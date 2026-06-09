@@ -5,11 +5,11 @@ import { App } from 'supertest/types';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AppModule } from '../src/app.module';
-import { TcpCompany } from '../src/models';
+import { LcpCompany } from '../src/models';
 
 describe('CompanyController (e2e)', () => {
   let app: INestApplication<App>;
-  let repo: Repository<TcpCompany>;
+  let repo: Repository<LcpCompany>;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -18,7 +18,7 @@ describe('CompanyController (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     await app.init();
-    repo = moduleFixture.get(getRepositoryToken(TcpCompany));
+    repo = moduleFixture.get(getRepositoryToken(LcpCompany));
   });
 
   afterEach(async () => {

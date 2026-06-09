@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { DbService } from '../db/db.service';
-import { TcpCompany } from '../models';
+import { LcpCompany } from '../models';
 import { ApiService } from './api.service';
 
 const makeDbService = (): jest.Mocked<
@@ -71,7 +71,7 @@ describe('ApiService', () => {
     it('returns whatever dbService.getCompany resolves to', async () => {
       const id = randomUUID();
       const fakeCompany = { id, slug: 'acme', name: 'Acme' };
-      db.getCompany.mockResolvedValue(fakeCompany as TcpCompany);
+      db.getCompany.mockResolvedValue(fakeCompany as LcpCompany);
 
       const result = await api.getCompany(id);
       expect(result).toBe(fakeCompany);

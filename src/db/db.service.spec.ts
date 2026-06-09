@@ -2,12 +2,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
 import { QueryFailedError, Repository } from 'typeorm';
-import { TcpCompany } from '../models';
+import { LcpCompany } from '../models';
 import { DbService } from './db.service';
 
 describe('DbService', () => {
   let dbService: DbService;
-  let repo: Repository<TcpCompany>;
+  let repo: Repository<LcpCompany>;
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -15,16 +15,16 @@ describe('DbService', () => {
         TypeOrmModule.forRoot({
           type: 'better-sqlite3',
           database: ':memory:',
-          entities: [TcpCompany],
+          entities: [LcpCompany],
           synchronize: true,
         }),
-        TypeOrmModule.forFeature([TcpCompany]),
+        TypeOrmModule.forFeature([LcpCompany]),
       ],
       providers: [DbService],
     }).compile();
 
     dbService = module.get(DbService);
-    repo = module.get(getRepositoryToken(TcpCompany));
+    repo = module.get(getRepositoryToken(LcpCompany));
   });
 
   afterEach(async () => {

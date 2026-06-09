@@ -1,7 +1,7 @@
 import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity()
-export class TcpCompany {
+export class LcpCompany {
   /** @format uuid */
   @PrimaryGeneratedColumn('uuid')
   id!: string;

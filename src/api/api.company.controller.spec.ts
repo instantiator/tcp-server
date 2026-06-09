@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { TcpCompany } from '../models';
+import { LcpCompany } from '../models';
 import { CompanyController } from './api.company.controller';
 import { ApiService } from './api.service';
 
@@ -23,13 +23,13 @@ describe('CompanyController', () => {
   describe('postCompany', () => {
     it('calls apiService.createCompany with the provided company', async () => {
       const company = { slug: 'acme', name: 'Acme Corp' };
-      await controller.postCompany(company as TcpCompany);
+      await controller.postCompany(company as LcpCompany);
       expect(api.createCompany).toHaveBeenCalledWith(company);
     });
 
     it('resolves without throwing', async () => {
       await expect(
-        controller.postCompany({ slug: 'acme', name: 'Acme' } as TcpCompany),
+        controller.postCompany({ slug: 'acme', name: 'Acme' } as LcpCompany),
       ).resolves.not.toThrow();
     });
   });
@@ -38,7 +38,7 @@ describe('CompanyController', () => {
     it('calls apiService.updateCompany with the id and company', async () => {
       const id = randomUUID();
       const company = { slug: 'acme', name: 'Acme' };
-      await controller.putCompany(id, company as TcpCompany);
+      await controller.putCompany(id, company as LcpCompany);
       expect(api.updateCompany).toHaveBeenCalledWith(id, company);
     });
   });
@@ -53,7 +53,7 @@ describe('CompanyController', () => {
     it('returns the result from apiService.getCompany', async () => {
       const id = randomUUID();
       const fakeCompany = { id, slug: 'acme', name: 'Acme' };
-      api.getCompany.mockResolvedValue(fakeCompany as TcpCompany);
+      api.getCompany.mockResolvedValue(fakeCompany as LcpCompany);
 
       const result = await controller.getCompany(id);
       expect(result).toBe(fakeCompany);

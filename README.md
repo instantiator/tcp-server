@@ -1,6 +1,6 @@
-# Tiny Computer People (TCP) server
+# Little Computer People (LCP) server
 
-TCP manages one or more companies of agents.
+LCP manages one or more companies of agents.
 
 ## Companies
 

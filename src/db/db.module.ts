@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { TcpCompany } from '../models';
+import { LcpCompany } from '../models';
 import { DbService } from './db.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([TcpCompany])],
+  imports: [TypeOrmModule.forFeature([LcpCompany])],
   providers: [DbService],
   exports: [DbService],
 })

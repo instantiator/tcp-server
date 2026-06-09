@@ -1,1 +1,1 @@
-export * from './TcpCompany.model';
+export * from './LcpCompany.model';
