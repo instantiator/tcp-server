@@ -33,23 +33,27 @@ Each task is a part of a plan, and each task has agents responsible for:
 ## Technologies
 
 - [NestJS](https://nestjs.com/) (server framework)
-- [Sequelize](https://sequelize.org/) (database ORM)
+- [TypeORM](https://typeorm.io/) (database ORM)
 - [sqlite3](https://sqlite.org/) (default database)
+- [ts-json-schema-generator](https://github.com/vega/ts-json-schema-generator) (schema generation)
+- [License Report](https://github.com/bepo65/license-report) (dependency documentation)
 - [DeepAgents](https://github.com/langchain-ai/deepagentsjs) (agent controls)
 
 ## Invocations
 
-| Invocation            | Purpose                                           |
-| --------------------- | ------------------------------------------------- |
-| `npm run build`       | Compiles the server to `dist/`                    |
-| `npm run format`      | Formats the code with `prettier`                  |
-| `npm run start`       | Starts a server on port `3000`                    |
-| `npm run start:dev`   | Starts a server                                   |
-| `npm run start:debug` | Starts a server with debug options (and monitors) |
-| `npm run start:prod`  | Starts the last compiled server                   |
-| `npm run lint`        | Runs a linter against the project                 |
-| `npm run test`        | Runs all tests                                    |
-| `npm run test:watch`  | Runs all tests (and monitors for changes)         |
-| `npm run test:cov`    | Runs all tests and measures code coverage         |
-| `npm run test:debug`  | Runs all tests with additional debug information  |
-| `npm run test:e2e`    | Runs the end-to-end tests                         |
+| Invocation                  | Purpose                                                |
+| --------------------------- | ------------------------------------------------------ |
+| `npm run build`             | Compiles the server to `dist/`                         |
+| `npm run format`            | Formats the code with `prettier`                       |
+| `npm run start`             | Starts a server on port `3000`                         |
+| `npm run start:dev`         | Starts a server                                        |
+| `npm run start:debug`       | Starts a server with debug options (and monitors)      |
+| `npm run start:prod`        | Starts the last compiled server                        |
+| `npm run lint`              | Runs a linter against the project                      |
+| `npm run test`              | Runs all tests                                         |
+| `npm run test:watch`        | Runs all tests (and monitors for changes)              |
+| `npm run test:cov`          | Runs all tests and measures code coverage              |
+| `npm run test:debug`        | Runs all tests with additional debug information       |
+| `npm run test:e2e`          | Runs the end-to-end tests                              |
+| `npm run schema:generate`   | Regenerates [schemas/schema.json](schemas/schema.json) |
+| `npm run licenses:generate` | Regenerates [docs/licenses.md](docs/licenses.md)       |

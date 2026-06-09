@@ -1,70 +1,65 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
-import { UniqueConstraintError } from 'sequelize';
+import { QueryFailedError, Repository } from 'typeorm';
 import { TcpCompany } from '../models';
 import { DbService } from './db.service';
 
 describe('DbService', () => {
   let dbService: DbService;
+  let repo: Repository<TcpCompany>;
 
   beforeAll(async () => {
-    dbService = new DbService();
-    await dbService.onModuleInit();
+    const module: TestingModule = await Test.createTestingModule({
+      imports: [
+        TypeOrmModule.forRoot({
+          type: 'better-sqlite3',
+          database: ':memory:',
+          entities: [TcpCompany],
+          synchronize: true,
+        }),
+        TypeOrmModule.forFeature([TcpCompany]),
+      ],
+      providers: [DbService],
+    }).compile();
+
+    dbService = module.get(DbService);
+    repo = module.get(getRepositoryToken(TcpCompany));
   });
 
   afterEach(async () => {
-    await TcpCompany.destroy({ where: {}, truncate: true });
-  });
-
-  afterAll(async () => {
-    await dbService.sequelize.close();
+    await repo.clear();
   });
 
   describe('setCompany', () => {
     it('creates a new record when replace=true and no prior record exists', async () => {
       await dbService.setCompany({ slug: 'acme', name: 'Acme Corp' }, true);
-      const count = await TcpCompany.count();
-      expect(count).toBe(1);
+      expect(await repo.count()).toBe(1);
     });
 
-    it('creates a new record when replace=false and no record with that id exists', async () => {
-      const id = randomUUID();
-      await dbService.setCompany(
-        { id, slug: 'acme', name: 'Acme Corp' },
-        false,
-      );
-      const record = await TcpCompany.findByPk(id);
+    it('creates a new record when replace=false', async () => {
+      await dbService.setCompany({ slug: 'acme', name: 'Acme Corp' }, false);
+      const record = await repo.findOneBy({ slug: 'acme' });
       expect(record).not.toBeNull();
       expect(record!.slug).toBe('acme');
     });
 
     it('updates an existing record when replace=false and the id matches', async () => {
       const id = randomUUID();
-      await dbService.setCompany(
-        { id, slug: 'acme', name: 'Original Name' },
-        false,
-      );
+      await dbService.setCompany({ id, slug: 'acme', name: 'Original Name' }, false);
+      await dbService.setCompany({ id, slug: 'acme', name: 'Updated Name' }, false);
 
-      await dbService.setCompany(
-        { id, slug: 'acme', name: 'Updated Name' },
-        false,
-      );
-
-      const count = await TcpCompany.count();
-      expect(count).toBe(1);
-      const record = await TcpCompany.findByPk(id);
+      expect(await repo.count()).toBe(1);
+      const record = await repo.findOneBy({ id });
       expect(record!.name).toBe('Updated Name');
     });
 
     it('does not overwrite unmodified fields when updating', async () => {
       const id = randomUUID();
-      await dbService.setCompany(
-        { id, slug: 'acme', name: 'Original Name' },
-        false,
-      );
-
+      await dbService.setCompany({ id, slug: 'acme', name: 'Original Name' }, false);
       await dbService.setCompany({ id, name: 'Updated Name' }, false);
 
-      const record = await TcpCompany.findByPk(id);
+      const record = await repo.findOneBy({ id });
       expect(record!.slug).toBe('acme');
     });
 
@@ -72,33 +67,22 @@ describe('DbService', () => {
       await dbService.setCompany({ slug: 'acme', name: 'First' }, true);
       await dbService.setCompany({ slug: 'acme', name: 'Second' }, true);
 
-      const count = await TcpCompany.count({ where: { slug: 'acme' } });
-      expect(count).toBe(1);
-      const record = await TcpCompany.findOne({ where: { slug: 'acme' } });
-      expect(record!.name).toBe('Second');
+      expect(await repo.count({ where: { slug: 'acme' } })).toBe(1);
+      expect((await repo.findOneBy({ slug: 'acme' }))!.name).toBe('Second');
     });
 
     it('throws on a duplicate slug when replace=false', async () => {
-      const id1 = randomUUID();
-      const id2 = randomUUID();
-      await dbService.setCompany(
-        { id: id1, slug: 'acme', name: 'First' },
-        false,
-      );
-
+      await dbService.setCompany({ slug: 'acme', name: 'First' }, false);
       await expect(
-        dbService.setCompany({ id: id2, slug: 'acme', name: 'Second' }, false),
-      ).rejects.toThrow(UniqueConstraintError);
+        dbService.setCompany({ slug: 'acme', name: 'Second' }, false),
+      ).rejects.toThrow(QueryFailedError);
     });
   });
 
   describe('getCompany', () => {
     it('retrieves a company by UUID', async () => {
       const id = randomUUID();
-      await dbService.setCompany(
-        { id, slug: 'acme', name: 'Acme Corp' },
-        false,
-      );
+      await dbService.setCompany({ id, slug: 'acme', name: 'Acme Corp' }, false);
 
       const result = await dbService.getCompany(id);
       expect(result).not.toBeNull();
@@ -114,21 +98,16 @@ describe('DbService', () => {
     });
 
     it('returns null for an unknown UUID', async () => {
-      const result = await dbService.getCompany(randomUUID());
-      expect(result).toBeNull();
+      expect(await dbService.getCompany(randomUUID())).toBeNull();
     });
 
     it('returns null for an unknown slug', async () => {
-      const result = await dbService.getCompany('does-not-exist');
-      expect(result).toBeNull();
+      expect(await dbService.getCompany('does-not-exist')).toBeNull();
     });
 
     it('routes UUID-shaped strings to findByPk and plain strings to findOne', async () => {
       const id = randomUUID();
-      await dbService.setCompany(
-        { id, slug: 'plainslug', name: 'Acme' },
-        false,
-      );
+      await dbService.setCompany({ id, slug: 'plainslug', name: 'Acme' }, false);
 
       expect(await dbService.getCompany(id)).not.toBeNull();
       expect(await dbService.getCompany('plainslug')).not.toBeNull();

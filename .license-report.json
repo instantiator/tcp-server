@@ -1,0 +1,18 @@
+{
+  "fields": [
+    "name",
+    "licenseType",
+    "link",
+    "author",
+    "remoteVersion",
+    "installedVersion",
+    "definedVersion"
+  ],
+  "name":             { "label": "Name" },
+  "licenseType":      { "label": "License" },
+  "link":             { "label": "Repository" },
+  "author":           { "label": "Author" },
+  "remoteVersion":    { "label": "Latest" },
+  "installedVersion": { "label": "Installed" },
+  "definedVersion":   { "label": "Defined" }
+}

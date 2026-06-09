@@ -2,11 +2,14 @@ import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { AppModule } from '../src/app.module';
 import { TcpCompany } from '../src/models';
 
 describe('CompanyController (e2e)', () => {
   let app: INestApplication<App>;
+  let repo: Repository<TcpCompany>;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -15,10 +18,11 @@ describe('CompanyController (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     await app.init();
+    repo = moduleFixture.get(getRepositoryToken(TcpCompany));
   });
 
   afterEach(async () => {
-    await TcpCompany.destroy({ where: {}, truncate: true });
+    await repo.clear();
   });
 
   afterAll(async () => {
@@ -38,7 +42,7 @@ describe('CompanyController (e2e)', () => {
         .post('/api/company')
         .send({ slug: 'acme', name: 'Acme Corp' });
 
-      const record = await TcpCompany.findOne({ where: { slug: 'acme' } });
+      const record = await repo.findOneBy({ slug: 'acme' });
       expect(record).not.toBeNull();
       expect(record!.name).toBe('Acme Corp');
     });
@@ -52,10 +56,8 @@ describe('CompanyController (e2e)', () => {
         .post('/api/company')
         .send({ slug: 'acme', name: 'Second' });
 
-      const count = await TcpCompany.count({ where: { slug: 'acme' } });
-      expect(count).toBe(1);
-      const record = await TcpCompany.findOne({ where: { slug: 'acme' } });
-      expect(record!.name).toBe('Second');
+      expect(await repo.count({ where: { slug: 'acme' } })).toBe(1);
+      expect((await repo.findOneBy({ slug: 'acme' }))!.name).toBe('Second');
     });
   });
 
@@ -65,8 +67,7 @@ describe('CompanyController (e2e)', () => {
         .post('/api/company')
         .send({ slug: 'acme', name: 'Acme Corp' });
 
-      const record = await TcpCompany.findOne({ where: { slug: 'acme' } });
-      const id = record!.id;
+      const id = (await repo.findOneBy({ slug: 'acme' }))!.id;
 
       const res = await request(app.getHttpServer())
         .get(`/api/company/${id}`)
@@ -106,16 +107,14 @@ describe('CompanyController (e2e)', () => {
         .post('/api/company')
         .send({ slug: 'acme', name: 'Original' });
 
-      const record = await TcpCompany.findOne({ where: { slug: 'acme' } });
-      const id = record!.id;
+      const id = (await repo.findOneBy({ slug: 'acme' }))!.id;
 
       await request(app.getHttpServer())
         .put(`/api/company/${id}`)
         .send({ slug: 'acme', name: 'Updated' })
         .expect(200);
 
-      const updated = await TcpCompany.findByPk(id);
-      expect(updated!.name).toBe('Updated');
+      expect((await repo.findOneBy({ id }))!.name).toBe('Updated');
     });
   });
 });

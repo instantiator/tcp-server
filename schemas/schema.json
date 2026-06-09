@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "NewTcpCompany": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "slug": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "slug",
+        "name"
+      ],
+      "type": "object"
+    },
+    "TcpCompany": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "slug": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "slug",
+        "name"
+      ],
+      "type": "object"
+    }
+  }
+}

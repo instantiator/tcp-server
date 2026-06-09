@@ -1,8 +1,17 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { ApiModule } from './api/api.module';
-import { DbModule } from './db/db.module';
+import { TcpCompany } from './models';
 
 @Module({
-  imports: [ApiModule, DbModule],
+  imports: [
+    TypeOrmModule.forRoot({
+      type: 'better-sqlite3',
+      database: ':memory:',
+      entities: [TcpCompany],
+      synchronize: true,
+    }),
+    ApiModule,
+  ],
 })
 export class AppModule {}

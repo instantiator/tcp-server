@@ -1,35 +1,16 @@
-import { UUID } from 'crypto';
-import { DataTypes, Model, type Sequelize } from 'sequelize';
-import { RegisterModel } from '../db/model-registry';
+import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
-@RegisterModel()
-export class TcpCompany extends Model {
-  declare id: UUID;
-  declare slug: string;
-  declare name: string;
+@Entity()
+export class TcpCompany {
+  /** @format uuid */
+  @PrimaryGeneratedColumn('uuid')
+  id!: string;
 
-  static register(sequelize: Sequelize) {
-    TcpCompany.init(
-      {
-        id: {
-          type: DataTypes.UUID,
-          primaryKey: true,
-          allowNull: false,
-          defaultValue: DataTypes.UUIDV4,
-        },
-        slug: {
-          type: DataTypes.TEXT,
-          unique: true,
-          allowNull: false,
-        },
-        name: {
-          type: DataTypes.TEXT,
-          allowNull: false,
-        },
-      },
-      { sequelize },
-    );
-  }
+  /** @minLength 1 */
+  @Column({ unique: true })
+  slug!: string;
+
+  /** @minLength 1 */
+  @Column()
+  name!: string;
 }
-
-export type NewTcpCompany = Omit<TcpCompany, 'id'>;
