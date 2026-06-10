@@ -4,10 +4,10 @@ import { CompanyController } from './api.company.controller';
 import { ApiService } from './api.service';
 
 const makeApiService = (): jest.Mocked<
-  Pick<ApiService, 'createCompany' | 'updateCompany' | 'getCompany'>
+  Pick<ApiService, 'createCompany' | 'setCompany' | 'getCompany'>
 > => ({
   createCompany: jest.fn().mockResolvedValue(undefined),
-  updateCompany: jest.fn().mockResolvedValue(undefined),
+  setCompany: jest.fn().mockResolvedValue(undefined),
   getCompany: jest.fn().mockResolvedValue(null),
 });
 
@@ -21,25 +21,35 @@ describe('CompanyController', () => {
   });
 
   describe('postCompany', () => {
-    it('calls apiService.createCompany with the provided company', async () => {
-      const company = { slug: 'acme', name: 'Acme Corp' };
-      await controller.postCompany(company as LcpCompany);
-      expect(api.createCompany).toHaveBeenCalledWith(company);
+    it('calls apiService.createCompany with the template and slug', async () => {
+      await controller.postCompany({ name: 'Acme Corp', slug: 'acme' });
+      expect(api.createCompany).toHaveBeenCalledWith(
+        { name: 'Acme Corp' },
+        'acme',
+      );
     });
 
     it('resolves without throwing', async () => {
       await expect(
-        controller.postCompany({ slug: 'acme', name: 'Acme' } as LcpCompany),
+        controller.postCompany({ name: 'Acme', slug: 'acme' }),
       ).resolves.not.toThrow();
     });
   });
 
   describe('putCompany', () => {
-    it('calls apiService.updateCompany with the id and company', async () => {
+    it('calls apiService.setCompany with the id and company', async () => {
       const id = randomUUID();
-      const company = { slug: 'acme', name: 'Acme' };
-      await controller.putCompany(id, company as LcpCompany);
-      expect(api.updateCompany).toHaveBeenCalledWith(id, company);
+      const company = { id, slug: 'acme', name: 'Acme' };
+      await controller.putCompany(id, company);
+      expect(api.setCompany).toHaveBeenCalledWith(id, company);
+    });
+
+    it('throws when the path id does not match the body id', async () => {
+      const id = randomUUID();
+      const company = { id: randomUUID(), slug: 'acme', name: 'Acme' };
+      await expect(
+        controller.putCompany(id, company as LcpCompany),
+      ).rejects.toThrow();
     });
   });
 
@@ -53,7 +63,7 @@ describe('CompanyController', () => {
     it('returns the result from apiService.getCompany', async () => {
       const id = randomUUID();
       const fakeCompany = { id, slug: 'acme', name: 'Acme' };
-      api.getCompany.mockResolvedValue(fakeCompany as LcpCompany);
+      api.getCompany.mockResolvedValue(fakeCompany);
 
       const result = await controller.getCompany(id);
       expect(result).toBe(fakeCompany);

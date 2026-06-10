@@ -1,24 +1,7 @@
 {
+  "$ref": "#/definitions/LcpCompany",
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
-    "NewLcpCompany": {
-      "additionalProperties": false,
-      "properties": {
-        "name": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "slug": {
-          "minLength": 1,
-          "type": "string"
-        }
-      },
-      "required": [
-        "slug",
-        "name"
-      ],
-      "type": "object"
-    },
     "LcpCompany": {
       "additionalProperties": false,
       "properties": {

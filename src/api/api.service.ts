@@ -2,16 +2,20 @@ import { Injectable } from '@nestjs/common';
 import { UUID } from 'crypto';
 import { DbService } from '../db/db.service';
 import { LcpCompany } from '../models';
+import { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
 
 @Injectable()
 export class ApiService {
   constructor(private readonly dbService: DbService) {}
 
-  async createCompany(company: Partial<LcpCompany>) {
-    return await this.dbService.setCompany(company, true);
+  async createCompany(
+    template: LcpCompanyTemplate,
+    slug: string,
+  ): Promise<LcpCompany> {
+    return await this.dbService.createCompany(template, slug);
   }
 
-  async updateCompany(id: UUID, company: Partial<LcpCompany>) {
+  async setCompany(id: UUID, company: Partial<LcpCompany>) {
     return await this.dbService.setCompany({ ...company, id }, false);
   }
 

@@ -35,6 +35,7 @@ src/
   api/                   # HTTP layer (controllers + ApiService)
   db/                    # DbService — TypeORM repository wrapper
   models/                # TypeORM entities and derived types (LcpCompany)
+  templates/             # Input shapes for create operations (e.g. LcpCompanyTemplate)
   utils/                 # Shared utilities (ObjectUtils)
 test/                    # e2e specs
 dev-environment/         # Git submodule — agent instructions and coding standards
@@ -49,8 +50,8 @@ npm run start:dev        # Start server with hot reload
 npm run build            # Compile + generate schema + generate license report
 npm run lint             # ESLint with auto-fix
 npm run format           # Prettier over src/ and test/
-npm test                 # Unit tests (Jest)
-npm run test:e2e         # End-to-end tests
+npm test                 # Unit tests (Jest) — fast, no HTTP, mocked dependencies
+npm run test:e2e         # End-to-end tests — spins up a real NestJS app + in-memory DB; run separately from unit tests
 npm run test:cov         # Coverage report
 ```
 
