@@ -12,7 +12,10 @@ export class DbService {
     private readonly repo: Repository<LcpCompany>,
   ) {}
 
-  /** Creates a new {@link LcpCompany} from template, replacing any existing record with the same slug */
+  /**
+   * Creates a new {@link LcpCompany} from template,
+   * replacing any existing record with the same slug.
+   */
   async createCompany(
     template: LcpCompanyTemplate,
     slug: string,

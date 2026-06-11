@@ -17,7 +17,7 @@ A company consists of several specialists or generalists, each provided with:
 
 Tasks are given to the company, who then work collaboratively to resolve them.
 
-Am agent creates a plan incorporating knowledge of agents in the company and their skills.
+An agent creates a plan incorporating knowledge of agents in the company and their skills.
 
 Each plan contains a number of tasks, arranged into a graph, and each plan has an agent responsible for:
 
