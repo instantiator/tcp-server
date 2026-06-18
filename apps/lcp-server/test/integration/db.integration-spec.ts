@@ -25,7 +25,9 @@ describe('Database connectivity', () => {
       console.log('Skipping — no postgres DATABASE_URL set');
       return;
     }
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const result = await ds.query('SELECT 1 AS ok');
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     expect(result[0].ok).toBe(1);
   });
 
@@ -35,9 +37,11 @@ describe('Database connectivity', () => {
     }
     // pg_available_extensions lists what can be installed; pg_extension only
     // lists what has already been created (which requires migrations to have run).
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const result = await ds.query(
       `SELECT name FROM pg_available_extensions WHERE name = 'vector'`,
     );
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     expect(result.length).toBeGreaterThan(0);
   });
 });
