@@ -1,0 +1,73 @@
+Let's design LCP. LCP is the backend service that should manage the agents. We don't need a plan to enact to build it (yet) - we'll build it piece by piece. This is just a design task, so ideally the design will be stored as a series of ADRs in: `docs/ADRs`, and the output from this prompt will be a plan to write the ADRs (and what we intend to put into them).
+
+It'd be good to include in the plan and ADRs:
+
+- any outstanding assumptions (but also please ask questions)
+- choice of technologies
+- key decisions and recommendations
+- top-level implementation suggestions for processes (eg. the orchestration and agent loops)
+- relevant coding standards linked to from `dev-environment/all-requests.md`, eg. testing requirements
+
+It's ok to present a couple of options in the plan if there are a couple of different ways to go. (If doing so, please put together a table summarising the benefits and drawbacks of each approach.)
+
+Initial spec follows... (Feel free to also suggest changes to the structure, or point out and include missing elements.)
+
+## LcpAgent
+
+- the LcpAgent will be a bit of software to
+  - run the agent loop, using whichever LLM service is specified for the LcpAgent (eg. could be a third party API powering this, or could be provided by LM Studio on a specific local network machine, etc.)
+  - run some LCP-provided standard of MCP servers for the agent
+  - connect the agent to any other specified MCP servers
+  - provide the prompt(s) to start the agent loop (eg. system prompt, task prompt)
+  - manage memory for the LcpAgent - ie. its own database of information, with RAG to retrieval (this could be managed through MCP?)
+  - capture results from the process
+  - capture and store an audit log (everything the LLM says, every action taken, etc.)
+- LcpAgents should run independently and be able to run in parallel
+
+Ideally each agent's current state is captured in the database, so that it can be reconstructed and continued after an interruption (or a long-running process that has gotten itself stuck in a loop can be cancelled with a database change before the service is resumed).
+
+It ought to be possible for an agent to run independently (eg. so we can test them, and so we can get started by building an agent first) - running their loop based on prompts given to them, making audit information available, connecting to their own memory, ane RAG service, connecting to a storage service for shared files. This makes it feel like it's probably a micro-service?
+
+## Service
+
+I've picked NestJS as a framework for the service as a whole. Any concerns / alternative suggestions?
+
+## Containerisation
+
+I've picked DeepAgents (https://github.com/langchain-ai/deepagentsjs) to run the agent loop. Any concerns / alternative suggestions? I feel like it's a good, simple way to get started, with sufficient opportunities to modify over time.
+
+I'd like to understand the benefits and drawbacks of containerising these agents, or of containerising a company as a whole, or of containerising individual services (eg. a container for the shared storage for a company, a container for orchestration, etc.)
+
+Perhaps there's a benefit to running isolated agents, with their own MCP servers, or perhaps that's too resource intensive? If not per agent, then we could perhaps containerise by LcpCompany - that way there can be shared services and MCP services amongst a company, but it's still isolated from anything else running. (LcpCompanies are our boundary for data - the agents should only be able share resources and tasks inside a company.)
+
+Equally, perhaps its sufficient to just run a single service and just manage per-agent and per-company context / resources / MCP services, with clear access controls.
+
+One of the main benefits to containerisation is that LCP can run on just about any server, so it's likely we'll set up something like Docker Compose to run the whole thing, including the core supporting services (database, shared storage services, agent loop and API).
+
+## Memories and knowledge
+
+Agents will have memories, which is a term I'm using to mean: contextual information about what they're doing at the moment, things they've done before, conclusions reached / lessions learned. They'll also have a knowledge base (eg. a RAG store) that they can use to document and retrieve their own specialist knowledge and information (eg. how to be a software architect, or woodland management, etc.) It'd be good to know what you recommend for this.
+
+## Shared company storage
+
+Each LcpAgent should have a memory, but there will also be a shared storage facility per company that contains files created by agents. This will effectively be a common filesystem. I was considering the filesystem MCP for this: https://hub.docker.com/mcp/server/filesystem/overview - but perhaps something that's actually a database or a third party service (with versioning and access controls?) might be better? (Or perhaps filesystem is adequate?) It would also be used to store the audit log.
+
+## Orchestration
+
+The orchestration would likely need to be a long running service that manages a company:
+
+- when there's a new task, it starts the process of developing a task plan, and then giving the first step to the first agent assigned to the task
+  - eg. a request for a new feature in a webapp might pass through several agents with different knowledge bases:
+    - a software architect
+    - a security consultant
+    - a senior developer (to specify the task)
+    - a developer (to implement the work)
+    - a senior developer (to review the task and test the change)
+  - for each agent, it sets up the agent loop with appropriate access to the right context, starting prompts, and MCP services
+    - it performs RAG lookups in their specialist knowledge store to supplement those prompts (or on request by the agent)
+  - it sets up conversations between agents when they request consultation
+  - it modifies the plan if an agent decides that's needed while working on the task
+  - it ensures that after each agent has completed its piece of work, it passes the task on to the next agent in the plan
+  - it keeps the database up to date with every change to the state of the company, agents, etc.
+  - it stores audit logs
+- on restore, it checks the state of tasks and their plans, and looks for agent loops that hadn't finished, and resumes tasks that weren't completed (or failed, or cancelled)

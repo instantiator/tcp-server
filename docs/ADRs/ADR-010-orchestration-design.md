@@ -1,0 +1,151 @@
+# ADR-010: Orchestration Design
+
+Status: Proposed
+
+## Context
+
+The orchestration layer is the long-running service (within lcp-server) that manages the full lifecycle of a task: from the initial user prompt, through plan generation and agent dispatch, to completion. It is the "delivery manager" of LCP.
+
+Key requirements:
+- Generate a task plan using a configurable "planner role" agent
+- Dispatch task steps to lcp-agent one at a time (or in parallel where the plan allows)
+- Support agent-to-agent consultation mid-step
+- Allow agents and users to revise the plan
+- Resume incomplete tasks on service restart
+- Keep the database as the source of truth at every stage
+
+## Task lifecycle
+
+```
+created → planning → in_progress → reviewing → completed
+                                              → failed
+                                              → cancelled
+```
+
+- **created**: user has submitted the task via API; supporting materials uploaded to MinIO
+- **planning**: orchestrator dispatches to the planner role agent; plan is being generated
+- **in_progress**: plan exists; steps are being executed by assigned role agents
+- **reviewing**: final step (if a review step is in the plan) is in progress
+- **completed / failed / cancelled**: terminal states
+
+## Task plan structure
+
+A task plan is a list of steps stored in the database. Each step:
+
+```typescript
+interface TaskStep {
+  id: UUID;
+  task_id: UUID;
+  order: number;
+  role: string;                        // which role definition to use
+  knowledge_domains: string[];         // used to pre-fetch relevant memories/KB
+  mcp_server_list: McpServerConfig[];  // step-specific MCP additions
+  input_context: string;               // summary of what to pass to this agent
+  output_spec: string;                 // what the agent is expected to produce
+  status: StepStatus;
+  thread_id?: string;                  // LangGraph checkpoint thread ID (set on dispatch)
+  result?: string;                     // agent's output summary
+  timeout_seconds: number;
+  max_iterations: number;
+}
+```
+
+## Role definition schema
+
+Roles are stored in the company config. Full schema (from design session):
+
+```typescript
+interface RoleDefinition {
+  name: string;
+  description: string;
+  knowledge_domains: string[];
+  knowledge_base: {
+    storage_path: string;       // MinIO path to OKF source files
+    vector_namespace: string;   // pgvector namespace for this role's KB
+  };
+  memory_namespace: string;     // pgvector namespace for episodic memory
+  mcp_server_list: McpServerConfig[];
+  llm_config: LlmConfig;        // see ADR-003
+  system_prompt_template: string;
+}
+```
+
+## Planner role
+
+Each company config specifies a `planner_role` — the role that generates task plans. A typical choice is a "product owner" or "delivery manager" role. When a task enters `planning`:
+
+1. The orchestrator constructs a prompt from the task description and supporting materials
+2. It dispatches a single-step plan-generation job to lcp-agent using the planner role's config
+3. The planner agent produces a structured task plan (list of `TaskStep` objects)
+4. The orchestrator validates and stores the plan, then transitions the task to `in_progress`
+
+Supporting materials (uploaded by the user at task creation) are accessible to the planner agent via the storage MCP server.
+
+## Task queue
+
+**BullMQ + Redis** (see [ADR-009](./ADR-009-containerization-strategy.md) for why Redis is in Docker Compose).
+
+| Queue | Direction | Description |
+|-------|-----------|-------------|
+| `agent-jobs` | lcp-server → lcp-agent | Dispatches a task step for execution |
+| `agent-results` | lcp-agent → lcp-server | Reports step completion, progress, events |
+
+BullMQ's retry and priority features are used: failed steps are retried up to a configurable limit; high-priority tasks can preempt lower-priority ones.
+
+### Orchestrator loop (lcp-server)
+
+The orchestrator is a NestJS service that:
+1. On startup: scans for tasks in `planning` or `in_progress` with no active job — resumes them
+2. On `agent-results` event `step_completed`: advances the plan to the next step, or marks the task `completed`
+3. On `agent-results` event `step_failed`: increments retry count; marks task `failed` on limit
+4. On `agent-results` event `consult`: pauses current step, dispatches a consultation job, resumes original step with result
+5. On `agent-results` event `revise_plan`: validates proposed changes and patches the plan
+6. On `agent-results` event `request_user_input`: suspends step (see [ADR-012](./ADR-012-human-in-the-loop.md)), creates a conversation thread
+
+## Agent-to-agent consultation
+
+When an agent needs to consult another role (e.g., the developer asks the security consultant for a review):
+
+1. Agent emits a `consult` event with: target role name, question, relevant context
+2. Orchestrator records the consultation request, pauses the current step
+3. Dispatches a consultation job to lcp-agent (short-lived agent run for the consultant role)
+4. On completion, orchestrator injects the consultant's response into the original step's context and resumes it
+
+## Plan revision
+
+An agent can propose plan revisions via a `revise_plan` event containing the proposed changes. The orchestrator:
+1. Validates the proposed changes (no removal of completed steps, no circular dependencies)
+2. Applies the patch to the plan in the database
+3. Resumes the current step
+
+## Example task flow
+
+Task: "Add a secure login feature to the webapp"
+
+```
+planning:    [product-owner]   → generates plan
+in_progress: [architect]       → designs the approach
+in_progress: [security-consultant] → reviews the design (consultation triggered by architect)
+in_progress: [senior-developer]    → specifies the implementation task
+in_progress: [developer]           → implements the work
+reviewing:   [senior-developer]    → reviews and tests the change
+completed
+```
+
+## Restore on restart
+
+On lcp-server startup:
+1. Query all tasks with status `planning` or `in_progress`
+2. For each incomplete step with no active BullMQ job: re-dispatch
+3. LangGraph checkpoints ensure lcp-agent resumes from the last safe state (see [ADR-005](./ADR-005-agent-state-persistence.md))
+
+## Consequences
+
+- The orchestrator is a NestJS service within lcp-server — no new deployable
+- BullMQ workers run within lcp-agent; the queue is the only coupling between lcp-server and lcp-agent
+- All task and plan state lives in PostgreSQL; Redis is ephemeral (queue transport only)
+
+## Open Questions / Assumptions
+
+- Parallel task steps: the current design is sequential. Parallel steps (where the plan specifies no dependency between them) are a future extension — the BullMQ dispatch logic and plan data model support it but the orchestrator loop handles sequential first.
+- Dead-letter queue for permanently failed jobs: note for implementation

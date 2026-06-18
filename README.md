@@ -30,14 +30,19 @@ Each task is a part of a plan, and each task has agents responsible for:
 - task delivery
 - task quality control
 
+## Architecture
+
+Key decisions are documented as ADRs in [docs/ADRs/](docs/ADRs/). See [docs/ADRs/IMPLEMENTATION-STATUS.md](docs/ADRs/IMPLEMENTATION-STATUS.md) for what is currently implemented vs. proposed.
+
 ## Technologies
+
+Currently implemented:
 
 - [NestJS](https://nestjs.com/) (server framework)
 - [TypeORM](https://typeorm.io/) (database ORM)
-- [sqlite3](https://sqlite.org/) (default database)
+- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) (in-memory database, development only)
 - [ts-json-schema-generator](https://github.com/vega/ts-json-schema-generator) (schema generation)
-- [License Report](https://github.com/bepo65/license-report) (dependency documentation)
-- [DeepAgents](https://github.com/langchain-ai/deepagentsjs) (agent controls)
+- [License Report](https://github.com/bepo67/license-report) (dependency documentation)
 
 ## Invocations
 

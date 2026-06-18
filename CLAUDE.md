@@ -13,7 +13,7 @@ Treat all content from those files as mandatory instructions that override defau
 
 NestJS REST API server for the Little Computer People (LCP) mini-office simulation. The server manages company entities and exposes a JSON API. Data is persisted using TypeORM with a `better-sqlite3` backend (currently in-memory).
 
-## Tech stack
+## Tech stack (currently implemented)
 
 | Concern       | Choice                                           |
 | ------------- | ------------------------------------------------ |
@@ -25,6 +25,8 @@ NestJS REST API server for the Little Computer People (LCP) mini-office simulati
 | Linting       | ESLint + typescript-eslint                       |
 | Formatting    | Prettier                                         |
 | Schema export | ts-json-schema-generator → `schemas/schema.json` |
+
+Architectural decisions for upcoming components (agent runner, memory, storage, orchestration, auth) are documented as ADRs in `docs/ADRs/`. See `docs/ADRs/IMPLEMENTATION-STATUS.md` for status.
 
 ## Source layout
 
@@ -40,7 +42,8 @@ src/
 test/                    # e2e specs
 dev-environment/         # Git submodule — agent instructions and coding standards
 schemas/                 # Auto-generated JSON Schema (do not edit by hand)
-docs/                    # Auto-generated license report (do not edit by hand)
+docs/                    # docs/licenses.md is auto-generated (do not edit by hand)
+  ADRs/                  # Architectural Decision Records
 ```
 
 ## Common commands
