@@ -5,6 +5,7 @@ Status: Proposed
 ## Context
 
 The spec requires that each agent's current state is captured in the database so that:
+
 - A long-running loop that gets stuck can be **cancelled** by a database change before the service is resumed
 - An interrupted loop can be **resumed** from where it left off
 - Loops can run for an extended time without risk of total loss if the process crashes
@@ -20,6 +21,7 @@ LangGraph serialises the full graph state (conversation history, pending tool ca
 ### What is checkpointed
 
 Each checkpoint contains:
+
 - Full message history (all LLM exchanges so far in this step)
 - Last tool calls and their results
 - Current node in the graph (where to resume)
@@ -38,6 +40,7 @@ lcp-server sets `status = 'cancelled'` via the REST API or orchestrator. The nex
 ### Resume
 
 On lcp-agent restart (or after a cancellation is cleared):
+
 1. lcp-server looks up incomplete task steps in the database
 2. It dispatches a BullMQ job with the `thread_id` of the interrupted run
 3. lcp-agent re-initialises the LangGraph graph with the same `thread_id` and calls `graph.stream(null, { configurable: { thread_id } })` — LangGraph loads the last checkpoint and continues from where it left off
@@ -45,6 +48,7 @@ On lcp-agent restart (or after a cancellation is cleared):
 ### Stuck-loop detection
 
 Each task step has a configurable `timeout_seconds` and `max_iterations` value (defaulting to company-level settings). lcp-agent enforces these:
+
 - `max_iterations`: incremented at each graph node; `interrupt()` called if exceeded
 - `timeout_seconds`: a timeout wraps the `graph.stream()` call; on expiry, the step is marked `timed_out` and a BullMQ retry is optionally scheduled
 

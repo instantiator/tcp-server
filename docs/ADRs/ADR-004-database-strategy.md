@@ -14,10 +14,10 @@ Status: Proposed
 
 ## Options
 
-| Option | Relational | Vector search | Multi-writer | Notes |
-|--------|-----------|---------------|--------------|-------|
-| **SQLite (file-based)** | ✓ | ✗ (sqlite-vec extension possible but limited) | ✗ (write lock per file) | Simple; single-file backup; not suitable for concurrent writers or embeddings |
-| **PostgreSQL + pgvector** | ✓ | ✓ | ✓ | Production-grade; covers all four requirements in one service; well-supported TypeORM driver |
+| Option                    | Relational | Vector search                                 | Multi-writer            | Notes                                                                                        |
+| ------------------------- | ---------- | --------------------------------------------- | ----------------------- | -------------------------------------------------------------------------------------------- |
+| **SQLite (file-based)**   | ✓          | ✗ (sqlite-vec extension possible but limited) | ✗ (write lock per file) | Simple; single-file backup; not suitable for concurrent writers or embeddings                |
+| **PostgreSQL + pgvector** | ✓          | ✓                                             | ✓                       | Production-grade; covers all four requirements in one service; well-supported TypeORM driver |
 
 ## Decision
 
@@ -35,9 +35,9 @@ One service covers all four requirements. The `@langchain/langgraph-checkpoint-p
 
 ### Environment config
 
-| Variable | Usage |
-|----------|-------|
-| `DATABASE_URL` | PostgreSQL connection string (`postgres://user:pass@host:5432/lcp`) |
+| Variable        | Usage                                                                                      |
+| --------------- | ------------------------------------------------------------------------------------------ |
+| `DATABASE_URL`  | PostgreSQL connection string (`postgres://user:pass@host:5432/lcp`)                        |
 | `DATABASE_TYPE` | `postgres` (production) or `better-sqlite3` (test) — defaults to `better-sqlite3` if unset |
 
 ## Consequences

@@ -4,21 +4,22 @@ Status: Proposed
 
 ## Context
 
-LCP must be deployable on any server. Docker Compose is the natural deployment unit. The question is what the containerization *boundary* should be — how finely to split services across containers, particularly for agents.
+LCP must be deployable on any server. Docker Compose is the natural deployment unit. The question is what the containerization _boundary_ should be — how finely to split services across containers, particularly for agents.
 
 ## Options
 
-| Strategy | Isolation | Resource overhead | Complexity | Notes |
-|----------|-----------|------------------|------------|-------|
-| **Per-agent container** | Highest — each agent run is a fresh container | High — container startup per task step | High — dynamic Compose/k8s required | Useful if agents need different runtimes or package sets; overkill for the current design |
-| **Per-company Docker Compose stack** | Company-level — each company runs its own service set | Medium — one full stack per company | Medium — Compose template per company | Good isolation; complex to provision dynamically; appropriate at larger scale |
-| **Single Docker Compose stack, logical isolation** | Low — all companies share services; isolation by DB row and MinIO bucket | Low — one stack total | Low — a single `docker-compose.yml` | Good starting point; revisit when multi-tenancy or strong isolation is required |
+| Strategy                                           | Isolation                                                                | Resource overhead                      | Complexity                            | Notes                                                                                     |
+| -------------------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **Per-agent container**                            | Highest — each agent run is a fresh container                            | High — container startup per task step | High — dynamic Compose/k8s required   | Useful if agents need different runtimes or package sets; overkill for the current design |
+| **Per-company Docker Compose stack**               | Company-level — each company runs its own service set                    | Medium — one full stack per company    | Medium — Compose template per company | Good isolation; complex to provision dynamically; appropriate at larger scale             |
+| **Single Docker Compose stack, logical isolation** | Low — all companies share services; isolation by DB row and MinIO bucket | Low — one stack total                  | Low — a single `docker-compose.yml`   | Good starting point; revisit when multi-tenancy or strong isolation is required           |
 
 ## Decision
 
 **Single Docker Compose stack with logical per-company isolation.**
 
 All companies share the same PostgreSQL, MinIO, Redis, lcp-server, and lcp-agent instances. Per-company isolation is enforced logically:
+
 - Every DB query is scoped by `company_id`
 - Each company has its own MinIO bucket (see [ADR-007](./ADR-007-shared-company-storage.md))
 - Memory and knowledge base vectors are namespaced by `{company_id}/{role_name}` (see [ADR-006](./ADR-006-agent-memory-architecture.md))
@@ -45,6 +46,7 @@ Additional per-company and per-role MCP servers (git, CI/CD, design tools, etc.)
 ### Revisit trigger
 
 Move to per-company stacks when any of the following occurs:
+
 - Strong data isolation between tenants is a legal or contractual requirement
 - A single company's agent workload saturates shared resources
 - Different companies need different versions of a service

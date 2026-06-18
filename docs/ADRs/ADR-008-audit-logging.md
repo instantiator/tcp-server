@@ -5,22 +5,24 @@ Status: Proposed
 ## Context
 
 Every agent action — every LLM message sent and received, every tool call and its result, every state change — must be recorded. This serves:
+
 - Debugging and inspection of agent behaviour
 - Compliance and accountability
 - Training data for future model improvements
 - User observation of in-progress tasks (see [ADR-012](./ADR-012-human-in-the-loop.md))
 
 Two distinct capture paths are needed:
+
 1. **Automatic capture** — the software records all LLM/tool activity unconditionally; no agent action required
-2. **Agent-initiated decision logging** — agents can explicitly log a *decision with justification* (e.g., "chose REST over GraphQL because the client requires simple key-value lookups") via an MCP tool
+2. **Agent-initiated decision logging** — agents can explicitly log a _decision with justification_ (e.g., "chose REST over GraphQL because the client requires simple key-value lookups") via an MCP tool
 
 ## Storage options
 
-| Option | Queryable | Human-readable | Real-time | Notes |
-|--------|-----------|----------------|-----------|-------|
-| **DB table only** | ✓ | partial | ✓ | Fast inserts; easy queries; hard to grep raw text |
-| **Files in shared storage only** | ✗ | ✓ | delayed | Easy to inspect; no structured query |
-| **Hybrid (DB + export to storage)** | ✓ | ✓ | ✓ + delayed | Best of both; slightly more moving parts |
+| Option                              | Queryable | Human-readable | Real-time   | Notes                                             |
+| ----------------------------------- | --------- | -------------- | ----------- | ------------------------------------------------- |
+| **DB table only**                   | ✓         | partial        | ✓           | Fast inserts; easy queries; hard to grep raw text |
+| **Files in shared storage only**    | ✗         | ✓              | delayed     | Easy to inspect; no structured query              |
+| **Hybrid (DB + export to storage)** | ✓         | ✓              | ✓ + delayed | Best of both; slightly more moving parts          |
 
 ## Decision
 
@@ -34,24 +36,24 @@ LangGraph emits a structured event stream during graph execution (see [ADR-002](
 
 A standard MCP tool exposed to all agents:
 
-| Tool | Description |
-|------|-------------|
+| Tool                                             | Description                                            |
+| ------------------------------------------------ | ------------------------------------------------------ |
 | `log_decision(summary, justification, context?)` | Agent explicitly records a decision with its reasoning |
 
 This writes a row to `audit_events` with `event_type = 'decision'`. It encourages agents to narrate their reasoning, producing a richer semantic audit trail alongside the raw LLM transcript.
 
 ### `audit_events` table schema
 
-| Column | Type | Notes |
-|--------|------|-------|
-| `id` | UUID | Primary key |
-| `timestamp` | TIMESTAMPTZ | Event time |
-| `company_id` | UUID | FK to company |
-| `role` | VARCHAR | Role name (e.g., `software-architect`) |
-| `task_id` | UUID | FK to task |
-| `step_id` | UUID | FK to task step |
-| `event_type` | VARCHAR | `llm_request`, `llm_response`, `tool_call`, `tool_result`, `decision`, `state_change` |
-| `payload` | JSONB | Full event content |
+| Column       | Type        | Notes                                                                                 |
+| ------------ | ----------- | ------------------------------------------------------------------------------------- |
+| `id`         | UUID        | Primary key                                                                           |
+| `timestamp`  | TIMESTAMPTZ | Event time                                                                            |
+| `company_id` | UUID        | FK to company                                                                         |
+| `role`       | VARCHAR     | Role name (e.g., `software-architect`)                                                |
+| `task_id`    | UUID        | FK to task                                                                            |
+| `step_id`    | UUID        | FK to task step                                                                       |
+| `event_type` | VARCHAR     | `llm_request`, `llm_response`, `tool_call`, `tool_result`, `decision`, `state_change` |
+| `payload`    | JSONB       | Full event content                                                                    |
 
 Primary index: `(company_id, task_id, timestamp)` — covers the common "show me everything for this task" query.
 

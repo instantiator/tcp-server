@@ -31,7 +31,7 @@ When a running agent needs user input:
 
 A user can open a conversation thread with any role at any time, independent of a running task:
 
-1. `POST /conversations` with `{ role_name, initial_message }` 
+1. `POST /conversations` with `{ role_name, initial_message }`
 2. Orchestrator spins up a short-lived lcp-agent job using the specified role's config
 3. The agent loop runs until the conversation is idle or explicitly closed
 4. Each reply: `POST /conversations/{id}/reply` → queued to the agent job → response returned via SSE or polling
@@ -39,6 +39,7 @@ A user can open a conversation thread with any role at any time, independent of 
 #### Teaching a role
 
 If the user wants to teach the role (add to its memory or knowledge base):
+
 - User includes `{ teach: true }` in their message
 - On completion of the conversation turn, the orchestrator identifies the learned content and calls the memory MCP server's `remember()` tool, tagged with `source: 'user-teaching'`
 - If the content is better suited as a KB document, the user can indicate `{ teach: 'knowledge' }` — the content is written as an OKF document to company storage and re-indexed (see [ADR-006](./ADR-006-agent-memory-architecture.md))
@@ -51,11 +52,11 @@ A user can subscribe to the live audit log for any task step:
 
 ## Transport options
 
-| Option | Notes |
-|--------|-------|
-| **REST + polling** | Simplest; user polls `/conversations/{id}` for new messages. Adequate but latency-limited. |
-| **Server-Sent Events (SSE)** | Good for one-way streaming (agent output, audit log). Built into NestJS with `@Sse()`. |
-| **WebSockets** | Full duplex; best for interactive conversation UX. More complex. |
+| Option                       | Notes                                                                                      |
+| ---------------------------- | ------------------------------------------------------------------------------------------ |
+| **REST + polling**           | Simplest; user polls `/conversations/{id}` for new messages. Adequate but latency-limited. |
+| **Server-Sent Events (SSE)** | Good for one-way streaming (agent output, audit log). Built into NestJS with `@Sse()`.     |
+| **WebSockets**               | Full duplex; best for interactive conversation UX. More complex.                           |
 
 ## Decision
 
@@ -74,7 +75,7 @@ interface Conversation {
   id: UUID;
   company_id: UUID;
   role_name: string;
-  task_id?: UUID;           // set if agent-initiated during a task step
+  task_id?: UUID; // set if agent-initiated during a task step
   step_id?: UUID;
   status: 'awaiting_user' | 'awaiting_agent' | 'closed';
   created_at: Date;
@@ -87,7 +88,7 @@ interface ConversationMessage {
   author: 'user' | 'agent';
   content: string;
   timestamp: Date;
-  teach?: 'memory' | 'knowledge';  // set by user to trigger teaching flow
+  teach?: 'memory' | 'knowledge'; // set by user to trigger teaching flow
 }
 ```
 

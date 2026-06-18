@@ -12,23 +12,23 @@ Agents are **not** auth subjects — they run as trusted internal processes inhe
 
 Each company membership record associates a user with a set of permission flags:
 
-| Permission | Allows |
-|-----------|--------|
-| `create_tasks` | Submit new tasks and upload supporting materials |
-| `initiate_conversations` | Open a conversation thread with an agent role |
-| `access_storage` | Read from and write to company shared storage via the API |
-| `modify_company` | Update company settings, role definitions, MCP server list |
-| `define_agent_roles` | Create, update, and delete role definitions |
+| Permission               | Allows                                                     |
+| ------------------------ | ---------------------------------------------------------- |
+| `create_tasks`           | Submit new tasks and upload supporting materials           |
+| `initiate_conversations` | Open a conversation thread with an agent role              |
+| `access_storage`         | Read from and write to company shared storage via the API  |
+| `modify_company`         | Update company settings, role definitions, MCP server list |
+| `define_agent_roles`     | Create, update, and delete role definitions                |
 
 A user can hold multiple permissions. Company creation grants the creator all permissions.
 
 ## Auth mechanism options
 
-| Option | Notes |
-|--------|-------|
-| **JWT (self-issued)** | NestJS Guards + Passport JWT. No external service. Standard, well-documented in the NestJS ecosystem. |
+| Option                           | Notes                                                                                                                        |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **JWT (self-issued)**            | NestJS Guards + Passport JWT. No external service. Standard, well-documented in the NestJS ecosystem.                        |
 | **OAuth2 / OIDC (external IdP)** | Delegates identity to an existing provider (Google, GitHub, etc.). More setup; better for production multi-user deployments. |
-| **API keys** | Simplest for machine-to-machine. Less suitable for interactive user access. |
+| **API keys**                     | Simplest for machine-to-machine. Less suitable for interactive user access.                                                  |
 
 ## Decision
 
@@ -38,7 +38,7 @@ NestJS's `@UseGuards(JwtAuthGuard)` pattern is idiomatic for this stack. The JWT
 
 ```typescript
 interface JwtPayload {
-  sub: string;        // user ID
+  sub: string; // user ID
   company_id: string; // which company this token is scoped to
   permissions: Permission[];
 }

@@ -13,11 +13,11 @@ Status: Proposed
 
 ## Options
 
-| Option | Resumability | Parallel agents | User-in-the-loop | TS support | Notes |
-|--------|-------------|-----------------|-----------------|-----------|-------|
-| **DeepAgentsJS** | ✗ (custom) | ✗ (custom) | ✗ (custom) | ✓ | LangChain deep-research loop: plan → web-search → write. Not a general-purpose orchestrator. All resumability and parallelism would need to be built on top. |
-| **LangGraph.js** | ✓ (built-in checkpoint store) | ✓ (parallel subgraphs) | ✓ (`interrupt()`) | ✓ | State-machine for agent loops. Part of the LangChain ecosystem. PostgreSQL checkpoint store available out of the box. |
-| **Anthropic SDK directly** | ✗ (custom) | ✗ (custom) | ✗ (custom) | ✓ | ~20-line agent loop. Maximum control; minimal magic. All three requirements above would need custom implementation. |
+| Option                     | Resumability                  | Parallel agents        | User-in-the-loop  | TS support | Notes                                                                                                                                                        |
+| -------------------------- | ----------------------------- | ---------------------- | ----------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **DeepAgentsJS**           | ✗ (custom)                    | ✗ (custom)             | ✗ (custom)        | ✓          | LangChain deep-research loop: plan → web-search → write. Not a general-purpose orchestrator. All resumability and parallelism would need to be built on top. |
+| **LangGraph.js**           | ✓ (built-in checkpoint store) | ✓ (parallel subgraphs) | ✓ (`interrupt()`) | ✓          | State-machine for agent loops. Part of the LangChain ecosystem. PostgreSQL checkpoint store available out of the box.                                        |
+| **Anthropic SDK directly** | ✗ (custom)                    | ✗ (custom)             | ✗ (custom)        | ✓          | ~20-line agent loop. Maximum control; minimal magic. All three requirements above would need custom implementation.                                          |
 
 ### Concern: DeepAgentsJS
 

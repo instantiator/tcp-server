@@ -6,7 +6,7 @@ Status: Proposed
 
 Agents need two distinct kinds of stored knowledge:
 
-1. **Episodic memory** — what this *role* has done before, conclusions reached, lessons learned. Grows over time as agents complete tasks. Role-scoped (not per-agent-instance, since agents are ephemeral roles — see [ADR-001](./ADR-001-service-architecture.md)).
+1. **Episodic memory** — what this _role_ has done before, conclusions reached, lessons learned. Grows over time as agents complete tasks. Role-scoped (not per-agent-instance, since agents are ephemeral roles — see [ADR-001](./ADR-001-service-architecture.md)).
 2. **Knowledge base** — specialist domain documents ("how to perform a security audit", "our preferred architecture patterns"). Pre-seeded from OKF-formatted files. Updated by user teaching (see [ADR-012](./ADR-012-human-in-the-loop.md)) and optionally by periodic memory consolidation.
 
 Both systems are accessed by agents through a dedicated **memory MCP server** rather than direct DB calls, keeping the agent loop decoupled from the storage implementation.
@@ -20,11 +20,11 @@ OKF provides a consistent schema for structured knowledge documents. Knowledge b
 
 ## Options for vector storage
 
-| Option | Episodic | Knowledge base | Notes |
-|--------|----------|----------------|-------|
-| **pgvector** (PostgreSQL extension) | ✓ | ✓ | No extra service; integrates with ADR-004 DB; custom RAG wrapper needed |
-| **LanceDB** | ✓ | ✓ | Embedded, TypeScript-native; extra dependency; no separate service |
-| **Qdrant** | ✓ | ✓ | Dedicated vector DB; excellent performance; adds a Docker service |
+| Option                              | Episodic | Knowledge base | Notes                                                                   |
+| ----------------------------------- | -------- | -------------- | ----------------------------------------------------------------------- |
+| **pgvector** (PostgreSQL extension) | ✓        | ✓              | No extra service; integrates with ADR-004 DB; custom RAG wrapper needed |
+| **LanceDB**                         | ✓        | ✓              | Embedded, TypeScript-native; extra dependency; no separate service      |
+| **Qdrant**                          | ✓        | ✓              | Dedicated vector DB; excellent performance; adds a Docker service       |
 
 ## Decision
 
@@ -39,16 +39,16 @@ Each role carries a `knowledge_base` pointer in its definition (stored in the co
 ```typescript
 interface RoleDefinition {
   name: string;
-  description: string;               // human-readable summary of the role
-  knowledge_domains: string[];        // used for task assignment heuristics
+  description: string; // human-readable summary of the role
+  knowledge_domains: string[]; // used for task assignment heuristics
   knowledge_base: {
-    storage_path: string;             // path in MinIO to OKF source files
-    vector_namespace: string;         // pgvector partition for this role's KB
+    storage_path: string; // path in MinIO to OKF source files
+    vector_namespace: string; // pgvector partition for this role's KB
   };
-  memory_namespace: string;           // pgvector partition for episodic memory
+  memory_namespace: string; // pgvector partition for episodic memory
   mcp_server_list: McpServerConfig[]; // role-specific MCP servers (beyond standard)
-  llm_config: LlmConfig;             // see ADR-003
-  system_prompt_template: string;     // Handlebars-style template
+  llm_config: LlmConfig; // see ADR-003
+  system_prompt_template: string; // Handlebars-style template
 }
 ```
 
@@ -56,11 +56,11 @@ interface RoleDefinition {
 
 The memory MCP server exposes tools to the agent:
 
-| Tool | Description |
-|------|-------------|
-| `recall(query, top_k?)` | Semantic search over both episodic memory and knowledge base |
-| `remember(content, tags?)` | Write a new episodic memory entry |
-| `search_knowledge(query, top_k?)` | Search knowledge base only |
+| Tool                              | Description                                                  |
+| --------------------------------- | ------------------------------------------------------------ |
+| `recall(query, top_k?)`           | Semantic search over both episodic memory and knowledge base |
+| `remember(content, tags?)`        | Write a new episodic memory entry                            |
+| `search_knowledge(query, top_k?)` | Search knowledge base only                                   |
 
 The server is provided as a standard MCP server to all agents (see [ADR-009](./ADR-009-containerization-strategy.md)).
 

@@ -7,6 +7,7 @@ Status: Proposed
 The orchestration layer is the long-running service (within lcp-server) that manages the full lifecycle of a task: from the initial user prompt, through plan generation and agent dispatch, to completion. It is the "delivery manager" of LCP.
 
 Key requirements:
+
 - Generate a task plan using a configurable "planner role" agent
 - Dispatch task steps to lcp-agent one at a time (or in parallel where the plan allows)
 - Support agent-to-agent consultation mid-step
@@ -37,14 +38,14 @@ interface TaskStep {
   id: UUID;
   task_id: UUID;
   order: number;
-  role: string;                        // which role definition to use
-  knowledge_domains: string[];         // used to pre-fetch relevant memories/KB
-  mcp_server_list: McpServerConfig[];  // step-specific MCP additions
-  input_context: string;               // summary of what to pass to this agent
-  output_spec: string;                 // what the agent is expected to produce
+  role: string; // which role definition to use
+  knowledge_domains: string[]; // used to pre-fetch relevant memories/KB
+  mcp_server_list: McpServerConfig[]; // step-specific MCP additions
+  input_context: string; // summary of what to pass to this agent
+  output_spec: string; // what the agent is expected to produce
   status: StepStatus;
-  thread_id?: string;                  // LangGraph checkpoint thread ID (set on dispatch)
-  result?: string;                     // agent's output summary
+  thread_id?: string; // LangGraph checkpoint thread ID (set on dispatch)
+  result?: string; // agent's output summary
   timeout_seconds: number;
   max_iterations: number;
 }
@@ -60,12 +61,12 @@ interface RoleDefinition {
   description: string;
   knowledge_domains: string[];
   knowledge_base: {
-    storage_path: string;       // MinIO path to OKF source files
-    vector_namespace: string;   // pgvector namespace for this role's KB
+    storage_path: string; // MinIO path to OKF source files
+    vector_namespace: string; // pgvector namespace for this role's KB
   };
-  memory_namespace: string;     // pgvector namespace for episodic memory
+  memory_namespace: string; // pgvector namespace for episodic memory
   mcp_server_list: McpServerConfig[];
-  llm_config: LlmConfig;        // see ADR-003
+  llm_config: LlmConfig; // see ADR-003
   system_prompt_template: string;
 }
 ```
@@ -85,9 +86,9 @@ Supporting materials (uploaded by the user at task creation) are accessible to t
 
 **BullMQ + Redis** (see [ADR-009](./ADR-009-containerization-strategy.md) for why Redis is in Docker Compose).
 
-| Queue | Direction | Description |
-|-------|-----------|-------------|
-| `agent-jobs` | lcp-server → lcp-agent | Dispatches a task step for execution |
+| Queue           | Direction              | Description                               |
+| --------------- | ---------------------- | ----------------------------------------- |
+| `agent-jobs`    | lcp-server → lcp-agent | Dispatches a task step for execution      |
 | `agent-results` | lcp-agent → lcp-server | Reports step completion, progress, events |
 
 BullMQ's retry and priority features are used: failed steps are retried up to a configurable limit; high-priority tasks can preempt lower-priority ones.
@@ -95,6 +96,7 @@ BullMQ's retry and priority features are used: failed steps are retried up to a 
 ### Orchestrator loop (lcp-server)
 
 The orchestrator is a NestJS service that:
+
 1. On startup: scans for tasks in `planning` or `in_progress` with no active job — resumes them
 2. On `agent-results` event `step_completed`: advances the plan to the next step, or marks the task `completed`
 3. On `agent-results` event `step_failed`: increments retry count; marks task `failed` on limit
@@ -114,6 +116,7 @@ When an agent needs to consult another role (e.g., the developer asks the securi
 ## Plan revision
 
 An agent can propose plan revisions via a `revise_plan` event containing the proposed changes. The orchestrator:
+
 1. Validates the proposed changes (no removal of completed steps, no circular dependencies)
 2. Applies the patch to the plan in the database
 3. Resumes the current step
@@ -135,6 +138,7 @@ completed
 ## Restore on restart
 
 On lcp-server startup:
+
 1. Query all tasks with status `planning` or `in_progress`
 2. For each incomplete step with no active BullMQ job: re-dispatch
 3. LangGraph checkpoints ensure lcp-agent resumes from the last safe state (see [ADR-005](./ADR-005-agent-state-persistence.md))

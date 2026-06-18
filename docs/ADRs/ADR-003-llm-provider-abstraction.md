@@ -12,11 +12,11 @@ The spec requires that each `LcpAgent` can use "whichever LLM service is specifi
 
 ## Options
 
-| Option | Notes |
-|--------|-------|
+| Option                                          | Notes                                                                                                                                                                                                              |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **LangChain model interface** (`BaseChatModel`) | Built-in to LangGraph.js. `ChatAnthropic`, `ChatOpenAI`, `ChatGoogleGenerativeAI`, etc. LM Studio works as `ChatOpenAI` with a custom `baseURL`. Zero extra dependencies if LangGraph is already chosen (ADR-002). |
-| **Vercel AI SDK** (`ai`) | Provider-agnostic, TypeScript-first. Works without LangChain. Adds a dependency; would require an adapter to plug into LangGraph's `BaseChatModel`. |
-| **Custom thin wrapper** | Full control; no framework lock-in. Adds maintenance burden; duplicates what LangChain already provides. |
+| **Vercel AI SDK** (`ai`)                        | Provider-agnostic, TypeScript-first. Works without LangChain. Adds a dependency; would require an adapter to plug into LangGraph's `BaseChatModel`.                                                                |
+| **Custom thin wrapper**                         | Full control; no framework lock-in. Adds maintenance burden; duplicates what LangChain already provides.                                                                                                           |
 
 ## Decision
 
@@ -29,9 +29,9 @@ LM Studio exposes an OpenAI-compatible chat completions endpoint. Configure it a
 ```typescript
 new ChatOpenAI({
   model: 'local-model-name',
-  apiKey: 'lm-studio',        // LM Studio ignores the key but requires a value
+  apiKey: 'lm-studio', // LM Studio ignores the key but requires a value
   configuration: {
-    baseURL: 'http://192.168.1.x:1234/v1',  // LM Studio address on local network
+    baseURL: 'http://192.168.1.x:1234/v1', // LM Studio address on local network
   },
 });
 ```
@@ -44,7 +44,7 @@ Each role definition carries an `llm_config` block (see [ADR-010](./ADR-010-orch
 interface LlmConfig {
   provider: 'anthropic' | 'openai' | 'lm-studio' | string;
   model: string;
-  baseUrl?: string;   // override for LM Studio or other custom endpoints
+  baseUrl?: string; // override for LM Studio or other custom endpoints
   apiKeyEnvVar?: string; // env var name — never store keys in DB
 }
 ```
