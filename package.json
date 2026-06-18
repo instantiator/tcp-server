@@ -1,32 +1,48 @@
 {
-  "name": "tcp-server",
+  "name": "lcp-server",
   "version": "0.0.1",
   "description": "",
   "author": "",
   "private": true,
   "license": "MIT",
   "scripts": {
-    "build": "nest build && npm run schema:generate && npm run licenses:generate",
-    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-    "start": "nest start",
-    "start:dev": "nest start --watch",
-    "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main",
-    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "build": "nest build lcp-server && nest build lcp-agent && npm run schema:generate && npm run licenses:generate",
+    "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\"",
+    "start": "nest start lcp-server",
+    "start:dev": "nest start lcp-server --watch",
+    "start:debug": "nest start lcp-server --debug --watch",
+    "start:prod": "node dist/apps/lcp-server/main",
+    "lint": "eslint \"{apps,libs}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
-    "schema:generate": "ts-json-schema-generator --path 'src/models/*.ts' --type '*' --out schemas/schema.json",
-    "licenses:generate": "license-report --config=.license-report.json --output=markdown --only=prod > docs/licenses.md"
+    "test:e2e": "jest --config ./apps/lcp-server/test/jest-e2e.json",
+    "test:integration": "jest --config test/jest-integration.json",
+    "test:system": "jest --config test/jest-system.json",
+    "schema:generate": "ts-json-schema-generator --path 'libs/lcp-shared/src/models/*.ts' --type '*' --out schemas/schema.json",
+    "licenses:generate": "license-report --config=.license-report.json --output=markdown --only=prod > docs/licenses.md",
+    "migration:generate": "typeorm migration:generate -d apps/lcp-server/src/data-source.ts",
+    "migration:run": "typeorm migration:run -d apps/lcp-server/src/data-source.ts",
+    "migration:revert": "typeorm migration:revert -d apps/lcp-server/src/data-source.ts"
   },
   "dependencies": {
+    "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.0.1",
+    "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.1",
+    "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/terminus": "^11.1.1",
     "@nestjs/typeorm": "^11.0.1",
+    "axios": "^1.18.0",
     "better-sqlite3": "^12.10.0",
+    "joi": "^18.2.3",
+    "jwks-rsa": "^4.0.1",
+    "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1",
+    "pg": "^8.21.0",
+    "redis": "^5.12.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "typeorm": "^1.0.0"
@@ -41,6 +57,9 @@
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.0.0",
+    "@types/passport": "^1.0.17",
+    "@types/passport-jwt": "^4.0.1",
+    "@types/pg": "^8.20.0",
     "@types/supertest": "^7.0.0",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
@@ -59,21 +78,35 @@
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
   },
+  "overrides": {
+    "multer": "^2.2.0"
+  },
   "jest": {
     "moduleFileExtensions": [
       "js",
       "json",
       "ts"
     ],
-    "rootDir": "src",
+    "roots": [
+      "<rootDir>/apps",
+      "<rootDir>/libs"
+    ],
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
+      "^.+\\.(t|j)s$": [
+        "ts-jest",
+        {
+          "tsconfig": "<rootDir>/tsconfig.json"
+        }
+      ]
+    },
+    "moduleNameMapper": {
+      "@lcp/shared": "<rootDir>/libs/lcp-shared/src/index.ts"
     },
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],
-    "coverageDirectory": "../coverage",
+    "coverageDirectory": "./coverage",
     "testEnvironment": "node"
   }
 }
