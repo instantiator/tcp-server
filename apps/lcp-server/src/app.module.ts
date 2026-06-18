@@ -1,11 +1,11 @@
+import { LcpCompany } from '@lcp/shared';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { LcpCompany } from '@lcp/shared';
 import { ApiModule } from './api/api.module';
+import { AuthModule } from './auth/auth.module';
 import { configSchema } from './config/config.schema';
 import { HealthModule } from './health/health.module';
-import { AuthModule } from './auth/auth.module';
 import { InitialSchema1750000000000 } from './migrations/1750000000000-InitialSchema';
 
 @Module({

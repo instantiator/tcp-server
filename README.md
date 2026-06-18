@@ -67,13 +67,13 @@ docker compose --profile auth up
 
 Services will be available at:
 
-| Service | URL |
-|---------|-----|
-| lcp-server API | http://localhost:3000 |
-| lcp-server health | http://localhost:3000/health |
-| lcp-agent health | http://localhost:3001/health |
-| MinIO console | http://localhost:9001 |
-| Keycloak admin | http://localhost:8080 (profile: auth) |
+| Service           | URL                                   |
+| ----------------- | ------------------------------------- |
+| lcp-server API    | http://localhost:3000                 |
+| lcp-server health | http://localhost:3000/health          |
+| lcp-agent health  | http://localhost:3001/health          |
+| MinIO console     | http://localhost:9001                 |
+| Keycloak admin    | http://localhost:8080 (profile: auth) |
 
 ### Stop everything
 
@@ -96,12 +96,12 @@ lcp-server falls back to in-memory SQLite when `DATABASE_URL` is not a postgres 
 
 ## Testing
 
-| Command | What it tests | Requires |
-|---------|---------------|----------|
-| `npm test` | Unit tests (fast, no external services) | Nothing |
-| `npm run test:e2e` | HTTP API tests against AppModule | Nothing (SQLite fallback) |
-| `npm run test:integration` | Service connectivity checks | Docker Compose |
-| `npm run test:system` | Full stack health checks | `docker compose up` |
+| Command                    | What it tests                           | Requires                  |
+| -------------------------- | --------------------------------------- | ------------------------- |
+| `npm test`                 | Unit tests (fast, no external services) | Nothing                   |
+| `npm run test:e2e`         | HTTP API tests against AppModule        | Nothing (SQLite fallback) |
+| `npm run test:integration` | Service connectivity checks             | Docker Compose            |
+| `npm run test:system`      | Full stack health checks                | `docker compose up`       |
 
 ### Convenience scripts
 
@@ -135,35 +135,35 @@ See [docs/keycloak-setup.md](docs/keycloak-setup.md) for Keycloak setup. To use 
 
 Currently implemented:
 
-| Concern | Choice |
-|---------|--------|
-| Framework | NestJS 11 |
-| ORM | TypeORM |
-| Database (production) | PostgreSQL 16 + pgvector |
-| Database (unit tests) | better-sqlite3 (in-memory) |
-| Auth | OAuth2/OIDC (Keycloak default) |
-| Object storage | MinIO |
-| Task queue | Redis (BullMQ — configured, workers pending) |
-| Schema export | ts-json-schema-generator |
+| Concern               | Choice                                       |
+| --------------------- | -------------------------------------------- |
+| Framework             | NestJS 11                                    |
+| ORM                   | TypeORM                                      |
+| Database (production) | PostgreSQL 16 + pgvector                     |
+| Database (unit tests) | better-sqlite3 (in-memory)                   |
+| Auth                  | OAuth2/OIDC (Keycloak default)               |
+| Object storage        | MinIO                                        |
+| Task queue            | Redis (BullMQ — configured, workers pending) |
+| Schema export         | ts-json-schema-generator                     |
 
 See [docs/ADRs/](docs/ADRs/) for decisions on upcoming components (agent runner, memory, orchestration).
 
 ## Commands reference
 
-| Command | Purpose |
-|---------|---------|
-| `npm run build` | Compile both apps to `dist/` |
-| `npm run build lcp-server` | Compile lcp-server only |
-| `npm run build lcp-agent` | Compile lcp-agent only |
-| `npm run start:dev` | Start lcp-server with hot reload |
-| `npm run lint` | ESLint with auto-fix |
-| `npm run format` | Prettier over `apps/` and `libs/` |
-| `npm test` | Unit tests |
-| `npm run test:e2e` | E2E tests |
-| `npm run test:integration` | Integration tests (needs Docker) |
-| `npm run test:system` | System tests (needs `docker compose up`) |
-| `npm run schema:generate` | Regenerate [schemas/schema.json](schemas/schema.json) |
-| `npm run licenses:generate` | Regenerate [docs/licenses.md](docs/licenses.md) |
-| `npm run migration:generate` | Generate a new TypeORM migration |
-| `npm run migration:run` | Run pending migrations |
-| `npm run migration:revert` | Revert the last migration |
+| Command                      | Purpose                                               |
+| ---------------------------- | ----------------------------------------------------- |
+| `npm run build`              | Compile both apps to `dist/`                          |
+| `npm run build lcp-server`   | Compile lcp-server only                               |
+| `npm run build lcp-agent`    | Compile lcp-agent only                                |
+| `npm run start:dev`          | Start lcp-server with hot reload                      |
+| `npm run lint`               | ESLint with auto-fix                                  |
+| `npm run format`             | Prettier over `apps/` and `libs/`                     |
+| `npm test`                   | Unit tests                                            |
+| `npm run test:e2e`           | E2E tests                                             |
+| `npm run test:integration`   | Integration tests (needs Docker)                      |
+| `npm run test:system`        | System tests (needs `docker compose up`)              |
+| `npm run schema:generate`    | Regenerate [schemas/schema.json](schemas/schema.json) |
+| `npm run licenses:generate`  | Regenerate [docs/licenses.md](docs/licenses.md)       |
+| `npm run migration:generate` | Generate a new TypeORM migration                      |
+| `npm run migration:run`      | Run pending migrations                                |
+| `npm run migration:revert`   | Revert the last migration                             |

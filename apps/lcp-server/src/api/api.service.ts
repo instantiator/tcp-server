@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { UUID } from 'crypto';
-import { DbService } from '../db/db.service';
 import { LcpCompany } from '@lcp/shared';
+import { DbService } from '../db/db.service';
 import { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
 
 @Injectable()

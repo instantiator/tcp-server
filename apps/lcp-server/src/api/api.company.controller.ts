@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
 import type { UUID } from 'crypto';
-import type { LcpCompany } from '@lcp/shared';
+import { LcpCompany } from '@lcp/shared';
 import type { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
 import { ApiService } from './api.service';
 

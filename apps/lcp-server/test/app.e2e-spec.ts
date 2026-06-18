@@ -1,11 +1,11 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { AppModule } from '../src/app.module';
 import { LcpCompany } from '@lcp/shared';
+import { AppModule } from '../src/app.module';
 
 describe('CompanyController (e2e)', () => {
   let app: INestApplication<App>;

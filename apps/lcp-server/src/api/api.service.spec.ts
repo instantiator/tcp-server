@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
-import { DbService } from '../db/db.service';
 import { LcpCompany } from '@lcp/shared';
+import { DbService } from '../db/db.service';
 import { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
 import { ApiService } from './api.service';
 
