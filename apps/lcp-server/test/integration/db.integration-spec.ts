@@ -33,8 +33,10 @@ describe('Database connectivity', () => {
     if (!ds?.isInitialized) {
       return;
     }
+    // pg_available_extensions lists what can be installed; pg_extension only
+    // lists what has already been created (which requires migrations to have run).
     const result = await ds.query(
-      `SELECT extname FROM pg_extension WHERE extname = 'vector'`,
+      `SELECT name FROM pg_available_extensions WHERE name = 'vector'`,
     );
     expect(result.length).toBeGreaterThan(0);
   });

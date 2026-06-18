@@ -18,7 +18,7 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./apps/lcp-server/test/jest-e2e.json",
-    "test:integration": "jest --config test/jest-integration.json",
+    "test:integration": "jest --config test/jest-integration.json --forceExit",
     "test:system": "jest --config test/jest-system.json",
     "schema:generate": "ts-json-schema-generator --path 'libs/lcp-shared/src/models/*.ts' --type '*' --out schemas/schema.json",
     "licenses:generate": "license-report --config=.license-report.json --output=markdown --only=prod > docs/licenses.md",

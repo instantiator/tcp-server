@@ -6,6 +6,7 @@ import { ApiModule } from './api/api.module';
 import { configSchema } from './config/config.schema';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
+import { InitialSchema1750000000000 } from './migrations/1750000000000-InitialSchema';
 
 @Module({
   imports: [
@@ -33,7 +34,7 @@ import { AuthModule } from './auth/auth.module';
           entities: [LcpCompany],
           synchronize: false,
           migrationsRun: true,
-          migrations: [__dirname + '/migrations/*.js'],
+          migrations: [InitialSchema1750000000000],
         };
       },
     }),

@@ -6,7 +6,7 @@
   "sourceRoot": "apps/lcp-server/src",
   "compilerOptions": {
     "deleteOutDir": true,
-    "webpack": false
+    "webpack": true
   },
   "projects": {
     "lcp-server": {

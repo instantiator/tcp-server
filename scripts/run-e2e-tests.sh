@@ -1,20 +1,42 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-docker compose up -d postgres redis minio
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="$REPO_ROOT/.env.testing"
 
-echo "Waiting for postgres to be healthy..."
-until docker compose exec -T postgres pg_isready -U lcp 2>/dev/null; do sleep 2; done
+if [ ! -f "$ENV_FILE" ]; then
+  echo "ERROR: $ENV_FILE not found." >&2
+  exit 1
+fi
 
-export DATABASE_URL="postgres://lcp:${POSTGRES_PASSWORD:-dev-password}@localhost:5432/lcp"
+set -a; source "$ENV_FILE"; set +a
+
+wait_for() {
+  local name="$1" cmd="$2" max="${3:-60}"
+  local waited=0
+  echo "Waiting for $name..."
+  until eval "$cmd" 2>/dev/null; do
+    sleep 2; waited=$((waited + 2))
+    if [ "$waited" -ge "$max" ]; then
+      echo "ERROR: Timed out waiting for $name after ${max}s" >&2
+      docker compose --env-file "$ENV_FILE" logs --tail=20
+      exit 1
+    fi
+  done
+  echo "$name ready."
+}
+
+docker compose --env-file "$ENV_FILE" up -d postgres redis minio
+
+wait_for postgres "docker compose exec -T postgres pg_isready -U lcp"
+
+export DATABASE_URL="postgres://lcp:${POSTGRES_PASSWORD}@localhost:5432/lcp"
 export REDIS_URL="redis://localhost:6379"
 export MINIO_ENDPOINT="http://localhost:9000"
-export MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-lcp-access-key}"
-export MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-lcp-secret-key}"
-export OIDC_ISSUER_URL="${OIDC_ISSUER_URL:-http://localhost:8080/realms/lcp}"
-export OIDC_CLIENT_ID="${OIDC_CLIENT_ID:-lcp-server}"
-export OIDC_CLIENT_SECRET="${OIDC_CLIENT_SECRET:-stub}"
+export OIDC_ISSUER_URL
+export OIDC_CLIENT_ID
+export OIDC_CLIENT_SECRET
 
 npm run test:e2e
 
-docker compose down
+docker compose --env-file "$ENV_FILE" down
