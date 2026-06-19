@@ -6,6 +6,7 @@ import { App } from 'supertest/types';
 import { Repository } from 'typeorm';
 import { AuditEvent, LcpAgent, LcpCompany, LcpRole } from '@lcp/shared';
 import { AppModule } from '../src/app.module';
+import { makeTestJwt } from './helpers/test-jwt';
 
 describe('CompanyController (e2e)', () => {
   let app: INestApplication<App>;
@@ -13,6 +14,7 @@ describe('CompanyController (e2e)', () => {
   let roleRepo: Repository<LcpRole>;
   let agentRepo: Repository<LcpAgent>;
   let auditRepo: Repository<AuditEvent>;
+  let jwt: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -25,14 +27,15 @@ describe('CompanyController (e2e)', () => {
     roleRepo = moduleFixture.get(getRepositoryToken(LcpRole));
     agentRepo = moduleFixture.get(getRepositoryToken(LcpAgent));
     auditRepo = moduleFixture.get(getRepositoryToken(AuditEvent));
+    jwt = makeTestJwt();
   });
 
   afterEach(async () => {
-    // Clear in FK-safe order: dependents before their referenced tables
-    await auditRepo.clear();
-    await agentRepo.clear();
-    await roleRepo.clear();
-    await companyRepo.clear();
+    // DELETE (not clear/TRUNCATE) — PostgreSQL rejects TRUNCATE on FK-referenced tables
+    await auditRepo.createQueryBuilder().delete().execute();
+    await agentRepo.createQueryBuilder().delete().execute();
+    await roleRepo.createQueryBuilder().delete().execute();
+    await companyRepo.createQueryBuilder().delete().execute();
   });
 
   afterAll(async () => {
@@ -43,6 +46,7 @@ describe('CompanyController (e2e)', () => {
     it('returns 201 when creating a company', async () => {
       await request(app.getHttpServer())
         .post('/api/company')
+        .set('Authorization', `Bearer ${jwt}`)
         .send({ slug: 'acme', name: 'Acme Corp' })
         .expect(201);
     });
@@ -50,6 +54,7 @@ describe('CompanyController (e2e)', () => {
     it('persists the company so it can be retrieved', async () => {
       await request(app.getHttpServer())
         .post('/api/company')
+        .set('Authorization', `Bearer ${jwt}`)
         .send({ slug: 'acme', name: 'Acme Corp' });
 
       const record = await companyRepo.findOneBy({ slug: 'acme' });
@@ -60,10 +65,12 @@ describe('CompanyController (e2e)', () => {
     it('replaces an existing company with the same slug on a second POST', async () => {
       await request(app.getHttpServer())
         .post('/api/company')
+        .set('Authorization', `Bearer ${jwt}`)
         .send({ slug: 'acme', name: 'First' });
 
       await request(app.getHttpServer())
         .post('/api/company')
+        .set('Authorization', `Bearer ${jwt}`)
         .send({ slug: 'acme', name: 'Second' });
 
       expect(await companyRepo.count({ where: { slug: 'acme' } })).toBe(1);
@@ -71,18 +78,27 @@ describe('CompanyController (e2e)', () => {
         'Second',
       );
     });
+
+    it('returns 401 when no token is provided', async () => {
+      await request(app.getHttpServer())
+        .post('/api/company')
+        .send({ slug: 'acme', name: 'Acme Corp' })
+        .expect(401);
+    });
   });
 
   describe('GET /api/company/:id', () => {
     it('returns 200 with the company when found by UUID', async () => {
       await request(app.getHttpServer())
         .post('/api/company')
+        .set('Authorization', `Bearer ${jwt}`)
         .send({ slug: 'acme', name: 'Acme Corp' });
 
       const id = (await companyRepo.findOneBy({ slug: 'acme' }))!.id;
 
       const res = await request(app.getHttpServer())
         .get(`/api/company/${id}`)
+        .set('Authorization', `Bearer ${jwt}`)
         .expect(200);
 
       const body = res.body as { slug: string; name: string };
@@ -93,10 +109,12 @@ describe('CompanyController (e2e)', () => {
     it('returns 200 with the company when found by slug', async () => {
       await request(app.getHttpServer())
         .post('/api/company')
+        .set('Authorization', `Bearer ${jwt}`)
         .send({ slug: 'acme', name: 'Acme Corp' });
 
       const res = await request(app.getHttpServer())
         .get('/api/company/acme')
+        .set('Authorization', `Bearer ${jwt}`)
         .expect(200);
 
       expect((res.body as { slug: string }).slug).toBe('acme');
@@ -107,6 +125,7 @@ describe('CompanyController (e2e)', () => {
       // TODO: add a NotFoundException guard to return 404 instead — before guarded endpoints are shipped, to align with REST conventions.
       const res = await request(app.getHttpServer())
         .get('/api/company/00000000-0000-0000-0000-000000000000')
+        .set('Authorization', `Bearer ${jwt}`)
         .expect(200);
 
       expect(res.body).toEqual({});
@@ -117,12 +136,14 @@ describe('CompanyController (e2e)', () => {
     it('updates the company name', async () => {
       await request(app.getHttpServer())
         .post('/api/company')
+        .set('Authorization', `Bearer ${jwt}`)
         .send({ slug: 'acme', name: 'Original' });
 
       const id = (await companyRepo.findOneBy({ slug: 'acme' }))!.id;
 
       await request(app.getHttpServer())
         .put(`/api/company/${id}`)
+        .set('Authorization', `Bearer ${jwt}`)
         .send({ slug: 'acme', name: 'Updated' })
         .expect(200);
 

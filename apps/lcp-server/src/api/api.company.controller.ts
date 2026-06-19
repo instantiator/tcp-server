@@ -6,14 +6,17 @@ import {
   Param,
   Post,
   Put,
+  UseGuards,
 } from '@nestjs/common';
 import type { UUID } from 'crypto';
 import { LcpCompany, LcpRole } from '@lcp/shared';
 import type { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
 import { DbService } from '../db/db.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ApiService } from './api.service';
 
 /** REST controller for company (tenant) create, read, and update operations. */
+@UseGuards(JwtAuthGuard)
 @Controller({ path: 'api/company' })
 export class CompanyController {
   constructor(

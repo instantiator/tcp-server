@@ -6,11 +6,14 @@ import {
   NotFoundException,
   Param,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import type { LcpRoleTemplate } from '../templates/LcpRoleTemplate';
 import { DbService } from '../db/db.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 /** REST controller for {@link LcpRole} create and read operations. */
+@UseGuards(JwtAuthGuard)
 @Controller({ path: 'api/role' })
 export class RoleController {
   constructor(private readonly db: DbService) {}

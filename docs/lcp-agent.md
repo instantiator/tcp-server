@@ -20,10 +20,23 @@ The `lcp-agent` service runs the LangGraph agent loop. It consumes jobs from the
 
 ---
 
+## Authentication
+
+All `lcp-server` API endpoints (`/api/*`) require a Bearer token from your OIDC provider. Obtain one from Keycloak (see [keycloak-setup.md](keycloak-setup.md)) and pass it in every request:
+
+```
+-H "Authorization: Bearer <token>"
+```
+
+The `/health` endpoints on both services are public and do not require a token.
+
+---
+
 ## Creating a role
 
 ```bash
 curl -X POST http://localhost:3000/api/role \
+  -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
     "companyId": "<uuid>",
@@ -55,6 +68,7 @@ curl -X POST http://localhost:3000/api/role \
 
 ```bash
 curl -X POST http://localhost:3000/api/agent/start \
+  -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
     "companyId": "<uuid>",
@@ -70,7 +84,8 @@ Returns the `LcpAgent` record. Poll `GET /api/agent/:id` to track status.
 ## Resuming an agent
 
 ```bash
-curl -X POST http://localhost:3000/api/agent/resume/:id
+curl -X POST http://localhost:3000/api/agent/resume/:id \
+  -H "Authorization: Bearer <token>"
 ```
 
 Valid from status `idle`, `paused`, or `failed`. Re-enqueues the agent; the LangGraph checkpoint store restores prior conversation state.
@@ -83,6 +98,7 @@ Before assigning a role to a model, verify that the model supports the required 
 
 ```bash
 curl -X POST http://localhost:3000/api/model/check \
+  -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
     "models": [
@@ -104,7 +120,7 @@ Returns `{ provider, model, supportsTools, supportsStructuredOutput, compatible,
 
 | Limit | Value | Config |
 |---|---|---|
-| Max iterations | 10 | Hard-coded in `AgentLoopService` |
+| Max LLM calls | 10 | Hard-coded in `AgentLoopService` |
 | Timeout | 60 s | Hard-coded in `AgentLoopService` |
 
 Both are candidates for `LcpRole.runConfig` JSONB once per-role tuning is needed (see `docs/prompts/003.3`).

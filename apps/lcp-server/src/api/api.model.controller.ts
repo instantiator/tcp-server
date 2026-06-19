@@ -1,11 +1,13 @@
 import { LlmConfig } from '@lcp/shared';
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import {
   ModelCompatibilityResult,
   ModelCompatibilityService,
 } from '../model-check/model-compatibility.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 /** REST controller for checking LLM model compatibility with the agent loop. */
+@UseGuards(JwtAuthGuard)
 @Controller({ path: 'api/model' })
 export class ModelController {
   constructor(private readonly checker: ModelCompatibilityService) {}

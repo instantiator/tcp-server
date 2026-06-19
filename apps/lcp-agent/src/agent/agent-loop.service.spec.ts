@@ -219,4 +219,61 @@ describe('AgentLoopService', () => {
   it('does nothing when the agent id does not exist', async () => {
     await expect(service.run('no-such-id')).resolves.not.toThrow();
   });
+
+  it('completes when many non-LLM chain events precede the model response', async () => {
+    // Regression: MAX_ITERATIONS must count on_chat_model_start, not all events.
+    // 20 on_chain_start events followed by a model response would have triggered
+    // the old "iterations > MAX_ITERATIONS" abort and marked the agent failed.
+    const manyChainEvents = Array.from({ length: 20 }, (_, i) => ({
+      event: 'on_chain_start',
+      name: `node_${i}`,
+      data: {},
+    }));
+    jest.mocked(StateGraph).mockImplementationOnce(
+      () =>
+        ({
+          addNode: jest.fn().mockReturnThis(),
+          addEdge: jest.fn().mockReturnThis(),
+          compile: jest
+            .fn()
+            .mockReturnValue(
+              makeStubGraph([...manyChainEvents, ...SUCCESS_EVENTS]),
+            ),
+        }) as unknown as InstanceType<typeof StateGraph>,
+    );
+
+    const { agent } = await seedAgentAndRole();
+    await service.run(agent.id);
+
+    const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+    expect(updated.status).toBe(AgentStatus.Completed);
+  });
+
+  it('aborts with failed/max_iterations when more than 10 LLM calls are made', async () => {
+    const elevenModelStarts = Array.from({ length: 11 }, () => ({
+      event: 'on_chat_model_start',
+      name: 'ChatOpenAI',
+      data: { input: {} },
+    }));
+    jest.mocked(StateGraph).mockImplementationOnce(
+      () =>
+        ({
+          addNode: jest.fn().mockReturnThis(),
+          addEdge: jest.fn().mockReturnThis(),
+          compile: jest.fn().mockReturnValue(makeStubGraph(elevenModelStarts)),
+        }) as unknown as InstanceType<typeof StateGraph>,
+    );
+
+    const { agent } = await seedAgentAndRole();
+    await service.run(agent.id);
+
+    const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+    expect(updated.status).toBe(AgentStatus.Failed);
+
+    const stateEvent = await auditRepo.findOneBy({
+      agentId: agent.id,
+      eventType: AuditEventType.StateChange,
+    });
+    expect(stateEvent?.payload).toMatchObject({ reason: 'max_iterations' });
+  });
 });

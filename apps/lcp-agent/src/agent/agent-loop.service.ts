@@ -197,10 +197,12 @@ export class AgentLoopService {
 
     const stream = graph.streamEvents(input, { ...config, version: 'v2' });
     for await (const event of stream) {
-      iterations++;
-      if (iterations > MAX_ITERATIONS) {
-        abortController.abort('max_iterations');
-        break;
+      if (event.event === 'on_chat_model_start') {
+        iterations++;
+        if (iterations > MAX_ITERATIONS) {
+          abortController.abort('max_iterations');
+          break;
+        }
       }
 
       const auditType = EVENT_TYPE_MAP[event.event];

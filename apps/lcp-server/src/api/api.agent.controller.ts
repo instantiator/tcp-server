@@ -7,12 +7,15 @@ import {
   NotFoundException,
   Param,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import { DbService } from '../db/db.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { LcpAgentTemplate } from '../templates/LcpAgentTemplate';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 
 /** REST controller for starting, resuming, and inspecting {@link LcpAgent} instances. */
+@UseGuards(JwtAuthGuard)
 @Controller({ path: 'api/agent' })
 export class AgentController {
   constructor(
