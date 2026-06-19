@@ -49,4 +49,6 @@ Design decisions made during the project, with context and rationale.
 ## Planning
 
 Historical planning documents and session prompts are in [prompts/](prompts/).
-These are records of how the project was designed, not active documentation.
+
+> [!NOTE]
+> These are records of how the project was designed, not active documentation.
