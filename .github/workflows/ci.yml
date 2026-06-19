@@ -50,26 +50,9 @@ jobs:
       - run: npm ci
       - run: ./scripts/run-unit-tests.sh
 
-  system-test:
-    name: System tests
-    needs: [unit-test]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: true
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "24"
-          cache: npm
-      - run: npm ci
-      - run: ./scripts/run-system-tests.sh
-      - if: always()
-        run: docker compose --profile auth down -v
-
   integration-test:
     name: Integration tests
-    needs: [system-test]
+    needs: [unit-test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -83,6 +66,23 @@ jobs:
       - run: ./scripts/run-integration-tests.sh
       - if: always()
         run: docker compose down -v
+
+  system-test:
+    name: System tests
+    needs: [integration-test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: ./scripts/run-system-tests.sh
+      - if: always()
+        run: docker compose --profile auth down -v
 
   e2e-test:
     name: E2E tests
