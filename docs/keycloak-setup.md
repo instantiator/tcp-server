@@ -2,6 +2,18 @@
 
 LCP uses an OIDC-compatible IdP for authentication. Keycloak is the default, provided as an optional Docker Compose service.
 
+## Automated local setup
+
+For local development, `scripts/start-dev.sh` handles everything below automatically — it starts all services, creates the `lcp` realm and `lcp-server` client, and adds a test user:
+
+```bash
+./scripts/start-dev.sh                          # uses .env or .env.testing
+./scripts/start-dev.sh -e .env.local            # use a custom env file
+./scripts/start-dev.sh --test-username alice --test-password s3cret
+```
+
+The manual steps below are for reference, custom IdP configuration, or production setup.
+
 ## Start Keycloak
 
 ```bash

@@ -49,14 +49,17 @@ docker compose up -d
 
 ## Testing
 
-| Command | What it tests | Requires |
-|---------|---------------|----------|
-| `npm test` | Unit tests (fast, no external services) | Nothing |
-| `npm run test:e2e` | HTTP API tests against AppModule | Nothing (SQLite fallback) |
-| `npm run test:integration` | Service connectivity checks | Docker Compose |
-| `npm run test:system` | Full stack health checks | `docker compose up` |
+See **[docs/testing.md](docs/testing.md)** for the testing strategy and full tier descriptions.
+See **[docs/scripts.md](docs/scripts.md)** for all available scripts.
 
-Convenience scripts in `scripts/` mirror the CI steps exactly.
+Quick reference:
+
+```bash
+./scripts/run-unit-tests.sh         # no services required
+./scripts/run-integration-tests.sh  # starts postgres, redis, minio
+./scripts/run-system-tests.sh       # starts full stack including Keycloak
+./scripts/run-e2e-tests.sh          # starts postgres, redis, minio
+```
 
 ## Technologies
 

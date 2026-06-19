@@ -111,14 +111,14 @@ not a postgres URL — useful for quick iteration without any Docker services.
 Confirm your environment is working correctly:
 
 ```bash
-./scripts/run-unit-tests.sh        # unit tests, no services required
-./scripts/run-e2e-tests.sh         # HTTP API tests — no services required (SQLite fallback)
-./scripts/run-system-tests.sh      # tests system components
-./scripts/run-integration-tests.sh # starts services, tests connectivity
+./scripts/run-unit-tests.sh         # no services required
+./scripts/run-integration-tests.sh  # starts postgres, redis, minio
+./scripts/run-system-tests.sh       # starts full stack including Keycloak
+./scripts/run-e2e-tests.sh          # starts postgres, redis, minio
 ```
 
-All tests should pass. See the [Testing section of the README](../README.md#testing)
-for the full test matrix.
+All tests should pass. See [docs/testing.md](testing.md) for the full testing
+strategy and tier descriptions.
 
 ## 10. Adding entities and schema changes
 
