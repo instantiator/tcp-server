@@ -3,16 +3,12 @@
 Work through this list top-to-bottom on a fresh machine. Each section links to
 the relevant documentation where more detail is available.
 
----
-
 ## 1. Prerequisites
 
 - [ ] **Docker** and **Docker Compose** installed
-  ([Docker Desktop](https://docs.docker.com/get-docker/) includes both)
+      ([Docker Desktop](https://docs.docker.com/get-docker/) includes both)
 - [ ] **Node.js 24 LTS** and npm installed ([nodejs.org](https://nodejs.org/))
 - [ ] **Git** with submodule support (any recent version)
-
----
 
 ## 2. Clone the repository
 
@@ -30,15 +26,11 @@ If you already cloned without it:
 git submodule update --init --recursive
 ```
 
----
-
 ## 3. Install dependencies
 
 ```bash
 npm install
 ```
-
----
 
 ## 4. Configure environment variables
 
@@ -49,18 +41,16 @@ cp .env.example .env
 Open `.env` and review each value. The defaults work out of the box for local
 development with Docker Compose. Values you may want to change:
 
-| Variable | Default | When to change |
-|----------|---------|----------------|
-| `POSTGRES_PASSWORD` | `dev-password` | Any shared or non-local environment |
-| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | stub values | Any shared or non-local environment |
-| `OIDC_CLIENT_SECRET` | `change-me` | Required when running Keycloak (step 7) |
-| `KEYCLOAK_ADMIN_PASSWORD` | `admin` | Required when running Keycloak (step 7) |
+| Variable                                | Default        | When to change                          |
+| --------------------------------------- | -------------- | --------------------------------------- |
+| `POSTGRES_PASSWORD`                     | `dev-password` | Any shared or non-local environment     |
+| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | stub values    | Any shared or non-local environment     |
+| `OIDC_CLIENT_SECRET`                    | `change-me`    | Required when running Keycloak (step 7) |
+| `KEYCLOAK_ADMIN_PASSWORD`               | `admin`        | Required when running Keycloak (step 7) |
 
 The OIDC variables (`OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`)
 must be set but are not validated at startup unless a guarded endpoint is called.
 The defaults from `.env.example` are safe to leave for development without auth.
-
----
 
 ## 5. Start all services
 
@@ -74,8 +64,6 @@ and started from the Docker images.
 On first boot, Docker pulls the base images and npm installs inside the build —
 expect this to take several minutes.
 
----
-
 ## 6. Verify services are healthy
 
 ```bash
@@ -88,13 +76,11 @@ Both should return HTTP 200. If lcp-server returns 503, check
 (PostgreSQL or MinIO) that hasn't finished starting yet. Wait 10–20 seconds
 and retry.
 
-| Service        | URL                          |
-|----------------|------------------------------|
-| lcp-server API | http://localhost:3000        |
-| lcp-agent      | http://localhost:3001        |
-| MinIO console  | http://localhost:9001        |
-
----
+| Service        | URL                   |
+| -------------- | --------------------- |
+| lcp-server API | http://localhost:3000 |
+| lcp-agent      | http://localhost:3001 |
+| MinIO console  | http://localhost:9001 |
 
 ## 7. (Optional) Set up authentication with Keycloak
 
@@ -106,8 +92,6 @@ docker compose --profile auth up -d
 
 Then follow [docs/keycloak-setup.md](keycloak-setup.md) to create the realm,
 client, and initial users.
-
----
 
 ## 8. (Optional) Set up for local development without Docker apps
 
@@ -122,29 +106,24 @@ npm run start:dev
 lcp-server falls back to in-memory SQLite when `DATABASE_URL` is absent or
 not a postgres URL — useful for quick iteration without any Docker services.
 
----
-
 ## 9. Run the tests
 
 Confirm your environment is working correctly:
 
 ```bash
-npm test              # unit tests — no services required
-npm run test:e2e      # HTTP API tests — no services required (SQLite fallback)
-./scripts/run-integration-tests.sh   # starts services, tests connectivity
+./scripts/run-unit-tests.sh        # unit tests, no services required
+./scripts/run-e2e-tests.sh         # HTTP API tests — no services required (SQLite fallback)
+./scripts/run-system-tests.sh      # tests system components
+./scripts/run-integration-tests.sh # starts services, tests connectivity
 ```
 
 All tests should pass. See the [Testing section of the README](../README.md#testing)
 for the full test matrix.
 
----
-
 ## 10. Adding entities and schema changes
 
 When you add or modify a TypeORM entity, you need to create a migration.
 See [docs/db-migrations.md](db-migrations.md) for the step-by-step workflow.
-
----
 
 ## Done
 

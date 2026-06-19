@@ -1,6 +1,40 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") [-h|--help] [-- <jest options>]
+
+Run the integration test suite against live infrastructure services.
+
+Starts PostgreSQL, Redis, and MinIO via Docker Compose (using .env.testing),
+waits for each to be healthy, then runs 'npm run test:integration'.
+Tears down the containers on exit.
+
+Integration tests verify that the application can connect to and use each
+service correctly (database queries, Redis pub/sub, MinIO bucket operations).
+Mirrors the 'integration-test' CI job.
+
+Any extra arguments are passed through to Jest, for example:
+  $(basename "$0") -- --testNamePattern="redis"
+
+Prerequisites:
+  - Docker and Docker Compose
+  - .env.testing present in the repo root (see .env.example)
+
+Options:
+  -h, --help    Show this help message and exit
+EOF
+}
+
+PASSTHROUGH=()
+for arg in "$@"; do
+  case "$arg" in
+    -h|--help) usage; exit 0 ;;
+    *) PASSTHROUGH+=("$arg") ;;
+  esac
+done
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$REPO_ROOT/.env.testing"
 
@@ -38,6 +72,6 @@ export DATABASE_URL="postgres://lcp:${POSTGRES_PASSWORD}@localhost:5432/lcp"
 export REDIS_URL="redis://localhost:6379"
 export MINIO_ENDPOINT="http://localhost:9000"
 
-npm run test:integration
+npm run test:integration -- ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}
 
 docker compose --env-file "$ENV_FILE" down
