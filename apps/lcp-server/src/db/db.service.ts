@@ -5,6 +5,10 @@ import { LcpCompany } from '@lcp/shared';
 import { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
 import { defined, isUUID } from '../utils/ObjectUtils';
 
+/**
+ * Thin TypeORM wrapper that provides create, update, and retrieval
+ * operations for {@link LcpCompany} records.
+ */
 @Injectable()
 export class DbService {
   constructor(

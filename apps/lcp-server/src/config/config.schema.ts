@@ -1,5 +1,9 @@
 import * as Joi from 'joi';
 
+/**
+ * Joi validation schema for lcp-server environment variables.
+ * The application will refuse to start if any required variable is absent or invalid.
+ */
 export const configSchema = Joi.object({
   PORT: Joi.number().default(3000),
   DATABASE_URL: Joi.string().required(),

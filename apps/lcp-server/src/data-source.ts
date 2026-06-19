@@ -1,5 +1,10 @@
-// Used by TypeORM CLI only (migration:generate, migration:run, migration:revert).
-// Not imported by the NestJS runtime — AppModule uses forRootAsync with ConfigService instead.
+/**
+ * TypeORM {@link DataSource} used exclusively by the TypeORM CLI
+ * (`migration:generate`, `migration:run`, `migration:revert`).
+ *
+ * Not imported by the NestJS runtime — {@link AppModule} constructs its own
+ * connection via `TypeOrmModule.forRootAsync` with {@link ConfigService}.
+ */
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 

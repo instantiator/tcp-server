@@ -7,6 +7,10 @@ import {
 } from '@nestjs/terminus';
 import { ConfigService } from '@nestjs/config';
 
+/**
+ * Exposes `GET /health` to report the liveness of lcp-server's dependencies:
+ * PostgreSQL, MinIO, and the OIDC provider.
+ */
 @Controller('health')
 export class HealthController {
   constructor(
@@ -16,6 +20,10 @@ export class HealthController {
     private readonly config: ConfigService,
   ) {}
 
+  /**
+   * Runs health checks against the database, MinIO, and the OIDC provider.
+   * Returns HTTP 200 when all checks pass, 503 when any fail.
+   */
   @Get()
   @HealthCheck()
   check() {

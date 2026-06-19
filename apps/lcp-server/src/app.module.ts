@@ -8,6 +8,10 @@ import { configSchema } from './config/config.schema';
 import { HealthModule } from './health/health.module';
 import { InitialSchema1750000000000 } from './migrations/1750000000000-InitialSchema';
 
+/**
+ * Root module for lcp-server. Wires global config validation, TypeORM,
+ * the REST API, health checks, and OIDC authentication.
+ */
 @Module({
   imports: [
     ConfigModule.forRoot({

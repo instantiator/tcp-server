@@ -92,7 +92,7 @@ describe('CompanyController (e2e)', () => {
 
     it('returns 200 with empty body for an unknown UUID', async () => {
       // NestJS serialises a null return as {} rather than null.
-      // This documents current behaviour; add a NotFoundException guard to return 404 instead.
+      // TODO: add a NotFoundException guard to return 404 instead — before guarded endpoints are shipped, to align with REST conventions.
       const res = await request(app.getHttpServer())
         .get('/api/company/00000000-0000-0000-0000-000000000000')
         .expect(200);

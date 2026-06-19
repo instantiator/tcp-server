@@ -1,6 +1,11 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
+/**
+ * Initial schema migration. Enables the pgvector extension and creates
+ * the {@link LcpCompany} table.
+ */
 export class InitialSchema1750000000000 implements MigrationInterface {
+  /** Applies the migration: enables pgvector and creates the `lcp_company` table. */
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query('CREATE EXTENSION IF NOT EXISTS vector;');
     await queryRunner.query(`
@@ -14,6 +19,7 @@ export class InitialSchema1750000000000 implements MigrationInterface {
     `);
   }
 
+  /** Reverts the migration: drops the `lcp_company` table. */
   async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query('DROP TABLE IF EXISTS "lcp_company"');
   }
