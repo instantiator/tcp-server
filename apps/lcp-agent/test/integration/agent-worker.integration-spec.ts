@@ -144,4 +144,70 @@ describeIf('AgentWorkerService (integration)', () => {
     expect(updated.status).toBe(AgentStatus.Completed);
     expect(updated.threadId).toBe(agent.id);
   }, 20_000);
+
+  it('two agents complete concurrently without cross-contaminating LangGraph state', async () => {
+    const company = await companyRepo.save(
+      companyRepo.create({
+        slug: 'test-co-concurrent',
+        name: 'Test Co (Concurrent)',
+      }),
+    );
+    const role = await roleRepo.save(
+      roleRepo.create({
+        companyId: company.id,
+        name: 'Analyst',
+        description: 'Analyses things.',
+        llmConfig: {
+          provider: 'lm-studio',
+          model: 'test-model',
+          baseUrl: 'http://127.0.0.1:1/v1',
+          apiKeyEnvVar: 'LM_STUDIO_API_KEY',
+        },
+        systemPromptTemplate: 'You are {{name}}.',
+      }),
+    );
+    const [agentA, agentB] = await Promise.all([
+      agentRepo.save(
+        agentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          initialPrompt: 'Task A',
+        }),
+      ),
+      agentRepo.save(
+        agentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          initialPrompt: 'Task B',
+        }),
+      ),
+    ]);
+
+    const queue = new Queue('agent-jobs', { connection: { url: redisUrl } });
+    await queue.add('agent-job', { agentId: agentA.id, type: 'start' });
+    await queue.add('agent-job', { agentId: agentB.id, type: 'start' });
+    await queue.close();
+
+    await pollUntil(async () => {
+      const [a, b] = await Promise.all([
+        agentRepo.findOneBy({ id: agentA.id }),
+        agentRepo.findOneBy({ id: agentB.id }),
+      ]);
+      return (
+        a?.status === AgentStatus.Completed &&
+        b?.status === AgentStatus.Completed
+      );
+    }, 20_000);
+
+    const [updatedA, updatedB] = await Promise.all([
+      agentRepo.findOneByOrFail({ id: agentA.id }),
+      agentRepo.findOneByOrFail({ id: agentB.id }),
+    ]);
+
+    expect(updatedA.status).toBe(AgentStatus.Completed);
+    expect(updatedB.status).toBe(AgentStatus.Completed);
+    // Each agent must write to its own LangGraph thread, not the other's
+    expect(updatedA.threadId).toBe(agentA.id);
+    expect(updatedB.threadId).toBe(agentB.id);
+  }, 30_000);
 });

@@ -52,7 +52,11 @@ export class AgentWorkerService implements OnModuleInit, OnModuleDestroy {
 
         await this.loop.run(agentId);
       },
-      { connection: { url: redisUrl } },
+      {
+        connection: { url: redisUrl },
+        // ponytail: move to config when per-role resource limits are addressed (see 003.3)
+        concurrency: 5,
+      },
     );
 
     this.worker.on('completed', (job) => {

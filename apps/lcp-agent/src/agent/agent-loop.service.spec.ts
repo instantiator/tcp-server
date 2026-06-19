@@ -38,6 +38,11 @@ function makeStubGraph(
 
 const SUCCESS_EVENTS = [
   {
+    event: 'on_chat_model_start',
+    name: 'ChatOpenAI',
+    data: { input: { messages: [] } },
+  },
+  {
     event: 'on_chat_model_end',
     name: 'agent',
     data: { output: new AIMessage('Here is my analysis.') },
@@ -178,6 +183,29 @@ describe('AgentLoopService', () => {
       (e) => e.eventType === AuditEventType.LlmResponse,
     );
     expect(responseEvent).toBeDefined();
+  });
+
+  it('writes both LlmRequest and LlmResponse audit events with correct metadata', async () => {
+    const { company, role, agent } = await seedAgentAndRole();
+
+    await service.run(agent.id);
+
+    const allEvents = await auditRepo.findBy({ agentId: agent.id });
+    const requestEvent = allEvents.find(
+      (e) => e.eventType === AuditEventType.LlmRequest,
+    );
+    const responseEvent = allEvents.find(
+      (e) => e.eventType === AuditEventType.LlmResponse,
+    );
+
+    expect(requestEvent).toBeDefined();
+    expect(responseEvent).toBeDefined();
+
+    for (const event of [requestEvent!, responseEvent!]) {
+      expect(event.companyId).toBe(company.id);
+      expect(event.agentId).toBe(agent.id);
+      expect(event.role).toBe(role.name);
+    }
   });
 
   it('deregisters the agent from the registry after the run', async () => {

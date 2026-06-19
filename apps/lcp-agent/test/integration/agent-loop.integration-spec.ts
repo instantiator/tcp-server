@@ -112,7 +112,7 @@ describeIf('AgentLoopService (integration)', () => {
   }
 
   it('runs to Completed and writes an LlmResponse audit event', async () => {
-    const { agent } = await seedAgentAndRole();
+    const { company, role, agent } = await seedAgentAndRole();
 
     await service.run(agent.id);
 
@@ -120,11 +120,23 @@ describeIf('AgentLoopService (integration)', () => {
     expect(updated.status).toBe(AgentStatus.Completed);
     expect(updated.threadId).toBe(agent.id);
 
-    const responseEvent = await auditRepo.findOneBy({
-      agentId: agent.id,
-      eventType: AuditEventType.LlmResponse,
-    });
+    const allEvents = await auditRepo.findBy({ agentId: agent.id });
+
+    const requestEvent = allEvents.find(
+      (e) => e.eventType === AuditEventType.LlmRequest,
+    );
+    const responseEvent = allEvents.find(
+      (e) => e.eventType === AuditEventType.LlmResponse,
+    );
+
+    expect(requestEvent).not.toBeNull();
     expect(responseEvent).not.toBeNull();
+
+    for (const event of [requestEvent!, responseEvent!]) {
+      expect(event.companyId).toBe(company.id);
+      expect(event.agentId).toBe(agent.id);
+      expect(event.role).toBe(role.name);
+    }
   }, 30_000);
 
   it('resumes from a Paused state, restoring the LangGraph checkpoint', async () => {
