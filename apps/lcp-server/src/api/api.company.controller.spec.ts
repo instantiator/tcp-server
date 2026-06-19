@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { LcpCompany } from '@lcp/shared';
 import { CompanyController } from './api.company.controller';
 import { ApiService } from './api.service';
+import { DbService } from '../db/db.service';
 
 const makeApiService = (): jest.Mocked<
   Pick<ApiService, 'createCompany' | 'setCompany' | 'getCompany'>
@@ -11,13 +12,22 @@ const makeApiService = (): jest.Mocked<
   getCompany: jest.fn().mockResolvedValue(null),
 });
 
+const makeDbService = (): jest.Mocked<Pick<DbService, 'listRoles'>> => ({
+  listRoles: jest.fn().mockResolvedValue([]),
+});
+
 describe('CompanyController', () => {
   let api: ReturnType<typeof makeApiService>;
+  let db: ReturnType<typeof makeDbService>;
   let controller: CompanyController;
 
   beforeEach(() => {
     api = makeApiService();
-    controller = new CompanyController(api as unknown as ApiService);
+    db = makeDbService();
+    controller = new CompanyController(
+      api as unknown as ApiService,
+      db as unknown as DbService,
+    );
   });
 
   describe('postCompany', () => {
@@ -73,6 +83,14 @@ describe('CompanyController', () => {
       api.getCompany.mockResolvedValue(null);
       const result = await controller.getCompany(randomUUID());
       expect(result).toBeNull();
+    });
+  });
+
+  describe('listRoles', () => {
+    it('delegates to dbService.listRoles with the company id', async () => {
+      const id = randomUUID();
+      await controller.listRoles(id);
+      expect(db.listRoles).toHaveBeenCalledWith(id);
     });
   });
 });

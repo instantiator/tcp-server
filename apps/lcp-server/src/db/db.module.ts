@@ -1,14 +1,16 @@
+import { AuditEvent, LcpAgent, LcpCompany, LcpRole } from '@lcp/shared';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { LcpCompany } from '@lcp/shared';
 import { DbService } from './db.service';
 
 /**
- * Registers the {@link LcpCompany} TypeORM repository and exposes
+ * Registers TypeORM repositories for all shared entities and exposes
  * {@link DbService} to other modules.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([LcpCompany])],
+  imports: [
+    TypeOrmModule.forFeature([LcpCompany, LcpRole, LcpAgent, AuditEvent]),
+  ],
   providers: [DbService],
   exports: [DbService],
 })

@@ -1,0 +1,29 @@
+import { LlmConfig } from '@lcp/shared';
+import { Body, Controller, Post } from '@nestjs/common';
+import {
+  ModelCompatibilityResult,
+  ModelCompatibilityService,
+} from '../model-check/model-compatibility.service';
+
+/** REST controller for checking LLM model compatibility with the agent loop. */
+@Controller({ path: 'api/model' })
+export class ModelController {
+  constructor(private readonly checker: ModelCompatibilityService) {}
+
+  /**
+   * Probes each model in the request body and returns a compatibility report.
+   *
+   * Each probe makes a live network call to the configured provider to test
+   * tool-calling and structured-output support.
+   *
+   * @example
+   * POST /api/model/check
+   * { "models": [{ "provider": "lm-studio", "model": "qwen3-5b", "baseUrl": "http://localhost:1234/v1" }] }
+   */
+  @Post('check')
+  async checkCompatibility(
+    @Body() body: { models: LlmConfig[] },
+  ): Promise<ModelCompatibilityResult[]> {
+    return this.checker.check(body.models ?? []);
+  }
+}

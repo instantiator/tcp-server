@@ -4,12 +4,15 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { Repository } from 'typeorm';
-import { LcpCompany } from '@lcp/shared';
+import { AuditEvent, LcpAgent, LcpCompany, LcpRole } from '@lcp/shared';
 import { AppModule } from '../src/app.module';
 
 describe('CompanyController (e2e)', () => {
   let app: INestApplication<App>;
-  let repo: Repository<LcpCompany>;
+  let companyRepo: Repository<LcpCompany>;
+  let roleRepo: Repository<LcpRole>;
+  let agentRepo: Repository<LcpAgent>;
+  let auditRepo: Repository<AuditEvent>;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -18,11 +21,18 @@ describe('CompanyController (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     await app.init();
-    repo = moduleFixture.get(getRepositoryToken(LcpCompany));
+    companyRepo = moduleFixture.get(getRepositoryToken(LcpCompany));
+    roleRepo = moduleFixture.get(getRepositoryToken(LcpRole));
+    agentRepo = moduleFixture.get(getRepositoryToken(LcpAgent));
+    auditRepo = moduleFixture.get(getRepositoryToken(AuditEvent));
   });
 
   afterEach(async () => {
-    await repo.clear();
+    // Clear in FK-safe order: dependents before their referenced tables
+    await auditRepo.clear();
+    await agentRepo.clear();
+    await roleRepo.clear();
+    await companyRepo.clear();
   });
 
   afterAll(async () => {
@@ -42,7 +52,7 @@ describe('CompanyController (e2e)', () => {
         .post('/api/company')
         .send({ slug: 'acme', name: 'Acme Corp' });
 
-      const record = await repo.findOneBy({ slug: 'acme' });
+      const record = await companyRepo.findOneBy({ slug: 'acme' });
       expect(record).not.toBeNull();
       expect(record!.name).toBe('Acme Corp');
     });
@@ -56,8 +66,10 @@ describe('CompanyController (e2e)', () => {
         .post('/api/company')
         .send({ slug: 'acme', name: 'Second' });
 
-      expect(await repo.count({ where: { slug: 'acme' } })).toBe(1);
-      expect((await repo.findOneBy({ slug: 'acme' }))!.name).toBe('Second');
+      expect(await companyRepo.count({ where: { slug: 'acme' } })).toBe(1);
+      expect((await companyRepo.findOneBy({ slug: 'acme' }))!.name).toBe(
+        'Second',
+      );
     });
   });
 
@@ -67,7 +79,7 @@ describe('CompanyController (e2e)', () => {
         .post('/api/company')
         .send({ slug: 'acme', name: 'Acme Corp' });
 
-      const id = (await repo.findOneBy({ slug: 'acme' }))!.id;
+      const id = (await companyRepo.findOneBy({ slug: 'acme' }))!.id;
 
       const res = await request(app.getHttpServer())
         .get(`/api/company/${id}`)
@@ -107,14 +119,14 @@ describe('CompanyController (e2e)', () => {
         .post('/api/company')
         .send({ slug: 'acme', name: 'Original' });
 
-      const id = (await repo.findOneBy({ slug: 'acme' }))!.id;
+      const id = (await companyRepo.findOneBy({ slug: 'acme' }))!.id;
 
       await request(app.getHttpServer())
         .put(`/api/company/${id}`)
         .send({ slug: 'acme', name: 'Updated' })
         .expect(200);
 
-      expect((await repo.findOneBy({ id }))!.name).toBe('Updated');
+      expect((await companyRepo.findOneBy({ id }))!.name).toBe('Updated');
     });
   });
 });

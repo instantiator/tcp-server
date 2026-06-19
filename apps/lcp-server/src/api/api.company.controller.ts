@@ -8,14 +8,18 @@ import {
   Put,
 } from '@nestjs/common';
 import type { UUID } from 'crypto';
-import { LcpCompany } from '@lcp/shared';
+import { LcpCompany, LcpRole } from '@lcp/shared';
 import type { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
+import { DbService } from '../db/db.service';
 import { ApiService } from './api.service';
 
 /** REST controller for company (tenant) create, read, and update operations. */
 @Controller({ path: 'api/company' })
 export class CompanyController {
-  constructor(private readonly api: ApiService) {}
+  constructor(
+    private readonly api: ApiService,
+    private readonly db: DbService,
+  ) {}
 
   /**
    * Creates or replaces a {@link LcpCompany}.
@@ -51,5 +55,11 @@ export class CompanyController {
   @Get(':id')
   async getCompany(@Param('id') id: UUID): Promise<LcpCompany | null> {
     return await this.api.getCompany(id);
+  }
+
+  /** Returns all {@link LcpRole} records belonging to the given company. */
+  @Get(':id/roles')
+  async listRoles(@Param('id') id: UUID): Promise<LcpRole[]> {
+    return this.db.listRoles(id);
   }
 }

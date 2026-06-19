@@ -12,7 +12,7 @@
     "start:dev": "nest start lcp-server --watch",
     "start:debug": "nest start lcp-server --debug --watch",
     "start:prod": "node dist/apps/lcp-server/main",
-    "typecheck": "tsc --noemit -p apps/lcp-server/tsconfig.app.json && tsc --noemit -p apps/lcp-agent/tsconfig.app.json && tsc --noemit -p libs/lcp-shared/tsconfig.lib.json",
+    "typecheck": "tsc --noemit -p apps/lcp-server/tsconfig.json && tsc --noemit -p apps/lcp-agent/tsconfig.json && tsc --noemit -p libs/lcp-shared/tsconfig.json",
     "lint": "eslint \"{apps,libs}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -28,6 +28,10 @@
     "migration:revert": "typeorm migration:revert -d apps/lcp-server/src/data-source.ts"
   },
   "dependencies": {
+    "@langchain/core": "^1.2.0",
+    "@langchain/langgraph": "^1.4.4",
+    "@langchain/langgraph-checkpoint-postgres": "^1.0.3",
+    "@langchain/openai": "^1.5.1",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
@@ -38,6 +42,7 @@
     "@nestjs/typeorm": "^11.0.1",
     "axios": "^1.18.0",
     "better-sqlite3": "^12.10.0",
+    "bullmq": "^5.79.0",
     "joi": "^18.2.3",
     "jwks-rsa": "^4.0.1",
     "passport": "^0.7.0",
