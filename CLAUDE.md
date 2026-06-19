@@ -30,7 +30,7 @@ NestJS monorepo for the Little Computer People (LCP) mini-office simulation. Two
 | Formatting | Prettier |
 | Schema export | ts-json-schema-generator → `schemas/schema.json` |
 
-Architectural decisions are documented as ADRs in `docs/ADRs/`. See `docs/ADRs/IMPLEMENTATION-STATUS.md` for implementation status.
+Architectural decisions are documented as ADRs in `docs/ADRs/`. See `docs/index.md` for the full list with implementation status.
 
 ## Source layout
 
