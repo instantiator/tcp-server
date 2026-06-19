@@ -123,7 +123,10 @@ fi
 
 # Client — confidential, service accounts enabled so lcp-server can call the
 # Keycloak Admin API; directAccessGrantsEnabled for password-grant token testing.
-if ! kc get clients -r lcp -q "clientId=$CLIENT_ID" 2>/dev/null | grep -q '"id"'; then
+CLIENT_INFO=$(kc get clients -r lcp -q "clientId=$CLIENT_ID" 2>&1 || true)
+if echo "$CLIENT_INFO" | grep -q '"id"'; then
+  echo "  Client $CLIENT_ID: already exists"
+else
   kc create clients -r lcp \
     -s "clientId=$CLIENT_ID" \
     -s "secret=$CLIENT_SECRET" \
@@ -140,20 +143,21 @@ if ! kc get clients -r lcp -q "clientId=$CLIENT_ID" 2>/dev/null | grep -q '"id"'
     --cclientid realm-management \
     --rolename realm-admin
   echo "  Created client: $CLIENT_ID (service account granted realm-admin)"
-else
-  echo "  Client $CLIENT_ID: already exists"
 fi
 
-# Test user
-if ! kc get users -r lcp -q "username=$TEST_USERNAME" 2>/dev/null | grep -q '"id"'; then
+# Test user — capture output into a variable so the kcadm call runs outside
+# the if-condition; pipelines inside if + set -euo pipefail behave differently
+# on bash 3.2 (macOS system default) and can trigger set -e unexpectedly.
+USER_INFO=$(kc get users -r lcp -q "username=$TEST_USERNAME" 2>&1 || true)
+if echo "$USER_INFO" | grep -q '"id"'; then
+  echo "  User $TEST_USERNAME: already exists"
+else
   kc create users -r lcp -s "username=$TEST_USERNAME" -s enabled=true
   kc set-password -r lcp \
     --username "$TEST_USERNAME" \
     --new-password "$TEST_PASSWORD" \
     --temporary=false
   echo "  Created user: $TEST_USERNAME"
-else
-  echo "  User $TEST_USERNAME: already exists"
 fi
 
 # Summary
@@ -174,10 +178,10 @@ echo "  Username:  $TEST_USERNAME"
 echo "  Password:  $TEST_PASSWORD"
 echo ""
 echo "Get a token:"
-printf "  curl -s -X POST 'http://localhost:8080/realms/lcp/protocol/openid-connect/token' \\\n"
-printf "    -d grant_type=password \\\n"
-printf "    -d 'client_id=%s' \\\n" "$CLIENT_ID"
-printf "    -d 'client_secret=%s' \\\n" "$CLIENT_SECRET"
-printf "    -d 'username=%s' \\\n" "$TEST_USERNAME"
-printf "    -d 'password=%s' | jq -r .access_token\n" "$TEST_PASSWORD"
+echo "  curl -s -X POST 'http://localhost:8080/realms/lcp/protocol/openid-connect/token' \\"
+echo "    -d grant_type=password \\"
+echo "    -d 'client_id=$CLIENT_ID' \\"
+echo "    -d 'client_secret=$CLIENT_SECRET' \\"
+echo "    -d 'username=$TEST_USERNAME' \\"
+echo "    -d 'password=$TEST_PASSWORD' | jq -r .access_token"
 echo ""
