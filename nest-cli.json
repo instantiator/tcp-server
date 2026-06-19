@@ -1,8 +1,40 @@
 {
   "$schema": "https://json.schemastore.org/nest-cli",
   "collection": "@nestjs/schematics",
-  "sourceRoot": "src",
+  "monorepo": true,
+  "root": "apps/lcp-server",
+  "sourceRoot": "apps/lcp-server/src",
   "compilerOptions": {
-    "deleteOutDir": true
+    "deleteOutDir": true,
+    "webpack": true
+  },
+  "projects": {
+    "lcp-server": {
+      "type": "application",
+      "root": "apps/lcp-server",
+      "entryFile": "main",
+      "sourceRoot": "apps/lcp-server/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/lcp-server/tsconfig.app.json"
+      }
+    },
+    "lcp-agent": {
+      "type": "application",
+      "root": "apps/lcp-agent",
+      "entryFile": "main",
+      "sourceRoot": "apps/lcp-agent/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/lcp-agent/tsconfig.app.json"
+      }
+    },
+    "lcp-shared": {
+      "type": "library",
+      "root": "libs/lcp-shared",
+      "entryFile": "index",
+      "sourceRoot": "libs/lcp-shared/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/lcp-shared/tsconfig.lib.json"
+      }
+    }
   }
 }

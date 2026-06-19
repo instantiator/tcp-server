@@ -1,64 +1,97 @@
-# Little Computer People (LCP) server
+# Little Computer People (LCP) Server
 
-LCP manages one or more companies of agents.
+LCP manages one or more companies of AI agents that collaborate to complete tasks.
 
 ## Companies
 
 A company consists of several specialists or generalists, each provided with:
 
-- overview of the organisation
-- identity prompt
-- reference material
-- personal knowledge database
-- access to tools
-- membership of a group where they can initiate conversations with other agents
+- Overview of the organisation
+- Identity prompt
+- Reference material
+- Personal knowledge database
+- Access to tools
+- Membership of a group where they can initiate conversations with other agents
 
 ## Tasks
 
-Tasks are given to the company, who then work collaboratively to resolve them.
+Tasks are given to the company, who then work collaboratively to resolve them. A planner agent creates a plan incorporating knowledge of the company's roles and their skills. Each plan step is assigned to an agent role that executes it and reports back.
 
-An agent creates a plan incorporating knowledge of agents in the company and their skills.
+## System architecture
 
-Each plan contains a number of tasks, arranged into a graph, and each plan has an agent responsible for:
+```mermaid
+graph TD
+  User["User / Browser"] -->|REST API :3000| LcpServer["lcp-server\n(NestJS)"]
+  LcpServer -->|OIDC token\nvalidation| Keycloak["Keycloak :8080\n(optional --profile auth)"]
+  LcpServer -->|TypeORM| Postgres[(PostgreSQL\n+ pgvector :5432)]
+  LcpServer -->|BullMQ jobs| Redis[(Redis :6379)]
+  LcpServer -->|S3 API| MinIO[(MinIO :9000\nconsole :9001)]
+  LcpAgent["lcp-agent\n(NestJS) :3001"] -->|BullMQ results| Redis
+  LcpAgent -->|TypeORM| Postgres
+  LcpAgent -->|S3 API| MinIO
+  LcpAgent -->|stdio| MCP["MCP Servers\n(child processes)"]
+```
 
-- plan requirements gathering
-- plan delivery
-- plan quality control
+Key architectural decisions are documented as ADRs in [docs/ADRs/](docs/ADRs/). See [docs/index.md](docs/index.md) for the full list with implementation status.
 
-Each task is a part of a plan, and each task has agents responsible for:
+## Getting started
 
-- task delivery
-- task quality control
+See **[docs/setup-checklist.md](docs/setup-checklist.md)** for a step-by-step first-time setup guide.
 
-## Architecture
+**Quick start** (prerequisites: Docker, Node.js 24):
 
-Key decisions are documented as ADRs in [docs/ADRs/](docs/ADRs/). See [docs/ADRs/IMPLEMENTATION-STATUS.md](docs/ADRs/IMPLEMENTATION-STATUS.md) for what is currently implemented vs. proposed.
+```bash
+git clone --recurse-submodules <repo-url> && cd lcp-server
+cp .env.example .env
+npm install
+docker compose up -d
+```
+
+## Testing
+
+See **[docs/testing.md](docs/testing.md)** for the testing strategy and full tier descriptions.
+See **[docs/scripts.md](docs/scripts.md)** for all available scripts.
+
+Quick reference:
+
+```bash
+./scripts/run-unit-tests.sh         # no services required
+./scripts/run-integration-tests.sh  # starts postgres, redis, minio
+./scripts/run-system-tests.sh       # starts full stack including Keycloak
+./scripts/run-e2e-tests.sh          # starts postgres, redis, minio
+```
 
 ## Technologies
 
-Currently implemented:
+| Concern | Choice |
+|---------|--------|
+| Framework | NestJS 11 |
+| ORM | TypeORM |
+| Database (production) | PostgreSQL 16 + pgvector |
+| Database (unit tests) | better-sqlite3 (in-memory) |
+| Auth | OAuth2/OIDC (Keycloak default) |
+| Object storage | MinIO |
+| Task queue | Redis (BullMQ — configured, workers pending) |
+| Schema export | ts-json-schema-generator |
 
-- [NestJS](https://nestjs.com/) (server framework)
-- [TypeORM](https://typeorm.io/) (database ORM)
-- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) (in-memory database, development only)
-- [ts-json-schema-generator](https://github.com/vega/ts-json-schema-generator) (schema generation)
-- [License Report](https://github.com/bepo67/license-report) (dependency documentation)
+See [docs/ADRs/](docs/ADRs/) for decisions on upcoming components (agent runner, memory, orchestration).
 
-## Invocations
+## Commands reference
 
-| Invocation                  | Purpose                                                |
-| --------------------------- | ------------------------------------------------------ |
-| `npm run build`             | Compiles the server to `dist/`                         |
-| `npm run format`            | Formats the code with `prettier`                       |
-| `npm run start`             | Starts a server on port `3000`                         |
-| `npm run start:dev`         | Starts a server                                        |
-| `npm run start:debug`       | Starts a server with debug options (and monitors)      |
-| `npm run start:prod`        | Starts the last compiled server                        |
-| `npm run lint`              | Runs a linter against the project                      |
-| `npm run test`              | Runs all tests                                         |
-| `npm run test:watch`        | Runs all tests (and monitors for changes)              |
-| `npm run test:cov`          | Runs all tests and measures code coverage              |
-| `npm run test:debug`        | Runs all tests with additional debug information       |
-| `npm run test:e2e`          | Runs the end-to-end tests                              |
-| `npm run schema:generate`   | Regenerates [schemas/schema.json](schemas/schema.json) |
-| `npm run licenses:generate` | Regenerates [docs/licenses.md](docs/licenses.md)       |
+| Command | Purpose |
+|---------|---------|
+| `npm run build` | Compile both apps to `dist/` |
+| `npm run build lcp-server` | Compile lcp-server only |
+| `npm run build lcp-agent` | Compile lcp-agent only |
+| `npm run start:dev` | Start lcp-server with hot reload |
+| `npm run lint` | ESLint with auto-fix |
+| `npm run format` | Prettier over `apps/` and `libs/` |
+| `npm test` | Unit tests |
+| `npm run test:e2e` | E2E tests |
+| `npm run test:integration` | Integration tests (needs Docker) |
+| `npm run test:system` | System tests (needs `docker compose up`) |
+| `npm run schema:generate` | Regenerate [schemas/schema.json](schemas/schema.json) |
+| `npm run licenses:generate` | Regenerate [docs/licenses.md](docs/licenses.md) |
+| `npm run migration:generate` | Generate a new TypeORM migration |
+| `npm run migration:run` | Run pending migrations |
+| `npm run migration:revert` | Revert the last migration |

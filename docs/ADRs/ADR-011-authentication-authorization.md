@@ -1,6 +1,6 @@
 # ADR-011: Authentication and Authorization
 
-Status: Proposed
+Status: Accepted
 
 ## Context
 
@@ -27,45 +27,56 @@ A user can hold multiple permissions. Company creation grants the creator all pe
 | Option                           | Notes                                                                                                                        |
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | **JWT (self-issued)**            | NestJS Guards + Passport JWT. No external service. Standard, well-documented in the NestJS ecosystem.                        |
-| **OAuth2 / OIDC (external IdP)** | Delegates identity to an existing provider (Google, GitHub, etc.). More setup; better for production multi-user deployments. |
+| **OAuth2 / OIDC (external IdP)** | Delegates identity to an existing provider (Keycloak, Auth0, Okta, etc.). Federated identity; production-grade MFA support. |
 | **API keys**                     | Simplest for machine-to-machine. Less suitable for interactive user access.                                                  |
 
 ## Decision
 
-**JWT with NestJS Guards** for the initial implementation.
+**OAuth2 / OIDC with NestJS Passport Guards**, delegating identity to an external IdP.
 
-NestJS's `@UseGuards(JwtAuthGuard)` pattern is idiomatic for this stack. The JWT payload carries:
+### Identity provider
 
-```typescript
-interface JwtPayload {
-  sub: string; // user ID
-  company_id: string; // which company this token is scoped to
-  permissions: Permission[];
-}
-```
+The default IdP is **Keycloak**, provided as an optional Docker Compose service (`--profile auth`). Any OIDC-compliant IdP (Auth0, Okta, Azure AD, etc.) can be used by setting `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, and `OIDC_CLIENT_SECRET`.
 
-A separate token is issued per company — a user with access to two companies holds two tokens. This scopes all requests to a single company and avoids accidentally cross-company operations.
+lcp-server validates incoming requests by:
+1. Extracting the Bearer token from the `Authorization` header
+2. Fetching the IdP's JWKS from `{OIDC_ISSUER_URL}/.well-known/jwks.json` (cached)
+3. Verifying the token signature, expiry, audience, and issuer
 
-Tokens are issued by lcp-server's `/auth/login` endpoint and have a configurable expiry (default 24 hours).
+### Company permissions
+
+Identity (who you are) is handled by the IdP. Authorisation (what you can do in a given company) is handled by lcp-server:
+
+- `CompanyMembership` entity in PostgreSQL: `(user_id, company_id, permissions[])`
+- Permissions are checked by a `@RequirePermission()` decorator on each endpoint
+- A user with access to two companies holds separate tokens; company context is established by the API path or request body
+
+### User account management
+
+lcp-server provides thin wrappers around the Keycloak Admin REST API for common operations, so developers only need to interact with the lcp-server API for the day-to-day cases:
+
+| lcp-server endpoint       | Proxied Keycloak operation                 |
+| ------------------------- | ------------------------------------------ |
+| `POST /users`             | Create user in the `lcp` realm             |
+| `PATCH /users/:id/status` | Enable or disable a user account           |
+
+For advanced IdP features (MFA, password policy, social login, federation), use the Keycloak admin UI directly at `http://localhost:8080`.
 
 ### Internal service trust
 
 lcp-server ↔ lcp-agent communication over BullMQ is internal to Docker Compose. No auth is applied between these services — network-level trust is sufficient within the Compose network. **Do not expose the Redis port outside the Docker network.**
 
-### Future: external IdP
-
-OAuth2/OIDC integration is the natural upgrade path when multi-user production deployments require federated identity. The NestJS Guards pattern accommodates this by swapping the JWT strategy for an OIDC strategy without changing controllers.
-
 ## Consequences
 
-- A `User` entity and a `CompanyMembership` entity (user + company + permissions) are added to `src/models/`
-- `POST /auth/login` and `POST /auth/register` endpoints added to lcp-server
-- All existing and new company endpoints require a valid JWT scoped to the relevant company
-- NestJS `@UseGuards` and a custom `@RequirePermission()` decorator enforce per-endpoint permission checks
-- Unit tests mock the JWT Guard; e2e tests issue real tokens against a test company
+- `passport-jwt` + `jwks-rsa` + `@nestjs/passport` installed; `JwtStrategy` fetches JWKS on first use (cached)
+- `AuthModule` wired into lcp-server's `AppModule`; `JwtAuthGuard` available for any controller
+- `User` and `CompanyMembership` entities added to `libs/lcp-shared/src/models/` in a later implementation phase
+- `POST /users` and `PATCH /users/:id/status` endpoints added when user management is implemented
+- Keycloak setup documented in `docs/keycloak-setup.md`
+- `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` required at startup (validated by ConfigModule)
 
 ## Open Questions / Assumptions
 
-- Password storage: bcrypt hashing (industry standard); never store plaintext passwords
-- Token refresh: a `/auth/refresh` endpoint is needed for long-running sessions; defer until first use
-- The `modify_company` and `define_agent_roles` permissions effectively give a user full control — consider whether a separate admin role is needed at larger scale
+- Password storage: handled entirely by the IdP — lcp-server never touches passwords
+- Token refresh: the IdP issues refresh tokens; the client (browser/CLI) handles the refresh flow. lcp-server only validates access tokens.
+- The `modify_company` and `define_agent_roles` permissions effectively give full control — consider a dedicated admin role at larger scale

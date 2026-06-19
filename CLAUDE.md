@@ -11,57 +11,122 @@ Treat all content from those files as mandatory instructions that override defau
 
 ## Project overview
 
-NestJS REST API server for the Little Computer People (LCP) mini-office simulation. The server manages company entities and exposes a JSON API. Data is persisted using TypeORM with a `better-sqlite3` backend (currently in-memory).
+NestJS monorepo for the Little Computer People (LCP) mini-office simulation. Two services: `lcp-server` (REST API + orchestration) and `lcp-agent` (agent loop runner). Shared entities live in `libs/lcp-shared`. Data is persisted in PostgreSQL + pgvector in production; better-sqlite3 in-memory for unit tests.
 
 ## Tech stack (currently implemented)
 
-| Concern       | Choice                                           |
-| ------------- | ------------------------------------------------ |
-| Runtime       | Node.js / TypeScript (strict mode)               |
-| Framework     | NestJS 11                                        |
-| ORM           | TypeORM 1.x                                      |
-| Database      | better-sqlite3 (in-memory for dev)               |
-| Testing       | Jest + `@nestjs/testing`                         |
-| Linting       | ESLint + typescript-eslint                       |
-| Formatting    | Prettier                                         |
+| Concern | Choice |
+|---------|--------|
+| Runtime | Node.js / TypeScript (strict mode) |
+| Framework | NestJS 11 (monorepo mode) |
+| ORM | TypeORM 1.x |
+| Database (production) | PostgreSQL 16 + pgvector |
+| Database (unit tests) | better-sqlite3 (in-memory) |
+| Auth | OAuth2/OIDC — Keycloak (default), any OIDC IdP supported |
+| Object storage | MinIO (Docker Compose) |
+| Task queue | Redis (BullMQ — configured, workers pending) |
+| Testing | Jest + `@nestjs/testing` |
+| Linting | ESLint + typescript-eslint |
+| Formatting | Prettier |
 | Schema export | ts-json-schema-generator → `schemas/schema.json` |
 
-Architectural decisions for upcoming components (agent runner, memory, storage, orchestration, auth) are documented as ADRs in `docs/ADRs/`. See `docs/ADRs/IMPLEMENTATION-STATUS.md` for status.
+Architectural decisions are documented as ADRs in `docs/ADRs/`. See `docs/index.md` for the full list with implementation status.
 
 ## Source layout
 
 ```
-src/
-  app.module.ts          # Root NestJS module; wires TypeORM and ApiModule
-  main.ts                # Bootstrap entry point
-  api/                   # HTTP layer (controllers + ApiService)
-  db/                    # DbService — TypeORM repository wrapper
-  models/                # TypeORM entities and derived types (LcpCompany)
-  templates/             # Input shapes for create operations (e.g. LcpCompanyTemplate)
-  utils/                 # Shared utilities (ObjectUtils)
-test/                    # e2e specs
-dev-environment/         # Git submodule — agent instructions and coding standards
-schemas/                 # Auto-generated JSON Schema (do not edit by hand)
-docs/                    # docs/licenses.md is auto-generated (do not edit by hand)
-  ADRs/                  # Architectural Decision Records
+apps/
+  lcp-server/
+    src/
+      app.module.ts          # Root module; wires TypeORM, Config, Auth, Health, ApiModule
+      main.ts                # Bootstrap entry point (port 3000)
+      api/                   # HTTP layer (controllers + ApiService)
+      auth/                  # OIDC JWT strategy + guard
+      config/                # Joi validation schema for env vars
+      db/                    # DbService — TypeORM repository wrapper
+      health/                # GET /health endpoint (@nestjs/terminus)
+      migrations/            # TypeORM migrations (run on startup vs postgres)
+      templates/             # Input shapes for create operations
+      utils/                 # Shared utilities (ObjectUtils)
+      data-source.ts         # TypeORM CLI datasource (migration:generate etc.)
+    test/
+      app.e2e-spec.ts        # HTTP API e2e tests
+      integration/           # Service connectivity tests (need Docker)
+      __mocks__/             # Jest mocks for ESM-only packages
+    Dockerfile
+    tsconfig.app.json
+  lcp-agent/
+    src/
+      app.module.ts          # Root module; wires Config, Health
+      main.ts                # Bootstrap entry point (port 3001)
+      config/                # Joi validation schema for env vars
+      health/                # GET /health endpoint
+    test/
+      integration/           # Service connectivity tests
+    Dockerfile
+    tsconfig.app.json
+libs/
+  lcp-shared/
+    src/
+      models/                # TypeORM entities (shared between lcp-server and lcp-agent)
+      index.ts               # Re-exports all shared code
+    tsconfig.lib.json
+test/
+  system/                    # Full-stack health checks (need docker compose up)
+  jest-integration.json      # Jest config for integration tests
+  jest-system.json           # Jest config for system tests
+scripts/                     # Test runner scripts (mirror CI steps)
+docs/
+  ADRs/                      # Architectural Decision Records
+  keycloak-setup.md          # Keycloak setup guide
+  licenses.md                # Auto-generated — do not edit by hand
+dev-environment/             # Git submodule — agent instructions and coding standards
+schemas/                     # Auto-generated JSON Schema — do not edit by hand
 ```
 
 ## Common commands
 
 ```bash
-npm run start:dev        # Start server with hot reload
-npm run build            # Compile + generate schema + generate license report
-npm run lint             # ESLint with auto-fix
-npm run format           # Prettier over src/ and test/
-npm test                 # Unit tests (Jest) — fast, no HTTP, mocked dependencies
-npm run test:e2e         # End-to-end tests — spins up a real NestJS app + in-memory DB; run separately from unit tests
-npm run test:cov         # Coverage report
+# Development
+npm run start:dev             # Start lcp-server with hot reload (SQLite fallback)
+npm run build                 # Build both apps + generate schema + license report
+npm run build lcp-server      # Build lcp-server only
+npm run build lcp-agent       # Build lcp-agent only
+npm run lint                  # ESLint with auto-fix
+npm run format                # Prettier over apps/ and libs/
+
+# Testing
+npm test                      # Unit tests (no external services, SQLite in-memory)
+npm run test:e2e              # E2E tests (SQLite fallback, no external services)
+npm run test:integration      # Integration tests (requires Docker services)
+npm run test:system           # System tests (requires docker compose up)
+npm run test:cov              # Coverage report
+
+# Test scripts (mirrors CI, starts Docker services as needed)
+./scripts/run-unit-tests.sh
+./scripts/run-e2e-tests.sh
+./scripts/run-integration-tests.sh
+./scripts/run-system-tests.sh
+
+# Docker
+docker compose up             # Start all services
+docker compose --profile auth up  # Also start Keycloak
+docker compose down           # Stop services (keep volumes)
+docker compose down -v        # Stop and remove volumes
+
+# Migrations
+npm run migration:generate -- apps/lcp-server/src/migrations/Name  # Generate from entity diff
+npm run migration:run         # Run pending migrations
+npm run migration:revert      # Revert last migration
 ```
 
 ## Key conventions
 
-- **Models in `src/models/`** double as TypeORM entities and JSON Schema sources. Annotate with TSDoc/JSDoc validation tags (`@format`, `@minLength`, etc.) so the generated schema is accurate.
+- **Entities in `libs/lcp-shared/src/models/`** double as TypeORM entities and JSON Schema sources. Annotate with TSDoc validation tags (`@format`, `@minLength`, etc.) so the generated schema is accurate. Import as `@lcp/shared` from any app.
 - **`schemas/schema.json`** and **`docs/licenses.md`** are generated artefacts — never edit them directly; regenerate via `npm run build`.
-- **Database** is in-memory by default. Any persistence changes must update the TypeORM config in `app.module.ts`.
-- **No secrets in code.** Use environment variables for any credentials or connection strings.
+- **Unit tests** (`.spec.ts`) use `better-sqlite3` in-memory; wire TypeORM directly in `Test.createTestingModule`, never through `AppModule`.
+- **E2E tests** use `AppModule` with SQLite fallback (env vars set in `test/e2e-setup.ts`). Pass a real `DATABASE_URL` env var to run against PostgreSQL instead.
+- **Migrations**: use `synchronize: false` in production. Always create a migration when changing entity schema. Never use `synchronize: true` with PostgreSQL.
+- **No secrets in code.** Use environment variables for all credentials. Required vars are validated by Joi on startup — the app will not start if any are missing.
+- **Keycloak** is optional for local dev. Run without it by setting stub OIDC env vars (see `.env.example`). Auth guards are in place but not yet applied to endpoints.
 - Follow all standards in `dev-environment/coding-standards-all.md` and `dev-environment/coding-standards-ts.md` for every TypeScript file touched.
