@@ -7,6 +7,7 @@ Day-to-day guides for running and maintaining the system.
 | Document                                | Description                                                        |
 | --------------------------------------- | ------------------------------------------------------------------ |
 | [Setup Checklist](setup-checklist.md)   | Step-by-step first-time setup from clone to running tests          |
+| [Services](services.md)                 | All Docker Compose services — ports, dependencies, and purpose     |
 | [Database Migrations](db-migrations.md) | How to create, register, and run TypeORM migrations                |
 | [Keycloak Setup](keycloak-setup.md)     | Configuring the OIDC provider for local development and production |
 
