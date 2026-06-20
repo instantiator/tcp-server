@@ -1,22 +1,55 @@
 import { Controller, Get } from '@nestjs/common';
-import { HealthCheck, HealthCheckService } from '@nestjs/terminus';
+import { ConfigService } from '@nestjs/config';
+import {
+  HealthCheck,
+  HealthCheckResult,
+  HealthCheckService,
+  HealthIndicatorResult,
+  TypeOrmHealthIndicator,
+} from '@nestjs/terminus';
+import { createClient } from 'redis';
 
 /**
- * Exposes `GET /health` to report the liveness of lcp-agent.
- * Additional dependency checks (database, Redis) will be added here
- * when lcp-agent gains those connections.
+ * Exposes `GET /health` to report the liveness of lcp-agent's dependencies:
+ * PostgreSQL (via TypeORM) and Redis (via a ping command).
  */
 @Controller('health')
 export class HealthController {
-  constructor(private readonly health: HealthCheckService) {}
+  constructor(
+    private readonly health: HealthCheckService,
+    private readonly db: TypeOrmHealthIndicator,
+    private readonly config: ConfigService,
+  ) {}
 
   /**
-   * Runs health checks and returns HTTP 200 when all pass, 503 when any fail.
-   * TODO: add TypeORM and Redis indicators when lcp-agent gains a database or Redis connection.
+   * Runs health checks for the database and Redis queue.
+   * Returns HTTP 200 when all pass, 503 when any fail.
    */
   @Get()
   @HealthCheck()
-  check() {
-    return this.health.check([]);
+  async check(): Promise<HealthCheckResult> {
+    return this.health.check([
+      () => this.db.pingCheck('database'),
+      () => this.pingRedis(),
+    ]);
+  }
+
+  private async pingRedis(): Promise<HealthIndicatorResult> {
+    const url = this.config.getOrThrow<string>('REDIS_URL');
+    const client = createClient({ url });
+    try {
+      await client.connect();
+      await client.ping();
+      return { redis: { status: 'up' } };
+    } catch (err) {
+      return {
+        redis: {
+          status: 'down',
+          message: err instanceof Error ? err.message : String(err),
+        },
+      };
+    } finally {
+      await client.disconnect();
+    }
   }
 }

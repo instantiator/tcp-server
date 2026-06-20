@@ -10,5 +10,6 @@
   "moduleNameMapper": {
     "@lcp/shared": "<rootDir>/libs/lcp-shared/src/index.ts"
   },
-  "testTimeout": 30000
+  "testTimeout": 30000,
+  "maxWorkers": 1
 }

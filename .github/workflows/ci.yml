@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -67,8 +68,8 @@ jobs:
       - if: always()
         run: docker compose down -v
 
-  system-test:
-    name: System tests
+  smoke-test:
+    name: Smoke tests
     needs: [integration-test]
     runs-on: ubuntu-latest
     steps:
@@ -79,11 +80,11 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       # Pre-build the app images using BuildKit's GHA layer cache.
-      # docker compose up (in run-system-tests.sh) finds the named images already
-      # present and skips the rebuild — the cache benefit applies on every run where
-      # package-lock.json is unchanged (i.e. the expensive `npm ci` Docker layer hits).
+      # run-smoke-tests.sh calls `docker compose build` which reuses these
+      # cached layers — the expensive `npm ci` Docker layer only rebuilds when
+      # package-lock.json changes.
       - name: Build lcp-server image
         uses: docker/build-push-action@v6
         with:
@@ -95,7 +96,7 @@ jobs:
           cache-from: type=gha,scope=lcp-server
           cache-to: type=gha,scope=lcp-server,mode=max
       - name: Build lcp-agent image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/lcp-agent/Dockerfile
@@ -105,13 +106,13 @@ jobs:
           cache-from: type=gha,scope=lcp-agent
           cache-to: type=gha,scope=lcp-agent,mode=max
       - run: npm ci
-      - run: ./scripts/run-system-tests.sh
+      - run: ./scripts/run-smoke-tests.sh
       - if: always()
         run: docker compose --profile auth down -v
 
   e2e-test:
     name: E2E tests
-    needs: [system-test]
+    needs: [smoke-test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

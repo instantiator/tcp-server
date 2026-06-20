@@ -1,0 +1,71 @@
+import { NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'crypto';
+import { LcpRole } from '@lcp/shared';
+import { RoleController } from './api.role.controller';
+import { DbService } from '../db/db.service';
+
+function makeRole(overrides: Partial<LcpRole> = {}): LcpRole {
+  return {
+    id: randomUUID(),
+    companyId: randomUUID(),
+    name: 'analyst',
+    description: 'Analyses.',
+    llmConfig: { provider: 'lm-studio', model: 'qwen3-5b' },
+    systemPromptTemplate: 'You are {{name}}.',
+    knowledgeDomains: [],
+    mcpServerList: [],
+    company: {} as never,
+    ...overrides,
+  };
+}
+
+describe('RoleController', () => {
+  let db: jest.Mocked<Pick<DbService, 'createRole' | 'getRole'>>;
+  let controller: RoleController;
+
+  beforeEach(() => {
+    db = {
+      createRole: jest.fn(),
+      getRole: jest.fn(),
+    };
+    controller = new RoleController(db as unknown as DbService);
+  });
+
+  describe('createRole', () => {
+    it('delegates to db.createRole and returns the result', async () => {
+      const role = makeRole();
+      db.createRole.mockResolvedValue(role);
+
+      const result = await controller.createRole({
+        companyId: role.companyId,
+        name: role.name,
+        description: role.description,
+        llmConfig: role.llmConfig,
+        systemPromptTemplate: role.systemPromptTemplate,
+        knowledgeDomains: [],
+        mcpServerList: [],
+      });
+
+      expect(db.createRole).toHaveBeenCalledTimes(1);
+      expect(result.id).toBe(role.id);
+    });
+  });
+
+  describe('getRole', () => {
+    it('returns the role when found', async () => {
+      const role = makeRole();
+      db.getRole.mockResolvedValue(role);
+
+      const result = await controller.getRole(role.id);
+      expect(result.id).toBe(role.id);
+    });
+
+    it('throws NotFoundException when the role does not exist', async () => {
+      db.getRole.mockResolvedValue(null);
+
+      await expect(controller.getRole(randomUUID())).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+});

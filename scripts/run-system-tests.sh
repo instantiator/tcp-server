@@ -25,7 +25,7 @@ Any extra arguments are passed through to Jest, for example:
 Prerequisites:
   - Docker and Docker Compose
   - .env.testing present in the repo root (see .env.example)
-  - Built Docker images (run 'docker compose build' first if images are stale)
+  - lcp-server and lcp-agent images are rebuilt automatically before each run
 
 Options:
   -h, --help    Show this help message and exit
@@ -65,6 +65,7 @@ wait_for() {
   echo "$name ready."
 }
 
+docker compose --profile auth --env-file "$ENV_FILE" build lcp-server lcp-agent
 docker compose --profile auth --env-file "$ENV_FILE" up -d
 
 # Keycloak starts slowly — allow up to 5 minutes.

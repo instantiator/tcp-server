@@ -10,12 +10,12 @@ gates the next:
 unit → integration → system → e2e
 ```
 
-| Tier | What it proves | Infrastructure |
-|------|----------------|----------------|
-| Unit | Individual classes and functions behave correctly | None — SQLite in-memory |
-| Integration | The app can connect to and use each backing service | Docker (postgres, redis, minio) |
-| System | The full deployment starts and all health checks pass | Docker + Keycloak |
-| E2E | HTTP API workflows produce the right responses end-to-end | Docker (postgres, redis, minio) |
+| Tier        | What it proves                                            | Infrastructure                  |
+| ----------- | --------------------------------------------------------- | ------------------------------- |
+| Unit        | Individual classes and functions behave correctly         | None — SQLite in-memory         |
+| Integration | The app can connect to and use each backing service       | Docker (postgres, redis, minio) |
+| System      | The full deployment starts and all health checks pass     | Docker + Keycloak               |
+| E2E         | HTTP API workflows produce the right responses end-to-end | Docker (postgres, redis, minio) |
 
 **Unit tests** use `better-sqlite3` in-memory and `@nestjs/testing` to wire
 modules without starting a real server. They run in milliseconds with no
@@ -85,12 +85,12 @@ Starts postgres, redis, and minio. Requires Docker. See
 
 ## Test file locations
 
-| Suite | Pattern | Jest config |
-|-------|---------|-------------|
-| Unit | `apps/**/src/**/*.spec.ts`, `libs/**/*.spec.ts` | `jest.config.js` (root) |
-| E2E | `apps/**/test/**/*.e2e-spec.ts` | `apps/lcp-server/test/jest-e2e.json` |
-| Integration | `apps/**/test/integration/**/*.integration-spec.ts` | `test/jest-integration.json` |
-| System | `test/system/**/*.spec.ts` | `test/jest-system.json` |
+| Suite       | Pattern                                             | Jest config                          |
+| ----------- | --------------------------------------------------- | ------------------------------------ |
+| Unit        | `apps/**/src/**/*.spec.ts`, `libs/**/*.spec.ts`     | `jest.config.js` (root)              |
+| E2E         | `apps/**/test/**/*.e2e-spec.ts`                     | `apps/lcp-server/test/jest-e2e.json` |
+| Integration | `apps/**/test/integration/**/*.integration-spec.ts` | `test/jest-integration.json`         |
+| System      | `test/system/**/*.spec.ts`                          | `test/jest-system.json`              |
 
 ## CI pipeline
 
