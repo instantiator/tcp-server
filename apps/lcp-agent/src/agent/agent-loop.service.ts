@@ -1,4 +1,11 @@
-import { AgentStatus, AuditEventType, LcpAgent, LcpRole } from '@lcp/shared';
+import {
+  AgentStatus,
+  AuditEventType,
+  LcpAgent,
+  LcpCompany,
+  LcpRole,
+  LlmConfig,
+} from '@lcp/shared';
 import {
   AIMessage,
   HumanMessage,
@@ -52,6 +59,8 @@ export class AgentLoopService {
     private readonly agentRepo: Repository<LcpAgent>,
     @InjectRepository(LcpRole)
     private readonly roleRepo: Repository<LcpRole>,
+    @InjectRepository(LcpCompany)
+    private readonly companyRepo: Repository<LcpCompany>,
     @InjectRepository(AuditEvent)
     private readonly auditRepo: Repository<AuditEvent>,
   ) {
@@ -75,6 +84,18 @@ export class AgentLoopService {
       return;
     }
 
+    const llmConfig =
+      role.llmConfig ??
+      (await this.companyRepo.findOneBy({ id: agent.companyId }))?.llmDefault;
+
+    if (!llmConfig) {
+      this.logger.error(
+        `No LLM config for agent ${agentId}: role has no llmConfig and company has no llmDefault`,
+      );
+      await this.updateStatus(agent, AgentStatus.Failed);
+      return;
+    }
+
     // Set up a timeout-backed abort controller
     const abortController = new AbortController();
     const timeoutId = setTimeout(
@@ -88,7 +109,7 @@ export class AgentLoopService {
     const checkpointer = PostgresSaver.fromConnString(this.databaseUrl);
     try {
       await checkpointer.setup();
-      await this.runLoop(agent, role, checkpointer, abortController);
+      await this.runLoop(agent, role, llmConfig, checkpointer, abortController);
     } finally {
       clearTimeout(timeoutId);
       await checkpointer.end();
@@ -99,10 +120,11 @@ export class AgentLoopService {
   private async runLoop(
     agent: LcpAgent,
     role: LcpRole,
+    llmConfig: LlmConfig,
     checkpointer: PostgresSaver,
     abortController: AbortController,
   ): Promise<void> {
-    const model = buildChatModel(role.llmConfig);
+    const model = buildChatModel(llmConfig);
     const graph = this.buildGraph(model, checkpointer);
 
     const systemPrompt = renderTemplate(role.systemPromptTemplate, {

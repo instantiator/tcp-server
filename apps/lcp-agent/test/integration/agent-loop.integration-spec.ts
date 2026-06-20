@@ -139,6 +139,41 @@ describeIf('AgentLoopService (integration)', () => {
     }
   }, 30_000);
 
+  it('uses company llmDefault when role.llmConfig is absent', async () => {
+    const company = await companyRepo.save(
+      companyRepo.create({
+        slug: 'default-llm',
+        name: 'Default LLM Co',
+        llmDefault: {
+          provider: 'lm-studio',
+          model: 'test-model',
+          baseUrl: 'http://127.0.0.1:1/v1',
+          apiKeyEnvVar: 'LM_STUDIO_API_KEY',
+        },
+      }),
+    );
+    const role = await roleRepo.save(
+      roleRepo.create({
+        companyId: company.id,
+        name: 'Inheritor',
+        description: 'Uses company default.',
+        systemPromptTemplate: 'You are {{name}}.',
+      }),
+    );
+    const agent = await agentRepo.save(
+      agentRepo.create({
+        companyId: company.id,
+        roleId: role.id,
+        initialPrompt: 'Hello.',
+      }),
+    );
+
+    await service.run(agent.id);
+
+    const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+    expect(updated.status).toBe(AgentStatus.Completed);
+  }, 30_000);
+
   it('resumes from a Paused state, restoring the LangGraph checkpoint', async () => {
     const { agent } = await seedAgentAndRole();
 

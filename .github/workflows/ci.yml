@@ -80,7 +80,7 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       # Pre-build the app images using BuildKit's GHA layer cache.
       # run-smoke-tests.sh calls `docker compose build` which reuses these
       # cached layers — the expensive `npm ci` Docker layer only rebuilds when
@@ -96,7 +96,7 @@ jobs:
           cache-from: type=gha,scope=lcp-server
           cache-to: type=gha,scope=lcp-server,mode=max
       - name: Build lcp-agent image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/lcp-agent/Dockerfile

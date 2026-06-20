@@ -8,6 +8,7 @@ import {
   LcpAgent,
   LcpCompany,
   LcpRole,
+  LlmConfig,
 } from '@lcp/shared';
 import { AIMessage } from '@langchain/core/messages';
 import { ConfigService } from '@nestjs/config';
@@ -136,20 +137,31 @@ describe('AgentLoopService', () => {
     );
   });
 
-  async function seedAgentAndRole() {
+  async function seedAgentAndRole(
+    opts: {
+      llmConfig?: LlmConfig;
+      companyLlmDefault?: LlmConfig;
+    } = {
+      llmConfig: {
+        provider: 'lm-studio',
+        model: 'qwen3-5b',
+        apiKeyEnvVar: 'LM_STUDIO_API_KEY',
+      },
+    },
+  ) {
     const company = await companyRepo.save(
-      companyRepo.create({ slug: 'acme', name: 'ACME' }),
+      companyRepo.create({
+        slug: 'acme',
+        name: 'ACME',
+        llmDefault: opts.companyLlmDefault,
+      }),
     );
     const role = await roleRepo.save(
       roleRepo.create({
         companyId: company.id,
         name: 'analyst',
         description: 'Analyses.',
-        llmConfig: {
-          provider: 'lm-studio',
-          model: 'qwen3-5b',
-          apiKeyEnvVar: 'LM_STUDIO_API_KEY',
-        },
+        llmConfig: opts.llmConfig,
         systemPromptTemplate: 'You are {{name}} as of {{date}}.',
       }),
     );
@@ -206,6 +218,34 @@ describe('AgentLoopService', () => {
       expect(event.agentId).toBe(agent.id);
       expect(event.role).toBe(role.name);
     }
+  });
+
+  it('uses company llmDefault when role has no llmConfig', async () => {
+    const { agent } = await seedAgentAndRole({
+      llmConfig: undefined,
+      companyLlmDefault: {
+        provider: 'lm-studio',
+        model: 'qwen3-5b',
+        apiKeyEnvVar: 'LM_STUDIO_API_KEY',
+      },
+    });
+
+    await service.run(agent.id);
+
+    const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+    expect(updated.status).toBe(AgentStatus.Completed);
+  });
+
+  it('fails the agent when neither role nor company has an LLM config', async () => {
+    const { agent } = await seedAgentAndRole({
+      llmConfig: undefined,
+      companyLlmDefault: undefined,
+    });
+
+    await service.run(agent.id);
+
+    const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+    expect(updated.status).toBe(AgentStatus.Failed);
   });
 
   it('deregisters the agent from the registry after the run', async () => {

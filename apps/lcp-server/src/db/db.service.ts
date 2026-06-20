@@ -6,9 +6,9 @@ import {
   LcpCompany,
   LcpRole,
 } from '@lcp/shared';
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { LcpAgentTemplate } from '../templates/LcpAgentTemplate';
 import { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
 import { LcpRoleTemplate } from '../templates/LcpRoleTemplate';
@@ -63,12 +63,22 @@ export class DbService {
       ? await this.companyRepo.findOneBy({ id: company.id })
       : null;
 
-    if (!defined(existing)) {
-      return this.companyRepo.save(this.companyRepo.create(company));
+    const merged = defined(existing) ? { ...existing, ...company } : company;
+
+    // Guard: if llmDefault is being removed while roles rely on it, reject.
+    // POST (slug-replace) is exempt — it cascade-deletes all roles first.
+    if (!replace && !merged.llmDefault && merged.id) {
+      const orphanCount = await this.roleRepo.count({
+        where: { companyId: merged.id, llmConfig: IsNull() },
+      });
+      if (orphanCount > 0) {
+        throw new BadRequestException(
+          `Cannot remove llmDefault: ${orphanCount} role(s) in this company have no llmConfig`,
+        );
+      }
     }
-    return this.companyRepo.save(
-      this.companyRepo.create({ ...existing, ...company }),
-    );
+
+    return this.companyRepo.save(this.companyRepo.create(merged));
   }
 
   /** Retrieves a company by its UUID or slug. Returns `null` if not found. */
@@ -82,6 +92,16 @@ export class DbService {
 
   /** Creates a new {@link LcpRole} from the given template. */
   async createRole(template: LcpRoleTemplate): Promise<LcpRole> {
+    if (!template.llmConfig) {
+      const company = await this.companyRepo.findOneByOrFail({
+        id: template.companyId,
+      });
+      if (!company.llmDefault) {
+        throw new BadRequestException(
+          'Role has no llmConfig and the company has no llmDefault — at least one is required',
+        );
+      }
+    }
     return this.roleRepo.save(this.roleRepo.create(template));
   }
 

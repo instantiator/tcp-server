@@ -32,7 +32,40 @@ The `/health` endpoints on both services are public and do not require a token.
 
 ---
 
+## Company-level LLM default
+
+A company can carry a `llmDefault` — a fallback `LlmConfig` used by any role that does not supply its own. This avoids repeating provider and model details on every role when all roles in a company share the same LLM.
+
+```bash
+curl -X POST http://localhost:3000/api/company \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "slug": "acme",
+    "name": "Acme Corp",
+    "llmDefault": {
+      "provider": "lm-studio",
+      "model": "qwen3-5b",
+      "baseUrl": "http://localhost:1234/v1",
+      "apiKeyEnvVar": "LM_STUDIO_API_KEY"
+    }
+  }'
+```
+
+**Fallback rules:**
+1. If the role has its own `llmConfig`, that is used.
+2. Otherwise the company's `llmDefault` is used.
+3. If neither is set, the agent run fails immediately with status `failed`.
+
+**Guard:** The API rejects:
+- Creating a role with no `llmConfig` when the company has no `llmDefault` (HTTP 400)
+- Updating a company to remove `llmDefault` when any of its roles have no `llmConfig` (HTTP 400)
+
+---
+
 ## Creating a role
+
+`llmConfig` is optional when the company has a `llmDefault`.
 
 ```bash
 curl -X POST http://localhost:3000/api/role \

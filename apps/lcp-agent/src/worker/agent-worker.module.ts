@@ -1,4 +1,4 @@
-import { AuditEvent, LcpAgent, LcpRole } from '@lcp/shared';
+import { AuditEvent, LcpAgent, LcpCompany, LcpRole } from '@lcp/shared';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AgentLoopService } from '../agent/agent-loop.service';
@@ -11,7 +11,9 @@ import { AgentWorkerService } from './agent-worker.service';
  * registered here so they are available via DI.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([LcpAgent, LcpRole, AuditEvent])],
+  imports: [
+    TypeOrmModule.forFeature([LcpAgent, LcpRole, LcpCompany, AuditEvent]),
+  ],
   providers: [AgentWorkerService, AgentLoopService, AgentRegistryService],
 })
 export class AgentWorkerModule {}

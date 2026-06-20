@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
@@ -158,6 +159,62 @@ describe('DbService', () => {
         dbService.setCompany({ slug: 'acme', name: 'Second' }, false),
       ).rejects.toThrow(QueryFailedError);
     });
+
+    it('rejects when removing llmDefault would leave roles without any config', async () => {
+      const id = randomUUID();
+      await dbService.setCompany(
+        {
+          id,
+          slug: 'llm-co',
+          name: 'LLM Co',
+          llmDefault: { provider: 'openai', model: 'gpt-4o' },
+        },
+        false,
+      );
+      // Create a role that relies on the company default (no llmConfig)
+      await roleRepo.save(
+        roleRepo.create({
+          companyId: id,
+          name: 'inheritor',
+          description: 'Uses company default.',
+          systemPromptTemplate: 'You are {{name}}.',
+        }),
+      );
+      // Removing llmDefault must be rejected (pass null to signal explicit removal)
+      await expect(
+        dbService.setCompany(
+          { id, slug: 'llm-co', name: 'LLM Co', llmDefault: null },
+          false,
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('allows removing llmDefault when all roles have their own llmConfig', async () => {
+      const id = randomUUID();
+      await dbService.setCompany(
+        {
+          id,
+          slug: 'llm-co2',
+          name: 'LLM Co 2',
+          llmDefault: { provider: 'openai', model: 'gpt-4o' },
+        },
+        false,
+      );
+      // Role has its own llmConfig — not reliant on the company default
+      await roleRepo.save(
+        roleRepo.create({
+          companyId: id,
+          name: 'self-configured',
+          description: 'Has own config.',
+          llmConfig: { provider: 'lm-studio', model: 'qwen3-5b' },
+          systemPromptTemplate: 'You are {{name}}.',
+        }),
+      );
+      // Removing llmDefault must succeed
+      await expect(
+        dbService.setCompany({ id, slug: 'llm-co2', name: 'LLM Co 2' }, false),
+      ).resolves.toBeDefined();
+    });
   });
 
   // getCompany
@@ -222,7 +279,7 @@ describe('DbService', () => {
       const found = await dbService.getRole(role.id);
       expect(found).not.toBeNull();
       expect(found!.name).toBe('analyst');
-      expect(found!.llmConfig.model).toBe('qwen3-5b');
+      expect(found!.llmConfig!.model).toBe('qwen3-5b');
     });
 
     it('getRole returns null for unknown id', async () => {
@@ -244,6 +301,40 @@ describe('DbService', () => {
       const result = await dbService.listRoles(company.id);
       expect(result).toHaveLength(1);
       expect(result[0].name).toBe('planner');
+    });
+
+    it('accepts a role with no llmConfig when the company has llmDefault', async () => {
+      const company = await companyRepo.save(
+        companyRepo.create({
+          slug: 'default-llm',
+          name: 'Default LLM Co',
+          llmDefault: { provider: 'openai', model: 'gpt-4o' },
+        }),
+      );
+      const role = await dbService.createRole({
+        companyId: company.id,
+        name: 'inheritor',
+        description: 'Uses company default.',
+        systemPromptTemplate: 'You are {{name}}.',
+        knowledgeDomains: [],
+        mcpServerList: [],
+      });
+      expect(role.id).toBeDefined();
+      expect(role.llmConfig).toBeNull();
+    });
+
+    it('rejects a role with no llmConfig when the company has no llmDefault', async () => {
+      const company = await seedCompany();
+      await expect(
+        dbService.createRole({
+          companyId: company.id,
+          name: 'broken',
+          description: 'No config.',
+          systemPromptTemplate: 'You are {{name}}.',
+          knowledgeDomains: [],
+          mcpServerList: [],
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

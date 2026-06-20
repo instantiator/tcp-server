@@ -69,9 +69,10 @@ export class LcpRole {
   /**
    * LLM provider and model configuration for agents running in this role.
    * Stored as JSONB; API keys are resolved from environment variables at runtime.
+   * When absent, the agent loop falls back to {@link LcpCompany.llmDefault}.
    */
-  @Column({ type: 'jsonb' })
-  llmConfig!: LlmConfig;
+  @Column({ type: 'jsonb', nullable: true })
+  llmConfig?: LlmConfig | null;
 
   /**
    * Handlebars-style prompt template injected as the system message at agent start.

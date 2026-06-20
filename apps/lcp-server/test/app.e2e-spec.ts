@@ -149,5 +149,134 @@ describe('CompanyController (e2e)', () => {
 
       expect((await companyRepo.findOneBy({ id }))!.name).toBe('Updated');
     });
+
+    it('returns 400 when removing llmDefault would leave a role without any config', async () => {
+      // Create company with llmDefault
+      await request(app.getHttpServer())
+        .post('/api/company')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({
+          slug: 'llm-co',
+          name: 'LLM Co',
+          llmDefault: { provider: 'openai', model: 'gpt-4o' },
+        });
+
+      const id = (await companyRepo.findOneBy({ slug: 'llm-co' }))!.id;
+
+      // Create a role with no llmConfig — relying on the company default
+      await request(app.getHttpServer())
+        .post('/api/role')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({
+          companyId: id,
+          name: 'inheritor',
+          description: 'Uses company default.',
+          systemPromptTemplate: 'You are {{name}}.',
+          knowledgeDomains: [],
+          mcpServerList: [],
+        });
+
+      // Removing llmDefault must be rejected (null signals explicit removal)
+      await request(app.getHttpServer())
+        .put(`/api/company/${id}`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({ slug: 'llm-co', name: 'LLM Co', llmDefault: null })
+        .expect(400);
+    });
+  });
+});
+
+describe('RoleController (e2e)', () => {
+  let app: INestApplication<App>;
+  let companyRepo: Repository<LcpCompany>;
+  let roleRepo: Repository<LcpRole>;
+  let agentRepo: Repository<LcpAgent>;
+  let auditRepo: Repository<AuditEvent>;
+  let jwt: string;
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
+    await app.init();
+    companyRepo = moduleFixture.get(getRepositoryToken(LcpCompany));
+    roleRepo = moduleFixture.get(getRepositoryToken(LcpRole));
+    agentRepo = moduleFixture.get(getRepositoryToken(LcpAgent));
+    auditRepo = moduleFixture.get(getRepositoryToken(AuditEvent));
+    jwt = makeTestJwt();
+  });
+
+  afterEach(async () => {
+    await auditRepo.createQueryBuilder().delete().execute();
+    await agentRepo.createQueryBuilder().delete().execute();
+    await roleRepo.createQueryBuilder().delete().execute();
+    await companyRepo.createQueryBuilder().delete().execute();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  async function createCompany(overrides: Record<string, unknown> = {}) {
+    await request(app.getHttpServer())
+      .post('/api/company')
+      .set('Authorization', `Bearer ${jwt}`)
+      .send({ slug: 'acme', name: 'Acme Corp', ...overrides });
+    return companyRepo.findOneByOrFail({ slug: 'acme' });
+  }
+
+  describe('POST /api/role', () => {
+    it('returns 201 when role has explicit llmConfig', async () => {
+      const company = await createCompany();
+      await request(app.getHttpServer())
+        .post('/api/role')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({
+          companyId: company.id,
+          name: 'analyst',
+          description: 'Analyses.',
+          llmConfig: { provider: 'lm-studio', model: 'qwen3-5b' },
+          systemPromptTemplate: 'You are {{name}}.',
+          knowledgeDomains: [],
+          mcpServerList: [],
+        })
+        .expect(201);
+    });
+
+    it('returns 201 when role has no llmConfig but company has llmDefault', async () => {
+      const company = await createCompany({
+        llmDefault: { provider: 'openai', model: 'gpt-4o' },
+      });
+      await request(app.getHttpServer())
+        .post('/api/role')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({
+          companyId: company.id,
+          name: 'inheritor',
+          description: 'Uses company default.',
+          systemPromptTemplate: 'You are {{name}}.',
+          knowledgeDomains: [],
+          mcpServerList: [],
+        })
+        .expect(201);
+    });
+
+    it('returns 400 when role has no llmConfig and company has no llmDefault', async () => {
+      const company = await createCompany();
+      await request(app.getHttpServer())
+        .post('/api/role')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({
+          companyId: company.id,
+          name: 'broken',
+          description: 'No config anywhere.',
+          systemPromptTemplate: 'You are {{name}}.',
+          knowledgeDomains: [],
+          mcpServerList: [],
+        })
+        .expect(400);
+    });
   });
 });

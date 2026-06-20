@@ -69,6 +69,33 @@ async function seedRole(companyId: string) {
   );
 }
 
+describe('LcpCompany entity', () => {
+  it('persists llmDefault as JSONB and retrieves it correctly', async () => {
+    const company = await companies.save(
+      companies.create({
+        slug: 'llm-co',
+        name: 'LLM Co',
+        llmDefault: {
+          provider: 'openai',
+          model: 'gpt-4o',
+          apiKeyEnvVar: 'OPENAI_API_KEY',
+        },
+      }),
+    );
+    const found = await companies.findOneByOrFail({ id: company.id });
+    expect(found.llmDefault?.provider).toBe('openai');
+    expect(found.llmDefault?.model).toBe('gpt-4o');
+  });
+
+  it('allows a company with no llmDefault', async () => {
+    const company = await companies.save(
+      companies.create({ slug: 'plain-co', name: 'Plain Co' }),
+    );
+    const found = await companies.findOneByOrFail({ id: company.id });
+    expect(found.llmDefault).toBeNull();
+  });
+});
+
 describe('LcpRole entity', () => {
   it('persists a role with JSONB llmConfig and array-field defaults', async () => {
     const company = await seedCompany();
@@ -76,9 +103,29 @@ describe('LcpRole entity', () => {
 
     const found = await roles.findOneByOrFail({ id: role.id });
     expect(found.name).toBe('analyst');
-    expect(found.llmConfig.provider).toBe('lm-studio');
+    expect(found.llmConfig!.provider).toBe('lm-studio');
     expect(found.knowledgeDomains).toEqual([]);
     expect(found.mcpServerList).toEqual([]);
+  });
+
+  it('allows a role with null llmConfig when the company provides a default', async () => {
+    const company = await companies.save(
+      companies.create({
+        slug: 'default-llm',
+        name: 'Default LLM Co',
+        llmDefault: { provider: 'openai', model: 'gpt-4o' },
+      }),
+    );
+    const role = await roles.save(
+      roles.create({
+        companyId: company.id,
+        name: 'inheritor',
+        description: 'Uses company default.',
+        systemPromptTemplate: 'You are {{name}}.',
+      }),
+    );
+    const found = await roles.findOneByOrFail({ id: role.id });
+    expect(found.llmConfig).toBeNull();
   });
 
   it('persists knowledgeDomains and mcpServerList when supplied', async () => {
