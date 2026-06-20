@@ -6,16 +6,22 @@ import { passportJwtSecret } from 'jwks-rsa';
 
 /**
  * Passport strategy that validates OIDC access tokens by fetching the
- * issuer's JWKS and verifying the token's signature, expiry, audience,
- * and issuer claims.
+ * issuer's JWKS and verifying the token's signature, expiry, and issuer
+ * claims. Audience validation is enabled when `OIDC_AUDIENCE` is set.
+ *
+ * Not instantiated directly — {@link AuthModule} uses an async factory to
+ * resolve `jwksUri` from the provider's discovery document before constructing
+ * this class, making it compatible with any standards-compliant OIDC provider.
  */
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(config: ConfigService) {
+  /**
+   * @param config - NestJS config service
+   * @param jwksUri - JWKS endpoint resolved from the provider's discovery doc
+   * @param audience - Optional audience claim to validate (from `OIDC_AUDIENCE`)
+   */
+  constructor(config: ConfigService, jwksUri: string, audience?: string) {
     const issuerUrl = config.getOrThrow<string>('OIDC_ISSUER_URL');
-    // Use internal URL for JWKS fetch (container-to-container); keep issuerUrl for iss validation.
-    const internalUrl =
-      config.get<string>('OIDC_INTERNAL_ISSUER_URL') ?? issuerUrl;
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
@@ -23,11 +29,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         cache: true,
         rateLimit: true,
         jwksRequestsPerMinute: 5,
-        // Keycloak's JWKS endpoint is /protocol/openid-connect/certs (not /.well-known/jwks.json).
-        jwksUri: `${internalUrl.replace(/\/$/, '')}/protocol/openid-connect/certs`,
+        jwksUri,
       }),
-      // No audience check: Keycloak ROPC tokens set aud=account, not the client ID.
-      // Validating iss is sufficient to confirm the token came from our realm.
+      // Audience validation is opt-in: set OIDC_AUDIENCE if your provider
+      // populates aud with a known value (e.g. an API identifier on Auth0/Okta).
+      // Keycloak ROPC tokens set aud=account by default; leave OIDC_AUDIENCE
+      // unset or configure a Keycloak audience mapper to override this.
+      ...(audience !== undefined ? { audience } : {}),
       issuer: issuerUrl,
     });
   }

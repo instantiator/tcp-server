@@ -8,3 +8,5 @@ process.env.MINIO_SECRET_KEY ||= 'test-secret';
 process.env.OIDC_ISSUER_URL ||= 'http://localhost:8080/realms/lcp';
 process.env.OIDC_CLIENT_ID ||= 'lcp-server';
 process.env.OIDC_CLIENT_SECRET ||= 'test-secret';
+// Skip OIDC discovery fetch at startup — jwks-rsa is mocked so the URI is irrelevant.
+process.env.OIDC_JWKS_URI ||= 'http://localhost:8080/stub-jwks';
