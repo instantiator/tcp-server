@@ -6,6 +6,7 @@ import { ApiModule } from './api/api.module';
 import { AuthModule } from './auth/auth.module';
 import { configSchema } from './config/config.schema';
 import { HealthModule } from './health/health.module';
+import { CompanyLlmDefault1750000000002 } from './migrations/1750000000002-CompanyLlmDefault';
 import { AddRoleAgentAudit1750000000001 } from './migrations/1750000000001-AddRoleAgentAudit';
 import { InitialSchema1750000000000 } from './migrations/1750000000000-InitialSchema';
 
@@ -43,6 +44,7 @@ import { InitialSchema1750000000000 } from './migrations/1750000000000-InitialSc
           migrations: [
             InitialSchema1750000000000,
             AddRoleAgentAudit1750000000001,
+            CompanyLlmDefault1750000000002,
           ],
         };
       },
