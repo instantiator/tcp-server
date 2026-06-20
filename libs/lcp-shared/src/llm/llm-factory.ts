@@ -1,36 +1,28 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { ChatOpenAI } from '@langchain/openai';
-import { LlmConfig } from '../models/LcpRole.model';
+import type { LlmConfig } from '../models/LlmConfig.model';
 
 /**
  * Builds a {@link BaseChatModel} from the given {@link LlmConfig}.
  *
  * - `'lm-studio'`: OpenAI-compatible local endpoint (requires `baseUrl`).
- *   API key is resolved from the env var named by `apiKeyEnvVar`; falls back
- *   to a placeholder when LM Studio runs without authentication.
- * - `'openai'`: hosted OpenAI (requires the env var named by `apiKeyEnvVar`)
+ *   Falls back to the placeholder `'lm-studio'` when no `apiKey` is set,
+ *   since LM Studio ignores the key value when running without authentication.
+ * - `'openai'`: hosted OpenAI (requires `apiKey`)
  *
  * @throws if the provider is unrecognised or required config is missing
  */
 export function buildChatModel(config: LlmConfig): BaseChatModel {
   switch (config.provider) {
-    case 'lm-studio': {
-      const key = config.apiKeyEnvVar
-        ? process.env[config.apiKeyEnvVar]
-        : undefined;
+    case 'lm-studio':
       return new ChatOpenAI({
         model: config.model,
         configuration: { baseURL: config.baseUrl },
-        apiKey: key ?? 'lm-studio',
+        apiKey: config.apiKey ?? 'lm-studio',
       });
-    }
 
-    case 'openai': {
-      const key = config.apiKeyEnvVar
-        ? process.env[config.apiKeyEnvVar]
-        : undefined;
-      return new ChatOpenAI({ model: config.model, apiKey: key });
-    }
+    case 'openai':
+      return new ChatOpenAI({ model: config.model, apiKey: config.apiKey });
 
     default:
       throw new Error(`Unsupported LLM provider: ${config.provider}`);

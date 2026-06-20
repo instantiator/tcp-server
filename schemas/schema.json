@@ -242,7 +242,7 @@
               "type": "null"
             }
           ],
-          "description": "LLM provider and model configuration for agents running in this role. Stored as JSONB; API keys are resolved from environment variables at runtime. When absent, the agent loop falls back to  {@link  LcpCompany.llmDefault } ."
+          "description": "LLM provider and model configuration for agents running in this role. Stored as JSONB. When absent, the agent loop falls back to  {@link  LcpCompany.llmDefault } ."
         },
         "mcpServerList": {
           "description": "List of MCP server identifiers this role is permitted to call. Stored now; wired to the agent loop once MCP servers are implemented. ponytail: unused for MVP; consumed by the MCP integration phase",
@@ -275,10 +275,10 @@
     },
     "LlmConfig": {
       "additionalProperties": false,
-      "description": "Configuration for a specific LLM provider and model. API keys are never stored here — only the name of the environment variable that holds the key.",
+      "description": "Configuration for a specific LLM provider and model. The API key is stored directly in this config object and persisted in the database. Ensure the database has encryption at rest to protect stored keys.",
       "properties": {
-        "apiKeyEnvVar": {
-          "description": "Name of the environment variable that holds the API key for this provider. The key is resolved at runtime and never stored in the database.",
+        "apiKey": {
+          "description": "API key for this provider. Stored in the database as part of the JSONB config block. Masked in API responses when `LCP_MASK_API_KEYS=true` (the default).",
           "type": "string"
         },
         "baseUrl": {

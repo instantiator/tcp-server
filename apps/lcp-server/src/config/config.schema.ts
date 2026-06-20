@@ -21,4 +21,6 @@ export const configSchema = Joi.object({
   OIDC_AUDIENCE: Joi.string().optional(),
   OIDC_CLIENT_ID: Joi.string().required(),
   OIDC_CLIENT_SECRET: Joi.string().required(),
+  // When true, apiKey values in LlmConfig are replaced with '***' in API responses.
+  LCP_MASK_API_KEYS: Joi.boolean().default(true),
 });

@@ -62,6 +62,15 @@ describe('RoleController', () => {
       expect(result.id).toBe(role.id);
     });
 
+    it('accepts a partial llmConfig patch without the full object', async () => {
+      const role = makeRole();
+      db.updateRole.mockResolvedValue(role);
+
+      const partial = { llmConfig: { model: 'gpt-4o-mini' } };
+      await controller.updateRole(role.id, partial);
+      expect(db.updateRole).toHaveBeenCalledWith(role.id, partial);
+    });
+
     it('throws NotFoundException when the role does not exist', async () => {
       db.updateRole.mockResolvedValue(null);
       await expect(

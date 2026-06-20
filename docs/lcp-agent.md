@@ -47,8 +47,9 @@ curl -X POST http://localhost:3000/api/company \
       "provider": "lm-studio",
       "model": "qwen3-5b",
       "baseUrl": "http://localhost:1234/v1",
-      "apiKeyEnvVar": "LM_STUDIO_API_KEY"
-    }'
+      "apiKey": "your-lm-studio-token"
+    }
+  }'
 ```
 
 **Fallback rules:**
@@ -80,13 +81,13 @@ curl -X POST http://localhost:3000/api/role \
       "provider": "lm-studio",
       "model": "qwen3-5b",
       "baseUrl": "http://localhost:1234/v1",
-      "apiKeyEnvVar": "LM_STUDIO_API_KEY"
+      "apiKey": "your-lm-studio-token"
     },
     "systemPromptTemplate": "You are {{name}}, a specialist at {{description}}. Today is {{date}}."
   }'
 ```
 
-`apiKeyEnvVar` names an environment variable that holds the API key. The key itself is never stored in the database.
+`apiKey` holds the API key for the provider. It is stored in the database as part of the JSONB config block and masked (`***`) in API responses by default. Set `LCP_MASK_API_KEYS=false` in the environment to expose raw keys during local debugging.
 
 ### Template placeholders
 
@@ -140,7 +141,7 @@ curl -X POST http://localhost:3000/api/model/check \
         "provider": "lm-studio",
         "model": "qwen3-5b",
         "baseUrl": "http://localhost:1234/v1",
-        "apiKeyEnvVar": "LM_STUDIO_API_KEY"
+        "apiKey": "your-lm-studio-token"
       }
     ]
   }'

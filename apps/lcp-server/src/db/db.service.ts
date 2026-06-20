@@ -8,7 +8,7 @@ import {
 } from '@lcp/shared';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { DeepPartial, IsNull, Repository } from 'typeorm';
 import { LcpAgentTemplate } from '../templates/LcpAgentTemplate';
 import { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
 import { LcpRoleTemplate } from '../templates/LcpRoleTemplate';
@@ -47,12 +47,14 @@ export class DbService {
 
   /**
    * Either creates or updates an {@link LcpCompany}.
+   * Accepts a deep-partial shape so callers can patch nested JSONB fields without
+   * providing a complete object.
    *
-   * @param company the company to create or update
-   * @param replace if `true`, removes any existing record matching the slug
+   * @param company the company fields to create or merge
+   * @param replace if `true`, removes any existing record matching the slug first
    */
   async setCompany(
-    company: Partial<LcpCompany>,
+    company: DeepPartial<LcpCompany>,
     replace: boolean,
   ): Promise<LcpCompany> {
     if (replace) {
@@ -63,7 +65,20 @@ export class DbService {
       ? await this.companyRepo.findOneBy({ id: company.id })
       : null;
 
-    const merged = defined(existing) ? { ...existing, ...company } : company;
+    const merged = defined(existing)
+      ? {
+          ...existing,
+          ...company,
+          // Deep-merge llmDefault so a partial patch (e.g. only model) preserves other fields.
+          // When llmDefault is explicitly null, pass it through as-is to allow removal.
+          llmDefault:
+            company.llmDefault !== undefined
+              ? company.llmDefault !== null && existing.llmDefault != null
+                ? { ...existing.llmDefault, ...company.llmDefault }
+                : company.llmDefault
+              : existing.llmDefault,
+        }
+      : company;
 
     // Guard: if llmDefault is being removed while roles rely on it, reject.
     // POST (slug-replace) is exempt — it cascade-deletes all roles first.
@@ -117,15 +132,25 @@ export class DbService {
 
   /**
    * Partially updates an existing {@link LcpRole} by id.
+   * Deep-merges `llmConfig` so a partial patch (e.g. only `model`) preserves other fields.
    * Returns the updated role, or `null` if no role with that id exists.
    */
   async updateRole(
     id: string,
-    partial: Partial<LcpRole>,
+    partial: DeepPartial<Omit<LcpRole, 'id' | 'company'>>,
   ): Promise<LcpRole | null> {
     const existing = await this.roleRepo.findOneBy({ id });
     if (!existing) return null;
-    return this.roleRepo.save({ ...existing, ...partial, id });
+    const merged = {
+      ...existing,
+      ...partial,
+      id,
+      llmConfig:
+        partial.llmConfig !== undefined
+          ? { ...existing.llmConfig, ...partial.llmConfig }
+          : existing.llmConfig,
+    };
+    return this.roleRepo.save(merged);
   }
 
   /** Returns all roles for a given company. */

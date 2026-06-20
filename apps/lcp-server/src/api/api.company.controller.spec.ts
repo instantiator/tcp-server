@@ -1,5 +1,4 @@
 import { randomUUID } from 'crypto';
-import { LcpCompany } from '@lcp/shared';
 import { CompanyController } from './api.company.controller';
 import { ApiService } from './api.service';
 import { DbService } from '../db/db.service';
@@ -50,19 +49,24 @@ describe('CompanyController', () => {
   });
 
   describe('putCompany', () => {
-    it('calls apiService.setCompany with the id and company', async () => {
+    it('calls apiService.setCompany with the path id and partial body', async () => {
       const id = randomUUID();
-      const company = { id, slug: 'acme', name: 'Acme' };
-      await controller.putCompany(id, company);
-      expect(api.setCompany).toHaveBeenCalledWith(id, company);
+      const partial = { slug: 'acme', name: 'Acme' };
+      await controller.putCompany(id, partial);
+      expect(api.setCompany).toHaveBeenCalledWith(id, partial);
     });
 
-    it('throws when the path id does not match the body id', async () => {
+    it('allows a partial body with only some fields', async () => {
       const id = randomUUID();
-      const company = { id: randomUUID(), slug: 'acme', name: 'Acme' };
-      await expect(
-        controller.putCompany(id, company as LcpCompany),
-      ).rejects.toThrow();
+      await controller.putCompany(id, { name: 'Updated Name' });
+      expect(api.setCompany).toHaveBeenCalledWith(id, { name: 'Updated Name' });
+    });
+
+    it('allows patching a nested llmDefault field', async () => {
+      const id = randomUUID();
+      const partial = { llmDefault: { model: 'gpt-4o-mini' } };
+      await controller.putCompany(id, partial);
+      expect(api.setCompany).toHaveBeenCalledWith(id, partial);
     });
   });
 

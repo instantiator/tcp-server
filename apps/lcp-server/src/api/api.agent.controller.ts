@@ -1,4 +1,4 @@
-import { AgentStatus, AuditEventType, LcpAgent } from '@lcp/shared';
+import { AgentStatus, AuditEventType, LcpAgent, AuditEvent } from '@lcp/shared';
 import {
   BadRequestException,
   Body,
@@ -14,7 +14,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { AuditEvent } from '@lcp/shared';
 import { Repository } from 'typeorm';
 import { DbService } from '../db/db.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -137,10 +136,6 @@ export class AgentController {
     return agent;
   }
 
-  /**
-   * Deletes an agent and all its associated audit events.
-   * Used by the CLI to clean up chat sessions on exit.
-   */
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteAgent(@Param('id') id: string): Promise<void> {

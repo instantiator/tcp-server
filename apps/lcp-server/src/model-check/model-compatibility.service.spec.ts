@@ -28,7 +28,7 @@ describe('ModelCompatibilityService', () => {
     provider: 'lm-studio',
     model: 'qwen3-5b',
     baseUrl: 'http://localhost:1234/v1',
-    apiKeyEnvVar: 'LM_STUDIO_API_KEY',
+    apiKey: 'LM_STUDIO_API_KEY',
   };
 
   it('returns compatible:true when both probes succeed', async () => {

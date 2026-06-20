@@ -9,6 +9,7 @@ import {
   Put,
   UseGuards,
 } from '@nestjs/common';
+import type { DeepPartial } from 'typeorm';
 import type { LcpRoleTemplate } from '../templates/LcpRoleTemplate';
 import { DbService } from '../db/db.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -30,12 +31,14 @@ export class RoleController {
 
   /**
    * Partially updates an existing {@link LcpRole} identified by `id`.
-   * Only the provided fields are changed; omitted fields are left as-is.
+   * Accepts a deep-partial body, so nested fields such as `llmConfig.model` can be
+   * patched without overwriting the whole object. The `id` and `company` fields
+   * are immutable and must not be included in the request body.
    */
   @Put(':id')
   async updateRole(
     @Param('id') id: string,
-    @Body() partial: Partial<LcpRole>,
+    @Body() partial: DeepPartial<Omit<LcpRole, 'id' | 'company'>>,
   ): Promise<LcpRole> {
     const role = await this.db.updateRole(id, partial);
     if (!role) throw new NotFoundException(`Role ${id} not found`);

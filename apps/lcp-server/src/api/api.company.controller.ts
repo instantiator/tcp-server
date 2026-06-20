@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Get,
@@ -10,6 +9,7 @@ import {
 } from '@nestjs/common';
 import type { UUID } from 'crypto';
 import { LcpCompany, LcpRole } from '@lcp/shared';
+import type { DeepPartial } from 'typeorm';
 import type { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
 import { DbService } from '../db/db.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -43,18 +43,17 @@ export class CompanyController {
   }
 
   /**
-   * Updates the fields of an existing {@link LcpCompany} identified by `id`.
-   * Rejects the request when the body's `id` conflicts with the path `id`.
+   * Partially updates the fields of an existing {@link LcpCompany} identified by `id`.
+   * Accepts a deep-partial body so nested fields such as `llmDefault.model` can be
+   * patched without overwriting the whole object. The `id` field is immutable and
+   * must not be included in the request body.
    */
   @Put(':id')
-  async putCompany(@Param('id') id: UUID, @Body() company: LcpCompany) {
-    // Only reject when the body explicitly provides a conflicting id
-    if (company.id && id !== company.id) {
-      throw new BadRequestException(
-        `Body id ${company.id} does not match path id ${id}`,
-      );
-    }
-    return this.api.setCompany(id, company);
+  async putCompany(
+    @Param('id') id: UUID,
+    @Body() partial: DeepPartial<Omit<LcpCompany, 'id'>>,
+  ): Promise<LcpCompany> {
+    return this.api.setCompany(id, partial);
   }
 
   /**

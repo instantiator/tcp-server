@@ -1,32 +1,6 @@
 import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import type { LlmConfig } from './LlmConfig.model';
 import { LcpCompany } from './LcpCompany.model';
-
-/**
- * Configuration for a specific LLM provider and model.
- * API keys are never stored here — only the name of the environment variable that holds the key.
- */
-export interface LlmConfig {
-  /**
-   * Identifies the provider. Known values: `'lm-studio'` (local OpenAI-compatible endpoint),
-   * `'openai'`. Any string value is accepted to support future providers.
-   */
-  provider: string;
-
-  /** The model identifier as expected by the provider API (e.g. `'gpt-4o'`, `'qwen3-5b'`). */
-  model: string;
-
-  /**
-   * Base URL override for providers that are not hosted at their default endpoint.
-   * Required for `'lm-studio'` (e.g. `'http://localhost:1234/v1'`).
-   */
-  baseUrl?: string;
-
-  /**
-   * Name of the environment variable that holds the API key for this provider.
-   * The key is resolved at runtime and never stored in the database.
-   */
-  apiKeyEnvVar?: string;
-}
 
 /**
  * A role template that defines the behaviour and LLM configuration for an agent.
@@ -68,8 +42,7 @@ export class LcpRole {
 
   /**
    * LLM provider and model configuration for agents running in this role.
-   * Stored as JSONB; API keys are resolved from environment variables at runtime.
-   * When absent, the agent loop falls back to {@link LcpCompany.llmDefault}.
+   * Stored as JSONB. When absent, the agent loop falls back to {@link LcpCompany.llmDefault}.
    */
   @Column({ type: 'jsonb', nullable: true })
   llmConfig?: LlmConfig | null;

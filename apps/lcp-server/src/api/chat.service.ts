@@ -29,14 +29,6 @@ export interface ChatMessageResponse {
   response: string;
 }
 
-/**
- * Handles synchronous, turn-by-turn chat with an {@link LcpAgent}.
- *
- * Each call to {@link sendMessage} invokes LangGraph inline (no BullMQ),
- * holding the HTTP connection open for the duration of the LLM call.
- * Conversation history is persisted in the LangGraph checkpoint store
- * (PostgreSQL) so context carries across turns.
- */
 @Injectable()
 export class ChatService {
   private readonly logger = new Logger(ChatService.name);
