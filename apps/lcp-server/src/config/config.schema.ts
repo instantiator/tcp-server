@@ -13,6 +13,8 @@ export const configSchema = Joi.object({
   MINIO_SECRET_KEY: Joi.string().required(),
   MINIO_BUCKET_PREFIX: Joi.string().default('lcp'),
   OIDC_ISSUER_URL: Joi.string().uri().required(),
+  // Override for container-to-container calls; OIDC_ISSUER_URL is still used for iss validation.
+  OIDC_INTERNAL_ISSUER_URL: Joi.string().uri().optional(),
   OIDC_CLIENT_ID: Joi.string().required(),
   OIDC_CLIENT_SECRET: Joi.string().required(),
 });

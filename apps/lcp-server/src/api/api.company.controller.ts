@@ -24,6 +24,12 @@ export class CompanyController {
     private readonly db: DbService,
   ) {}
 
+  /** Returns all {@link LcpCompany} records. */
+  @Get()
+  async listCompanies(): Promise<LcpCompany[]> {
+    return this.db.listCompanies();
+  }
+
   /**
    * Creates or replaces a {@link LcpCompany}.
    * If a company with the same slug already exists it is replaced.
@@ -48,7 +54,7 @@ export class CompanyController {
         `Body id ${company.id} does not match path id ${id}`,
       );
     }
-    await this.api.setCompany(id, company);
+    return this.api.setCompany(id, company);
   }
 
   /**

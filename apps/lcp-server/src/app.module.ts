@@ -4,6 +4,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ApiModule } from './api/api.module';
 import { AuthModule } from './auth/auth.module';
+import { AuthTokenController } from './auth/auth-token.controller';
+import { AuthTokenService } from './auth/auth-token.service';
 import { configSchema } from './config/config.schema';
 import { HealthModule } from './health/health.module';
 import { CompanyLlmDefault1750000000002 } from './migrations/1750000000002-CompanyLlmDefault';
@@ -53,5 +55,7 @@ import { InitialSchema1750000000000 } from './migrations/1750000000000-InitialSc
     HealthModule,
     AuthModule,
   ],
+  controllers: [AuthTokenController],
+  providers: [AuthTokenService],
 })
 export class AppModule {}

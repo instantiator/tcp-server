@@ -12,8 +12,11 @@ const makeApiService = (): jest.Mocked<
   getCompany: jest.fn().mockResolvedValue(null),
 });
 
-const makeDbService = (): jest.Mocked<Pick<DbService, 'listRoles'>> => ({
+const makeDbService = (): jest.Mocked<
+  Pick<DbService, 'listRoles' | 'listCompanies'>
+> => ({
   listRoles: jest.fn().mockResolvedValue([]),
+  listCompanies: jest.fn().mockResolvedValue([]),
 });
 
 describe('CompanyController', () => {
@@ -83,6 +86,17 @@ describe('CompanyController', () => {
       api.getCompany.mockResolvedValue(null);
       const result = await controller.getCompany(randomUUID());
       expect(result).toBeNull();
+    });
+  });
+
+  describe('listCompanies', () => {
+    it('delegates to dbService.listCompanies and returns the result', async () => {
+      const companies = [{ id: randomUUID(), slug: 'acme', name: 'Acme' }];
+      db.listCompanies.mockResolvedValue(companies);
+
+      const result = await controller.listCompanies();
+      expect(db.listCompanies).toHaveBeenCalledTimes(1);
+      expect(result).toBe(companies);
     });
   });
 

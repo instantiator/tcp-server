@@ -81,6 +81,11 @@ export class DbService {
     return this.companyRepo.save(this.companyRepo.create(merged));
   }
 
+  /** Returns all {@link LcpCompany} records. */
+  async listCompanies(): Promise<LcpCompany[]> {
+    return this.companyRepo.find();
+  }
+
   /** Retrieves a company by its UUID or slug. Returns `null` if not found. */
   async getCompany(identifier: string): Promise<LcpCompany | null> {
     return isUUID(identifier)
@@ -110,6 +115,19 @@ export class DbService {
     return this.roleRepo.findOneBy({ id });
   }
 
+  /**
+   * Partially updates an existing {@link LcpRole} by id.
+   * Returns the updated role, or `null` if no role with that id exists.
+   */
+  async updateRole(
+    id: string,
+    partial: Partial<LcpRole>,
+  ): Promise<LcpRole | null> {
+    const existing = await this.roleRepo.findOneBy({ id });
+    if (!existing) return null;
+    return this.roleRepo.save({ ...existing, ...partial, id });
+  }
+
   /** Returns all roles for a given company. */
   async listRoles(companyId: string): Promise<LcpRole[]> {
     return this.roleRepo.findBy({ companyId });
@@ -125,6 +143,15 @@ export class DbService {
   /** Retrieves an agent by its UUID. Returns `null` if not found. */
   async getAgent(id: string): Promise<LcpAgent | null> {
     return this.agentRepo.findOneBy({ id });
+  }
+
+  /**
+   * Physically deletes an {@link LcpAgent} and its associated {@link AuditEvent} rows.
+   * Returns `true` if a record was deleted, `false` if no agent with that id exists.
+   */
+  async deleteAgent(id: string): Promise<boolean> {
+    const result = await this.agentRepo.delete(id);
+    return (result.affected ?? 0) > 0;
   }
 
   /**

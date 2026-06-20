@@ -6,13 +6,14 @@ import {
   NotFoundException,
   Param,
   Post,
+  Put,
   UseGuards,
 } from '@nestjs/common';
 import type { LcpRoleTemplate } from '../templates/LcpRoleTemplate';
 import { DbService } from '../db/db.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
-/** REST controller for {@link LcpRole} create and read operations. */
+/** REST controller for {@link LcpRole} create, read, and update operations. */
 @UseGuards(JwtAuthGuard)
 @Controller({ path: 'api/role' })
 export class RoleController {
@@ -25,6 +26,20 @@ export class RoleController {
   @Post()
   async createRole(@Body() body: LcpRoleTemplate): Promise<LcpRole> {
     return this.db.createRole(body);
+  }
+
+  /**
+   * Partially updates an existing {@link LcpRole} identified by `id`.
+   * Only the provided fields are changed; omitted fields are left as-is.
+   */
+  @Put(':id')
+  async updateRole(
+    @Param('id') id: string,
+    @Body() partial: Partial<LcpRole>,
+  ): Promise<LcpRole> {
+    const role = await this.db.updateRole(id, partial);
+    if (!role) throw new NotFoundException(`Role ${id} not found`);
+    return role;
   }
 
   /** Retrieves a role by its UUID. Returns 404 when not found. */

@@ -45,6 +45,8 @@ fi
 
 set -a; source "$ENV_FILE"; set +a
 
+DC="docker compose -p lcp-e2e --env-file $ENV_FILE"
+
 wait_for() {
   local name="$1" cmd="$2" max="${3:-60}"
   local waited=0
@@ -53,16 +55,16 @@ wait_for() {
     sleep 2; waited=$((waited + 2))
     if [ "$waited" -ge "$max" ]; then
       echo "ERROR: Timed out waiting for $name after ${max}s" >&2
-      docker compose --env-file "$ENV_FILE" logs --tail=20
+      $DC logs --tail=20
       exit 1
     fi
   done
   echo "$name ready."
 }
 
-docker compose --env-file "$ENV_FILE" up -d postgres redis minio
+$DC up -d postgres redis minio
 
-wait_for postgres "docker compose exec -T postgres pg_isready -U lcp"
+wait_for postgres "$DC exec -T postgres pg_isready -U lcp"
 
 export DATABASE_URL="postgres://lcp:${POSTGRES_PASSWORD}@localhost:5432/lcp"
 export REDIS_URL="redis://localhost:6379"
@@ -73,4 +75,4 @@ export OIDC_CLIENT_SECRET
 
 npm run test:e2e -- ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}
 
-docker compose --env-file "$ENV_FILE" down
+$DC down

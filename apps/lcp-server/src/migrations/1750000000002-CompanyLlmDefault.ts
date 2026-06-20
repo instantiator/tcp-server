@@ -11,7 +11,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 export class CompanyLlmDefault1750000000002 implements MigrationInterface {
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `ALTER TABLE "lcp_company" ADD COLUMN "llmDefault" jsonb`,
+      `ALTER TABLE "lcp_company" ADD COLUMN IF NOT EXISTS "llmDefault" jsonb`,
     );
     await queryRunner.query(
       `ALTER TABLE "lcp_role" ALTER COLUMN "llmConfig" DROP NOT NULL`,

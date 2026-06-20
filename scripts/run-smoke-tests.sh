@@ -69,6 +69,8 @@ fi
 
 set -a; source "$ENV_FILE"; set +a
 
+DC="docker compose -p lcp-smoke --profile auth --env-file $ENV_FILE"
+
 wait_for() {
   local name="$1" cmd="$2" max="${3:-120}"
   local waited=0
@@ -77,15 +79,15 @@ wait_for() {
     sleep 3; waited=$((waited + 3))
     if [ "$waited" -ge "$max" ]; then
       echo "ERROR: Timed out waiting for $name after ${max}s" >&2
-      docker compose --profile auth --env-file "$ENV_FILE" logs --tail=20
+      $DC logs --tail=20
       exit 1
     fi
   done
   echo "$name ready."
 }
 
-docker compose --profile auth --env-file "$ENV_FILE" build lcp-server lcp-agent
-docker compose --profile auth --env-file "$ENV_FILE" up -d
+$DC build lcp-server lcp-agent
+$DC up -d
 
 # Keycloak starts slowly — allow up to 5 minutes.
 # Use the master realm OIDC discovery URL: always present on a fresh Keycloak,
@@ -96,6 +98,58 @@ wait_for keycloak "curl -sf http://localhost:8080/realms/master/.well-known/open
 wait_for lcp-server "curl -sf http://localhost:3000/health"
 wait_for lcp-agent "curl -sf http://localhost:3001/health"
 
+# Configure Keycloak: create lcp realm, lcp-server client, and a test user.
+# Mirrors the setup done by dev/start-dev.sh. Safe to re-run.
+kc() { $DC exec -T keycloak /opt/keycloak/bin/kcadm.sh "$@"; }
+
+ADMIN_PASS="${KEYCLOAK_ADMIN_PASSWORD:-admin}"
+CLIENT_ID="${OIDC_CLIENT_ID:-lcp-server}"
+CLIENT_SECRET="${OIDC_CLIENT_SECRET:-test-stub}"
+TEST_USERNAME_VAL="${TEST_USERNAME:-test}"
+TEST_PASSWORD_VAL="${TEST_PASSWORD:-test}"
+
+echo ""
+echo "Configuring Keycloak..."
+kc config credentials --server http://localhost:8080 --realm master --user admin --password "$ADMIN_PASS"
+
+if ! kc get realms/lcp > /dev/null 2>&1; then
+  kc create realms -s realm=lcp -s enabled=true
+  echo "  Created realm: lcp"
+else
+  echo "  Realm lcp: already exists"
+fi
+
+CLIENT_INFO=$(kc get clients -r lcp -q "clientId=$CLIENT_ID" 2>&1 || true)
+if echo "$CLIENT_INFO" | grep -q '"id"'; then
+  echo "  Client $CLIENT_ID: already exists"
+else
+  kc create clients -r lcp \
+    -s "clientId=$CLIENT_ID" \
+    -s "secret=$CLIENT_SECRET" \
+    -s enabled=true \
+    -s clientAuthenticatorType=client-secret \
+    -s protocol=openid-connect \
+    -s directAccessGrantsEnabled=true \
+    -s 'redirectUris=["http://localhost:3000/*"]'
+  echo "  Created client: $CLIENT_ID"
+fi
+
+USER_INFO=$(kc get users -r lcp -q "username=$TEST_USERNAME_VAL" 2>&1 || true)
+if echo "$USER_INFO" | grep -q '"id"'; then
+  echo "  User $TEST_USERNAME_VAL: already exists"
+else
+  kc create users -r lcp \
+    -s "username=$TEST_USERNAME_VAL" \
+    -s "email=${TEST_USERNAME_VAL}@lcp.local" \
+    -s emailVerified=true \
+    -s firstName=Test \
+    -s lastName=User \
+    -s enabled=true
+  kc set-password -r lcp --username "$TEST_USERNAME_VAL" \
+    --new-password "$TEST_PASSWORD_VAL"
+  echo "  Created user: $TEST_USERNAME_VAL"
+fi
+
 npm --prefix "$REPO_ROOT" run test:smoke -- ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}
 
-docker compose --profile auth --env-file "$ENV_FILE" down
+$DC down

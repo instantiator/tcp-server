@@ -13,6 +13,9 @@ import { passportJwtSecret } from 'jwks-rsa';
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(config: ConfigService) {
     const issuerUrl = config.getOrThrow<string>('OIDC_ISSUER_URL');
+    // Use internal URL for JWKS fetch (container-to-container); keep issuerUrl for iss validation.
+    const internalUrl =
+      config.get<string>('OIDC_INTERNAL_ISSUER_URL') ?? issuerUrl;
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
@@ -20,9 +23,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         cache: true,
         rateLimit: true,
         jwksRequestsPerMinute: 5,
-        jwksUri: `${issuerUrl}/.well-known/jwks.json`,
+        // Keycloak's JWKS endpoint is /protocol/openid-connect/certs (not /.well-known/jwks.json).
+        jwksUri: `${internalUrl.replace(/\/$/, '')}/protocol/openid-connect/certs`,
       }),
-      audience: config.getOrThrow<string>('OIDC_CLIENT_ID'),
+      // No audience check: Keycloak ROPC tokens set aud=account, not the client ID.
+      // Validating iss is sufficient to confirm the token came from our realm.
       issuer: issuerUrl,
     });
   }

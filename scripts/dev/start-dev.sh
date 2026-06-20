@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 usage() {
   cat <<EOF
@@ -63,6 +63,8 @@ fi
 echo "Using: $ENV_FILE"
 set -a; source "$ENV_FILE"; set +a
 
+DC="docker compose -p lcp-dev --profile auth --env-file $ENV_FILE"
+
 # Helpers
 
 wait_for() {
@@ -73,7 +75,7 @@ wait_for() {
     sleep 3; waited=$((waited + 3))
     if [[ "$waited" -ge "$max" ]]; then
       echo "ERROR: Timed out waiting for $name after ${max}s" >&2
-      docker compose --profile auth --env-file "$ENV_FILE" logs --tail=20
+      $DC logs --tail=20
       exit 1
     fi
   done
@@ -81,20 +83,18 @@ wait_for() {
 }
 
 # Run kcadm inside the already-running keycloak container.
-kc() { docker compose exec -T keycloak /opt/keycloak/bin/kcadm.sh "$@"; }
+kc() { $DC exec -T keycloak /opt/keycloak/bin/kcadm.sh "$@"; }
 
 # Start services
 
 echo ""
 echo "Starting services..."
-docker compose --profile auth --env-file "$ENV_FILE" up -d
+$DC up -d
 
 # Keycloak starts slowly on first boot — allow up to 5 minutes.
 wait_for keycloak \
   "curl -sf http://localhost:8080/realms/master/.well-known/openid-configuration" 300
 
-# lcp-server health checks master realm (always present), not the lcp realm,
-# so it passes before we create the realm below.
 wait_for lcp-server "curl -sf http://localhost:3000/health"
 wait_for lcp-agent  "curl -sf http://localhost:3001/health"
 
@@ -152,11 +152,16 @@ USER_INFO=$(kc get users -r lcp -q "username=$TEST_USERNAME" 2>&1 || true)
 if echo "$USER_INFO" | grep -q '"id"'; then
   echo "  User $TEST_USERNAME: already exists"
 else
-  kc create users -r lcp -s "username=$TEST_USERNAME" -s enabled=true
+  kc create users -r lcp \
+    -s "username=$TEST_USERNAME" \
+    -s "email=${TEST_USERNAME}@lcp.local" \
+    -s emailVerified=true \
+    -s firstName=Test \
+    -s lastName=User \
+    -s enabled=true
   kc set-password -r lcp \
     --username "$TEST_USERNAME" \
-    --new-password "$TEST_PASSWORD" \
-    --temporary=false
+    --new-password "$TEST_PASSWORD"
   echo "  Created user: $TEST_USERNAME"
 fi
 

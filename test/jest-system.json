@@ -1,9 +1,0 @@
-{
-  "rootDir": "..",
-  "testMatch": ["<rootDir>/test/system/*.spec.ts"],
-  "testEnvironment": "node",
-  "transform": {
-    "^.+\\.(t|j)s$": ["ts-jest", { "tsconfig": "<rootDir>/tsconfig.json" }]
-  },
-  "testTimeout": 60000
-}

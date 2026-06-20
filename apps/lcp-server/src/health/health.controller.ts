@@ -28,7 +28,11 @@ export class HealthController {
   @HealthCheck()
   check() {
     const minioEndpoint = this.config.get<string>('MINIO_ENDPOINT') ?? '';
-    const oidcIssuer = this.config.get<string>('OIDC_ISSUER_URL') ?? '';
+    // Prefer the internal URL for health checks so the probe works from inside Docker.
+    const oidcIssuer =
+      this.config.get<string>('OIDC_INTERNAL_ISSUER_URL') ??
+      this.config.get<string>('OIDC_ISSUER_URL') ??
+      '';
     // Check the master realm discovery URL: it's always present on a fresh
     // Keycloak (unlike a custom realm), is served on the main port 8080, and
     // confirms OIDC is actually serving requests. Keycloak 24+ moved /health/ready

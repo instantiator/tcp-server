@@ -35,6 +35,15 @@
       "compilerOptions": {
         "tsConfigPath": "libs/lcp-shared/tsconfig.lib.json"
       }
+    },
+    "lcp-cli": {
+      "type": "application",
+      "root": "apps/lcp-cli",
+      "entryFile": "main",
+      "sourceRoot": "apps/lcp-cli/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/lcp-cli/tsconfig.app.json"
+      }
     }
   }
 }

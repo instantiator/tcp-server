@@ -1,8 +1,9 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { AgentStatus, LcpAgent } from '@lcp/shared';
+import { AgentStatus, AuditEventType, LcpAgent } from '@lcp/shared';
 import { AgentController } from './api.agent.controller';
 import { AgentOrchestrationService } from './agent-orchestration.service';
+import { ChatService } from './chat.service';
 import { DbService } from '../db/db.service';
 
 function makeAgent(overrides: Partial<LcpAgent> = {}): LcpAgent {
@@ -22,21 +23,33 @@ function makeAgent(overrides: Partial<LcpAgent> = {}): LcpAgent {
 }
 
 describe('AgentController', () => {
-  let db: jest.Mocked<Pick<DbService, 'getAgent'>>;
+  let db: jest.Mocked<
+    Pick<DbService, 'getAgent' | 'createAgent' | 'deleteAgent'>
+  >;
   let orchestration: jest.Mocked<
     Pick<AgentOrchestrationService, 'startAgent' | 'resumeAgent'>
   >;
+  let chat: jest.Mocked<Pick<ChatService, 'sendMessage'>>;
+  let auditRepo: { save: jest.Mock; create: jest.Mock };
   let controller: AgentController;
 
   beforeEach(() => {
-    db = { getAgent: jest.fn() };
-    orchestration = {
-      startAgent: jest.fn(),
-      resumeAgent: jest.fn(),
+    db = {
+      getAgent: jest.fn(),
+      createAgent: jest.fn(),
+      deleteAgent: jest.fn(),
+    };
+    orchestration = { startAgent: jest.fn(), resumeAgent: jest.fn() };
+    chat = { sendMessage: jest.fn() };
+    auditRepo = {
+      save: jest.fn().mockResolvedValue({}),
+      create: jest.fn().mockReturnValue({}),
     };
     controller = new AgentController(
       db as unknown as DbService,
       orchestration as unknown as AgentOrchestrationService,
+      chat as unknown as ChatService,
+      auditRepo as never,
     );
   });
 
@@ -108,6 +121,77 @@ describe('AgentController', () => {
       await expect(controller.getAgent(randomUUID())).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('deleteAgent', () => {
+    it('calls db.deleteAgent and returns 204 when found', async () => {
+      db.deleteAgent.mockResolvedValue(true);
+      await expect(
+        controller.deleteAgent(randomUUID()),
+      ).resolves.toBeUndefined();
+    });
+
+    it('throws NotFoundException when the agent does not exist', async () => {
+      db.deleteAgent.mockResolvedValue(false);
+      await expect(controller.deleteAgent(randomUUID())).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('startChat', () => {
+    it('creates a chat agent without dispatching to BullMQ and records an audit event', async () => {
+      const agent = makeAgent({ initialPrompt: '' });
+      db.createAgent.mockResolvedValue(agent);
+
+      const result = await controller.startChat({
+        companyId: agent.companyId,
+        roleId: agent.roleId,
+      });
+
+      expect(db.createAgent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          companyId: agent.companyId,
+          roleId: agent.roleId,
+        }),
+      );
+      expect(auditRepo.save).toHaveBeenCalledTimes(1);
+      expect(auditRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: AuditEventType.StateChange }),
+      );
+      expect(result.id).toBe(agent.id);
+    });
+
+    it('throws BadRequestException when required fields are missing', async () => {
+      await expect(
+        controller.startChat({ companyId: '', roleId: randomUUID() }),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('sendMessage', () => {
+    it('delegates to chat.sendMessage and returns the response', async () => {
+      chat.sendMessage.mockResolvedValue({ response: 'Hello!' });
+      const result = await controller.sendMessage(randomUUID(), {
+        message: 'Hi',
+      });
+      expect(result.response).toBe('Hello!');
+    });
+
+    it('throws BadRequestException when message is empty', async () => {
+      await expect(
+        controller.sendMessage(randomUUID(), { message: '' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('re-throws NotFoundException from ChatService', async () => {
+      chat.sendMessage.mockRejectedValue(
+        new NotFoundException('Agent not found'),
+      );
+      await expect(
+        controller.sendMessage(randomUUID(), { message: 'Hi' }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });
