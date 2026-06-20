@@ -9,7 +9,7 @@
     "build": "nest build lcp-server && nest build lcp-agent && nest build lcp-cli && npm run schema:generate && npm run licenses:generate",
     "build:lcp-cli": "nest build lcp-cli",
     "start:lcp-cli": "node dist/apps/lcp-cli/main",
-    "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\"",
+    "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start lcp-server",
     "start:dev": "nest start lcp-server --watch",
     "start:debug": "nest start lcp-server --debug --watch",

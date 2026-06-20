@@ -120,7 +120,11 @@ describe('lcp-cli API flows', () => {
         'PUT',
         `/api/company/${companyId}`,
         token,
-        { id: companyId, name: `CLI Test Corp ${RUN_ID} (updated)`, slug: `cli-test-${RUN_ID}` },
+        {
+          id: companyId,
+          name: `CLI Test Corp ${RUN_ID} (updated)`,
+          slug: `cli-test-${RUN_ID}`,
+        },
       );
       expect(status).toBe(200);
       expect(data.name).toContain('updated');
@@ -129,7 +133,11 @@ describe('lcp-cli API flows', () => {
 
   describe('list-companies (GET /api/company)', () => {
     it('returns an array that includes the created company', async () => {
-      const { status, data } = await api<Company[]>('GET', '/api/company', token);
+      const { status, data } = await api<Company[]>(
+        'GET',
+        '/api/company',
+        token,
+      );
       expect(status).toBe(200);
       expect(Array.isArray(data)).toBe(true);
       expect(data.some((c) => c.id === companyId)).toBe(true);
@@ -138,20 +146,15 @@ describe('lcp-cli API flows', () => {
 
   describe('set-role (POST /api/role)', () => {
     it('creates a new role under the company', async () => {
-      const { status, data } = await api<Role>(
-        'POST',
-        '/api/role',
-        token,
-        {
-          name: `cli-analyst-${RUN_ID}`,
-          companyId,
-          description: 'Integration test role',
-          systemPromptTemplate: 'You are {{name}}.',
-          knowledgeDomains: [],
-          mcpServerList: [],
-          llmConfig: { modelId: 'stub', apiKeyEnvVar: 'STUB_KEY' },
-        },
-      );
+      const { status, data } = await api<Role>('POST', '/api/role', token, {
+        name: `cli-analyst-${RUN_ID}`,
+        companyId,
+        description: 'Integration test role',
+        systemPromptTemplate: 'You are {{name}}.',
+        knowledgeDomains: [],
+        mcpServerList: [],
+        llmConfig: { modelId: 'stub', apiKeyEnvVar: 'STUB_KEY' },
+      });
       expect(status).toBe(201);
       expect(data.companyId).toBe(companyId);
       roleId = data.id;
