@@ -15,18 +15,18 @@ describe('buildChatModel', () => {
     const model = buildChatModel({
       provider: 'openai',
       model: 'gpt-4o',
-      apiKeyEnvVar: 'OPENAI_API_KEY',
+      apiKey: 'OPENAI_API_KEY',
     });
     expect(model).toBeInstanceOf(ChatOpenAI);
   });
 
-  it('instantiates without throwing when apiKeyEnvVar is set in env', () => {
+  it('instantiates without throwing when apiKey is set in env', () => {
     process.env['TEST_LLM_KEY'] = 'test-secret';
     expect(() =>
       buildChatModel({
         provider: 'openai',
         model: 'gpt-4o',
-        apiKeyEnvVar: 'TEST_LLM_KEY',
+        apiKey: 'TEST_LLM_KEY',
       }),
     ).not.toThrow();
     delete process.env['TEST_LLM_KEY'];

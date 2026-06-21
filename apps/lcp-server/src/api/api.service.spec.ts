@@ -56,14 +56,9 @@ describe('ApiService', () => {
       expect(called.id).toBe(id);
     });
 
-    it('explicit id parameter overwrites any id already in the body', async () => {
+    it('passes the path id to dbService regardless of body content', async () => {
       const correctId = randomUUID();
-      const bodyId = randomUUID();
-      await api.setCompany(correctId, {
-        id: bodyId,
-        slug: 'acme',
-        name: 'Acme',
-      });
+      await api.setCompany(correctId, { slug: 'acme', name: 'Acme' });
       const [called] = db.setCompany.mock.calls[0];
       expect(called.id).toBe(correctId);
     });

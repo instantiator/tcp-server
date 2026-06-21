@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { UUID } from 'crypto';
 import { LcpCompany } from '@lcp/shared';
+import type { DeepPartial } from 'typeorm';
 import { DbService } from '../db/db.service';
 import { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
 
@@ -21,11 +22,15 @@ export class ApiService {
   }
 
   /**
-   * Replaces the fields of an existing {@link LcpCompany} by id,
+   * Updates the fields of an existing {@link LcpCompany} by id,
    * or creates it if no record with that id exists.
+   * The `id` from the path parameter always takes precedence.
    */
-  async setCompany(id: UUID, company: Partial<LcpCompany>) {
-    return await this.dbService.setCompany({ ...company, id }, false);
+  async setCompany(
+    id: UUID,
+    partial: DeepPartial<Omit<LcpCompany, 'id'>>,
+  ): Promise<LcpCompany> {
+    return await this.dbService.setCompany({ ...partial, id }, false);
   }
 
   /**

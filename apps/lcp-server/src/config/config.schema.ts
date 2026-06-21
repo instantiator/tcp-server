@@ -13,6 +13,14 @@ export const configSchema = Joi.object({
   MINIO_SECRET_KEY: Joi.string().required(),
   MINIO_BUCKET_PREFIX: Joi.string().default('lcp'),
   OIDC_ISSUER_URL: Joi.string().uri().required(),
+  // Override for container-to-container calls; OIDC_ISSUER_URL is still used for iss validation.
+  OIDC_INTERNAL_ISSUER_URL: Joi.string().uri().optional(),
+  // Explicit JWKS URI override. If unset, discovered from OIDC_ISSUER_URL/.well-known/openid-configuration.
+  OIDC_JWKS_URI: Joi.string().uri().optional(),
+  // Audience claim to validate. If unset, audience validation is skipped.
+  OIDC_AUDIENCE: Joi.string().optional(),
   OIDC_CLIENT_ID: Joi.string().required(),
   OIDC_CLIENT_SECRET: Joi.string().required(),
+  // When true, apiKey values in LlmConfig are replaced with '***' in API responses.
+  LCP_MASK_API_KEYS: Joi.boolean().default(true),
 });

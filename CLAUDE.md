@@ -65,6 +65,13 @@ apps/
       integration/           # Service connectivity tests
     Dockerfile
     tsconfig.app.json
+  lcp-cli/
+    src/
+      main.ts                # commander entry point; global options
+      commands/              # get-token, list-companies, list-roles, set-company, set-role, chat
+      lib/                   # api.ts (fetch wrapper), auth.ts (token resolution), types.ts
+    tsconfig.app.json        # extends root; adds @lcp/shared paths
+    tsconfig.json            # extends tsconfig.app.json; includes spec files (for ESLint)
 libs/
   lcp-shared/
     src/
@@ -72,9 +79,9 @@ libs/
       index.ts               # Re-exports all shared code
     tsconfig.lib.json
 test/
-  system/                    # Full-stack health checks (need docker compose up)
+  smoke/                     # Full-stack health checks + lcp-cli API flows (need docker compose up --profile auth)
   jest-integration.json      # Jest config for integration tests
-  jest-system.json           # Jest config for system tests
+  jest-smoke.json            # Jest config for smoke tests
 scripts/                     # Test runner scripts (mirror CI steps)
 docs/
   ADRs/                      # Architectural Decision Records
@@ -89,9 +96,12 @@ schemas/                     # Auto-generated JSON Schema — do not edit by han
 ```bash
 # Development
 npm run start:dev             # Start lcp-server with hot reload (SQLite fallback)
-npm run build                 # Build both apps + generate schema + license report
+./scripts/dev/lcp-cli.sh      # Run lcp-cli (builds automatically if needed)
+./scripts/dev/lcp-cli.sh --rebuild  # Force rebuild before running
+npm run build                 # Build all apps + generate schema + license report
 npm run build lcp-server      # Build lcp-server only
 npm run build lcp-agent       # Build lcp-agent only
+npm run build:lcp-cli         # Build lcp-cli standalone binary
 npm run lint                  # ESLint with auto-fix
 npm run format                # Prettier over apps/ and libs/
 
@@ -99,14 +109,14 @@ npm run format                # Prettier over apps/ and libs/
 npm test                      # Unit tests (no external services, SQLite in-memory)
 npm run test:e2e              # E2E tests (SQLite fallback, no external services)
 npm run test:integration      # Integration tests (requires Docker services)
-npm run test:system           # System tests (requires docker compose up)
+npm run test:smoke            # Smoke tests (requires docker compose --profile auth up)
 npm run test:cov              # Coverage report
 
 # Test scripts (mirrors CI, starts Docker services as needed)
 ./scripts/run-unit-tests.sh
 ./scripts/run-e2e-tests.sh
 ./scripts/run-integration-tests.sh
-./scripts/run-system-tests.sh
+./scripts/run-smoke-tests.sh
 
 # Docker
 docker compose up             # Start all services

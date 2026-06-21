@@ -7,15 +7,15 @@ infrastructure requirement. CI runs them in this order — a failure at any tier
 gates the next:
 
 ```
-unit → integration → system → e2e
+unit → integration → smoke → e2e
 ```
 
-| Tier        | What it proves                                            | Infrastructure                  |
-| ----------- | --------------------------------------------------------- | ------------------------------- |
-| Unit        | Individual classes and functions behave correctly         | None — SQLite in-memory         |
-| Integration | The app can connect to and use each backing service       | Docker (postgres, redis, minio) |
-| System      | The full deployment starts and all health checks pass     | Docker + Keycloak               |
-| E2E         | HTTP API workflows produce the right responses end-to-end | Docker (postgres, redis, minio) |
+| Tier        | What it proves                                                                 | Infrastructure                  |
+| ----------- | ------------------------------------------------------------------------------ | ------------------------------- |
+| Unit        | Individual classes and functions behave correctly                              | None — SQLite in-memory         |
+| Integration | The app can connect to and use each backing service                            | Docker (postgres, redis, minio) |
+| Smoke       | The full deployment starts, health checks pass, and the lcp-cli API flows work | Docker + Keycloak               |
+| E2E         | HTTP API workflows produce the right responses end-to-end                      | Docker (postgres, redis, minio) |
 
 **Unit tests** use `better-sqlite3` in-memory and `@nestjs/testing` to wire
 modules without starting a real server. They run in milliseconds with no
@@ -26,11 +26,11 @@ no Keycloak) and verify that the application code can query PostgreSQL, ping
 Redis, and reach MinIO. A failure here points to a connectivity or schema
 problem, not an application logic problem.
 
-**System tests** start the full Docker Compose stack including Keycloak and
-verify that every `GET /health` endpoint returns 200. lcp-server's health
-check covers PostgreSQL, MinIO, and OIDC reachability in a single call, so a
-passing system test confirms the entire stack is wired correctly. Keycloak can
-take up to 5 minutes on first boot.
+**Smoke tests** start the full Docker Compose stack including Keycloak and
+verify that every `GET /health` endpoint returns 200. They also exercise the
+full API surface used by `lcp-cli`: obtaining a token from the OIDC proxy,
+creating and listing companies and roles, and creating/deleting chat agents.
+Keycloak can take up to 5 minutes on first boot.
 
 **E2E tests** run HTTP requests against a real NestJS application (via
 `supertest`) backed by PostgreSQL. They test full request/response cycles
@@ -62,16 +62,18 @@ No external services. Safe to run at any time. See
 Starts postgres, redis, and minio. Requires Docker. See
 [scripts/run-integration-tests.sh](../scripts/run-integration-tests.sh).
 
-### System tests
+### Smoke tests
 
 ```bash
-./scripts/run-system-tests.sh
-./scripts/run-system-tests.sh -- --testNamePattern="keycloak"
+./scripts/run-smoke-tests.sh
+./scripts/run-smoke-tests.sh -- --testNamePattern="get-token"
+./scripts/run-smoke-tests.sh --base-url http://your-host:3000   # remote deployment
 ```
 
 Starts the full stack including Keycloak. Requires Docker and built app
-images (`docker compose build` if they are stale). See
-[scripts/run-system-tests.sh](../scripts/run-system-tests.sh).
+images (rebuilt automatically). Also accepts `--base-url` to test a remote
+deployment (no Docker required in that mode). See
+[scripts/run-smoke-tests.sh](../scripts/run-smoke-tests.sh).
 
 ### E2E tests
 
@@ -90,7 +92,7 @@ Starts postgres, redis, and minio. Requires Docker. See
 | Unit        | `apps/**/src/**/*.spec.ts`, `libs/**/*.spec.ts`     | `jest.config.js` (root)              |
 | E2E         | `apps/**/test/**/*.e2e-spec.ts`                     | `apps/lcp-server/test/jest-e2e.json` |
 | Integration | `apps/**/test/integration/**/*.integration-spec.ts` | `test/jest-integration.json`         |
-| System      | `test/system/**/*.spec.ts`                          | `test/jest-system.json`              |
+| Smoke       | `test/smoke/**/*.spec.ts`                           | `test/jest-smoke.json`               |
 
 ## CI pipeline
 
@@ -100,6 +102,6 @@ passed.
 
 ```
 build ─┐
-       ├─→ unit-test → integration-test → system-test → e2e-test
+       ├─→ unit-test → integration-test → smoke-test → e2e-test
 lint  ─┘
 ```

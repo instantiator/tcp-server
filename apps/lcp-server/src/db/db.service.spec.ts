@@ -189,6 +189,37 @@ describe('DbService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    it('deep-merges llmDefault so a partial patch preserves other fields', async () => {
+      const id = randomUUID();
+      await dbService.setCompany(
+        {
+          id,
+          slug: 'merge-co',
+          name: 'Merge Co',
+          llmDefault: {
+            provider: 'openai',
+            model: 'gpt-4o',
+            apiKey: 'test-api-key',
+          },
+        },
+        false,
+      );
+
+      const updated = await dbService.setCompany(
+        {
+          id,
+          slug: 'merge-co',
+          name: 'Merge Co',
+          llmDefault: { model: 'gpt-4o-mini' },
+        },
+        false,
+      );
+
+      expect(updated.llmDefault!.model).toBe('gpt-4o-mini');
+      expect(updated.llmDefault!.provider).toBe('openai');
+      expect(updated.llmDefault!.apiKey).toBe('test-api-key');
+    });
+
     it('allows removing llmDefault when all roles have their own llmConfig', async () => {
       const id = randomUUID();
       await dbService.setCompany(
@@ -335,6 +366,55 @@ describe('DbService', () => {
           mcpServerList: [],
         }),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  // updateRole
+
+  describe('updateRole', () => {
+    it('returns null for an unknown role id', async () => {
+      expect(
+        await dbService.updateRole(randomUUID(), { name: 'x' }),
+      ).toBeNull();
+    });
+
+    it('updates a top-level field while leaving others unchanged', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+
+      const updated = await dbService.updateRole(role.id, {
+        name: 'updated-name',
+      });
+
+      expect(updated!.name).toBe('updated-name');
+      expect(updated!.description).toBe(role.description);
+      expect(updated!.llmConfig!.provider).toBe('lm-studio');
+    });
+
+    it('deep-merges llmConfig so a partial patch preserves other fields', async () => {
+      const company = await seedCompany();
+      const role = await roleRepo.save(
+        roleRepo.create({
+          companyId: company.id,
+          name: 'planner',
+          description: 'Plans.',
+          llmConfig: {
+            provider: 'openai',
+            model: 'gpt-4o',
+            apiKey: 'test-api-key',
+          },
+          systemPromptTemplate: 'You are {{name}}.',
+        }),
+      );
+
+      const updated = await dbService.updateRole(role.id, {
+        llmConfig: { model: 'gpt-4o-mini' },
+      });
+
+      expect(updated!.llmConfig!.model).toBe('gpt-4o-mini');
+      // Provider and apiKey must survive the partial patch
+      expect(updated!.llmConfig!.provider).toBe('openai');
+      expect(updated!.llmConfig!.apiKey).toBe('test-api-key');
     });
   });
 

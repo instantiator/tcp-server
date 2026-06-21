@@ -1,5 +1,5 @@
 import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
-import type { LlmConfig } from './LcpRole.model';
+import type { LlmConfig } from './LlmConfig.model';
 
 /**
  * Represents a company (tenant) within the LCP simulation.

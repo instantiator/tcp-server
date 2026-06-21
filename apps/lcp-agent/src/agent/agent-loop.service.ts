@@ -96,7 +96,6 @@ export class AgentLoopService {
       return;
     }
 
-    // Set up a timeout-backed abort controller
     const abortController = new AbortController();
     const timeoutId = setTimeout(
       () => abortController.abort('timeout'),
@@ -161,7 +160,6 @@ export class AgentLoopService {
         return;
       }
 
-      // Validate that the agent produced non-empty output
       const rawContent = lastAiMessage?.content;
       const content = (typeof rawContent === 'string' ? rawContent : '').trim();
       if (!content) {

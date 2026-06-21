@@ -47,17 +47,19 @@ curl -X POST http://localhost:3000/api/company \
       "provider": "lm-studio",
       "model": "qwen3-5b",
       "baseUrl": "http://localhost:1234/v1",
-      "apiKeyEnvVar": "LM_STUDIO_API_KEY"
+      "apiKey": "your-lm-studio-token"
     }
   }'
 ```
 
 **Fallback rules:**
+
 1. If the role has its own `llmConfig`, that is used.
 2. Otherwise the company's `llmDefault` is used.
 3. If neither is set, the agent run fails immediately with status `failed`.
 
 **Guard:** The API rejects:
+
 - Creating a role with no `llmConfig` when the company has no `llmDefault` (HTTP 400)
 - Updating a company to remove `llmDefault` when any of its roles have no `llmConfig` (HTTP 400)
 
@@ -79,21 +81,21 @@ curl -X POST http://localhost:3000/api/role \
       "provider": "lm-studio",
       "model": "qwen3-5b",
       "baseUrl": "http://localhost:1234/v1",
-      "apiKeyEnvVar": "LM_STUDIO_API_KEY"
+      "apiKey": "your-lm-studio-token"
     },
     "systemPromptTemplate": "You are {{name}}, a specialist at {{description}}. Today is {{date}}."
   }'
 ```
 
-`apiKeyEnvVar` names an environment variable that holds the API key. The key itself is never stored in the database.
+`apiKey` holds the API key for the provider. It is stored in the database as part of the JSONB config block and masked (`***`) in API responses by default. Set `LCP_MASK_API_KEYS=false` in the environment to expose raw keys during local debugging.
 
 ### Template placeholders
 
-| Placeholder | Value |
-|---|---|
-| `{{name}}` | `LcpRole.name` |
-| `{{description}}` | `LcpRole.description` |
-| `{{date}}` | Current date (ISO format, date part only) |
+| Placeholder       | Value                                     |
+| ----------------- | ----------------------------------------- |
+| `{{name}}`        | `LcpRole.name`                            |
+| `{{description}}` | `LcpRole.description`                     |
+| `{{date}}`        | Current date (ISO format, date part only) |
 
 ---
 
@@ -139,7 +141,7 @@ curl -X POST http://localhost:3000/api/model/check \
         "provider": "lm-studio",
         "model": "qwen3-5b",
         "baseUrl": "http://localhost:1234/v1",
-        "apiKeyEnvVar": "LM_STUDIO_API_KEY"
+        "apiKey": "your-lm-studio-token"
       }
     ]
   }'
@@ -151,10 +153,10 @@ Returns `{ provider, model, supportsTools, supportsStructuredOutput, compatible,
 
 ## Resource limits (MVP)
 
-| Limit | Value | Config |
-|---|---|---|
-| Max LLM calls | 10 | Hard-coded in `AgentLoopService` |
-| Timeout | 60 s | Hard-coded in `AgentLoopService` |
+| Limit         | Value | Config                           |
+| ------------- | ----- | -------------------------------- |
+| Max LLM calls | 10    | Hard-coded in `AgentLoopService` |
+| Timeout       | 60 s  | Hard-coded in `AgentLoopService` |
 
 Both are candidates for `LcpRole.runConfig` JSONB once per-role tuning is needed (see `docs/prompts/003.3`).
 
@@ -164,12 +166,12 @@ Both are candidates for `LcpRole.runConfig` JSONB once per-role tuning is needed
 
 Every agent run produces `AuditEvent` rows in the `audit_event` table:
 
-| Event type | When |
-|---|---|
-| `llm_request` | LLM invocation starts |
-| `llm_response` | LLM invocation completes |
-| `tool_call` | MCP tool is invoked (future) |
-| `tool_result` | MCP tool returns a result (future) |
+| Event type     | When                                           |
+| -------------- | ---------------------------------------------- |
+| `llm_request`  | LLM invocation starts                          |
+| `llm_response` | LLM invocation completes                       |
+| `tool_call`    | MCP tool is invoked (future)                   |
+| `tool_result`  | MCP tool returns a result (future)             |
 | `state_change` | Agent status changes (e.g. failed with reason) |
 
 Query: `SELECT * FROM audit_event WHERE agent_id = $1 ORDER BY timestamp`.

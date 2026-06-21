@@ -1,5 +1,4 @@
 import { randomUUID } from 'crypto';
-import { LcpCompany } from '@lcp/shared';
 import { CompanyController } from './api.company.controller';
 import { ApiService } from './api.service';
 import { DbService } from '../db/db.service';
@@ -12,8 +11,11 @@ const makeApiService = (): jest.Mocked<
   getCompany: jest.fn().mockResolvedValue(null),
 });
 
-const makeDbService = (): jest.Mocked<Pick<DbService, 'listRoles'>> => ({
+const makeDbService = (): jest.Mocked<
+  Pick<DbService, 'listRoles' | 'listCompanies'>
+> => ({
   listRoles: jest.fn().mockResolvedValue([]),
+  listCompanies: jest.fn().mockResolvedValue([]),
 });
 
 describe('CompanyController', () => {
@@ -47,19 +49,24 @@ describe('CompanyController', () => {
   });
 
   describe('putCompany', () => {
-    it('calls apiService.setCompany with the id and company', async () => {
+    it('calls apiService.setCompany with the path id and partial body', async () => {
       const id = randomUUID();
-      const company = { id, slug: 'acme', name: 'Acme' };
-      await controller.putCompany(id, company);
-      expect(api.setCompany).toHaveBeenCalledWith(id, company);
+      const partial = { slug: 'acme', name: 'Acme' };
+      await controller.putCompany(id, partial);
+      expect(api.setCompany).toHaveBeenCalledWith(id, partial);
     });
 
-    it('throws when the path id does not match the body id', async () => {
+    it('allows a partial body with only some fields', async () => {
       const id = randomUUID();
-      const company = { id: randomUUID(), slug: 'acme', name: 'Acme' };
-      await expect(
-        controller.putCompany(id, company as LcpCompany),
-      ).rejects.toThrow();
+      await controller.putCompany(id, { name: 'Updated Name' });
+      expect(api.setCompany).toHaveBeenCalledWith(id, { name: 'Updated Name' });
+    });
+
+    it('allows patching a nested llmDefault field', async () => {
+      const id = randomUUID();
+      const partial = { llmDefault: { model: 'gpt-4o-mini' } };
+      await controller.putCompany(id, partial);
+      expect(api.setCompany).toHaveBeenCalledWith(id, partial);
     });
   });
 
@@ -83,6 +90,17 @@ describe('CompanyController', () => {
       api.getCompany.mockResolvedValue(null);
       const result = await controller.getCompany(randomUUID());
       expect(result).toBeNull();
+    });
+  });
+
+  describe('listCompanies', () => {
+    it('delegates to dbService.listCompanies and returns the result', async () => {
+      const companies = [{ id: randomUUID(), slug: 'acme', name: 'Acme' }];
+      db.listCompanies.mockResolvedValue(companies);
+
+      const result = await controller.listCompanies();
+      expect(db.listCompanies).toHaveBeenCalledTimes(1);
+      expect(result).toBe(companies);
     });
   });
 

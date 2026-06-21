@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 usage() {
   cat <<EOF
@@ -55,14 +55,14 @@ fi
 
 # Stop services
 
-DOWN_ARGS="--profile auth --env-file $ENV_FILE"
+DC="docker compose -p lcp-dev --profile auth --env-file $ENV_FILE"
 
 if [[ "$REMOVE_VOLUMES" == true ]]; then
   echo "Stopping services and removing volumes..."
-  docker compose $DOWN_ARGS down -v
+  $DC down -v
   echo "Done. All data has been reset."
 else
   echo "Stopping services (volumes retained)..."
-  docker compose $DOWN_ARGS down
-  echo "Done. Run './scripts/start-dev.sh' to restart."
+  $DC down
+  echo "Done. Run './scripts/dev/start-dev.sh' to restart."
 fi

@@ -1,14 +1,18 @@
 import { AuditEvent, LcpAgent, LcpCompany, LcpRole } from '@lcp/shared';
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ApiModule } from './api/api.module';
 import { AuthModule } from './auth/auth.module';
+import { AuthTokenController } from './auth/auth-token.controller';
+import { AuthTokenService } from './auth/auth-token.service';
 import { configSchema } from './config/config.schema';
 import { HealthModule } from './health/health.module';
 import { CompanyLlmDefault1750000000002 } from './migrations/1750000000002-CompanyLlmDefault';
 import { AddRoleAgentAudit1750000000001 } from './migrations/1750000000001-AddRoleAgentAudit';
 import { InitialSchema1750000000000 } from './migrations/1750000000000-InitialSchema';
+import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
 
 /**
  * Root module for lcp-server. Wires global config validation, TypeORM,
@@ -52,6 +56,11 @@ import { InitialSchema1750000000000 } from './migrations/1750000000000-InitialSc
     ApiModule,
     HealthModule,
     AuthModule,
+  ],
+  controllers: [AuthTokenController],
+  providers: [
+    AuthTokenService,
+    { provide: APP_INTERCEPTOR, useClass: MaskSecretsInterceptor },
   ],
 })
 export class AppModule {}

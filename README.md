@@ -57,7 +57,7 @@ Quick reference:
 ```bash
 ./scripts/run-unit-tests.sh         # no services required
 ./scripts/run-integration-tests.sh  # starts postgres, redis, minio
-./scripts/run-system-tests.sh       # starts full stack including Keycloak
+./scripts/run-smoke-tests.sh        # starts full stack including Keycloak
 ./scripts/run-e2e-tests.sh          # starts postgres, redis, minio
 ```
 
@@ -89,7 +89,7 @@ See [docs/ADRs/](docs/ADRs/) for decisions on upcoming components (agent runner,
 | `npm test` | Unit tests |
 | `npm run test:e2e` | E2E tests |
 | `npm run test:integration` | Integration tests (needs Docker) |
-| `npm run test:system` | System tests (needs `docker compose up`) |
+| `npm run test:smoke` | Smoke tests (needs `docker compose up --profile auth`) |
 | `npm run schema:generate` | Regenerate [schemas/schema.json](schemas/schema.json) |
 | `npm run licenses:generate` | Regenerate [docs/licenses.md](docs/licenses.md) |
 | `npm run migration:generate` | Generate a new TypeORM migration |

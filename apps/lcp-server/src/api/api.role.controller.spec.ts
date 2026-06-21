@@ -20,13 +20,14 @@ function makeRole(overrides: Partial<LcpRole> = {}): LcpRole {
 }
 
 describe('RoleController', () => {
-  let db: jest.Mocked<Pick<DbService, 'createRole' | 'getRole'>>;
+  let db: jest.Mocked<Pick<DbService, 'createRole' | 'getRole' | 'updateRole'>>;
   let controller: RoleController;
 
   beforeEach(() => {
     db = {
       createRole: jest.fn(),
       getRole: jest.fn(),
+      updateRole: jest.fn(),
     };
     controller = new RoleController(db as unknown as DbService);
   });
@@ -48,6 +49,33 @@ describe('RoleController', () => {
 
       expect(db.createRole).toHaveBeenCalledTimes(1);
       expect(result.id).toBe(role.id);
+    });
+  });
+
+  describe('updateRole', () => {
+    it('delegates to db.updateRole and returns the updated role', async () => {
+      const role = makeRole();
+      db.updateRole.mockResolvedValue(role);
+
+      const result = await controller.updateRole(role.id, { name: 'updated' });
+      expect(db.updateRole).toHaveBeenCalledWith(role.id, { name: 'updated' });
+      expect(result.id).toBe(role.id);
+    });
+
+    it('accepts a partial llmConfig patch without the full object', async () => {
+      const role = makeRole();
+      db.updateRole.mockResolvedValue(role);
+
+      const partial = { llmConfig: { model: 'gpt-4o-mini' } };
+      await controller.updateRole(role.id, partial);
+      expect(db.updateRole).toHaveBeenCalledWith(role.id, partial);
+    });
+
+    it('throws NotFoundException when the role does not exist', async () => {
+      db.updateRole.mockResolvedValue(null);
+      await expect(
+        controller.updateRole(randomUUID(), { name: 'x' }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 

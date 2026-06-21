@@ -1,0 +1,10 @@
+{
+  "slug": "test-company",
+  "name": "Test Company",
+  "llmDefault": {
+    "provider": "lm-studio",
+    "model": "qwen/qwen3.5-9b",
+    "baseUrl": "http://host.docker.internal:1234/v1",
+    "apiKey": "<your-lm-studio-bearer-token>"
+  }
+}

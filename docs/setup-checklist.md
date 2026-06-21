@@ -113,7 +113,7 @@ Confirm your environment is working correctly:
 ```bash
 ./scripts/run-unit-tests.sh         # no services required
 ./scripts/run-integration-tests.sh  # starts postgres, redis, minio
-./scripts/run-system-tests.sh       # starts full stack including Keycloak
+./scripts/run-smoke-tests.sh        # starts full stack including Keycloak
 ./scripts/run-e2e-tests.sh          # starts postgres, redis, minio
 ```
 

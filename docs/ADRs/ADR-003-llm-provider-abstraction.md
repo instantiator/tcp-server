@@ -45,11 +45,11 @@ interface LlmConfig {
   provider: 'anthropic' | 'openai' | 'lm-studio' | string;
   model: string;
   baseUrl?: string; // override for LM Studio or other custom endpoints
-  apiKeyEnvVar?: string; // env var name — never store keys in DB
+  apiKey?: string;  // stored in the database; masked in API responses by default
 }
 ```
 
-lcp-agent resolves the `BaseChatModel` instance at task step startup using this config. API keys are read from environment variables, never stored in the database.
+lcp-agent resolves the `BaseChatModel` instance at task step startup using this config. API keys are stored in the database as part of the `LlmConfig` JSONB block and masked (`***`) in API responses when `LCP_MASK_API_KEYS=true` (the default).
 
 ## Consequences
 

@@ -96,7 +96,7 @@ describeIf('AgentLoopService (integration)', () => {
           provider: 'lm-studio',
           model: 'test-model',
           baseUrl: 'http://127.0.0.1:1/v1',
-          apiKeyEnvVar: 'LM_STUDIO_API_KEY',
+          apiKey: process.env['LM_STUDIO_API_KEY'],
         },
         systemPromptTemplate: 'You are {{name}} as of {{date}}.',
       }),
@@ -148,7 +148,7 @@ describeIf('AgentLoopService (integration)', () => {
           provider: 'lm-studio',
           model: 'test-model',
           baseUrl: 'http://127.0.0.1:1/v1',
-          apiKeyEnvVar: 'LM_STUDIO_API_KEY',
+          apiKey: process.env['LM_STUDIO_API_KEY'],
         },
       }),
     );

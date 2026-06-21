@@ -60,8 +60,8 @@ services:
       KC_DB_USERNAME: lcp
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
       KC_HOSTNAME: localhost
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy
@@ -87,9 +87,11 @@ services:
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      OIDC_ISSUER_URL: http://keycloak:8080/realms/lcp
+      OIDC_ISSUER_URL: http://localhost:8080/realms/lcp
+      OIDC_INTERNAL_ISSUER_URL: http://keycloak:8080/realms/lcp
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+      LM_STUDIO_API_KEY: ${LM_STUDIO_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy

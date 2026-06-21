@@ -4,15 +4,33 @@ All scripts live in [`scripts/`](../scripts/). Each accepts `-h` / `--help`
 for full usage. Testing scripts also accept `-- <jest options>` to pass
 arguments through to Jest (e.g. `--testNamePattern`, `--testPathPattern`).
 
+## Docker Compose project isolation
+
+Each script uses a distinct Docker Compose project name so their containers,
+networks, and volumes are completely independent of each other:
+
+| Script                   | Project name      |
+| ------------------------ | ----------------- |
+| `dev/start-dev.sh`       | `lcp-dev`         |
+| `run-integration-tests.sh` | `lcp-integration` |
+| `run-e2e-tests.sh`       | `lcp-e2e`         |
+| `run-smoke-tests.sh`     | `lcp-smoke`       |
+
+This means a running dev environment is never touched by a test script's
+`down`, and test data never contaminates dev data. Port conflicts still
+prevent two deployments from running simultaneously on the same machine
+(all use the same host port bindings).
+
 ## Summary
 
 | Script                                               | Purpose                                                          | Requires              |
 | ---------------------------------------------------- | ---------------------------------------------------------------- | --------------------- |
-| [start-dev.sh](#start-devsh)                         | Start full environment and configure Keycloak for first-time use | Docker                |
-| [stop-dev.sh](#stop-devsh)                           | Stop the dev environment; optionally remove volumes              | Docker                |
+| [dev/start-dev.sh](#start-devsh)                     | Start full environment and configure Keycloak for first-time use | Docker                |
+| [dev/stop-dev.sh](#stop-devsh)                       | Stop the dev environment; optionally remove volumes              | Docker                |
+| [dev/lcp-cli.sh](#lcp-clish)                         | Run the `lcp-cli` tool (builds automatically if needed)          | Built lcp-cli         |
 | [run-unit-tests.sh](#run-unit-testssh)               | Unit tests                                                       | Nothing               |
 | [run-integration-tests.sh](#run-integration-testssh) | Integration tests — service connectivity                         | Docker                |
-| [run-system-tests.sh](#run-system-testssh)           | System tests — full stack health checks                          | Docker + built images |
+| [run-smoke-tests.sh](#run-smoke-testssh)             | Smoke tests — full stack health checks + lcp-cli API flows       | Docker + built images |
 | [run-e2e-tests.sh](#run-e2e-testssh)                 | E2E tests — HTTP API workflows                                   | Docker                |
 
 ## start-dev.sh
@@ -25,9 +43,9 @@ creates the `lcp` realm, the `lcp-server` confidential client (with
 Safe to re-run — existing Keycloak resources are left untouched.
 
 ```bash
-./scripts/start-dev.sh                                    # uses .env or .env.testing
-./scripts/start-dev.sh -e .env.local                      # custom env file
-./scripts/start-dev.sh --test-username alice --test-password s3cret
+./scripts/dev/start-dev.sh                                    # uses .env or .env.testing
+./scripts/dev/start-dev.sh -e .env.local                      # custom env file
+./scripts/dev/start-dev.sh --test-username alice --test-password s3cret
 ```
 
 **Options:**
@@ -48,9 +66,9 @@ data (databases, Keycloak configuration) persists across restarts. Pass
 `--volumes` to reset everything to a clean state.
 
 ```bash
-./scripts/stop-dev.sh              # stop, keep data
-./scripts/stop-dev.sh --volumes    # stop and reset all data
-./scripts/stop-dev.sh -e .env.local --volumes
+./scripts/dev/stop-dev.sh              # stop, keep data
+./scripts/dev/stop-dev.sh --volumes    # stop and reset all data
+./scripts/dev/stop-dev.sh -e .env.local --volumes
 ```
 
 **Options:**
@@ -59,6 +77,23 @@ data (databases, Keycloak configuration) persists across restarts. Pass
 | -------------------- | -------------------------------- | -------------------------------------- |
 | `-e`, `--env <path>` | Environment file                 | `.env` if present, else `.env.testing` |
 | `-v`, `--volumes`    | Remove volumes (resets all data) | off                                    |
+
+## lcp-cli.sh
+
+Runs the `lcp-cli` developer tool. Builds the CLI automatically if the
+compiled output is missing. Pass `--rebuild` as the first argument to force
+a fresh build before running.
+
+```bash
+./scripts/dev/lcp-cli.sh --help
+./scripts/dev/lcp-cli.sh list-companies
+./scripts/dev/lcp-cli.sh --rebuild list-companies
+./scripts/dev/lcp-cli.sh -u alice get-token
+./scripts/dev/lcp-cli.sh -r <roleId> chat
+./scripts/dev/lcp-cli.sh -r <roleId> -q "hello" chat
+```
+
+See also: [docs/lcp-cli.md](lcp-cli.md) for the full CLI reference.
 
 ## run-unit-tests.sh
 
@@ -89,21 +124,24 @@ verify that the application can connect to and use each backing service.
 
 See also: [docs/testing.md](testing.md).
 
-## run-system-tests.sh
+## run-smoke-tests.sh
 
 Starts the full Docker Compose stack including Keycloak (`--profile auth`),
-waits for every service to be healthy (up to 5 minutes for Keycloak on first
-boot), runs the system suite, then tears down. Tests verify that every health
-endpoint returns 200 — lcp-server's `/health` covers PostgreSQL, MinIO, and
-OIDC in a single call.
+configures the `lcp` realm, client, and test user, waits for every service to
+be healthy (up to 5 minutes for Keycloak on first boot), runs the smoke suite,
+then tears down. Tests verify health endpoints and the full API surface used by
+`lcp-cli` (token acquisition, company/role CRUD, chat agent lifecycle).
+
+Accepts `--base-url URL` to skip Docker entirely and test a remote deployment.
 
 ```bash
-./scripts/run-system-tests.sh
-./scripts/run-system-tests.sh -- --testNamePattern="keycloak"
+./scripts/run-smoke-tests.sh
+./scripts/run-smoke-tests.sh -- --testNamePattern="get-token"
+./scripts/run-smoke-tests.sh --base-url http://your-host:3000
 ```
 
-**Requires:** Docker and Docker Compose, `.env.testing`, built app images
-(`docker compose build` if images are stale).
+**Requires (local mode):** Docker and Docker Compose, `.env.testing`, app
+images (rebuilt automatically).
 
 See also: [docs/testing.md](testing.md).
 

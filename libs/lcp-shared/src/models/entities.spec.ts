@@ -78,7 +78,7 @@ describe('LcpCompany entity', () => {
         llmDefault: {
           provider: 'openai',
           model: 'gpt-4o',
-          apiKeyEnvVar: 'OPENAI_API_KEY',
+          apiKey: 'OPENAI_API_KEY',
         },
       }),
     );
@@ -138,7 +138,7 @@ describe('LcpRole entity', () => {
         llmConfig: {
           provider: 'openai',
           model: 'gpt-4o',
-          apiKeyEnvVar: 'OPENAI_API_KEY',
+          apiKey: 'OPENAI_API_KEY',
         },
         systemPromptTemplate: 'Plan it.',
         knowledgeDomains: ['finance', 'strategy'],

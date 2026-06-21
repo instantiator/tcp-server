@@ -145,7 +145,7 @@ describe('AgentLoopService', () => {
       llmConfig: {
         provider: 'lm-studio',
         model: 'qwen3-5b',
-        apiKeyEnvVar: 'LM_STUDIO_API_KEY',
+        apiKey: 'test-key',
       },
     },
   ) {
@@ -226,7 +226,7 @@ describe('AgentLoopService', () => {
       companyLlmDefault: {
         provider: 'lm-studio',
         model: 'qwen3-5b',
-        apiKeyEnvVar: 'LM_STUDIO_API_KEY',
+        apiKey: 'test-key',
       },
     });
 

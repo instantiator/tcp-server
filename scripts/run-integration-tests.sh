@@ -47,6 +47,8 @@ fi
 # both pick up POSTGRES_PASSWORD, MINIO_ACCESS_KEY, etc.
 set -a; source "$ENV_FILE"; set +a
 
+DC="docker compose -p lcp-integration --env-file $ENV_FILE"
+
 wait_for() {
   local name="$1" cmd="$2" max="${3:-60}"
   local waited=0
@@ -55,17 +57,17 @@ wait_for() {
     sleep 2; waited=$((waited + 2))
     if [ "$waited" -ge "$max" ]; then
       echo "ERROR: Timed out waiting for $name after ${max}s" >&2
-      docker compose --env-file "$ENV_FILE" logs --tail=20
+      $DC logs --tail=20
       exit 1
     fi
   done
   echo "$name ready."
 }
 
-docker compose --env-file "$ENV_FILE" up -d postgres redis minio
+$DC up -d postgres redis minio
 
-wait_for postgres "docker compose exec -T postgres pg_isready -U lcp"
-wait_for redis "docker compose exec -T redis redis-cli ping | grep -q PONG"
+wait_for postgres "$DC exec -T postgres pg_isready -U lcp"
+wait_for redis "$DC exec -T redis redis-cli ping | grep -q PONG"
 wait_for minio "curl -sf http://localhost:9000/minio/health/live"
 
 export DATABASE_URL="postgres://lcp:${POSTGRES_PASSWORD}@localhost:5432/lcp"
@@ -74,4 +76,4 @@ export MINIO_ENDPOINT="http://localhost:9000"
 
 npm run test:integration -- ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}
 
-docker compose --env-file "$ENV_FILE" down
+$DC down
