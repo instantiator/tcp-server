@@ -7,6 +7,11 @@ interface TokenRequest {
   password: string;
 }
 
+/** Request body for {@link AuthTokenController.refreshToken}. */
+interface RefreshRequest {
+  refresh_token: string;
+}
+
 /**
  * Issues OIDC access tokens on behalf of callers.
  * This endpoint is intentionally not guarded — it produces tokens.
@@ -28,5 +33,15 @@ export class AuthTokenController {
   @HttpCode(HttpStatus.OK)
   async getToken(@Body() body: TokenRequest): Promise<OidcTokenResponse> {
     return this.authTokenService.getToken(body.username, body.password);
+  }
+
+  /**
+   * Exchanges a refresh token for a new access token.
+   * The OIDC client secret is resolved server-side and never exposed to callers.
+   */
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  async refreshToken(@Body() body: RefreshRequest): Promise<OidcTokenResponse> {
+    return this.authTokenService.refreshToken(body.refresh_token);
   }
 }

@@ -21,11 +21,14 @@ These options apply to all verbs and must come before the verb name.
 | ------------------------------ | ----- | ----------------------- | --------------------------------------------------- |
 | `--lcp-server <url>`           | `-s`  | `http://localhost:3000` | LCP server base URL                                 |
 | `--access-token <token>`       | `-t`  | —                       | Bearer token (skips auth flow)                      |
+| `--refresh-token <token>`      | `-T`  | —                       | Refresh token (renews an expired access token)      |
 | `--access-token-env-var <var>` | `-e`  | —                       | Name of env var holding the token                   |
 | `--username <user>`            | `-u`  | —                       | OIDC username (triggers server-side token exchange) |
 | `--password <pass>`            | `-p`  | —                       | OIDC password (omit to be prompted interactively)   |
 
 **Token resolution order**: `-t` → `-e` → username+password grant.
+
+**Token renewal**: when `-t` or `-e` is used alongside `-T`, the refresh token is held in memory. Commands that run for a long time (e.g. `chat`) automatically exchange it for a new access token when the server returns `401 Unauthorized`, then retry the request transparently. When `-u` / `-p` is used instead, the server's own refresh token from the initial grant is used — no `-T` is needed.
 
 ## Authentication
 
@@ -133,6 +136,8 @@ Initiate a conversation with an agent running a given role.
 
 Conversation history is maintained server-side in the LangGraph checkpoint store.
 Each chat session creates a new agent record; the agent is deleted when the session ends.
+If the access token expires mid-session, it is renewed automatically using the refresh token
+(provided via `-T` or obtained from the initial username+password grant).
 
 | Flag                | Alias | Description                            |
 | ------------------- | ----- | -------------------------------------- |

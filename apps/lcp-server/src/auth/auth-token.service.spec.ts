@@ -111,4 +111,52 @@ describe('AuthTokenService', () => {
       UnauthorizedException,
     );
   });
+
+  describe('refreshToken', () => {
+    const discovery = {
+      issuer: 'http://keycloak/realms/lcp',
+      token_endpoint: 'http://keycloak/realms/lcp/protocol/token',
+    };
+
+    it('exchanges a refresh token for a new access token', async () => {
+      const tokenResponse = {
+        access_token: 'new-token',
+        token_type: 'Bearer',
+        expires_in: 300,
+        refresh_token: 'new-refresh',
+      };
+
+      fetchSpy
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(discovery),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(tokenResponse),
+        });
+
+      const result = await service.refreshToken('old-refresh');
+
+      expect(result.access_token).toBe('new-token');
+      const body = new URLSearchParams(
+        (fetchSpy.mock.calls[1] as [string, { body: string }])[1].body,
+      );
+      expect(body.get('grant_type')).toBe('refresh_token');
+      expect(body.get('refresh_token')).toBe('old-refresh');
+    });
+
+    it('throws UnauthorizedException when refresh token is invalid', async () => {
+      fetchSpy
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(discovery),
+        })
+        .mockResolvedValueOnce({ ok: false, status: 401 });
+
+      await expect(service.refreshToken('expired-refresh')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+  });
 });

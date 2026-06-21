@@ -6,6 +6,7 @@ export interface OidcTokenResponse {
   access_token: string;
   token_type: string;
   expires_in: number;
+  refresh_token?: string;
 }
 
 /** Shape of the OIDC discovery document (subset we care about). */
@@ -56,6 +57,31 @@ export class AuthTokenService {
 
     const data = (await res.json()) as OidcTokenResponse;
     return data;
+  }
+
+  /** Exchanges a refresh token for a new access token. */
+  async refreshToken(refreshToken: string): Promise<OidcTokenResponse> {
+    const endpoint = await this.resolveTokenEndpoint();
+
+    const body = new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: this.config.getOrThrow<string>('OIDC_CLIENT_ID'),
+      client_secret: this.config.getOrThrow<string>('OIDC_CLIENT_SECRET'),
+      refresh_token: refreshToken,
+    });
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+
+    if (!res.ok) {
+      this.logger.warn(`OIDC refresh request failed: HTTP ${res.status}`);
+      throw new UnauthorizedException('Refresh token invalid or expired');
+    }
+
+    return (await res.json()) as OidcTokenResponse;
   }
 
   /** Fetches the token endpoint from the OIDC discovery document (cached after first call). */

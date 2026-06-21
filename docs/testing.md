@@ -10,12 +10,12 @@ gates the next:
 unit → integration → smoke → e2e
 ```
 
-| Tier        | What it proves                                            | Infrastructure                  |
-| ----------- | --------------------------------------------------------- | ------------------------------- |
-| Unit        | Individual classes and functions behave correctly         | None — SQLite in-memory         |
-| Integration | The app can connect to and use each backing service       | Docker (postgres, redis, minio) |
-| Smoke       | The full deployment starts, health checks pass, and the lcp-cli API flows work | Docker + Keycloak |
-| E2E         | HTTP API workflows produce the right responses end-to-end | Docker (postgres, redis, minio) |
+| Tier        | What it proves                                                                 | Infrastructure                  |
+| ----------- | ------------------------------------------------------------------------------ | ------------------------------- |
+| Unit        | Individual classes and functions behave correctly                              | None — SQLite in-memory         |
+| Integration | The app can connect to and use each backing service                            | Docker (postgres, redis, minio) |
+| Smoke       | The full deployment starts, health checks pass, and the lcp-cli API flows work | Docker + Keycloak               |
+| E2E         | HTTP API workflows produce the right responses end-to-end                      | Docker (postgres, redis, minio) |
 
 **Unit tests** use `better-sqlite3` in-memory and `@nestjs/testing` to wire
 modules without starting a real server. They run in milliseconds with no

@@ -5,15 +5,22 @@ import { apiRequest, ApiOptions } from './api';
 export interface AuthOptions {
   baseUrl: string;
   accessToken?: string;
+  refreshToken?: string;
   accessTokenEnvVar?: string;
   username?: string;
   password?: string;
 }
 
-/** Resolves a bearer token from the provided options, prompting if needed. */
-export async function resolveToken(opts: AuthOptions): Promise<string> {
+/** A resolved token pair. `refreshToken` is only present when obtained via username+password. */
+export interface TokenSession {
+  token: string;
+  refreshToken?: string;
+}
+
+/** Resolves a bearer token and, when possible, a refresh token. */
+export async function resolveSession(opts: AuthOptions): Promise<TokenSession> {
   // 1. Explicit token
-  if (opts.accessToken) return opts.accessToken;
+  if (opts.accessToken) return { token: opts.accessToken, refreshToken: opts.refreshToken };
 
   // 2. Environment variable
   if (opts.accessTokenEnvVar) {
@@ -24,7 +31,7 @@ export async function resolveToken(opts: AuthOptions): Promise<string> {
       );
       process.exit(1);
     }
-    return val;
+    return { token: val, refreshToken: opts.refreshToken };
   }
 
   // 3. Username + password grant via server
@@ -39,11 +46,33 @@ export async function resolveToken(opts: AuthOptions): Promise<string> {
     opts.password ?? (await promptPassword(`Password for ${opts.username}: `));
 
   const apiOpts: ApiOptions = { baseUrl: opts.baseUrl };
-  const data = await apiRequest<{ access_token: string }>(
+  const data = await apiRequest<{ access_token: string; refresh_token?: string }>(
     apiOpts,
     'POST',
     '/api/auth/token',
     { username: opts.username, password },
+  );
+  return { token: data.access_token, refreshToken: data.refresh_token };
+}
+
+/** Resolves a bearer token from the provided options, prompting if needed. */
+export async function resolveToken(opts: AuthOptions): Promise<string> {
+  return (await resolveSession(opts)).token;
+}
+
+/**
+ * Exchanges a refresh token for a new access token via the server proxy.
+ * The OIDC client secret never leaves the server.
+ */
+export async function renewToken(
+  baseUrl: string,
+  refreshToken: string,
+): Promise<string> {
+  const data = await apiRequest<{ access_token: string }>(
+    { baseUrl },
+    'POST',
+    '/api/auth/refresh',
+    { refresh_token: refreshToken },
   );
   return data.access_token;
 }

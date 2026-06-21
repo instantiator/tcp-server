@@ -19,6 +19,7 @@ program
     'http://localhost:3000',
   )
   .option('-t, --access-token <token>', 'Bearer token (skips auth flow)')
+  .option('-T, --refresh-token <token>', 'Refresh token (renews an expired access token)')
   .option(
     '-e, --access-token-env-var <var>',
     'Name of env var holding the token',
