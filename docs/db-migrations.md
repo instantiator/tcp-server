@@ -23,21 +23,29 @@ Edit the model in `libs/lcp-shared/src/models/`. Commit nothing yet.
 
 ### 2. Generate the migration
 
-Point `DATABASE_URL` at a running PostgreSQL instance (e.g. `docker compose up -d postgres`)
-and run:
+Point `DATABASE_URL` at a running PostgreSQL instance (e.g. `docker compose up -d postgres`) and run:
 
 ```bash
 DATABASE_URL=postgres://lcp:dev-password@localhost:5432/lcp \
   npm run migration:generate -- apps/lcp-server/src/migrations/DescriptiveName
 ```
 
-TypeORM compares the current database schema against the entity definitions and writes
-a new file to `apps/lcp-server/src/migrations/`.
+eg.
+
+```bash
+DATABASE_URL=postgres://lcp:dev-password@localhost:5432/lcp \
+  npm run migration:generate -- apps/lcp-server/src/migrations/AddCompanyDescription
+```
+
+TypeORM compares the current database schema against the entity definitions and writes a new file to `apps/lcp-server/src/migrations/`.
 
 ### 3. Review the generated file
 
 Open the generated migration and check:
 
+- Change `import { MigrationInterface, QueryRunner }` to
+  `import type { MigrationInterface, QueryRunner }` — the generator emits a value
+  import but both are TypeScript interfaces with no runtime representation.
 - The `up()` method makes exactly the structural changes you intended.
 - The `down()` method correctly reverses them.
 - No unexpected `DROP COLUMN` or `DROP TABLE` statements (these appear when TypeORM

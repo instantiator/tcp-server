@@ -11,7 +11,7 @@ import { DataSource } from 'typeorm';
 export default new DataSource({
   type: 'postgres',
   url: process.env.DATABASE_URL,
-  entities: ['apps/lcp-server/src/**/*.model.ts'],
+  entities: ['libs/lcp-shared/src/models/*.model.ts'],
   migrations: ['apps/lcp-server/src/migrations/*.ts'],
   migrationsTableName: 'typeorm_migrations',
 });

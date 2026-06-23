@@ -1,5 +1,6 @@
-import { TestingModule, Test } from '@nestjs/testing';
+import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
+import { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import {
   AgentStatus,
@@ -50,10 +51,16 @@ afterEach(async () => {
 });
 
 async function seedCompany() {
-  return companies.save(companies.create({ slug: 'acme', name: 'ACME' }));
+  return companies.save(
+    companies.create({
+      slug: 'acme',
+      name: 'ACME',
+      description: 'A Company that Makes Everything',
+    }),
+  );
 }
 
-async function seedRole(companyId: string) {
+async function seedRole(companyId: UUID) {
   return roles.save(
     roles.create({
       companyId,
@@ -75,6 +82,7 @@ describe('LcpCompany entity', () => {
       companies.create({
         slug: 'llm-co',
         name: 'LLM Co',
+        description: 'LLM Company',
         llmDefault: {
           provider: 'openai',
           model: 'gpt-4o',
@@ -89,7 +97,11 @@ describe('LcpCompany entity', () => {
 
   it('allows a company with no llmDefault', async () => {
     const company = await companies.save(
-      companies.create({ slug: 'plain-co', name: 'Plain Co' }),
+      companies.create({
+        slug: 'plain-co',
+        name: 'Plain Co',
+        description: 'A plain company',
+      }),
     );
     const found = await companies.findOneByOrFail({ id: company.id });
     expect(found.llmDefault).toBeNull();
@@ -113,6 +125,7 @@ describe('LcpRole entity', () => {
       companies.create({
         slug: 'default-llm',
         name: 'Default LLM Co',
+        description: 'A default company',
         llmDefault: { provider: 'openai', model: 'gpt-4o' },
       }),
     );

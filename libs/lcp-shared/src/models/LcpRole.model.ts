@@ -1,6 +1,7 @@
+import type { UUID } from 'crypto';
 import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
-import type { LlmConfig } from './LlmConfig.model';
 import { LcpCompany } from './LcpCompany.model';
+import type { LlmConfig } from './LlmConfig.model';
 
 /**
  * A role template that defines the behaviour and LLM configuration for an agent.
@@ -13,7 +14,7 @@ export class LcpRole {
    * @format uuid
    */
   @PrimaryGeneratedColumn('uuid')
-  id!: string;
+  id!: UUID;
 
   /** The company this role belongs to. */
   @ManyToOne(() => LcpCompany, { nullable: false, onDelete: 'CASCADE' })
@@ -24,7 +25,7 @@ export class LcpRole {
    * @format uuid
    */
   @Column()
-  companyId!: string;
+  companyId!: UUID;
 
   /**
    * Short identifier for this role within the company (e.g. `'analyst'`, `'planner'`).

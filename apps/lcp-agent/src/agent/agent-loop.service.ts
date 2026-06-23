@@ -1,23 +1,24 @@
 import {
-  AgentStatus,
-  AuditEventType,
-  LcpAgent,
-  LcpCompany,
-  LcpRole,
-  LlmConfig,
-} from '@lcp/shared';
-import {
   AIMessage,
   HumanMessage,
   SystemMessage,
 } from '@langchain/core/messages';
 import { END, MessagesAnnotation, StateGraph } from '@langchain/langgraph';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
+import {
+  AgentStatus,
+  AuditEvent,
+  AuditEventType,
+  LcpAgent,
+  LcpCompany,
+  LcpRole,
+  LlmConfig,
+} from '@lcp/shared';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
+import { UUID } from 'crypto';
 import { Repository } from 'typeorm';
-import { AuditEvent } from '@lcp/shared';
 import { buildChatModel } from '../llm/llm-factory';
 import { AgentRegistryService } from '../registry/agent-registry.service';
 
@@ -71,7 +72,7 @@ export class AgentLoopService {
    * Runs (or resumes) the agent loop for the given agent.
    * Updates the agent's status throughout and writes {@link AuditEvent} rows.
    */
-  async run(agentId: string): Promise<void> {
+  async run(agentId: UUID): Promise<void> {
     const agent = await this.agentRepo.findOneBy({ id: agentId });
     if (!agent) {
       this.logger.error(`Agent ${agentId} not found — skipping job`);
@@ -138,8 +139,26 @@ export class AgentLoopService {
     };
     const initialState = {
       messages: [
+        // Prompt part 0: system prompt — rendered from the role's systemPromptTemplate
         new SystemMessage(systemPrompt),
+        // TODO - prompt part 1: inject a separate role prompt (identity, attitude, domain
+        //   knowledge, behavioural guidelines distinct from the system prompt) once the
+        //   role prompt structure is split from systemPromptTemplate (ADR-013)
+        // TODO - prompt part 2: inject company environment message (agent roster, company
+        //   name/description, shared storage folder structure) — implement when company
+        //   context is wired into the agent loop (ADR-001)
+        // TODO - prompt part 3: inject services-available message listing MCP server
+        //   capabilities and RAG knowledge domains — implement when MCP/RAG integration
+        //   lands (ADR-002, ADR-006)
+        // TODO - prompt part 5: inject RAG data retrieved for the initial task — implement
+        //   when RAG retrieval is available (ADR-006)
+        // TODO - prompt part 6: inject MCP responses from any pre-task data retrieval —
+        //   implement when MCP servers are wired (ADR-002)
+        // Prompt part 4: task / query prompt
         new HumanMessage(agent.initialPrompt),
+        // TODO - prompt part 8: append a final-instruction suffix message telling the agent
+        //   what to do — implement alongside role prompt restructure (ADR-013)
+        // Prompt part 7: conversation history provided by LangGraph checkpoint on resume
       ],
     };
 

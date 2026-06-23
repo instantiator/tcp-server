@@ -8,6 +8,7 @@ import {
 } from '@lcp/shared';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { UUID } from 'crypto';
 import { DeepPartial, IsNull, Repository } from 'typeorm';
 import { LcpAgentTemplate } from '../templates/LcpAgentTemplate';
 import { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
@@ -126,7 +127,7 @@ export class DbService {
   }
 
   /** Retrieves a role by its UUID. Returns `null` if not found. */
-  async getRole(id: string): Promise<LcpRole | null> {
+  async getRole(id: UUID): Promise<LcpRole | null> {
     return this.roleRepo.findOneBy({ id });
   }
 
@@ -136,7 +137,7 @@ export class DbService {
    * Returns the updated role, or `null` if no role with that id exists.
    */
   async updateRole(
-    id: string,
+    id: UUID,
     partial: DeepPartial<Omit<LcpRole, 'id' | 'company'>>,
   ): Promise<LcpRole | null> {
     const existing = await this.roleRepo.findOneBy({ id });
@@ -154,7 +155,7 @@ export class DbService {
   }
 
   /** Returns all roles for a given company. */
-  async listRoles(companyId: string): Promise<LcpRole[]> {
+  async listRoles(companyId: UUID): Promise<LcpRole[]> {
     return this.roleRepo.findBy({ companyId });
   }
 
@@ -166,7 +167,7 @@ export class DbService {
   }
 
   /** Retrieves an agent by its UUID. Returns `null` if not found. */
-  async getAgent(id: string): Promise<LcpAgent | null> {
+  async getAgent(id: UUID): Promise<LcpAgent | null> {
     return this.agentRepo.findOneBy({ id });
   }
 
@@ -174,7 +175,7 @@ export class DbService {
    * Physically deletes an {@link LcpAgent} and its associated {@link AuditEvent} rows.
    * Returns `true` if a record was deleted, `false` if no agent with that id exists.
    */
-  async deleteAgent(id: string): Promise<boolean> {
+  async deleteAgent(id: UUID): Promise<boolean> {
     const result = await this.agentRepo.delete(id);
     return (result.affected ?? 0) > 0;
   }
@@ -184,7 +185,7 @@ export class DbService {
    * LangGraph `threadId` on first dispatch.
    */
   async updateAgentStatus(
-    id: string,
+    id: UUID,
     status: AgentStatus,
     threadId?: string,
   ): Promise<void> {
@@ -206,9 +207,9 @@ export class DbService {
    * @param payload structured event data
    */
   async saveAuditEvent(
-    companyId: string,
+    companyId: UUID,
     role: string,
-    agentId: string | null,
+    agentId: UUID | null,
     eventType: AuditEventType,
     payload: Record<string, unknown>,
   ): Promise<AuditEvent> {

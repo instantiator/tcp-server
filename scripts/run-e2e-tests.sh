@@ -62,6 +62,8 @@ wait_for() {
   echo "$name ready."
 }
 
+trap 'rc=$?; $DC down; exit $rc' EXIT
+$DC down -v
 $DC up -d postgres redis minio
 
 wait_for postgres "$DC exec -T postgres pg_isready -U lcp"

@@ -1,0 +1,18 @@
+{
+  "verbose": true,
+  "rootDir": "..",
+  "testMatch": ["<rootDir>/test/e2e/*.e2e-spec.ts"],
+  "testEnvironment": "node",
+  "setupFiles": ["<rootDir>/test/e2e/e2e-setup.ts"],
+  "transform": {
+    "^.+\\.(t|j)s$": ["ts-jest", { "tsconfig": "<rootDir>/tsconfig.json" }]
+  },
+  "moduleNameMapper": {
+    "@lcp/shared": "<rootDir>/libs/lcp-shared/src/index.ts",
+    "^jwks-rsa$": "<rootDir>/test/e2e/__mocks__/jwks-rsa.ts"
+  },
+  "reporters": [
+    "default",
+    ["jest-junit", { "outputDirectory": "test-results", "outputName": "e2e.xml" }]
+  ]
+}

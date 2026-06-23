@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    name: Build
+  verify:
+    name: Build, lint & typecheck
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -20,26 +20,16 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: true
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "24"
-          cache: npm
-      - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
 
   unit-test:
     name: Unit tests
-    needs: [build, lint]
+    needs: [verify]
     runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      contents: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -50,11 +40,22 @@ jobs:
           cache: npm
       - run: npm ci
       - run: ./scripts/run-unit-tests.sh
+      - name: Publish test results
+        uses: dorny/test-reporter@v3
+        if: ${{ !cancelled() }}
+        with:
+          name: Unit tests
+          path: test-results/unit.xml
+          reporter: jest-junit
+          fail-on-error: false
 
   integration-test:
     name: Integration tests
     needs: [unit-test]
     runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      contents: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -65,13 +66,24 @@ jobs:
           cache: npm
       - run: npm ci
       - run: ./scripts/run-integration-tests.sh
+      - name: Publish test results
+        uses: dorny/test-reporter@v3
+        if: ${{ !cancelled() }}
+        with:
+          name: Integration tests
+          path: test-results/integration.xml
+          reporter: jest-junit
+          fail-on-error: false
       - if: always()
         run: docker compose down -v
 
-  smoke-test:
-    name: Smoke tests
+  api-test:
+    name: API tests
     needs: [integration-test]
     runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      contents: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -81,12 +93,8 @@ jobs:
           node-version: "24"
           cache: npm
       - uses: docker/setup-buildx-action@v4
-      # Pre-build the app images using BuildKit's GHA layer cache.
-      # run-smoke-tests.sh calls `docker compose build` which reuses these
-      # cached layers — the expensive `npm ci` Docker layer only rebuilds when
-      # package-lock.json changes.
       - name: Build lcp-server image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/lcp-server/Dockerfile
@@ -106,14 +114,25 @@ jobs:
           cache-from: type=gha,scope=lcp-agent
           cache-to: type=gha,scope=lcp-agent,mode=max
       - run: npm ci
-      - run: ./scripts/run-smoke-tests.sh
+      - run: ./scripts/run-api-tests.sh
+      - name: Publish test results
+        uses: dorny/test-reporter@v3
+        if: ${{ !cancelled() }}
+        with:
+          name: API tests
+          path: test-results/api.xml
+          reporter: jest-junit
+          fail-on-error: false
       - if: always()
         run: docker compose --profile auth down -v
 
   e2e-test:
     name: E2E tests
-    needs: [smoke-test]
+    needs: [integration-test]
     runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      contents: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -124,5 +143,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: ./scripts/run-e2e-tests.sh
+      - name: Publish test results
+        uses: dorny/test-reporter@v3
+        if: ${{ !cancelled() }}
+        with:
+          name: E2E tests
+          path: test-results/e2e.xml
+          reporter: jest-junit
+          fail-on-error: false
       - if: always()
         run: docker compose down -v

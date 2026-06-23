@@ -1,8 +1,3 @@
-import { BadRequestException } from '@nestjs/common';
-import { Test, TestingModule } from '@nestjs/testing';
-import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
-import { randomUUID } from 'crypto';
-import { QueryFailedError, Repository } from 'typeorm';
 import {
   AgentStatus,
   AuditEvent,
@@ -11,6 +6,11 @@ import {
   LcpCompany,
   LcpRole,
 } from '@lcp/shared';
+import { BadRequestException } from '@nestjs/common';
+import { Test, TestingModule } from '@nestjs/testing';
+import { getRepositoryToken, TypeOrmModule } from '@nestjs/typeorm';
+import { randomUUID, UUID } from 'crypto';
+import { QueryFailedError, Repository } from 'typeorm';
 import { DbService } from './db.service';
 
 const ALL_ENTITIES = [LcpCompany, LcpRole, LcpAgent, AuditEvent];
@@ -53,10 +53,16 @@ describe('DbService', () => {
   // Helpers
 
   async function seedCompany() {
-    return companyRepo.save(companyRepo.create({ slug: 'acme', name: 'ACME' }));
+    return companyRepo.save(
+      companyRepo.create({
+        slug: 'acme',
+        name: 'ACME',
+        description: 'A Company that Makes Everything',
+      }),
+    );
   }
 
-  async function seedRole(companyId: string) {
+  async function seedRole(companyId: UUID) {
     return roleRepo.save(
       roleRepo.create({
         companyId,
@@ -72,7 +78,10 @@ describe('DbService', () => {
 
   describe('createCompany', () => {
     it('persists a new record with the given slug and template fields', async () => {
-      await dbService.createCompany({ name: 'Acme Corp' }, 'acme');
+      await dbService.createCompany(
+        { name: 'Acme Corp', description: 'A Company That Makes Everything' },
+        'acme',
+      );
       const record = await companyRepo.findOneBy({ slug: 'acme' });
       expect(record).not.toBeNull();
       expect(record!.name).toBe('Acme Corp');
@@ -81,7 +90,7 @@ describe('DbService', () => {
 
     it('assigns a UUID to the new record', async () => {
       const result = await dbService.createCompany(
-        { name: 'Acme Corp' },
+        { name: 'Acme Corp', description: 'A Company That Makes Everything' },
         'acme',
       );
       expect(result.id).toMatch(
@@ -90,8 +99,14 @@ describe('DbService', () => {
     });
 
     it('replaces an existing record with the same slug', async () => {
-      await dbService.createCompany({ name: 'First' }, 'acme');
-      await dbService.createCompany({ name: 'Second' }, 'acme');
+      await dbService.createCompany(
+        { name: 'First', description: 'v1' },
+        'acme',
+      );
+      await dbService.createCompany(
+        { name: 'Second', description: 'v2' },
+        'acme',
+      );
 
       expect(await companyRepo.count({ where: { slug: 'acme' } })).toBe(1);
       expect((await companyRepo.findOneBy({ slug: 'acme' }))!.name).toBe(
@@ -104,12 +119,26 @@ describe('DbService', () => {
 
   describe('setCompany', () => {
     it('creates a new record when replace=true and no prior record exists', async () => {
-      await dbService.setCompany({ slug: 'acme', name: 'Acme Corp' }, true);
+      await dbService.setCompany(
+        {
+          slug: 'acme',
+          name: 'Acme Corp',
+          description: 'A company that makes everything',
+        },
+        true,
+      );
       expect(await companyRepo.count()).toBe(1);
     });
 
     it('creates a new record when replace=false', async () => {
-      await dbService.setCompany({ slug: 'acme', name: 'Acme Corp' }, false);
+      await dbService.setCompany(
+        {
+          slug: 'acme',
+          name: 'Acme Corp',
+          description: 'A Company that Makes Everything',
+        },
+        false,
+      );
       const record = await companyRepo.findOneBy({ slug: 'acme' });
       expect(record).not.toBeNull();
       expect(record!.slug).toBe('acme');
@@ -118,7 +147,7 @@ describe('DbService', () => {
     it('updates an existing record when replace=false and the id matches', async () => {
       const id = randomUUID();
       await dbService.setCompany(
-        { id, slug: 'acme', name: 'Original Name' },
+        { id, slug: 'acme', name: 'Original Name', description: 'Company' },
         false,
       );
       await dbService.setCompany(
@@ -134,7 +163,12 @@ describe('DbService', () => {
     it('does not overwrite unmodified fields when updating', async () => {
       const id = randomUUID();
       await dbService.setCompany(
-        { id, slug: 'acme', name: 'Original Name' },
+        {
+          id,
+          slug: 'acme',
+          name: 'Original Name',
+          description: 'Original company',
+        },
         false,
       );
       await dbService.setCompany({ id, name: 'Updated Name' }, false);
@@ -144,8 +178,14 @@ describe('DbService', () => {
     });
 
     it('destroys the prior record with the same slug when replace=true', async () => {
-      await dbService.setCompany({ slug: 'acme', name: 'First' }, true);
-      await dbService.setCompany({ slug: 'acme', name: 'Second' }, true);
+      await dbService.setCompany(
+        { slug: 'acme', name: 'First', description: 'Company 1' },
+        true,
+      );
+      await dbService.setCompany(
+        { slug: 'acme', name: 'Second', description: 'Company 2' },
+        true,
+      );
 
       expect(await companyRepo.count({ where: { slug: 'acme' } })).toBe(1);
       expect((await companyRepo.findOneBy({ slug: 'acme' }))!.name).toBe(
@@ -154,9 +194,23 @@ describe('DbService', () => {
     });
 
     it('throws on a duplicate slug when replace=false', async () => {
-      await dbService.setCompany({ slug: 'acme', name: 'First' }, false);
+      await dbService.setCompany(
+        {
+          slug: 'acme',
+          name: 'First',
+          description: 'A company that makes everything',
+        },
+        false,
+      );
       await expect(
-        dbService.setCompany({ slug: 'acme', name: 'Second' }, false),
+        dbService.setCompany(
+          {
+            slug: 'acme',
+            name: 'Second',
+            description: 'A company that makes everything',
+          },
+          false,
+        ),
       ).rejects.toThrow(QueryFailedError);
     });
 
@@ -167,6 +221,7 @@ describe('DbService', () => {
           id,
           slug: 'llm-co',
           name: 'LLM Co',
+          description: 'LLM Company',
           llmDefault: { provider: 'openai', model: 'gpt-4o' },
         },
         false,
@@ -183,7 +238,13 @@ describe('DbService', () => {
       // Removing llmDefault must be rejected (pass null to signal explicit removal)
       await expect(
         dbService.setCompany(
-          { id, slug: 'llm-co', name: 'LLM Co', llmDefault: null },
+          {
+            id,
+            slug: 'llm-co',
+            name: 'LLM Co',
+            description: 'LLM Company',
+            llmDefault: null,
+          },
           false,
         ),
       ).rejects.toThrow(BadRequestException);
@@ -196,6 +257,7 @@ describe('DbService', () => {
           id,
           slug: 'merge-co',
           name: 'Merge Co',
+          description: 'Merge Company',
           llmDefault: {
             provider: 'openai',
             model: 'gpt-4o',
@@ -210,6 +272,7 @@ describe('DbService', () => {
           id,
           slug: 'merge-co',
           name: 'Merge Co',
+          description: 'Merge Company',
           llmDefault: { model: 'gpt-4o-mini' },
         },
         false,
@@ -227,6 +290,7 @@ describe('DbService', () => {
           id,
           slug: 'llm-co2',
           name: 'LLM Co 2',
+          description: 'LLM Company 1',
           llmDefault: { provider: 'openai', model: 'gpt-4o' },
         },
         false,
@@ -243,7 +307,15 @@ describe('DbService', () => {
       );
       // Removing llmDefault must succeed
       await expect(
-        dbService.setCompany({ id, slug: 'llm-co2', name: 'LLM Co 2' }, false),
+        dbService.setCompany(
+          {
+            id,
+            slug: 'llm-co2',
+            name: 'LLM Co 2',
+            description: 'LLM company 2',
+          },
+          false,
+        ),
       ).resolves.toBeDefined();
     });
   });
@@ -254,7 +326,12 @@ describe('DbService', () => {
     it('retrieves a company by UUID', async () => {
       const id = randomUUID();
       await dbService.setCompany(
-        { id, slug: 'acme', name: 'Acme Corp' },
+        {
+          id,
+          slug: 'acme',
+          name: 'Acme Corp',
+          description: 'A Company that Makes Everything',
+        },
         false,
       );
 
@@ -264,7 +341,14 @@ describe('DbService', () => {
     });
 
     it('retrieves a company by slug', async () => {
-      await dbService.setCompany({ slug: 'acme', name: 'Acme Corp' }, true);
+      await dbService.setCompany(
+        {
+          slug: 'acme',
+          name: 'Acme Corp',
+          description: 'A Company that Makes Everything',
+        },
+        true,
+      );
 
       const result = await dbService.getCompany('acme');
       expect(result).not.toBeNull();
@@ -282,7 +366,12 @@ describe('DbService', () => {
     it('routes UUID-shaped strings to findByPk and plain strings to findOne', async () => {
       const id = randomUUID();
       await dbService.setCompany(
-        { id, slug: 'plainslug', name: 'Acme' },
+        {
+          id,
+          slug: 'plainslug',
+          name: 'Acme',
+          description: 'A Company that Makes Everything',
+        },
         false,
       );
 
@@ -339,6 +428,7 @@ describe('DbService', () => {
         companyRepo.create({
           slug: 'default-llm',
           name: 'Default LLM Co',
+          description: 'A default company',
           llmDefault: { provider: 'openai', model: 'gpt-4o' },
         }),
       );

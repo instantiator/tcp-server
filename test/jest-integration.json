@@ -1,7 +1,8 @@
 {
+  "verbose": true,
   "rootDir": "..",
   "testMatch": [
-    "<rootDir>/apps/*/test/integration/*.integration-spec.ts"
+    "<rootDir>/test/integration/**/*.integration-spec.ts"
   ],
   "testEnvironment": "node",
   "transform": {
@@ -11,5 +12,9 @@
     "@lcp/shared": "<rootDir>/libs/lcp-shared/src/index.ts"
   },
   "testTimeout": 30000,
-  "maxWorkers": 1
+  "maxWorkers": 1,
+  "reporters": [
+    "default",
+    ["jest-junit", { "outputDirectory": "test-results", "outputName": "integration.xml" }]
+  ]
 }

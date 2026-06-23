@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
+import { UUID } from 'crypto';
 import { DbService } from '../db/db.service';
 import { LcpAgentTemplate } from '../templates/LcpAgentTemplate';
 
@@ -64,7 +65,7 @@ export class AgentOrchestrationService
    *
    * @throws if the agent does not exist or is already running / completed
    */
-  async resumeAgent(agentId: string): Promise<LcpAgent> {
+  async resumeAgent(agentId: UUID): Promise<LcpAgent> {
     const agent = await this.db.getAgent(agentId);
     if (!agent) {
       throw new Error(`Agent ${agentId} not found`);

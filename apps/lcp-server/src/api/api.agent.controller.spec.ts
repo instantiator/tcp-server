@@ -1,10 +1,12 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { randomUUID } from 'crypto';
 import { AgentStatus, AuditEventType, LcpAgent } from '@lcp/shared';
-import { AgentController } from './api.agent.controller';
-import { AgentOrchestrationService } from './agent-orchestration.service';
-import { ChatService } from './chat.service';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { randomUUID, UUID } from 'crypto';
+import type { Request } from 'express';
 import { DbService } from '../db/db.service';
+import { AgentEventService } from '../events/agent-event.service';
+import { AgentOrchestrationService } from './agent-orchestration.service';
+import { AgentController } from './api.agent.controller';
+import { ChatService } from './chat.service';
 
 function makeAgent(overrides: Partial<LcpAgent> = {}): LcpAgent {
   return {
@@ -22,6 +24,10 @@ function makeAgent(overrides: Partial<LcpAgent> = {}): LcpAgent {
   };
 }
 
+const mockReq = {
+  socket: { on: jest.fn() },
+} as unknown as Request;
+
 describe('AgentController', () => {
   let db: jest.Mocked<
     Pick<DbService, 'getAgent' | 'createAgent' | 'deleteAgent'>
@@ -30,6 +36,9 @@ describe('AgentController', () => {
     Pick<AgentOrchestrationService, 'startAgent' | 'resumeAgent'>
   >;
   let chat: jest.Mocked<Pick<ChatService, 'sendMessage'>>;
+  let agentEvents: jest.Mocked<
+    Pick<AgentEventService, 'observe' | 'emit' | 'cleanup'>
+  >;
   let auditRepo: { save: jest.Mock; create: jest.Mock };
   let controller: AgentController;
 
@@ -41,6 +50,11 @@ describe('AgentController', () => {
     };
     orchestration = { startAgent: jest.fn(), resumeAgent: jest.fn() };
     chat = { sendMessage: jest.fn() };
+    agentEvents = {
+      observe: jest.fn().mockReturnValue({ pipe: jest.fn() }),
+      emit: jest.fn(),
+      cleanup: jest.fn(),
+    };
     auditRepo = {
       save: jest.fn().mockResolvedValue({}),
       create: jest.fn().mockReturnValue({}),
@@ -49,6 +63,7 @@ describe('AgentController', () => {
       db as unknown as DbService,
       orchestration as unknown as AgentOrchestrationService,
       chat as unknown as ChatService,
+      agentEvents as unknown as AgentEventService,
       auditRepo as never,
     );
   });
@@ -71,7 +86,7 @@ describe('AgentController', () => {
     it('throws BadRequestException when required fields are missing', async () => {
       await expect(
         controller.startAgent({
-          companyId: '',
+          companyId: '' as UUID,
           roleId: randomUUID(),
           initialPrompt: 'Go.',
         }),
@@ -83,25 +98,26 @@ describe('AgentController', () => {
     it('delegates to orchestration.resumeAgent and returns the agent', async () => {
       const agent = makeAgent();
       orchestration.resumeAgent.mockResolvedValue(agent);
-
       const result = await controller.resumeAgent(agent.id);
       expect(result.id).toBe(agent.id);
     });
 
     it('throws NotFoundException when the orchestration service reports agent not found', async () => {
+      const id = randomUUID();
       orchestration.resumeAgent.mockRejectedValue(
         new Error('Agent xyz not found'),
       );
-      await expect(controller.resumeAgent('xyz')).rejects.toThrow(
+      await expect(controller.resumeAgent(id)).rejects.toThrow(
         NotFoundException,
       );
     });
 
     it('throws BadRequestException when the agent cannot be resumed', async () => {
+      const id = randomUUID();
       orchestration.resumeAgent.mockRejectedValue(
         new Error("cannot be resumed from status 'running'"),
       );
-      await expect(controller.resumeAgent('xyz')).rejects.toThrow(
+      await expect(controller.resumeAgent(id)).rejects.toThrow(
         BadRequestException,
       );
     });
@@ -165,7 +181,7 @@ describe('AgentController', () => {
 
     it('throws BadRequestException when required fields are missing', async () => {
       await expect(
-        controller.startChat({ companyId: '', roleId: randomUUID() }),
+        controller.startChat({ companyId: '' as UUID, roleId: randomUUID() }),
       ).rejects.toThrow(BadRequestException);
     });
   });
@@ -173,15 +189,17 @@ describe('AgentController', () => {
   describe('sendMessage', () => {
     it('delegates to chat.sendMessage and returns the response', async () => {
       chat.sendMessage.mockResolvedValue({ response: 'Hello!' });
-      const result = await controller.sendMessage(randomUUID(), {
-        message: 'Hi',
-      });
+      const result = await controller.sendMessage(
+        randomUUID(),
+        { message: 'Hi' },
+        mockReq,
+      );
       expect(result.response).toBe('Hello!');
     });
 
     it('throws BadRequestException when message is empty', async () => {
       await expect(
-        controller.sendMessage(randomUUID(), { message: '' }),
+        controller.sendMessage(randomUUID(), { message: '' }, mockReq),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -190,7 +208,7 @@ describe('AgentController', () => {
         new NotFoundException('Agent not found'),
       );
       await expect(
-        controller.sendMessage(randomUUID(), { message: 'Hi' }),
+        controller.sendMessage(randomUUID(), { message: 'Hi' }, mockReq),
       ).rejects.toThrow(NotFoundException);
     });
   });

@@ -1,0 +1,14 @@
+{
+  "verbose": true,
+  "rootDir": "..",
+  "testMatch": ["<rootDir>/test/api/*.spec.ts", "<rootDir>/test/smoke/*.spec.ts"],
+  "testEnvironment": "node",
+  "transform": {
+    "^.+\\.(t|j)s$": ["ts-jest", { "tsconfig": "<rootDir>/tsconfig.json" }]
+  },
+  "testTimeout": 60000,
+  "reporters": [
+    "default",
+    ["jest-junit", { "outputDirectory": "test-results", "outputName": "api.xml" }]
+  ]
+}

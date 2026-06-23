@@ -9,12 +9,12 @@ Run the smoke test suite.
 
 Without --base-url: starts all services via Docker Compose with the 'auth'
 profile (including Keycloak), waits for each to be healthy, runs
-'npm run test:smoke', then tears down all containers on exit.
+'npm run test:smoke', then tears down all containers on exit. Volumes are
+removed on both start and exit to ensure a clean database on every run.
 
-With --base-url URL: skips Docker entirely and tests the deployment at the
-given URL (sets LCP_SERVER_URL). For lcp-agent or Keycloak at a different
-URL, also set LCP_AGENT_URL and KEYCLOAK_URL in the environment before
-invoking this script.
+With --base-url URL: skips Docker entirely and runs 'npm run test:smoke'
+against the deployment at that URL. Use the options below to supply the
+URLs and credentials for that deployment.
 
 Smoke tests verify end-to-end health across the full stack: lcp-server,
 lcp-agent, PostgreSQL, MinIO, Redis, and Keycloak. The lcp-server /health
@@ -33,16 +33,33 @@ Prerequisites (local mode):
   - lcp-server and lcp-agent images are rebuilt automatically before each run
 
 Options:
-  --base-url URL  Test against a running deployment at URL (skips Docker)
-  -h, --help      Show this help message and exit
+  --base-url URL            Test against a running deployment at URL (skips Docker)
+  --agent-url URL           lcp-agent URL for remote mode (default: http://localhost:3001)
+  --oidc-discovery-url URL  Full OIDC discovery URL for remote mode
+                            (default: http://localhost:8080/realms/master/.well-known/openid-configuration)
+  --username NAME           Test user username for remote mode (default: test)
+  --password PASS           Test user password for remote mode (default: test)
+  -h, --help                Show this help message and exit
+
+Each option can also be supplied as an environment variable:
+  LCP_AGENT_URL, OIDC_DISCOVERY_URL, TEST_USERNAME, TEST_PASSWORD
+CLI flags take precedence over environment variables.
 EOF
 }
 
 BASE_URL=""
+LCP_AGENT_URL="${LCP_AGENT_URL:-}"
+OIDC_DISCOVERY_URL="${OIDC_DISCOVERY_URL:-}"
+TEST_USERNAME="${TEST_USERNAME:-}"
+TEST_PASSWORD="${TEST_PASSWORD:-}"
 PASSTHROUGH=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --base-url) BASE_URL="$2"; shift 2 ;;
+    --base-url)            BASE_URL="$2";            shift 2 ;;
+    --agent-url)           LCP_AGENT_URL="$2";       shift 2 ;;
+    --oidc-discovery-url)  OIDC_DISCOVERY_URL="$2";  shift 2 ;;
+    --username)            TEST_USERNAME="$2";        shift 2 ;;
+    --password)            TEST_PASSWORD="$2";        shift 2 ;;
     --) shift; PASSTHROUGH+=("$@"); break ;;
     -h|--help) usage; exit 0 ;;
     *) PASSTHROUGH+=("$1"); shift ;;
@@ -53,9 +70,11 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 if [[ -n "$BASE_URL" ]]; then
   # Remote mode: test against the provided URL, no Docker needed.
-  # LCP_AGENT_URL and KEYCLOAK_URL fall back to localhost defaults in the spec
-  # unless the caller exports them explicitly.
   export LCP_SERVER_URL="$BASE_URL"
+  [[ -n "$LCP_AGENT_URL" ]]       && export LCP_AGENT_URL
+  [[ -n "$OIDC_DISCOVERY_URL" ]]  && export OIDC_DISCOVERY_URL
+  [[ -n "$TEST_USERNAME" ]]       && export TEST_USERNAME
+  [[ -n "$TEST_PASSWORD" ]]       && export TEST_PASSWORD
   npm --prefix "$REPO_ROOT" run test:smoke -- ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}
   exit 0
 fi
@@ -86,6 +105,8 @@ wait_for() {
   echo "$name ready."
 }
 
+trap 'rc=$?; $DC down; exit $rc' EXIT
+$DC down -v
 $DC build lcp-server lcp-agent
 $DC up -d
 

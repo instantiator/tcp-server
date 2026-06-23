@@ -32,6 +32,7 @@ Design decisions made during the project, with context and rationale.
 | [ADR-010](ADRs/ADR-010-orchestration-design.md)         | Orchestration Design                           | Partially Implemented | BullMQ `agent-jobs` queue wired. lcp-server enqueues; lcp-agent `AgentWorkerService` consumes.                        |
 | [ADR-011](ADRs/ADR-011-authentication-authorization.md) | Authentication and Authorization               | Accepted              | `JwtStrategy` + `JwtAuthGuard` wired. Guards not yet applied to any endpoint. User/CompanyMembership entities pending. |
 | [ADR-012](ADRs/ADR-012-human-in-the-loop.md)            | Human-in-the-Loop and User-Agent Conversations | Proposed              |                                                                                                                        |
+| [ADR-013](ADRs/ADR-013-prompt-assembly-context-management.md) | Agent Prompt Assembly and Context Management | Partially Implemented | 8-part prompt structure documented; context budget + compaction services implemented; Ctrl+C cancellation wired.  |
 
 ### Status definitions
 
@@ -42,6 +43,14 @@ Design decisions made during the project, with context and rationale.
 | **Partially Implemented** | Work in progress; some components built         |
 | **Implemented**           | Fully built and in use                          |
 | **Superseded**            | Replaced by a later ADR                         |
+
+## Features
+
+In-depth guides for implemented system features.
+
+| Document | Description |
+|---|---|
+| [Context Management](context-management.md) | Context window budgeting, compaction strategies, and SSE progress reporting |
 
 ## Reference
 

@@ -6,13 +6,15 @@ import { randomUUID } from 'crypto';
 import { AgentStatus, AuditEventType, LcpAgent, LcpRole } from '@lcp/shared';
 import { ConfigService } from '@nestjs/config';
 
-// Mock the heavy LangGraph + LLM deps before importing ChatService
+// Mock heavy LangGraph + LLM deps before importing ChatService
 jest.mock('@langchain/langgraph', () => ({
   StateGraph: jest.fn().mockReturnValue({
     addNode: jest.fn().mockReturnThis(),
     addEdge: jest.fn().mockReturnThis(),
     compile: jest.fn().mockReturnValue({
       invoke: jest.fn(),
+      getState: jest.fn(),
+      updateState: jest.fn(),
     }),
   }),
   MessagesAnnotation: { State: {} },
@@ -34,10 +36,28 @@ jest.mock('@lcp/shared', () => {
   };
 });
 
+jest.mock('@langchain/core/utils/tiktoken', () => ({
+  getEncoding: jest.fn().mockResolvedValue({
+    encode: (text: string) => new Uint32Array(Math.ceil(text.length / 4)),
+  }),
+}));
+
+jest.mock('@langchain/core/messages', () => {
+  const actual = jest.requireActual<typeof import('@langchain/core/messages')>(
+    '@langchain/core/messages',
+  );
+  return { ...actual, trimMessages: jest.fn().mockResolvedValue([]) };
+});
+
 import { ChatService } from './chat.service';
 import { AIMessage } from '@langchain/core/messages';
 import { StateGraph } from '@langchain/langgraph';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
+import { ContextBudgetService } from '../context/context-budget.service';
+import { ContextCompactorService } from '../context/context-compactor.service';
+import { IncomingDataGuardService } from '../context/incoming-data-guard.service';
+import { ContextManagerService } from '../context/context-manager.service';
+import { AgentEventService } from '../events/agent-event.service';
 
 function makeAgent(overrides: Partial<LcpAgent> = {}): LcpAgent {
   return {
@@ -77,8 +97,14 @@ describe('ChatService', () => {
   let auditRepo: { save: jest.Mock; create: jest.Mock };
   let config: ConfigService;
   let service: ChatService;
-  let compiledGraph: { invoke: jest.Mock };
+  let compiledGraph: {
+    invoke: jest.Mock;
+    getState: jest.Mock;
+    updateState: jest.Mock;
+  };
   let mockCheckpointer: { setup: jest.Mock; end: jest.Mock };
+  let contextManager: ContextManagerService;
+  let agentEvents: AgentEventService;
 
   beforeEach(() => {
     agentRepo = {
@@ -103,20 +129,42 @@ describe('ChatService', () => {
       mockCheckpointer,
     );
 
-    compiledGraph = { invoke: jest.fn() };
+    compiledGraph = {
+      invoke: jest.fn(),
+      getState: jest.fn().mockResolvedValue({ values: { messages: [] } }),
+      updateState: jest.fn().mockResolvedValue({}),
+    };
     (StateGraph as jest.Mock).mockReturnValue({
       addNode: jest.fn().mockReturnThis(),
       addEdge: jest.fn().mockReturnThis(),
       compile: jest.fn().mockReturnValue(compiledGraph),
     });
 
+    // Wire real context services (tiktoken is mocked above)
+    const budget = new ContextBudgetService();
+    const compactor = new ContextCompactorService(budget);
+    const guard = new IncomingDataGuardService(budget, compactor);
+    agentEvents = new AgentEventService();
+    contextManager = new ContextManagerService(
+      budget,
+      compactor,
+      guard,
+      agentEvents,
+    );
+
     service = new ChatService(
       config,
+      contextManager,
+      agentEvents,
       agentRepo as never,
       roleRepo as never,
       companyRepo as never,
       auditRepo as never,
     );
+  });
+
+  afterEach(() => {
+    agentEvents.onModuleDestroy();
   });
 
   it('throws NotFoundException when the agent does not exist', async () => {
@@ -197,8 +245,38 @@ describe('ChatService', () => {
     expect(auditRepo.create).toHaveBeenCalledWith(
       expect.objectContaining({ eventType: AuditEventType.StateChange }),
     );
-
     // PostgresSaver.end() must always be called to release connection
+    expect(mockCheckpointer.end).toHaveBeenCalled();
+  });
+
+  it('returns Idle status and empty response when aborted by client', async () => {
+    const agent = makeAgent({ threadId: null });
+    const role = makeRole();
+    agentRepo.findOneBy.mockResolvedValue(agent);
+    roleRepo.findOneBy.mockResolvedValue(role);
+
+    const abortError = new Error('The operation was aborted');
+    abortError.name = 'AbortError';
+    compiledGraph.invoke.mockRejectedValue(abortError);
+
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await service.sendMessage(
+      agent.id,
+      'Hello',
+      controller.signal,
+    );
+
+    expect(result.response).toBe('');
+    expect(agentRepo.update).toHaveBeenCalledWith(
+      agent.id,
+      expect.objectContaining({ status: AgentStatus.Idle }),
+    );
+    // Should write a StateChange audit (cancelled) but not LlmResponse
+    expect(auditRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: AuditEventType.StateChange }),
+    );
     expect(mockCheckpointer.end).toHaveBeenCalled();
   });
 });

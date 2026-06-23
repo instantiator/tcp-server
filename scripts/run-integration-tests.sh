@@ -64,15 +64,21 @@ wait_for() {
   echo "$name ready."
 }
 
+trap 'rc=$?; $DC down; exit $rc' EXIT
+$DC down -v
 $DC up -d postgres redis minio
+# stub-llm runs under the 'integration' profile so it only starts during tests
+$DC --profile integration up -d stub-llm
 
 wait_for postgres "$DC exec -T postgres pg_isready -U lcp"
 wait_for redis "$DC exec -T redis redis-cli ping | grep -q PONG"
 wait_for minio "curl -sf http://localhost:9000/minio/health/live"
+wait_for stub-llm "curl -sf http://localhost:3002/health"
 
 export DATABASE_URL="postgres://lcp:${POSTGRES_PASSWORD}@localhost:5432/lcp"
 export REDIS_URL="redis://localhost:6379"
 export MINIO_ENDPOINT="http://localhost:9000"
+export STUB_LLM_URL="http://localhost:3002/v1"
 
 npm run test:integration -- ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}
 
