@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    name: Build
+  verify:
+    name: Build, lint & typecheck
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -20,41 +20,16 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: true
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "24"
-          cache: npm
-      - run: npm ci
       - run: npm run lint
-
-  typecheck:
-    name: Typecheck
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: true
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "24"
-          cache: npm
-      - run: npm ci
       - run: npm run typecheck
 
   unit-test:
     name: Unit tests
-    needs: [build, lint, typecheck]
+    needs: [verify]
+    runs-on: ubuntu-latest
     permissions:
       checks: write
-    runs-on: ubuntu-latest
+      contents: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -80,6 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       checks: write
+      contents: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -107,6 +83,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       checks: write
+      contents: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -155,6 +132,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       checks: write
+      contents: read
     steps:
       - uses: actions/checkout@v7
         with:

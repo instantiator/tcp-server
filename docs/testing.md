@@ -137,7 +137,6 @@ lint run in parallel first; each subsequent tier only runs if the previous
 passed.
 
 ```
-build ─┐
-lint  ─┼─→ unit-test → integration-test ─┬─→ api-test (includes smoke)
-type  ─┘                                  └─→ e2e-test
+verify (build + lint + typecheck) → unit-test → integration-test ─┬─→ api-test (includes smoke)
+                                                                   └─→ e2e-test
 ```
