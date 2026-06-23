@@ -67,7 +67,7 @@ jobs:
       - run: ./scripts/run-unit-tests.sh
       - name: Publish test results
         uses: dorny/test-reporter@v3
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: Unit tests
           path: test-results/unit.xml
@@ -92,7 +92,7 @@ jobs:
       - run: ./scripts/run-integration-tests.sh
       - name: Publish test results
         uses: dorny/test-reporter@v3
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: Integration tests
           path: test-results/integration.xml
@@ -140,7 +140,7 @@ jobs:
       - run: ./scripts/run-api-tests.sh
       - name: Publish test results
         uses: dorny/test-reporter@v3
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: API tests
           path: test-results/api.xml
@@ -167,7 +167,7 @@ jobs:
       - run: ./scripts/run-e2e-tests.sh
       - name: Publish test results
         uses: dorny/test-reporter@v3
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: E2E tests
           path: test-results/e2e.xml
