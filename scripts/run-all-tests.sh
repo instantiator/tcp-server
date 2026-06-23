@@ -37,26 +37,37 @@ step() {
   echo "════════════════════════════════════════"
 }
 
+step "Type check"
+npm --prefix "$REPO_ROOT" run typecheck
+echo
+
 step "Build"
 npm --prefix "$REPO_ROOT" run build
+echo
 
 step "Lint"
 npm --prefix "$REPO_ROOT" run lint:check
+echo
 
 step "Unit tests"
 "$SCRIPTS/run-unit-tests.sh"
+echo
 
 step "Integration tests"
 "$SCRIPTS/run-integration-tests.sh"
+echo
 
 step "E2E tests"
 "$SCRIPTS/run-e2e-tests.sh"
+echo
 
 step "API tests"
 "$SCRIPTS/run-api-tests.sh"
+echo
 
 step "Smoke tests"
 "$SCRIPTS/run-smoke-tests.sh"
+echo
 
-echo ""
 echo "All steps passed."
+echo

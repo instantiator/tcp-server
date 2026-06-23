@@ -7,15 +7,14 @@ infrastructure requirement. CI runs them in this order — a failure at any tier
 gates the next:
 
 ```
-unit → integration → smoke → e2e
+unit → integration → api (includes smoke) + e2e
 ```
 
 | Tier        | What it proves                                                                 | Infrastructure                  |
 | ----------- | ------------------------------------------------------------------------------ | ------------------------------- |
 | Unit        | Individual classes and functions behave correctly                              | None — SQLite in-memory         |
 | Integration | The app can connect to and use each backing service                            | Docker (postgres, redis, minio) |
-| Smoke       | The full deployment starts and health checks pass                              | Docker + Keycloak               |
-| API         | Requests and responses through the lcp-server API with a real JWT              | Docker + Keycloak               |
+| API         | Health checks, and requests and responses through the lcp-server API with a real JWT | Docker + Keycloak         |
 | E2E         | HTTP API workflows produce the right responses end-to-end                      | Docker (postgres, redis, minio) |
 
 **Unit tests** use `better-sqlite3` in-memory and `@nestjs/testing` to wire
@@ -27,14 +26,12 @@ no Keycloak) and verify that the application code can query PostgreSQL, ping
 Redis, and reach MinIO. A failure here points to a connectivity or schema
 problem, not an application logic problem.
 
-**Smoke tests** start the full Docker Compose stack including Keycloak and
-verify that every `GET /health` endpoint returns 200. Keycloak can take up to
-5 minutes on first boot.
-
-**API tests** also require Keycloak and run the full stack. They send
-authenticated HTTP requests directly to the lcp-server API (using real JWTs)
-and assert on response shapes and status codes. A failure here points to API
-contract or authentication issues rather than infrastructure problems.
+**API tests** require Keycloak and run the full stack. They first verify that
+every `GET /health` endpoint returns 200, then send authenticated HTTP requests
+directly to the lcp-server API (using real JWTs) and assert on response shapes
+and status codes. Smoke tests can still be run independently against a remote
+deployment via `run-smoke-tests.sh`. A failure here points to a deployment,
+API contract, or authentication issue rather than an infrastructure problem.
 
 **E2E tests** run HTTP requests against a real NestJS application (via
 `supertest`) backed by PostgreSQL. They test full request/response cycles
@@ -78,9 +75,11 @@ Starts postgres, redis, and minio. Requires Docker. See
 
 ### Smoke tests
 
+Smoke tests run as part of the API test suite in CI (see below). To run
+them in isolation — for example against a remote deployment — use:
+
 ```bash
 ./scripts/run-smoke-tests.sh
-./scripts/run-smoke-tests.sh -- --testNamePattern="get-token"
 
 # Remote deployment — Docker not required
 ./scripts/run-smoke-tests.sh --base-url http://your-host:3000
@@ -90,12 +89,8 @@ Starts postgres, redis, and minio. Requires Docker. See
   --username alice --password s3cret
 ```
 
-Starts the full stack including Keycloak. Requires Docker and built app
-images (rebuilt automatically). Accepts `--base-url` to test a remote
-deployment instead — in that mode Docker is not used and credentials/URLs
-for the remote stack are supplied via the flags above (or as environment
-variables `LCP_AGENT_URL`, `KEYCLOAK_URL`, `TEST_USERNAME`, `TEST_PASSWORD`).
-See [scripts/run-smoke-tests.sh](../scripts/run-smoke-tests.sh).
+Accepts `--base-url` to test a remote deployment without Docker. See
+[scripts/run-smoke-tests.sh](../scripts/run-smoke-tests.sh).
 
 ### API tests
 
@@ -143,6 +138,6 @@ passed.
 
 ```
 build ─┐
-       ├─→ unit-test → integration-test → smoke-test ─┬─→ api-test
-lint  ─┘                                              └─→ e2e-test
+lint  ─┼─→ unit-test → integration-test ─┬─→ api-test (includes smoke)
+type  ─┘                                  └─→ e2e-test
 ```
