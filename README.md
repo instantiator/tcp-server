@@ -2,6 +2,8 @@
 
 LCP manages one or more companies of AI agents that collaborate to complete tasks.
 
+[![CI](https://github.com/instantiator/lcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/instantiator/lcp-server/actions/workflows/ci.yml)
+
 ## Companies
 
 A company consists of several specialists or generalists, each provided with:
@@ -63,35 +65,35 @@ Quick reference:
 
 ## Technologies
 
-| Concern | Choice |
-|---------|--------|
-| Framework | NestJS 11 |
-| ORM | TypeORM |
-| Database (production) | PostgreSQL 16 + pgvector |
-| Database (unit tests) | better-sqlite3 (in-memory) |
-| Auth | OAuth2/OIDC (Keycloak default) |
-| Object storage | MinIO |
-| Task queue | Redis (BullMQ — configured, workers pending) |
-| Schema export | ts-json-schema-generator |
+| Concern               | Choice                                       |
+| --------------------- | -------------------------------------------- |
+| Framework             | NestJS 11                                    |
+| ORM                   | TypeORM                                      |
+| Database (production) | PostgreSQL 16 + pgvector                     |
+| Database (unit tests) | better-sqlite3 (in-memory)                   |
+| Auth                  | OAuth2/OIDC (Keycloak default)               |
+| Object storage        | MinIO                                        |
+| Task queue            | Redis (BullMQ — configured, workers pending) |
+| Schema export         | ts-json-schema-generator                     |
 
 See [docs/ADRs/](docs/ADRs/) for decisions on upcoming components (agent runner, memory, orchestration).
 
 ## Commands reference
 
-| Command | Purpose |
-|---------|---------|
-| `npm run build` | Compile both apps to `dist/` |
-| `npm run build lcp-server` | Compile lcp-server only |
-| `npm run build lcp-agent` | Compile lcp-agent only |
-| `npm run start:dev` | Start lcp-server with hot reload |
-| `npm run lint` | ESLint with auto-fix |
-| `npm run format` | Prettier over `apps/` and `libs/` |
-| `npm test` | Unit tests |
-| `npm run test:e2e` | E2E tests |
-| `npm run test:integration` | Integration tests (needs Docker) |
-| `npm run test:smoke` | Smoke tests (needs `docker compose up --profile auth`) |
-| `npm run schema:generate` | Regenerate [schemas/schema.json](schemas/schema.json) |
-| `npm run licenses:generate` | Regenerate [docs/licenses.md](docs/licenses.md) |
-| `npm run migration:generate` | Generate a new TypeORM migration |
-| `npm run migration:run` | Run pending migrations |
-| `npm run migration:revert` | Revert the last migration |
+| Command                      | Purpose                                                |
+| ---------------------------- | ------------------------------------------------------ |
+| `npm run build`              | Compile both apps to `dist/`                           |
+| `npm run build lcp-server`   | Compile lcp-server only                                |
+| `npm run build lcp-agent`    | Compile lcp-agent only                                 |
+| `npm run start:dev`          | Start lcp-server with hot reload                       |
+| `npm run lint`               | ESLint with auto-fix                                   |
+| `npm run format`             | Prettier over `apps/` and `libs/`                      |
+| `npm test`                   | Unit tests                                             |
+| `npm run test:e2e`           | E2E tests                                              |
+| `npm run test:integration`   | Integration tests (needs Docker)                       |
+| `npm run test:smoke`         | Smoke tests (needs `docker compose up --profile auth`) |
+| `npm run schema:generate`    | Regenerate [schemas/schema.json](schemas/schema.json)  |
+| `npm run licenses:generate`  | Regenerate [docs/licenses.md](docs/licenses.md)        |
+| `npm run migration:generate` | Generate a new TypeORM migration                       |
+| `npm run migration:run`      | Run pending migrations                                 |
+| `npm run migration:revert`   | Revert the last migration                              |
