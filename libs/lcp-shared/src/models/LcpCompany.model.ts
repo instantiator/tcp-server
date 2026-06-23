@@ -1,3 +1,4 @@
+import type { UUID } from 'crypto';
 import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 import type { LlmConfig } from './LlmConfig.model';
 
@@ -12,7 +13,7 @@ export class LcpCompany {
    * @format uuid
    */
   @PrimaryGeneratedColumn('uuid')
-  id!: string;
+  id!: UUID;
 
   /**
    * URL-safe identifier used in API paths and agent namespacing.
@@ -28,6 +29,13 @@ export class LcpCompany {
    */
   @Column()
   name!: string;
+
+  /**
+   * Human-readable description for the company.
+   * @minLength 1
+   */
+  @Column()
+  description!: string;
 
   /**
    * Company-wide default LLM configuration. Roles that do not specify their

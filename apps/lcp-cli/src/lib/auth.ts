@@ -20,7 +20,8 @@ export interface TokenSession {
 /** Resolves a bearer token and, when possible, a refresh token. */
 export async function resolveSession(opts: AuthOptions): Promise<TokenSession> {
   // 1. Explicit token
-  if (opts.accessToken) return { token: opts.accessToken, refreshToken: opts.refreshToken };
+  if (opts.accessToken)
+    return { token: opts.accessToken, refreshToken: opts.refreshToken };
 
   // 2. Environment variable
   if (opts.accessTokenEnvVar) {
@@ -46,12 +47,10 @@ export async function resolveSession(opts: AuthOptions): Promise<TokenSession> {
     opts.password ?? (await promptPassword(`Password for ${opts.username}: `));
 
   const apiOpts: ApiOptions = { baseUrl: opts.baseUrl };
-  const data = await apiRequest<{ access_token: string; refresh_token?: string }>(
-    apiOpts,
-    'POST',
-    '/api/auth/token',
-    { username: opts.username, password },
-  );
+  const data = await apiRequest<{
+    access_token: string;
+    refresh_token?: string;
+  }>(apiOpts, 'POST', '/api/auth/token', { username: opts.username, password });
   return { token: data.access_token, refreshToken: data.refresh_token };
 }
 

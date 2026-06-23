@@ -1,17 +1,18 @@
 import { AuditEvent, LcpAgent, LcpCompany, LcpRole } from '@lcp/shared';
 import { Module } from '@nestjs/common';
-import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ApiModule } from './api/api.module';
-import { AuthModule } from './auth/auth.module';
 import { AuthTokenController } from './auth/auth-token.controller';
 import { AuthTokenService } from './auth/auth-token.service';
+import { AuthModule } from './auth/auth.module';
 import { configSchema } from './config/config.schema';
 import { HealthModule } from './health/health.module';
-import { CompanyLlmDefault1750000000002 } from './migrations/1750000000002-CompanyLlmDefault';
-import { AddRoleAgentAudit1750000000001 } from './migrations/1750000000001-AddRoleAgentAudit';
 import { InitialSchema1750000000000 } from './migrations/1750000000000-InitialSchema';
+import { AddRoleAgentAudit1750000000001 } from './migrations/1750000000001-AddRoleAgentAudit';
+import { CompanyLlmDefault1750000000002 } from './migrations/1750000000002-CompanyLlmDefault';
+import { AddCompanyDescription1782144931792 } from './migrations/1782144931792-AddCompanyDescription';
 import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
 
 /**
@@ -49,6 +50,7 @@ import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
             InitialSchema1750000000000,
             AddRoleAgentAudit1750000000001,
             CompanyLlmDefault1750000000002,
+            AddCompanyDescription1782144931792,
           ],
         };
       },

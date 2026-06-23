@@ -21,22 +21,27 @@ function get(url: string): Promise<{ status: number; body: string }> {
 }
 
 describe('Smoke', () => {
-  it('keycloak master realm OIDC discovery returns 200', async () => {
-    // /health/ready moved to the management port (9000) in Keycloak 24+.
-    // The master realm discovery URL is always present and served on port 8080.
-    const res = await get(
-      `${KEYCLOAK}/realms/master/.well-known/openid-configuration`,
-    );
-    expect(res.status).toBe(200);
+  describe('keycloak', () => {
+    it('master realm OIDC discovery returns 200', async () => {
+      // NB. /health/ready is on the management port (9000) in Keycloak 24+.
+      // The master realm discovery URL is always served on port 8080.
+      const res = await get(
+        `${KEYCLOAK}/realms/master/.well-known/openid-configuration`,
+      );
+      expect(res.status).toBe(200);
+    });
+  });
+  describe('lcp-server', () => {
+    it('/health returns 200', async () => {
+      const res = await get(`${LCP_SERVER}/health`);
+      expect(res.status).toBe(200);
+    });
   });
 
-  it('lcp-server /health returns 200 (includes database, minio, and oidc checks)', async () => {
-    const res = await get(`${LCP_SERVER}/health`);
-    expect(res.status).toBe(200);
-  });
-
-  it('lcp-agent /health returns 200', async () => {
-    const res = await get(`${LCP_AGENT}/health`);
-    expect(res.status).toBe(200);
+  describe('lcp-agent', () => {
+    it('lcp-agent /health returns 200', async () => {
+      const res = await get(`${LCP_AGENT}/health`);
+      expect(res.status).toBe(200);
+    });
   });
 });

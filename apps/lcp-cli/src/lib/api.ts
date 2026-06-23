@@ -11,6 +11,11 @@ export interface ApiOptions {
   baseUrl: string;
   /** Bearer token included on every request (optional for token-fetching calls). */
   token?: string;
+  /**
+   * Optional {@link AbortSignal} forwarded to the underlying `fetch` call.
+   * Abort the associated {@link AbortController} to cancel the in-flight request.
+   */
+  signal?: AbortSignal;
 }
 
 /** Performs a fetch to the given path and returns the parsed JSON response. */
@@ -30,6 +35,7 @@ export async function apiRequest<T>(
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal: opts.signal,
   });
 
   if (!res.ok) {

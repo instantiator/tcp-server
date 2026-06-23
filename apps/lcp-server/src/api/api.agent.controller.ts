@@ -1,4 +1,4 @@
-import { AgentStatus, AuditEventType, LcpAgent, AuditEvent } from '@lcp/shared';
+import { AgentStatus, AuditEvent, AuditEventType, LcpAgent } from '@lcp/shared';
 import {
   BadRequestException,
   Body,
@@ -8,23 +8,30 @@ import {
   HttpCode,
   HttpStatus,
   InternalServerErrorException,
+  MessageEvent,
   NotFoundException,
   Param,
   Post,
+  Req,
+  Sse,
   UseGuards,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import type { UUID } from 'crypto';
+import type { Request } from 'express';
+import { map } from 'rxjs/operators';
 import { Repository } from 'typeorm';
-import { DbService } from '../db/db.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { DbService } from '../db/db.service';
+import { AgentEventService } from '../events/agent-event.service';
 import type { LcpAgentTemplate } from '../templates/LcpAgentTemplate';
 import { AgentOrchestrationService } from './agent-orchestration.service';
-import { ChatService, ChatMessageResponse } from './chat.service';
+import { ChatMessageResponse, ChatService } from './chat.service';
 
 /** Body for the chat start endpoint. */
 interface ChatStartBody {
-  companyId: string;
-  roleId: string;
+  companyId: UUID;
+  roleId: UUID;
 }
 
 /** Body for the send-message endpoint. */
@@ -40,6 +47,7 @@ export class AgentController {
     private readonly db: DbService,
     private readonly orchestration: AgentOrchestrationService,
     private readonly chat: ChatService,
+    private readonly agentEvents: AgentEventService,
     @InjectRepository(AuditEvent)
     private readonly auditRepo: Repository<AuditEvent>,
   ) {}
@@ -91,17 +99,24 @@ export class AgentController {
   /**
    * Sends a single message to a chat agent and returns the agent's response.
    * The HTTP connection is held open for the duration of the LLM call.
+   *
+   * When the client disconnects before the response arrives, the request socket
+   * emits a `close` event which aborts the in-flight LLM call, returning the
+   * agent to `idle` status rather than leaving it stuck in `running`.
    */
   @Post(':id/message')
   async sendMessage(
-    @Param('id') id: string,
+    @Param('id') id: UUID,
     @Body() body: SendMessageBody,
+    @Req() req: Request,
   ): Promise<ChatMessageResponse> {
     if (!body.message) {
       throw new BadRequestException('message is required');
     }
+    const abort = new AbortController();
+    req.socket.on('close', () => abort.abort('client_disconnect'));
     try {
-      return await this.chat.sendMessage(id, body.message);
+      return await this.chat.sendMessage(id, body.message, abort.signal);
     } catch (err) {
       if (
         err instanceof NotFoundException ||
@@ -114,11 +129,23 @@ export class AgentController {
   }
 
   /**
+   * SSE stream of processing and compaction events for a chat agent.
+   *
+   * Clients may connect here after sending a message to receive real-time
+   * updates such as `compaction_started` and `compaction_complete` without
+   * polling. The stream stays open until the client disconnects.
+   */
+  @Sse(':id/events')
+  streamEvents(@Param('id') id: UUID): import('rxjs').Observable<MessageEvent> {
+    return this.agentEvents.observe(id).pipe(map((event) => ({ data: event })));
+  }
+
+  /**
    * Dispatches a resume job for an existing agent.
    * The agent must be in `idle`, `paused`, or `failed` status.
    */
   @Post('resume/:id')
-  async resumeAgent(@Param('id') id: string): Promise<LcpAgent> {
+  async resumeAgent(@Param('id') id: UUID): Promise<LcpAgent> {
     try {
       return await this.orchestration.resumeAgent(id);
     } catch (err) {
@@ -130,7 +157,7 @@ export class AgentController {
 
   /** Retrieves the current state of an agent by its UUID. */
   @Get(':id')
-  async getAgent(@Param('id') id: string): Promise<LcpAgent> {
+  async getAgent(@Param('id') id: UUID): Promise<LcpAgent> {
     const agent = await this.db.getAgent(id);
     if (!agent) throw new NotFoundException(`Agent ${id} not found`);
     return agent;
@@ -138,8 +165,10 @@ export class AgentController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteAgent(@Param('id') id: string): Promise<void> {
+  async deleteAgent(@Param('id') id: UUID): Promise<void> {
     const deleted = await this.db.deleteAgent(id);
     if (!deleted) throw new NotFoundException(`Agent ${id} not found`);
+    // Complete the SSE subject for this agent so open streams close cleanly
+    this.agentEvents.cleanup(id);
   }
 }

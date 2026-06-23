@@ -49,10 +49,6 @@ apps/
       templates/             # Input shapes for create operations
       utils/                 # Shared utilities (ObjectUtils)
       data-source.ts         # TypeORM CLI datasource (migration:generate etc.)
-    test/
-      app.e2e-spec.ts        # HTTP API e2e tests
-      integration/           # Service connectivity tests (need Docker)
-      __mocks__/             # Jest mocks for ESM-only packages
     Dockerfile
     tsconfig.app.json
   lcp-agent/
@@ -61,8 +57,6 @@ apps/
       main.ts                # Bootstrap entry point (port 3001)
       config/                # Joi validation schema for env vars
       health/                # GET /health endpoint
-    test/
-      integration/           # Service connectivity tests
     Dockerfile
     tsconfig.app.json
   lcp-cli/
@@ -79,7 +73,14 @@ libs/
       index.ts               # Re-exports all shared code
     tsconfig.lib.json
 test/
-  smoke/                     # Full-stack health checks + lcp-cli API flows (need docker compose up --profile auth)
+  api/                       # API contract tests — authenticated HTTP round-trips (need docker compose up --profile auth)
+  e2e/                       # E2E tests — HTTP API via supertest (need Docker)
+  integration/
+    lcp-server/              # lcp-server service connectivity tests (need Docker)
+    lcp-agent/               # lcp-agent service connectivity tests (need Docker)
+  smoke/                     # Full-stack health checks (need docker compose up --profile auth)
+  jest-api.json              # Jest config for API tests
+  jest-e2e.json              # Jest config for E2E tests
   jest-integration.json      # Jest config for integration tests
   jest-smoke.json            # Jest config for smoke tests
 scripts/                     # Test runner scripts (mirror CI steps)

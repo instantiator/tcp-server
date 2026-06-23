@@ -6,12 +6,13 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Worker } from 'bullmq';
+import { UUID } from 'crypto';
 import { AgentLoopService } from '../agent/agent-loop.service';
 import { AgentRegistryService } from '../registry/agent-registry.service';
 
 /** Payload shape expected on the `agent-jobs` queue. */
 interface AgentJobPayload {
-  agentId: string;
+  agentId: UUID;
   type: 'start' | 'resume';
 }
 

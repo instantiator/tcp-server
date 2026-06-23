@@ -48,7 +48,9 @@ describe('AuthTokenController', () => {
       };
       service.refreshToken.mockResolvedValue(tokenResponse);
 
-      const result = await controller.refreshToken({ refresh_token: 'old-refresh' });
+      const result = await controller.refreshToken({
+        refresh_token: 'old-refresh',
+      });
 
       expect(result.access_token).toBe('new-tok');
       expect(service.refreshToken).toHaveBeenCalledWith('old-refresh');

@@ -1,4 +1,5 @@
 {
+  "verbose": true,
   "rootDir": "..",
   "testMatch": ["<rootDir>/test/smoke/*.spec.ts"],
   "testEnvironment": "node",

@@ -1,3 +1,4 @@
+import type { UUID } from 'crypto';
 import {
   Column,
   CreateDateColumn,
@@ -10,14 +11,17 @@ import { LcpAgent } from './LcpAgent.model';
 import { LcpCompany } from './LcpCompany.model';
 
 /** Categories of event captured in the audit log (per ADR-008). */
-export enum AuditEventType {
-  LlmRequest = 'llm_request',
-  LlmResponse = 'llm_response',
-  ToolCall = 'tool_call',
-  ToolResult = 'tool_result',
-  Decision = 'decision',
-  StateChange = 'state_change',
-}
+export const AuditEventType = {
+  LlmRequest: 'llm_request',
+  LlmResponse: 'llm_response',
+  ToolCall: 'tool_call',
+  ToolResult: 'tool_result',
+  Decision: 'decision',
+  StateChange: 'state_change',
+} as const;
+
+export type AuditEventType =
+  (typeof AuditEventType)[keyof typeof AuditEventType];
 
 /**
  * A single entry in the audit log for an agent run.
@@ -33,7 +37,7 @@ export class AuditEvent {
    * @format uuid
    */
   @PrimaryGeneratedColumn('uuid')
-  id!: string;
+  id!: UUID;
 
   /** When this event was recorded. Defaults to the current time. */
   @CreateDateColumn()
@@ -48,7 +52,7 @@ export class AuditEvent {
    * @format uuid
    */
   @Column()
-  companyId!: string;
+  companyId!: UUID;
 
   /**
    * The role name at the time of the event (denormalised for query convenience
@@ -66,7 +70,7 @@ export class AuditEvent {
    * @format uuid
    */
   @Column({ nullable: true, type: 'varchar' })
-  agentId!: string | null;
+  agentId!: UUID | null;
 
   /** The category of event. */
   @Column({ type: 'varchar' })

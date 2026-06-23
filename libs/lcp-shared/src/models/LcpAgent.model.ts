@@ -1,3 +1,4 @@
+import type { UUID } from 'crypto';
 import {
   Column,
   CreateDateColumn,
@@ -39,7 +40,7 @@ export class LcpAgent {
    * @format uuid
    */
   @PrimaryGeneratedColumn('uuid')
-  id!: string;
+  id!: UUID;
 
   /** The company this agent belongs to. */
   @ManyToOne(() => LcpCompany, { nullable: false, onDelete: 'CASCADE' })
@@ -50,7 +51,7 @@ export class LcpAgent {
    * @format uuid
    */
   @Column()
-  companyId!: string;
+  companyId!: UUID;
 
   /** The role template this agent runs as. */
   @ManyToOne(() => LcpRole, { nullable: false, onDelete: 'CASCADE' })
@@ -61,7 +62,7 @@ export class LcpAgent {
    * @format uuid
    */
   @Column()
-  roleId!: string;
+  roleId!: UUID;
 
   /** Current lifecycle state of this agent. */
   @Column({ type: 'varchar', default: AgentStatus.Idle })

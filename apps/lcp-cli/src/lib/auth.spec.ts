@@ -51,7 +51,10 @@ describe('resolveSession', () => {
       username: 'alice',
       password: 'pass',
     });
-    expect(session).toEqual({ token: 'server-token', refreshToken: 'server-refresh' });
+    expect(session).toEqual({
+      token: 'server-token',
+      refreshToken: 'server-refresh',
+    });
   });
 });
 

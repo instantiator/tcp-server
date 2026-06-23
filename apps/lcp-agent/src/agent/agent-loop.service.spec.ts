@@ -1,6 +1,5 @@
-import { Logger } from '@nestjs/common';
-import { Test, TestingModule } from '@nestjs/testing';
-import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
+import { AIMessage } from '@langchain/core/messages';
+import { StateGraph } from '@langchain/langgraph';
 import {
   AgentStatus,
   AuditEvent,
@@ -10,13 +9,15 @@ import {
   LcpRole,
   LlmConfig,
 } from '@lcp/shared';
-import { AIMessage } from '@langchain/core/messages';
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Test, TestingModule } from '@nestjs/testing';
+import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
+import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
-import { StateGraph } from '@langchain/langgraph';
-import { AgentLoopService } from './agent-loop.service';
-import { AgentRegistryService } from '../registry/agent-registry.service';
 import * as factory from '../llm/llm-factory';
+import { AgentRegistryService } from '../registry/agent-registry.service';
+import { AgentLoopService } from './agent-loop.service';
 
 const ALL_ENTITIES = [LcpCompany, LcpRole, LcpAgent, AuditEvent];
 
@@ -153,6 +154,7 @@ describe('AgentLoopService', () => {
       companyRepo.create({
         slug: 'acme',
         name: 'ACME',
+        description: 'A Company that Makes Everything',
         llmDefault: opts.companyLlmDefault,
       }),
     );
@@ -285,7 +287,7 @@ describe('AgentLoopService', () => {
   });
 
   it('does nothing when the agent id does not exist', async () => {
-    await expect(service.run('no-such-id')).resolves.not.toThrow();
+    await expect(service.run(randomUUID())).resolves.not.toThrow();
   });
 
   it('completes when many non-LLM chain events precede the model response', async () => {

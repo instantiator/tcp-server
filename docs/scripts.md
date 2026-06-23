@@ -15,6 +15,7 @@ networks, and volumes are completely independent of each other:
 | `run-integration-tests.sh` | `lcp-integration` |
 | `run-e2e-tests.sh`       | `lcp-e2e`         |
 | `run-smoke-tests.sh`     | `lcp-smoke`       |
+| `run-api-tests.sh`       | `lcp-api`         |
 
 This means a running dev environment is never touched by a test script's
 `down`, and test data never contaminates dev data. Port conflicts still
@@ -28,9 +29,11 @@ prevent two deployments from running simultaneously on the same machine
 | [dev/start-dev.sh](#start-devsh)                     | Start full environment and configure Keycloak for first-time use | Docker                |
 | [dev/stop-dev.sh](#stop-devsh)                       | Stop the dev environment; optionally remove volumes              | Docker                |
 | [dev/lcp-cli.sh](#lcp-clish)                         | Run the `lcp-cli` tool (builds automatically if needed)          | Built lcp-cli         |
+| [run-all-tests.sh](#run-all-testssh)                 | Build, lint, and run every test suite in sequence                | Docker + built images |
 | [run-unit-tests.sh](#run-unit-testssh)               | Unit tests                                                       | Nothing               |
 | [run-integration-tests.sh](#run-integration-testssh) | Integration tests — service connectivity                         | Docker                |
-| [run-smoke-tests.sh](#run-smoke-testssh)             | Smoke tests — full stack health checks + lcp-cli API flows       | Docker + built images |
+| [run-smoke-tests.sh](#run-smoke-testssh)             | Smoke tests — full stack health checks                           | Docker + built images |
+| [run-api-tests.sh](#run-api-testssh)                 | API tests — authenticated HTTP requests against the lcp-server API | Docker + built images |
 | [run-e2e-tests.sh](#run-e2e-testssh)                 | E2E tests — HTTP API workflows                                   | Docker                |
 
 ## start-dev.sh
@@ -133,12 +136,69 @@ then tears down. Tests verify health endpoints and the full API surface used by
 `lcp-cli` (token acquisition, company/role CRUD, chat agent lifecycle).
 
 Accepts `--base-url URL` to skip Docker entirely and test a remote deployment.
+When using `--base-url`, supply credentials and service URLs via the flags
+below or as environment variables.
 
 ```bash
 ./scripts/run-smoke-tests.sh
 ./scripts/run-smoke-tests.sh -- --testNamePattern="get-token"
+
+# Remote deployment
 ./scripts/run-smoke-tests.sh --base-url http://your-host:3000
+./scripts/run-smoke-tests.sh --base-url http://your-host:3000 \
+  --agent-url http://your-host:3001 \
+  --keycloak-url http://your-keycloak:8080 \
+  --username alice --password s3cret
 ```
+
+**Options:**
+
+| Flag                  | Env var          | Description                     | Default                    |
+| --------------------- | ---------------- | ------------------------------- | -------------------------- |
+| `--base-url URL`      | —                | Test against a remote deployment | (local Docker mode)        |
+| `--agent-url URL`     | `LCP_AGENT_URL`  | lcp-agent URL (remote mode)     | `http://localhost:3001`    |
+| `--keycloak-url URL`  | `KEYCLOAK_URL`   | Keycloak URL (remote mode)      | `http://localhost:8080`    |
+| `--username NAME`     | `TEST_USERNAME`  | Test user username (remote mode) | `test`                    |
+| `--password PASS`     | `TEST_PASSWORD`  | Test user password (remote mode) | `test`                    |
+
+**Requires (local mode):** Docker and Docker Compose, `.env.testing`, app
+images (rebuilt automatically).
+
+See also: [docs/testing.md](testing.md).
+
+## run-api-tests.sh
+
+Starts the full Docker Compose stack including Keycloak (`--profile auth`),
+configures the `lcp` realm, client, and test user, waits for every service to
+be healthy, runs the API test suite, then tears down. Tests send authenticated
+HTTP requests directly to the lcp-server API using real Keycloak-issued JWTs
+and assert on response shapes and status codes.
+
+Accepts `--base-url URL` to skip Docker entirely and test a remote deployment.
+When using `--base-url`, supply credentials and service URLs via the flags
+below or as environment variables. CLI flags take precedence over environment
+variables.
+
+```bash
+./scripts/run-api-tests.sh
+./scripts/run-api-tests.sh -- --testNamePattern="company"
+
+# Remote deployment
+./scripts/run-api-tests.sh --base-url http://your-host:3000
+./scripts/run-api-tests.sh --base-url http://your-host:3000 \
+  --keycloak-url http://your-keycloak:8080 \
+  --username alice --password s3cret
+```
+
+**Options:**
+
+| Flag                  | Env var          | Description                     | Default                    |
+| --------------------- | ---------------- | ------------------------------- | -------------------------- |
+| `--base-url URL`      | —                | Test against a remote deployment | (local Docker mode)        |
+| `--agent-url URL`     | `LCP_AGENT_URL`  | lcp-agent URL (remote mode)     | `http://localhost:3001`    |
+| `--keycloak-url URL`  | `KEYCLOAK_URL`   | Keycloak URL (remote mode)      | `http://localhost:8080`    |
+| `--username NAME`     | `TEST_USERNAME`  | Test user username (remote mode) | `test`                    |
+| `--password PASS`     | `TEST_PASSWORD`  | Test user password (remote mode) | `test`                    |
 
 **Requires (local mode):** Docker and Docker Compose, `.env.testing`, app
 images (rebuilt automatically).
@@ -157,5 +217,20 @@ down. Keycloak is not required — OIDC env vars are provided as stubs.
 ```
 
 **Requires:** Docker and Docker Compose, `.env.testing` in the repo root.
+
+See also: [docs/testing.md](testing.md).
+
+## run-all-tests.sh
+
+Runs the full verification pipeline in sequence: build → lint → unit →
+integration → e2e → api → smoke. Each step is delegated to its own script;
+a failure in any step aborts the remainder.
+
+```bash
+./scripts/run-all-tests.sh
+```
+
+**Requires:** Docker and Docker Compose, `.env.testing`, and built app images
+(rebuilt automatically by the smoke and api scripts).
 
 See also: [docs/testing.md](testing.md).

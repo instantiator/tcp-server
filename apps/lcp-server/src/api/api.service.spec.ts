@@ -1,5 +1,5 @@
-import { randomUUID } from 'crypto';
 import { LcpCompany } from '@lcp/shared';
+import { randomUUID } from 'crypto';
 import { DbService } from '../db/db.service';
 import { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
 import { ApiService } from './api.service';
@@ -23,7 +23,10 @@ describe('ApiService', () => {
 
   describe('createCompany', () => {
     it('calls dbService.createCompany with the template and slug', async () => {
-      const template: LcpCompanyTemplate = { name: 'Acme Corp' };
+      const template: LcpCompanyTemplate = {
+        name: 'Acme Corp',
+        description: 'A Company That Makes Everything',
+      };
       const slug = 'acme';
       await api.createCompany(template, slug);
       expect(db.createCompany).toHaveBeenCalledWith(template, slug);
@@ -36,7 +39,10 @@ describe('ApiService', () => {
         name: 'Acme Corp',
       } as LcpCompany;
       db.createCompany.mockResolvedValue(fakeCompany);
-      const result = await api.createCompany({ name: 'Acme Corp' }, 'acme');
+      const result = await api.createCompany(
+        { name: 'Acme Corp', description: 'A Company That Makes Everything' },
+        'acme',
+      );
       expect(result).toBe(fakeCompany);
     });
   });
@@ -73,7 +79,12 @@ describe('ApiService', () => {
 
     it('returns whatever dbService.getCompany resolves to', async () => {
       const id = randomUUID();
-      const fakeCompany = { id, slug: 'acme', name: 'Acme' };
+      const fakeCompany = {
+        id,
+        slug: 'acme',
+        name: 'Acme',
+        description: 'A Company That Makes Everything',
+      };
       db.getCompany.mockResolvedValue(fakeCompany);
 
       const result = await api.getCompany(id);

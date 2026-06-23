@@ -1,6 +1,4 @@
-import { ConfigService } from '@nestjs/config';
-import { Test, TestingModule } from '@nestjs/testing';
-import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
+import { FakeListChatModel } from '@langchain/core/utils/testing';
 import {
   AgentStatus,
   AuditEvent,
@@ -9,11 +7,13 @@ import {
   LcpCompany,
   LcpRole,
 } from '@lcp/shared';
-import { FakeListChatModel } from '@langchain/core/utils/testing';
+import { ConfigService } from '@nestjs/config';
+import { Test, TestingModule } from '@nestjs/testing';
+import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { AgentLoopService } from '../../src/agent/agent-loop.service';
-import { AgentRegistryService } from '../../src/registry/agent-registry.service';
-import * as factory from '../../src/llm/llm-factory';
+import { AgentLoopService } from '../../../apps/lcp-agent/src/agent/agent-loop.service';
+import * as factory from '../../../apps/lcp-agent/src/llm/llm-factory';
+import { AgentRegistryService } from '../../../apps/lcp-agent/src/registry/agent-registry.service';
 
 // Requires DOCKER services: PostgreSQL (DATABASE_URL).
 // Run via: ./scripts/run-integration-tests.sh
@@ -85,7 +85,11 @@ describeIf('AgentLoopService (integration)', () => {
 
   async function seedAgentAndRole() {
     const company = await companyRepo.save(
-      companyRepo.create({ slug: 'test-co', name: 'Test Co' }),
+      companyRepo.create({
+        slug: 'test-co',
+        name: 'Test Co',
+        description: 'Test company',
+      }),
     );
     const role = await roleRepo.save(
       roleRepo.create({
@@ -144,6 +148,7 @@ describeIf('AgentLoopService (integration)', () => {
       companyRepo.create({
         slug: 'default-llm',
         name: 'Default LLM Co',
+        description: 'Default company',
         llmDefault: {
           provider: 'lm-studio',
           model: 'test-model',

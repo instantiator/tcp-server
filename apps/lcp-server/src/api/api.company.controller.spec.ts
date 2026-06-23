@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
+import { DbService } from '../db/db.service';
 import { CompanyController } from './api.company.controller';
 import { ApiService } from './api.service';
-import { DbService } from '../db/db.service';
 
 const makeApiService = (): jest.Mocked<
   Pick<ApiService, 'createCompany' | 'setCompany' | 'getCompany'>
@@ -34,16 +34,24 @@ describe('CompanyController', () => {
 
   describe('postCompany', () => {
     it('calls apiService.createCompany with the template and slug', async () => {
-      await controller.postCompany({ name: 'Acme Corp', slug: 'acme' });
+      await controller.postCompany({
+        name: 'Acme Corp',
+        slug: 'acme',
+        description: 'A Company That Makes Everything',
+      });
       expect(api.createCompany).toHaveBeenCalledWith(
-        { name: 'Acme Corp' },
+        { name: 'Acme Corp', description: 'A Company That Makes Everything' },
         'acme',
       );
     });
 
     it('resolves without throwing', async () => {
       await expect(
-        controller.postCompany({ name: 'Acme', slug: 'acme' }),
+        controller.postCompany({
+          name: 'Acme',
+          slug: 'acme',
+          description: 'A Company That Makes Everything',
+        }),
       ).resolves.not.toThrow();
     });
   });
@@ -79,7 +87,12 @@ describe('CompanyController', () => {
 
     it('returns the result from apiService.getCompany', async () => {
       const id = randomUUID();
-      const fakeCompany = { id, slug: 'acme', name: 'Acme' };
+      const fakeCompany = {
+        id,
+        slug: 'acme',
+        name: 'Acme',
+        description: 'A Company That Makes Everything',
+      };
       api.getCompany.mockResolvedValue(fakeCompany);
 
       const result = await controller.getCompany(id);
@@ -95,7 +108,14 @@ describe('CompanyController', () => {
 
   describe('listCompanies', () => {
     it('delegates to dbService.listCompanies and returns the result', async () => {
-      const companies = [{ id: randomUUID(), slug: 'acme', name: 'Acme' }];
+      const companies = [
+        {
+          id: randomUUID(),
+          slug: 'acme',
+          name: 'Acme',
+          description: 'A Company That Makes Everything',
+        },
+      ];
       db.listCompanies.mockResolvedValue(companies);
 
       const result = await controller.listCompanies();

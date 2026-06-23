@@ -25,4 +25,11 @@ export interface LlmConfig {
    * Masked in API responses when `LCP_MASK_API_KEYS=true` (the default).
    */
   apiKey?: string;
+
+  /**
+   * Maximum context window for this model in tokens.
+   * Used by {@link ContextBudgetService} to determine when compaction is needed.
+   * Defaults to `8192` when absent.
+   */
+  contextWindow?: number;
 }

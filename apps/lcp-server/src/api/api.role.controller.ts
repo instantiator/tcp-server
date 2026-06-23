@@ -9,10 +9,11 @@ import {
   Put,
   UseGuards,
 } from '@nestjs/common';
+import type { UUID } from 'crypto';
 import type { DeepPartial } from 'typeorm';
-import type { LcpRoleTemplate } from '../templates/LcpRoleTemplate';
-import { DbService } from '../db/db.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { DbService } from '../db/db.service';
+import type { LcpRoleTemplate } from '../templates/LcpRoleTemplate';
 
 /** REST controller for {@link LcpRole} create, read, and update operations. */
 @UseGuards(JwtAuthGuard)
@@ -37,7 +38,7 @@ export class RoleController {
    */
   @Put(':id')
   async updateRole(
-    @Param('id') id: string,
+    @Param('id') id: UUID,
     @Body() partial: DeepPartial<Omit<LcpRole, 'id' | 'company'>>,
   ): Promise<LcpRole> {
     const role = await this.db.updateRole(id, partial);
@@ -47,7 +48,7 @@ export class RoleController {
 
   /** Retrieves a role by its UUID. Returns 404 when not found. */
   @Get(':id')
-  async getRole(@Param('id') id: string): Promise<LcpRole> {
+  async getRole(@Param('id') id: UUID): Promise<LcpRole> {
     const role = await this.db.getRole(id);
     if (!role) throw new NotFoundException(`Role ${id} not found`);
     return role;

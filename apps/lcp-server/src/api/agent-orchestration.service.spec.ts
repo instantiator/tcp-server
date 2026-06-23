@@ -1,9 +1,10 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { ConfigService } from '@nestjs/config';
 import { AgentStatus, LcpAgent } from '@lcp/shared';
+import { ConfigService } from '@nestjs/config';
+import { Test, TestingModule } from '@nestjs/testing';
 import { Queue } from 'bullmq';
-import { AgentOrchestrationService } from './agent-orchestration.service';
+import { randomUUID } from 'crypto';
 import { DbService } from '../db/db.service';
+import { AgentOrchestrationService } from './agent-orchestration.service';
 
 // Prevent BullMQ from trying to open a real Redis connection
 jest.mock('bullmq', () => ({
@@ -17,9 +18,9 @@ const MockQueue = Queue as jest.MockedClass<typeof Queue>;
 
 function makeAgent(overrides: Partial<LcpAgent> = {}): LcpAgent {
   return {
-    id: 'agent-uuid',
-    companyId: 'company-uuid',
-    roleId: 'role-uuid',
+    id: randomUUID(),
+    companyId: randomUUID(),
+    roleId: randomUUID(),
     status: AgentStatus.Idle,
     threadId: null,
     initialPrompt: 'Do something.',
@@ -75,14 +76,14 @@ describe('AgentOrchestrationService', () => {
       mockDb.createAgent.mockResolvedValue(agent);
 
       const result = await service.startAgent({
-        companyId: 'company-uuid',
-        roleId: 'role-uuid',
+        companyId: agent.companyId,
+        roleId: agent.roleId,
         initialPrompt: 'Do something.',
       });
 
       expect(mockDb.createAgent).toHaveBeenCalledWith({
-        companyId: 'company-uuid',
-        roleId: 'role-uuid',
+        companyId: agent.companyId,
+        roleId: agent.roleId,
         initialPrompt: 'Do something.',
       });
       expect(mockQueueInstance.add).toHaveBeenCalledWith('start', {
@@ -121,7 +122,9 @@ describe('AgentOrchestrationService', () => {
     it('throws when the agent does not exist', async () => {
       mockDb.getAgent.mockResolvedValue(null);
 
-      await expect(service.resumeAgent('missing')).rejects.toThrow('not found');
+      await expect(service.resumeAgent(randomUUID())).rejects.toThrow(
+        'not found',
+      );
     });
 
     it('throws when the agent is already running', async () => {

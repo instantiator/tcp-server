@@ -1,7 +1,8 @@
 {
+  "verbose": true,
   "rootDir": "..",
   "testMatch": [
-    "<rootDir>/apps/*/test/integration/*.integration-spec.ts"
+    "<rootDir>/test/integration/**/*.integration-spec.ts"
   ],
   "testEnvironment": "node",
   "transform": {

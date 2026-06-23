@@ -1,18 +1,19 @@
 import {
-  AgentStatus,
-  AuditEventType,
-  LcpAgent,
-  LcpCompany,
-  LcpRole,
-  buildChatModel,
-} from '@lcp/shared';
-import {
   AIMessage,
   HumanMessage,
   SystemMessage,
 } from '@langchain/core/messages';
 import { END, MessagesAnnotation, StateGraph } from '@langchain/langgraph';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
+import {
+  AgentStatus,
+  AuditEvent,
+  AuditEventType,
+  LcpAgent,
+  LcpCompany,
+  LcpRole,
+  buildChatModel,
+} from '@lcp/shared';
 import {
   Injectable,
   InternalServerErrorException,
@@ -21,12 +22,21 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { AuditEvent } from '@lcp/shared';
+import { UUID } from 'crypto';
 import { Repository } from 'typeorm';
+import { ContextManagerService } from '../context/context-manager.service';
+import type { CompactionReport } from '../context/context.types';
+import { AgentEventService } from '../events/agent-event.service';
 
 /** Response returned by {@link ChatService.sendMessage}. */
 export interface ChatMessageResponse {
+  /** The agent's reply text. Empty string when the request was cancelled. */
   response: string;
+  /**
+   * Present when the server compacted the context window before or during
+   * this turn. Includes strategy names, activities, duration, and token counts.
+   */
+  compactionReport?: CompactionReport;
 }
 
 @Injectable()
@@ -35,6 +45,8 @@ export class ChatService {
 
   constructor(
     private readonly config: ConfigService,
+    private readonly contextManager: ContextManagerService,
+    private readonly agentEvents: AgentEventService,
     @InjectRepository(LcpAgent)
     private readonly agentRepo: Repository<LcpAgent>,
     @InjectRepository(LcpRole)
@@ -52,12 +64,22 @@ export class ChatService {
    * prompt is prepended so the LLM knows its persona. Subsequent messages are
    * appended to the existing LangGraph checkpoint thread.
    *
-   * @throws {@link NotFoundException} when the agent or its role/LLM config cannot be found
-   * @throws {@link InternalServerErrorException} when the LLM call fails
+   * Context compaction runs before each invocation when the conversation
+   * history approaches the configured context window limit. See
+   * {@link ContextManagerService} for compaction details.
+   *
+   * @param agentId - ID of the chat agent to send the message to.
+   * @param message - User message text.
+   * @param signal - Optional {@link AbortSignal} to cancel the in-flight LLM call.
+   *   When aborted, the agent is returned to `idle` status rather than `failed`.
+   *
+   * @throws {@link NotFoundException} when the agent or its role/LLM config cannot be found.
+   * @throws {@link InternalServerErrorException} when the LLM call fails unexpectedly.
    */
   async sendMessage(
-    agentId: string,
+    agentId: UUID,
     message: string,
+    signal?: AbortSignal,
   ): Promise<ChatMessageResponse> {
     const agent = await this.agentRepo.findOneBy({ id: agentId });
     if (!agent) throw new NotFoundException(`Agent ${agentId} not found`);
@@ -74,19 +96,8 @@ export class ChatService {
       );
     }
 
+    const windowSize = llmConfig.contextWindow ?? 8192;
     const isFirstMessage = agent.threadId === null;
-    const messages = isFirstMessage
-      ? [
-          new SystemMessage(
-            renderTemplate(role.systemPromptTemplate, {
-              name: role.name,
-              description: role.description,
-              date: new Date().toISOString().split('T')[0],
-            }),
-          ),
-          new HumanMessage(message),
-        ]
-      : [new HumanMessage(message)];
 
     await this.agentRepo.update(agentId, {
       status: AgentStatus.Running,
@@ -104,17 +115,67 @@ export class ChatService {
       const model = buildChatModel(llmConfig);
       const graph = new StateGraph(MessagesAnnotation)
         .addNode('agent', async (state: typeof MessagesAnnotation.State) => ({
-          messages: [await model.invoke(state.messages)],
+          messages: [await model.invoke(state.messages, { signal })],
         }))
         .addEdge('__start__', 'agent')
         // ponytail: conditional edge to tools node goes here once MCP servers exist
         .addEdge('agent', END)
         .compile({ checkpointer });
 
-      const result = await graph.invoke(
-        { messages },
-        { configurable: { thread_id: agentId } },
-      );
+      const runConfig = { configurable: { thread_id: agentId } };
+
+      // Check context budget and compact if needed before invoking
+      this.agentEvents.emit(agentId, {
+        kind: 'processing_started',
+        timestamp: new Date().toISOString(),
+      });
+      const { message: preparedMessage, report: compactionReport } =
+        await this.contextManager.prepare(
+          agentId,
+          message,
+          model,
+          windowSize,
+          graph,
+          runConfig,
+          isFirstMessage,
+          agent,
+          role,
+          this.auditRepo,
+        );
+
+      const messages = isFirstMessage
+        ? [
+            // Prompt part 0: system prompt — rendered from the role's systemPromptTemplate
+            new SystemMessage(
+              renderTemplate(role.systemPromptTemplate, {
+                name: role.name,
+                description: role.description,
+                date: new Date().toISOString().split('T')[0],
+              }),
+            ),
+            // TODO - prompt part 1: inject a separate role prompt (identity, attitude, domain
+            //   knowledge, behavioural guidelines distinct from the system prompt) once the
+            //   role prompt structure is split from systemPromptTemplate (ADR-013)
+            // TODO - prompt part 2: inject company environment message (agent roster, company
+            //   name/description, shared storage folder structure) — implement when company
+            //   context is wired into the chat path (ADR-001)
+            // TODO - prompt part 3: inject services-available message listing MCP server
+            //   capabilities and RAG knowledge domains — implement when MCP/RAG integration
+            //   lands (ADR-002, ADR-006)
+            // TODO - prompt part 5: inject RAG data retrieved for this query — implement when
+            //   RAG retrieval is available (ADR-006)
+            // TODO - prompt part 6: inject MCP tool responses if the agent pre-fetches data
+            //   before its first turn — implement when MCP servers are wired (ADR-002)
+            // Prompt part 4: task / query prompt
+            new HumanMessage(preparedMessage),
+            // TODO - prompt part 8: append a final-instruction suffix message telling the
+            //   agent what to do next — implement alongside role prompt restructure (ADR-013)
+          ]
+        : [new HumanMessage(preparedMessage)];
+      // Prompt part 7: conversation history is implicitly provided by the LangGraph
+      // checkpoint store keyed on agent.threadId — no explicit injection needed.
+
+      const result = await graph.invoke({ messages }, { ...runConfig, signal });
 
       const last = result.messages.at(-1);
       const content =
@@ -126,9 +187,33 @@ export class ChatService {
         response: content,
       });
       await this.agentRepo.update(agentId, { status: AgentStatus.Idle });
+      this.agentEvents.emit(agentId, {
+        kind: 'processing_complete',
+        timestamp: new Date().toISOString(),
+      });
 
-      return { response: content };
+      return {
+        response: content,
+        compactionReport: compactionReport ?? undefined,
+      };
     } catch (err) {
+      // Client-side cancellations (`AbortError`) are not a failure.
+      // This returns the agent to idle.
+      if (
+        String(err).includes('Aborted') ||
+        (err instanceof Error &&
+          (err.name === 'AbortError' ||
+            (signal?.aborted && err.message.includes('abort'))))
+      ) {
+        await this.saveAudit(agent, role, AuditEventType.StateChange, {
+          newStatus: 'idle',
+          reason: 'cancelled by user',
+        });
+        await this.agentRepo.update(agentId, { status: AgentStatus.Idle });
+        return { response: '' };
+      }
+
+      // err was not a cancellation - move to failed state.
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`Chat agent ${agentId} error: ${msg}`);
       await this.saveAudit(agent, role, AuditEventType.StateChange, {
@@ -136,7 +221,9 @@ export class ChatService {
         reason: msg,
       });
       await this.agentRepo.update(agentId, { status: AgentStatus.Failed });
-      throw new InternalServerErrorException('Agent encountered an error');
+      throw new InternalServerErrorException(
+        `Agent encountered an unexpected error.`,
+      );
     } finally {
       await checkpointer.end();
     }

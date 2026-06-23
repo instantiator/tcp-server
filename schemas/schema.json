@@ -31,30 +31,34 @@
           "description": "The agent that produced this event. Nullable for system-level events."
         },
         "agentId": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/UUID"
+            },
+            {
+              "type": "null"
+            }
+          ],
           "description": "Foreign key for the  {@link  LcpAgent }  that produced this event.",
-          "format": "uuid",
-          "type": [
-            "string",
-            "null"
-          ]
+          "format": "uuid"
         },
         "company": {
           "$ref": "#/definitions/LcpCompany",
           "description": "The company context for this event."
         },
         "companyId": {
+          "$ref": "#/definitions/UUID",
           "description": "Foreign key for the owning  {@link  LcpCompany } .",
-          "format": "uuid",
-          "type": "string"
+          "format": "uuid"
         },
         "eventType": {
           "$ref": "#/definitions/AuditEventType",
           "description": "The category of event."
         },
         "id": {
+          "$ref": "#/definitions/UUID",
           "description": "Auto-generated primary key.",
-          "format": "uuid",
-          "type": "string"
+          "format": "uuid"
         },
         "payload": {
           "additionalProperties": {},
@@ -105,9 +109,9 @@
           "description": "The company this agent belongs to."
         },
         "companyId": {
+          "$ref": "#/definitions/UUID",
           "description": "Foreign key for the owning  {@link  LcpCompany } .",
-          "format": "uuid",
-          "type": "string"
+          "format": "uuid"
         },
         "createdAt": {
           "description": "Timestamp when this agent record was created.",
@@ -115,9 +119,9 @@
           "type": "string"
         },
         "id": {
+          "$ref": "#/definitions/UUID",
           "description": "Auto-generated primary key. Also used as the LangGraph `thread_id`.",
-          "format": "uuid",
-          "type": "string"
+          "format": "uuid"
         },
         "initialPrompt": {
           "description": "The task prompt supplied when the agent was started.",
@@ -129,9 +133,9 @@
           "description": "The role template this agent runs as."
         },
         "roleId": {
+          "$ref": "#/definitions/UUID",
           "description": "Foreign key for the  {@link  LcpRole }  this agent is an instance of.",
-          "format": "uuid",
-          "type": "string"
+          "format": "uuid"
         },
         "status": {
           "$ref": "#/definitions/AgentStatus",
@@ -169,10 +173,15 @@
       "additionalProperties": false,
       "description": "Represents a company (tenant) within the LCP simulation. Each company has its own isolated set of agents, memory, and resources.",
       "properties": {
-        "id": {
-          "description": "Auto-generated primary key for this company.",
-          "format": "uuid",
+        "description": {
+          "description": "Human-readable description for the company.",
+          "minLength": 1,
           "type": "string"
+        },
+        "id": {
+          "$ref": "#/definitions/UUID",
+          "description": "Auto-generated primary key for this company.",
+          "format": "uuid"
         },
         "llmDefault": {
           "anyOf": [
@@ -199,7 +208,8 @@
       "required": [
         "id",
         "slug",
-        "name"
+        "name",
+        "description"
       ],
       "type": "object"
     },
@@ -212,9 +222,9 @@
           "description": "The company this role belongs to."
         },
         "companyId": {
+          "$ref": "#/definitions/UUID",
           "description": "Foreign key column for the owning  {@link  LcpCompany } .",
-          "format": "uuid",
-          "type": "string"
+          "format": "uuid"
         },
         "description": {
           "description": "Human-readable description of what this role does and what outputs it is expected to produce.",
@@ -222,9 +232,9 @@
           "type": "string"
         },
         "id": {
+          "$ref": "#/definitions/UUID",
           "description": "Auto-generated primary key for this role.",
-          "format": "uuid",
-          "type": "string"
+          "format": "uuid"
         },
         "knowledgeDomains": {
           "description": "Knowledge domain tags that will be used for RAG retrieval once the memory system is built. Stored now so roles can be defined ahead of the RAG implementation. ponytail: unused for MVP; consumed by the RAG phase",
@@ -285,6 +295,10 @@
           "description": "Base URL override for providers that are not hosted at their default endpoint. Required for `'lm-studio'` (e.g. `'http://localhost:1234/v1'`).",
           "type": "string"
         },
+        "contextWindow": {
+          "description": "Maximum context window for this model in tokens. Used by  {@link  ContextBudgetService  }  to determine when compaction is needed. Defaults to `8192` when absent.",
+          "type": "number"
+        },
         "model": {
           "description": "The model identifier as expected by the provider API (e.g. `'gpt-4o'`, `'qwen3-5b'`).",
           "type": "string"
@@ -300,17 +314,20 @@
       ],
       "type": "object"
     },
+    "UUID": {
+      "type": "string"
+    },
     "seedCompany": {
       "$comment": "() =>undefined"
     },
     "seedRole": {
-      "$comment": "(companyId: string) =>undefined",
+      "$comment": "(companyId: UUID) =>undefined",
       "properties": {
         "namedArgs": {
           "additionalProperties": false,
           "properties": {
             "companyId": {
-              "type": "string"
+              "$ref": "#/definitions/UUID"
             }
           },
           "required": [

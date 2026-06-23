@@ -1,0 +1,10 @@
+{
+  "verbose": true,
+  "rootDir": "..",
+  "testMatch": ["<rootDir>/test/api/*.spec.ts"],
+  "testEnvironment": "node",
+  "transform": {
+    "^.+\\.(t|j)s$": ["ts-jest", { "tsconfig": "<rootDir>/tsconfig.json" }]
+  },
+  "testTimeout": 60000
+}

@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DbModule } from '../db/db.module';
 import { ModelCheckModule } from '../model-check/model-check.module';
+import { ContextModule } from '../context/context.module';
 import { AgentController } from './api.agent.controller';
 import { CompanyController } from './api.company.controller';
 import { ModelController } from './api.model.controller';
@@ -16,6 +17,7 @@ import { ChatService } from './chat.service';
   imports: [
     DbModule,
     ModelCheckModule,
+    ContextModule,
     TypeOrmModule.forFeature([LcpAgent, LcpRole, LcpCompany, AuditEvent]),
   ],
   controllers: [
