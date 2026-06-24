@@ -50,10 +50,13 @@ Design decisions made during the project, with context and rationale.
 
 In-depth guides for implemented system features.
 
-| Document                                    | Description                                                                 |
-| ------------------------------------------- | --------------------------------------------------------------------------- |
-| [Agent Services](agent-services.md)         | RAG setup, MCP servers, CLI commands, and MinIO storage layout              |
-| [Context Management](context-management.md) | Context window budgeting, compaction strategies, and SSE progress reporting |
+| Document                                        | Description                                                                 |
+| ----------------------------------------------- | --------------------------------------------------------------------------- |
+| [Agent Services](agent-services.md)             | RAG setup, MCP servers, CLI commands, and MinIO storage layout              |
+| [lcp-mcp-storage](lcp-mcp-storage.md)           | Storage MCP server — tool reference and implementation notes                |
+| [lcp-mcp-memory](lcp-mcp-memory.md)             | Memory MCP server — tool reference (stub)                                   |
+| [lcp-mcp-interactions](lcp-mcp-interactions.md) | Interactions MCP server — tool reference (stub)                             |
+| [Context Management](context-management.md)     | Context window budgeting, compaction strategies, and SSE progress reporting |
 
 ## Reference
 

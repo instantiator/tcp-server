@@ -8,8 +8,6 @@ This document covers the three agent-facing service layers added in the 006 work
 
 For manual testing steps, see [docs/manual-testing/start.md](manual-testing/start.md).
 
----
-
 ## RAG (Retrieval-Augmented Generation)
 
 Relevant knowledge is retrieved from a per-role document store and injected into prompt part 5 before each LLM call.
@@ -73,8 +71,6 @@ author: Alice
 
 Documents failing this validation are rejected at upload time.
 
----
-
 ## MCP Servers
 
 Agents access external tools via the Model Context Protocol. Three MCP servers run as Docker Compose services.
@@ -94,26 +90,15 @@ flowchart LR
 
 Each MCP server uses the **Streamable HTTP transport** with a stateless per-request model — a fresh MCP session is created for each tool call. The servers expose `GET /health` and `POST /mcp`.
 
-### lcp-mcp-storage (port 3010)
+### Available servers
 
-Real MinIO integration. Tools:
+| Server                                          | Port | Status      | Description                                                      |
+| ----------------------------------------------- | ---- | ----------- | ---------------------------------------------------------------- |
+| [lcp-mcp-storage](lcp-mcp-storage.md)           | 3010 | Implemented | Read/write access to the shared MinIO object store               |
+| [lcp-mcp-memory](lcp-mcp-memory.md)             | 3011 | Stub        | Semantic search over episodic memory and role knowledge base     |
+| [lcp-mcp-interactions](lcp-mcp-interactions.md) | 3012 | Stub        | Request input from a human user or consult another agent by role |
 
-| Tool                        | Description                                             |
-| --------------------------- | ------------------------------------------------------- |
-| `describe_server`           | Overview of all tools and path conventions              |
-| `describe_folder(path)`     | Purpose of a folder by path prefix (ADR-007 convention) |
-| `list_files(path)`          | List files under a path prefix                          |
-| `read_file(path)`           | Read file text content                                  |
-| `write_file(path, content)` | Create or overwrite a file                              |
-| `delete_file(path)`         | Delete a file                                           |
-
-### lcp-mcp-memory (port 3011)
-
-Stub implementation. Returns informative "not yet implemented" responses that direct agents to use RAG context instead.
-
-### lcp-mcp-interactions (port 3012)
-
-Stub implementation. Returns informative "not yet implemented" responses for agent-to-agent consultation and user input requests.
+See the individual server docs for tool reference, argument details, and implementation status.
 
 ### Enabling MCP tools for a role
 
@@ -140,8 +125,6 @@ MCP server URLs are resolved from environment variables:
 | `MCP_INTERACTIONS_URL` | `http://lcp-mcp-interactions:3012/mcp` |
 
 If a variable is unset, that server is silently skipped. Agents run with only the servers that resolved successfully.
-
----
 
 ## Storage layout
 

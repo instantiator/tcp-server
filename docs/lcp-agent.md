@@ -162,6 +162,22 @@ Both are candidates for `LcpRole.runConfig` JSONB once per-role tuning is needed
 
 ---
 
+## MCP tools
+
+Before running the LangGraph loop, `AgentLoopService` connects to each MCP server listed in `role.mcpServerList` and loads its tools. Tools are exposed to the model as `{serverName}__{toolName}` (e.g. `storage__list_files`) to prevent collisions across servers. If a server is unreachable, it is silently skipped and the agent runs with whatever tools did load.
+
+MCP server URLs are resolved from environment variables:
+
+| Variable               | Server                                                                                     |
+| ---------------------- | ------------------------------------------------------------------------------------------ |
+| `MCP_STORAGE_URL`      | [lcp-mcp-storage](lcp-mcp-storage.md) — MinIO file operations                              |
+| `MCP_MEMORY_URL`       | [lcp-mcp-memory](lcp-mcp-memory.md) — episodic memory and knowledge search (stub)          |
+| `MCP_INTERACTIONS_URL` | [lcp-mcp-interactions](lcp-mcp-interactions.md) — user input and agent consultation (stub) |
+
+See [agent-services.md → MCP Servers](agent-services.md#mcp-servers) for configuration details.
+
+---
+
 ## Audit events
 
 Every agent run produces `AuditEvent` rows in the `audit_event` table:

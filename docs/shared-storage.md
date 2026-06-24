@@ -105,3 +105,9 @@ Role knowledge documents are uploaded via lcp-cli and stored under `knowledge/{r
 ```
 
 See [`lcp-cli.md` → document management verbs](lcp-cli.md#store-role-documents) and [Agent Services → RAG](agent-services.md#rag-retrieval-augmented-generation) for full details.
+
+---
+
+## Agent access via MCP
+
+Agents read and write files through the [lcp-mcp-storage](lcp-mcp-storage.md) MCP server rather than directly via the S3 API. The server exposes tools for listing, reading, writing, and deleting files, and provides folder descriptions keyed to the ADR-007 path conventions above. See [lcp-mcp-storage.md](lcp-mcp-storage.md) for the full tool reference.
