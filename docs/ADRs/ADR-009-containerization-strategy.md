@@ -1,6 +1,6 @@
 # ADR-009: Containerization Strategy
 
-Status: Proposed
+Status: Partially Implemented
 
 ## Context
 
@@ -28,20 +28,28 @@ All companies share the same PostgreSQL, MinIO, Redis, lcp-server, and lcp-agent
 
 ```
 services:
-  lcp-server:    NestJS API + orchestration
-  lcp-agent:     LangGraph agent loop runner
-  postgres:      PostgreSQL 16 + pgvector (pgvector/pgvector image)
-  minio:         MinIO object storage (minio/minio image)
-  redis:         Redis 7 (BullMQ queue backend)
+  lcp-server:             NestJS API + orchestration
+  lcp-agent:              LangGraph agent loop runner
+  lcp-mcp-storage:        Storage MCP server (MinIO tools) — port 3010
+  lcp-mcp-memory:         Memory/RAG MCP server — port 3011
+  lcp-mcp-interactions:   Interactions MCP server — port 3012
+  postgres:               PostgreSQL 16 + pgvector (pgvector/pgvector image)
+  minio:                  MinIO object storage (minio/minio image)
+  redis:                  Redis 7 (BullMQ queue backend)
 ```
 
 ### MCP server lifecycle
 
-MCP servers are **not** permanent Docker services. They are spawned on-demand by lcp-agent at the start of each task step and torn down on completion. This keeps the Compose file simple and avoids running idle MCP processes.
+MCP servers run as **permanent Docker Compose services**, not as child processes. This supersedes the original ADR decision to spawn them on-demand as stdio child processes. The Docker Compose approach provides:
 
-The three standard LCP MCP servers (memory, storage, audit-decision — see [ADR-006](./ADR-006-agent-memory-architecture.md), [ADR-007](./ADR-007-shared-company-storage.md), [ADR-008](./ADR-008-audit-logging.md)) are Node.js processes spawned as child processes of lcp-agent using the MCP stdio transport.
+- Independent health checks and restart policies per MCP server
+- Clean network isolation (internal Docker network, no host-port exposure required)
+- Faster agent startup (no process spawn per task)
+- Easier debugging via `docker compose logs`
 
-Additional per-company and per-role MCP servers (git, CI/CD, design tools, etc.) are configured in the company/role definition and spawned the same way.
+lcp-agent connects to MCP servers over HTTP using the MCP Streamable HTTP transport. The `McpClientService` resolves server URLs from `MCP_{NAME}_URL` environment variables set in Docker Compose. Tool loading is per-agent-run, scoped to the server names listed in `role.mcpServerList`.
+
+The three standard LCP MCP servers (storage, memory, interactions) are NestJS applications in `apps/lcp-mcp-*/` using `@modelcontextprotocol/sdk`. Additional per-company MCP servers are a future extension.
 
 ### Revisit trigger
 

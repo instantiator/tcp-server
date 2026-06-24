@@ -272,6 +272,36 @@ export class ContextManagerService {
     };
   }
 
+  /**
+   * Runs the incoming-data guard on a discrete context section (e.g. RAG data,
+   * MCP responses) before it is injected into the prompt.
+   *
+   * Unlike {@link prepare}, this does not touch the LangGraph checkpoint — it
+   * only evaluates and optionally compacts the section text. Pass `overflowPath`
+   * (a sanitised MinIO key prefix) to enable overflow storage when the compacted
+   * version is still too large.
+   *
+   * @param text - Section content to guard.
+   * @param model - LLM used for compaction if needed.
+   * @param windowSize - Full context window size in tokens.
+   * @param overflowPath - Optional MinIO key prefix for overflow storage.
+   */
+  async guardSection(
+    text: string,
+    model: BaseChatModel,
+    windowSize: number,
+    overflowPath?: string,
+  ): Promise<string> {
+    const result = await this.guard.check(
+      text,
+      0,
+      windowSize,
+      model,
+      overflowPath,
+    );
+    return result.text;
+  }
+
   /** Loads current checkpoint state and counts its message tokens. */
   private async loadCheckpointTokens(
     graph: CheckpointableGraph,

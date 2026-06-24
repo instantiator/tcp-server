@@ -9,13 +9,13 @@ arguments through to Jest (e.g. `--testNamePattern`, `--testPathPattern`).
 Each script uses a distinct Docker Compose project name so their containers,
 networks, and volumes are completely independent of each other:
 
-| Script                   | Project name      |
-| ------------------------ | ----------------- |
-| `dev/start-dev.sh`       | `lcp-dev`         |
+| Script                     | Project name      |
+| -------------------------- | ----------------- |
+| `dev/start-dev.sh`         | `lcp-dev`         |
 | `run-integration-tests.sh` | `lcp-integration` |
-| `run-e2e-tests.sh`       | `lcp-e2e`         |
-| `run-smoke-tests.sh`     | `lcp-smoke`       |
-| `run-api-tests.sh`       | `lcp-api`         |
+| `run-e2e-tests.sh`         | `lcp-e2e`         |
+| `run-smoke-tests.sh`       | `lcp-smoke`       |
+| `run-api-tests.sh`         | `lcp-api`         |
 
 This means a running dev environment is never touched by a test script's
 `down`, and test data never contaminates dev data. Port conflicts still
@@ -24,17 +24,17 @@ prevent two deployments from running simultaneously on the same machine
 
 ## Summary
 
-| Script                                               | Purpose                                                          | Requires              |
-| ---------------------------------------------------- | ---------------------------------------------------------------- | --------------------- |
-| [dev/start-dev.sh](#start-devsh)                     | Start full environment and configure Keycloak for first-time use | Docker                |
-| [dev/stop-dev.sh](#stop-devsh)                       | Stop the dev environment; optionally remove volumes              | Docker                |
-| [dev/lcp-cli.sh](#lcp-clish)                         | Run the `lcp-cli` tool (builds automatically if needed)          | Built lcp-cli         |
-| [run-all-tests.sh](#run-all-testssh)                 | Build, lint, and run every test suite in sequence                | Docker + built images |
-| [run-unit-tests.sh](#run-unit-testssh)               | Unit tests                                                       | Nothing               |
-| [run-integration-tests.sh](#run-integration-testssh) | Integration tests — service connectivity                         | Docker                |
-| [run-smoke-tests.sh](#run-smoke-testssh)             | Smoke tests — full stack health checks                           | Docker + built images |
+| Script                                               | Purpose                                                            | Requires              |
+| ---------------------------------------------------- | ------------------------------------------------------------------ | --------------------- |
+| [dev/start-dev.sh](#start-devsh)                     | Start full environment and configure Keycloak for first-time use   | Docker                |
+| [dev/stop-dev.sh](#stop-devsh)                       | Stop the dev environment; optionally remove volumes                | Docker                |
+| [dev/lcp-cli.sh](#lcp-clish)                         | Run the `lcp-cli` tool (builds automatically if needed)            | Built lcp-cli         |
+| [run-all-tests.sh](#run-all-testssh)                 | Build, lint, and run every test suite in sequence                  | Docker + built images |
+| [run-unit-tests.sh](#run-unit-testssh)               | Unit tests                                                         | Nothing               |
+| [run-integration-tests.sh](#run-integration-testssh) | Integration tests — service connectivity                           | Docker                |
+| [run-smoke-tests.sh](#run-smoke-testssh)             | Smoke tests — full stack health checks                             | Docker + built images |
 | [run-api-tests.sh](#run-api-testssh)                 | API tests — authenticated HTTP requests against the lcp-server API | Docker + built images |
-| [run-e2e-tests.sh](#run-e2e-testssh)                 | E2E tests — HTTP API workflows                                   | Docker                |
+| [run-e2e-tests.sh](#run-e2e-testssh)                 | E2E tests — HTTP API workflows                                     | Docker                |
 
 ## start-dev.sh
 
@@ -153,13 +153,13 @@ below or as environment variables.
 
 **Options:**
 
-| Flag                  | Env var          | Description                     | Default                    |
-| --------------------- | ---------------- | ------------------------------- | -------------------------- |
-| `--base-url URL`      | —                | Test against a remote deployment | (local Docker mode)        |
-| `--agent-url URL`     | `LCP_AGENT_URL`  | lcp-agent URL (remote mode)     | `http://localhost:3001`    |
-| `--keycloak-url URL`  | `KEYCLOAK_URL`   | Keycloak URL (remote mode)      | `http://localhost:8080`    |
-| `--username NAME`     | `TEST_USERNAME`  | Test user username (remote mode) | `test`                    |
-| `--password PASS`     | `TEST_PASSWORD`  | Test user password (remote mode) | `test`                    |
+| Flag                 | Env var         | Description                      | Default                 |
+| -------------------- | --------------- | -------------------------------- | ----------------------- |
+| `--base-url URL`     | —               | Test against a remote deployment | (local Docker mode)     |
+| `--agent-url URL`    | `LCP_AGENT_URL` | lcp-agent URL (remote mode)      | `http://localhost:3001` |
+| `--keycloak-url URL` | `KEYCLOAK_URL`  | Keycloak URL (remote mode)       | `http://localhost:8080` |
+| `--username NAME`    | `TEST_USERNAME` | Test user username (remote mode) | `test`                  |
+| `--password PASS`    | `TEST_PASSWORD` | Test user password (remote mode) | `test`                  |
 
 **Requires (local mode):** Docker and Docker Compose, `.env.testing`, app
 images (rebuilt automatically).
@@ -192,13 +192,13 @@ variables.
 
 **Options:**
 
-| Flag                  | Env var          | Description                     | Default                    |
-| --------------------- | ---------------- | ------------------------------- | -------------------------- |
-| `--base-url URL`      | —                | Test against a remote deployment | (local Docker mode)        |
-| `--agent-url URL`     | `LCP_AGENT_URL`  | lcp-agent URL (remote mode)     | `http://localhost:3001`    |
-| `--keycloak-url URL`  | `KEYCLOAK_URL`   | Keycloak URL (remote mode)      | `http://localhost:8080`    |
-| `--username NAME`     | `TEST_USERNAME`  | Test user username (remote mode) | `test`                    |
-| `--password PASS`     | `TEST_PASSWORD`  | Test user password (remote mode) | `test`                    |
+| Flag                 | Env var         | Description                      | Default                 |
+| -------------------- | --------------- | -------------------------------- | ----------------------- |
+| `--base-url URL`     | —               | Test against a remote deployment | (local Docker mode)     |
+| `--agent-url URL`    | `LCP_AGENT_URL` | lcp-agent URL (remote mode)      | `http://localhost:3001` |
+| `--keycloak-url URL` | `KEYCLOAK_URL`  | Keycloak URL (remote mode)       | `http://localhost:8080` |
+| `--username NAME`    | `TEST_USERNAME` | Test user username (remote mode) | `test`                  |
+| `--password PASS`    | `TEST_PASSWORD` | Test user password (remote mode) | `test`                  |
 
 **Requires (local mode):** Docker and Docker Compose, `.env.testing`, app
 images (rebuilt automatically).

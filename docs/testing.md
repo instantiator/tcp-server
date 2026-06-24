@@ -10,12 +10,12 @@ gates the next:
 unit → integration → api (includes smoke) + e2e
 ```
 
-| Tier        | What it proves                                                                 | Infrastructure                  |
-| ----------- | ------------------------------------------------------------------------------ | ------------------------------- |
-| Unit        | Individual classes and functions behave correctly                              | None — SQLite in-memory         |
-| Integration | The app can connect to and use each backing service                            | Docker (postgres, redis, minio) |
-| API         | Health checks, and requests and responses through the lcp-server API with a real JWT | Docker + Keycloak         |
-| E2E         | HTTP API workflows produce the right responses end-to-end                      | Docker (postgres, redis, minio) |
+| Tier        | What it proves                                                                       | Infrastructure                  |
+| ----------- | ------------------------------------------------------------------------------------ | ------------------------------- |
+| Unit        | Individual classes and functions behave correctly                                    | None — SQLite in-memory         |
+| Integration | The app can connect to and use each backing service                                  | Docker (postgres, redis, minio) |
+| API         | Health checks, and requests and responses through the lcp-server API with a real JWT | Docker + Keycloak               |
+| E2E         | HTTP API workflows produce the right responses end-to-end                            | Docker (postgres, redis, minio) |
 
 **Unit tests** use `better-sqlite3` in-memory and `@nestjs/testing` to wire
 modules without starting a real server. They run in milliseconds with no
@@ -122,13 +122,13 @@ Starts postgres, redis, and minio. Requires Docker. See
 
 ## Test file locations
 
-| Suite       | Pattern                                          | Jest config                  |
-| ----------- | ------------------------------------------------ | ---------------------------- |
-| Unit        | `apps/**/src/**/*.spec.ts`, `libs/**/*.spec.ts`  | `jest.config.js` (root)      |
-| E2E         | `test/e2e/*.e2e-spec.ts`                         | `test/jest-e2e.json`         |
-| Integration | `test/integration/**/*.integration-spec.ts`      | `test/jest-integration.json` |
-| Smoke       | `test/smoke/**/*.spec.ts`                        | `test/jest-smoke.json`       |
-| API         | `test/api/**/*.spec.ts`                          | `test/jest-api.json`         |
+| Suite       | Pattern                                         | Jest config                  |
+| ----------- | ----------------------------------------------- | ---------------------------- |
+| Unit        | `apps/**/src/**/*.spec.ts`, `libs/**/*.spec.ts` | `jest.config.js` (root)      |
+| E2E         | `test/e2e/*.e2e-spec.ts`                        | `test/jest-e2e.json`         |
+| Integration | `test/integration/**/*.integration-spec.ts`     | `test/jest-integration.json` |
+| Smoke       | `test/smoke/**/*.spec.ts`                       | `test/jest-smoke.json`       |
+| API         | `test/api/**/*.spec.ts`                         | `test/jest-api.json`         |
 
 ## CI pipeline
 

@@ -24,11 +24,11 @@ A user can hold multiple permissions. Company creation grants the creator all pe
 
 ## Auth mechanism options
 
-| Option                           | Notes                                                                                                                        |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| **JWT (self-issued)**            | NestJS Guards + Passport JWT. No external service. Standard, well-documented in the NestJS ecosystem.                        |
+| Option                           | Notes                                                                                                                       |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| **JWT (self-issued)**            | NestJS Guards + Passport JWT. No external service. Standard, well-documented in the NestJS ecosystem.                       |
 | **OAuth2 / OIDC (external IdP)** | Delegates identity to an existing provider (Keycloak, Auth0, Okta, etc.). Federated identity; production-grade MFA support. |
-| **API keys**                     | Simplest for machine-to-machine. Less suitable for interactive user access.                                                  |
+| **API keys**                     | Simplest for machine-to-machine. Less suitable for interactive user access.                                                 |
 
 ## Decision
 
@@ -39,6 +39,7 @@ A user can hold multiple permissions. Company creation grants the creator all pe
 The default IdP is **Keycloak**, provided as an optional Docker Compose service (`--profile auth`). Any OIDC-compliant IdP (Auth0, Okta, Azure AD, etc.) can be used by setting `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, and `OIDC_CLIENT_SECRET`.
 
 lcp-server validates incoming requests by:
+
 1. Extracting the Bearer token from the `Authorization` header
 2. Fetching the IdP's JWKS from `{OIDC_ISSUER_URL}/.well-known/jwks.json` (cached)
 3. Verifying the token signature, expiry, audience, and issuer
@@ -55,10 +56,10 @@ Identity (who you are) is handled by the IdP. Authorisation (what you can do in 
 
 lcp-server provides thin wrappers around the Keycloak Admin REST API for common operations, so developers only need to interact with the lcp-server API for the day-to-day cases:
 
-| lcp-server endpoint       | Proxied Keycloak operation                 |
-| ------------------------- | ------------------------------------------ |
-| `POST /users`             | Create user in the `lcp` realm             |
-| `PATCH /users/:id/status` | Enable or disable a user account           |
+| lcp-server endpoint       | Proxied Keycloak operation       |
+| ------------------------- | -------------------------------- |
+| `POST /users`             | Create user in the `lcp` realm   |
+| `PATCH /users/:id/status` | Enable or disable a user account |
 
 For advanced IdP features (MFA, password policy, social login, federation), use the Keycloak admin UI directly at `http://localhost:8080`.
 

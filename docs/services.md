@@ -5,14 +5,17 @@ starts when the `auth` profile is active (`docker compose --profile auth up`).
 
 ## Summary
 
-| Service    | Container name | Exposed ports              | Description                                           |
-| ---------- | -------------- | -------------------------- | ----------------------------------------------------- |
-| lcp-server | `lcp-server`   | 3000                       | REST API and orchestration layer                      |
-| lcp-agent  | `lcp-agent`    | 3001                       | Agent loop runner                                     |
-| PostgreSQL | `postgres`     | 5432                       | Primary relational store (pgvector extension enabled) |
-| Redis      | `redis`        | 6379                       | Task queue broker (BullMQ)                            |
-| MinIO      | `minio`        | 9000 (API), 9001 (console) | S3-compatible object storage                          |
-| Keycloak   | `keycloak`     | 8080                       | OIDC identity provider (profile: auth)                |
+| Service              | Container name         | Exposed ports              | Description                                           |
+| -------------------- | ---------------------- | -------------------------- | ----------------------------------------------------- |
+| lcp-server           | `lcp-server`           | 3000                       | REST API and orchestration layer                      |
+| lcp-agent            | `lcp-agent`            | 3001                       | Agent loop runner                                     |
+| lcp-mcp-storage      | `lcp-mcp-storage`      | 3010                       | Storage MCP server (MinIO tools)                      |
+| lcp-mcp-memory       | `lcp-mcp-memory`       | 3011                       | Memory MCP server (stub)                              |
+| lcp-mcp-interactions | `lcp-mcp-interactions` | 3012                       | Interactions MCP server (stub)                        |
+| PostgreSQL           | `postgres`             | 5432                       | Primary relational store (pgvector extension enabled) |
+| Redis                | `redis`                | 6379                       | Task queue broker (BullMQ)                            |
+| MinIO                | `minio`                | 9000 (API), 9001 (console) | S3-compatible object storage                          |
+| Keycloak             | `keycloak`             | 8080                       | OIDC identity provider (profile: auth)                |
 
 ## LCP services
 

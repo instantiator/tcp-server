@@ -15,14 +15,14 @@ production you can swap it out for Auth0, Okta, Azure AD, or any other provider.
 
 ## Environment variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `OIDC_ISSUER_URL` | **Yes** | The provider's issuer URL. Must match the `iss` claim in tokens. |
-| `OIDC_CLIENT_ID` | **Yes** | Client ID registered with the provider. |
-| `OIDC_CLIENT_SECRET` | **Yes** | Client secret (used by the token proxy endpoint). |
-| `OIDC_INTERNAL_ISSUER_URL` | No | Alternative URL for server-side HTTP calls to the provider (see [Docker networking](#docker-networking)). |
-| `OIDC_JWKS_URI` | No | Explicit JWKS URI override. If unset, discovered from the provider's discovery document. |
-| `OIDC_AUDIENCE` | No | Audience claim to validate. If unset, audience validation is skipped (see [Audience validation](#audience-validation)). |
+| Variable                   | Required | Description                                                                                                             |
+| -------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `OIDC_ISSUER_URL`          | **Yes**  | The provider's issuer URL. Must match the `iss` claim in tokens.                                                        |
+| `OIDC_CLIENT_ID`           | **Yes**  | Client ID registered with the provider.                                                                                 |
+| `OIDC_CLIENT_SECRET`       | **Yes**  | Client secret (used by the token proxy endpoint).                                                                       |
+| `OIDC_INTERNAL_ISSUER_URL` | No       | Alternative URL for server-side HTTP calls to the provider (see [Docker networking](#docker-networking)).               |
+| `OIDC_JWKS_URI`            | No       | Explicit JWKS URI override. If unset, discovered from the provider's discovery document.                                |
+| `OIDC_AUDIENCE`            | No       | Audience claim to validate. If unset, audience validation is skipped (see [Audience validation](#audience-validation)). |
 
 ## Using the included Keycloak (local development)
 
@@ -34,6 +34,7 @@ starts it and performs first-time configuration automatically.
 ```
 
 This creates:
+
 - Realm: `lcp`
 - Client: `lcp-server` (direct access grants enabled)
 - Test user: `test` / `test`
@@ -122,12 +123,12 @@ this split is not needed — set only `OIDC_ISSUER_URL`.
 The `aud` claim in access tokens identifies the intended recipient of the token. Behaviour
 varies by provider and grant type:
 
-| Provider / scenario | `aud` value |
-|---------------------|-------------|
-| Keycloak (ROPC, default client config) | `account` |
-| Auth0 (with API configured) | Your API identifier |
-| Okta | `api://default` or your custom audience |
-| Keycloak (with audience mapper configured) | Your configured value |
+| Provider / scenario                        | `aud` value                             |
+| ------------------------------------------ | --------------------------------------- |
+| Keycloak (ROPC, default client config)     | `account`                               |
+| Auth0 (with API configured)                | Your API identifier                     |
+| Okta                                       | `api://default` or your custom audience |
+| Keycloak (with audience mapper configured) | Your configured value                   |
 
 By default lcp-server does not validate `aud` (the issuer check is sufficient for
 single-tenant deployments). To enable it, set `OIDC_AUDIENCE` to the expected value.
@@ -148,6 +149,7 @@ This endpoint proxies the OIDC Resource Owner Password Credentials (ROPC) grant
 so the OIDC client secret never leaves the server. It is used by `lcp-cli get-token`.
 
 **Limitations:**
+
 - ROPC is deprecated in OAuth 2.1 and not supported by all providers.
 - It requires a confidential client (one with a `client_secret`).
 - Auth0 restricts ROPC to specific plan tiers; Azure AD discourages it for new apps.

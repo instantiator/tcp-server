@@ -15,20 +15,20 @@ NestJS monorepo for the Little Computer People (LCP) mini-office simulation. Two
 
 ## Tech stack (currently implemented)
 
-| Concern | Choice |
-|---------|--------|
-| Runtime | Node.js / TypeScript (strict mode) |
-| Framework | NestJS 11 (monorepo mode) |
-| ORM | TypeORM 1.x |
-| Database (production) | PostgreSQL 16 + pgvector |
-| Database (unit tests) | better-sqlite3 (in-memory) |
-| Auth | OAuth2/OIDC — Keycloak (default), any OIDC IdP supported |
-| Object storage | MinIO (Docker Compose) |
-| Task queue | Redis (BullMQ — configured, workers pending) |
-| Testing | Jest + `@nestjs/testing` |
-| Linting | ESLint + typescript-eslint |
-| Formatting | Prettier |
-| Schema export | ts-json-schema-generator → `schemas/schema.json` |
+| Concern               | Choice                                                   |
+| --------------------- | -------------------------------------------------------- |
+| Runtime               | Node.js / TypeScript (strict mode)                       |
+| Framework             | NestJS 11 (monorepo mode)                                |
+| ORM                   | TypeORM 1.x                                              |
+| Database (production) | PostgreSQL 16 + pgvector                                 |
+| Database (unit tests) | better-sqlite3 (in-memory)                               |
+| Auth                  | OAuth2/OIDC — Keycloak (default), any OIDC IdP supported |
+| Object storage        | MinIO (Docker Compose)                                   |
+| Task queue            | Redis (BullMQ — configured, workers pending)             |
+| Testing               | Jest + `@nestjs/testing`                                 |
+| Linting               | ESLint + typescript-eslint                               |
+| Formatting            | Prettier                                                 |
+| Schema export         | ts-json-schema-generator → `schemas/schema.json`         |
 
 Architectural decisions are documented as ADRs in `docs/ADRs/`. See `docs/index.md` for the full list with implementation status.
 

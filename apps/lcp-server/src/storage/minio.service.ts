@@ -56,6 +56,22 @@ export class MinioService implements OnModuleInit {
   }
 
   /**
+   * Writes arbitrary text content to a specific object key in the bucket.
+   * The caller is responsible for constructing a safe, sanitised key.
+   */
+  async putRaw(key: string, body: string): Promise<void> {
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: body,
+        ContentType: 'text/plain',
+      }),
+    );
+    this.logger.debug(`Stored raw object at ${key} (${body.length} chars)`);
+  }
+
+  /**
    * Uploads a document to the knowledge store for a role.
    *
    * Object key: `{companySlug}/knowledge/{roleName}/{filename}`.

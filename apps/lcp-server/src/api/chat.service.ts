@@ -127,7 +127,8 @@ export class ChatService {
           messages: [await model.invoke(state.messages, { signal })],
         }))
         .addEdge('__start__', 'agent')
-        // ponytail: conditional edge to tools node goes here once MCP servers exist
+        // ponytail: MCP tool binding for chat agents — add when interactive chat needs
+        //   tool calls. lcp-agent already binds tools; chat is currently stateless per-turn.
         .addEdge('agent', END)
         .compile({ checkpointer });
 
@@ -160,7 +161,17 @@ export class ChatService {
           company?.embeddingConfig,
         );
         if (ragChunks.length) {
-          ragMessage = new HumanMessage(buildRagMessage(ragChunks));
+          const rawRagText = buildRagMessage(ragChunks);
+          const overflowPath = company?.slug
+            ? `${sanitiseSlug(company.slug)}/tasks/${agentId}/context-overflow`
+            : undefined;
+          const ragText = await this.contextManager.guardSection(
+            rawRagText,
+            model,
+            windowSize,
+            overflowPath,
+          );
+          ragMessage = new HumanMessage(ragText);
         }
       }
 
@@ -312,4 +323,9 @@ function buildServicesMessage(
     lines.join('\n');
 
   return [new HumanMessage(text)];
+}
+
+/** Strips characters unsafe for use as a MinIO path component. */
+function sanitiseSlug(slug: string): string {
+  return slug.replace(/[^a-zA-Z0-9_-]/g, '_');
 }
