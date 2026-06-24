@@ -133,6 +133,9 @@ services:
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MCP_STORAGE_URL: http://lcp-mcp-storage:3010
+      MCP_MEMORY_URL: http://lcp-mcp-memory:3011
+      MCP_INTERACTIONS_URL: http://lcp-mcp-interactions:3012
     depends_on:
       postgres:
         condition: service_healthy
@@ -142,6 +145,56 @@ services:
       - "3001:3001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  lcp-mcp-storage:
+    build:
+      context: .
+      dockerfile: apps/lcp-mcp-storage/Dockerfile
+    image: lcp-mcp-storage:latest
+    restart: unless-stopped
+    environment:
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET: ${MINIO_BUCKET:-lcp}
+    depends_on:
+      minio:
+        condition: service_healthy
+    ports:
+      - "3010:3010"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3010/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  lcp-mcp-memory:
+    build:
+      context: .
+      dockerfile: apps/lcp-mcp-memory/Dockerfile
+    image: lcp-mcp-memory:latest
+    restart: unless-stopped
+    ports:
+      - "3011:3011"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3011/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  lcp-mcp-interactions:
+    build:
+      context: .
+      dockerfile: apps/lcp-mcp-interactions/Dockerfile
+    image: lcp-mcp-interactions:latest
+    restart: unless-stopped
+    ports:
+      - "3012:3012"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3012/health"]
       interval: 15s
       timeout: 5s
       retries: 5

@@ -30,12 +30,25 @@ done
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPTS="$REPO_ROOT/scripts"
 
+CURRENT_STEP=""
+
 step() {
+  CURRENT_STEP="$1"
   echo ""
   echo "════════════════════════════════════════"
-  echo "  $1"
+  echo "  $CURRENT_STEP"
   echo "════════════════════════════════════════"
 }
+
+on_error() {
+  echo ""
+  echo "════════════════════════════════════════"
+  echo "  FAILED: $CURRENT_STEP"
+  echo "════════════════════════════════════════"
+  exit 1
+}
+
+trap on_error ERR
 
 step "Type check"
 npm --prefix "$REPO_ROOT" run typecheck

@@ -44,6 +44,33 @@
       "compilerOptions": {
         "tsConfigPath": "apps/lcp-cli/tsconfig.app.json"
       }
+    },
+    "lcp-mcp-storage": {
+      "type": "application",
+      "root": "apps/lcp-mcp-storage",
+      "entryFile": "main",
+      "sourceRoot": "apps/lcp-mcp-storage/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/lcp-mcp-storage/tsconfig.app.json"
+      }
+    },
+    "lcp-mcp-memory": {
+      "type": "application",
+      "root": "apps/lcp-mcp-memory",
+      "entryFile": "main",
+      "sourceRoot": "apps/lcp-mcp-memory/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/lcp-mcp-memory/tsconfig.app.json"
+      }
+    },
+    "lcp-mcp-interactions": {
+      "type": "application",
+      "root": "apps/lcp-mcp-interactions",
+      "entryFile": "main",
+      "sourceRoot": "apps/lcp-mcp-interactions/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/lcp-mcp-interactions/tsconfig.app.json"
+      }
     }
   }
 }

@@ -4,6 +4,7 @@ import {
   SystemMessage,
 } from '@langchain/core/messages';
 import { END, MessagesAnnotation, StateGraph } from '@langchain/langgraph';
+import { ToolNode, toolsCondition } from '@langchain/langgraph/prebuilt';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import {
   AgentStatus,
@@ -19,12 +20,23 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
 import { Repository } from 'typeorm';
+import type { DynamicStructuredTool } from '@langchain/core/tools';
 import { buildChatModel } from '../llm/llm-factory';
+import { McpClientService } from '../mcp/mcp-client.service';
+import { AgentRagService } from '../rag/agent-rag.service';
 import { AgentRegistryService } from '../registry/agent-registry.service';
 
 /** Hard limits applied to every agent run. */
 const MAX_ITERATIONS = 10;
 const TIMEOUT_MS = 60_000;
+
+/**
+ * Prompt part 8 — appended as the last message on the initial turn.
+ * Gives the agent a clear directive to begin work after all context has been
+ * established by the preceding prompt parts.
+ */
+const FINAL_INSTRUCTION =
+  'You have been given your task and all relevant context above. Proceed now: be thorough, draw on your expertise, and deliver your best work.';
 
 /** Maps LangGraph v2 event names to {@link AuditEventType} values. */
 const EVENT_TYPE_MAP: Record<string, AuditEventType> = {
@@ -55,6 +67,8 @@ export class AgentLoopService {
 
   constructor(
     private readonly registry: AgentRegistryService,
+    private readonly rag: AgentRagService,
+    private readonly mcp: McpClientService,
     private readonly config: ConfigService,
     @InjectRepository(LcpAgent)
     private readonly agentRepo: Repository<LcpAgent>,
@@ -85,9 +99,8 @@ export class AgentLoopService {
       return;
     }
 
-    const llmConfig =
-      role.llmConfig ??
-      (await this.companyRepo.findOneBy({ id: agent.companyId }))?.llmDefault;
+    const company = await this.companyRepo.findOneBy({ id: agent.companyId });
+    const llmConfig = role.llmConfig ?? company?.llmDefault;
 
     if (!llmConfig) {
       this.logger.error(
@@ -109,7 +122,14 @@ export class AgentLoopService {
     const checkpointer = PostgresSaver.fromConnString(this.databaseUrl);
     try {
       await checkpointer.setup();
-      await this.runLoop(agent, role, llmConfig, checkpointer, abortController);
+      await this.runLoop(
+        agent,
+        role,
+        company,
+        llmConfig,
+        checkpointer,
+        abortController,
+      );
     } finally {
       clearTimeout(timeoutId);
       await checkpointer.end();
@@ -120,18 +140,42 @@ export class AgentLoopService {
   private async runLoop(
     agent: LcpAgent,
     role: LcpRole,
+    company: LcpCompany | null,
     llmConfig: LlmConfig,
     checkpointer: PostgresSaver,
     abortController: AbortController,
   ): Promise<void> {
+    const mcpServerUrls = resolveMcpServerUrls(this.config);
+    const mcpTools = await this.mcp.loadTools(
+      role.mcpServerList ?? [],
+      mcpServerUrls,
+    );
+    const langchainTools = mcpTools.map((t) => t.tool);
+
     const model = buildChatModel(llmConfig);
-    const graph = this.buildGraph(model, checkpointer);
+    const graph = this.buildGraph(model, checkpointer, langchainTools);
 
     const systemPrompt = renderTemplate(role.systemPromptTemplate, {
       name: role.name,
       description: role.description,
       date: new Date().toISOString().split('T')[0],
     });
+
+    const ragChunks = await this.rag.retrieve(
+      role.id,
+      agent.initialPrompt,
+      company?.embeddingConfig,
+    );
+    const ragMessage = ragChunks.length
+      ? new HumanMessage(buildRagMessage(ragChunks))
+      : null;
+
+    const servicesMessage =
+      mcpTools.length > 0
+        ? new HumanMessage(
+            buildServicesMessage(role.mcpServerList ?? [], mcpServerUrls),
+          )
+        : null;
 
     const config = {
       configurable: { thread_id: agent.id },
@@ -141,24 +185,22 @@ export class AgentLoopService {
       messages: [
         // Prompt part 0: system prompt — rendered from the role's systemPromptTemplate
         new SystemMessage(systemPrompt),
-        // TODO - prompt part 1: inject a separate role prompt (identity, attitude, domain
-        //   knowledge, behavioural guidelines distinct from the system prompt) once the
-        //   role prompt structure is split from systemPromptTemplate (ADR-013)
-        // TODO - prompt part 2: inject company environment message (agent roster, company
-        //   name/description, shared storage folder structure) — implement when company
-        //   context is wired into the agent loop (ADR-001)
-        // TODO - prompt part 3: inject services-available message listing MCP server
-        //   capabilities and RAG knowledge domains — implement when MCP/RAG integration
-        //   lands (ADR-002, ADR-006)
-        // TODO - prompt part 5: inject RAG data retrieved for the initial task — implement
-        //   when RAG retrieval is available (ADR-006)
-        // TODO - prompt part 6: inject MCP responses from any pre-task data retrieval —
-        //   implement when MCP servers are wired (ADR-002)
+        // Prompt part 1: role prompt (identity, attitude, domain knowledge, behavioural guidelines)
+        ...(role.rolePrompt ? [new HumanMessage(role.rolePrompt)] : []),
+        // Prompt part 2: company environment (name, description, shared storage layout, etc.)
+        ...(company?.companyContext
+          ? [new HumanMessage(company.companyContext)]
+          : []),
+        // Prompt part 3: services available (MCP servers). Call describe_server on any for details.
+        ...(servicesMessage ? [servicesMessage] : []),
         // Prompt part 4: task / query prompt
         new HumanMessage(agent.initialPrompt),
-        // TODO - prompt part 8: append a final-instruction suffix message telling the agent
-        //   what to do — implement alongside role prompt restructure (ADR-013)
+        // Prompt part 5: RAG data retrieved for the initial task (omitted when nothing relevant)
+        ...(ragMessage ? [ragMessage] : []),
+        // Prompt part 6: MCP pre-task responses (none for stub servers; wired here for future use)
         // Prompt part 7: conversation history provided by LangGraph checkpoint on resume
+        // Prompt part 8: final instruction — directs the agent to begin after all context is set
+        new HumanMessage(FINAL_INSTRUCTION),
       ],
     };
 
@@ -206,20 +248,30 @@ export class AgentLoopService {
   private buildGraph(
     model: ReturnType<typeof buildChatModel>,
     checkpointer: PostgresSaver,
+    tools: DynamicStructuredTool[],
   ) {
+    const boundModel =
+      tools.length > 0 && model.bindTools ? model.bindTools(tools) : model;
+
     const agentNode = async (state: typeof MessagesAnnotation.State) => {
-      const response = await model.invoke(state.messages);
+      const response = await boundModel.invoke(state.messages);
       return { messages: [response] };
     };
 
-    return (
-      new StateGraph(MessagesAnnotation)
-        .addNode('agent', agentNode)
-        .addEdge('__start__', 'agent')
-        // ponytail: conditional edge to a tools node goes here once MCP servers exist
-        .addEdge('agent', END)
-        .compile({ checkpointer })
-    );
+    const graph = new StateGraph(MessagesAnnotation)
+      .addNode('agent', agentNode)
+      .addEdge('__start__', 'agent');
+
+    if (tools.length > 0) {
+      graph
+        .addNode('tools', new ToolNode(tools))
+        .addConditionalEdges('agent', toolsCondition)
+        .addEdge('tools', 'agent');
+    } else {
+      graph.addEdge('agent', END);
+    }
+
+    return graph.compile({ checkpointer });
   }
 
   /** Streams graph events, writes audit rows, and returns the last AI message. */
@@ -308,4 +360,49 @@ function renderTemplate(
     /\{\{(\w+)\}\}/g,
     (_, key: string) => vars[key] ?? '',
   );
+}
+
+/**
+ * Reads MCP server URLs from environment variables.
+ * Convention: `MCP_{NAME_UPPER}_URL` — e.g. `MCP_STORAGE_URL`.
+ */
+function resolveMcpServerUrls(config: ConfigService): Record<string, string> {
+  const urls: Record<string, string> = {};
+  for (const name of ['storage', 'memory', 'interactions']) {
+    const url = config.get<string>(`MCP_${name.toUpperCase()}_URL`);
+    if (url) urls[name] = url;
+  }
+  return urls;
+}
+
+/** Formats the services-available message for prompt part 3. */
+function buildServicesMessage(
+  serverNames: string[],
+  serverUrls: Record<string, string>,
+): string {
+  const lines = serverNames
+    .filter((n) => serverUrls[n])
+    .map(
+      (n) =>
+        `- **${n}**: call \`${n}__describe_server\` for a full tool list and usage guide`,
+    );
+
+  if (lines.length === 0) return '';
+
+  return (
+    '## Available Services\n\n' +
+    'You have access to the following external services via tools. ' +
+    'Each service exposes a `describe_server` tool — call it to learn exactly what tools are available and how to use them before making calls.\n\n' +
+    lines.join('\n')
+  );
+}
+
+/** Formats RAG chunks as a prompt part 5 message. */
+function buildRagMessage(
+  chunks: { documentPath: string; content: string }[],
+): string {
+  const sections = chunks
+    .map((c) => `### Source: ${c.documentPath}\n\n${c.content}`)
+    .join('\n\n---\n\n');
+  return `The following excerpts from your knowledge base are relevant to your current task. Draw on them as needed:\n\n${sections}`;
 }

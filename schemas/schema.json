@@ -100,6 +100,56 @@
       ],
       "type": "string"
     },
+    "KnowledgeChunk": {
+      "additionalProperties": false,
+      "description": "A single chunk of text extracted from an OKF knowledge-base document and stored for RAG retrieval. The corresponding embedding vector is stored directly in PostgreSQL as a `vector(1536)` column (pgvector extension) and is not mapped by TypeORM — all vector reads and writes use raw SQL.\n\nChunks are scoped to a  {@link  LcpRole  }  within a  {@link  LcpCompany  } . All chunks for a given `documentPath` are replaced atomically on re-index.",
+      "properties": {
+        "chunkIndex": {
+          "description": "Zero-based position of this chunk within its source document.",
+          "type": "number"
+        },
+        "companyId": {
+          "$ref": "#/definitions/UUID",
+          "description": "The company that owns this chunk.",
+          "format": "uuid"
+        },
+        "content": {
+          "description": "Raw text content of this chunk.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "createdAt": {
+          "description": "When this chunk was created.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "documentPath": {
+          "description": "MinIO path of the OKF source document this chunk was extracted from. Used to identify all chunks belonging to one document for deletion/re-index.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "id": {
+          "$ref": "#/definitions/UUID",
+          "description": "Auto-generated primary key.",
+          "format": "uuid"
+        },
+        "roleId": {
+          "$ref": "#/definitions/UUID",
+          "description": "The role whose knowledge base this chunk belongs to.",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "id",
+        "companyId",
+        "roleId",
+        "documentPath",
+        "chunkIndex",
+        "content",
+        "createdAt"
+      ],
+      "type": "object"
+    },
     "LcpAgent": {
       "additionalProperties": false,
       "description": "A running instance of an  {@link  LcpRole }  within an  {@link  LcpCompany } . Each agent has a LangGraph `thread_id` (stored as  {@link  LcpAgent.threadId } ) that links it to its checkpoint in the PostgreSQL checkpoint store, enabling resumability.",
@@ -173,10 +223,28 @@
       "additionalProperties": false,
       "description": "Represents a company (tenant) within the LCP simulation. Each company has its own isolated set of agents, memory, and resources.",
       "properties": {
+        "companyContext": {
+          "description": "Optional company context injected as prompt part 2 at agent start. Describes the company environment: agent roster, shared storage layout, company name and description, and any company-wide behavioural guidelines.\n\nWhen null, part 2 is omitted from the agent prompt.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "description": {
           "description": "Human-readable description for the company.",
           "minLength": 1,
           "type": "string"
+        },
+        "embeddingConfig": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LlmConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Provider and model configuration used for generating and querying embeddings. Must point to an OpenAI-compatible embeddings endpoint (e.g. LM Studio `/v1/embeddings`, OpenAI `text-embedding-3-small`).\n\nWhen null, the RAG index and retrieval services are disabled for this company. Stored as JSONB — same shape as  {@link  LlmConfig }  but the `contextWindow` field is ignored."
         },
         "id": {
           "$ref": "#/definitions/UUID",
@@ -265,6 +333,13 @@
           "description": "Short identifier for this role within the company (e.g. `'analyst'`, `'planner'`).",
           "minLength": 1,
           "type": "string"
+        },
+        "rolePrompt": {
+          "description": "Optional role prompt injected as prompt part 1 immediately after the system prompt. Covers role identity, attitude, domain knowledge, and behavioural guidelines that are distinct from the system-level instructions.\n\nWhen null, part 1 is omitted —  {@link  systemPromptTemplate }  continues to serve as the sole pre-task context until a role prompt is explicitly set.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "systemPromptTemplate": {
           "description": "Handlebars-style prompt template injected as the system message at agent start. Available variables: `{{name}}`, `{{description}}`, `{{date}}`.",

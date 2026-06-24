@@ -2,6 +2,8 @@ import { AuditEvent, LcpAgent, LcpCompany, LcpRole } from '@lcp/shared';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AgentLoopService } from '../agent/agent-loop.service';
+import { McpClientModule } from '../mcp/mcp-client.module';
+import { AgentRagModule } from '../rag/agent-rag.module';
 import { AgentRegistryService } from '../registry/agent-registry.service';
 import { AgentWorkerService } from './agent-worker.service';
 
@@ -13,6 +15,8 @@ import { AgentWorkerService } from './agent-worker.service';
 @Module({
   imports: [
     TypeOrmModule.forFeature([LcpAgent, LcpRole, LcpCompany, AuditEvent]),
+    AgentRagModule,
+    McpClientModule,
   ],
   providers: [AgentWorkerService, AgentLoopService, AgentRegistryService],
 })

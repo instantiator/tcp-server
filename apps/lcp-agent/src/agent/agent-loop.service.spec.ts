@@ -16,6 +16,8 @@ import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
 import * as factory from '../llm/llm-factory';
+import { McpClientService } from '../mcp/mcp-client.service';
+import { AgentRagService } from '../rag/agent-rag.service';
 import { AgentRegistryService } from '../registry/agent-registry.service';
 import { AgentLoopService } from './agent-loop.service';
 
@@ -102,8 +104,17 @@ describe('AgentLoopService', () => {
         AgentLoopService,
         AgentRegistryService,
         {
+          provide: AgentRagService,
+          useValue: { retrieve: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: McpClientService,
+          useValue: { loadTools: jest.fn().mockResolvedValue([]) },
+        },
+        {
           provide: ConfigService,
           useValue: {
+            get: jest.fn().mockReturnValue(undefined),
             getOrThrow: jest.fn().mockReturnValue('postgres://localhost/test'),
           },
         },

@@ -27,6 +27,15 @@ import { Repository } from 'typeorm';
 import { ContextManagerService } from '../context/context-manager.service';
 import type { CompactionReport } from '../context/context.types';
 import { AgentEventService } from '../events/agent-event.service';
+import { RagRetrievalService } from '../rag/rag-retrieval.service';
+
+/**
+ * Prompt part 8 — appended as the last message on the initial turn only.
+ * Gives the agent a clear directive to begin work after all context has been
+ * established by the preceding prompt parts.
+ */
+const FINAL_INSTRUCTION =
+  'You have been given your task and all relevant context above. Proceed now: be thorough, draw on your expertise, and deliver your best work.';
 
 /** Response returned by {@link ChatService.sendMessage}. */
 export interface ChatMessageResponse {
@@ -47,6 +56,7 @@ export class ChatService {
     private readonly config: ConfigService,
     private readonly contextManager: ContextManagerService,
     private readonly agentEvents: AgentEventService,
+    private readonly ragRetrieval: RagRetrievalService,
     @InjectRepository(LcpAgent)
     private readonly agentRepo: Repository<LcpAgent>,
     @InjectRepository(LcpRole)
@@ -87,9 +97,8 @@ export class ChatService {
     const role = await this.roleRepo.findOneBy({ id: agent.roleId });
     if (!role) throw new NotFoundException(`Role ${agent.roleId} not found`);
 
-    const llmConfig =
-      role.llmConfig ??
-      (await this.companyRepo.findOneBy({ id: agent.companyId }))?.llmDefault;
+    const company = await this.companyRepo.findOneBy({ id: agent.companyId });
+    const llmConfig = role.llmConfig ?? company?.llmDefault;
     if (!llmConfig) {
       throw new NotFoundException(
         `No LLM config for agent ${agentId}: role has no llmConfig and company has no llmDefault`,
@@ -143,6 +152,18 @@ export class ChatService {
           this.auditRepo,
         );
 
+      let ragMessage: HumanMessage | null = null;
+      if (isFirstMessage) {
+        const ragChunks = await this.ragRetrieval.retrieve(
+          role.id,
+          preparedMessage,
+          company?.embeddingConfig,
+        );
+        if (ragChunks.length) {
+          ragMessage = new HumanMessage(buildRagMessage(ragChunks));
+        }
+      }
+
       const messages = isFirstMessage
         ? [
             // Prompt part 0: system prompt — rendered from the role's systemPromptTemplate
@@ -153,27 +174,25 @@ export class ChatService {
                 date: new Date().toISOString().split('T')[0],
               }),
             ),
-            // TODO - prompt part 1: inject a separate role prompt (identity, attitude, domain
-            //   knowledge, behavioural guidelines distinct from the system prompt) once the
-            //   role prompt structure is split from systemPromptTemplate (ADR-013)
-            // TODO - prompt part 2: inject company environment message (agent roster, company
-            //   name/description, shared storage folder structure) — implement when company
-            //   context is wired into the chat path (ADR-001)
-            // TODO - prompt part 3: inject services-available message listing MCP server
-            //   capabilities and RAG knowledge domains — implement when MCP/RAG integration
-            //   lands (ADR-002, ADR-006)
-            // TODO - prompt part 5: inject RAG data retrieved for this query — implement when
-            //   RAG retrieval is available (ADR-006)
-            // TODO - prompt part 6: inject MCP tool responses if the agent pre-fetches data
-            //   before its first turn — implement when MCP servers are wired (ADR-002)
+            // Prompt part 1: role prompt (identity, attitude, domain knowledge, behavioural guidelines)
+            ...(role.rolePrompt ? [new HumanMessage(role.rolePrompt)] : []),
+            // Prompt part 2: company environment (name, description, shared storage layout, etc.)
+            ...(company?.companyContext
+              ? [new HumanMessage(company.companyContext)]
+              : []),
+            // Prompt part 3: services available (MCP servers). Injected when role has a list.
+            ...buildServicesMessage(role.mcpServerList ?? [], this.config),
             // Prompt part 4: task / query prompt
             new HumanMessage(preparedMessage),
-            // TODO - prompt part 8: append a final-instruction suffix message telling the
-            //   agent what to do next — implement alongside role prompt restructure (ADR-013)
+            // Prompt part 5: RAG data retrieved for this query (omitted when nothing relevant)
+            ...(ragMessage ? [ragMessage] : []),
+            // Prompt part 6: MCP pre-task responses (none for stub servers; wired here for future use)
+            // Prompt part 7: conversation history is implicitly provided by the LangGraph
+            // checkpoint store keyed on agent.threadId — no explicit injection needed.
+            // Prompt part 8: final instruction — directs the agent to begin after all context is set
+            new HumanMessage(FINAL_INSTRUCTION),
           ]
         : [new HumanMessage(preparedMessage)];
-      // Prompt part 7: conversation history is implicitly provided by the LangGraph
-      // checkpoint store keyed on agent.threadId — no explicit injection needed.
 
       const result = await graph.invoke({ messages }, { ...runConfig, signal });
 
@@ -256,4 +275,41 @@ function renderTemplate(
     /\{\{(\w+)\}\}/g,
     (_, key: string) => vars[key] ?? '',
   );
+}
+
+/** Formats RAG chunks as a prompt part 5 message. */
+function buildRagMessage(
+  chunks: { documentPath: string; content: string }[],
+): string {
+  const sections = chunks
+    .map((c) => `### Source: ${c.documentPath}\n\n${c.content}`)
+    .join('\n\n---\n\n');
+  return `The following excerpts from your knowledge base are relevant to your current task. Draw on them as needed:\n\n${sections}`;
+}
+
+/**
+ * Returns zero or one HumanMessage announcing the MCP services available to the
+ * agent. Reads server URLs from env vars (`MCP_{NAME_UPPER}_URL`). Returns an
+ * empty array when the role has no configured servers or none have a URL set.
+ */
+function buildServicesMessage(
+  serverNames: string[],
+  config: ConfigService,
+): HumanMessage[] {
+  const lines = serverNames
+    .filter((n) => config.get<string>(`MCP_${n.toUpperCase()}_URL`))
+    .map(
+      (n) =>
+        `- **${n}**: call \`${n}__describe_server\` for a full tool list and usage guide`,
+    );
+
+  if (lines.length === 0) return [];
+
+  const text =
+    '## Available Services\n\n' +
+    'You have access to the following external services via tools. ' +
+    'Each service exposes a `describe_server` tool — call it to learn exactly what tools are available and how to use them before making calls.\n\n' +
+    lines.join('\n');
+
+  return [new HumanMessage(text)];
 }

@@ -8,6 +8,7 @@
   "transform": {
     "^.+\\.(t|j)s$": ["ts-jest", { "tsconfig": "<rootDir>/tsconfig.json" }]
   },
+  "transformIgnorePatterns": ["node_modules/(?!(pgvector)/)"],
   "moduleNameMapper": {
     "@lcp/shared": "<rootDir>/libs/lcp-shared/src/index.ts"
   },

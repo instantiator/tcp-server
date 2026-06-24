@@ -54,3 +54,40 @@ export async function apiRequest<T>(
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
+
+/**
+ * Uploads a single file to the given path using `multipart/form-data`.
+ * The file is sent in a field named `file`.
+ */
+export async function apiUpload<T>(
+  opts: ApiOptions,
+  path: string,
+  filename: string,
+  data: Buffer,
+): Promise<T> {
+  const url = `${opts.baseUrl.replace(/\/$/, '')}${path}`;
+  const form = new FormData();
+  form.append(
+    'file',
+    new Blob([new Uint8Array(data)], { type: 'text/markdown' }),
+    filename,
+  );
+
+  const headers: Record<string, string> = {};
+  if (opts.token) headers['Authorization'] = `Bearer ${opts.token}`;
+
+  const res = await fetch(url, { method: 'POST', headers, body: form });
+
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const err = (await res.json()) as { message?: string };
+      detail = err.message ? `: ${err.message}` : '';
+    } catch {
+      /* ignore */
+    }
+    throw new Error(`POST ${path} failed with HTTP ${res.status}${detail}`);
+  }
+
+  return res.json() as Promise<T>;
+}

@@ -56,6 +56,17 @@ export class LcpRole {
   systemPromptTemplate!: string;
 
   /**
+   * Optional role prompt injected as prompt part 1 immediately after the system prompt.
+   * Covers role identity, attitude, domain knowledge, and behavioural guidelines
+   * that are distinct from the system-level instructions.
+   *
+   * When null, part 1 is omitted — {@link systemPromptTemplate} continues to serve
+   * as the sole pre-task context until a role prompt is explicitly set.
+   */
+  @Column({ type: 'text', nullable: true })
+  rolePrompt?: string | null;
+
+  /**
    * Knowledge domain tags that will be used for RAG retrieval once the memory system is built.
    * Stored now so roles can be defined ahead of the RAG implementation.
    * ponytail: unused for MVP; consumed by the RAG phase

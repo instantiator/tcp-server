@@ -13,6 +13,8 @@ import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AgentLoopService } from '../../../apps/lcp-agent/src/agent/agent-loop.service';
 import * as factory from '../../../apps/lcp-agent/src/llm/llm-factory';
+import { McpClientService } from '../../../apps/lcp-agent/src/mcp/mcp-client.service';
+import { AgentRagService } from '../../../apps/lcp-agent/src/rag/agent-rag.service';
 import { AgentRegistryService } from '../../../apps/lcp-agent/src/registry/agent-registry.service';
 
 // Requires DOCKER services: PostgreSQL (DATABASE_URL).
@@ -47,8 +49,19 @@ describeIf('AgentLoopService (integration)', () => {
         AgentLoopService,
         AgentRegistryService,
         {
+          provide: AgentRagService,
+          useValue: { retrieve: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: McpClientService,
+          useValue: { loadTools: jest.fn().mockResolvedValue([]) },
+        },
+        {
           provide: ConfigService,
-          useValue: { getOrThrow: () => dbUrl },
+          useValue: {
+            get: jest.fn().mockReturnValue(undefined),
+            getOrThrow: () => dbUrl,
+          },
         },
       ],
     }).compile();
