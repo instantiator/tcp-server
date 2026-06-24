@@ -49,6 +49,19 @@ export LCP_TOKEN=$(./scripts/dev/lcp-cli.sh -u alice get-token)
 
 ## Verbs
 
+| Verb                                              | Invocation                                         | Description                                              |
+| ------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------------- |
+| [`get-token`](#get-token)                         | `get-token`                                        | Exchange username + password for an OIDC access token    |
+| [`list-companies`](#list-companies)               | `list-companies`                                   | List all companies                                       |
+| [`list-roles`](#list-roles)                       | `list-roles [-c <uuid>]`                           | List roles, optionally filtered to one company           |
+| [`set-company`](#set-company)                     | `set-company [-i <json>]`                          | Create or update a company                               |
+| [`set-role`](#set-role)                           | `set-role -c <uuid> [-i <json>]`                   | Create or update a role                                  |
+| [`chat`](#chat)                                   | `chat -r <uuid> [-q <message>]`                    | Interactive or single-query chat with a role             |
+| [`store-role-documents`](#store-role-documents)   | `store-role-documents -r <uuid> -s <paths...>`     | Upload OKF Markdown documents to a role's knowledge base |
+| [`list-role-documents`](#list-role-documents)     | `list-role-documents -r <uuid>`                    | List knowledge-base documents stored for a role          |
+| [`remove-role-documents`](#remove-role-documents) | `remove-role-documents -r <uuid> -p <patterns...>` | Remove knowledge-base documents by filename pattern      |
+| [`open-document-store`](#open-document-store)     | `open-document-store [--no-open]`                  | Print (and open) the MinIO console URL                   |
+
 ### `get-token`
 
 Exchange username + password for an OIDC access token.
@@ -170,6 +183,86 @@ If the access token expires mid-session, it is renewed automatically using the r
 # > exit
 # Agent <id> removed.
 ```
+
+### `store-role-documents`
+
+Upload OKF Markdown documents to a role's knowledge base. All files are validated before any are uploaded — if any fail, none are sent.
+
+Each file must be a `.md` file with valid YAML front-matter containing a non-empty `title` field (OKF format).
+
+- **stdout**: JSON array of `{ key, name, size, lastModified }` for each uploaded document
+- **stderr**: validation errors and per-file progress
+
+| Flag               | Alias | Description                                     |
+| ------------------ | ----- | ----------------------------------------------- |
+| `--role-id <uuid>` | `-r`  | **(Required)** Role UUID                        |
+| `--src <paths...>` | `-s`  | **(Required)** One or more file paths to upload |
+
+```bash
+./scripts/dev/lcp-cli.sh -t $TOKEN store-role-documents -r <roleId> -s policy.md handbook.md
+```
+
+Documents are stored in MinIO under `{company_slug}/knowledge/{role_name}/` and automatically indexed for RAG retrieval. See [shared-storage.md](shared-storage.md) for the storage layout.
+
+### `list-role-documents`
+
+List the knowledge-base documents currently stored for a role.
+
+- **stdout**: JSON array of `{ key, name, size, lastModified }` — empty array if none stored
+
+| Flag               | Alias | Description              |
+| ------------------ | ----- | ------------------------ |
+| `--role-id <uuid>` | `-r`  | **(Required)** Role UUID |
+
+```bash
+./scripts/dev/lcp-cli.sh -t $TOKEN list-role-documents -r <roleId>
+```
+
+### `remove-role-documents`
+
+Remove knowledge-base documents from a role by filename pattern. Supports `*` (any sequence of characters) and `?` (any single character) wildcards. Matched documents are deleted from MinIO and their RAG chunks removed from the database.
+
+- **stdout**: JSON array of deleted document keys
+- **stderr**: list of matched filenames before deletion, or a message if nothing matched
+
+| Flag                      | Alias | Description                                                  |
+| ------------------------- | ----- | ------------------------------------------------------------ |
+| `--role-id <uuid>`        | `-r`  | **(Required)** Role UUID                                     |
+| `--pattern <patterns...>` | `-p`  | **(Required)** One or more filename patterns (e.g. `"*.md"`) |
+
+```bash
+# Remove a specific file
+./scripts/dev/lcp-cli.sh -t $TOKEN remove-role-documents -r <roleId> -p "handbook.md"
+
+# Remove all markdown files
+./scripts/dev/lcp-cli.sh -t $TOKEN remove-role-documents -r <roleId> -p "*.md"
+
+# Remove files matching multiple patterns
+./scripts/dev/lcp-cli.sh -t $TOKEN remove-role-documents -r <roleId> -p "policy-?.md" "archive-*.md"
+```
+
+### `open-document-store`
+
+Print the MinIO console URL and open it in the default browser. Useful for browsing stored files during development.
+
+- **stdout**: the console URL
+- The URL is read from the `MINIO_CONSOLE_URL` environment variable (default: `http://localhost:9001`)
+
+| Flag        | Description                      |
+| ----------- | -------------------------------- |
+| `--no-open` | Print the URL without opening it |
+
+```bash
+# Open in browser
+./scripts/dev/lcp-cli.sh open-document-store
+
+# Print URL only
+./scripts/dev/lcp-cli.sh open-document-store --no-open
+```
+
+No authentication required — the MinIO console has its own login (see [shared-storage.md → Authentication](shared-storage.md#authentication)).
+
+---
 
 ## Input shape: `DeepPartial<T>`
 

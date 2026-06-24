@@ -134,7 +134,7 @@ docker compose logs lcp-server | grep -i "rag\|chunk\|retriev"
 ```bash
 ./scripts/dev/lcp-cli.sh remove-role-documents \
   --role-id "$ROLE_ID" \
-  --src /tmp/test-knowledge.md
+  --pattern "test-knowledge.md"
 ```
 
 Expected: success message. The document is removed from MinIO and all associated `KnowledgeChunk` rows are deleted from PostgreSQL. Subsequent agents will not retrieve content from it.

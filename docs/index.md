@@ -4,16 +4,17 @@
 
 Day-to-day guides for running and maintaining the system.
 
-| Document                                  | Description                                                        |
-| ----------------------------------------- | ------------------------------------------------------------------ |
-| [lcp-agent](lcp-agent.md)                 | Creating roles, starting agents, model compatibility check         |
-| [Setup Checklist](setup-checklist.md)     | Step-by-step first-time setup from clone to running tests          |
-| [Scripts](scripts.md)                     | All scripts in `scripts/` — purpose, options, and usage examples   |
-| [Testing](testing.md)                     | Testing strategy, four-tier overview, and how to run each suite    |
-| [Manual Testing](manual-testing/start.md) | Structured manual test guide — infrastructure through MCP servers  |
-| [Services](services.md)                   | All Docker Compose services — ports, dependencies, and purpose     |
-| [Database Migrations](db-migrations.md)   | How to create, register, and run TypeORM migrations                |
-| [Keycloak Setup](keycloak-setup.md)       | Configuring the OIDC provider for local development and production |
+| Document                                     | Description                                                        |
+| -------------------------------------------- | ------------------------------------------------------------------ |
+| 📄 [lcp-agent](lcp-agent.md)                 | Creating roles, starting agents, model compatibility check         |
+| 📄 [Setup Checklist](setup-checklist.md)     | Step-by-step first-time setup from clone to running tests          |
+| 📄 [Scripts](scripts.md)                     | All scripts in `scripts/` — purpose, options, and usage examples   |
+| 📄 [Testing](testing.md)                     | Testing strategy, four-tier overview, and how to run each suite    |
+| 📄 [Manual Testing](manual-testing/start.md) | Structured manual test guide — infrastructure through MCP servers  |
+| 📄 [Services](services.md)                   | All Docker Compose services — ports, dependencies, and purpose     |
+| 📄 [Shared Storage](shared-storage.md)       | MinIO authentication, folder structure, and document management    |
+| 📄 [Database Migrations](db-migrations.md)   | How to create, register, and run TypeORM migrations                |
+| 📄 [Keycloak Setup](keycloak-setup.md)       | Configuring the OIDC provider for local development and production |
 
 ## Architecture Decision Records
 

@@ -1,7 +1,9 @@
 # Scripts
 
 All scripts live in [`scripts/`](../scripts/). Each accepts `-h` / `--help`
-for full usage. Testing scripts also accept `-- <jest options>` to pass
+for full usage.
+
+Testing scripts also accept `-- <jest options>` to pass
 arguments through to Jest (e.g. `--testNamePattern`, `--testPathPattern`).
 
 ## Docker Compose project isolation
@@ -18,9 +20,10 @@ networks, and volumes are completely independent of each other:
 | `run-api-tests.sh`         | `lcp-api`         |
 
 This means a running dev environment is never touched by a test script's
-`down`, and test data never contaminates dev data. Port conflicts still
-prevent two deployments from running simultaneously on the same machine
-(all use the same host port bindings).
+`down`, and test data never contaminates dev data.
+
+> [!WARNING]
+> Port conflicts still prevent two deployments from running simultaneously on the same machine. (They all use the same host port bindings.)
 
 ## Summary
 
