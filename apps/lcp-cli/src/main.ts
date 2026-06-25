@@ -10,6 +10,11 @@ import { registerOpenDocumentStore } from './commands/open-document-store';
 import { registerSetCompany } from './commands/set-company';
 import { registerSetRole } from './commands/set-role';
 import { registerChat } from './commands/chat';
+import { registerListOpenQueries } from './commands/list-open-queries';
+import { registerReadQuery } from './commands/read-query';
+import { registerRespond } from './commands/respond';
+import { registerDownloadSharedDocument } from './commands/download-shared-document';
+import { registerUploadSharedDocument } from './commands/upload-shared-document';
 
 const program = new Command();
 
@@ -44,5 +49,10 @@ registerOpenDocumentStore(program);
 registerSetCompany(program);
 registerSetRole(program);
 registerChat(program);
+registerListOpenQueries(program);
+registerReadQuery(program);
+registerRespond(program);
+registerDownloadSharedDocument(program);
+registerUploadSharedDocument(program);
 
 program.parse(process.argv);

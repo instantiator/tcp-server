@@ -24,6 +24,7 @@ import { InternalController } from './internal.controller';
 import { ModelController } from './api.model.controller';
 import { RoleController } from './api.role.controller';
 import { RoleDocumentController } from './role-document.controller';
+import { StorageProxyController } from './storage-proxy.controller';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { ApiService } from './api.service';
 import { ChatService } from './chat.service';
@@ -56,6 +57,7 @@ import { RoleDocumentService } from './role-document.service';
     InternalController,
     RoleController,
     RoleDocumentController,
+    StorageProxyController,
     AgentController,
     ModelController,
   ],

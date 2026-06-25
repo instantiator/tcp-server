@@ -191,6 +191,53 @@ export class MinioService implements OnModuleInit {
     return `${companySlug}/knowledge/${roleName}/${filename}`;
   }
 
+  /**
+   * Returns the raw content stream and content-type for an arbitrary object key.
+   * Resolves `null` when the key does not exist.
+   */
+  async getByKey(
+    key: string,
+  ): Promise<{ stream: Readable; contentType: string } | null> {
+    try {
+      const resp = await this.client.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      );
+      return {
+        stream: resp.Body as Readable,
+        contentType: resp.ContentType ?? 'application/octet-stream',
+      };
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        (err.name === 'NoSuchKey' || err.name === 'NotFound')
+      ) {
+        return null;
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Writes arbitrary binary content to the given object key.
+   * Returns the number of bytes written.
+   */
+  async putByKey(
+    key: string,
+    data: Buffer,
+    contentType: string,
+  ): Promise<number> {
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: data,
+        ContentType: contentType,
+        ContentLength: data.length,
+      }),
+    );
+    return data.length;
+  }
+
   private async ensureBucketExists(): Promise<void> {
     try {
       await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
