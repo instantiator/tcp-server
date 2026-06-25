@@ -163,6 +163,14 @@
       ],
       "type": "object"
     },
+    "ConsultationStatus": {
+      "description": "Lifecycle states for an inter-agent consultation.",
+      "enum": [
+        "pending",
+        "complete"
+      ],
+      "type": "string"
+    },
     "Conversation": {
       "additionalProperties": false,
       "description": "A question posed by an agent to one or more human users. Created when an agent calls `request_user_input`; closed when a human replies.\n\nThe slug is human-readable (`{roleName}-{queryIndex}`) and is the primary identifier used by CLI commands. It is unique per role.",
@@ -180,16 +188,9 @@
           "format": "uuid"
         },
         "closedAt": {
-          "anyOf": [
-            {
-              "format": "date-time",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Set when status transitions to `closed`."
+          "description": "Set when status transitions to `closed`.",
+          "format": "date-time",
+          "type": "string"
         },
         "companyId": {
           "$ref": "#/definitions/UUID",
@@ -262,8 +263,7 @@
         "context",
         "status",
         "routedToIdentifiers",
-        "createdAt",
-        "closedAt"
+        "createdAt"
       ],
       "type": "object"
     },
@@ -465,6 +465,13 @@
           "minLength": 1,
           "type": "string"
         },
+        "output": {
+          "description": "Final output produced by the agent on completion. Set via the `complete_task` MCP tool, or as a fallback from the last AI message when the loop exits naturally.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "role": {
           "$ref": "#/definitions/LcpRole",
           "description": "The role template this agent runs as."
@@ -502,6 +509,7 @@
         "threadId",
         "initialPrompt",
         "createdAt",
+        "output",
         "updatedAt"
       ],
       "type": "object"
@@ -697,6 +705,53 @@
         "agent"
       ],
       "type": "string"
+    },
+    "PendingConsultation": {
+      "additionalProperties": false,
+      "description": "Tracks a paused agent waiting for another agent's consultation response.\n\nCreated when an agent calls `request_agent_consultation` via the interactions MCP server. The calling agent is set to  {@link  AgentStatus.Paused  }  until the consultation agent completes and `PauseAndResumeService.completeAgent()` finds this record and re-enqueues the calling agent.",
+      "properties": {
+        "callingAgentId": {
+          "$ref": "#/definitions/UUID",
+          "description": "The agent that is paused awaiting the consultation result."
+        },
+        "companyId": {
+          "$ref": "#/definitions/UUID",
+          "description": "Company owning both agents."
+        },
+        "consultationAgentId": {
+          "$ref": "#/definitions/UUID",
+          "description": "The newly created agent that will perform the consultation."
+        },
+        "createdAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "id": {
+          "$ref": "#/definitions/UUID",
+          "format": "uuid"
+        },
+        "result": {
+          "description": "The consultation result written by the consulting agent on completion. Null until the consultation is complete.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "$ref": "#/definitions/ConsultationStatus",
+          "description": "Current state of the consultation."
+        }
+      },
+      "required": [
+        "id",
+        "callingAgentId",
+        "consultationAgentId",
+        "companyId",
+        "status",
+        "result",
+        "createdAt"
+      ],
+      "type": "object"
     },
     "UUID": {
       "type": "string"

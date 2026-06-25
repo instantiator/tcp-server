@@ -107,7 +107,7 @@ describe('AgentLoopService', () => {
         AgentRegistryService,
         {
           provide: AuditClientService,
-          useValue: { record: auditRecord },
+          useValue: { record: auditRecord, notifyComplete: jest.fn() },
         },
         {
           provide: AgentRagService,

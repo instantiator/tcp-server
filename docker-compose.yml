@@ -206,6 +206,9 @@ services:
     environment:
       LCP_SERVER_URL: http://lcp-server:3000
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+    depends_on:
+      lcp-server:
+        condition: service_healthy
     ports:
       - "3012:3012"
     healthcheck:

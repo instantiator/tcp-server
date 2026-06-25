@@ -1,6 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import axios from 'axios';
 import { z } from 'zod';
+import { AuditClientService } from '../audit/audit-client.service';
 
 /** MCP tool result envelope — index signature satisfies the SDK's Zod-inferred type. */
 interface ToolResult {
@@ -8,12 +11,36 @@ interface ToolResult {
   content: Array<{ type: 'text'; text: string }>;
 }
 
+function ok(text: string): ToolResult {
+  return { content: [{ type: 'text', text }] };
+}
+
+function err(text: string): ToolResult {
+  return { content: [{ type: 'text', text: `Error: ${text}` }] };
+}
+
 /**
- * Builds fresh {@link McpServer} instances pre-loaded with stub interaction tools.
+ * Builds fresh {@link McpServer} instances pre-loaded with real interaction tools.
  * A new server is created per request so state is never shared across sessions.
+ *
+ * All state-mutating operations (`request_user_input`, `request_agent_consultation`,
+ * `complete_task`) delegate to lcp-server's internal endpoints, which handle
+ * all database writes and BullMQ job dispatch.
  */
 @Injectable()
 export class InteractionsToolsService {
+  private readonly logger = new Logger(InteractionsToolsService.name);
+  private readonly serverUrl: string;
+  private readonly apiKey: string;
+
+  constructor(
+    private readonly audit: AuditClientService,
+    config: ConfigService,
+  ) {
+    this.serverUrl = config.getOrThrow<string>('LCP_SERVER_URL');
+    this.apiKey = config.getOrThrow<string>('INTERNAL_API_KEY');
+  }
+
   /** Creates and returns a configured McpServer with all interaction tools registered. */
   createServer(): McpServer {
     const server = new McpServer({
@@ -22,8 +49,11 @@ export class InteractionsToolsService {
     });
 
     this.registerDescribeServer(server);
+    this.registerListAvailableUsers(server);
+    this.registerListAvailableRoles(server);
     this.registerRequestUserInput(server);
     this.registerRequestAgentConsultation(server);
+    this.registerCompleteTask(server);
 
     return server;
   }
@@ -33,26 +63,66 @@ export class InteractionsToolsService {
       'describe_server',
       'Returns an overview of the interactions service and its tools.',
       {},
-      (): ToolResult => {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: [
-                '## Interactions Service',
-                '',
-                'Enables requesting input from users or consultation from other agents.',
-                'These tools pause agent execution until the requested input is received.',
-                'This service is not yet fully implemented — tool calls return stub responses.',
-                '',
-                '### Tools',
-                '- **describe_server** — this overview',
-                '- **request_user_input(question, context?)** — pause and request input from a human user (stub)',
-                '- **request_agent_consultation(role_name, question, context?)** — consult another agent by role (stub)',
-              ].join('\n'),
-            },
-          ],
-        };
+      (): ToolResult =>
+        ok(
+          [
+            '## Interactions Service',
+            '',
+            'Enables requesting input from users or consultation from other agents.',
+            'Tools that pause agent execution will not return until the request is fulfilled.',
+            '',
+            '### Tools',
+            '- **describe_server** — this overview',
+            '- **list_available_users(companyId)** — list company users and their knowledge domains',
+            '- **list_available_roles(companyId)** — list roles available for agent consultation',
+            '- **request_user_input(agentId, companyId, question, context?)** — pause and request human input',
+            '- **request_agent_consultation(agentId, companyId, roleName, question, context?)** — consult another agent role',
+            '- **complete_task(agentId, companyId, finalAnswer)** — mark task complete with final output',
+          ].join('\n'),
+        ),
+    );
+  }
+
+  private registerListAvailableUsers(server: McpServer): void {
+    server.tool(
+      'list_available_users',
+      'Lists the human users registered in the company along with their roles and knowledge domains.',
+      {
+        companyId: z.string().uuid().describe('The company UUID.'),
+      },
+      async ({ companyId }): Promise<ToolResult> => {
+        try {
+          const res = await axios.get<unknown[]>(
+            `${this.serverUrl}/api/company/${companyId}/users`,
+            { headers: { Authorization: `Bearer internal` } },
+          );
+          return ok(JSON.stringify(res.data, null, 2));
+        } catch (e) {
+          this.logger.warn(`list_available_users failed: ${String(e)}`);
+          return err('Could not retrieve user list.');
+        }
+      },
+    );
+  }
+
+  private registerListAvailableRoles(server: McpServer): void {
+    server.tool(
+      'list_available_roles',
+      'Lists the agent roles defined in the company that can be consulted.',
+      {
+        companyId: z.string().uuid().describe('The company UUID.'),
+      },
+      async ({ companyId }): Promise<ToolResult> => {
+        try {
+          const res = await axios.get<unknown[]>(
+            `${this.serverUrl}/api/roles?companyId=${companyId}`,
+            { headers: { Authorization: `Bearer internal` } },
+          );
+          return ok(JSON.stringify(res.data, null, 2));
+        } catch (e) {
+          this.logger.warn(`list_available_roles failed: ${String(e)}`);
+          return err('Could not retrieve role list.');
+        }
       },
     );
   }
@@ -60,9 +130,15 @@ export class InteractionsToolsService {
   private registerRequestUserInput(server: McpServer): void {
     server.tool(
       'request_user_input',
-      'Pause and request input from a human user (stub).',
+      [
+        'Pauses the current agent and submits a question to the relevant human users in the company.',
+        'The agent will be automatically resumed once a user replies.',
+        'Use this when you need information or a decision that only a human can provide.',
+      ].join(' '),
       {
-        question: z.string().describe('The question to ask the user.'),
+        agentId: z.string().uuid().describe('The calling agent UUID.'),
+        companyId: z.string().uuid().describe('The company UUID.'),
+        question: z.string().min(1).describe('The question to ask the user.'),
         context: z
           .string()
           .optional()
@@ -70,15 +146,28 @@ export class InteractionsToolsService {
             'Optional context to help the user understand the request.',
           ),
       },
-      (): ToolResult => {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: 'User input requests are not yet implemented.',
-            },
-          ],
-        };
+      async ({
+        agentId,
+        companyId,
+        question,
+        context,
+      }): Promise<ToolResult> => {
+        try {
+          const res = await axios.post<{ slug: string }>(
+            `${this.serverUrl}/internal/pause`,
+            { type: 'user_input', agentId, companyId, question, context },
+            { headers: { 'X-Internal-Api-Key': this.apiKey } },
+          );
+          const { slug } = res.data;
+          return ok(
+            `Paused. Your question has been submitted as conversation '${slug}'. Your task will resume automatically when a user responds.`,
+          );
+        } catch (e) {
+          this.logger.error(`request_user_input failed: ${String(e)}`);
+          return err(
+            'Could not submit user input request. Try again or proceed without user input.',
+          );
+        }
       },
     );
   }
@@ -86,26 +175,97 @@ export class InteractionsToolsService {
   private registerRequestAgentConsultation(server: McpServer): void {
     server.tool(
       'request_agent_consultation',
-      'Consult another agent by role (stub).',
+      [
+        'Pauses the current agent and dispatches a consultation request to another agent role.',
+        "The agent will be automatically resumed with the consulting agent's response once it completes.",
+        'Use this when another role has specialist knowledge needed to proceed.',
+      ].join(' '),
       {
-        role_name: z
+        agentId: z.string().uuid().describe('The calling agent UUID.'),
+        companyId: z.string().uuid().describe('The company UUID.'),
+        roleName: z
           .string()
-          .describe('The role name of the agent to consult.'),
-        question: z.string().describe('The question to pose to the agent.'),
+          .min(1)
+          .describe('The name of the role to consult.'),
+        question: z
+          .string()
+          .min(1)
+          .describe('The question to pose to the consulting agent.'),
         context: z
           .string()
           .optional()
           .describe('Optional context for the consultation.'),
       },
-      (): ToolResult => {
-        return {
-          content: [
+      async ({
+        agentId,
+        companyId,
+        roleName,
+        question,
+        context,
+      }): Promise<ToolResult> => {
+        try {
+          const res = await axios.post<{ consultationId: string }>(
+            `${this.serverUrl}/internal/pause`,
             {
-              type: 'text',
-              text: 'Agent consultation is not yet implemented.',
+              type: 'agent_consultation',
+              agentId,
+              companyId,
+              roleName,
+              question,
+              context,
             },
-          ],
-        };
+            { headers: { 'X-Internal-Api-Key': this.apiKey } },
+          );
+          const { consultationId } = res.data;
+          return ok(
+            `Paused. Consultation request dispatched to '${roleName}' (id: ${consultationId}). Your task will resume automatically when the consulting agent responds.`,
+          );
+        } catch (e) {
+          this.logger.error(`request_agent_consultation failed: ${String(e)}`);
+          return err(
+            `Could not dispatch consultation to '${roleName}'. Check the role name and try again.`,
+          );
+        }
+      },
+    );
+  }
+
+  private registerCompleteTask(server: McpServer): void {
+    server.tool(
+      'complete_task',
+      [
+        'Marks the current agent task as complete with a final answer.',
+        'Call this as your last action, after all work is done and any output files have been written.',
+        'The finalAnswer should be a concise, human-readable summary of what was accomplished.',
+      ].join(' '),
+      {
+        agentId: z.string().uuid().describe('The calling agent UUID.'),
+        companyId: z.string().uuid().describe('The company UUID.'),
+        finalAnswer: z
+          .string()
+          .min(1)
+          .describe('A concise summary of the completed task and its outputs.'),
+      },
+      async ({ agentId, companyId, finalAnswer }): Promise<ToolResult> => {
+        try {
+          await axios.post(
+            `${this.serverUrl}/internal/agent/${agentId}/complete`,
+            { output: finalAnswer },
+            { headers: { 'X-Internal-Api-Key': this.apiKey } },
+          );
+          this.audit.record(companyId, 'agent', agentId, 'state_change', {
+            newStatus: 'completed',
+            source: 'complete_task',
+          });
+          return ok('Task marked complete. Your run is now finished.');
+        } catch (e) {
+          this.logger.error(
+            `complete_task failed for agent ${agentId}: ${String(e)}`,
+          );
+          return err(
+            'Could not mark task complete. Your output may still have been processed.',
+          );
+        }
       },
     );
   }

@@ -21,7 +21,12 @@ const makeRepo = <T extends object>(): jest.Mocked<
 
 const makeDataSource = (overrides?: {
   queryResult?: unknown[];
-}): { query: jest.Mock; transaction: jest.Mock } => ({
+}): {
+  options: { type: string };
+  query: jest.Mock;
+  transaction: jest.Mock;
+} => ({
+  options: { type: 'postgres' },
   query: jest
     .fn()
     .mockResolvedValue(overrides?.queryResult ?? [{ queryIndex: 1 }]),

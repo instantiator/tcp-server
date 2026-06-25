@@ -1,5 +1,6 @@
 import { Conversation, ConversationMessage } from '@lcp/shared';
 import { randomUUID } from 'crypto';
+import type { AgentOrchestrationService } from './agent-orchestration.service';
 import type { ConversationService } from './conversation.service';
 import { ConversationController } from './conversation.controller';
 
@@ -11,14 +12,23 @@ const makeService = (): jest.Mocked<
   reply: jest.fn().mockResolvedValue({}),
 });
 
+const makeOrchestration = (): jest.Mocked<
+  Pick<AgentOrchestrationService, 'resumeAgent'>
+> => ({
+  resumeAgent: jest.fn().mockResolvedValue(undefined),
+});
+
 describe('ConversationController', () => {
   let service: ReturnType<typeof makeService>;
+  let orchestration: ReturnType<typeof makeOrchestration>;
   let ctrl: ConversationController;
 
   beforeEach(() => {
     service = makeService();
+    orchestration = makeOrchestration();
     ctrl = new ConversationController(
       service as unknown as ConversationService,
+      orchestration as unknown as AgentOrchestrationService,
     );
   });
 
@@ -51,6 +61,9 @@ describe('ConversationController', () => {
 
   describe('reply', () => {
     it('passes content and authorIdentifier to service.reply', async () => {
+      const conv = { agentId: null } as Conversation;
+      service.reply.mockResolvedValue(conv);
+
       await ctrl.reply('cto-1', {
         content: 'Here is my answer.',
         authorIdentifier: 'alice@example.com',
@@ -63,8 +76,42 @@ describe('ConversationController', () => {
     });
 
     it('omits authorIdentifier when not provided', async () => {
+      service.reply.mockResolvedValue({ agentId: null } as Conversation);
       await ctrl.reply('cto-1', { content: 'answer' });
       expect(service.reply).toHaveBeenCalledWith('cto-1', 'answer', undefined);
+    });
+
+    it('resumes the agent when conversation has an agentId', async () => {
+      const agentId = randomUUID();
+      service.reply.mockResolvedValue({
+        agentId,
+        slug: 'cto-1',
+      } as Conversation);
+
+      await ctrl.reply('cto-1', { content: 'The answer.' });
+
+      expect(orchestration.resumeAgent).toHaveBeenCalledWith(
+        agentId,
+        'The answer.',
+      );
+    });
+
+    it('does not call resumeAgent when agentId is null', async () => {
+      service.reply.mockResolvedValue({ agentId: null } as Conversation);
+
+      await ctrl.reply('cto-1', { content: 'answer' });
+
+      expect(orchestration.resumeAgent).not.toHaveBeenCalled();
+    });
+
+    it('does not throw when resumeAgent fails (logs warning only)', async () => {
+      const agentId = randomUUID();
+      service.reply.mockResolvedValue({ agentId } as Conversation);
+      orchestration.resumeAgent.mockRejectedValue(new Error('Queue down'));
+
+      await expect(
+        ctrl.reply('cto-1', { content: 'answer' }),
+      ).resolves.not.toThrow();
     });
   });
 });

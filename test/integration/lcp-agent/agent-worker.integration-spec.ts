@@ -58,7 +58,7 @@ describeIf('AgentWorkerService (integration)', () => {
         AgentRegistryService,
         {
           provide: AuditClientService,
-          useValue: { record: jest.fn() },
+          useValue: { record: jest.fn(), notifyComplete: jest.fn() },
         },
         {
           provide: AgentRagService,

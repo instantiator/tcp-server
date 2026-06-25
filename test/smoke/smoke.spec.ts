@@ -6,6 +6,9 @@ import * as http from 'http';
 
 const LCP_SERVER = process.env.LCP_SERVER_URL ?? 'http://localhost:3000';
 const LCP_AGENT = process.env.LCP_AGENT_URL ?? 'http://localhost:3001';
+const LCP_MCP_STORAGE = process.env.LCP_MCP_STORAGE_URL ?? 'http://localhost:3010';
+const LCP_MCP_MEMORY = process.env.LCP_MCP_MEMORY_URL ?? 'http://localhost:3011';
+const LCP_MCP_INTERACTIONS = process.env.LCP_MCP_INTERACTIONS_URL ?? 'http://localhost:3012';
 /**
  * Full OIDC discovery URL. Defaults to Keycloak's master realm on localhost.
  * Override with OIDC_DISCOVERY_URL for non-Keycloak providers or remote deployments.
@@ -26,6 +29,12 @@ function get(url: string): Promise<{ status: number; body: string }> {
   });
 }
 
+/** Parse body and assert the terminus `status` field is `"ok"`. */
+function expectHealthy(body: string): void {
+  const parsed = JSON.parse(body) as { status?: string };
+  expect(parsed.status).toBe('ok');
+}
+
 describe('Smoke', () => {
   describe('oidc provider', () => {
     it('OIDC discovery endpoint returns 200', async () => {
@@ -33,17 +42,44 @@ describe('Smoke', () => {
       expect(res.status).toBe(200);
     });
   });
+
   describe('lcp-server', () => {
-    it('/health returns 200', async () => {
+    it('/health returns 200 with status ok', async () => {
       const res = await get(`${LCP_SERVER}/health`);
       expect(res.status).toBe(200);
+      expectHealthy(res.body);
     });
   });
 
   describe('lcp-agent', () => {
-    it('lcp-agent /health returns 200', async () => {
+    it('/health returns 200 with status ok', async () => {
       const res = await get(`${LCP_AGENT}/health`);
       expect(res.status).toBe(200);
+      expectHealthy(res.body);
+    });
+  });
+
+  describe('lcp-mcp-storage', () => {
+    it('/health returns 200 with status ok (MinIO reachable)', async () => {
+      const res = await get(`${LCP_MCP_STORAGE}/health`);
+      expect(res.status).toBe(200);
+      expectHealthy(res.body);
+    });
+  });
+
+  describe('lcp-mcp-memory', () => {
+    it('/health returns 200 with status ok (PostgreSQL reachable)', async () => {
+      const res = await get(`${LCP_MCP_MEMORY}/health`);
+      expect(res.status).toBe(200);
+      expectHealthy(res.body);
+    });
+  });
+
+  describe('lcp-mcp-interactions', () => {
+    it('/health returns 200 with status ok', async () => {
+      const res = await get(`${LCP_MCP_INTERACTIONS}/health`);
+      expect(res.status).toBe(200);
+      expectHealthy(res.body);
     });
   });
 });

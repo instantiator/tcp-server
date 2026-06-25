@@ -83,6 +83,6 @@ export class Conversation {
   createdAt!: Date;
 
   /** Set when status transitions to `closed`. */
-  @Column({ type: 'timestamptz', nullable: true })
-  closedAt!: Date | null;
+  @Column({ nullable: true })
+  closedAt?: Date;
 }

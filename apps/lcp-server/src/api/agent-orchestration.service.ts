@@ -15,6 +15,8 @@ import { LcpAgentTemplate } from '../templates/LcpAgentTemplate';
 interface AgentJob {
   agentId: string;
   type: 'start' | 'resume';
+  /** User reply or consultation result injected as the first message on resume. */
+  replyContent?: string;
 }
 
 /**
@@ -63,9 +65,11 @@ export class AgentOrchestrationService
    * Validates that the agent exists and is in a resumable state, then
    * dispatches a `resume` job.
    *
-   * @throws if the agent does not exist or is already running / completed
+   * @param replyContent - Optional content injected as the first HumanMessage
+   *   on resume (user reply or consultation result).
+   * @throws if the agent does not exist or is not in a resumable state
    */
-  async resumeAgent(agentId: UUID): Promise<LcpAgent> {
+  async resumeAgent(agentId: UUID, replyContent?: string): Promise<LcpAgent> {
     const agent = await this.db.getAgent(agentId);
     if (!agent) {
       throw new Error(`Agent ${agentId} not found`);
@@ -80,7 +84,11 @@ export class AgentOrchestrationService
         `Agent ${agentId} cannot be resumed from status '${agent.status}'`,
       );
     }
-    await this.queue.add('resume', { agentId: agent.id, type: 'resume' });
+    await this.queue.add('resume', {
+      agentId: agent.id,
+      type: 'resume',
+      replyContent,
+    });
     this.logger.log(`Dispatched resume job for agent ${agent.id}`);
     return agent;
   }

@@ -5,6 +5,7 @@ import {
   LcpAgent,
   LcpCompany,
   LcpRole,
+  PendingConsultation,
 } from '@lcp/shared';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -19,12 +20,14 @@ import { CompanyController } from './api.company.controller';
 import { CompanyUserController } from './company-user.controller';
 import { ConversationController } from './conversation.controller';
 import { ConversationService } from './conversation.service';
+import { InternalController } from './internal.controller';
 import { ModelController } from './api.model.controller';
 import { RoleController } from './api.role.controller';
 import { RoleDocumentController } from './role-document.controller';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { ApiService } from './api.service';
 import { ChatService } from './chat.service';
+import { PauseAndResumeService } from './pause-and-resume.service';
 import { RoleDocumentService } from './role-document.service';
 
 /** HTTP API module: wires all REST controllers and supporting services. */
@@ -43,12 +46,14 @@ import { RoleDocumentService } from './role-document.service';
       CompanyUser,
       Conversation,
       ConversationMessage,
+      PendingConsultation,
     ]),
   ],
   controllers: [
     CompanyController,
     CompanyUserController,
     ConversationController,
+    InternalController,
     RoleController,
     RoleDocumentController,
     AgentController,
@@ -59,6 +64,7 @@ import { RoleDocumentService } from './role-document.service';
     AgentOrchestrationService,
     ChatService,
     ConversationService,
+    PauseAndResumeService,
     RoleDocumentService,
   ],
 })

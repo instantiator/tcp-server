@@ -1,4 +1,8 @@
-import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import {
+  ExecutionContext,
+  ForbiddenException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InternalApiKeyGuard } from './internal-api-key.guard';
 
@@ -29,9 +33,9 @@ describe('InternalApiKeyGuard', () => {
     expect(guard.canActivate(makeContext('secret-key'))).toBe(true);
   });
 
-  it('throws UnauthorizedException when the key is wrong', () => {
+  it('throws ForbiddenException when the key is wrong', () => {
     expect(() => guard.canActivate(makeContext('wrong-key'))).toThrow(
-      UnauthorizedException,
+      ForbiddenException,
     );
   });
 

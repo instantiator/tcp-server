@@ -6,7 +6,7 @@ import axios from 'axios';
 /**
  * Fire-and-forget HTTP client for writing audit events to `POST /internal/audit`
  * on lcp-server. Errors are logged but never thrown — audit failures must not
- * interrupt agent operations.
+ * interrupt MCP tool calls.
  */
 @Injectable()
 export class AuditClientService {
@@ -17,27 +17,6 @@ export class AuditClientService {
   constructor(config: ConfigService) {
     this.serverUrl = config.getOrThrow<string>('LCP_SERVER_URL');
     this.apiKey = config.getOrThrow<string>('INTERNAL_API_KEY');
-  }
-
-  /**
-   * Notifies lcp-server that an agent has completed with the given output.
-   * Fire-and-forget — errors are logged but never thrown.
-   *
-   * Idempotent on the server side: if the agent is already completed (e.g.
-   * because `complete_task` was called during the run) this is a no-op.
-   */
-  notifyComplete(agentId: string, output: string): void {
-    axios
-      .post(
-        `${this.serverUrl}/internal/agent/${agentId}/complete`,
-        { output },
-        { headers: { 'X-Internal-Api-Key': this.apiKey } },
-      )
-      .catch((err: unknown) => {
-        this.logger.warn(
-          `Agent complete notification failed for ${agentId}: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      });
   }
 
   /** Writes an audit event. Never throws. */

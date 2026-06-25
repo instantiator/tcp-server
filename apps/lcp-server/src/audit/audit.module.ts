@@ -10,6 +10,6 @@ import { InternalApiKeyGuard } from './internal-api-key.guard';
   imports: [TypeOrmModule.forFeature([AuditEvent])],
   controllers: [AuditController],
   providers: [AuditService, InternalApiKeyGuard],
-  exports: [AuditService],
+  exports: [AuditService, InternalApiKeyGuard],
 })
 export class AuditModule {}

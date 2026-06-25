@@ -8,6 +8,7 @@ import {
   LcpAgent,
   LcpCompany,
   LcpRole,
+  PendingConsultation,
 } from '@lcp/shared';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -30,6 +31,7 @@ import { AddKnowledgeChunk1782246974122 } from './migrations/1782246974122-AddKn
 import { AddEpisodicMemory1782247100000 } from './migrations/1782247100000-AddEpisodicMemory';
 import { AddCompanyUser1782247200000 } from './migrations/1782247200000-AddCompanyUser';
 import { AddConversation1782247300000 } from './migrations/1782247300000-AddConversation';
+import { AddAgentOutputAndConsultation1782247400000 } from './migrations/1782247400000-AddAgentOutputAndConsultation';
 import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
 
 /**
@@ -58,6 +60,7 @@ import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
           CompanyUser,
           Conversation,
           ConversationMessage,
+          PendingConsultation,
         ];
         if (!url || url.startsWith('sqlite')) {
           return {
@@ -84,6 +87,7 @@ import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
             AddEpisodicMemory1782247100000,
             AddCompanyUser1782247200000,
             AddConversation1782247300000,
+            AddAgentOutputAndConsultation1782247400000,
           ],
         };
       },

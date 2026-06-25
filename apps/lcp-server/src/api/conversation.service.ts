@@ -76,11 +76,21 @@ export class ConversationService {
 
     let queryIndex = 0;
     if (roleId) {
-      const rows = await this.dataSource.query<{ queryIndex: number }[]>(
-        `UPDATE lcp_role SET "queryIndex" = "queryIndex" + 1 WHERE id = $1 RETURNING "queryIndex"`,
-        [roleId],
-      );
-      queryIndex = rows[0]?.queryIndex ?? 0;
+      if (this.dataSource.options.type === 'postgres') {
+        // Atomic increment on PostgreSQL via RETURNING
+        const rows = await this.dataSource.query<{ queryIndex: number }[]>(
+          `UPDATE lcp_role SET "queryIndex" = "queryIndex" + 1 WHERE id = $1 RETURNING "queryIndex"`,
+          [roleId],
+        );
+        queryIndex = rows[0]?.queryIndex ?? 0;
+      } else {
+        // Non-atomic fallback for SQLite (E2E tests without PostgreSQL)
+        const role = await this.roleRepo.findOneBy({ id: roleId });
+        if (role) {
+          queryIndex = role.queryIndex + 1;
+          await this.roleRepo.update(roleId, { queryIndex });
+        }
+      }
     }
 
     const slug = `${slugBase}-${queryIndex}`;
@@ -100,7 +110,6 @@ export class ConversationService {
       context: context ?? null,
       status: 'awaiting_user',
       routedToIdentifiers,
-      closedAt: null,
     });
     return this.convRepo.save(conv);
   }

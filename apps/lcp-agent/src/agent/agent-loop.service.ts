@@ -58,7 +58,14 @@ const EVENT_TYPE_MAP: Record<string, AuditEventType> = {
  * - {@link TIMEOUT_MS} wall-clock timeout before the run is cancelled as failed
  * ponytail: move limits to LcpRole.runConfig JSONB once per-role tuning is needed
  *
- * MCP tool access and RAG memory injection are deferred to a later phase.
+ * **Pause/resume flow:**
+ * When an agent calls `request_user_input` or `request_agent_consultation` via
+ * the interactions MCP server, lcp-server sets the agent's status to
+ * {@link AgentStatus.Paused}. After each tool result event,
+ * {@link streamAndAudit} re-reads the agent status; detecting Paused causes an
+ * early exit so the BullMQ job completes normally without marking the agent
+ * failed. On resume, lcp-server enqueues a new job with `replyContent` which
+ * is injected as the first HumanMessage into the resumed LangGraph stream.
  */
 @Injectable()
 export class AgentLoopService {
@@ -83,9 +90,12 @@ export class AgentLoopService {
 
   /**
    * Runs (or resumes) the agent loop for the given agent.
-   * Updates the agent's status throughout and writes {@link AuditEvent} rows.
+   *
+   * @param replyContent - When provided, the agent is resuming from a pause.
+   *   The content is injected as the first HumanMessage instead of rebuilding
+   *   the full initial-state prompt from scratch.
    */
-  async run(agentId: UUID): Promise<void> {
+  async run(agentId: UUID, replyContent?: string): Promise<void> {
     const agent = await this.agentRepo.findOneBy({ id: agentId });
     if (!agent) {
       this.logger.error(`Agent ${agentId} not found — skipping job`);
@@ -128,6 +138,7 @@ export class AgentLoopService {
         llmConfig,
         checkpointer,
         abortController,
+        replyContent,
       );
     } finally {
       clearTimeout(timeoutId);
@@ -143,6 +154,7 @@ export class AgentLoopService {
     llmConfig: LlmConfig,
     checkpointer: PostgresSaver,
     abortController: AbortController,
+    replyContent?: string,
   ): Promise<void> {
     const mcpServerUrls = resolveMcpServerUrls(this.config);
     const mcpTools = await this.mcp.loadTools(
@@ -154,59 +166,27 @@ export class AgentLoopService {
     const model = buildChatModel(llmConfig);
     const graph = this.buildGraph(model, checkpointer, langchainTools);
 
-    const systemPrompt = renderTemplate(role.systemPromptTemplate, {
-      name: role.name,
-      description: role.description,
-      date: new Date().toISOString().split('T')[0],
-    });
-
-    const ragChunks = await this.rag.retrieve(
-      role.id,
-      agent.initialPrompt,
-      company?.embeddingConfig,
-    );
-    const ragMessage = ragChunks.length
-      ? new HumanMessage(buildRagMessage(ragChunks))
-      : null;
-
-    const servicesMessage =
-      mcpTools.length > 0
-        ? new HumanMessage(
-            buildServicesMessage(role.mcpServerList ?? [], mcpServerUrls),
-          )
-        : null;
-
     const config = {
       configurable: { thread_id: agent.id },
       signal: abortController.signal,
     };
-    const initialState = {
-      messages: [
-        // Prompt part 0: system prompt — rendered from the role's systemPromptTemplate
-        new SystemMessage(systemPrompt),
-        // Prompt part 1: role prompt (identity, attitude, domain knowledge, behavioural guidelines)
-        ...(role.rolePrompt ? [new HumanMessage(role.rolePrompt)] : []),
-        // Prompt part 2: company environment (name, description, shared storage layout, etc.)
-        ...(company?.companyContext
-          ? [new HumanMessage(company.companyContext)]
-          : []),
-        // Prompt part 3: services available (MCP servers). Call describe_server on any for details.
-        ...(servicesMessage ? [servicesMessage] : []),
-        // Prompt part 4: task / query prompt
-        new HumanMessage(agent.initialPrompt),
-        // Prompt part 5: RAG data retrieved for the initial task (omitted when nothing relevant)
-        ...(ragMessage ? [ragMessage] : []),
-        // Prompt part 6: MCP pre-task responses (none for stub servers; wired here for future use)
-        // Prompt part 7: conversation history provided by LangGraph checkpoint on resume
-        // Prompt part 8: final instruction — directs the agent to begin after all context is set
-        new HumanMessage(FINAL_INSTRUCTION),
-      ],
-    };
+
+    // Resume path: inject reply as the next message; checkpoint holds prior state
+    const input: typeof MessagesAnnotation.State =
+      replyContent !== undefined
+        ? { messages: [new HumanMessage(replyContent)] }
+        : await this.buildInitialState(
+            agent,
+            role,
+            company,
+            mcpTools,
+            mcpServerUrls,
+          );
 
     try {
       const lastAiMessage = await this.streamAndAudit(
         graph,
-        initialState,
+        input,
         config,
         agent,
         role,
@@ -217,6 +197,18 @@ export class AgentLoopService {
         const reason = String(abortController.signal.reason ?? 'unknown');
         this.recordStateChange(agent, role, 'failed', reason);
         await this.updateStatus(agent, AgentStatus.Failed);
+        return;
+      }
+
+      // A tool call may have set the agent to Paused or Completed during the stream
+      const freshAgent = await this.agentRepo.findOneBy({ id: agent.id });
+      if (
+        freshAgent?.status === AgentStatus.Paused ||
+        freshAgent?.status === AgentStatus.Completed
+      ) {
+        this.logger.log(
+          `Agent ${agent.id} loop ending with status '${freshAgent.status}' (set by tool call)`,
+        );
         return;
       }
 
@@ -235,6 +227,9 @@ export class AgentLoopService {
         );
       }
 
+      // Fallback completion — notifyComplete is idempotent if complete_task was called
+      const output = content || '';
+      this.auditClient.notifyComplete(agent.id, output);
       await this.updateStatus(agent, AgentStatus.Completed);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -273,7 +268,14 @@ export class AgentLoopService {
     return graph.compile({ checkpointer });
   }
 
-  /** Streams graph events, writes audit rows, and returns the last AI message. */
+  /**
+   * Streams graph events, writes audit rows, and returns the last AI message.
+   *
+   * After each `on_tool_end` event, re-reads the agent status from the DB. If
+   * a tool call has set the status to {@link AgentStatus.Paused} or
+   * {@link AgentStatus.Completed}, breaks out of the stream early so the BullMQ
+   * job can complete without marking the agent failed.
+   */
   private async streamAndAudit(
     graph: ReturnType<typeof this.buildGraph>,
     input: typeof MessagesAnnotation.State,
@@ -310,9 +312,76 @@ export class AgentLoopService {
         const output = (event.data as { output?: unknown } | undefined)?.output;
         if (output instanceof AIMessage) lastAiMessage = output;
       }
+
+      // Pause detection: a tool call (e.g. request_user_input, complete_task) may
+      // have mutated the agent's status — exit the stream gracefully if so
+      if (event.event === 'on_tool_end') {
+        const fresh = await this.agentRepo.findOneBy({ id: agent.id });
+        if (
+          fresh?.status === AgentStatus.Paused ||
+          fresh?.status === AgentStatus.Completed
+        ) {
+          this.logger.log(
+            `Agent ${agent.id} status '${fresh.status}' detected after tool result — exiting stream`,
+          );
+          break;
+        }
+      }
     }
 
     return lastAiMessage;
+  }
+
+  /** Builds the full initial-state message list for the first run of an agent. */
+  private async buildInitialState(
+    agent: LcpAgent,
+    role: LcpRole,
+    company: LcpCompany | null,
+    mcpTools: Awaited<ReturnType<McpClientService['loadTools']>>,
+    mcpServerUrls: Record<string, string>,
+  ): Promise<typeof MessagesAnnotation.State> {
+    const systemPrompt = renderTemplate(role.systemPromptTemplate, {
+      name: role.name,
+      description: role.description,
+      date: new Date().toISOString().split('T')[0],
+    });
+
+    const ragChunks = await this.rag.retrieve(
+      role.id,
+      agent.initialPrompt,
+      company?.embeddingConfig,
+    );
+    const ragMessage = ragChunks.length
+      ? new HumanMessage(buildRagMessage(ragChunks))
+      : null;
+
+    const servicesMessage =
+      mcpTools.length > 0
+        ? new HumanMessage(
+            buildServicesMessage(role.mcpServerList ?? [], mcpServerUrls),
+          )
+        : null;
+
+    return {
+      messages: [
+        // Prompt part 0: system prompt — rendered from the role's systemPromptTemplate
+        new SystemMessage(systemPrompt),
+        // Prompt part 1: role prompt (identity, attitude, domain knowledge, behavioural guidelines)
+        ...(role.rolePrompt ? [new HumanMessage(role.rolePrompt)] : []),
+        // Prompt part 2: company environment (name, description, shared storage layout, etc.)
+        ...(company?.companyContext
+          ? [new HumanMessage(company.companyContext)]
+          : []),
+        // Prompt part 3: services available (MCP servers). Call describe_server on any for details.
+        ...(servicesMessage ? [servicesMessage] : []),
+        // Prompt part 4: task / query prompt
+        new HumanMessage(agent.initialPrompt),
+        // Prompt part 5: RAG data retrieved for the initial task (omitted when nothing relevant)
+        ...(ragMessage ? [ragMessage] : []),
+        // Prompt part 8: final instruction — directs the agent to begin after all context is set
+        new HumanMessage(FINAL_INSTRUCTION),
+      ],
+    };
   }
 
   private async updateStatus(
