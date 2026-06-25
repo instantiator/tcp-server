@@ -6,9 +6,12 @@ import * as http from 'http';
 
 const LCP_SERVER = process.env.LCP_SERVER_URL ?? 'http://localhost:3000';
 const LCP_AGENT = process.env.LCP_AGENT_URL ?? 'http://localhost:3001';
-const LCP_MCP_STORAGE = process.env.LCP_MCP_STORAGE_URL ?? 'http://localhost:3010';
-const LCP_MCP_MEMORY = process.env.LCP_MCP_MEMORY_URL ?? 'http://localhost:3011';
-const LCP_MCP_INTERACTIONS = process.env.LCP_MCP_INTERACTIONS_URL ?? 'http://localhost:3012';
+const LCP_MCP_STORAGE =
+  process.env.LCP_MCP_STORAGE_URL ?? 'http://localhost:3010';
+const LCP_MCP_MEMORY =
+  process.env.LCP_MCP_MEMORY_URL ?? 'http://localhost:3011';
+const LCP_MCP_INTERACTIONS =
+  process.env.LCP_MCP_INTERACTIONS_URL ?? 'http://localhost:3012';
 /**
  * Full OIDC discovery URL. Defaults to Keycloak's master realm on localhost.
  * Override with OIDC_DISCOVERY_URL for non-Keycloak providers or remote deployments.
