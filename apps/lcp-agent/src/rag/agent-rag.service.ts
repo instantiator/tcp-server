@@ -1,7 +1,6 @@
-import { LlmConfig } from '@lcp/shared';
+import { EmbeddingService, LlmConfig } from '@lcp/shared';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { OpenAIEmbeddings } from '@langchain/openai';
 import { UUID } from 'crypto';
 import pgvector from 'pgvector';
 import { DataSource } from 'typeorm';
@@ -16,21 +15,18 @@ export interface RagChunk {
 }
 
 /**
- * Minimal RAG retrieval service for lcp-agent.
+ * RAG retrieval service for lcp-agent.
  *
- * Embeds the query using the company's {@link LlmConfig.embeddingConfig} and
- * runs a pgvector cosine similarity search against the `knowledge_chunk` table.
- * Returns an empty array when no chunks exceed the similarity threshold, so
- * the agent prompt is not augmented with irrelevant content.
- *
- * This service mirrors {@link RagRetrievalService} in lcp-server but is kept
- * separate to avoid an HTTP round-trip between lcp-agent and lcp-server.
+ * Embeds the query using {@link EmbeddingService} (shared from libs) and runs a
+ * pgvector cosine similarity search against the `knowledge_chunk` table.
+ * Returns an empty array when no chunks exceed the similarity threshold.
  */
 @Injectable()
 export class AgentRagService {
   private readonly logger = new Logger(AgentRagService.name);
 
   constructor(
+    private readonly embedding: EmbeddingService,
     @InjectDataSource()
     private readonly dataSource: DataSource,
   ) {}
@@ -39,7 +35,7 @@ export class AgentRagService {
    * Returns the top-K most relevant chunks for `query` within `roleId`.
    *
    * @param roleId - Restrict search to this role's knowledge base.
-   * @param query - Natural-language query string (e.g. `agent.initialPrompt`).
+   * @param query - Natural-language query string.
    * @param embeddingConfig - Company embedding config. Returns empty when null.
    * @param topK - Maximum chunks to return (default 5).
    * @param threshold - Minimum cosine similarity (default 0.7).
@@ -53,14 +49,7 @@ export class AgentRagService {
   ): Promise<RagChunk[]> {
     if (!embeddingConfig) return [];
 
-    const embeddings = new OpenAIEmbeddings({
-      model: embeddingConfig.model,
-      apiKey: embeddingConfig.apiKey ?? 'lcp',
-      configuration: embeddingConfig.baseUrl
-        ? { baseURL: embeddingConfig.baseUrl }
-        : undefined,
-    });
-    const queryVector = await embeddings.embedQuery(query);
+    const queryVector = await this.embedding.embedQuery(embeddingConfig, query);
 
     const rows = await this.dataSource.query<RagChunk[]>(
       `SELECT id, "documentPath", "chunkIndex", content,

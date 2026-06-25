@@ -1,17 +1,12 @@
 import { FakeListChatModel } from '@langchain/core/utils/testing';
-import {
-  AgentStatus,
-  AuditEvent,
-  LcpAgent,
-  LcpCompany,
-  LcpRole,
-} from '@lcp/shared';
+import { AgentStatus, LcpAgent, LcpCompany, LcpRole } from '@lcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import { Queue } from 'bullmq';
 import { Repository } from 'typeorm';
 import { AgentLoopService } from '../../../apps/lcp-agent/src/agent/agent-loop.service';
+import { AuditClientService } from '../../../apps/lcp-agent/src/audit/audit-client.service';
 import * as factory from '../../../apps/lcp-agent/src/llm/llm-factory';
 import { McpClientService } from '../../../apps/lcp-agent/src/mcp/mcp-client.service';
 import { AgentRagService } from '../../../apps/lcp-agent/src/rag/agent-rag.service';
@@ -21,7 +16,7 @@ import { AgentWorkerService } from '../../../apps/lcp-agent/src/worker/agent-wor
 // Requires DOCKER services: PostgreSQL (DATABASE_URL) and Redis (REDIS_URL).
 // Run via: ./scripts/run-integration-tests.sh
 
-const ALL_ENTITIES = [LcpCompany, LcpRole, LcpAgent, AuditEvent];
+const ALL_ENTITIES = [LcpCompany, LcpRole, LcpAgent];
 
 const dbUrl = process.env.DATABASE_URL;
 const redisUrl = process.env.REDIS_URL;
@@ -45,7 +40,6 @@ describeIf('AgentWorkerService (integration)', () => {
   let companyRepo: Repository<LcpCompany>;
   let roleRepo: Repository<LcpRole>;
   let agentRepo: Repository<LcpAgent>;
-  let auditRepo: Repository<AuditEvent>;
 
   beforeAll(async () => {
     module = await Test.createTestingModule({
@@ -62,6 +56,10 @@ describeIf('AgentWorkerService (integration)', () => {
         AgentWorkerService,
         AgentLoopService,
         AgentRegistryService,
+        {
+          provide: AuditClientService,
+          useValue: { record: jest.fn() },
+        },
         {
           provide: AgentRagService,
           useValue: { retrieve: jest.fn().mockResolvedValue([]) },
@@ -95,7 +93,6 @@ describeIf('AgentWorkerService (integration)', () => {
     companyRepo = module.get(getRepositoryToken(LcpCompany));
     roleRepo = module.get(getRepositoryToken(LcpRole));
     agentRepo = module.get(getRepositoryToken(LcpAgent));
-    auditRepo = module.get(getRepositoryToken(AuditEvent));
   });
 
   afterAll(async () => {
@@ -106,7 +103,6 @@ describeIf('AgentWorkerService (integration)', () => {
   // Use DELETE (not TRUNCATE) to avoid PostgreSQL FK constraint errors.
   // beforeEach ensures a clean slate even when a previous run failed mid-cleanup.
   async function cleanDb() {
-    await auditRepo.createQueryBuilder().delete().execute();
     await agentRepo.createQueryBuilder().delete().execute();
     await roleRepo.createQueryBuilder().delete().execute();
     await companyRepo.createQueryBuilder().delete().execute();

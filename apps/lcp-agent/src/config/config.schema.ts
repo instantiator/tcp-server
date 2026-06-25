@@ -14,4 +14,6 @@ export const configSchema = Joi.object({
   MCP_STORAGE_URL: Joi.string().uri().optional(),
   MCP_MEMORY_URL: Joi.string().uri().optional(),
   MCP_INTERACTIONS_URL: Joi.string().uri().optional(),
+  LCP_SERVER_URL: Joi.string().uri().required(),
+  INTERNAL_API_KEY: Joi.string().required(),
 });

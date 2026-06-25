@@ -81,4 +81,11 @@ export class LcpRole {
    */
   @Column({ type: 'jsonb', default: [] })
   mcpServerList!: string[];
+
+  /**
+   * Monotonically incrementing counter used to generate unique {@link Conversation} slugs.
+   * Incremented atomically (raw SQL `UPDATE … RETURNING`) on each new conversation.
+   */
+  @Column({ type: 'int', default: 0 })
+  queryIndex!: number;
 }

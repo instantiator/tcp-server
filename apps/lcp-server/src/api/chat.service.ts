@@ -7,7 +7,6 @@ import { END, MessagesAnnotation, StateGraph } from '@langchain/langgraph';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import {
   AgentStatus,
-  AuditEvent,
   AuditEventType,
   LcpAgent,
   LcpCompany,
@@ -24,6 +23,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
 import { Repository } from 'typeorm';
+import { AuditService } from '../audit/audit.service';
 import { ContextManagerService } from '../context/context-manager.service';
 import type { CompactionReport } from '../context/context.types';
 import { AgentEventService } from '../events/agent-event.service';
@@ -57,14 +57,13 @@ export class ChatService {
     private readonly contextManager: ContextManagerService,
     private readonly agentEvents: AgentEventService,
     private readonly ragRetrieval: RagRetrievalService,
+    private readonly audit: AuditService,
     @InjectRepository(LcpAgent)
     private readonly agentRepo: Repository<LcpAgent>,
     @InjectRepository(LcpRole)
     private readonly roleRepo: Repository<LcpRole>,
     @InjectRepository(LcpCompany)
     private readonly companyRepo: Repository<LcpCompany>,
-    @InjectRepository(AuditEvent)
-    private readonly auditRepo: Repository<AuditEvent>,
   ) {}
 
   /**
@@ -113,7 +112,13 @@ export class ChatService {
       ...(isFirstMessage && { threadId: agentId }),
     });
 
-    await this.saveAudit(agent, role, AuditEventType.LlmRequest, { message });
+    await this.audit.record(
+      agent.companyId,
+      role.name,
+      agent.id,
+      AuditEventType.LlmRequest,
+      { message },
+    );
 
     const databaseUrl = this.config.getOrThrow<string>('DATABASE_URL');
     const checkpointer = PostgresSaver.fromConnString(databaseUrl);
@@ -150,7 +155,6 @@ export class ChatService {
           isFirstMessage,
           agent,
           role,
-          this.auditRepo,
         );
 
       let ragMessage: HumanMessage | null = null;
@@ -213,9 +217,13 @@ export class ChatService {
           ? last.content.trim()
           : '';
 
-      await this.saveAudit(agent, role, AuditEventType.LlmResponse, {
-        response: content,
-      });
+      await this.audit.record(
+        agent.companyId,
+        role.name,
+        agent.id,
+        AuditEventType.LlmResponse,
+        { response: content },
+      );
       await this.agentRepo.update(agentId, { status: AgentStatus.Idle });
       this.agentEvents.emit(agentId, {
         kind: 'processing_complete',
@@ -235,10 +243,13 @@ export class ChatService {
           (err.name === 'AbortError' ||
             (signal?.aborted && err.message.includes('abort'))))
       ) {
-        await this.saveAudit(agent, role, AuditEventType.StateChange, {
-          newStatus: 'idle',
-          reason: 'cancelled by user',
-        });
+        await this.audit.record(
+          agent.companyId,
+          role.name,
+          agent.id,
+          AuditEventType.StateChange,
+          { newStatus: 'idle', reason: 'cancelled by user' },
+        );
         await this.agentRepo.update(agentId, { status: AgentStatus.Idle });
         return { response: '' };
       }
@@ -246,10 +257,13 @@ export class ChatService {
       // err was not a cancellation - move to failed state.
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`Chat agent ${agentId} error: ${msg}`);
-      await this.saveAudit(agent, role, AuditEventType.StateChange, {
-        newStatus: 'failed',
-        reason: msg,
-      });
+      await this.audit.record(
+        agent.companyId,
+        role.name,
+        agent.id,
+        AuditEventType.StateChange,
+        { newStatus: 'failed', reason: msg },
+      );
       await this.agentRepo.update(agentId, { status: AgentStatus.Failed });
       throw new InternalServerErrorException(
         `Agent encountered an unexpected error.`,
@@ -257,23 +271,6 @@ export class ChatService {
     } finally {
       await checkpointer.end();
     }
-  }
-
-  private async saveAudit(
-    agent: LcpAgent,
-    role: LcpRole,
-    eventType: AuditEventType,
-    payload: Record<string, unknown>,
-  ): Promise<void> {
-    await this.auditRepo.save(
-      this.auditRepo.create({
-        companyId: agent.companyId,
-        role: role.name,
-        agentId: agent.id,
-        eventType,
-        payload,
-      }),
-    );
   }
 }
 

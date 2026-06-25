@@ -5,6 +5,7 @@ import {
 import { randomUUID } from 'crypto';
 import { AgentStatus, AuditEventType, LcpAgent, LcpRole } from '@lcp/shared';
 import { ConfigService } from '@nestjs/config';
+import { AuditService } from '../audit/audit.service';
 
 // Mock heavy LangGraph + LLM deps before importing ChatService
 jest.mock('@langchain/langgraph', () => ({
@@ -86,6 +87,7 @@ function makeRole(overrides: Partial<LcpRole> = {}): LcpRole {
     systemPromptTemplate: 'You are {{name}}.',
     knowledgeDomains: [],
     mcpServerList: [],
+    queryIndex: 0,
     company: {} as never,
     ...overrides,
   };
@@ -95,7 +97,7 @@ describe('ChatService', () => {
   let agentRepo: { findOneBy: jest.Mock; update: jest.Mock };
   let roleRepo: { findOneBy: jest.Mock };
   let companyRepo: { findOneBy: jest.Mock };
-  let auditRepo: { save: jest.Mock; create: jest.Mock };
+  let auditService: { write: jest.Mock; record: jest.Mock };
   let config: ConfigService;
   let service: ChatService;
   let compiledGraph: {
@@ -115,9 +117,9 @@ describe('ChatService', () => {
     };
     roleRepo = { findOneBy: jest.fn() };
     companyRepo = { findOneBy: jest.fn() };
-    auditRepo = {
-      save: jest.fn().mockResolvedValue({}),
-      create: jest.fn().mockReturnValue({}),
+    auditService = {
+      write: jest.fn().mockResolvedValue(undefined),
+      record: jest.fn().mockResolvedValue(undefined),
     };
     config = {
       getOrThrow: jest.fn().mockReturnValue('postgres://test'),
@@ -152,6 +154,7 @@ describe('ChatService', () => {
       compactor,
       guard,
       agentEvents,
+      auditService as unknown as AuditService,
     );
 
     ragRetrieval = { retrieve: jest.fn().mockResolvedValue([]) };
@@ -161,10 +164,10 @@ describe('ChatService', () => {
       contextManager,
       agentEvents,
       ragRetrieval as unknown as RagRetrievalService,
+      auditService as unknown as AuditService,
       agentRepo as never,
       roleRepo as never,
       companyRepo as never,
-      auditRepo as never,
     );
   });
 
@@ -205,11 +208,19 @@ describe('ChatService', () => {
       expect.objectContaining({ threadId: agent.id }),
     );
     // Audit events: LlmRequest + LlmResponse
-    expect(auditRepo.create).toHaveBeenCalledWith(
-      expect.objectContaining({ eventType: AuditEventType.LlmRequest }),
+    expect(auditService.record).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      AuditEventType.LlmRequest,
+      expect.any(Object),
     );
-    expect(auditRepo.create).toHaveBeenCalledWith(
-      expect.objectContaining({ eventType: AuditEventType.LlmResponse }),
+    expect(auditService.record).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      AuditEventType.LlmResponse,
+      expect.any(Object),
     );
   });
 
@@ -247,8 +258,12 @@ describe('ChatService', () => {
       agent.id,
       expect.objectContaining({ status: AgentStatus.Failed }),
     );
-    expect(auditRepo.create).toHaveBeenCalledWith(
-      expect.objectContaining({ eventType: AuditEventType.StateChange }),
+    expect(auditService.record).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      AuditEventType.StateChange,
+      expect.any(Object),
     );
     // PostgresSaver.end() must always be called to release connection
     expect(mockCheckpointer.end).toHaveBeenCalled();
@@ -449,8 +464,12 @@ describe('ChatService', () => {
       expect.objectContaining({ status: AgentStatus.Idle }),
     );
     // Should write a StateChange audit (cancelled) but not LlmResponse
-    expect(auditRepo.create).toHaveBeenCalledWith(
-      expect.objectContaining({ eventType: AuditEventType.StateChange }),
+    expect(auditService.record).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      AuditEventType.StateChange,
+      expect.any(Object),
     );
     expect(mockCheckpointer.end).toHaveBeenCalled();
   });

@@ -8,7 +8,6 @@ import { ToolNode, toolsCondition } from '@langchain/langgraph/prebuilt';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import {
   AgentStatus,
-  AuditEvent,
   AuditEventType,
   LcpAgent,
   LcpCompany,
@@ -21,6 +20,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import type { DynamicStructuredTool } from '@langchain/core/tools';
+import { AuditClientService } from '../audit/audit-client.service';
 import { buildChatModel } from '../llm/llm-factory';
 import { McpClientService } from '../mcp/mcp-client.service';
 import { AgentRagService } from '../rag/agent-rag.service';
@@ -70,14 +70,13 @@ export class AgentLoopService {
     private readonly rag: AgentRagService,
     private readonly mcp: McpClientService,
     private readonly config: ConfigService,
+    private readonly auditClient: AuditClientService,
     @InjectRepository(LcpAgent)
     private readonly agentRepo: Repository<LcpAgent>,
     @InjectRepository(LcpRole)
     private readonly roleRepo: Repository<LcpRole>,
     @InjectRepository(LcpCompany)
     private readonly companyRepo: Repository<LcpCompany>,
-    @InjectRepository(AuditEvent)
-    private readonly auditRepo: Repository<AuditEvent>,
   ) {
     this.databaseUrl = this.config.getOrThrow<string>('DATABASE_URL');
   }
@@ -216,7 +215,7 @@ export class AgentLoopService {
 
       if (abortController.signal.aborted) {
         const reason = String(abortController.signal.reason ?? 'unknown');
-        await this.recordStateChange(agent, role, 'failed', reason);
+        this.recordStateChange(agent, role, 'failed', reason);
         await this.updateStatus(agent, AgentStatus.Failed);
         return;
       }
@@ -240,7 +239,7 @@ export class AgentLoopService {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`Agent ${agent.id} loop error: ${msg}`);
-      await this.recordStateChange(agent, role, 'failed', msg);
+      this.recordStateChange(agent, role, 'failed', msg);
       await this.updateStatus(agent, AgentStatus.Failed);
     }
   }
@@ -298,7 +297,13 @@ export class AgentLoopService {
 
       const auditType = EVENT_TYPE_MAP[event.event];
       if (auditType) {
-        await this.saveAudit(agent, role, auditType, event.data);
+        this.auditClient.record(
+          agent.companyId,
+          role.name,
+          agent.id,
+          auditType,
+          event.data,
+        );
       }
 
       if (event.event === 'on_chat_model_end') {
@@ -321,33 +326,19 @@ export class AgentLoopService {
     });
   }
 
-  private async saveAudit(
-    agent: LcpAgent,
-    role: LcpRole,
-    eventType: AuditEventType,
-    payload: Record<string, unknown>,
-  ): Promise<void> {
-    await this.auditRepo.save(
-      this.auditRepo.create({
-        companyId: agent.companyId,
-        role: role.name,
-        agentId: agent.id,
-        eventType,
-        payload,
-      }),
-    );
-  }
-
-  private async recordStateChange(
+  private recordStateChange(
     agent: LcpAgent,
     role: LcpRole,
     newStatus: string,
     reason: string,
-  ): Promise<void> {
-    await this.saveAudit(agent, role, AuditEventType.StateChange, {
-      newStatus,
-      reason,
-    });
+  ): void {
+    this.auditClient.record(
+      agent.companyId,
+      role.name,
+      agent.id,
+      AuditEventType.StateChange,
+      { newStatus, reason },
+    );
   }
 }
 

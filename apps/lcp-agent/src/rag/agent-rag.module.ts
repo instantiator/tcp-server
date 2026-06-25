@@ -1,3 +1,4 @@
+import { EmbeddingService } from '@lcp/shared';
 import { Module } from '@nestjs/common';
 import { AgentRagService } from './agent-rag.service';
 
@@ -6,7 +7,7 @@ import { AgentRagService } from './agent-rag.service';
  * Does not include indexing — that is handled by lcp-server.
  */
 @Module({
-  providers: [AgentRagService],
+  providers: [AgentRagService, EmbeddingService],
   exports: [AgentRagService],
 })
 export class AgentRagModule {}

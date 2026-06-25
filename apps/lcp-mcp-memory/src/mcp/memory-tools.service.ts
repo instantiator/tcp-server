@@ -1,31 +1,51 @@
-import { Injectable } from '@nestjs/common';
+import { AuditEventType, EmbeddingService, LcpCompany } from '@lcp/shared';
+import { Injectable, Logger } from '@nestjs/common';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { UUID } from 'crypto';
+import pgvector from 'pgvector';
+import { DataSource, Repository } from 'typeorm';
 import { z } from 'zod';
+import { AuditClientService } from '../audit/audit-client.service';
 
-/** MCP tool result envelope — index signature satisfies the SDK's Zod-inferred type. */
+/** MCP tool result envelope. */
 interface ToolResult {
   [key: string]: unknown;
   content: Array<{ type: 'text'; text: string }>;
 }
 
+interface MemoryRow {
+  id: UUID;
+  source: 'knowledge' | 'episodic';
+  path: string;
+  content: string;
+  similarity: number;
+}
+
 /**
- * Builds fresh {@link McpServer} instances pre-loaded with stub memory tools.
- * A new server is created per request so state is never shared across sessions.
+ * Builds fresh {@link McpServer} instances with real memory tools backed by pgvector.
+ * Each request gets its own server instance — no shared state across sessions.
  */
 @Injectable()
 export class MemoryToolsService {
+  private readonly logger = new Logger(MemoryToolsService.name);
+
+  constructor(
+    private readonly embedding: EmbeddingService,
+    private readonly audit: AuditClientService,
+    @InjectRepository(LcpCompany)
+    private readonly companyRepo: Repository<LcpCompany>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
+  ) {}
+
   /** Creates and returns a configured McpServer with all memory tools registered. */
   createServer(): McpServer {
-    const server = new McpServer({
-      name: 'lcp-mcp-memory',
-      version: '1.0.0',
-    });
-
+    const server = new McpServer({ name: 'lcp-mcp-memory', version: '1.0.0' });
     this.registerDescribeServer(server);
     this.registerRecall(server);
     this.registerRemember(server);
     this.registerSearchKnowledge(server);
-
     return server;
   }
 
@@ -34,52 +54,58 @@ export class MemoryToolsService {
       'describe_server',
       'Returns an overview of the memory service and its tools.',
       {},
-      (): ToolResult => {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: [
-                '## Memory Service',
-                '',
-                "Provides semantic search over the role's knowledge base and episodic memory.",
-                'This service is not yet fully implemented — tool calls return stub responses.',
-                '',
-                '### Tools',
-                '- **describe_server** — this overview',
-                '- **recall(query, top_k?)** — search episodic and knowledge memory (stub)',
-                '- **remember(content, tags?)** — store an episodic memory entry (stub)',
-                '- **search_knowledge(query, top_k?)** — search the role knowledge base only (stub)',
-              ].join('\n'),
-            },
-          ],
-        };
-      },
+      (): ToolResult => ({
+        content: [
+          {
+            type: 'text',
+            text: [
+              '## Memory Service',
+              '',
+              "Provides semantic search over the role's knowledge base and episodic memory.",
+              'All searches use pgvector cosine similarity against the company embedding model.',
+              '',
+              '### Tools',
+              '- **describe_server** — this overview',
+              '- **recall(roleId, companyId, query, top_k?)** — search both episodic memory and knowledge base',
+              '- **remember(roleId, companyId, content, agentId?, tags?)** — store an episodic memory entry',
+              '- **search_knowledge(roleId, companyId, query, top_k?)** — search the role knowledge base only',
+            ].join('\n'),
+          },
+        ],
+      }),
     );
   }
 
   private registerRecall(server: McpServer): void {
     server.tool(
       'recall',
-      'Search episodic and knowledge memory (stub).',
+      'Search both episodic memory and the knowledge base by semantic similarity.',
       {
+        roleId: z
+          .string()
+          .uuid()
+          .describe('The role ID whose memory to search.'),
+        companyId: z
+          .string()
+          .uuid()
+          .describe('The company ID (used to load embedding config).'),
         query: z.string().describe('The search query.'),
         top_k: z
           .number()
           .int()
           .positive()
           .optional()
-          .describe('Maximum number of results to return.'),
+          .describe('Maximum results (default 5).'),
       },
-      (): ToolResult => {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: 'Memory recall is not yet implemented. Use the RAG context already injected into your initial prompt for knowledge retrieval.',
-            },
-          ],
-        };
+      async ({ roleId, companyId, query, top_k }): Promise<ToolResult> => {
+        const k = top_k ?? 5;
+        const result = await this.hybridSearch(companyId, roleId, query, k);
+        this.audit.record(companyId, roleId, null, AuditEventType.ToolCall, {
+          tool: 'recall',
+          query,
+          top_k: k,
+        });
+        return { content: [{ type: 'text', text: result }] };
       },
     );
   }
@@ -87,23 +113,49 @@ export class MemoryToolsService {
   private registerRemember(server: McpServer): void {
     server.tool(
       'remember',
-      'Store an episodic memory entry (stub).',
+      'Store an episodic memory entry for later recall.',
       {
+        roleId: z
+          .string()
+          .uuid()
+          .describe('The role ID to store this memory under.'),
+        companyId: z
+          .string()
+          .uuid()
+          .describe('The company ID (used to load embedding config).'),
         content: z.string().describe('The content to remember.'),
+        agentId: z
+          .string()
+          .uuid()
+          .optional()
+          .describe('The agent storing the memory.'),
         tags: z
           .array(z.string())
           .optional()
-          .describe('Optional tags to associate with the memory.'),
+          .describe('Optional classification tags.'),
       },
-      (): ToolResult => {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: 'Episodic memory storage is not yet implemented.',
-            },
-          ],
-        };
+      async ({
+        roleId,
+        companyId,
+        content,
+        agentId,
+        tags,
+      }): Promise<ToolResult> => {
+        const text = await this.storeMemory(
+          companyId,
+          roleId,
+          content,
+          agentId ?? null,
+          tags ?? null,
+        );
+        this.audit.record(
+          companyId,
+          roleId,
+          agentId ?? null,
+          AuditEventType.ToolCall,
+          { tool: 'remember' },
+        );
+        return { content: [{ type: 'text', text }] };
       },
     );
   }
@@ -111,26 +163,149 @@ export class MemoryToolsService {
   private registerSearchKnowledge(server: McpServer): void {
     server.tool(
       'search_knowledge',
-      'Search the role knowledge base only (stub).',
+      'Search the role knowledge base only by semantic similarity.',
       {
+        roleId: z
+          .string()
+          .uuid()
+          .describe('The role ID whose knowledge base to search.'),
+        companyId: z
+          .string()
+          .uuid()
+          .describe('The company ID (used to load embedding config).'),
         query: z.string().describe('The search query.'),
         top_k: z
           .number()
           .int()
           .positive()
           .optional()
-          .describe('Maximum number of results to return.'),
+          .describe('Maximum results (default 5).'),
       },
-      (): ToolResult => {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: 'Knowledge search is not yet implemented. Use the RAG context already injected into your initial prompt.',
-            },
-          ],
-        };
+      async ({ roleId, companyId, query, top_k }): Promise<ToolResult> => {
+        const k = top_k ?? 5;
+        const result = await this.knowledgeSearch(companyId, roleId, query, k);
+        this.audit.record(companyId, roleId, null, AuditEventType.ToolCall, {
+          tool: 'search_knowledge',
+          query,
+          top_k: k,
+        });
+        return { content: [{ type: 'text', text: result }] };
       },
     );
+  }
+
+  async hybridSearch(
+    companyId: string,
+    roleId: string,
+    query: string,
+    topK: number,
+  ): Promise<string> {
+    const embeddingConfig = await this.loadEmbeddingConfig(companyId);
+    if (!embeddingConfig)
+      return 'No embedding config found for this company — cannot perform semantic search.';
+
+    const queryVector = await this.embedding.embedQuery(embeddingConfig, query);
+    const vec = pgvector.toSql(queryVector);
+
+    const rows = await this.dataSource.query<MemoryRow[]>(
+      `SELECT * FROM (
+         SELECT 'knowledge' AS source, id::text, "documentPath" AS path, content,
+                1 - (embedding <=> $1::vector) AS similarity
+         FROM knowledge_chunk
+         WHERE "roleId" = $2::uuid AND embedding IS NOT NULL
+         UNION ALL
+         SELECT 'episodic', id::text, '' AS path, content,
+                1 - (embedding <=> $1::vector) AS similarity
+         FROM episodic_memory
+         WHERE "roleId" = $2::uuid AND embedding IS NOT NULL
+       ) combined
+       WHERE similarity >= 0.5
+       ORDER BY similarity DESC
+       LIMIT $3`,
+      [vec, roleId, topK],
+    );
+
+    return this.formatResults(rows);
+  }
+
+  async knowledgeSearch(
+    companyId: string,
+    roleId: string,
+    query: string,
+    topK: number,
+  ): Promise<string> {
+    const embeddingConfig = await this.loadEmbeddingConfig(companyId);
+    if (!embeddingConfig)
+      return 'No embedding config found for this company — cannot perform semantic search.';
+
+    const queryVector = await this.embedding.embedQuery(embeddingConfig, query);
+
+    const rows = await this.dataSource.query<MemoryRow[]>(
+      `SELECT 'knowledge' AS source, id::text, "documentPath" AS path, content,
+              1 - (embedding <=> $1::vector) AS similarity
+       FROM knowledge_chunk
+       WHERE "roleId" = $2::uuid AND embedding IS NOT NULL AND 1 - (embedding <=> $1::vector) >= 0.5
+       ORDER BY similarity DESC
+       LIMIT $3`,
+      [pgvector.toSql(queryVector), roleId, topK],
+    );
+
+    return this.formatResults(rows);
+  }
+
+  async storeMemory(
+    companyId: string,
+    roleId: string,
+    content: string,
+    agentId: string | null,
+    tags: string[] | null,
+  ): Promise<string> {
+    const embeddingConfig = await this.loadEmbeddingConfig(companyId);
+    if (!embeddingConfig)
+      return 'No embedding config found — memory stored without embedding (not searchable).';
+
+    const vector = await this.embedding.embedTexts(embeddingConfig, [content]);
+    const vec = pgvector.toSql(vector[0]);
+
+    const rows = await this.dataSource.query<{ id: UUID }[]>(
+      `INSERT INTO episodic_memory ("companyId", "roleId", "agentId", content, tags, embedding)
+       VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5::jsonb, $6::vector)
+       RETURNING id`,
+      [
+        companyId,
+        roleId,
+        agentId,
+        content,
+        tags ? JSON.stringify(tags) : null,
+        vec,
+      ],
+    );
+
+    this.logger.debug(
+      `Stored episodic memory ${rows[0].id} for role ${roleId}`,
+    );
+    return `Memory stored (id: ${rows[0].id}).`;
+  }
+
+  private async loadEmbeddingConfig(companyId: string) {
+    const company = await this.companyRepo.findOne({
+      where: { id: companyId as UUID },
+    });
+    return company?.embeddingConfig ?? null;
+  }
+
+  private formatResults(rows: MemoryRow[]): string {
+    if (rows.length === 0)
+      return 'No results found above the similarity threshold.';
+
+    return rows
+      .map((r, i) => {
+        const header =
+          r.source === 'knowledge'
+            ? `[${i + 1}] source: knowledge | similarity: ${Number(r.similarity).toFixed(2)} | path: ${r.path}`
+            : `[${i + 1}] source: episodic  | similarity: ${Number(r.similarity).toFixed(2)}`;
+        return `${header}\n"${r.content.slice(0, 500)}${r.content.length > 500 ? '…' : ''}"`;
+      })
+      .join('\n\n');
   }
 }

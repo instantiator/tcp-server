@@ -100,6 +100,293 @@
       ],
       "type": "string"
     },
+    "CompanyUser": {
+      "additionalProperties": false,
+      "description": "A human user associated with a company. Used for query routing (matching conversations to the right user) and for the human-in-the-loop pause/resume flow in Phases 5–6.",
+      "properties": {
+        "companyId": {
+          "$ref": "#/definitions/UUID",
+          "description": "The company this user belongs to.",
+          "format": "uuid"
+        },
+        "createdAt": {
+          "description": "When this user was added to the company.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "id": {
+          "$ref": "#/definitions/UUID",
+          "description": "Auto-generated primary key.",
+          "format": "uuid"
+        },
+        "identifier": {
+          "description": "OIDC subject (`sub`) claim or email address — unique per company.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "knowledgeDomains": {
+          "description": "Knowledge domains this user covers (e.g. `\"finance\"`, `\"legal\"`). Used by query routing to prefer the best-matched user.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "memberType": {
+          "$ref": "#/definitions/MemberType",
+          "description": "Membership tier. `creator` is set on company creation and cannot be removed."
+        },
+        "name": {
+          "description": "Display name for this user (optional).",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "roles": {
+          "description": "Role slugs this user is responsible for. Used by query routing to match incoming agent questions to the right user.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "companyId",
+        "identifier",
+        "name",
+        "memberType",
+        "roles",
+        "knowledgeDomains",
+        "createdAt"
+      ],
+      "type": "object"
+    },
+    "Conversation": {
+      "additionalProperties": false,
+      "description": "A question posed by an agent to one or more human users. Created when an agent calls `request_user_input`; closed when a human replies.\n\nThe slug is human-readable (`{roleName}-{queryIndex}`) and is the primary identifier used by CLI commands. It is unique per role.",
+      "properties": {
+        "agentId": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/UUID"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The agent that raised this question.",
+          "format": "uuid"
+        },
+        "closedAt": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Set when status transitions to `closed`."
+        },
+        "companyId": {
+          "$ref": "#/definitions/UUID",
+          "description": "The company this conversation belongs to.",
+          "format": "uuid"
+        },
+        "context": {
+          "description": "Optional additional context provided by the agent alongside the question.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "createdAt": {
+          "description": "When this conversation was created.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "id": {
+          "$ref": "#/definitions/UUID",
+          "description": "Auto-generated primary key.",
+          "format": "uuid"
+        },
+        "question": {
+          "description": "The question the agent is asking.",
+          "type": "string"
+        },
+        "roleId": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/UUID"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The role ID that originated this question.",
+          "format": "uuid"
+        },
+        "roleName": {
+          "description": "The role that originated this question (denormalised — kept even if role is later renamed).",
+          "minLength": 1,
+          "type": "string"
+        },
+        "routedToIdentifiers": {
+          "description": "OIDC identifiers of the users this question was routed to.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "slug": {
+          "description": "Human-readable unique identifier in the form `{role-name}-{queryIndex}`.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/ConversationStatus",
+          "description": "Current lifecycle state."
+        }
+      },
+      "required": [
+        "id",
+        "slug",
+        "companyId",
+        "roleName",
+        "roleId",
+        "agentId",
+        "question",
+        "context",
+        "status",
+        "routedToIdentifiers",
+        "createdAt",
+        "closedAt"
+      ],
+      "type": "object"
+    },
+    "ConversationMessage": {
+      "additionalProperties": false,
+      "description": "A single message in a  {@link  Conversation  }  thread. Messages are append-only — one `agent` message (the question) followed by zero or one `user` message (the reply that closes the conversation).",
+      "properties": {
+        "author": {
+          "$ref": "#/definitions/MessageAuthor",
+          "description": "Whether this message was written by the agent or a human user."
+        },
+        "authorIdentifier": {
+          "description": "OIDC identifier of the user who replied (null for agent messages).",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "content": {
+          "description": "Message body.",
+          "type": "string"
+        },
+        "conversationId": {
+          "$ref": "#/definitions/UUID",
+          "description": "The conversation this message belongs to.",
+          "format": "uuid"
+        },
+        "id": {
+          "$ref": "#/definitions/UUID",
+          "description": "Auto-generated primary key.",
+          "format": "uuid"
+        },
+        "timestamp": {
+          "description": "When this message was created.",
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "conversationId",
+        "author",
+        "authorIdentifier",
+        "content",
+        "timestamp"
+      ],
+      "type": "object"
+    },
+    "ConversationStatus": {
+      "description": "Lifecycle state of a  {@link  Conversation } .",
+      "enum": [
+        "awaiting_user",
+        "closed"
+      ],
+      "type": "string"
+    },
+    "EpisodicMemory": {
+      "additionalProperties": false,
+      "description": "A single agent-authored memory entry stored for later recall. The embedding vector is stored in a `vector(1536)` column managed via raw SQL (pgvector extension) — not mapped by TypeORM.",
+      "properties": {
+        "agentId": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/UUID"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The agent that recorded this memory (nullable — may be system-generated).",
+          "format": "uuid"
+        },
+        "companyId": {
+          "$ref": "#/definitions/UUID",
+          "description": "The company that owns this memory.",
+          "format": "uuid"
+        },
+        "content": {
+          "description": "Raw text content of the memory.",
+          "type": "string"
+        },
+        "createdAt": {
+          "description": "When this memory was created.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "id": {
+          "$ref": "#/definitions/UUID",
+          "description": "Auto-generated primary key.",
+          "format": "uuid"
+        },
+        "roleId": {
+          "$ref": "#/definitions/UUID",
+          "description": "The role whose episodic memory this belongs to.",
+          "format": "uuid"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional classification tags for filtering."
+        }
+      },
+      "required": [
+        "id",
+        "companyId",
+        "roleId",
+        "agentId",
+        "content",
+        "tags",
+        "createdAt"
+      ],
+      "type": "object"
+    },
     "KnowledgeChunk": {
       "additionalProperties": false,
       "description": "A single chunk of text extracted from an OKF knowledge-base document and stored for RAG retrieval. The corresponding embedding vector is stored directly in PostgreSQL as a `vector(1536)` column (pgvector extension) and is not mapped by TypeORM — all vector reads and writes use raw SQL.\n\nChunks are scoped to a  {@link  LcpRole  }  within a  {@link  LcpCompany  } . All chunks for a given `documentPath` are replaced atomically on re-index.",
@@ -334,6 +621,10 @@
           "minLength": 1,
           "type": "string"
         },
+        "queryIndex": {
+          "description": "Monotonically incrementing counter used to generate unique  {@link  Conversation  }  slugs. Incremented atomically (raw SQL `UPDATE … RETURNING`) on each new conversation.",
+          "type": "number"
+        },
         "rolePrompt": {
           "description": "Optional role prompt injected as prompt part 1 immediately after the system prompt. Covers role identity, attitude, domain knowledge, and behavioural guidelines that are distinct from the system-level instructions.\n\nWhen null, part 1 is omitted —  {@link  systemPromptTemplate }  continues to serve as the sole pre-task context until a role prompt is explicitly set.",
           "type": [
@@ -354,7 +645,8 @@
         "description",
         "systemPromptTemplate",
         "knowledgeDomains",
-        "mcpServerList"
+        "mcpServerList",
+        "queryIndex"
       ],
       "type": "object"
     },
@@ -388,6 +680,23 @@
         "model"
       ],
       "type": "object"
+    },
+    "MemberType": {
+      "description": "Membership tier for a  {@link  CompanyUser }  within a company.",
+      "enum": [
+        "creator",
+        "owner",
+        "member"
+      ],
+      "type": "string"
+    },
+    "MessageAuthor": {
+      "description": "Who authored a  {@link  ConversationMessage } .",
+      "enum": [
+        "user",
+        "agent"
+      ],
+      "type": "string"
     },
     "UUID": {
       "type": "string"

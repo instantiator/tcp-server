@@ -1,4 +1,4 @@
-import { AgentStatus, AuditEvent, AuditEventType, LcpAgent } from '@lcp/shared';
+import { AgentStatus, AuditEventType, LcpAgent } from '@lcp/shared';
 import {
   BadRequestException,
   Body,
@@ -16,12 +16,11 @@ import {
   Sse,
   UseGuards,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
 import type { UUID } from 'crypto';
 import type { Request } from 'express';
 import { map } from 'rxjs/operators';
-import { Repository } from 'typeorm';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AuditService } from '../audit/audit.service';
 import { DbService } from '../db/db.service';
 import { AgentEventService } from '../events/agent-event.service';
 import type { LcpAgentTemplate } from '../templates/LcpAgentTemplate';
@@ -48,8 +47,7 @@ export class AgentController {
     private readonly orchestration: AgentOrchestrationService,
     private readonly chat: ChatService,
     private readonly agentEvents: AgentEventService,
-    @InjectRepository(AuditEvent)
-    private readonly auditRepo: Repository<AuditEvent>,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -81,17 +79,15 @@ export class AgentController {
       roleId: body.roleId,
       initialPrompt: '',
     });
-    await this.auditRepo.save(
-      this.auditRepo.create({
-        companyId: agent.companyId,
-        role: body.roleId,
-        agentId: agent.id,
-        eventType: AuditEventType.StateChange,
-        payload: {
-          newStatus: AgentStatus.Idle,
-          reason: 'chat session created',
-        },
-      }),
+    await this.audit.record(
+      agent.companyId,
+      body.roleId,
+      agent.id,
+      AuditEventType.StateChange,
+      {
+        newStatus: AgentStatus.Idle,
+        reason: 'chat session created',
+      },
     );
     return agent;
   }

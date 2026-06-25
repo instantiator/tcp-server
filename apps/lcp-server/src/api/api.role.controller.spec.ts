@@ -14,6 +14,7 @@ function makeRole(overrides: Partial<LcpRole> = {}): LcpRole {
     systemPromptTemplate: 'You are {{name}}.',
     knowledgeDomains: [],
     mcpServerList: [],
+    queryIndex: 0,
     company: {} as never,
     ...overrides,
   };

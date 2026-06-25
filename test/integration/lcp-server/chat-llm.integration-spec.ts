@@ -12,6 +12,7 @@ import { getRepositoryToken, TypeOrmModule } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
 import { DataSource, Repository } from 'typeorm';
 import { ChatService } from '../../../apps/lcp-server/src/api/chat.service';
+import { AuditService } from '../../../apps/lcp-server/src/audit/audit.service';
 import { ContextModule } from '../../../apps/lcp-server/src/context/context.module';
 import { AgentEventService } from '../../../apps/lcp-server/src/events/agent-event.service';
 import { RagRetrievalService } from '../../../apps/lcp-server/src/rag/rag-retrieval.service';
@@ -68,6 +69,7 @@ describe('ChatService integration (stub LLM)', () => {
       ],
       providers: [
         ChatService,
+        AuditService,
         AgentEventService,
         {
           provide: RagRetrievalService,

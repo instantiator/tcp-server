@@ -2,8 +2,8 @@
 | :--------------------------------------- | :----------- | :------------------------------------------------------------- | :--------------------------------------------------------------------- | :------- | :-------- | :-------- |
 | @aws-sdk/client-s3                       | Apache-2.0   | git+https://github.com/aws/aws-sdk-js-v3.git                   | AWS SDK for JavaScript Team https://aws.amazon.com/sdk-for-javascript/ | 3.1075.0 | 3.1075.0  | ^3.1075.0 |
 | @langchain/core                          | MIT          | git+ssh://git@github.com/langchain-ai/langchainjs.git          | LangChain                                                              | 1.2.1    | 1.2.0     | ^1.2.0    |
-| @langchain/langgraph                     | MIT          | git+ssh://git@github.com/langchain-ai/langgraphjs.git          | LangChain                                                              | 1.4.5    | 1.4.4     | ^1.4.4    |
-| @langchain/langgraph-checkpoint-postgres | MIT          | git+ssh://git@github.com/langchain-ai/langgraphjs.git          | LangChain                                                              | 1.0.3    | 1.0.3     | ^1.0.3    |
+| @langchain/langgraph                     | MIT          | git+ssh://git@github.com/langchain-ai/langgraphjs.git          | LangChain                                                              | 1.4.6    | 1.4.4     | ^1.4.4    |
+| @langchain/langgraph-checkpoint-postgres | MIT          | git+ssh://git@github.com/langchain-ai/langgraphjs.git          | LangChain                                                              | 1.0.4    | 1.0.3     | ^1.0.3    |
 | @langchain/openai                        | MIT          | git+ssh://git@github.com/langchain-ai/langchainjs.git          | LangChain                                                              | 1.5.3    | 1.5.1     | ^1.5.1    |
 | @modelcontextprotocol/sdk                | MIT          | git+https://github.com/modelcontextprotocol/typescript-sdk.git | Anthropic, PBC (https://anthropic.com)                                 | 1.29.0   | 1.29.0    | ^1.29.0   |
 | @nestjs/axios                            | MIT          | git+https://github.com/nestjs/axios.git                        | Kamil Mysliwiec                                                        | 4.0.1    | 4.0.1     | ^4.0.1    |
@@ -29,3 +29,4 @@
 | reflect-metadata                         | Apache-2.0   | git+https://github.com/rbuckton/reflect-metadata.git           | Ron Buckton ron.buckton@microsoft.com http://github.com/rbuckton       | 0.2.2    | 0.2.2     | ^0.2.2    |
 | rxjs                                     | Apache-2.0   | git+https://github.com/reactivex/rxjs.git                      | Ben Lesh <ben@benlesh.com>                                             | 7.8.2    | 7.8.2     | ^7.8.1    |
 | typeorm                                  | MIT          | git+https://github.com/typeorm/typeorm.git                     | TypeORM maintainers@typeorm.io                                         | 1.0.0    | 1.0.0     | ^1.0.0    |
+

@@ -2,7 +2,11 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "declaration": false,
-    "outDir": "../../dist/apps/lcp-mcp-memory"
+    "outDir": "../../dist/apps/lcp-mcp-memory",
+    "paths": {
+      "@lcp/shared": ["../../libs/lcp-shared/src/index.ts"],
+      "@lcp/shared/*": ["../../libs/lcp-shared/src/*"]
+    }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "test", "**/*spec.ts"]

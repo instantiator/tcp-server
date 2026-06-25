@@ -2,8 +2,8 @@ import { BaseMessage } from '@langchain/core/messages';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { RunnableConfig } from '@langchain/core/runnables';
 import { Injectable, Logger } from '@nestjs/common';
-import { AuditEvent, AuditEventType, LcpAgent, LcpRole } from '@lcp/shared';
-import { Repository } from 'typeorm';
+import { AuditEventType, LcpAgent, LcpRole } from '@lcp/shared';
+import { AuditService } from '../audit/audit.service';
 import { AgentEventService } from '../events/agent-event.service';
 import { ContextBudgetService } from './context-budget.service';
 import { ContextCompactorService } from './context-compactor.service';
@@ -46,7 +46,7 @@ export interface PrepareResult {
  *    {@link ContextCompactorService} and writes the result back to the
  *    checkpoint using `graph.updateState()`.
  * 4. If still over budget, runs Tier-2 (LLM summarisation) on oversized messages.
- * 5. Emits {@link AgentEvent} SSE events and writes {@link AuditEvent} rows
+ * 5. Emits {@link AgentEvent} SSE events and writes audit rows via {@link AuditService}
  *    before and after compaction.
  *
  * When no compaction is needed the method returns immediately with no side effects.
@@ -60,6 +60,7 @@ export class ContextManagerService {
     private readonly compactor: ContextCompactorService,
     private readonly guard: IncomingDataGuardService,
     private readonly events: AgentEventService,
+    private readonly auditService: AuditService,
   ) {}
 
   /**
@@ -78,7 +79,6 @@ export class ContextManagerService {
    * @param isFirstMessage - When `true`, skips checkpoint state loading.
    * @param agent - Current agent record (for audit logging).
    * @param role - Agent's role (for audit logging).
-   * @param auditRepo - TypeORM repository for writing {@link AuditEvent} rows.
    */
   async prepare(
     agentId: string,
@@ -90,7 +90,6 @@ export class ContextManagerService {
     isFirstMessage: boolean,
     agent: LcpAgent,
     role: LcpRole,
-    auditRepo: Repository<AuditEvent>,
   ): Promise<PrepareResult> {
     const startMs = Date.now();
     const activities: string[] = [];
@@ -163,12 +162,18 @@ export class ContextManagerService {
         strategies: [],
       },
     });
-    await this.saveAudit(auditRepo, agent, role, {
-      event: 'compaction_triggered',
-      tokensBefore: totalTokens,
-      windowSize,
-      pct: this.budget.pct(totalTokens, windowSize),
-    });
+    await this.auditService.record(
+      agent.companyId,
+      role.name,
+      agent.id,
+      AuditEventType.Decision,
+      {
+        event: 'compaction_triggered',
+        tokensBefore: totalTokens,
+        windowSize,
+        pct: this.budget.pct(totalTokens, windowSize),
+      },
+    );
 
     const tokensBefore = totalTokens;
     let tokensAfter = totalTokens;
@@ -245,14 +250,20 @@ export class ContextManagerService {
         activities,
       },
     });
-    await this.saveAudit(auditRepo, agent, role, {
-      event: 'compaction_complete',
-      tokensAfter,
-      windowSize,
-      pctAfter: this.budget.pct(tokensAfter, windowSize),
-      durationMs: Date.now() - startMs,
-      activities,
-    });
+    await this.auditService.record(
+      agent.companyId,
+      role.name,
+      agent.id,
+      AuditEventType.Decision,
+      {
+        event: 'compaction_complete',
+        tokensAfter,
+        windowSize,
+        pctAfter: this.budget.pct(tokensAfter, windowSize),
+        durationMs: Date.now() - startMs,
+        activities,
+      },
+    );
 
     this.logger.log(
       `Agent ${agentId}: compaction complete — ${tokensBefore}→${tokensAfter} tokens in ${Date.now() - startMs}ms`,
@@ -347,22 +358,5 @@ export class ContextManagerService {
       before,
       after,
     };
-  }
-
-  private async saveAudit(
-    auditRepo: Repository<AuditEvent>,
-    agent: LcpAgent,
-    role: LcpRole,
-    payload: Record<string, unknown>,
-  ): Promise<void> {
-    await auditRepo.save(
-      auditRepo.create({
-        companyId: agent.companyId,
-        role: role.name,
-        agentId: agent.id,
-        eventType: AuditEventType.Decision,
-        payload,
-      }),
-    );
   }
 }

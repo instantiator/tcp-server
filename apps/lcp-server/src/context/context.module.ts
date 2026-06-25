@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AuditModule } from '../audit/audit.module';
 import { MinioModule } from '../storage/minio.module';
 import { AgentEventService } from '../events/agent-event.service';
 import { ContextBudgetService } from './context-budget.service';
@@ -8,7 +9,7 @@ import { IncomingDataGuardService } from './incoming-data-guard.service';
 
 /** Provides context-budget, compaction, and agent-event services to the API layer. */
 @Module({
-  imports: [MinioModule],
+  imports: [AuditModule, MinioModule],
   providers: [
     AgentEventService,
     ContextBudgetService,
