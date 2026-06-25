@@ -183,7 +183,7 @@ services:
     image: lcp-mcp-memory:latest
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://lcp:lcp@postgres:5432/lcp
+      DATABASE_URL: postgres://lcp:${POSTGRES_PASSWORD}@postgres:5432/lcp
       LCP_SERVER_URL: http://lcp-server:3000
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
     ports:

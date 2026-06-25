@@ -29,3 +29,4 @@
 | reflect-metadata                         | Apache-2.0   | git+https://github.com/rbuckton/reflect-metadata.git           | Ron Buckton ron.buckton@microsoft.com http://github.com/rbuckton       | 0.2.2    | 0.2.2     | ^0.2.2    |
 | rxjs                                     | Apache-2.0   | git+https://github.com/reactivex/rxjs.git                      | Ben Lesh <ben@benlesh.com>                                             | 7.8.2    | 7.8.2     | ^7.8.1    |
 | typeorm                                  | MIT          | git+https://github.com/typeorm/typeorm.git                     | TypeORM maintainers@typeorm.io                                         | 1.0.0    | 1.0.0     | ^1.0.0    |
+
