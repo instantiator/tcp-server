@@ -16,12 +16,12 @@ See [agent-services.md → MCP Servers](agent-services.md#mcp-servers) for how a
 
 ## Tools
 
-| Tool                                    | Signature                                      | Description                                          |
-| --------------------------------------- | ---------------------------------------------- | ---------------------------------------------------- |
-| [`describe_server`](#describe_server)   | `describe_server()`                            | Overview of the memory service and its tools         |
-| [`recall`](#recall)                     | `recall(roleId, companyId, query, top_k?)`     | Search episodic memory + knowledge base by similarity |
-| [`remember`](#remember)                 | `remember(roleId, companyId, content, agentId?, tags?)` | Store a new episodic memory entry           |
-| [`search_knowledge`](#search_knowledge) | `search_knowledge(roleId, companyId, query, top_k?)` | Search the role knowledge base only            |
+| Tool                                    | Signature                                               | Description                                           |
+| --------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------- |
+| [`describe_server`](#describe_server)   | `describe_server()`                                     | Overview of the memory service and its tools          |
+| [`recall`](#recall)                     | `recall(roleId, companyId, query, top_k?)`              | Search episodic memory + knowledge base by similarity |
+| [`remember`](#remember)                 | `remember(roleId, companyId, content, agentId?, tags?)` | Store a new episodic memory entry                     |
+| [`search_knowledge`](#search_knowledge) | `search_knowledge(roleId, companyId, query, top_k?)`    | Search the role knowledge base only                   |
 
 ---
 
@@ -43,12 +43,12 @@ Runs a hybrid semantic search across both episodic memory (`episodic_memory` tab
 
 **Arguments:**
 
-| Parameter   | Type    | Required | Description                                               |
-| ----------- | ------- | -------- | --------------------------------------------------------- |
-| `roleId`    | UUID    | yes      | The role whose memory and knowledge base to search        |
-| `companyId` | UUID    | yes      | The company (used to load the embedding configuration)    |
-| `query`     | string  | yes      | Natural-language search query                             |
-| `top_k`     | integer | no       | Maximum number of results to return (default: 5)          |
+| Parameter   | Type    | Required | Description                                            |
+| ----------- | ------- | -------- | ------------------------------------------------------ |
+| `roleId`    | UUID    | yes      | The role whose memory and knowledge base to search     |
+| `companyId` | UUID    | yes      | The company (used to load the embedding configuration) |
+| `query`     | string  | yes      | Natural-language search query                          |
+| `top_k`     | integer | no       | Maximum number of results to return (default: 5)       |
 
 **Returns:** Formatted results listing source, content, and cosine similarity score for each match. Returns a "no results" message if nothing is above the similarity threshold.
 
@@ -66,13 +66,13 @@ Stores a short piece of information in the role's episodic memory. The content i
 
 **Arguments:**
 
-| Parameter   | Type     | Required | Description                                                  |
-| ----------- | -------- | -------- | ------------------------------------------------------------ |
-| `roleId`    | UUID     | yes      | The role to store this memory under                          |
-| `companyId` | UUID     | yes      | The company (used to load the embedding configuration)       |
-| `content`   | string   | yes      | The content to store                                         |
-| `agentId`   | UUID     | no       | The agent instance storing the memory                        |
-| `tags`      | string[] | no       | Optional classification tags for future filtering            |
+| Parameter   | Type     | Required | Description                                            |
+| ----------- | -------- | -------- | ------------------------------------------------------ |
+| `roleId`    | UUID     | yes      | The role to store this memory under                    |
+| `companyId` | UUID     | yes      | The company (used to load the embedding configuration) |
+| `content`   | string   | yes      | The content to store                                   |
+| `agentId`   | UUID     | no       | The agent instance storing the memory                  |
+| `tags`      | string[] | no       | Optional classification tags for future filtering      |
 
 **Returns:** Confirmation message containing the new memory's UUID.
 
@@ -88,12 +88,12 @@ Searches the role's knowledge base only (RAG source documents in `knowledge_chun
 
 **Arguments:**
 
-| Parameter   | Type    | Required | Description                                                  |
-| ----------- | ------- | -------- | ------------------------------------------------------------ |
-| `roleId`    | UUID    | yes      | The role whose knowledge base to search                      |
-| `companyId` | UUID    | yes      | The company (used to load the embedding configuration)       |
-| `query`     | string  | yes      | Natural-language search query                                |
-| `top_k`     | integer | no       | Maximum number of results to return (default: 5)             |
+| Parameter   | Type    | Required | Description                                            |
+| ----------- | ------- | -------- | ------------------------------------------------------ |
+| `roleId`    | UUID    | yes      | The role whose knowledge base to search                |
+| `companyId` | UUID    | yes      | The company (used to load the embedding configuration) |
+| `query`     | string  | yes      | Natural-language search query                          |
+| `top_k`     | integer | no       | Maximum number of results to return (default: 5)       |
 
 **Returns:** Formatted results (same format as `recall`). Returns a "no results" message if nothing is above the similarity threshold.
 
@@ -103,12 +103,12 @@ Searches the role's knowledge base only (RAG source documents in `knowledge_chun
 
 ## Relationship to RAG injection
 
-|                | RAG injection (prompt part 5)     | Memory MCP tools                                    |
-| -------------- | --------------------------------- | --------------------------------------------------- |
-| When           | Before the first LLM call         | On demand, any time during the loop                 |
-| Query          | The agent's initial task prompt   | Any query the agent constructs                      |
-| Scope          | `knowledge_chunk` only            | `knowledge_chunk` + `episodic_memory` (for `recall`) |
-| Writes         | No                                | `remember` writes to `episodic_memory`               |
+|        | RAG injection (prompt part 5)   | Memory MCP tools                                     |
+| ------ | ------------------------------- | ---------------------------------------------------- |
+| When   | Before the first LLM call       | On demand, any time during the loop                  |
+| Query  | The agent's initial task prompt | Any query the agent constructs                       |
+| Scope  | `knowledge_chunk` only          | `knowledge_chunk` + `episodic_memory` (for `recall`) |
+| Writes | No                              | `remember` writes to `episodic_memory`               |
 
 ---
 

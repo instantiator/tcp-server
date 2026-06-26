@@ -49,23 +49,23 @@ export LCP_TOKEN=$(./scripts/dev/lcp-cli.sh -u alice get-token)
 
 ## Verbs
 
-| Verb                                              | Invocation                                         | Description                                              |
-| ------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------------- |
-| [`get-token`](#get-token)                         | `get-token`                                        | Exchange username + password for an OIDC access token    |
-| [`list-companies`](#list-companies)               | `list-companies`                                   | List all companies                                       |
-| [`list-roles`](#list-roles)                       | `list-roles [-c <uuid>]`                           | List roles, optionally filtered to one company           |
-| [`set-company`](#set-company)                     | `set-company [-i <json>]`                          | Create or update a company                               |
-| [`set-role`](#set-role)                           | `set-role -c <uuid> [-i <json>]`                   | Create or update a role                                  |
-| [`chat`](#chat)                                   | `chat -r <uuid> [-q <message>]`                    | Interactive or single-query chat with a role             |
-| [`store-role-documents`](#store-role-documents)   | `store-role-documents -r <uuid> -s <paths...>`     | Upload OKF Markdown documents to a role's knowledge base |
-| [`list-role-documents`](#list-role-documents)     | `list-role-documents -r <uuid>`                    | List knowledge-base documents stored for a role          |
-| [`remove-role-documents`](#remove-role-documents) | `remove-role-documents -r <uuid> -p <patterns...>` | Remove knowledge-base documents by filename pattern      |
-| [`open-document-store`](#open-document-store)           | `open-document-store [--no-open]`                                    | Print (and open) the MinIO console URL                   |
-| [`list-open-queries`](#list-open-queries)               | `list-open-queries [-c <uuid>] [--format table\|json\|csv]`          | List open agent-to-human queries                         |
-| [`read-query`](#read-query)                             | `read-query <slug>`                                                   | Read a query's full question and conversation history    |
-| [`respond`](#respond)                                   | `respond <slug> <message>`                                            | Reply to a query and resume the waiting agent            |
-| [`download-shared-document`](#download-shared-document) | `download-shared-document --source <path> [--target <path>]`         | Download a file from shared company storage              |
-| [`upload-shared-document`](#upload-shared-document)     | `upload-shared-document --source <path> --target <path>`             | Upload a local file to shared company storage            |
+| Verb                                                    | Invocation                                                   | Description                                              |
+| ------------------------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------- |
+| [`get-token`](#get-token)                               | `get-token`                                                  | Exchange username + password for an OIDC access token    |
+| [`list-companies`](#list-companies)                     | `list-companies`                                             | List all companies                                       |
+| [`list-roles`](#list-roles)                             | `list-roles [-c <uuid>]`                                     | List roles, optionally filtered to one company           |
+| [`set-company`](#set-company)                           | `set-company [-i <json>]`                                    | Create or update a company                               |
+| [`set-role`](#set-role)                                 | `set-role -c <uuid> [-i <json>]`                             | Create or update a role                                  |
+| [`chat`](#chat)                                         | `chat -r <uuid> [-q <message>]`                              | Interactive or single-query chat with a role             |
+| [`store-role-documents`](#store-role-documents)         | `store-role-documents -r <uuid> -s <paths...>`               | Upload OKF Markdown documents to a role's knowledge base |
+| [`list-role-documents`](#list-role-documents)           | `list-role-documents -r <uuid>`                              | List knowledge-base documents stored for a role          |
+| [`remove-role-documents`](#remove-role-documents)       | `remove-role-documents -r <uuid> -p <patterns...>`           | Remove knowledge-base documents by filename pattern      |
+| [`open-document-store`](#open-document-store)           | `open-document-store [--no-open]`                            | Print (and open) the MinIO console URL                   |
+| [`list-open-queries`](#list-open-queries)               | `list-open-queries [-c <uuid>] [--format table\|json\|csv]`  | List open agent-to-human queries                         |
+| [`read-query`](#read-query)                             | `read-query <slug>`                                          | Read a query's full question and conversation history    |
+| [`respond`](#respond)                                   | `respond <slug> <message>`                                   | Reply to a query and resume the waiting agent            |
+| [`download-shared-document`](#download-shared-document) | `download-shared-document --source <path> [--target <path>]` | Download a file from shared company storage              |
+| [`upload-shared-document`](#upload-shared-document)     | `upload-shared-document --source <path> --target <path>`     | Upload a local file to shared company storage            |
 
 ### `get-token`
 
@@ -276,10 +276,10 @@ List open agent-to-human queries (conversations with `status: awaiting_user`) th
 - **stdout**: formatted table (default), JSON, or CSV depending on `--format`
 - **stderr**: progress messages
 
-| Flag                    | Description                                  |
-| ----------------------- | -------------------------------------------- |
-| `-c, --company-id <id>` | Filter to a specific company                 |
-| `--format <fmt>`        | `table` (default), `json`, or `csv`          |
+| Flag                    | Description                         |
+| ----------------------- | ----------------------------------- |
+| `-c, --company-id <id>` | Filter to a specific company        |
+| `--format <fmt>`        | `table` (default), `json`, or `csv` |
 
 ```bash
 # Default table output
@@ -328,10 +328,10 @@ Download a file from shared company storage to the local filesystem.
 - **stdout**: `{ source, target, size }` JSON on success
 - **stderr**: progress messages
 
-| Flag                   | Description                                                          |
-| ---------------------- | -------------------------------------------------------------------- |
-| `--source <path>`      | Required. Object key in MinIO (e.g. `acme/tasks/xyz/output/out.md`) |
-| `--target <path>`      | Local destination path. Defaults to `./<filename>` (basename of source) |
+| Flag              | Description                                                             |
+| ----------------- | ----------------------------------------------------------------------- |
+| `--source <path>` | Required. Object key in MinIO (e.g. `acme/tasks/xyz/output/out.md`)     |
+| `--target <path>` | Local destination path. Defaults to `./<filename>` (basename of source) |
 
 ```bash
 # Download to current directory
@@ -350,9 +350,9 @@ Upload a local file to shared company storage.
 - **stdout**: `{ key, size }` JSON on success
 - **stderr**: progress messages
 
-| Flag              | Description                                                         |
-| ----------------- | ------------------------------------------------------------------- |
-| `--source <path>` | Required. Local file path to upload                                 |
+| Flag              | Description                                                                        |
+| ----------------- | ---------------------------------------------------------------------------------- |
+| `--source <path>` | Required. Local file path to upload                                                |
 | `--target <path>` | Required. Object key destination in MinIO (e.g. `acme/knowledge/analyst/guide.md`) |
 
 ```bash

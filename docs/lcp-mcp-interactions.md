@@ -16,14 +16,14 @@ See [agent-services.md → MCP Servers](agent-services.md#mcp-servers) for how a
 
 ## Tools
 
-| Tool                                                        | Signature                                                                | Description                                        |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------- |
-| [`describe_server`](#describe_server)                       | `describe_server()`                                                      | Overview of the interactions service               |
-| [`list_available_users`](#list_available_users)             | `list_available_users(companyId)`                                        | List human users registered in the company         |
-| [`list_available_roles`](#list_available_roles)             | `list_available_roles(companyId)`                                        | List agent roles that can be consulted             |
-| [`request_user_input`](#request_user_input)                 | `request_user_input(agentId, companyId, question, context?)`             | Pause and submit a question to human users         |
+| Tool                                                        | Signature                                                                      | Description                                |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------ |
+| [`describe_server`](#describe_server)                       | `describe_server()`                                                            | Overview of the interactions service       |
+| [`list_available_users`](#list_available_users)             | `list_available_users(companyId)`                                              | List human users registered in the company |
+| [`list_available_roles`](#list_available_roles)             | `list_available_roles(companyId)`                                              | List agent roles that can be consulted     |
+| [`request_user_input`](#request_user_input)                 | `request_user_input(agentId, companyId, question, context?)`                   | Pause and submit a question to human users |
 | [`request_agent_consultation`](#request_agent_consultation) | `request_agent_consultation(agentId, companyId, roleName, question, context?)` | Consult another agent role                 |
-| [`complete_task`](#complete_task)                           | `complete_task(agentId, companyId, finalAnswer)`                         | Mark the task complete with a summary              |
+| [`complete_task`](#complete_task)                           | `complete_task(agentId, companyId, finalAnswer)`                               | Mark the task complete with a summary      |
 
 ---
 
@@ -45,9 +45,9 @@ Lists the human users registered in the company, including their roles and knowl
 
 **Arguments:**
 
-| Parameter   | Type | Required | Description              |
-| ----------- | ---- | -------- | ------------------------ |
-| `companyId` | UUID | yes      | The company to query     |
+| Parameter   | Type | Required | Description          |
+| ----------- | ---- | -------- | -------------------- |
+| `companyId` | UUID | yes      | The company to query |
 
 **Returns:** JSON array of user records:
 
@@ -72,9 +72,9 @@ Lists the agent roles defined in the company that can be consulted via `request_
 
 **Arguments:**
 
-| Parameter   | Type | Required | Description              |
-| ----------- | ---- | -------- | ------------------------ |
-| `companyId` | UUID | yes      | The company to query     |
+| Parameter   | Type | Required | Description          |
+| ----------- | ---- | -------- | -------------------- |
+| `companyId` | UUID | yes      | The company to query |
 
 **Returns:** JSON array of role records (name, slug, description).
 
@@ -86,12 +86,12 @@ Pauses the current agent and submits a question to the relevant human users in t
 
 **Arguments:**
 
-| Parameter   | Type   | Required | Description                                                |
-| ----------- | ------ | -------- | ---------------------------------------------------------- |
-| `agentId`   | UUID   | yes      | The calling agent's UUID                                   |
-| `companyId` | UUID   | yes      | The company UUID                                           |
+| Parameter   | Type   | Required | Description                                                 |
+| ----------- | ------ | -------- | ----------------------------------------------------------- |
+| `agentId`   | UUID   | yes      | The calling agent's UUID                                    |
+| `companyId` | UUID   | yes      | The company UUID                                            |
 | `question`  | string | yes      | The question to ask the user (shown in `list-open-queries`) |
-| `context`   | string | no       | Optional background context to help the user respond      |
+| `context`   | string | no       | Optional background context to help the user respond        |
 
 **Returns:** A confirmation message containing the conversation slug (e.g. `"Paused. Query submitted as analyst-3. Your task will resume when the user responds."`).
 
@@ -112,13 +112,13 @@ Pauses the current agent and dispatches a consultation job to another agent role
 
 **Arguments:**
 
-| Parameter   | Type   | Required | Description                                               |
-| ----------- | ------ | -------- | --------------------------------------------------------- |
-| `agentId`   | UUID   | yes      | The calling agent's UUID                                  |
-| `companyId` | UUID   | yes      | The company UUID                                          |
-| `roleName`  | string | yes      | The name of the role to consult                           |
-| `question`  | string | yes      | The question to pose to the consulting agent              |
-| `context`   | string | no       | Optional context for the consultation                     |
+| Parameter   | Type   | Required | Description                                  |
+| ----------- | ------ | -------- | -------------------------------------------- |
+| `agentId`   | UUID   | yes      | The calling agent's UUID                     |
+| `companyId` | UUID   | yes      | The company UUID                             |
+| `roleName`  | string | yes      | The name of the role to consult              |
+| `question`  | string | yes      | The question to pose to the consulting agent |
+| `context`   | string | no       | Optional context for the consultation        |
 
 **Returns:** A confirmation message containing the consultation ID.
 
@@ -135,10 +135,10 @@ Marks the current agent task as complete and stores a final answer summary. Agen
 
 **Arguments:**
 
-| Parameter     | Type   | Required | Description                                                            |
-| ------------- | ------ | -------- | ---------------------------------------------------------------------- |
-| `agentId`     | UUID   | yes      | The calling agent's UUID                                               |
-| `companyId`   | UUID   | yes      | The company UUID                                                       |
+| Parameter     | Type   | Required | Description                                                                          |
+| ------------- | ------ | -------- | ------------------------------------------------------------------------------------ |
+| `agentId`     | UUID   | yes      | The calling agent's UUID                                                             |
+| `companyId`   | UUID   | yes      | The company UUID                                                                     |
 | `finalAnswer` | string | yes      | A concise, human-readable summary of what was accomplished and any output file paths |
 
 **Returns:** A completion acknowledgement (e.g. `"Task marked complete. Well done."`).
@@ -171,8 +171,8 @@ See [conversations.md](conversations.md) for the full human-in-the-loop sequence
 
 ## Deferred
 
-| Item                          | Description                                                                                    |
-| ----------------------------- | ---------------------------------------------------------------------------------------------- |
-| User-initiated conversations  | `POST /conversations` for user-to-agent threads outside the normal task pipeline — deferred    |
-| WebSocket transport           | Real-time bidirectional conversation UX — deferred                                             |
-| Teaching flow                 | `{ teach: 'memory' \| 'knowledge' }` in replies to trigger memory or KB writes — deferred     |
+| Item                         | Description                                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------------------- |
+| User-initiated conversations | `POST /conversations` for user-to-agent threads outside the normal task pipeline — deferred |
+| WebSocket transport          | Real-time bidirectional conversation UX — deferred                                          |
+| Teaching flow                | `{ teach: 'memory' \| 'knowledge' }` in replies to trigger memory or KB writes — deferred   |

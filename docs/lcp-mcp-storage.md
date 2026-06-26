@@ -16,20 +16,20 @@ See [shared-storage.md](shared-storage.md) for the full folder structure and aut
 
 ## Tools
 
-| Tool                                        | Signature                                         | Description                                  |
-| ------------------------------------------- | ------------------------------------------------- | -------------------------------------------- |
-| [`describe_server`](#describe_server)       | `describe_server()`                               | Overview of all tools and path conventions   |
-| [`describe_folder`](#describe_folder)       | `describe_folder(path)`                           | Purpose of a folder by path prefix           |
-| [`list_files`](#list_files)                 | `list_files(path?)`                               | List files under a path prefix               |
-| [`read_file`](#read_file)                   | `read_file(path)`                                 | Read a file's text content                   |
-| [`write_file`](#write_file)                 | `write_file(path, content, overwrite?)`           | Create or overwrite a file                   |
-| [`delete_file`](#delete_file)               | `delete_file(path)`                               | Soft-delete a file (restorable)              |
-| [`restore_file`](#restore_file)             | `restore_file(path)`                              | Restore a soft-deleted file                  |
-| [`search_files`](#search_files)             | `search_files(prefix?, pattern?)`                 | Find files by path prefix and/or glob        |
-| [`get_file_properties`](#get_file_properties) | `get_file_properties(path)`                     | Metadata without reading the file body       |
-| [`copy_file`](#copy_file)                   | `copy_file(source, destination)`                  | Copy a file within the bucket                |
-| [`move_file`](#move_file)                   | `move_file(source, destination)`                  | Move (rename) a file within the bucket       |
-| [`get_file_summary`](#get_file_summary)     | `get_file_summary(path)`                          | Structural analysis of a file's content      |
+| Tool                                          | Signature                               | Description                                |
+| --------------------------------------------- | --------------------------------------- | ------------------------------------------ |
+| [`describe_server`](#describe_server)         | `describe_server()`                     | Overview of all tools and path conventions |
+| [`describe_folder`](#describe_folder)         | `describe_folder(path)`                 | Purpose of a folder by path prefix         |
+| [`list_files`](#list_files)                   | `list_files(path?)`                     | List files under a path prefix             |
+| [`read_file`](#read_file)                     | `read_file(path)`                       | Read a file's text content                 |
+| [`write_file`](#write_file)                   | `write_file(path, content, overwrite?)` | Create or overwrite a file                 |
+| [`delete_file`](#delete_file)                 | `delete_file(path)`                     | Soft-delete a file (restorable)            |
+| [`restore_file`](#restore_file)               | `restore_file(path)`                    | Restore a soft-deleted file                |
+| [`search_files`](#search_files)               | `search_files(prefix?, pattern?)`       | Find files by path prefix and/or glob      |
+| [`get_file_properties`](#get_file_properties) | `get_file_properties(path)`             | Metadata without reading the file body     |
+| [`copy_file`](#copy_file)                     | `copy_file(source, destination)`        | Copy a file within the bucket              |
+| [`move_file`](#move_file)                     | `move_file(source, destination)`        | Move (rename) a file within the bucket     |
+| [`get_file_summary`](#get_file_summary)       | `get_file_summary(path)`                | Structural analysis of a file's content    |
 
 ---
 
@@ -81,9 +81,9 @@ Lists all files (object keys) under a given path prefix, excluding soft-deleted 
 
 **Arguments:**
 
-| Parameter | Type   | Required | Description                                                  |
-| --------- | ------ | -------- | ------------------------------------------------------------ |
-| `path`    | string | no       | Prefix to list under. Omit to list all files in the bucket.  |
+| Parameter | Type   | Required | Description                                                 |
+| --------- | ------ | -------- | ----------------------------------------------------------- |
+| `path`    | string | no       | Prefix to list under. Omit to list all files in the bucket. |
 
 **Returns:** JSON array of file entries:
 
@@ -107,9 +107,9 @@ Reads the full text content of a single file.
 
 **Arguments:**
 
-| Parameter | Type   | Required | Description                                                   |
-| --------- | ------ | -------- | ------------------------------------------------------------- |
-| `path`    | string | yes      | Object key to read (e.g. `acme/tasks/abc/output/notes.txt`)  |
+| Parameter | Type   | Required | Description                                                 |
+| --------- | ------ | -------- | ----------------------------------------------------------- |
+| `path`    | string | yes      | Object key to read (e.g. `acme/tasks/abc/output/notes.txt`) |
 
 **Returns:** The file's text content, or `"File not found: {path}"` if the key does not exist.
 
@@ -123,10 +123,10 @@ Creates or overwrites a file with the given text content.
 
 **Arguments:**
 
-| Parameter   | Type    | Required | Default | Description                                           |
-| ----------- | ------- | -------- | ------- | ----------------------------------------------------- |
-| `path`      | string  | yes      | —       | Object key to write                                   |
-| `content`   | string  | yes      | —       | Text content to write                                 |
+| Parameter   | Type    | Required | Default | Description                                             |
+| ----------- | ------- | -------- | ------- | ------------------------------------------------------- |
+| `path`      | string  | yes      | —       | Object key to write                                     |
+| `content`   | string  | yes      | —       | Text content to write                                   |
 | `overwrite` | boolean | no       | `false` | If `false`, refuses to write if the file already exists |
 
 **Returns:** `"Written {N} bytes to {path}"` on success.
@@ -159,8 +159,8 @@ Restores a previously soft-deleted file back to its original path.
 
 **Arguments:**
 
-| Parameter | Type   | Required | Description                                          |
-| --------- | ------ | -------- | ---------------------------------------------------- |
+| Parameter | Type   | Required | Description                                            |
+| --------- | ------ | -------- | ------------------------------------------------------ |
 | `path`    | string | yes      | Original object key (not the `_deleted/` prefixed key) |
 
 **Returns:** `"Restored {path}"` on success, or `"No soft-deleted file found at {path}"` if nothing exists under `_deleted/{path}`.
@@ -173,9 +173,9 @@ Lists files matching a path prefix and/or a glob pattern.
 
 **Arguments:**
 
-| Parameter | Type   | Required | Description                                                            |
-| --------- | ------ | -------- | ---------------------------------------------------------------------- |
-| `prefix`  | string | no       | Path prefix to search under. Omit to search the whole bucket.          |
+| Parameter | Type   | Required | Description                                                             |
+| --------- | ------ | -------- | ----------------------------------------------------------------------- |
+| `prefix`  | string | no       | Path prefix to search under. Omit to search the whole bucket.           |
 | `pattern` | string | no       | Glob pattern to match against file names (e.g. `*.md`, `report-*.json`) |
 
 **Returns:** JSON array in the same format as `list_files`. Soft-deleted files are excluded.
@@ -190,9 +190,9 @@ Returns metadata for a file without reading its content body.
 
 **Arguments:**
 
-| Parameter | Type   | Required | Description              |
-| --------- | ------ | -------- | ------------------------ |
-| `path`    | string | yes      | Object key to inspect    |
+| Parameter | Type   | Required | Description           |
+| --------- | ------ | -------- | --------------------- |
+| `path`    | string | yes      | Object key to inspect |
 
 **Returns:** JSON object:
 
@@ -216,10 +216,10 @@ Copies a file to a new location within the same bucket.
 
 **Arguments:**
 
-| Parameter     | Type   | Required | Description                       |
-| ------------- | ------ | -------- | --------------------------------- |
-| `source`      | string | yes      | Source object key                 |
-| `destination` | string | yes      | Destination object key            |
+| Parameter     | Type   | Required | Description            |
+| ------------- | ------ | -------- | ---------------------- |
+| `source`      | string | yes      | Source object key      |
+| `destination` | string | yes      | Destination object key |
 
 **Returns:** `"Copied {source} → {destination}"` on success.
 
@@ -233,10 +233,10 @@ Moves (renames) a file within the bucket by copying then deleting the original.
 
 **Arguments:**
 
-| Parameter     | Type   | Required | Description                       |
-| ------------- | ------ | -------- | --------------------------------- |
-| `source`      | string | yes      | Source object key                 |
-| `destination` | string | yes      | Destination object key            |
+| Parameter     | Type   | Required | Description            |
+| ------------- | ------ | -------- | ---------------------- |
+| `source`      | string | yes      | Source object key      |
+| `destination` | string | yes      | Destination object key |
 
 **Returns:** `"Moved {source} → {destination}"` on success.
 
@@ -248,18 +248,18 @@ Returns a structural analysis of a file's content without requiring LLM processi
 
 **Arguments:**
 
-| Parameter | Type   | Required | Description          |
-| --------- | ------ | -------- | -------------------- |
+| Parameter | Type   | Required | Description           |
+| --------- | ------ | -------- | --------------------- |
 | `path`    | string | yes      | Object key to analyse |
 
 **Returns:** JSON object whose structure depends on the detected format:
 
-| Format            | Detected by        | Extracted                                                             |
-| ----------------- | ------------------ | --------------------------------------------------------------------- |
-| JSON object       | `.json`, `.jsonc`  | `format`, `keys` (top-level property names), `valueTypes`             |
-| JSON array        | `.json`, `.jsonc`  | `format: "json-array"`, `length`                                      |
-| Markdown          | `.md`              | `format: "markdown"`, `headings` (text + level), `wordCount`          |
-| Plain text / other | anything else     | `format: "text"`, `lineCount`, `wordCount`, `firstLine`               |
+| Format             | Detected by       | Extracted                                                    |
+| ------------------ | ----------------- | ------------------------------------------------------------ |
+| JSON object        | `.json`, `.jsonc` | `format`, `keys` (top-level property names), `valueTypes`    |
+| JSON array         | `.json`, `.jsonc` | `format: "json-array"`, `length`                             |
+| Markdown           | `.md`             | `format: "markdown"`, `headings` (text + level), `wordCount` |
+| Plain text / other | anything else     | `format: "text"`, `lineCount`, `wordCount`, `firstLine`      |
 
 Returns `"File not found: {path}"` if the key does not exist.
 
@@ -289,8 +289,8 @@ Do not include a leading `/`. Examples:
 
 ## Deferred
 
-| Item                   | Description                                                                                                        |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| MinIO OIDC SSO         | Keycloak console login for the MinIO UI — deferred                                                                 |
-| MinIO bucket versioning | Would provide true versioning instead of the `_deleted/` soft-delete prefix; configurable per company when added  |
-| Audit log JSONL export | Archival export of audit events to MinIO JSONL files — deferred (see ADR-008)                                      |
+| Item                    | Description                                                                                                      |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| MinIO OIDC SSO          | Keycloak console login for the MinIO UI — deferred                                                               |
+| MinIO bucket versioning | Would provide true versioning instead of the `_deleted/` soft-delete prefix; configurable per company when added |
+| Audit log JSONL export  | Archival export of audit events to MinIO JSONL files — deferred (see ADR-008)                                    |

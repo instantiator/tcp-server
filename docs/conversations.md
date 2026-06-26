@@ -142,11 +142,11 @@ sequenceDiagram
 
 ## Conversation data model
 
-| Entity                | Key fields                                                                                          |
-| --------------------- | --------------------------------------------------------------------------------------------------- |
+| Entity                | Key fields                                                                                                                                    |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Conversation`        | `id`, `slug`, `agentId`, `companyId`, `roleName`, `roleSlug`, `question`, `context`, `status`, `routedToIdentifiers`, `createdAt`, `closedAt` |
-| `ConversationMessage` | `id`, `conversationId`, `author` (`user`/`agent`), `authorIdentifier`, `content`, `timestamp`      |
-| `PendingConsultation` | `id`, `callingAgentId`, `consultationAgentId`, `status`, `result`, `createdAt`                      |
+| `ConversationMessage` | `id`, `conversationId`, `author` (`user`/`agent`), `authorIdentifier`, `content`, `timestamp`                                                 |
+| `PendingConsultation` | `id`, `callingAgentId`, `consultationAgentId`, `status`, `result`, `createdAt`                                                                |
 
 **Slug generation:** `{role-slug}-{queryIndex}` where `queryIndex` is an atomic counter on the `LcpRole` entity, incremented in a transaction. This gives stable, human-readable conversation identifiers.
 
@@ -156,8 +156,8 @@ sequenceDiagram
 
 ## API endpoints
 
-| Method | Path                                | Description                                      |
-| ------ | ----------------------------------- | ------------------------------------------------ |
-| `GET`  | `/api/conversation`                 | List conversations (filter: `status`, `companyId`) |
-| `GET`  | `/api/conversation/:slug`           | Get full conversation + messages                 |
-| `POST` | `/api/conversation/:slug/reply`     | Submit a user reply; triggers agent resume       |
+| Method | Path                            | Description                                        |
+| ------ | ------------------------------- | -------------------------------------------------- |
+| `GET`  | `/api/conversation`             | List conversations (filter: `status`, `companyId`) |
+| `GET`  | `/api/conversation/:slug`       | Get full conversation + messages                   |
+| `POST` | `/api/conversation/:slug/reply` | Submit a user reply; triggers agent resume         |
