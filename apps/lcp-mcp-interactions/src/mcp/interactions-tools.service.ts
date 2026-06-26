@@ -4,6 +4,15 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import axios from 'axios';
 import { z } from 'zod';
 import { AuditClientService } from '../audit/audit-client.service';
+import { interactionPrompts } from '../interactions-prompts';
+
+/** Replaces `{{key}}` placeholders in a template string. */
+function interpolate(template: string, vars: Record<string, string>): string {
+  return template.replace(
+    /\{\{(\w+)\}\}/g,
+    (_, key: string) => vars[key] ?? '',
+  );
+}
 
 /** MCP tool result envelope — index signature satisfies the SDK's Zod-inferred type. */
 interface ToolResult {
@@ -63,23 +72,7 @@ export class InteractionsToolsService {
       'describe_server',
       'Returns an overview of the interactions service and its tools.',
       {},
-      (): ToolResult =>
-        ok(
-          [
-            '## Interactions Service',
-            '',
-            'Enables requesting input from users or consultation from other agents.',
-            'Tools that pause agent execution will not return until the request is fulfilled.',
-            '',
-            '### Tools',
-            '- **describe_server** — this overview',
-            '- **list_available_users(companyId)** — list company users and their knowledge domains',
-            '- **list_available_roles(companyId)** — list roles available for agent consultation',
-            '- **request_user_input(agentId, companyId, question, context?)** — pause and request human input',
-            '- **request_agent_consultation(agentId, companyId, roleName, question, context?)** — consult another agent role',
-            '- **complete_task(agentId, companyId, finalAnswer)** — mark task complete with final output',
-          ].join('\n'),
-        ),
+      (): ToolResult => ok(interactionPrompts.describe_server),
     );
   }
 
@@ -99,7 +92,7 @@ export class InteractionsToolsService {
           return ok(JSON.stringify(res.data, null, 2));
         } catch (e) {
           this.logger.warn(`list_available_users failed: ${String(e)}`);
-          return err('Could not retrieve user list.');
+          return err(interactionPrompts.error_list_users);
         }
       },
     );
@@ -121,7 +114,7 @@ export class InteractionsToolsService {
           return ok(JSON.stringify(res.data, null, 2));
         } catch (e) {
           this.logger.warn(`list_available_roles failed: ${String(e)}`);
-          return err('Could not retrieve role list.');
+          return err(interactionPrompts.error_list_roles);
         }
       },
     );
@@ -160,13 +153,11 @@ export class InteractionsToolsService {
           );
           const { slug } = res.data;
           return ok(
-            `Paused. Your question has been submitted as conversation '${slug}'. Your task will resume automatically when a user responds.`,
+            interpolate(interactionPrompts.paused_user_input, { slug }),
           );
         } catch (e) {
           this.logger.error(`request_user_input failed: ${String(e)}`);
-          return err(
-            'Could not submit user input request. Try again or proceed without user input.',
-          );
+          return err(interactionPrompts.error_user_input);
         }
       },
     );
@@ -218,12 +209,15 @@ export class InteractionsToolsService {
           );
           const { consultationId } = res.data;
           return ok(
-            `Paused. Consultation request dispatched to '${roleName}' (id: ${consultationId}). Your task will resume automatically when the consulting agent responds.`,
+            interpolate(interactionPrompts.paused_consultation, {
+              roleName,
+              consultationId,
+            }),
           );
         } catch (e) {
           this.logger.error(`request_agent_consultation failed: ${String(e)}`);
           return err(
-            `Could not dispatch consultation to '${roleName}'. Check the role name and try again.`,
+            interpolate(interactionPrompts.error_consultation, { roleName }),
           );
         }
       },
@@ -257,14 +251,12 @@ export class InteractionsToolsService {
             newStatus: 'completed',
             source: 'complete_task',
           });
-          return ok('Task marked complete. Your run is now finished.');
+          return ok(interactionPrompts.task_complete);
         } catch (e) {
           this.logger.error(
             `complete_task failed for agent ${agentId}: ${String(e)}`,
           );
-          return err(
-            'Could not mark task complete. Your output may still have been processed.',
-          );
+          return err(interactionPrompts.error_complete_task);
         }
       },
     );

@@ -25,18 +25,11 @@ import { buildChatModel } from '../llm/llm-factory';
 import { McpClientService } from '../mcp/mcp-client.service';
 import { AgentRagService } from '../rag/agent-rag.service';
 import { AgentRegistryService } from '../registry/agent-registry.service';
+import { agentPrompts } from '../agent-prompts';
 
 /** Hard limits applied to every agent run. */
 const MAX_ITERATIONS = 10;
 const TIMEOUT_MS = 60_000;
-
-/**
- * Prompt part 8 — appended as the last message on the initial turn.
- * Gives the agent a clear directive to begin work after all context has been
- * established by the preceding prompt parts.
- */
-const FINAL_INSTRUCTION =
-  'You have been given your task and all relevant context above. Proceed now: be thorough, draw on your expertise, and deliver your best work.';
 
 /** Maps LangGraph v2 event names to {@link AuditEventType} values. */
 const EVENT_TYPE_MAP: Record<string, AuditEventType> = {
@@ -379,7 +372,7 @@ export class AgentLoopService {
         // Prompt part 5: RAG data retrieved for the initial task (omitted when nothing relevant)
         ...(ragMessage ? [ragMessage] : []),
         // Prompt part 8: final instruction — directs the agent to begin after all context is set
-        new HumanMessage(FINAL_INSTRUCTION),
+        new HumanMessage(agentPrompts.final_instruction),
       ],
     };
   }

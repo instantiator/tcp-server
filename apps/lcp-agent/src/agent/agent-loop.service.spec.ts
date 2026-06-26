@@ -1,5 +1,9 @@
-import { AIMessage } from '@langchain/core/messages';
-import { StateGraph } from '@langchain/langgraph';
+import {
+  AIMessage,
+  HumanMessage,
+  SystemMessage,
+} from '@langchain/core/messages';
+import { MessagesAnnotation, StateGraph } from '@langchain/langgraph';
 import {
   AgentStatus,
   AuditEventType,
@@ -19,6 +23,7 @@ import * as factory from '../llm/llm-factory';
 import { McpClientService } from '../mcp/mcp-client.service';
 import { AgentRagService } from '../rag/agent-rag.service';
 import { AgentRegistryService } from '../registry/agent-registry.service';
+import { agentPrompts } from '../agent-prompts';
 import { AgentLoopService } from './agent-loop.service';
 
 const ALL_ENTITIES = [LcpCompany, LcpRole, LcpAgent];
@@ -365,5 +370,83 @@ describe('AgentLoopService', () => {
       AuditEventType.StateChange,
       expect.objectContaining({ reason: 'max_iterations' }),
     );
+  });
+
+  describe('initial prompt structure', () => {
+    it('opens with a SystemMessage and closes with final_instruction as the last HumanMessage', async () => {
+      let capturedInput: typeof MessagesAnnotation.State | undefined;
+
+      jest.mocked(StateGraph).mockImplementationOnce(
+        () =>
+          ({
+            addNode: jest.fn().mockReturnThis(),
+            addEdge: jest.fn().mockReturnThis(),
+            compile: jest.fn().mockReturnValue({
+              streamEvents: jest
+                .fn()
+                .mockImplementation(
+                  (input: typeof MessagesAnnotation.State) => {
+                    capturedInput = input;
+                    return {
+                      // eslint-disable-next-line @typescript-eslint/require-await
+                      [Symbol.asyncIterator]: async function* () {
+                        for (const ev of SUCCESS_EVENTS) yield ev;
+                      },
+                    };
+                  },
+                ),
+            }),
+          }) as unknown as InstanceType<typeof StateGraph>,
+      );
+
+      const { agent } = await seedAgentAndRole();
+      await service.run(agent.id);
+
+      const messages = capturedInput!.messages;
+      expect(messages[0]).toBeInstanceOf(SystemMessage);
+
+      const last = messages[messages.length - 1];
+      expect(last).toBeInstanceOf(HumanMessage);
+      expect((last as HumanMessage).content).toBe(
+        agentPrompts.final_instruction,
+      );
+    });
+
+    it('includes the task initialPrompt as a HumanMessage', async () => {
+      let capturedInput: typeof MessagesAnnotation.State | undefined;
+
+      jest.mocked(StateGraph).mockImplementationOnce(
+        () =>
+          ({
+            addNode: jest.fn().mockReturnThis(),
+            addEdge: jest.fn().mockReturnThis(),
+            compile: jest.fn().mockReturnValue({
+              streamEvents: jest
+                .fn()
+                .mockImplementation(
+                  (input: typeof MessagesAnnotation.State) => {
+                    capturedInput = input;
+                    return {
+                      // eslint-disable-next-line @typescript-eslint/require-await
+                      [Symbol.asyncIterator]: async function* () {
+                        for (const ev of SUCCESS_EVENTS) yield ev;
+                      },
+                    };
+                  },
+                ),
+            }),
+          }) as unknown as InstanceType<typeof StateGraph>,
+      );
+
+      const { agent } = await seedAgentAndRole();
+      await service.run(agent.id);
+
+      const messages = capturedInput!.messages;
+      const hasTaskPrompt = messages.some(
+        (m) =>
+          m instanceof HumanMessage && m.content === 'Summarise the market.',
+      );
+      expect(hasTaskPrompt).toBe(true);
+    });
   });
 });

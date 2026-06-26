@@ -7,6 +7,15 @@ import pgvector from 'pgvector';
 import { DataSource, Repository } from 'typeorm';
 import { z } from 'zod';
 import { AuditClientService } from '../audit/audit-client.service';
+import { memoryPrompts } from '../memory-prompts';
+
+/** Replaces `{{key}}` placeholders in a template string. */
+function interpolate(template: string, vars: Record<string, string>): string {
+  return template.replace(
+    /\{\{(\w+)\}\}/g,
+    (_, key: string) => vars[key] ?? '',
+  );
+}
 
 /** MCP tool result envelope. */
 interface ToolResult {
@@ -58,18 +67,7 @@ export class MemoryToolsService {
         content: [
           {
             type: 'text',
-            text: [
-              '## Memory Service',
-              '',
-              "Provides semantic search over the role's knowledge base and episodic memory.",
-              'All searches use pgvector cosine similarity against the company embedding model.',
-              '',
-              '### Tools',
-              '- **describe_server** — this overview',
-              '- **recall(roleId, companyId, query, top_k?)** — search both episodic memory and knowledge base',
-              '- **remember(roleId, companyId, content, agentId?, tags?)** — store an episodic memory entry',
-              '- **search_knowledge(roleId, companyId, query, top_k?)** — search the role knowledge base only',
-            ].join('\n'),
+            text: memoryPrompts.describe_server,
           },
         ],
       }),
@@ -201,8 +199,7 @@ export class MemoryToolsService {
     topK: number,
   ): Promise<string> {
     const embeddingConfig = await this.loadEmbeddingConfig(companyId);
-    if (!embeddingConfig)
-      return 'No embedding config found for this company — cannot perform semantic search.';
+    if (!embeddingConfig) return memoryPrompts.no_embedding_config;
 
     const queryVector = await this.embedding.embedQuery(embeddingConfig, query);
     const vec = pgvector.toSql(queryVector);
@@ -235,8 +232,7 @@ export class MemoryToolsService {
     topK: number,
   ): Promise<string> {
     const embeddingConfig = await this.loadEmbeddingConfig(companyId);
-    if (!embeddingConfig)
-      return 'No embedding config found for this company — cannot perform semantic search.';
+    if (!embeddingConfig) return memoryPrompts.no_embedding_config;
 
     const queryVector = await this.embedding.embedQuery(embeddingConfig, query);
 
@@ -261,8 +257,7 @@ export class MemoryToolsService {
     tags: string[] | null,
   ): Promise<string> {
     const embeddingConfig = await this.loadEmbeddingConfig(companyId);
-    if (!embeddingConfig)
-      return 'No embedding config found — memory stored without embedding (not searchable).';
+    if (!embeddingConfig) return memoryPrompts.no_embedding_config_store;
 
     const vector = await this.embedding.embedTexts(embeddingConfig, [content]);
     const vec = pgvector.toSql(vector[0]);
@@ -284,7 +279,7 @@ export class MemoryToolsService {
     this.logger.debug(
       `Stored episodic memory ${rows[0].id} for role ${roleId}`,
     );
-    return `Memory stored (id: ${rows[0].id}).`;
+    return interpolate(memoryPrompts.memory_stored, { id: rows[0].id });
   }
 
   private async loadEmbeddingConfig(companyId: string) {
@@ -295,8 +290,7 @@ export class MemoryToolsService {
   }
 
   private formatResults(rows: MemoryRow[]): string {
-    if (rows.length === 0)
-      return 'No results found above the similarity threshold.';
+    if (rows.length === 0) return memoryPrompts.no_results;
 
     return rows
       .map((r, i) => {

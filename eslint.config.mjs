@@ -32,4 +32,12 @@ export default tseslint.config(
       "prettier/prettier": ["error", { endOfLine: "auto" }],
     },
   },
+  {
+    // Jest mocks accessed via typed objects legitimately trigger unbound-method;
+    // the rule is too strict for spec files.
+    files: ['**/*.spec.ts'],
+    rules: {
+      '@typescript-eslint/unbound-method': 'off',
+    },
+  },
 );

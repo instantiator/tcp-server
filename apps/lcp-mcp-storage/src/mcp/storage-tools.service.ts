@@ -13,6 +13,7 @@ import {
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { AuditClientService } from '../audit/audit-client.service';
+import { storagePrompts } from '../storage-prompts';
 
 /** Shape of a single entry returned by list/search tools. */
 interface FileEntry {
@@ -511,38 +512,7 @@ export class StorageToolsService {
       'Returns an overview of the storage service and its tools.',
       {},
       (): ToolResult => ({
-        content: [
-          {
-            type: 'text',
-            text: [
-              '## Storage Service',
-              '',
-              'Provides read/write access to the shared MinIO object store, organised per the ADR-007 folder layout.',
-              'Call `describe_folder` with any path prefix to learn what that folder is for and what it should contain.',
-              '',
-              '### Tools',
-              '- **describe_server** — this overview',
-              '- **describe_folder(path)** — explain the purpose of a folder in the storage hierarchy',
-              '- **list_files(path?)** — list files under a path prefix (excludes soft-deleted files)',
-              "- **read_file(path)** — read a file's text content",
-              '- **write_file(path, content, overwrite?)** — create or overwrite a file (overwrite defaults to false)',
-              '- **delete_file(path)** — soft-delete a file (moved to `_deleted/` prefix; restorable)',
-              '- **restore_file(path)** — restore a soft-deleted file',
-              '- **search_files(prefix?, pattern?)** — list files matching a glob pattern under a prefix',
-              '- **get_file_properties(path)** — get file metadata (size, content type, last modified)',
-              '- **copy_file(source, destination)** — copy a file to a new path',
-              '- **move_file(source, destination)** — move (rename) a file',
-              '- **get_file_summary(path)** — structural analysis of a file (headings, keys, declarations)',
-              '',
-              '### Path conventions',
-              'Paths are relative to the bucket root and follow the structure: `{company_slug}/{area}/...`',
-              'Do not include a leading slash.',
-              '',
-              '### Soft delete',
-              'Deleted files are moved to `_deleted/{original_path}` and can be restored with `restore_file`.',
-            ].join('\n'),
-          },
-        ],
+        content: [{ type: 'text', text: storagePrompts.describe_server }],
       }),
     );
   }
@@ -558,35 +528,26 @@ export class StorageToolsService {
     );
   }
 
-  private describeFolder(path: string): string {
-    if (path.includes('/tasks/') && path.includes('/materials')) {
-      return '**Task materials** — User-submitted inputs for this task (briefs, data files, reference documents). Read-only after task creation.';
-    }
-    if (path.includes('/tasks/') && path.includes('/output')) {
-      return '**Task output** — Files created during task execution. This is your working area: write intermediate results and final artefacts here before review.';
-    }
-    if (path.includes('/knowledge/') || path.endsWith('/knowledge')) {
-      return '**Knowledge base** — OKF Markdown source documents for RAG indexing. Managed by the `store-role-documents` CLI command. Treat as read-only from within an agent.';
-    }
-    if (path.includes('/finished/reports')) {
-      return '**Finished reports** — Reviewed, stable report artefacts accessible to all agents and stakeholders.';
-    }
-    if (path.includes('/finished/specifications')) {
-      return '**Finished specifications** — Reviewed technical or functional specifications.';
-    }
-    if (path.includes('/finished/designs')) {
-      return '**Finished designs** — Reviewed design documents (wireframes, architecture diagrams, etc.).';
-    }
-    if (path.includes('/finished/code')) {
-      return '**Finished code** — Reviewed and signed-off code artefacts.';
-    }
-    if (path.includes('/finished/other')) {
-      return '**Finished (other)** — Stable artefacts that do not fit a named category.';
-    }
-    if (path.includes('/audit/') || path.endsWith('/audit')) {
-      return '**Audit log** — Append-only JSONL audit entries written by the system. Do not modify.';
-    }
-    return 'No specific description is available for this path. Use `list_files` to explore its contents.';
+  private describeFolder(p: string): string {
+    if (p.includes('/tasks/') && p.includes('/materials'))
+      return storagePrompts.describe_folder_task_materials;
+    if (p.includes('/tasks/') && p.includes('/output'))
+      return storagePrompts.describe_folder_task_output;
+    if (p.includes('/knowledge/') || p.endsWith('/knowledge'))
+      return storagePrompts.describe_folder_knowledge;
+    if (p.includes('/finished/reports'))
+      return storagePrompts.describe_folder_finished_reports;
+    if (p.includes('/finished/specifications'))
+      return storagePrompts.describe_folder_finished_specifications;
+    if (p.includes('/finished/designs'))
+      return storagePrompts.describe_folder_finished_designs;
+    if (p.includes('/finished/code'))
+      return storagePrompts.describe_folder_finished_code;
+    if (p.includes('/finished/other'))
+      return storagePrompts.describe_folder_finished_other;
+    if (p.includes('/audit/') || p.endsWith('/audit'))
+      return storagePrompts.describe_folder_audit;
+    return storagePrompts.describe_folder_fallback;
   }
 
   private registerListFiles(server: McpServer): void {
