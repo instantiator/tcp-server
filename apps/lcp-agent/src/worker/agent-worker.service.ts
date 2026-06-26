@@ -14,6 +14,8 @@ import { AgentRegistryService } from '../registry/agent-registry.service';
 interface AgentJobPayload {
   agentId: UUID;
   type: 'start' | 'resume';
+  /** Content to inject as the first HumanMessage on resume (user reply or consultation result). */
+  replyContent?: string;
 }
 
 /**
@@ -41,7 +43,7 @@ export class AgentWorkerService implements OnModuleInit, OnModuleDestroy {
     this.worker = new Worker<AgentJobPayload>(
       'agent-jobs',
       async (job) => {
-        const { agentId, type } = job.data;
+        const { agentId, type, replyContent } = job.data;
         this.logger.log(`Processing ${type} job for agent ${agentId}`);
 
         if (this.registry.isRunning(agentId)) {
@@ -51,7 +53,7 @@ export class AgentWorkerService implements OnModuleInit, OnModuleDestroy {
           return;
         }
 
-        await this.loop.run(agentId);
+        await this.loop.run(agentId, replyContent);
       },
       {
         connection: { url: redisUrl },

@@ -113,6 +113,36 @@ jobs:
           tags: lcp-agent:latest
           cache-from: type=gha,scope=lcp-agent
           cache-to: type=gha,scope=lcp-agent,mode=max
+      - name: Build lcp-mcp-storage image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/lcp-mcp-storage/Dockerfile
+          push: false
+          load: true
+          tags: lcp-mcp-storage:latest
+          cache-from: type=gha,scope=lcp-mcp-storage
+          cache-to: type=gha,scope=lcp-mcp-storage,mode=max
+      - name: Build lcp-mcp-memory image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/lcp-mcp-memory/Dockerfile
+          push: false
+          load: true
+          tags: lcp-mcp-memory:latest
+          cache-from: type=gha,scope=lcp-mcp-memory
+          cache-to: type=gha,scope=lcp-mcp-memory,mode=max
+      - name: Build lcp-mcp-interactions image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/lcp-mcp-interactions/Dockerfile
+          push: false
+          load: true
+          tags: lcp-mcp-interactions:latest
+          cache-from: type=gha,scope=lcp-mcp-interactions
+          cache-to: type=gha,scope=lcp-mcp-interactions,mode=max
       - run: npm ci
       - run: ./scripts/run-api-tests.sh
       - name: Publish test results

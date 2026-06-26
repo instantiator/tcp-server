@@ -1,0 +1,12 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "paths": {
+      "@lcp/shared": ["../libs/lcp-shared/src/index.ts"],
+      "@lcp/shared/*": ["../libs/lcp-shared/src/*"]
+    }
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules"]
+}

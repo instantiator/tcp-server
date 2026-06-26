@@ -47,7 +47,42 @@ export LCP_TOKEN=$(./scripts/dev/lcp-cli.sh -u alice get-token)
 ./scripts/dev/lcp-cli.sh -e LCP_TOKEN list-companies
 ```
 
+## Validating JSON input
+
+`set-company`, `set-role`, and similar commands accept a JSON payload. Before applying, validate it against the generated JSON Schema to catch missing required fields or type mismatches before they reach the server:
+
+```bash
+# Install ajv-cli once (global, not in devDependencies)
+npm install -g ajv-cli
+
+# Validate a company file
+ajv validate -s schemas/schema.json --ref '#/definitions/LcpCompany' -d my-company.json
+
+# Validate a role file
+ajv validate -s schemas/schema.json --ref '#/definitions/LcpRole' -d my-role.json
+```
+
+See [schema.md](schema.md) for the full field reference, VS Code integration, example JSON, and an inline Node.js validation option that needs no extra install.
+
 ## Verbs
+
+| Verb                                                    | Invocation                                                   | Description                                              |
+| ------------------------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------- |
+| [`get-token`](#get-token)                               | `get-token`                                                  | Exchange username + password for an OIDC access token    |
+| [`list-companies`](#list-companies)                     | `list-companies`                                             | List all companies                                       |
+| [`list-roles`](#list-roles)                             | `list-roles [-c <uuid>]`                                     | List roles, optionally filtered to one company           |
+| [`set-company`](#set-company)                           | `set-company [-i <json>]`                                    | Create or update a company                               |
+| [`set-role`](#set-role)                                 | `set-role -c <uuid> [-i <json>]`                             | Create or update a role                                  |
+| [`chat`](#chat)                                         | `chat -r <uuid> [-q <message>]`                              | Interactive or single-query chat with a role             |
+| [`store-role-documents`](#store-role-documents)         | `store-role-documents -r <uuid> -s <paths...>`               | Upload OKF Markdown documents to a role's knowledge base |
+| [`list-role-documents`](#list-role-documents)           | `list-role-documents -r <uuid>`                              | List knowledge-base documents stored for a role          |
+| [`remove-role-documents`](#remove-role-documents)       | `remove-role-documents -r <uuid> -p <patterns...>`           | Remove knowledge-base documents by filename pattern      |
+| [`open-document-store`](#open-document-store)           | `open-document-store [--no-open]`                            | Print (and open) the MinIO console URL                   |
+| [`list-open-queries`](#list-open-queries)               | `list-open-queries [-c <uuid>] [--format table\|json\|csv]`  | List open agent-to-human queries                         |
+| [`read-query`](#read-query)                             | `read-query <slug>`                                          | Read a query's full question and conversation history    |
+| [`respond`](#respond)                                   | `respond <slug> <message>`                                   | Reply to a query and resume the waiting agent            |
+| [`download-shared-document`](#download-shared-document) | `download-shared-document --source <path> [--target <path>]` | Download a file from shared company storage              |
+| [`upload-shared-document`](#upload-shared-document)     | `upload-shared-document --source <path> --target <path>`     | Upload a local file to shared company storage            |
 
 ### `get-token`
 
@@ -170,6 +205,180 @@ If the access token expires mid-session, it is renewed automatically using the r
 # > exit
 # Agent <id> removed.
 ```
+
+### `store-role-documents`
+
+Upload OKF Markdown documents to a role's knowledge base. All files are validated before any are uploaded — if any fail, none are sent.
+
+Each file must be a `.md` file with valid YAML front-matter containing a non-empty `title` field (OKF format).
+
+- **stdout**: JSON array of `{ key, name, size, lastModified }` for each uploaded document
+- **stderr**: validation errors and per-file progress
+
+| Flag               | Alias | Description                                     |
+| ------------------ | ----- | ----------------------------------------------- |
+| `--role-id <uuid>` | `-r`  | **(Required)** Role UUID                        |
+| `--src <paths...>` | `-s`  | **(Required)** One or more file paths to upload |
+
+```bash
+./scripts/dev/lcp-cli.sh -t $TOKEN store-role-documents -r <roleId> -s policy.md handbook.md
+```
+
+Documents are stored in MinIO under `{company_slug}/knowledge/{role_name}/` and automatically indexed for RAG retrieval. See [shared-storage.md](shared-storage.md) for the storage layout.
+
+### `list-role-documents`
+
+List the knowledge-base documents currently stored for a role.
+
+- **stdout**: JSON array of `{ key, name, size, lastModified }` — empty array if none stored
+
+| Flag               | Alias | Description              |
+| ------------------ | ----- | ------------------------ |
+| `--role-id <uuid>` | `-r`  | **(Required)** Role UUID |
+
+```bash
+./scripts/dev/lcp-cli.sh -t $TOKEN list-role-documents -r <roleId>
+```
+
+### `remove-role-documents`
+
+Remove knowledge-base documents from a role by filename pattern. Supports `*` (any sequence of characters) and `?` (any single character) wildcards. Matched documents are deleted from MinIO and their RAG chunks removed from the database.
+
+- **stdout**: JSON array of deleted document keys
+- **stderr**: list of matched filenames before deletion, or a message if nothing matched
+
+| Flag                      | Alias | Description                                                  |
+| ------------------------- | ----- | ------------------------------------------------------------ |
+| `--role-id <uuid>`        | `-r`  | **(Required)** Role UUID                                     |
+| `--pattern <patterns...>` | `-p`  | **(Required)** One or more filename patterns (e.g. `"*.md"`) |
+
+```bash
+# Remove a specific file
+./scripts/dev/lcp-cli.sh -t $TOKEN remove-role-documents -r <roleId> -p "handbook.md"
+
+# Remove all markdown files
+./scripts/dev/lcp-cli.sh -t $TOKEN remove-role-documents -r <roleId> -p "*.md"
+
+# Remove files matching multiple patterns
+./scripts/dev/lcp-cli.sh -t $TOKEN remove-role-documents -r <roleId> -p "policy-?.md" "archive-*.md"
+```
+
+### `open-document-store`
+
+Print the MinIO console URL and open it in the default browser. Useful for browsing stored files during development.
+
+- **stdout**: the console URL
+- The URL is read from the `MINIO_CONSOLE_URL` environment variable (default: `http://localhost:9001`)
+
+| Flag        | Description                      |
+| ----------- | -------------------------------- |
+| `--no-open` | Print the URL without opening it |
+
+```bash
+# Open in browser
+./scripts/dev/lcp-cli.sh open-document-store
+
+# Print URL only
+./scripts/dev/lcp-cli.sh open-document-store --no-open
+```
+
+No authentication required — the MinIO console has its own login (see [shared-storage.md → Authentication](shared-storage.md#authentication)).
+
+---
+
+### `list-open-queries`
+
+List open agent-to-human queries (conversations with `status: awaiting_user`) that are waiting for a response.
+
+- **stdout**: formatted table (default), JSON, or CSV depending on `--format`
+- **stderr**: progress messages
+
+| Flag                    | Description                         |
+| ----------------------- | ----------------------------------- |
+| `-c, --company-id <id>` | Filter to a specific company        |
+| `--format <fmt>`        | `table` (default), `json`, or `csv` |
+
+```bash
+# Default table output
+./scripts/dev/lcp-cli.sh list-open-queries
+
+# Filter to a company, JSON output
+./scripts/dev/lcp-cli.sh -e LCP_TOKEN list-open-queries -c <companyId> --format json
+```
+
+The table columns are: slug, role name, and the first 120 characters of the question.
+
+---
+
+### `read-query`
+
+Read the full question, context, and reply history for a single query by its slug.
+
+- **stdout**: full conversation content
+- **stderr**: progress messages
+
+```bash
+./scripts/dev/lcp-cli.sh read-query analyst-3
+```
+
+---
+
+### `respond`
+
+Reply to an open query. Once submitted, the waiting agent is automatically re-enqueued and will resume with your reply injected as a `HumanMessage`.
+
+- **stdout**: `{ slug, status }` JSON
+- **stderr**: progress messages (`"Sending response..."`, `"Agent resumed."`)
+
+```bash
+./scripts/dev/lcp-cli.sh respond analyst-3 "The budget is $50,000 for Q3."
+```
+
+The message argument is a plain string. Quotes are handled by your shell in the usual way.
+
+---
+
+### `download-shared-document`
+
+Download a file from shared company storage to the local filesystem.
+
+- **stdout**: `{ source, target, size }` JSON on success
+- **stderr**: progress messages
+
+| Flag              | Description                                                             |
+| ----------------- | ----------------------------------------------------------------------- |
+| `--source <path>` | Required. Object key in MinIO (e.g. `acme/tasks/xyz/output/out.md`)     |
+| `--target <path>` | Local destination path. Defaults to `./<filename>` (basename of source) |
+
+```bash
+# Download to current directory
+./scripts/dev/lcp-cli.sh download-shared-document --source acme/tasks/xyz/output/report.md
+
+# Download to a specific path
+./scripts/dev/lcp-cli.sh download-shared-document --source acme/tasks/xyz/output/report.md --target ~/Desktop/report.md
+```
+
+---
+
+### `upload-shared-document`
+
+Upload a local file to shared company storage.
+
+- **stdout**: `{ key, size }` JSON on success
+- **stderr**: progress messages
+
+| Flag              | Description                                                                        |
+| ----------------- | ---------------------------------------------------------------------------------- |
+| `--source <path>` | Required. Local file path to upload                                                |
+| `--target <path>` | Required. Object key destination in MinIO (e.g. `acme/knowledge/analyst/guide.md`) |
+
+```bash
+./scripts/dev/lcp-cli.sh upload-shared-document --source ./architecture.md --target acme/knowledge/architect/architecture.md
+```
+
+MIME type is inferred from the file extension. Supported formats include `.md`, `.txt`, `.json`, `.pdf`, `.png`, `.jpg`, and `.jpeg`.
+
+---
 
 ## Input shape: `DeepPartial<T>`
 

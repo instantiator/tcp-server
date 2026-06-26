@@ -12,8 +12,10 @@ import { getRepositoryToken, TypeOrmModule } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
 import { DataSource, Repository } from 'typeorm';
 import { ChatService } from '../../../apps/lcp-server/src/api/chat.service';
+import { AuditService } from '../../../apps/lcp-server/src/audit/audit.service';
 import { ContextModule } from '../../../apps/lcp-server/src/context/context.module';
 import { AgentEventService } from '../../../apps/lcp-server/src/events/agent-event.service';
+import { RagRetrievalService } from '../../../apps/lcp-server/src/rag/rag-retrieval.service';
 
 /**
  * Integration tests for {@link ChatService} against a live PostgreSQL instance
@@ -60,12 +62,20 @@ describe('ChatService integration (stub LLM)', () => {
           type: 'postgres',
           url: DATABASE_URL,
           entities: [LcpAgent, LcpRole, LcpCompany, AuditEvent],
-          synchronize: false,
+          synchronize: true,
         }),
         TypeOrmModule.forFeature([LcpAgent, LcpRole, LcpCompany, AuditEvent]),
         ContextModule,
       ],
-      providers: [ChatService, AgentEventService],
+      providers: [
+        ChatService,
+        AuditService,
+        AgentEventService,
+        {
+          provide: RagRetrievalService,
+          useValue: { retrieve: jest.fn().mockResolvedValue([]) },
+        },
+      ],
     }).compile();
 
     service = moduleRef.get(ChatService);

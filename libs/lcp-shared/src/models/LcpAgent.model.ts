@@ -87,6 +87,14 @@ export class LcpAgent {
   @CreateDateColumn()
   createdAt!: Date;
 
+  /**
+   * Final output produced by the agent on completion.
+   * Set via the `complete_task` MCP tool, or as a fallback from the last AI
+   * message when the loop exits naturally.
+   */
+  @Column({ type: 'text', nullable: true })
+  output!: string | null;
+
   /** Timestamp of the last status or field update. */
   @UpdateDateColumn()
   updatedAt!: Date;

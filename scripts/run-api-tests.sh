@@ -28,7 +28,7 @@ Any extra arguments after -- are passed through to Jest, for example:
 Prerequisites (local mode):
   - Docker and Docker Compose
   - .env.testing present in the repo root (see .env.example)
-  - lcp-server and lcp-agent images are rebuilt automatically before each run
+  - lcp-server, lcp-agent, and all three MCP service images are rebuilt automatically before each run
 
 Options:
   --base-url URL            Test against a running deployment at URL (skips Docker)
@@ -109,7 +109,7 @@ wait_for() {
 
 trap 'rc=$?; $DC down; exit $rc' EXIT
 $DC down -v
-$DC build lcp-server lcp-agent
+$DC build lcp-server lcp-agent lcp-mcp-storage lcp-mcp-memory lcp-mcp-interactions
 $DC up -d
 
 # Keycloak starts slowly — allow up to 5 minutes.
@@ -120,6 +120,9 @@ wait_for keycloak "curl -sf http://localhost:8080/realms/master/.well-known/open
 # lcp-server health now includes an OIDC check, so this confirms the full stack.
 wait_for lcp-server "curl -sf http://localhost:3000/health"
 wait_for lcp-agent "curl -sf http://localhost:3001/health"
+wait_for lcp-mcp-storage "curl -sf http://localhost:3010/health"
+wait_for lcp-mcp-memory "curl -sf http://localhost:3011/health"
+wait_for lcp-mcp-interactions "curl -sf http://localhost:3012/health"
 
 # Configure Keycloak: create lcp realm, lcp-server client, and a test user.
 # Mirrors the setup done by dev/start-dev.sh. Safe to re-run.

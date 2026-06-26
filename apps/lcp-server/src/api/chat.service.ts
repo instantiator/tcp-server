@@ -7,7 +7,6 @@ import { END, MessagesAnnotation, StateGraph } from '@langchain/langgraph';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import {
   AgentStatus,
-  AuditEvent,
   AuditEventType,
   LcpAgent,
   LcpCompany,
@@ -24,9 +23,19 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
 import { Repository } from 'typeorm';
+import { AuditService } from '../audit/audit.service';
 import { ContextManagerService } from '../context/context-manager.service';
 import type { CompactionReport } from '../context/context.types';
 import { AgentEventService } from '../events/agent-event.service';
+import { RagRetrievalService } from '../rag/rag-retrieval.service';
+
+/**
+ * Prompt part 8 — appended as the last message on the initial turn only.
+ * Gives the agent a clear directive to begin work after all context has been
+ * established by the preceding prompt parts.
+ */
+const FINAL_INSTRUCTION =
+  'You have been given your task and all relevant context above. Proceed now: be thorough, draw on your expertise, and deliver your best work.';
 
 /** Response returned by {@link ChatService.sendMessage}. */
 export interface ChatMessageResponse {
@@ -47,14 +56,14 @@ export class ChatService {
     private readonly config: ConfigService,
     private readonly contextManager: ContextManagerService,
     private readonly agentEvents: AgentEventService,
+    private readonly ragRetrieval: RagRetrievalService,
+    private readonly audit: AuditService,
     @InjectRepository(LcpAgent)
     private readonly agentRepo: Repository<LcpAgent>,
     @InjectRepository(LcpRole)
     private readonly roleRepo: Repository<LcpRole>,
     @InjectRepository(LcpCompany)
     private readonly companyRepo: Repository<LcpCompany>,
-    @InjectRepository(AuditEvent)
-    private readonly auditRepo: Repository<AuditEvent>,
   ) {}
 
   /**
@@ -87,9 +96,8 @@ export class ChatService {
     const role = await this.roleRepo.findOneBy({ id: agent.roleId });
     if (!role) throw new NotFoundException(`Role ${agent.roleId} not found`);
 
-    const llmConfig =
-      role.llmConfig ??
-      (await this.companyRepo.findOneBy({ id: agent.companyId }))?.llmDefault;
+    const company = await this.companyRepo.findOneBy({ id: agent.companyId });
+    const llmConfig = role.llmConfig ?? company?.llmDefault;
     if (!llmConfig) {
       throw new NotFoundException(
         `No LLM config for agent ${agentId}: role has no llmConfig and company has no llmDefault`,
@@ -104,7 +112,13 @@ export class ChatService {
       ...(isFirstMessage && { threadId: agentId }),
     });
 
-    await this.saveAudit(agent, role, AuditEventType.LlmRequest, { message });
+    await this.audit.record(
+      agent.companyId,
+      role.name,
+      agent.id,
+      AuditEventType.LlmRequest,
+      { message },
+    );
 
     const databaseUrl = this.config.getOrThrow<string>('DATABASE_URL');
     const checkpointer = PostgresSaver.fromConnString(databaseUrl);
@@ -118,7 +132,8 @@ export class ChatService {
           messages: [await model.invoke(state.messages, { signal })],
         }))
         .addEdge('__start__', 'agent')
-        // ponytail: conditional edge to tools node goes here once MCP servers exist
+        // ponytail: MCP tool binding for chat agents — add when interactive chat needs
+        //   tool calls. lcp-agent already binds tools; chat is currently stateless per-turn.
         .addEdge('agent', END)
         .compile({ checkpointer });
 
@@ -140,8 +155,29 @@ export class ChatService {
           isFirstMessage,
           agent,
           role,
-          this.auditRepo,
         );
+
+      let ragMessage: HumanMessage | null = null;
+      if (isFirstMessage) {
+        const ragChunks = await this.ragRetrieval.retrieve(
+          role.id,
+          preparedMessage,
+          company?.embeddingConfig,
+        );
+        if (ragChunks.length) {
+          const rawRagText = buildRagMessage(ragChunks);
+          const overflowPath = company?.slug
+            ? `${sanitiseSlug(company.slug)}/tasks/${agentId}/context-overflow`
+            : undefined;
+          const ragText = await this.contextManager.guardSection(
+            rawRagText,
+            model,
+            windowSize,
+            overflowPath,
+          );
+          ragMessage = new HumanMessage(ragText);
+        }
+      }
 
       const messages = isFirstMessage
         ? [
@@ -153,27 +189,25 @@ export class ChatService {
                 date: new Date().toISOString().split('T')[0],
               }),
             ),
-            // TODO - prompt part 1: inject a separate role prompt (identity, attitude, domain
-            //   knowledge, behavioural guidelines distinct from the system prompt) once the
-            //   role prompt structure is split from systemPromptTemplate (ADR-013)
-            // TODO - prompt part 2: inject company environment message (agent roster, company
-            //   name/description, shared storage folder structure) — implement when company
-            //   context is wired into the chat path (ADR-001)
-            // TODO - prompt part 3: inject services-available message listing MCP server
-            //   capabilities and RAG knowledge domains — implement when MCP/RAG integration
-            //   lands (ADR-002, ADR-006)
-            // TODO - prompt part 5: inject RAG data retrieved for this query — implement when
-            //   RAG retrieval is available (ADR-006)
-            // TODO - prompt part 6: inject MCP tool responses if the agent pre-fetches data
-            //   before its first turn — implement when MCP servers are wired (ADR-002)
+            // Prompt part 1: role prompt (identity, attitude, domain knowledge, behavioural guidelines)
+            ...(role.rolePrompt ? [new HumanMessage(role.rolePrompt)] : []),
+            // Prompt part 2: company environment (name, description, shared storage layout, etc.)
+            ...(company?.companyContext
+              ? [new HumanMessage(company.companyContext)]
+              : []),
+            // Prompt part 3: services available (MCP servers). Injected when role has a list.
+            ...buildServicesMessage(role.mcpServerList ?? [], this.config),
             // Prompt part 4: task / query prompt
             new HumanMessage(preparedMessage),
-            // TODO - prompt part 8: append a final-instruction suffix message telling the
-            //   agent what to do next — implement alongside role prompt restructure (ADR-013)
+            // Prompt part 5: RAG data retrieved for this query (omitted when nothing relevant)
+            ...(ragMessage ? [ragMessage] : []),
+            // Prompt part 6: MCP pre-task responses (none for stub servers; wired here for future use)
+            // Prompt part 7: conversation history is implicitly provided by the LangGraph
+            // checkpoint store keyed on agent.threadId — no explicit injection needed.
+            // Prompt part 8: final instruction — directs the agent to begin after all context is set
+            new HumanMessage(FINAL_INSTRUCTION),
           ]
         : [new HumanMessage(preparedMessage)];
-      // Prompt part 7: conversation history is implicitly provided by the LangGraph
-      // checkpoint store keyed on agent.threadId — no explicit injection needed.
 
       const result = await graph.invoke({ messages }, { ...runConfig, signal });
 
@@ -183,9 +217,13 @@ export class ChatService {
           ? last.content.trim()
           : '';
 
-      await this.saveAudit(agent, role, AuditEventType.LlmResponse, {
-        response: content,
-      });
+      await this.audit.record(
+        agent.companyId,
+        role.name,
+        agent.id,
+        AuditEventType.LlmResponse,
+        { response: content },
+      );
       await this.agentRepo.update(agentId, { status: AgentStatus.Idle });
       this.agentEvents.emit(agentId, {
         kind: 'processing_complete',
@@ -205,10 +243,13 @@ export class ChatService {
           (err.name === 'AbortError' ||
             (signal?.aborted && err.message.includes('abort'))))
       ) {
-        await this.saveAudit(agent, role, AuditEventType.StateChange, {
-          newStatus: 'idle',
-          reason: 'cancelled by user',
-        });
+        await this.audit.record(
+          agent.companyId,
+          role.name,
+          agent.id,
+          AuditEventType.StateChange,
+          { newStatus: 'idle', reason: 'cancelled by user' },
+        );
         await this.agentRepo.update(agentId, { status: AgentStatus.Idle });
         return { response: '' };
       }
@@ -216,10 +257,13 @@ export class ChatService {
       // err was not a cancellation - move to failed state.
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`Chat agent ${agentId} error: ${msg}`);
-      await this.saveAudit(agent, role, AuditEventType.StateChange, {
-        newStatus: 'failed',
-        reason: msg,
-      });
+      await this.audit.record(
+        agent.companyId,
+        role.name,
+        agent.id,
+        AuditEventType.StateChange,
+        { newStatus: 'failed', reason: msg },
+      );
       await this.agentRepo.update(agentId, { status: AgentStatus.Failed });
       throw new InternalServerErrorException(
         `Agent encountered an unexpected error.`,
@@ -227,23 +271,6 @@ export class ChatService {
     } finally {
       await checkpointer.end();
     }
-  }
-
-  private async saveAudit(
-    agent: LcpAgent,
-    role: LcpRole,
-    eventType: AuditEventType,
-    payload: Record<string, unknown>,
-  ): Promise<void> {
-    await this.auditRepo.save(
-      this.auditRepo.create({
-        companyId: agent.companyId,
-        role: role.name,
-        agentId: agent.id,
-        eventType,
-        payload,
-      }),
-    );
   }
 }
 
@@ -256,4 +283,46 @@ function renderTemplate(
     /\{\{(\w+)\}\}/g,
     (_, key: string) => vars[key] ?? '',
   );
+}
+
+/** Formats RAG chunks as a prompt part 5 message. */
+function buildRagMessage(
+  chunks: { documentPath: string; content: string }[],
+): string {
+  const sections = chunks
+    .map((c) => `### Source: ${c.documentPath}\n\n${c.content}`)
+    .join('\n\n---\n\n');
+  return `The following excerpts from your knowledge base are relevant to your current task. Draw on them as needed:\n\n${sections}`;
+}
+
+/**
+ * Returns zero or one HumanMessage announcing the MCP services available to the
+ * agent. Reads server URLs from env vars (`MCP_{NAME_UPPER}_URL`). Returns an
+ * empty array when the role has no configured servers or none have a URL set.
+ */
+function buildServicesMessage(
+  serverNames: string[],
+  config: ConfigService,
+): HumanMessage[] {
+  const lines = serverNames
+    .filter((n) => config.get<string>(`MCP_${n.toUpperCase()}_URL`))
+    .map(
+      (n) =>
+        `- **${n}**: call \`${n}__describe_server\` for a full tool list and usage guide`,
+    );
+
+  if (lines.length === 0) return [];
+
+  const text =
+    '## Available Services\n\n' +
+    'You have access to the following external services via tools. ' +
+    'Each service exposes a `describe_server` tool — call it to learn exactly what tools are available and how to use them before making calls.\n\n' +
+    lines.join('\n');
+
+  return [new HumanMessage(text)];
+}
+
+/** Strips characters unsafe for use as a MinIO path component. */
+function sanitiseSlug(slug: string): string {
+  return slug.replace(/[^a-zA-Z0-9_-]/g, '_');
 }

@@ -11,4 +11,9 @@ export const configSchema = Joi.object({
   MINIO_ENDPOINT: Joi.string().required(),
   MINIO_ACCESS_KEY: Joi.string().required(),
   MINIO_SECRET_KEY: Joi.string().required(),
+  MCP_STORAGE_URL: Joi.string().uri().optional(),
+  MCP_MEMORY_URL: Joi.string().uri().optional(),
+  MCP_INTERACTIONS_URL: Joi.string().uri().optional(),
+  LCP_SERVER_URL: Joi.string().uri().required(),
+  INTERNAL_API_KEY: Joi.string().required(),
 });

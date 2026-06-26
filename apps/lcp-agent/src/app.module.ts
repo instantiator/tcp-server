@@ -1,4 +1,10 @@
-import { AuditEvent, LcpAgent, LcpCompany, LcpRole } from '@lcp/shared';
+import {
+  AuditEvent,
+  KnowledgeChunk,
+  LcpAgent,
+  LcpCompany,
+  LcpRole,
+} from '@lcp/shared';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -27,14 +33,20 @@ import { AgentWorkerModule } from './worker/agent-worker.module';
           return {
             type: 'better-sqlite3',
             database: ':memory:',
-            entities: [LcpCompany, LcpRole, LcpAgent, AuditEvent],
+            entities: [
+              LcpCompany,
+              LcpRole,
+              LcpAgent,
+              AuditEvent,
+              KnowledgeChunk,
+            ],
             synchronize: true,
           };
         }
         return {
           type: 'postgres',
           url,
-          entities: [LcpCompany, LcpRole, LcpAgent, AuditEvent],
+          entities: [LcpCompany, LcpRole, LcpAgent, AuditEvent, KnowledgeChunk],
           // Migrations are run by lcp-server on startup; lcp-agent only reads/writes
           synchronize: false,
           migrationsRun: false,

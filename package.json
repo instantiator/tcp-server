@@ -6,17 +6,17 @@
   "private": true,
   "license": "MIT",
   "scripts": {
-    "build": "nest build lcp-server && nest build lcp-agent && nest build lcp-cli && npm run schema:generate && npm run licenses:generate",
+    "build": "nest build lcp-server && nest build lcp-agent && nest build lcp-mcp-storage && nest build lcp-mcp-memory && nest build lcp-mcp-interactions && nest build lcp-cli && npm run schema:generate && npm run licenses:generate",
     "build:lcp-cli": "nest build lcp-cli",
     "start:lcp-cli": "node dist/apps/lcp-cli/main",
-    "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\" \"test/**/*.ts\"",
+    "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\" \"test/**/*.ts\" \"docs/**/*.md\" \"*.md\"",
     "start": "nest start lcp-server",
     "start:dev": "nest start lcp-server --watch",
     "start:debug": "nest start lcp-server --debug --watch",
     "start:prod": "node dist/apps/lcp-server/main",
-    "typecheck": "tsc --noemit -p apps/lcp-server/tsconfig.json && tsc --noemit -p apps/lcp-agent/tsconfig.json && tsc --noemit -p apps/lcp-cli/tsconfig.app.json && tsc --noemit -p libs/lcp-shared/tsconfig.json",
-    "lint": "eslint \"{apps,libs}/**/*.ts\" --fix",
-    "lint:check": "eslint \"{apps,libs}/**/*.ts\"",
+    "typecheck": "tsc --noemit -p apps/lcp-server/tsconfig.json && tsc --noemit -p apps/lcp-agent/tsconfig.json && tsc --noemit -p apps/lcp-cli/tsconfig.app.json && tsc --noemit -p apps/lcp-mcp-storage/tsconfig.app.json && tsc --noemit -p apps/lcp-mcp-memory/tsconfig.app.json && tsc --noemit -p apps/lcp-mcp-interactions/tsconfig.app.json && tsc --noemit -p libs/lcp-shared/tsconfig.json && tsc --noemit -p test/tsconfig.json",
+    "lint": "NODE_OPTIONS=--max-old-space-size=4096 eslint \"{apps,libs,test}/**/*.ts\" --fix --cache",
+    "lint:check": "NODE_OPTIONS=--max-old-space-size=4096 eslint \"{apps,libs,test}/**/*.ts\" --cache",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
@@ -30,13 +30,16 @@
     "licenses:generate": "license-report --config=.license-report.json --output=markdown --only=prod > docs/licenses.md",
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d apps/lcp-server/src/data-source.ts",
     "migration:run": "typeorm-ts-node-commonjs migration:run -d apps/lcp-server/src/data-source.ts",
-    "migration:revert": "typeorm-ts-node-commonjs migration:revert -d apps/lcp-server/src/data-source.ts"
+    "migration:revert": "typeorm-ts-node-commonjs migration:revert -d apps/lcp-server/src/data-source.ts",
+    "hooks:install": "cp scripts/hooks/pre-push .git/hooks/pre-push && chmod +x .git/hooks/pre-push && echo 'Git hooks installed.'"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1075.0",
     "@langchain/core": "^1.2.0",
     "@langchain/langgraph": "^1.4.4",
     "@langchain/langgraph-checkpoint-postgres": "^1.0.3",
     "@langchain/openai": "^1.5.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
@@ -48,12 +51,16 @@
     "axios": "^1.18.0",
     "better-sqlite3": "^12.10.0",
     "bullmq": "^5.79.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
     "commander": "^13.1.0",
+    "gray-matter": "^4.0.3",
     "joi": "^18.2.3",
     "jwks-rsa": "^4.0.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.21.0",
+    "pgvector": "^0.3.0",
     "redis": "^5.12.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
@@ -68,6 +75,7 @@
     "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
+    "@types/multer": "^1.4.13",
     "@types/node": "^24.0.0",
     "@types/passport": "^1.0.17",
     "@types/passport-jwt": "^4.0.1",
@@ -114,6 +122,9 @@
         }
       ]
     },
+    "transformIgnorePatterns": [
+      "node_modules/(?!(pgvector)/)"
+    ],
     "moduleNameMapper": {
       "@lcp/shared": "<rootDir>/libs/lcp-shared/src/index.ts"
     },
@@ -124,7 +135,13 @@
     "testEnvironment": "node",
     "reporters": [
       "default",
-      ["jest-junit", { "outputDirectory": "test-results", "outputName": "unit.xml" }]
+      [
+        "jest-junit",
+        {
+          "outputDirectory": "test-results",
+          "outputName": "unit.xml"
+        }
+      ]
     ]
   }
 }

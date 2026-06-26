@@ -1,7 +1,6 @@
 import { FakeListChatModel } from '@langchain/core/utils/testing';
 import {
   AgentStatus,
-  AuditEvent,
   AuditEventType,
   LcpAgent,
   LcpCompany,
@@ -12,13 +11,16 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AgentLoopService } from '../../../apps/lcp-agent/src/agent/agent-loop.service';
+import { AuditClientService } from '../../../apps/lcp-agent/src/audit/audit-client.service';
 import * as factory from '../../../apps/lcp-agent/src/llm/llm-factory';
+import { McpClientService } from '../../../apps/lcp-agent/src/mcp/mcp-client.service';
+import { AgentRagService } from '../../../apps/lcp-agent/src/rag/agent-rag.service';
 import { AgentRegistryService } from '../../../apps/lcp-agent/src/registry/agent-registry.service';
 
 // Requires DOCKER services: PostgreSQL (DATABASE_URL).
 // Run via: ./scripts/run-integration-tests.sh
 
-const ALL_ENTITIES = [LcpCompany, LcpRole, LcpAgent, AuditEvent];
+const ALL_ENTITIES = [LcpCompany, LcpRole, LcpAgent];
 
 const dbUrl = process.env.DATABASE_URL;
 
@@ -30,9 +32,11 @@ describeIf('AgentLoopService (integration)', () => {
   let companyRepo: Repository<LcpCompany>;
   let roleRepo: Repository<LcpRole>;
   let agentRepo: Repository<LcpAgent>;
-  let auditRepo: Repository<AuditEvent>;
+  let auditRecord: jest.Mock;
 
   beforeAll(async () => {
+    auditRecord = jest.fn();
+
     module = await Test.createTestingModule({
       imports: [
         TypeOrmModule.forRoot({
@@ -47,8 +51,23 @@ describeIf('AgentLoopService (integration)', () => {
         AgentLoopService,
         AgentRegistryService,
         {
+          provide: AuditClientService,
+          useValue: { record: auditRecord, notifyComplete: jest.fn() },
+        },
+        {
+          provide: AgentRagService,
+          useValue: { retrieve: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: McpClientService,
+          useValue: { loadTools: jest.fn().mockResolvedValue([]) },
+        },
+        {
           provide: ConfigService,
-          useValue: { getOrThrow: () => dbUrl },
+          useValue: {
+            get: jest.fn().mockReturnValue(undefined),
+            getOrThrow: () => dbUrl,
+          },
         },
       ],
     }).compile();
@@ -63,7 +82,6 @@ describeIf('AgentLoopService (integration)', () => {
     companyRepo = module.get(getRepositoryToken(LcpCompany));
     roleRepo = module.get(getRepositoryToken(LcpRole));
     agentRepo = module.get(getRepositoryToken(LcpAgent));
-    auditRepo = module.get(getRepositoryToken(AuditEvent));
   });
 
   afterAll(async () => {
@@ -74,7 +92,6 @@ describeIf('AgentLoopService (integration)', () => {
   // Use DELETE (not TRUNCATE) to avoid PostgreSQL FK constraint errors.
   // beforeEach ensures a clean slate even when a previous run failed mid-cleanup.
   async function cleanDb() {
-    await auditRepo.createQueryBuilder().delete().execute();
     await agentRepo.createQueryBuilder().delete().execute();
     await roleRepo.createQueryBuilder().delete().execute();
     await companyRepo.createQueryBuilder().delete().execute();
@@ -115,7 +132,7 @@ describeIf('AgentLoopService (integration)', () => {
     return { company, role, agent };
   }
 
-  it('runs to Completed and writes an LlmResponse audit event', async () => {
+  it('runs to Completed and fires LlmRequest + LlmResponse audit events', async () => {
     const { company, role, agent } = await seedAgentAndRole();
 
     await service.run(agent.id);
@@ -124,23 +141,20 @@ describeIf('AgentLoopService (integration)', () => {
     expect(updated.status).toBe(AgentStatus.Completed);
     expect(updated.threadId).toBe(agent.id);
 
-    const allEvents = await auditRepo.findBy({ agentId: agent.id });
-
-    const requestEvent = allEvents.find(
-      (e) => e.eventType === AuditEventType.LlmRequest,
+    expect(auditRecord).toHaveBeenCalledWith(
+      company.id,
+      role.name,
+      agent.id,
+      AuditEventType.LlmRequest,
+      expect.any(Object),
     );
-    const responseEvent = allEvents.find(
-      (e) => e.eventType === AuditEventType.LlmResponse,
+    expect(auditRecord).toHaveBeenCalledWith(
+      company.id,
+      role.name,
+      agent.id,
+      AuditEventType.LlmResponse,
+      expect.any(Object),
     );
-
-    expect(requestEvent).not.toBeNull();
-    expect(responseEvent).not.toBeNull();
-
-    for (const event of [requestEvent!, responseEvent!]) {
-      expect(event.companyId).toBe(company.id);
-      expect(event.agentId).toBe(agent.id);
-      expect(event.role).toBe(role.name);
-    }
   }, 30_000);
 
   it('uses company llmDefault when role.llmConfig is absent', async () => {

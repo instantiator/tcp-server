@@ -1,0 +1,269 @@
+# Section 6 — MCP Servers
+
+[← Back to start](./start.md#sections)
+
+> **Requires:** Section 1 complete — Docker stack running. Section 5 recommended (storage operations are more interesting with files present).
+
+You are testing the three MCP (Model Context Protocol) servers. Each exposes an HTTP endpoint that agents use to call tools at runtime. The servers use a stateless request-per-connection model: a fresh MCP session is created for every tool call.
+
+The three servers are:
+
+- **lcp-mcp-storage** (port 3010) — real S3/MinIO integration; agents use this to read and write files.
+- **lcp-mcp-memory** (port 3011) — stub; returns informative "not yet implemented" responses.
+- **lcp-mcp-interactions** (port 3012) — stub; same pattern as memory.
+
+```mermaid
+sequenceDiagram
+    participant A as lcp-agent
+    participant C as McpClientService
+    participant S as lcp-mcp-storage :3010
+
+    A->>C: loadTools(["storage"], urls)
+    C->>S: POST /mcp (initialize + listTools)
+    S-->>C: tool list
+    C-->>A: DynamicStructuredTool[]
+
+    A->>C: invoke storage__list_files
+    C->>S: POST /mcp (callTool: list_files)
+    S->>MIO: ListObjectsV2
+    MIO-->>S: file list
+    S-->>C: JSON result
+    C-->>A: text response
+```
+
+---
+
+## 6.1 — Health checks
+
+Each MCP server exposes a `GET /health` endpoint.
+
+```bash
+curl -s http://localhost:3010/health
+curl -s http://localhost:3011/health
+curl -s http://localhost:3012/health
+```
+
+Expected response for each (status 200):
+
+```json
+{ "status": "ok" }
+```
+
+---
+
+## 6.2 — List tools on the storage server
+
+Send an MCP `initialize + tools/list` request to the storage server. This is what lcp-agent does when loading tools for a role that includes `"storage"` in its `mcpServerList`.
+
+```bash
+curl -s -X POST http://localhost:3010/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "2025-03-26",
+      "capabilities": {},
+      "clientInfo": { "name": "manual-test", "version": "0.0.1" }
+    }
+  }' | jq '.result.serverInfo'
+```
+
+Expected:
+
+| Field     | Expected            |
+| --------- | ------------------- |
+| `name`    | `"lcp-mcp-storage"` |
+| `version` | `"1.0.0"`           |
+
+Then list tools:
+
+```bash
+curl -s -X POST http://localhost:3010/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tools/list",
+    "params": {}
+  }' | jq '[.result.tools[].name]'
+```
+
+Expected tool list:
+
+| Tool              | Description                                     |
+| ----------------- | ----------------------------------------------- |
+| `describe_server` | Returns an overview of the storage service      |
+| `describe_folder` | Explains the purpose of a folder by path prefix |
+| `list_files`      | Lists files under a path prefix                 |
+| `read_file`       | Reads a file's text content                     |
+| `write_file`      | Creates or overwrites a file                    |
+| `delete_file`     | Deletes a file                                  |
+
+---
+
+## 6.3 — Call `describe_server`
+
+```bash
+curl -s -X POST http://localhost:3010/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 3,
+    "method": "tools/call",
+    "params": {
+      "name": "describe_server",
+      "arguments": {}
+    }
+  }' | jq -r '.result.content[0].text'
+```
+
+Expected: a markdown overview of the storage service listing all tools and path conventions.
+
+This is the tool an agent calls when it first connects to a server to learn what is available and how to use it — analogous to reading a man page before running commands.
+
+---
+
+## 6.4 — Call `describe_folder`
+
+```bash
+curl -s -X POST http://localhost:3010/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 4,
+    "method": "tools/call",
+    "params": {
+      "name": "describe_folder",
+      "arguments": { "path": "acme/tasks/123/output" }
+    }
+  }' | jq -r '.result.content[0].text'
+```
+
+Expected: a description of the `output` folder — something like "Task output — Files created during task execution. This is your working area..."
+
+Try different path prefixes and observe the canned descriptions:
+
+| Path                       | Expected description topic            |
+| -------------------------- | ------------------------------------- |
+| `acme/tasks/abc/materials` | Task materials — read-only inputs     |
+| `acme/tasks/abc/output`    | Task output — agent working area      |
+| `acme/knowledge/analyst`   | Knowledge base — RAG source documents |
+| `acme/finished/reports`    | Finished reports — stable artefacts   |
+| `acme/audit/abc`           | Audit log — append-only JSONL         |
+
+---
+
+## 6.5 — List files in MinIO via MCP
+
+If you uploaded a document in Section 5, you can retrieve it through the storage MCP server:
+
+```bash
+# Replace 'acme' with your company slug
+curl -s -X POST http://localhost:3010/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 5,
+    "method": "tools/call",
+    "params": {
+      "name": "list_files",
+      "arguments": { "path": "acme/knowledge" }
+    }
+  }' | jq -r '.result.content[0].text'
+```
+
+Expected: a JSON array of file entries including `test-knowledge.md`.
+
+| Field          | Expected                                                         |
+| -------------- | ---------------------------------------------------------------- |
+| `key`          | Full object key, e.g. `acme/knowledge/analyst/test-knowledge.md` |
+| `size`         | File size in bytes (> 0)                                         |
+| `lastModified` | ISO 8601 timestamp                                               |
+
+---
+
+## 6.6 — Write and read a file via MCP
+
+Test the write and read tools end to end:
+
+```bash
+# Write
+curl -s -X POST http://localhost:3010/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 6,
+    "method": "tools/call",
+    "params": {
+      "name": "write_file",
+      "arguments": {
+        "path": "acme/tasks/manual-test/output/hello.txt",
+        "content": "Hello from the MCP storage server."
+      }
+    }
+  }' | jq -r '.result.content[0].text'
+```
+
+Expected: `Written: acme/tasks/manual-test/output/hello.txt`
+
+```bash
+# Read back
+curl -s -X POST http://localhost:3010/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 7,
+    "method": "tools/call",
+    "params": {
+      "name": "read_file",
+      "arguments": { "path": "acme/tasks/manual-test/output/hello.txt" }
+    }
+  }' | jq -r '.result.content[0].text'
+```
+
+Expected: `Hello from the MCP storage server.`
+
+---
+
+## 6.7 — Verify stub servers respond correctly
+
+Memory and interactions servers return informative stub responses:
+
+```bash
+# Memory server
+curl -s -X POST http://localhost:3011/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"recall","arguments":{"query":"test"}}}' \
+  | jq -r '.result.content[0].text'
+```
+
+Expected: a message explaining that memory recall is not yet implemented and directing the agent to use RAG context instead.
+
+```bash
+# Interactions server
+curl -s -X POST http://localhost:3012/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"request_user_input","arguments":{"question":"test"}}}' \
+  | jq -r '.result.content[0].text'
+```
+
+Expected: a message explaining that user input requests are not yet implemented.
+
+---
+
+## Testing complete
+
+You have verified the full stack end to end:
+
+| Section                                                          | ✓   |
+| ---------------------------------------------------------------- | --- |
+| Infrastructure — all services healthy                            |     |
+| Companies & roles — create and retrieve                          |     |
+| Chat agents — multi-turn conversation                            |     |
+| Autonomous agents — job dispatch and completion                  |     |
+| RAG & documents — upload, retrieve, and verify in agent response |     |
+| MCP servers — tool listing, describe, read, write                |     |
+
+[← Back to start](./start.md)

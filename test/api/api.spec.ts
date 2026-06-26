@@ -12,6 +12,7 @@
 import { LcpCompany, LcpRole } from '../../libs/lcp-shared/src';
 import {
   ApiHelper,
+  BASE,
   ChatResponse,
   PASSWORD,
   RUN_ID,
@@ -142,6 +143,71 @@ describe('lcp-cli API flows', () => {
           });
         });
       });
+    });
+  });
+});
+
+describe('storage proxy', () => {
+  let token: string;
+
+  beforeAll(async () => {
+    token = await ApiHelper.postCredentialsForToken(USERNAME, PASSWORD, 200);
+  });
+
+  const authHeaders = () => ({ Authorization: `Bearer ${token}` });
+
+  describe('POST /api/storage/:path + GET /api/storage?path=', () => {
+    const key = `api-test/${RUN_ID}/proxy-test.txt`;
+    const content = `proxy test content ${RUN_ID}`;
+
+    it('uploads a file and returns key and size', async () => {
+      const form = new FormData();
+      form.append(
+        'file',
+        new Blob([content], { type: 'text/plain' }),
+        'proxy-test.txt',
+      );
+      const res = await fetch(
+        `${BASE}/api/storage?path=${encodeURIComponent(key)}`,
+        { method: 'POST', headers: authHeaders(), body: form },
+      );
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as { key: string; size: number };
+      expect(body.key).toBe(key);
+      expect(body.size).toBe(Buffer.byteLength(content));
+    });
+
+    it('downloads the uploaded file back', async () => {
+      const res = await fetch(
+        `${BASE}/api/storage?path=${encodeURIComponent(key)}`,
+        { headers: authHeaders() },
+      );
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      expect(text).toBe(content);
+    });
+
+    it('returns 404 for a non-existent key', async () => {
+      const res = await fetch(
+        `${BASE}/api/storage?path=${encodeURIComponent('api-test/does-not-exist.txt')}`,
+        { headers: authHeaders() },
+      );
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 400 for a path traversal attempt', async () => {
+      const res = await fetch(
+        `${BASE}/api/storage?path=${encodeURIComponent('../etc/passwd')}`,
+        { headers: authHeaders() },
+      );
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 401 without a token', async () => {
+      const res = await fetch(
+        `${BASE}/api/storage?path=${encodeURIComponent(key)}`,
+      );
+      expect(res.status).toBe(401);
     });
   });
 });

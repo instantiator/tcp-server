@@ -1,6 +1,6 @@
 # ADR-007: Shared Company Storage
 
-Status: Proposed
+Status: Partially Implemented
 
 ## Context
 
@@ -43,10 +43,16 @@ MinIO is S3-compatible, lightweight, and self-hostable. Per-company S3 buckets p
       output/            ← files created by agents during the task
   knowledge/
     {role_name}/         ← OKF knowledge base source files for a role
+  finished/              ← stable artefacts promoted from tasks/*/output/
+    {category}/          ← reports | specifications | designs | code | other
+      {task_id}/
+        {filename}
   audit/
     {task_id}/
       {step_id}.jsonl    ← exported audit log per task step (see ADR-008)
 ```
+
+Agents write to `tasks/{task_id}/output/` during execution. When a task completes, the reviewing agent (or orchestrator) copies finalised artefacts into `finished/{category}/{task_id}/`. This keeps in-progress working files isolated from stable outputs that other agents may read.
 
 ### Storage MCP server
 

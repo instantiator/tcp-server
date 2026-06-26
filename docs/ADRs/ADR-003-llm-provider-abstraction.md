@@ -45,7 +45,7 @@ interface LlmConfig {
   provider: 'anthropic' | 'openai' | 'lm-studio' | string;
   model: string;
   baseUrl?: string; // override for LM Studio or other custom endpoints
-  apiKey?: string;  // stored in the database; masked in API responses by default
+  apiKey?: string; // stored in the database; masked in API responses by default
 }
 ```
 

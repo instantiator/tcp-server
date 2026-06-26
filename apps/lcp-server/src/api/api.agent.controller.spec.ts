@@ -1,6 +1,6 @@
 import { AgentStatus, AuditEventType, LcpAgent } from '@lcp/shared';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { randomUUID, UUID } from 'crypto';
+import { randomUUID } from 'crypto';
 import type { Request } from 'express';
 import { DbService } from '../db/db.service';
 import { AgentEventService } from '../events/agent-event.service';
@@ -16,6 +16,7 @@ function makeAgent(overrides: Partial<LcpAgent> = {}): LcpAgent {
     status: AgentStatus.Idle,
     threadId: null,
     initialPrompt: 'Do something.',
+    output: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     company: {} as never,
@@ -39,7 +40,7 @@ describe('AgentController', () => {
   let agentEvents: jest.Mocked<
     Pick<AgentEventService, 'observe' | 'emit' | 'cleanup'>
   >;
-  let auditRepo: { save: jest.Mock; create: jest.Mock };
+  let auditService: { record: jest.Mock };
   let controller: AgentController;
 
   beforeEach(() => {
@@ -55,16 +56,13 @@ describe('AgentController', () => {
       emit: jest.fn(),
       cleanup: jest.fn(),
     };
-    auditRepo = {
-      save: jest.fn().mockResolvedValue({}),
-      create: jest.fn().mockReturnValue({}),
-    };
+    auditService = { record: jest.fn().mockResolvedValue(undefined) };
     controller = new AgentController(
       db as unknown as DbService,
       orchestration as unknown as AgentOrchestrationService,
       chat as unknown as ChatService,
       agentEvents as unknown as AgentEventService,
-      auditRepo as never,
+      auditService as never,
     );
   });
 
@@ -81,16 +79,6 @@ describe('AgentController', () => {
 
       expect(orchestration.startAgent).toHaveBeenCalledTimes(1);
       expect(result.id).toBe(agent.id);
-    });
-
-    it('throws BadRequestException when required fields are missing', async () => {
-      await expect(
-        controller.startAgent({
-          companyId: '' as UUID,
-          roleId: randomUUID(),
-          initialPrompt: 'Go.',
-        }),
-      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -172,17 +160,14 @@ describe('AgentController', () => {
           roleId: agent.roleId,
         }),
       );
-      expect(auditRepo.save).toHaveBeenCalledTimes(1);
-      expect(auditRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ eventType: AuditEventType.StateChange }),
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(String),
+        expect.any(String),
+        AuditEventType.StateChange,
+        expect.any(Object),
       );
       expect(result.id).toBe(agent.id);
-    });
-
-    it('throws BadRequestException when required fields are missing', async () => {
-      await expect(
-        controller.startChat({ companyId: '' as UUID, roleId: randomUUID() }),
-      ).rejects.toThrow(BadRequestException);
     });
   });
 

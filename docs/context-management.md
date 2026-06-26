@@ -21,10 +21,10 @@ The model's context window is configured via `LlmConfig.contextWindow` (tokens).
 
 ## Compaction thresholds
 
-| Threshold | Value | Description |
-|---|---|---|
-| Trigger | 80% | Compaction is triggered when the context exceeds this fraction of the window |
-| Target | 60% | Compaction aims to bring the context below this fraction |
+| Threshold | Value | Description                                                                  |
+| --------- | ----- | ---------------------------------------------------------------------------- |
+| Trigger   | 80%   | Compaction is triggered when the context exceeds this fraction of the window |
+| Target    | 60%   | Compaction aims to bring the context below this fraction                     |
 
 ## Compaction strategies
 
@@ -58,7 +58,7 @@ When compaction runs, `ChatMessageResponse` includes a `compactionReport` field:
     "activities": ["Trimmed history from 24 to 8 messages (removed 16)"],
     "duration": 45,
     "before": { "tokens": 6800, "windowSize": 8192, "pct": 83.0 },
-    "after":  { "tokens": 4200, "windowSize": 8192, "pct": 51.3 }
+    "after": { "tokens": 4200, "windowSize": 8192, "pct": 51.3 }
   }
 }
 ```
@@ -76,12 +76,12 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 Events:
 
-| Kind | When |
-|---|---|
-| `processing_started` | LLM invocation has begun |
-| `compaction_started` | Compaction triggered; includes `tokensBefore`, `windowSize`, `pct`, `strategies` |
+| Kind                  | When                                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------------------- |
+| `processing_started`  | LLM invocation has begun                                                                          |
+| `compaction_started`  | Compaction triggered; includes `tokensBefore`, `windowSize`, `pct`, `strategies`                  |
 | `compaction_complete` | Compaction finished; includes `tokensAfter`, `windowSize`, `pctAfter`, `durationMs`, `activities` |
-| `processing_complete` | LLM response received |
+| `processing_complete` | LLM response received                                                                             |
 
 The CLI automatically connects to this stream after 3 seconds of no response from the server, displaying compaction events in real time.
 
@@ -98,10 +98,10 @@ See [ADR-013](ADRs/ADR-013-prompt-assembly-context-management.md) for the full d
 
 ### Services
 
-| Service | Location | Purpose |
-|---|---|---|
-| `ContextBudgetService` | `src/context/context-budget.service.ts` | Token counting and budget thresholds |
-| `ContextCompactorService` | `src/context/context-compactor.service.ts` | Trim and summarise operations |
-| `IncomingDataGuardService` | `src/context/incoming-data-guard.service.ts` | Pre-check incoming data size |
-| `ContextManagerService` | `src/context/context-manager.service.ts` | Orchestrates budget checks and compaction |
-| `AgentEventService` | `src/events/agent-event.service.ts` | In-memory SSE event bus per agent |
+| Service                    | Location                                     | Purpose                                   |
+| -------------------------- | -------------------------------------------- | ----------------------------------------- |
+| `ContextBudgetService`     | `src/context/context-budget.service.ts`      | Token counting and budget thresholds      |
+| `ContextCompactorService`  | `src/context/context-compactor.service.ts`   | Trim and summarise operations             |
+| `IncomingDataGuardService` | `src/context/incoming-data-guard.service.ts` | Pre-check incoming data size              |
+| `ContextManagerService`    | `src/context/context-manager.service.ts`     | Orchestrates budget checks and compaction |
+| `AgentEventService`        | `src/events/agent-event.service.ts`          | In-memory SSE event bus per agent         |

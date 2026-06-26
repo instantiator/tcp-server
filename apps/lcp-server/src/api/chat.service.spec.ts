@@ -5,6 +5,7 @@ import {
 import { randomUUID } from 'crypto';
 import { AgentStatus, AuditEventType, LcpAgent, LcpRole } from '@lcp/shared';
 import { ConfigService } from '@nestjs/config';
+import { AuditService } from '../audit/audit.service';
 
 // Mock heavy LangGraph + LLM deps before importing ChatService
 jest.mock('@langchain/langgraph', () => ({
@@ -58,6 +59,7 @@ import { ContextCompactorService } from '../context/context-compactor.service';
 import { IncomingDataGuardService } from '../context/incoming-data-guard.service';
 import { ContextManagerService } from '../context/context-manager.service';
 import { AgentEventService } from '../events/agent-event.service';
+import { RagRetrievalService } from '../rag/rag-retrieval.service';
 
 function makeAgent(overrides: Partial<LcpAgent> = {}): LcpAgent {
   return {
@@ -67,6 +69,7 @@ function makeAgent(overrides: Partial<LcpAgent> = {}): LcpAgent {
     status: AgentStatus.Idle,
     threadId: null,
     initialPrompt: '',
+    output: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     company: {} as never,
@@ -85,6 +88,7 @@ function makeRole(overrides: Partial<LcpRole> = {}): LcpRole {
     systemPromptTemplate: 'You are {{name}}.',
     knowledgeDomains: [],
     mcpServerList: [],
+    queryIndex: 0,
     company: {} as never,
     ...overrides,
   };
@@ -94,7 +98,7 @@ describe('ChatService', () => {
   let agentRepo: { findOneBy: jest.Mock; update: jest.Mock };
   let roleRepo: { findOneBy: jest.Mock };
   let companyRepo: { findOneBy: jest.Mock };
-  let auditRepo: { save: jest.Mock; create: jest.Mock };
+  let auditService: { write: jest.Mock; record: jest.Mock };
   let config: ConfigService;
   let service: ChatService;
   let compiledGraph: {
@@ -105,6 +109,7 @@ describe('ChatService', () => {
   let mockCheckpointer: { setup: jest.Mock; end: jest.Mock };
   let contextManager: ContextManagerService;
   let agentEvents: AgentEventService;
+  let ragRetrieval: { retrieve: jest.Mock };
 
   beforeEach(() => {
     agentRepo = {
@@ -113,9 +118,9 @@ describe('ChatService', () => {
     };
     roleRepo = { findOneBy: jest.fn() };
     companyRepo = { findOneBy: jest.fn() };
-    auditRepo = {
-      save: jest.fn().mockResolvedValue({}),
-      create: jest.fn().mockReturnValue({}),
+    auditService = {
+      write: jest.fn().mockResolvedValue(undefined),
+      record: jest.fn().mockResolvedValue(undefined),
     };
     config = {
       getOrThrow: jest.fn().mockReturnValue('postgres://test'),
@@ -150,16 +155,20 @@ describe('ChatService', () => {
       compactor,
       guard,
       agentEvents,
+      auditService as unknown as AuditService,
     );
+
+    ragRetrieval = { retrieve: jest.fn().mockResolvedValue([]) };
 
     service = new ChatService(
       config,
       contextManager,
       agentEvents,
+      ragRetrieval as unknown as RagRetrievalService,
+      auditService as unknown as AuditService,
       agentRepo as never,
       roleRepo as never,
       companyRepo as never,
-      auditRepo as never,
     );
   });
 
@@ -200,11 +209,19 @@ describe('ChatService', () => {
       expect.objectContaining({ threadId: agent.id }),
     );
     // Audit events: LlmRequest + LlmResponse
-    expect(auditRepo.create).toHaveBeenCalledWith(
-      expect.objectContaining({ eventType: AuditEventType.LlmRequest }),
+    expect(auditService.record).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      AuditEventType.LlmRequest,
+      expect.any(Object),
     );
-    expect(auditRepo.create).toHaveBeenCalledWith(
-      expect.objectContaining({ eventType: AuditEventType.LlmResponse }),
+    expect(auditService.record).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      AuditEventType.LlmResponse,
+      expect.any(Object),
     );
   });
 
@@ -242,11 +259,185 @@ describe('ChatService', () => {
       agent.id,
       expect.objectContaining({ status: AgentStatus.Failed }),
     );
-    expect(auditRepo.create).toHaveBeenCalledWith(
-      expect.objectContaining({ eventType: AuditEventType.StateChange }),
+    expect(auditService.record).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      AuditEventType.StateChange,
+      expect.any(Object),
     );
     // PostgresSaver.end() must always be called to release connection
     expect(mockCheckpointer.end).toHaveBeenCalled();
+  });
+
+  it('injects role prompt as second message when rolePrompt is set', async () => {
+    const agent = makeAgent({ threadId: null });
+    const role = makeRole({ rolePrompt: 'You are an expert analyst.' });
+    agentRepo.findOneBy.mockResolvedValue(agent);
+    roleRepo.findOneBy.mockResolvedValue(role);
+    companyRepo.findOneBy.mockResolvedValue(null);
+
+    const aiMsg = new AIMessage('Response.');
+    compiledGraph.invoke.mockResolvedValue({ messages: [aiMsg] });
+
+    await service.sendMessage(agent.id, 'Hello');
+
+    const { messages } = (
+      compiledGraph.invoke.mock.calls[0] as [
+        { messages: { content: string }[] },
+      ]
+    )[0];
+    const texts = messages.map((m) => m.content);
+    expect(texts).toContain('You are an expert analyst.');
+  });
+
+  it('skips role prompt injection when rolePrompt is null', async () => {
+    const agent = makeAgent({ threadId: null });
+    const role = makeRole({ rolePrompt: null });
+    agentRepo.findOneBy.mockResolvedValue(agent);
+    roleRepo.findOneBy.mockResolvedValue(role);
+    companyRepo.findOneBy.mockResolvedValue(null);
+
+    const aiMsg = new AIMessage('Response.');
+    compiledGraph.invoke.mockResolvedValue({ messages: [aiMsg] });
+
+    await service.sendMessage(agent.id, 'Hello');
+
+    const { messages } = (
+      compiledGraph.invoke.mock.calls[0] as [
+        { messages: { content: string }[] },
+      ]
+    )[0];
+    // System prompt + task + final instruction = 3 messages; no role prompt
+    expect(messages).toHaveLength(3);
+  });
+
+  it('injects company context when companyContext is set', async () => {
+    const agent = makeAgent({ threadId: null });
+    const role = makeRole();
+    agentRepo.findOneBy.mockResolvedValue(agent);
+    roleRepo.findOneBy.mockResolvedValue(role);
+    companyRepo.findOneBy.mockResolvedValue({
+      id: agent.companyId,
+      companyContext: 'We are ACME, a simulation company.',
+    });
+
+    const aiMsg = new AIMessage('Response.');
+    compiledGraph.invoke.mockResolvedValue({ messages: [aiMsg] });
+
+    await service.sendMessage(agent.id, 'Hello');
+
+    const { messages } = (
+      compiledGraph.invoke.mock.calls[0] as [
+        { messages: { content: string }[] },
+      ]
+    )[0];
+    const texts = messages.map((m) => m.content);
+    expect(texts).toContain('We are ACME, a simulation company.');
+  });
+
+  it('appends final instruction as last message on first turn', async () => {
+    const agent = makeAgent({ threadId: null });
+    const role = makeRole();
+    agentRepo.findOneBy.mockResolvedValue(agent);
+    roleRepo.findOneBy.mockResolvedValue(role);
+    companyRepo.findOneBy.mockResolvedValue(null);
+
+    const aiMsg = new AIMessage('Response.');
+    compiledGraph.invoke.mockResolvedValue({ messages: [aiMsg] });
+
+    await service.sendMessage(agent.id, 'Hello');
+
+    const { messages } = (
+      compiledGraph.invoke.mock.calls[0] as [
+        { messages: { content: string }[] },
+      ]
+    )[0];
+    const lastContent = messages[messages.length - 1].content;
+    expect(lastContent).toMatch(/Proceed now/);
+  });
+
+  it('does not append final instruction on subsequent turns', async () => {
+    const agent = makeAgent({ threadId: randomUUID() });
+    const role = makeRole();
+    agentRepo.findOneBy.mockResolvedValue(agent);
+    roleRepo.findOneBy.mockResolvedValue(role);
+    companyRepo.findOneBy.mockResolvedValue(null);
+
+    const aiMsg = new AIMessage('Response.');
+    compiledGraph.invoke.mockResolvedValue({ messages: [aiMsg] });
+
+    await service.sendMessage(agent.id, 'Follow-up');
+
+    const { messages } = (
+      compiledGraph.invoke.mock.calls[0] as [
+        { messages: { content: string }[] },
+      ]
+    )[0];
+    // Subsequent turns pass only the single new message
+    expect(messages).toHaveLength(1);
+  });
+
+  it('injects RAG chunks as prompt part 5 when retrieval returns results', async () => {
+    const agent = makeAgent({ threadId: null });
+    const role = makeRole();
+    agentRepo.findOneBy.mockResolvedValue(agent);
+    roleRepo.findOneBy.mockResolvedValue(role);
+    companyRepo.findOneBy.mockResolvedValue({
+      id: agent.companyId,
+      embeddingConfig: { provider: 'lm-studio', model: 'nomic-embed-text' },
+    });
+
+    ragRetrieval.retrieve.mockResolvedValue([
+      {
+        id: randomUUID(),
+        documentPath: 'knowledge/analyst/handbook.md',
+        chunkIndex: 0,
+        content: 'Always cite your sources.',
+        similarity: 0.92,
+      },
+    ]);
+
+    const aiMsg = new AIMessage('Response.');
+    compiledGraph.invoke.mockResolvedValue({ messages: [aiMsg] });
+
+    await service.sendMessage(agent.id, 'Hello');
+
+    const { messages } = (
+      compiledGraph.invoke.mock.calls[0] as [
+        { messages: { content: string }[] },
+      ]
+    )[0];
+    const texts = messages.map((m) => m.content);
+    expect(texts.some((t) => t.includes('Always cite your sources.'))).toBe(
+      true,
+    );
+    expect(texts.some((t) => t.includes('handbook.md'))).toBe(true);
+  });
+
+  it('omits RAG message when retrieval returns no results', async () => {
+    const agent = makeAgent({ threadId: null });
+    const role = makeRole({ rolePrompt: null });
+    agentRepo.findOneBy.mockResolvedValue(agent);
+    roleRepo.findOneBy.mockResolvedValue(role);
+    companyRepo.findOneBy.mockResolvedValue({
+      id: agent.companyId,
+      embeddingConfig: { provider: 'lm-studio', model: 'nomic-embed-text' },
+    });
+    ragRetrieval.retrieve.mockResolvedValue([]);
+
+    const aiMsg = new AIMessage('Response.');
+    compiledGraph.invoke.mockResolvedValue({ messages: [aiMsg] });
+
+    await service.sendMessage(agent.id, 'Hello');
+
+    const { messages } = (
+      compiledGraph.invoke.mock.calls[0] as [
+        { messages: { content: string }[] },
+      ]
+    )[0];
+    // System prompt + task + final instruction = 3 (no role prompt, no RAG)
+    expect(messages).toHaveLength(3);
   });
 
   it('returns Idle status and empty response when aborted by client', async () => {
@@ -274,8 +465,12 @@ describe('ChatService', () => {
       expect.objectContaining({ status: AgentStatus.Idle }),
     );
     // Should write a StateChange audit (cancelled) but not LlmResponse
-    expect(auditRepo.create).toHaveBeenCalledWith(
-      expect.objectContaining({ eventType: AuditEventType.StateChange }),
+    expect(auditService.record).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      AuditEventType.StateChange,
+      expect.any(Object),
     );
     expect(mockCheckpointer.end).toHaveBeenCalled();
   });

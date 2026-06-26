@@ -1,0 +1,5 @@
+{
+  // Directive appended to every agent prompt after all context has been established.
+  // Signals the agent to begin work rather than ask clarifying questions.
+  "final_instruction": "You have been given your task and all relevant context above. Proceed now: be thorough, draw on your expertise, and deliver your best work."
+}

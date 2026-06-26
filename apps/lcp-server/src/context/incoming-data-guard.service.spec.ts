@@ -10,6 +10,7 @@ jest.mock('@langchain/core/utils/tiktoken', () => ({
 import { ContextBudgetService } from './context-budget.service';
 import { ContextCompactorService } from './context-compactor.service';
 import { IncomingDataGuardService } from './incoming-data-guard.service';
+import type { MinioService } from '../storage/minio.service';
 
 function makeServices() {
   const budget = new ContextBudgetService();
@@ -63,7 +64,7 @@ describe('IncomingDataGuardService', () => {
     expect(result.activity).toBeDefined();
   });
 
-  it('returns compacted text even when still over budget (best effort)', async () => {
+  it('returns compacted text even when still over budget (best effort, no MinioService)', async () => {
     // compact returns something still large
     (compactor.compactSection as jest.Mock).mockResolvedValue('b'.repeat(300));
     model.invoke.mockResolvedValue(new AIMessage('b'.repeat(300)));
@@ -78,6 +79,57 @@ describe('IncomingDataGuardService', () => {
     );
 
     expect(result.compacted).toBe(true);
+    expect(result.activity).toContain('still over budget');
+    expect(result.overflowKey).toBeUndefined();
+  });
+
+  it('stores overflow in MinIO and returns reference when still over budget', async () => {
+    const putRaw = jest.fn().mockResolvedValue(undefined);
+    const minio = { putRaw } as unknown as MinioService;
+    const serviceWithMinio = new IncomingDataGuardService(
+      budget,
+      compactor,
+      minio,
+    );
+    (compactor.compactSection as jest.Mock).mockResolvedValue('b'.repeat(300));
+
+    const result = await serviceWithMinio.check(
+      'a'.repeat(400),
+      750,
+      1000,
+      model as never,
+      'acme/tasks/agent-1/context-overflow',
+    );
+
+    expect(putRaw).toHaveBeenCalledWith(
+      expect.stringContaining('acme/tasks/agent-1/context-overflow/'),
+      'a'.repeat(400),
+    );
+    expect(result.compacted).toBe(true);
+    expect(result.overflowKey).toBeDefined();
+    expect(result.text).toContain('[Context overflow:');
+  });
+
+  it('falls back to best-effort compaction when MinIO write fails', async () => {
+    const putRaw = jest.fn().mockRejectedValue(new Error('MinIO unreachable'));
+    const minio = { putRaw } as unknown as MinioService;
+    const serviceWithMinio = new IncomingDataGuardService(
+      budget,
+      compactor,
+      minio,
+    );
+    (compactor.compactSection as jest.Mock).mockResolvedValue('b'.repeat(300));
+
+    const result = await serviceWithMinio.check(
+      'a'.repeat(400),
+      750,
+      1000,
+      model as never,
+      'acme/tasks/agent-1/context-overflow',
+    );
+
+    expect(result.compacted).toBe(true);
+    expect(result.overflowKey).toBeUndefined();
     expect(result.activity).toContain('still over budget');
   });
 });

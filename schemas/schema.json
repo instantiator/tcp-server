@@ -100,6 +100,343 @@
       ],
       "type": "string"
     },
+    "CompanyUser": {
+      "additionalProperties": false,
+      "description": "A human user associated with a company. Used for query routing (matching conversations to the right user) and for the human-in-the-loop pause/resume flow in Phases 5–6.",
+      "properties": {
+        "companyId": {
+          "$ref": "#/definitions/UUID",
+          "description": "The company this user belongs to.",
+          "format": "uuid"
+        },
+        "createdAt": {
+          "description": "When this user was added to the company.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "id": {
+          "$ref": "#/definitions/UUID",
+          "description": "Auto-generated primary key.",
+          "format": "uuid"
+        },
+        "identifier": {
+          "description": "OIDC subject (`sub`) claim or email address — unique per company.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "knowledgeDomains": {
+          "description": "Knowledge domains this user covers (e.g. `\"finance\"`, `\"legal\"`). Used by query routing to prefer the best-matched user.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "memberType": {
+          "$ref": "#/definitions/MemberType",
+          "description": "Membership tier. `creator` is set on company creation and cannot be removed."
+        },
+        "name": {
+          "description": "Display name for this user (optional).",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "roles": {
+          "description": "Role slugs this user is responsible for. Used by query routing to match incoming agent questions to the right user.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "companyId",
+        "identifier",
+        "name",
+        "memberType",
+        "roles",
+        "knowledgeDomains",
+        "createdAt"
+      ],
+      "type": "object"
+    },
+    "ConsultationStatus": {
+      "description": "Lifecycle states for an inter-agent consultation.",
+      "enum": [
+        "pending",
+        "complete"
+      ],
+      "type": "string"
+    },
+    "Conversation": {
+      "additionalProperties": false,
+      "description": "A question posed by an agent to one or more human users. Created when an agent calls `request_user_input`; closed when a human replies.\n\nThe slug is human-readable (`{roleName}-{queryIndex}`) and is the primary identifier used by CLI commands. It is unique per role.",
+      "properties": {
+        "agentId": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/UUID"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The agent that raised this question.",
+          "format": "uuid"
+        },
+        "closedAt": {
+          "description": "Set when status transitions to `closed`.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "companyId": {
+          "$ref": "#/definitions/UUID",
+          "description": "The company this conversation belongs to.",
+          "format": "uuid"
+        },
+        "context": {
+          "description": "Optional additional context provided by the agent alongside the question.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "createdAt": {
+          "description": "When this conversation was created.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "id": {
+          "$ref": "#/definitions/UUID",
+          "description": "Auto-generated primary key.",
+          "format": "uuid"
+        },
+        "question": {
+          "description": "The question the agent is asking.",
+          "type": "string"
+        },
+        "roleId": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/UUID"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The role ID that originated this question.",
+          "format": "uuid"
+        },
+        "roleName": {
+          "description": "The role that originated this question (denormalised — kept even if role is later renamed).",
+          "minLength": 1,
+          "type": "string"
+        },
+        "routedToIdentifiers": {
+          "description": "OIDC identifiers of the users this question was routed to.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "slug": {
+          "description": "Human-readable unique identifier in the form `{role-name}-{queryIndex}`.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/ConversationStatus",
+          "description": "Current lifecycle state."
+        }
+      },
+      "required": [
+        "id",
+        "slug",
+        "companyId",
+        "roleName",
+        "roleId",
+        "agentId",
+        "question",
+        "context",
+        "status",
+        "routedToIdentifiers",
+        "createdAt"
+      ],
+      "type": "object"
+    },
+    "ConversationMessage": {
+      "additionalProperties": false,
+      "description": "A single message in a  {@link  Conversation  }  thread. Messages are append-only — one `agent` message (the question) followed by zero or one `user` message (the reply that closes the conversation).",
+      "properties": {
+        "author": {
+          "$ref": "#/definitions/MessageAuthor",
+          "description": "Whether this message was written by the agent or a human user."
+        },
+        "authorIdentifier": {
+          "description": "OIDC identifier of the user who replied (null for agent messages).",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "content": {
+          "description": "Message body.",
+          "type": "string"
+        },
+        "conversationId": {
+          "$ref": "#/definitions/UUID",
+          "description": "The conversation this message belongs to.",
+          "format": "uuid"
+        },
+        "id": {
+          "$ref": "#/definitions/UUID",
+          "description": "Auto-generated primary key.",
+          "format": "uuid"
+        },
+        "timestamp": {
+          "description": "When this message was created.",
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "conversationId",
+        "author",
+        "authorIdentifier",
+        "content",
+        "timestamp"
+      ],
+      "type": "object"
+    },
+    "ConversationStatus": {
+      "description": "Lifecycle state of a  {@link  Conversation } .",
+      "enum": [
+        "awaiting_user",
+        "closed"
+      ],
+      "type": "string"
+    },
+    "EpisodicMemory": {
+      "additionalProperties": false,
+      "description": "A single agent-authored memory entry stored for later recall. The embedding vector is stored in a `vector(1536)` column managed via raw SQL (pgvector extension) — not mapped by TypeORM.",
+      "properties": {
+        "agentId": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/UUID"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The agent that recorded this memory (nullable — may be system-generated).",
+          "format": "uuid"
+        },
+        "companyId": {
+          "$ref": "#/definitions/UUID",
+          "description": "The company that owns this memory.",
+          "format": "uuid"
+        },
+        "content": {
+          "description": "Raw text content of the memory.",
+          "type": "string"
+        },
+        "createdAt": {
+          "description": "When this memory was created.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "id": {
+          "$ref": "#/definitions/UUID",
+          "description": "Auto-generated primary key.",
+          "format": "uuid"
+        },
+        "roleId": {
+          "$ref": "#/definitions/UUID",
+          "description": "The role whose episodic memory this belongs to.",
+          "format": "uuid"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional classification tags for filtering."
+        }
+      },
+      "required": [
+        "id",
+        "companyId",
+        "roleId",
+        "agentId",
+        "content",
+        "tags",
+        "createdAt"
+      ],
+      "type": "object"
+    },
+    "KnowledgeChunk": {
+      "additionalProperties": false,
+      "description": "A single chunk of text extracted from an OKF knowledge-base document and stored for RAG retrieval. The corresponding embedding vector is stored directly in PostgreSQL as a `vector(1536)` column (pgvector extension) and is not mapped by TypeORM — all vector reads and writes use raw SQL.\n\nChunks are scoped to a  {@link  LcpRole  }  within a  {@link  LcpCompany  } . All chunks for a given `documentPath` are replaced atomically on re-index.",
+      "properties": {
+        "chunkIndex": {
+          "description": "Zero-based position of this chunk within its source document.",
+          "type": "number"
+        },
+        "companyId": {
+          "$ref": "#/definitions/UUID",
+          "description": "The company that owns this chunk.",
+          "format": "uuid"
+        },
+        "content": {
+          "description": "Raw text content of this chunk.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "createdAt": {
+          "description": "When this chunk was created.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "documentPath": {
+          "description": "MinIO path of the OKF source document this chunk was extracted from. Used to identify all chunks belonging to one document for deletion/re-index.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "id": {
+          "$ref": "#/definitions/UUID",
+          "description": "Auto-generated primary key.",
+          "format": "uuid"
+        },
+        "roleId": {
+          "$ref": "#/definitions/UUID",
+          "description": "The role whose knowledge base this chunk belongs to.",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "id",
+        "companyId",
+        "roleId",
+        "documentPath",
+        "chunkIndex",
+        "content",
+        "createdAt"
+      ],
+      "type": "object"
+    },
     "LcpAgent": {
       "additionalProperties": false,
       "description": "A running instance of an  {@link  LcpRole }  within an  {@link  LcpCompany } . Each agent has a LangGraph `thread_id` (stored as  {@link  LcpAgent.threadId } ) that links it to its checkpoint in the PostgreSQL checkpoint store, enabling resumability.",
@@ -127,6 +464,13 @@
           "description": "The task prompt supplied when the agent was started.",
           "minLength": 1,
           "type": "string"
+        },
+        "output": {
+          "description": "Final output produced by the agent on completion. Set via the `complete_task` MCP tool, or as a fallback from the last AI message when the loop exits naturally.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "role": {
           "$ref": "#/definitions/LcpRole",
@@ -165,6 +509,7 @@
         "threadId",
         "initialPrompt",
         "createdAt",
+        "output",
         "updatedAt"
       ],
       "type": "object"
@@ -173,10 +518,28 @@
       "additionalProperties": false,
       "description": "Represents a company (tenant) within the LCP simulation. Each company has its own isolated set of agents, memory, and resources.",
       "properties": {
+        "companyContext": {
+          "description": "Optional company context injected as prompt part 2 at agent start. Describes the company environment: agent roster, shared storage layout, company name and description, and any company-wide behavioural guidelines.\n\nWhen null, part 2 is omitted from the agent prompt.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "description": {
           "description": "Human-readable description for the company.",
           "minLength": 1,
           "type": "string"
+        },
+        "embeddingConfig": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LlmConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Provider and model configuration used for generating and querying embeddings. Must point to an OpenAI-compatible embeddings endpoint (e.g. LM Studio `/v1/embeddings`, OpenAI `text-embedding-3-small`).\n\nWhen null, the RAG index and retrieval services are disabled for this company. Stored as JSONB — same shape as  {@link  LlmConfig }  but the `contextWindow` field is ignored."
         },
         "id": {
           "$ref": "#/definitions/UUID",
@@ -266,6 +629,17 @@
           "minLength": 1,
           "type": "string"
         },
+        "queryIndex": {
+          "description": "Monotonically incrementing counter used to generate unique  {@link  Conversation  }  slugs. Incremented atomically (raw SQL `UPDATE … RETURNING`) on each new conversation.",
+          "type": "number"
+        },
+        "rolePrompt": {
+          "description": "Optional role prompt injected as prompt part 1 immediately after the system prompt. Covers role identity, attitude, domain knowledge, and behavioural guidelines that are distinct from the system-level instructions.\n\nWhen null, part 1 is omitted —  {@link  systemPromptTemplate }  continues to serve as the sole pre-task context until a role prompt is explicitly set.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "systemPromptTemplate": {
           "description": "Handlebars-style prompt template injected as the system message at agent start. Available variables: `{{name}}`, `{{description}}`, `{{date}}`.",
           "type": "string"
@@ -279,7 +653,8 @@
         "description",
         "systemPromptTemplate",
         "knowledgeDomains",
-        "mcpServerList"
+        "mcpServerList",
+        "queryIndex"
       ],
       "type": "object"
     },
@@ -311,6 +686,70 @@
       "required": [
         "provider",
         "model"
+      ],
+      "type": "object"
+    },
+    "MemberType": {
+      "description": "Membership tier for a  {@link  CompanyUser }  within a company.",
+      "enum": [
+        "creator",
+        "owner",
+        "member"
+      ],
+      "type": "string"
+    },
+    "MessageAuthor": {
+      "description": "Who authored a  {@link  ConversationMessage } .",
+      "enum": [
+        "user",
+        "agent"
+      ],
+      "type": "string"
+    },
+    "PendingConsultation": {
+      "additionalProperties": false,
+      "description": "Tracks a paused agent waiting for another agent's consultation response.\n\nCreated when an agent calls `request_agent_consultation` via the interactions MCP server. The calling agent is set to  {@link  AgentStatus.Paused  }  until the consultation agent completes and `PauseAndResumeService.completeAgent()` finds this record and re-enqueues the calling agent.",
+      "properties": {
+        "callingAgentId": {
+          "$ref": "#/definitions/UUID",
+          "description": "The agent that is paused awaiting the consultation result."
+        },
+        "companyId": {
+          "$ref": "#/definitions/UUID",
+          "description": "Company owning both agents."
+        },
+        "consultationAgentId": {
+          "$ref": "#/definitions/UUID",
+          "description": "The newly created agent that will perform the consultation."
+        },
+        "createdAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "id": {
+          "$ref": "#/definitions/UUID",
+          "format": "uuid"
+        },
+        "result": {
+          "description": "The consultation result written by the consulting agent on completion. Null until the consultation is complete.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "$ref": "#/definitions/ConsultationStatus",
+          "description": "Current state of the consultation."
+        }
+      },
+      "required": [
+        "id",
+        "callingAgentId",
+        "consultationAgentId",
+        "companyId",
+        "status",
+        "result",
+        "createdAt"
       ],
       "type": "object"
     },

@@ -1,4 +1,4 @@
-import { AgentStatus, AuditEvent, AuditEventType, LcpAgent } from '@lcp/shared';
+import { AgentStatus, AuditEventType, LcpAgent } from '@lcp/shared';
 import {
   BadRequestException,
   Body,
@@ -16,28 +16,16 @@ import {
   Sse,
   UseGuards,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
 import type { UUID } from 'crypto';
 import type { Request } from 'express';
 import { map } from 'rxjs/operators';
-import { Repository } from 'typeorm';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AuditService } from '../audit/audit.service';
 import { DbService } from '../db/db.service';
 import { AgentEventService } from '../events/agent-event.service';
-import type { LcpAgentTemplate } from '../templates/LcpAgentTemplate';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { ChatMessageResponse, ChatService } from './chat.service';
-
-/** Body for the chat start endpoint. */
-interface ChatStartBody {
-  companyId: UUID;
-  roleId: UUID;
-}
-
-/** Body for the send-message endpoint. */
-interface SendMessageBody {
-  message: string;
-}
+import { SendMessageDto, StartAgentDto, StartChatDto } from './dto/agent.dto';
 
 /** REST controller for starting, resuming, chatting with, and inspecting {@link LcpAgent} instances. */
 @UseGuards(JwtAuthGuard)
@@ -48,8 +36,7 @@ export class AgentController {
     private readonly orchestration: AgentOrchestrationService,
     private readonly chat: ChatService,
     private readonly agentEvents: AgentEventService,
-    @InjectRepository(AuditEvent)
-    private readonly auditRepo: Repository<AuditEvent>,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -57,12 +44,7 @@ export class AgentController {
    * Returns the agent record immediately; status starts as `idle`.
    */
   @Post('start')
-  async startAgent(@Body() body: LcpAgentTemplate): Promise<LcpAgent> {
-    if (!body.companyId || !body.roleId || !body.initialPrompt) {
-      throw new BadRequestException(
-        'companyId, roleId, and initialPrompt are required',
-      );
-    }
+  async startAgent(@Body() body: StartAgentDto): Promise<LcpAgent> {
     return this.orchestration.startAgent(body);
   }
 
@@ -72,26 +54,21 @@ export class AgentController {
    * {@link sendMessage} instead of the BullMQ pipeline.
    */
   @Post('chat/start')
-  async startChat(@Body() body: ChatStartBody): Promise<LcpAgent> {
-    if (!body.companyId || !body.roleId) {
-      throw new BadRequestException('companyId and roleId are required');
-    }
+  async startChat(@Body() body: StartChatDto): Promise<LcpAgent> {
     const agent = await this.db.createAgent({
       companyId: body.companyId,
       roleId: body.roleId,
       initialPrompt: '',
     });
-    await this.auditRepo.save(
-      this.auditRepo.create({
-        companyId: agent.companyId,
-        role: body.roleId,
-        agentId: agent.id,
-        eventType: AuditEventType.StateChange,
-        payload: {
-          newStatus: AgentStatus.Idle,
-          reason: 'chat session created',
-        },
-      }),
+    await this.audit.record(
+      agent.companyId,
+      body.roleId,
+      agent.id,
+      AuditEventType.StateChange,
+      {
+        newStatus: AgentStatus.Idle,
+        reason: 'chat session created',
+      },
     );
     return agent;
   }
@@ -107,7 +84,7 @@ export class AgentController {
   @Post(':id/message')
   async sendMessage(
     @Param('id') id: UUID,
-    @Body() body: SendMessageBody,
+    @Body() body: SendMessageDto,
     @Req() req: Request,
   ): Promise<ChatMessageResponse> {
     if (!body.message) {

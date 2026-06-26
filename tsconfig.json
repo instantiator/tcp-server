@@ -1,5 +1,9 @@
 {
   "compilerOptions": {
+    "paths": {
+      "@lcp/shared": ["./libs/lcp-shared/src/index.ts"],
+      "@lcp/shared/*": ["./libs/lcp-shared/src/*"]
+    },
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "resolvePackageJsonExports": true,
@@ -20,6 +24,6 @@
     "noImplicitAny": true,
     "strictBindCallApply": true,
     "noFallthroughCasesInSwitch": true,
-    "types": ["node", "@types/jest"]
+    "types": ["node", "@types/jest", "multer"]
   }
 }

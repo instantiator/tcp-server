@@ -23,4 +23,6 @@ export const configSchema = Joi.object({
   OIDC_CLIENT_SECRET: Joi.string().required(),
   // When true, apiKey values in LlmConfig are replaced with '***' in API responses.
   LCP_MASK_API_KEYS: Joi.boolean().default(true),
+  // Shared secret used to authenticate internal service-to-service calls (lcp-agent, MCP servers).
+  INTERNAL_API_KEY: Joi.string().required(),
 });

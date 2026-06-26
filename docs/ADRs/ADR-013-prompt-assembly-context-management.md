@@ -16,21 +16,19 @@ This ADR documents:
 
 The intended prompt for each agent turn consists of eight parts, assembled in order:
 
-| #   | Part                 | Source                                                                                          | Status                    |
-| --- | -------------------- | ----------------------------------------------------------------------------------------------- | ------------------------- |
-| 0   | System prompt        | `LcpRole.systemPromptTemplate` (rendered with `name`, `description`, `date`)                    | ✅ Implemented            |
-| 1   | Role prompt          | Role identity, attitude, domain knowledge, behavioural guidelines — separate from system prompt | ❌ Not yet (TODO in code) |
-| 2   | Company environment  | Agent roster, company name/description, shared storage folder structure from `LcpCompany`       | ❌ Not yet (TODO in code) |
-| 3   | Services available   | MCP server list and RAG knowledge domains                                                       | ❌ Not yet (TODO in code) |
-| 4   | Task / query prompt  | User message or `agent.initialPrompt`                                                           | ✅ Implemented            |
-| 5   | RAG data             | Retrieved documents for the current query                                                       | ❌ Not yet (TODO in code) |
-| 6   | MCP responses        | Tool responses pre-fetched before the turn                                                      | ❌ Not yet (TODO in code) |
-| 7   | Conversation history | Maintained implicitly via the LangGraph PostgreSQL checkpoint                                   | ✅ Implemented            |
-| 8   | Final instruction    | A suffix message telling the agent what to do next                                              | ❌ Not yet (TODO in code) |
+| #   | Part                 | Source                                                                                    | Status         |
+| --- | -------------------- | ----------------------------------------------------------------------------------------- | -------------- |
+| 0   | System prompt        | `LcpRole.systemPromptTemplate` (rendered with `name`, `description`, `date`)              | ✅ Implemented |
+| 1   | Role prompt          | `LcpRole.rolePrompt` — role identity, attitude, domain knowledge, behavioural guidelines  | ✅ Implemented |
+| 2   | Company environment  | `LcpCompany.companyContext` — company name/description, shared context for all agents     | ✅ Implemented |
+| 3   | Services available   | Dynamic list generated from `role.mcpServerList`; directs agent to call `describe_server` | ✅ Implemented |
+| 4   | Task / query prompt  | User message or `agent.initialPrompt`                                                     | ✅ Implemented |
+| 5   | RAG data             | Top-k chunks retrieved via pgvector cosine similarity for the current query               | ✅ Implemented |
+| 6   | MCP responses        | Tool responses pre-fetched before the turn                                                | ❌ Not yet     |
+| 7   | Conversation history | Maintained implicitly via the LangGraph PostgreSQL checkpoint                             | ✅ Implemented |
+| 8   | Final instruction    | A fixed suffix HumanMessage instructing the agent what to do next                         | ✅ Implemented |
 
-Parts 1–3 and 5–6 and 8 are marked with `// TODO` comments in `chat.service.ts` and `agent-loop.service.ts` with references to the ADRs that gate their implementation.
-
-Parts 0, 4, and 7 are combined with the conflation of 0 and 1: the current `systemPromptTemplate` on `LcpRole` serves as both the system prompt and the role prompt. Separating them is deferred to the role prompt restructure noted above.
+Part 6 (pre-fetched MCP responses) remains unimplemented; agents call MCP tools reactively via the LangGraph tool node instead.
 
 ## Context window management
 
@@ -67,7 +65,7 @@ ponytail: move to `LcpRole.runConfig` JSONB when per-role tuning is needed.
 
 ### Incoming data guard
 
-Before a new message (or RAG/MCP data) is added to the context, `IncomingDataGuardService` checks whether it would push the total over `TRIGGER_PCT`. If so, it compacts the incoming data using `compact_section` before inclusion. A `// TODO` marks the point where, if compacted data still doesn't fit, it should be stored in MinIO with a reference summary (deferred to ADR-007 implementation).
+Before a new message (or RAG/MCP data) is added to the context, `IncomingDataGuardService` checks whether it would push the total over `TRIGGER_PCT`. If so, it compacts the incoming data using `compact_section` before inclusion. If compacted data still doesn't fit and an overflow path and `MinioService` are provided, the original content is written to `{overflowPath}/{timestamp}.txt` and a reference summary is injected instead (implemented as part of ADR-007 integration).
 
 ### Compaction reporting
 

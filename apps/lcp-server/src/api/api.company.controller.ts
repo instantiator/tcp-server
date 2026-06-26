@@ -9,11 +9,10 @@ import {
 } from '@nestjs/common';
 import type { UUID } from 'crypto';
 import { LcpCompany, LcpRole } from '@lcp/shared';
-import type { DeepPartial } from 'typeorm';
-import type { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
 import { DbService } from '../db/db.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ApiService } from './api.service';
+import { CreateCompanyDto, UpdateCompanyDto } from './dto/company.dto';
 
 /** REST controller for company (tenant) create, read, and update operations. */
 @UseGuards(JwtAuthGuard)
@@ -35,23 +34,21 @@ export class CompanyController {
    * If a company with the same slug already exists it is replaced.
    */
   @Post()
-  async postCompany(
-    @Body() body: LcpCompanyTemplate & { slug: string },
-  ): Promise<LcpCompany> {
+  async postCompany(@Body() body: CreateCompanyDto): Promise<LcpCompany> {
     const { slug, ...template } = body;
     return await this.api.createCompany(template, slug);
   }
 
   /**
    * Partially updates the fields of an existing {@link LcpCompany} identified by `id`.
-   * Accepts a deep-partial body so nested fields such as `llmDefault.model` can be
+   * Accepts a partial body so nested fields such as `llmDefault.model` can be
    * patched without overwriting the whole object. The `id` field is immutable and
    * must not be included in the request body.
    */
   @Put(':id')
   async putCompany(
     @Param('id') id: UUID,
-    @Body() partial: DeepPartial<Omit<LcpCompany, 'id'>>,
+    @Body() partial: UpdateCompanyDto,
   ): Promise<LcpCompany> {
     return this.api.setCompany(id, partial);
   }

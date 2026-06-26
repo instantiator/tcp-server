@@ -29,6 +29,9 @@ lerna-debug.log*
 .settings/
 *.sublime-workspace
 
+# ESLint cache
+.eslintcache
+
 # IDE - VSCode
 .vscode/*
 !.vscode/tasks.json

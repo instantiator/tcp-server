@@ -55,6 +55,7 @@ It should return a full instance of the company, including its id - indicating t
 ```json
 {
   "name": "Test Company",
+  "description": "A test company",
   "llmDefault": {
     "provider": "lm-studio",
     "model": "qwen/qwen3.5-9b",

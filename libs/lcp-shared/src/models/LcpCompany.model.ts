@@ -45,4 +45,26 @@ export class LcpCompany {
    */
   @Column({ type: 'jsonb', nullable: true })
   llmDefault?: LlmConfig | null;
+
+  /**
+   * Optional company context injected as prompt part 2 at agent start.
+   * Describes the company environment: agent roster, shared storage layout,
+   * company name and description, and any company-wide behavioural guidelines.
+   *
+   * When null, part 2 is omitted from the agent prompt.
+   */
+  @Column({ type: 'text', nullable: true })
+  companyContext?: string | null;
+
+  /**
+   * Provider and model configuration used for generating and querying embeddings.
+   * Must point to an OpenAI-compatible embeddings endpoint
+   * (e.g. LM Studio `/v1/embeddings`, OpenAI `text-embedding-3-small`).
+   *
+   * When null, the RAG index and retrieval services are disabled for this company.
+   * Stored as JSONB — same shape as {@link LlmConfig} but the `contextWindow` field
+   * is ignored.
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  embeddingConfig?: LlmConfig | null;
 }

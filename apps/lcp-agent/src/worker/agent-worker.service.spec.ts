@@ -56,7 +56,7 @@ describe('AgentWorkerService', () => {
   it('calls loop.run when the agent is not already running', async () => {
     await processor({ data: { agentId: 'agent-a', type: 'start' } });
 
-    expect(loopRun).toHaveBeenCalledWith('agent-a');
+    expect(loopRun).toHaveBeenCalledWith('agent-a', undefined);
   });
 
   it('skips loop.run when the agent is already running', async () => {

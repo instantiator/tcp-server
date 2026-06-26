@@ -5,14 +5,17 @@ starts when the `auth` profile is active (`docker compose --profile auth up`).
 
 ## Summary
 
-| Service    | Container name | Exposed ports              | Description                                           |
-| ---------- | -------------- | -------------------------- | ----------------------------------------------------- |
-| lcp-server | `lcp-server`   | 3000                       | REST API and orchestration layer                      |
-| lcp-agent  | `lcp-agent`    | 3001                       | Agent loop runner                                     |
-| PostgreSQL | `postgres`     | 5432                       | Primary relational store (pgvector extension enabled) |
-| Redis      | `redis`        | 6379                       | Task queue broker (BullMQ)                            |
-| MinIO      | `minio`        | 9000 (API), 9001 (console) | S3-compatible object storage                          |
-| Keycloak   | `keycloak`     | 8080                       | OIDC identity provider (profile: auth)                |
+| Service              | Container name         | Exposed ports              | Description                                           |
+| -------------------- | ---------------------- | -------------------------- | ----------------------------------------------------- |
+| lcp-server           | `lcp-server`           | 3000                       | REST API and orchestration layer                      |
+| lcp-agent            | `lcp-agent`            | 3001                       | Agent loop runner                                     |
+| lcp-mcp-storage      | `lcp-mcp-storage`      | 3010                       | Storage MCP server (MinIO tools)                      |
+| lcp-mcp-memory       | `lcp-mcp-memory`       | 3011                       | Memory MCP server (stub)                              |
+| lcp-mcp-interactions | `lcp-mcp-interactions` | 3012                       | Interactions MCP server (stub)                        |
+| PostgreSQL           | `postgres`             | 5432                       | Primary relational store (pgvector extension enabled) |
+| Redis                | `redis`                | 6379                       | Task queue broker (BullMQ)                            |
+| MinIO                | `minio`                | 9000 (API), 9001 (console) | S3-compatible object storage                          |
+| Keycloak             | `keycloak`             | 8080                       | OIDC identity provider (profile: auth)                |
 
 ## LCP services
 
@@ -27,13 +30,36 @@ enqueues agent tasks via BullMQ, and validates JWT tokens issued by Keycloak.
 
 ### lcp-agent
 
-NestJS agent loop runner. Consumes BullMQ jobs from Redis, executes agent steps,
-and persists results to PostgreSQL and MinIO. MCP servers run as child processes
-managed by lcp-agent.
+NestJS agent loop runner. Consumes BullMQ jobs from Redis, executes agent steps, and persists results to PostgreSQL and MinIO. Connects to MCP servers over HTTP to load tools for each agent run. See [lcp-agent.md](lcp-agent.md) for configuration and usage.
 
 - **Health:** `GET http://localhost:3001/health`
 - **Depends on:** postgres, redis
 - **Built from:** `apps/lcp-agent/Dockerfile`
+
+### lcp-mcp-storage
+
+NestJS MCP server providing agents with read/write access to the shared MinIO object store. Uses the MCP Streamable HTTP transport — stateless, one session per request. See [lcp-mcp-storage.md](lcp-mcp-storage.md) for tool reference.
+
+- **Health:** `GET http://localhost:3010/health`
+- **API:** `POST http://localhost:3010/mcp` (MCP JSON-RPC)
+- **Depends on:** minio
+- **Built from:** `apps/lcp-mcp-storage/Dockerfile`
+
+### lcp-mcp-memory
+
+NestJS MCP server for semantic search over episodic memory and role knowledge. Currently a stub — all tools return informative "not yet implemented" responses. See [lcp-mcp-memory.md](lcp-mcp-memory.md) for tool reference and planned implementation.
+
+- **Health:** `GET http://localhost:3011/health`
+- **API:** `POST http://localhost:3011/mcp`
+- **Built from:** `apps/lcp-mcp-memory/Dockerfile`
+
+### lcp-mcp-interactions
+
+NestJS MCP server for requesting input from human users or consulting other agents by role. Currently a stub. See [lcp-mcp-interactions.md](lcp-mcp-interactions.md) for tool reference and planned implementation.
+
+- **Health:** `GET http://localhost:3012/health`
+- **API:** `POST http://localhost:3012/mcp`
+- **Built from:** `apps/lcp-mcp-interactions/Dockerfile`
 
 ## Third-party services
 

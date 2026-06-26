@@ -1,0 +1,26 @@
+{
+  // Returned by describe_server — gives the agent an overview of available interaction tools.
+  "describe_server": "## Interactions Service\n\nEnables requesting input from users or consultation from other agents.\nTools that pause agent execution will not return until the request is fulfilled.\n\n### Tools\n- **describe_server** — this overview\n- **list_available_users(companyId)** — list company users and their knowledge domains\n- **list_available_roles(companyId)** — list roles available for agent consultation\n- **request_user_input(agentId, companyId, question, context?)** — pause and request human input\n- **request_agent_consultation(agentId, companyId, roleName, question, context?)** — consult another agent role\n- **complete_task(agentId, companyId, finalAnswer)** — mark task complete with final output",
+
+  // Returned on successful user-input pause. {{slug}} is replaced with the conversation slug.
+  "paused_user_input": "Paused. Your question has been submitted as conversation '{{slug}}'. Your task will resume automatically when a user responds.",
+
+  // Returned when request_user_input fails.
+  "error_user_input": "Could not submit user input request. Try again or proceed without user input.",
+
+  // Returned on successful agent-consultation pause. {{roleName}} and {{consultationId}} are replaced.
+  "paused_consultation": "Paused. Consultation request dispatched to '{{roleName}}' (id: {{consultationId}}). Your task will resume automatically when the consulting agent responds.",
+
+  // Returned when request_agent_consultation fails. {{roleName}} is replaced.
+  "error_consultation": "Could not dispatch consultation to '{{roleName}}'. Check the role name and try again.",
+
+  // Returned by complete_task on success.
+  "task_complete": "Task marked complete. Your run is now finished.",
+
+  // Returned when complete_task fails.
+  "error_complete_task": "Could not mark task complete. Your output may still have been processed.",
+
+  // Returned when list_available_users or list_available_roles fail.
+  "error_list_users": "Could not retrieve user list.",
+  "error_list_roles": "Could not retrieve role list."
+}

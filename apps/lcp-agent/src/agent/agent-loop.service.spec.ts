@@ -1,8 +1,11 @@
-import { AIMessage } from '@langchain/core/messages';
-import { StateGraph } from '@langchain/langgraph';
+import {
+  AIMessage,
+  HumanMessage,
+  SystemMessage,
+} from '@langchain/core/messages';
+import { MessagesAnnotation, StateGraph } from '@langchain/langgraph';
 import {
   AgentStatus,
-  AuditEvent,
   AuditEventType,
   LcpAgent,
   LcpCompany,
@@ -15,11 +18,15 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
+import { AuditClientService } from '../audit/audit-client.service';
 import * as factory from '../llm/llm-factory';
+import { McpClientService } from '../mcp/mcp-client.service';
+import { AgentRagService } from '../rag/agent-rag.service';
 import { AgentRegistryService } from '../registry/agent-registry.service';
+import { agentPrompts } from '../agent-prompts';
 import { AgentLoopService } from './agent-loop.service';
 
-const ALL_ENTITIES = [LcpCompany, LcpRole, LcpAgent, AuditEvent];
+const ALL_ENTITIES = [LcpCompany, LcpRole, LcpAgent];
 
 // Returns a compiled-graph stub whose streamEvents yields the given events
 function makeStubGraph(
@@ -80,13 +87,15 @@ describe('AgentLoopService', () => {
   let agentRepo: Repository<LcpAgent>;
   let roleRepo: Repository<LcpRole>;
   let companyRepo: Repository<LcpCompany>;
-  let auditRepo: Repository<AuditEvent>;
+  let auditRecord: jest.Mock;
 
   beforeAll(async () => {
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     jest
       .spyOn(factory, 'buildChatModel')
       .mockReturnValue({} as ReturnType<typeof factory.buildChatModel>);
+
+    auditRecord = jest.fn();
 
     const testingModule: TestingModule = await Test.createTestingModule({
       imports: [
@@ -102,8 +111,21 @@ describe('AgentLoopService', () => {
         AgentLoopService,
         AgentRegistryService,
         {
+          provide: AuditClientService,
+          useValue: { record: auditRecord, notifyComplete: jest.fn() },
+        },
+        {
+          provide: AgentRagService,
+          useValue: { retrieve: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: McpClientService,
+          useValue: { loadTools: jest.fn().mockResolvedValue([]) },
+        },
+        {
           provide: ConfigService,
           useValue: {
+            get: jest.fn().mockReturnValue(undefined),
             getOrThrow: jest.fn().mockReturnValue('postgres://localhost/test'),
           },
         },
@@ -115,11 +137,10 @@ describe('AgentLoopService', () => {
     agentRepo = testingModule.get(getRepositoryToken(LcpAgent));
     roleRepo = testingModule.get(getRepositoryToken(LcpRole));
     companyRepo = testingModule.get(getRepositoryToken(LcpCompany));
-    auditRepo = testingModule.get(getRepositoryToken(AuditEvent));
   });
 
   afterEach(async () => {
-    await auditRepo.clear();
+    auditRecord.mockClear();
     await agentRepo.clear();
     await roleRepo.clear();
     await companyRepo.clear();
@@ -192,11 +213,13 @@ describe('AgentLoopService', () => {
 
     await service.run(agent.id);
 
-    const auditEvents = await auditRepo.findBy({ agentId: agent.id });
-    const responseEvent = auditEvents.find(
-      (e) => e.eventType === AuditEventType.LlmResponse,
+    expect(auditRecord).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      agent.id,
+      AuditEventType.LlmResponse,
+      expect.any(Object),
     );
-    expect(responseEvent).toBeDefined();
   });
 
   it('writes both LlmRequest and LlmResponse audit events with correct metadata', async () => {
@@ -204,22 +227,20 @@ describe('AgentLoopService', () => {
 
     await service.run(agent.id);
 
-    const allEvents = await auditRepo.findBy({ agentId: agent.id });
-    const requestEvent = allEvents.find(
-      (e) => e.eventType === AuditEventType.LlmRequest,
+    expect(auditRecord).toHaveBeenCalledWith(
+      company.id,
+      role.name,
+      agent.id,
+      AuditEventType.LlmRequest,
+      expect.any(Object),
     );
-    const responseEvent = allEvents.find(
-      (e) => e.eventType === AuditEventType.LlmResponse,
+    expect(auditRecord).toHaveBeenCalledWith(
+      company.id,
+      role.name,
+      agent.id,
+      AuditEventType.LlmResponse,
+      expect.any(Object),
     );
-
-    expect(requestEvent).toBeDefined();
-    expect(responseEvent).toBeDefined();
-
-    for (const event of [requestEvent!, responseEvent!]) {
-      expect(event.companyId).toBe(company.id);
-      expect(event.agentId).toBe(agent.id);
-      expect(event.role).toBe(role.name);
-    }
   });
 
   it('uses company llmDefault when role has no llmConfig', async () => {
@@ -279,11 +300,13 @@ describe('AgentLoopService', () => {
     const updated = await agentRepo.findOneByOrFail({ id: agent.id });
     expect(updated.status).toBe(AgentStatus.Failed);
 
-    const stateEvent = await auditRepo.findOneBy({
-      agentId: agent.id,
-      eventType: AuditEventType.StateChange,
-    });
-    expect(stateEvent).not.toBeNull();
+    expect(auditRecord).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      agent.id,
+      AuditEventType.StateChange,
+      expect.any(Object),
+    );
   });
 
   it('does nothing when the agent id does not exist', async () => {
@@ -340,10 +363,90 @@ describe('AgentLoopService', () => {
     const updated = await agentRepo.findOneByOrFail({ id: agent.id });
     expect(updated.status).toBe(AgentStatus.Failed);
 
-    const stateEvent = await auditRepo.findOneBy({
-      agentId: agent.id,
-      eventType: AuditEventType.StateChange,
+    expect(auditRecord).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      agent.id,
+      AuditEventType.StateChange,
+      expect.objectContaining({ reason: 'max_iterations' }),
+    );
+  });
+
+  describe('initial prompt structure', () => {
+    it('opens with a SystemMessage and closes with final_instruction as the last HumanMessage', async () => {
+      let capturedInput: typeof MessagesAnnotation.State | undefined;
+
+      jest.mocked(StateGraph).mockImplementationOnce(
+        () =>
+          ({
+            addNode: jest.fn().mockReturnThis(),
+            addEdge: jest.fn().mockReturnThis(),
+            compile: jest.fn().mockReturnValue({
+              streamEvents: jest
+                .fn()
+                .mockImplementation(
+                  (input: typeof MessagesAnnotation.State) => {
+                    capturedInput = input;
+                    return {
+                      // eslint-disable-next-line @typescript-eslint/require-await
+                      [Symbol.asyncIterator]: async function* () {
+                        for (const ev of SUCCESS_EVENTS) yield ev;
+                      },
+                    };
+                  },
+                ),
+            }),
+          }) as unknown as InstanceType<typeof StateGraph>,
+      );
+
+      const { agent } = await seedAgentAndRole();
+      await service.run(agent.id);
+
+      const messages = capturedInput!.messages;
+      expect(messages[0]).toBeInstanceOf(SystemMessage);
+
+      const last = messages[messages.length - 1];
+      expect(last).toBeInstanceOf(HumanMessage);
+      expect((last as HumanMessage).content).toBe(
+        agentPrompts.final_instruction,
+      );
     });
-    expect(stateEvent?.payload).toMatchObject({ reason: 'max_iterations' });
+
+    it('includes the task initialPrompt as a HumanMessage', async () => {
+      let capturedInput: typeof MessagesAnnotation.State | undefined;
+
+      jest.mocked(StateGraph).mockImplementationOnce(
+        () =>
+          ({
+            addNode: jest.fn().mockReturnThis(),
+            addEdge: jest.fn().mockReturnThis(),
+            compile: jest.fn().mockReturnValue({
+              streamEvents: jest
+                .fn()
+                .mockImplementation(
+                  (input: typeof MessagesAnnotation.State) => {
+                    capturedInput = input;
+                    return {
+                      // eslint-disable-next-line @typescript-eslint/require-await
+                      [Symbol.asyncIterator]: async function* () {
+                        for (const ev of SUCCESS_EVENTS) yield ev;
+                      },
+                    };
+                  },
+                ),
+            }),
+          }) as unknown as InstanceType<typeof StateGraph>,
+      );
+
+      const { agent } = await seedAgentAndRole();
+      await service.run(agent.id);
+
+      const messages = capturedInput!.messages;
+      const hasTaskPrompt = messages.some(
+        (m) =>
+          m instanceof HumanMessage && m.content === 'Summarise the market.',
+      );
+      expect(hasTaskPrompt).toBe(true);
+    });
   });
 });
