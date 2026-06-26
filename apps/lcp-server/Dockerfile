@@ -1,11 +1,11 @@
-FROM node:24-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
 RUN npm run build lcp-server
 
-FROM node:24-alpine
+FROM node:26-alpine
 WORKDIR /app
 RUN apk add --no-cache curl
 # Webpack bundles everything into dist/apps/lcp-server/main.js.
