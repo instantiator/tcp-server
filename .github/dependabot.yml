@@ -1,0 +1,43 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: docker
+    directory: "/apps/lcp-server"
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: "/apps/lcp-agent"
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: "/apps/lcp-mcp-interactions"
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: "/apps/lcp-mcp-memory"
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: "/apps/lcp-mcp-storage"
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: "/docker/stub-llm"
+    schedule:
+      interval: weekly
