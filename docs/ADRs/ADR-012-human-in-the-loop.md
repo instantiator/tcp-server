@@ -1,6 +1,6 @@
 # ADR-012: Human-in-the-Loop and User-Agent Conversations
 
-Status: Proposed
+Status: Partially Implemented
 
 ## Context
 
@@ -92,14 +92,56 @@ interface ConversationMessage {
 }
 ```
 
+## Implementation status
+
+### What changed from the original plan
+
+**LangGraph `interrupt()` was not used.** The implementation uses a different, simpler mechanism:
+
+1. The MCP tool calls `POST /internal/pause` on lcp-server
+2. lcp-server sets `LcpAgent.status = paused` and creates the pending record
+3. lcp-agent detects the `paused` status on the next iteration of its event loop and exits the stream cleanly
+4. The BullMQ job completes normally (the agent is paused, not failed)
+5. On resume, lcp-server re-enqueues a new BullMQ job; lcp-agent resumes from the LangGraph checkpoint with the reply injected as a `HumanMessage`
+
+This avoids LangGraph's `interrupt()` mechanism entirely. The checkpoint store (PostgresSaver) handles state persistence naturally between the pause and resume BullMQ jobs.
+
+**`Conversation` links to `agentId`, not `task_id/step_id`.** `Task` and `TaskStep` entities do not yet exist. Conversations are linked to `LcpAgent.id` instead.
+
+**`complete_task` is a mandatory tool call, not a passive flow.** Agents must call `complete_task` (on lcp-mcp-interactions) as their final action. This writes the agent's `output` field and triggers consultation resume if applicable. lcp-agent enforces this with a completion enforcement loop.
+
+### Implemented
+
+- `Conversation` entity: `(id, slug, agentId, companyId, roleName, roleSlug, question, context, status, routedToIdentifiers, createdAt, closedAt)`
+- `ConversationMessage` entity: `(id, conversationId, author, authorIdentifier, content, timestamp)`
+- `PendingConsultation` entity: `(id, callingAgentId, consultationAgentId, status, result, createdAt)`
+- `LcpAgent` entity: added `output` field (set by `complete_task`)
+- `LcpRole` entity: added `queryIndex` field (incremented per query to generate slug suffixes)
+- `PauseAndResumeService` in lcp-server — shared logic for both pause flows
+- `POST /internal/pause` — creates Conversation or PendingConsultation, sets agent to paused
+- `POST /internal/agent/resume/:agentId` — re-enqueues with reply
+- `POST /internal/agent/:agentId/complete` — sets status completed, stores output, triggers consultation resume
+- `GET /api/conversation` — list conversations (filter by status, companyId)
+- `GET /api/conversation/:slug` — full conversation + messages
+- `POST /api/conversation/:slug/reply` — user reply; closes conversation; triggers agent resume
+- Query routing in `ConversationService`: keyword match on question content against user `knowledgeDomains` and `roles`; falls back to all owners
+- Slug generation: `{role-slug}-{queryIndex}` — `queryIndex` incremented atomically in a DB transaction
+- CLI commands: `list-open-queries`, `read-query`, `respond` (see [lcp-cli.md](../lcp-cli.md))
+
+### Deferred
+
+- User-initiated conversations (`POST /conversations` independent of a running task)
+- WebSocket upgrade for real-time conversation UX
+- Teaching flow (`{ teach: 'memory' | 'knowledge' }` in replies)
+- `GET /tasks/{task_id}/audit/stream` SSE endpoint
+
 ## Consequences
 
-- `Conversation` and `ConversationMessage` entities added to `src/models/`
-- SSE endpoint added to lcp-server: `GET /tasks/{task_id}/audit/stream`
-- Conversation CRUD endpoints added: `POST /conversations`, `GET /conversations/{id}`, `POST /conversations/{id}/reply`
-- Auth guards (see [ADR-011](./ADR-011-authentication-authorization.md)) apply: `initiate_conversations` permission required to open a conversation
+- `Conversation`, `ConversationMessage`, `PendingConsultation` entities in `libs/lcp-shared/src/models/`
+- Pause/resume is BullMQ-based (checkpoint + re-enqueue), not LangGraph `interrupt()`
+- Agents must call `complete_task` as their last action; lcp-agent enforces this with a one-shot completion prompt if they forget
 
 ## Open Questions / Assumptions
 
-- Notification mechanism: how does the user know an agent has paused and is awaiting input? Options: SSE push on the task stream, email, webhook. Defer to implementation — the data model supports all options.
-- Conversation history in agent context: when resuming after a user reply, the full conversation history is injected into the agent's context, not just the latest message
+- Notification mechanism: the `routedToIdentifiers` field is populated but no push notification is sent — users poll `list-open-queries` or the API. SSE push and webhook notification are natural future extensions.
+- Conversation history on resume: only the user's reply is injected as a new `HumanMessage`; the full conversation thread is not re-injected (the LangGraph checkpoint already holds the prior context).

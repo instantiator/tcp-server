@@ -1,6 +1,6 @@
 # ADR-008: Audit Logging
 
-Status: Proposed
+Status: Partially Implemented
 
 ## Context
 
@@ -67,13 +67,45 @@ At the end of each task step, lcp-agent writes the step's audit events to MinIO 
 - Retention policy applied by a scheduled cleanup job (future)
 - MinIO object versioning means exported files are retained even if accidentally overwritten
 
+## Implementation status
+
+### What changed from the original plan
+
+The original plan described a hybrid approach (DB writes + MinIO export). The implementation diverges in two ways:
+
+**1. HTTP audit endpoint instead of direct DB writes from MCP servers**
+
+lcp-mcp-storage, lcp-mcp-memory, and lcp-mcp-interactions do not have database connections for audit purposes. Instead, each calls `POST /internal/audit` on lcp-server (protected by `X-Internal-Api-Key`). lcp-server's `AuditService` handles the actual write. lcp-agent also uses this endpoint (via `AuditClientService`) rather than writing directly.
+
+This gives a single audit write path. Calls are fire-and-forget (errors are logged but never propagate to the agent).
+
+**2. `complete_task` replaces `log_decision`**
+
+The `log_decision` MCP tool described in this ADR was not implemented. Instead, agents call `complete_task` (on lcp-mcp-interactions) as their mandatory final action. This writes a `state_change` audit event and stores the agent's final answer, which provides the semantic closure `log_decision` intended.
+
+### Implemented
+
+- `audit_event` table with `(company_id, role, agent_id, event_type, payload)` columns
+- `POST /internal/audit` endpoint on lcp-server (protected by `InternalApiKeyGuard`)
+- `AuditClientService` in lcp-agent — HTTP client to the internal endpoint; fire-and-forget
+- `AuditService` in lcp-server — writes `AuditEvent` rows
+- All three MCP servers write `tool_call` and `tool_result` events for each tool invocation
+- lcp-agent writes `llm_request`, `llm_response`, `tool_call`, `tool_result`, `state_change`, and `decision` events from the LangGraph event stream
+- `complete_task` writes a `state_change` event with the agent's final answer
+
+### Deferred
+
+- MinIO JSONL export (archival path) — export events to `audit/{id}/` as JSON Lines files
+- Audit log query/filter API
+- Retention policy and scheduled cleanup
+
 ## Consequences
 
-- lcp-agent subscribes to LangGraph's event stream and maps each event type to a row in `audit_events`
-- The audit MCP server is part of the standard LCP MCP suite; it is always available to agents
+- lcp-agent subscribes to LangGraph's event stream and maps each event type to a row in `audit_events` via `POST /internal/audit`
+- All MCP servers have `AuditClientService` injected; audit writes are fire-and-forget and never block tool responses
 - User-facing "live audit" stream is served from the `audit_events` table via SSE (see [ADR-012](./ADR-012-human-in-the-loop.md))
 
 ## Open Questions / Assumptions
 
 - JSONB payload size: very long LLM responses could be large. Consider truncating/summarising payloads above a threshold, or storing large payloads as MinIO objects referenced by the row.
-- The `log_decision` MCP tool is a suggestion, not an enforcement. Agents are not required to call it — all activity is captured automatically regardless.
+- Agents call `complete_task` as their last action; the completion enforcement logic in lcp-agent ensures this happens even if the agent forgets.

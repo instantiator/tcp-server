@@ -1,6 +1,6 @@
 # ADR-006: Agent Memory Architecture
 
-Status: Proposed
+Status: Partially Implemented
 
 ## Context
 
@@ -82,6 +82,26 @@ When a user teaches a role during a conversation (see [ADR-012](./ADR-012-human-
 - Two vector namespaces per role: `{company_id}/{role_name}/memory` and `{company_id}/{role_name}/knowledge`
 - Embedding model is configured per company; defaults to a no-cost local model for development
 - The memory MCP server is part of the standard LCP MCP suite; it is not optional
+
+## Implementation status
+
+### Implemented
+
+- `EmbeddingService` lives in `libs/lcp-shared/src/rag/` and is shared between lcp-server and lcp-agent
+- `KnowledgeChunk` entity and pgvector table (`knowledge_chunk`) with IVFFlat index — used for automatic RAG injection
+- `EpisodicMemory` entity and table (`episodic_memory`) with pgvector embedding column
+- `RagIndexService` and `RagRetrievalService` in lcp-server — used for knowledge base indexing and retrieval
+- lcp-mcp-memory: `recall`, `remember`, and `search_knowledge` tools are fully implemented against pgvector
+  - `recall` runs a UNION query over both `episodic_memory` and `knowledge_chunk`, ranked by cosine similarity
+  - `remember` embeds content and inserts into `episodic_memory` (with optional tags as JSONB)
+  - `search_knowledge` queries `knowledge_chunk` only
+- All memory tools write `tool_call` audit events
+
+### Deferred
+
+- Memory consolidation (periodic background job extracting high-value episodic memories into OKF KB docs)
+- Memory scrubbing API (delete by date range, task ID, or tag)
+- `update_rag_context` / `condense_rag_context` MCP tools (RAG context replacement mid-loop)
 
 ## Open Questions / Assumptions
 

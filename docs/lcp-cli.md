@@ -60,7 +60,12 @@ export LCP_TOKEN=$(./scripts/dev/lcp-cli.sh -u alice get-token)
 | [`store-role-documents`](#store-role-documents)   | `store-role-documents -r <uuid> -s <paths...>`     | Upload OKF Markdown documents to a role's knowledge base |
 | [`list-role-documents`](#list-role-documents)     | `list-role-documents -r <uuid>`                    | List knowledge-base documents stored for a role          |
 | [`remove-role-documents`](#remove-role-documents) | `remove-role-documents -r <uuid> -p <patterns...>` | Remove knowledge-base documents by filename pattern      |
-| [`open-document-store`](#open-document-store)     | `open-document-store [--no-open]`                  | Print (and open) the MinIO console URL                   |
+| [`open-document-store`](#open-document-store)           | `open-document-store [--no-open]`                                    | Print (and open) the MinIO console URL                   |
+| [`list-open-queries`](#list-open-queries)               | `list-open-queries [-c <uuid>] [--format table\|json\|csv]`          | List open agent-to-human queries                         |
+| [`read-query`](#read-query)                             | `read-query <slug>`                                                   | Read a query's full question and conversation history    |
+| [`respond`](#respond)                                   | `respond <slug> <message>`                                            | Reply to a query and resume the waiting agent            |
+| [`download-shared-document`](#download-shared-document) | `download-shared-document --source <path> [--target <path>]`         | Download a file from shared company storage              |
+| [`upload-shared-document`](#upload-shared-document)     | `upload-shared-document --source <path> --target <path>`             | Upload a local file to shared company storage            |
 
 ### `get-token`
 
@@ -261,6 +266,100 @@ Print the MinIO console URL and open it in the default browser. Useful for brows
 ```
 
 No authentication required — the MinIO console has its own login (see [shared-storage.md → Authentication](shared-storage.md#authentication)).
+
+---
+
+### `list-open-queries`
+
+List open agent-to-human queries (conversations with `status: awaiting_user`) that are waiting for a response.
+
+- **stdout**: formatted table (default), JSON, or CSV depending on `--format`
+- **stderr**: progress messages
+
+| Flag                    | Description                                  |
+| ----------------------- | -------------------------------------------- |
+| `-c, --company-id <id>` | Filter to a specific company                 |
+| `--format <fmt>`        | `table` (default), `json`, or `csv`          |
+
+```bash
+# Default table output
+./scripts/dev/lcp-cli.sh list-open-queries
+
+# Filter to a company, JSON output
+./scripts/dev/lcp-cli.sh -e LCP_TOKEN list-open-queries -c <companyId> --format json
+```
+
+The table columns are: slug, role name, and the first 120 characters of the question.
+
+---
+
+### `read-query`
+
+Read the full question, context, and reply history for a single query by its slug.
+
+- **stdout**: full conversation content
+- **stderr**: progress messages
+
+```bash
+./scripts/dev/lcp-cli.sh read-query analyst-3
+```
+
+---
+
+### `respond`
+
+Reply to an open query. Once submitted, the waiting agent is automatically re-enqueued and will resume with your reply injected as a `HumanMessage`.
+
+- **stdout**: `{ slug, status }` JSON
+- **stderr**: progress messages (`"Sending response..."`, `"Agent resumed."`)
+
+```bash
+./scripts/dev/lcp-cli.sh respond analyst-3 "The budget is $50,000 for Q3."
+```
+
+The message argument is a plain string. Quotes are handled by your shell in the usual way.
+
+---
+
+### `download-shared-document`
+
+Download a file from shared company storage to the local filesystem.
+
+- **stdout**: `{ source, target, size }` JSON on success
+- **stderr**: progress messages
+
+| Flag                   | Description                                                          |
+| ---------------------- | -------------------------------------------------------------------- |
+| `--source <path>`      | Required. Object key in MinIO (e.g. `acme/tasks/xyz/output/out.md`) |
+| `--target <path>`      | Local destination path. Defaults to `./<filename>` (basename of source) |
+
+```bash
+# Download to current directory
+./scripts/dev/lcp-cli.sh download-shared-document --source acme/tasks/xyz/output/report.md
+
+# Download to a specific path
+./scripts/dev/lcp-cli.sh download-shared-document --source acme/tasks/xyz/output/report.md --target ~/Desktop/report.md
+```
+
+---
+
+### `upload-shared-document`
+
+Upload a local file to shared company storage.
+
+- **stdout**: `{ key, size }` JSON on success
+- **stderr**: progress messages
+
+| Flag              | Description                                                         |
+| ----------------- | ------------------------------------------------------------------- |
+| `--source <path>` | Required. Local file path to upload                                 |
+| `--target <path>` | Required. Object key destination in MinIO (e.g. `acme/knowledge/analyst/guide.md`) |
+
+```bash
+./scripts/dev/lcp-cli.sh upload-shared-document --source ./architecture.md --target acme/knowledge/architect/architecture.md
+```
+
+MIME type is inferred from the file extension. Supported formats include `.md`, `.txt`, `.json`, `.pdf`, `.png`, `.jpg`, and `.jpeg`.
 
 ---
 

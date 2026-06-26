@@ -108,6 +108,24 @@ See [`lcp-cli.md` → document management verbs](lcp-cli.md#store-role-documents
 
 ---
 
+## Downloading and uploading documents from the CLI
+
+```bash
+# Download a file from storage to the local filesystem
+./scripts/dev/lcp-cli.sh download-shared-document \
+  --source acme/tasks/xyz/output/report.md \
+  --target ~/Desktop/report.md        # optional; defaults to ./<filename>
+
+# Upload a local file to storage
+./scripts/dev/lcp-cli.sh upload-shared-document \
+  --source ./architecture.md \
+  --target acme/knowledge/architect/architecture.md
+```
+
+Both commands write a JSON result to stdout and progress messages to stderr. See [lcp-cli.md](lcp-cli.md#download-shared-document) for full option details.
+
+---
+
 ## Agent access via MCP
 
-Agents read and write files through the [lcp-mcp-storage](lcp-mcp-storage.md) MCP server rather than directly via the S3 API. The server exposes tools for listing, reading, writing, and deleting files, and provides folder descriptions keyed to the ADR-007 path conventions above. See [lcp-mcp-storage.md](lcp-mcp-storage.md) for the full tool reference.
+Agents read and write files through the [lcp-mcp-storage](lcp-mcp-storage.md) MCP server rather than directly via the S3 API. The server exposes 12 tools including soft delete (files moved to `_deleted/` rather than permanently removed), overwrite safety, file search with glob patterns, metadata inspection, copy, move, and structural file summary. See [lcp-mcp-storage.md](lcp-mcp-storage.md) for the full tool reference.

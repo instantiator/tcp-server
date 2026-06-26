@@ -1,14 +1,14 @@
 # lcp-mcp-memory
 
-**Status:** Stub — all tools return "not yet implemented" responses
+**Status:** Implemented
 **Port:** 3011
 **Transport:** MCP Streamable HTTP — stateless, one session per request
 
-`lcp-mcp-memory` is a NestJS MCP server intended to give agents semantic search over episodic memory and the role's knowledge base. It lives in `apps/lcp-mcp-memory/` and runs as a Docker Compose service.
+`lcp-mcp-memory` is a NestJS MCP server that gives agents semantic search over episodic memory and the role's knowledge base, and lets them store new episodic memories mid-task. It lives in `apps/lcp-mcp-memory/` and runs as a Docker Compose service with a direct PostgreSQL connection (pgvector).
 
-All tools are currently stubs. Agents can call them without errors, but they receive an informative "not yet implemented" message in return. The `recall` and `search_knowledge` stubs additionally direct the agent to use the RAG context already injected into prompt part 5 instead.
+Each tool call creates a fresh MCP session so no state is shared across requests. The server exposes `GET /health` (checks PostgreSQL connectivity) and `POST /mcp`.
 
-The infrastructure needed for a real implementation already exists: `RagRetrievalService`, `EmbeddingService`, and the `knowledge_chunk` pgvector table are all live in lcp-server. What remains is wiring them into this service (which would need its own DB connection and access to those services), and adding an episodic memory table for `remember`/`recall`.
+Every tool call writes `tool_call` and `tool_result` audit events to lcp-server via the internal audit endpoint.
 
 See [agent-services.md → MCP Servers](agent-services.md#mcp-servers) for how agents connect, and [ADR-006](ADRs/ADR-006-agent-memory-architecture.md) for the full memory architecture design.
 
@@ -16,12 +16,12 @@ See [agent-services.md → MCP Servers](agent-services.md#mcp-servers) for how a
 
 ## Tools
 
-| Tool                                    | Signature                         | Status | Description                                  |
-| --------------------------------------- | --------------------------------- | ------ | -------------------------------------------- |
-| [`describe_server`](#describe_server)   | `describe_server()`               | Stub   | Overview of the memory service and its tools |
-| [`recall`](#recall)                     | `recall(query, top_k?)`           | Stub   | Search episodic and knowledge memory         |
-| [`remember`](#remember)                 | `remember(content, tags?)`        | Stub   | Store an episodic memory entry               |
-| [`search_knowledge`](#search_knowledge) | `search_knowledge(query, top_k?)` | Stub   | Search the role knowledge base only          |
+| Tool                                    | Signature                                      | Description                                          |
+| --------------------------------------- | ---------------------------------------------- | ---------------------------------------------------- |
+| [`describe_server`](#describe_server)   | `describe_server()`                            | Overview of the memory service and its tools         |
+| [`recall`](#recall)                     | `recall(roleId, companyId, query, top_k?)`     | Search episodic memory + knowledge base by similarity |
+| [`remember`](#remember)                 | `remember(roleId, companyId, content, agentId?, tags?)` | Store a new episodic memory entry           |
+| [`search_knowledge`](#search_knowledge) | `search_knowledge(roleId, companyId, query, top_k?)` | Search the role knowledge base only            |
 
 ---
 
@@ -31,7 +31,7 @@ Returns a markdown overview of the memory service and its tools.
 
 **Arguments:** none
 
-**Returns:** Markdown text listing all tools. The description notes that tools are stubs.
+**Returns:** Markdown text listing all tools and usage guidance.
 
 **Usage pattern:** Agents should call this first when they discover the memory server is available. Prompt part 3 directs agents to do this automatically.
 
@@ -39,62 +39,79 @@ Returns a markdown overview of the memory service and its tools.
 
 ## `recall`
 
-Intended to run a semantic search across both the episodic memory store and the role's knowledge base, returning the most relevant entries for the given query.
+Runs a hybrid semantic search across both episodic memory (`episodic_memory` table) and the role's knowledge base (`knowledge_chunk` table), returning the most relevant results for the query.
 
 **Arguments:**
 
-| Parameter | Type    | Required | Description                         |
-| --------- | ------- | -------- | ----------------------------------- |
-| `query`   | string  | yes      | The search query                    |
-| `top_k`   | integer | no       | Maximum number of results to return |
+| Parameter   | Type    | Required | Description                                               |
+| ----------- | ------- | -------- | --------------------------------------------------------- |
+| `roleId`    | UUID    | yes      | The role whose memory and knowledge base to search        |
+| `companyId` | UUID    | yes      | The company (used to load the embedding configuration)    |
+| `query`     | string  | yes      | Natural-language search query                             |
+| `top_k`     | integer | no       | Maximum number of results to return (default: 5)          |
 
-**Current behaviour (stub):** Returns `"Memory recall is not yet implemented. Use the RAG context already injected into your initial prompt for knowledge retrieval."`
+**Returns:** Formatted results listing source, content, and cosine similarity score for each match. Returns a "no results" message if nothing is above the similarity threshold.
 
-**Planned behaviour:** Embed the query, run a pgvector cosine similarity search over both `episodic_memory` (agent-written entries) and `knowledge_chunk` (RAG source docs) tables, and return the top-k results above a similarity threshold.
+**Behaviour when no embedding config exists:** Returns an informative message directing the agent to use the RAG context already injected into its initial prompt instead.
+
+**Similarity threshold:** 0.7 (cosine). Results below this threshold are discarded. The top-k limit is applied after threshold filtering.
+
+**Relationship to RAG injection:** The automatic RAG injection (prompt part 5) runs once before the first LLM call, using the initial task prompt as the query. `recall` is an on-demand search that the agent can call at any point mid-task, with any query.
 
 ---
 
 ## `remember`
 
-Intended to store a short piece of information in the agent's episodic memory, optionally tagged for later retrieval.
+Stores a short piece of information in the role's episodic memory. The content is embedded using the company's embedding model and stored in the `episodic_memory` table for future `recall` searches.
 
 **Arguments:**
 
-| Parameter | Type     | Required | Description                               |
-| --------- | -------- | -------- | ----------------------------------------- |
-| `content` | string   | yes      | The content to store                      |
-| `tags`    | string[] | no       | Optional tags to associate with the entry |
+| Parameter   | Type     | Required | Description                                                  |
+| ----------- | -------- | -------- | ------------------------------------------------------------ |
+| `roleId`    | UUID     | yes      | The role to store this memory under                          |
+| `companyId` | UUID     | yes      | The company (used to load the embedding configuration)       |
+| `content`   | string   | yes      | The content to store                                         |
+| `agentId`   | UUID     | no       | The agent instance storing the memory                        |
+| `tags`      | string[] | no       | Optional classification tags for future filtering            |
 
-**Current behaviour (stub):** Returns `"Episodic memory storage is not yet implemented."`
+**Returns:** Confirmation message containing the new memory's UUID.
 
-**Planned behaviour:** Insert a row into an `episodic_memory` table (agentId, roleId, content, embedding, tags, createdAt). Embedding is computed via the company's `embeddingConfig` model.
+**Behaviour when no embedding config exists:** Returns an informative message; the memory is not stored.
+
+**Storage:** Each `remember` call inserts one row into `episodic_memory` with a computed embedding vector. Tags are stored as a JSONB array.
 
 ---
 
 ## `search_knowledge`
 
-Intended to search only the role's knowledge base (RAG source documents), excluding episodic memory entries. Useful when the agent needs to retrieve factual reference material mid-conversation rather than relying solely on what was injected at prompt assembly time.
+Searches the role's knowledge base only (RAG source documents in `knowledge_chunk`), excluding episodic memory entries. Useful when the agent needs to retrieve factual reference material mid-conversation.
 
 **Arguments:**
 
-| Parameter | Type    | Required | Description                         |
-| --------- | ------- | -------- | ----------------------------------- |
-| `query`   | string  | yes      | The search query                    |
-| `top_k`   | integer | no       | Maximum number of results to return |
+| Parameter   | Type    | Required | Description                                                  |
+| ----------- | ------- | -------- | ------------------------------------------------------------ |
+| `roleId`    | UUID    | yes      | The role whose knowledge base to search                      |
+| `companyId` | UUID    | yes      | The company (used to load the embedding configuration)       |
+| `query`     | string  | yes      | Natural-language search query                                |
+| `top_k`     | integer | no       | Maximum number of results to return (default: 5)             |
 
-**Current behaviour (stub):** Returns `"Knowledge search is not yet implemented. Use the RAG context already injected into your initial prompt."`
+**Returns:** Formatted results (same format as `recall`). Returns a "no results" message if nothing is above the similarity threshold.
 
-**Planned behaviour:** Embed the query, run a pgvector cosine similarity search over `knowledge_chunk` rows scoped to the current role, and return the top-k results. This is the same retrieval that happens automatically at prompt part 5, but exposed as an on-demand tool for mid-conversation use.
+**Difference from `recall`:** `search_knowledge` searches `knowledge_chunk` only. `recall` unions both `knowledge_chunk` and `episodic_memory` in a single ranked result set.
 
 ---
 
-## Relationship to RAG
+## Relationship to RAG injection
 
-The automatic RAG injection (prompt part 5) and this server's `recall` / `search_knowledge` tools address the same underlying data but at different points in the agent lifecycle:
+|                | RAG injection (prompt part 5)     | Memory MCP tools                                    |
+| -------------- | --------------------------------- | --------------------------------------------------- |
+| When           | Before the first LLM call         | On demand, any time during the loop                 |
+| Query          | The agent's initial task prompt   | Any query the agent constructs                      |
+| Scope          | `knowledge_chunk` only            | `knowledge_chunk` + `episodic_memory` (for `recall`) |
+| Writes         | No                                | `remember` writes to `episodic_memory`               |
 
-|        | RAG injection (prompt part 5) | Memory MCP tools                           |
-| ------ | ----------------------------- | ------------------------------------------ |
-| When   | Before the first LLM call     | On demand, any time during the loop        |
-| Query  | The agent's initial prompt    | Any query the agent chooses                |
-| Scope  | Role knowledge base only      | Knowledge base + episodic memory (planned) |
-| Status | Implemented                   | Stub                                       |
+---
+
+## Database dependency
+
+lcp-mcp-memory requires a direct PostgreSQL connection (with pgvector) to run similarity queries. The `DATABASE_URL` environment variable must be set. The Docker Compose service has a `depends_on: postgres` constraint and a `/health` endpoint that checks the connection before the service is considered ready.
