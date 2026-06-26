@@ -5,6 +5,7 @@
     "<rootDir>/test/e2e/*.e2e-spec.ts"
   ],
   "testEnvironment": "node",
+  "maxWorkers": 1,
   "setupFiles": [
     "<rootDir>/test/e2e/e2e-setup.ts"
   ],

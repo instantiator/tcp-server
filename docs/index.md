@@ -63,7 +63,7 @@ In-depth guides for implemented system features.
 
 | Document                   | Description                                                              |
 | -------------------------- | ------------------------------------------------------------------------ |
-| [schema.md](schema.md)     | JSON Schema reference — field tables, validation examples, ajv-cli usage |
+| [schema.md](schema.md)     | JSON Schema reference — entity schemas, DTO field tables, validation examples |
 | [licenses.md](licenses.md) | Dependency license report — auto-generated, do not edit by hand          |
 
 ## Planning

@@ -30,6 +30,14 @@ done
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPTS="$REPO_ROOT/scripts"
 
+# If lcp-server is already running on :3000, reuse it for API/smoke tests
+# rather than starting a separate Docker stack for those suites.
+API_SMOKE_ARGS=()
+if curl -sf http://localhost:3000/health >/dev/null 2>&1; then
+  echo "→ lcp-server detected at localhost:3000 — API and smoke tests will target the running stack."
+  API_SMOKE_ARGS=(--base-url http://localhost:3000)
+fi
+
 CURRENT_STEP=""
 
 step() {
@@ -75,11 +83,11 @@ step "E2E tests"
 echo
 
 step "API tests"
-"$SCRIPTS/run-api-tests.sh"
+"$SCRIPTS/run-api-tests.sh" "${API_SMOKE_ARGS[@]+"${API_SMOKE_ARGS[@]}"}"
 echo
 
 step "Smoke tests"
-"$SCRIPTS/run-smoke-tests.sh"
+"$SCRIPTS/run-smoke-tests.sh" "${API_SMOKE_ARGS[@]+"${API_SMOKE_ARGS[@]}"}"
 echo
 
 echo "All steps passed."

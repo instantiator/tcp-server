@@ -1,6 +1,6 @@
 import { AgentStatus, AuditEventType, LcpAgent } from '@lcp/shared';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { randomUUID, UUID } from 'crypto';
+import { randomUUID } from 'crypto';
 import type { Request } from 'express';
 import { DbService } from '../db/db.service';
 import { AgentEventService } from '../events/agent-event.service';
@@ -79,16 +79,6 @@ describe('AgentController', () => {
 
       expect(orchestration.startAgent).toHaveBeenCalledTimes(1);
       expect(result.id).toBe(agent.id);
-    });
-
-    it('throws BadRequestException when required fields are missing', async () => {
-      await expect(
-        controller.startAgent({
-          companyId: '' as UUID,
-          roleId: randomUUID(),
-          initialPrompt: 'Go.',
-        }),
-      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -178,12 +168,6 @@ describe('AgentController', () => {
         expect.any(Object),
       );
       expect(result.id).toBe(agent.id);
-    });
-
-    it('throws BadRequestException when required fields are missing', async () => {
-      await expect(
-        controller.startChat({ companyId: '' as UUID, roleId: randomUUID() }),
-      ).rejects.toThrow(BadRequestException);
     });
   });
 

@@ -23,20 +23,9 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuditService } from '../audit/audit.service';
 import { DbService } from '../db/db.service';
 import { AgentEventService } from '../events/agent-event.service';
-import type { LcpAgentTemplate } from '../templates/LcpAgentTemplate';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { ChatMessageResponse, ChatService } from './chat.service';
-
-/** Body for the chat start endpoint. */
-interface ChatStartBody {
-  companyId: UUID;
-  roleId: UUID;
-}
-
-/** Body for the send-message endpoint. */
-interface SendMessageBody {
-  message: string;
-}
+import { SendMessageDto, StartAgentDto, StartChatDto } from './dto/agent.dto';
 
 /** REST controller for starting, resuming, chatting with, and inspecting {@link LcpAgent} instances. */
 @UseGuards(JwtAuthGuard)
@@ -55,12 +44,7 @@ export class AgentController {
    * Returns the agent record immediately; status starts as `idle`.
    */
   @Post('start')
-  async startAgent(@Body() body: LcpAgentTemplate): Promise<LcpAgent> {
-    if (!body.companyId || !body.roleId || !body.initialPrompt) {
-      throw new BadRequestException(
-        'companyId, roleId, and initialPrompt are required',
-      );
-    }
+  async startAgent(@Body() body: StartAgentDto): Promise<LcpAgent> {
     return this.orchestration.startAgent(body);
   }
 
@@ -70,10 +54,7 @@ export class AgentController {
    * {@link sendMessage} instead of the BullMQ pipeline.
    */
   @Post('chat/start')
-  async startChat(@Body() body: ChatStartBody): Promise<LcpAgent> {
-    if (!body.companyId || !body.roleId) {
-      throw new BadRequestException('companyId and roleId are required');
-    }
+  async startChat(@Body() body: StartChatDto): Promise<LcpAgent> {
     const agent = await this.db.createAgent({
       companyId: body.companyId,
       roleId: body.roleId,
@@ -103,7 +84,7 @@ export class AgentController {
   @Post(':id/message')
   async sendMessage(
     @Param('id') id: UUID,
-    @Body() body: SendMessageBody,
+    @Body() body: SendMessageDto,
     @Req() req: Request,
   ): Promise<ChatMessageResponse> {
     if (!body.message) {

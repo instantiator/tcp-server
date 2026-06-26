@@ -42,7 +42,7 @@ describe('RoleController', () => {
         companyId: role.companyId,
         name: role.name,
         description: role.description,
-        llmConfig: role.llmConfig,
+        llmConfig: role.llmConfig ?? undefined,
         systemPromptTemplate: role.systemPromptTemplate,
         knowledgeDomains: [],
         mcpServerList: [],
@@ -67,7 +67,9 @@ describe('RoleController', () => {
       const role = makeRole();
       db.updateRole.mockResolvedValue(role);
 
-      const partial = { llmConfig: { model: 'gpt-4o-mini' } };
+      const partial = {
+        llmConfig: { provider: 'lm-studio', model: 'gpt-4o-mini' },
+      };
       await controller.updateRole(role.id, partial);
       expect(db.updateRole).toHaveBeenCalledWith(role.id, partial);
     });

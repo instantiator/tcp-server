@@ -13,11 +13,7 @@ import type { UUID } from 'crypto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { ConversationService } from './conversation.service';
-
-interface ReplyBody {
-  content: string;
-  authorIdentifier?: string;
-}
+import { ConversationReplyDto } from './dto/conversation.dto';
 
 /** REST controller for agent-to-human conversation queries. */
 @UseGuards(JwtAuthGuard)
@@ -58,7 +54,7 @@ export class ConversationController {
   @Post(':slug/reply')
   async reply(
     @Param('slug') slug: string,
-    @Body() body: ReplyBody,
+    @Body() body: ConversationReplyDto,
   ): Promise<Conversation> {
     const conv = await this.service.reply(
       slug,

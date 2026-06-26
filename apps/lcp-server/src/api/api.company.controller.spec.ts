@@ -72,7 +72,9 @@ describe('CompanyController', () => {
 
     it('allows patching a nested llmDefault field', async () => {
       const id = randomUUID();
-      const partial = { llmDefault: { model: 'gpt-4o-mini' } };
+      const partial = {
+        llmDefault: { provider: 'openai', model: 'gpt-4o-mini' },
+      };
       await controller.putCompany(id, partial);
       expect(api.setCompany).toHaveBeenCalledWith(id, partial);
     });

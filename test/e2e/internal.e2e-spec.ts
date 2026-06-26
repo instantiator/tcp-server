@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import type { UUID } from 'crypto';
 import {
   AgentStatus,
@@ -84,7 +85,7 @@ describe('InternalController + ConversationController (e2e)', () => {
   }
 
   async function createRole(companyId: UUID): Promise<LcpRole> {
-    await request(app.getHttpServer())
+    const res = await request(app.getHttpServer())
       .post('/api/role')
       .set('Authorization', `Bearer ${jwt}`)
       .send({
@@ -95,8 +96,9 @@ describe('InternalController + ConversationController (e2e)', () => {
         systemPromptTemplate: 'You are {{name}}.',
         knowledgeDomains: [],
         mcpServerList: [],
-      });
-    return roleRepo.findOneByOrFail({ companyId, name: 'analyst' });
+      })
+      .expect(201);
+    return res.body as LcpRole;
   }
 
   /** Inserts a Running agent directly — bypasses BullMQ so no Redis needed. */
@@ -192,7 +194,7 @@ describe('InternalController + ConversationController (e2e)', () => {
         .set('X-Internal-Api-Key', INTERNAL_KEY)
         .send({
           type: 'user_input',
-          agentId: '00000000-0000-0000-0000-000000000099',
+          agentId: randomUUID(),
           question: 'Who am I?',
         })
         .expect(404);

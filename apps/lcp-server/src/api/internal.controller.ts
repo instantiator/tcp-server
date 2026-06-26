@@ -9,28 +9,7 @@ import {
 import type { UUID } from 'crypto';
 import { InternalApiKeyGuard } from '../audit/internal-api-key.guard';
 import { PauseAndResumeService } from './pause-and-resume.service';
-
-interface PauseUserInputBody {
-  type: 'user_input';
-  agentId: UUID;
-  question: string;
-  context?: string;
-}
-
-interface PauseConsultationBody {
-  type: 'agent_consultation';
-  agentId: UUID;
-  companyId: UUID;
-  roleName: string;
-  question: string;
-  context?: string;
-}
-
-type PauseBody = PauseUserInputBody | PauseConsultationBody;
-
-interface CompleteBody {
-  output: string;
-}
+import { CompleteDto, PauseDto } from './dto/internal.dto';
 
 /**
  * Internal service-to-service endpoints for agent lifecycle management.
@@ -51,7 +30,7 @@ export class InternalController {
    */
   @Post('pause')
   async pause(
-    @Body() body: PauseBody,
+    @Body() body: PauseDto,
   ): Promise<{ slug?: string; consultationId?: string }> {
     if (body.type === 'user_input') {
       const result = await this.pauseResume.pauseForUserInput(
@@ -64,8 +43,9 @@ export class InternalController {
 
     const result = await this.pauseResume.pauseForConsultation(
       body.agentId,
-      body.companyId,
-      body.roleName,
+      // ValidateIf guarantees these are present when type === 'agent_consultation'
+      body.companyId!,
+      body.roleName!,
       body.question,
       body.context,
     );
@@ -82,7 +62,7 @@ export class InternalController {
   @HttpCode(204)
   async complete(
     @Param('agentId') agentId: UUID,
-    @Body() body: CompleteBody,
+    @Body() body: CompleteDto,
   ): Promise<void> {
     await this.pauseResume.completeAgent(agentId, body.output);
   }

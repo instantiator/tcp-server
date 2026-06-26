@@ -1,4 +1,4 @@
-import { CompanyUser, MemberType } from '@lcp/shared';
+import { CompanyUser } from '@lcp/shared';
 import {
   Body,
   Controller,
@@ -16,21 +16,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import type { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-
-interface CreateCompanyUserBody {
-  identifier: string;
-  name?: string;
-  memberType: MemberType;
-  roles?: string[];
-  knowledgeDomains?: string[];
-}
-
-interface UpdateCompanyUserBody {
-  name?: string;
-  memberType?: MemberType;
-  roles?: string[];
-  knowledgeDomains?: string[];
-}
+import {
+  CreateCompanyUserDto,
+  UpdateCompanyUserDto,
+} from './dto/company-user.dto';
 
 /** REST controller for per-company human user management. */
 @UseGuards(JwtAuthGuard)
@@ -54,7 +43,7 @@ export class CompanyUserController {
   @Post()
   async createUser(
     @Param('companyId') companyId: UUID,
-    @Body() body: CreateCompanyUserBody,
+    @Body() body: CreateCompanyUserDto,
   ): Promise<CompanyUser> {
     const user = this.users.create({
       companyId,
@@ -72,7 +61,7 @@ export class CompanyUserController {
   async updateUser(
     @Param('companyId') companyId: UUID,
     @Param('userId') userId: UUID,
-    @Body() body: UpdateCompanyUserBody,
+    @Body() body: UpdateCompanyUserDto,
   ): Promise<CompanyUser> {
     const user = await this.users.findOne({ where: { id: userId, companyId } });
     if (!user) throw new NotFoundException(`User ${userId} not found`);

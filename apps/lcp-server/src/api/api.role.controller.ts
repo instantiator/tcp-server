@@ -10,10 +10,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { UUID } from 'crypto';
-import type { DeepPartial } from 'typeorm';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { DbService } from '../db/db.service';
-import type { LcpRoleTemplate } from '../templates/LcpRoleTemplate';
+import { CreateRoleDto, UpdateRoleDto } from './dto/role.dto';
 
 /** REST controller for {@link LcpRole} create, read, and update operations. */
 @UseGuards(JwtAuthGuard)
@@ -26,20 +25,20 @@ export class RoleController {
    * All fields from {@link LcpRoleTemplate} are required.
    */
   @Post()
-  async createRole(@Body() body: LcpRoleTemplate): Promise<LcpRole> {
+  async createRole(@Body() body: CreateRoleDto): Promise<LcpRole> {
     return this.db.createRole(body);
   }
 
   /**
    * Partially updates an existing {@link LcpRole} identified by `id`.
-   * Accepts a deep-partial body, so nested fields such as `llmConfig.model` can be
+   * Accepts a partial body so nested fields such as `llmConfig.model` can be
    * patched without overwriting the whole object. The `id` and `company` fields
    * are immutable and must not be included in the request body.
    */
   @Put(':id')
   async updateRole(
     @Param('id') id: UUID,
-    @Body() partial: DeepPartial<Omit<LcpRole, 'id' | 'company'>>,
+    @Body() partial: UpdateRoleDto,
   ): Promise<LcpRole> {
     const role = await this.db.updateRole(id, partial);
     if (!role) throw new NotFoundException(`Role ${id} not found`);

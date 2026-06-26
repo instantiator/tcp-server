@@ -10,9 +10,9 @@ import {
   LcpRole,
   PendingConsultation,
 } from '@lcp/shared';
-import { Module } from '@nestjs/common';
+import { Module, ValidationPipe } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ApiModule } from './api/api.module';
 import { AuditModule } from './audit/audit.module';
@@ -101,6 +101,14 @@ import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
   providers: [
     AuthTokenService,
     { provide: APP_INTERCEPTOR, useClass: MaskSecretsInterceptor },
+    {
+      provide: APP_PIPE,
+      useValue: new ValidationPipe({
+        whitelist: true,
+        transform: true,
+        forbidNonWhitelisted: false,
+      }),
+    },
   ],
 })
 export class AppModule {}

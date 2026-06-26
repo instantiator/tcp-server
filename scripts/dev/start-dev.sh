@@ -63,6 +63,28 @@ fi
 echo "Using: $ENV_FILE"
 set -a; source "$ENV_FILE"; set +a
 
+# Pre-flight: verify all required variables are non-empty.
+# These match the Joi required() fields in lcp-server and lcp-agent config schemas.
+REQUIRED_VARS=(
+  DATABASE_URL REDIS_URL
+  MINIO_ENDPOINT MINIO_ACCESS_KEY MINIO_SECRET_KEY
+  OIDC_ISSUER_URL OIDC_CLIENT_ID OIDC_CLIENT_SECRET
+  INTERNAL_API_KEY LCP_SERVER_URL
+)
+missing=()
+for var in "${REQUIRED_VARS[@]}"; do
+  [[ -n "${!var:-}" ]] || missing+=("$var")
+done
+if [[ ${#missing[@]} -gt 0 ]]; then
+  echo "" >&2
+  echo "ERROR: the following required variables are missing or empty in $ENV_FILE:" >&2
+  for var in "${missing[@]}"; do echo "  $var" >&2; done
+  echo "" >&2
+  echo "Add them to $ENV_FILE and retry. See .env.example for reference values." >&2
+  echo "" >&2
+  exit 1
+fi
+
 DC="docker compose -p lcp-dev --profile auth --env-file $ENV_FILE"
 
 # Helpers

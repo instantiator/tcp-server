@@ -62,11 +62,25 @@ wait_for() {
   echo "$name ready."
 }
 
-trap 'rc=$?; $DC down; exit $rc' EXIT
-$DC down -v
-$DC up -d postgres redis minio
+# If services are already running on the expected ports, reuse them.
+INFRA_ALREADY_UP=false
+if curl -sf http://localhost:9000/minio/health/live >/dev/null 2>&1; then
+  INFRA_ALREADY_UP=true
+  echo "→ Infrastructure services are already running. Reusing them."
+fi
 
-wait_for postgres "$DC exec -T postgres pg_isready -U lcp"
+cleanup() {
+  if [ "$INFRA_ALREADY_UP" = false ]; then
+    $DC down
+  fi
+}
+trap 'rc=$?; cleanup; exit $rc' EXIT
+
+if [ "$INFRA_ALREADY_UP" = false ]; then
+  $DC down -v
+  $DC up -d postgres redis minio
+  wait_for postgres "$DC exec -T postgres pg_isready -U lcp"
+fi
 
 export DATABASE_URL="postgres://lcp:${POSTGRES_PASSWORD}@localhost:5432/lcp"
 export REDIS_URL="redis://localhost:6379"
@@ -76,5 +90,3 @@ export OIDC_CLIENT_ID
 export OIDC_CLIENT_SECRET
 
 npm run test:e2e -- ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}
-
-$DC down
