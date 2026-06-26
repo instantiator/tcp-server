@@ -47,6 +47,23 @@ export LCP_TOKEN=$(./scripts/dev/lcp-cli.sh -u alice get-token)
 ./scripts/dev/lcp-cli.sh -e LCP_TOKEN list-companies
 ```
 
+## Validating JSON input
+
+`set-company`, `set-role`, and similar commands accept a JSON payload. Before applying, validate it against the generated JSON Schema to catch missing required fields or type mismatches before they reach the server:
+
+```bash
+# Install ajv-cli once (global, not in devDependencies)
+npm install -g ajv-cli
+
+# Validate a company file
+ajv validate -s schemas/schema.json --ref '#/definitions/LcpCompany' -d my-company.json
+
+# Validate a role file
+ajv validate -s schemas/schema.json --ref '#/definitions/LcpRole' -d my-role.json
+```
+
+See [schema.md](schema.md) for the full field reference, VS Code integration, example JSON, and an inline Node.js validation option that needs no extra install.
+
 ## Verbs
 
 | Verb                                                    | Invocation                                                   | Description                                              |

@@ -61,9 +61,10 @@ In-depth guides for implemented system features.
 
 ## Reference
 
-| Document                   | Description                                                     |
-| -------------------------- | --------------------------------------------------------------- |
-| [licenses.md](licenses.md) | Dependency license report — auto-generated, do not edit by hand |
+| Document                   | Description                                                              |
+| -------------------------- | ------------------------------------------------------------------------ |
+| [schema.md](schema.md)     | JSON Schema reference — field tables, validation examples, ajv-cli usage |
+| [licenses.md](licenses.md) | Dependency license report — auto-generated, do not edit by hand          |
 
 ## Planning
 

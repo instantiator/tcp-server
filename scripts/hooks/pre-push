@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Pre-push hook: format, regenerate derived files, check for migration drift.
+# Install: npm run hooks:install
+# Bypass: git push --no-verify
+set -euo pipefail
+
+echo "→ pre-push: formatting..."
+npm run format --silent
+
+echo "→ pre-push: regenerating schema..."
+npm run schema:generate --silent
+
+echo "→ pre-push: regenerating licenses..."
+npm run licenses:generate --silent
+
+# If any tracked file was modified by the generators, abort and ask for a commit.
+if ! git diff --quiet; then
+  echo ""
+  echo "✗ pre-push: the following files were updated and need to be committed:"
+  git diff --name-only | sed 's/^/    /'
+  echo ""
+  echo "  Run:  git add -u && git commit -m 'chore: update generated files'"
+  echo "  Then retry the push."
+  echo ""
+  exit 1
+fi
+
+# Migration drift check (no database needed).
+# Compares the most recent commit that touched entity models against the most
+# recent commit that touched migrations. If models are newer, a migration is
+# likely missing. This is a heuristic — bypass with --no-verify if the model
+# change was non-structural (comments, decorators, formatting only).
+last_model=$(git log -1 --format="%H" -- 'libs/lcp-shared/src/models/*.model.ts' 2>/dev/null || true)
+last_migration=$(git log -1 --format="%H" -- 'apps/lcp-server/src/migrations/*.ts' 2>/dev/null || true)
+
+if [[ -n "$last_model" && -z "$last_migration" ]]; then
+  echo ""
+  echo "✗ pre-push: entity models exist but no migration files found."
+  echo "  Generate an initial migration:"
+  echo "    npm run migration:generate -- apps/lcp-server/src/migrations/InitialSchema"
+  echo ""
+  exit 1
+fi
+
+if [[ -n "$last_model" && -n "$last_migration" ]]; then
+  if ! git merge-base --is-ancestor "$last_model" "$last_migration" 2>/dev/null; then
+    echo ""
+    echo "✗ pre-push: entity models were changed after the last migration."
+    echo "  If the schema changed, generate a migration before pushing:"
+    echo "    npm run migration:generate -- apps/lcp-server/src/migrations/<Name>"
+    echo ""
+    echo "  If the change was non-structural (comments, validation decorators,"
+    echo "  or TypeDoc only), bypass this check with:  git push --no-verify"
+    echo ""
+    exit 1
+  fi
+fi
+
+echo "✓ pre-push checks passed."

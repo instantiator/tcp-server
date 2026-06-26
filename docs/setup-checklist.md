@@ -26,11 +26,17 @@ If you already cloned without it:
 git submodule update --init --recursive
 ```
 
-## 3. Install dependencies
+## 3. Install dependencies and git hooks
 
 ```bash
 npm install
+npm run hooks:install
 ```
+
+The second command copies `scripts/hooks/pre-push` into `.git/hooks/` so that
+formatting, schema generation, and migration-drift checks run automatically
+before each push. See [docs/schema.md](schema.md) for what the hook does and
+how to bypass it with `--no-verify` when needed.
 
 ## 4. Configure environment variables
 
