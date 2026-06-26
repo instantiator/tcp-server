@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { Command } from 'commander';
-import matter from 'gray-matter';
+import { load } from 'js-yaml';
 import { apiUpload } from '../lib/api';
 import { resolveToken } from '../lib/auth';
 
@@ -27,16 +27,17 @@ export function validateOkfDocument(
   if (path.extname(filePath).toLowerCase() !== '.md') {
     return `${filePath}: must be a Markdown (.md) file`;
   }
-  let parsed: matter.GrayMatterFile<string>;
+  let data: Record<string, unknown>;
   try {
-    parsed = matter(content);
+    const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    data = match ? ((load(match[1]) as Record<string, unknown>) ?? {}) : {};
   } catch {
     return `${filePath}: failed to parse YAML front-matter`;
   }
   if (
-    !parsed.data['title'] ||
-    typeof parsed.data['title'] !== 'string' ||
-    !parsed.data['title'].trim()
+    !data['title'] ||
+    typeof data['title'] !== 'string' ||
+    !data['title'].trim()
   ) {
     return `${filePath}: front-matter must include a non-empty 'title' field`;
   }
