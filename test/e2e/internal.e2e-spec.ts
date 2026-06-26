@@ -1,3 +1,4 @@
+import type { UUID } from 'crypto';
 import {
   AgentStatus,
   AuditEvent,
@@ -82,7 +83,7 @@ describe('InternalController + ConversationController (e2e)', () => {
     return companyRepo.findOneByOrFail({ slug: 'e2e-co' });
   }
 
-  async function createRole(companyId: string): Promise<LcpRole> {
+  async function createRole(companyId: UUID): Promise<LcpRole> {
     await request(app.getHttpServer())
       .post('/api/role')
       .set('Authorization', `Bearer ${jwt}`)
@@ -100,8 +101,8 @@ describe('InternalController + ConversationController (e2e)', () => {
 
   /** Inserts a Running agent directly — bypasses BullMQ so no Redis needed. */
   async function createRunningAgent(
-    companyId: string,
-    roleId: string,
+    companyId: UUID,
+    roleId: UUID,
   ): Promise<LcpAgent> {
     return agentRepo.save(
       agentRepo.create({
