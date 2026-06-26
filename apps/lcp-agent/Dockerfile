@@ -1,11 +1,11 @@
-FROM node:24-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
 RUN npm run build lcp-agent
 
-FROM node:24-alpine
+FROM node:26-alpine
 WORKDIR /app
 RUN apk add --no-cache curl
 # lcp-agent has no @lcp/shared imports, so tsc rootDir stays as apps/lcp-agent/src/.
