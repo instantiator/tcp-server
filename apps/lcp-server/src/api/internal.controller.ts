@@ -1,15 +1,25 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
+  NotFoundException,
   Param,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { LcpAgent } from '@lcp/shared';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import type { UUID } from 'crypto';
 import { InternalApiKeyGuard } from '../audit/internal-api-key.guard';
 import { PauseAndResumeService } from './pause-and-resume.service';
-import { CompleteDto, PauseDto } from './dto/internal.dto';
+import {
+  CompleteDto,
+  PauseDto,
+  UpdateStorageChangesDto,
+} from './dto/internal.dto';
 
 /**
  * Internal service-to-service endpoints for agent lifecycle management.
@@ -21,7 +31,22 @@ import { CompleteDto, PauseDto } from './dto/internal.dto';
 @Controller('internal')
 @UseGuards(InternalApiKeyGuard)
 export class InternalController {
-  constructor(private readonly pauseResume: PauseAndResumeService) {}
+  constructor(
+    private readonly pauseResume: PauseAndResumeService,
+    @InjectRepository(LcpAgent)
+    private readonly agentRepo: Repository<LcpAgent>,
+  ) {}
+
+  /**
+   * Returns a minimal view of an agent record for service-to-service queries.
+   * Currently exposes `storageChanges` for `complete_task` file validation.
+   */
+  @Get('agent/:agentId')
+  async getAgent(@Param('agentId') agentId: UUID): Promise<Partial<LcpAgent>> {
+    const agent = await this.agentRepo.findOneBy({ id: agentId });
+    if (!agent) throw new NotFoundException(`Agent ${agentId} not found`);
+    return { id: agent.id, storageChanges: agent.storageChanges };
+  }
 
   /**
    * Pauses an agent and records the pending interaction.
@@ -65,5 +90,19 @@ export class InternalController {
     @Body() body: CompleteDto,
   ): Promise<void> {
     await this.pauseResume.completeAgent(agentId, body.output);
+  }
+
+  /**
+   * Merges a storage change snapshot into the agent's tracked storage state.
+   * Called fire-and-forget by lcp-agent after each storage tool result.
+   * Returns 204 No Content.
+   */
+  @Patch('agent/:agentId/storage')
+  @HttpCode(204)
+  async updateStorage(
+    @Param('agentId') agentId: UUID,
+    @Body() body: UpdateStorageChangesDto,
+  ): Promise<void> {
+    await this.pauseResume.updateStorageChanges(agentId, body);
   }
 }

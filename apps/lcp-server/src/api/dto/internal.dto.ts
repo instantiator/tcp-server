@@ -1,5 +1,6 @@
 import type { UUID } from 'crypto';
 import {
+  IsArray,
   IsIn,
   IsNotEmpty,
   IsOptional,
@@ -38,4 +39,23 @@ export class PauseDto {
 export class CompleteDto {
   @IsString()
   output!: string;
+}
+
+/** Body for `PATCH /internal/agent/:agentId/storage`. */
+export class UpdateStorageChangesDto {
+  @IsOptional()
+  @IsArray()
+  created?: string[];
+
+  @IsOptional()
+  @IsArray()
+  modified?: string[];
+
+  @IsOptional()
+  @IsArray()
+  deleted?: string[];
+
+  @IsOptional()
+  @IsArray()
+  moved?: { from: string; to: string }[];
 }

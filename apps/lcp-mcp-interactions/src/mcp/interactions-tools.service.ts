@@ -42,11 +42,14 @@ export class InteractionsToolsService {
   private readonly serverUrl: string;
   private readonly apiKey: string;
 
+  private readonly storageUrl: string;
+
   constructor(
     private readonly audit: AuditClientService,
     config: ConfigService,
   ) {
     this.serverUrl = config.getOrThrow<string>('LCP_SERVER_URL');
+    this.storageUrl = config.getOrThrow<string>('LCP_STORAGE_URL');
     this.apiKey = config.getOrThrow<string>('INTERNAL_API_KEY');
   }
 
@@ -231,6 +234,9 @@ export class InteractionsToolsService {
         'Marks the current agent task as complete with a final answer.',
         'Call this as your last action, after all work is done and any output files have been written.',
         'The finalAnswer should be a concise, human-readable summary of what was accomplished.',
+        'If the task produced output files, list their paths in outputFiles.',
+        'Each path will be verified to exist in shared storage before the task is marked complete.',
+        'Omit outputFiles if the task produces no file output.',
       ].join(' '),
       {
         agentId: z.string().uuid().describe('The calling agent UUID.'),
@@ -239,9 +245,29 @@ export class InteractionsToolsService {
           .string()
           .min(1)
           .describe('A concise summary of the completed task and its outputs.'),
+        outputFiles: z
+          .array(z.string().min(1))
+          .optional()
+          .describe(
+            'Paths in shared storage that this task produced or references as output. Each will be verified to exist.',
+          ),
       },
-      async ({ agentId, companyId, finalAnswer }): Promise<ToolResult> => {
+      async ({
+        agentId,
+        companyId,
+        finalAnswer,
+        outputFiles,
+      }): Promise<ToolResult> => {
         try {
+          // File existence validation — only if the agent listed output files
+          if (outputFiles && outputFiles.length > 0) {
+            const missing = await this.checkMissingFiles(outputFiles);
+            if (missing.length > 0) {
+              const changes = await this.fetchStorageChanges(agentId);
+              return ok(this.buildMissingFilesPrompt(missing, changes));
+            }
+          }
+
           await axios.post(
             `${this.serverUrl}/internal/agent/${agentId}/complete`,
             { output: finalAnswer },
@@ -260,5 +286,64 @@ export class InteractionsToolsService {
         }
       },
     );
+  }
+
+  /** Returns paths from `outputFiles` that do not exist in shared storage. */
+  private async checkMissingFiles(paths: string[]): Promise<string[]> {
+    try {
+      const params = new URLSearchParams(paths.map((p) => ['path', p]));
+      const res = await axios.get<{ missing: string[] }>(
+        `${this.storageUrl}/files/exists?${params.toString()}`,
+        { headers: { 'X-Internal-Api-Key': this.apiKey } },
+      );
+      return res.data.missing;
+    } catch (e) {
+      this.logger.warn(`File existence check failed: ${String(e)}`);
+      // Fail open — if the storage service is unreachable, allow completion
+      return [];
+    }
+  }
+
+  /** Fetches the storage change tracker for the given agent from lcp-server. */
+  private async fetchStorageChanges(agentId: string): Promise<{
+    created: string[];
+    modified: string[];
+  }> {
+    try {
+      const res = await axios.get<{
+        storageChanges?: {
+          created?: string[];
+          modified?: string[];
+        } | null;
+      }>(`${this.serverUrl}/internal/agent/${agentId}`, {
+        headers: { 'X-Internal-Api-Key': this.apiKey },
+      });
+      const sc = res.data.storageChanges;
+      return {
+        created: sc?.created ?? [],
+        modified: sc?.modified ?? [],
+      };
+    } catch {
+      return { created: [], modified: [] };
+    }
+  }
+
+  /** Builds the canned error prompt for missing output files. */
+  private buildMissingFilesPrompt(
+    missing: string[],
+    changes: { created: string[]; modified: string[] },
+  ): string {
+    const missingList = missing.map((p) => `- ${p}`).join('\n');
+    const created = changes.created.length
+      ? changes.created.join(', ')
+      : '(none)';
+    const modified = changes.modified.length
+      ? changes.modified.join(', ')
+      : '(none)';
+    return interpolate(interactionPrompts.missing_output_files, {
+      missingList,
+      created,
+      modified,
+    });
   }
 }

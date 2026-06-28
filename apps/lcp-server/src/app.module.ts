@@ -32,6 +32,7 @@ import { AddEpisodicMemory1782247100000 } from './migrations/1782247100000-AddEp
 import { AddCompanyUser1782247200000 } from './migrations/1782247200000-AddCompanyUser';
 import { AddConversation1782247300000 } from './migrations/1782247300000-AddConversation';
 import { AddAgentOutputAndConsultation1782247400000 } from './migrations/1782247400000-AddAgentOutputAndConsultation';
+import { AddAgentStorageChanges1782247500000 } from './migrations/1782247500000-AddAgentStorageChanges';
 import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
 
 /**
@@ -88,6 +89,7 @@ import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
             AddCompanyUser1782247200000,
             AddConversation1782247300000,
             AddAgentOutputAndConsultation1782247400000,
+            AddAgentStorageChanges1782247500000,
           ],
         };
       },

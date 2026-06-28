@@ -6,6 +6,7 @@ import { AuditClientService } from '../audit/audit-client.service';
 import { McpClientModule } from '../mcp/mcp-client.module';
 import { AgentRagModule } from '../rag/agent-rag.module';
 import { AgentRegistryService } from '../registry/agent-registry.service';
+import { StorageTrackingClientService } from '../storage-tracking/storage-tracking-client.service';
 import { AgentWorkerService } from './agent-worker.service';
 
 /**
@@ -24,6 +25,7 @@ import { AgentWorkerService } from './agent-worker.service';
     AgentLoopService,
     AgentRegistryService,
     AuditClientService,
+    StorageTrackingClientService,
   ],
 })
 export class AgentWorkerModule {}

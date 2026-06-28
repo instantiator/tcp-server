@@ -95,6 +95,21 @@ export class LcpAgent {
   @Column({ type: 'text', nullable: true })
   output!: string | null;
 
+  /**
+   * Storage changes accumulated by the agent loop during the current (or last) run.
+   * Updated incrementally by lcp-agent as storage MCP tool calls complete.
+   * Used by lcp-mcp-interactions to include context in `complete_task` error messages.
+   *
+   * Uses `simple-json` (stored as TEXT) for cross-DB compatibility with SQLite unit tests.
+   */
+  @Column({ type: 'simple-json', nullable: true })
+  storageChanges?: {
+    created: string[];
+    modified: string[];
+    deleted: string[];
+    moved: { from: string; to: string }[];
+  } | null;
+
   /** Timestamp of the last status or field update. */
   @UpdateDateColumn()
   updatedAt!: Date;

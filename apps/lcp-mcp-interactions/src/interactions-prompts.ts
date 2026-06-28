@@ -13,6 +13,8 @@ export interface InteractionPrompts {
   error_complete_task: string;
   error_list_users: string;
   error_list_roles: string;
+  /** Returned when outputFiles listed in complete_task cannot be found in storage. */
+  missing_output_files: string;
 }
 
 /** Loaded once at module initialisation from the co-located {@link prompts.jsonc} file. */

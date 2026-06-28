@@ -107,21 +107,23 @@ Key architectural decisions are documented as ADRs in [docs/ADRs/](docs/ADRs/). 
 
 ## Getting started
 
-See **[docs/setup-checklist.md](docs/setup-checklist.md)** for a step-by-step first-time setup guide.
+See **[Setup checklist](docs/setup-checklist.md)** for a step-by-step first-time setup guide.
 
 **Quick start** (prerequisites: Docker, Node.js 24):
 
 ```bash
-git clone --recurse-submodules <repo-url> && cd lcp-server
+git clone --recurse-submodules https://github.com/instantiator/lcp-server.git && cd lcp-server
 cp .env.example .env
 npm install
 docker compose up -d
 ```
 
+Follow the steps in **[Your first company](docs/your-first-company.md)** to populate and interact with a simple agent in a company.
+
 ## Testing
 
-See **[docs/testing.md](docs/testing.md)** for the testing strategy and full tier descriptions.
-See **[docs/scripts.md](docs/scripts.md)** for all available scripts.
+See **[Testing](docs/testing.md)** for the testing strategy and full tier descriptions.
+See **[Scripts](docs/scripts.md)** for all available scripts.
 
 Quick reference:
 

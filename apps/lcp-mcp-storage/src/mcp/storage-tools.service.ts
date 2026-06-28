@@ -363,6 +363,17 @@ export class StorageToolsService {
     return null;
   }
 
+  /**
+   * Checks which of the provided paths do not exist in storage.
+   * Used by the HTTP file-existence endpoint called by lcp-mcp-interactions.
+   */
+  async checkMissingFiles(paths: string[]): Promise<string[]> {
+    const results = await Promise.all(
+      paths.map(async (p) => ({ path: p, exists: await this.objectExists(p) })),
+    );
+    return results.filter((r) => !r.exists).map((r) => r.path);
+  }
+
   private async objectExists(key: string): Promise<boolean> {
     try {
       await this.s3.send(

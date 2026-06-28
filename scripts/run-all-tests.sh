@@ -78,12 +78,24 @@ step "Integration tests"
 "$SCRIPTS/run-integration-tests.sh"
 echo
 
+step "Docker prune (post-integration)"
+docker system prune -f
+echo
+
 step "E2E tests"
 "$SCRIPTS/run-e2e-tests.sh"
 echo
 
+step "Docker prune (post-e2e)"
+docker system prune -f
+echo
+
 step "API tests"
 "$SCRIPTS/run-api-tests.sh" "${API_SMOKE_ARGS[@]+"${API_SMOKE_ARGS[@]}"}"
+echo
+
+step "Docker prune (post-api)"
+docker system prune -f
 echo
 
 step "Smoke tests"

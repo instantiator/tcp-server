@@ -4,6 +4,76 @@
     "*": {
       "$comment": "() =>undefined"
     },
+    "AgentLoopCompletionSummary": {
+      "additionalProperties": false,
+      "description": "Structured payload for  {@link  AuditEventType.AgentLoopCompletion }  events.",
+      "properties": {
+        "actions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "storage": {
+          "additionalProperties": false,
+          "properties": {
+            "created": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "deleted": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "modified": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "moved": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "from": {
+                    "type": "string"
+                  },
+                  "to": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "from",
+                  "to"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "created",
+            "modified",
+            "deleted",
+            "moved"
+          ],
+          "type": "object"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "summary",
+        "actions",
+        "storage"
+      ],
+      "type": "object"
+    },
     "AgentStatus": {
       "description": "Lifecycle states for an agent instance.",
       "enum": [
@@ -96,7 +166,8 @@
         "tool_call",
         "tool_result",
         "decision",
-        "state_change"
+        "state_change",
+        "agent_loop_completion"
       ],
       "type": "string"
     },
@@ -484,6 +555,63 @@
         "status": {
           "$ref": "#/definitions/AgentStatus",
           "description": "Current lifecycle state of this agent."
+        },
+        "storageChanges": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "created": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "deleted": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "modified": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "moved": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "from": {
+                        "type": "string"
+                      },
+                      "to": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "from",
+                      "to"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "created",
+                "modified",
+                "deleted",
+                "moved"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Storage changes accumulated by the agent loop during the current (or last) run. Updated incrementally by lcp-agent as storage MCP tool calls complete. Used by lcp-mcp-interactions to include context in `complete_task` error messages.\n\nUses `simple-json` (stored as TEXT) for cross-DB compatibility with SQLite unit tests."
         },
         "threadId": {
           "description": "LangGraph checkpoint thread_id. Set to the agent's own UUID on first run. Null until the first BullMQ job is dispatched.",

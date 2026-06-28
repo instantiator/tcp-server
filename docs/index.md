@@ -61,11 +61,11 @@ In-depth guides for implemented system features.
 
 ## Reference
 
-| Document                     | Description                                                                   |
-| ---------------------------- | ----------------------------------------------------------------------------- |
-| [glossary.md](glossary.md)   | Definitions for all core terms — entities, services, execution, MCP, storage  |
-| [schema.md](schema.md)       | JSON Schema reference — entity schemas, DTO field tables, validation examples |
-| [licenses.md](licenses.md)   | Dependency license report — auto-generated, do not edit by hand               |
+| Document                   | Description                                                                   |
+| -------------------------- | ----------------------------------------------------------------------------- |
+| [glossary.md](glossary.md) | Definitions for all core terms — entities, services, execution, MCP, storage  |
+| [schema.md](schema.md)     | JSON Schema reference — entity schemas, DTO field tables, validation examples |
+| [licenses.md](licenses.md) | Dependency license report — auto-generated, do not edit by hand               |
 
 ## Planning
 
