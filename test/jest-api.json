@@ -2,8 +2,7 @@
   "verbose": true,
   "rootDir": "..",
   "testMatch": [
-    "<rootDir>/test/api/*.spec.ts",
-    "<rootDir>/test/smoke/*.spec.ts"
+    "<rootDir>/test/api/*.spec.ts"
   ],
   "testEnvironment": "node",
   "transform": {

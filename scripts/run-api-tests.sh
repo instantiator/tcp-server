@@ -176,6 +176,10 @@ else
   echo "  Created user: $TEST_USERNAME_VAL"
 fi
 
-npm --prefix "$REPO_ROOT" run test:api -- ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}
+# Override any Docker-internal URLs that may be set in .env so tests hit the
+# host-mapped ports, not the container-network hostnames.
+LCP_SERVER_URL=http://localhost:3000 \
+LCP_AGENT_URL=http://localhost:3001 \
+  npm --prefix "$REPO_ROOT" run test:api -- ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}
 
 $DC down
