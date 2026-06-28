@@ -518,10 +518,12 @@ export class StorageToolsService {
   // ─── Server registration ──────────────────────────────────────────────────
 
   private registerDescribeServer(server: McpServer): void {
-    server.tool(
+    server.registerTool(
       'describe_server',
-      'Returns an overview of the storage service and its tools.',
-      {},
+      {
+        description:
+          'Returns an overview of the storage service and its tools.',
+      },
       (): ToolResult => ({
         content: [{ type: 'text', text: storagePrompts.describe_server }],
       }),
@@ -529,10 +531,15 @@ export class StorageToolsService {
   }
 
   private registerDescribeFolder(server: McpServer): void {
-    server.tool(
+    server.registerTool(
       'describe_folder',
-      'Explains the purpose of a folder in the storage hierarchy.',
-      { path: z.string().describe('The folder path prefix to describe.') },
+      {
+        description:
+          'Explains the purpose of a folder in the storage hierarchy.',
+        inputSchema: {
+          path: z.string().describe('The folder path prefix to describe.'),
+        },
+      },
       ({ path }): ToolResult => ({
         content: [{ type: 'text', text: this.describeFolder(path) }],
       }),
@@ -562,39 +569,46 @@ export class StorageToolsService {
   }
 
   private registerListFiles(server: McpServer): void {
-    server.tool(
+    server.registerTool(
       'list_files',
-      'Lists files under a path prefix in the object store.',
       {
-        path: z
-          .string()
-          .optional()
-          .describe('Path prefix to list under (default: all files).'),
+        description: 'Lists files under a path prefix in the object store.',
+        inputSchema: {
+          path: z
+            .string()
+            .optional()
+            .describe('Path prefix to list under (default: all files).'),
+        },
       },
       ({ path }) => this.listFiles(path),
     );
   }
 
   private registerReadFile(server: McpServer): void {
-    server.tool(
+    server.registerTool(
       'read_file',
-      'Reads the text content of a file from the object store.',
-      { path: z.string().describe('The object key to read.') },
+      {
+        description: 'Reads the text content of a file from the object store.',
+        inputSchema: { path: z.string().describe('The object key to read.') },
+      },
       ({ path }) => this.readFile(path),
     );
   }
 
   private registerWriteFile(server: McpServer): void {
-    server.tool(
+    server.registerTool(
       'write_file',
-      'Creates a file in the object store. Set overwrite: true to replace an existing file.',
       {
-        path: z.string().describe('The object key to write.'),
-        content: z.string().describe('The text content to write.'),
-        overwrite: z
-          .boolean()
-          .optional()
-          .describe('Replace an existing file (default: false).'),
+        description:
+          'Creates a file in the object store. Set overwrite: true to replace an existing file.',
+        inputSchema: {
+          path: z.string().describe('The object key to write.'),
+          content: z.string().describe('The text content to write.'),
+          overwrite: z
+            .boolean()
+            .optional()
+            .describe('Replace an existing file (default: false).'),
+        },
       },
       ({ path, content, overwrite }) =>
         this.writeFile(path, content, overwrite ?? false),
@@ -602,78 +616,109 @@ export class StorageToolsService {
   }
 
   private registerDeleteFile(server: McpServer): void {
-    server.tool(
+    server.registerTool(
       'delete_file',
-      'Soft-deletes a file by moving it to the _deleted/ prefix. Use restore_file to undo.',
-      { path: z.string().describe('The object key to delete.') },
+      {
+        description:
+          'Soft-deletes a file by moving it to the _deleted/ prefix. Use restore_file to undo.',
+        inputSchema: {
+          path: z.string().describe('The object key to delete.'),
+        },
+      },
       ({ path }) => this.deleteFile(path),
     );
   }
 
   private registerRestoreFile(server: McpServer): void {
-    server.tool(
+    server.registerTool(
       'restore_file',
-      'Restores a soft-deleted file from the _deleted/ prefix back to its original path.',
-      { path: z.string().describe('The original object key to restore.') },
+      {
+        description:
+          'Restores a soft-deleted file from the _deleted/ prefix back to its original path.',
+        inputSchema: {
+          path: z.string().describe('The original object key to restore.'),
+        },
+      },
       ({ path }) => this.restoreFile(path),
     );
   }
 
   private registerSearchFiles(server: McpServer): void {
-    server.tool(
+    server.registerTool(
       'search_files',
-      'Lists files matching a glob pattern under a path prefix.',
       {
-        prefix: z.string().optional().describe('Path prefix to search under.'),
-        pattern: z
-          .string()
-          .optional()
-          .describe(
-            'Glob pattern to match against full key (supports * and ?).',
-          ),
+        description: 'Lists files matching a glob pattern under a path prefix.',
+        inputSchema: {
+          prefix: z
+            .string()
+            .optional()
+            .describe('Path prefix to search under.'),
+          pattern: z
+            .string()
+            .optional()
+            .describe(
+              'Glob pattern to match against full key (supports * and ?).',
+            ),
+        },
       },
       ({ prefix, pattern }) => this.searchFiles(prefix, pattern),
     );
   }
 
   private registerGetFileProperties(server: McpServer): void {
-    server.tool(
+    server.registerTool(
       'get_file_properties',
-      'Returns metadata for a file: size, content type, last modified, and whether it exists.',
-      { path: z.string().describe('The object key to inspect.') },
+      {
+        description:
+          'Returns metadata for a file: size, content type, last modified, and whether it exists.',
+        inputSchema: {
+          path: z.string().describe('The object key to inspect.'),
+        },
+      },
       ({ path }) => this.getFileProperties(path),
     );
   }
 
   private registerCopyFile(server: McpServer): void {
-    server.tool(
+    server.registerTool(
       'copy_file',
-      'Copies a file to a new path, leaving the original in place.',
       {
-        source: z.string().describe('The source object key.'),
-        destination: z.string().describe('The destination object key.'),
+        description:
+          'Copies a file to a new path, leaving the original in place.',
+        inputSchema: {
+          source: z.string().describe('The source object key.'),
+          destination: z.string().describe('The destination object key.'),
+        },
       },
       ({ source, destination }) => this.copyFile(source, destination),
     );
   }
 
   private registerMoveFile(server: McpServer): void {
-    server.tool(
+    server.registerTool(
       'move_file',
-      'Moves (renames) a file to a new path, removing the original.',
       {
-        source: z.string().describe('The source object key.'),
-        destination: z.string().describe('The destination object key.'),
+        description:
+          'Moves (renames) a file to a new path, removing the original.',
+        inputSchema: {
+          source: z.string().describe('The source object key.'),
+          destination: z.string().describe('The destination object key.'),
+        },
       },
       ({ source, destination }) => this.moveFile(source, destination),
     );
   }
 
   private registerGetFileSummary(server: McpServer): void {
-    server.tool(
+    server.registerTool(
       'get_file_summary',
-      'Returns a structural summary of a file without reading its full content: headings, top-level keys, or top-level declarations depending on format.',
-      { path: z.string().describe('The object key to summarise.') },
+      {
+        description:
+          'Returns a structural summary of a file without reading its full content: headings, top-level keys, or top-level declarations depending on format.',
+        inputSchema: {
+          path: z.string().describe('The object key to summarise.'),
+        },
+      },
       ({ path }) => this.getFileSummary(path),
     );
   }

@@ -71,20 +71,25 @@ export class InteractionsToolsService {
   }
 
   private registerDescribeServer(server: McpServer): void {
-    server.tool(
+    server.registerTool(
       'describe_server',
-      'Returns an overview of the interactions service and its tools.',
-      {},
+      {
+        description:
+          'Returns an overview of the interactions service and its tools.',
+      },
       (): ToolResult => ok(interactionPrompts.describe_server),
     );
   }
 
   private registerListAvailableUsers(server: McpServer): void {
-    server.tool(
+    server.registerTool(
       'list_available_users',
-      'Lists the human users registered in the company along with their roles and knowledge domains.',
       {
-        companyId: z.string().uuid().describe('The company UUID.'),
+        description:
+          'Lists the human users registered in the company along with their roles and knowledge domains.',
+        inputSchema: {
+          companyId: z.uuid().describe('The company UUID.'),
+        },
       },
       async ({ companyId }): Promise<ToolResult> => {
         try {
@@ -102,11 +107,14 @@ export class InteractionsToolsService {
   }
 
   private registerListAvailableRoles(server: McpServer): void {
-    server.tool(
+    server.registerTool(
       'list_available_roles',
-      'Lists the agent roles defined in the company that can be consulted.',
       {
-        companyId: z.string().uuid().describe('The company UUID.'),
+        description:
+          'Lists the agent roles defined in the company that can be consulted.',
+        inputSchema: {
+          companyId: z.uuid().describe('The company UUID.'),
+        },
       },
       async ({ companyId }): Promise<ToolResult> => {
         try {
@@ -124,23 +132,25 @@ export class InteractionsToolsService {
   }
 
   private registerRequestUserInput(server: McpServer): void {
-    server.tool(
+    server.registerTool(
       'request_user_input',
-      [
-        'Pauses the current agent and submits a question to the relevant human users in the company.',
-        'The agent will be automatically resumed once a user replies.',
-        'Use this when you need information or a decision that only a human can provide.',
-      ].join(' '),
       {
-        agentId: z.string().uuid().describe('The calling agent UUID.'),
-        companyId: z.string().uuid().describe('The company UUID.'),
-        question: z.string().min(1).describe('The question to ask the user.'),
-        context: z
-          .string()
-          .optional()
-          .describe(
-            'Optional context to help the user understand the request.',
-          ),
+        description: [
+          'Pauses the current agent and submits a question to the relevant human users in the company.',
+          'The agent will be automatically resumed once a user replies.',
+          'Use this when you need information or a decision that only a human can provide.',
+        ].join(' '),
+        inputSchema: {
+          agentId: z.uuid().describe('The calling agent UUID.'),
+          companyId: z.uuid().describe('The company UUID.'),
+          question: z.string().min(1).describe('The question to ask the user.'),
+          context: z
+            .string()
+            .optional()
+            .describe(
+              'Optional context to help the user understand the request.',
+            ),
+        },
       },
       async ({
         agentId,
@@ -167,28 +177,30 @@ export class InteractionsToolsService {
   }
 
   private registerRequestAgentConsultation(server: McpServer): void {
-    server.tool(
+    server.registerTool(
       'request_agent_consultation',
-      [
-        'Pauses the current agent and dispatches a consultation request to another agent role.',
-        "The agent will be automatically resumed with the consulting agent's response once it completes.",
-        'Use this when another role has specialist knowledge needed to proceed.',
-      ].join(' '),
       {
-        agentId: z.string().uuid().describe('The calling agent UUID.'),
-        companyId: z.string().uuid().describe('The company UUID.'),
-        roleName: z
-          .string()
-          .min(1)
-          .describe('The name of the role to consult.'),
-        question: z
-          .string()
-          .min(1)
-          .describe('The question to pose to the consulting agent.'),
-        context: z
-          .string()
-          .optional()
-          .describe('Optional context for the consultation.'),
+        description: [
+          'Pauses the current agent and dispatches a consultation request to another agent role.',
+          "The agent will be automatically resumed with the consulting agent's response once it completes.",
+          'Use this when another role has specialist knowledge needed to proceed.',
+        ].join(' '),
+        inputSchema: {
+          agentId: z.uuid().describe('The calling agent UUID.'),
+          companyId: z.uuid().describe('The company UUID.'),
+          roleName: z
+            .string()
+            .min(1)
+            .describe('The name of the role to consult.'),
+          question: z
+            .string()
+            .min(1)
+            .describe('The question to pose to the consulting agent.'),
+          context: z
+            .string()
+            .optional()
+            .describe('Optional context for the consultation.'),
+        },
       },
       async ({
         agentId,
@@ -228,29 +240,33 @@ export class InteractionsToolsService {
   }
 
   private registerCompleteTask(server: McpServer): void {
-    server.tool(
+    server.registerTool(
       'complete_task',
-      [
-        'Marks the current agent task as complete with a final answer.',
-        'Call this as your last action, after all work is done and any output files have been written.',
-        'The finalAnswer should be a concise, human-readable summary of what was accomplished.',
-        'If the task produced output files, list their paths in outputFiles.',
-        'Each path will be verified to exist in shared storage before the task is marked complete.',
-        'Omit outputFiles if the task produces no file output.',
-      ].join(' '),
       {
-        agentId: z.string().uuid().describe('The calling agent UUID.'),
-        companyId: z.string().uuid().describe('The company UUID.'),
-        finalAnswer: z
-          .string()
-          .min(1)
-          .describe('A concise summary of the completed task and its outputs.'),
-        outputFiles: z
-          .array(z.string().min(1))
-          .optional()
-          .describe(
-            'Paths in shared storage that this task produced or references as output. Each will be verified to exist.',
-          ),
+        description: [
+          'Marks the current agent task as complete with a final answer.',
+          'Call this as your last action, after all work is done and any output files have been written.',
+          'The finalAnswer should be a concise, human-readable summary of what was accomplished.',
+          'If the task produced output files, list their paths in outputFiles.',
+          'Each path will be verified to exist in shared storage before the task is marked complete.',
+          'Omit outputFiles if the task produces no file output.',
+        ].join(' '),
+        inputSchema: {
+          agentId: z.uuid().describe('The calling agent UUID.'),
+          companyId: z.uuid().describe('The company UUID.'),
+          finalAnswer: z
+            .string()
+            .min(1)
+            .describe(
+              'A concise summary of the completed task and its outputs.',
+            ),
+          outputFiles: z
+            .array(z.string().min(1))
+            .optional()
+            .describe(
+              'Paths in shared storage that this task produced or references as output. Each will be verified to exist.',
+            ),
+        },
       },
       async ({
         agentId,
