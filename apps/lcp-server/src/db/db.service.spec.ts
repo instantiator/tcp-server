@@ -6,7 +6,7 @@ import {
   LcpCompany,
   LcpRole,
 } from '@lcp/shared';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken, TypeOrmModule } from '@nestjs/typeorm';
 import { randomUUID, UUID } from 'crypto';
@@ -456,6 +456,33 @@ describe('DbService', () => {
           mcpServerList: [],
         }),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws NotFoundException when companyId does not exist in the database', async () => {
+      await expect(
+        dbService.createRole({
+          companyId: randomUUID(),
+          name: 'orphan',
+          description: 'No company.',
+          llmConfig: { provider: 'lm-studio', model: 'qwen3-5b' },
+          systemPromptTemplate: 'You are {{name}}.',
+          knowledgeDomains: [],
+          mcpServerList: [],
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws NotFoundException even without llmConfig when companyId does not exist', async () => {
+      await expect(
+        dbService.createRole({
+          companyId: randomUUID(),
+          name: 'orphan',
+          description: 'No company.',
+          systemPromptTemplate: 'You are {{name}}.',
+          knowledgeDomains: [],
+          mcpServerList: [],
+        }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 

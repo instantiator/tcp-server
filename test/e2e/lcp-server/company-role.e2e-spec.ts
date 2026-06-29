@@ -237,6 +237,40 @@ describe('RoleController (e2e)', () => {
     await app.close();
   });
 
+  describe('POST /api/role (no matching company)', () => {
+    it('returns 404 when companyId is a valid UUID not in the database', async () => {
+      await request(app.getHttpServer())
+        .post('/api/role')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({
+          companyId: '00000000-0000-0000-0000-000000000000',
+          name: 'orphan',
+          description: 'No company.',
+          llmConfig: { provider: 'lm-studio', model: 'qwen3-5b' },
+          systemPromptTemplate: 'You are {{name}}.',
+          knowledgeDomains: [],
+          mcpServerList: [],
+        })
+        .expect(404);
+    });
+
+    it('returns 400 when companyId is not a valid UUID', async () => {
+      await request(app.getHttpServer())
+        .post('/api/role')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({
+          companyId: 'not-a-uuid',
+          name: 'invalid',
+          description: 'Bad companyId.',
+          llmConfig: { provider: 'lm-studio', model: 'qwen3-5b' },
+          systemPromptTemplate: 'You are {{name}}.',
+          knowledgeDomains: [],
+          mcpServerList: [],
+        })
+        .expect(400);
+    });
+  });
+
   describe('with a company', () => {
     let company: LcpCompany;
 

@@ -36,6 +36,8 @@ curl http://localhost:3001/health
 ./scripts/dev/lcp-cli.sh --rebuild get-token --username test --password test
 ```
 
+You should see a token returned - it _looks like_ a long string of random characters.
+
 ## 1. Create a company
 
 ### 1.1 Update `simple-company.json`
@@ -50,7 +52,7 @@ In the repo, it's set up to point to a local instance of LM Studio, but you can 
 cat scripts/test-data/simple-company.json | scripts/dev/lcp-cli.sh --username test --password test set-company
 ```
 
-It should return a full instance of the company, including its id - indicating that it has been added to the database.
+It should return a full instance of the company, _including its `id`_ - indicating that it has been added to the database.
 
 ```json
 {

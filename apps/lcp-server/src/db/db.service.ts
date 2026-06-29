@@ -6,7 +6,11 @@ import {
   LcpCompany,
   LcpRole,
 } from '@lcp/shared';
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
 import { DeepPartial, IsNull, Repository } from 'typeorm';
@@ -113,15 +117,16 @@ export class DbService {
 
   /** Creates a new {@link LcpRole} from the given template. */
   async createRole(template: LcpRoleTemplate): Promise<LcpRole> {
-    if (!template.llmConfig) {
-      const company = await this.companyRepo.findOneByOrFail({
-        id: template.companyId,
-      });
-      if (!company.llmDefault) {
-        throw new BadRequestException(
-          'Role has no llmConfig and the company has no llmDefault — at least one is required',
-        );
-      }
+    const company = await this.companyRepo.findOneBy({
+      id: template.companyId,
+    });
+    if (!company) {
+      throw new NotFoundException(`Company ${template.companyId} not found`);
+    }
+    if (!template.llmConfig && !company.llmDefault) {
+      throw new BadRequestException(
+        'Role has no llmConfig and the company has no llmDefault — at least one is required',
+      );
     }
     return this.roleRepo.save(this.roleRepo.create(template));
   }
