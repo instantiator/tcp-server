@@ -4,10 +4,10 @@ import {
   LcpAgent,
   LcpCompany,
   LcpRole,
+  makeTypeOrmConfig,
 } from '@lcp/shared';
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigModule } from '@nestjs/config';
 import { configSchema } from './config/config.schema';
 import { HealthModule } from './health/health.module';
 import { AgentWorkerModule } from './worker/agent-worker.module';
@@ -24,35 +24,13 @@ import { AgentWorkerModule } from './worker/agent-worker.module';
       validationSchema: configSchema,
       validationOptions: { abortEarly: true },
     }),
-    TypeOrmModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => {
-        const url = config.get<string>('DATABASE_URL') ?? '';
-        if (!url || url.startsWith('sqlite')) {
-          return {
-            type: 'better-sqlite3',
-            database: ':memory:',
-            entities: [
-              LcpCompany,
-              LcpRole,
-              LcpAgent,
-              AuditEvent,
-              KnowledgeChunk,
-            ],
-            synchronize: true,
-          };
-        }
-        return {
-          type: 'postgres',
-          url,
-          entities: [LcpCompany, LcpRole, LcpAgent, AuditEvent, KnowledgeChunk],
-          // Migrations are run by lcp-server on startup; lcp-agent only reads/writes
-          synchronize: false,
-          migrationsRun: false,
-        };
-      },
-    }),
+    makeTypeOrmConfig([
+      LcpCompany,
+      LcpRole,
+      LcpAgent,
+      AuditEvent,
+      KnowledgeChunk,
+    ]),
     HealthModule,
     AgentWorkerModule,
   ],

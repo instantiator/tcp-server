@@ -6,6 +6,7 @@ import {
   Index,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { VersionedEntity } from './VersionedEntity';
 
 /** Lifecycle states for an inter-agent consultation. */
 export type ConsultationStatus = 'pending' | 'complete';
@@ -21,7 +22,7 @@ export type ConsultationStatus = 'pending' | 'complete';
 @Entity()
 @Index(['consultationAgentId'])
 @Index(['callingAgentId', 'status'])
-export class PendingConsultation {
+export class PendingConsultation extends VersionedEntity {
   /** @format uuid */
   @PrimaryGeneratedColumn('uuid')
   id!: UUID;

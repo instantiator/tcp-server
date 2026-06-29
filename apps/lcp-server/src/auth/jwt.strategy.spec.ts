@@ -17,7 +17,7 @@ jest.mock('passport-jwt', () => ({
   },
 }));
 
-// ── JwtStrategy ───────────────────────────────────────────────────────────────
+// JwtStrategy
 // We test validate() via prototype access to avoid triggering the OIDC discovery
 // closure inside the constructor. Constructor option assertions use a real instance
 // now that jwks-rsa and passport-jwt are safely mocked.

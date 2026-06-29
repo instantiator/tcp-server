@@ -12,8 +12,9 @@ import {
 } from '@aws-sdk/client-s3';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { AuditClientService } from '../audit/audit-client.service';
+import { AuditClientService } from '@lcp/shared';
 import { storagePrompts } from '../storage-prompts';
+import { storageToolDescriptions } from '../storage-tool-descriptions';
 
 /** Shape of a single entry returned by list/search tools. */
 interface FileEntry {
@@ -110,7 +111,7 @@ export class StorageToolsService {
     return server;
   }
 
-  // ─── Tool handlers (public for testability) ───────────────────────────────
+  // Tool handlers (public for testability)
 
   async listFiles(prefix?: string): Promise<ToolResult> {
     const command = new ListObjectsV2Command({
@@ -351,7 +352,7 @@ export class StorageToolsService {
     };
   }
 
-  // ─── Private helpers ──────────────────────────────────────────────────────
+  // Private helpers
 
   private validatePath(path: string, label = 'path'): string | null {
     if (!path || path.includes('..')) {
@@ -515,15 +516,12 @@ export class StorageToolsService {
     });
   }
 
-  // ─── Server registration ──────────────────────────────────────────────────
+  // Server registration
 
   private registerDescribeServer(server: McpServer): void {
     server.registerTool(
       'describe_server',
-      {
-        description:
-          'Returns an overview of the storage service and its tools.',
-      },
+      { description: storageToolDescriptions.describe_server },
       (): ToolResult => ({
         content: [{ type: 'text', text: storagePrompts.describe_server }],
       }),
@@ -534,8 +532,7 @@ export class StorageToolsService {
     server.registerTool(
       'describe_folder',
       {
-        description:
-          'Explains the purpose of a folder in the storage hierarchy.',
+        description: storageToolDescriptions.describe_folder,
         inputSchema: {
           path: z.string().describe('The folder path prefix to describe.'),
         },
@@ -572,7 +569,7 @@ export class StorageToolsService {
     server.registerTool(
       'list_files',
       {
-        description: 'Lists files under a path prefix in the object store.',
+        description: storageToolDescriptions.list_files,
         inputSchema: {
           path: z
             .string()
@@ -588,7 +585,7 @@ export class StorageToolsService {
     server.registerTool(
       'read_file',
       {
-        description: 'Reads the text content of a file from the object store.',
+        description: storageToolDescriptions.read_file,
         inputSchema: { path: z.string().describe('The object key to read.') },
       },
       ({ path }) => this.readFile(path),
@@ -599,8 +596,7 @@ export class StorageToolsService {
     server.registerTool(
       'write_file',
       {
-        description:
-          'Creates a file in the object store. Set overwrite: true to replace an existing file.',
+        description: storageToolDescriptions.write_file,
         inputSchema: {
           path: z.string().describe('The object key to write.'),
           content: z.string().describe('The text content to write.'),
@@ -619,8 +615,7 @@ export class StorageToolsService {
     server.registerTool(
       'delete_file',
       {
-        description:
-          'Soft-deletes a file by moving it to the _deleted/ prefix. Use restore_file to undo.',
+        description: storageToolDescriptions.delete_file,
         inputSchema: {
           path: z.string().describe('The object key to delete.'),
         },
@@ -633,8 +628,7 @@ export class StorageToolsService {
     server.registerTool(
       'restore_file',
       {
-        description:
-          'Restores a soft-deleted file from the _deleted/ prefix back to its original path.',
+        description: storageToolDescriptions.restore_file,
         inputSchema: {
           path: z.string().describe('The original object key to restore.'),
         },
@@ -647,7 +641,7 @@ export class StorageToolsService {
     server.registerTool(
       'search_files',
       {
-        description: 'Lists files matching a glob pattern under a path prefix.',
+        description: storageToolDescriptions.search_files,
         inputSchema: {
           prefix: z
             .string()
@@ -669,8 +663,7 @@ export class StorageToolsService {
     server.registerTool(
       'get_file_properties',
       {
-        description:
-          'Returns metadata for a file: size, content type, last modified, and whether it exists.',
+        description: storageToolDescriptions.get_file_properties,
         inputSchema: {
           path: z.string().describe('The object key to inspect.'),
         },
@@ -683,8 +676,7 @@ export class StorageToolsService {
     server.registerTool(
       'copy_file',
       {
-        description:
-          'Copies a file to a new path, leaving the original in place.',
+        description: storageToolDescriptions.copy_file,
         inputSchema: {
           source: z.string().describe('The source object key.'),
           destination: z.string().describe('The destination object key.'),
@@ -698,8 +690,7 @@ export class StorageToolsService {
     server.registerTool(
       'move_file',
       {
-        description:
-          'Moves (renames) a file to a new path, removing the original.',
+        description: storageToolDescriptions.move_file,
         inputSchema: {
           source: z.string().describe('The source object key.'),
           destination: z.string().describe('The destination object key.'),
@@ -713,8 +704,7 @@ export class StorageToolsService {
     server.registerTool(
       'get_file_summary',
       {
-        description:
-          'Returns a structural summary of a file without reading its full content: headings, top-level keys, or top-level declarations depending on format.',
+        description: storageToolDescriptions.get_file_summary,
         inputSchema: {
           path: z.string().describe('The object key to summarise.'),
         },

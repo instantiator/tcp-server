@@ -1,0 +1,15 @@
+{
+  // Tool descriptions for lcp-mcp-storage
+  "describe_server": "Returns an overview of the storage service and its tools.",
+  "describe_folder": "Explains the purpose of a folder in the storage hierarchy.",
+  "list_files": "Lists files under a path prefix in the object store.",
+  "read_file": "Reads the text content of a file from the object store.",
+  "write_file": "Creates a file in the object store. Set overwrite: true to replace an existing file.",
+  "delete_file": "Soft-deletes a file by moving it to the _deleted/ prefix. Use restore_file to undo.",
+  "restore_file": "Restores a soft-deleted file from the _deleted/ prefix back to its original path.",
+  "search_files": "Lists files matching a glob pattern under a path prefix.",
+  "get_file_properties": "Returns metadata for a file: size, content type, last modified, and whether it exists.",
+  "copy_file": "Copies a file to a new path, leaving the original in place.",
+  "move_file": "Moves (renames) a file to a new path, removing the original.",
+  "get_file_summary": "Returns a structural summary of a file without reading its full content: headings, top-level keys, or top-level declarations depending on format."
+}

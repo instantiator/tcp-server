@@ -7,7 +7,7 @@ import {
   ListObjectsV2Command,
   S3Client,
 } from '@aws-sdk/client-s3';
-import { AuditClientService } from '../../../apps/lcp-mcp-storage/src/audit/audit-client.service';
+import { AuditClientService } from '@lcp/shared';
 import { StorageToolsService } from '../../../apps/lcp-mcp-storage/src/mcp/storage-tools.service';
 
 // Requires MINIO_ENDPOINT pointing to a running MinIO instance.

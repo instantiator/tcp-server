@@ -53,7 +53,10 @@
       "sourceRoot": "apps/lcp-mcp-storage/src",
       "compilerOptions": {
         "tsConfigPath": "apps/lcp-mcp-storage/tsconfig.app.json",
-        "assets": [{ "include": "prompts.jsonc", "outDir": "dist/apps/lcp-mcp-storage" }]
+        "assets": [
+          { "include": "prompts.jsonc", "outDir": "dist/apps/lcp-mcp-storage" },
+          { "include": "tools.jsonc", "outDir": "dist/apps/lcp-mcp-storage" }
+        ]
       }
     },
     "lcp-mcp-memory": {
@@ -63,7 +66,10 @@
       "sourceRoot": "apps/lcp-mcp-memory/src",
       "compilerOptions": {
         "tsConfigPath": "apps/lcp-mcp-memory/tsconfig.app.json",
-        "assets": [{ "include": "prompts.jsonc", "outDir": "dist/apps/lcp-mcp-memory" }]
+        "assets": [
+          { "include": "prompts.jsonc", "outDir": "dist/apps/lcp-mcp-memory" },
+          { "include": "tools.jsonc", "outDir": "dist/apps/lcp-mcp-memory" }
+        ]
       }
     },
     "lcp-mcp-interactions": {
@@ -73,7 +79,10 @@
       "sourceRoot": "apps/lcp-mcp-interactions/src",
       "compilerOptions": {
         "tsConfigPath": "apps/lcp-mcp-interactions/tsconfig.app.json",
-        "assets": [{ "include": "prompts.jsonc", "outDir": "dist/apps/lcp-mcp-interactions" }]
+        "assets": [
+          { "include": "prompts.jsonc", "outDir": "dist/apps/lcp-mcp-interactions" },
+          { "include": "tools.jsonc", "outDir": "dist/apps/lcp-mcp-interactions" }
+        ]
       }
     }
   }

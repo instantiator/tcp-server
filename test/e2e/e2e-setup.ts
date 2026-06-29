@@ -11,3 +11,6 @@ process.env.OIDC_CLIENT_SECRET ||= 'test-secret';
 // Skip OIDC discovery fetch at startup — jwks-rsa is mocked so the URI is irrelevant.
 process.env.OIDC_JWKS_URI ||= 'http://localhost:8080/stub-jwks';
 process.env.INTERNAL_API_KEY ||= 'e2e-test-internal-key';
+// Stubs for services that communicate with other LCP services.
+process.env.LCP_SERVER_URL ||= 'http://localhost:3000';
+process.env.LCP_STORAGE_URL ||= 'http://localhost:3010';

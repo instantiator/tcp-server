@@ -16,4 +16,8 @@ export const configSchema = Joi.object({
   MCP_INTERACTIONS_URL: Joi.string().uri().optional(),
   LCP_SERVER_URL: Joi.string().uri().required(),
   INTERNAL_API_KEY: Joi.string().required(),
+  /** Overrides {@link DEFAULT_AGENT_ITERATIONS} when set. Per-role and per-company runConfig take precedence. */
+  AGENT_ITERATIONS: Joi.number().integer().positive().optional(),
+  /** Overrides {@link DEFAULT_AGENT_LOOP_TIMEOUT_MS} when set. Per-role and per-company runConfig take precedence. */
+  AGENT_LOOP_TIMEOUT_MS: Joi.number().integer().positive().optional(),
 });

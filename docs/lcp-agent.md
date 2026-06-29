@@ -194,21 +194,25 @@ After each storage `on_tool_end`, the tracker is persisted to `LcpAgent.storageC
 
 Every agent run produces `AuditEvent` rows in the `audit_event` table:
 
-| Event type              | When                                                                    |
-| ----------------------- | ----------------------------------------------------------------------- |
-| `llm_request`           | LLM invocation starts                                                   |
-| `llm_response`          | LLM invocation completes                                                |
-| `tool_call`             | MCP tool is invoked                                                     |
-| `tool_result`           | MCP tool returns a result                                               |
-| `state_change`          | Agent status changes (e.g. failed with reason)                          |
-| `agent_loop_completion` | Agent loop ends via `complete_task` — structured summary + action log   |
+| Event type              | When                                                                  |
+| ----------------------- | --------------------------------------------------------------------- |
+| `llm_request`           | LLM invocation starts                                                 |
+| `llm_response`          | LLM invocation completes                                              |
+| `tool_call`             | MCP tool is invoked                                                   |
+| `tool_result`           | MCP tool returns a result                                             |
+| `state_change`          | Agent status changes (e.g. failed with reason)                        |
+| `agent_loop_completion` | Agent loop ends via `complete_task` — structured summary + action log |
 
 The `agent_loop_completion` payload is an `AgentLoopCompletionSummary`:
 
 ```json
 {
   "summary": "The agent analysed the renewable energy market and produced report.md.",
-  "actions": ["Read file: context/brief.md", "Wrote file: docs/report.md", "Submitted task completion"],
+  "actions": [
+    "Read file: context/brief.md",
+    "Wrote file: docs/report.md",
+    "Submitted task completion"
+  ],
   "storage": {
     "created": ["docs/report.md"],
     "modified": [],

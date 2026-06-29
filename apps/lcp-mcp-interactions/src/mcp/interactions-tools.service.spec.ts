@@ -1,7 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { randomUUID } from 'crypto';
-import { AuditClientService } from '../audit/audit-client.service';
+import { AuditClientService } from '@lcp/shared';
 import { InteractionsToolsService } from './interactions-tools.service';
 
 jest.mock('axios');

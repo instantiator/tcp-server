@@ -3,8 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import axios from 'axios';
 import { z } from 'zod';
-import { AuditClientService } from '../audit/audit-client.service';
+import { AuditClientService } from '@lcp/shared';
 import { interactionPrompts } from '../interactions-prompts';
+import { interactionToolDescriptions } from '../interactions-tool-descriptions';
 
 /** Replaces `{{key}}` placeholders in a template string. */
 function interpolate(template: string, vars: Record<string, string>): string {
@@ -73,10 +74,7 @@ export class InteractionsToolsService {
   private registerDescribeServer(server: McpServer): void {
     server.registerTool(
       'describe_server',
-      {
-        description:
-          'Returns an overview of the interactions service and its tools.',
-      },
+      { description: interactionToolDescriptions.describe_server },
       (): ToolResult => ok(interactionPrompts.describe_server),
     );
   }
@@ -85,8 +83,7 @@ export class InteractionsToolsService {
     server.registerTool(
       'list_available_users',
       {
-        description:
-          'Lists the human users registered in the company along with their roles and knowledge domains.',
+        description: interactionToolDescriptions.list_available_users,
         inputSchema: {
           companyId: z.uuid().describe('The company UUID.'),
         },
@@ -110,8 +107,7 @@ export class InteractionsToolsService {
     server.registerTool(
       'list_available_roles',
       {
-        description:
-          'Lists the agent roles defined in the company that can be consulted.',
+        description: interactionToolDescriptions.list_available_roles,
         inputSchema: {
           companyId: z.uuid().describe('The company UUID.'),
         },
@@ -135,11 +131,7 @@ export class InteractionsToolsService {
     server.registerTool(
       'request_user_input',
       {
-        description: [
-          'Pauses the current agent and submits a question to the relevant human users in the company.',
-          'The agent will be automatically resumed once a user replies.',
-          'Use this when you need information or a decision that only a human can provide.',
-        ].join(' '),
+        description: interactionToolDescriptions.request_user_input,
         inputSchema: {
           agentId: z.uuid().describe('The calling agent UUID.'),
           companyId: z.uuid().describe('The company UUID.'),
@@ -180,11 +172,7 @@ export class InteractionsToolsService {
     server.registerTool(
       'request_agent_consultation',
       {
-        description: [
-          'Pauses the current agent and dispatches a consultation request to another agent role.',
-          "The agent will be automatically resumed with the consulting agent's response once it completes.",
-          'Use this when another role has specialist knowledge needed to proceed.',
-        ].join(' '),
+        description: interactionToolDescriptions.request_agent_consultation,
         inputSchema: {
           agentId: z.uuid().describe('The calling agent UUID.'),
           companyId: z.uuid().describe('The company UUID.'),
@@ -243,14 +231,7 @@ export class InteractionsToolsService {
     server.registerTool(
       'complete_task',
       {
-        description: [
-          'Marks the current agent task as complete with a final answer.',
-          'Call this as your last action, after all work is done and any output files have been written.',
-          'The finalAnswer should be a concise, human-readable summary of what was accomplished.',
-          'If the task produced output files, list their paths in outputFiles.',
-          'Each path will be verified to exist in shared storage before the task is marked complete.',
-          'Omit outputFiles if the task produces no file output.',
-        ].join(' '),
+        description: interactionToolDescriptions.complete_task,
         inputSchema: {
           agentId: z.uuid().describe('The calling agent UUID.'),
           companyId: z.uuid().describe('The company UUID.'),

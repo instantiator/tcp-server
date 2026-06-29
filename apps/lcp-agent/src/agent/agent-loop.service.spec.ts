@@ -6,6 +6,7 @@ import {
 import { MessagesAnnotation, StateGraph } from '@langchain/langgraph';
 import {
   AgentStatus,
+  AuditClientService,
   AuditEventType,
   LcpAgent,
   LcpCompany,
@@ -18,7 +19,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
-import { AuditClientService } from '../audit/audit-client.service';
 import * as factory from '../llm/llm-factory';
 import { McpClientService } from '../mcp/mcp-client.service';
 import { AgentRagService } from '../rag/agent-rag.service';
@@ -406,7 +406,7 @@ describe('AgentLoopService', () => {
       );
     });
 
-    it('swallows LLM errors during summary generation without failing the run', async () => {
+    it('records a structured fallback summary when LLM summary generation fails', async () => {
       jest.spyOn(factory, 'buildChatModel').mockReturnValue({
         invoke: jest.fn().mockRejectedValue(new Error('LLM timeout')),
       } as unknown as ReturnType<typeof factory.buildChatModel>);
@@ -419,12 +419,19 @@ describe('AgentLoopService', () => {
         .mockResolvedValueOnce({ ...agent, status: AgentStatus.Completed });
 
       await expect(service.run(agent.id)).resolves.not.toThrow();
-      expect(auditRecord).not.toHaveBeenCalledWith(
+
+      // Fallback summary is always recorded even when the LLM call fails
+      expect(auditRecord).toHaveBeenCalledWith(
         expect.anything(),
         expect.anything(),
-        expect.anything(),
+        agent.id,
         AuditEventType.AgentLoopCompletion,
-        expect.anything(),
+        expect.objectContaining({
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          summary: expect.stringMatching(
+            /Completed task:.*no actions recorded/,
+          ),
+        }),
       );
     });
 

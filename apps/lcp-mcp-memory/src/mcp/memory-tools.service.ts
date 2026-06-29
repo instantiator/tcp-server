@@ -6,8 +6,9 @@ import { UUID } from 'crypto';
 import pgvector from 'pgvector';
 import { DataSource, Repository } from 'typeorm';
 import { z } from 'zod';
-import { AuditClientService } from '../audit/audit-client.service';
+import { AuditClientService } from '@lcp/shared';
 import { memoryPrompts } from '../memory-prompts';
+import { memoryToolDescriptions } from '../memory-tool-descriptions';
 
 /** Replaces `{{key}}` placeholders in a template string. */
 function interpolate(template: string, vars: Record<string, string>): string {
@@ -61,9 +62,7 @@ export class MemoryToolsService {
   private registerDescribeServer(server: McpServer): void {
     server.registerTool(
       'describe_server',
-      {
-        description: 'Returns an overview of the memory service and its tools.',
-      },
+      { description: memoryToolDescriptions.describe_server },
       (): ToolResult => ({
         content: [
           {
@@ -79,8 +78,7 @@ export class MemoryToolsService {
     server.registerTool(
       'recall',
       {
-        description:
-          'Search both episodic memory and the knowledge base by semantic similarity.',
+        description: memoryToolDescriptions.recall,
         inputSchema: {
           roleId: z.uuid().describe('The role ID whose memory to search.'),
           companyId: z
@@ -112,7 +110,7 @@ export class MemoryToolsService {
     server.registerTool(
       'remember',
       {
-        description: 'Store an episodic memory entry for later recall.',
+        description: memoryToolDescriptions.remember,
         inputSchema: {
           roleId: z.uuid().describe('The role ID to store this memory under.'),
           companyId: z
@@ -159,8 +157,7 @@ export class MemoryToolsService {
     server.registerTool(
       'search_knowledge',
       {
-        description:
-          'Search the role knowledge base only by semantic similarity.',
+        description: memoryToolDescriptions.search_knowledge,
         inputSchema: {
           roleId: z
             .uuid()

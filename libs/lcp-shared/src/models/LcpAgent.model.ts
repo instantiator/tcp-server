@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { LcpCompany } from './LcpCompany.model';
 import { LcpRole } from './LcpRole.model';
+import { VersionedEntity } from './VersionedEntity';
 
 /** Lifecycle states for an agent instance. */
 export enum AgentStatus {
@@ -34,7 +35,7 @@ export enum AgentStatus {
  * to its checkpoint in the PostgreSQL checkpoint store, enabling resumability.
  */
 @Entity()
-export class LcpAgent {
+export class LcpAgent extends VersionedEntity {
   /**
    * Auto-generated primary key. Also used as the LangGraph `thread_id`.
    * @format uuid

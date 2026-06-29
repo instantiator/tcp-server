@@ -6,7 +6,7 @@ import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import { Queue } from 'bullmq';
 import { Repository } from 'typeorm';
 import { AgentLoopService } from '../../../apps/lcp-agent/src/agent/agent-loop.service';
-import { AuditClientService } from '../../../apps/lcp-agent/src/audit/audit-client.service';
+import { AuditClientService } from '@lcp/shared';
 import * as factory from '../../../apps/lcp-agent/src/llm/llm-factory';
 import { McpClientService } from '../../../apps/lcp-agent/src/mcp/mcp-client.service';
 import { AgentRagService } from '../../../apps/lcp-agent/src/rag/agent-rag.service';

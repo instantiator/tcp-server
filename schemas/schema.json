@@ -74,6 +74,21 @@
       ],
       "type": "object"
     },
+    "AgentRunConfig": {
+      "additionalProperties": false,
+      "description": "Optional per-role or per-company overrides for agent loop resource limits.\n\nValues are applied in precedence order:  {@link  LcpRole.runConfig  }  →  {@link  LcpCompany.runConfig  }  → environment variables → code defaults. Any field left undefined falls through to the next level.",
+      "properties": {
+        "maxIterations": {
+          "description": "Maximum number of LLM invocations before the run is cancelled as failed.",
+          "type": "number"
+        },
+        "timeoutMs": {
+          "description": "Wall-clock timeout in milliseconds before the run is cancelled as failed.",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
     "AgentStatus": {
       "description": "Lifecycle states for an agent instance.",
       "enum": [
@@ -321,20 +336,24 @@
         "status": {
           "$ref": "#/definitions/ConversationStatus",
           "description": "Current lifecycle state."
+        },
+        "version": {
+          "type": "number"
         }
       },
       "required": [
-        "id",
-        "slug",
-        "companyId",
-        "roleName",
-        "roleId",
         "agentId",
-        "question",
+        "companyId",
         "context",
-        "status",
+        "createdAt",
+        "id",
+        "question",
+        "roleId",
+        "roleName",
         "routedToIdentifiers",
-        "createdAt"
+        "slug",
+        "status",
+        "version"
       ],
       "type": "object"
     },
@@ -625,20 +644,24 @@
           "description": "Timestamp of the last status or field update.",
           "format": "date-time",
           "type": "string"
+        },
+        "version": {
+          "type": "number"
         }
       },
       "required": [
-        "id",
         "company",
         "companyId",
+        "createdAt",
+        "id",
+        "initialPrompt",
+        "output",
         "role",
         "roleId",
         "status",
         "threadId",
-        "initialPrompt",
-        "createdAt",
-        "output",
-        "updatedAt"
+        "updatedAt",
+        "version"
       ],
       "type": "object"
     },
@@ -689,6 +712,17 @@
           "description": "Human-readable display name for the company.",
           "minLength": 1,
           "type": "string"
+        },
+        "runConfig": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/AgentRunConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional company-wide agent-loop resource overrides. Applied when the running role has no  {@link  LcpRole.runConfig  }  set. See  {@link  AgentRunConfig }  for available fields."
         },
         "slug": {
           "description": "URL-safe identifier used in API paths and agent namespacing. Must be globally unique across all companies.",
@@ -767,6 +801,17 @@
             "string",
             "null"
           ]
+        },
+        "runConfig": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/AgentRunConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional agent-loop resource overrides for agents running in this role. Takes precedence over  {@link  LcpCompany.runConfig }  and environment variables. See  {@link  AgentRunConfig }  for available fields."
         },
         "systemPromptTemplate": {
           "description": "Handlebars-style prompt template injected as the system message at agent start. Available variables: `{{name}}`, `{{description}}`, `{{date}}`.",
@@ -868,21 +913,38 @@
         "status": {
           "$ref": "#/definitions/ConsultationStatus",
           "description": "Current state of the consultation."
+        },
+        "version": {
+          "type": "number"
         }
       },
       "required": [
-        "id",
         "callingAgentId",
-        "consultationAgentId",
         "companyId",
-        "status",
+        "consultationAgentId",
+        "createdAt",
+        "id",
         "result",
-        "createdAt"
+        "status",
+        "version"
       ],
       "type": "object"
     },
     "UUID": {
       "type": "string"
+    },
+    "VersionedEntity": {
+      "additionalProperties": false,
+      "description": "Abstract base for entities that require optimistic concurrency control.\n\nTypeORM increments `version` on every `save()` and throws `OptimisticLockVersionMismatchError` when a stale version is detected, preventing lost updates under concurrent writes. Callers should wrap writes in  {@link  withOptimisticRetry  } .\n\nApply to entities with concurrent write patterns: multiple BullMQ workers, HTTP endpoints, or background tasks that can race on the same row.",
+      "properties": {
+        "version": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
     },
     "seedCompany": {
       "$comment": "() =>undefined"

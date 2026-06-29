@@ -1,5 +1,6 @@
 import type { UUID } from 'crypto';
 import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import type { AgentRunConfig } from './AgentRunConfig.model';
 import { LcpCompany } from './LcpCompany.model';
 import type { LlmConfig } from './LlmConfig.model';
 
@@ -81,6 +82,14 @@ export class LcpRole {
    */
   @Column({ type: 'jsonb', default: [] })
   mcpServerList!: string[];
+
+  /**
+   * Optional agent-loop resource overrides for agents running in this role.
+   * Takes precedence over {@link LcpCompany.runConfig} and environment variables.
+   * See {@link AgentRunConfig} for available fields.
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  runConfig?: AgentRunConfig | null;
 
   /**
    * Monotonically incrementing counter used to generate unique {@link Conversation} slugs.

@@ -70,14 +70,26 @@ libs/
   lcp-shared/
     src/
       models/                # TypeORM entities (shared between lcp-server and lcp-agent)
+      audit/                 # Shared AuditClientService (used by all four services)
+      db/                    # makeTypeOrmConfig factory + optimistic-retry helper
+      mcp/                   # BaseMcpController abstract base class
+      llm/                   # buildChatModel LLM provider factory
+      rag/                   # RAG retrieval helpers
       index.ts               # Re-exports all shared code
     tsconfig.lib.json
 test/
   api/                       # API contract tests — authenticated HTTP round-trips (need docker compose up --profile auth)
-  e2e/                       # E2E tests — HTTP API via supertest (need Docker)
+  e2e/
+    lcp-server/              # lcp-server E2E specs (company-role, agent, model, users, audit, etc.)
+    lcp-agent/               # lcp-agent health E2E spec
+    lcp-mcp-interactions/    # lcp-mcp-interactions health + MCP protocol E2E specs
+    lcp-mcp-memory/          # lcp-mcp-memory health + MCP protocol E2E specs (skipped without Postgres)
+    lcp-mcp-storage/         # lcp-mcp-storage health + MCP protocol E2E specs
+    helpers/                 # Shared E2E utilities (test-jwt helper)
   integration/
     lcp-server/              # lcp-server service connectivity tests (need Docker)
     lcp-agent/               # lcp-agent service connectivity tests (need Docker)
+    lcp-shared/              # makeTypeOrmConfig integration test (need Docker for Postgres path)
   smoke/                     # Full-stack health checks (need docker compose up --profile auth)
   jest-api.json              # Jest config for API tests
   jest-e2e.json              # Jest config for E2E tests
@@ -133,7 +145,8 @@ npm run migration:revert      # Revert last migration
 
 ## Key conventions
 
-- **Entities in `libs/lcp-shared/src/models/`** double as TypeORM entities and JSON Schema sources. Annotate with TSDoc validation tags (`@format`, `@minLength`, etc.) so the generated schema is accurate. Import as `@lcp/shared` from any app.
+- **`libs/lcp-shared`** is the shared library imported as `@lcp/shared` from any app. It exports: TypeORM entities (`models/`), `AuditClientService` (`audit/`), `makeTypeOrmConfig` + `withOptimisticRetry` (`db/`), `BaseMcpController` (`mcp/`), and `buildChatModel` (`llm/`).
+- **Entities in `libs/lcp-shared/src/models/`** double as TypeORM entities and JSON Schema sources. Annotate with TSDoc validation tags (`@format`, `@minLength`, etc.) so the generated schema is accurate.
 - **`schemas/schema.json`** and **`docs/licenses.md`** are generated artefacts — never edit them directly; regenerate via `npm run build`.
 - **Unit tests** (`.spec.ts`) use `better-sqlite3` in-memory; wire TypeORM directly in `Test.createTestingModule`, never through `AppModule`.
 - **E2E tests** use `AppModule` with SQLite fallback (env vars set in `test/e2e-setup.ts`). Pass a real `DATABASE_URL` env var to run against PostgreSQL instead.

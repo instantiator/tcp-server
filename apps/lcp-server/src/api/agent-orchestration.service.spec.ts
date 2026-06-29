@@ -29,6 +29,7 @@ function makeAgent(overrides: Partial<LcpAgent> = {}): LcpAgent {
     updatedAt: new Date(),
     company: {} as never,
     role: {} as never,
+    version: 1,
     ...overrides,
   };
 }

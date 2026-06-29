@@ -6,6 +6,7 @@ import {
   Index,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { VersionedEntity } from './VersionedEntity';
 
 /** Lifecycle state of a {@link Conversation}. */
 export type ConversationStatus = 'awaiting_user' | 'closed';
@@ -19,7 +20,7 @@ export type ConversationStatus = 'awaiting_user' | 'closed';
  */
 @Entity()
 @Index(['companyId', 'status'])
-export class Conversation {
+export class Conversation extends VersionedEntity {
   /**
    * Auto-generated primary key.
    * @format uuid
