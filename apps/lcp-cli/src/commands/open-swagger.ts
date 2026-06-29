@@ -12,16 +12,23 @@ const SERVICES = [
 
 type Service = (typeof SERVICES)[number];
 
-/** Default base URLs keyed by service name, matching the smoke-test env-var conventions. */
+/**
+ * Browser-accessible base URLs keyed by service name.
+ *
+ * Uses `LCP_*_BROWSER_URL` env vars rather than `LCP_*_URL`, which are
+ * typically set to Docker-internal hostnames (e.g. `http://lcp-server:3000`)
+ * and are not reachable from the host browser.
+ */
 const DEFAULT_URLS: Record<Service, string> = {
-  'lcp-server': process.env['LCP_SERVER_URL'] ?? 'http://localhost:3000',
-  'lcp-agent': process.env['LCP_AGENT_URL'] ?? 'http://localhost:3001',
+  'lcp-server':
+    process.env['LCP_SERVER_BROWSER_URL'] ?? 'http://localhost:3000',
+  'lcp-agent': process.env['LCP_AGENT_BROWSER_URL'] ?? 'http://localhost:3001',
   'lcp-mcp-storage':
-    process.env['LCP_MCP_STORAGE_URL'] ?? 'http://localhost:3010',
+    process.env['LCP_MCP_STORAGE_BROWSER_URL'] ?? 'http://localhost:3010',
   'lcp-mcp-memory':
-    process.env['LCP_MCP_MEMORY_URL'] ?? 'http://localhost:3011',
+    process.env['LCP_MCP_MEMORY_BROWSER_URL'] ?? 'http://localhost:3011',
   'lcp-mcp-interactions':
-    process.env['LCP_MCP_INTERACTIONS_URL'] ?? 'http://localhost:3012',
+    process.env['LCP_MCP_INTERACTIONS_BROWSER_URL'] ?? 'http://localhost:3012',
 };
 
 /**
