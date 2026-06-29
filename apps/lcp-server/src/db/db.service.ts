@@ -6,14 +6,10 @@ import {
   LcpCompany,
   LcpRole,
 } from '@lcp/shared';
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
-import { DeepPartial, IsNull, Repository } from 'typeorm';
+import { DeepPartial, Repository } from 'typeorm';
 import { LcpAgentTemplate } from '../templates/LcpAgentTemplate';
 import { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
 import { LcpRoleTemplate } from '../templates/LcpRoleTemplate';
@@ -85,19 +81,6 @@ export class DbService {
         }
       : company;
 
-    // Guard: if llmDefault is being removed while roles rely on it, reject.
-    // POST (slug-replace) is exempt — it cascade-deletes all roles first.
-    if (!replace && !merged.llmDefault && merged.id) {
-      const orphanCount = await this.roleRepo.count({
-        where: { companyId: merged.id, llmConfig: IsNull() },
-      });
-      if (orphanCount > 0) {
-        throw new BadRequestException(
-          `Cannot remove llmDefault: ${orphanCount} role(s) in this company have no llmConfig`,
-        );
-      }
-    }
-
     return this.companyRepo.save(this.companyRepo.create(merged));
   }
 
@@ -122,11 +105,6 @@ export class DbService {
     });
     if (!company) {
       throw new NotFoundException(`Company ${template.companyId} not found`);
-    }
-    if (!template.llmConfig && !company.llmDefault) {
-      throw new BadRequestException(
-        'Role has no llmConfig and the company has no llmDefault — at least one is required',
-      );
     }
     return this.roleRepo.save(this.roleRepo.create(template));
   }

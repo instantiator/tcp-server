@@ -2,6 +2,8 @@ export * from './audit/audit-client.service';
 export * from './db/optimistic-retry';
 export * from './db/typeorm-config.factory';
 export * from './mcp/base-mcp.controller';
+export * from './mcp/mcp-client.service';
+export * from './mcp/mcp-registry';
 export * from './config/resolve-run-config';
 export * from './models';
 export * from './llm/llm-factory';

@@ -33,7 +33,7 @@ program
     'Refresh token (renews an expired access token)',
   )
   .option(
-    '-e, --access-token-env-var <var>',
+    '-E, --access-token-env-var <var>',
     'Name of env var holding the token',
   )
   .option('-u, --username <user>', 'OIDC username')

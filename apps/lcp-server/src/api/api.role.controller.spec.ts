@@ -1,4 +1,4 @@
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { LcpRole } from '@lcp/shared';
 import { RoleController } from './api.role.controller';
@@ -66,22 +66,6 @@ describe('RoleController', () => {
           mcpServerList: [],
         }),
       ).rejects.toThrow(NotFoundException);
-    });
-
-    it('propagates BadRequestException when no llm config is available', async () => {
-      db.createRole.mockRejectedValue(
-        new BadRequestException('no llmConfig and no llmDefault'),
-      );
-      await expect(
-        controller.createRole({
-          companyId: randomUUID(),
-          name: 'broken',
-          description: 'No config.',
-          systemPromptTemplate: 'You are {{name}}.',
-          knowledgeDomains: [],
-          mcpServerList: [],
-        }),
-      ).rejects.toThrow(BadRequestException);
     });
   });
 

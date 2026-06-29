@@ -67,16 +67,16 @@ export class ContextBudgetService {
 
   /** Returns `true` when `tokens` exceeds {@link TRIGGER_PCT} of `windowSize`. */
   isOverBudget(tokens: number, windowSize: number): boolean {
-    return tokens / windowSize > this.TRIGGER_PCT;
+    return !!windowSize && tokens / windowSize > this.TRIGGER_PCT;
   }
 
   /** Returns `true` when `tokens` is at or below {@link TARGET_PCT} of `windowSize`. */
   isAtTarget(tokens: number, windowSize: number): boolean {
-    return tokens / windowSize <= this.TARGET_PCT;
+    return !!windowSize && tokens / windowSize <= this.TARGET_PCT;
   }
 
   /** Computes the percentage of the window consumed, rounded to one decimal place. */
   pct(tokens: number, windowSize: number): number {
-    return Math.round((tokens / windowSize) * 1000) / 10;
+    return windowSize ? Math.round((tokens / windowSize) * 1000) / 10 : 0;
   }
 }

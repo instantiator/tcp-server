@@ -5,7 +5,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [-h|--help] [-e|--env <path>] [--test-username <name>] [--test-password <pass>]
+Usage: $(basename "$0") [-h|--help] [-e|--env <path>] [--rebuild] [--test-username <name>] [--test-password <pass>]
 
 Start a full local development environment and configure it for first-time use.
 
@@ -20,6 +20,7 @@ Environment file precedence (first match wins):
 
 Options:
   -e, --env <path>          Environment file to use
+  --rebuild                 Force a Docker image rebuild (passes --build to docker compose up)
   --test-username <name>    Keycloak test user username (default: test)
   --test-password <pass>    Keycloak test user password (default: test)
   -h, --help                Show this help message and exit
@@ -29,6 +30,7 @@ EOF
 # Argument parsing
 
 ENV_FILE=""
+REBUILD=false
 TEST_USERNAME="test"
 TEST_PASSWORD="test"
 
@@ -38,6 +40,7 @@ while [[ $# -gt 0 ]]; do
     -e|--env)
       [[ -n "${2:-}" ]] || { echo "ERROR: --env requires a path" >&2; exit 1; }
       ENV_FILE="$2"; shift 2 ;;
+    --rebuild) REBUILD=true; shift ;;
     --test-username)
       [[ -n "${2:-}" ]] || { echo "ERROR: --test-username requires a value" >&2; exit 1; }
       TEST_USERNAME="$2"; shift 2 ;;
@@ -111,7 +114,11 @@ kc() { $DC exec -T keycloak /opt/keycloak/bin/kcadm.sh "$@"; }
 
 echo ""
 echo "Starting services..."
-$DC up -d
+if [[ "$REBUILD" = "true" ]]; then
+  $DC up -d --build
+else
+  $DC up -d
+fi
 
 # Keycloak starts slowly on first boot — allow up to 5 minutes.
 wait_for keycloak \

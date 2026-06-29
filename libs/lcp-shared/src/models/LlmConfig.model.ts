@@ -32,4 +32,10 @@ export interface LlmConfig {
    * Defaults to `8192` when absent.
    */
   contextWindow?: number;
+
+  /**
+   * Per-request timeout in milliseconds for LLM API calls.
+   * Defaults to 30 minutes when absent. Set higher for slow local models.
+   */
+  timeoutMs?: number;
 }

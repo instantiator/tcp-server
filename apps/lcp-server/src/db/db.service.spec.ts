@@ -6,7 +6,7 @@ import {
   LcpCompany,
   LcpRole,
 } from '@lcp/shared';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken, TypeOrmModule } from '@nestjs/typeorm';
 import { randomUUID, UUID } from 'crypto';
@@ -214,7 +214,7 @@ describe('DbService', () => {
       ).rejects.toThrow(QueryFailedError);
     });
 
-    it('rejects when removing llmDefault would leave roles without any config', async () => {
+    it('allows removing llmDefault even when roles have no llmConfig (env fallback covers)', async () => {
       const id = randomUUID();
       await dbService.setCompany(
         {
@@ -226,7 +226,6 @@ describe('DbService', () => {
         },
         false,
       );
-      // Create a role that relies on the company default (no llmConfig)
       await roleRepo.save(
         roleRepo.create({
           companyId: id,
@@ -235,7 +234,7 @@ describe('DbService', () => {
           systemPromptTemplate: 'You are {{name}}.',
         }),
       );
-      // Removing llmDefault must be rejected (pass null to signal explicit removal)
+      // Removing llmDefault must succeed — env fallback covers orphaned roles at runtime
       await expect(
         dbService.setCompany(
           {
@@ -247,7 +246,7 @@ describe('DbService', () => {
           },
           false,
         ),
-      ).rejects.toThrow(BadRequestException);
+      ).resolves.toBeDefined();
     });
 
     it('deep-merges llmDefault so a partial patch preserves other fields', async () => {
@@ -444,18 +443,18 @@ describe('DbService', () => {
       expect(role.llmConfig).toBeNull();
     });
 
-    it('rejects a role with no llmConfig when the company has no llmDefault', async () => {
+    it('accepts a role with no llmConfig when the company also has no llmDefault (env fallback covers)', async () => {
       const company = await seedCompany();
-      await expect(
-        dbService.createRole({
-          companyId: company.id,
-          name: 'broken',
-          description: 'No config.',
-          systemPromptTemplate: 'You are {{name}}.',
-          knowledgeDomains: [],
-          mcpServerList: [],
-        }),
-      ).rejects.toThrow(BadRequestException);
+      const role = await dbService.createRole({
+        companyId: company.id,
+        name: 'env-reliant',
+        description: 'Relies on env fallback.',
+        systemPromptTemplate: 'You are {{name}}.',
+        knowledgeDomains: [],
+        mcpServerList: [],
+      });
+      expect(role.id).toBeDefined();
+      expect(role.llmConfig).toBeNull();
     });
 
     it('throws NotFoundException when companyId does not exist in the database', async () => {

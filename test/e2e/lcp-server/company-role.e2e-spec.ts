@@ -191,13 +191,14 @@ describe('CompanyController (e2e)', () => {
       });
 
       describe('PUT /api/company/:id', () => {
-        it('returns 400 when removing llmDefault would leave a role without any config', async () => {
-          // Removing llmDefault must be rejected (null signals explicit removal)
+        it('returns 200 when removing llmDefault even when roles have no llmConfig (env fallback covers)', async () => {
+          // Removing llmDefault is now permitted — orphaned roles fall back to the
+          // environment-level LLM config (LLM_PROVIDER / LLM_MODEL) at runtime.
           await request(app.getHttpServer())
             .put(`/api/company/${company.id}`)
             .set('Authorization', `Bearer ${jwt}`)
             .send({ slug: 'llm-co', name: 'LLM Co', llmDefault: null })
-            .expect(400);
+            .expect(200);
         });
       });
     });
@@ -303,19 +304,21 @@ describe('RoleController (e2e)', () => {
           .expect(201);
       });
 
-      it('returns 400 when role has no llmConfig and company has no llmDefault', async () => {
+      it('returns 201 when role has no llmConfig and company has no llmDefault (env fallback covers)', async () => {
+        // The role can be created without any DB-level LLM config; the env fallback
+        // (LLM_PROVIDER / LLM_MODEL) is checked at runtime when a message is sent.
         await request(app.getHttpServer())
           .post('/api/role')
           .set('Authorization', `Bearer ${jwt}`)
           .send({
             companyId: company.id,
-            name: 'broken',
-            description: 'No config anywhere.',
+            name: 'env-reliant',
+            description: 'Relies on env fallback.',
             systemPromptTemplate: 'You are {{name}}.',
             knowledgeDomains: [],
             mcpServerList: [],
           })
-          .expect(400);
+          .expect(201);
       });
     });
   });

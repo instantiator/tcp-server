@@ -25,4 +25,16 @@ export const configSchema = Joi.object({
   LCP_MASK_API_KEYS: Joi.boolean().default(true),
   // Shared secret used to authenticate internal service-to-service calls (lcp-agent, MCP servers).
   INTERNAL_API_KEY: Joi.string().required(),
+  // Environment-level LLM fallback — used when neither a role's llmConfig nor a company's llmDefault is set.
+  // Both LLM_PROVIDER and LLM_MODEL must be present to activate the fallback; all other fields are optional.
+  // MCP server URLs — each optional; omit to disable that service.
+  MCP_STORAGE_URL: Joi.string().uri().empty('').optional(),
+  MCP_MEMORY_URL: Joi.string().uri().empty('').optional(),
+  MCP_INTERACTIONS_URL: Joi.string().uri().empty('').optional(),
+  LLM_PROVIDER: Joi.string().empty('').optional(),
+  LLM_MODEL: Joi.string().empty('').optional(),
+  LLM_BASE_URL: Joi.string().uri().empty('').optional(),
+  LLM_API_KEY: Joi.string().empty('').optional(),
+  LLM_CONTEXT_WINDOW: Joi.number().integer().positive().empty('').optional(),
+  LLM_TIMEOUT_MS: Joi.number().integer().positive().empty('').optional(),
 });

@@ -5,6 +5,7 @@ import {
   LcpAgent,
   LcpCompany,
   LcpRole,
+  McpClientService,
 } from '@lcp/shared';
 import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
@@ -74,6 +75,10 @@ describe('ChatService integration (stub LLM)', () => {
         {
           provide: RagRetrievalService,
           useValue: { retrieve: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: McpClientService,
+          useValue: { loadTools: jest.fn().mockResolvedValue([]) },
         },
       ],
     }).compile();

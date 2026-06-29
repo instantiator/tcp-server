@@ -116,11 +116,12 @@ export class AgentLoopService {
     }
 
     const company = await this.companyRepo.findOneBy({ id: agent.companyId });
-    const llmConfig = role.llmConfig ?? company?.llmDefault;
+    const llmConfig =
+      role.llmConfig ?? company?.llmDefault ?? resolveEnvLlmConfig(this.config);
 
     if (!llmConfig) {
       this.logger.error(
-        `No LLM config for agent ${agentId}: role has no llmConfig and company has no llmDefault`,
+        `No LLM config for agent ${agentId}: role has no llmConfig, company has no llmDefault, and no LLM env fallback is configured`,
       );
       await this.updateStatus(agent, AgentStatus.Failed);
       return;
@@ -193,10 +194,14 @@ export class AgentLoopService {
     replyContent?: string,
   ): Promise<void> {
     const mcpServerUrls = resolveMcpServerUrls(this.config);
-    const mcpTools = await this.mcp.loadTools(
-      role.mcpServerList ?? [],
-      mcpServerUrls,
-    );
+    // Default servers (all configured registry entries) are always included; role list adds extras.
+    const mcpServerNames = [
+      ...new Set([
+        ...Object.keys(mcpServerUrls),
+        ...(role.mcpServerList ?? []),
+      ]),
+    ];
+    const mcpTools = await this.mcp.loadTools(mcpServerNames, mcpServerUrls);
     const langchainTools = mcpTools.map((t) => t.tool);
 
     const model = buildChatModel(llmConfig);
@@ -436,10 +441,11 @@ export class AgentLoopService {
       ? new HumanMessage(buildRagMessage(ragChunks))
       : null;
 
+    const loadedServerNames = [...new Set(mcpTools.map((t) => t.serverName))];
     const servicesMessage =
-      mcpTools.length > 0
+      loadedServerNames.length > 0
         ? new HumanMessage(
-            buildServicesMessage(role.mcpServerList ?? [], mcpServerUrls),
+            buildServicesMessage(loadedServerNames, mcpServerUrls),
           )
         : null;
 
@@ -623,6 +629,25 @@ function buildRagMessage(
     )
     .join('\n\n---\n\n');
   return `${agentPrompts.rag_intro}\n\n${sections}`;
+}
+
+/**
+ * Builds an {@link LlmConfig} from environment variables as the last-resort
+ * fallback in the resolution chain (role → company → env → fail).
+ * Returns `null` when `LLM_PROVIDER` or `LLM_MODEL` are not set.
+ */
+function resolveEnvLlmConfig(config: ConfigService): LlmConfig | null {
+  const provider = config.get<string>('LLM_PROVIDER');
+  const model = config.get<string>('LLM_MODEL');
+  if (!provider || !model) return null;
+  return {
+    provider,
+    model,
+    baseUrl: config.get<string>('LLM_BASE_URL'),
+    apiKey: config.get<string>('LLM_API_KEY'),
+    contextWindow: config.get<number>('LLM_CONTEXT_WINDOW'),
+    timeoutMs: config.get<number>('LLM_TIMEOUT_MS'),
+  };
 }
 
 /**

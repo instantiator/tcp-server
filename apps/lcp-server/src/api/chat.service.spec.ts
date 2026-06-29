@@ -12,6 +12,7 @@ jest.mock('@langchain/langgraph', () => ({
   StateGraph: jest.fn().mockReturnValue({
     addNode: jest.fn().mockReturnThis(),
     addEdge: jest.fn().mockReturnThis(),
+    addConditionalEdges: jest.fn().mockReturnThis(),
     compile: jest.fn().mockReturnValue({
       invoke: jest.fn(),
       getState: jest.fn(),
@@ -20,6 +21,11 @@ jest.mock('@langchain/langgraph', () => ({
   }),
   MessagesAnnotation: { State: {} },
   END: 'END',
+}));
+
+jest.mock('@langchain/langgraph/prebuilt', () => ({
+  ToolNode: jest.fn(),
+  toolsCondition: jest.fn(),
 }));
 
 jest.mock('@langchain/langgraph-checkpoint-postgres', () => ({
@@ -33,7 +39,11 @@ jest.mock('@lcp/shared', () => {
     jest.requireActual<typeof import('@lcp/shared')>('@lcp/shared');
   return {
     ...actual,
-    buildChatModel: jest.fn().mockReturnValue({ invoke: jest.fn() }),
+    buildChatModel: jest.fn().mockReturnValue({
+      invoke: jest.fn(),
+      bindTools: jest.fn().mockReturnValue({ invoke: jest.fn() }),
+    }),
+    resolveMcpServerUrls: jest.fn().mockReturnValue({}),
   };
 });
 
@@ -111,6 +121,7 @@ describe('ChatService', () => {
   let contextManager: ContextManagerService;
   let agentEvents: AgentEventService;
   let ragRetrieval: { retrieve: jest.Mock };
+  let mcpClient: { loadTools: jest.Mock };
 
   beforeEach(() => {
     agentRepo = {
@@ -125,6 +136,8 @@ describe('ChatService', () => {
     };
     config = {
       getOrThrow: jest.fn().mockReturnValue('postgres://test'),
+      // Returns undefined for all LLM env vars by default (no env fallback active)
+      get: jest.fn().mockReturnValue(undefined),
     } as unknown as ConfigService;
 
     mockCheckpointer = {
@@ -160,6 +173,7 @@ describe('ChatService', () => {
     );
 
     ragRetrieval = { retrieve: jest.fn().mockResolvedValue([]) };
+    mcpClient = { loadTools: jest.fn().mockResolvedValue([]) };
 
     service = new ChatService(
       config,
@@ -167,6 +181,7 @@ describe('ChatService', () => {
       agentEvents,
       ragRetrieval as unknown as RagRetrievalService,
       auditService as unknown as AuditService,
+      mcpClient as never,
       agentRepo as never,
       roleRepo as never,
       companyRepo as never,
@@ -190,6 +205,38 @@ describe('ChatService', () => {
     await expect(service.sendMessage(randomUUID(), 'Hello')).rejects.toThrow(
       NotFoundException,
     );
+  });
+
+  it('throws NotFoundException when no LLM config is available from any source', async () => {
+    const agent = makeAgent({ threadId: null });
+    const role = makeRole({ llmConfig: null });
+    agentRepo.findOneBy.mockResolvedValue(agent);
+    roleRepo.findOneBy.mockResolvedValue(role);
+    companyRepo.findOneBy.mockResolvedValue({ llmDefault: null });
+    // config.get already returns undefined for all LLM vars (set in beforeEach)
+    await expect(service.sendMessage(agent.id, 'Hello')).rejects.toThrow(
+      NotFoundException,
+    );
+  });
+
+  it('uses env fallback LLM config when role and company have none', async () => {
+    const agent = makeAgent({ threadId: null });
+    const role = makeRole({ llmConfig: null });
+    agentRepo.findOneBy.mockResolvedValue(agent);
+    roleRepo.findOneBy.mockResolvedValue(role);
+    companyRepo.findOneBy.mockResolvedValue({ llmDefault: null });
+    (config.get as jest.Mock).mockImplementation((key: string) => {
+      if (key === 'LLM_PROVIDER') return 'lm-studio';
+      if (key === 'LLM_MODEL') return 'qwen3-5b';
+      if (key === 'LLM_BASE_URL') return 'http://localhost:1234/v1';
+      return undefined;
+    });
+
+    const aiMsg = new AIMessage('Response via env fallback.');
+    compiledGraph.invoke.mockResolvedValue({ messages: [aiMsg] });
+
+    const result = await service.sendMessage(agent.id, 'Hello');
+    expect(result.response).toBe('Response via env fallback.');
   });
 
   it('sends the first message with system prompt prepended', async () => {

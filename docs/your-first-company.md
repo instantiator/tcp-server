@@ -40,13 +40,19 @@ You should see a token returned - it _looks like_ a long string of random charac
 
 ## 1. Create a company
 
-### 1.1 Update `simple-company.json`
+### 1.1 LLM configuration
 
-`scripts/test-data/simple-company.json` is a sample company definition file.
+LLM configuration follows a three-level resolution chain at runtime:
 
-In the repo, it's set up to point to a local instance of LM Studio, but you can point it at any LLM provider. Update the `provider`, `baseUrl`, `model`, and `apiKey` values, and anything else you'd like to modify about the new company, and then create it with this invocation, using the `set-company` verb:
+1. **Role** — `llmConfig` on the role itself (highest priority)
+2. **Company** — `llmDefault` on the company (optional fallback)
+3. **Environment** — `LLM_PROVIDER` + `LLM_MODEL` in the server's env file (lowest priority)
+
+For a simple setup, set the `LLM_*` variables in your `.env` file and leave `llmDefault` off the company entirely. See `.env.example` for the available variables.
 
 ### 1.2 Create a new company
+
+`scripts/test-data/simple-company.json` is a minimal company definition with no LLM config — it relies on the environment-level fallback.
 
 ```bash
 cat scripts/test-data/simple-company.json | scripts/dev/lcp-cli.sh --username test --password test set-company
@@ -58,12 +64,6 @@ It should return a full instance of the company, _including its `id`_ - indicati
 {
   "name": "Test Company",
   "description": "A test company",
-  "llmDefault": {
-    "provider": "lm-studio",
-    "model": "qwen/qwen3.5-9b",
-    "baseUrl": "http://host.docker.internal:1234/v1",
-    "apiKey": "***"
-  },
   "id": "4ab6d5a6-a55c-4b62-b9b0-7fd85c490fd2",
   "slug": "test-company"
 }
@@ -107,7 +107,7 @@ cat scripts/test-data/chicken-assistant.json | scripts/dev/lcp-cli.sh --username
 List the roles available with the `list-roles` verb:
 
 ```bash
-cat scripts/test-data/chicken-assistant.json | scripts/dev/lcp-cli.sh --username test --password test list-roles
+scripts/dev/lcp-cli.sh --username test --password test list-roles
 ```
 
 It'll give you a list of all roles in each company:
@@ -143,9 +143,7 @@ $ ./scripts/dev/lcp-cli.sh --username test --password test chat --role-id 'c62b8
 
 ```text
 LCP API: http://localhost:3000
-LLM API: http://host.docker.internal:1234/v1
-Provider: lm-studio
-Model: qwen/qwen3.5-9b
+LLM: (using server environment default)
 Role: Chicken assistant
 'exit', 'quit', or Ctrl+C to exit.
 Sending...
@@ -155,6 +153,9 @@ I'm here to help you find the best grub spots and where to roost for safety at n
 
 Agent dca0fbc6-7c5e-4cbd-9424-c2f29b1b910e removed.
 ```
+
+> [!NOTE]
+> When neither the role nor the company carries an explicit LLM config, the CLI displays `LLM: (using server environment default)`. The actual provider and model are determined by the `LLM_PROVIDER` / `LLM_MODEL` env vars on the server.
 
 #### 1.6.2 Enter interactive mode
 
@@ -167,9 +168,7 @@ Agent dca0fbc6-7c5e-4cbd-9424-c2f29b1b910e removed.
 
 ```text
 LCP API: http://localhost:3000
-LLM API: http://host.docker.internal:1234/v1
-Provider: lm-studio
-Model: qwen/qwen3.5-9b
+LLM: (using server environment default)
 Role: Chicken assistant
 'exit', 'quit', or Ctrl+C to exit.
 >

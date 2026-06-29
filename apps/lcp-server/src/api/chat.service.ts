@@ -4,6 +4,7 @@ import {
   SystemMessage,
 } from '@langchain/core/messages';
 import { END, MessagesAnnotation, StateGraph } from '@langchain/langgraph';
+import { ToolNode, toolsCondition } from '@langchain/langgraph/prebuilt';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import {
   AgentStatus,
@@ -11,7 +12,10 @@ import {
   LcpAgent,
   LcpCompany,
   LcpRole,
+  LlmConfig,
+  McpClientService,
   buildChatModel,
+  resolveMcpServerUrls,
 } from '@lcp/shared';
 import {
   Injectable,
@@ -58,6 +62,7 @@ export class ChatService {
     private readonly agentEvents: AgentEventService,
     private readonly ragRetrieval: RagRetrievalService,
     private readonly audit: AuditService,
+    private readonly mcp: McpClientService,
     @InjectRepository(LcpAgent)
     private readonly agentRepo: Repository<LcpAgent>,
     @InjectRepository(LcpRole)
@@ -97,14 +102,15 @@ export class ChatService {
     if (!role) throw new NotFoundException(`Role ${agent.roleId} not found`);
 
     const company = await this.companyRepo.findOneBy({ id: agent.companyId });
-    const llmConfig = role.llmConfig ?? company?.llmDefault;
+    const llmConfig =
+      role.llmConfig ?? company?.llmDefault ?? resolveEnvLlmConfig(this.config);
     if (!llmConfig) {
       throw new NotFoundException(
-        `No LLM config for agent ${agentId}: role has no llmConfig and company has no llmDefault`,
+        `No LLM config for agent ${agentId}: role has no llmConfig, company has no llmDefault, and no LLM env fallback is configured`,
       );
     }
 
-    const windowSize = llmConfig.contextWindow ?? 8192;
+    const windowSize = Number(llmConfig.contextWindow) || 8192;
     const isFirstMessage = agent.threadId === null;
 
     await this.agentRepo.update(agentId, {
@@ -126,16 +132,38 @@ export class ChatService {
     try {
       await checkpointer.setup();
 
+      const mcpServerUrls = resolveMcpServerUrls(this.config);
+      const mcpServerNames = [
+        ...new Set([
+          ...Object.keys(mcpServerUrls),
+          ...(role.mcpServerList ?? []),
+        ]),
+      ];
+      const mcpTools = await this.mcp.loadTools(mcpServerNames, mcpServerUrls);
+      const langchainTools = mcpTools.map((t) => t.tool);
+
       const model = buildChatModel(llmConfig);
-      const graph = new StateGraph(MessagesAnnotation)
+      const boundModel =
+        langchainTools.length > 0 && model.bindTools
+          ? model.bindTools(langchainTools)
+          : model;
+
+      const graphBuilder = new StateGraph(MessagesAnnotation)
         .addNode('agent', async (state: typeof MessagesAnnotation.State) => ({
-          messages: [await model.invoke(state.messages, { signal })],
+          messages: [await boundModel.invoke(state.messages, { signal })],
         }))
-        .addEdge('__start__', 'agent')
-        // ponytail: MCP tool binding for chat agents — add when interactive chat needs
-        //   tool calls. lcp-agent already binds tools; chat is currently stateless per-turn.
-        .addEdge('agent', END)
-        .compile({ checkpointer });
+        .addEdge('__start__', 'agent');
+
+      if (langchainTools.length > 0) {
+        graphBuilder
+          .addNode('tools', new ToolNode(langchainTools))
+          .addConditionalEdges('agent', toolsCondition)
+          .addEdge('tools', 'agent');
+      } else {
+        graphBuilder.addEdge('agent', END);
+      }
+
+      const graph = graphBuilder.compile({ checkpointer });
 
       const runConfig = { configurable: { thread_id: agentId } };
 
@@ -195,8 +223,11 @@ export class ChatService {
             ...(company?.companyContext
               ? [new HumanMessage(company.companyContext)]
               : []),
-            // Prompt part 3: services available (MCP servers). Injected when role has a list.
-            ...buildServicesMessage(role.mcpServerList ?? [], this.config),
+            // Prompt part 3: services available (MCP servers loaded for this turn)
+            ...buildServicesMessage(
+              [...new Set(mcpTools.map((t) => t.serverName))],
+              mcpServerUrls,
+            ),
             // Prompt part 4: task / query prompt
             new HumanMessage(preparedMessage),
             // Prompt part 5: RAG data retrieved for this query (omitted when nothing relevant)
@@ -297,15 +328,15 @@ function buildRagMessage(
 
 /**
  * Returns zero or one HumanMessage announcing the MCP services available to the
- * agent. Reads server URLs from env vars (`MCP_{NAME_UPPER}_URL`). Returns an
- * empty array when the role has no configured servers or none have a URL set.
+ * agent. Only includes servers present in `serverUrls` (i.e. those that loaded
+ * successfully). Returns an empty array when no services are available.
  */
 function buildServicesMessage(
   serverNames: string[],
-  config: ConfigService,
+  serverUrls: Record<string, string>,
 ): HumanMessage[] {
   const lines = serverNames
-    .filter((n) => config.get<string>(`MCP_${n.toUpperCase()}_URL`))
+    .filter((n) => serverUrls[n])
     .map(
       (n) =>
         `- **${n}**: call \`${n}__describe_server\` for a full tool list and usage guide`,
@@ -325,4 +356,23 @@ function buildServicesMessage(
 /** Strips characters unsafe for use as a MinIO path component. */
 function sanitiseSlug(slug: string): string {
   return slug.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+/**
+ * Builds an {@link LlmConfig} from environment variables as the last-resort
+ * fallback in the resolution chain (role → company → env → fail).
+ * Returns `null` when `LLM_PROVIDER` or `LLM_MODEL` are not set.
+ */
+function resolveEnvLlmConfig(config: ConfigService): LlmConfig | null {
+  const provider = config.get<string>('LLM_PROVIDER');
+  const model = config.get<string>('LLM_MODEL');
+  if (!provider || !model) return null;
+  return {
+    provider,
+    model,
+    baseUrl: config.get<string>('LLM_BASE_URL'),
+    apiKey: config.get<string>('LLM_API_KEY'),
+    contextWindow: config.get<number>('LLM_CONTEXT_WINDOW'),
+    timeoutMs: config.get<number>('LLM_TIMEOUT_MS'),
+  };
 }
