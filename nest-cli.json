@@ -15,7 +15,8 @@
       "entryFile": "main",
       "sourceRoot": "apps/lcp-server/src",
       "compilerOptions": {
-        "tsConfigPath": "apps/lcp-server/tsconfig.app.json"
+        "tsConfigPath": "apps/lcp-server/tsconfig.app.json",
+        "plugins": ["@nestjs/swagger"]
       }
     },
     "lcp-agent": {
@@ -25,6 +26,7 @@
       "sourceRoot": "apps/lcp-agent/src",
       "compilerOptions": {
         "tsConfigPath": "apps/lcp-agent/tsconfig.app.json",
+        "plugins": ["@nestjs/swagger"],
         "assets": [{ "include": "prompts.jsonc", "outDir": "dist/apps/lcp-agent" }]
       }
     },
@@ -53,6 +55,7 @@
       "sourceRoot": "apps/lcp-mcp-storage/src",
       "compilerOptions": {
         "tsConfigPath": "apps/lcp-mcp-storage/tsconfig.app.json",
+        "plugins": ["@nestjs/swagger"],
         "assets": [
           { "include": "prompts.jsonc", "outDir": "dist/apps/lcp-mcp-storage" },
           { "include": "tools.jsonc", "outDir": "dist/apps/lcp-mcp-storage" }
@@ -66,6 +69,7 @@
       "sourceRoot": "apps/lcp-mcp-memory/src",
       "compilerOptions": {
         "tsConfigPath": "apps/lcp-mcp-memory/tsconfig.app.json",
+        "plugins": ["@nestjs/swagger"],
         "assets": [
           { "include": "prompts.jsonc", "outDir": "dist/apps/lcp-mcp-memory" },
           { "include": "tools.jsonc", "outDir": "dist/apps/lcp-mcp-memory" }
@@ -79,6 +83,7 @@
       "sourceRoot": "apps/lcp-mcp-interactions/src",
       "compilerOptions": {
         "tsConfigPath": "apps/lcp-mcp-interactions/tsconfig.app.json",
+        "plugins": ["@nestjs/swagger"],
         "assets": [
           { "include": "prompts.jsonc", "outDir": "dist/apps/lcp-mcp-interactions" },
           { "include": "tools.jsonc", "outDir": "dist/apps/lcp-mcp-interactions" }

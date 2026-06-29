@@ -1,4 +1,5 @@
 import { Body, Controller, HttpCode, Post, UseGuards } from '@nestjs/common';
+import { ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { AuditService } from './audit.service';
 import { CreateAuditEventDto } from './create-audit-event.dto';
 import { InternalApiKeyGuard } from './internal-api-key.guard';
@@ -11,12 +12,15 @@ import { InternalApiKeyGuard } from './internal-api-key.guard';
  *
  * permission: (internal service endpoint — no user permission required)
  */
+@ApiTags('internal')
+@ApiSecurity('internal-api-key')
 @Controller('internal/audit')
 @UseGuards(InternalApiKeyGuard)
 export class AuditController {
   constructor(private readonly auditService: AuditService) {}
 
   /** Records a single audit event. Returns 204 No Content on success. */
+  @ApiOperation({ summary: 'Record an audit event (internal)' })
   @Post()
   @HttpCode(204)
   async create(@Body() dto: CreateAuditEventDto): Promise<void> {

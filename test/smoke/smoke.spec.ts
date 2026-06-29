@@ -52,6 +52,11 @@ describe('Smoke', () => {
       expect(res.status).toBe(200);
       expectHealthy(res.body);
     });
+
+    it('/swagger returns 200', async () => {
+      const res = await get(`${LCP_SERVER}/swagger`);
+      expect(res.status).toBe(200);
+    });
   });
 
   describe('lcp-agent', () => {
@@ -59,6 +64,11 @@ describe('Smoke', () => {
       const res = await get(`${LCP_AGENT}/health`);
       expect(res.status).toBe(200);
       expectHealthy(res.body);
+    });
+
+    it('/swagger returns 200', async () => {
+      const res = await get(`${LCP_AGENT}/swagger`);
+      expect(res.status).toBe(200);
     });
   });
 
@@ -68,6 +78,11 @@ describe('Smoke', () => {
       expect(res.status).toBe(200);
       expectHealthy(res.body);
     });
+
+    it('/swagger returns 200', async () => {
+      const res = await get(`${LCP_MCP_STORAGE}/swagger`);
+      expect(res.status).toBe(200);
+    });
   });
 
   describe('lcp-mcp-memory', () => {
@@ -76,6 +91,11 @@ describe('Smoke', () => {
       expect(res.status).toBe(200);
       expectHealthy(res.body);
     });
+
+    it('/swagger returns 200', async () => {
+      const res = await get(`${LCP_MCP_MEMORY}/swagger`);
+      expect(res.status).toBe(200);
+    });
   });
 
   describe('lcp-mcp-interactions', () => {
@@ -83,6 +103,11 @@ describe('Smoke', () => {
       const res = await get(`${LCP_MCP_INTERACTIONS}/health`);
       expect(res.status).toBe(200);
       expectHealthy(res.body);
+    });
+
+    it('/swagger returns 200', async () => {
+      const res = await get(`${LCP_MCP_INTERACTIONS}/swagger`);
+      expect(res.status).toBe(200);
     });
   });
 });

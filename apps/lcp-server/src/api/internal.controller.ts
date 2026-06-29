@@ -9,6 +9,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { LcpAgent } from '@lcp/shared';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -28,6 +29,8 @@ import {
  * Called by lcp-mcp-interactions (pause/complete) and indirectly by lcp-agent
  * when an agent finishes normally without calling `complete_task`.
  */
+@ApiTags('internal')
+@ApiSecurity('internal-api-key')
 @Controller('internal')
 @UseGuards(InternalApiKeyGuard)
 export class InternalController {
@@ -41,6 +44,7 @@ export class InternalController {
    * Returns a minimal view of an agent record for service-to-service queries.
    * Currently exposes `storageChanges` for `complete_task` file validation.
    */
+  @ApiOperation({ summary: 'Get agent record (internal)' })
   @Get('agent/:agentId')
   async getAgent(@Param('agentId') agentId: UUID): Promise<Partial<LcpAgent>> {
     const agent = await this.agentRepo.findOneBy({ id: agentId });
@@ -53,6 +57,9 @@ export class InternalController {
    * - `type: 'user_input'` → creates a Conversation and returns its slug.
    * - `type: 'agent_consultation'` → starts a consulting agent and returns the consultation id.
    */
+  @ApiOperation({
+    summary: 'Pause an agent for user input or consultation (internal)',
+  })
   @Post('pause')
   async pause(
     @Body() body: PauseDto,
@@ -83,6 +90,7 @@ export class InternalController {
    * consultation and re-enqueues the calling agent.
    * Returns 204 No Content.
    */
+  @ApiOperation({ summary: 'Mark an agent as completed (internal)' })
   @Post('agent/:agentId/complete')
   @HttpCode(204)
   async complete(
@@ -97,6 +105,7 @@ export class InternalController {
    * Called fire-and-forget by lcp-agent after each storage tool result.
    * Returns 204 No Content.
    */
+  @ApiOperation({ summary: 'Update agent storage changes (internal)' })
   @Patch('agent/:agentId/storage')
   @HttpCode(204)
   async updateStorage(

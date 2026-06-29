@@ -46,6 +46,7 @@
     "@nestjs/core": "^11.0.1",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/swagger": "^11.4.4",
     "@nestjs/terminus": "^11.1.1",
     "@nestjs/typeorm": "^11.0.1",
     "axios": "^1.18.0",
@@ -63,6 +64,7 @@
     "redis": "^5.12.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "swagger-ui-express": "^5.0.1",
     "typeorm": "^1.0.0"
   },
   "devDependencies": {
@@ -81,6 +83,7 @@
     "@types/passport-jwt": "^4.0.1",
     "@types/pg": "^8.20.0",
     "@types/supertest": "^7.0.0",
+    "@types/swagger-ui-express": "^4.1.8",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",
@@ -132,6 +135,7 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "./coverage",
+    "maxWorkers": "50%",
     "testEnvironment": "node",
     "reporters": [
       "default",
