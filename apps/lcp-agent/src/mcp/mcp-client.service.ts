@@ -112,12 +112,12 @@ export class McpClientService {
  */
 function buildZodSchema(
   inputSchema: Record<string, unknown>,
-): z.ZodObject<Record<string, z.ZodTypeAny>> {
+): z.ZodObject<Record<string, z.ZodType>> {
   const properties =
     (inputSchema['properties'] as Record<string, unknown>) ?? {};
   const required = (inputSchema['required'] as string[]) ?? [];
 
-  const shape: Record<string, z.ZodTypeAny> = {};
+  const shape: Record<string, z.ZodType> = {};
   for (const [key, def] of Object.entries(properties)) {
     const field = jsonSchemaFieldToZod(def as Record<string, unknown>);
     shape[key] = required.includes(key) ? field : field.optional();
@@ -126,7 +126,7 @@ function buildZodSchema(
   return z.object(shape);
 }
 
-function jsonSchemaFieldToZod(field: Record<string, unknown>): z.ZodTypeAny {
+function jsonSchemaFieldToZod(field: Record<string, unknown>): z.ZodType {
   switch (field['type']) {
     case 'string':
       return z.string();

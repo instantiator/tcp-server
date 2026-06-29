@@ -180,6 +180,40 @@ export class PauseAndResumeService {
       );
   }
 
+  /**
+   * Merges a storage change snapshot into {@link LcpAgent.storageChanges}.
+   * Called fire-and-forget by lcp-agent after each storage tool result.
+   * Appends to existing arrays; does not deduplicate.
+   */
+  async updateStorageChanges(
+    agentId: UUID,
+    patch: {
+      created?: string[];
+      modified?: string[];
+      deleted?: string[];
+      moved?: { from: string; to: string }[];
+    },
+  ): Promise<void> {
+    const agent = await this.agentRepo.findOneBy({ id: agentId });
+    if (!agent) return;
+
+    const existing = agent.storageChanges ?? {
+      created: [],
+      modified: [],
+      deleted: [],
+      moved: [],
+    };
+
+    await this.agentRepo.update(agentId, {
+      storageChanges: {
+        created: [...existing.created, ...(patch.created ?? [])],
+        modified: [...existing.modified, ...(patch.modified ?? [])],
+        deleted: [...existing.deleted, ...(patch.deleted ?? [])],
+        moved: [...existing.moved, ...(patch.moved ?? [])],
+      },
+    });
+  }
+
   private async loadAgent(agentId: UUID): Promise<LcpAgent> {
     const agent = await this.agentRepo.findOneBy({ id: agentId });
     if (!agent) throw new NotFoundException(`Agent ${agentId} not found`);

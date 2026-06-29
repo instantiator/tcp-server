@@ -1,7 +1,7 @@
 import { EmbeddingService, LcpCompany } from '@lcp/shared';
 import { randomUUID } from 'crypto';
 import { DataSource, Repository } from 'typeorm';
-import { AuditClientService } from '../audit/audit-client.service';
+import { AuditClientService } from '@lcp/shared';
 import { memoryPrompts } from '../memory-prompts';
 import { MemoryToolsService } from './memory-tools.service';
 

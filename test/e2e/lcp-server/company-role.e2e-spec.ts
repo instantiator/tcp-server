@@ -5,8 +5,8 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { Repository } from 'typeorm';
-import { AppModule } from '../../apps/lcp-server/src/app.module';
-import { makeTestJwt } from './helpers/test-jwt';
+import { AppModule } from '../../../apps/lcp-server/src/app.module';
+import { makeTestJwt } from '../helpers/test-jwt';
 
 describe('CompanyController (e2e)', () => {
   let app: INestApplication<App>;

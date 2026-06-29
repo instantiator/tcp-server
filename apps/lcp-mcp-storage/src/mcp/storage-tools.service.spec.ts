@@ -5,7 +5,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { ConfigService } from '@nestjs/config';
-import { AuditClientService } from '../audit/audit-client.service';
+import { AuditClientService } from '@lcp/shared';
 import { StorageToolsService } from './storage-tools.service';
 
 jest.mock('@aws-sdk/client-s3', () => {
@@ -68,7 +68,7 @@ describe('StorageToolsService', () => {
 
   afterEach(() => jest.clearAllMocks());
 
-  // ── list_files ────────────────────────────────────────────────────────────
+  // list_files
 
   describe('list_files', () => {
     it('returns a JSON array of file entries', async () => {
@@ -102,7 +102,7 @@ describe('StorageToolsService', () => {
     });
   });
 
-  // ── read_file ─────────────────────────────────────────────────────────────
+  // read_file
 
   describe('read_file', () => {
     it('returns the file content as text', async () => {
@@ -131,7 +131,7 @@ describe('StorageToolsService', () => {
     });
   });
 
-  // ── write_file ────────────────────────────────────────────────────────────
+  // write_file
 
   describe('write_file', () => {
     it('writes the file and returns a confirmation', async () => {
@@ -171,7 +171,7 @@ describe('StorageToolsService', () => {
     });
   });
 
-  // ── delete_file / restore_file ────────────────────────────────────────────
+  // delete_file / restore_file
 
   describe('delete_file', () => {
     it('soft-deletes: copies to _deleted/ then removes original', async () => {
@@ -223,7 +223,7 @@ describe('StorageToolsService', () => {
     });
   });
 
-  // ── search_files ──────────────────────────────────────────────────────────
+  // search_files
 
   describe('search_files', () => {
     it('returns all files when no pattern is given', async () => {
@@ -257,7 +257,7 @@ describe('StorageToolsService', () => {
     });
   });
 
-  // ── get_file_properties ───────────────────────────────────────────────────
+  // get_file_properties
 
   describe('get_file_properties', () => {
     it('returns metadata for an existing file', async () => {
@@ -285,7 +285,7 @@ describe('StorageToolsService', () => {
     });
   });
 
-  // ── copy_file / move_file ─────────────────────────────────────────────────
+  // copy_file / move_file
 
   describe('copy_file', () => {
     it('copies a file and returns confirmation', async () => {
@@ -330,7 +330,7 @@ describe('StorageToolsService', () => {
     });
   });
 
-  // ── get_file_summary ──────────────────────────────────────────────────────
+  // get_file_summary
 
   describe('get_file_summary', () => {
     it('returns JSON summary with format=json-object for a JSON file', async () => {
@@ -377,7 +377,7 @@ describe('StorageToolsService', () => {
     });
   });
 
-  // ── describe_server ───────────────────────────────────────────────────────
+  // describe_server
 
   describe('describe_server', () => {
     it('returns overview text containing key tool names', async () => {
@@ -388,7 +388,7 @@ describe('StorageToolsService', () => {
     });
   });
 
-  // ── describe_folder ───────────────────────────────────────────────────────
+  // describe_folder
 
   describe('describe_folder', () => {
     const cases: [string, string][] = [

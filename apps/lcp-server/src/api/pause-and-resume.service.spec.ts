@@ -33,6 +33,7 @@ const makeAgent = (overrides: Partial<LcpAgent> = {}): LcpAgent => ({
   updatedAt: new Date(),
   company: {} as never,
   role: {} as never,
+  version: 1,
   ...overrides,
 });
 
@@ -165,6 +166,7 @@ describe('PauseAndResumeService', () => {
         status: 'pending',
         result: null,
         createdAt: new Date(),
+        version: 1,
       });
 
       await service.pauseForConsultation(

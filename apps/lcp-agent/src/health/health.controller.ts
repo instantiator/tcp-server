@@ -49,7 +49,7 @@ export class HealthController {
         },
       };
     } finally {
-      await client.disconnect();
+      client.destroy();
     }
   }
 }

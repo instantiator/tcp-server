@@ -6,8 +6,9 @@ import { UUID } from 'crypto';
 import pgvector from 'pgvector';
 import { DataSource, Repository } from 'typeorm';
 import { z } from 'zod';
-import { AuditClientService } from '../audit/audit-client.service';
+import { AuditClientService } from '@lcp/shared';
 import { memoryPrompts } from '../memory-prompts';
+import { memoryToolDescriptions } from '../memory-tool-descriptions';
 
 /** Replaces `{{key}}` placeholders in a template string. */
 function interpolate(template: string, vars: Record<string, string>): string {
@@ -59,10 +60,9 @@ export class MemoryToolsService {
   }
 
   private registerDescribeServer(server: McpServer): void {
-    server.tool(
+    server.registerTool(
       'describe_server',
-      'Returns an overview of the memory service and its tools.',
-      {},
+      { description: memoryToolDescriptions.describe_server },
       (): ToolResult => ({
         content: [
           {
@@ -75,25 +75,23 @@ export class MemoryToolsService {
   }
 
   private registerRecall(server: McpServer): void {
-    server.tool(
+    server.registerTool(
       'recall',
-      'Search both episodic memory and the knowledge base by semantic similarity.',
       {
-        roleId: z
-          .string()
-          .uuid()
-          .describe('The role ID whose memory to search.'),
-        companyId: z
-          .string()
-          .uuid()
-          .describe('The company ID (used to load embedding config).'),
-        query: z.string().describe('The search query.'),
-        top_k: z
-          .number()
-          .int()
-          .positive()
-          .optional()
-          .describe('Maximum results (default 5).'),
+        description: memoryToolDescriptions.recall,
+        inputSchema: {
+          roleId: z.uuid().describe('The role ID whose memory to search.'),
+          companyId: z
+            .uuid()
+            .describe('The company ID (used to load embedding config).'),
+          query: z.string().describe('The search query.'),
+          top_k: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe('Maximum results (default 5).'),
+        },
       },
       async ({ roleId, companyId, query, top_k }): Promise<ToolResult> => {
         const k = top_k ?? 5;
@@ -109,28 +107,25 @@ export class MemoryToolsService {
   }
 
   private registerRemember(server: McpServer): void {
-    server.tool(
+    server.registerTool(
       'remember',
-      'Store an episodic memory entry for later recall.',
       {
-        roleId: z
-          .string()
-          .uuid()
-          .describe('The role ID to store this memory under.'),
-        companyId: z
-          .string()
-          .uuid()
-          .describe('The company ID (used to load embedding config).'),
-        content: z.string().describe('The content to remember.'),
-        agentId: z
-          .string()
-          .uuid()
-          .optional()
-          .describe('The agent storing the memory.'),
-        tags: z
-          .array(z.string())
-          .optional()
-          .describe('Optional classification tags.'),
+        description: memoryToolDescriptions.remember,
+        inputSchema: {
+          roleId: z.uuid().describe('The role ID to store this memory under.'),
+          companyId: z
+            .uuid()
+            .describe('The company ID (used to load embedding config).'),
+          content: z.string().describe('The content to remember.'),
+          agentId: z
+            .uuid()
+            .optional()
+            .describe('The agent storing the memory.'),
+          tags: z
+            .array(z.string())
+            .optional()
+            .describe('Optional classification tags.'),
+        },
       },
       async ({
         roleId,
@@ -159,25 +154,25 @@ export class MemoryToolsService {
   }
 
   private registerSearchKnowledge(server: McpServer): void {
-    server.tool(
+    server.registerTool(
       'search_knowledge',
-      'Search the role knowledge base only by semantic similarity.',
       {
-        roleId: z
-          .string()
-          .uuid()
-          .describe('The role ID whose knowledge base to search.'),
-        companyId: z
-          .string()
-          .uuid()
-          .describe('The company ID (used to load embedding config).'),
-        query: z.string().describe('The search query.'),
-        top_k: z
-          .number()
-          .int()
-          .positive()
-          .optional()
-          .describe('Maximum results (default 5).'),
+        description: memoryToolDescriptions.search_knowledge,
+        inputSchema: {
+          roleId: z
+            .uuid()
+            .describe('The role ID whose knowledge base to search.'),
+          companyId: z
+            .uuid()
+            .describe('The company ID (used to load embedding config).'),
+          query: z.string().describe('The search query.'),
+          top_k: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe('Maximum results (default 5).'),
+        },
       },
       async ({ roleId, companyId, query, top_k }): Promise<ToolResult> => {
         const k = top_k ?? 5;

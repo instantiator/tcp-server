@@ -1,7 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { randomUUID } from 'crypto';
-import { AuditClientService } from '../audit/audit-client.service';
+import { AuditClientService } from '@lcp/shared';
 import { InteractionsToolsService } from './interactions-tools.service';
 
 jest.mock('axios');
@@ -48,16 +48,20 @@ describe('InteractionsToolsService', () => {
   const agentId = randomUUID();
   const companyId = randomUUID();
 
+  let axiosGet: jest.Mock;
+
   beforeEach(() => {
     jest.clearAllMocks();
     config = makeConfig({
       LCP_SERVER_URL: 'http://lcp-server:3000',
+      LCP_STORAGE_URL: 'http://lcp-mcp-storage:3010',
       INTERNAL_API_KEY: 'test-key',
     });
     audit = makeAudit();
     service = new InteractionsToolsService(audit, config);
     // Spy on axios.post to get a bound reference (avoids @typescript-eslint/unbound-method)
     axiosPost = jest.spyOn(mockedAxios, 'post') as unknown as jest.Mock;
+    axiosGet = jest.spyOn(mockedAxios, 'get') as unknown as jest.Mock;
   });
 
   describe('describe_server', () => {
@@ -162,6 +166,77 @@ describe('InteractionsToolsService', () => {
       });
 
       expect(text).toContain('Error');
+    });
+
+    it('completes successfully when all outputFiles exist', async () => {
+      // GET /files/exists → no missing; GET /internal/agent → storageChanges; POST complete
+      axiosGet.mockResolvedValueOnce({ data: { missing: [] } }); // files/exists
+      mockedAxios.post.mockResolvedValue({ data: {} });
+
+      const text = await callTool(service, 'complete_task', {
+        agentId,
+        companyId,
+        finalAnswer: 'Done.',
+        outputFiles: ['docs/report.md'],
+      });
+
+      expect(axiosGet).toHaveBeenCalledWith(
+        expect.stringContaining('/files/exists'),
+        expect.objectContaining({
+          headers: { 'X-Internal-Api-Key': 'test-key' },
+        }),
+      );
+      expect(text).toContain('complete');
+    });
+
+    it('returns missing-files error and does not complete when outputFiles are absent', async () => {
+      axiosGet
+        .mockResolvedValueOnce({ data: { missing: ['docs/missing.md'] } }) // files/exists
+        .mockResolvedValueOnce({
+          // internal/agent
+          data: {
+            storageChanges: { created: ['docs/report.md'], modified: [] },
+          },
+        });
+
+      const text = await callTool(service, 'complete_task', {
+        agentId,
+        companyId,
+        finalAnswer: 'Done.',
+        outputFiles: ['docs/missing.md'],
+      });
+
+      expect(axiosPost).not.toHaveBeenCalled();
+      expect(text).toContain('docs/missing.md');
+      expect(text).toContain('docs/report.md');
+    });
+
+    it('fails open (completes) when the storage check itself errors', async () => {
+      axiosGet.mockRejectedValue(new Error('Storage unreachable'));
+      mockedAxios.post.mockResolvedValue({ data: {} });
+
+      const text = await callTool(service, 'complete_task', {
+        agentId,
+        companyId,
+        finalAnswer: 'Done.',
+        outputFiles: ['docs/report.md'],
+      });
+
+      // Storage check failed, so should proceed with completion
+      expect(text).toContain('complete');
+    });
+
+    it('skips file check when outputFiles is omitted', async () => {
+      mockedAxios.post.mockResolvedValue({ data: {} });
+
+      await callTool(service, 'complete_task', {
+        agentId,
+        companyId,
+        finalAnswer: 'Done.',
+      });
+
+      expect(axiosGet).not.toHaveBeenCalled();
+      expect(axiosPost).toHaveBeenCalled();
     });
   });
 });

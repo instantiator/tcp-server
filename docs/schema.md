@@ -13,28 +13,28 @@ Every endpoint that accepts a request body uses a dedicated DTO (Data Transfer O
 
 ### DTO source files
 
-| File | DTOs |
-| ---- | ---- |
-| `apps/lcp-server/src/api/dto/llm-config.dto.ts` | `LlmConfigDto` |
-| `apps/lcp-server/src/api/dto/company.dto.ts` | `CreateCompanyDto`, `UpdateCompanyDto` |
-| `apps/lcp-server/src/api/dto/role.dto.ts` | `CreateRoleDto`, `UpdateRoleDto` |
-| `apps/lcp-server/src/api/dto/company-user.dto.ts` | `CreateCompanyUserDto`, `UpdateCompanyUserDto` |
-| `apps/lcp-server/src/api/dto/agent.dto.ts` | `StartAgentDto`, `StartChatDto`, `SendMessageDto` |
-| `apps/lcp-server/src/api/dto/conversation.dto.ts` | `ConversationReplyDto` |
-| `apps/lcp-server/src/api/dto/internal.dto.ts` | `PauseDto`, `CompleteDto` |
+| File                                              | DTOs                                              |
+| ------------------------------------------------- | ------------------------------------------------- |
+| `apps/lcp-server/src/api/dto/llm-config.dto.ts`   | `LlmConfigDto`                                    |
+| `apps/lcp-server/src/api/dto/company.dto.ts`      | `CreateCompanyDto`, `UpdateCompanyDto`            |
+| `apps/lcp-server/src/api/dto/role.dto.ts`         | `CreateRoleDto`, `UpdateRoleDto`                  |
+| `apps/lcp-server/src/api/dto/company-user.dto.ts` | `CreateCompanyUserDto`, `UpdateCompanyUserDto`    |
+| `apps/lcp-server/src/api/dto/agent.dto.ts`        | `StartAgentDto`, `StartChatDto`, `SendMessageDto` |
+| `apps/lcp-server/src/api/dto/conversation.dto.ts` | `ConversationReplyDto`                            |
+| `apps/lcp-server/src/api/dto/internal.dto.ts`     | `PauseDto`, `CompleteDto`                         |
 
 ### DTO field reference
 
 #### `CreateCompanyDto` — `POST /api/company`
 
-| Field | Type | Required | Constraints |
-| ----- | ---- | -------- | ----------- |
-| `slug` | `string` | Yes | Non-empty |
-| `name` | `string` | Yes | Non-empty |
-| `description` | `string` | Yes | Non-empty |
-| `llmDefault` | `LlmConfigDto` | No | Nested object |
-| `embeddingConfig` | `LlmConfigDto` | No | Nested object |
-| `companyContext` | `string` | No | |
+| Field             | Type           | Required | Constraints   |
+| ----------------- | -------------- | -------- | ------------- |
+| `slug`            | `string`       | Yes      | Non-empty     |
+| `name`            | `string`       | Yes      | Non-empty     |
+| `description`     | `string`       | Yes      | Non-empty     |
+| `llmDefault`      | `LlmConfigDto` | No       | Nested object |
+| `embeddingConfig` | `LlmConfigDto` | No       | Nested object |
+| `companyContext`  | `string`       | No       |               |
 
 #### `UpdateCompanyDto` — `PUT /api/company/:id`
 
@@ -42,47 +42,47 @@ All fields optional. Non-null strings must be non-empty. Omitted fields are not 
 
 #### `CreateRoleDto` — `POST /api/role`
 
-| Field | Type | Required | Constraints |
-| ----- | ---- | -------- | ----------- |
-| `companyId` | UUID string | Yes | Must be a valid UUID |
-| `name` | `string` | Yes | Non-empty |
-| `description` | `string` | Yes | Non-empty |
-| `systemPromptTemplate` | `string` | Yes | Non-empty |
-| `knowledgeDomains` | `string[]` | Yes | Array of strings |
-| `mcpServerList` | `string[]` | Yes | Array of strings |
-| `llmConfig` | `LlmConfigDto` | No | Nested object |
-| `rolePrompt` | `string` | No | |
+| Field                  | Type           | Required | Constraints          |
+| ---------------------- | -------------- | -------- | -------------------- |
+| `companyId`            | UUID string    | Yes      | Must be a valid UUID |
+| `name`                 | `string`       | Yes      | Non-empty            |
+| `description`          | `string`       | Yes      | Non-empty            |
+| `systemPromptTemplate` | `string`       | Yes      | Non-empty            |
+| `knowledgeDomains`     | `string[]`     | Yes      | Array of strings     |
+| `mcpServerList`        | `string[]`     | Yes      | Array of strings     |
+| `llmConfig`            | `LlmConfigDto` | No       | Nested object        |
+| `rolePrompt`           | `string`       | No       |                      |
 
 #### `LlmConfigDto` — nested in company and role DTOs
 
-| Field | Type | Required | Constraints |
-| ----- | ---- | -------- | ----------- |
-| `provider` | `string` | Yes | |
-| `model` | `string` | Yes | |
-| `baseUrl` | `string` | No | |
-| `apiKey` | `string` | No | Stored masked; returned as `***` |
-| `contextWindow` | `number` | No | |
+| Field           | Type     | Required | Constraints                      |
+| --------------- | -------- | -------- | -------------------------------- |
+| `provider`      | `string` | Yes      |                                  |
+| `model`         | `string` | Yes      |                                  |
+| `baseUrl`       | `string` | No       |                                  |
+| `apiKey`        | `string` | No       | Stored masked; returned as `***` |
+| `contextWindow` | `number` | No       |                                  |
 
 #### `CreateCompanyUserDto` — `POST /api/company/:id/users`
 
-| Field | Type | Required | Constraints |
-| ----- | ---- | -------- | ----------- |
-| `identifier` | `string` | Yes | Non-empty (OIDC sub or email) |
-| `memberType` | `"creator" \| "owner" \| "member"` | Yes | Exact string match |
-| `name` | `string` | No | |
-| `roles` | `string[]` | No | |
-| `knowledgeDomains` | `string[]` | No | |
+| Field              | Type                               | Required | Constraints                   |
+| ------------------ | ---------------------------------- | -------- | ----------------------------- |
+| `identifier`       | `string`                           | Yes      | Non-empty (OIDC sub or email) |
+| `memberType`       | `"creator" \| "owner" \| "member"` | Yes      | Exact string match            |
+| `name`             | `string`                           | No       |                               |
+| `roles`            | `string[]`                         | No       |                               |
+| `knowledgeDomains` | `string[]`                         | No       |                               |
 
 #### `PauseDto` — `POST /internal/pause`
 
-| Field | Type | Required | Constraints |
-| ----- | ---- | -------- | ----------- |
-| `type` | `"user_input" \| "agent_consultation"` | Yes | |
-| `agentId` | UUID string | Yes | |
-| `question` | `string` | Yes | Non-empty |
-| `context` | `string` | No | |
-| `companyId` | UUID string | Conditional | Required when `type === "agent_consultation"` |
-| `roleName` | `string` | Conditional | Required when `type === "agent_consultation"` |
+| Field       | Type                                   | Required    | Constraints                                   |
+| ----------- | -------------------------------------- | ----------- | --------------------------------------------- |
+| `type`      | `"user_input" \| "agent_consultation"` | Yes         |                                               |
+| `agentId`   | UUID string                            | Yes         |                                               |
+| `question`  | `string`                               | Yes         | Non-empty                                     |
+| `context`   | `string`                               | No          |                                               |
+| `companyId` | UUID string                            | Conditional | Required when `type === "agent_consultation"` |
+| `roleName`  | `string`                               | Conditional | Required when `type === "agent_consultation"` |
 
 ### Do we need a generated DTO schema?
 

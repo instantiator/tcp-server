@@ -17,8 +17,8 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { Repository } from 'typeorm';
-import { AppModule } from '../../apps/lcp-server/src/app.module';
-import { makeTestJwt } from './helpers/test-jwt';
+import { AppModule } from '../../../apps/lcp-server/src/app.module';
+import { makeTestJwt } from '../helpers/test-jwt';
 
 const INTERNAL_KEY = process.env.INTERNAL_API_KEY ?? 'e2e-test-internal-key';
 

@@ -1,5 +1,6 @@
 import type { UUID } from 'crypto';
 import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import type { AgentRunConfig } from './AgentRunConfig.model';
 import type { LlmConfig } from './LlmConfig.model';
 
 /**
@@ -67,4 +68,12 @@ export class LcpCompany {
    */
   @Column({ type: 'jsonb', nullable: true })
   embeddingConfig?: LlmConfig | null;
+
+  /**
+   * Optional company-wide agent-loop resource overrides.
+   * Applied when the running role has no {@link LcpRole.runConfig} set.
+   * See {@link AgentRunConfig} for available fields.
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  runConfig?: AgentRunConfig | null;
 }

@@ -205,9 +205,12 @@ services:
     restart: unless-stopped
     environment:
       LCP_SERVER_URL: http://lcp-server:3000
+      LCP_STORAGE_URL: http://lcp-mcp-storage:3010
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
     depends_on:
       lcp-server:
+        condition: service_healthy
+      lcp-mcp-storage:
         condition: service_healthy
     ports:
       - "3012:3012"

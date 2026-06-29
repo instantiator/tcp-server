@@ -1,4 +1,4 @@
-import { AuditEventType } from '@lcp/shared';
+import { AuditEventType } from '../models/AuditEvent.model';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
@@ -63,6 +63,17 @@ describe('AuditClientService', () => {
 
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('network error'),
+    );
+  });
+
+  it('posts to /internal/agent/:id/complete for notifyComplete', () => {
+    const service = makeService();
+    service.notifyComplete('agent-uuid', 'final output');
+
+    expect(mockedPost).toHaveBeenCalledWith(
+      'http://lcp-server:3000/internal/agent/agent-uuid/complete',
+      { output: 'final output' },
+      expect.objectContaining({ headers: { 'X-Internal-Api-Key': 'key' } }),
     );
   });
 });

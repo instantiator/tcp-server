@@ -2,7 +2,7 @@
   "verbose": true,
   "rootDir": "..",
   "testMatch": [
-    "<rootDir>/test/e2e/*.e2e-spec.ts"
+    "<rootDir>/test/e2e/**/*.e2e-spec.ts"
   ],
   "testEnvironment": "node",
   "maxWorkers": 1,

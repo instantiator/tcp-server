@@ -16,14 +16,14 @@ See [agent-services.md → MCP Servers](agent-services.md#mcp-servers) for how a
 
 ## Tools
 
-| Tool                                                        | Signature                                                                      | Description                                |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------ |
-| [`describe_server`](#describe_server)                       | `describe_server()`                                                            | Overview of the interactions service       |
-| [`list_available_users`](#list_available_users)             | `list_available_users(companyId)`                                              | List human users registered in the company |
-| [`list_available_roles`](#list_available_roles)             | `list_available_roles(companyId)`                                              | List agent roles that can be consulted     |
-| [`request_user_input`](#request_user_input)                 | `request_user_input(agentId, companyId, question, context?)`                   | Pause and submit a question to human users |
-| [`request_agent_consultation`](#request_agent_consultation) | `request_agent_consultation(agentId, companyId, roleName, question, context?)` | Consult another agent role                 |
-| [`complete_task`](#complete_task)                           | `complete_task(agentId, companyId, finalAnswer)`                               | Mark the task complete with a summary      |
+| Tool                                                        | Signature                                                                      | Description                                                  |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| [`describe_server`](#describe_server)                       | `describe_server()`                                                            | Overview of the interactions service                         |
+| [`list_available_users`](#list_available_users)             | `list_available_users(companyId)`                                              | List human users registered in the company                   |
+| [`list_available_roles`](#list_available_roles)             | `list_available_roles(companyId)`                                              | List agent roles that can be consulted                       |
+| [`request_user_input`](#request_user_input)                 | `request_user_input(agentId, companyId, question, context?)`                   | Pause and submit a question to human users                   |
+| [`request_agent_consultation`](#request_agent_consultation) | `request_agent_consultation(agentId, companyId, roleName, question, context?)` | Consult another agent role                                   |
+| [`complete_task`](#complete_task)                           | `complete_task(agentId, companyId, finalAnswer, outputFiles?)`                 | Mark the task complete; optionally verify output files exist |
 
 ---
 
@@ -135,15 +135,20 @@ Marks the current agent task as complete and stores a final answer summary. Agen
 
 **Arguments:**
 
-| Parameter     | Type   | Required | Description                                                                          |
-| ------------- | ------ | -------- | ------------------------------------------------------------------------------------ |
-| `agentId`     | UUID   | yes      | The calling agent's UUID                                                             |
-| `companyId`   | UUID   | yes      | The company UUID                                                                     |
-| `finalAnswer` | string | yes      | A concise, human-readable summary of what was accomplished and any output file paths |
+| Parameter     | Type     | Required | Description                                                                          |
+| ------------- | -------- | -------- | ------------------------------------------------------------------------------------ |
+| `agentId`     | UUID     | yes      | The calling agent's UUID                                                             |
+| `companyId`   | UUID     | yes      | The company UUID                                                                     |
+| `finalAnswer` | string   | yes      | A concise, human-readable summary of what was accomplished and any output file paths |
+| `outputFiles` | string[] | no       | Paths in shared storage produced by this task — each is verified to exist in MinIO   |
 
-**Returns:** A completion acknowledgement (e.g. `"Task marked complete. Well done."`).
+**Returns:** A completion acknowledgement on success. If `outputFiles` is supplied and any path is missing from MinIO, returns a canned error listing the missing files alongside the files created or modified during the run — the agent should correct the paths or continue working before calling again.
 
-**What happens internally:** `POST /internal/agent/:agentId/complete` — sets `LcpAgent.status = completed` and stores `finalAnswer` as `LcpAgent.output`. For consultation agents, this also triggers the calling agent's resume.
+**What happens internally:**
+
+1. If `outputFiles` is non-empty, queries lcp-mcp-storage `GET /files/exists` for each path. Missing paths trigger the error response (no completion written). Fails open — if lcp-mcp-storage is unreachable, completion proceeds.
+2. On success: `POST /internal/agent/:agentId/complete` — sets `LcpAgent.status = completed` and stores `finalAnswer` as `LcpAgent.output`. For consultation agents, also triggers the calling agent's resume.
+3. Records an `agent_loop_completion` audit event with a prose summary, the ordered action log, and storage changes (created, modified, deleted, moved files).
 
 **Completion enforcement:** If the agent loop exits without having called `complete_task` and iterations remain, lcp-agent injects one final HumanMessage instructing the agent to call `complete_task`. If still not called, lcp-agent sets the status to `completed` with the last AI message as the output, and logs a warning.
 

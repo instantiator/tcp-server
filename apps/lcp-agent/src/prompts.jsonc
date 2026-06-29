@@ -1,5 +1,20 @@
 {
   // Directive appended to every agent prompt after all context has been established.
   // Signals the agent to begin work rather than ask clarifying questions.
-  "final_instruction": "You have been given your task and all relevant context above. Proceed now: be thorough, draw on your expertise, and deliver your best work."
+  "final_instruction": "You have been given your task and all relevant context above. Proceed now: be thorough, draw on your expertise, and deliver your best work.",
+
+  // Heading for prompt part 3 (available MCP services).
+  "services_header": "## Available Services",
+
+  // Body text for prompt part 3. Follows the heading, before the per-service bullet list.
+  "services_intro": "You have access to the following external services via tools. Each service exposes a `describe_server` tool — call it to learn exactly what tools are available and how to use them before making calls.",
+
+  // Template for a single service bullet in prompt part 3. {{name}} is replaced with the server name.
+  "services_item": "- **{{name}}**: call `{{name}}__describe_server` for a full tool list and usage guide",
+
+  // Introductory sentence for prompt part 5 (RAG knowledge-base excerpts).
+  "rag_intro": "The following excerpts from your knowledge base are relevant to your current task. Draw on them as needed:",
+
+  // Template for the heading of each RAG chunk section. {{documentPath}} is replaced with the source path.
+  "rag_source_header": "### Source: {{documentPath}}"
 }

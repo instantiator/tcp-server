@@ -6,6 +6,7 @@ import {
 import { MessagesAnnotation, StateGraph } from '@langchain/langgraph';
 import {
   AgentStatus,
+  AuditClientService,
   AuditEventType,
   LcpAgent,
   LcpCompany,
@@ -18,11 +19,11 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
-import { AuditClientService } from '../audit/audit-client.service';
 import * as factory from '../llm/llm-factory';
 import { McpClientService } from '../mcp/mcp-client.service';
 import { AgentRagService } from '../rag/agent-rag.service';
 import { AgentRegistryService } from '../registry/agent-registry.service';
+import { StorageTrackingClientService } from '../storage-tracking/storage-tracking-client.service';
 import { agentPrompts } from '../agent-prompts';
 import { AgentLoopService } from './agent-loop.service';
 
@@ -113,6 +114,10 @@ describe('AgentLoopService', () => {
         {
           provide: AuditClientService,
           useValue: { record: auditRecord, notifyComplete: jest.fn() },
+        },
+        {
+          provide: StorageTrackingClientService,
+          useValue: { patch: jest.fn() },
         },
         {
           provide: AgentRagService,
@@ -370,6 +375,92 @@ describe('AgentLoopService', () => {
       AuditEventType.StateChange,
       expect.objectContaining({ reason: 'max_iterations' }),
     );
+  });
+
+  describe('post-completion summary generation', () => {
+    it('records an AgentLoopCompletion audit event when the agent completes via complete_task', async () => {
+      const mockInvoke = jest
+        .fn()
+        .mockResolvedValue(
+          new AIMessage('{"summary": "The agent analysed the market."}'),
+        );
+      jest.spyOn(factory, 'buildChatModel').mockReturnValue({
+        invoke: mockInvoke,
+      } as unknown as ReturnType<typeof factory.buildChatModel>);
+
+      const { agent, role, company } = await seedAgentAndRole();
+
+      jest
+        .spyOn(agentRepo, 'findOneBy')
+        .mockResolvedValueOnce(agent) // run() initial lookup
+        .mockResolvedValueOnce({ ...agent, status: AgentStatus.Completed }); // runLoop() status check
+
+      await service.run(agent.id);
+
+      expect(auditRecord).toHaveBeenCalledWith(
+        company.id,
+        role.name,
+        agent.id,
+        AuditEventType.AgentLoopCompletion,
+        expect.objectContaining({ summary: 'The agent analysed the market.' }),
+      );
+    });
+
+    it('records a structured fallback summary when LLM summary generation fails', async () => {
+      jest.spyOn(factory, 'buildChatModel').mockReturnValue({
+        invoke: jest.fn().mockRejectedValue(new Error('LLM timeout')),
+      } as unknown as ReturnType<typeof factory.buildChatModel>);
+
+      const { agent } = await seedAgentAndRole();
+
+      jest
+        .spyOn(agentRepo, 'findOneBy')
+        .mockResolvedValueOnce(agent)
+        .mockResolvedValueOnce({ ...agent, status: AgentStatus.Completed });
+
+      await expect(service.run(agent.id)).resolves.not.toThrow();
+
+      // Fallback summary is always recorded even when the LLM call fails
+      expect(auditRecord).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        agent.id,
+        AuditEventType.AgentLoopCompletion,
+        expect.objectContaining({
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          summary: expect.stringMatching(
+            /Completed task:.*no actions recorded/,
+          ),
+        }),
+      );
+    });
+
+    it('strips markdown fences from the LLM summary response', async () => {
+      jest.spyOn(factory, 'buildChatModel').mockReturnValue({
+        invoke: jest
+          .fn()
+          .mockResolvedValue(
+            new AIMessage('```json\n{"summary": "Clean summary."}\n```'),
+          ),
+      } as unknown as ReturnType<typeof factory.buildChatModel>);
+
+      const { agent } = await seedAgentAndRole();
+
+      jest
+        .spyOn(agentRepo, 'findOneBy')
+        .mockResolvedValueOnce(agent)
+        .mockResolvedValueOnce({ ...agent, status: AgentStatus.Completed });
+
+      await service.run(agent.id);
+
+      expect(auditRecord).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        agent.id,
+        AuditEventType.AgentLoopCompletion,
+        expect.objectContaining({ summary: 'Clean summary.' }),
+      );
+    });
   });
 
   describe('initial prompt structure', () => {

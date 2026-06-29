@@ -137,10 +137,10 @@ A structured audit event emitted at the end of a successful run: a brief overall
 
 ## Agent status values
 
-| Status      | Meaning                                                          |
-| ----------- | ---------------------------------------------------------------- |
-| `idle`      | Created but not yet started                                      |
-| `running`   | Agent loop is actively executing                                 |
-| `paused`    | Waiting for user input or a consultation result                  |
-| `completed` | Run finished successfully; `output` is populated                 |
-| `failed`    | Run ended with an error; `errorMessage` explains why             |
+| Status      | Meaning                                              |
+| ----------- | ---------------------------------------------------- |
+| `idle`      | Created but not yet started                          |
+| `running`   | Agent loop is actively executing                     |
+| `paused`    | Waiting for user input or a consultation result      |
+| `completed` | Run finished successfully; `output` is populated     |
+| `failed`    | Run ended with an error; `errorMessage` explains why |

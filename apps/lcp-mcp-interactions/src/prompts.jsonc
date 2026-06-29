@@ -1,6 +1,6 @@
 {
   // Returned by describe_server — gives the agent an overview of available interaction tools.
-  "describe_server": "## Interactions Service\n\nEnables requesting input from users or consultation from other agents.\nTools that pause agent execution will not return until the request is fulfilled.\n\n### Tools\n- **describe_server** — this overview\n- **list_available_users(companyId)** — list company users and their knowledge domains\n- **list_available_roles(companyId)** — list roles available for agent consultation\n- **request_user_input(agentId, companyId, question, context?)** — pause and request human input\n- **request_agent_consultation(agentId, companyId, roleName, question, context?)** — consult another agent role\n- **complete_task(agentId, companyId, finalAnswer)** — mark task complete with final output",
+  "describe_server": "## Interactions Service\n\nEnables requesting input from users or consultation from other agents.\nTools that pause agent execution will not return until the request is fulfilled.\n\n### Tools\n- **describe_server** — this overview\n- **list_available_users(companyId)** — list company users and their knowledge domains\n- **list_available_roles(companyId)** — list roles available for agent consultation\n- **request_user_input(agentId, companyId, question, context?)** — pause and request human input\n- **request_agent_consultation(agentId, companyId, roleName, question, context?)** — consult another agent role\n- **complete_task(agentId, companyId, finalAnswer, outputFiles?)** — mark task complete; optionally list output file paths to have their existence verified before completion",
 
   // Returned on successful user-input pause. {{slug}} is replaced with the conversation slug.
   "paused_user_input": "Paused. Your question has been submitted as conversation '{{slug}}'. Your task will resume automatically when a user responds.",
@@ -22,5 +22,9 @@
 
   // Returned when list_available_users or list_available_roles fail.
   "error_list_users": "Could not retrieve user list.",
-  "error_list_roles": "Could not retrieve role list."
+  "error_list_roles": "Could not retrieve role list.",
+
+  // Returned when outputFiles listed in complete_task cannot be found in storage.
+  // Includes lists of missing files and files tracked during the current run.
+  "missing_output_files": "Some output files could not be found in shared storage.\n\nMissing files:\n{{missingList}}\n\nFiles you created or modified during this task:\n- Created: {{created}}\n- Modified: {{modified}}\n\nIf you intended to reference one of those files, correct the path and call complete_task again. If the output is incomplete, continue working and submit a new complete_task when ready. If the task does not produce file output, omit the outputFiles parameter."
 }

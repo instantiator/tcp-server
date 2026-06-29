@@ -1,4 +1,7 @@
+import { NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import { Repository } from 'typeorm';
+import { LcpAgent } from '@lcp/shared';
 import { InternalController } from './internal.controller';
 import { PauseAndResumeService } from './pause-and-resume.service';
 
@@ -7,7 +10,9 @@ describe('InternalController', () => {
     pauseForUserInput: jest.Mock;
     pauseForConsultation: jest.Mock;
     completeAgent: jest.Mock;
+    updateStorageChanges: jest.Mock;
   };
+  let agentRepo: { findOneBy: jest.Mock };
   let controller: InternalController;
 
   beforeEach(() => {
@@ -15,9 +20,12 @@ describe('InternalController', () => {
       pauseForUserInput: jest.fn(),
       pauseForConsultation: jest.fn(),
       completeAgent: jest.fn().mockResolvedValue(undefined),
+      updateStorageChanges: jest.fn().mockResolvedValue(undefined),
     };
+    agentRepo = { findOneBy: jest.fn() };
     controller = new InternalController(
       pauseResume as unknown as PauseAndResumeService,
+      agentRepo as unknown as Repository<LcpAgent>,
     );
   });
 
@@ -78,6 +86,52 @@ describe('InternalController', () => {
         agentId,
         'My final answer.',
       );
+    });
+  });
+
+  describe('getAgent', () => {
+    it('returns id and storageChanges when agent exists', async () => {
+      const agentId = randomUUID();
+      agentRepo.findOneBy.mockResolvedValue({
+        id: agentId,
+        storageChanges: {
+          created: ['docs/report.md'],
+          modified: [],
+          deleted: [],
+          moved: [],
+        },
+      });
+
+      const result = await controller.getAgent(agentId);
+
+      expect(result).toEqual({
+        id: agentId,
+        storageChanges: {
+          created: ['docs/report.md'],
+          modified: [],
+          deleted: [],
+          moved: [],
+        },
+      });
+    });
+
+    it('throws NotFoundException when agent does not exist', async () => {
+      agentRepo.findOneBy.mockResolvedValue(null);
+      await expect(controller.getAgent(randomUUID())).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('updateStorage', () => {
+    it('delegates to updateStorageChanges and returns void', async () => {
+      const agentId = randomUUID();
+
+      await controller.updateStorage(agentId, { created: ['docs/out.md'] });
+
+      expect(pauseResume.updateStorageChanges).toHaveBeenCalledWith(agentId, {
+        created: ['docs/out.md'],
+      });
     });
   });
 });

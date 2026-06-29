@@ -11,11 +11,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AgentLoopService } from '../../../apps/lcp-agent/src/agent/agent-loop.service';
-import { AuditClientService } from '../../../apps/lcp-agent/src/audit/audit-client.service';
+import { AuditClientService } from '@lcp/shared';
 import * as factory from '../../../apps/lcp-agent/src/llm/llm-factory';
 import { McpClientService } from '../../../apps/lcp-agent/src/mcp/mcp-client.service';
 import { AgentRagService } from '../../../apps/lcp-agent/src/rag/agent-rag.service';
 import { AgentRegistryService } from '../../../apps/lcp-agent/src/registry/agent-registry.service';
+import { StorageTrackingClientService } from '../../../apps/lcp-agent/src/storage-tracking/storage-tracking-client.service';
 
 // Requires DOCKER services: PostgreSQL (DATABASE_URL).
 // Run via: ./scripts/run-integration-tests.sh
@@ -61,6 +62,10 @@ describeIf('AgentLoopService (integration)', () => {
         {
           provide: McpClientService,
           useValue: { loadTools: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: StorageTrackingClientService,
+          useValue: { patch: jest.fn() },
         },
         {
           provide: ConfigService,

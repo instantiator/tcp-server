@@ -10,6 +10,18 @@ import {
 import { LcpAgent } from './LcpAgent.model';
 import { LcpCompany } from './LcpCompany.model';
 
+/** Structured payload for {@link AuditEventType.AgentLoopCompletion} events. */
+export interface AgentLoopCompletionSummary {
+  summary: string;
+  actions: string[];
+  storage: {
+    created: string[];
+    modified: string[];
+    deleted: string[];
+    moved: { from: string; to: string }[];
+  };
+}
+
 /** Categories of event captured in the audit log (per ADR-008). */
 export const AuditEventType = {
   LlmRequest: 'llm_request',
@@ -18,6 +30,7 @@ export const AuditEventType = {
   ToolResult: 'tool_result',
   Decision: 'decision',
   StateChange: 'state_change',
+  AgentLoopCompletion: 'agent_loop_completion',
 } as const;
 
 export type AuditEventType =
