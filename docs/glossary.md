@@ -60,7 +60,7 @@ The persisted LangGraph graph state written to PostgreSQL after each step. Enabl
 LangGraph's identifier for a checkpoint state thread. Stored on the `LcpAgent` record; used to restore the agent's full conversation history when resuming.
 
 **Pause / Resume**
-When an agent calls `request_user_input` or `request_agent_consultation`, its status is set to `paused` and the BullMQ job completes cleanly (no CPU consumed while waiting). On receiving a reply or consultation result, lcp-server re-enqueues the job (`type: 'resume'`) and the agent continues from its checkpoint.
+When an agent calls `request_user_input` or `request_agent_consultation`, its status is set to `paused` (with `pausedAt` recorded) and the BullMQ job completes cleanly (no CPU consumed while waiting). The agent only resumes once it has no other outstanding requests; lcp-server then re-enqueues the job (`type: 'resume'`) with every response received since `pausedAt` aggregated into one message. See [cross-agent-consultations.md](cross-agent-consultations.md#resume-conditions).
 
 **Task (future)**
 A higher-level unit of work managed by the orchestrator, broken into ordered `TaskStep` objects each assigned to a role. Not yet fully implemented; see [ADR-010](ADRs/ADR-010-orchestration-design.md).

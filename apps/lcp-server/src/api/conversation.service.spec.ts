@@ -4,7 +4,11 @@ import {
   ConversationMessage,
   LcpRole,
 } from '@lcp/shared';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import type { DataSource, EntityManager, Repository } from 'typeorm';
 import { ConversationService } from './conversation.service';
@@ -128,6 +132,42 @@ describe('ConversationService', () => {
         expect.stringContaining('UPDATE lcp_role'),
         [roleId],
       );
+    });
+
+    it('routes to explicit userIds when given, skipping routeQuery', async () => {
+      const targetId = randomUUID();
+      userRepo.findBy.mockResolvedValue([
+        { id: targetId, identifier: 'alice@example.com' } as CompanyUser,
+      ]);
+
+      const conv = await service.create(
+        companyId,
+        roleId,
+        'cto',
+        agentId,
+        'question',
+        undefined,
+        [targetId],
+      );
+
+      expect(conv.routedToIdentifiers).toEqual(['alice@example.com']);
+    });
+
+    it('throws BadRequestException when a userId does not belong to the company', async () => {
+      const targetId = randomUUID();
+      userRepo.findBy.mockResolvedValue([]); // none match
+
+      await expect(
+        service.create(
+          companyId,
+          roleId,
+          'cto',
+          agentId,
+          'question',
+          undefined,
+          [targetId],
+        ),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

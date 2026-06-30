@@ -6,7 +6,7 @@ import {
 } from '@lcp/shared';
 import { NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import type { Repository } from 'typeorm';
+import type { FindOneOptions, Repository } from 'typeorm';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { ConversationService } from './conversation.service';
 import { PauseAndResumeService } from './pause-and-resume.service';
@@ -34,6 +34,7 @@ const makeAgent = (overrides: Partial<LcpAgent> = {}): LcpAgent => ({
   company: {} as never,
   role: {} as never,
   version: 1,
+  pausedAt: undefined,
   ...overrides,
 });
 
@@ -80,7 +81,7 @@ describe('PauseAndResumeService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('sets agent status to Paused and creates a conversation', async () => {
+    it('sets agent status to Paused (with pausedAt) and creates a conversation', async () => {
       const agent = makeAgent();
       const role = makeRole({ id: agent.roleId, name: 'analyst' });
       agentRepo.findOneBy.mockResolvedValue(agent);
@@ -95,6 +96,7 @@ describe('PauseAndResumeService', () => {
 
       expect(agentRepo.update).toHaveBeenCalledWith(agent.id, {
         status: AgentStatus.Paused,
+        pausedAt: expect.any(Date) as Date,
       });
       expect(convService.create).toHaveBeenCalledWith(
         agent.companyId,
@@ -103,6 +105,7 @@ describe('PauseAndResumeService', () => {
         agent.id,
         'What is the plan?',
         'Some context',
+        undefined,
       );
       expect(result.slug).toBe('analyst-1');
     });
@@ -122,13 +125,36 @@ describe('PauseAndResumeService', () => {
         expect.any(String),
         'question',
         undefined,
+        undefined,
+      );
+    });
+
+    it('forwards userIds to ConversationService.create when given', async () => {
+      const agent = makeAgent();
+      const role = makeRole({ id: agent.roleId, name: 'analyst' });
+      agentRepo.findOneBy.mockResolvedValue(agent);
+      roleRepo.findOneBy.mockResolvedValue(role);
+      convService.create.mockResolvedValue({ slug: 'analyst-1' });
+      const userIds = [randomUUID(), randomUUID()];
+
+      await service.pauseForUserInput(agent.id, 'question', undefined, userIds);
+
+      expect(convService.create).toHaveBeenCalledWith(
+        agent.companyId,
+        agent.roleId,
+        'analyst',
+        agent.id,
+        'question',
+        undefined,
+        userIds,
       );
     });
   });
 
   describe('pauseForConsultation', () => {
-    it('throws NotFoundException when role does not exist for the company', async () => {
+    it('throws NotFoundException when role id does not exist for the company', async () => {
       const agent = makeAgent();
+      const roleId = randomUUID();
       agentRepo.findOneBy.mockResolvedValue(agent);
       roleRepo.findOne.mockResolvedValue(null);
 
@@ -136,13 +162,103 @@ describe('PauseAndResumeService', () => {
         service.pauseForConsultation(
           agent.id,
           agent.companyId,
-          'unknown-role',
+          roleId,
           'question',
         ),
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('sets calling agent to Paused, starts consultation agent, creates PendingConsultation', async () => {
+    it('looks up the role by id (scoped to the company), not by name', async () => {
+      const caller = makeAgent();
+      const callerRole = makeRole({ id: caller.roleId, name: 'cto' });
+      const consultRole = makeRole({
+        name: 'analyst',
+        companyId: caller.companyId,
+      });
+      const consultAgent = makeAgent({ id: randomUUID() });
+
+      agentRepo.findOneBy
+        .mockResolvedValueOnce(caller)
+        .mockResolvedValueOnce(callerRole as never);
+      roleRepo.findOne.mockResolvedValue(consultRole);
+      roleRepo.findOneBy.mockResolvedValue(callerRole);
+      orchestration.startAgent.mockResolvedValue(consultAgent);
+      consultRepo.save.mockResolvedValue({
+        id: randomUUID(),
+        callingAgentId: caller.id,
+        consultationAgentId: consultAgent.id,
+        companyId: caller.companyId,
+        status: 'pending',
+        result: null,
+        createdAt: new Date(),
+        version: 1,
+      });
+
+      await service.pauseForConsultation(
+        caller.id,
+        caller.companyId,
+        consultRole.id,
+        'Can you analyse this?',
+      );
+
+      expect(roleRepo.findOne).toHaveBeenCalledWith({
+        where: { id: consultRole.id, companyId: caller.companyId },
+      });
+    });
+
+    it('targets the correct role when two roles in the company share a name (regression)', async () => {
+      const caller = makeAgent();
+      const callerRole = makeRole({ id: caller.roleId, name: 'cto' });
+      const sameNameRoleA = makeRole({
+        name: 'analyst',
+        companyId: caller.companyId,
+      });
+      const sameNameRoleB = makeRole({
+        name: 'analyst',
+        companyId: caller.companyId,
+      });
+      const consultAgent = makeAgent({ id: randomUUID() });
+
+      agentRepo.findOneBy
+        .mockResolvedValueOnce(caller)
+        .mockResolvedValueOnce(callerRole as never);
+      // Lookup is scoped to id, so only the intended role (B) is ever returned.
+      roleRepo.findOne.mockImplementation((opts: FindOneOptions<LcpRole>) => {
+        const where = opts.where as { id?: string } | undefined;
+        return Promise.resolve(
+          where?.id === sameNameRoleB.id ? sameNameRoleB : null,
+        );
+      });
+      roleRepo.findOneBy.mockResolvedValue(callerRole);
+      orchestration.startAgent.mockResolvedValue(consultAgent);
+      consultRepo.save.mockResolvedValue({
+        id: randomUUID(),
+        callingAgentId: caller.id,
+        consultationAgentId: consultAgent.id,
+        companyId: caller.companyId,
+        status: 'pending',
+        result: null,
+        createdAt: new Date(),
+        version: 1,
+      });
+
+      await service.pauseForConsultation(
+        caller.id,
+        caller.companyId,
+        sameNameRoleB.id,
+        'Can you analyse this?',
+      );
+
+      // Targeted the role matching the id, never the other same-named role.
+      expect(orchestration.startAgent).toHaveBeenCalledWith(
+        expect.objectContaining({ roleId: sameNameRoleB.id }),
+      );
+      expect(orchestration.startAgent).not.toHaveBeenCalledWith(
+        expect.objectContaining({ roleId: sameNameRoleA.id }),
+      );
+    });
+
+    it('sets calling agent to Paused (with pausedAt), starts consultation agent, creates PendingConsultation, returns the resolved role name', async () => {
       const caller = makeAgent();
       const callerRole = makeRole({ id: caller.roleId, name: 'cto' });
       const consultRole = makeRole({
@@ -169,15 +285,16 @@ describe('PauseAndResumeService', () => {
         version: 1,
       });
 
-      await service.pauseForConsultation(
+      const result = await service.pauseForConsultation(
         caller.id,
         caller.companyId,
-        'analyst',
+        consultRole.id,
         'Can you analyse this?',
       );
 
       expect(agentRepo.update).toHaveBeenCalledWith(caller.id, {
         status: AgentStatus.Paused,
+        pausedAt: expect.any(Date) as Date,
       });
       expect(orchestration.startAgent).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -186,6 +303,7 @@ describe('PauseAndResumeService', () => {
         }),
       );
       expect(consultRepo.save).toHaveBeenCalled();
+      expect(result.roleName).toBe('analyst');
     });
   });
 
@@ -245,10 +363,7 @@ describe('PauseAndResumeService', () => {
         status: 'complete',
         result: 'consultation result',
       });
-      expect(orchestration.resumeAgent).toHaveBeenCalledWith(
-        callingAgent.id,
-        'consultation result',
-      );
+      expect(orchestration.resumeAgent).toHaveBeenCalledWith(callingAgent.id);
     });
 
     it('does not resume calling agent when it is not Paused', async () => {

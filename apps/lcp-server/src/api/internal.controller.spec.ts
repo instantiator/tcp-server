@@ -51,22 +51,48 @@ describe('InternalController', () => {
         agentId,
         'What should we do?',
         'Background info.',
+        undefined,
       );
       expect(result).toEqual({ slug: 'analyst-3' });
+    });
+
+    it('forwards userIds when targeting specific users', async () => {
+      const agentId = randomUUID();
+      const userIds = [randomUUID(), randomUUID()];
+      pauseResume.pauseForUserInput.mockResolvedValue({ slug: 'analyst-4' });
+
+      await controller.pause({
+        type: 'user_input',
+        agentId,
+        question: 'What should we do?',
+        userIds,
+      });
+
+      expect(pauseResume.pauseForUserInput).toHaveBeenCalledWith(
+        agentId,
+        'What should we do?',
+        undefined,
+        userIds,
+      );
     });
   });
 
   describe('pause — agent_consultation', () => {
-    it('delegates to pauseForConsultation and returns consultationId', async () => {
+    it('delegates to pauseForConsultation and returns consultationId + roleName', async () => {
       const agentId = randomUUID();
       const companyId = randomUUID();
+      const roleId = randomUUID();
       const consultationId = randomUUID();
-      pauseResume.pauseForConsultation.mockResolvedValue({ consultationId });
+      pauseResume.pauseForConsultation.mockResolvedValue({
+        consultationId,
+        roleName: 'Legal Advisor',
+      });
 
       const result = await controller.pause({
         type: 'agent_consultation',
         agentId,
         companyId,
+        roleId,
         roleName: 'legal-advisor',
         question: 'Is this compliant?',
       });
@@ -74,11 +100,15 @@ describe('InternalController', () => {
       expect(pauseResume.pauseForConsultation).toHaveBeenCalledWith(
         agentId,
         companyId,
-        'legal-advisor',
+        roleId,
         'Is this compliant?',
         undefined,
+        'legal-advisor',
       );
-      expect(result).toEqual({ consultationId });
+      expect(result).toEqual({
+        consultationId,
+        roleName: 'Legal Advisor',
+      });
     });
   });
 

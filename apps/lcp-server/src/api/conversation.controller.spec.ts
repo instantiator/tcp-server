@@ -90,10 +90,9 @@ describe('ConversationController', () => {
 
       await ctrl.reply('cto-1', { content: 'The answer.' });
 
-      expect(orchestration.resumeAgent).toHaveBeenCalledWith(
-        agentId,
-        'The answer.',
-      );
+      // No reply content passed — the orchestrator aggregates responses
+      // itself from the DB, scoped by the agent's pausedAt.
+      expect(orchestration.resumeAgent).toHaveBeenCalledWith(agentId);
     });
 
     it('does not call resumeAgent when agentId is null', async () => {

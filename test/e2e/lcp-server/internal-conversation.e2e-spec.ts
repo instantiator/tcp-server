@@ -202,6 +202,113 @@ describe('InternalController + ConversationController (e2e)', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // POST /internal/pause — agent_consultation
+  // ---------------------------------------------------------------------------
+
+  describe('POST /internal/pause (agent_consultation)', () => {
+    it('pauses the caller (with pausedAt) and starts a consultation agent for roleId', async () => {
+      const company = await createCompany();
+      const role = await createRole(company.id);
+      const caller = await createRunningAgent(company.id, role.id);
+
+      const res = await request(app.getHttpServer())
+        .post('/internal/pause')
+        .set('X-Internal-Api-Key', INTERNAL_KEY)
+        .send({
+          type: 'agent_consultation',
+          agentId: caller.id,
+          companyId: company.id,
+          roleId: role.id,
+          question: 'Can you analyse this?',
+        })
+        .expect(201);
+
+      const body = res.body as { consultationId: string; roleName: string };
+      expect(body.roleName).toBe('analyst');
+
+      const fresh = await agentRepo.findOneByOrFail({ id: caller.id });
+      expect(fresh.status).toBe(AgentStatus.Paused);
+      expect(fresh.pausedAt).toBeTruthy();
+
+      const consult = await consultRepo.findOneByOrFail({
+        id: body.consultationId as UUID,
+      });
+      expect(consult.callingAgentId).toBe(caller.id);
+      expect(consult.status).toBe('pending');
+
+      const consultant = await agentRepo.findOneByOrFail({
+        id: consult.consultationAgentId,
+      });
+      expect(consultant.roleId).toBe(role.id);
+    });
+
+    it('targets the correct role when two roles in the company share a name (regression)', async () => {
+      const company = await createCompany();
+      // Two roles named 'analyst' in the same company — the original bug
+      // looked these up by name and could resolve to either one.
+      const roleA = await createRole(company.id);
+      const res = await request(app.getHttpServer())
+        .post('/api/role')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({
+          companyId: company.id,
+          name: 'analyst',
+          description: 'A second, identically-named role.',
+          llmConfig: { provider: 'lm-studio', model: 'qwen3-5b' },
+          systemPromptTemplate: 'You are {{name}}.',
+          knowledgeDomains: [],
+          mcpServerList: [],
+        })
+        .expect(201);
+      const roleB = res.body as LcpRole;
+      const caller = await createRunningAgent(company.id, roleA.id);
+
+      const pauseRes = await request(app.getHttpServer())
+        .post('/internal/pause')
+        .set('X-Internal-Api-Key', INTERNAL_KEY)
+        .send({
+          type: 'agent_consultation',
+          agentId: caller.id,
+          companyId: company.id,
+          roleId: roleB.id,
+          question: 'Can you analyse this?',
+        })
+        .expect(201);
+
+      const { consultationId } = pauseRes.body as { consultationId: UUID };
+      const consult = await consultRepo.findOneByOrFail({
+        id: consultationId,
+      });
+      const consultant = await agentRepo.findOneByOrFail({
+        id: consult.consultationAgentId,
+      });
+
+      // Targeted role B specifically, not role A — proves the lookup is
+      // unambiguous even with a duplicate role name in the company.
+      expect(consultant.roleId).toBe(roleB.id);
+      expect(consultant.roleId).not.toBe(roleA.id);
+    });
+
+    it('returns 404 when roleId does not exist in the company', async () => {
+      const company = await createCompany();
+      const role = await createRole(company.id);
+      const caller = await createRunningAgent(company.id, role.id);
+
+      await request(app.getHttpServer())
+        .post('/internal/pause')
+        .set('X-Internal-Api-Key', INTERNAL_KEY)
+        .send({
+          type: 'agent_consultation',
+          agentId: caller.id,
+          companyId: company.id,
+          roleId: randomUUID(),
+          question: 'Can you analyse this?',
+        })
+        .expect(404);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // POST /internal/agent/:agentId/complete — no consultation
   // ---------------------------------------------------------------------------
 

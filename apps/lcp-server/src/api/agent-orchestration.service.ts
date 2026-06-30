@@ -1,4 +1,10 @@
-import { AgentStatus, LcpAgent } from '@lcp/shared';
+import {
+  AgentStatus,
+  Conversation,
+  ConversationMessage,
+  LcpAgent,
+  PendingConsultation,
+} from '@lcp/shared';
 import {
   Injectable,
   Logger,
@@ -6,8 +12,10 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
 import { Queue } from 'bullmq';
 import { UUID } from 'crypto';
+import { MoreThanOrEqual, Repository } from 'typeorm';
 import { DbService } from '../db/db.service';
 import { LcpAgentTemplate } from '../templates/LcpAgentTemplate';
 
@@ -36,6 +44,14 @@ export class AgentOrchestrationService
   constructor(
     private readonly db: DbService,
     private readonly config: ConfigService,
+    @InjectRepository(LcpAgent)
+    private readonly agentRepo: Repository<LcpAgent>,
+    @InjectRepository(PendingConsultation)
+    private readonly consultRepo: Repository<PendingConsultation>,
+    @InjectRepository(Conversation)
+    private readonly convRepo: Repository<Conversation>,
+    @InjectRepository(ConversationMessage)
+    private readonly msgRepo: Repository<ConversationMessage>,
   ) {}
 
   /** Connects to the Redis-backed BullMQ queue on startup. */
@@ -63,10 +79,14 @@ export class AgentOrchestrationService
 
   /**
    * Validates that the agent exists and is in a resumable state, then
-   * dispatches a `resume` job.
+   * dispatches a `resume` job — unless the agent has other outstanding
+   * consultations or user-input requests, in which case it stays paused
+   * until all of them are resolved.
    *
-   * @param replyContent - Optional content injected as the first HumanMessage
-   *   on resume (user reply or consultation result).
+   * @param replyContent - Fallback content injected as the first HumanMessage
+   *   on resume, used only when the agent wasn't paused via this service
+   *   (e.g. a manual retry). Pause-triggered resumes aggregate every response
+   *   received since the agent paused instead.
    * @throws if the agent does not exist or is not in a resumable state
    */
   async resumeAgent(agentId: UUID, replyContent?: string): Promise<LcpAgent> {
@@ -84,12 +104,92 @@ export class AgentOrchestrationService
         `Agent ${agentId} cannot be resumed from status '${agent.status}'`,
       );
     }
+
+    // Stay paused if the agent raised other requests that haven't been
+    // answered yet — it should see every response it asked for, not just
+    // the first one back.
+    const outstanding = await this.countOutstanding(agentId);
+    if (outstanding > 0) {
+      this.logger.log(
+        `Agent ${agentId} has ${outstanding} outstanding request(s) — staying paused`,
+      );
+      return agent;
+    }
+
+    // Combine every response received since this pause episode began, so
+    // the resumed agent sees all the answers it asked for, not just the
+    // last one to arrive.
+    const aggregated = agent.pausedAt
+      ? await this.collectRepliesSince(agentId, agent.pausedAt)
+      : null;
+
+    await this.agentRepo.update(agentId, { pausedAt: () => 'NULL' });
+
     await this.queue.add('resume', {
       agentId: agent.id,
       type: 'resume',
-      replyContent,
+      replyContent: aggregated ?? replyContent,
     });
     this.logger.log(`Dispatched resume job for agent ${agent.id}`);
     return agent;
+  }
+
+  /** Counts the agent's still-unresolved consultations and user-input requests. */
+  private async countOutstanding(agentId: UUID): Promise<number> {
+    const [pendingConsultations, openConversations] = await Promise.all([
+      this.consultRepo.count({
+        where: { callingAgentId: agentId, status: 'pending' },
+      }),
+      this.convRepo.count({ where: { agentId, status: 'awaiting_user' } }),
+    ]);
+    return pendingConsultations + openConversations;
+  }
+
+  /**
+   * Gathers every consultation result and user reply received for this
+   * agent since `pausedAt`, joined into one message. Returns `null` if
+   * nothing was found (e.g. the agent is being resumed for another reason).
+   */
+  private async collectRepliesSince(
+    agentId: UUID,
+    pausedAt: Date,
+  ): Promise<string | null> {
+    const [consultations, conversations] = await Promise.all([
+      this.consultRepo.find({
+        where: {
+          callingAgentId: agentId,
+          status: 'complete',
+          createdAt: MoreThanOrEqual(pausedAt),
+        },
+      }),
+      this.convRepo.find({
+        where: {
+          agentId,
+          status: 'closed',
+          createdAt: MoreThanOrEqual(pausedAt),
+        },
+      }),
+    ]);
+
+    const conversationReplies = await Promise.all(
+      conversations.map(async (conv) => {
+        const reply = await this.msgRepo.findOne({
+          where: { conversationId: conv.id, author: 'user' },
+          order: { timestamp: 'DESC' },
+        });
+        return reply?.content;
+      }),
+    );
+
+    const parts = [
+      ...consultations
+        .filter((c) => c.result)
+        .map((c) => `Consultation response: ${c.result}`),
+      ...conversationReplies
+        .filter((content): content is string => Boolean(content))
+        .map((content) => `User response: ${content}`),
+    ];
+
+    return parts.length > 0 ? parts.join('\n\n') : null;
   }
 }

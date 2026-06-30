@@ -12,7 +12,7 @@
 | @nestjs/core                             | MIT          | git+https://github.com/nestjs/nest.git                         | Kamil Mysliwiec                                                        | 11.1.27  | 11.1.27   | ^11.0.1   |
 | @nestjs/passport                         | MIT          | git+https://github.com/nestjs/passport.git                     | Kamil Mysliwiec                                                        | 11.0.5   | 11.0.5    | ^11.0.5   |
 | @nestjs/platform-express                 | MIT          | git+https://github.com/nestjs/nest.git                         | Kamil Mysliwiec                                                        | 11.1.27  | 11.1.27   | ^11.0.1   |
-| @nestjs/swagger                          | MIT          | git+https://github.com/nestjs/swagger.git                      | Kamil Mysliwiec                                                        | 11.4.4   | 11.4.4    | ^11.4.4   |
+| @nestjs/swagger                          | MIT          | git+https://github.com/nestjs/swagger.git                      | Kamil Mysliwiec                                                        | 11.4.5   | 11.4.4    | ^11.4.4   |
 | @nestjs/terminus                         | MIT          | git+https://github.com/nestjs/terminus.git                     | Livio Brunner                                                          | 11.1.1   | 11.1.1    | ^11.1.1   |
 | @nestjs/typeorm                          | MIT          | git+https://github.com/nestjs/typeorm.git                      | Kamil Mysliwiec                                                        | 11.0.3   | 11.0.2    | ^11.0.1   |
 | axios                                    | MIT          | git+https://github.com/axios/axios.git                         | Matt Zabriskie                                                         | 1.18.1   | 1.18.0    | ^1.18.0   |
@@ -32,3 +32,4 @@
 | rxjs                                     | Apache-2.0   | git+https://github.com/reactivex/rxjs.git                      | Ben Lesh <ben@benlesh.com>                                             | 7.8.2    | 7.8.2     | ^7.8.1    |
 | swagger-ui-express                       | MIT          | git+ssh://git@github.com/scottie1984/swagger-ui-express.git    | Stephen Scott scottie1984@gmail.com                                    | 5.0.1    | 5.0.1     | ^5.0.1    |
 | typeorm                                  | MIT          | git+https://github.com/typeorm/typeorm.git                     | TypeORM maintainers@typeorm.io                                         | 1.0.0    | 1.0.0     | ^1.0.0    |
+

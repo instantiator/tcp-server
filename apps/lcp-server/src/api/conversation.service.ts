@@ -6,13 +6,14 @@ import {
   LcpRole,
 } from '@lcp/shared';
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
-import { DataSource, FindOptionsWhere, Repository } from 'typeorm';
+import { DataSource, FindOptionsWhere, In, Repository } from 'typeorm';
 
 /**
  * Manages the lifecycle of agent-to-human {@link Conversation} records.
@@ -71,6 +72,7 @@ export class ConversationService {
     agentId: UUID | null,
     question: string,
     context?: string,
+    userIds?: UUID[],
   ): Promise<Conversation> {
     const slugBase = roleName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
@@ -94,11 +96,12 @@ export class ConversationService {
     }
 
     const slug = `${slugBase}-${queryIndex}`;
-    const routedToIdentifiers = await this.routeQuery(
-      companyId,
-      question,
-      roleName,
-    );
+
+    // Target explicit users when given, validating they belong to the
+    // company; otherwise fall back to the keyword-matching heuristic.
+    const routedToIdentifiers = userIds
+      ? await this.resolveTargetIdentifiers(companyId, userIds)
+      : await this.routeQuery(companyId, question, roleName);
 
     const conv = this.convRepo.create({
       slug,
@@ -143,6 +146,27 @@ export class ConversationService {
       conv.closedAt = new Date();
       return em.getRepository(Conversation).save(conv);
     });
+  }
+
+  /**
+   * Resolves explicit target user ids to their OIDC identifiers, validating
+   * each belongs to the company. Throws 400 if any id doesn't match.
+   */
+  private async resolveTargetIdentifiers(
+    companyId: UUID,
+    userIds: UUID[],
+  ): Promise<string[]> {
+    const users = await this.userRepo.findBy({
+      id: In(userIds),
+      companyId,
+    });
+    const missing = userIds.filter((id) => !users.some((u) => u.id === id));
+    if (missing.length > 0) {
+      throw new BadRequestException(
+        `User id(s) not found in company ${companyId}: ${missing.join(', ')}`,
+      );
+    }
+    return users.map((u) => u.identifier);
   }
 
   /**

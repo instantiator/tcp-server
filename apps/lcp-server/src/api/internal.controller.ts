@@ -67,12 +67,13 @@ export class InternalController {
   @Post('pause')
   async pause(
     @Body() body: PauseDto,
-  ): Promise<{ slug?: string; consultationId?: string }> {
+  ): Promise<{ slug?: string; consultationId?: string; roleName?: string }> {
     if (body.type === 'user_input') {
       const result = await this.pauseResume.pauseForUserInput(
         body.agentId,
         body.question,
         body.context,
+        body.userIds,
       );
       return { slug: result.slug };
     }
@@ -81,11 +82,12 @@ export class InternalController {
       body.agentId,
       // ValidateIf guarantees these are present when type === 'agent_consultation'
       body.companyId!,
-      body.roleName!,
+      body.roleId!,
       body.question,
       body.context,
+      body.roleName,
     );
-    return { consultationId: result.consultationId };
+    return { consultationId: result.consultationId, roleName: result.roleName };
   }
 
   /**

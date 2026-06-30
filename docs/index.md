@@ -57,7 +57,8 @@ In-depth guides for implemented system features.
 | [lcp-mcp-storage](lcp-mcp-storage.md)             | Storage MCP server — full tool reference (12 tools, soft delete, audit)       |
 | [lcp-mcp-memory](lcp-mcp-memory.md)               | Memory MCP server — real implementation with pgvector recall and remember     |
 | [lcp-mcp-interactions](lcp-mcp-interactions.md)   | Interactions MCP server — pause/resume, consultation, complete_task           |
-| [Conversations](conversations.md)                 | Human-in-the-loop flow — query routing, pause/resume, sequence diagrams       |
+| [User Input Conversations](user-input-conversations.md) | Agent-to-human flow — query routing, pause/resume, sequence diagrams    |
+| [Cross-Agent Consultations](cross-agent-consultations.md) | Agent-to-agent flow — role lookup by id, resume conditions, sequence diagram |
 | [Context Management](context-management.md)       | Context window budgeting, compaction strategies, and SSE progress reporting   |
 | [Agent Special Cases](lcp-agent-special-cases.md) | LLM provider quirks (e.g. reasoning_content) and where their workarounds live |
 

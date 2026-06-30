@@ -29,11 +29,21 @@ export class PauseDto {
   @IsUUID()
   companyId?: UUID;
 
-  /** Required when type === 'agent_consultation'. */
+  /** Required when type === 'agent_consultation' — the unambiguous lookup key. */
   @ValidateIf((o: PauseDto) => o.type === 'agent_consultation')
+  @IsUUID()
+  roleId?: UUID;
+
+  /** Optional human-readable label, used only for friendlier error messages. */
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   roleName?: string;
+
+  /** Optional, type === 'user_input' only — targets specific company users instead of auto-routing. */
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  userIds?: UUID[];
 }
 
 export class CompleteDto {

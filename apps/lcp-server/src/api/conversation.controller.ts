@@ -62,6 +62,7 @@ export class ConversationController {
     @Param('slug') slug: string,
     @Body() body: ConversationReplyDto,
   ): Promise<Conversation> {
+    // Record the reply and close the conversation.
     const conv = await this.service.reply(
       slug,
       body.content,
@@ -69,9 +70,12 @@ export class ConversationController {
     );
 
     if (conv.agentId) {
+      // Ask the orchestrator to resume the agent — it will stay paused if
+      // other requests are still outstanding, or aggregate every response
+      // since the pause (including this one) if this was the last.
       // Fire-and-forget — conversation is already closed; don't block on Redis.
       void this.orchestration
-        .resumeAgent(conv.agentId, body.content)
+        .resumeAgent(conv.agentId)
         .catch((err: unknown) =>
           this.logger.warn(
             `Could not resume agent ${conv.agentId} after reply to ${slug}: ${err instanceof Error ? err.message : String(err)}`,

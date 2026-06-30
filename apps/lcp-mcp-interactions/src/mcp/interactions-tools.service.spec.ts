@@ -163,17 +163,38 @@ describe('InteractionsToolsService', () => {
 
       expect(text).toContain('Error');
     });
+
+    it('forwards userIds when targeting specific users', async () => {
+      mockedAxios.post.mockResolvedValue({ data: { slug: 'analyst-6' } });
+      const userIds = [randomUUID(), randomUUID()];
+
+      await callTool(service, 'request_user_input', {
+        agentId,
+        companyId,
+        question: 'What is the plan?',
+        userIds,
+      });
+
+      expect(axiosPost).toHaveBeenCalledWith(
+        'http://lcp-server:3000/internal/pause',
+        expect.objectContaining({ type: 'user_input', userIds }),
+        expect.any(Object),
+      );
+    });
   });
 
   describe('request_agent_consultation', () => {
-    it('calls POST /internal/pause with consultation type and returns message', async () => {
+    it('calls POST /internal/pause with the roleId and returns the resolved role name', async () => {
       const consultationId = randomUUID();
-      mockedAxios.post.mockResolvedValue({ data: { consultationId } });
+      const roleId = randomUUID();
+      mockedAxios.post.mockResolvedValue({
+        data: { consultationId, roleName: 'Legal Advisor' },
+      });
 
       const text = await callTool(service, 'request_agent_consultation', {
         agentId,
         companyId,
-        roleName: 'legal-advisor',
+        roleId,
         question: 'Is this legal?',
       });
 
@@ -181,12 +202,49 @@ describe('InteractionsToolsService', () => {
         'http://lcp-server:3000/internal/pause',
         expect.objectContaining({
           type: 'agent_consultation',
-          roleName: 'legal-advisor',
+          roleId,
         }),
         expect.any(Object),
       );
-      expect(text).toContain('legal-advisor');
+      expect(text).toContain('Legal Advisor');
       expect(text).toContain('Paused');
+    });
+
+    it('forwards an optional roleName label alongside roleId', async () => {
+      const consultationId = randomUUID();
+      const roleId = randomUUID();
+      mockedAxios.post.mockResolvedValue({
+        data: { consultationId, roleName: 'Legal Advisor' },
+      });
+
+      await callTool(service, 'request_agent_consultation', {
+        agentId,
+        companyId,
+        roleId,
+        roleName: 'legal-advisor',
+        question: 'Is this legal?',
+      });
+
+      expect(axiosPost).toHaveBeenCalledWith(
+        'http://lcp-server:3000/internal/pause',
+        expect.objectContaining({ roleId, roleName: 'legal-advisor' }),
+        expect.any(Object),
+      );
+    });
+
+    it('falls back to roleId in the error message when the request fails and no roleName was given', async () => {
+      const roleId = randomUUID();
+      mockedAxios.post.mockRejectedValue(new Error('Network error'));
+
+      const text = await callTool(service, 'request_agent_consultation', {
+        agentId,
+        companyId,
+        roleId,
+        question: 'Is this legal?',
+      });
+
+      expect(text).toContain('Error');
+      expect(text).toContain(roleId);
     });
   });
 
