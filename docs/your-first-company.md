@@ -11,7 +11,7 @@ The dev instance is much like a production instance. It's launched with docker c
 [^master]: I guess keycloak missed the memo around the time tech services moved away from master/slave terminology, over to `main` or `trunk`. My personal take: The intention is more important than the words, but I appreciate it's not ideal because even good intentions can evoke bad times. Let's do better in future.
 
 ```bash
-scripts/dev/start-dev.sh
+scripts/start-dev.sh
 ```
 
 | Realm    | Username | Default password |
@@ -33,7 +33,7 @@ curl http://localhost:3001/health
 ### 0.2 Test your the account
 
 ```bash
-./scripts/dev/lcp-cli.sh --rebuild get-token --username test --password test
+./lcp-cli.sh --rebuild get-token --username test --password test
 ```
 
 You should see a token returned - it _looks like_ a long string of random characters.
@@ -55,7 +55,7 @@ For a simple setup, set the `LLM_*` variables in your `.env` file and leave `llm
 `scripts/test-data/simple-company.json` is a minimal company definition with no LLM config — it relies on the environment-level fallback.
 
 ```bash
-cat scripts/test-data/simple-company.json | scripts/dev/lcp-cli.sh --username test --password test set-company
+cat scripts/test-data/simple-company.json | lcp-cli.sh --username test --password test set-company
 ```
 
 It should return a full instance of the company, _including its `id`_ - indicating that it has been added to the database.
@@ -77,7 +77,7 @@ It should return a full instance of the company, _including its `id`_ - indicati
 List the companies available with the `list-companies` verb:
 
 ```bash
-scripts/dev/lcp-cli.sh --username test --password test list-companies
+lcp-cli.sh --username test --password test list-companies
 ```
 
 You'll get a condensed list of companies:
@@ -96,7 +96,7 @@ You'll get a condensed list of companies:
 Create a simple test role in the new company with the `set-role` verb (and provide your company's id in the `--company-id` field):
 
 ```bash
-cat scripts/test-data/chicken-assistant.json | scripts/dev/lcp-cli.sh --username test --password test set-role --company-id '4ab6d5a6-a55c-4b62-b9b0-7fd85c490fd2'
+cat scripts/test-data/chicken-assistant.json | lcp-cli.sh --username test --password test set-role --company-id '4ab6d5a6-a55c-4b62-b9b0-7fd85c490fd2'
 ```
 
 > [!TIP]
@@ -107,7 +107,7 @@ cat scripts/test-data/chicken-assistant.json | scripts/dev/lcp-cli.sh --username
 List the roles available with the `list-roles` verb:
 
 ```bash
-scripts/dev/lcp-cli.sh --username test --password test list-roles
+lcp-cli.sh --username test --password test list-roles
 ```
 
 It'll give you a list of all roles in each company:
@@ -138,7 +138,7 @@ It'll give you a list of all roles in each company:
 #### 1.6.1 Ask a question
 
 ```bash
-$ ./scripts/dev/lcp-cli.sh --username test --password test chat --role-id 'c62b82b9-c046-4ba2-8842-824f4bfdc25c' --query 'What is your name?'
+$ ./lcp-cli.sh --username test --password test chat --role-id 'c62b82b9-c046-4ba2-8842-824f4bfdc25c' --query 'What is your name?'
 ```
 
 ```text
@@ -163,7 +163,7 @@ Agent dca0fbc6-7c5e-4cbd-9424-c2f29b1b910e removed.
 > Type `quit` or `exit` to leave interactive mode.
 
 ```bash
-./scripts/dev/lcp-cli.sh --rebuild --username test --password test chat --role-id 'c62b82b9-c046-4ba2-8842-824f4bfdc25c'
+./lcp-cli.sh --rebuild --username test --password test chat --role-id 'c62b82b9-c046-4ba2-8842-824f4bfdc25c'
 ```
 
 ```text

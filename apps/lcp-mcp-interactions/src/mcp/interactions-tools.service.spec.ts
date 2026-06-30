@@ -73,6 +73,60 @@ describe('InteractionsToolsService', () => {
     });
   });
 
+  describe('list_available_roles', () => {
+    it('calls GET /internal/company/:companyId/roles with the internal API key', async () => {
+      const roles = [{ id: randomUUID(), name: 'analyst' }];
+      axiosGet.mockResolvedValue({ data: roles });
+
+      const text = await callTool(service, 'list_available_roles', {
+        companyId,
+      });
+
+      expect(axiosGet).toHaveBeenCalledWith(
+        `http://lcp-server:3000/internal/company/${companyId}/roles`,
+        { headers: { 'X-Internal-Api-Key': 'test-key' } },
+      );
+      expect(text).toContain('analyst');
+    });
+
+    it('returns error message when the request fails', async () => {
+      axiosGet.mockRejectedValue(new Error('Network error'));
+
+      const text = await callTool(service, 'list_available_roles', {
+        companyId,
+      });
+
+      expect(text).toContain('Error');
+    });
+  });
+
+  describe('list_available_users', () => {
+    it('calls GET /internal/company/:companyId/users with the internal API key', async () => {
+      const users = [{ id: randomUUID(), identifier: 'alice' }];
+      axiosGet.mockResolvedValue({ data: users });
+
+      const text = await callTool(service, 'list_available_users', {
+        companyId,
+      });
+
+      expect(axiosGet).toHaveBeenCalledWith(
+        `http://lcp-server:3000/internal/company/${companyId}/users`,
+        { headers: { 'X-Internal-Api-Key': 'test-key' } },
+      );
+      expect(text).toContain('alice');
+    });
+
+    it('returns error message when the request fails', async () => {
+      axiosGet.mockRejectedValue(new Error('Network error'));
+
+      const text = await callTool(service, 'list_available_users', {
+        companyId,
+      });
+
+      expect(text).toContain('Error');
+    });
+  });
+
   describe('request_user_input', () => {
     it('calls POST /internal/pause and returns slug message on success', async () => {
       mockedAxios.post.mockResolvedValue({ data: { slug: 'analyst-5' } });

@@ -8,8 +8,10 @@ Usage: $(basename "$0") [-h|--help]
 Build the project, lint, and run every test suite in order:
   unit → integration → e2e → api → smoke
 
-Each suite is delegated to its own script, which manages Docker services
-as needed. A failure in any step aborts the remainder.
+The api and smoke suites require a running LCP stack with Keycloak. If
+lcp-server is already reachable at http://localhost:3000 the running stack
+is reused; otherwise start-deployment.sh starts one automatically using
+.env.testing and tears it down on exit.
 
 Prerequisites:
   - Docker and Docker Compose
@@ -30,12 +32,25 @@ done
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPTS="$REPO_ROOT/scripts"
 
-# If lcp-server is already running on :3000, reuse it for API/smoke tests
-# rather than starting a separate Docker stack for those suites.
-API_SMOKE_ARGS=()
+DEPLOYMENT_PROJECT=lcp-all
+DEPLOYMENT_STARTED=false
+
+cleanup() {
+  local rc=$?
+  if [[ "$DEPLOYMENT_STARTED" = "true" ]]; then
+    docker compose -p "$DEPLOYMENT_PROJECT" --profile auth down -v
+  fi
+  exit $rc
+}
+trap cleanup EXIT
+
 if curl -sf http://localhost:3000/health >/dev/null 2>&1; then
-  echo "→ lcp-server detected at localhost:3000 — API and smoke tests will target the running stack."
-  API_SMOKE_ARGS=(--base-url http://localhost:3000)
+  echo "→ lcp-server already running at localhost:3000 — reusing running stack"
+else
+  DEPLOYMENT_STARTED=true
+  "$SCRIPTS/start-deployment.sh" \
+    --project "$DEPLOYMENT_PROJECT" \
+    --env-file "$REPO_ROOT/.env.testing"
 fi
 
 CURRENT_STEP=""
@@ -91,15 +106,11 @@ docker system prune -f
 echo
 
 step "API tests"
-"$SCRIPTS/run-api-tests.sh" "${API_SMOKE_ARGS[@]+"${API_SMOKE_ARGS[@]}"}"
-echo
-
-step "Docker prune (post-api)"
-docker system prune -f
+"$SCRIPTS/run-api-tests.sh" --base-url http://localhost:3000
 echo
 
 step "Smoke tests"
-"$SCRIPTS/run-smoke-tests.sh" "${API_SMOKE_ARGS[@]+"${API_SMOKE_ARGS[@]}"}"
+"$SCRIPTS/run-smoke-tests.sh" --base-url http://localhost:3000
 echo
 
 echo "All steps passed."

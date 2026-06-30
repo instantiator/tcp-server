@@ -91,8 +91,8 @@ export class InteractionsToolsService {
       async ({ companyId }): Promise<ToolResult> => {
         try {
           const res = await axios.get<unknown[]>(
-            `${this.serverUrl}/api/company/${companyId}/users`,
-            { headers: { Authorization: `Bearer internal` } },
+            `${this.serverUrl}/internal/company/${companyId}/users`,
+            { headers: { 'X-Internal-Api-Key': this.apiKey } },
           );
           return ok(JSON.stringify(res.data, null, 2));
         } catch (e) {
@@ -115,8 +115,8 @@ export class InteractionsToolsService {
       async ({ companyId }): Promise<ToolResult> => {
         try {
           const res = await axios.get<unknown[]>(
-            `${this.serverUrl}/api/roles?companyId=${companyId}`,
-            { headers: { Authorization: `Bearer internal` } },
+            `${this.serverUrl}/internal/company/${companyId}/roles`,
+            { headers: { 'X-Internal-Api-Key': this.apiKey } },
           );
           return ok(JSON.stringify(res.data, null, 2));
         } catch (e) {

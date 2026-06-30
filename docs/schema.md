@@ -127,16 +127,16 @@ Represents a company (tenant). Used by `set-company`.
 
 Represents an agent role within a company. Used by `set-role`.
 
-| Field                  | Type                      | Required | Notes                                                |
-| ---------------------- | ------------------------- | -------- | ---------------------------------------------------- |
-| `companyId`            | UUID string               | Yes      | Must match an existing company                       |
-| `name`                 | `string`                  | Yes      | Human-readable role name                             |
-| `description`          | `string`                  | Yes      | Shown to other agents via `list_available_roles`     |
-| `systemPromptTemplate` | `string`                  | Yes      | Supports `{{name}}`, `{{companyName}}` placeholders  |
-| `knowledgeDomains`     | `string[]`                | Yes      | Tags for query routing (e.g. `["finance","legal"]`)  |
-| `mcpServerList`        | `string[]`                | Yes      | MCP server names the role can use                    |
-| `llmConfig`            | [`LlmConfig`](#llmconfig) | No       | Per-role LLM override; falls back to company default |
-| `rolePrompt`           | `string`                  | No       | Additional context injected at the start of each run |
+| Field                  | Type                      | Required | Notes                                                                                          |
+| ---------------------- | ------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
+| `companyId`            | UUID string               | Yes      | Must match an existing company                                                                 |
+| `name`                 | `string`                  | Yes      | Human-readable role name                                                                       |
+| `description`          | `string`                  | Yes      | Shown to other agents via `list_available_roles`                                               |
+| `systemPromptTemplate` | `string`                  | Yes      | Supports `{{name}}`, `{{description}}`, `{{date}}`, `{{companyId}}`, `{{roleId}}` placeholders |
+| `knowledgeDomains`     | `string[]`                | Yes      | Tags for query routing (e.g. `["finance","legal"]`)                                            |
+| `mcpServerList`        | `string[]`                | Yes      | MCP server names the role can use                                                              |
+| `llmConfig`            | [`LlmConfig`](#llmconfig) | No       | Per-role LLM override; falls back to company default                                           |
+| `rolePrompt`           | `string`                  | No       | Additional context injected at the start of each run                                           |
 
 ### `LlmConfig`
 
@@ -255,7 +255,7 @@ else { console.error(ajv.errorsText()); process.exit(1); }
 ajv validate -s schemas/schema.json --ref '#/definitions/LcpCompany' -d acme.json
 
 # Apply
-./scripts/dev/lcp-cli.sh -u alice set-company -i "$(cat acme.json)"
+./lcp-cli.sh -u alice set-company -i "$(cat acme.json)"
 ```
 
 ## Example: minimal role JSON
@@ -273,7 +273,7 @@ ajv validate -s schemas/schema.json --ref '#/definitions/LcpCompany' -d acme.jso
 
 ```bash
 ajv validate -s schemas/schema.json --ref '#/definitions/LcpRole' -d analyst-role.json
-./scripts/dev/lcp-cli.sh -u alice set-role -c 00000000-0000-0000-0000-000000000001 -i "$(cat analyst-role.json)"
+./lcp-cli.sh -u alice set-role -c 00000000-0000-0000-0000-000000000001 -i "$(cat analyst-role.json)"
 ```
 
 ---

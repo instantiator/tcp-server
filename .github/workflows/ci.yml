@@ -78,7 +78,7 @@ jobs:
         run: docker compose down -v
 
   api-test:
-    name: API tests
+    name: API & smoke tests
     needs: [integration-test]
     runs-on: ubuntu-latest
     permissions:
@@ -144,8 +144,11 @@ jobs:
           cache-from: type=gha,scope=lcp-mcp-interactions
           cache-to: type=gha,scope=lcp-mcp-interactions,mode=max
       - run: npm ci
-      - run: ./scripts/run-api-tests.sh
-      - name: Publish test results
+      - name: Start deployment stack
+        run: ./scripts/start-deployment.sh --project lcp-api --env-file .env.testing
+      - name: Run API tests
+        run: ./scripts/run-api-tests.sh --base-url http://localhost:3000
+      - name: Publish API test results
         uses: dorny/test-reporter@v3
         if: ${{ !cancelled() }}
         with:
@@ -153,8 +156,18 @@ jobs:
           path: test-results/api.xml
           reporter: jest-junit
           fail-on-error: false
+      - name: Run smoke tests
+        run: ./scripts/run-smoke-tests.sh --base-url http://localhost:3000
+      - name: Publish smoke test results
+        uses: dorny/test-reporter@v3
+        if: ${{ !cancelled() }}
+        with:
+          name: Smoke tests
+          path: test-results/smoke.xml
+          reporter: jest-junit
+          fail-on-error: false
       - if: always()
-        run: docker compose --profile auth down -v
+        run: docker compose -p lcp-api --profile auth down -v
 
   e2e-test:
     name: E2E tests

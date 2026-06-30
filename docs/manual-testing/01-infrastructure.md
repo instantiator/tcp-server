@@ -113,13 +113,13 @@ The CLI uses OIDC to obtain a bearer token. In development, Keycloak runs under 
 
 ```bash
 docker compose --profile auth up -d
-./scripts/dev/lcp-cli.sh --username test --password test get-token
+./lcp-cli.sh --username test --password test get-token
 ```
 
 **Without Keycloak (stub OIDC, no auth required):**
 
 ```bash
-./scripts/dev/lcp-cli.sh list-companies
+./lcp-cli.sh list-companies
 ```
 
 > Auth guards are wired but not yet applied to endpoints — unauthenticated requests are accepted in the current build. When Keycloak is running you still need a token for the `chat` command.

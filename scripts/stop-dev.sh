@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 usage() {
   cat <<EOF
@@ -64,5 +64,5 @@ if [[ "$REMOVE_VOLUMES" == true ]]; then
 else
   echo "Stopping services (volumes retained)..."
   $DC down
-  echo "Done. Run './scripts/dev/start-dev.sh' to restart."
+  echo "Done. Run './scripts/start-dev.sh' to restart."
 fi

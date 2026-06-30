@@ -1,5 +1,6 @@
 import { BaseMessage } from '@langchain/core/messages';
 import { getEncoding } from '@langchain/core/utils/tiktoken';
+import { DEFAULT_LLM_CONTEXT_WINDOW } from '@lcp/shared';
 import { Injectable, Logger } from '@nestjs/common';
 import type { Tiktoken } from 'js-tiktoken';
 
@@ -21,7 +22,7 @@ export class ContextBudgetService {
   /** Fraction of the context window that compaction aims to reach. */
   readonly TARGET_PCT = 0.6;
   /** Default context window size when not specified in {@link LlmConfig}. */
-  readonly DEFAULT_WINDOW = 8192;
+  readonly DEFAULT_WINDOW = DEFAULT_LLM_CONTEXT_WINDOW;
 
   private encoder: Tiktoken | null = null;
 

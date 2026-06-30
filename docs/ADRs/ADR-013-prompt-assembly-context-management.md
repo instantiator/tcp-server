@@ -16,17 +16,17 @@ This ADR documents:
 
 The intended prompt for each agent turn consists of eight parts, assembled in order:
 
-| #   | Part                 | Source                                                                                    | Status         |
-| --- | -------------------- | ----------------------------------------------------------------------------------------- | -------------- |
-| 0   | System prompt        | `LcpRole.systemPromptTemplate` (rendered with `name`, `description`, `date`)              | ✅ Implemented |
-| 1   | Role prompt          | `LcpRole.rolePrompt` — role identity, attitude, domain knowledge, behavioural guidelines  | ✅ Implemented |
-| 2   | Company environment  | `LcpCompany.companyContext` — company name/description, shared context for all agents     | ✅ Implemented |
-| 3   | Services available   | Dynamic list generated from `role.mcpServerList`; directs agent to call `describe_server` | ✅ Implemented |
-| 4   | Task / query prompt  | User message or `agent.initialPrompt`                                                     | ✅ Implemented |
-| 5   | RAG data             | Top-k chunks retrieved via pgvector cosine similarity for the current query               | ✅ Implemented |
-| 6   | MCP responses        | Tool responses pre-fetched before the turn                                                | ❌ Not yet     |
-| 7   | Conversation history | Maintained implicitly via the LangGraph PostgreSQL checkpoint                             | ✅ Implemented |
-| 8   | Final instruction    | A fixed suffix HumanMessage instructing the agent what to do next                         | ✅ Implemented |
+| #   | Part                 | Source                                                                                              | Status         |
+| --- | -------------------- | --------------------------------------------------------------------------------------------------- | -------------- |
+| 0   | System prompt        | `LcpRole.systemPromptTemplate` (rendered with `name`, `description`, `date`, `companyId`, `roleId`) | ✅ Implemented |
+| 1   | Role prompt          | `LcpRole.rolePrompt` — role identity, attitude, domain knowledge, behavioural guidelines            | ✅ Implemented |
+| 2   | Company environment  | `LcpCompany.companyContext` — company name/description, shared context for all agents               | ✅ Implemented |
+| 3   | Services available   | Dynamic list generated from `role.mcpServerList`; directs agent to call `describe_server`           | ✅ Implemented |
+| 4   | Task / query prompt  | User message or `agent.initialPrompt`                                                               | ✅ Implemented |
+| 5   | RAG data             | Top-k chunks retrieved via pgvector cosine similarity for the current query                         | ✅ Implemented |
+| 6   | MCP responses        | Tool responses pre-fetched before the turn                                                          | ❌ Not yet     |
+| 7   | Conversation history | Maintained implicitly via the LangGraph PostgreSQL checkpoint                                       | ✅ Implemented |
+| 8   | Final instruction    | A fixed suffix HumanMessage instructing the agent what to do next                                   | ✅ Implemented |
 
 Part 6 (pre-fetched MCP responses) remains unimplemented; agents call MCP tools reactively via the LangGraph tool node instead.
 

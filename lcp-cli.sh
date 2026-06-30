@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # lcp-cli.sh — wrapper to run the lcp-cli developer tool.
 #
-# Usage: ./scripts/dev/lcp-cli.sh [--rebuild] [-e|--env <file>] [lcp-cli options]
+# Usage: ./lcp-cli.sh [--rebuild] [-e|--env <file>] [lcp-cli options]
 #
 # Wrapper-only flags (consumed before the rest are forwarded to the node binary):
 #   --rebuild          Force a fresh build even if dist/ is present.

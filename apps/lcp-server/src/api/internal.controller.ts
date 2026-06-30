@@ -10,7 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
-import { LcpAgent } from '@lcp/shared';
+import { CompanyUser, LcpAgent, LcpRole } from '@lcp/shared';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import type { UUID } from 'crypto';
@@ -26,8 +26,8 @@ import {
  * Internal service-to-service endpoints for agent lifecycle management.
  * All routes are protected by {@link InternalApiKeyGuard}.
  *
- * Called by lcp-mcp-interactions (pause/complete) and indirectly by lcp-agent
- * when an agent finishes normally without calling `complete_task`.
+ * Called by lcp-mcp-interactions (pause/complete/list) and indirectly by
+ * lcp-agent when an agent finishes normally without calling `complete_task`.
  */
 @ApiTags('internal')
 @ApiSecurity('internal-api-key')
@@ -38,6 +38,10 @@ export class InternalController {
     private readonly pauseResume: PauseAndResumeService,
     @InjectRepository(LcpAgent)
     private readonly agentRepo: Repository<LcpAgent>,
+    @InjectRepository(LcpRole)
+    private readonly roleRepo: Repository<LcpRole>,
+    @InjectRepository(CompanyUser)
+    private readonly userRepo: Repository<CompanyUser>,
   ) {}
 
   /**
@@ -113,5 +117,19 @@ export class InternalController {
     @Body() body: UpdateStorageChangesDto,
   ): Promise<void> {
     await this.pauseResume.updateStorageChanges(agentId, body);
+  }
+
+  /** Returns all roles belonging to the given company. Used by lcp-mcp-interactions' `list_available_roles`. */
+  @ApiOperation({ summary: 'List roles for a company (internal)' })
+  @Get('company/:companyId/roles')
+  async listRoles(@Param('companyId') companyId: UUID): Promise<LcpRole[]> {
+    return this.roleRepo.findBy({ companyId });
+  }
+
+  /** Returns all users belonging to the given company. Used by lcp-mcp-interactions' `list_available_users`. */
+  @ApiOperation({ summary: 'List users for a company (internal)' })
+  @Get('company/:companyId/users')
+  async listUsers(@Param('companyId') companyId: UUID): Promise<CompanyUser[]> {
+    return this.userRepo.findBy({ companyId });
   }
 }

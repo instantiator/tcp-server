@@ -35,6 +35,8 @@ export const configSchema = Joi.object({
   LLM_MODEL: Joi.string().empty('').optional(),
   LLM_BASE_URL: Joi.string().uri().empty('').optional(),
   LLM_API_KEY: Joi.string().empty('').optional(),
+  /** Overrides {@link DEFAULT_LLM_CONTEXT_WINDOW} when set. */
   LLM_CONTEXT_WINDOW: Joi.number().integer().positive().empty('').optional(),
+  /** Overrides {@link DEFAULT_LLM_TIMEOUT_MS} when set. */
   LLM_TIMEOUT_MS: Joi.number().integer().positive().empty('').optional(),
 });

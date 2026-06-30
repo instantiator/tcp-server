@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") [-h|--help] [-e|--env <path>] [--rebuild]
+
+Start a full local development environment and configure it for first-time use.
+
+Starts all services via Docker Compose (including Keycloak when
+KEYCLOAK_ADMIN_PASSWORD is set), waits for each to be healthy, then creates
+the Keycloak realm, client, and test user. Safe to re-run — existing resources
+are left untouched.
+
+Credentials for the Keycloak realm and test user are read from the env file
+(KEYCLOAK_REALM, TEST_USERNAME, TEST_PASSWORD). Add or override them there.
+
+Environment file precedence (first match wins):
+  1. --env <path>      if provided
+  2. .env              if present in the repo root
+  3. .env.testing      fallback (always present, safe test credentials)
+
+Options:
+  -e, --env <path>   Environment file to use
+  --rebuild          Force a Docker image rebuild (passes --build to docker compose up)
+  -h, --help         Show this help message and exit
+EOF
+}
+
+ENV_FILE=""
+REBUILD=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    -e|--env)
+      [[ -n "${2:-}" ]] || { echo "ERROR: --env requires a path" >&2; exit 1; }
+      ENV_FILE="$2"; shift 2 ;;
+    --rebuild) REBUILD=true; shift ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
+  esac
+done
+
+# Resolve env file (cascade: .env → .env.testing)
+if [[ -z "$ENV_FILE" ]]; then
+  if [[ -f "$REPO_ROOT/.env" ]]; then
+    ENV_FILE="$REPO_ROOT/.env"
+  else
+    ENV_FILE="$REPO_ROOT/.env.testing"
+  fi
+fi
+
+[[ -f "$ENV_FILE" ]] || { echo "ERROR: env file not found: $ENV_FILE" >&2; exit 1; }
+
+ARGS=(--project lcp-dev --env-file "$ENV_FILE")
+[[ "$REBUILD" == true ]] && ARGS+=(--rebuild)
+
+exec "$REPO_ROOT/scripts/start-deployment.sh" "${ARGS[@]}"

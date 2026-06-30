@@ -1,9 +1,7 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { ChatOpenAI } from '@langchain/openai';
+import { DEFAULT_LLM_TIMEOUT_MS } from '../config/defaults';
 import type { LlmConfig } from '../models/LlmConfig.model';
-
-/** Default per-request LLM timeout. Local models can be slow; 30 min avoids premature drops. */
-const DEFAULT_LLM_TIMEOUT_MS = 30 * 60 * 1000;
 
 /**
  * Builds a {@link BaseChatModel} from the given {@link LlmConfig}.
@@ -16,7 +14,10 @@ const DEFAULT_LLM_TIMEOUT_MS = 30 * 60 * 1000;
  * @throws if the provider is unrecognised or required config is missing
  */
 export function buildChatModel(config: LlmConfig): BaseChatModel {
-  const timeout = config.timeoutMs ?? DEFAULT_LLM_TIMEOUT_MS;
+  // `||` (not `??`): NestJS's ConfigService can surface an unset env var as
+  // `''` rather than `undefined` (Joi's `.empty('')` coercion isn't applied
+  // to its process.env fallback path), and 0 is never a meaningful timeout.
+  const timeout = config.timeoutMs || DEFAULT_LLM_TIMEOUT_MS;
   switch (config.provider) {
     case 'lm-studio':
       return new ChatOpenAI({

@@ -51,7 +51,9 @@ export class LcpRole {
 
   /**
    * Handlebars-style prompt template injected as the system message at agent start.
-   * Available variables: `{{name}}`, `{{description}}`, `{{date}}`.
+   * Available variables: `{{name}}`, `{{description}}`, `{{date}}`, `{{companyId}}`,
+   * `{{roleId}}`. The latter two let the agent supply identifiers required by
+   * company- and role-scoped MCP tool calls.
    */
   @Column({ type: 'text' })
   systemPromptTemplate!: string;

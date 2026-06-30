@@ -1,7 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
-import { LcpAgent } from '@lcp/shared';
+import { CompanyUser, LcpAgent, LcpRole } from '@lcp/shared';
 import { InternalController } from './internal.controller';
 import { PauseAndResumeService } from './pause-and-resume.service';
 
@@ -13,6 +13,8 @@ describe('InternalController', () => {
     updateStorageChanges: jest.Mock;
   };
   let agentRepo: { findOneBy: jest.Mock };
+  let roleRepo: { findBy: jest.Mock };
+  let userRepo: { findBy: jest.Mock };
   let controller: InternalController;
 
   beforeEach(() => {
@@ -23,9 +25,13 @@ describe('InternalController', () => {
       updateStorageChanges: jest.fn().mockResolvedValue(undefined),
     };
     agentRepo = { findOneBy: jest.fn() };
+    roleRepo = { findBy: jest.fn() };
+    userRepo = { findBy: jest.fn() };
     controller = new InternalController(
       pauseResume as unknown as PauseAndResumeService,
       agentRepo as unknown as Repository<LcpAgent>,
+      roleRepo as unknown as Repository<LcpRole>,
+      userRepo as unknown as Repository<CompanyUser>,
     );
   });
 
@@ -132,6 +138,32 @@ describe('InternalController', () => {
       expect(pauseResume.updateStorageChanges).toHaveBeenCalledWith(agentId, {
         created: ['docs/out.md'],
       });
+    });
+  });
+
+  describe('listRoles', () => {
+    it('returns roles for the given company', async () => {
+      const companyId = randomUUID();
+      const roles = [{ id: randomUUID(), name: 'analyst', companyId }];
+      roleRepo.findBy.mockResolvedValue(roles);
+
+      const result = await controller.listRoles(companyId);
+
+      expect(roleRepo.findBy).toHaveBeenCalledWith({ companyId });
+      expect(result).toEqual(roles);
+    });
+  });
+
+  describe('listUsers', () => {
+    it('returns users for the given company', async () => {
+      const companyId = randomUUID();
+      const users = [{ id: randomUUID(), identifier: 'alice', companyId }];
+      userRepo.findBy.mockResolvedValue(users);
+
+      const result = await controller.listUsers(companyId);
+
+      expect(userRepo.findBy).toHaveBeenCalledWith({ companyId });
+      expect(result).toEqual(users);
     });
   });
 });

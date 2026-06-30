@@ -32,4 +32,3 @@
 | rxjs                                     | Apache-2.0   | git+https://github.com/reactivex/rxjs.git                      | Ben Lesh <ben@benlesh.com>                                             | 7.8.2    | 7.8.2     | ^7.8.1    |
 | swagger-ui-express                       | MIT          | git+ssh://git@github.com/scottie1984/swagger-ui-express.git    | Stephen Scott scottie1984@gmail.com                                    | 5.0.1    | 5.0.1     | ^5.0.1    |
 | typeorm                                  | MIT          | git+https://github.com/typeorm/typeorm.git                     | TypeORM maintainers@typeorm.io                                         | 1.0.0    | 1.0.0     | ^1.0.0    |
-

@@ -58,7 +58,7 @@ EOF
 ## 5.2 — Upload the document
 
 ```bash
-./scripts/dev/lcp-cli.sh store-role-documents \
+./lcp-cli.sh store-role-documents \
   --role-id "$ROLE_ID" \
   --src /tmp/test-knowledge.md
 ```
@@ -77,7 +77,7 @@ If validation fails (e.g. missing `title`), the CLI reports the error and upload
 ## 5.3 — List stored documents
 
 ```bash
-./scripts/dev/lcp-cli.sh list-role-documents --role-id "$ROLE_ID"
+./lcp-cli.sh list-role-documents --role-id "$ROLE_ID"
 ```
 
 Expected: a table showing `test-knowledge.md` with its size and last-modified date.
@@ -132,7 +132,7 @@ docker compose logs lcp-server | grep -i "rag\|chunk\|retriev"
 ## 5.6 — Remove a document
 
 ```bash
-./scripts/dev/lcp-cli.sh remove-role-documents \
+./lcp-cli.sh remove-role-documents \
   --role-id "$ROLE_ID" \
   --pattern "test-knowledge.md"
 ```
@@ -146,7 +146,7 @@ Expected: success message. The document is removed from MinIO and all associated
 The `open-document-store` command prints and opens the MinIO console URL:
 
 ```bash
-./scripts/dev/lcp-cli.sh open-document-store
+./lcp-cli.sh open-document-store
 ```
 
 Expected: URL printed to stdout; browser opens to the MinIO console.

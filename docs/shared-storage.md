@@ -11,7 +11,7 @@ MinIO ships a browser-based console for browsing and managing stored files.
 **Open via lcp-cli:**
 
 ```bash
-./scripts/dev/lcp-cli.sh open-document-store
+./lcp-cli.sh open-document-store
 ```
 
 This prints the console URL and opens it in your default browser. Pass `--no-open` to print the URL only.
@@ -95,13 +95,13 @@ Role knowledge documents are uploaded via lcp-cli and stored under `knowledge/{r
 
 ```bash
 # Upload documents
-./scripts/dev/lcp-cli.sh store-role-documents -r <roleId> -s policy.md handbook.md
+./lcp-cli.sh store-role-documents -r <roleId> -s policy.md handbook.md
 
 # List stored documents
-./scripts/dev/lcp-cli.sh list-role-documents -r <roleId>
+./lcp-cli.sh list-role-documents -r <roleId>
 
 # Remove documents by pattern
-./scripts/dev/lcp-cli.sh remove-role-documents -r <roleId> -p "*.md"
+./lcp-cli.sh remove-role-documents -r <roleId> -p "*.md"
 ```
 
 See [`lcp-cli.md` → document management verbs](lcp-cli.md#store-role-documents) and [Agent Services → RAG](agent-services.md#rag-retrieval-augmented-generation) for full details.
@@ -112,12 +112,12 @@ See [`lcp-cli.md` → document management verbs](lcp-cli.md#store-role-documents
 
 ```bash
 # Download a file from storage to the local filesystem
-./scripts/dev/lcp-cli.sh download-shared-document \
+./lcp-cli.sh download-shared-document \
   --source acme/tasks/xyz/output/report.md \
   --target ~/Desktop/report.md        # optional; defaults to ./<filename>
 
 # Upload a local file to storage
-./scripts/dev/lcp-cli.sh upload-shared-document \
+./lcp-cli.sh upload-shared-document \
   --source ./architecture.md \
   --target acme/knowledge/architect/architecture.md
 ```

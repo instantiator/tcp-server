@@ -3,7 +3,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { AgentStatus, AuditEventType, LcpAgent, LcpRole } from '@lcp/shared';
+import {
+  AgentStatus,
+  AuditEventType,
+  LcpAgent,
+  LcpRole,
+  buildChatModel,
+} from '@lcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { AuditService } from '../audit/audit.service';
 
@@ -239,6 +245,30 @@ describe('ChatService', () => {
     expect(result.response).toBe('Response via env fallback.');
   });
 
+  it('substitutes companyId and roleId into the rendered system prompt', async () => {
+    const agent = makeAgent({ threadId: null });
+    const role = makeRole({
+      systemPromptTemplate: 'Company: {{companyId}}, Role: {{roleId}}',
+    });
+    agentRepo.findOneBy.mockResolvedValue(agent);
+    roleRepo.findOneBy.mockResolvedValue(role);
+    companyRepo.findOneBy.mockResolvedValue(null);
+
+    const aiMsg = new AIMessage('Hi there!');
+    compiledGraph.invoke.mockResolvedValue({ messages: [aiMsg] });
+
+    await service.sendMessage(agent.id, 'Hello');
+
+    const { messages } = (
+      compiledGraph.invoke.mock.calls[0] as [
+        { messages: { content: string }[] },
+      ]
+    )[0];
+    expect(messages[0].content).toBe(
+      `Company: ${agent.companyId}, Role: ${role.id}`,
+    );
+  });
+
   it('sends the first message with system prompt prepended', async () => {
     const agent = makeAgent({ threadId: null });
     const role = makeRole();
@@ -271,6 +301,51 @@ describe('ChatService', () => {
       AuditEventType.LlmResponse,
       expect.any(Object),
     );
+  });
+
+  it('recovers the response when a "thinking" model leaves content blank and puts its answer in reasoning_content (regression)', async () => {
+    const agent = makeAgent({ threadId: null });
+    const role = makeRole();
+    agentRepo.findOneBy.mockResolvedValue(agent);
+    roleRepo.findOneBy.mockResolvedValue(role);
+
+    // Drive the real 'agent' node registered by buildAgentGraph (instead of
+    // stubbing compiledGraph.invoke directly) so this test exercises the
+    // actual ReasoningContentRecovery wiring, not just message extraction.
+    type AgentNode = (state: {
+      messages: AIMessage[];
+    }) => Promise<{ messages: AIMessage[] }>;
+    let agentNode: AgentNode | undefined;
+    interface GraphBuilderStub {
+      addNode: jest.Mock;
+      addEdge: jest.Mock;
+      compile: jest.Mock;
+    }
+    const graphBuilderStub: GraphBuilderStub = {
+      addNode: jest.fn((name: string, fn: AgentNode) => {
+        if (name === 'agent') agentNode = fn;
+        return graphBuilderStub;
+      }),
+      addEdge: jest.fn().mockReturnThis(),
+      compile: jest.fn().mockReturnValue(compiledGraph),
+    };
+    (StateGraph as jest.Mock).mockReturnValue(graphBuilderStub);
+    compiledGraph.invoke.mockImplementation(
+      async (input: { messages: AIMessage[] }) => agentNode!(input),
+    );
+
+    (buildChatModel as jest.Mock).mockReturnValueOnce({
+      invoke: jest.fn().mockResolvedValue(
+        new AIMessage({
+          content: '',
+          additional_kwargs: { reasoning_content: 'The recovered answer.' },
+        }),
+      ),
+    });
+
+    const result = await service.sendMessage(agent.id, 'Hello');
+
+    expect(result.response).toBe('The recovered answer.');
   });
 
   it('does not prepend system prompt on subsequent messages', async () => {

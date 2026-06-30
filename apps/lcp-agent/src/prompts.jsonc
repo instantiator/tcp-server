@@ -7,14 +7,37 @@
   "services_header": "## Available Services",
 
   // Body text for prompt part 3. Follows the heading, before the per-service bullet list.
-  "services_intro": "You have access to the following external services via tools. Each service exposes a `describe_server` tool — call it to learn exactly what tools are available and how to use them before making calls.",
+  // Deliberately omits tool names/parameters/descriptions — those are already sent to the
+  // LLM via bindTools on every turn. Only the "when to use this service" framing is added
+  // here; the prompt itself still points the agent at describe_server for anything deeper.
+  "services_intro": "You have access to the following external services via tools. Each service's tools are already available to you; the list below is just guidance on when to reach for each one. Call `{name}__describe_server` on any service for more detail.",
 
-  // Template for a single service bullet in prompt part 3. {{name}} is replaced with the server name.
-  "services_item": "- **{{name}}**: call `{{name}}__describe_server` for a full tool list and usage guide",
+  // Template for a single service bullet in prompt part 3. {{name}} and {{usage}} are substituted.
+  "services_item": "- **{{name}}**: use for {{usage}}",
+
+  // Fallback bullet for a server with no known MCP_REGISTRY usage text (e.g. a role-specific extra).
+  // {{name}} is substituted.
+  "services_item_unknown": "- **{{name}}**: call `{{name}}__describe_server` for a full tool list and usage guide",
 
   // Introductory sentence for prompt part 5 (RAG knowledge-base excerpts).
   "rag_intro": "The following excerpts from your knowledge base are relevant to your current task. Draw on them as needed:",
 
   // Template for the heading of each RAG chunk section. {{documentPath}} is replaced with the source path.
-  "rag_source_header": "### Source: {{documentPath}}"
+  "rag_source_header": "### Source: {{documentPath}}",
+
+  // Prompt sent to the LLM to generate a completion summary once an agent loop finishes.
+  // {{initialPrompt}}, {{actionLines}}, {{created}}, {{modified}}, {{deleted}}, {{moved}} are substituted.
+  "completion_summary_prompt": "Your task is now complete.\n\nOriginal task: {{initialPrompt}}\n\nActions taken (in order):\n{{actionLines}}\n\nStorage changes:\n- Created: {{created}}\n- Modified: {{modified}}\n- Deleted: {{deleted}}\n- Moved: {{moved}}\n\nRespond with ONLY a JSON object — no markdown, no extra text:\n{\"summary\": \"One or two sentences describing what was accomplished at a high level.\"}\n\nThe summary should be concise and factual, suitable for an audit log.",
+
+  // Placeholder text used in the completion summary prompt when no actions/storage changes were recorded.
+  "completion_summary_no_actions": "(none recorded)",
+  "completion_summary_no_storage": "(none)",
+
+  // Structured fallback summary used when the LLM call fails. {{taskSnippet}}, {{actionsSummary}},
+  // {{storageSummary}} are substituted.
+  "completion_fallback_summary": "Completed task: \"{{taskSnippet}}\"; {{actionsSummary}}; {{storageSummary}}.",
+  "completion_fallback_actions": "{{count}} action(s) taken",
+  "completion_fallback_no_actions": "no actions recorded",
+  "completion_fallback_storage": "{{count}} file(s) affected",
+  "completion_fallback_no_storage": "no storage changes"
 }

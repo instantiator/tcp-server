@@ -4,12 +4,11 @@ LCP uses an OIDC-compatible IdP for authentication. Keycloak is the default, pro
 
 ## Automated local setup
 
-For local development, `scripts/dev/start-dev.sh` handles everything below automatically — it starts all services, creates the `lcp` realm and `lcp-server` client, and adds a test user:
+For local development, `scripts/start-dev.sh` handles everything below automatically — it starts all services, creates the `lcp` realm and `lcp-server` client, and adds a test user:
 
 ```bash
-./scripts/dev/start-dev.sh                          # uses .env or .env.testing
-./scripts/dev/start-dev.sh -e .env.local            # use a custom env file
-./scripts/dev/start-dev.sh --test-username alice --test-password s3cret
+./scripts/start-dev.sh                          # uses .env or .env.testing
+./scripts/start-dev.sh -e .env.local            # use a custom env file
 ```
 
 The manual steps below are for reference, custom IdP configuration, or production setup.

@@ -3,18 +3,19 @@ import {
   HumanMessage,
   SystemMessage,
 } from '@langchain/core/messages';
-import { END, MessagesAnnotation, StateGraph } from '@langchain/langgraph';
-import { ToolNode, toolsCondition } from '@langchain/langgraph/prebuilt';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import {
   AgentStatus,
   AuditEventType,
+  DEFAULT_LLM_CONTEXT_WINDOW,
   LcpAgent,
   LcpCompany,
   LcpRole,
-  LlmConfig,
   McpClientService,
+  buildAgentGraph,
   buildChatModel,
+  renderTemplate,
+  resolveEnvLlmConfig,
   resolveMcpServerUrls,
 } from '@lcp/shared';
 import {
@@ -110,7 +111,8 @@ export class ChatService {
       );
     }
 
-    const windowSize = Number(llmConfig.contextWindow) || 8192;
+    const windowSize =
+      Number(llmConfig.contextWindow) || DEFAULT_LLM_CONTEXT_WINDOW;
     const isFirstMessage = agent.threadId === null;
 
     await this.agentRepo.update(agentId, {
@@ -143,27 +145,13 @@ export class ChatService {
       const langchainTools = mcpTools.map((t) => t.tool);
 
       const model = buildChatModel(llmConfig);
-      const boundModel =
-        langchainTools.length > 0 && model.bindTools
-          ? model.bindTools(langchainTools)
-          : model;
-
-      const graphBuilder = new StateGraph(MessagesAnnotation)
-        .addNode('agent', async (state: typeof MessagesAnnotation.State) => ({
-          messages: [await boundModel.invoke(state.messages, { signal })],
-        }))
-        .addEdge('__start__', 'agent');
-
-      if (langchainTools.length > 0) {
-        graphBuilder
-          .addNode('tools', new ToolNode(langchainTools))
-          .addConditionalEdges('agent', toolsCondition)
-          .addEdge('tools', 'agent');
-      } else {
-        graphBuilder.addEdge('agent', END);
-      }
-
-      const graph = graphBuilder.compile({ checkpointer });
+      const graph = buildAgentGraph({
+        model,
+        checkpointer,
+        tools: langchainTools,
+        signal,
+        logger: this.logger,
+      });
 
       const runConfig = { configurable: { thread_id: agentId } };
 
@@ -215,6 +203,8 @@ export class ChatService {
                 name: role.name,
                 description: role.description,
                 date: new Date().toISOString().split('T')[0],
+                companyId: agent.companyId,
+                roleId: role.id,
               }),
             ),
             // Prompt part 1: role prompt (identity, attitude, domain knowledge, behavioural guidelines)
@@ -305,17 +295,6 @@ export class ChatService {
   }
 }
 
-/** Replaces `{{key}}` placeholders in a template string with provided values. */
-function renderTemplate(
-  template: string,
-  vars: Record<string, string>,
-): string {
-  return template.replace(
-    /\{\{(\w+)\}\}/g,
-    (_, key: string) => vars[key] ?? '',
-  );
-}
-
 /** Formats RAG chunks as a prompt part 5 message. */
 function buildRagMessage(
   chunks: { documentPath: string; content: string }[],
@@ -356,23 +335,4 @@ function buildServicesMessage(
 /** Strips characters unsafe for use as a MinIO path component. */
 function sanitiseSlug(slug: string): string {
   return slug.replace(/[^a-zA-Z0-9_-]/g, '_');
-}
-
-/**
- * Builds an {@link LlmConfig} from environment variables as the last-resort
- * fallback in the resolution chain (role → company → env → fail).
- * Returns `null` when `LLM_PROVIDER` or `LLM_MODEL` are not set.
- */
-function resolveEnvLlmConfig(config: ConfigService): LlmConfig | null {
-  const provider = config.get<string>('LLM_PROVIDER');
-  const model = config.get<string>('LLM_MODEL');
-  if (!provider || !model) return null;
-  return {
-    provider,
-    model,
-    baseUrl: config.get<string>('LLM_BASE_URL'),
-    apiKey: config.get<string>('LLM_API_KEY'),
-    contextWindow: config.get<number>('LLM_CONTEXT_WINDOW'),
-    timeoutMs: config.get<number>('LLM_TIMEOUT_MS'),
-  };
 }

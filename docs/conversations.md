@@ -32,13 +32,13 @@ After the tool call returns, lcp-agent checks the agent's status on the next eve
 
 ```bash
 # See all open queries
-./scripts/dev/lcp-cli.sh list-open-queries
+./lcp-cli.sh list-open-queries
 
 # Read the full question
-./scripts/dev/lcp-cli.sh read-query analyst-3
+./lcp-cli.sh read-query analyst-3
 
 # Reply (triggers agent resume)
-./scripts/dev/lcp-cli.sh respond analyst-3 "The budget is $50,000 for Q3."
+./lcp-cli.sh respond analyst-3 "The budget is $50,000 for Q3."
 ```
 
 Or via the API: `POST /api/conversation/analyst-3/reply`
