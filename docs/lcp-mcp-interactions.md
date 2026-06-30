@@ -12,6 +12,8 @@ Each tool call writes `tool_call` and `tool_result` audit events to lcp-server v
 
 See [agent-services.md → MCP Servers](agent-services.md#mcp-servers) for how agents connect. See [ADR-012](ADRs/ADR-012-human-in-the-loop.md) for the full design, [user-input-conversations.md](user-input-conversations.md) for the agent-to-human flow, and [cross-agent-consultations.md](cross-agent-consultations.md) for the agent-to-agent flow.
 
+**`agentId`/`companyId` are not LLM-suppliable.** The signatures below are this server's published MCP schema, but `McpClientService` (see [agent-services.md](agent-services.md#enabling-mcp-tools-for-a-role)) strips `agentId`/`companyId` from what the calling LLM actually sees and injects the real values on every call. The LLM has no reliable way to know its own `agentId`, and trusting it to supply one is also a correctness/security gap — it could otherwise assert a different agent's id.
+
 ---
 
 ## Tools

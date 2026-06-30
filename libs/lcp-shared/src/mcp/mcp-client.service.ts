@@ -14,6 +14,20 @@ export interface McpTool {
 }
 
 /**
+ * Identity values for the agent currently running, used to override
+ * LLM-suppliable tool arguments of the same name. The LLM has no reliable
+ * way to know its own `agentId` (it's a DB id, not something in its
+ * context), and trusting it to assert one is also a correctness/security
+ * gap — an LLM could supply a different agent's id. Any tool parameter
+ * matching one of these keys is hidden from the LLM-facing schema and the
+ * real value is injected at call time instead.
+ */
+export interface McpToolContext {
+  agentId?: string;
+  companyId?: string;
+}
+
+/**
  * Connects to one or more MCP servers, fetches their tool lists, and returns
  * LangChain {@link DynamicStructuredTool} instances ready for use in a LangGraph agent.
  *
@@ -30,10 +44,15 @@ export class McpClientService {
    *
    * Servers that fail to connect are logged and skipped — the agent will still
    * run with whichever servers did respond.
+   *
+   * @param context identity values (`agentId`, `companyId`) for the current
+   *   agent run. Any matching tool parameter is removed from what the LLM
+   *   sees and the real value substituted on every call — see {@link McpToolContext}.
    */
   async loadTools(
     serverNames: string[],
     serverUrls: Record<string, string>,
+    context: McpToolContext = {},
   ): Promise<McpTool[]> {
     const results: McpTool[] = [];
 
@@ -46,7 +65,7 @@ export class McpClientService {
         continue;
       }
       try {
-        const tools = await this.fetchToolsFrom(name, url);
+        const tools = await this.fetchToolsFrom(name, url, context);
         results.push(...tools);
       } catch (err) {
         this.logger.warn(
@@ -61,6 +80,7 @@ export class McpClientService {
   private async fetchToolsFrom(
     serverName: string,
     baseUrl: string,
+    context: McpToolContext,
   ): Promise<McpTool[]> {
     const client = new Client({ name: 'lcp', version: '0.0.1' });
     const transport = new StreamableHTTPClientTransport(
@@ -71,7 +91,9 @@ export class McpClientService {
     try {
       const { tools } = await client.listTools();
       // Pass baseUrl rather than client — each tool invocation opens its own connection
-      return tools.map((t) => this.convertTool(serverName, baseUrl, t));
+      return tools.map((t) =>
+        this.convertTool(serverName, baseUrl, t, context),
+      );
     } finally {
       await client.close();
     }
@@ -81,10 +103,24 @@ export class McpClientService {
     serverName: string,
     baseUrl: string,
     mcpTool: Tool,
+    context: McpToolContext,
   ): McpTool {
     const toolName = `${serverName}__${mcpTool.name}`;
-    const schema = buildZodSchema(mcpTool.inputSchema);
     const mcpUrl = `${baseUrl.replace(/\/$/, '')}/mcp`;
+
+    // Only override parameters this tool actually declares — context values
+    // for tools that don't take an agentId/companyId are simply unused.
+    const properties =
+      (mcpTool.inputSchema['properties'] as
+        | Record<string, unknown>
+        | undefined) ?? {};
+    const fixedArgs: Record<string, string> = {};
+    for (const key of Object.keys(context) as (keyof McpToolContext)[]) {
+      const value = context[key];
+      if (value !== undefined && key in properties) fixedArgs[key] = value;
+    }
+
+    const schema = buildZodSchema(mcpTool.inputSchema, Object.keys(fixedArgs));
 
     const tool = new DynamicStructuredTool({
       name: toolName,
@@ -98,7 +134,8 @@ export class McpClientService {
         try {
           const raw = await callClient.callTool({
             name: mcpTool.name,
-            arguments: input,
+            // fixedArgs always wins — the LLM never gets a vote on identity.
+            arguments: { ...input, ...fixedArgs },
           });
           const parsed = CallToolResultSchema.safeParse(raw);
           const textContent = parsed.success
@@ -121,9 +158,14 @@ export class McpClientService {
  * Converts an MCP JSON Schema object into a Zod schema for use with
  * {@link DynamicStructuredTool}. Handles string, number, boolean, and object
  * types. Unrecognised types fall back to `z.unknown()`.
+ *
+ * @param omitKeys properties to exclude entirely — used to hide
+ *   identity fields (`agentId`, `companyId`) that are injected server-side
+ *   rather than supplied by the LLM.
  */
 function buildZodSchema(
   inputSchema: Record<string, unknown>,
+  omitKeys: string[] = [],
 ): z.ZodObject<Record<string, z.ZodType>> {
   const properties =
     (inputSchema['properties'] as Record<string, unknown>) ?? {};
@@ -131,6 +173,7 @@ function buildZodSchema(
 
   const shape: Record<string, z.ZodType> = {};
   for (const [key, def] of Object.entries(properties)) {
+    if (omitKeys.includes(key)) continue;
     const field = jsonSchemaFieldToZod(def as Record<string, unknown>);
     shape[key] = required.includes(key) ? field : field.optional();
   }

@@ -186,7 +186,10 @@ export class AgentLoopService {
         ...(agent.role.mcpServerList ?? []),
       ]),
     ];
-    const mcpTools = await this.mcp.loadTools(mcpServerNames, mcpServerUrls);
+    const mcpTools = await this.mcp.loadTools(mcpServerNames, mcpServerUrls, {
+      agentId: agent.id,
+      companyId: agent.companyId,
+    });
     const langchainTools = mcpTools.map((t) => t.tool);
 
     const model = buildChatModel(llmConfig);

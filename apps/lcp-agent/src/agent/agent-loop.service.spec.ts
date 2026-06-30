@@ -122,6 +122,7 @@ describe('AgentLoopService', () => {
   let companyRepo: Repository<LcpCompany>;
   let auditRecord: jest.Mock;
   let notifyComplete: jest.Mock;
+  let mcpClient: { loadTools: jest.Mock };
 
   beforeAll(async () => {
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
@@ -176,6 +177,7 @@ describe('AgentLoopService', () => {
     agentRepo = testingModule.get(getRepositoryToken(LcpAgent));
     roleRepo = testingModule.get(getRepositoryToken(LcpRole));
     companyRepo = testingModule.get(getRepositoryToken(LcpCompany));
+    mcpClient = testingModule.get(McpClientService);
   });
 
   afterEach(async () => {
@@ -248,6 +250,18 @@ describe('AgentLoopService', () => {
     const updated = await agentRepo.findOneByOrFail({ id: agent.id });
     expect(updated.status).toBe(AgentStatus.Completed);
     expect(updated.threadId).toBe(agent.id);
+  });
+
+  it('passes the real agentId/companyId as MCP tool context, not LLM-suppliable values', async () => {
+    const { agent } = await seedAgentAndRole();
+
+    await service.run(agent.id);
+
+    expect(mcpClient.loadTools).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.any(Object),
+      { agentId: agent.id, companyId: agent.companyId },
+    );
   });
 
   it('writes an audit event for the LLM response', async () => {

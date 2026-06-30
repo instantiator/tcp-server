@@ -17,29 +17,39 @@ The `agent` node is where each special case below hooks in — it's the one plac
 
 ---
 
-## Case: "thinking" models leaving `content` blank
+## Case: "thinking" models stopping before they're actually done
 
-**Symptom:** the agent's response is empty (or, in `lcp-agent`'s case, looks like a silent failure / retried run).
+**Symptom:** the agent's response is empty, or the agent clearly intended to take an action (consult a role, ask a user, call a tool) but never actually did it — the loop just ends.
 
-**Cause:** some local reasoning models — observed with `qwen/qwen3.5-9b` served through LM Studio, and known to affect other "thinking" model families (DeepSeek-R1, QwQ, etc.) served through OpenAI-compatible endpoints — put their entire answer into a provider-specific `reasoning_content` field on the chat completion response and leave the standard `content` field empty. This isn't an LLM error; the model did produce an answer, it just landed in the wrong field for callers that only read `content`.
+**Cause:** some local reasoning models — observed with `qwen/qwen3.5-9b` served through LM Studio, and known to affect other "thinking" model families (DeepSeek-R1, QwQ, etc.) served through OpenAI-compatible endpoints — return a `stop`-terminated completion with `content` blank and the model's entire turn (including, sometimes, a narrated tool call) sitting in a provider-specific `reasoning_content` field instead. Two variants have been observed:
 
-LangChain's OpenAI converter (`@langchain/openai`) doesn't surface `reasoning_content` as `content`, but it does preserve it on `AIMessage.additional_kwargs.reasoning_content`, so the answer is recoverable without touching the raw HTTP response.
+1. **Narrated-but-uninvoked tool call** — `reasoning_content` contains literal `<tool_call>...` text describing the call it intends to make, but the API's `tool_calls` array is empty. The model described the action instead of taking it.
+2. **No narrated tool call at all** — `reasoning_content` shows the model still mid-thought (e.g. "let me also check what roles are available...") with no indication it was about to call anything. It just stopped.
+
+Earlier this was treated as "the model finished, and the answer is in `reasoning_content`" — but both production examples above show that's not a safe assumption: the model genuinely wasn't done. Taking `reasoning_content` as a final answer immediately would have shown the user (or the agent loop) a truncated, incomplete response.
 
 **Fix:** [`ReasoningContentRecovery`](../libs/lcp-shared/src/llm/reasoning-content-recovery.ts), called from `buildAgentGraph`'s `agent` node immediately after every model invoke:
 
-- If `content` is non-empty, the message passes through unchanged.
-- If `content` is blank and `additional_kwargs.reasoning_content` has text, that text is promoted into `content` and a warning is logged naming the model (from `response_metadata.model_name`).
-- If both are blank, the message passes through unchanged — there's nothing to recover.
+- If the response has real `content` or actually populated `tool_calls`, it passes through unchanged — this is the normal case.
+- Otherwise the model is presumed not finished. It's re-invoked **once** with the prior (unusable) response plus a corrective nudge appended to the conversation:
+  - if `reasoning_content` contains a narrated `<tool_call>`, the nudge tells it to actually invoke the tool rather than describe it
+  - otherwise the nudge tells it to continue and either call a tool or give its final response
+- Whatever the retried response is, it's used as the recovered result — *if* it has real content or tool calls.
+- If the retry is *also* unusable, `reasoning_content` from the retried response is promoted into `content` as a last resort, so the loop still gets something rather than nothing.
 
-**Why no model allowlist:** detection is signal-based ("`content` empty, `reasoning_content` populated") rather than a list of known-offending model names. That combination is specific enough on its own to be a reliable signal, and a hardcoded list would only ever cover models already seen — it would fail open for the next thinking model nobody's added to the list yet. The warning log on every recovery gives visibility into which models are doing this over time without needing to maintain a list.
+The nudge round-trip (the original unusable message, and the nudge itself) isn't persisted to checkpointed history — only the final, usable message is returned from the node, keeping the conversation thread clean.
 
-**Interaction with `AgentLoopService`'s empty-content retry:** `runLoop` still has a separate, older safety net — if the _final_ message in a run has blank content after everything else (including this recovery), it retries once with an explicit "Please provide your response." continuation prompt before failing the run. That retry is unconditional (it doesn't know about `reasoning_content`) and exists for the harder case where the model genuinely produced nothing. Because `ReasoningContentRecovery` runs first, inside the graph node, a `reasoning_content` rescue means the retry path is never reached in this scenario — but it still defends against the case where there's truly no recoverable answer.
+**Why no model allowlist, and why detect `<tool_call>` by literal substring:** detection is signal-based rather than a list of known-offending model names, for the same reason throughout this doc — a list only ever covers models already seen. The `<tool_call>` tag specifically is the literal marker Qwen3.5 emits for this quirk; other models narrating tool calls differently (a different tag, plain prose) won't be caught by this pattern yet. If that's observed, extend the detection regex rather than parsing/executing the narrated call directly — see "Adding a new special case" below for why.
+
+**Why not parse and execute the narrated tool call ourselves:** different models format a narrated call differently, so a parser for arbitrary tool-call-shaped text becomes a growing, fragile maintenance surface, and it'd reimplement argument validation the real tool-calling path already does correctly. Nudging the model to make the call through the proper mechanism is simpler and reuses all the existing tool-call handling.
+
+**Interaction with `AgentLoopService`'s empty-content retry:** `runLoop` still has a separate, older safety net — if the _final_ message in a run has blank content after everything else (including this recovery's one retry), it retries once more with an explicit "Please provide your response." continuation prompt before failing the run. That retry is unconditional and exists for the harder case where the model genuinely produces nothing even after this recovery's own nudge.
 
 **Tests:**
 
-- [`reasoning-content-recovery.spec.ts`](../libs/lcp-shared/src/llm/reasoning-content-recovery.spec.ts) — unit tests for the recovery logic itself.
-- [`build-agent-graph.spec.ts`](../libs/lcp-shared/src/llm/build-agent-graph.spec.ts) — confirms the recovery actually fires inside a real (non-mocked) LangGraph node.
-- [`chat.service.spec.ts`](../apps/lcp-server/src/api/chat.service.spec.ts) — regression test reproducing the exact production scenario this was found in (`lcp-cli chat` against a Qwen model via LM Studio).
+- [`reasoning-content-recovery.spec.ts`](../libs/lcp-shared/src/llm/reasoning-content-recovery.spec.ts) — unit tests for the recovery/nudge/fallback logic, including which nudge wording is chosen.
+- [`build-agent-graph.spec.ts`](../libs/lcp-shared/src/llm/build-agent-graph.spec.ts) — confirms the nudge-and-retry actually fires inside a real (non-mocked) LangGraph node and the model is invoked exactly twice.
+- [`chat.service.spec.ts`](../apps/lcp-server/src/api/chat.service.spec.ts) — regression test reproducing the original production scenario (`lcp-cli chat` against a Qwen model via LM Studio).
 
 ---
 

@@ -1,67 +1,181 @@
-import { AIMessage } from '@langchain/core/messages';
+import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
 import { Logger } from '@nestjs/common';
 import { ReasoningContentRecovery } from './reasoning-content-recovery';
 
+function notInvoked(): Promise<AIMessage> {
+  throw new Error('invoke should not have been called');
+}
+
+function textOf(message: BaseMessage): string {
+  return typeof message.content === 'string' ? message.content : '';
+}
+
 describe('ReasoningContentRecovery', () => {
-  it('leaves the message unchanged when content is already present', () => {
+  it('leaves the message unchanged when content is already present', async () => {
     const message = new AIMessage('Here is my answer.');
-    const result = ReasoningContentRecovery.recover(message);
+    const result = await ReasoningContentRecovery.recover(
+      [],
+      message,
+      notInvoked,
+    );
     expect(result.content).toBe('Here is my answer.');
   });
 
-  it('recovers content from reasoning_content when content is blank', () => {
+  it('leaves the message unchanged when tool_calls were actually made, even with blank content', async () => {
     const message = new AIMessage({
       content: '',
-      additional_kwargs: { reasoning_content: 'The actual answer.' },
+      tool_calls: [{ name: 'list_files', args: {}, id: 'call-1' }],
     });
-    const result = ReasoningContentRecovery.recover(message);
-    expect(result.content).toBe('The actual answer.');
+    const result = await ReasoningContentRecovery.recover(
+      [],
+      message,
+      notInvoked,
+    );
+    expect(result).toBe(message);
   });
 
-  it('treats whitespace-only content as blank', () => {
-    const message = new AIMessage({
-      content: '   \n  ',
-      additional_kwargs: { reasoning_content: 'Recovered answer.' },
+  describe('when the first response is unusable (blank content, no tool_calls)', () => {
+    it('re-invokes with a nudge and returns the retried response when it has content', async () => {
+      const original = new AIMessage({
+        content: '',
+        additional_kwargs: { reasoning_content: 'Still thinking...' },
+      });
+      const retried = new AIMessage('The real final answer.');
+      const invoke = jest.fn().mockResolvedValue(retried);
+
+      const result = await ReasoningContentRecovery.recover(
+        [new HumanMessage('question')],
+        original,
+        invoke,
+      );
+
+      expect(result).toBe(retried);
+      expect(invoke).toHaveBeenCalledTimes(1);
+      const [messages] = invoke.mock.calls[0] as [BaseMessage[]];
+      expect(messages).toHaveLength(3); // original human msg + the unusable response + the nudge
+      expect(messages[2]).toBeInstanceOf(HumanMessage);
     });
-    const result = ReasoningContentRecovery.recover(message);
-    expect(result.content).toBe('Recovered answer.');
-  });
 
-  it('leaves the message unchanged when both content and reasoning_content are blank', () => {
-    const message = new AIMessage({
-      content: '',
-      additional_kwargs: { reasoning_content: '   ' },
+    it('re-invokes with a nudge and returns the retried response when it makes a real tool call', async () => {
+      const original = new AIMessage({ content: '' });
+      const retried = new AIMessage({
+        content: '',
+        tool_calls: [{ name: 'list_available_roles', args: {}, id: 'call-1' }],
+      });
+      const invoke = jest.fn().mockResolvedValue(retried);
+
+      const result = await ReasoningContentRecovery.recover(
+        [],
+        original,
+        invoke,
+      );
+
+      expect(result).toBe(retried);
     });
-    const result = ReasoningContentRecovery.recover(message);
-    expect(result.content).toBe('');
+
+    it('nudges to actually invoke the tool when reasoning_content narrates an unmade <tool_call>', async () => {
+      const original = new AIMessage({
+        content: '',
+        additional_kwargs: {
+          reasoning_content:
+            'I should consult the role.\n<tool_call>\n<function=interactions_request_agent_consultation>\n</function>\n</tool_call>',
+        },
+      });
+      const invoke = jest.fn().mockResolvedValue(new AIMessage('done'));
+
+      await ReasoningContentRecovery.recover([], original, invoke);
+
+      const [messages] = invoke.mock.calls[0] as [BaseMessage[]];
+      expect(textOf(messages.at(-1)!)).toMatch(/didn't actually invoke it/);
+    });
+
+    it('nudges to continue/finish when there is no narrated tool call', async () => {
+      const original = new AIMessage({
+        content: '',
+        additional_kwargs: {
+          reasoning_content: 'Hmm, let me think about next steps.',
+        },
+      });
+      const invoke = jest.fn().mockResolvedValue(new AIMessage('done'));
+
+      await ReasoningContentRecovery.recover([], original, invoke);
+
+      const [messages] = invoke.mock.calls[0] as [BaseMessage[]];
+      expect(textOf(messages.at(-1)!)).toMatch(
+        /haven't provided a response yet/,
+      );
+    });
+
+    it("falls back to the retried response's reasoning_content when it is also unusable", async () => {
+      const original = new AIMessage({
+        content: '',
+        additional_kwargs: { reasoning_content: 'First attempt reasoning.' },
+      });
+      const retried = new AIMessage({
+        content: '',
+        additional_kwargs: {
+          reasoning_content: 'Second attempt — the real answer.',
+        },
+      });
+      const invoke = jest.fn().mockResolvedValue(retried);
+
+      const result = await ReasoningContentRecovery.recover(
+        [],
+        original,
+        invoke,
+      );
+
+      expect(result.content).toBe('Second attempt — the real answer.');
+    });
+
+    it('returns the retried response as-is when even reasoning_content is empty after the retry', async () => {
+      const original = new AIMessage({ content: '' });
+      const retried = new AIMessage({ content: '' });
+      const invoke = jest.fn().mockResolvedValue(retried);
+
+      const result = await ReasoningContentRecovery.recover(
+        [],
+        original,
+        invoke,
+      );
+
+      expect(result).toBe(retried);
+      expect(result.content).toBe('');
+    });
+
+    it('only invokes once, never loops indefinitely', async () => {
+      const original = new AIMessage({ content: '' });
+      const invoke = jest
+        .fn()
+        .mockResolvedValue(new AIMessage({ content: '' }));
+
+      await ReasoningContentRecovery.recover([], original, invoke);
+
+      expect(invoke).toHaveBeenCalledTimes(1);
+    });
   });
 
-  it('leaves the message unchanged when reasoning_content is absent', () => {
-    const message = new AIMessage('');
-    const result = ReasoningContentRecovery.recover(message);
-    expect(result.content).toBe('');
-  });
-
-  it('logs a warning naming the model when recovery happens', () => {
+  it('logs a warning naming the model when nudging', async () => {
     const logger = { warn: jest.fn() } as unknown as Logger;
     const message = new AIMessage({
       content: '',
-      additional_kwargs: { reasoning_content: 'Recovered.' },
+      additional_kwargs: { reasoning_content: 'Thinking.' },
       response_metadata: { model_name: 'qwen/qwen3.5-9b' },
     });
+    const invoke = jest.fn().mockResolvedValue(new AIMessage('answer'));
 
-    ReasoningContentRecovery.recover(message, logger);
+    await ReasoningContentRecovery.recover([], message, invoke, logger);
 
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining('qwen/qwen3.5-9b'),
     );
   });
 
-  it('does not throw when no logger is provided', () => {
-    const message = new AIMessage({
-      content: '',
-      additional_kwargs: { reasoning_content: 'Recovered.' },
-    });
-    expect(() => ReasoningContentRecovery.recover(message)).not.toThrow();
+  it('does not throw when no logger is provided', async () => {
+    const message = new AIMessage({ content: '' });
+    const invoke = jest.fn().mockResolvedValue(new AIMessage('answer'));
+    await expect(
+      ReasoningContentRecovery.recover([], message, invoke),
+    ).resolves.not.toThrow();
   });
 });

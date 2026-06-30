@@ -303,6 +303,24 @@ describe('ChatService', () => {
     );
   });
 
+  it('passes the real agentId/companyId as MCP tool context, not LLM-suppliable values', async () => {
+    const agent = makeAgent({ threadId: null });
+    const role = makeRole();
+    agentRepo.findOneBy.mockResolvedValue(agent);
+    roleRepo.findOneBy.mockResolvedValue(role);
+    compiledGraph.invoke.mockResolvedValue({
+      messages: [new AIMessage('Hi there!')],
+    });
+
+    await service.sendMessage(agent.id, 'Hello');
+
+    expect(mcpClient.loadTools).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.any(Object),
+      { agentId: agent.id, companyId: agent.companyId },
+    );
+  });
+
   it('recovers the response when a "thinking" model leaves content blank and puts its answer in reasoning_content (regression)', async () => {
     const agent = makeAgent({ threadId: null });
     const role = makeRole();

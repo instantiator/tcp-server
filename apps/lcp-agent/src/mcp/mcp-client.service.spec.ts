@@ -174,5 +174,125 @@ describe('McpClientService', () => {
       const output: unknown = await mcpTool.tool.invoke({});
       expect(output).toBe('');
     });
+
+    describe('identity context (agentId / companyId)', () => {
+      function makeConsultationTool() {
+        return makeClientInstance([
+          {
+            name: 'request_agent_consultation',
+            description: 'Consult another role',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                agentId: { type: 'string' },
+                companyId: { type: 'string' },
+                roleId: { type: 'string' },
+                question: { type: 'string' },
+              },
+              required: ['agentId', 'companyId', 'roleId', 'question'],
+            },
+          },
+        ]);
+      }
+
+      it('hides agentId/companyId from the LangChain-facing schema when context supplies them', async () => {
+        const clientInstance = makeConsultationTool();
+        MockClient.mockImplementation(
+          () => clientInstance as unknown as Client,
+        );
+
+        const [mcpTool] = await service.loadTools(
+          ['interactions'],
+          { interactions: 'http://localhost:3012' },
+          { agentId: 'real-agent-id', companyId: 'real-company-id' },
+        );
+
+        const shape = (
+          mcpTool.tool.schema as { shape: Record<string, unknown> }
+        ).shape;
+        expect(shape).not.toHaveProperty('agentId');
+        expect(shape).not.toHaveProperty('companyId');
+        expect(shape).toHaveProperty('roleId');
+        expect(shape).toHaveProperty('question');
+      });
+
+      it('injects the real agentId/companyId on every call, overriding anything the LLM supplies', async () => {
+        const clientInstance = makeConsultationTool();
+        MockClient.mockImplementation(
+          () => clientInstance as unknown as Client,
+        );
+
+        const [mcpTool] = await service.loadTools(
+          ['interactions'],
+          { interactions: 'http://localhost:3012' },
+          { agentId: 'real-agent-id', companyId: 'real-company-id' },
+        );
+
+        await mcpTool.tool.invoke({
+          // An LLM that somehow still supplied these (e.g. a malformed call)
+          // must not be able to override the real values.
+          agentId: 'guessed-agent-id',
+          companyId: 'guessed-company-id',
+          roleId: 'role-1',
+          question: 'Would you like a worm?',
+        });
+
+        expect(clientInstance.callTool).toHaveBeenCalledWith({
+          name: 'request_agent_consultation',
+          arguments: {
+            agentId: 'real-agent-id',
+            companyId: 'real-company-id',
+            roleId: 'role-1',
+            question: 'Would you like a worm?',
+          },
+        });
+      });
+
+      it('leaves tools that do not declare agentId/companyId unaffected by context', async () => {
+        const clientInstance = makeClientInstance([
+          {
+            name: 'list_files',
+            description: 'List',
+            inputSchema: {
+              type: 'object',
+              properties: { prefix: { type: 'string' } },
+            },
+          },
+        ]);
+        MockClient.mockImplementation(
+          () => clientInstance as unknown as Client,
+        );
+
+        const [mcpTool] = await service.loadTools(
+          ['storage'],
+          { storage: 'http://localhost:3010' },
+          { agentId: 'real-agent-id', companyId: 'real-company-id' },
+        );
+
+        await mcpTool.tool.invoke({ prefix: 'docs/' });
+
+        expect(clientInstance.callTool).toHaveBeenCalledWith({
+          name: 'list_files',
+          arguments: { prefix: 'docs/' },
+        });
+      });
+
+      it('does not strip or override fields when no context is given', async () => {
+        const clientInstance = makeConsultationTool();
+        MockClient.mockImplementation(
+          () => clientInstance as unknown as Client,
+        );
+
+        const [mcpTool] = await service.loadTools(['interactions'], {
+          interactions: 'http://localhost:3012',
+        });
+
+        const shape = (
+          mcpTool.tool.schema as { shape: Record<string, unknown> }
+        ).shape;
+        expect(shape).toHaveProperty('agentId');
+        expect(shape).toHaveProperty('companyId');
+      });
+    });
   });
 });

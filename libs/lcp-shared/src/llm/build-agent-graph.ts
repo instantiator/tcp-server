@@ -35,11 +35,15 @@ export function buildAgentGraph(options: BuildAgentGraphOptions) {
     tools.length > 0 && model.bindTools ? model.bindTools(tools) : model;
 
   const agentNode = async (state: typeof MessagesAnnotation.State) => {
-    const response = await boundModel.invoke(
+    const invokeOptions = signal ? { signal } : undefined;
+    const response = await boundModel.invoke(state.messages, invokeOptions);
+    const recovered = await ReasoningContentRecovery.recover(
       state.messages,
-      signal ? { signal } : undefined,
+      response,
+      (messages) => boundModel.invoke(messages, invokeOptions),
+      logger,
     );
-    return { messages: [ReasoningContentRecovery.recover(response, logger)] };
+    return { messages: [recovered] };
   };
 
   const graphBuilder = new StateGraph(MessagesAnnotation)

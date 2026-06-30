@@ -48,6 +48,31 @@ describe('buildAgentGraph', () => {
     expect(result.messages.at(-1)?.content).toBe('The recovered answer.');
   });
 
+  it('nudges and re-invokes the model when the first response has no usable content or tool_calls', async () => {
+    const invoke = jest
+      .fn()
+      .mockResolvedValueOnce(
+        new AIMessage({
+          content: '',
+          additional_kwargs: { reasoning_content: 'Still working on it...' },
+        }),
+      )
+      .mockResolvedValueOnce(new AIMessage('The real final answer.'));
+    const graph = buildAgentGraph({
+      model: makeModel(invoke),
+      checkpointer: new MemorySaver(),
+      tools: [],
+    });
+
+    const result = await graph.invoke(
+      { messages: [new HumanMessage('Hi')] },
+      RUN_CONFIG,
+    );
+
+    expect(invoke).toHaveBeenCalledTimes(2);
+    expect(result.messages.at(-1)?.content).toBe('The real final answer.');
+  });
+
   it('binds tools to the model when tools are provided', async () => {
     const boundInvoke = jest
       .fn()
