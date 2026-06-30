@@ -1,6 +1,9 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { DynamicStructuredTool } from '@langchain/core/tools';
-import type { BaseCheckpointSaver } from '@langchain/langgraph';
+import type {
+  BaseCheckpointSaver,
+  LangGraphRunnableConfig,
+} from '@langchain/langgraph';
 import { END, MessagesAnnotation, StateGraph } from '@langchain/langgraph';
 import { ToolNode, toolsCondition } from '@langchain/langgraph/prebuilt';
 import { Logger } from '@nestjs/common';
@@ -34,8 +37,16 @@ export function buildAgentGraph(options: BuildAgentGraphOptions) {
   const boundModel =
     tools.length > 0 && model.bindTools ? model.bindTools(tools) : model;
 
-  const agentNode = async (state: typeof MessagesAnnotation.State) => {
-    const invokeOptions = signal ? { signal } : undefined;
+  const agentNode = async (
+    state: typeof MessagesAnnotation.State,
+    config: LangGraphRunnableConfig,
+  ) => {
+    // Forward LangGraph's own config (callbacks, tags, etc.) into the model
+    // invoke — without this, the model call happens outside the graph's
+    // callback chain and on_chat_model_start/end never fire for it, which
+    // breaks anything (audit events, streamEvents-based completion
+    // detection) that depends on observing those events.
+    const invokeOptions = { ...config, ...(signal ? { signal } : {}) };
     const response = await boundModel.invoke(state.messages, invokeOptions);
     const recovered = await ReasoningContentRecovery.recover(
       state.messages,

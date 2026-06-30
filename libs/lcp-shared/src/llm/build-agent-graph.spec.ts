@@ -121,12 +121,16 @@ describe('buildAgentGraph', () => {
 
     await graph.invoke({ messages: [new HumanMessage('Hi')] }, RUN_CONFIG);
 
-    expect(invoke).toHaveBeenCalledWith(expect.any(Array), {
-      signal: controller.signal,
-    });
+    expect(invoke).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({ signal: controller.signal }),
+    );
   });
 
-  it('passes undefined invoke options when no signal is provided', async () => {
+  it("forwards LangGraph's own run config (e.g. thread_id) into the model invoke call", async () => {
+    // Regression: the model invoke must happen inside LangGraph's callback
+    // chain (via its config), or on_chat_model_start/end never fire for it —
+    // which breaks streamEvents-based audit/completion-detection consumers.
     const invoke = jest.fn().mockResolvedValue(new AIMessage('Done.'));
 
     const graph = buildAgentGraph({
@@ -137,6 +141,10 @@ describe('buildAgentGraph', () => {
 
     await graph.invoke({ messages: [new HumanMessage('Hi')] }, RUN_CONFIG);
 
-    expect(invoke).toHaveBeenCalledWith(expect.any(Array), undefined);
+    const [, invokeOptions] = invoke.mock.calls[0] as [
+      unknown,
+      { configurable?: { thread_id?: string } },
+    ];
+    expect(invokeOptions.configurable?.thread_id).toBe('test-thread');
   });
 });

@@ -339,7 +339,12 @@ export class AgentLoopService {
 
       if (event.event === 'on_chat_model_end') {
         const output = (event.data as { output?: unknown } | undefined)?.output;
-        if (output instanceof AIMessage) lastAiMessage = output;
+        // A streamed chat-model run reports its output as an AIMessageChunk,
+        // not a plain AIMessage — instanceof AIMessage misses it, but
+        // AIMessage.isInstance() recognizes both.
+        if (AIMessage.isInstance(output)) {
+          lastAiMessage = output;
+        }
       }
 
       if (event.event === 'on_tool_start') {
