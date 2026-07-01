@@ -138,7 +138,7 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "./coverage",
-    "maxWorkers": "50%",
+    "runInBand": true,
     "testEnvironment": "node",
     "reporters": [
       "default",
