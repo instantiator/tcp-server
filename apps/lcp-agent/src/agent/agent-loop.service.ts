@@ -20,6 +20,7 @@ import {
   resolveRunConfig,
 } from '@lcp/shared';
 import { Injectable, Logger } from '@nestjs/common';
+import Redis from 'ioredis';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
@@ -244,6 +245,7 @@ export class AgentLoopService {
           `Agent ${agent.id} loop ending with status 'completed' (set by tool call)`,
         );
         await this.generateAndRecordCompletionSummary(agent, model, tracker);
+        await this.publishCompletion(agent.id, freshAgent.output ?? '');
         return;
       }
 
@@ -280,9 +282,13 @@ export class AgentLoopService {
         return;
       }
 
-      // Fallback completion — notifyComplete is idempotent if complete_task was called
+      // Fallback completion — notifyComplete is idempotent if complete_task was called.
+      // Write output directly first so chat.service's race-condition check can read it
+      // before publishCompletion fires; notifyComplete is fire-and-forget and may lag.
+      await this.agentRepo.update(agent.id, { output: content });
       this.auditClient.notifyComplete(agent.id, content);
       await this.updateStatus(agent, AgentStatus.Completed);
+      await this.publishCompletion(agent.id, content);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`Agent ${agent.id} loop error: ${msg}`);
@@ -524,6 +530,32 @@ export class AgentLoopService {
       status,
       ...(threadId !== undefined && { threadId }),
     });
+  }
+
+  /**
+   * Publishes the agent's final response to `agent:completed:{agentId}` on
+   * Redis so that any HTTP handler waiting on this agent (e.g. the chat
+   * service holding a long-poll open across a pause/resume cycle) can return
+   * the real answer rather than a placeholder.
+   *
+   * A transient connection is created per publish and closed immediately
+   * after — no persistent connection is held. If `REDIS_URL` is not configured
+   * or the publish fails, the error is logged and swallowed: the channel is
+   * best-effort and the BullMQ job must not fail because of it.
+   */
+  private async publishCompletion(agentId: UUID, content: string): Promise<void> {
+    const redisUrl = this.config.get<string>('REDIS_URL');
+    if (!redisUrl) return;
+    const publisher = new Redis(redisUrl);
+    try {
+      await publisher.publish(`agent:completed:${agentId}`, content);
+    } catch (err) {
+      this.logger.warn(
+        `Failed to publish completion for agent ${agentId}: ${String(err)}`,
+      );
+    } finally {
+      await publisher.quit().catch(() => {});
+    }
   }
 
   /**

@@ -51,7 +51,7 @@ describe('PauseAndResumeService', () => {
   let roleRepo: ReturnType<typeof makeRepo<LcpRole>>;
   let consultRepo: ReturnType<typeof makeRepo<PendingConsultation>>;
   let convService: { create: jest.Mock };
-  let orchestration: { startAgent: jest.Mock; resumeAgent: jest.Mock };
+  let orchestration: { startAgent: jest.Mock; createAgent: jest.Mock; dispatchStartJob: jest.Mock; resumeAgent: jest.Mock };
   let service: PauseAndResumeService;
 
   beforeEach(() => {
@@ -61,6 +61,8 @@ describe('PauseAndResumeService', () => {
     convService = { create: jest.fn() };
     orchestration = {
       startAgent: jest.fn(),
+      createAgent: jest.fn(),
+      dispatchStartJob: jest.fn().mockResolvedValue(undefined),
       resumeAgent: jest.fn().mockResolvedValue(undefined),
     };
 
@@ -182,7 +184,7 @@ describe('PauseAndResumeService', () => {
         .mockResolvedValueOnce(callerRole as never);
       roleRepo.findOne.mockResolvedValue(consultRole);
       roleRepo.findOneBy.mockResolvedValue(callerRole);
-      orchestration.startAgent.mockResolvedValue(consultAgent);
+      orchestration.createAgent.mockResolvedValue(consultAgent);
       consultRepo.save.mockResolvedValue({
         id: randomUUID(),
         callingAgentId: caller.id,
@@ -230,7 +232,7 @@ describe('PauseAndResumeService', () => {
         );
       });
       roleRepo.findOneBy.mockResolvedValue(callerRole);
-      orchestration.startAgent.mockResolvedValue(consultAgent);
+      orchestration.createAgent.mockResolvedValue(consultAgent);
       consultRepo.save.mockResolvedValue({
         id: randomUUID(),
         callingAgentId: caller.id,
@@ -250,10 +252,10 @@ describe('PauseAndResumeService', () => {
       );
 
       // Targeted the role matching the id, never the other same-named role.
-      expect(orchestration.startAgent).toHaveBeenCalledWith(
+      expect(orchestration.createAgent).toHaveBeenCalledWith(
         expect.objectContaining({ roleId: sameNameRoleB.id }),
       );
-      expect(orchestration.startAgent).not.toHaveBeenCalledWith(
+      expect(orchestration.createAgent).not.toHaveBeenCalledWith(
         expect.objectContaining({ roleId: sameNameRoleA.id }),
       );
     });
@@ -273,7 +275,7 @@ describe('PauseAndResumeService', () => {
 
       roleRepo.findOne.mockResolvedValue(consultRole);
       roleRepo.findOneBy.mockResolvedValue(callerRole);
-      orchestration.startAgent.mockResolvedValue(consultAgent);
+      orchestration.createAgent.mockResolvedValue(consultAgent);
       consultRepo.save.mockResolvedValue({
         id: randomUUID(),
         callingAgentId: caller.id,
@@ -296,7 +298,7 @@ describe('PauseAndResumeService', () => {
         status: AgentStatus.Paused,
         pausedAt: expect.any(Date) as Date,
       });
-      expect(orchestration.startAgent).toHaveBeenCalledWith(
+      expect(orchestration.createAgent).toHaveBeenCalledWith(
         expect.objectContaining({
           companyId: caller.companyId,
           roleId: consultRole.id,

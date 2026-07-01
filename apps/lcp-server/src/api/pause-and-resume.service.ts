@@ -131,7 +131,12 @@ export class PauseAndResumeService {
       .filter(Boolean)
       .join('\n');
 
-    const consultAgent = await this.orchestration.startAgent({
+    // Create the agent record first, then commit the consultation link, then
+    // dispatch the job. This ordering prevents a race where the worker picks
+    // up the job and calls completeAgent before the PendingConsultation row
+    // exists — completeAgent would find no pending consultation and return
+    // without resuming the calling agent.
+    const consultAgent = await this.orchestration.createAgent({
       companyId,
       roleId: role.id,
       initialPrompt,
@@ -148,6 +153,9 @@ export class PauseAndResumeService {
       }),
     );
 
+    // Only now dispatch the job — the PendingConsultation row is committed.
+    await this.orchestration.dispatchStartJob(consultAgent.id);
+
     this.logger.log(
       `Agent ${callingAgentId} (${callingRole?.name ?? '?'}) paused for consultation — consulting agent ${consultAgent.id} (${role.name}), consultation ${consultation.id}`,
     );
@@ -162,19 +170,25 @@ export class PauseAndResumeService {
    * Idempotent: a no-op if the agent is already Completed.
    */
   async completeAgent(agentId: UUID, output: string): Promise<void> {
-    // Mark this agent completed — a no-op if already completed.
     const agent = await this.agentRepo.findOneBy({ id: agentId });
     if (!agent) return;
-    if (agent.status === AgentStatus.Completed) return; // idempotent
 
-    await this.agentRepo.update(agentId, {
-      status: AgentStatus.Completed,
-      output,
-    });
-    this.logger.log(`Agent ${agentId} completed`);
+    // Update status and output only when not already completed — idempotent
+    // for the agent record itself. AgentLoopService may have already set the
+    // agent to Completed (and written output) before this HTTP call arrived,
+    // so we skip the write but MUST NOT skip the consultation resolution below.
+    if (agent.status !== AgentStatus.Completed) {
+      await this.agentRepo.update(agentId, {
+        status: AgentStatus.Completed,
+        output,
+      });
+      this.logger.log(`Agent ${agentId} completed`);
+    }
 
-    // If this was a consultation agent, resolve the pending record so the
-    // calling agent's resume can pick up the result.
+    // Always attempt consultation resolution even if status was already
+    // Completed — the lcp-agent fallback path sets status synchronously
+    // before this HTTP call arrives, leaving the consultation pending.
+    const resolvedOutput = output || agent.output || '';
     const consultation = await this.consultRepo.findOne({
       where: { consultationAgentId: agentId, status: 'pending' },
     });
@@ -182,7 +196,7 @@ export class PauseAndResumeService {
 
     await this.consultRepo.update(consultation.id, {
       status: 'complete',
-      result: output,
+      result: resolvedOutput,
     });
 
     const calling = await this.agentRepo.findOneBy({

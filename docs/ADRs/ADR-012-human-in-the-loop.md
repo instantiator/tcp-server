@@ -140,6 +140,106 @@ This avoids LangGraph's `interrupt()` mechanism entirely. The checkpoint store (
 - WebSocket upgrade for real-time conversation UX
 - Teaching flow (`{ teach: 'memory' | 'knowledge' }` in replies)
 - `GET /tasks/{task_id}/audit/stream` SSE endpoint
+- **SSE-based completion delivery** — replace the current long-poll (`waitForAgentCompletion`) with `202 Accepted` + `completed` SSE event; see [ADR-015](ADR-015-agent-completion-sse.md)
+- **Required tool call tracking** — `LcpAgent.requiredToolCalls?: string[]` set at creation (e.g. `['complete_task']` for consultation agents); `AgentLoopService` warns or retries if the stream ends without all required calls having fired; reduces silent fallback completions where the agent narrated a tool call instead of invoking it
+
+## Agent-to-agent consultation flow
+
+### Current behaviour
+
+The BullMQ job for the calling agent (cat) completes as soon as the agent
+pauses. The `chat.service` HTTP handler returns at that point with whatever
+the LLM said before pausing — typically a placeholder like "I've asked the
+chicken…" — and the HTTP connection closes. The resumed run later produces the
+real answer, but no one is waiting for it.
+
+```mermaid
+sequenceDiagram
+    participant CLI as Client (lcp-cli)
+    participant CS as chat.service
+    participant BQ as BullMQ
+    participant Cat1 as cat agent (run 1)
+    participant Chkn as chicken agent
+    participant Cat2 as cat agent (run 2)
+
+    CLI->>CS: POST /api/agent/:id/message
+    CS->>BQ: dispatch cat job
+    BQ->>Cat1: run agent loop
+    Note over Cat1: LLM calls request_agent_consultation
+    Cat1->>CS: POST /internal/pause
+    CS-->>Cat1: Paused. Consultation dispatched.
+    CS->>BQ: dispatch chicken job
+    Note over Cat1: LLM produces empty response
+    Note over Cat1: ReasoningContentRecovery nudges
+    Note over Cat1: LLM produces placeholder response
+    Cat1-->>BQ: job complete (agent: Paused)
+    BQ-->>CS: done
+    CS-->>CLI: placeholder response (consultation unresolved)
+
+    Note over CLI,CS: HTTP connection closes here
+
+    BQ->>Chkn: run agent loop
+    Note over Chkn: LLM answers the question
+    Chkn->>CS: POST /internal/complete
+    CS->>BQ: dispatch cat resume job
+    BQ->>Cat2: run agent loop (resumed from checkpoint)
+    Note over Cat2: LLM produces real answer
+    Cat2-->>BQ: job complete (agent: Completed)
+    Note over Cat2,BQ: Final answer — no recipient
+```
+
+### Proposed improvement: Redis pub/sub notification
+
+Two changes close the gap without holding any BullMQ thread open:
+
+1. **Suppress the spurious nudge.** `ReasoningContentRecovery` checks whether
+   the last `ToolMessage` in the conversation is a terminal one ("Paused." /
+   "Task marked complete.") — if so, it returns the empty response as-is
+   rather than nudging the LLM to produce a placeholder.
+
+2. **Hold the HTTP request open across the pause/resume cycle.** After the
+   first BullMQ job completes with the agent in `Paused` state, `chat.service`
+   subscribes to `agent:completed:{agentId}` on Redis. When the cat's resumed
+   run finishes, `AgentLoopService` publishes the final response text to that
+   key. `chat.service` receives it, unsubscribes, and returns it to the client.
+   The BullMQ jobs themselves are unaffected — they still start and finish
+   normally; the only resource held open is the HTTP connection.
+
+```mermaid
+sequenceDiagram
+    participant CLI as Client (lcp-cli)
+    participant CS as chat.service
+    participant R as Redis
+    participant BQ as BullMQ
+    participant Cat1 as cat agent (run 1)
+    participant Chkn as chicken agent
+    participant Cat2 as cat agent (run 2)
+
+    CLI->>CS: POST /api/agent/:id/message
+    CS->>BQ: dispatch cat job
+    BQ->>Cat1: run agent loop
+    Note over Cat1: LLM calls request_agent_consultation
+    Cat1->>CS: POST /internal/pause
+    CS-->>Cat1: Paused. Consultation dispatched.
+    CS->>BQ: dispatch chicken job
+    Note over Cat1: LLM produces empty response
+    Note over Cat1: last tool was terminal — no nudge
+    Cat1-->>BQ: job complete (agent: Paused)
+    BQ-->>CS: done (agent: Paused)
+    CS->>R: SUBSCRIBE agent:completed:{agentId}
+    Note over CS: HTTP held open (timeout = LLM_TIMEOUT_MS)
+
+    BQ->>Chkn: run agent loop
+    Note over Chkn: LLM answers the question
+    Chkn->>CS: POST /internal/complete
+    CS->>BQ: dispatch cat resume job
+    BQ->>Cat2: run agent loop (resumed from checkpoint)
+    Note over Cat2: LLM produces real answer
+    Cat2->>R: PUBLISH agent:completed:{agentId}
+    R-->>CS: event received
+    CS->>R: UNSUBSCRIBE
+    CS-->>CLI: real answer from cat agent
+```
 
 ## Consequences
 

@@ -11,6 +11,14 @@ const NUDGE_NO_RESPONSE =
   "You haven't provided a response yet. Continue: call a tool if more work is needed, or give your final response now.";
 
 /**
+ * Prefixes emitted by terminal MCP tool results that signal the agent has
+ * intentionally stopped its current turn — no further action is needed and an
+ * empty response is the correct outcome. Nudging in these cases would produce
+ * a spurious placeholder message the caller never asked for.
+ */
+const TERMINAL_TOOL_RESULT_PREFIXES = ['Paused.', 'Task marked complete.'];
+
+/**
  * Detects and corrects two related failure modes in "thinking" models
  * (observed with Qwen3.5, and known to affect other reasoning models —
  * DeepSeek-R1, QwQ, etc. — served through OpenAI-compatible local endpoints
@@ -38,6 +46,7 @@ export class ReasoningContentRecovery {
     logger?: Logger,
   ): Promise<AIMessage> {
     if (this.isUsable(response)) return response;
+    if (this.lastToolWasTerminal(messages)) return response;
 
     const reasoning = this.reasoningContentOf(response);
     const nudgeText =
@@ -56,6 +65,20 @@ export class ReasoningContentRecovery {
     if (this.isUsable(retried)) return retried;
 
     return this.fallbackToReasoning(retried, logger) ?? retried;
+  }
+
+  /**
+   * Returns true when the most recent tool result in the message history is a
+   * terminal one (pause or task completion). The LLM correctly produces an
+   * empty response after these — nudging would only generate a spurious
+   * placeholder that the caller never asked for.
+   */
+  private static lastToolWasTerminal(messages: BaseMessage[]): boolean {
+    const last = [...messages]
+      .reverse()
+      .find((m) => m._getType() === 'tool');
+    const c = typeof last?.content === 'string' ? last.content : '';
+    return TERMINAL_TOOL_RESULT_PREFIXES.some((p) => c.startsWith(p));
   }
 
   /** A response is usable if it has real content or it actually invoked a tool. */

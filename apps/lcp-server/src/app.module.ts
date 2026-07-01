@@ -35,6 +35,7 @@ import { AddAgentOutputAndConsultation1782247400000 } from './migrations/1782247
 import { AddAgentStorageChanges1782247500000 } from './migrations/1782247500000-AddAgentStorageChanges';
 import { AddRunConfig1782247600000 } from './migrations/1782247600000-AddRunConfig';
 import { AddVersionColumns1782247700000 } from './migrations/1782247700000-AddVersionColumns';
+import { AddAgentPausedAt1782831650682 } from './migrations/1782831650682-AddAgentPausedAt';
 import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
 
 /**
@@ -76,6 +77,7 @@ import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
         AddAgentStorageChanges1782247500000,
         AddRunConfig1782247600000,
         AddVersionColumns1782247700000,
+        AddAgentPausedAt1782831650682,
       ],
     ),
     ApiModule,

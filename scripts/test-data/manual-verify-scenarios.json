@@ -1,0 +1,35 @@
+[
+  {
+    "role": "chicken",
+    "prompt": "What is your name?",
+    "checks": [
+      "Does the chat interface identify the role it is submitting the query to as 'Chicken assistant'?",
+      "Has the agent chosen an appropriate name for itself?",
+      "Is the response delivered in the style of a chicken?"
+    ]
+  },
+  {
+    "role": "chicken",
+    "prompt": "Who would you consult if I asked about mice?",
+    "checks": [
+      "Does the response indicate that it would consult 'Cat assistant'?"
+    ]
+  },
+  {
+    "role": "cat",
+    "prompt": "Who is available to consult with from this company?",
+    "checks": [
+      "Does the response include: Chicken assistant and Cat assistant?",
+      "Is the response delivered in the style of a cat?"
+    ]
+  },
+  {
+    "role": "cat",
+    "prompt": "Ask the chicken assistant if it would like a worm. Let me know if it does, and how you enjoyed the interaction.",
+    "checks": [
+      "Was the chicken assistant consulted successfully?",
+      "Did the chicken assistant want a worm?",
+      "Did the cat assistant give its perspective?"
+    ]
+  }
+]

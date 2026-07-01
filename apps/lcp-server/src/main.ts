@@ -23,5 +23,10 @@ async function bootstrap() {
   );
 
   await app.listen(process.env['PORT'] ?? 3000);
+  // Disable Node.js's built-in 5-minute request timeout so that long-running
+  // endpoints (e.g. consultation long-polls in waitForAgentCompletion) are not
+  // killed before they can return a response. Application-level timeouts
+  // (LLM_TIMEOUT_MS) are still enforced by the service layer.
+  app.getHttpServer().requestTimeout = 0;
 }
 void bootstrap();

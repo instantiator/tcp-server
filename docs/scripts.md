@@ -39,6 +39,7 @@ never contaminates dev data.
 | [run-smoke-tests.sh](#run-smoke-testssh)             | Smoke tests — requires a running deployment                          | Running stack         |
 | [run-api-tests.sh](#run-api-testssh)                 | API tests — requires a running deployment                            | Running stack         |
 | [run-e2e-tests.sh](#run-e2e-testssh)                 | E2E tests — HTTP API workflows                                       | Docker                |
+| [manual-verify.sh](#manual-verifysh)                 | Interactive scenario walkthrough with human checks                   | Running stack         |
 
 ## start-deployment.sh
 
@@ -239,6 +240,36 @@ down. Keycloak is not required — OIDC env vars are provided as stubs.
 **Requires:** Docker and Docker Compose, `.env.testing` in the repo root.
 
 See also: [docs/testing.md](testing.md).
+
+## manual-verify.sh
+
+Interactive scenario walkthrough for human-judged verification (response tone,
+correct role identification, successful agent-to-agent consultation) that
+automated tests can't assert on. Creates a test company and two roles
+(chicken/cat assistant) from `scripts/test-data/`, then runs each prompt in
+`scripts/test-data/manual-verify-scenarios.json` through `lcp-cli.sh chat -q`,
+asking the operator a yes/no check after every response. Halts on the first
+failed API call or "n" answer.
+
+```bash
+./scripts/start-deployment.sh --project lcp-dev --env-file .env.testing
+./scripts/manual-verify.sh --username test --password test
+./scripts/manual-verify.sh --username test --password test \
+  --lcp-server http://your-host:3000 \
+  --scenarios scripts/test-data/manual-verify-scenarios.json
+```
+
+**Options:**
+
+| Flag                  | Description           | Default                                                    |
+| ---------------------- | ---------------------- | ------------------------------------------------------------ |
+| `-u, --username <user>` | OIDC username          | (required)                                                    |
+| `-p, --password <pass>` | OIDC password          | (required)                                                    |
+| `-s, --lcp-server <url>` | LCP server base URL   | `http://localhost:3000`                                       |
+| `--scenarios <file>`   | Scenarios JSON file    | `scripts/test-data/manual-verify-scenarios.json`               |
+
+**Requires:** a running stack with default LLM config in its `.env`,
+`MCP_INTERACTIONS_URL` reachable (the consultation scenario needs it), `jq`.
 
 ## run-all-tests.sh
 

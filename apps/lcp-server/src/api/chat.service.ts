@@ -3,6 +3,7 @@ import {
   HumanMessage,
   SystemMessage,
 } from '@langchain/core/messages';
+import Redis from 'ioredis';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import {
   AgentStatus,
@@ -24,6 +25,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { DEFAULT_LLM_TIMEOUT_MS } from '@lcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
@@ -131,6 +133,16 @@ export class ChatService {
     const databaseUrl = this.config.getOrThrow<string>('DATABASE_URL');
     const checkpointer = PostgresSaver.fromConnString(databaseUrl);
 
+    // Guard so the checkpointer connection pool is closed exactly once even
+    // when we need to close it early (before waiting on a Redis subscription).
+    let checkpointerClosed = false;
+    const closeCheckpointer = async () => {
+      if (!checkpointerClosed) {
+        checkpointerClosed = true;
+        await checkpointer.end();
+      }
+    };
+
     try {
       await checkpointer.setup();
 
@@ -235,6 +247,26 @@ export class ChatService {
 
       const result = await graph.invoke({ messages }, { ...runConfig, signal });
 
+      // If a consultation or user-input tool paused the agent mid-turn, the
+      // graph has already terminated and the agent is waiting for a resumed
+      // BullMQ run to supply the real answer. Release the checkpointer
+      // immediately (no further checkpoint reads needed) and hold the HTTP
+      // connection open until the resumed run publishes its response.
+      //
+      // Also handle Completed: the consultation cycle can race to completion
+      // while graph.invoke() is still running its final empty LLM turn, so
+      // the agent's status may already be Completed by the time we check.
+      // waitForAgentCompletion handles both cases — its polling loop finds
+      // the output within one interval when the agent is already done.
+      const freshAgent = await this.agentRepo.findOneBy({ id: agentId });
+      if (
+        freshAgent?.status === AgentStatus.Paused ||
+        freshAgent?.status === AgentStatus.Completed
+      ) {
+        await closeCheckpointer();
+        return await this.waitForAgentCompletion(agentId, signal);
+      }
+
       const last = result.messages.at(-1);
       const content =
         last instanceof AIMessage && typeof last.content === 'string'
@@ -293,7 +325,111 @@ export class ChatService {
         `Agent encountered an unexpected error.`,
       );
     } finally {
-      await checkpointer.end();
+      await closeCheckpointer();
+    }
+  }
+
+  /**
+   * Subscribes to `agent:completed:{agentId}` on Redis and resolves when the
+   * agent's resumed BullMQ run publishes its final response. Called after
+   * detecting that a consultation or user-input tool paused the agent.
+   *
+   * Guards against the race where the resumed run completes (and publishes)
+   * before the subscription is established by polling the DB at 500 ms
+   * intervals after subscribing — if `agent.output` is already populated,
+   * the poll delivers the result without waiting for a Redis message that
+   * has already been lost.
+   *
+   * Resolves with an empty string if the agent fails, the caller's signal is
+   * aborted, or the built-in timeout fires (LLM_TIMEOUT_MS, default 30 min).
+   */
+  private async waitForAgentCompletion(
+    agentId: UUID,
+    signal?: AbortSignal,
+  ): Promise<ChatMessageResponse> {
+    const redisUrl = this.config.getOrThrow<string>('REDIS_URL');
+    // Use || not ?? — docker-compose passes LLM_TIMEOUT_MS as "" when unset,
+    // and "" ?? default returns "" (not null/undefined) triggering an instant timeout.
+    const timeoutMs =
+      this.config.get<number>('LLM_TIMEOUT_MS') || DEFAULT_LLM_TIMEOUT_MS;
+    const channel = `agent:completed:${agentId}`;
+    const subscriber = new Redis(redisUrl);
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    try {
+      const response = await new Promise<string>((resolve) => {
+        // Ensure the promise resolves at most once regardless of how many
+        // signals fire (abort, timeout, message) in quick succession.
+        let resolved = false;
+        const done = (msg: string) => {
+          if (!resolved) {
+            resolved = true;
+            resolve(msg);
+          }
+        };
+
+        // Without an explicit error handler, ioredis emits 'error' as an
+        // uncaught exception which destroys the HTTP socket. Handle it here
+        // so connection drops resolve the wait gracefully.
+        subscriber.on('error', (err) => {
+          this.logger.error(
+            `Redis subscriber error for agent ${agentId}: ${String(err)}`,
+          );
+          done('');
+        });
+
+        subscriber.subscribe(channel, (err) => {
+          if (err) {
+            this.logger.error(
+              `Redis subscribe error for agent ${agentId}: ${String(err)}`,
+            );
+            done('');
+            return;
+          }
+
+          // Race-condition safety: if the resumed run completed and published
+          // before our SUBSCRIBE arrived, the Redis message is gone. Poll the
+          // DB at 500 ms intervals until we find a non-null output, the agent
+          // fails, or the outer promise resolves via Redis / timeout / signal.
+          void (async () => {
+            while (!resolved) {
+              await new Promise<void>((r) => setTimeout(r, 500));
+              if (resolved) return;
+              try {
+                const a = await this.agentRepo.findOneBy({ id: agentId });
+                if (resolved) return;
+                if (a?.status === AgentStatus.Completed && a.output != null) {
+                  done(a.output);
+                  return;
+                }
+                if (a?.status === AgentStatus.Failed) {
+                  done('');
+                  return;
+                }
+              } catch {
+                // transient DB error — continue polling
+              }
+            }
+          })();
+        });
+
+        subscriber.on('message', (_ch: string, msg: string) => done(msg));
+
+        timeoutId = setTimeout(() => {
+          this.logger.warn(
+            `Agent ${agentId} consultation wait timed out after ${timeoutMs}ms`,
+          );
+          done('');
+        }, timeoutMs);
+
+        signal?.addEventListener('abort', () => done(''), { once: true });
+      });
+
+      return { response };
+    } finally {
+      clearTimeout(timeoutId);
+      await subscriber.quit().catch(() => {});
+      await this.agentRepo.update(agentId, { status: AgentStatus.Idle });
     }
   }
 }

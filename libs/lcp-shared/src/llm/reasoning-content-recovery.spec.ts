@@ -1,4 +1,9 @@
-import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
+import {
+  AIMessage,
+  BaseMessage,
+  HumanMessage,
+  ToolMessage,
+} from '@langchain/core/messages';
 import { Logger } from '@nestjs/common';
 import { ReasoningContentRecovery } from './reasoning-content-recovery';
 
@@ -150,6 +155,57 @@ describe('ReasoningContentRecovery', () => {
         .mockResolvedValue(new AIMessage({ content: '' }));
 
       await ReasoningContentRecovery.recover([], original, invoke);
+
+      expect(invoke).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('when the last tool result is terminal (pause or task completion)', () => {
+    it('returns the empty response as-is after a pause tool result', async () => {
+      const pauseResult = new ToolMessage({
+        content: 'Paused. Consultation request dispatched to the Cat assistant.',
+        tool_call_id: 'call-1',
+      });
+      const empty = new AIMessage({ content: '' });
+
+      const result = await ReasoningContentRecovery.recover(
+        [new HumanMessage('question'), pauseResult],
+        empty,
+        notInvoked,
+      );
+
+      expect(result).toBe(empty);
+    });
+
+    it('returns the empty response as-is after a task-complete tool result', async () => {
+      const completeResult = new ToolMessage({
+        content: 'Task marked complete. Your run is now finished.',
+        tool_call_id: 'call-2',
+      });
+      const empty = new AIMessage({ content: '' });
+
+      const result = await ReasoningContentRecovery.recover(
+        [new HumanMessage('question'), completeResult],
+        empty,
+        notInvoked,
+      );
+
+      expect(result).toBe(empty);
+    });
+
+    it('still nudges when the last tool result is non-terminal', async () => {
+      const nonTerminal = new ToolMessage({
+        content: 'Here are the available roles: ...',
+        tool_call_id: 'call-3',
+      });
+      const empty = new AIMessage({ content: '' });
+      const invoke = jest.fn().mockResolvedValue(new AIMessage('ok'));
+
+      await ReasoningContentRecovery.recover(
+        [new HumanMessage('question'), nonTerminal],
+        empty,
+        invoke,
+      );
 
       expect(invoke).toHaveBeenCalledTimes(1);
     });

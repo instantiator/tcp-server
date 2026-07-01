@@ -72,9 +72,25 @@ export class AgentOrchestrationService
    */
   async startAgent(template: LcpAgentTemplate): Promise<LcpAgent> {
     const agent = await this.db.createAgent(template);
-    await this.queue.add('start', { agentId: agent.id, type: 'start' });
-    this.logger.log(`Dispatched start job for agent ${agent.id}`);
+    await this.dispatchStartJob(agent.id);
     return agent;
+  }
+
+  /**
+   * Creates a new {@link LcpAgent} record WITHOUT dispatching a job yet.
+   * Use together with {@link dispatchStartJob} when other records (e.g. a
+   * {@link PendingConsultation}) must be committed before the worker can
+   * pick up the job — otherwise the worker may complete and call back
+   * before those records exist.
+   */
+  async createAgent(template: LcpAgentTemplate): Promise<LcpAgent> {
+    return this.db.createAgent(template);
+  }
+
+  /** Dispatches a `start` job for an already-created agent. */
+  async dispatchStartJob(agentId: UUID): Promise<void> {
+    await this.queue.add('start', { agentId, type: 'start' });
+    this.logger.log(`Dispatched start job for agent ${agentId}`);
   }
 
   /**
