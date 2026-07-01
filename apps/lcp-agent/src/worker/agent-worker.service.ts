@@ -72,6 +72,10 @@ export class AgentWorkerService implements OnModuleInit, OnModuleDestroy {
       );
     });
 
+    this.worker.on('error', (err) => {
+      this.logger.warn(`Worker connection error: ${err.message}`);
+    });
+
     this.logger.log('Agent worker started, listening on agent-jobs queue');
   }
 
