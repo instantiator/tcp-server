@@ -9,12 +9,15 @@ import {
   Put,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { UUID } from 'crypto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { DbService } from '../db/db.service';
 import { CreateRoleDto, UpdateRoleDto } from './dto/role.dto';
 
 /** REST controller for {@link LcpRole} create, read, and update operations. */
+@ApiTags('roles')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller({ path: 'api/role' })
 export class RoleController {
@@ -24,6 +27,7 @@ export class RoleController {
    * Creates a new role for the given company.
    * All fields from {@link LcpRoleTemplate} are required.
    */
+  @ApiOperation({ summary: 'Create a role' })
   @Post()
   async createRole(@Body() body: CreateRoleDto): Promise<LcpRole> {
     return this.db.createRole(body);
@@ -35,6 +39,7 @@ export class RoleController {
    * patched without overwriting the whole object. The `id` and `company` fields
    * are immutable and must not be included in the request body.
    */
+  @ApiOperation({ summary: 'Partially update a role' })
   @Put(':id')
   async updateRole(
     @Param('id') id: UUID,
@@ -46,6 +51,7 @@ export class RoleController {
   }
 
   /** Retrieves a role by its UUID. Returns 404 when not found. */
+  @ApiOperation({ summary: 'Get a role by ID' })
   @Get(':id')
   async getRole(@Param('id') id: UUID): Promise<LcpRole> {
     const role = await this.db.getRole(id);

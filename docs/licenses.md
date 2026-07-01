@@ -1,6 +1,6 @@
 | Name                                     | License      | Repository                                                     | Author                                                                 | Latest   | Installed | Defined   |
 | :--------------------------------------- | :----------- | :------------------------------------------------------------- | :--------------------------------------------------------------------- | :------- | :-------- | :-------- |
-| @aws-sdk/client-s3                       | Apache-2.0   | git+https://github.com/aws/aws-sdk-js-v3.git                   | AWS SDK for JavaScript Team https://aws.amazon.com/sdk-for-javascript/ | 3.1075.0 | 3.1075.0  | ^3.1075.0 |
+| @aws-sdk/client-s3                       | Apache-2.0   | git+https://github.com/aws/aws-sdk-js-v3.git                   | AWS SDK for JavaScript Team https://aws.amazon.com/sdk-for-javascript/ | 3.1077.0 | 3.1075.0  | ^3.1075.0 |
 | @langchain/core                          | MIT          | git+ssh://git@github.com/langchain-ai/langchainjs.git          | LangChain                                                              | 1.2.1    | 1.2.0     | ^1.2.0    |
 | @langchain/langgraph                     | MIT          | git+ssh://git@github.com/langchain-ai/langgraphjs.git          | LangChain                                                              | 1.4.7    | 1.4.4     | ^1.4.4    |
 | @langchain/langgraph-checkpoint-postgres | MIT          | git+ssh://git@github.com/langchain-ai/langgraphjs.git          | LangChain                                                              | 1.0.4    | 1.0.3     | ^1.0.3    |
@@ -12,6 +12,7 @@
 | @nestjs/core                             | MIT          | git+https://github.com/nestjs/nest.git                         | Kamil Mysliwiec                                                        | 11.1.27  | 11.1.27   | ^11.0.1   |
 | @nestjs/passport                         | MIT          | git+https://github.com/nestjs/passport.git                     | Kamil Mysliwiec                                                        | 11.0.5   | 11.0.5    | ^11.0.5   |
 | @nestjs/platform-express                 | MIT          | git+https://github.com/nestjs/nest.git                         | Kamil Mysliwiec                                                        | 11.1.27  | 11.1.27   | ^11.0.1   |
+| @nestjs/swagger                          | MIT          | git+https://github.com/nestjs/swagger.git                      | Kamil Mysliwiec                                                        | 11.4.5   | 11.4.4    | ^11.4.4   |
 | @nestjs/terminus                         | MIT          | git+https://github.com/nestjs/terminus.git                     | Livio Brunner                                                          | 11.1.1   | 11.1.1    | ^11.1.1   |
 | @nestjs/typeorm                          | MIT          | git+https://github.com/nestjs/typeorm.git                      | Kamil Mysliwiec                                                        | 11.0.3   | 11.0.2    | ^11.0.1   |
 | axios                                    | MIT          | git+https://github.com/axios/axios.git                         | Matt Zabriskie                                                         | 1.18.1   | 1.18.0    | ^1.18.0   |
@@ -20,6 +21,7 @@
 | class-transformer                        | MIT          | git+https://github.com/typestack/class-transformer.git         | TypeStack contributors                                                 | 0.5.1    | 0.5.1     | ^0.5.1    |
 | class-validator                          | MIT          | git+https://github.com/typestack/class-validator.git           | TypeStack contributors                                                 | 0.15.1   | 0.15.1    | ^0.15.1   |
 | commander                                | MIT          | git+https://github.com/tj/commander.js.git                     | TJ Holowaychuk <tj@vision-media.ca>                                    | 13.1.0   | 13.1.0    | ^13.1.0   |
+| ioredis                                  | MIT          | git://github.com/luin/ioredis.git                              | Zihua Li <i@zihua.li> (http://zihua.li)                                | 5.11.1   | 5.11.1    | ^5.11.1   |
 | joi                                      | BSD-3-Clause | git://github.com/hapijs/joi.git                                | n/a                                                                    | 18.2.3   | 18.2.3    | ^18.2.3   |
 | jwks-rsa                                 | MIT          | git+https://github.com/auth0/node-jwks-rsa.git                 | Auth0                                                                  | 4.1.0    | 4.0.1     | ^4.0.1    |
 | passport                                 | MIT          | git://github.com/jaredhanson/passport.git                      | Jared Hanson jaredhanson@gmail.com https://www.jaredhanson.me/         | 0.7.0    | 0.7.0     | ^0.7.0    |
@@ -29,5 +31,7 @@
 | redis                                    | MIT          | git://github.com/redis/node-redis.git                          | n/a                                                                    | 5.12.1   | 5.12.1    | ^5.12.1   |
 | reflect-metadata                         | Apache-2.0   | git+https://github.com/rbuckton/reflect-metadata.git           | Ron Buckton ron.buckton@microsoft.com http://github.com/rbuckton       | 0.2.2    | 0.2.2     | ^0.2.2    |
 | rxjs                                     | Apache-2.0   | git+https://github.com/reactivex/rxjs.git                      | Ben Lesh <ben@benlesh.com>                                             | 7.8.2    | 7.8.2     | ^7.8.1    |
+| swagger-ui-express                       | MIT          | git+ssh://git@github.com/scottie1984/swagger-ui-express.git    | Stephen Scott scottie1984@gmail.com                                    | 5.0.1    | 5.0.1     | ^5.0.1    |
 | typeorm                                  | MIT          | git+https://github.com/typeorm/typeorm.git                     | TypeORM maintainers@typeorm.io                                         | 1.0.0    | 1.0.0     | ^1.0.0    |
+| undici                                   | MIT          | git+https://github.com/nodejs/undici.git                       | n/a                                                                    | 8.5.0    | 8.5.0     | ^8.5.0    |
 

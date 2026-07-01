@@ -39,10 +39,10 @@ export class LcpCompany {
   description!: string;
 
   /**
-   * Company-wide default LLM configuration. Roles that do not specify their
-   * own {@link LcpRole.llmConfig} fall back to this value at run time.
-   * At least one of `llmDefault` or the role's `llmConfig` must be set —
-   * the API enforces this at role-creation time and when this field is removed.
+   * Optional company-wide default LLM configuration. Roles that do not specify
+   * their own {@link LcpRole.llmConfig} fall back to this value at run time,
+   * then to the environment-configured LLM fallback (`LLM_PROVIDER` / `LLM_MODEL`),
+   * before failing.
    */
   @Column({ type: 'jsonb', nullable: true })
   llmDefault?: LlmConfig | null;

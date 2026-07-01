@@ -51,6 +51,22 @@ describe('RoleController', () => {
       expect(db.createRole).toHaveBeenCalledTimes(1);
       expect(result.id).toBe(role.id);
     });
+
+    it('propagates NotFoundException when the company does not exist', async () => {
+      db.createRole.mockRejectedValue(
+        new NotFoundException('Company not found'),
+      );
+      await expect(
+        controller.createRole({
+          companyId: randomUUID(),
+          name: 'orphan',
+          description: 'No company.',
+          systemPromptTemplate: 'You are {{name}}.',
+          knowledgeDomains: [],
+          mcpServerList: [],
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
   });
 
   describe('updateRole', () => {

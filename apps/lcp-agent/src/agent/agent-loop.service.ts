@@ -3,22 +3,24 @@ import {
   HumanMessage,
   SystemMessage,
 } from '@langchain/core/messages';
-import type { DynamicStructuredTool } from '@langchain/core/tools';
-import { END, MessagesAnnotation, StateGraph } from '@langchain/langgraph';
+import { MessagesAnnotation } from '@langchain/langgraph';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
-import { ToolNode, toolsCondition } from '@langchain/langgraph/prebuilt';
 import {
   AgentLoopCompletionSummary,
   AgentStatus,
   AuditClientService,
   AuditEventType,
+  DEFAULT_AGENT_ITERATIONS,
+  DEFAULT_AGENT_LOOP_TIMEOUT_MS,
   LcpAgent,
-  LcpCompany,
-  LcpRole,
   LlmConfig,
+  buildAgentGraph,
+  renderTemplate,
+  resolveEnvLlmConfig,
   resolveRunConfig,
 } from '@lcp/shared';
 import { Injectable, Logger } from '@nestjs/common';
+import Redis from 'ioredis';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
@@ -26,7 +28,7 @@ import { Repository } from 'typeorm';
 import { agentPrompts } from '../agent-prompts';
 import { buildChatModel } from '../llm/llm-factory';
 import { McpClientService } from '../mcp/mcp-client.service';
-import { resolveMcpServerUrls } from '../mcp/mcp-registry';
+import { MCP_REGISTRY, resolveMcpServerUrls } from '../mcp/mcp-registry';
 import { AgentRagService } from '../rag/agent-rag.service';
 import { AgentRegistryService } from '../registry/agent-registry.service';
 import { StorageTrackingClientService } from '../storage-tracking/storage-tracking-client.service';
@@ -36,12 +38,6 @@ import {
   createTracker,
   generateActionString,
 } from './loop-tracker';
-
-/** Default maximum LLM invocations per run when no override is configured. */
-const DEFAULT_AGENT_ITERATIONS = 10;
-
-/** Default wall-clock timeout in milliseconds when no override is configured. */
-const DEFAULT_AGENT_LOOP_TIMEOUT_MS = 60_000;
 
 /** Maps LangGraph v2 event names to {@link AuditEventType} values. */
 const EVENT_TYPE_MAP: Record<string, AuditEventType> = {
@@ -59,7 +55,7 @@ const EVENT_TYPE_MAP: Record<string, AuditEventType> = {
  * the agent can be resumed after an interruption.
  *
  * Resource limits — resolved at run-time in precedence order:
- * 1. {@link LcpRole.runConfig} → 2. {@link LcpCompany.runConfig} → 3. env vars
+ * 1. `LcpRole.runConfig` → 2. `LcpCompany.runConfig` → 3. env vars
  *    (`AGENT_ITERATIONS`, `AGENT_LOOP_TIMEOUT_MS`) → 4. code defaults
  *    ({@link DEFAULT_AGENT_ITERATIONS}, {@link DEFAULT_AGENT_LOOP_TIMEOUT_MS})
  *
@@ -87,10 +83,6 @@ export class AgentLoopService {
     private readonly storageTracking: StorageTrackingClientService,
     @InjectRepository(LcpAgent)
     private readonly agentRepo: Repository<LcpAgent>,
-    @InjectRepository(LcpRole)
-    private readonly roleRepo: Repository<LcpRole>,
-    @InjectRepository(LcpCompany)
-    private readonly companyRepo: Repository<LcpCompany>,
   ) {
     this.databaseUrl = this.config.getOrThrow<string>('DATABASE_URL');
   }
@@ -103,24 +95,23 @@ export class AgentLoopService {
    *   the full initial-state prompt from scratch.
    */
   async run(agentId: UUID, replyContent?: string): Promise<void> {
-    const agent = await this.agentRepo.findOneBy({ id: agentId });
+    const agent = await this.agentRepo.findOne({
+      where: { id: agentId },
+      relations: { role: true, company: true },
+    });
     if (!agent) {
       this.logger.error(`Agent ${agentId} not found — skipping job`);
       return;
     }
 
-    const role = await this.roleRepo.findOneBy({ id: agent.roleId });
-    if (!role) {
-      this.logger.error(`Role ${agent.roleId} not found for agent ${agentId}`);
-      return;
-    }
-
-    const company = await this.companyRepo.findOneBy({ id: agent.companyId });
-    const llmConfig = role.llmConfig ?? company?.llmDefault;
+    const llmConfig =
+      agent.role.llmConfig ??
+      agent.company.llmDefault ??
+      resolveEnvLlmConfig(this.config);
 
     if (!llmConfig) {
       this.logger.error(
-        `No LLM config for agent ${agentId}: role has no llmConfig and company has no llmDefault`,
+        `No LLM config for agent ${agentId}: role has no llmConfig, company has no llmDefault, and no LLM env fallback is configured`,
       );
       await this.updateStatus(agent, AgentStatus.Failed);
       return;
@@ -128,15 +119,15 @@ export class AgentLoopService {
 
     const maxIterations = resolveRunConfig(
       'maxIterations',
-      role,
-      company ?? null,
+      agent.role,
+      agent.company,
       this.config.get<number>('AGENT_ITERATIONS'),
       DEFAULT_AGENT_ITERATIONS,
     );
     const timeoutMs = resolveRunConfig(
       'timeoutMs',
-      role,
-      company ?? null,
+      agent.role,
+      agent.company,
       this.config.get<number>('AGENT_LOOP_TIMEOUT_MS'),
       DEFAULT_AGENT_LOOP_TIMEOUT_MS,
     );
@@ -157,8 +148,6 @@ export class AgentLoopService {
       await checkpointer.setup();
       await this.runLoop(
         agent,
-        role,
-        company,
         llmConfig,
         checkpointer,
         abortController,
@@ -184,8 +173,6 @@ export class AgentLoopService {
    */
   private async runLoop(
     agent: LcpAgent,
-    role: LcpRole,
-    company: LcpCompany | null,
     llmConfig: LlmConfig,
     checkpointer: PostgresSaver,
     abortController: AbortController,
@@ -193,14 +180,26 @@ export class AgentLoopService {
     replyContent?: string,
   ): Promise<void> {
     const mcpServerUrls = resolveMcpServerUrls(this.config);
-    const mcpTools = await this.mcp.loadTools(
-      role.mcpServerList ?? [],
-      mcpServerUrls,
-    );
+    // Default servers (all configured registry entries) are always included; role list adds extras.
+    const mcpServerNames = [
+      ...new Set([
+        ...Object.keys(mcpServerUrls),
+        ...(agent.role.mcpServerList ?? []),
+      ]),
+    ];
+    const mcpTools = await this.mcp.loadTools(mcpServerNames, mcpServerUrls, {
+      agentId: agent.id,
+      companyId: agent.companyId,
+    });
     const langchainTools = mcpTools.map((t) => t.tool);
 
     const model = buildChatModel(llmConfig);
-    const graph = this.buildGraph(model, checkpointer, langchainTools);
+    const graph = buildAgentGraph({
+      model,
+      checkpointer,
+      tools: langchainTools,
+      logger: this.logger,
+    });
 
     const config = {
       configurable: { thread_id: agent.id },
@@ -211,13 +210,7 @@ export class AgentLoopService {
     const input: typeof MessagesAnnotation.State =
       replyContent !== undefined
         ? { messages: [new HumanMessage(replyContent)] }
-        : await this.buildInitialState(
-            agent,
-            role,
-            company,
-            mcpTools,
-            mcpServerUrls,
-          );
+        : await this.buildInitialState(agent, mcpTools, mcpServerUrls);
 
     const tracker = createTracker();
 
@@ -227,7 +220,6 @@ export class AgentLoopService {
         input,
         config,
         agent,
-        role,
         abortController,
         tracker,
         maxIterations,
@@ -235,7 +227,7 @@ export class AgentLoopService {
 
       if (abortController.signal.aborted) {
         const reason = String(abortController.signal.reason ?? 'unknown');
-        this.recordStateChange(agent, role, 'failed', reason);
+        this.recordStateChange(agent, 'failed', reason);
         await this.updateStatus(agent, AgentStatus.Failed);
         return;
       }
@@ -252,80 +244,57 @@ export class AgentLoopService {
         this.logger.log(
           `Agent ${agent.id} loop ending with status 'completed' (set by tool call)`,
         );
-        await this.generateAndRecordCompletionSummary(
-          agent,
-          role,
-          model,
-          tracker,
-        );
+        await this.generateAndRecordCompletionSummary(agent, model, tracker);
+        await this.publishCompletion(agent.id, freshAgent.output ?? '');
         return;
       }
 
       const rawContent = lastAiMessage?.content;
-      const content = (typeof rawContent === 'string' ? rawContent : '').trim();
+      let content = (typeof rawContent === 'string' ? rawContent : '').trim();
       if (!content) {
         // One retry: ask the agent to continue with an explicit continuation prompt
         this.logger.warn(`Agent ${agent.id} produced empty output — retrying`);
-        await this.streamAndAudit(
+        const retryMessage = await this.streamAndAudit(
           graph,
           { messages: [new HumanMessage('Please provide your response.')] },
           config,
           agent,
-          role,
           abortController,
           tracker,
           maxIterations,
         );
+        const rawRetryContent = retryMessage?.content;
+        content = (
+          typeof rawRetryContent === 'string' ? rawRetryContent : ''
+        ).trim();
       }
 
-      // Fallback completion — notifyComplete is idempotent if complete_task was called
-      const output = content || '';
-      this.auditClient.notifyComplete(agent.id, output);
+      if (!content) {
+        this.logger.error(
+          `Agent ${agent.id} produced empty output after retry — failing run`,
+        );
+        this.recordStateChange(
+          agent,
+          'failed',
+          'LLM produced no output after retry',
+        );
+        await this.updateStatus(agent, AgentStatus.Failed);
+        return;
+      }
+
+      // Fallback completion — notifyComplete is idempotent if complete_task was called.
+      // Write output directly first so chat.service's race-condition check can read it
+      // before publishCompletion fires; notifyComplete is fire-and-forget and may lag.
+      await this.agentRepo.update(agent.id, { output: content });
+      this.auditClient.notifyComplete(agent.id, content);
       await this.updateStatus(agent, AgentStatus.Completed);
+      await this.publishCompletion(agent.id, content);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`Agent ${agent.id} loop error: ${msg}`);
-      this.recordStateChange(agent, role, 'failed', msg);
+      this.recordStateChange(agent, 'failed', msg);
       await this.updateStatus(agent, AgentStatus.Failed);
     }
-  }
-
-  /**
-   * Constructs and compiles the LangGraph {@link StateGraph} for this run.
-   *
-   * Wires a single `agent` node (LLM invoke) and, when tools are present, a
-   * `tools` node ({@link ToolNode}) with a conditional edge from agent → tools
-   * or END. When no tools are provided the graph terminates after the first LLM
-   * invocation. The compiled graph is bound to the given {@link checkpointer}
-   * so state is persisted between turns.
-   */
-  private buildGraph(
-    model: ReturnType<typeof buildChatModel>,
-    checkpointer: PostgresSaver,
-    tools: DynamicStructuredTool[],
-  ) {
-    const boundModel =
-      tools.length > 0 && model.bindTools ? model.bindTools(tools) : model;
-
-    const agentNode = async (state: typeof MessagesAnnotation.State) => {
-      const response = await boundModel.invoke(state.messages);
-      return { messages: [response] };
-    };
-
-    const graph = new StateGraph(MessagesAnnotation)
-      .addNode('agent', agentNode)
-      .addEdge('__start__', 'agent');
-
-    if (tools.length > 0) {
-      graph
-        .addNode('tools', new ToolNode(tools))
-        .addConditionalEdges('agent', toolsCondition)
-        .addEdge('tools', 'agent');
-    } else {
-      graph.addEdge('agent', END);
-    }
-
-    return graph.compile({ checkpointer });
   }
 
   /**
@@ -338,11 +307,10 @@ export class AgentLoopService {
    * job can complete without marking the agent failed.
    */
   private async streamAndAudit(
-    graph: ReturnType<typeof this.buildGraph>,
+    graph: ReturnType<typeof buildAgentGraph>,
     input: typeof MessagesAnnotation.State,
     config: { configurable: { thread_id: string }; signal: AbortSignal },
     agent: LcpAgent,
-    role: LcpRole,
     abortController: AbortController,
     tracker: AgentLoopTracker,
     maxIterations: number,
@@ -368,7 +336,7 @@ export class AgentLoopService {
       if (auditType) {
         this.auditClient.record(
           agent.companyId,
-          role.name,
+          agent.role.name,
           agent.id,
           auditType,
           event.data,
@@ -377,7 +345,12 @@ export class AgentLoopService {
 
       if (event.event === 'on_chat_model_end') {
         const output = (event.data as { output?: unknown } | undefined)?.output;
-        if (output instanceof AIMessage) lastAiMessage = output;
+        // A streamed chat-model run reports its output as an AIMessageChunk,
+        // not a plain AIMessage — instanceof AIMessage misses it, but
+        // AIMessage.isInstance() recognizes both.
+        if (AIMessage.isInstance(output)) {
+          lastAiMessage = output;
+        }
       }
 
       if (event.event === 'on_tool_start') {
@@ -416,30 +389,32 @@ export class AgentLoopService {
   /** Builds the full initial-state message list for the first run of an agent. */
   private async buildInitialState(
     agent: LcpAgent,
-    role: LcpRole,
-    company: LcpCompany | null,
     mcpTools: Awaited<ReturnType<McpClientService['loadTools']>>,
     mcpServerUrls: Record<string, string>,
   ): Promise<typeof MessagesAnnotation.State> {
+    const { role, company } = agent;
     const systemPrompt = renderTemplate(role.systemPromptTemplate, {
       name: role.name,
       description: role.description,
       date: new Date().toISOString().split('T')[0],
+      companyId: agent.companyId,
+      roleId: role.id,
     });
 
     const ragChunks = await this.rag.retrieve(
       role.id,
       agent.initialPrompt,
-      company?.embeddingConfig,
+      company.embeddingConfig,
     );
     const ragMessage = ragChunks.length
       ? new HumanMessage(buildRagMessage(ragChunks))
       : null;
 
+    const loadedServerNames = [...new Set(mcpTools.map((t) => t.serverName))];
     const servicesMessage =
-      mcpTools.length > 0
+      loadedServerNames.length > 0
         ? new HumanMessage(
-            buildServicesMessage(role.mcpServerList ?? [], mcpServerUrls),
+            buildServicesMessage(loadedServerNames, mcpServerUrls),
           )
         : null;
 
@@ -450,7 +425,7 @@ export class AgentLoopService {
         // Prompt part 1: role prompt (identity, attitude, domain knowledge, behavioural guidelines)
         ...(role.rolePrompt ? [new HumanMessage(role.rolePrompt)] : []),
         // Prompt part 2: company environment (name, description, shared storage layout, etc.)
-        ...(company?.companyContext
+        ...(company.companyContext
           ? [new HumanMessage(company.companyContext)]
           : []),
         // Prompt part 3: services available (MCP servers). Call describe_server on any for details.
@@ -478,7 +453,6 @@ export class AgentLoopService {
    */
   private async generateAndRecordCompletionSummary(
     agent: LcpAgent,
-    role: LcpRole,
     model: ReturnType<typeof buildChatModel>,
     tracker: AgentLoopTracker,
   ): Promise<void> {
@@ -487,26 +461,23 @@ export class AgentLoopService {
     const invokeForSummary = async (): Promise<string> => {
       const actionLines = actions.length
         ? actions.map((a, i) => `${i + 1}. ${a}`).join('\n')
-        : '(none recorded)';
-      const prompt = [
-        'Your task is now complete.',
-        '',
-        `Original task: ${agent.initialPrompt}`,
-        '',
-        'Actions taken (in order):',
+        : agentPrompts.completion_summary_no_actions;
+      const prompt = renderTemplate(agentPrompts.completion_summary_prompt, {
+        initialPrompt: agent.initialPrompt,
         actionLines,
-        '',
-        'Storage changes:',
-        `- Created: ${storage.created.join(', ') || '(none)'}`,
-        `- Modified: ${storage.modified.join(', ') || '(none)'}`,
-        `- Deleted: ${storage.deleted.join(', ') || '(none)'}`,
-        `- Moved: ${storage.moved.map((m) => `${m.from} → ${m.to}`).join(', ') || '(none)'}`,
-        '',
-        'Respond with ONLY a JSON object — no markdown, no extra text:',
-        '{"summary": "One or two sentences describing what was accomplished at a high level."}',
-        '',
-        'The summary should be concise and factual, suitable for an audit log.',
-      ].join('\n');
+        created:
+          storage.created.join(', ') ||
+          agentPrompts.completion_summary_no_storage,
+        modified:
+          storage.modified.join(', ') ||
+          agentPrompts.completion_summary_no_storage,
+        deleted:
+          storage.deleted.join(', ') ||
+          agentPrompts.completion_summary_no_storage,
+        moved:
+          storage.moved.map((m) => `${m.from} → ${m.to}`).join(', ') ||
+          agentPrompts.completion_summary_no_storage,
+      });
       const response = await model.invoke([new HumanMessage(prompt)]);
       const raw =
         typeof response.content === 'string' ? response.content.trim() : '';
@@ -538,7 +509,7 @@ export class AgentLoopService {
     };
     this.auditClient.record(
       agent.companyId,
-      role.name,
+      agent.role.name,
       agent.id,
       AuditEventType.AgentLoopCompletion,
       completionSummary as unknown as Record<string, unknown>,
@@ -562,18 +533,46 @@ export class AgentLoopService {
   }
 
   /**
+   * Publishes the agent's final response to `agent:completed:{agentId}` on
+   * Redis so that any HTTP handler waiting on this agent (e.g. the chat
+   * service holding a long-poll open across a pause/resume cycle) can return
+   * the real answer rather than a placeholder.
+   *
+   * A transient connection is created per publish and closed immediately
+   * after — no persistent connection is held. If `REDIS_URL` is not configured
+   * or the publish fails, the error is logged and swallowed: the channel is
+   * best-effort and the BullMQ job must not fail because of it.
+   */
+  private async publishCompletion(
+    agentId: UUID,
+    content: string,
+  ): Promise<void> {
+    const redisUrl = this.config.get<string>('REDIS_URL');
+    if (!redisUrl) return;
+    const publisher = new Redis(redisUrl);
+    try {
+      await publisher.publish(`agent:completed:${agentId}`, content);
+    } catch (err) {
+      this.logger.warn(
+        `Failed to publish completion for agent ${agentId}: ${String(err)}`,
+      );
+    } finally {
+      await publisher.quit().catch(() => {});
+    }
+  }
+
+  /**
    * Writes an {@link AuditEventType.StateChange} event capturing the reason for
    * a status transition (e.g. timeout, max iterations, unhandled error).
    */
   private recordStateChange(
     agent: LcpAgent,
-    role: LcpRole,
     newStatus: string,
     reason: string,
   ): void {
     this.auditClient.record(
       agent.companyId,
-      role.name,
+      agent.role.name,
       agent.id,
       AuditEventType.StateChange,
       { newStatus, reason },
@@ -581,25 +580,24 @@ export class AgentLoopService {
   }
 }
 
-/** Replaces `{{key}}` placeholders in a template string with the provided values. */
-function renderTemplate(
-  template: string,
-  vars: Record<string, string>,
-): string {
-  return template.replace(
-    /\{\{(\w+)\}\}/g,
-    (_, key: string) => vars[key] ?? '',
-  );
-}
-
-/** Formats the services-available message for prompt part 3. */
+/**
+ * Formats the services-available message for prompt part 3.
+ * Each line gives the "when to use this" framing from {@link MCP_REGISTRY};
+ * tool-level detail is deliberately omitted since LangChain's `bindTools`
+ * already sends the full tool schema for every loaded MCP tool on every turn.
+ */
 function buildServicesMessage(
   serverNames: string[],
   serverUrls: Record<string, string>,
 ): string {
   const lines = serverNames
     .filter((n) => serverUrls[n])
-    .map((n) => renderTemplate(agentPrompts.services_item, { name: n }));
+    .map((n) => {
+      const usage = MCP_REGISTRY.find((s) => s.name === n)?.usage;
+      return usage
+        ? renderTemplate(agentPrompts.services_item, { name: n, usage })
+        : renderTemplate(agentPrompts.services_item_unknown, { name: n });
+    });
 
   if (lines.length === 0) return '';
 
@@ -643,13 +641,21 @@ function buildFallbackSummary(
     storage.modified.length +
     storage.deleted.length +
     storage.moved.length;
-  return (
-    [
-      `Completed task: "${taskSnippet}"`,
-      actions.length > 0
-        ? `${actions.length} action(s) taken`
-        : 'no actions recorded',
-      totalFiles > 0 ? `${totalFiles} file(s) affected` : 'no storage changes',
-    ].join('; ') + '.'
-  );
+  const actionsSummary =
+    actions.length > 0
+      ? renderTemplate(agentPrompts.completion_fallback_actions, {
+          count: String(actions.length),
+        })
+      : agentPrompts.completion_fallback_no_actions;
+  const storageSummary =
+    totalFiles > 0
+      ? renderTemplate(agentPrompts.completion_fallback_storage, {
+          count: String(totalFiles),
+        })
+      : agentPrompts.completion_fallback_no_storage;
+  return renderTemplate(agentPrompts.completion_fallback_summary, {
+    taskSnippet,
+    actionsSummary,
+    storageSummary,
+  });
 }

@@ -66,7 +66,9 @@ export function generateActionString(
     case 'request_user_input':
       return `Requested user input: ${s(input.question)}`;
     case 'request_agent_consultation':
-      return `Consulted role '${s(input.roleName)}': ${s(input.question)}`;
+      // roleName is an optional label — roleId is always present and is the
+      // actual lookup key, so fall back to it if no name was given.
+      return `Consulted role '${s(input.roleName) || s(input.roleId)}': ${s(input.question)}`;
     case 'complete_task':
       return `Submitted task completion`;
     default:

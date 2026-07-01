@@ -562,6 +562,11 @@
             "null"
           ]
         },
+        "pausedAt": {
+          "description": "Set when this agent transitions to  {@link  AgentStatus.Paused } ; cleared on resume. Scopes which consultation/conversation responses belong to the current pause episode when aggregating a resume message.",
+          "format": "date-time",
+          "type": "string"
+        },
         "role": {
           "$ref": "#/definitions/LcpRole",
           "description": "The role template this agent runs as."
@@ -706,7 +711,7 @@
               "type": "null"
             }
           ],
-          "description": "Company-wide default LLM configuration. Roles that do not specify their own  {@link  LcpRole.llmConfig  }  fall back to this value at run time. At least one of `llmDefault` or the role's `llmConfig` must be set — the API enforces this at role-creation time and when this field is removed."
+          "description": "Optional company-wide default LLM configuration. Roles that do not specify their own  {@link  LcpRole.llmConfig  }  fall back to this value at run time, then to the environment-configured LLM fallback (`LLM_PROVIDER` / `LLM_MODEL`), before failing."
         },
         "name": {
           "description": "Human-readable display name for the company.",
@@ -814,7 +819,7 @@
           "description": "Optional agent-loop resource overrides for agents running in this role. Takes precedence over  {@link  LcpCompany.runConfig }  and environment variables. See  {@link  AgentRunConfig }  for available fields."
         },
         "systemPromptTemplate": {
-          "description": "Handlebars-style prompt template injected as the system message at agent start. Available variables: `{{name}}`, `{{description}}`, `{{date}}`.",
+          "description": "Handlebars-style prompt template injected as the system message at agent start. Available variables: `{{name}}`, `{{description}}`, `{{date}}`, `{{companyId}}`, `{{roleId}}`. The latter two let the agent supply identifiers required by company- and role-scoped MCP tool calls.",
           "type": "string"
         }
       },
@@ -844,7 +849,7 @@
           "type": "string"
         },
         "contextWindow": {
-          "description": "Maximum context window for this model in tokens. Used by  {@link  ContextBudgetService  }  to determine when compaction is needed. Defaults to `8192` when absent.",
+          "description": "Maximum context window for this model in tokens. Used by  {@link  ContextBudgetService  }  to determine when compaction is needed. Defaults to  {@link  DEFAULT_LLM_CONTEXT_WINDOW  }  when absent.",
           "type": "number"
         },
         "model": {
@@ -854,6 +859,10 @@
         "provider": {
           "description": "Identifies the provider. Known values: `'lm-studio'` (local OpenAI-compatible endpoint), `'openai'`. Any string value is accepted to support future providers.",
           "type": "string"
+        },
+        "timeoutMs": {
+          "description": "Per-request timeout in milliseconds for LLM API calls. Defaults to  {@link  DEFAULT_LLM_TIMEOUT_MS  }  when absent. Set higher for slow local models.",
+          "type": "number"
         }
       },
       "required": [

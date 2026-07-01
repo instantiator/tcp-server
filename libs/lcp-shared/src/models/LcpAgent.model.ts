@@ -114,4 +114,12 @@ export class LcpAgent extends VersionedEntity {
   /** Timestamp of the last status or field update. */
   @UpdateDateColumn()
   updatedAt!: Date;
+
+  /**
+   * Set when this agent transitions to {@link AgentStatus.Paused}; cleared on
+   * resume. Scopes which consultation/conversation responses belong to the
+   * current pause episode when aggregating a resume message.
+   */
+  @Column({ nullable: true })
+  pausedAt?: Date;
 }

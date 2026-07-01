@@ -20,4 +20,14 @@ export const configSchema = Joi.object({
   AGENT_ITERATIONS: Joi.number().integer().positive().optional(),
   /** Overrides {@link DEFAULT_AGENT_LOOP_TIMEOUT_MS} when set. Per-role and per-company runConfig take precedence. */
   AGENT_LOOP_TIMEOUT_MS: Joi.number().integer().positive().optional(),
+  // Environment-level LLM fallback — used when neither a role's llmConfig nor a company's llmDefault is set.
+  // Both LLM_PROVIDER and LLM_MODEL must be present to activate the fallback; all other fields are optional.
+  LLM_PROVIDER: Joi.string().empty('').optional(),
+  LLM_MODEL: Joi.string().empty('').optional(),
+  LLM_BASE_URL: Joi.string().uri().empty('').optional(),
+  LLM_API_KEY: Joi.string().empty('').optional(),
+  /** Overrides {@link DEFAULT_LLM_CONTEXT_WINDOW} when set. */
+  LLM_CONTEXT_WINDOW: Joi.number().integer().positive().empty('').optional(),
+  /** Overrides {@link DEFAULT_LLM_TIMEOUT_MS} when set. */
+  LLM_TIMEOUT_MS: Joi.number().integer().positive().empty('').optional(),
 });

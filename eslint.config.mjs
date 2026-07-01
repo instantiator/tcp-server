@@ -1,5 +1,6 @@
 // @ts-check
 import eslint from '@eslint/js';
+import eslintPluginJsonc from 'eslint-plugin-jsonc';
 import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
@@ -39,6 +40,27 @@ export default tseslint.config(
     files: ['**/*.spec.ts'],
     rules: {
       '@typescript-eslint/unbound-method': 'off',
+    },
+  },
+  // .jsonc files (prompts/tools config) — parsed separately from the TS rules
+  // above; Prettier (via .prettierrc's "*.jsonc" override) is the sole
+  // formatting authority, so jsonc's own stylistic rules are disabled.
+  {
+    ...tseslint.configs.disableTypeChecked,
+    files: ['apps/**/*.jsonc'],
+  },
+  ...eslintPluginJsonc.configs['flat/base'].map((c) => ({
+    ...c,
+    files: ['apps/**/*.jsonc'],
+  })),
+  ...eslintPluginJsonc.configs['flat/prettier'].map((c) => ({
+    ...c,
+    files: ['apps/**/*.jsonc'],
+  })),
+  {
+    files: ['apps/**/*.jsonc'],
+    rules: {
+      'prettier/prettier': ['error', { endOfLine: 'auto' }],
     },
   },
 );

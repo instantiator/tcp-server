@@ -1,5 +1,14 @@
 #!/usr/bin/env node
+import { Agent, setGlobalDispatcher } from 'undici';
 import { Command } from 'commander';
+
+// Node.js 18+ built-in fetch uses undici with a 5-minute headersTimeout by
+// default. Long-polling endpoints (e.g. consultation wait) can take longer
+// than that, causing the client to receive "fetch failed" mid-wait. Override
+// the global dispatcher to match the CLI's own 35-minute abort signal.
+setGlobalDispatcher(
+  new Agent({ headersTimeout: 35 * 60 * 1000, bodyTimeout: 35 * 60 * 1000 }),
+);
 import { registerGetToken } from './commands/get-token';
 import { registerListCompanies } from './commands/list-companies';
 import { registerListRoles } from './commands/list-roles';
@@ -7,6 +16,7 @@ import { registerListRoleDocuments } from './commands/list-role-documents';
 import { registerStoreRoleDocuments } from './commands/store-role-documents';
 import { registerRemoveRoleDocuments } from './commands/remove-role-documents';
 import { registerOpenDocumentStore } from './commands/open-document-store';
+import { registerOpenSwagger } from './commands/open-swagger';
 import { registerSetCompany } from './commands/set-company';
 import { registerSetRole } from './commands/set-role';
 import { registerChat } from './commands/chat';
@@ -33,7 +43,7 @@ program
     'Refresh token (renews an expired access token)',
   )
   .option(
-    '-e, --access-token-env-var <var>',
+    '-E, --access-token-env-var <var>',
     'Name of env var holding the token',
   )
   .option('-u, --username <user>', 'OIDC username')
@@ -46,6 +56,7 @@ registerListRoleDocuments(program);
 registerStoreRoleDocuments(program);
 registerRemoveRoleDocuments(program);
 registerOpenDocumentStore(program);
+registerOpenSwagger(program);
 registerSetCompany(program);
 registerSetRole(program);
 registerChat(program);

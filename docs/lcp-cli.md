@@ -1,16 +1,16 @@
 # lcp-cli — Developer CLI Reference
 
 `lcp-cli` is a TypeScript command-line tool for interacting with an LCP server.
-It lives in `apps/lcp-cli/` and is launched via `scripts/dev/lcp-cli.sh`.
+It lives in `apps/lcp-cli/` and is launched via `./lcp-cli.sh` at the repository root.
 
 ## Quick start
 
 ```bash
 # Build and run (auto-builds on first call)
-./scripts/dev/lcp-cli.sh --help
+./lcp-cli.sh --help
 
 # Force rebuild before running
-./scripts/dev/lcp-cli.sh --rebuild list-companies
+./lcp-cli.sh --rebuild list-companies
 ```
 
 ## Global options
@@ -37,14 +37,14 @@ The server proxies the OIDC password grant so the client secret stays server-sid
 
 ```bash
 # Interactive password prompt (characters masked)
-./scripts/dev/lcp-cli.sh -u alice get-token
+./lcp-cli.sh -u alice get-token
 
 # Non-interactive
-./scripts/dev/lcp-cli.sh -u alice -p secret get-token
+./lcp-cli.sh -u alice -p secret get-token
 
 # Use a token from an env var
-export LCP_TOKEN=$(./scripts/dev/lcp-cli.sh -u alice get-token)
-./scripts/dev/lcp-cli.sh -e LCP_TOKEN list-companies
+export LCP_TOKEN=$(./lcp-cli.sh -u alice get-token)
+./lcp-cli.sh -e LCP_TOKEN list-companies
 ```
 
 ## Validating JSON input
@@ -93,8 +93,8 @@ Exchange username + password for an OIDC access token.
 - **Requires**: `--username` (password prompted if `--password` omitted)
 
 ```bash
-./scripts/dev/lcp-cli.sh -u alice get-token
-./scripts/dev/lcp-cli.sh -u alice -p secret get-token
+./lcp-cli.sh -u alice get-token
+./lcp-cli.sh -u alice -p secret get-token
 ```
 
 ### `list-companies`
@@ -104,7 +104,7 @@ List all companies.
 - **stdout**: `{ id, name }[]` as JSON
 
 ```bash
-./scripts/dev/lcp-cli.sh -t $TOKEN list-companies
+./lcp-cli.sh -t $TOKEN list-companies
 ```
 
 ### `list-roles`
@@ -119,8 +119,8 @@ List roles grouped by company.
 | `--company-id <uuid>` | `-c`  | Filter to a single company |
 
 ```bash
-./scripts/dev/lcp-cli.sh -t $TOKEN list-roles
-./scripts/dev/lcp-cli.sh -t $TOKEN list-roles -c <companyId>
+./lcp-cli.sh -t $TOKEN list-roles
+./lcp-cli.sh -t $TOKEN list-roles -c <companyId>
 ```
 
 ### `set-company`
@@ -137,10 +137,10 @@ Create or update a company. Reads JSON from `--input` or stdin.
 
 ```bash
 # Create
-echo '{"slug":"acme","name":"Acme Corp"}' | ./scripts/dev/lcp-cli.sh -t $TOKEN set-company
+echo '{"slug":"acme","name":"Acme Corp"}' | ./lcp-cli.sh -t $TOKEN set-company
 
 # Update (id present → PUT)
-./scripts/dev/lcp-cli.sh -t $TOKEN set-company -i '{"id":"<uuid>","name":"Acme Renamed"}'
+./lcp-cli.sh -t $TOKEN set-company -i '{"id":"<uuid>","name":"Acme Renamed"}'
 ```
 
 ### `set-role`
@@ -158,11 +158,11 @@ Create or update a role. Reads JSON from `--input` or stdin.
 
 ```bash
 # Create
-./scripts/dev/lcp-cli.sh -t $TOKEN set-role -c <companyId> \
+./lcp-cli.sh -t $TOKEN set-role -c <companyId> \
   -i '{"name":"analyst","description":"...","systemPromptTemplate":"You are {{name}}."}'
 
 # Update
-./scripts/dev/lcp-cli.sh -t $TOKEN set-role -i '{"id":"<uuid>","name":"senior-analyst"}'
+./lcp-cli.sh -t $TOKEN set-role -i '{"id":"<uuid>","name":"senior-analyst"}'
 ```
 
 ### `chat`
@@ -186,7 +186,7 @@ If the access token expires mid-session, it is renewed automatically using the r
 - Creates agent → sends message → prints response → deletes agent → exits
 
 ```bash
-./scripts/dev/lcp-cli.sh -t $TOKEN chat -r <roleId> -q "What is your role?"
+./lcp-cli.sh -t $TOKEN chat -r <roleId> -q "What is your role?"
 ```
 
 **Interactive mode** (no `-q`):
@@ -197,7 +197,7 @@ If the access token expires mid-session, it is renewed automatically using the r
 - The agent is always cleaned up on exit (even on interrupt)
 
 ```bash
-./scripts/dev/lcp-cli.sh -t $TOKEN chat -r <roleId>
+./lcp-cli.sh -t $TOKEN chat -r <roleId>
 # > Hello!
 # Hello! I am the analyst agent. How can I help?
 # > Tell me about Q3 trends.
@@ -221,7 +221,7 @@ Each file must be a `.md` file with valid YAML front-matter containing a non-emp
 | `--src <paths...>` | `-s`  | **(Required)** One or more file paths to upload |
 
 ```bash
-./scripts/dev/lcp-cli.sh -t $TOKEN store-role-documents -r <roleId> -s policy.md handbook.md
+./lcp-cli.sh -t $TOKEN store-role-documents -r <roleId> -s policy.md handbook.md
 ```
 
 Documents are stored in MinIO under `{company_slug}/knowledge/{role_name}/` and automatically indexed for RAG retrieval. See [shared-storage.md](shared-storage.md) for the storage layout.
@@ -237,7 +237,7 @@ List the knowledge-base documents currently stored for a role.
 | `--role-id <uuid>` | `-r`  | **(Required)** Role UUID |
 
 ```bash
-./scripts/dev/lcp-cli.sh -t $TOKEN list-role-documents -r <roleId>
+./lcp-cli.sh -t $TOKEN list-role-documents -r <roleId>
 ```
 
 ### `remove-role-documents`
@@ -254,13 +254,13 @@ Remove knowledge-base documents from a role by filename pattern. Supports `*` (a
 
 ```bash
 # Remove a specific file
-./scripts/dev/lcp-cli.sh -t $TOKEN remove-role-documents -r <roleId> -p "handbook.md"
+./lcp-cli.sh -t $TOKEN remove-role-documents -r <roleId> -p "handbook.md"
 
 # Remove all markdown files
-./scripts/dev/lcp-cli.sh -t $TOKEN remove-role-documents -r <roleId> -p "*.md"
+./lcp-cli.sh -t $TOKEN remove-role-documents -r <roleId> -p "*.md"
 
 # Remove files matching multiple patterns
-./scripts/dev/lcp-cli.sh -t $TOKEN remove-role-documents -r <roleId> -p "policy-?.md" "archive-*.md"
+./lcp-cli.sh -t $TOKEN remove-role-documents -r <roleId> -p "policy-?.md" "archive-*.md"
 ```
 
 ### `open-document-store`
@@ -276,10 +276,10 @@ Print the MinIO console URL and open it in the default browser. Useful for brows
 
 ```bash
 # Open in browser
-./scripts/dev/lcp-cli.sh open-document-store
+./lcp-cli.sh open-document-store
 
 # Print URL only
-./scripts/dev/lcp-cli.sh open-document-store --no-open
+./lcp-cli.sh open-document-store --no-open
 ```
 
 No authentication required — the MinIO console has its own login (see [shared-storage.md → Authentication](shared-storage.md#authentication)).
@@ -300,10 +300,10 @@ List open agent-to-human queries (conversations with `status: awaiting_user`) th
 
 ```bash
 # Default table output
-./scripts/dev/lcp-cli.sh list-open-queries
+./lcp-cli.sh list-open-queries
 
 # Filter to a company, JSON output
-./scripts/dev/lcp-cli.sh -e LCP_TOKEN list-open-queries -c <companyId> --format json
+./lcp-cli.sh -e LCP_TOKEN list-open-queries -c <companyId> --format json
 ```
 
 The table columns are: slug, role name, and the first 120 characters of the question.
@@ -318,7 +318,7 @@ Read the full question, context, and reply history for a single query by its slu
 - **stderr**: progress messages
 
 ```bash
-./scripts/dev/lcp-cli.sh read-query analyst-3
+./lcp-cli.sh read-query analyst-3
 ```
 
 ---
@@ -331,7 +331,7 @@ Reply to an open query. Once submitted, the waiting agent is automatically re-en
 - **stderr**: progress messages (`"Sending response..."`, `"Agent resumed."`)
 
 ```bash
-./scripts/dev/lcp-cli.sh respond analyst-3 "The budget is $50,000 for Q3."
+./lcp-cli.sh respond analyst-3 "The budget is $50,000 for Q3."
 ```
 
 The message argument is a plain string. Quotes are handled by your shell in the usual way.
@@ -352,10 +352,10 @@ Download a file from shared company storage to the local filesystem.
 
 ```bash
 # Download to current directory
-./scripts/dev/lcp-cli.sh download-shared-document --source acme/tasks/xyz/output/report.md
+./lcp-cli.sh download-shared-document --source acme/tasks/xyz/output/report.md
 
 # Download to a specific path
-./scripts/dev/lcp-cli.sh download-shared-document --source acme/tasks/xyz/output/report.md --target ~/Desktop/report.md
+./lcp-cli.sh download-shared-document --source acme/tasks/xyz/output/report.md --target ~/Desktop/report.md
 ```
 
 ---
@@ -373,7 +373,7 @@ Upload a local file to shared company storage.
 | `--target <path>` | Required. Object key destination in MinIO (e.g. `acme/knowledge/analyst/guide.md`) |
 
 ```bash
-./scripts/dev/lcp-cli.sh upload-shared-document --source ./architecture.md --target acme/knowledge/architect/architecture.md
+./lcp-cli.sh upload-shared-document --source ./architecture.md --target acme/knowledge/architect/architecture.md
 ```
 
 MIME type is inferred from the file extension. Supported formats include `.md`, `.txt`, `.json`, `.pdf`, `.png`, `.jpg`, and `.jpeg`.

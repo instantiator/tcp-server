@@ -105,7 +105,15 @@ services:
       OIDC_INTERNAL_ISSUER_URL: http://keycloak:8080/realms/lcp
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
-      LM_STUDIO_API_KEY: ${LM_STUDIO_API_KEY}
+      MCP_STORAGE_URL: http://lcp-mcp-storage:3010
+      MCP_MEMORY_URL: http://lcp-mcp-memory:3011
+      MCP_INTERACTIONS_URL: http://lcp-mcp-interactions:3012
+      LLM_PROVIDER: ${LLM_PROVIDER:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_CONTEXT_WINDOW: ${LLM_CONTEXT_WINDOW:-}
+      LLM_TIMEOUT_MS: ${LLM_TIMEOUT_MS:-}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
     depends_on:
       postgres:
@@ -118,9 +126,10 @@ services:
       - "3000:3000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      start_period: 120s
       interval: 15s
       timeout: 5s
-      retries: 5
+      retries: 10
 
   lcp-agent:
     build:
@@ -138,6 +147,12 @@ services:
       MCP_MEMORY_URL: http://lcp-mcp-memory:3011
       MCP_INTERACTIONS_URL: http://lcp-mcp-interactions:3012
       LCP_SERVER_URL: http://lcp-server:3000
+      LLM_PROVIDER: ${LLM_PROVIDER:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_CONTEXT_WINDOW: ${LLM_CONTEXT_WINDOW:-}
+      LLM_TIMEOUT_MS: ${LLM_TIMEOUT_MS:-}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
     depends_on:
       postgres:

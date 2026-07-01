@@ -73,42 +73,40 @@ No external services. Safe to run at any time. See
 Starts postgres, redis, and minio. Requires Docker. See
 [scripts/run-integration-tests.sh](../scripts/run-integration-tests.sh).
 
-### Smoke tests
+### API & smoke tests
 
-Smoke tests run as part of the API test suite in CI (see below). To run
-them in isolation — for example against a remote deployment — use:
-
-```bash
-./scripts/run-smoke-tests.sh
-
-# Remote deployment — Docker not required
-./scripts/run-smoke-tests.sh --base-url http://your-host:3000
-./scripts/run-smoke-tests.sh --base-url http://your-host:3000 \
-  --agent-url http://your-host:3001 \
-  --keycloak-url http://your-keycloak:8080 \
-  --username alice --password s3cret
-```
-
-Accepts `--base-url` to test a remote deployment without Docker. See
-[scripts/run-smoke-tests.sh](../scripts/run-smoke-tests.sh).
-
-### API tests
+Both suites require a running LCP stack with Keycloak. Start one first with
+`start-deployment.sh`, then run either or both test scripts against it. In CI
+both run against the same stack in the `api-test` job.
 
 ```bash
+# Start stack (reads Keycloak credentials from env file)
+./scripts/start-deployment.sh --project lcp-api --env-file .env.testing
+
+# Run API tests
 ./scripts/run-api-tests.sh
 ./scripts/run-api-tests.sh -- --testNamePattern="company"
 
-# Remote deployment — Docker not required
-./scripts/run-api-tests.sh --base-url http://your-host:3000
+# Run smoke tests against the same stack
+./scripts/run-smoke-tests.sh
+
+# Tear down
+docker compose -p lcp-api --profile auth down -v
+```
+
+Both scripts default to `http://localhost:3000` and accept `--base-url` to
+target a remote deployment without Docker:
+
+```bash
 ./scripts/run-api-tests.sh --base-url http://your-host:3000 \
   --keycloak-url http://your-keycloak:8080 \
   --username alice --password s3cret
+
+./scripts/run-smoke-tests.sh --base-url http://your-host:3000
 ```
 
-Starts the full stack including Keycloak. Requires Docker and built app
-images (rebuilt automatically). Accepts `--base-url` to test a remote
-deployment — same flag semantics as the smoke script above. See
-[scripts/run-api-tests.sh](../scripts/run-api-tests.sh).
+See [scripts/run-api-tests.sh](../scripts/run-api-tests.sh) and
+[scripts/run-smoke-tests.sh](../scripts/run-smoke-tests.sh).
 
 ### E2E tests
 

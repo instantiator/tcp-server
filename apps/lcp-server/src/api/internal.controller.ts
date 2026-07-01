@@ -9,7 +9,8 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { LcpAgent } from '@lcp/shared';
+import { ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
+import { CompanyUser, LcpAgent, LcpRole } from '@lcp/shared';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import type { UUID } from 'crypto';
@@ -25,9 +26,11 @@ import {
  * Internal service-to-service endpoints for agent lifecycle management.
  * All routes are protected by {@link InternalApiKeyGuard}.
  *
- * Called by lcp-mcp-interactions (pause/complete) and indirectly by lcp-agent
- * when an agent finishes normally without calling `complete_task`.
+ * Called by lcp-mcp-interactions (pause/complete/list) and indirectly by
+ * lcp-agent when an agent finishes normally without calling `complete_task`.
  */
+@ApiTags('internal')
+@ApiSecurity('internal-api-key')
 @Controller('internal')
 @UseGuards(InternalApiKeyGuard)
 export class InternalController {
@@ -35,12 +38,17 @@ export class InternalController {
     private readonly pauseResume: PauseAndResumeService,
     @InjectRepository(LcpAgent)
     private readonly agentRepo: Repository<LcpAgent>,
+    @InjectRepository(LcpRole)
+    private readonly roleRepo: Repository<LcpRole>,
+    @InjectRepository(CompanyUser)
+    private readonly userRepo: Repository<CompanyUser>,
   ) {}
 
   /**
    * Returns a minimal view of an agent record for service-to-service queries.
    * Currently exposes `storageChanges` for `complete_task` file validation.
    */
+  @ApiOperation({ summary: 'Get agent record (internal)' })
   @Get('agent/:agentId')
   async getAgent(@Param('agentId') agentId: UUID): Promise<Partial<LcpAgent>> {
     const agent = await this.agentRepo.findOneBy({ id: agentId });
@@ -53,15 +61,19 @@ export class InternalController {
    * - `type: 'user_input'` → creates a Conversation and returns its slug.
    * - `type: 'agent_consultation'` → starts a consulting agent and returns the consultation id.
    */
+  @ApiOperation({
+    summary: 'Pause an agent for user input or consultation (internal)',
+  })
   @Post('pause')
   async pause(
     @Body() body: PauseDto,
-  ): Promise<{ slug?: string; consultationId?: string }> {
+  ): Promise<{ slug?: string; consultationId?: string; roleName?: string }> {
     if (body.type === 'user_input') {
       const result = await this.pauseResume.pauseForUserInput(
         body.agentId,
         body.question,
         body.context,
+        body.userIds,
       );
       return { slug: result.slug };
     }
@@ -70,11 +82,12 @@ export class InternalController {
       body.agentId,
       // ValidateIf guarantees these are present when type === 'agent_consultation'
       body.companyId!,
-      body.roleName!,
+      body.roleId!,
       body.question,
       body.context,
+      body.roleName,
     );
-    return { consultationId: result.consultationId };
+    return { consultationId: result.consultationId, roleName: result.roleName };
   }
 
   /**
@@ -83,6 +96,7 @@ export class InternalController {
    * consultation and re-enqueues the calling agent.
    * Returns 204 No Content.
    */
+  @ApiOperation({ summary: 'Mark an agent as completed (internal)' })
   @Post('agent/:agentId/complete')
   @HttpCode(204)
   async complete(
@@ -97,6 +111,7 @@ export class InternalController {
    * Called fire-and-forget by lcp-agent after each storage tool result.
    * Returns 204 No Content.
    */
+  @ApiOperation({ summary: 'Update agent storage changes (internal)' })
   @Patch('agent/:agentId/storage')
   @HttpCode(204)
   async updateStorage(
@@ -104,5 +119,19 @@ export class InternalController {
     @Body() body: UpdateStorageChangesDto,
   ): Promise<void> {
     await this.pauseResume.updateStorageChanges(agentId, body);
+  }
+
+  /** Returns all roles belonging to the given company. Used by lcp-mcp-interactions' `list_available_roles`. */
+  @ApiOperation({ summary: 'List roles for a company (internal)' })
+  @Get('company/:companyId/roles')
+  async listRoles(@Param('companyId') companyId: UUID): Promise<LcpRole[]> {
+    return this.roleRepo.findBy({ companyId });
+  }
+
+  /** Returns all users belonging to the given company. Used by lcp-mcp-interactions' `list_available_users`. */
+  @ApiOperation({ summary: 'List users for a company (internal)' })
+  @Get('company/:companyId/users')
+  async listUsers(@Param('companyId') companyId: UUID): Promise<CompanyUser[]> {
+    return this.userRepo.findBy({ companyId });
   }
 }

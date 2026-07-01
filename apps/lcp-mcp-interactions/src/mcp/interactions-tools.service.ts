@@ -91,8 +91,8 @@ export class InteractionsToolsService {
       async ({ companyId }): Promise<ToolResult> => {
         try {
           const res = await axios.get<unknown[]>(
-            `${this.serverUrl}/api/company/${companyId}/users`,
-            { headers: { Authorization: `Bearer internal` } },
+            `${this.serverUrl}/internal/company/${companyId}/users`,
+            { headers: { 'X-Internal-Api-Key': this.apiKey } },
           );
           return ok(JSON.stringify(res.data, null, 2));
         } catch (e) {
@@ -115,8 +115,8 @@ export class InteractionsToolsService {
       async ({ companyId }): Promise<ToolResult> => {
         try {
           const res = await axios.get<unknown[]>(
-            `${this.serverUrl}/api/roles?companyId=${companyId}`,
-            { headers: { Authorization: `Bearer internal` } },
+            `${this.serverUrl}/internal/company/${companyId}/roles`,
+            { headers: { 'X-Internal-Api-Key': this.apiKey } },
           );
           return ok(JSON.stringify(res.data, null, 2));
         } catch (e) {
@@ -142,6 +142,13 @@ export class InteractionsToolsService {
             .describe(
               'Optional context to help the user understand the request.',
             ),
+          userIds: z
+            .array(z.uuid())
+            .min(1)
+            .optional()
+            .describe(
+              'Optional company user ids (from list_available_users) to target this question to. Omit to auto-route based on the question.',
+            ),
         },
       },
       async ({
@@ -149,13 +156,28 @@ export class InteractionsToolsService {
         companyId,
         question,
         context,
+        userIds,
       }): Promise<ToolResult> => {
         try {
+          // Ask lcp-server to pause this agent and create the Conversation —
+          // it creates the record, sets the agent to Paused, and routes the
+          // question to userIds (if given) or the auto-routing heuristic.
           const res = await axios.post<{ slug: string }>(
             `${this.serverUrl}/internal/pause`,
-            { type: 'user_input', agentId, companyId, question, context },
+            {
+              type: 'user_input',
+              agentId,
+              companyId,
+              question,
+              context,
+              userIds,
+            },
             { headers: { 'X-Internal-Api-Key': this.apiKey } },
           );
+
+          // Report the conversation slug back to the agent so it knows the
+          // request was submitted; the agent loop pauses here until a reply
+          // resumes it.
           const { slug } = res.data;
           return ok(
             interpolate(interactionPrompts.paused_user_input, { slug }),
@@ -176,10 +198,18 @@ export class InteractionsToolsService {
         inputSchema: {
           agentId: z.uuid().describe('The calling agent UUID.'),
           companyId: z.uuid().describe('The company UUID.'),
+          roleId: z
+            .uuid()
+            .describe(
+              'The id of the role to consult — get it from list_available_roles. Role names are not unique within a company, so the id is required.',
+            ),
           roleName: z
             .string()
             .min(1)
-            .describe('The name of the role to consult.'),
+            .optional()
+            .describe(
+              'Optional human-readable role name, used only for friendlier logging if the consultation fails.',
+            ),
           question: z
             .string()
             .min(1)
@@ -193,34 +223,49 @@ export class InteractionsToolsService {
       async ({
         agentId,
         companyId,
+        roleId,
         roleName,
         question,
         context,
       }): Promise<ToolResult> => {
         try {
-          const res = await axios.post<{ consultationId: string }>(
+          // Ask lcp-server to pause this agent and dispatch a new consulting
+          // agent for roleId — it looks the role up by id (unambiguous even
+          // when multiple roles share a name), starts the consulting agent,
+          // and records the PendingConsultation link between them.
+          const res = await axios.post<{
+            consultationId: string;
+            roleName: string;
+          }>(
             `${this.serverUrl}/internal/pause`,
             {
               type: 'agent_consultation',
               agentId,
               companyId,
+              roleId,
               roleName,
               question,
               context,
             },
             { headers: { 'X-Internal-Api-Key': this.apiKey } },
           );
-          const { consultationId } = res.data;
+
+          // Report the resolved role name (from the server, not the caller's
+          // possibly-stale label) and consultation id; the agent loop pauses
+          // here until the consulting agent completes.
+          const { consultationId, roleName: resolvedRoleName } = res.data;
           return ok(
             interpolate(interactionPrompts.paused_consultation, {
-              roleName,
+              roleName: resolvedRoleName,
               consultationId,
             }),
           );
         } catch (e) {
           this.logger.error(`request_agent_consultation failed: ${String(e)}`);
           return err(
-            interpolate(interactionPrompts.error_consultation, { roleName }),
+            interpolate(interactionPrompts.error_consultation, {
+              roleName: roleName ?? roleId,
+            }),
           );
         }
       },

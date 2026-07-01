@@ -114,6 +114,8 @@ At agent startup, `McpClientService` loads tools from each listed server. Tools 
 
 The agent receives prompt part 3 listing available servers and is directed to call `describe_server` on each before using its tools.
 
+**Identity fields (`agentId`, `companyId`):** `loadTools` accepts an optional context (`{ agentId, companyId }`) for the agent currently running. Any tool parameter matching one of those names is removed from the schema the LLM sees and the real value substituted on every call, regardless of what (if anything) the LLM supplies — the LLM has no reliable way to know its own `agentId` (it's a DB id, not part of its context) and shouldn't be trusted to assert one. This is why `request_user_input`/`request_agent_consultation`/`complete_task` in `lcp-mcp-interactions` no longer need `agentId`/`companyId` filled in by the model, even though those fields are still part of the MCP server's published tool schema.
+
 ### MCP server URLs
 
 MCP server URLs are resolved from environment variables:

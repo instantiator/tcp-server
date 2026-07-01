@@ -70,7 +70,7 @@ Work through these in order.
 You will use the CLI frequently. These aliases make the commands shorter:
 
 ```bash
-alias lcp="./scripts/dev/lcp-cli.sh"
+alias lcp="./lcp-cli.sh"
 export TOKEN=$(lcp --username test --password test get-token)
 ```
 

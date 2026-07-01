@@ -99,6 +99,13 @@ Connect with psql:
 psql postgres://lcp:<POSTGRES_PASSWORD>@localhost:5432/lcp
 ```
 
+Submit a query directly using docker:
+
+```bash
+docker exec lcp-dev-postgres-1 psql -U lcp -d lcp -c \
+  "SELECT timestamp, \"eventType\", \"agentId\", payload FROM audit_event ORDER BY timestamp DESC LIMIT 20;"
+```
+
 Connect with a GUI tool (TablePlus, pgAdmin): host `localhost`, port `5432`, database `lcp`, user `lcp`, password from `.env`.
 
 ### Useful developer queries

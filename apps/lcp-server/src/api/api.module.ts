@@ -11,6 +11,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditModule } from '../audit/audit.module';
 import { DbModule } from '../db/db.module';
+import { McpClientModule } from '../mcp/mcp-client.module';
 import { ModelCheckModule } from '../model-check/model-check.module';
 import { ContextModule } from '../context/context.module';
 import { RagModule } from '../rag/rag.module';
@@ -36,6 +37,7 @@ import { RoleDocumentService } from './role-document.service';
   imports: [
     AuditModule,
     DbModule,
+    McpClientModule,
     ModelCheckModule,
     ContextModule,
     RagModule,

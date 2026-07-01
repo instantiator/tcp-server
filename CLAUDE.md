@@ -109,8 +109,8 @@ schemas/                     # Auto-generated JSON Schema — do not edit by han
 ```bash
 # Development
 npm run start:dev             # Start lcp-server with hot reload (SQLite fallback)
-./scripts/dev/lcp-cli.sh      # Run lcp-cli (builds automatically if needed)
-./scripts/dev/lcp-cli.sh --rebuild  # Force rebuild before running
+./lcp-cli.sh      # Run lcp-cli (builds automatically if needed)
+./lcp-cli.sh --rebuild  # Force rebuild before running
 npm run build                 # Build all apps + generate schema + license report
 npm run build lcp-server      # Build lcp-server only
 npm run build lcp-agent       # Build lcp-agent only

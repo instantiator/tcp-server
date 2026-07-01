@@ -3,7 +3,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { AgentStatus, AuditEventType, LcpAgent, LcpRole } from '@lcp/shared';
+import {
+  AgentStatus,
+  AuditEventType,
+  LcpAgent,
+  LcpRole,
+  buildChatModel,
+} from '@lcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { AuditService } from '../audit/audit.service';
 
@@ -12,6 +18,7 @@ jest.mock('@langchain/langgraph', () => ({
   StateGraph: jest.fn().mockReturnValue({
     addNode: jest.fn().mockReturnThis(),
     addEdge: jest.fn().mockReturnThis(),
+    addConditionalEdges: jest.fn().mockReturnThis(),
     compile: jest.fn().mockReturnValue({
       invoke: jest.fn(),
       getState: jest.fn(),
@@ -20,6 +27,11 @@ jest.mock('@langchain/langgraph', () => ({
   }),
   MessagesAnnotation: { State: {} },
   END: 'END',
+}));
+
+jest.mock('@langchain/langgraph/prebuilt', () => ({
+  ToolNode: jest.fn(),
+  toolsCondition: jest.fn(),
 }));
 
 jest.mock('@langchain/langgraph-checkpoint-postgres', () => ({
@@ -33,7 +45,11 @@ jest.mock('@lcp/shared', () => {
     jest.requireActual<typeof import('@lcp/shared')>('@lcp/shared');
   return {
     ...actual,
-    buildChatModel: jest.fn().mockReturnValue({ invoke: jest.fn() }),
+    buildChatModel: jest.fn().mockReturnValue({
+      invoke: jest.fn(),
+      bindTools: jest.fn().mockReturnValue({ invoke: jest.fn() }),
+    }),
+    resolveMcpServerUrls: jest.fn().mockReturnValue({}),
   };
 });
 
@@ -111,6 +127,7 @@ describe('ChatService', () => {
   let contextManager: ContextManagerService;
   let agentEvents: AgentEventService;
   let ragRetrieval: { retrieve: jest.Mock };
+  let mcpClient: { loadTools: jest.Mock };
 
   beforeEach(() => {
     agentRepo = {
@@ -125,6 +142,8 @@ describe('ChatService', () => {
     };
     config = {
       getOrThrow: jest.fn().mockReturnValue('postgres://test'),
+      // Returns undefined for all LLM env vars by default (no env fallback active)
+      get: jest.fn().mockReturnValue(undefined),
     } as unknown as ConfigService;
 
     mockCheckpointer = {
@@ -160,6 +179,7 @@ describe('ChatService', () => {
     );
 
     ragRetrieval = { retrieve: jest.fn().mockResolvedValue([]) };
+    mcpClient = { loadTools: jest.fn().mockResolvedValue([]) };
 
     service = new ChatService(
       config,
@@ -167,6 +187,7 @@ describe('ChatService', () => {
       agentEvents,
       ragRetrieval as unknown as RagRetrievalService,
       auditService as unknown as AuditService,
+      mcpClient as never,
       agentRepo as never,
       roleRepo as never,
       companyRepo as never,
@@ -189,6 +210,62 @@ describe('ChatService', () => {
     roleRepo.findOneBy.mockResolvedValue(null);
     await expect(service.sendMessage(randomUUID(), 'Hello')).rejects.toThrow(
       NotFoundException,
+    );
+  });
+
+  it('throws NotFoundException when no LLM config is available from any source', async () => {
+    const agent = makeAgent({ threadId: null });
+    const role = makeRole({ llmConfig: null });
+    agentRepo.findOneBy.mockResolvedValue(agent);
+    roleRepo.findOneBy.mockResolvedValue(role);
+    companyRepo.findOneBy.mockResolvedValue({ llmDefault: null });
+    // config.get already returns undefined for all LLM vars (set in beforeEach)
+    await expect(service.sendMessage(agent.id, 'Hello')).rejects.toThrow(
+      NotFoundException,
+    );
+  });
+
+  it('uses env fallback LLM config when role and company have none', async () => {
+    const agent = makeAgent({ threadId: null });
+    const role = makeRole({ llmConfig: null });
+    agentRepo.findOneBy.mockResolvedValue(agent);
+    roleRepo.findOneBy.mockResolvedValue(role);
+    companyRepo.findOneBy.mockResolvedValue({ llmDefault: null });
+    (config.get as jest.Mock).mockImplementation((key: string) => {
+      if (key === 'LLM_PROVIDER') return 'lm-studio';
+      if (key === 'LLM_MODEL') return 'qwen3-5b';
+      if (key === 'LLM_BASE_URL') return 'http://localhost:1234/v1';
+      return undefined;
+    });
+
+    const aiMsg = new AIMessage('Response via env fallback.');
+    compiledGraph.invoke.mockResolvedValue({ messages: [aiMsg] });
+
+    const result = await service.sendMessage(agent.id, 'Hello');
+    expect(result.response).toBe('Response via env fallback.');
+  });
+
+  it('substitutes companyId and roleId into the rendered system prompt', async () => {
+    const agent = makeAgent({ threadId: null });
+    const role = makeRole({
+      systemPromptTemplate: 'Company: {{companyId}}, Role: {{roleId}}',
+    });
+    agentRepo.findOneBy.mockResolvedValue(agent);
+    roleRepo.findOneBy.mockResolvedValue(role);
+    companyRepo.findOneBy.mockResolvedValue(null);
+
+    const aiMsg = new AIMessage('Hi there!');
+    compiledGraph.invoke.mockResolvedValue({ messages: [aiMsg] });
+
+    await service.sendMessage(agent.id, 'Hello');
+
+    const { messages } = (
+      compiledGraph.invoke.mock.calls[0] as [
+        { messages: { content: string }[] },
+      ]
+    )[0];
+    expect(messages[0].content).toBe(
+      `Company: ${agent.companyId}, Role: ${role.id}`,
     );
   });
 
@@ -224,6 +301,69 @@ describe('ChatService', () => {
       AuditEventType.LlmResponse,
       expect.any(Object),
     );
+  });
+
+  it('passes the real agentId/companyId as MCP tool context, not LLM-suppliable values', async () => {
+    const agent = makeAgent({ threadId: null });
+    const role = makeRole();
+    agentRepo.findOneBy.mockResolvedValue(agent);
+    roleRepo.findOneBy.mockResolvedValue(role);
+    compiledGraph.invoke.mockResolvedValue({
+      messages: [new AIMessage('Hi there!')],
+    });
+
+    await service.sendMessage(agent.id, 'Hello');
+
+    expect(mcpClient.loadTools).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.any(Object),
+      { agentId: agent.id, companyId: agent.companyId },
+    );
+  });
+
+  it('recovers the response when a "thinking" model leaves content blank and puts its answer in reasoning_content (regression)', async () => {
+    const agent = makeAgent({ threadId: null });
+    const role = makeRole();
+    agentRepo.findOneBy.mockResolvedValue(agent);
+    roleRepo.findOneBy.mockResolvedValue(role);
+
+    // Drive the real 'agent' node registered by buildAgentGraph (instead of
+    // stubbing compiledGraph.invoke directly) so this test exercises the
+    // actual ReasoningContentRecovery wiring, not just message extraction.
+    type AgentNode = (state: {
+      messages: AIMessage[];
+    }) => Promise<{ messages: AIMessage[] }>;
+    let agentNode: AgentNode | undefined;
+    interface GraphBuilderStub {
+      addNode: jest.Mock;
+      addEdge: jest.Mock;
+      compile: jest.Mock;
+    }
+    const graphBuilderStub: GraphBuilderStub = {
+      addNode: jest.fn((name: string, fn: AgentNode) => {
+        if (name === 'agent') agentNode = fn;
+        return graphBuilderStub;
+      }),
+      addEdge: jest.fn().mockReturnThis(),
+      compile: jest.fn().mockReturnValue(compiledGraph),
+    };
+    (StateGraph as jest.Mock).mockReturnValue(graphBuilderStub);
+    compiledGraph.invoke.mockImplementation(
+      async (input: { messages: AIMessage[] }) => agentNode!(input),
+    );
+
+    (buildChatModel as jest.Mock).mockReturnValueOnce({
+      invoke: jest.fn().mockResolvedValue(
+        new AIMessage({
+          content: '',
+          additional_kwargs: { reasoning_content: 'The recovered answer.' },
+        }),
+      ),
+    });
+
+    const result = await service.sendMessage(agent.id, 'Hello');
+
+    expect(result.response).toBe('The recovered answer.');
   });
 
   it('does not prepend system prompt on subsequent messages', async () => {

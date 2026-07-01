@@ -92,6 +92,15 @@ describe('generateActionString', () => {
     ).toBe("Consulted role 'analyst': Check this");
   });
 
+  it('falls back to roleId for request_agent_consultation when roleName is omitted', () => {
+    expect(
+      generateActionString('interactions__request_agent_consultation', {
+        roleId: 'role-123',
+        question: 'Check this',
+      }),
+    ).toBe("Consulted role 'role-123': Check this");
+  });
+
   it('handles complete_task', () => {
     expect(generateActionString('interactions__complete_task', {})).toBe(
       'Submitted task completion',

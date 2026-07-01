@@ -16,6 +16,7 @@ import {
   Sse,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { UUID } from 'crypto';
 import type { Request } from 'express';
 import { map } from 'rxjs/operators';
@@ -28,6 +29,8 @@ import { ChatMessageResponse, ChatService } from './chat.service';
 import { SendMessageDto, StartAgentDto, StartChatDto } from './dto/agent.dto';
 
 /** REST controller for starting, resuming, chatting with, and inspecting {@link LcpAgent} instances. */
+@ApiTags('agents')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller({ path: 'api/agent' })
 export class AgentController {
@@ -43,6 +46,7 @@ export class AgentController {
    * Creates a new agent and dispatches it to the lcp-agent worker pool.
    * Returns the agent record immediately; status starts as `idle`.
    */
+  @ApiOperation({ summary: 'Start a new agent' })
   @Post('start')
   async startAgent(@Body() body: StartAgentDto): Promise<LcpAgent> {
     return this.orchestration.startAgent(body);
@@ -53,6 +57,7 @@ export class AgentController {
    * The agent starts in `idle` status and is driven by calls to
    * {@link sendMessage} instead of the BullMQ pipeline.
    */
+  @ApiOperation({ summary: 'Start a chat-mode agent' })
   @Post('chat/start')
   async startChat(@Body() body: StartChatDto): Promise<LcpAgent> {
     const agent = await this.db.createAgent({
@@ -81,6 +86,7 @@ export class AgentController {
    * emits a `close` event which aborts the in-flight LLM call, returning the
    * agent to `idle` status rather than leaving it stuck in `running`.
    */
+  @ApiOperation({ summary: 'Send a message to a chat agent' })
   @Post(':id/message')
   async sendMessage(
     @Param('id') id: UUID,
@@ -112,6 +118,7 @@ export class AgentController {
    * updates such as `compaction_started` and `compaction_complete` without
    * polling. The stream stays open until the client disconnects.
    */
+  @ApiOperation({ summary: 'Subscribe to agent events (SSE)' })
   @Sse(':id/events')
   streamEvents(@Param('id') id: UUID): import('rxjs').Observable<MessageEvent> {
     return this.agentEvents.observe(id).pipe(map((event) => ({ data: event })));
@@ -121,6 +128,7 @@ export class AgentController {
    * Dispatches a resume job for an existing agent.
    * The agent must be in `idle`, `paused`, or `failed` status.
    */
+  @ApiOperation({ summary: 'Resume a paused or idle agent' })
   @Post('resume/:id')
   async resumeAgent(@Param('id') id: UUID): Promise<LcpAgent> {
     try {
@@ -133,6 +141,7 @@ export class AgentController {
   }
 
   /** Retrieves the current state of an agent by its UUID. */
+  @ApiOperation({ summary: 'Get an agent by ID' })
   @Get(':id')
   async getAgent(@Param('id') id: UUID): Promise<LcpAgent> {
     const agent = await this.db.getAgent(id);
@@ -140,6 +149,7 @@ export class AgentController {
     return agent;
   }
 
+  @ApiOperation({ summary: 'Delete an agent' })
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteAgent(@Param('id') id: UUID): Promise<void> {

@@ -54,12 +54,22 @@ export class PauseAndResumeService {
     agentId: UUID,
     question: string,
     context?: string,
+    userIds?: UUID[],
   ): Promise<{ slug: string }> {
+    // Look up the agent and its role — the role name is used purely for the
+    // conversation slug, not as a lookup key.
     const agent = await this.loadAgent(agentId);
     const role = await this.roleRepo.findOneBy({ id: agent.roleId });
 
-    await this.agentRepo.update(agentId, { status: AgentStatus.Paused });
+    // Mark the agent paused, recording when so a later resume can scope which
+    // responses belong to this pause episode.
+    await this.agentRepo.update(agentId, {
+      status: AgentStatus.Paused,
+      pausedAt: new Date(),
+    });
 
+    // Create the conversation — routes to explicit userIds when given,
+    // otherwise falls back to ConversationService's keyword-matching heuristic.
     const conv = await this.convService.create(
       agent.companyId,
       agent.roleId,
@@ -67,6 +77,7 @@ export class PauseAndResumeService {
       agentId,
       question,
       context,
+      userIds,
     );
 
     this.logger.log(
@@ -76,29 +87,39 @@ export class PauseAndResumeService {
   }
 
   /**
-   * Pauses the calling agent, starts a consultation agent for `roleName`, and
-   * records the {@link PendingConsultation} link between them.
-   * Returns the consultation id.
+   * Pauses the calling agent, starts a consultation agent for the role
+   * identified by `roleId`, and records the {@link PendingConsultation} link
+   * between them. Returns the consultation id and the resolved role name.
    */
   async pauseForConsultation(
     callingAgentId: UUID,
     companyId: UUID,
-    roleName: string,
+    roleId: UUID,
     question: string,
     context?: string,
-  ): Promise<{ consultationId: UUID }> {
+    roleName?: string,
+  ): Promise<{ consultationId: UUID; roleName: string }> {
     const callingAgent = await this.loadAgent(callingAgentId);
+
+    // Look up the target role by id, scoped to the company — role names
+    // aren't unique within a company, so id is the only unambiguous key.
     const role = await this.roleRepo.findOne({
-      where: { companyId, name: roleName },
+      where: { id: roleId, companyId },
     });
     if (!role) {
       throw new NotFoundException(
-        `No role named '${roleName}' found in company ${companyId}`,
+        `No role with id '${roleId}'${roleName ? ` ('${roleName}')` : ''} found in company ${companyId}`,
       );
     }
 
-    await this.agentRepo.update(callingAgentId, { status: AgentStatus.Paused });
+    // Mark the calling agent paused, recording when so a later resume can
+    // scope which responses belong to this pause episode.
+    await this.agentRepo.update(callingAgentId, {
+      status: AgentStatus.Paused,
+      pausedAt: new Date(),
+    });
 
+    // Build the consulting agent's prompt and dispatch it.
     const callingRole = await this.roleRepo.findOneBy({
       id: callingAgent.roleId,
     });
@@ -110,12 +131,18 @@ export class PauseAndResumeService {
       .filter(Boolean)
       .join('\n');
 
-    const consultAgent = await this.orchestration.startAgent({
+    // Create the agent record first, then commit the consultation link, then
+    // dispatch the job. This ordering prevents a race where the worker picks
+    // up the job and calls completeAgent before the PendingConsultation row
+    // exists — completeAgent would find no pending consultation and return
+    // without resuming the calling agent.
+    const consultAgent = await this.orchestration.createAgent({
       companyId,
       roleId: role.id,
       initialPrompt,
     });
 
+    // Record the link between the paused caller and the new consulting agent.
     const consultation = await this.consultRepo.save(
       this.consultRepo.create({
         callingAgentId,
@@ -126,10 +153,13 @@ export class PauseAndResumeService {
       }),
     );
 
+    // Only now dispatch the job — the PendingConsultation row is committed.
+    await this.orchestration.dispatchStartJob(consultAgent.id);
+
     this.logger.log(
-      `Agent ${callingAgentId} (${callingRole?.name ?? '?'}) paused for consultation — consulting agent ${consultAgent.id} (${roleName}), consultation ${consultation.id}`,
+      `Agent ${callingAgentId} (${callingRole?.name ?? '?'}) paused for consultation — consulting agent ${consultAgent.id} (${role.name}), consultation ${consultation.id}`,
     );
-    return { consultationId: consultation.id };
+    return { consultationId: consultation.id, roleName: role.name };
   }
 
   /**
@@ -142,14 +172,23 @@ export class PauseAndResumeService {
   async completeAgent(agentId: UUID, output: string): Promise<void> {
     const agent = await this.agentRepo.findOneBy({ id: agentId });
     if (!agent) return;
-    if (agent.status === AgentStatus.Completed) return; // idempotent
 
-    await this.agentRepo.update(agentId, {
-      status: AgentStatus.Completed,
-      output,
-    });
-    this.logger.log(`Agent ${agentId} completed`);
+    // Update status and output only when not already completed — idempotent
+    // for the agent record itself. AgentLoopService may have already set the
+    // agent to Completed (and written output) before this HTTP call arrived,
+    // so we skip the write but MUST NOT skip the consultation resolution below.
+    if (agent.status !== AgentStatus.Completed) {
+      await this.agentRepo.update(agentId, {
+        status: AgentStatus.Completed,
+        output,
+      });
+      this.logger.log(`Agent ${agentId} completed`);
+    }
 
+    // Always attempt consultation resolution even if status was already
+    // Completed — the lcp-agent fallback path sets status synchronously
+    // before this HTTP call arrives, leaving the consultation pending.
+    const resolvedOutput = output || agent.output || '';
     const consultation = await this.consultRepo.findOne({
       where: { consultationAgentId: agentId, status: 'pending' },
     });
@@ -157,7 +196,7 @@ export class PauseAndResumeService {
 
     await this.consultRepo.update(consultation.id, {
       status: 'complete',
-      result: output,
+      result: resolvedOutput,
     });
 
     const calling = await this.agentRepo.findOneBy({
@@ -165,9 +204,12 @@ export class PauseAndResumeService {
     });
     if (calling?.status !== AgentStatus.Paused) return;
 
+    // Ask the orchestrator to resume the calling agent — it will stay paused
+    // if other requests are still outstanding, or aggregate every response
+    // since the pause (including this one) if this was the last.
     // Fire-and-forget — DB state is already consistent; don't block on Redis.
     void this.orchestration
-      .resumeAgent(consultation.callingAgentId, output)
+      .resumeAgent(consultation.callingAgentId)
       .then(() =>
         this.logger.log(
           `Resumed calling agent ${consultation.callingAgentId} with consultation result`,

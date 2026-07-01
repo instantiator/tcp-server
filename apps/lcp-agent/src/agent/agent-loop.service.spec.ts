@@ -59,6 +59,38 @@ const SUCCESS_EVENTS = [
   },
 ];
 
+// Mirrors SUCCESS_EVENTS but with blank content, e.g. a "thinking" model whose
+// answer landed entirely in a reasoning_content field LangChain doesn't surface.
+const BLANK_CONTENT_EVENTS = [
+  {
+    event: 'on_chat_model_start',
+    name: 'ChatOpenAI',
+    data: { input: { messages: [] } },
+  },
+  {
+    event: 'on_chat_model_end',
+    name: 'agent',
+    data: { output: new AIMessage('') },
+  },
+];
+
+// Returns a compiled-graph stub whose streamEvents yields a different event
+// set on each successive call — used to simulate the run/retry sequence.
+function makeSequentialStubGraph(
+  ...eventSets: Array<Array<Record<string, unknown>>>
+) {
+  const streamEvents = jest.fn();
+  for (const events of eventSets) {
+    streamEvents.mockImplementationOnce(() => ({
+      // eslint-disable-next-line @typescript-eslint/require-await
+      [Symbol.asyncIterator]: async function* () {
+        for (const ev of events) yield ev;
+      },
+    }));
+  }
+  return { streamEvents };
+}
+
 jest.mock('@langchain/langgraph-checkpoint-postgres', () => ({
   PostgresSaver: {
     fromConnString: jest.fn().mockReturnValue({
@@ -89,6 +121,8 @@ describe('AgentLoopService', () => {
   let roleRepo: Repository<LcpRole>;
   let companyRepo: Repository<LcpCompany>;
   let auditRecord: jest.Mock;
+  let notifyComplete: jest.Mock;
+  let mcpClient: { loadTools: jest.Mock };
 
   beforeAll(async () => {
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
@@ -97,6 +131,7 @@ describe('AgentLoopService', () => {
       .mockReturnValue({} as ReturnType<typeof factory.buildChatModel>);
 
     auditRecord = jest.fn();
+    notifyComplete = jest.fn();
 
     const testingModule: TestingModule = await Test.createTestingModule({
       imports: [
@@ -113,7 +148,7 @@ describe('AgentLoopService', () => {
         AgentRegistryService,
         {
           provide: AuditClientService,
-          useValue: { record: auditRecord, notifyComplete: jest.fn() },
+          useValue: { record: auditRecord, notifyComplete },
         },
         {
           provide: StorageTrackingClientService,
@@ -142,10 +177,12 @@ describe('AgentLoopService', () => {
     agentRepo = testingModule.get(getRepositoryToken(LcpAgent));
     roleRepo = testingModule.get(getRepositoryToken(LcpRole));
     companyRepo = testingModule.get(getRepositoryToken(LcpCompany));
+    mcpClient = testingModule.get(McpClientService);
   });
 
   afterEach(async () => {
     auditRecord.mockClear();
+    notifyComplete.mockClear();
     await agentRepo.clear();
     await roleRepo.clear();
     await companyRepo.clear();
@@ -168,6 +205,7 @@ describe('AgentLoopService', () => {
     opts: {
       llmConfig?: LlmConfig;
       companyLlmDefault?: LlmConfig;
+      systemPromptTemplate?: string;
     } = {
       llmConfig: {
         provider: 'lm-studio',
@@ -190,7 +228,8 @@ describe('AgentLoopService', () => {
         name: 'analyst',
         description: 'Analyses.',
         llmConfig: opts.llmConfig,
-        systemPromptTemplate: 'You are {{name}} as of {{date}}.',
+        systemPromptTemplate:
+          opts.systemPromptTemplate ?? 'You are {{name}} as of {{date}}.',
       }),
     );
     const agent = await agentRepo.save(
@@ -211,6 +250,18 @@ describe('AgentLoopService', () => {
     const updated = await agentRepo.findOneByOrFail({ id: agent.id });
     expect(updated.status).toBe(AgentStatus.Completed);
     expect(updated.threadId).toBe(agent.id);
+  });
+
+  it('passes the real agentId/companyId as MCP tool context, not LLM-suppliable values', async () => {
+    const { agent } = await seedAgentAndRole();
+
+    await service.run(agent.id);
+
+    expect(mcpClient.loadTools).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.any(Object),
+      { agentId: agent.id, companyId: agent.companyId },
+    );
   });
 
   it('writes an audit event for the LLM response', async () => {
@@ -314,6 +365,56 @@ describe('AgentLoopService', () => {
     );
   });
 
+  it('retries and uses the retried response when the first turn produces empty content', async () => {
+    jest.mocked(StateGraph).mockImplementationOnce(
+      () =>
+        ({
+          addNode: jest.fn().mockReturnThis(),
+          addEdge: jest.fn().mockReturnThis(),
+          compile: jest
+            .fn()
+            .mockReturnValue(
+              makeSequentialStubGraph(BLANK_CONTENT_EVENTS, SUCCESS_EVENTS),
+            ),
+        }) as unknown as InstanceType<typeof StateGraph>,
+    );
+
+    const { agent } = await seedAgentAndRole();
+    await service.run(agent.id);
+
+    const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+    expect(updated.status).toBe(AgentStatus.Completed);
+    expect(notifyComplete).toHaveBeenCalledWith(
+      agent.id,
+      'Here is my analysis.',
+    );
+  });
+
+  it('fails the run when content is still empty after the retry', async () => {
+    jest.mocked(StateGraph).mockImplementationOnce(
+      () =>
+        ({
+          addNode: jest.fn().mockReturnThis(),
+          addEdge: jest.fn().mockReturnThis(),
+          compile: jest
+            .fn()
+            .mockReturnValue(
+              makeSequentialStubGraph(
+                BLANK_CONTENT_EVENTS,
+                BLANK_CONTENT_EVENTS,
+              ),
+            ),
+        }) as unknown as InstanceType<typeof StateGraph>,
+    );
+
+    const { agent } = await seedAgentAndRole();
+    await service.run(agent.id);
+
+    const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+    expect(updated.status).toBe(AgentStatus.Failed);
+    expect(notifyComplete).not.toHaveBeenCalled();
+  });
+
   it('does nothing when the agent id does not exist', async () => {
     await expect(service.run(randomUUID())).resolves.not.toThrow();
   });
@@ -390,10 +491,12 @@ describe('AgentLoopService', () => {
 
       const { agent, role, company } = await seedAgentAndRole();
 
+      // runLoop() re-reads agent status after the stream to detect a tool-set
+      // status change (e.g. complete_task); the initial run() lookup hits the
+      // real DB and eager-loads role/company normally.
       jest
         .spyOn(agentRepo, 'findOneBy')
-        .mockResolvedValueOnce(agent) // run() initial lookup
-        .mockResolvedValueOnce({ ...agent, status: AgentStatus.Completed }); // runLoop() status check
+        .mockResolvedValueOnce({ ...agent, status: AgentStatus.Completed });
 
       await service.run(agent.id);
 
@@ -415,7 +518,6 @@ describe('AgentLoopService', () => {
 
       jest
         .spyOn(agentRepo, 'findOneBy')
-        .mockResolvedValueOnce(agent)
         .mockResolvedValueOnce({ ...agent, status: AgentStatus.Completed });
 
       await expect(service.run(agent.id)).resolves.not.toThrow();
@@ -448,7 +550,6 @@ describe('AgentLoopService', () => {
 
       jest
         .spyOn(agentRepo, 'findOneBy')
-        .mockResolvedValueOnce(agent)
         .mockResolvedValueOnce({ ...agent, status: AgentStatus.Completed });
 
       await service.run(agent.id);
@@ -538,6 +639,49 @@ describe('AgentLoopService', () => {
           m instanceof HumanMessage && m.content === 'Summarise the market.',
       );
       expect(hasTaskPrompt).toBe(true);
+    });
+
+    it('substitutes companyId and roleId into the rendered system prompt', async () => {
+      let capturedInput: typeof MessagesAnnotation.State | undefined;
+
+      jest.mocked(StateGraph).mockImplementationOnce(
+        () =>
+          ({
+            addNode: jest.fn().mockReturnThis(),
+            addEdge: jest.fn().mockReturnThis(),
+            compile: jest.fn().mockReturnValue({
+              streamEvents: jest
+                .fn()
+                .mockImplementation(
+                  (input: typeof MessagesAnnotation.State) => {
+                    capturedInput = input;
+                    return {
+                      // eslint-disable-next-line @typescript-eslint/require-await
+                      [Symbol.asyncIterator]: async function* () {
+                        for (const ev of SUCCESS_EVENTS) yield ev;
+                      },
+                    };
+                  },
+                ),
+            }),
+          }) as unknown as InstanceType<typeof StateGraph>,
+      );
+
+      const { agent, role, company } = await seedAgentAndRole({
+        llmConfig: {
+          provider: 'lm-studio',
+          model: 'qwen3-5b',
+          apiKey: 'test-key',
+        },
+        systemPromptTemplate: 'Company: {{companyId}}, Role: {{roleId}}',
+      });
+      await service.run(agent.id);
+
+      const systemMessage = capturedInput!.messages[0];
+      expect(systemMessage).toBeInstanceOf(SystemMessage);
+      expect((systemMessage as SystemMessage).content).toBe(
+        `Company: ${company.id}, Role: ${role.id}`,
+      );
     });
   });
 });

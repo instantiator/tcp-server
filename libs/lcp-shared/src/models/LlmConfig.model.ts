@@ -29,7 +29,13 @@ export interface LlmConfig {
   /**
    * Maximum context window for this model in tokens.
    * Used by {@link ContextBudgetService} to determine when compaction is needed.
-   * Defaults to `8192` when absent.
+   * Defaults to {@link DEFAULT_LLM_CONTEXT_WINDOW} when absent.
    */
   contextWindow?: number;
+
+  /**
+   * Per-request timeout in milliseconds for LLM API calls.
+   * Defaults to {@link DEFAULT_LLM_TIMEOUT_MS} when absent. Set higher for slow local models.
+   */
+  timeoutMs?: number;
 }

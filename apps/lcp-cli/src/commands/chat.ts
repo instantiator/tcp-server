@@ -92,7 +92,7 @@ export function registerChat(program: Command): void {
           `/api/role/${cmdOpts.roleId}`,
         );
 
-        // Mirror the agent's resolution: role.llmConfig → company.llmDefault → error
+        // Mirror the agent's resolution: role.llmConfig → company.llmDefault → server env fallback
         let llmConfig = role.llmConfig;
         if (!llmConfig) {
           const company = await apiRequest<{ llmDefault?: LlmConfig | null }>(
@@ -101,12 +101,6 @@ export function registerChat(program: Command): void {
             `/api/company/${role.companyId}`,
           );
           llmConfig = company.llmDefault ?? null;
-        }
-        if (!llmConfig) {
-          process.stderr.write(
-            `Error: role has no llmConfig and company has no llmDefault\n`,
-          );
-          process.exit(1);
         }
 
         const agent = await apiRequest<AgentRecord>(
@@ -117,11 +111,15 @@ export function registerChat(program: Command): void {
         );
         agentId = agent.id;
         process.stderr.write(`LCP API: ${opts.lcpServer}\n`);
-        process.stderr.write(
-          `LLM API: ${llmConfig.baseUrl ?? '(provider default)'}\n`,
-        );
-        process.stderr.write(`Provider: ${llmConfig.provider}\n`);
-        process.stderr.write(`Model: ${llmConfig.model}\n`);
+        if (llmConfig) {
+          process.stderr.write(
+            `LLM API: ${llmConfig.baseUrl ?? '(provider default)'}\n`,
+          );
+          process.stderr.write(`Provider: ${llmConfig.provider}\n`);
+          process.stderr.write(`Model: ${llmConfig.model}\n`);
+        } else {
+          process.stderr.write(`LLM: (using server environment default)\n`);
+        }
         process.stderr.write(`Role: ${role.name}\n`);
         process.stderr.write(`'exit', 'quit', or Ctrl+C to exit.\n`);
       } catch (err) {
@@ -145,13 +143,19 @@ export function registerChat(program: Command): void {
         message: string,
       ): Promise<MessageResponse | null> => {
         currentAbort = new AbortController();
-        const doRequest = () =>
-          apiRequest<MessageResponse>(
-            { baseUrl: opts.lcpServer, token, signal: currentAbort!.signal },
+        const doRequest = () => {
+          // ponytail: 35 min covers the default LLM_TIMEOUT_MS; both signals race so Ctrl+C still works
+          const signal = AbortSignal.any([
+            currentAbort!.signal,
+            AbortSignal.timeout(35 * 60 * 1000),
+          ]);
+          return apiRequest<MessageResponse>(
+            { baseUrl: opts.lcpServer, token, signal },
             'POST',
             `/api/agent/${agentId}/message`,
             { message },
           );
+        };
         try {
           const result = await doRequest();
           return result;

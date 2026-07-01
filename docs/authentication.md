@@ -30,7 +30,7 @@ The Docker Compose file includes Keycloak under the `auth` profile. `start-dev.s
 starts it and performs first-time configuration automatically.
 
 ```bash
-./scripts/dev/start-dev.sh
+./scripts/start-dev.sh
 ```
 
 This creates:

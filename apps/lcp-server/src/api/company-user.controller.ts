@@ -12,6 +12,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { UUID } from 'crypto';
 import { Repository } from 'typeorm';
@@ -22,6 +23,8 @@ import {
 } from './dto/company-user.dto';
 
 /** REST controller for per-company human user management. */
+@ApiTags('company-users')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller({ path: 'api/company/:companyId/users' })
 export class CompanyUserController {
@@ -31,6 +34,7 @@ export class CompanyUserController {
   ) {}
 
   /** Returns all users belonging to the given company. */
+  @ApiOperation({ summary: 'List users in a company' })
   @Get()
   async listUsers(@Param('companyId') companyId: UUID): Promise<CompanyUser[]> {
     return this.users.findBy({ companyId });
@@ -40,6 +44,7 @@ export class CompanyUserController {
    * Adds a user to the company.
    * Returns 409 if a user with the same identifier already exists (DB unique constraint).
    */
+  @ApiOperation({ summary: 'Add a user to a company' })
   @Post()
   async createUser(
     @Param('companyId') companyId: UUID,
@@ -57,6 +62,7 @@ export class CompanyUserController {
   }
 
   /** Partially updates a user's name, memberType, roles, or knowledgeDomains. */
+  @ApiOperation({ summary: 'Update a company user' })
   @Patch(':userId')
   async updateUser(
     @Param('companyId') companyId: UUID,
@@ -76,6 +82,7 @@ export class CompanyUserController {
   }
 
   /** Removes a user from the company. Returns 404 if not found. */
+  @ApiOperation({ summary: 'Remove a user from a company' })
   @Delete(':userId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteUser(

@@ -110,17 +110,23 @@ This avoids LangGraph's `interrupt()` mechanism entirely. The checkpoint store (
 
 **`complete_task` is a mandatory tool call, not a passive flow.** Agents must call `complete_task` (on lcp-mcp-interactions) as their final action. This writes the agent's `output` field and triggers consultation resume if applicable. lcp-agent enforces this with a completion enforcement loop.
 
+**Consultations target a role id, not a role name.** Role names aren't unique within a company, so `request_agent_consultation` looks the role up by `roleId` (from `list_available_roles`), scoped to `companyId`. `roleName` is accepted only as an optional label for logging.
+
+**`request_user_input` can target specific users.** An optional `userIds` argument (from `list_available_users`) routes the question directly to those users, bypassing the keyword-matching heuristic. Any one of the targeted users replying resolves the request.
+
+**Resume is gated and aggregates multiple responses.** `LcpAgent.pausedAt` is set whenever an agent transitions to `Paused`. `AgentOrchestrationService.resumeAgent` — the single choke point both pause flows call into — only re-enqueues the agent once it has no remaining outstanding `PendingConsultation` (`status: 'pending'`) or `Conversation` (`status: 'awaiting_user'`) rows. When the gate passes, the resume message combines every response received since `pausedAt`, not just the one that happened to resolve last. This lets an agent raise multiple requests (e.g. consult a role and ask a user) before pausing and see every answer on resume.
+
 ### Implemented
 
-- `Conversation` entity: `(id, slug, agentId, companyId, roleName, roleSlug, question, context, status, routedToIdentifiers, createdAt, closedAt)`
+- `Conversation` entity: `(id, slug, agentId, companyId, roleName, roleId, question, context, status, routedToIdentifiers, createdAt, closedAt)`
 - `ConversationMessage` entity: `(id, conversationId, author, authorIdentifier, content, timestamp)`
 - `PendingConsultation` entity: `(id, callingAgentId, consultationAgentId, status, result, createdAt)`
-- `LcpAgent` entity: added `output` field (set by `complete_task`)
+- `LcpAgent` entity: added `output` field (set by `complete_task`) and `pausedAt` field (scopes responses to the current pause episode for resume aggregation)
 - `LcpRole` entity: added `queryIndex` field (incremented per query to generate slug suffixes)
 - `PauseAndResumeService` in lcp-server — shared logic for both pause flows
 - `POST /internal/pause` — creates Conversation or PendingConsultation, sets agent to paused
-- `POST /internal/agent/resume/:agentId` — re-enqueues with reply
-- `POST /internal/agent/:agentId/complete` — sets status completed, stores output, triggers consultation resume
+- `POST /internal/agent/:agentId/complete` — sets status completed, stores output, triggers consultation resume (subject to gating, see above)
+- `AgentOrchestrationService.resumeAgent` — internal-only choke point both `complete_task` and conversation replies call into; no separate REST endpoint
 - `GET /api/conversation` — list conversations (filter by status, companyId)
 - `GET /api/conversation/:slug` — full conversation + messages
 - `POST /api/conversation/:slug/reply` — user reply; closes conversation; triggers agent resume
@@ -134,6 +140,106 @@ This avoids LangGraph's `interrupt()` mechanism entirely. The checkpoint store (
 - WebSocket upgrade for real-time conversation UX
 - Teaching flow (`{ teach: 'memory' | 'knowledge' }` in replies)
 - `GET /tasks/{task_id}/audit/stream` SSE endpoint
+- **SSE-based completion delivery** — replace the current long-poll (`waitForAgentCompletion`) with `202 Accepted` + `completed` SSE event; see [ADR-015](ADR-015-agent-completion-sse.md)
+- **Required tool call tracking** — `LcpAgent.requiredToolCalls?: string[]` set at creation (e.g. `['complete_task']` for consultation agents); `AgentLoopService` warns or retries if the stream ends without all required calls having fired; reduces silent fallback completions where the agent narrated a tool call instead of invoking it
+
+## Agent-to-agent consultation flow
+
+### Current behaviour
+
+The BullMQ job for the calling agent (cat) completes as soon as the agent
+pauses. The `chat.service` HTTP handler returns at that point with whatever
+the LLM said before pausing — typically a placeholder like "I've asked the
+chicken…" — and the HTTP connection closes. The resumed run later produces the
+real answer, but no one is waiting for it.
+
+```mermaid
+sequenceDiagram
+    participant CLI as Client (lcp-cli)
+    participant CS as chat.service
+    participant BQ as BullMQ
+    participant Cat1 as cat agent (run 1)
+    participant Chkn as chicken agent
+    participant Cat2 as cat agent (run 2)
+
+    CLI->>CS: POST /api/agent/:id/message
+    CS->>BQ: dispatch cat job
+    BQ->>Cat1: run agent loop
+    Note over Cat1: LLM calls request_agent_consultation
+    Cat1->>CS: POST /internal/pause
+    CS-->>Cat1: Paused. Consultation dispatched.
+    CS->>BQ: dispatch chicken job
+    Note over Cat1: LLM produces empty response
+    Note over Cat1: ReasoningContentRecovery nudges
+    Note over Cat1: LLM produces placeholder response
+    Cat1-->>BQ: job complete (agent: Paused)
+    BQ-->>CS: done
+    CS-->>CLI: placeholder response (consultation unresolved)
+
+    Note over CLI,CS: HTTP connection closes here
+
+    BQ->>Chkn: run agent loop
+    Note over Chkn: LLM answers the question
+    Chkn->>CS: POST /internal/complete
+    CS->>BQ: dispatch cat resume job
+    BQ->>Cat2: run agent loop (resumed from checkpoint)
+    Note over Cat2: LLM produces real answer
+    Cat2-->>BQ: job complete (agent: Completed)
+    Note over Cat2,BQ: Final answer — no recipient
+```
+
+### Proposed improvement: Redis pub/sub notification
+
+Two changes close the gap without holding any BullMQ thread open:
+
+1. **Suppress the spurious nudge.** `ReasoningContentRecovery` checks whether
+   the last `ToolMessage` in the conversation is a terminal one ("Paused." /
+   "Task marked complete.") — if so, it returns the empty response as-is
+   rather than nudging the LLM to produce a placeholder.
+
+2. **Hold the HTTP request open across the pause/resume cycle.** After the
+   first BullMQ job completes with the agent in `Paused` state, `chat.service`
+   subscribes to `agent:completed:{agentId}` on Redis. When the cat's resumed
+   run finishes, `AgentLoopService` publishes the final response text to that
+   key. `chat.service` receives it, unsubscribes, and returns it to the client.
+   The BullMQ jobs themselves are unaffected — they still start and finish
+   normally; the only resource held open is the HTTP connection.
+
+```mermaid
+sequenceDiagram
+    participant CLI as Client (lcp-cli)
+    participant CS as chat.service
+    participant R as Redis
+    participant BQ as BullMQ
+    participant Cat1 as cat agent (run 1)
+    participant Chkn as chicken agent
+    participant Cat2 as cat agent (run 2)
+
+    CLI->>CS: POST /api/agent/:id/message
+    CS->>BQ: dispatch cat job
+    BQ->>Cat1: run agent loop
+    Note over Cat1: LLM calls request_agent_consultation
+    Cat1->>CS: POST /internal/pause
+    CS-->>Cat1: Paused. Consultation dispatched.
+    CS->>BQ: dispatch chicken job
+    Note over Cat1: LLM produces empty response
+    Note over Cat1: last tool was terminal — no nudge
+    Cat1-->>BQ: job complete (agent: Paused)
+    BQ-->>CS: done (agent: Paused)
+    CS->>R: SUBSCRIBE agent:completed:{agentId}
+    Note over CS: HTTP held open (timeout = LLM_TIMEOUT_MS)
+
+    BQ->>Chkn: run agent loop
+    Note over Chkn: LLM answers the question
+    Chkn->>CS: POST /internal/complete
+    CS->>BQ: dispatch cat resume job
+    BQ->>Cat2: run agent loop (resumed from checkpoint)
+    Note over Cat2: LLM produces real answer
+    Cat2->>R: PUBLISH agent:completed:{agentId}
+    R-->>CS: event received
+    CS->>R: UNSUBSCRIBE
+    CS-->>CLI: real answer from cat agent
+```
 
 ## Consequences
 
@@ -144,4 +250,4 @@ This avoids LangGraph's `interrupt()` mechanism entirely. The checkpoint store (
 ## Open Questions / Assumptions
 
 - Notification mechanism: the `routedToIdentifiers` field is populated but no push notification is sent — users poll `list-open-queries` or the API. SSE push and webhook notification are natural future extensions.
-- Conversation history on resume: only the user's reply is injected as a new `HumanMessage`; the full conversation thread is not re-injected (the LangGraph checkpoint already holds the prior context).
+- Conversation history on resume: only the response(s) from the current pause episode are injected as a new `HumanMessage`; the full conversation thread is not re-injected (the LangGraph checkpoint already holds the prior context).

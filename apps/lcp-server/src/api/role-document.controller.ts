@@ -10,6 +10,12 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import {
+  ApiConsumes,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { UUID } from 'crypto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -33,6 +39,8 @@ interface DeleteDocumentsBody {
  *
  * All routes are under `/api/role/:roleId/documents` and require a valid JWT.
  */
+@ApiTags('role-documents')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller({ path: 'api/role/:roleId/documents' })
 export class RoleDocumentController {
@@ -43,6 +51,7 @@ export class RoleDocumentController {
    *
    * @returns Array of {@link DocumentSummary} objects ordered by key.
    */
+  @ApiOperation({ summary: 'List OKF documents for a role' })
   @Get()
   async listDocuments(
     @Param('roleId') roleId: UUID,
@@ -59,6 +68,8 @@ export class RoleDocumentController {
    *
    * @returns The {@link DocumentSummary} for the stored document.
    */
+  @ApiOperation({ summary: 'Upload an OKF document for a role' })
+  @ApiConsumes('multipart/form-data')
   @Post()
   @UseInterceptors(FileInterceptor('file'))
   async storeDocument(
@@ -74,6 +85,7 @@ export class RoleDocumentController {
    * Pass the `keys` array from {@link listDocuments} responses.
    * Unknown keys are silently ignored.
    */
+  @ApiOperation({ summary: 'Delete OKF documents for a role' })
   @Delete()
   @HttpCode(204)
   async deleteDocuments(

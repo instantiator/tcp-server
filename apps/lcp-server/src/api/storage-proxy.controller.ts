@@ -11,6 +11,12 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import {
+  ApiConsumes,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import * as path from 'path';
@@ -42,6 +48,8 @@ function assertSafePath(p: string): void {
  *
  * Both endpoints require a valid JWT.
  */
+@ApiTags('storage')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller({ path: 'api/storage' })
 export class StorageProxyController {
@@ -51,6 +59,7 @@ export class StorageProxyController {
    * Downloads the object at `path` from shared storage and streams it to the
    * response. Returns 404 when the key does not exist.
    */
+  @ApiOperation({ summary: 'Download a file from shared storage' })
   @Get()
   async download(
     @Query('path') objectPath: string,
@@ -70,6 +79,8 @@ export class StorageProxyController {
    * Uploads `file` (multipart) to the given `path` in shared storage.
    * Returns `{ key, size }` on success.
    */
+  @ApiOperation({ summary: 'Upload a file to shared storage' })
+  @ApiConsumes('multipart/form-data')
   @Post()
   @UseInterceptors(FileInterceptor('file'))
   async upload(
