@@ -17,7 +17,7 @@
     "typecheck": "tsc --noemit -p apps/lcp-server/tsconfig.json && tsc --noemit -p apps/lcp-agent/tsconfig.json && tsc --noemit -p apps/lcp-cli/tsconfig.app.json && tsc --noemit -p apps/lcp-mcp-storage/tsconfig.app.json && tsc --noemit -p apps/lcp-mcp-memory/tsconfig.app.json && tsc --noemit -p apps/lcp-mcp-interactions/tsconfig.app.json && tsc --noemit -p libs/lcp-shared/tsconfig.json && tsc --noemit -p test/tsconfig.json",
     "lint": "NODE_OPTIONS=--max-old-space-size=4096 eslint \"{apps,libs,test}/**/*.ts\" \"apps/**/*.jsonc\" --fix --cache",
     "lint:check": "NODE_OPTIONS=--max-old-space-size=4096 eslint \"{apps,libs,test}/**/*.ts\" \"apps/**/*.jsonc\" --cache",
-    "test": "jest",
+    "test": "jest --runInBand",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
@@ -138,7 +138,6 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "./coverage",
-    "runInBand": true,
     "testEnvironment": "node",
     "reporters": [
       "default",

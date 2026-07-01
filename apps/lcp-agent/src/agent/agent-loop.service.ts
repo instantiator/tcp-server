@@ -543,7 +543,10 @@ export class AgentLoopService {
    * or the publish fails, the error is logged and swallowed: the channel is
    * best-effort and the BullMQ job must not fail because of it.
    */
-  private async publishCompletion(agentId: UUID, content: string): Promise<void> {
+  private async publishCompletion(
+    agentId: UUID,
+    content: string,
+  ): Promise<void> {
     const redisUrl = this.config.get<string>('REDIS_URL');
     if (!redisUrl) return;
     const publisher = new Redis(redisUrl);

@@ -21,6 +21,7 @@
 | class-transformer                        | MIT          | git+https://github.com/typestack/class-transformer.git         | TypeStack contributors                                                 | 0.5.1    | 0.5.1     | ^0.5.1    |
 | class-validator                          | MIT          | git+https://github.com/typestack/class-validator.git           | TypeStack contributors                                                 | 0.15.1   | 0.15.1    | ^0.15.1   |
 | commander                                | MIT          | git+https://github.com/tj/commander.js.git                     | TJ Holowaychuk <tj@vision-media.ca>                                    | 13.1.0   | 13.1.0    | ^13.1.0   |
+| ioredis                                  | MIT          | git://github.com/luin/ioredis.git                              | Zihua Li <i@zihua.li> (http://zihua.li)                                | 5.11.1   | 5.11.1    | ^5.11.1   |
 | joi                                      | BSD-3-Clause | git://github.com/hapijs/joi.git                                | n/a                                                                    | 18.2.3   | 18.2.3    | ^18.2.3   |
 | jwks-rsa                                 | MIT          | git+https://github.com/auth0/node-jwks-rsa.git                 | Auth0                                                                  | 4.1.0    | 4.0.1     | ^4.0.1    |
 | passport                                 | MIT          | git://github.com/jaredhanson/passport.git                      | Jared Hanson jaredhanson@gmail.com https://www.jaredhanson.me/         | 0.7.0    | 0.7.0     | ^0.7.0    |
@@ -32,4 +33,5 @@
 | rxjs                                     | Apache-2.0   | git+https://github.com/reactivex/rxjs.git                      | Ben Lesh <ben@benlesh.com>                                             | 7.8.2    | 7.8.2     | ^7.8.1    |
 | swagger-ui-express                       | MIT          | git+ssh://git@github.com/scottie1984/swagger-ui-express.git    | Stephen Scott scottie1984@gmail.com                                    | 5.0.1    | 5.0.1     | ^5.0.1    |
 | typeorm                                  | MIT          | git+https://github.com/typeorm/typeorm.git                     | TypeORM maintainers@typeorm.io                                         | 1.0.0    | 1.0.0     | ^1.0.0    |
+| undici                                   | MIT          | git+https://github.com/nodejs/undici.git                       | n/a                                                                    | 8.5.0    | 8.5.0     | ^8.5.0    |
 

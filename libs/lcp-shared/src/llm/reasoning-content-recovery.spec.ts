@@ -163,7 +163,8 @@ describe('ReasoningContentRecovery', () => {
   describe('when the last tool result is terminal (pause or task completion)', () => {
     it('returns the empty response as-is after a pause tool result', async () => {
       const pauseResult = new ToolMessage({
-        content: 'Paused. Consultation request dispatched to the Cat assistant.',
+        content:
+          'Paused. Consultation request dispatched to the Cat assistant.',
         tool_call_id: 'call-1',
       });
       const empty = new AIMessage({ content: '' });

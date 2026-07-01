@@ -78,10 +78,10 @@ sequenceDiagram
 
 ## Data model
 
-| Entity                | Key fields                                                                                                       |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Entity                | Key fields                                                                                                                                  |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Conversation`        | `id`, `slug`, `agentId`, `companyId`, `roleName`, `roleId`, `question`, `context`, `status`, `routedToIdentifiers`, `createdAt`, `closedAt` |
-| `ConversationMessage` | `id`, `conversationId`, `author` (`user`/`agent`), `authorIdentifier`, `content`, `timestamp`                   |
+| `ConversationMessage` | `id`, `conversationId`, `author` (`user`/`agent`), `authorIdentifier`, `content`, `timestamp`                                               |
 
 **Slug generation:** `{role-name}-{queryIndex}` where `queryIndex` is an atomic counter on the `LcpRole` entity, incremented in a transaction. This gives stable, human-readable conversation identifiers.
 
@@ -91,8 +91,8 @@ sequenceDiagram
 
 ## API endpoints
 
-| Method | Path                            | Description                                        |
-| ------ | -------------------------------- | -------------------------------------------------- |
-| `GET`  | `/api/conversation`              | List conversations (filter: `status`, `companyId`) |
-| `GET`  | `/api/conversation/:slug`        | Get full conversation + messages                   |
-| `POST` | `/api/conversation/:slug/reply`  | Submit a user reply; triggers agent resume (subject to [resume conditions](cross-agent-consultations.md#resume-conditions)) |
+| Method | Path                            | Description                                                                                                                 |
+| ------ | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/api/conversation`             | List conversations (filter: `status`, `companyId`)                                                                          |
+| `GET`  | `/api/conversation/:slug`       | Get full conversation + messages                                                                                            |
+| `POST` | `/api/conversation/:slug/reply` | Submit a user reply; triggers agent resume (subject to [resume conditions](cross-agent-consultations.md#resume-conditions)) |

@@ -6,17 +6,17 @@ LCP uses a single BullMQ queue named **`agent-jobs`** backed by Redis. All
 agent execution is asynchronous: lcp-server enqueues jobs, lcp-agent workers
 consume them.
 
-| Role       | Service    | Component                    |
-| ---------- | ---------- | ---------------------------- |
-| Producer   | lcp-server | `AgentOrchestrationService`  |
-| Consumer   | lcp-agent  | `AgentWorkerService`         |
+| Role     | Service    | Component                   |
+| -------- | ---------- | --------------------------- |
+| Producer | lcp-server | `AgentOrchestrationService` |
+| Consumer | lcp-agent  | `AgentWorkerService`        |
 
 ## Job types
 
-| `type`    | When dispatched                                                | Payload                                          |
-| --------- | -------------------------------------------------------------- | ------------------------------------------------ |
-| `start`   | New agent created (`AgentOrchestrationService.startAgent`)     | `{ agentId, type: 'start' }`                     |
-| `resume`  | All outstanding requests resolved (`resumeAgent` gate passes)  | `{ agentId, type: 'resume', replyContent? }`     |
+| `type`   | When dispatched                                               | Payload                                      |
+| -------- | ------------------------------------------------------------- | -------------------------------------------- |
+| `start`  | New agent created (`AgentOrchestrationService.startAgent`)    | `{ agentId, type: 'start' }`                 |
+| `resume` | All outstanding requests resolved (`resumeAgent` gate passes) | `{ agentId, type: 'resume', replyContent? }` |
 
 `replyContent` on a `resume` job is the aggregated text of every consultation
 result and user reply received since the agent paused (see
@@ -181,9 +181,9 @@ resuming prematurely on the first response to arrive.
 
 In addition to job routing, Redis carries a lightweight completion signal:
 
-| Channel                       | Published by              | Consumed by               |
-| ----------------------------- | ------------------------- | ------------------------- |
-| `agent:completed:{agentId}`   | `AgentLoopService` (lcp-agent) | `ChatService` (lcp-server) |
+| Channel                     | Published by                   | Consumed by                |
+| --------------------------- | ------------------------------ | -------------------------- |
+| `agent:completed:{agentId}` | `AgentLoopService` (lcp-agent) | `ChatService` (lcp-server) |
 
 This channel is only relevant for **chat sessions** (use case 3). Standard
 BullMQ agent runs (use cases 1, 2, 4) do not depend on it — if no one

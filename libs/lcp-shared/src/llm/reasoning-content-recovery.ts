@@ -74,9 +74,7 @@ export class ReasoningContentRecovery {
    * placeholder that the caller never asked for.
    */
   private static lastToolWasTerminal(messages: BaseMessage[]): boolean {
-    const last = [...messages]
-      .reverse()
-      .find((m) => m._getType() === 'tool');
+    const last = [...messages].reverse().find((m) => m.type === 'tool');
     const c = typeof last?.content === 'string' ? last.content : '';
     return TERMINAL_TOOL_RESULT_PREFIXES.some((p) => c.startsWith(p));
   }

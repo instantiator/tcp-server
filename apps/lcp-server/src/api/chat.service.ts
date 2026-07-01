@@ -378,7 +378,7 @@ export class ChatService {
           done('');
         });
 
-        subscriber.subscribe(channel, (err) => {
+        void subscriber.subscribe(channel, (err) => {
           if (err) {
             this.logger.error(
               `Redis subscribe error for agent ${agentId}: ${String(err)}`,

@@ -34,8 +34,8 @@ Earlier this was treated as "the model finished, and the answer is in `reasoning
 - Otherwise the model is presumed not finished. It's re-invoked **once** with the prior (unusable) response plus a corrective nudge appended to the conversation:
   - if `reasoning_content` contains a narrated `<tool_call>`, the nudge tells it to actually invoke the tool rather than describe it
   - otherwise the nudge tells it to continue and either call a tool or give its final response
-- Whatever the retried response is, it's used as the recovered result — *if* it has real content or tool calls.
-- If the retry is *also* unusable, `reasoning_content` from the retried response is promoted into `content` as a last resort, so the loop still gets something rather than nothing.
+- Whatever the retried response is, it's used as the recovered result — _if_ it has real content or tool calls.
+- If the retry is _also_ unusable, `reasoning_content` from the retried response is promoted into `content` as a last resort, so the loop still gets something rather than nothing.
 
 The nudge round-trip (the original unusable message, and the nudge itself) isn't persisted to checkpointed history — only the final, usable message is returned from the node, keeping the conversation thread clean.
 

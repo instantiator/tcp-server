@@ -79,7 +79,7 @@ sequenceDiagram
 
 Both this flow and the [agent-to-human flow](user-input-conversations.md) go through the same choke point, `AgentOrchestrationService.resumeAgent`, regardless of which one triggers it:
 
-- **Gating:** an agent only resumes once it has *no* remaining outstanding requests — no `PendingConsultation` with `status: 'pending'` and no `Conversation` with `status: 'awaiting_user'` linked to it. If an agent raised more than one request before pausing, resolving any single one of them leaves it paused until the rest are resolved too.
+- **Gating:** an agent only resumes once it has _no_ remaining outstanding requests — no `PendingConsultation` with `status: 'pending'` and no `Conversation` with `status: 'awaiting_user'` linked to it. If an agent raised more than one request before pausing, resolving any single one of them leaves it paused until the rest are resolved too.
 - **Aggregation:** `LcpAgent.pausedAt` is set whenever an agent transitions to `Paused`. When the gate finally passes, the resume message is built by collecting every consultation result and user reply received since `pausedAt` — not just whichever one happened to resolve last — so the agent sees every answer it asked for.
 - `pausedAt` is cleared once the resume is dispatched, so the next pause episode starts scoping fresh.
 
@@ -89,10 +89,10 @@ If an agent only ever raises one request before pausing — the common case toda
 
 ## Data model
 
-| Entity                | Key fields                                                                       |
-| ---------------------- | --------------------------------------------------------------------------------- |
+| Entity                | Key fields                                                                                  |
+| --------------------- | ------------------------------------------------------------------------------------------- |
 | `PendingConsultation` | `id`, `callingAgentId`, `consultationAgentId`, `companyId`, `status`, `result`, `createdAt` |
-| `LcpAgent`            | (relevant fields) `id`, `status`, `pausedAt`                                     |
+| `LcpAgent`            | (relevant fields) `id`, `status`, `pausedAt`                                                |
 
 ---
 

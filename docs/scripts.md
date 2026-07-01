@@ -261,12 +261,12 @@ failed API call or "n" answer.
 
 **Options:**
 
-| Flag                  | Description           | Default                                                    |
-| ---------------------- | ---------------------- | ------------------------------------------------------------ |
-| `-u, --username <user>` | OIDC username          | (required)                                                    |
-| `-p, --password <pass>` | OIDC password          | (required)                                                    |
-| `-s, --lcp-server <url>` | LCP server base URL   | `http://localhost:3000`                                       |
-| `--scenarios <file>`   | Scenarios JSON file    | `scripts/test-data/manual-verify-scenarios.json`               |
+| Flag                     | Description         | Default                                          |
+| ------------------------ | ------------------- | ------------------------------------------------ |
+| `-u, --username <user>`  | OIDC username       | (required)                                       |
+| `-p, --password <pass>`  | OIDC password       | (required)                                       |
+| `-s, --lcp-server <url>` | LCP server base URL | `http://localhost:3000`                          |
+| `--scenarios <file>`     | Scenarios JSON file | `scripts/test-data/manual-verify-scenarios.json` |
 
 **Requires:** a running stack with default LLM config in its `.env`,
 `MCP_INTERACTIONS_URL` reachable (the consultation scenario needs it), `jq`.

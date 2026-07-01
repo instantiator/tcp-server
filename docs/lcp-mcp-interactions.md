@@ -18,14 +18,14 @@ See [agent-services.md → MCP Servers](agent-services.md#mcp-servers) for how a
 
 ## Tools
 
-| Tool                                                        | Signature                                                                      | Description                                                  |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------ |
-| [`describe_server`](#describe_server)                       | `describe_server()`                                                            | Overview of the interactions service                         |
-| [`list_available_users`](#list_available_users)             | `list_available_users(companyId)`                                              | List human users registered in the company                   |
-| [`list_available_roles`](#list_available_roles)             | `list_available_roles(companyId)`                                              | List agent roles that can be consulted                       |
-| [`request_user_input`](#request_user_input)                 | `request_user_input(agentId, companyId, question, context?, userIds?)`         | Pause and submit a question to human users                   |
+| Tool                                                        | Signature                                                                               | Description                                                  |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| [`describe_server`](#describe_server)                       | `describe_server()`                                                                     | Overview of the interactions service                         |
+| [`list_available_users`](#list_available_users)             | `list_available_users(companyId)`                                                       | List human users registered in the company                   |
+| [`list_available_roles`](#list_available_roles)             | `list_available_roles(companyId)`                                                       | List agent roles that can be consulted                       |
+| [`request_user_input`](#request_user_input)                 | `request_user_input(agentId, companyId, question, context?, userIds?)`                  | Pause and submit a question to human users                   |
 | [`request_agent_consultation`](#request_agent_consultation) | `request_agent_consultation(agentId, companyId, roleId, question, context?, roleName?)` | Consult another agent role                                   |
-| [`complete_task`](#complete_task)                           | `complete_task(agentId, companyId, finalAnswer, outputFiles?)`                 | Mark the task complete; optionally verify output files exist |
+| [`complete_task`](#complete_task)                           | `complete_task(agentId, companyId, finalAnswer, outputFiles?)`                          | Mark the task complete; optionally verify output files exist |
 
 ---
 
@@ -88,13 +88,13 @@ Pauses the current agent and submits a question to the relevant human users in t
 
 **Arguments:**
 
-| Parameter   | Type     | Required | Description                                                              |
-| ----------- | -------- | -------- | ------------------------------------------------------------------------- |
-| `agentId`   | UUID     | yes      | The calling agent's UUID                                                  |
-| `companyId` | UUID     | yes      | The company UUID                                                          |
-| `question`  | string   | yes      | The question to ask the user (shown in `list-open-queries`)               |
-| `context`   | string   | no       | Optional background context to help the user respond                     |
-| `userIds`   | UUID[]   | no       | Company user ids (from `list_available_users`) to target. Omit to auto-route based on the question. |
+| Parameter   | Type   | Required | Description                                                                                         |
+| ----------- | ------ | -------- | --------------------------------------------------------------------------------------------------- |
+| `agentId`   | UUID   | yes      | The calling agent's UUID                                                                            |
+| `companyId` | UUID   | yes      | The company UUID                                                                                    |
+| `question`  | string | yes      | The question to ask the user (shown in `list-open-queries`)                                         |
+| `context`   | string | no       | Optional background context to help the user respond                                                |
+| `userIds`   | UUID[] | no       | Company user ids (from `list_available_users`) to target. Omit to auto-route based on the question. |
 
 **Returns:** A confirmation message containing the conversation slug (e.g. `"Paused. Query submitted as analyst-3. Your task will resume when the user responds."`).
 
@@ -115,14 +115,14 @@ Pauses the current agent and dispatches a consultation job to another agent role
 
 **Arguments:**
 
-| Parameter   | Type   | Required | Description                                                              |
-| ----------- | ------ | -------- | --------------------------------------------------------------------------- |
-| `agentId`   | UUID   | yes      | The calling agent's UUID                                                    |
-| `companyId` | UUID   | yes      | The company UUID                                                            |
+| Parameter   | Type   | Required | Description                                                                                                                          |
+| ----------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `agentId`   | UUID   | yes      | The calling agent's UUID                                                                                                             |
+| `companyId` | UUID   | yes      | The company UUID                                                                                                                     |
 | `roleId`    | UUID   | yes      | The id of the role to consult (from `list_available_roles`) — role names aren't unique within a company, so the id is the lookup key |
-| `question`  | string | yes      | The question to pose to the consulting agent                                |
-| `context`   | string | no       | Optional context for the consultation                                       |
-| `roleName`  | string | no       | Optional human-readable label, used only for friendlier logging              |
+| `question`  | string | yes      | The question to pose to the consulting agent                                                                                         |
+| `context`   | string | no       | Optional context for the consultation                                                                                                |
+| `roleName`  | string | no       | Optional human-readable label, used only for friendlier logging                                                                      |
 
 **Returns:** A confirmation message containing the consultation ID and the resolved role name.
 

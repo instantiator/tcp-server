@@ -51,7 +51,12 @@ describe('PauseAndResumeService', () => {
   let roleRepo: ReturnType<typeof makeRepo<LcpRole>>;
   let consultRepo: ReturnType<typeof makeRepo<PendingConsultation>>;
   let convService: { create: jest.Mock };
-  let orchestration: { startAgent: jest.Mock; createAgent: jest.Mock; dispatchStartJob: jest.Mock; resumeAgent: jest.Mock };
+  let orchestration: {
+    startAgent: jest.Mock;
+    createAgent: jest.Mock;
+    dispatchStartJob: jest.Mock;
+    resumeAgent: jest.Mock;
+  };
   let service: PauseAndResumeService;
 
   beforeEach(() => {
