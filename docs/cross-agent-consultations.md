@@ -60,7 +60,7 @@ The resume message renders failed consultations as:
 
 > `Consultation FAILED: <reason>. Use your own judgement about how to proceed; if a response is essential, consider escalating to a user via request_user_input.`
 
-The calling agent decides what to do — retry with a different role, continue without the answer, or escalate to a human. An agent that merely *declines* to answer is not a failure: it says so via `complete_task` and the refusal flows back as a normal consultation response.
+The calling agent decides what to do — retry with a different role, continue without the answer, or escalate to a human. An agent that merely _declines_ to answer is not a failure: it says so via `complete_task` and the refusal flows back as a normal consultation response.
 
 ### Sequence diagram
 
@@ -107,10 +107,10 @@ If an agent only ever raises one request before pausing — the common case toda
 
 ## Data model
 
-| Entity                | Key fields                                                                                  |
-| --------------------- | ------------------------------------------------------------------------------------------- |
+| Entity                | Key fields                                                                                                                        |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `PendingConsultation` | `id`, `callingAgentId`, `consultationAgentId`, `companyId`, `status` (`pending` \| `complete` \| `failed`), `result`, `createdAt` |
-| `LcpAgent`            | (relevant fields) `id`, `status`, `pausedAt`, `requiredToolCalls`                           |
+| `LcpAgent`            | (relevant fields) `id`, `status`, `pausedAt`, `requiredToolCalls`                                                                 |
 
 ---
 
