@@ -26,11 +26,6 @@ export interface LlmConfig {
    */
   apiKey?: string;
 
-  /**
-   * Maximum context window for this model in tokens.
-   * Used by {@link ContextBudgetService} to determine when compaction is needed.
-   * Defaults to {@link DEFAULT_LLM_CONTEXT_WINDOW} when absent.
-   */
   contextWindow?: number;
 
   /**

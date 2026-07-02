@@ -1,7 +1,10 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
-import type { TextContent, Tool } from '@modelcontextprotocol/sdk/types.js';
+import {
+  CallToolResultSchema,
+  type TextContent,
+  type Tool,
+} from '@modelcontextprotocol/sdk/types.js';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { Injectable, Logger } from '@nestjs/common';
 import { z } from 'zod';

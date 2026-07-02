@@ -159,9 +159,6 @@ export class InteractionsToolsService {
         userIds,
       }): Promise<ToolResult> => {
         try {
-          // Ask lcp-server to pause this agent and create the Conversation —
-          // it creates the record, sets the agent to Paused, and routes the
-          // question to userIds (if given) or the auto-routing heuristic.
           const res = await axios.post<{ slug: string }>(
             `${this.serverUrl}/internal/pause`,
             {

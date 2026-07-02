@@ -119,7 +119,6 @@ export class PauseAndResumeService {
       pausedAt: new Date(),
     });
 
-    // Build the consulting agent's prompt and dispatch it.
     const callingRole = await this.roleRepo.findOneBy({
       id: callingAgent.roleId,
     });

@@ -7,6 +7,7 @@ Day-to-day guides for running and maintaining the system.
 | Document                                     | Description                                                        |
 | -------------------------------------------- | ------------------------------------------------------------------ |
 | 📄 [lcp-agent](lcp-agent.md)                 | Creating roles, starting agents, model compatibility check         |
+| 📄 [Development](development.md)             | Tech stack, source layout, everyday commands, and key conventions  |
 | 📄 [Setup Checklist](setup-checklist.md)     | Step-by-step first-time setup from clone to running tests          |
 | 📄 [Scripts](scripts.md)                     | All scripts in `scripts/` — purpose, options, and usage examples   |
 | 📄 [Testing](testing.md)                     | Testing strategy, four-tier overview, and how to run each suite    |

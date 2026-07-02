@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Pre-commit hook: runs the dev-environment fast quality gate
+# (format check, lint, typecheck, shellcheck).
+# Install: npm run hooks:install
+# Bypass: git commit --no-verify
+set -euo pipefail
+
+TOP="$(git rev-parse --show-toplevel)"
+exec bash "$TOP/dev-environment/scripts/check.sh" --fast --project "$TOP"

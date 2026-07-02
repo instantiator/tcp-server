@@ -19,8 +19,10 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { UUID } from 'crypto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import type { DocumentSummary } from './role-document.service';
-import { RoleDocumentService } from './role-document.service';
+import {
+  RoleDocumentService,
+  type DocumentSummary,
+} from './role-document.service';
 
 /** Subset of the multer file object relevant to document upload. */
 interface UploadedFileBuffer {

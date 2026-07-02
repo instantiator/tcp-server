@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-
 usage() {
   cat <<EOF
 Usage: $(basename "$0") --project <name> --env-file <path> [--rebuild] [-h|--help]
@@ -57,7 +55,10 @@ done
 [[ -f "$ENV_FILE" ]] || { echo "ERROR: env file not found: $ENV_FILE" >&2; exit 1; }
 
 echo "Using: $ENV_FILE"
-set -a; source "$ENV_FILE"; set +a
+set -a
+# shellcheck disable=SC1090 # env file path is only known at runtime
+source "$ENV_FILE"
+set +a
 
 # Pre-flight: verify all required variables are non-empty.
 REQUIRED_VARS=(

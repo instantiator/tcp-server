@@ -45,7 +45,10 @@ fi
 [[ -f "$ENV_FILE" ]] || { echo "ERROR: env file not found: $ENV_FILE" >&2; exit 1; }
 
 # Export all vars from the env file into this process and the node child.
-set -a; source "$ENV_FILE"; set +a
+set -a
+# shellcheck disable=SC1090 # env file path is only known at runtime
+source "$ENV_FILE"
+set +a
 
 # When an explicit env file was provided, sync the running Docker containers so
 # the server picks up any new vars (e.g. LLM_*) without a manual restart.

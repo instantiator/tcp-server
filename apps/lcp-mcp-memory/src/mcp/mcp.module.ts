@@ -1,7 +1,11 @@
-import { EmbeddingService, EpisodicMemory, LcpCompany } from '@lcp/shared';
+import {
+  EmbeddingService,
+  EpisodicMemory,
+  LcpCompany,
+  AuditClientService,
+} from '@lcp/shared';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { AuditClientService } from '@lcp/shared';
 import { McpController } from './mcp.controller';
 import { MemoryToolsService } from './memory-tools.service';
 

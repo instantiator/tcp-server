@@ -45,10 +45,12 @@ fi
 
 # Export all vars from .env.testing into the shell so docker compose and npm
 # both pick up POSTGRES_PASSWORD, MINIO_ACCESS_KEY, etc.
-set -a; source "$ENV_FILE"; set +a
+set -a
+# shellcheck disable=SC1090 # env file path is only known at runtime
+source "$ENV_FILE"
+set +a
 
 DC="docker compose -p lcp-integration --env-file $ENV_FILE"
-DC_DEV="docker compose -p lcp-dev"
 
 wait_for() {
   local name="$1" cmd="$2" max="${3:-60}"
@@ -94,6 +96,7 @@ restore_dev_agent() {
     docker start lcp-dev-lcp-agent-1 2>/dev/null || true
   fi
 }
+# shellcheck disable=SC2154 # rc is assigned inside the trap string itself
 trap 'rc=$?; restore_dev_agent; exit $rc' EXIT
 
 if $INFRA_ALREADY_UP; then

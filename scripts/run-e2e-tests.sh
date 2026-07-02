@@ -43,7 +43,10 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
-set -a; source "$ENV_FILE"; set +a
+set -a
+# shellcheck disable=SC1090 # env file path is only known at runtime
+source "$ENV_FILE"
+set +a
 
 DC="docker compose -p lcp-e2e --env-file $ENV_FILE"
 
@@ -74,6 +77,7 @@ cleanup() {
     $DC down
   fi
 }
+# shellcheck disable=SC2154 # rc is assigned inside the trap string itself
 trap 'rc=$?; cleanup; exit $rc' EXIT
 
 if [ "$INFRA_ALREADY_UP" = false ]; then

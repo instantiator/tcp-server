@@ -55,8 +55,8 @@ async function callTool(
   args: Record<string, unknown>,
 ): Promise<string> {
   const server = service.createServer();
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-  const tools = (server as any)._registeredTools as Record<
+  const tools = (server as unknown as { _registeredTools: unknown })
+    ._registeredTools as Record<
     string,
     {
       handler: (

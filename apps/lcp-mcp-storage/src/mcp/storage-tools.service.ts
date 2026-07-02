@@ -1,4 +1,4 @@
-import { AuditEventType } from '@lcp/shared';
+import { AuditEventType, AuditClientService } from '@lcp/shared';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -12,7 +12,6 @@ import {
 } from '@aws-sdk/client-s3';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { AuditClientService } from '@lcp/shared';
 import { storagePrompts } from '../storage-prompts';
 import { storageToolDescriptions } from '../storage-tool-descriptions';
 
@@ -44,7 +43,6 @@ const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 /** Prefix under which soft-deleted files are stored. */
 const DELETED_PREFIX = '_deleted/';
 
-/** Extension → content-type map used by get_file_summary. */
 const MIME_MAP: Record<string, string> = {
   '.json': 'application/json',
   '.jsonc': 'application/json',
@@ -364,10 +362,6 @@ export class StorageToolsService {
     return null;
   }
 
-  /**
-   * Checks which of the provided paths do not exist in storage.
-   * Used by the HTTP file-existence endpoint called by lcp-mcp-interactions.
-   */
   async checkMissingFiles(paths: string[]): Promise<string[]> {
     const results = await Promise.all(
       paths.map(async (p) => ({ path: p, exists: await this.objectExists(p) })),
