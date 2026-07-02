@@ -307,6 +307,7 @@ describe('PauseAndResumeService', () => {
         expect.objectContaining({
           companyId: caller.companyId,
           roleId: consultRole.id,
+          requiredToolCalls: ['complete_task'],
         }),
       );
       expect(consultRepo.save).toHaveBeenCalled();
@@ -393,6 +394,98 @@ describe('PauseAndResumeService', () => {
 
       await service.completeAgent(consultAgent.id, 'result');
 
+      expect(orchestration.resumeAgent).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('failAgent', () => {
+    it('is a no-op when agent does not exist', async () => {
+      agentRepo.findOneBy.mockResolvedValue(null);
+      await expect(
+        service.failAgent(randomUUID(), 'boom'),
+      ).resolves.not.toThrow();
+      expect(agentRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('does not overwrite a Completed agent but still checks for a consultation', async () => {
+      const agent = makeAgent({ status: AgentStatus.Completed });
+      agentRepo.findOneBy.mockResolvedValue(agent);
+      consultRepo.findOne.mockResolvedValue(null);
+
+      await service.failAgent(agent.id, 'late failure');
+
+      expect(agentRepo.update).not.toHaveBeenCalled();
+      expect(consultRepo.findOne).toHaveBeenCalled();
+    });
+
+    it('sets status to Failed and returns when no consultation is pending', async () => {
+      const agent = makeAgent({ status: AgentStatus.Running });
+      agentRepo.findOneBy.mockResolvedValue(agent);
+      consultRepo.findOne.mockResolvedValue(null);
+
+      await service.failAgent(agent.id, 'LLM exploded');
+
+      expect(agentRepo.update).toHaveBeenCalledWith(agent.id, {
+        status: AgentStatus.Failed,
+      });
+      expect(consultRepo.update).not.toHaveBeenCalled();
+      expect(orchestration.resumeAgent).not.toHaveBeenCalled();
+    });
+
+    it('marks the consultation failed with the reason and resumes the calling agent', async () => {
+      const consultAgent = makeAgent({ status: AgentStatus.Running });
+      const callingAgent = makeAgent({ status: AgentStatus.Paused });
+      const consultation = {
+        id: randomUUID(),
+        callingAgentId: callingAgent.id,
+        consultationAgentId: consultAgent.id,
+        companyId: callingAgent.companyId,
+        status: 'pending',
+        result: null,
+        createdAt: new Date(),
+      } as PendingConsultation;
+
+      agentRepo.findOneBy
+        .mockResolvedValueOnce(consultAgent)
+        .mockResolvedValueOnce(callingAgent);
+      consultRepo.findOne.mockResolvedValue(consultation);
+
+      await service.failAgent(
+        consultAgent.id,
+        'no complete_task after retries',
+      );
+
+      expect(consultRepo.update).toHaveBeenCalledWith(consultation.id, {
+        status: 'failed',
+        result: 'no complete_task after retries',
+      });
+      expect(orchestration.resumeAgent).toHaveBeenCalledWith(callingAgent.id);
+    });
+
+    it('does not resume the calling agent when it is not Paused', async () => {
+      const consultAgent = makeAgent({ status: AgentStatus.Running });
+      const callingAgent = makeAgent({ status: AgentStatus.Completed });
+      const consultation = {
+        id: randomUUID(),
+        callingAgentId: callingAgent.id,
+        consultationAgentId: consultAgent.id,
+        companyId: callingAgent.companyId,
+        status: 'pending',
+        result: null,
+        createdAt: new Date(),
+      } as PendingConsultation;
+
+      agentRepo.findOneBy
+        .mockResolvedValueOnce(consultAgent)
+        .mockResolvedValueOnce(callingAgent);
+      consultRepo.findOne.mockResolvedValue(consultation);
+
+      await service.failAgent(consultAgent.id, 'boom');
+
+      expect(consultRepo.update).toHaveBeenCalledWith(consultation.id, {
+        status: 'failed',
+        result: 'boom',
+      });
       expect(orchestration.resumeAgent).not.toHaveBeenCalled();
     });
   });

@@ -10,6 +10,7 @@ describe('InternalController', () => {
     pauseForUserInput: jest.Mock;
     pauseForConsultation: jest.Mock;
     completeAgent: jest.Mock;
+    failAgent: jest.Mock;
     updateStorageChanges: jest.Mock;
   };
   let agentRepo: { findOneBy: jest.Mock };
@@ -22,6 +23,7 @@ describe('InternalController', () => {
       pauseForUserInput: jest.fn(),
       pauseForConsultation: jest.fn(),
       completeAgent: jest.fn().mockResolvedValue(undefined),
+      failAgent: jest.fn().mockResolvedValue(undefined),
       updateStorageChanges: jest.fn().mockResolvedValue(undefined),
     };
     agentRepo = { findOneBy: jest.fn() };
@@ -121,6 +123,21 @@ describe('InternalController', () => {
       expect(pauseResume.completeAgent).toHaveBeenCalledWith(
         agentId,
         'My final answer.',
+      );
+    });
+  });
+
+  describe('fail', () => {
+    it('delegates to failAgent with the reason', async () => {
+      const agentId = randomUUID();
+
+      await controller.fail(agentId, {
+        reason: 'Agent ended without calling complete_task',
+      });
+
+      expect(pauseResume.failAgent).toHaveBeenCalledWith(
+        agentId,
+        'Agent ended without calling complete_task',
       );
     });
   });

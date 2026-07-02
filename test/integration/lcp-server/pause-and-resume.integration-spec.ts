@@ -1,6 +1,7 @@
 import { DataSource } from 'typeorm';
 import { AddAgentOutputAndConsultation1782247400000 } from '../../../apps/lcp-server/src/migrations/1782247400000-AddAgentOutputAndConsultation';
 import { AddAgentPausedAt1782831650682 } from '../../../apps/lcp-server/src/migrations/1782831650682-AddAgentPausedAt';
+import { AddAgentRequiredToolCalls1783007161076 } from '../../../apps/lcp-server/src/migrations/1783007161076-AddAgentRequiredToolCalls';
 
 // Requires DATABASE_URL pointing to a running PostgreSQL instance.
 // Run via: ./scripts/run-integration-tests.sh
@@ -42,6 +43,7 @@ describe('Pause-and-resume schema (migration verification)', () => {
     try {
       await new AddAgentOutputAndConsultation1782247400000().up(runner);
       await new AddAgentPausedAt1782831650682().up(runner);
+      await new AddAgentRequiredToolCalls1783007161076().up(runner);
     } finally {
       await runner.release();
     }
@@ -113,6 +115,19 @@ describe('Pause-and-resume schema (migration verification)', () => {
       WHERE table_name = 'pending_consultation' AND column_name = 'status'
     `);
     expect(rows[0].column_default).toContain('pending');
+  });
+
+  it('lcp_agent has a nullable requiredToolCalls column of type text', async () => {
+    if (skip) return console.log('Skipping — no postgres DATABASE_URL');
+
+    const rows = await ds.query<{ data_type: string; is_nullable: string }[]>(`
+      SELECT data_type, is_nullable
+      FROM information_schema.columns
+      WHERE table_name = 'lcp_agent' AND column_name = 'requiredToolCalls'
+    `);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].data_type).toBe('text');
+    expect(rows[0].is_nullable).toBe('YES');
   });
 
   it('lcp_agent has a nullable pausedAt column', async () => {

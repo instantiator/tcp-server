@@ -12,6 +12,7 @@ import {
   AuditEventType,
   DEFAULT_AGENT_ITERATIONS,
   DEFAULT_AGENT_LOOP_TIMEOUT_MS,
+  DEFAULT_REQUIRED_TOOL_RETRIES,
   LcpAgent,
   LlmConfig,
   buildAgentGraph,
@@ -35,6 +36,7 @@ import { StorageTrackingClientService } from '../storage-tracking/storage-tracki
 import {
   AgentLoopTracker,
   applyStorageResult,
+  baseToolName,
   createTracker,
   generateActionString,
 } from './loop-tracker';
@@ -110,10 +112,10 @@ export class AgentLoopService {
       resolveEnvLlmConfig(this.config);
 
     if (!llmConfig) {
-      this.logger.error(
-        `No LLM config for agent ${agentId}: role has no llmConfig, company has no llmDefault, and no LLM env fallback is configured`,
+      await this.failRun(
+        agent,
+        'No LLM config: role has no llmConfig, company has no llmDefault, and no LLM env fallback is configured',
       );
-      await this.updateStatus(agent, AgentStatus.Failed);
       return;
     }
 
@@ -154,6 +156,12 @@ export class AgentLoopService {
         maxIterations,
         replyContent,
       );
+    } catch (err) {
+      // runLoop handles its own errors; this covers checkpointer.setup() and
+      // anything else escaping, which would otherwise leave the agent stuck
+      // Running (and any pending consultation unresolved forever).
+      const msg = err instanceof Error ? err.message : String(err);
+      await this.failRun(agent, msg);
     } finally {
       clearTimeout(timeoutId);
       await checkpointer.end();
@@ -226,9 +234,10 @@ export class AgentLoopService {
       );
 
       if (abortController.signal.aborted) {
-        const reason = String(abortController.signal.reason ?? 'unknown');
-        this.recordStateChange(agent, 'failed', reason);
-        await this.updateStatus(agent, AgentStatus.Failed);
+        await this.failRun(
+          agent,
+          String(abortController.signal.reason ?? 'unknown'),
+        );
         return;
       }
 
@@ -246,6 +255,26 @@ export class AgentLoopService {
         );
         await this.generateAndRecordCompletionSummary(agent, model, tracker);
         await this.publishCompletion(agent.id, freshAgent.output ?? '');
+        return;
+      }
+
+      // The stream ended without the agent reaching a terminal status. Agents
+      // with required tool calls (default: complete_task) are reminded and
+      // re-streamed instead of falling back to narrated text — a narrated
+      // "completion" would never resolve a pending consultation.
+      const requiredTools = this.resolveRequiredTools(agent, langchainTools);
+      if (requiredTools.length > 0) {
+        await this.enforceRequiredTools(
+          graph,
+          config,
+          agent,
+          abortController,
+          tracker,
+          maxIterations,
+          model,
+          requiredTools,
+          langchainTools,
+        );
         return;
       }
 
@@ -270,15 +299,7 @@ export class AgentLoopService {
       }
 
       if (!content) {
-        this.logger.error(
-          `Agent ${agent.id} produced empty output after retry — failing run`,
-        );
-        this.recordStateChange(
-          agent,
-          'failed',
-          'LLM produced no output after retry',
-        );
-        await this.updateStatus(agent, AgentStatus.Failed);
+        await this.failRun(agent, 'LLM produced no output after retry');
         return;
       }
 
@@ -292,8 +313,7 @@ export class AgentLoopService {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`Agent ${agent.id} loop error: ${msg}`);
-      this.recordStateChange(agent, 'failed', msg);
-      await this.updateStatus(agent, AgentStatus.Failed);
+      await this.failRun(agent, msg);
     }
   }
 
@@ -359,6 +379,7 @@ export class AgentLoopService {
             ?.input ?? {};
         pendingToolInputs.set(event.run_id, input_);
         tracker.actions.push(generateActionString(event.name, input_));
+        tracker.firedTools.add(baseToolName(event.name));
       }
 
       if (event.event === 'on_tool_end') {
@@ -384,6 +405,134 @@ export class AgentLoopService {
     }
 
     return lastAiMessage;
+  }
+
+  /**
+   * Resolves the tool calls this agent must make before its run may end.
+   * Null on the agent means the default (`complete_task`); an empty array
+   * opts out. Required tools missing from the loaded toolset are dropped
+   * with a warning — a role without the relevant MCP server must not fail
+   * every run inevitably.
+   */
+  private resolveRequiredTools(
+    agent: LcpAgent,
+    tools: { name: string }[],
+  ): string[] {
+    const required = agent.requiredToolCalls ?? ['complete_task'];
+    const available = new Set(tools.map((t) => baseToolName(t.name)));
+    return required.filter((toolName) => {
+      if (available.has(toolName)) return true;
+      this.logger.warn(
+        `Agent ${agent.id} requires tool '${toolName}' but it is not in the loaded toolset — skipping enforcement for it`,
+      );
+      return false;
+    });
+  }
+
+  /**
+   * Reminds the agent to make its outstanding required tool calls, re-running
+   * the stream up to `AGENT_REQUIRED_TOOL_RETRIES` times. Each round re-reads
+   * the agent status: Completed takes the normal summary/publish path, Paused
+   * exits cleanly. If the retries are exhausted the run is failed — narrated
+   * text is never accepted in place of the required calls.
+   */
+  private async enforceRequiredTools(
+    graph: ReturnType<typeof buildAgentGraph>,
+    config: { configurable: { thread_id: string }; signal: AbortSignal },
+    agent: LcpAgent,
+    abortController: AbortController,
+    tracker: AgentLoopTracker,
+    maxIterations: number,
+    model: ReturnType<typeof buildChatModel>,
+    requiredTools: string[],
+    tools: { name: string }[],
+  ): Promise<void> {
+    const retries =
+      this.config.get<number>('AGENT_REQUIRED_TOOL_RETRIES') ??
+      DEFAULT_REQUIRED_TOOL_RETRIES;
+
+    // Name tools in reminders exactly as the LLM sees them (server-prefixed).
+    const callableName = (base: string): string =>
+      tools.find((t) => baseToolName(t.name) === base)?.name ?? base;
+
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      // Distinguish "never called" from "called but the call did not succeed"
+      // (the tool fired yet the status never flipped, e.g. complete_task errored).
+      const missing = requiredTools.filter((t) => !tracker.firedTools.has(t));
+      const nudge = missing.length
+        ? renderTemplate(agentPrompts.required_tools_reminder, {
+            tools: missing.map(callableName).join(', '),
+          })
+        : renderTemplate(agentPrompts.required_tools_call_failed, {
+            tools: requiredTools.map(callableName).join(', '),
+          });
+      this.logger.warn(
+        `Agent ${agent.id} ended without required tool call(s) [${requiredTools.join(', ')}] — reminder ${attempt}/${retries}`,
+      );
+
+      await this.streamAndAudit(
+        graph,
+        { messages: [new HumanMessage(nudge)] },
+        config,
+        agent,
+        abortController,
+        tracker,
+        maxIterations,
+      );
+
+      if (abortController.signal.aborted) {
+        await this.failRun(
+          agent,
+          String(abortController.signal.reason ?? 'unknown'),
+        );
+        return;
+      }
+
+      const fresh = await this.agentRepo.findOneBy({ id: agent.id });
+      if (fresh?.status === AgentStatus.Paused) {
+        this.logger.log(
+          `Agent ${agent.id} paused during required-tool reminder — exiting`,
+        );
+        return;
+      }
+      if (fresh?.status === AgentStatus.Completed) {
+        this.logger.log(
+          `Agent ${agent.id} completed after required-tool reminder ${attempt}`,
+        );
+        await this.generateAndRecordCompletionSummary(agent, model, tracker);
+        await this.publishCompletion(agent.id, fresh.output ?? '');
+        return;
+      }
+    }
+
+    await this.failRun(
+      agent,
+      `Agent ended without successfully calling required tool(s): ${requiredTools.join(', ')} after ${retries} reminder(s)`,
+    );
+  }
+
+  /**
+   * Marks the run as failed: records the state change, sets the agent status,
+   * notifies lcp-server (which resolves any pending consultation as failed and
+   * resumes the calling agent), and publishes the empty-string failure
+   * sentinel so any HTTP handler waiting on this agent returns promptly.
+   *
+   * No-op if the agent has already reached Completed — `complete_task` may
+   * have won the race against a late failure (e.g. a summary error).
+   */
+  private async failRun(agent: LcpAgent, reason: string): Promise<void> {
+    const fresh = await this.agentRepo.findOneBy({ id: agent.id });
+    if (fresh?.status === AgentStatus.Completed) {
+      this.logger.warn(
+        `Agent ${agent.id} already completed — ignoring failure: ${reason}`,
+      );
+      return;
+    }
+    this.logger.error(`Agent ${agent.id} run failed: ${reason}`);
+    this.recordStateChange(agent, 'failed', reason);
+    await this.updateStatus(agent, AgentStatus.Failed);
+    this.auditClient.notifyFailed(agent.id, reason);
+    await this.publishCompletion(agent.id, '');
   }
 
   /** Builds the full initial-state message list for the first run of an agent. */

@@ -1,6 +1,7 @@
 import {
   AgentLoopTracker,
   applyStorageResult,
+  baseToolName,
   createTracker,
   generateActionString,
 } from './loop-tracker';
@@ -13,6 +14,21 @@ describe('createTracker', () => {
     expect(t.storage.modified).toEqual([]);
     expect(t.storage.deleted).toEqual([]);
     expect(t.storage.moved).toEqual([]);
+    expect(t.firedTools.size).toBe(0);
+  });
+});
+
+describe('baseToolName', () => {
+  it('strips the server prefix', () => {
+    expect(baseToolName('interactions__complete_task')).toBe('complete_task');
+  });
+
+  it('preserves later double underscores', () => {
+    expect(baseToolName('server__oddly__named')).toBe('oddly__named');
+  });
+
+  it('returns unprefixed names unchanged', () => {
+    expect(baseToolName('complete_task')).toBe('complete_task');
   });
 });
 

@@ -15,7 +15,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Queue } from 'bullmq';
 import { UUID } from 'crypto';
-import { MoreThanOrEqual, Repository } from 'typeorm';
+import { In, MoreThanOrEqual, Repository } from 'typeorm';
 import { DbService } from '../db/db.service';
 import { LcpAgentTemplate } from '../templates/LcpAgentTemplate';
 
@@ -181,7 +181,7 @@ export class AgentOrchestrationService
       this.consultRepo.find({
         where: {
           callingAgentId: agentId,
-          status: 'complete',
+          status: In(['complete', 'failed']),
           createdAt: MoreThanOrEqual(pausedAt),
         },
       }),
@@ -206,8 +206,16 @@ export class AgentOrchestrationService
 
     const parts = [
       ...consultations
-        .filter((c) => c.result)
+        .filter((c) => c.status === 'complete' && c.result)
         .map((c) => `Consultation response: ${c.result}`),
+      ...consultations
+        .filter((c) => c.status === 'failed')
+        .map(
+          (c) =>
+            `Consultation FAILED: ${c.result ?? 'no reason given'}. ` +
+            'Use your own judgement about how to proceed; if a response is ' +
+            'essential, consider escalating to a user via request_user_input.',
+        ),
       ...conversationReplies
         .filter((content): content is string => Boolean(content))
         .map((content) => `User response: ${content}`),

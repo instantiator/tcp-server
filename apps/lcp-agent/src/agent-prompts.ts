@@ -14,6 +14,10 @@ export interface AgentPrompts {
   services_item: string;
   /** Bullet template for a server with no known {@link MCP_REGISTRY} usage text; `{{name}}` is substituted (prompt part 3). */
   services_item_unknown: string;
+  /** Reminder when required tool(s) were never invoked; `{{tools}}` is substituted. */
+  required_tools_reminder: string;
+  /** Reminder when required tool(s) were invoked but the call failed; `{{tools}}` is substituted. */
+  required_tools_call_failed: string;
   /** Introductory sentence before RAG excerpts (prompt part 5). */
   rag_intro: string;
   /** Per-chunk heading template; `{{documentPath}}` is replaced with the source path (prompt part 5). */

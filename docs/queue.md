@@ -39,9 +39,9 @@ sequenceDiagram
     Q->>A: deliver job
     A->>A: AgentLoopService.run()
     Note over A: LangGraph runs to completion
-    A->>A: complete_task called (or fallback completion)
-    A->>S: POST /internal/agent/:id/complete
-    S->>S: store output, mark Completed
+    A->>A: complete_task called (required; reminded if missed)
+    A->>S: POST /internal/agent/:id/complete (or /fail)
+    S->>S: store output, mark Completed (or Failed)
     A-->>Q: job done
 ```
 

@@ -19,6 +19,14 @@
   // {{name}} is substituted.
   "services_item_unknown": "- **{{name}}**: call `{{name}}__describe_server` for a full tool list and usage guide",
 
+  // Reminder sent when the stream ends without the agent having invoked its required
+  // tool call(s) at all. {{tools}} is the comma-separated list of callable tool names.
+  "required_tools_reminder": "Your task is NOT complete. You have not called the required tool(s): {{tools}}. Writing out or describing a tool call is not sufficient — you must actually invoke the tool. Do so now: finish any remaining work, then call {{tools}} as your final action.",
+
+  // Reminder sent when the required tool(s) were invoked but the call did not succeed
+  // (the task was never marked complete). {{tools}} is the comma-separated list of callable tool names.
+  "required_tools_call_failed": "Your task is NOT complete: your call to {{tools}} did not succeed. Review the tool error message above, fix the problem it describes, and call {{tools}} again now.",
+
   // Introductory sentence for prompt part 5 (RAG knowledge-base excerpts).
   "rag_intro": "The following excerpts from your knowledge base are relevant to your current task. Draw on them as needed:",
 

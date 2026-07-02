@@ -130,6 +130,7 @@ Pauses the current agent and dispatches a consultation job to another agent role
 
 1. `POST /internal/pause` on lcp-server — looks up the role by `roleId` (scoped to `companyId`), creates a `PendingConsultation` record, sets the calling agent to `paused`, starts a new agent job for the target role with a supplementary context prompt: `"This is a consultation from {callingRoleName}. Give a complete, concise answer in a single response."`
 2. When the consulting agent calls `complete_task`, lcp-server attempts to resume the calling agent with the consultation result — see [Resume conditions](cross-agent-consultations.md#resume-conditions)
+3. Consulting agents are created with `requiredToolCalls: ['complete_task']`. If the consultation fails (error, timeout, or the required call never fires despite reminders), the calling agent is resumed with a `Consultation FAILED: <reason>` message instead of staying paused — see [Consultation failure](cross-agent-consultations.md#consultation-failure)
 
 ---
 
@@ -154,7 +155,7 @@ Marks the current agent task as complete and stores a final answer summary. Agen
 2. On success: `POST /internal/agent/:agentId/complete` — sets `LcpAgent.status = completed` and stores `finalAnswer` as `LcpAgent.output`. For consultation agents, also triggers the calling agent's resume.
 3. Records an `agent_loop_completion` audit event with a prose summary, the ordered action log, and storage changes (created, modified, deleted, moved files).
 
-**Completion enforcement:** If the agent loop exits without having called `complete_task` and iterations remain, lcp-agent injects one final HumanMessage instructing the agent to call `complete_task`. If still not called, lcp-agent sets the status to `completed` with the last AI message as the output, and logs a warning.
+**Completion enforcement:** `LcpAgent.requiredToolCalls` (null → default `['complete_task']`, `[]` opts out) lists the tools an agent must invoke before its loop may end. If the stream ends without them, lcp-agent injects a reminder HumanMessage and re-streams, up to `AGENT_REQUIRED_TOOL_RETRIES` times (default 2). If the calls still haven't succeeded, the run is failed and the failure propagates via `POST /internal/agent/:agentId/fail` (resolving any pending consultation as `failed` and resuming the caller). Narrated text is never accepted in place of a required call; agents with `requiredToolCalls: []` keep the legacy fallback where the last AI message becomes the output.
 
 ---
 

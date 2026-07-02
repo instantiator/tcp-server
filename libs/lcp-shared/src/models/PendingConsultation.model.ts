@@ -9,7 +9,7 @@ import {
 import { VersionedEntity } from './VersionedEntity';
 
 /** Lifecycle states for an inter-agent consultation. */
-export type ConsultationStatus = 'pending' | 'complete';
+export type ConsultationStatus = 'pending' | 'complete' | 'failed';
 
 /**
  * Tracks a paused agent waiting for another agent's consultation response.

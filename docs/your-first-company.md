@@ -173,3 +173,9 @@ Role: Chicken assistant
 'exit', 'quit', or Ctrl+C to exit.
 >
 ```
+
+#### 1.6.3 Agents that consult each other
+
+If your role's prompt encourages it (like the cat assistant deferring to the chicken assistant on matters of grubs), the agent may pause mid-chat to consult another role via `request_agent_consultation`. The chat waits while the consulted agent works, and your agent's eventual reply incorporates the consultation result.
+
+If the consultation fails — the consulted agent errors, times out, or never signals completion despite reminders — the failure is reported back to your agent, which explains what happened or escalates to a user query instead of leaving the chat hanging. See [cross-agent-consultations.md](cross-agent-consultations.md) for the full flow.

@@ -139,6 +139,9 @@ export class PauseAndResumeService {
       companyId,
       roleId: role.id,
       initialPrompt,
+      // Consultation results are only delivered via complete_task — a narrated
+      // answer would never resolve the PendingConsultation, so enforce the call.
+      requiredToolCalls: ['complete_task'],
     });
 
     // Record the link between the paused caller and the new consulting agent.
@@ -212,6 +215,56 @@ export class PauseAndResumeService {
       .then(() =>
         this.logger.log(
           `Resumed calling agent ${consultation.callingAgentId} with consultation result`,
+        ),
+      )
+      .catch((err: unknown) =>
+        this.logger.error(
+          `Failed to resume calling agent ${consultation.callingAgentId}: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+  }
+
+  /**
+   * Marks an agent run as {@link AgentStatus.Failed} with the given reason.
+   * If the agent was performing a consultation, resolves the pending record as
+   * `failed` (storing the reason as its result) and re-enqueues the calling
+   * agent so it can decide how to proceed rather than wait forever.
+   *
+   * Does not overwrite a Completed agent — `complete_task` may have won the
+   * race against the failure notification.
+   */
+  async failAgent(agentId: UUID, reason: string): Promise<void> {
+    const agent = await this.agentRepo.findOneBy({ id: agentId });
+    if (!agent) return;
+
+    if (agent.status !== AgentStatus.Completed) {
+      await this.agentRepo.update(agentId, { status: AgentStatus.Failed });
+      this.logger.warn(`Agent ${agentId} failed: ${reason}`);
+    }
+
+    const consultation = await this.consultRepo.findOne({
+      where: { consultationAgentId: agentId, status: 'pending' },
+    });
+    if (!consultation) return;
+
+    await this.consultRepo.update(consultation.id, {
+      status: 'failed',
+      result: reason,
+    });
+
+    const calling = await this.agentRepo.findOneBy({
+      id: consultation.callingAgentId,
+    });
+    if (calling?.status !== AgentStatus.Paused) return;
+
+    // Same resume contract as completeAgent: the orchestrator aggregates all
+    // responses (including this failure) once nothing else is outstanding.
+    // Fire-and-forget — DB state is already consistent; don't block on Redis.
+    void this.orchestration
+      .resumeAgent(consultation.callingAgentId)
+      .then(() =>
+        this.logger.log(
+          `Resumed calling agent ${consultation.callingAgentId} after consultation failure`,
         ),
       )
       .catch((err: unknown) =>

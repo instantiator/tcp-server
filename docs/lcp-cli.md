@@ -174,6 +174,11 @@ Each chat session creates a new agent record; the agent is deleted when the sess
 If the access token expires mid-session, it is renewed automatically using the refresh token
 (provided via `-T` or obtained from the initial username+password grant).
 
+If the agent consults another role mid-chat and that consultation fails (the consulted
+agent errors, times out, or never calls `complete_task` despite reminders), the failure
+is reported back to your agent, which decides how to proceed — you get a real answer
+(possibly one that explains the failure) instead of the chat hanging until the timeout.
+
 | Flag                | Alias | Description                            |
 | ------------------- | ----- | -------------------------------------- |
 | `--role-id <uuid>`  | `-r`  | **(Required)** Role UUID for the agent |
@@ -325,7 +330,7 @@ Read the full question, context, and reply history for a single query by its slu
 
 ### `respond`
 
-Reply to an open query. Once submitted, the waiting agent is automatically re-enqueued and will resume with your reply injected as a `HumanMessage`.
+Reply to an open query. Once submitted, the waiting agent is automatically re-enqueued and will resume with your reply injected as a `HumanMessage`. (If the agent raised several requests before pausing — e.g. a consultation and a user query — it resumes only once all of them are resolved, and sees every response at once.)
 
 - **stdout**: `{ slug, status }` JSON
 - **stderr**: progress messages (`"Sending response..."`, `"Agent resumed."`)

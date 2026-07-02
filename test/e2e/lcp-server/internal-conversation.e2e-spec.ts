@@ -240,6 +240,8 @@ describe('InternalController + ConversationController (e2e)', () => {
         id: consult.consultationAgentId,
       });
       expect(consultant.roleId).toBe(role.id);
+      // Consultation agents must deliver their answer via complete_task
+      expect(consultant.requiredToolCalls).toEqual(['complete_task']);
     });
 
     it('targets the correct role when two roles in the company share a name (regression)', async () => {
@@ -414,6 +416,111 @@ describe('InternalController + ConversationController (e2e)', () => {
       });
       expect(consult?.status).toBe('complete');
       expect(consult?.result).toBe('Consultation answer.');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /internal/agent/:agentId/fail
+  // ---------------------------------------------------------------------------
+
+  describe('POST /internal/agent/:agentId/fail', () => {
+    it('marks the agent Failed when no consultation is pending', async () => {
+      const company = await createCompany();
+      const role = await createRole(company.id);
+      const agent = await createRunningAgent(company.id, role.id);
+
+      await request(app.getHttpServer())
+        .post(`/internal/agent/${agent.id}/fail`)
+        .set('X-Internal-Api-Key', INTERNAL_KEY)
+        .send({ reason: 'LLM produced no output after retry' })
+        .expect(204);
+
+      const fresh = await agentRepo.findOneByOrFail({ id: agent.id });
+      expect(fresh.status).toBe(AgentStatus.Failed);
+    });
+
+    it('resolves the pending consultation as failed with the reason as its result', async () => {
+      const company = await createCompany();
+      const role = await createRole(company.id);
+
+      const caller = await agentRepo.save(
+        agentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          status: AgentStatus.Paused,
+          initialPrompt: 'Wait for analyst.',
+          output: null,
+        }),
+      );
+      const consultant = await agentRepo.save(
+        agentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          status: AgentStatus.Running,
+          initialPrompt: 'Analyse this.',
+          output: null,
+          requiredToolCalls: ['complete_task'],
+        }),
+      );
+      await consultRepo.save(
+        consultRepo.create({
+          callingAgentId: caller.id,
+          consultationAgentId: consultant.id,
+          companyId: company.id,
+          status: 'pending',
+          result: null,
+        }),
+      );
+
+      await request(app.getHttpServer())
+        .post(`/internal/agent/${consultant.id}/fail`)
+        .set('X-Internal-Api-Key', INTERNAL_KEY)
+        .send({
+          reason:
+            'Agent ended without successfully calling required tool(s): complete_task after 2 reminder(s)',
+        })
+        .expect(204);
+
+      const freshConsultant = await agentRepo.findOneByOrFail({
+        id: consultant.id,
+      });
+      expect(freshConsultant.status).toBe(AgentStatus.Failed);
+
+      const consult = await consultRepo.findOneByOrFail({
+        consultationAgentId: consultant.id,
+      });
+      expect(consult.status).toBe('failed');
+      expect(consult.result).toContain('complete_task');
+    });
+
+    it('does not clobber an already-Completed agent (complete_task won the race)', async () => {
+      const company = await createCompany();
+      const role = await createRole(company.id);
+      const agent = await createRunningAgent(company.id, role.id);
+
+      await request(app.getHttpServer())
+        .post(`/internal/agent/${agent.id}/complete`)
+        .set('X-Internal-Api-Key', INTERNAL_KEY)
+        .send({ output: 'Real answer.' })
+        .expect(204);
+
+      await request(app.getHttpServer())
+        .post(`/internal/agent/${agent.id}/fail`)
+        .set('X-Internal-Api-Key', INTERNAL_KEY)
+        .send({ reason: 'late failure' })
+        .expect(204);
+
+      const fresh = await agentRepo.findOneByOrFail({ id: agent.id });
+      expect(fresh.status).toBe(AgentStatus.Completed);
+      expect(fresh.output).toBe('Real answer.');
+    });
+
+    it('returns 204 without error when the agent does not exist', async () => {
+      await request(app.getHttpServer())
+        .post('/internal/agent/00000000-0000-0000-0000-000000000098/fail')
+        .set('X-Internal-Api-Key', INTERNAL_KEY)
+        .send({ reason: 'ghost failure' })
+        .expect(204);
     });
   });
 

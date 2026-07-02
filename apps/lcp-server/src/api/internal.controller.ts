@@ -18,6 +18,7 @@ import { InternalApiKeyGuard } from '../audit/internal-api-key.guard';
 import { PauseAndResumeService } from './pause-and-resume.service';
 import {
   CompleteDto,
+  FailDto,
   PauseDto,
   UpdateStorageChangesDto,
 } from './dto/internal.dto';
@@ -104,6 +105,23 @@ export class InternalController {
     @Body() body: CompleteDto,
   ): Promise<void> {
     await this.pauseResume.completeAgent(agentId, body.output);
+  }
+
+  /**
+   * Marks an agent run as failed with the given reason.
+   * If the agent was a consultation agent, resolves the pending consultation
+   * as `failed` and re-enqueues the calling agent so it can react to the
+   * failure instead of waiting forever.
+   * Returns 204 No Content.
+   */
+  @ApiOperation({ summary: 'Mark an agent run as failed (internal)' })
+  @Post('agent/:agentId/fail')
+  @HttpCode(204)
+  async fail(
+    @Param('agentId') agentId: UUID,
+    @Body() body: FailDto,
+  ): Promise<void> {
+    await this.pauseResume.failAgent(agentId, body.reason);
   }
 
   /**

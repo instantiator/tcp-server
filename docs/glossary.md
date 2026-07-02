@@ -40,7 +40,7 @@ Informal shorthand for an `LcpAgent` record and its full execution lifecycle —
 A pause/reply thread created when an agent calls `request_user_input`. Has a human-readable **slug** (e.g., `analyst-3`) and routes the question to the appropriate company users. Closed when the user replies, which triggers agent resume.
 
 **Consultation (`PendingConsultation`)**
-A pause record created when a calling agent requests input from a different role via `request_agent_consultation`. Links the calling agent to the consultation agent; resolved when the consultation agent calls `complete_task`.
+A pause record created when a calling agent requests input from a different role via `request_agent_consultation`. Links the calling agent to the consultation agent; resolved as `complete` when the consultation agent calls `complete_task`, or as `failed` (with the failure reason) when its run fails — either way the calling agent resumes.
 
 **Company user (`CompanyUser`)**
 A human user associated with a company. Used for query routing: their `knowledgeDomains` and `roles` fields are matched against questions from agents to determine who receives them.

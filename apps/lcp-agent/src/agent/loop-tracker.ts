@@ -12,6 +12,8 @@ export interface AgentLoopTracker {
   actions: string[];
   /** Files created, modified, deleted, or moved during the run. */
   storage: StorageChanges;
+  /** Base (unprefixed) names of every tool invoked during the run. */
+  firedTools: Set<string>;
 }
 
 /** Creates an empty tracker for a new loop run. */
@@ -19,7 +21,15 @@ export function createTracker(): AgentLoopTracker {
   return {
     actions: [],
     storage: { created: [], modified: [], deleted: [], moved: [] },
+    firedTools: new Set(),
   };
+}
+
+/** Strips the MCP server prefix from a tool name (e.g. `storage__write_file` → `write_file`). */
+export function baseToolName(toolName: string): string {
+  return toolName.includes('__')
+    ? toolName.split('__').slice(1).join('__')
+    : toolName;
 }
 
 /**
@@ -32,10 +42,7 @@ export function generateActionString(
   toolName: string,
   input: Record<string, unknown>,
 ): string {
-  // Strip MCP server prefix (e.g. "storage__write_file" → "write_file")
-  const base = toolName.includes('__')
-    ? toolName.split('__').slice(1).join('__')
-    : toolName;
+  const base = baseToolName(toolName);
 
   const s = (v: unknown): string =>
     typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '';
@@ -120,9 +127,7 @@ export function applyStorageResult(
   output: unknown,
   tracker: AgentLoopTracker,
 ): void {
-  const base = toolName.includes('__')
-    ? toolName.split('__').slice(1).join('__')
-    : toolName;
+  const base = baseToolName(toolName);
 
   if (!STORAGE_MUTATION_TOOLS.has(base)) return;
 

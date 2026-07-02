@@ -208,7 +208,11 @@ describe('AgentOrchestrationService', () => {
       const agent = makeAgent({ status: AgentStatus.Paused, pausedAt });
       mockDb.getAgent.mockResolvedValue(agent);
       consultRepo.find.mockResolvedValue([
-        { id: randomUUID(), result: 'Consultation answer.' },
+        {
+          id: randomUUID(),
+          status: 'complete',
+          result: 'Consultation answer.',
+        },
       ]);
       const conversationId = randomUUID();
       convRepo.find.mockResolvedValue([{ id: conversationId }]);
@@ -226,6 +230,34 @@ describe('AgentOrchestrationService', () => {
         { replyContent: string },
       ];
       expect(payload.replyContent).toContain('User answer.');
+    });
+
+    it('includes failed consultations with a FAILED marker and escalation guidance', async () => {
+      const pausedAt = new Date('2026-06-01T00:00:00Z');
+      const agent = makeAgent({ status: AgentStatus.Paused, pausedAt });
+      mockDb.getAgent.mockResolvedValue(agent);
+      consultRepo.find.mockResolvedValue([
+        { id: randomUUID(), status: 'complete', result: 'All good.' },
+        {
+          id: randomUUID(),
+          status: 'failed',
+          result: 'Agent ended without calling complete_task',
+        },
+      ]);
+
+      await service.resumeAgent(agent.id);
+
+      const [, payload] = mockQueueInstance.add.mock.calls[0] as [
+        string,
+        { replyContent: string },
+      ];
+      expect(payload.replyContent).toContain(
+        'Consultation response: All good.',
+      );
+      expect(payload.replyContent).toContain(
+        'Consultation FAILED: Agent ended without calling complete_task',
+      );
+      expect(payload.replyContent).toContain('request_user_input');
     });
 
     it('clears pausedAt after a successful resume', async () => {

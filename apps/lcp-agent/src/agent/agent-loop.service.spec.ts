@@ -12,6 +12,7 @@ import {
   LcpCompany,
   LcpRole,
   LlmConfig,
+  renderTemplate,
 } from '@lcp/shared';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -122,6 +123,7 @@ describe('AgentLoopService', () => {
   let companyRepo: Repository<LcpCompany>;
   let auditRecord: jest.Mock;
   let notifyComplete: jest.Mock;
+  let notifyFailed: jest.Mock;
   let mcpClient: { loadTools: jest.Mock };
 
   beforeAll(async () => {
@@ -132,6 +134,7 @@ describe('AgentLoopService', () => {
 
     auditRecord = jest.fn();
     notifyComplete = jest.fn();
+    notifyFailed = jest.fn();
 
     const testingModule: TestingModule = await Test.createTestingModule({
       imports: [
@@ -148,7 +151,7 @@ describe('AgentLoopService', () => {
         AgentRegistryService,
         {
           provide: AuditClientService,
-          useValue: { record: auditRecord, notifyComplete },
+          useValue: { record: auditRecord, notifyComplete, notifyFailed },
         },
         {
           provide: StorageTrackingClientService,
@@ -183,6 +186,7 @@ describe('AgentLoopService', () => {
   afterEach(async () => {
     auditRecord.mockClear();
     notifyComplete.mockClear();
+    notifyFailed.mockClear();
     await agentRepo.clear();
     await roleRepo.clear();
     await companyRepo.clear();
@@ -325,6 +329,10 @@ describe('AgentLoopService', () => {
 
     const updated = await agentRepo.findOneByOrFail({ id: agent.id });
     expect(updated.status).toBe(AgentStatus.Failed);
+    expect(notifyFailed).toHaveBeenCalledWith(
+      agent.id,
+      expect.stringContaining('No LLM config'),
+    );
   });
 
   it('deregisters the agent from the registry after the run', async () => {
@@ -355,6 +363,10 @@ describe('AgentLoopService', () => {
 
     const updated = await agentRepo.findOneByOrFail({ id: agent.id });
     expect(updated.status).toBe(AgentStatus.Failed);
+    expect(notifyFailed).toHaveBeenCalledWith(
+      agent.id,
+      'LLM connection refused',
+    );
 
     expect(auditRecord).toHaveBeenCalledWith(
       expect.any(String),
@@ -413,6 +425,10 @@ describe('AgentLoopService', () => {
     const updated = await agentRepo.findOneByOrFail({ id: agent.id });
     expect(updated.status).toBe(AgentStatus.Failed);
     expect(notifyComplete).not.toHaveBeenCalled();
+    expect(notifyFailed).toHaveBeenCalledWith(
+      agent.id,
+      'LLM produced no output after retry',
+    );
   });
 
   it('does nothing when the agent id does not exist', async () => {
@@ -476,6 +492,157 @@ describe('AgentLoopService', () => {
       AuditEventType.StateChange,
       expect.objectContaining({ reason: 'max_iterations' }),
     );
+  });
+
+  describe('required tool call enforcement', () => {
+    const INTERACTIONS_TOOL = {
+      serverName: 'interactions',
+      tool: { name: 'interactions__complete_task' },
+    };
+
+    // Event set where the agent invoked complete_task but the call did not
+    // flip the status (e.g. the tool errored). No on_tool_end, so no status
+    // re-read fires mid-stream.
+    const TOOL_FIRED_EVENTS = [
+      {
+        event: 'on_tool_start',
+        name: 'interactions__complete_task',
+        run_id: 'run-1',
+        data: { input: {} },
+      },
+      ...SUCCESS_EVENTS,
+    ];
+
+    // Installs a StateGraph mock exposing the full builder chain used when
+    // tools are present (addConditionalEdges is only called for tool graphs).
+    function mockToolGraphOnce(graph: { streamEvents: jest.Mock }) {
+      jest.mocked(StateGraph).mockImplementationOnce(
+        () =>
+          ({
+            addNode: jest.fn().mockReturnThis(),
+            addEdge: jest.fn().mockReturnThis(),
+            addConditionalEdges: jest.fn().mockReturnThis(),
+            compile: jest.fn().mockReturnValue(graph),
+          }) as unknown as InstanceType<typeof StateGraph>,
+      );
+    }
+
+    it('reminds the agent and takes the completed path when complete_task fires after the nudge', async () => {
+      mcpClient.loadTools.mockResolvedValueOnce([INTERACTIONS_TOOL]);
+      const graph = makeSequentialStubGraph(SUCCESS_EVENTS, SUCCESS_EVENTS);
+      mockToolGraphOnce(graph);
+
+      const { agent } = await seedAgentAndRole();
+      jest
+        .spyOn(agentRepo, 'findOneBy')
+        // Post-stream re-read: still running — enforcement kicks in
+        .mockResolvedValueOnce({ ...agent, status: AgentStatus.Running })
+        // Re-read after the nudge round: complete_task flipped the status
+        .mockResolvedValueOnce({
+          ...agent,
+          status: AgentStatus.Completed,
+          output: 'The real answer.',
+        });
+
+      await service.run(agent.id);
+
+      expect(graph.streamEvents).toHaveBeenCalledTimes(2);
+      const [nudgeInput] = graph.streamEvents.mock.calls[1] as [
+        { messages: HumanMessage[] },
+      ];
+      expect(nudgeInput.messages[0].content).toBe(
+        renderTemplate(agentPrompts.required_tools_reminder, {
+          tools: 'interactions__complete_task',
+        }),
+      );
+      // Completed via the tool path — no fallback write, no failure
+      expect(notifyComplete).not.toHaveBeenCalled();
+      expect(notifyFailed).not.toHaveBeenCalled();
+      expect(auditRecord).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        agent.id,
+        AuditEventType.AgentLoopCompletion,
+        expect.any(Object),
+      );
+    });
+
+    it('uses the call-failed reminder when the tool fired but the run never completed', async () => {
+      mcpClient.loadTools.mockResolvedValueOnce([INTERACTIONS_TOOL]);
+      const graph = makeSequentialStubGraph(TOOL_FIRED_EVENTS, SUCCESS_EVENTS);
+      mockToolGraphOnce(graph);
+
+      const { agent } = await seedAgentAndRole();
+      jest
+        .spyOn(agentRepo, 'findOneBy')
+        .mockResolvedValueOnce({ ...agent, status: AgentStatus.Running })
+        .mockResolvedValueOnce({
+          ...agent,
+          status: AgentStatus.Completed,
+          output: 'Recovered.',
+        });
+
+      await service.run(agent.id);
+
+      const [nudgeInput] = graph.streamEvents.mock.calls[1] as [
+        { messages: HumanMessage[] },
+      ];
+      expect(nudgeInput.messages[0].content).toBe(
+        renderTemplate(agentPrompts.required_tools_call_failed, {
+          tools: 'interactions__complete_task',
+        }),
+      );
+    });
+
+    it('fails the run and notifies lcp-server after exhausting the reminders', async () => {
+      mcpClient.loadTools.mockResolvedValueOnce([INTERACTIONS_TOOL]);
+      const graph = makeSequentialStubGraph(
+        SUCCESS_EVENTS,
+        SUCCESS_EVENTS,
+        SUCCESS_EVENTS,
+      );
+      mockToolGraphOnce(graph);
+
+      const { agent } = await seedAgentAndRole();
+      jest
+        .spyOn(agentRepo, 'findOneBy')
+        // Post-stream, two post-nudge re-reads, and failRun's completed-guard
+        .mockResolvedValueOnce({ ...agent, status: AgentStatus.Running })
+        .mockResolvedValueOnce({ ...agent, status: AgentStatus.Running })
+        .mockResolvedValueOnce({ ...agent, status: AgentStatus.Running })
+        .mockResolvedValueOnce({ ...agent, status: AgentStatus.Running });
+
+      await service.run(agent.id);
+
+      // Initial stream + 2 reminder rounds (DEFAULT_REQUIRED_TOOL_RETRIES)
+      expect(graph.streamEvents).toHaveBeenCalledTimes(3);
+      expect(notifyFailed).toHaveBeenCalledWith(
+        agent.id,
+        expect.stringContaining('complete_task'),
+      );
+      expect(notifyComplete).not.toHaveBeenCalled();
+      const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+      expect(updated.status).toBe(AgentStatus.Failed);
+    });
+
+    it('keeps the narrated-text fallback when requiredToolCalls is an empty array', async () => {
+      mcpClient.loadTools.mockResolvedValueOnce([INTERACTIONS_TOOL]);
+      const graph = makeSequentialStubGraph(SUCCESS_EVENTS);
+      mockToolGraphOnce(graph);
+
+      const { agent } = await seedAgentAndRole();
+      await agentRepo.update(agent.id, { requiredToolCalls: [] });
+
+      await service.run(agent.id);
+
+      expect(graph.streamEvents).toHaveBeenCalledTimes(1);
+      expect(notifyComplete).toHaveBeenCalledWith(
+        agent.id,
+        'Here is my analysis.',
+      );
+      const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+      expect(updated.status).toBe(AgentStatus.Completed);
+    });
   });
 
   describe('post-completion summary generation', () => {
