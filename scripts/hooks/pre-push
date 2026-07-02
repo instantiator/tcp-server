@@ -27,32 +27,33 @@ if ! git diff --quiet; then
   exit 1
 fi
 
-# Migration drift check (no database needed).
-# Compares the most recent commit that touched entity models against the most
-# recent commit that touched migrations. If models are newer, a migration is
-# likely missing. This is a heuristic — bypass with --no-verify if the model
-# change was non-structural (comments, decorators, formatting only).
-last_model=$(git log -1 --format="%H" -- 'libs/lcp-shared/src/models/*.model.ts' 2>/dev/null || true)
-last_migration=$(git log -1 --format="%H" -- 'apps/lcp-server/src/migrations/*.ts' 2>/dev/null || true)
+# Migration drift check, scoped to the commits being pushed (no database needed).
+# A full `migration:generate` drift check is not viable here: the models
+# intentionally diverge from the Postgres migrations (varchar for UUID/date
+# columns for SQLite cross-compat) and use pgvector types TypeORM can't
+# introspect, so generate always reports phantom drift. Instead we flag only
+# when THIS branch changes an entity model without also adding/editing a
+# migration — which stops the check re-firing on every push after an unrelated
+# model edit already on the remote. Run scripts/check-migrations.sh to inspect
+# the full (phantom-inclusive) model-vs-migration diff by hand.
+upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)
+[[ -z "$upstream" ]] && upstream="origin/main"
 
-if [[ -n "$last_model" && -z "$last_migration" ]]; then
-  echo ""
-  echo "✗ pre-push: entity models exist but no migration files found."
-  echo "  Generate an initial migration:"
-  echo "    npm run migration:generate -- apps/lcp-server/src/migrations/InitialSchema"
-  echo ""
-  exit 1
-fi
+if git rev-parse --verify --quiet "$upstream" >/dev/null; then
+  changed=$(git diff --name-only "$upstream...HEAD")
+  models_changed=$(echo "$changed" | grep -E 'libs/lcp-shared/src/models/.*\.model\.ts' || true)
+  migrations_changed=$(echo "$changed" | grep -E 'apps/lcp-server/src/migrations/.*\.ts' || true)
 
-if [[ -n "$last_model" && -n "$last_migration" ]]; then
-  if ! git merge-base --is-ancestor "$last_model" "$last_migration" 2>/dev/null; then
+  if [[ -n "$models_changed" && -z "$migrations_changed" ]]; then
     echo ""
-    echo "✗ pre-push: entity models were changed after the last migration."
+    echo "✗ pre-push: this branch changes entity models without a migration:"
+    echo "$models_changed" | sed 's/^/    /'
+    echo ""
     echo "  If the schema changed, generate a migration before pushing:"
     echo "    npm run migration:generate -- apps/lcp-server/src/migrations/<Name>"
     echo ""
     echo "  If the change was non-structural (comments, validation decorators,"
-    echo "  or TypeDoc only), bypass this check with:  git push --no-verify"
+    echo "  or a type-only refactor), bypass this check with:  git push --no-verify"
     echo ""
     exit 1
   fi
