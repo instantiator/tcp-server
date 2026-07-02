@@ -58,6 +58,13 @@ export class AgentOrchestrationService
   onModuleInit(): void {
     const url = this.config.getOrThrow<string>('REDIS_URL');
     this.queue = new Queue<AgentJob>('agent-jobs', { connection: { url } });
+    // BullMQ surfaces Redis connection problems (including a post-close
+    // "Connection is closed") as 'error' events; with no listener they become
+    // unhandled rejections that can crash unrelated code — e.g. a later e2e
+    // suite sharing the process. Mirror the worker: log and swallow.
+    this.queue.on('error', (err) => {
+      this.logger.warn(`agent-jobs queue error: ${err.message}`);
+    });
     this.logger.log('Connected to agent-jobs queue');
   }
 
