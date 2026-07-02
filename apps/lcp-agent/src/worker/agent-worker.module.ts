@@ -1,8 +1,7 @@
-import { LcpAgent, LcpCompany, LcpRole } from '@lcp/shared';
+import { LcpAgent, LcpCompany, LcpRole, AuditClientService } from '@lcp/shared';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AgentLoopService } from '../agent/agent-loop.service';
-import { AuditClientService } from '@lcp/shared';
 import { McpClientModule } from '../mcp/mcp-client.module';
 import { AgentRagModule } from '../rag/agent-rag.module';
 import { AgentRegistryService } from '../registry/agent-registry.service';

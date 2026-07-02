@@ -24,8 +24,8 @@ async function callTool(
 ): Promise<string> {
   const server = service.createServer();
   // Access tools via the internal _registeredTools object (SDK v0.x pattern)
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-  const tools = (server as any)._registeredTools as Record<
+  const tools = (server as unknown as { _registeredTools: unknown })
+    ._registeredTools as Record<
     string,
     {
       handler: (

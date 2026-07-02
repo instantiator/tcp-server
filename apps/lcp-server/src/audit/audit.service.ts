@@ -30,10 +30,6 @@ export class AuditService {
     await this.repo.save(event);
   }
 
-  /**
-   * Convenience helper matching the previous inline pattern used by lcp-server services.
-   * Prefer injecting {@link AuditService} directly over inline repository access.
-   */
   async record(
     companyId: UUID,
     role: string,

@@ -38,6 +38,7 @@ SCRIPTS="$REPO_ROOT/scripts"
 conflicting=$(docker ps --format '{{.Names}}' 2>/dev/null | grep '^lcp-' || true)
 if [ -n "$conflicting" ]; then
   echo "ERROR: LCP containers are already running:" >&2
+  # shellcheck disable=SC2001 # sed reads better than ${var//} for multi-line prefixing
   echo "$conflicting" | sed 's/^/  /' >&2
   echo "" >&2
   echo "Stop them (e.g. 'docker compose -p lcp-dev down') before running the full suite." >&2

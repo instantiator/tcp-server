@@ -50,10 +50,6 @@ export class CompanyUser {
   @Column({ type: 'varchar' })
   memberType!: MemberType;
 
-  /**
-   * Role slugs this user is responsible for.
-   * Used by query routing to match incoming agent questions to the right user.
-   */
   @Column({ type: 'jsonb', default: '[]' })
   roles!: string[];
 

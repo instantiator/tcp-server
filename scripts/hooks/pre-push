@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Pre-push hook: format, regenerate derived files, check for migration drift.
+# Pre-push hook: format, regenerate derived files, check for migration drift,
+# then run the full dev-environment quality gate (build, tests, aislop).
 # Install: npm run hooks:install
 # Bypass: git push --no-verify
 set -euo pipefail
@@ -55,5 +56,11 @@ if [[ -n "$last_model" && -n "$last_migration" ]]; then
     exit 1
   fi
 fi
+
+# Full quality gate last: the project-specific checks above are quick and
+# fail fast; this runs the comprehensive build/test/scan pass.
+echo "→ pre-push: running the full quality gate..."
+TOP="$(git rev-parse --show-toplevel)"
+bash "$TOP/dev-environment/scripts/check.sh" --project "$TOP"
 
 echo "✓ pre-push checks passed."

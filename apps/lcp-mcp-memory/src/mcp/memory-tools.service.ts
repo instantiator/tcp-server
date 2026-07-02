@@ -1,4 +1,9 @@
-import { AuditEventType, EmbeddingService, LcpCompany } from '@lcp/shared';
+import {
+  AuditEventType,
+  EmbeddingService,
+  LcpCompany,
+  AuditClientService,
+} from '@lcp/shared';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -6,7 +11,6 @@ import { UUID } from 'crypto';
 import pgvector from 'pgvector';
 import { DataSource, Repository } from 'typeorm';
 import { z } from 'zod';
-import { AuditClientService } from '@lcp/shared';
 import { memoryPrompts } from '../memory-prompts';
 import { memoryToolDescriptions } from '../memory-tool-descriptions';
 
