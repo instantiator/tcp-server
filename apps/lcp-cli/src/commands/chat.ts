@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import * as readline from 'readline';
 import { apiRequest } from '../lib/api';
 import { renewToken, resolveSession } from '../lib/auth';
+import { formatCompactionEvent, parseSseBuffer } from '../lib/sse';
 
 interface AgentRecord {
   id: string;
@@ -193,47 +194,11 @@ export function registerChat(program: Command): void {
               const { done, value } = await reader.read();
               if (done) break;
               buffer += decoder.decode(value, { stream: true });
-              // SSE lines end with \n\n
-              const parts = buffer.split('\n\n');
-              buffer = parts.pop() ?? '';
-              for (const part of parts) {
-                const dataLine = part
-                  .split('\n')
-                  .find((l) => l.startsWith('data:'));
-                if (!dataLine) continue;
-                try {
-                  const event = JSON.parse(dataLine.slice(5).trim()) as {
-                    kind: string;
-                    data?: Record<string, unknown>;
-                  };
-                  if (event.kind === 'compaction_started') {
-                    const d = event.data ?? {};
-                    const strats = Array.isArray(d.strategies)
-                      ? (d.strategies as string[]).join(', ')
-                      : '';
-                    const tb =
-                      typeof d.tokensBefore === 'number' ? d.tokensBefore : '?';
-                    const ws =
-                      typeof d.windowSize === 'number' ? d.windowSize : '?';
-                    const pct = typeof d.pct === 'number' ? d.pct : '?';
-                    process.stderr.write(
-                      `[Context compacting: strategies=[${strats}], ${tb}/${ws} tokens (${pct}%)]\n`,
-                    );
-                  } else if (event.kind === 'compaction_complete') {
-                    const d = event.data ?? {};
-                    const ta =
-                      typeof d.tokensAfter === 'number' ? d.tokensAfter : '?';
-                    const ws =
-                      typeof d.windowSize === 'number' ? d.windowSize : '?';
-                    const pa =
-                      typeof d.pctAfter === 'number' ? d.pctAfter : '?';
-                    process.stderr.write(
-                      `[Context compacted: ${ta}/${ws} tokens (${pa}%)]\n`,
-                    );
-                  }
-                } catch {
-                  // ignore malformed SSE events
-                }
+              const { events, rest } = parseSseBuffer(buffer);
+              buffer = rest;
+              for (const event of events) {
+                const line = formatCompactionEvent(event);
+                if (line) process.stderr.write(line + '\n');
               }
             }
           } catch {

@@ -61,7 +61,7 @@ export class CompanyController {
 
   /**
    * Retrieves a {@link LcpCompany} by its UUID or slug.
-   * Returns an empty body when no match is found (see TODO below).
+   * Returns `null` (serialised as an empty body) when no company matches.
    */
   @ApiOperation({ summary: 'Get a company by ID or slug' })
   @Get(':id')

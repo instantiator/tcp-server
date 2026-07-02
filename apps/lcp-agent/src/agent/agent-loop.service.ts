@@ -512,7 +512,7 @@ export class AgentLoopService {
       agent.role.name,
       agent.id,
       AuditEventType.AgentLoopCompletion,
-      completionSummary as unknown as Record<string, unknown>,
+      completionSummary,
     );
   }
 

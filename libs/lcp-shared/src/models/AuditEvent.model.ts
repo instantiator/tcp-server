@@ -10,8 +10,10 @@ import {
 import { LcpAgent } from './LcpAgent.model';
 import { LcpCompany } from './LcpCompany.model';
 
+// Declared as a type alias, not an interface, so it stays assignable to the
+// `Record<string, unknown>` audit payload without a cast.
 /** Structured payload for {@link AuditEventType.AgentLoopCompletion} events. */
-export interface AgentLoopCompletionSummary {
+export type AgentLoopCompletionSummary = {
   summary: string;
   actions: string[];
   storage: {
@@ -20,7 +22,7 @@ export interface AgentLoopCompletionSummary {
     deleted: string[];
     moved: { from: string; to: string }[];
   };
-}
+};
 
 /** Categories of event captured in the audit log (per ADR-008). */
 export const AuditEventType = {

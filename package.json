@@ -17,7 +17,6 @@
     "typecheck": "tsc --noemit -p apps/lcp-server/tsconfig.json && tsc --noemit -p apps/lcp-agent/tsconfig.json && tsc --noemit -p apps/lcp-cli/tsconfig.app.json && tsc --noemit -p apps/lcp-mcp-storage/tsconfig.app.json && tsc --noemit -p apps/lcp-mcp-memory/tsconfig.app.json && tsc --noemit -p apps/lcp-mcp-interactions/tsconfig.app.json && tsc --noemit -p libs/lcp-shared/tsconfig.json && tsc --noemit -p test/tsconfig.json",
     "lint": "NODE_OPTIONS=--max-old-space-size=4096 eslint \"{apps,libs,test}/**/*.ts\" \"apps/**/*.jsonc\" --fix --cache",
     "lint:check": "NODE_OPTIONS=--max-old-space-size=4096 eslint \"{apps,libs,test}/**/*.ts\" \"apps/**/*.jsonc\" --cache",
-    "lint:check": "NODE_OPTIONS=--max-old-space-size=4096 eslint \"{apps,libs,test}/**/*.ts\" \"apps/**/*.jsonc\" --cache",
     "test": "jest --runInBand",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
@@ -58,6 +57,8 @@
     "commander": "^13.1.0",
     "ioredis": "^5.11.1",
     "joi": "^18.2.3",
+    "js-tiktoken": "^1.0.21",
+    "json5": "^2.2.3",
     "jwks-rsa": "^4.0.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
@@ -68,7 +69,8 @@
     "rxjs": "^7.8.1",
     "swagger-ui-express": "^5.0.1",
     "typeorm": "^1.0.0",
-    "undici": "^8.5.0"
+    "undici": "^8.5.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",

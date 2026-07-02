@@ -23,6 +23,8 @@
 | commander                                | MIT          | git+https://github.com/tj/commander.js.git                     | TJ Holowaychuk <tj@vision-media.ca>                                    | 13.1.0   | 13.1.0    | ^13.1.0   |
 | ioredis                                  | MIT          | git://github.com/luin/ioredis.git                              | Zihua Li <i@zihua.li> (http://zihua.li)                                | 5.11.1   | 5.11.1    | ^5.11.1   |
 | joi                                      | BSD-3-Clause | git://github.com/hapijs/joi.git                                | n/a                                                                    | 18.2.3   | 18.2.3    | ^18.2.3   |
+| js-tiktoken                              | MIT          | git+https://github.com/dqbd/tiktoken.git                       | n/a                                                                    | 1.0.21   | 1.0.21    | ^1.0.21   |
+| json5                                    | MIT          | git+https://github.com/json5/json5.git                         | Aseem Kishore <aseem.kishore@gmail.com>                                | 2.2.3    | 2.2.3     | ^2.2.3    |
 | jwks-rsa                                 | MIT          | git+https://github.com/auth0/node-jwks-rsa.git                 | Auth0                                                                  | 4.1.0    | 4.0.1     | ^4.0.1    |
 | passport                                 | MIT          | git://github.com/jaredhanson/passport.git                      | Jared Hanson jaredhanson@gmail.com https://www.jaredhanson.me/         | 0.7.0    | 0.7.0     | ^0.7.0    |
 | passport-jwt                             | MIT          | git+https://github.com/mikenicholson/passport-jwt.git          | Mike Nicholson                                                         | 4.0.1    | 4.0.1     | ^4.0.1    |
@@ -33,5 +35,6 @@
 | rxjs                                     | Apache-2.0   | git+https://github.com/reactivex/rxjs.git                      | Ben Lesh <ben@benlesh.com>                                             | 7.8.2    | 7.8.2     | ^7.8.1    |
 | swagger-ui-express                       | MIT          | git+ssh://git@github.com/scottie1984/swagger-ui-express.git    | Stephen Scott scottie1984@gmail.com                                    | 5.0.1    | 5.0.1     | ^5.0.1    |
 | typeorm                                  | MIT          | git+https://github.com/typeorm/typeorm.git                     | TypeORM maintainers@typeorm.io                                         | 1.0.0    | 1.0.0     | ^1.0.0    |
-| undici                                   | MIT          | git+https://github.com/nodejs/undici.git                       | n/a                                                                    | 8.5.0    | 8.5.0     | ^8.5.0    |
+| undici                                   | MIT          | git+https://github.com/nodejs/undici.git                       | n/a                                                                    | 8.6.0    | 8.5.0     | ^8.5.0    |
+| zod                                      | MIT          | git+https://github.com/colinhacks/zod.git                      | Colin McDonnell <zod@colinhacks.com>                                   | 4.4.3    | 4.4.3     | ^4.4.3    |
 

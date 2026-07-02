@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Pre-push hook: format, regenerate derived files, check for migration drift,
-# then run the full dev-environment quality gate (build, tests, aislop).
+# run the full dev-environment quality gate (build, unit tests, aislop), then
+# the service-backed integration + e2e tiers (api/smoke run in CI).
 # Install: npm run hooks:install
 # Bypass: git push --no-verify
 set -euo pipefail
@@ -62,5 +63,24 @@ fi
 echo "→ pre-push: running the full quality gate..."
 TOP="$(git rev-parse --show-toplevel)"
 bash "$TOP/dev-environment/scripts/check.sh" --project "$TOP"
+
+# Service-backed tiers that check.sh cannot cover: they need Postgres/Redis/MinIO
+# to catch cross-layer regressions unit tests miss. Each wrapper starts and tears
+# down its own containers. Only integration + e2e run here (self-contained and
+# fast); api/smoke need the full stack incl. Keycloak and belong in CI.
+if ! docker info >/dev/null 2>&1; then
+  echo ""
+  echo "✗ pre-push: Docker is not running — integration and e2e tests need it."
+  echo "  Start Docker and retry, or (only if the change has no runtime surface)"
+  echo "  bypass with:  git push --no-verify"
+  echo ""
+  exit 1
+fi
+
+echo "→ pre-push: running integration tests..."
+bash "$TOP/scripts/run-integration-tests.sh"
+
+echo "→ pre-push: running e2e tests..."
+bash "$TOP/scripts/run-e2e-tests.sh"
 
 echo "✓ pre-push checks passed."

@@ -62,8 +62,20 @@ export class InteractionsToolsService {
     });
 
     this.registerDescribeServer(server);
-    this.registerListAvailableUsers(server);
-    this.registerListAvailableRoles(server);
+    this.registerCompanyListTool(
+      server,
+      'list_available_users',
+      interactionToolDescriptions.list_available_users,
+      'users',
+      interactionPrompts.error_list_users,
+    );
+    this.registerCompanyListTool(
+      server,
+      'list_available_roles',
+      interactionToolDescriptions.list_available_roles,
+      'roles',
+      interactionPrompts.error_list_roles,
+    );
     this.registerRequestUserInput(server);
     this.registerRequestAgentConsultation(server);
     this.registerCompleteTask(server);
@@ -79,11 +91,23 @@ export class InteractionsToolsService {
     );
   }
 
-  private registerListAvailableUsers(server: McpServer): void {
+  /**
+   * Registers a read-only tool that proxies a GET to lcp-server's internal
+   * company sub-collection endpoint (`/internal/company/{id}/{collection}`)
+   * and returns the JSON response. Shared by the users and roles listings,
+   * which differ only in the collection segment and their prompt strings.
+   */
+  private registerCompanyListTool(
+    server: McpServer,
+    toolName: string,
+    description: string,
+    collection: string,
+    errorPrompt: string,
+  ): void {
     server.registerTool(
-      'list_available_users',
+      toolName,
       {
-        description: interactionToolDescriptions.list_available_users,
+        description,
         inputSchema: {
           companyId: z.uuid().describe('The company UUID.'),
         },
@@ -91,37 +115,13 @@ export class InteractionsToolsService {
       async ({ companyId }): Promise<ToolResult> => {
         try {
           const res = await axios.get<unknown[]>(
-            `${this.serverUrl}/internal/company/${companyId}/users`,
+            `${this.serverUrl}/internal/company/${companyId}/${collection}`,
             { headers: { 'X-Internal-Api-Key': this.apiKey } },
           );
           return ok(JSON.stringify(res.data, null, 2));
         } catch (e) {
-          this.logger.warn(`list_available_users failed: ${String(e)}`);
-          return err(interactionPrompts.error_list_users);
-        }
-      },
-    );
-  }
-
-  private registerListAvailableRoles(server: McpServer): void {
-    server.registerTool(
-      'list_available_roles',
-      {
-        description: interactionToolDescriptions.list_available_roles,
-        inputSchema: {
-          companyId: z.uuid().describe('The company UUID.'),
-        },
-      },
-      async ({ companyId }): Promise<ToolResult> => {
-        try {
-          const res = await axios.get<unknown[]>(
-            `${this.serverUrl}/internal/company/${companyId}/roles`,
-            { headers: { 'X-Internal-Api-Key': this.apiKey } },
-          );
-          return ok(JSON.stringify(res.data, null, 2));
-        } catch (e) {
-          this.logger.warn(`list_available_roles failed: ${String(e)}`);
-          return err(interactionPrompts.error_list_roles);
+          this.logger.warn(`${toolName} failed: ${String(e)}`);
+          return err(errorPrompt);
         }
       },
     );

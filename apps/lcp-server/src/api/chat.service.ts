@@ -9,6 +9,7 @@ import {
   AgentStatus,
   AuditEventType,
   DEFAULT_LLM_CONTEXT_WINDOW,
+  DEFAULT_LLM_TIMEOUT_MS,
   LcpAgent,
   LcpCompany,
   LcpRole,
@@ -25,7 +26,6 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { DEFAULT_LLM_TIMEOUT_MS } from '@lcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
