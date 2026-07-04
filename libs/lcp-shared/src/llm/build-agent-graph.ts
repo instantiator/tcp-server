@@ -16,6 +16,20 @@ export interface BuildAgentGraphOptions {
   /** Forwarded to the model's `.invoke()` call so an in-flight request can be cancelled. */
   signal?: AbortSignal;
   logger?: Logger;
+  /**
+   * When `true` (and tools are present), compiles the graph with
+   * `interruptAfter: ['tools']` — LangGraph deterministically halts after
+   * every tool-node execution and persists the checkpoint, instead of
+   * automatically continuing to the next `agent` invocation. The caller
+   * resumes with `graph.streamEvents(null, config)`.
+   *
+   * This is what {@link runSupervisedGraph} relies on to check context
+   * budget, tool visibility, and terminal agent status between every
+   * tool-loop iteration — without it, once `streamEvents` starts consuming,
+   * LangGraph's own `tools → agent` edge continues the run on its own
+   * regardless of whether the external consumer keeps reading events.
+   */
+  interruptAfterTools?: boolean;
 }
 
 /**
@@ -33,7 +47,8 @@ export interface BuildAgentGraphOptions {
  * covers both services and is reflected in checkpointed conversation history.
  */
 export function buildAgentGraph(options: BuildAgentGraphOptions) {
-  const { model, checkpointer, tools, signal, logger } = options;
+  const { model, checkpointer, tools, signal, logger, interruptAfterTools } =
+    options;
   const boundModel =
     tools.length > 0 && model.bindTools ? model.bindTools(tools) : model;
 
@@ -62,13 +77,16 @@ export function buildAgentGraph(options: BuildAgentGraphOptions) {
     .addEdge('__start__', 'agent');
 
   if (tools.length > 0) {
-    graphBuilder
+    const withTools = graphBuilder
       .addNode('tools', new ToolNode(tools))
       .addConditionalEdges('agent', toolsCondition)
       .addEdge('tools', 'agent');
-  } else {
-    graphBuilder.addEdge('agent', END);
+
+    return withTools.compile({
+      checkpointer,
+      ...(interruptAfterTools ? { interruptAfter: ['tools'] } : {}),
+    });
   }
 
-  return graphBuilder.compile({ checkpointer });
+  return graphBuilder.addEdge('agent', END).compile({ checkpointer });
 }

@@ -1,4 +1,5 @@
 import {
+  AgentEvent,
   AgentStatus,
   AuditEvent,
   AuditEventType,
@@ -42,6 +43,7 @@ async function setStubResponse(response: string): Promise<void> {
 
 describe('ChatService integration (stub LLM)', () => {
   let service: ChatService;
+  let agentEvents: AgentEventService;
   let agentRepo: Repository<LcpAgent>;
   let roleRepo: Repository<LcpRole>;
   let companyRepo: Repository<LcpCompany>;
@@ -49,6 +51,26 @@ describe('ChatService integration (stub LLM)', () => {
   let dataSource: DataSource;
   let testCompanyId: UUID;
   let testRoleId: UUID;
+
+  /**
+   * Resolves with the agent's terminal event. The turn now runs detached and
+   * delivers its outcome over the event stream rather than a return value.
+   */
+  function waitForTerminal(agentId: UUID): Promise<AgentEvent> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error('timed out waiting for terminal event')),
+        30_000,
+      );
+      const sub = agentEvents.observe(agentId).subscribe((event) => {
+        if (event.kind === 'completed' || event.kind === 'failed') {
+          clearTimeout(timer);
+          sub.unsubscribe();
+          resolve(event);
+        }
+      });
+    });
+  }
 
   const skip =
     !DATABASE_URL || DATABASE_URL.startsWith('sqlite') || !STUB_LLM_URL;
@@ -71,7 +93,9 @@ describe('ChatService integration (stub LLM)', () => {
       providers: [
         ChatService,
         AuditService,
-        AgentEventService,
+        // AgentEventService comes from ContextModule (imported + exported) so
+        // ChatService and this test share one instance — the event stream is
+        // how the detached turn reports completion.
         {
           provide: RagRetrievalService,
           useValue: { retrieve: jest.fn().mockResolvedValue([]) },
@@ -84,6 +108,7 @@ describe('ChatService integration (stub LLM)', () => {
     }).compile();
 
     service = moduleRef.get(ChatService);
+    agentEvents = moduleRef.get(AgentEventService);
     agentRepo = moduleRef.get(getRepositoryToken(LcpAgent));
     roleRepo = moduleRef.get(getRepositoryToken(LcpRole));
     companyRepo = moduleRef.get(getRepositoryToken(LcpCompany));
@@ -123,6 +148,7 @@ describe('ChatService integration (stub LLM)', () => {
     await agentRepo.delete({ companyId: testCompanyId });
     await roleRepo.delete({ companyId: testCompanyId });
     await companyRepo.delete({ id: testCompanyId });
+    await agentEvents.onModuleDestroy();
     await dataSource.destroy();
   });
 
@@ -135,7 +161,7 @@ describe('ChatService integration (stub LLM)', () => {
     expect(true).toBe(true);
   });
 
-  it('sends a message end-to-end and returns the stub response', async () => {
+  it('streams a message end-to-end and completes with the stub response', async () => {
     if (skip) return;
 
     await setStubResponse('Hello from stub LLM!');
@@ -150,8 +176,19 @@ describe('ChatService integration (stub LLM)', () => {
     );
 
     try {
-      const result = await service.sendMessage(agent.id, 'Hi there');
-      expect(result.response).toBe('Hello from stub LLM!');
+      const terminal = waitForTerminal(agent.id);
+      await service.sendMessage(agent.id, 'Hi there');
+      const event = await terminal;
+
+      expect(event.kind).toBe('completed');
+      if (event.kind === 'completed') {
+        expect(event.data.response).toBe('Hello from stub LLM!');
+      }
+
+      // The response is also persisted for the recovery/replay path.
+      const updated = await agentRepo.findOneBy({ id: agent.id });
+      expect(updated?.status).toBe(AgentStatus.Idle);
+      expect(updated?.output).toBe('Hello from stub LLM!');
     } finally {
       await agentRepo.delete({ id: agent.id });
     }
@@ -172,7 +209,9 @@ describe('ChatService integration (stub LLM)', () => {
     );
 
     try {
+      const terminal = waitForTerminal(agent.id);
       await service.sendMessage(agent.id, 'Audit test');
+      await terminal;
 
       const events = await auditRepo.find({
         where: { agentId: agent.id },
@@ -182,39 +221,6 @@ describe('ChatService integration (stub LLM)', () => {
       const types = events.map((e) => e.eventType);
       expect(types).toContain(AuditEventType.LlmRequest);
       expect(types).toContain(AuditEventType.LlmResponse);
-    } finally {
-      await auditRepo.delete({ agentId: agent.id });
-      await agentRepo.delete({ id: agent.id });
-    }
-  });
-
-  it('returns agent to Idle status after cancellation', async () => {
-    if (skip) return;
-
-    const agent = await agentRepo.save(
-      agentRepo.create({
-        companyId: testCompanyId,
-        roleId: testRoleId,
-        status: AgentStatus.Idle,
-        initialPrompt: '',
-      }),
-    );
-
-    try {
-      const controller = new AbortController();
-      // Abort immediately to simulate client disconnect
-      controller.abort();
-
-      const result = await service.sendMessage(
-        agent.id,
-        'Cancel me',
-        controller.signal,
-      );
-
-      expect(result.response).toBe('');
-
-      const updated = await agentRepo.findOneBy({ id: agent.id });
-      expect(updated?.status).toBe(AgentStatus.Idle);
     } finally {
       await auditRepo.delete({ agentId: agent.id });
       await agentRepo.delete({ id: agent.id });

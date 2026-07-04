@@ -9,8 +9,10 @@ jest.mock('@langchain/core/utils/tiktoken', () => ({
 
 import { ContextBudgetService } from './context-budget.service';
 import { ContextCompactorService } from './context-compactor.service';
-import { IncomingDataGuardService } from './incoming-data-guard.service';
-import type { MinioService } from '../storage/minio.service';
+import {
+  IncomingDataGuardService,
+  type OverflowStore,
+} from './incoming-data-guard.service';
 
 function makeServices() {
   const budget = new ContextBudgetService();
@@ -85,7 +87,7 @@ describe('IncomingDataGuardService', () => {
 
   it('stores overflow in MinIO and returns reference when still over budget', async () => {
     const putRaw = jest.fn().mockResolvedValue(undefined);
-    const minio = { putRaw } as unknown as MinioService;
+    const minio = { putRaw } as unknown as OverflowStore;
     const serviceWithMinio = new IncomingDataGuardService(
       budget,
       compactor,
@@ -112,7 +114,7 @@ describe('IncomingDataGuardService', () => {
 
   it('falls back to best-effort compaction when MinIO write fails', async () => {
     const putRaw = jest.fn().mockRejectedValue(new Error('MinIO unreachable'));
-    const minio = { putRaw } as unknown as MinioService;
+    const minio = { putRaw } as unknown as OverflowStore;
     const serviceWithMinio = new IncomingDataGuardService(
       budget,
       compactor,

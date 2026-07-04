@@ -68,18 +68,18 @@ describe('InteractionsToolsService', () => {
     it('returns an overview describing available tools', async () => {
       const text = await callTool(service, 'describe_server', {});
       expect(text).toContain('Interactions Service');
-      expect(text).toContain('request_user_input');
       expect(text).toContain('complete_task');
     });
   });
 
-  describe('list_available_roles', () => {
-    it('calls GET /internal/company/:companyId/roles with the internal API key', async () => {
+  describe('list_available_contacts', () => {
+    it("kind: 'roles' calls GET /internal/company/:companyId/roles and returns the raw list", async () => {
       const roles = [{ id: randomUUID(), name: 'analyst' }];
       axiosGet.mockResolvedValue({ data: roles });
 
-      const text = await callTool(service, 'list_available_roles', {
+      const text = await callTool(service, 'list_available_contacts', {
         companyId,
+        kind: 'roles',
       });
 
       expect(axiosGet).toHaveBeenCalledWith(
@@ -89,24 +89,24 @@ describe('InteractionsToolsService', () => {
       expect(text).toContain('analyst');
     });
 
-    it('returns error message when the request fails', async () => {
+    it("kind: 'roles' returns error message when the request fails", async () => {
       axiosGet.mockRejectedValue(new Error('Network error'));
 
-      const text = await callTool(service, 'list_available_roles', {
+      const text = await callTool(service, 'list_available_contacts', {
         companyId,
+        kind: 'roles',
       });
 
       expect(text).toContain('Error');
     });
-  });
 
-  describe('list_available_users', () => {
-    it('calls GET /internal/company/:companyId/users with the internal API key', async () => {
+    it("kind: 'users' calls GET /internal/company/:companyId/users and returns the raw list", async () => {
       const users = [{ id: randomUUID(), identifier: 'alice' }];
       axiosGet.mockResolvedValue({ data: users });
 
-      const text = await callTool(service, 'list_available_users', {
+      const text = await callTool(service, 'list_available_contacts', {
         companyId,
+        kind: 'users',
       });
 
       expect(axiosGet).toHaveBeenCalledWith(
@@ -116,14 +116,47 @@ describe('InteractionsToolsService', () => {
       expect(text).toContain('alice');
     });
 
-    it('returns error message when the request fails', async () => {
+    it("kind: 'users' returns error message when the request fails", async () => {
       axiosGet.mockRejectedValue(new Error('Network error'));
 
-      const text = await callTool(service, 'list_available_users', {
+      const text = await callTool(service, 'list_available_contacts', {
         companyId,
+        kind: 'users',
       });
 
       expect(text).toContain('Error');
+    });
+
+    it('defaults to both when kind is omitted, fetching users and roles in one call', async () => {
+      const users = [{ id: randomUUID(), identifier: 'alice' }];
+      const roles = [{ id: randomUUID(), name: 'analyst' }];
+      axiosGet.mockImplementation((url: string) =>
+        Promise.resolve({ data: url.endsWith('/users') ? users : roles }),
+      );
+
+      const text = await callTool(service, 'list_available_contacts', {
+        companyId,
+      });
+
+      expect(axiosGet).toHaveBeenCalledTimes(2);
+      expect(text).toContain('alice');
+      expect(text).toContain('analyst');
+    });
+
+    it('reports one collection as an error without hiding the other when only one fetch fails', async () => {
+      axiosGet.mockImplementation((url: string) =>
+        url.endsWith('/users')
+          ? Promise.reject(new Error('Network error'))
+          : Promise.resolve({ data: [{ id: randomUUID(), name: 'analyst' }] }),
+      );
+
+      const text = await callTool(service, 'list_available_contacts', {
+        companyId,
+        kind: 'both',
+      });
+
+      expect(text).toContain('analyst');
+      expect(text).toContain('Could not retrieve user list.');
     });
   });
 

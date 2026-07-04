@@ -46,19 +46,44 @@ export class AgentWorkerService implements OnModuleInit, OnModuleDestroy {
         const { agentId, type, replyContent } = job.data;
         this.logger.log(`Processing ${type} job for agent ${agentId}`);
 
+        // Check-and-register must happen with no `await` in between — a
+        // stalled-job retry (BullMQ re-dispatches a job whose lock renewal
+        // failed, e.g. because a slow local model kept a turn running past
+        // the default 30s lock duration, while the original invocation is
+        // still very much alive) must never see `isRunning() === false` for
+        // an agent that's already mid-run. `AgentLoopService.run` only
+        // fetches the agent (an `await`) before it would otherwise register,
+        // so registration happens here instead, synchronously, before handing
+        // off to `run`.
         if (this.registry.isRunning(agentId)) {
           this.logger.warn(
             `Agent ${agentId} is already running — skipping duplicate job`,
           );
           return;
         }
+        const abortController = new AbortController();
+        this.registry.register(agentId, abortController);
 
-        await this.loop.run(agentId, replyContent);
+        try {
+          await this.loop.run(agentId, replyContent, abortController);
+        } finally {
+          this.registry.deregister(agentId);
+        }
       },
       {
         connection: { url: redisUrl },
         // ponytail: move to config when per-role resource limits are addressed (see 003.3)
         concurrency: 5,
+        // BullMQ's own default (30s) is far shorter than a single LLM turn can
+        // take with a slow local model — the worker auto-renews the lock well
+        // before it expires, but a transient Redis hiccup during any one of
+        // the many renewals over a long run can still miss the deadline,
+        // making BullMQ believe the job stalled and re-dispatch a duplicate.
+        // The in-memory registry guard (see the processor above) closes that
+        // race structurally, but a generous lock duration avoids relying on
+        // it as the only line of defence.
+        lockDuration: 5 * 60 * 1000, // 5m
+        maxStalledCount: 2,
       },
     );
 

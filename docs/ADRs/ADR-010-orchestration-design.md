@@ -93,6 +93,8 @@ Supporting materials (uploaded by the user at task creation) are accessible to t
 
 BullMQ's retry and priority features are used: failed steps are retried up to a configurable limit; high-priority tasks can preempt lower-priority ones.
 
+> **Note (008.6):** `AgentWorkerService`'s duplicate-job guard (`AgentRegistryService.isRunning`) had a TOCTOU race — it checked `isRunning` before `AgentLoopService.run` registered the agent, with an `await` (a DB fetch) in between. A stalled-job retry (BullMQ re-dispatching a job whose lock renewal failed — the default 30s lock duration is far shorter than a single turn can take with a slow local model) could slip through that gap and start a second concurrent execution against the same LangGraph checkpoint thread, producing repeated `complete_task` calls, stray extra model turns, and incorrect "task not complete" reminders even though the task had genuinely completed. Fixed by moving registration into the worker's job processor itself, synchronously with the `isRunning` check (no `await` in between), and raising the BullMQ lock duration to 5 minutes as a second line of defence. See `agent-worker.service.ts` and `agent-worker.service.spec.ts`'s atomicity regression test.
+
 ### Orchestrator loop (lcp-server)
 
 The orchestrator is a NestJS service that:
@@ -148,6 +150,7 @@ On lcp-server startup:
 - The orchestrator is a NestJS service within lcp-server — no new deployable
 - BullMQ workers run within lcp-agent; the queue is the only coupling between lcp-server and lcp-agent
 - All task and plan state lives in PostgreSQL; Redis is ephemeral (queue transport only)
+- **MCP tool loading (since 008.6):** `McpClientService`'s per-agent-run tool loading (see [agent-services.md](../agent-services.md#enabling-mcp-tools-for-a-role)) is layered with a tool-schema visibility gate — only each server's `describe_server` tool is bound to the model until it's called, sitting alongside the existing auto-inject/strip-identity behaviour `McpClientService` already provides. See [ADR-013 Amendments](ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-0086).
 
 ## Open Questions / Assumptions
 

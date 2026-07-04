@@ -6,6 +6,8 @@
 export interface SseEvent {
   kind: string;
   data?: Record<string, unknown>;
+  /** ISO timestamp set by the producer (see `AgentEvent` in `@lcp/shared`). */
+  timestamp?: string;
 }
 
 /**

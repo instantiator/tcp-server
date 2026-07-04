@@ -8,6 +8,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { UUID } from 'crypto';
 import { Repository } from 'typeorm';
+import { AgentEventService } from '../events/agent-event.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { ConversationService } from './conversation.service';
 
@@ -44,7 +45,21 @@ export class PauseAndResumeService {
     private readonly consultRepo: Repository<PendingConsultation>,
     private readonly convService: ConversationService,
     private readonly orchestration: AgentOrchestrationService,
+    private readonly events: AgentEventService,
   ) {}
+
+  /** Emits an `agent_status` transition to any SSE clients observing `agentId`. */
+  private emitStatus(
+    agentId: UUID,
+    status: AgentStatus,
+    extra?: { reason?: string; conversationSlug?: string },
+  ): void {
+    this.events.emit(agentId, {
+      timestamp: new Date().toISOString(),
+      kind: 'agent_status',
+      data: { status, ...extra },
+    });
+  }
 
   /**
    * Pauses the agent and creates a human-readable {@link Conversation} query.
@@ -80,6 +95,10 @@ export class PauseAndResumeService {
       userIds,
     );
 
+    this.emitStatus(agentId, AgentStatus.Paused, {
+      reason: 'user_input',
+      conversationSlug: conv.slug,
+    });
     this.logger.log(
       `Agent ${agentId} paused for user input — conversation ${conv.slug}`,
     );
@@ -158,6 +177,17 @@ export class PauseAndResumeService {
     // Only now dispatch the job — the PendingConsultation row is committed.
     await this.orchestration.dispatchStartJob(consultAgent.id);
 
+    // Tell any client watching the calling agent that it paused to consult, and
+    // which agent to follow for the consultation's own activity.
+    this.emitStatus(callingAgentId, AgentStatus.Paused, {
+      reason: 'consultation',
+    });
+    this.events.emit(callingAgentId, {
+      timestamp: new Date().toISOString(),
+      kind: 'consultation_started',
+      data: { agentId: consultAgent.id, roleName: role.name },
+    });
+
     this.logger.log(
       `Agent ${callingAgentId} (${callingRole?.name ?? '?'}) paused for consultation — consulting agent ${consultAgent.id} (${role.name}), consultation ${consultation.id}`,
     );
@@ -191,6 +221,18 @@ export class PauseAndResumeService {
     // Completed — the lcp-agent fallback path sets status synchronously
     // before this HTTP call arrives, leaving the consultation pending.
     const resolvedOutput = output || agent.output || '';
+
+    // Terminal event for any client observing this agent (a chat agent resumed
+    // in the worker, or a consultation agent being followed). Emitted here —
+    // before the consultation early-return below — so every worker completion
+    // reaches its watchers, regardless of the idempotency guard above.
+    this.events.emit(agentId, {
+      timestamp: new Date().toISOString(),
+      kind: 'completed',
+      data: { response: resolvedOutput },
+    });
+    this.emitStatus(agentId, AgentStatus.Completed);
+
     const consultation = await this.consultRepo.findOne({
       where: { consultationAgentId: agentId, status: 'pending' },
     });
@@ -241,6 +283,15 @@ export class PauseAndResumeService {
       await this.agentRepo.update(agentId, { status: AgentStatus.Failed });
       this.logger.warn(`Agent ${agentId} failed: ${reason}`);
     }
+
+    // Terminal event for observers — emitted before the consultation
+    // early-return so every worker failure reaches its watchers.
+    this.events.emit(agentId, {
+      timestamp: new Date().toISOString(),
+      kind: 'failed',
+      data: { error: reason },
+    });
+    this.emitStatus(agentId, AgentStatus.Failed);
 
     const consultation = await this.consultRepo.findOne({
       where: { consultationAgentId: agentId, status: 'pending' },

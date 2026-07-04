@@ -1,4 +1,6 @@
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { DynamicStructuredTool } from '@langchain/core/tools';
+import { z } from 'zod';
 
 // Mock tiktoken before importing the service
 jest.mock('@langchain/core/utils/tiktoken', () => ({
@@ -68,6 +70,40 @@ describe('ContextBudgetService', () => {
 
     it('returns false above the target threshold (61%)', () => {
       expect(service.isAtTarget(610, 1000)).toBe(false);
+    });
+  });
+
+  describe('countTools', () => {
+    it('returns 0 for an empty tool list', async () => {
+      expect(await service.countTools([])).toBe(0);
+    });
+
+    it("sums tokens across each tool's name, description, and schema", async () => {
+      const tool = new DynamicStructuredTool({
+        name: 'storage__read_file',
+        description: 'Reads the text content of a file from the object store.',
+        schema: z.object({ path: z.string() }),
+        func: () => Promise.resolve(''),
+      });
+      const total = await service.countTools([tool]);
+      expect(total).toBeGreaterThan(0);
+    });
+
+    it('grows with the number of tools bound', async () => {
+      const makeTool = (name: string) =>
+        new DynamicStructuredTool({
+          name,
+          description: 'A tool.',
+          schema: z.object({ path: z.string() }),
+          func: () => Promise.resolve(''),
+        });
+      const one = await service.countTools([makeTool('a')]);
+      const three = await service.countTools([
+        makeTool('a'),
+        makeTool('b'),
+        makeTool('c'),
+      ]);
+      expect(three).toBeGreaterThan(one);
     });
   });
 

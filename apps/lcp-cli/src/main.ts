@@ -3,9 +3,9 @@ import { Agent, setGlobalDispatcher } from 'undici';
 import { Command } from 'commander';
 
 // Node.js 18+ built-in fetch uses undici with a 5-minute headersTimeout by
-// default. Long-polling endpoints (e.g. consultation wait) can take longer
-// than that, causing the client to receive "fetch failed" mid-wait. Override
-// the global dispatcher to match the CLI's own 35-minute abort signal.
+// default. The chat SSE event stream stays open for the whole turn (which can
+// exceed 5 minutes across a consultation cycle), so raise the dispatcher's
+// timeouts to match the CLI's own 35-minute abort ceiling.
 setGlobalDispatcher(
   new Agent({ headersTimeout: 35 * 60 * 1000, bodyTimeout: 35 * 60 * 1000 }),
 );

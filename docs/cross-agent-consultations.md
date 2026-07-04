@@ -10,7 +10,7 @@ See [lcp-mcp-interactions.md](lcp-mcp-interactions.md) for the MCP tool referenc
 
 ### 1. Agent requests consultation
 
-The agent calls `request_agent_consultation(agentId, companyId, roleId, question, context?, roleName?)`. `roleId` is the unambiguous lookup key — get it from `list_available_roles` first. Role names aren't unique within a company, so a name-only lookup can target the wrong role; `roleName` is accepted only as an optional label for friendlier logs and error messages.
+The agent calls `request_agent_consultation(agentId, companyId, roleId, question, context?, roleName?)`. `roleId` is the unambiguous lookup key — get it from `list_available_contacts` first. Role names aren't unique within a company, so a name-only lookup can target the wrong role; `roleName` is accepted only as an optional label for friendlier logs and error messages.
 
 ```
 Calling Agent ──► interactions__request_agent_consultation

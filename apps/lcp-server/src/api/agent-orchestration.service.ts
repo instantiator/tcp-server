@@ -17,6 +17,7 @@ import { Queue } from 'bullmq';
 import { UUID } from 'crypto';
 import { In, MoreThanOrEqual, Repository } from 'typeorm';
 import { DbService } from '../db/db.service';
+import { AgentEventService } from '../events/agent-event.service';
 import { LcpAgentTemplate } from '../templates/LcpAgentTemplate';
 
 /** Payload dispatched to the `agent-jobs` BullMQ queue. */
@@ -52,6 +53,7 @@ export class AgentOrchestrationService
     private readonly convRepo: Repository<Conversation>,
     @InjectRepository(ConversationMessage)
     private readonly msgRepo: Repository<ConversationMessage>,
+    private readonly events: AgentEventService,
   ) {}
 
   /** Connects to the Redis-backed BullMQ queue on startup. */
@@ -142,16 +144,40 @@ export class AgentOrchestrationService
     // Combine every response received since this pause episode began, so
     // the resumed agent sees all the answers it asked for, not just the
     // last one to arrive.
-    const aggregated = agent.pausedAt
-      ? await this.collectRepliesSince(agentId, agent.pausedAt)
-      : null;
-
-    await this.agentRepo.update(agentId, { pausedAt: () => 'NULL' });
+    let aggregated: string | null = null;
+    if (agent.pausedAt) {
+      // Atomically claim this pause episode's resume: only the caller that
+      // actually clears pausedAt proceeds to enqueue. Without this, two
+      // near-simultaneous resume triggers (e.g. a retried fire-and-forget
+      // completion notification) can both read the same pausedAt, both find
+      // zero outstanding requests, and both enqueue a resume job carrying
+      // the same aggregated reply — injecting it into the agent twice.
+      const claim = await this.agentRepo
+        .createQueryBuilder()
+        .update(LcpAgent)
+        .set({ pausedAt: () => 'NULL' })
+        .where('id = :agentId', { agentId })
+        .andWhere('pausedAt = :pausedAt', { pausedAt: agent.pausedAt })
+        .execute();
+      if (claim.affected === 0) {
+        this.logger.log(
+          `Agent ${agentId} resume already claimed by a concurrent call — skipping duplicate resume job`,
+        );
+        return agent;
+      }
+      aggregated = await this.collectRepliesSince(agentId, agent.pausedAt);
+    }
 
     await this.queue.add('resume', {
       agentId: agent.id,
       type: 'resume',
       replyContent: aggregated ?? replyContent,
+    });
+    // Let any client observing the calling agent see it come back to life.
+    this.events.emit(agent.id, {
+      timestamp: new Date().toISOString(),
+      kind: 'agent_status',
+      data: { status: AgentStatus.Running, reason: 'resumed' },
     });
     this.logger.log(`Dispatched resume job for agent ${agent.id}`);
     return agent;

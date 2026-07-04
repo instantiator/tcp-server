@@ -179,34 +179,108 @@ agent errors, times out, or never calls `complete_task` despite reminders), the 
 is reported back to your agent, which decides how to proceed — you get a real answer
 (possibly one that explains the failure) instead of the chat hanging until the timeout.
 
-| Flag                | Alias | Description                            |
-| ------------------- | ----- | -------------------------------------- |
-| `--role-id <uuid>`  | `-r`  | **(Required)** Role UUID for the agent |
-| `--query <message>` | `-q`  | Single question (non-interactive)      |
+**How a turn works.** Sending a message returns `202 Accepted` immediately; the
+turn runs on the server and everything it does is streamed back live over the
+agent's Server-Sent Events stream (`GET /api/agent/:id/events`). The CLI opens
+that stream and renders each event until the terminal `completed` (or
+`failed`) event arrives — either in the full-screen TUI (default on a TTY) or
+as colour-coded scrolling text (piped output, or `--no-tui`); see below.
 
-**Single-query mode** (`-q` provided):
+**Following consultations.** When your agent pauses to consult another role,
+the CLI automatically opens a second stream for the consulted agent and
+renders its activity too — as its own tab in the TUI, or inline prefixed with
+the consulted role's name (e.g. `[Cat assistant] Response: …`) in the plain
+renderer. Nested consultations are followed recursively either way.
 
-- **stdout**: the agent's response
-- **stderr**: status messages
-- Creates agent → sends message → prints response → deletes agent → exits
+| Flag                | Alias | Description                                       |
+| ------------------- | ----- | ------------------------------------------------- |
+| `--role-id <uuid>`  | `-r`  | **(Required)** Role UUID for the agent            |
+| `--query <message>` | `-q`  | Single question (auto-submitted, no input box)    |
+| `--hide-reasoning`  |       | Suppress the reasoning stream                     |
+| `--no-tui`          |       | Force the plain scrolling renderer, even on a TTY |
 
-```bash
-./lcp-cli.sh -t $TOKEN chat -r <roleId> -q "What is your role?"
-```
+#### Full-screen TUI (default on a TTY)
 
-**Interactive mode** (no `-q`):
+When stdout is a real terminal, `chat` (both interactive and `-q`) opens a
+full-screen view instead of scrolling text:
 
-- Enters a readline prompt (`> `)
-- User types messages; the agent's response is written to stdout
-- Type `exit` or `quit`, or press Ctrl+C to end the session
-- The agent is always cleaned up on exit (even on interrupt)
+- **One tab per monitored agent** — the root agent (the one you're chatting
+  with) plus one tab per consultation it triggers, added live as
+  `consultation_started` events arrive. Switch tabs with **Ctrl+Right** /
+  **Ctrl+Left**.
+- **Independent scrollback per tab** — each agent's events accumulate in its
+  own pane; switching tabs doesn't lose or interleave another agent's output,
+  unlike the plain renderer's single interleaved stream.
+- **Input box only on the talkable tab** — only the root agent's tab shows an
+  input line, since consultation tabs are spectate-only. In `-q` mode there's
+  no input box at all (see below).
+- Events render as `hh:mm:ss | event_type | text`, blank-line separated;
+  reasoning deltas render specially — indented two spaces, no columns, word-
+  wrapped — with a blank line whenever reasoning is interrupted by another
+  event or resumes afterwards.
+- **Ctrl+C**: while a turn is in flight, stops watching (the agent keeps
+  running server-side) and returns to the prompt. At the idle prompt, tears
+  down the TUI, cleans up the agent, and exits — the same two-stage behaviour
+  as the plain renderer's Ctrl+C.
+- Typing `exit` or `quit` in the root tab's input box ends the session, same
+  as the plain renderer.
+
+**`-q`/`--query` at a TTY** also opens the TUI: the message is submitted
+automatically (no input box needed), and as soon as the root agent's turn
+reaches its terminal event, the TUI tears down and the final response is
+printed to stdout exactly as in piped mode, then the process exits.
 
 ```bash
 ./lcp-cli.sh -t $TOKEN chat -r <roleId>
-# > Hello!
-# Hello! I am the analyst agent. How can I help?
+# (full-screen TUI opens; type at the bottom input line, Ctrl+Right/Left to
+# switch tabs if a consultation is in progress, Ctrl+C or 'exit' to leave)
+```
+
+#### Plain renderer (piped output, or `--no-tui`)
+
+When stdout is piped/redirected, or `--no-tui` is passed, output stays as
+colour-coded, blank-line-separated scrolling text — this is also the only
+mode compatible with piping the final answer to another command:
+
+- **Agent state** (bright cyan) — lifecycle transitions: running, paused,
+  resumed, completed.
+- **LLM state** (bright magenta) — request start/finish and tool calls.
+- **Reasoning** (grey, indented) — the model's reasoning tokens as they arrive,
+  where the provider exposes them (e.g. LM Studio). Shown by default; suppress
+  with `--hide-reasoning`.
+- **Response** (white) — the answer content, streamed token by token.
+
+**Single-query mode** (`-q` provided, piped or `--no-tui`):
+
+- **stdout**: the agent's final response (once, so the output stays pipeable)
+- **stderr**: the live streamed blocks (state, reasoning, response progress)
+- Creates agent → sends message → streams the turn → prints the answer → deletes agent → exits
+
+```bash
+./lcp-cli.sh -t $TOKEN chat -r <roleId> -q "What is your role?" | tee answer.txt
+```
+
+**Interactive mode** (no `-q`, piped or `--no-tui`):
+
+- Enters a readline prompt (`> `)
+- User types messages; the streamed blocks render live, the response on stdout
+- Type `exit` or `quit` to end the session
+- **Ctrl+C during a turn** stops watching the stream and re-shows the prompt —
+  the agent keeps running on the server. **Ctrl+C at the idle prompt** cleans up
+  the agent and exits.
+- The agent is always cleaned up on a clean exit.
+
+```bash
+./lcp-cli.sh -t $TOKEN chat -r <roleId> --no-tui
 # > Tell me about Q3 trends.
-# ...
+#
+# Agent state: running
+#
+# Reasoning: the user wants a summary of…
+#
+# Response: Q3 revenue rose 12% driven by…
+#
+# Agent state: completed
 # > exit
 # Agent <id> removed.
 ```

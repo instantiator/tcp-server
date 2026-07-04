@@ -1,7 +1,7 @@
-import { AgentStatus, AuditEventType, LcpAgent } from '@lcp/shared';
+import { AgentEvent, AgentStatus, AuditEventType, LcpAgent } from '@lcp/shared';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import type { Request } from 'express';
+import { EMPTY, firstValueFrom, of, take, toArray } from 'rxjs';
 import { DbService } from '../db/db.service';
 import { AgentEventService } from '../events/agent-event.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
@@ -26,10 +26,6 @@ function makeAgent(overrides: Partial<LcpAgent> = {}): LcpAgent {
   };
 }
 
-const mockReq = {
-  socket: { on: jest.fn() },
-} as unknown as Request;
-
 describe('AgentController', () => {
   let db: jest.Mocked<
     Pick<DbService, 'getAgent' | 'createAgent' | 'deleteAgent'>
@@ -53,7 +49,7 @@ describe('AgentController', () => {
     orchestration = { startAgent: jest.fn(), resumeAgent: jest.fn() };
     chat = { sendMessage: jest.fn() };
     agentEvents = {
-      observe: jest.fn().mockReturnValue({ pipe: jest.fn() }),
+      observe: jest.fn().mockReturnValue(EMPTY),
       emit: jest.fn(),
       cleanup: jest.fn(),
     };
@@ -173,19 +169,18 @@ describe('AgentController', () => {
   });
 
   describe('sendMessage', () => {
-    it('delegates to chat.sendMessage and returns the response', async () => {
-      chat.sendMessage.mockResolvedValue({ response: 'Hello!' });
-      const result = await controller.sendMessage(
-        randomUUID(),
-        { message: 'Hi' },
-        mockReq,
-      );
-      expect(result.response).toBe('Hello!');
+    it('delegates to chat.sendMessage and returns 202 accepted', async () => {
+      chat.sendMessage.mockResolvedValue(undefined);
+      const result = await controller.sendMessage(randomUUID(), {
+        message: 'Hi',
+      });
+      expect(chat.sendMessage).toHaveBeenCalledWith(expect.any(String), 'Hi');
+      expect(result).toEqual({ accepted: true });
     });
 
     it('throws BadRequestException when message is empty', async () => {
       await expect(
-        controller.sendMessage(randomUUID(), { message: '' }, mockReq),
+        controller.sendMessage(randomUUID(), { message: '' }),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -194,8 +189,58 @@ describe('AgentController', () => {
         new NotFoundException('Agent not found'),
       );
       await expect(
-        controller.sendMessage(randomUUID(), { message: 'Hi' }, mockReq),
+        controller.sendMessage(randomUUID(), { message: 'Hi' }),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('streamEvents (SSE)', () => {
+    it('replays a synthesized completed event when the agent already finished', async () => {
+      const agent = makeAgent({
+        status: AgentStatus.Completed,
+        output: 'done',
+      });
+      db.getAgent.mockResolvedValue(agent);
+      agentEvents.observe.mockReturnValue(EMPTY);
+
+      const first = (await firstValueFrom(
+        controller.streamEvents(agent.id).pipe(take(1)),
+      )) as { data: AgentEvent };
+
+      expect(first.data).toMatchObject({
+        kind: 'completed',
+        data: { response: 'done' },
+      });
+    });
+
+    it('replays a synthesized failed event when the agent has failed', async () => {
+      const agent = makeAgent({ status: AgentStatus.Failed });
+      db.getAgent.mockResolvedValue(agent);
+      agentEvents.observe.mockReturnValue(EMPTY);
+
+      const first = (await firstValueFrom(
+        controller.streamEvents(agent.id).pipe(take(1)),
+      )) as { data: AgentEvent };
+
+      expect(first.data.kind).toBe('failed');
+    });
+
+    it('does not replay a terminal event while the agent is still running', async () => {
+      const agent = makeAgent({ status: AgentStatus.Running });
+      db.getAgent.mockResolvedValue(agent);
+      const live: AgentEvent = {
+        kind: 'response',
+        timestamp: 't',
+        data: { delta: 'hi' },
+      };
+      agentEvents.observe.mockReturnValue(of(live));
+
+      const events = (await firstValueFrom(
+        controller.streamEvents(agent.id).pipe(toArray()),
+      )) as { data: AgentEvent }[];
+
+      expect(events).toHaveLength(1);
+      expect(events[0].data.kind).toBe('response');
     });
   });
 });

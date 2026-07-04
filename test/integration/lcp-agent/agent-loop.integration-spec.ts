@@ -2,6 +2,12 @@ import { FakeListChatModel } from '@langchain/core/utils/testing';
 import {
   AgentStatus,
   AuditEventType,
+  CONTEXT_AUDIT_SINK,
+  CONTEXT_EVENT_SINK,
+  ContextBudgetService,
+  ContextCompactorService,
+  ContextManagerService,
+  IncomingDataGuardService,
   LcpAgent,
   LcpCompany,
   LcpRole,
@@ -10,12 +16,12 @@ import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { AgentEventPublisherService } from '../../../apps/lcp-agent/src/agent/agent-event-publisher.service';
 import { AgentLoopService } from '../../../apps/lcp-agent/src/agent/agent-loop.service';
 import { AuditClientService } from '@lcp/shared';
 import * as factory from '../../../apps/lcp-agent/src/llm/llm-factory';
 import { McpClientService } from '../../../apps/lcp-agent/src/mcp/mcp-client.service';
 import { AgentRagService } from '../../../apps/lcp-agent/src/rag/agent-rag.service';
-import { AgentRegistryService } from '../../../apps/lcp-agent/src/registry/agent-registry.service';
 import { StorageTrackingClientService } from '../../../apps/lcp-agent/src/storage-tracking/storage-tracking-client.service';
 
 // Requires DOCKER services: PostgreSQL (DATABASE_URL).
@@ -50,7 +56,6 @@ describeIf('AgentLoopService (integration)', () => {
       ],
       providers: [
         AgentLoopService,
-        AgentRegistryService,
         {
           provide: AuditClientService,
           useValue: { record: auditRecord, notifyComplete: jest.fn() },
@@ -68,12 +73,32 @@ describeIf('AgentLoopService (integration)', () => {
           useValue: { patch: jest.fn() },
         },
         {
+          provide: AgentEventPublisherService,
+          useValue: { publish: jest.fn() },
+        },
+        {
           provide: ConfigService,
           useValue: {
             get: jest.fn().mockReturnValue(undefined),
             getOrThrow: () => dbUrl,
           },
         },
+        // Real context-management wiring (mirrors AgentWorkerModule) so this
+        // integration spec exercises the actual budget-check/compaction path,
+        // not a pass-through mock.
+        ContextBudgetService,
+        ContextCompactorService,
+        IncomingDataGuardService,
+        {
+          provide: CONTEXT_EVENT_SINK,
+          useFactory: (publisher: AgentEventPublisherService) => ({
+            emit: (agentId: string, event: unknown) =>
+              publisher.publish(agentId as never, event as never),
+          }),
+          inject: [AgentEventPublisherService],
+        },
+        { provide: CONTEXT_AUDIT_SINK, useExisting: AuditClientService },
+        ContextManagerService,
       ],
     }).compile();
 
@@ -140,7 +165,7 @@ describeIf('AgentLoopService (integration)', () => {
   it('runs to Completed and fires LlmRequest + LlmResponse audit events', async () => {
     const { company, role, agent } = await seedAgentAndRole();
 
-    await service.run(agent.id);
+    await service.run(agent.id, undefined, new AbortController());
 
     const updated = await agentRepo.findOneByOrFail({ id: agent.id });
     expect(updated.status).toBe(AgentStatus.Completed);
@@ -192,17 +217,57 @@ describeIf('AgentLoopService (integration)', () => {
       }),
     );
 
-    await service.run(agent.id);
+    await service.run(agent.id, undefined, new AbortController());
 
     const updated = await agentRepo.findOneByOrFail({ id: agent.id });
     expect(updated.status).toBe(AgentStatus.Completed);
+  }, 30_000);
+
+  it('compacts the checkpoint on resume when a tiny context window is exceeded, and still completes', async () => {
+    const { company, role, agent } = await seedAgentAndRole();
+
+    // First run: builds up real checkpoint history (system/role/task messages).
+    await service.run(agent.id, undefined, new AbortController());
+    const afterFirst = await agentRepo.findOneByOrFail({ id: agent.id });
+    expect(afterFirst.status).toBe(AgentStatus.Completed);
+
+    // Shrink the window so the existing checkpoint + a large reply now
+    // exceeds the 80% trigger threshold, forcing Tier-1 trim on resume.
+    await roleRepo.update(role.id, {
+      llmConfig: { ...role.llmConfig, contextWindow: 50 },
+    });
+    await agentRepo.update(agent.id, { status: AgentStatus.Paused });
+
+    await service.run(
+      agent.id,
+      'Consultation response: '.repeat(50),
+      new AbortController(),
+    );
+
+    const afterResume = await agentRepo.findOneByOrFail({ id: agent.id });
+    expect(afterResume.status).toBe(AgentStatus.Completed);
+
+    expect(auditRecord).toHaveBeenCalledWith(
+      company.id,
+      role.name,
+      agent.id,
+      AuditEventType.Decision,
+      expect.objectContaining({ event: 'compaction_triggered' }),
+    );
+    expect(auditRecord).toHaveBeenCalledWith(
+      company.id,
+      role.name,
+      agent.id,
+      AuditEventType.Decision,
+      expect.objectContaining({ event: 'compaction_complete' }),
+    );
   }, 30_000);
 
   it('resumes from a Paused state, restoring the LangGraph checkpoint', async () => {
     const { agent } = await seedAgentAndRole();
 
     // First run: creates checkpoint and completes
-    await service.run(agent.id);
+    await service.run(agent.id, undefined, new AbortController());
     const afterFirst = await agentRepo.findOneByOrFail({ id: agent.id });
     expect(afterFirst.status).toBe(AgentStatus.Completed);
     const threadIdAfterFirst = afterFirst.threadId;
@@ -211,7 +276,7 @@ describeIf('AgentLoopService (integration)', () => {
     await agentRepo.update(agent.id, { status: AgentStatus.Paused });
 
     // Second run: LangGraph restores the checkpoint for the same thread_id
-    await service.run(agent.id);
+    await service.run(agent.id, undefined, new AbortController());
 
     const afterSecond = await agentRepo.findOneByOrFail({ id: agent.id });
     expect(afterSecond.status).toBe(AgentStatus.Completed);

@@ -1,8 +1,5 @@
-import {
-  AIMessage,
-  HumanMessage,
-  SystemMessage,
-} from '@langchain/core/messages';
+import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import type { DynamicStructuredTool } from '@langchain/core/tools';
 import { MessagesAnnotation } from '@langchain/langgraph';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import {
@@ -10,18 +7,24 @@ import {
   AgentStatus,
   AuditClientService,
   AuditEventType,
+  ContextManagerService,
   DEFAULT_AGENT_ITERATIONS,
   DEFAULT_AGENT_LOOP_TIMEOUT_MS,
+  DEFAULT_LLM_CONTEXT_WINDOW,
   DEFAULT_REQUIRED_TOOL_RETRIES,
   LcpAgent,
   LlmConfig,
+  StreamEventLike,
+  SupervisedGraphResult,
+  ToolVisibilityTracker,
   buildAgentGraph,
+  mapStreamEvent,
   renderTemplate,
   resolveEnvLlmConfig,
   resolveRunConfig,
+  runSupervisedGraph,
 } from '@lcp/shared';
 import { Injectable, Logger } from '@nestjs/common';
-import Redis from 'ioredis';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
@@ -31,8 +34,8 @@ import { buildChatModel } from '../llm/llm-factory';
 import { McpClientService } from '../mcp/mcp-client.service';
 import { MCP_REGISTRY, resolveMcpServerUrls } from '../mcp/mcp-registry';
 import { AgentRagService } from '../rag/agent-rag.service';
-import { AgentRegistryService } from '../registry/agent-registry.service';
 import { StorageTrackingClientService } from '../storage-tracking/storage-tracking-client.service';
+import { AgentEventPublisherService } from './agent-event-publisher.service';
 import {
   AgentLoopTracker,
   applyStorageResult,
@@ -50,6 +53,36 @@ const EVENT_TYPE_MAP: Record<string, AuditEventType> = {
 };
 
 /**
+ * Bundles the per-run values {@link AgentLoopService.runSupervised} needs,
+ * shared across the main run, the empty-output retry, and each
+ * required-tool reminder in {@link AgentLoopService.enforceRequiredTools}.
+ */
+interface SupervisedRunContext {
+  agent: LcpAgent;
+  model: ReturnType<typeof buildChatModel>;
+  allTools: DynamicStructuredTool[];
+  /**
+   * The graph built once in {@link AgentLoopService.runLoop} (and already
+   * used for the pre-turn `ContextManagerService.prepare` check) — reused as
+   * `initialGraph` by every {@link AgentLoopService.runSupervised} call for
+   * this job (main run, empty-output retry, required-tool reminders), same
+   * as the single shared graph the old `streamAndAudit` call sites reused.
+   */
+  graph: ReturnType<typeof buildAgentGraph>;
+  config: { configurable: { thread_id: string }; signal: AbortSignal };
+  windowSize: number;
+  abortController: AbortController;
+  maxIterations: number;
+  buildGraph: (
+    tools: DynamicStructuredTool[],
+  ) => ReturnType<typeof buildAgentGraph>;
+  /** Shared across every {@link AgentLoopService.runSupervised} call for this
+   * job, so a server described during the main run stays visible through a
+   * subsequent retry or required-tool reminder. */
+  toolVisibility: ToolVisibilityTracker;
+}
+
+/**
  * Executes and manages the LangGraph agent loop for a single {@link LcpAgent} run.
  *
  * Each call to {@link AgentLoopService.run} corresponds to one BullMQ job.
@@ -65,11 +98,12 @@ const EVENT_TYPE_MAP: Record<string, AuditEventType> = {
  *
  * When an agent calls `request_user_input` or `request_agent_consultation` via
  * the interactions MCP server, lcp-server sets the agent's status to
- * {@link AgentStatus.Paused}. After each tool result event,
- * {@link streamAndAudit} re-reads the agent status; detecting Paused causes an
- * early exit so the BullMQ job completes normally without marking the agent
- * failed. On resume, lcp-server enqueues a new job with `replyContent` which
- * is injected as the first HumanMessage into the resumed LangGraph stream.
+ * {@link AgentStatus.Paused}. `runSupervisedGraph` (see {@link runSupervised})
+ * re-reads the agent status between tool-loop iterations; detecting Paused
+ * causes an early exit so the BullMQ job completes normally without marking
+ * the agent failed. On resume, lcp-server enqueues a new job with
+ * `replyContent` which is injected as the first HumanMessage into the
+ * resumed LangGraph stream.
  */
 @Injectable()
 export class AgentLoopService {
@@ -77,12 +111,13 @@ export class AgentLoopService {
   private readonly databaseUrl: string;
 
   constructor(
-    private readonly registry: AgentRegistryService,
     private readonly rag: AgentRagService,
     private readonly mcp: McpClientService,
     private readonly config: ConfigService,
     private readonly auditClient: AuditClientService,
     private readonly storageTracking: StorageTrackingClientService,
+    private readonly events: AgentEventPublisherService,
+    private readonly contextManager: ContextManagerService,
     @InjectRepository(LcpAgent)
     private readonly agentRepo: Repository<LcpAgent>,
   ) {
@@ -95,8 +130,20 @@ export class AgentLoopService {
    * @param replyContent - When provided, the agent is resuming from a pause.
    *   The content is injected as the first HumanMessage instead of rebuilding
    *   the full initial-state prompt from scratch.
+   * @param abortController - Owned by the caller ({@link AgentWorkerService}),
+   *   which registers it in {@link AgentRegistryService} *before* calling this
+   *   method — synchronously, with no `await` in between, so the duplicate-job
+   *   check and the registration are atomic. Registering here instead (after
+   *   the `agentRepo.findOne` below) would reopen that race: a stalled-job
+   *   retry dispatched while this call is still awaiting that query would see
+   *   `isRunning() === false` and start a second, concurrent execution against
+   *   the same LangGraph checkpoint thread.
    */
-  async run(agentId: UUID, replyContent?: string): Promise<void> {
+  async run(
+    agentId: UUID,
+    replyContent: string | undefined,
+    abortController: AbortController,
+  ): Promise<void> {
     const agent = await this.agentRepo.findOne({
       where: { id: agentId },
       relations: { role: true, company: true },
@@ -134,15 +181,12 @@ export class AgentLoopService {
       DEFAULT_AGENT_LOOP_TIMEOUT_MS,
     );
 
-    const abortController = new AbortController();
-
     /** Cancels the run after the resolved wall-clock timeout. */
     const timeoutId = setTimeout(
       () => abortController.abort('timeout'),
       timeoutMs,
     );
 
-    this.registry.register(agentId, abortController);
     await this.updateStatus(agent, AgentStatus.Running, agentId);
 
     const checkpointer = PostgresSaver.fromConnString(this.databaseUrl);
@@ -165,7 +209,6 @@ export class AgentLoopService {
     } finally {
       clearTimeout(timeoutId);
       await checkpointer.end();
-      this.registry.deregister(agentId);
     }
   }
 
@@ -175,7 +218,7 @@ export class AgentLoopService {
    *
    * Loads MCP tools from the role's permitted server list, builds the LangGraph
    * graph, constructs the input state (resume path vs. full initial-state build),
-   * then delegates to {@link streamAndAudit}. Handles post-stream status
+   * then delegates to {@link runSupervisedGraph}. Handles post-stream status
    * resolution: paused (early exit), completed (generate summary), or
    * fallback completion when the loop ends without an explicit tool call.
    */
@@ -202,59 +245,96 @@ export class AgentLoopService {
     const langchainTools = mcpTools.map((t) => t.tool);
 
     const model = buildChatModel(llmConfig);
-    const graph = buildAgentGraph({
-      model,
-      checkpointer,
-      tools: langchainTools,
-      logger: this.logger,
-    });
+    const buildGraph = (tools: DynamicStructuredTool[]) =>
+      buildAgentGraph({
+        model,
+        checkpointer,
+        tools,
+        logger: this.logger,
+        interruptAfterTools: true,
+        signal: abortController.signal,
+      });
+    // Tool-schema gating: only each server's describe_server tool (plus
+    // always-visible servers, e.g. interactions) is bound until the agent
+    // describes it — the initial graph and budget check below must use this
+    // same gated set, not the full one, or the very first turn would bind
+    // everything regardless.
+    const toolVisibility = new ToolVisibilityTracker();
+    const initialTools = toolVisibility.resolveVisibleTools(langchainTools);
+    const graph = buildGraph(initialTools);
 
     const config = {
       configurable: { thread_id: agent.id },
       signal: abortController.signal,
     };
 
+    // Check context budget and compact if needed before invoking — same
+    // protection chat.service.ts's inline turns already have (see
+    // ContextManagerService), now also covering worker runs (fresh, resumed,
+    // and consulted-agent runs), which previously had none at all.
+    const windowSize =
+      Number(llmConfig.contextWindow) || DEFAULT_LLM_CONTEXT_WINDOW;
+    const isFirstMessage = replyContent === undefined;
+    const { message: preparedMessage } = await this.contextManager.prepare(
+      agent.id,
+      replyContent ?? agent.initialPrompt,
+      model,
+      windowSize,
+      graph,
+      config,
+      isFirstMessage,
+      agent,
+      agent.role,
+      initialTools,
+    );
+
     // Resume path: inject reply as the next message; checkpoint holds prior state
-    const input: typeof MessagesAnnotation.State =
-      replyContent !== undefined
-        ? { messages: [new HumanMessage(replyContent)] }
-        : await this.buildInitialState(agent, mcpTools, mcpServerUrls);
+    const input: typeof MessagesAnnotation.State = !isFirstMessage
+      ? { messages: [new HumanMessage(preparedMessage)] }
+      : await this.buildInitialState(
+          agent,
+          mcpTools,
+          mcpServerUrls,
+          preparedMessage,
+        );
 
     const tracker = createTracker();
+    const ctx: SupervisedRunContext = {
+      agent,
+      model,
+      allTools: langchainTools,
+      graph,
+      config,
+      windowSize,
+      abortController,
+      maxIterations,
+      buildGraph,
+      toolVisibility,
+    };
 
     try {
-      const lastAiMessage = await this.streamAndAudit(
-        graph,
-        input,
-        config,
-        agent,
-        abortController,
-        tracker,
-        maxIterations,
-      );
+      const result = await this.runSupervised(ctx, input, tracker);
 
-      if (abortController.signal.aborted) {
+      if (result.aborted) {
         await this.failRun(
           agent,
-          String(abortController.signal.reason ?? 'unknown'),
+          result.failureReason ??
+            String(abortController.signal.reason ?? 'unknown'),
         );
         return;
       }
 
-      // A tool call may have set the agent to Paused or Completed during the stream
-      const freshAgent = await this.agentRepo.findOneBy({ id: agent.id });
-      if (freshAgent?.status === AgentStatus.Paused) {
+      if (result.terminalStatus === AgentStatus.Paused) {
         this.logger.log(
           `Agent ${agent.id} loop ending with status 'paused' (set by tool call)`,
         );
         return;
       }
-      if (freshAgent?.status === AgentStatus.Completed) {
+      if (result.terminalStatus === AgentStatus.Completed) {
         this.logger.log(
           `Agent ${agent.id} loop ending with status 'completed' (set by tool call)`,
         );
-        await this.generateAndRecordCompletionSummary(agent, model, tracker);
-        await this.publishCompletion(agent.id, freshAgent.output ?? '');
+        this.recordCompletionSummary(agent, tracker);
         return;
       }
 
@@ -265,34 +345,25 @@ export class AgentLoopService {
       const requiredTools = this.resolveRequiredTools(agent, langchainTools);
       if (requiredTools.length > 0) {
         await this.enforceRequiredTools(
-          graph,
-          config,
-          agent,
-          abortController,
+          ctx,
           tracker,
-          maxIterations,
-          model,
           requiredTools,
           langchainTools,
         );
         return;
       }
 
-      const rawContent = lastAiMessage?.content;
+      const rawContent = result.lastAiMessage?.content;
       let content = (typeof rawContent === 'string' ? rawContent : '').trim();
       if (!content) {
         // One retry: ask the agent to continue with an explicit continuation prompt
         this.logger.warn(`Agent ${agent.id} produced empty output — retrying`);
-        const retryMessage = await this.streamAndAudit(
-          graph,
+        const retryResult = await this.runSupervised(
+          ctx,
           { messages: [new HumanMessage('Please provide your response.')] },
-          config,
-          agent,
-          abortController,
           tracker,
-          maxIterations,
         );
-        const rawRetryContent = retryMessage?.content;
+        const rawRetryContent = retryResult.lastAiMessage?.content;
         content = (
           typeof rawRetryContent === 'string' ? rawRetryContent : ''
         ).trim();
@@ -304,12 +375,11 @@ export class AgentLoopService {
       }
 
       // Fallback completion — notifyComplete is idempotent if complete_task was called.
-      // Write output directly first so chat.service's race-condition check can read it
-      // before publishCompletion fires; notifyComplete is fire-and-forget and may lag.
+      // Write output directly first so lcp-server's recovery/replay path can read
+      // it (the completed event originates there); notifyComplete may lag.
       await this.agentRepo.update(agent.id, { output: content });
       this.auditClient.notifyComplete(agent.id, content);
       await this.updateStatus(agent, AgentStatus.Completed);
-      await this.publishCompletion(agent.id, content);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`Agent ${agent.id} loop error: ${msg}`);
@@ -318,40 +388,63 @@ export class AgentLoopService {
   }
 
   /**
-   * Streams graph events, writes audit rows, tracks tool actions and storage
-   * changes, and returns the last AI message plus the accumulated tracker.
-   *
-   * After each `on_tool_end` event, re-reads the agent status from the DB. If
-   * a tool call has set the status to {@link AgentStatus.Paused} or
-   * {@link AgentStatus.Completed}, breaks out of the stream early so the BullMQ
-   * job can complete without marking the agent failed.
+   * Runs one supervised turn (see {@link runSupervisedGraph}) with this
+   * service's audit/tracker/observability side effects wired up via
+   * {@link buildOnEvent} and DB-backed terminal-status/iteration hooks.
    */
-  private async streamAndAudit(
-    graph: ReturnType<typeof buildAgentGraph>,
+  private async runSupervised(
+    ctx: SupervisedRunContext,
     input: typeof MessagesAnnotation.State,
-    config: { configurable: { thread_id: string }; signal: AbortSignal },
-    agent: LcpAgent,
-    abortController: AbortController,
     tracker: AgentLoopTracker,
-    maxIterations: number,
-  ): Promise<AIMessage | undefined> {
-    let lastAiMessage: AIMessage | undefined;
-    let iterations = 0;
+  ): Promise<SupervisedGraphResult> {
+    const onEvent = this.buildOnEvent(ctx.agent, tracker);
+    return runSupervisedGraph({
+      agentId: ctx.agent.id,
+      agent: ctx.agent,
+      role: ctx.agent.role,
+      model: ctx.model,
+      allTools: ctx.allTools,
+      initialGraph: ctx.graph,
+      input,
+      config: ctx.config,
+      contextManager: this.contextManager,
+      windowSize: ctx.windowSize,
+      abortController: ctx.abortController,
+      hooks: {
+        buildGraph: ctx.buildGraph,
+        onEvent: (event) => {
+          ctx.toolVisibility.onEvent(event);
+          onEvent(event);
+        },
+        checkTerminalStatus: async () => {
+          const fresh = await this.agentRepo.findOneBy({ id: ctx.agent.id });
+          return fresh?.status === AgentStatus.Paused ||
+            fresh?.status === AgentStatus.Completed
+            ? fresh.status
+            : null;
+        },
+        maxIterations: ctx.maxIterations,
+        resolveVisibleTools: (tools) =>
+          ctx.toolVisibility.resolveVisibleTools(tools),
+      },
+    });
+  }
 
-    // Correlates on_tool_start inputs to on_tool_end outputs by run_id
+  /**
+   * Builds a per-run `onEvent` handler: writes audit rows, tracks tool
+   * actions/storage changes, and relays every event to observing SSE
+   * clients. `pendingToolInputs` correlates `on_tool_start` inputs to
+   * `on_tool_end` outputs by `run_id` — scoped to one {@link runSupervised}
+   * call, matching the previous per-call `streamAndAudit` scoping.
+   */
+  private buildOnEvent(
+    agent: LcpAgent,
+    tracker: AgentLoopTracker,
+  ): (event: StreamEventLike) => void {
     // ponytail: actions include failed tool calls; on_tool_start used for simplicity
     const pendingToolInputs = new Map<string, Record<string, unknown>>();
 
-    const stream = graph.streamEvents(input, { ...config, version: 'v2' });
-    for await (const event of stream) {
-      if (event.event === 'on_chat_model_start') {
-        iterations++;
-        if (iterations > maxIterations) {
-          abortController.abort('max_iterations');
-          break;
-        }
-      }
-
+    return (event: StreamEventLike) => {
       const auditType = EVENT_TYPE_MAP[event.event];
       if (auditType) {
         this.auditClient.record(
@@ -359,52 +452,33 @@ export class AgentLoopService {
           agent.role.name,
           agent.id,
           auditType,
-          event.data,
+          event.data ?? {},
         );
       }
 
-      if (event.event === 'on_chat_model_end') {
-        const output = (event.data as { output?: unknown } | undefined)?.output;
-        // A streamed chat-model run reports its output as an AIMessageChunk,
-        // not a plain AIMessage — instanceof AIMessage misses it, but
-        // AIMessage.isInstance() recognizes both.
-        if (AIMessage.isInstance(output)) {
-          lastAiMessage = output;
-        }
+      // Relay the same stream events to observing SSE clients (LLM activity,
+      // reasoning/response token deltas). No-op when Redis is not configured.
+      for (const observabilityEvent of mapStreamEvent(event)) {
+        this.events.publish(agent.id, observabilityEvent);
       }
 
       if (event.event === 'on_tool_start') {
-        const input_ =
-          (event.data as { input?: Record<string, unknown> } | undefined)
-            ?.input ?? {};
-        pendingToolInputs.set(event.run_id, input_);
-        tracker.actions.push(generateActionString(event.name, input_));
-        tracker.firedTools.add(baseToolName(event.name));
+        const input_ = event.data?.input ?? {};
+        const runId = event.run_id ?? '';
+        pendingToolInputs.set(runId, input_);
+        tracker.actions.push(generateActionString(event.name ?? '', input_));
+        tracker.firedTools.add(baseToolName(event.name ?? ''));
       }
 
       if (event.event === 'on_tool_end') {
-        const toolInput = pendingToolInputs.get(event.run_id) ?? {};
-        const output = (event.data as { output?: unknown } | undefined)?.output;
-        applyStorageResult(event.name, toolInput, output, tracker);
-        pendingToolInputs.delete(event.run_id);
+        const runId = event.run_id ?? '';
+        const toolInput = pendingToolInputs.get(runId) ?? {};
+        const output = event.data?.output;
+        applyStorageResult(event.name ?? '', toolInput, output, tracker);
+        pendingToolInputs.delete(runId);
         this.storageTracking.patch(agent.id, tracker.storage);
-
-        // Pause detection: a tool call (e.g. request_user_input, complete_task) may
-        // have mutated the agent's status — exit the stream gracefully if so
-        const fresh = await this.agentRepo.findOneBy({ id: agent.id });
-        if (
-          fresh?.status === AgentStatus.Paused ||
-          fresh?.status === AgentStatus.Completed
-        ) {
-          this.logger.log(
-            `Agent ${agent.id} status '${fresh.status}' detected after tool result — exiting stream`,
-          );
-          break;
-        }
       }
-    }
-
-    return lastAiMessage;
+    };
   }
 
   /**
@@ -437,19 +511,15 @@ export class AgentLoopService {
    * text is never accepted in place of the required calls.
    */
   private async enforceRequiredTools(
-    graph: ReturnType<typeof buildAgentGraph>,
-    config: { configurable: { thread_id: string }; signal: AbortSignal },
-    agent: LcpAgent,
-    abortController: AbortController,
+    ctx: SupervisedRunContext,
     tracker: AgentLoopTracker,
-    maxIterations: number,
-    model: ReturnType<typeof buildChatModel>,
     requiredTools: string[],
     tools: { name: string }[],
   ): Promise<void> {
     const retries =
       this.config.get<number>('AGENT_REQUIRED_TOOL_RETRIES') ??
       DEFAULT_REQUIRED_TOOL_RETRIES;
+    const { agent } = ctx;
 
     // Name tools in reminders exactly as the LLM sees them (server-prefixed).
     const callableName = (base: string): string =>
@@ -470,37 +540,32 @@ export class AgentLoopService {
         `Agent ${agent.id} ended without required tool call(s) [${requiredTools.join(', ')}] — reminder ${attempt}/${retries}`,
       );
 
-      await this.streamAndAudit(
-        graph,
+      const result = await this.runSupervised(
+        ctx,
         { messages: [new HumanMessage(nudge)] },
-        config,
-        agent,
-        abortController,
         tracker,
-        maxIterations,
       );
 
-      if (abortController.signal.aborted) {
+      if (result.aborted) {
         await this.failRun(
           agent,
-          String(abortController.signal.reason ?? 'unknown'),
+          result.failureReason ??
+            String(ctx.abortController.signal.reason ?? 'unknown'),
         );
         return;
       }
 
-      const fresh = await this.agentRepo.findOneBy({ id: agent.id });
-      if (fresh?.status === AgentStatus.Paused) {
+      if (result.terminalStatus === AgentStatus.Paused) {
         this.logger.log(
           `Agent ${agent.id} paused during required-tool reminder — exiting`,
         );
         return;
       }
-      if (fresh?.status === AgentStatus.Completed) {
+      if (result.terminalStatus === AgentStatus.Completed) {
         this.logger.log(
           `Agent ${agent.id} completed after required-tool reminder ${attempt}`,
         );
-        await this.generateAndRecordCompletionSummary(agent, model, tracker);
-        await this.publishCompletion(agent.id, fresh.output ?? '');
+        this.recordCompletionSummary(agent, tracker);
         return;
       }
     }
@@ -513,9 +578,9 @@ export class AgentLoopService {
 
   /**
    * Marks the run as failed: records the state change, sets the agent status,
-   * notifies lcp-server (which resolves any pending consultation as failed and
-   * resumes the calling agent), and publishes the empty-string failure
-   * sentinel so any HTTP handler waiting on this agent returns promptly.
+   * and notifies lcp-server (which resolves any pending consultation as failed,
+   * resumes the calling agent, and emits the terminal `failed` event to any SSE
+   * clients observing this agent).
    *
    * No-op if the agent has already reached Completed — `complete_task` may
    * have won the race against a late failure (e.g. a summary error).
@@ -532,14 +597,20 @@ export class AgentLoopService {
     this.recordStateChange(agent, 'failed', reason);
     await this.updateStatus(agent, AgentStatus.Failed);
     this.auditClient.notifyFailed(agent.id, reason);
-    await this.publishCompletion(agent.id, '');
   }
 
-  /** Builds the full initial-state message list for the first run of an agent. */
+  /**
+   * Builds the full initial-state message list for the first run of an agent.
+   *
+   * @param initialPrompt - The task prompt to use for prompt part 4, already
+   *   passed through {@link ContextManagerService.prepare} (may differ from
+   *   `agent.initialPrompt` if the incoming-data guard compacted it).
+   */
   private async buildInitialState(
     agent: LcpAgent,
     mcpTools: Awaited<ReturnType<McpClientService['loadTools']>>,
     mcpServerUrls: Record<string, string>,
+    initialPrompt: string,
   ): Promise<typeof MessagesAnnotation.State> {
     const { role, company } = agent;
     const systemPrompt = renderTemplate(role.systemPromptTemplate, {
@@ -552,7 +623,7 @@ export class AgentLoopService {
 
     const ragChunks = await this.rag.retrieve(
       role.id,
-      agent.initialPrompt,
+      initialPrompt,
       company.embeddingConfig,
     );
     const ragMessage = ragChunks.length
@@ -580,7 +651,7 @@ export class AgentLoopService {
         // Prompt part 3: services available (MCP servers). Call describe_server on any for details.
         ...(servicesMessage ? [servicesMessage] : []),
         // Prompt part 4: task / query prompt
-        new HumanMessage(agent.initialPrompt),
+        new HumanMessage(initialPrompt),
         // Prompt part 5: RAG data retrieved for the initial task (omitted when nothing relevant)
         ...(ragMessage ? [ragMessage] : []),
         // Prompt part 6: episodic memory — recalled prior run summaries relevant to this task (not yet implemented)
@@ -592,28 +663,25 @@ export class AgentLoopService {
   }
 
   /**
-   * Generates a short prose summary of the completed agent loop via a direct
-   * LLM call and records it as an {@link AuditEventType.AgentLoopCompletion} event.
+   * Builds a deterministic completion summary from the tracker data and
+   * records it as an {@link AuditEventType.AgentLoopCompletion} event.
    *
-   * Attempts the LLM call once; on failure retries once more immediately.
-   * If both attempts fail, falls back to a structured plaintext summary built
-   * from the tracker data so that a completion event is always recorded.
-   * ponytail: one retry, then structured fallback — LLM is best-effort for summaries
+   * No LLM call — the tracked actions and storage changes are already
+   * precise and complete, so an LLM-authored abstractive summary added
+   * narrative framing but no new facts, at the cost of an extra round-trip
+   * on every completed run.
    */
-  private async generateAndRecordCompletionSummary(
+  private recordCompletionSummary(
     agent: LcpAgent,
-    model: ReturnType<typeof buildChatModel>,
     tracker: AgentLoopTracker,
-  ): Promise<void> {
+  ): void {
     const { actions, storage } = tracker;
-
-    const invokeForSummary = async (): Promise<string> => {
-      const actionLines = actions.length
-        ? actions.map((a, i) => `${i + 1}. ${a}`).join('\n')
-        : agentPrompts.completion_summary_no_actions;
-      const prompt = renderTemplate(agentPrompts.completion_summary_prompt, {
-        initialPrompt: agent.initialPrompt,
-        actionLines,
+    const summary = renderTemplate(
+      agentPrompts.completion_summary_deterministic,
+      {
+        actionLines: actions.length
+          ? actions.map((a, i) => `${i + 1}. ${a}`).join('\n')
+          : agentPrompts.completion_summary_no_actions,
         created:
           storage.created.join(', ') ||
           agentPrompts.completion_summary_no_storage,
@@ -626,30 +694,8 @@ export class AgentLoopService {
         moved:
           storage.moved.map((m) => `${m.from} → ${m.to}`).join(', ') ||
           agentPrompts.completion_summary_no_storage,
-      });
-      const response = await model.invoke([new HumanMessage(prompt)]);
-      const raw =
-        typeof response.content === 'string' ? response.content.trim() : '';
-      // Strip markdown code fences if the model wraps the JSON
-      const jsonText = raw
-        .replace(/^```(?:json)?\s*/i, '')
-        .replace(/```\s*$/, '');
-      const parsed = JSON.parse(jsonText) as { summary?: unknown };
-      return typeof parsed.summary === 'string' ? parsed.summary : raw;
-    };
-
-    let summary = buildFallbackSummary(agent.initialPrompt, actions, storage);
-    try {
-      summary = await invokeForSummary();
-    } catch {
-      try {
-        summary = await invokeForSummary();
-      } catch (e) {
-        this.logger.warn(
-          `Failed to generate completion summary for agent ${agent.id}: ${String(e)} — using structured fallback`,
-        );
-      }
-    }
+      },
+    );
 
     const completionSummary: AgentLoopCompletionSummary = {
       summary,
@@ -679,35 +725,14 @@ export class AgentLoopService {
       status,
       ...(threadId !== undefined && { threadId }),
     });
-  }
-
-  /**
-   * Publishes the agent's final response to `agent:completed:{agentId}` on
-   * Redis so that any HTTP handler waiting on this agent (e.g. the chat
-   * service holding a long-poll open across a pause/resume cycle) can return
-   * the real answer rather than a placeholder.
-   *
-   * A transient connection is created per publish and closed immediately
-   * after — no persistent connection is held. If `REDIS_URL` is not configured
-   * or the publish fails, the error is logged and swallowed: the channel is
-   * best-effort and the BullMQ job must not fail because of it.
-   */
-  private async publishCompletion(
-    agentId: UUID,
-    content: string,
-  ): Promise<void> {
-    const redisUrl = this.config.get<string>('REDIS_URL');
-    if (!redisUrl) return;
-    const publisher = new Redis(redisUrl);
-    try {
-      await publisher.publish(`agent:completed:${agentId}`, content);
-    } catch (err) {
-      this.logger.warn(
-        `Failed to publish completion for agent ${agentId}: ${String(err)}`,
-      );
-    } finally {
-      await publisher.quit().catch(() => {});
-    }
+    // Surface the worker's lifecycle transitions to observing SSE clients.
+    // Terminal `completed`/`failed` events (carrying the response/error) are
+    // emitted separately by lcp-server once notifyComplete/notifyFailed lands.
+    this.events.publish(agent.id, {
+      timestamp: new Date().toISOString(),
+      kind: 'agent_status',
+      data: { status },
+    });
   }
 
   /**
@@ -732,8 +757,10 @@ export class AgentLoopService {
 /**
  * Formats the services-available message for prompt part 3.
  * Each line gives the "when to use this" framing from {@link MCP_REGISTRY};
- * tool-level detail is deliberately omitted since LangChain's `bindTools`
- * already sends the full tool schema for every loaded MCP tool on every turn.
+ * tool-level detail is deliberately omitted — a service's other tools only
+ * become bound once the agent calls its `describe_server` tool (see
+ * {@link ToolVisibilityTracker}), so restating them here would duplicate
+ * what the model sees once it actually describes the service.
  */
 function buildServicesMessage(
   serverNames: string[],
@@ -770,41 +797,4 @@ function buildRagMessage(
     )
     .join('\n\n---\n\n');
   return `${agentPrompts.rag_intro}\n\n${sections}`;
-}
-
-/**
- * Builds a structured plaintext summary from raw tracker data.
- * Used as a fallback when the LLM is unavailable during summary generation.
- */
-function buildFallbackSummary(
-  initialPrompt: string,
-  actions: string[],
-  storage: AgentLoopCompletionSummary['storage'],
-): string {
-  const taskSnippet =
-    initialPrompt.length > 100
-      ? `${initialPrompt.slice(0, 100)}…`
-      : initialPrompt;
-  const totalFiles =
-    storage.created.length +
-    storage.modified.length +
-    storage.deleted.length +
-    storage.moved.length;
-  const actionsSummary =
-    actions.length > 0
-      ? renderTemplate(agentPrompts.completion_fallback_actions, {
-          count: String(actions.length),
-        })
-      : agentPrompts.completion_fallback_no_actions;
-  const storageSummary =
-    totalFiles > 0
-      ? renderTemplate(agentPrompts.completion_fallback_storage, {
-          count: String(totalFiles),
-        })
-      : agentPrompts.completion_fallback_no_storage;
-  return renderTemplate(agentPrompts.completion_fallback_summary, {
-    taskSnippet,
-    actionsSummary,
-    storageSummary,
-  });
 }

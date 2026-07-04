@@ -1,38 +1,31 @@
-import {
-  AIMessage,
-  HumanMessage,
-  SystemMessage,
-} from '@langchain/core/messages';
-import Redis from 'ioredis';
+import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import type { DynamicStructuredTool } from '@langchain/core/tools';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import {
   AgentStatus,
   AuditEventType,
+  ContextManagerService,
   DEFAULT_LLM_CONTEXT_WINDOW,
-  DEFAULT_LLM_TIMEOUT_MS,
   LcpAgent,
   LcpCompany,
   LcpRole,
+  LlmConfig,
   McpClientService,
+  ToolVisibilityTracker,
   buildAgentGraph,
   buildChatModel,
+  mapStreamEvent,
   renderTemplate,
   resolveEnvLlmConfig,
   resolveMcpServerUrls,
+  runSupervisedGraph,
 } from '@lcp/shared';
-import {
-  Injectable,
-  InternalServerErrorException,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
-import { ContextManagerService } from '../context/context-manager.service';
-import type { CompactionReport } from '../context/context.types';
 import { AgentEventService } from '../events/agent-event.service';
 import { RagRetrievalService } from '../rag/rag-retrieval.service';
 
@@ -44,15 +37,15 @@ import { RagRetrievalService } from '../rag/rag-retrieval.service';
 const FINAL_INSTRUCTION =
   'You have been given your task and all relevant context above. Proceed now: be thorough, draw on your expertise, and deliver your best work.';
 
-/** Response returned by {@link ChatService.sendMessage}. */
-export interface ChatMessageResponse {
-  /** The agent's reply text. Empty string when the request was cancelled. */
-  response: string;
-  /**
-   * Present when the server compacted the context window before or during
-   * this turn. Includes strategy names, activities, duration, and token counts.
-   */
-  compactionReport?: CompactionReport;
+/** Resolved context for one detached chat turn, passed to {@link ChatService.runTurn}. */
+interface TurnContext {
+  agent: LcpAgent;
+  role: LcpRole;
+  company: LcpCompany | null;
+  llmConfig: LlmConfig;
+  windowSize: number;
+  isFirstMessage: boolean;
+  message: string;
 }
 
 @Injectable()
@@ -75,29 +68,21 @@ export class ChatService {
   ) {}
 
   /**
-   * Sends a message to an existing chat agent and returns the agent's response.
+   * Accepts a message for a chat agent and starts the turn, returning as soon
+   * as validation passes. The turn itself runs detached (see {@link runTurn});
+   * its output — reasoning, response, and completion — is delivered to clients
+   * over the `GET /api/agent/:id/events` SSE stream, not this call.
    *
    * On the first message (when `agent.threadId` is null), the role's system
    * prompt is prepended so the LLM knows its persona. Subsequent messages are
    * appended to the existing LangGraph checkpoint thread.
    *
-   * Context compaction runs before each invocation when the conversation
-   * history approaches the configured context window limit. See
-   * {@link ContextManagerService} for compaction details.
-   *
    * @param agentId - ID of the chat agent to send the message to.
    * @param message - User message text.
-   * @param signal - Optional {@link AbortSignal} to cancel the in-flight LLM call.
-   *   When aborted, the agent is returned to `idle` status rather than `failed`.
    *
    * @throws {@link NotFoundException} when the agent or its role/LLM config cannot be found.
-   * @throws {@link InternalServerErrorException} when the LLM call fails unexpectedly.
    */
-  async sendMessage(
-    agentId: UUID,
-    message: string,
-    signal?: AbortSignal,
-  ): Promise<ChatMessageResponse> {
+  async sendMessage(agentId: UUID, message: string): Promise<void> {
     const agent = await this.agentRepo.findOneBy({ id: agentId });
     if (!agent) throw new NotFoundException(`Agent ${agentId} not found`);
 
@@ -121,7 +106,6 @@ export class ChatService {
       status: AgentStatus.Running,
       ...(isFirstMessage && { threadId: agentId }),
     });
-
     await this.audit.record(
       agent.companyId,
       role.name,
@@ -129,12 +113,46 @@ export class ChatService {
       AuditEventType.LlmRequest,
       { message },
     );
+    this.agentEvents.emit(agentId, {
+      timestamp: new Date().toISOString(),
+      kind: 'agent_status',
+      data: { status: AgentStatus.Running },
+    });
+
+    // Detached — runTurn owns the agent's status and emits all turn output on
+    // the SSE stream. It never rejects (its catch handles failures), so the
+    // fire-and-forget is safe.
+    void this.runTurn({
+      agent,
+      role,
+      company,
+      llmConfig,
+      windowSize,
+      isFirstMessage,
+      message,
+    });
+  }
+
+  /**
+   * Runs one chat turn to completion in the background, streaming LLM activity,
+   * reasoning, and response deltas to SSE observers and persisting the final
+   * output. Emits a terminal `completed` (or `failed`) event and returns the
+   * agent to `idle` when the turn ends without pausing.
+   *
+   * When a consultation or user-input tool pauses the agent mid-turn, this
+   * returns early: the resumed BullMQ run plus {@link PauseAndResumeService}
+   * emit the remaining events (including the terminal one).
+   */
+  private async runTurn(ctx: TurnContext): Promise<void> {
+    const { agent, role, company, llmConfig, windowSize, isFirstMessage } = ctx;
+    const { message } = ctx;
+    const agentId = agent.id;
 
     const databaseUrl = this.config.getOrThrow<string>('DATABASE_URL');
     const checkpointer = PostgresSaver.fromConnString(databaseUrl);
 
     // Guard so the checkpointer connection pool is closed exactly once even
-    // when we need to close it early (before waiting on a Redis subscription).
+    // when we need to close it early (before returning on a mid-turn pause).
     let checkpointerClosed = false;
     const closeCheckpointer = async () => {
       if (!checkpointerClosed) {
@@ -160,33 +178,42 @@ export class ChatService {
       const langchainTools = mcpTools.map((t) => t.tool);
 
       const model = buildChatModel(llmConfig);
-      const graph = buildAgentGraph({
-        model,
-        checkpointer,
-        tools: langchainTools,
-        signal,
-        logger: this.logger,
-      });
+      const abortController = new AbortController();
+      const buildGraph = (tools: DynamicStructuredTool[]) =>
+        buildAgentGraph({
+          model,
+          checkpointer,
+          tools,
+          logger: this.logger,
+          interruptAfterTools: true,
+          signal: abortController.signal,
+        });
+      // Tool-schema gating: only each server's describe_server tool (plus
+      // always-visible servers, e.g. interactions) is bound until the agent
+      // describes it — the initial graph and budget check below must use
+      // this same gated set, not the full one, or the very first turn would
+      // bind everything regardless.
+      const toolVisibility = new ToolVisibilityTracker();
+      const initialTools = toolVisibility.resolveVisibleTools(langchainTools);
+      const graph = buildGraph(initialTools);
 
       const runConfig = { configurable: { thread_id: agentId } };
 
-      // Check context budget and compact if needed before invoking
-      this.agentEvents.emit(agentId, {
-        kind: 'processing_started',
-        timestamp: new Date().toISOString(),
-      });
-      const { message: preparedMessage, report: compactionReport } =
-        await this.contextManager.prepare(
-          agentId,
-          message,
-          model,
-          windowSize,
-          graph,
-          runConfig,
-          isFirstMessage,
-          agent,
-          role,
-        );
+      // Check context budget and compact if needed before invoking. Compaction
+      // emits its own SSE events; the running transition was already emitted by
+      // sendMessage.
+      const { message: preparedMessage } = await this.contextManager.prepare(
+        agentId,
+        message,
+        model,
+        windowSize,
+        graph,
+        runConfig,
+        isFirstMessage,
+        agent,
+        role,
+        initialTools,
+      );
 
       let ragMessage: HumanMessage | null = null;
       if (isFirstMessage) {
@@ -245,32 +272,70 @@ export class ChatService {
           ]
         : [new HumanMessage(preparedMessage)];
 
-      const result = await graph.invoke({ messages }, { ...runConfig, signal });
+      // Supervise the turn: check terminal status, context budget, and tool
+      // visibility between every tool-loop iteration, instead of letting the
+      // graph's tools -> agent edge run unattended to the end. Forwards
+      // every LLM/tool/reasoning/response event to observers as it happens
+      // and captures the final AI message for persistence.
+      const result = await runSupervisedGraph({
+        agentId,
+        agent,
+        role,
+        model,
+        allTools: langchainTools,
+        initialGraph: graph,
+        input: { messages },
+        config: runConfig,
+        contextManager: this.contextManager,
+        windowSize,
+        abortController,
+        hooks: {
+          buildGraph,
+          onEvent: (event) => {
+            toolVisibility.onEvent(event);
+            for (const observabilityEvent of mapStreamEvent(event)) {
+              this.agentEvents.emit(agentId, observabilityEvent);
+            }
+          },
+          checkTerminalStatus: async () => {
+            const fresh = await this.agentRepo.findOneBy({ id: agentId });
+            return fresh?.status === AgentStatus.Paused ||
+              fresh?.status === AgentStatus.Completed
+              ? fresh.status
+              : null;
+          },
+          resolveVisibleTools: (tools) =>
+            toolVisibility.resolveVisibleTools(tools),
+        },
+      });
 
-      // If a consultation or user-input tool paused the agent mid-turn, the
-      // graph has already terminated and the agent is waiting for a resumed
-      // BullMQ run to supply the real answer. Release the checkpointer
-      // immediately (no further checkpoint reads needed) and hold the HTTP
-      // connection open until the resumed run publishes its response.
-      //
-      // Also handle Completed: the consultation cycle can race to completion
-      // while graph.invoke() is still running its final empty LLM turn, so
-      // the agent's status may already be Completed by the time we check.
-      // waitForAgentCompletion handles both cases — its polling loop finds
-      // the output within one interval when the agent is already done.
-      const freshAgent = await this.agentRepo.findOneBy({ id: agentId });
-      if (
-        freshAgent?.status === AgentStatus.Paused ||
-        freshAgent?.status === AgentStatus.Completed
-      ) {
-        await closeCheckpointer();
-        return await this.waitForAgentCompletion(agentId, signal);
+      if (result.failureReason) {
+        throw new Error(result.failureReason);
       }
 
-      const last = result.messages.at(-1);
+      // A consultation or user-input tool may have paused the agent mid-turn.
+      // Its resumed BullMQ run — plus PauseAndResumeService — will emit the
+      // remaining events (including the terminal one), so we stop here. If the
+      // consultation cycle raced to Completed while the final LLM turn ran,
+      // emit the terminal event now from the persisted output.
+      if (result.terminalStatus === AgentStatus.Paused) {
+        await closeCheckpointer();
+        return;
+      }
+      if (result.terminalStatus === AgentStatus.Completed) {
+        await closeCheckpointer();
+        const freshAgent = await this.agentRepo.findOneBy({ id: agentId });
+        this.agentEvents.emit(agentId, {
+          timestamp: new Date().toISOString(),
+          kind: 'completed',
+          data: { response: freshAgent?.output ?? '' },
+        });
+        return;
+      }
+
       const content =
-        last instanceof AIMessage && typeof last.content === 'string'
-          ? last.content.trim()
+        typeof result.lastAiMessage?.content === 'string'
+          ? result.lastAiMessage.content.trim()
           : '';
 
       await this.audit.record(
@@ -280,37 +345,25 @@ export class ChatService {
         AuditEventType.LlmResponse,
         { response: content },
       );
-      await this.agentRepo.update(agentId, { status: AgentStatus.Idle });
-      this.agentEvents.emit(agentId, {
-        kind: 'processing_complete',
-        timestamp: new Date().toISOString(),
+      // Persist output so a client that missed the SSE `completed` event can
+      // recover it via GET /api/agent/:id (the SSE replay path reads it too).
+      await this.agentRepo.update(agentId, {
+        status: AgentStatus.Idle,
+        output: content,
       });
-
-      return {
-        response: content,
-        compactionReport: compactionReport ?? undefined,
-      };
+      this.agentEvents.emit(agentId, {
+        timestamp: new Date().toISOString(),
+        kind: 'agent_status',
+        data: { status: AgentStatus.Idle },
+      });
+      this.agentEvents.emit(agentId, {
+        timestamp: new Date().toISOString(),
+        kind: 'completed',
+        data: { response: content },
+      });
     } catch (err) {
-      // Client-side cancellations (`AbortError`) are not a failure.
-      // This returns the agent to idle.
-      if (
-        String(err).includes('Aborted') ||
-        (err instanceof Error &&
-          (err.name === 'AbortError' ||
-            (signal?.aborted && err.message.includes('abort'))))
-      ) {
-        await this.audit.record(
-          agent.companyId,
-          role.name,
-          agent.id,
-          AuditEventType.StateChange,
-          { newStatus: 'idle', reason: 'cancelled by user' },
-        );
-        await this.agentRepo.update(agentId, { status: AgentStatus.Idle });
-        return { response: '' };
-      }
-
-      // err was not a cancellation - move to failed state.
+      // The turn is detached — record the failure and emit a terminal event
+      // rather than rethrowing (there is no caller left to catch it).
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`Chat agent ${agentId} error: ${msg}`);
       await this.audit.record(
@@ -321,115 +374,13 @@ export class ChatService {
         { newStatus: 'failed', reason: msg },
       );
       await this.agentRepo.update(agentId, { status: AgentStatus.Failed });
-      throw new InternalServerErrorException(
-        `Agent encountered an unexpected error.`,
-      );
+      this.agentEvents.emit(agentId, {
+        timestamp: new Date().toISOString(),
+        kind: 'failed',
+        data: { error: msg },
+      });
     } finally {
       await closeCheckpointer();
-    }
-  }
-
-  /**
-   * Subscribes to `agent:completed:{agentId}` on Redis and resolves when the
-   * agent's resumed BullMQ run publishes its final response. Called after
-   * detecting that a consultation or user-input tool paused the agent.
-   *
-   * Guards against the race where the resumed run completes (and publishes)
-   * before the subscription is established by polling the DB at 500 ms
-   * intervals after subscribing — if `agent.output` is already populated,
-   * the poll delivers the result without waiting for a Redis message that
-   * has already been lost.
-   *
-   * Resolves with an empty string if the agent fails, the caller's signal is
-   * aborted, or the built-in timeout fires (LLM_TIMEOUT_MS, default 30 min).
-   */
-  private async waitForAgentCompletion(
-    agentId: UUID,
-    signal?: AbortSignal,
-  ): Promise<ChatMessageResponse> {
-    const redisUrl = this.config.getOrThrow<string>('REDIS_URL');
-    // Use || not ?? — docker-compose passes LLM_TIMEOUT_MS as "" when unset,
-    // and "" ?? default returns "" (not null/undefined) triggering an instant timeout.
-    const timeoutMs =
-      this.config.get<number>('LLM_TIMEOUT_MS') || DEFAULT_LLM_TIMEOUT_MS;
-    const channel = `agent:completed:${agentId}`;
-    const subscriber = new Redis(redisUrl);
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
-
-    try {
-      const response = await new Promise<string>((resolve) => {
-        // Ensure the promise resolves at most once regardless of how many
-        // signals fire (abort, timeout, message) in quick succession.
-        let resolved = false;
-        const done = (msg: string) => {
-          if (!resolved) {
-            resolved = true;
-            resolve(msg);
-          }
-        };
-
-        // Without an explicit error handler, ioredis emits 'error' as an
-        // uncaught exception which destroys the HTTP socket. Handle it here
-        // so connection drops resolve the wait gracefully.
-        subscriber.on('error', (err) => {
-          this.logger.error(
-            `Redis subscriber error for agent ${agentId}: ${String(err)}`,
-          );
-          done('');
-        });
-
-        void subscriber.subscribe(channel, (err) => {
-          if (err) {
-            this.logger.error(
-              `Redis subscribe error for agent ${agentId}: ${String(err)}`,
-            );
-            done('');
-            return;
-          }
-
-          // Race-condition safety: if the resumed run completed and published
-          // before our SUBSCRIBE arrived, the Redis message is gone. Poll the
-          // DB at 500 ms intervals until we find a non-null output, the agent
-          // fails, or the outer promise resolves via Redis / timeout / signal.
-          void (async () => {
-            while (!resolved) {
-              await new Promise<void>((r) => setTimeout(r, 500));
-              if (resolved) return;
-              try {
-                const a = await this.agentRepo.findOneBy({ id: agentId });
-                if (resolved) return;
-                if (a?.status === AgentStatus.Completed && a.output != null) {
-                  done(a.output);
-                  return;
-                }
-                if (a?.status === AgentStatus.Failed) {
-                  done('');
-                  return;
-                }
-              } catch {
-                // transient DB error — continue polling
-              }
-            }
-          })();
-        });
-
-        subscriber.on('message', (_ch: string, msg: string) => done(msg));
-
-        timeoutId = setTimeout(() => {
-          this.logger.warn(
-            `Agent ${agentId} consultation wait timed out after ${timeoutMs}ms`,
-          );
-          done('');
-        }, timeoutMs);
-
-        signal?.addEventListener('abort', () => done(''), { once: true });
-      });
-
-      return { response };
-    } finally {
-      clearTimeout(timeoutId);
-      await subscriber.quit().catch(() => {});
-      await this.agentRepo.update(agentId, { status: AgentStatus.Idle });
     }
   }
 }
@@ -465,7 +416,8 @@ function buildServicesMessage(
   const text =
     '## Available Services\n\n' +
     'You have access to the following external services via tools. ' +
-    'Each service exposes a `describe_server` tool — call it to learn exactly what tools are available and how to use them before making calls.\n\n' +
+    "Each service's other tools only become available once you call its `describe_server` tool — they stay available for a few turns, then are hidden again until you re-describe. " +
+    'Be sparing: only describe a service you actually need for the current step.\n\n' +
     lines.join('\n');
 
   return [new HumanMessage(text)];

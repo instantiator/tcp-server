@@ -1,10 +1,22 @@
 import { FakeListChatModel } from '@langchain/core/utils/testing';
-import { AgentStatus, LcpAgent, LcpCompany, LcpRole } from '@lcp/shared';
+import {
+  AgentStatus,
+  CONTEXT_AUDIT_SINK,
+  CONTEXT_EVENT_SINK,
+  ContextBudgetService,
+  ContextCompactorService,
+  ContextManagerService,
+  IncomingDataGuardService,
+  LcpAgent,
+  LcpCompany,
+  LcpRole,
+} from '@lcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import { Queue } from 'bullmq';
 import { Repository } from 'typeorm';
+import { AgentEventPublisherService } from '../../../apps/lcp-agent/src/agent/agent-event-publisher.service';
 import { AgentLoopService } from '../../../apps/lcp-agent/src/agent/agent-loop.service';
 import { AuditClientService } from '@lcp/shared';
 import * as factory from '../../../apps/lcp-agent/src/llm/llm-factory';
@@ -74,6 +86,10 @@ describeIf('AgentWorkerService (integration)', () => {
           useValue: { patch: jest.fn() },
         },
         {
+          provide: AgentEventPublisherService,
+          useValue: { publish: jest.fn() },
+        },
+        {
           provide: ConfigService,
           useValue: {
             get: jest.fn().mockReturnValue(undefined),
@@ -84,6 +100,20 @@ describeIf('AgentWorkerService (integration)', () => {
             },
           },
         },
+        // Real context-management wiring (mirrors AgentWorkerModule).
+        ContextBudgetService,
+        ContextCompactorService,
+        IncomingDataGuardService,
+        {
+          provide: CONTEXT_EVENT_SINK,
+          useFactory: (publisher: AgentEventPublisherService) => ({
+            emit: (agentId: string, event: unknown) =>
+              publisher.publish(agentId as never, event as never),
+          }),
+          inject: [AgentEventPublisherService],
+        },
+        { provide: CONTEXT_AUDIT_SINK, useExisting: AuditClientService },
+        ContextManagerService,
       ],
     }).compile();
 

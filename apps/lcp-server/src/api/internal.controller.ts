@@ -139,14 +139,14 @@ export class InternalController {
     await this.pauseResume.updateStorageChanges(agentId, body);
   }
 
-  /** Returns all roles belonging to the given company. Used by lcp-mcp-interactions' `list_available_roles`. */
+  /** Returns all roles belonging to the given company. Used by lcp-mcp-interactions' `list_available_contacts`. */
   @ApiOperation({ summary: 'List roles for a company (internal)' })
   @Get('company/:companyId/roles')
   async listRoles(@Param('companyId') companyId: UUID): Promise<LcpRole[]> {
     return this.roleRepo.findBy({ companyId });
   }
 
-  /** Returns all users belonging to the given company. Used by lcp-mcp-interactions' `list_available_users`. */
+  /** Returns all users belonging to the given company. Used by lcp-mcp-interactions' `list_available_contacts`. */
   @ApiOperation({ summary: 'List users for a company (internal)' })
   @Get('company/:companyId/users')
   async listUsers(@Param('companyId') companyId: UUID): Promise<CompanyUser[]> {

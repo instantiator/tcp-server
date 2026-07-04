@@ -93,6 +93,8 @@ The `log_decision` MCP tool described in this ADR was not implemented. Instead, 
 - lcp-agent writes `llm_request`, `llm_response`, `tool_call`, `tool_result`, `state_change`, and `decision` events from the LangGraph event stream
 - `complete_task` writes a `state_change` event with the agent's final answer
 
+> **Note (008.6):** `POST /internal/audit` was silently failing every real call with a `500` — `CreateAuditEventDto` had no `class-validator` decorators on any field, so the app-wide `ValidationPipe({ whitelist: true })` (see `AppModule`) stripped the entire body before validation, leaving `companyId`/`role`/`eventType`/`payload` all `undefined` and failing the entity's `NOT NULL` constraints. Fire-and-forget error handling meant this had no visible effect on agents or tools — only the audit log itself was silently empty. Found and fixed during 008.6's manual verification pass (not part of that plan's original scope): every `CreateAuditEventDto` field now has a decorator (`@IsUUID`, `@IsString`, `@IsIn`, `@IsObject`), with a regression test (`create-audit-event.dto.spec.ts`) driving the real `ValidationPipe` directly, plus e2e coverage (`audit.e2e-spec.ts`) exercising the actual HTTP endpoint end-to-end — the previous e2e suite only tested `AuditService.record()` in-process and the 401-unauthenticated case, never a valid authenticated request through the real endpoint, which is why this went undetected.
+
 ### Deferred
 
 - MinIO JSONL export (archival path) — export events to `audit/{id}/` as JSON Lines files

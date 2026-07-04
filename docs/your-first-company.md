@@ -137,8 +137,15 @@ It'll give you a list of all roles in each company:
 
 #### 1.6.1 Ask a question
 
+`chat --query` opens the same full-screen TUI as interactive mode when run at
+a real terminal (see 1.6.2) — the query is submitted automatically and the TUI
+tears down once the answer arrives, printing it to stdout. That live view
+can't be shown in prose, so the transcript below is from piping the command
+(`| cat`, or `--no-tui`), which keeps the original linear, colour-coded output
+this doc can actually screenshot:
+
 ```bash
-$ ./lcp-cli.sh --username test --password test chat --role-id 'c62b82b9-c046-4ba2-8842-824f4bfdc25c' --query 'What is your name?'
+$ ./lcp-cli.sh --username test --password test chat --role-id 'c62b82b9-c046-4ba2-8842-824f4bfdc25c' --query 'What is your name?' --no-tui
 ```
 
 ```text
@@ -147,12 +154,23 @@ LLM: (using server environment default)
 Role: Chicken assistant
 'exit', 'quit', or Ctrl+C to exit.
 Sending...
-Cluck-cluck! You can just call me **Chicky**! But really, names are like pecks on a seed—only interesting if there's something tasty inside! ✨🐤
 
-I'm here to help you find the best grub spots and where to roost for safety at night. Flap-flap! Do you have any fresh seeds or juicy worms we can scratch around in together? 🌽🪱
+Agent state: running
+
+Reasoning: the user is asking for my name — I should answer in character…
+
+Response: Cluck-cluck! You can just call me **Chicky**! But really, names are like pecks on a seed—only interesting if there's something tasty inside! ✨🐤
+
+Agent state: completed
+Cluck-cluck! You can just call me **Chicky**! …
 
 Agent dca0fbc6-7c5e-4cbd-9424-c2f29b1b910e removed.
 ```
+
+The colour-coded blocks (agent state, LLM state, reasoning, response) stream
+live to stderr as the turn progresses; the final answer is also printed to
+stdout so it stays pipeable. Pass `--hide-reasoning` to suppress the reasoning
+block.
 
 > [!NOTE]
 > When neither the role nor the company carries an explicit LLM config, the CLI displays `LLM: (using server environment default)`. The actual provider and model are determined by the `LLM_PROVIDER` / `LLM_MODEL` env vars on the server.
@@ -160,22 +178,22 @@ Agent dca0fbc6-7c5e-4cbd-9424-c2f29b1b910e removed.
 #### 1.6.2 Enter interactive mode
 
 > [!TIP]
-> Type `quit` or `exit` to leave interactive mode.
+> Type `quit` or `exit`, or press Ctrl+C at the prompt, to leave interactive mode.
+
+At a real terminal, `chat` opens a full-screen TUI: one tab per agent you're
+monitoring (your own conversation, plus a tab per consultation it triggers),
+each with its own scrollback, and an input line at the bottom for your own
+tab. Switch tabs with **Ctrl+Right**/**Ctrl+Left**. Since this is a live,
+full-screen view it can't be captured as a static transcript — see
+[lcp-cli.md](lcp-cli.md#chat) for the full behaviour, or pass `--no-tui` for
+the original linear renderer shown in 1.6.1.
 
 ```bash
 ./lcp-cli.sh --rebuild --username test --password test chat --role-id 'c62b82b9-c046-4ba2-8842-824f4bfdc25c'
 ```
 
-```text
-LCP API: http://localhost:3000
-LLM: (using server environment default)
-Role: Chicken assistant
-'exit', 'quit', or Ctrl+C to exit.
->
-```
-
 #### 1.6.3 Agents that consult each other
 
-If your role's prompt encourages it (like the cat assistant deferring to the chicken assistant on matters of grubs), the agent may pause mid-chat to consult another role via `request_agent_consultation`. The chat waits while the consulted agent works, and your agent's eventual reply incorporates the consultation result.
+If your role's prompt encourages it (like the cat assistant deferring to the chicken assistant on matters of grubs), the agent may pause mid-chat to consult another role via `request_agent_consultation`. The CLI follows the consulted agent's stream too: in the TUI, this opens a new (spectate-only) tab labelled with the consulted role's name; with `--no-tui` or piped output, its activity renders inline prefixed with its role name instead (e.g. `[Chicken assistant] Response: …`). Either way, your agent then resumes and its reply incorporates the consultation result.
 
 If the consultation fails — the consulted agent errors, times out, or never signals completion despite reminders — the failure is reported back to your agent, which explains what happened or escalates to a user query instead of leaving the chat hanging. See [cross-agent-consultations.md](cross-agent-consultations.md) for the full flow.

@@ -56,7 +56,11 @@ describe('AgentWorkerService', () => {
   it('calls loop.run when the agent is not already running', async () => {
     await processor({ data: { agentId: 'agent-a', type: 'start' } });
 
-    expect(loopRun).toHaveBeenCalledWith('agent-a', undefined);
+    expect(loopRun).toHaveBeenCalledWith(
+      'agent-a',
+      undefined,
+      expect.any(AbortController),
+    );
   });
 
   it('skips loop.run when the agent is already running', async () => {
@@ -68,5 +72,42 @@ describe('AgentWorkerService', () => {
     expect(loopRun).not.toHaveBeenCalled();
 
     registry.deregister(agentId);
+  });
+
+  it('deregisters the agent once loop.run resolves', async () => {
+    const agentId = 'agent-c';
+
+    await processor({ data: { agentId, type: 'start' } });
+
+    expect(registry.isRunning(agentId)).toBe(false);
+  });
+
+  it('deregisters the agent even when loop.run rejects', async () => {
+    const agentId = 'agent-d';
+    loopRun.mockRejectedValueOnce(new Error('boom'));
+
+    await expect(
+      processor({ data: { agentId, type: 'start' } }),
+    ).rejects.toThrow('boom');
+
+    expect(registry.isRunning(agentId)).toBe(false);
+  });
+
+  // Regression test for the TOCTOU race that let a stalled-job retry start a
+  // second concurrent execution against the same agent: registration must
+  // happen with no `await` between the `isRunning` check and `registry.register`,
+  // so by the time `loop.run` is actually invoked the agent is already
+  // registered — a duplicate job arriving at that point is correctly rejected.
+  it('registers the agent atomically with the isRunning check — no gap where a duplicate could slip through', async () => {
+    const agentId = 'agent-e';
+    let sawRegisteredDuringRun = false;
+    loopRun.mockImplementationOnce(() => {
+      sawRegisteredDuringRun = registry.isRunning(agentId);
+      return Promise.resolve();
+    });
+
+    await processor({ data: { agentId, type: 'start' } });
+
+    expect(sawRegisteredDuringRun).toBe(true);
   });
 });

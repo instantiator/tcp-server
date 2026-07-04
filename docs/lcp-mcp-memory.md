@@ -35,6 +35,8 @@ Returns a markdown overview of the memory service and its tools.
 
 **Usage pattern:** Agents should call this first when they discover the memory server is available. Prompt part 3 directs agents to do this automatically.
 
+**Tool-schema gating:** `recall`, `remember`, and `search_knowledge` are only bound to the model after `describe_server` has been called, and stay bound for a small number of iterations before being hidden again (see [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-0086)).
+
 ---
 
 ## `recall`

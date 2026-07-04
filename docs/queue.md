@@ -90,13 +90,16 @@ sequenceDiagram
 
 A chat session (triggered by `POST /api/agent/:id/message`) runs LangGraph
 **inline** in lcp-server — no BullMQ job for the calling agent's first turn.
-When a consultation tool is called, lcp-server dispatches a BullMQ job for
-the called agent as normal. Once that job's chain completes, the calling
-agent's resumed run publishes to Redis so the waiting HTTP handler can return
-the real final answer.
+The POST returns `202` immediately and the turn streams over SSE; when a
+consultation tool is called, lcp-server dispatches a BullMQ job for the called
+agent as normal. Once that job's chain completes, the calling agent's resumed
+run finishes and lcp-server emits the terminal `completed` event to the client's
+SSE stream.
 
-See [ADR-012](ADRs/ADR-012-human-in-the-loop.md) for the full sequence
-diagrams of the current and proposed flows.
+> **Note:** the sequence diagram below predates [ADR-015](ADRs/ADR-015-agent-completion-sse.md)
+> (amended) — the `SUBSCRIBE agent:completed` / "HTTP held open" long-poll it
+> shows was replaced by the `202` + SSE flow. Steps are otherwise unchanged. See
+> [ADR-012](ADRs/ADR-012-human-in-the-loop.md) for the pause/resume details.
 
 ```mermaid
 sequenceDiagram

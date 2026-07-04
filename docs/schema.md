@@ -131,7 +131,7 @@ Represents an agent role within a company. Used by `set-role`.
 | ---------------------- | ------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
 | `companyId`            | UUID string               | Yes      | Must match an existing company                                                                 |
 | `name`                 | `string`                  | Yes      | Human-readable role name                                                                       |
-| `description`          | `string`                  | Yes      | Shown to other agents via `list_available_roles`                                               |
+| `description`          | `string`                  | Yes      | Shown to other agents via `list_available_contacts`                                            |
 | `systemPromptTemplate` | `string`                  | Yes      | Supports `{{name}}`, `{{description}}`, `{{date}}`, `{{companyId}}`, `{{roleId}}` placeholders |
 | `knowledgeDomains`     | `string[]`                | Yes      | Tags for query routing (e.g. `["finance","legal"]`)                                            |
 | `mcpServerList`        | `string[]`                | Yes      | MCP server names the role can use                                                              |

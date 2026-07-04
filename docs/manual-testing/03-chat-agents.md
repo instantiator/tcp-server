@@ -75,10 +75,15 @@ Expected output:
 
 The response content will depend on your `rolePrompt`. If you used the sample data, expect the agent to describe itself using the persona defined there.
 
+> **Via the CLI (recommended):** `lcp-cli chat` no longer blocks on this call.
+> `POST /api/agent/:id/message` returns `202 Accepted` immediately and the turn
+> streams over `GET /api/agent/:id/events` (SSE). The curl above is a low-level
+> illustration; for the streamed experience use section 3.7.
+
 **What to check:**
 
 - The response is coherent and reflects the role's persona.
-- Status 200.
+- Status 202 (accepted); the turn's output arrives on the SSE stream.
 
 ---
 
@@ -124,21 +129,84 @@ Expected: a list of audit events including `llm_request` and `llm_response` entr
 
 ---
 
-## 3.6 — Cancel an in-flight request (optional)
+## 3.6 — Watch the raw event stream (optional)
 
-This tests the abort signal pathway. Start a long request and immediately cancel it:
+Subscribe to the SSE stream directly to see what the CLI renders. In one
+terminal, open the stream; in another, send a message.
 
 ```bash
-# In one terminal:
-curl -s -X POST "http://localhost:3000/api/agents/$AGENT_ID/chat" \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Write a very long story."}' &
+# Terminal 1 — watch the stream (stays open):
+curl -sN "http://localhost:3000/api/agent/$AGENT_ID/events"
 
-# In another terminal (within ~1 second):
-kill %1
+# Terminal 2 — send a message (returns 202 immediately):
+curl -s -X POST "http://localhost:3000/api/agent/$AGENT_ID/message" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Tell me a short story."}'
 ```
 
-After cancellation, the agent status should return to `"idle"` (not `"failed"`).
+Expected on the stream: a sequence of `data:` events — `agent_status` (running),
+`llm` activity, `reasoning`/`response` deltas (if the provider streams them), and
+a final `completed` event carrying the response. Reconnecting after the turn has
+finished still delivers a synthesized `completed` event (replay from the stored
+output).
+
+---
+
+## 3.7 — Streamed rendering via the CLI
+
+Run an interactive session in a real terminal (not piped) to exercise the
+full-screen TUI, the default rendering mode since 008.6.
+
+```bash
+./lcp-cli.sh --username test --password test chat --role-id "$ROLE_ID"
+```
+
+**What to check (TUI mode — default on a real terminal):**
+
+- The screen switches to a full-screen view with a tab bar at the top and an
+  input line at the bottom. Unlike the old linear transcript, you can no longer
+  eyeball "one scrolling stream" — instead, confirm correctness **per tab**:
+  - The root tab (your own conversation) shows only its own events: no
+    interleaving with any consulted agent's output.
+  - Discrete events render as `hh:mm:ss | event_type | text` (e.g.
+    `14:32:01 | agent_status | running`), blank-line separated.
+  - Reasoning renders specially: no time/type columns, indented two spaces,
+    grey, word-wrapped — with a blank line separating it from the events
+    before and after it.
+  - No raw/unformatted event JSON leaks into any pane.
+  - `--hide-reasoning` suppresses the reasoning block; the response still renders.
+- **Consultation tab:** trigger a consultation and confirm a **new tab**
+  appears for the consulted agent (labelled with its role name), switchable via
+  **Ctrl+Right**/**Ctrl+Left**. That tab has no input box (spectate-only) and
+  its own independent scrollback — switching back to the root tab and back
+  again should not lose or reorder anything in either tab.
+- **Ctrl+C mid-turn** stops watching (prints nothing destructive to either
+  pane; the agent keeps running server-side) and returns you to the input box.
+  **Ctrl+C at the idle prompt** tears down the TUI, cleans up the agent, and
+  exits back to a normal terminal — confirm the terminal is left in a sane
+  state (cursor visible, no leftover escape sequences).
+- Typing `exit` or `quit` in the input box ends the session the same way.
+
+**What to check (plain renderer — pipe the command, or pass `--no-tui`):**
+
+```bash
+./lcp-cli.sh --username test --password test chat --role-id "$ROLE_ID" --no-tui
+```
+
+- Colour-coded, blank-line-separated blocks appear: **Agent state** (cyan),
+  **LLM state** (magenta), **Reasoning** (grey, indented), **Response** (white).
+- No raw/unformatted event JSON leaks into the output.
+- **Stray-`>` check:** after each turn completes, exactly **one** `> ` prompt is
+  shown — never a duplicate or an orphaned prompt while the model is still
+  working. Run several turns, including one that triggers a consultation, and one
+  where you press **Ctrl+C mid-turn** (which should stop watching, print that the
+  agent continues server-side, and re-show a single prompt).
+- **Consultation follow:** when the agent consults another role, its activity is
+  rendered inline prefixed with the consulted role name (e.g.
+  `[Cat assistant] Response: …`).
+
+`scripts/manual-verify.sh` automates the consultation scenario (`-r 4` runs just
+the consultation prompt) and asks these as yes/no checks, covering both modes.
 
 ---
 
