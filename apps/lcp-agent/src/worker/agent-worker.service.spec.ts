@@ -8,6 +8,7 @@ jest.mock('bullmq', () => ({
   Worker: jest.fn().mockImplementation(() => ({
     on: jest.fn(),
     close: jest.fn().mockResolvedValue(undefined),
+    waitUntilReady: jest.fn().mockResolvedValue(undefined),
   })),
 }));
 
@@ -51,6 +52,22 @@ describe('AgentWorkerService', () => {
 
   beforeEach(() => {
     loopRun.mockClear();
+  });
+
+  // Regression test for a BullMQ shutdown race: if the module is torn down
+  // before the worker's Redis connection finishes its initial handshake,
+  // BullMQ's close() can strip its listeners before that handshake promise
+  // settles, and a late rejection then throws as an unhandled 'error' with
+  // no listener left to catch it (crashed a fast-running e2e health check in
+  // CI). onModuleInit must await waitUntilReady() so the connection has
+  // already settled before this module is considered started (and therefore
+  // before anything can call close() on it).
+  it('awaits the connection becoming ready before completing module init', () => {
+    const { Worker } = jest.requireMock<{ Worker: jest.Mock }>('bullmq');
+    const instance = Worker.mock.results[0].value as {
+      waitUntilReady: jest.Mock;
+    };
+    expect(instance.waitUntilReady).toHaveBeenCalled();
   });
 
   it('calls loop.run when the agent is not already running', async () => {

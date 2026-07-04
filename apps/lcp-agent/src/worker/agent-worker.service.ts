@@ -37,7 +37,7 @@ export class AgentWorkerService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   /** Starts the BullMQ worker on module init. */
-  onModuleInit(): void {
+  async onModuleInit(): Promise<void> {
     const redisUrl = this.config.getOrThrow<string>('REDIS_URL');
 
     this.worker = new Worker<AgentJobPayload>(
@@ -100,6 +100,17 @@ export class AgentWorkerService implements OnModuleInit, OnModuleDestroy {
     this.worker.on('error', (err) => {
       this.logger.warn(`Worker connection error: ${err.message}`);
     });
+
+    // Block module init until the underlying Redis connection has actually
+    // finished connecting. Without this, a module torn down quickly after
+    // start (e.g. a health-check-only e2e test whose `afterAll` closes the
+    // app immediately) can call `worker.close()` while the connection is
+    // still mid-handshake; BullMQ's `close()` strips its own listeners once
+    // it's done, but the connection's original constructor-time promise can
+    // still reject afterwards and re-emit 'error' on an object with no
+    // listeners left, crashing the process. Waiting for 'ready' here means
+    // that promise has already settled by the time close() can ever run.
+    await this.worker.waitUntilReady();
 
     this.logger.log('Agent worker started, listening on agent-jobs queue');
   }

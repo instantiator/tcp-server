@@ -1,31 +1,51 @@
 #!/usr/bin/env bash
-# Pre-push hook: format, regenerate derived files, check for migration drift,
-# run the full dev-environment quality gate (build, unit tests, aislop), then
-# the service-backed integration + e2e tiers (api/smoke run in CI).
+# Pre-push hook. Format/licenses:generate/schema:generate are content changes
+# already handled by pre-commit, so this doesn't repeat them. It does:
+#   1. typecheck, shellcheck, lint — defensive re-checks in case pre-commit
+#      was bypassed or hooks were only just installed.
+#   2. build (also catches Nest's own compilation) and an aislop scan.
+#   3. A migration drift check, scoped to the commits being pushed.
+#   4. The service-backed quality gate: unit, integration, and e2e tests.
 # Install: npm run hooks:install
 # Bypass: git push --no-verify
 set -euo pipefail
 
-echo "→ pre-push: formatting..."
-npm run format --silent
+TOP="$(git rev-parse --show-toplevel)"
+cd "$TOP"
 
-echo "→ pre-push: regenerating schema..."
-npm run schema:generate --silent
+echo "→ pre-push: typecheck..."
+npm run typecheck --silent
 
-echo "→ pre-push: regenerating licenses..."
-npm run licenses:generate --silent
+echo "→ pre-push: shellcheck..."
+npm run shellcheck --silent
 
-# If any tracked file was modified by the generators, abort and ask for a commit.
-if ! git diff --quiet; then
+# Verification only (no --fix) — by this point commits are already made, so
+# the hook should confirm the committed state is clean rather than mutate an
+# already-committed tree without amending it.
+echo "→ pre-push: lint..."
+npm run lint:check --silent
+
+echo "→ pre-push: build..."
+npm run build --silent
+
+# `npm run build` ends by re-running schema:generate/licenses:generate (same
+# as pre-commit) — normally a no-op since pre-commit already regenerated
+# them, but if pre-commit was bypassed or a dependency changed since the last
+# commit, this catches the drift before it's pushed uncommitted.
+if ! git diff --quiet -- docs/licenses.md schemas/schema.json; then
   echo ""
-  echo "✗ pre-push: the following files were updated and need to be committed:"
-  git diff --name-only | sed 's/^/    /'
+  echo "✗ pre-push: build regenerated derived files that aren't committed:"
+  drifted=$(git diff --name-only -- docs/licenses.md schemas/schema.json)
+  echo "    ${drifted//$'\n'/$'\n'    }"
   echo ""
-  echo "  Run:  git add -u && git commit -m 'chore: update generated files'"
+  echo "  Run:  git add docs/licenses.md schemas/schema.json && git commit -m 'chore: update generated files'"
   echo "  Then retry the push."
   echo ""
   exit 1
 fi
+
+echo "→ pre-push: aislop scan..."
+npx --no-install aislop ci
 
 # Migration drift check, scoped to the commits being pushed (no database needed).
 # A full `migration:generate` drift check is not viable here: the models
@@ -36,6 +56,7 @@ fi
 # migration — which stops the check re-firing on every push after an unrelated
 # model edit already on the remote. Run scripts/check-migrations.sh to inspect
 # the full (phantom-inclusive) model-vs-migration diff by hand.
+echo "→ pre-push: checking for migration drift..."
 upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)
 [[ -z "$upstream" ]] && upstream="origin/main"
 
@@ -47,7 +68,7 @@ if git rev-parse --verify --quiet "$upstream" >/dev/null; then
   if [[ -n "$models_changed" && -z "$migrations_changed" ]]; then
     echo ""
     echo "✗ pre-push: this branch changes entity models without a migration:"
-    echo "$models_changed" | sed 's/^/    /'
+    echo "    ${models_changed//$'\n'/$'\n'    }"
     echo ""
     echo "  If the schema changed, generate a migration before pushing:"
     echo "    npm run migration:generate -- apps/lcp-server/src/migrations/<Name>"
@@ -59,16 +80,12 @@ if git rev-parse --verify --quiet "$upstream" >/dev/null; then
   fi
 fi
 
-# Full quality gate last: the project-specific checks above are quick and
-# fail fast; this runs the comprehensive build/test/scan pass.
-echo "→ pre-push: running the full quality gate..."
-TOP="$(git rev-parse --show-toplevel)"
-bash "$TOP/dev-environment/scripts/check.sh" --project "$TOP"
+# Quality gate: unit tests, then the service-backed tiers. Each wrapper starts
+# and tears down its own containers; api/smoke need the full stack incl.
+# Keycloak and belong in CI, not here.
+echo "→ pre-push: running unit tests..."
+bash "$TOP/scripts/run-unit-tests.sh"
 
-# Service-backed tiers that check.sh cannot cover: they need Postgres/Redis/MinIO
-# to catch cross-layer regressions unit tests miss. Each wrapper starts and tears
-# down its own containers. Only integration + e2e run here (self-contained and
-# fast); api/smoke need the full stack incl. Keycloak and belong in CI.
 if ! docker info >/dev/null 2>&1; then
   echo ""
   echo "✗ pre-push: Docker is not running — integration and e2e tests need it."
