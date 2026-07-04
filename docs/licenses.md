@@ -37,6 +37,6 @@
 | swagger-ui-express                       | MIT          | git+ssh://git@github.com/scottie1984/swagger-ui-express.git    | Stephen Scott scottie1984@gmail.com                                    | 5.0.1    | 5.0.1     | ^5.0.1    |
 | terminal-kit                             | MIT          | git+https://github.com/cronvel/terminal-kit.git                | Cédric Ronvel                                                          | 3.1.3    | 3.1.3     | ^3.1.3    |
 | typeorm                                  | MIT          | git+https://github.com/typeorm/typeorm.git                     | TypeORM maintainers@typeorm.io                                         | 1.0.0    | 1.0.0     | ^1.0.0    |
-| undici                                   | MIT          | git+https://github.com/nodejs/undici.git                       | n/a                                                                    | 8.6.0    | 8.5.0     | ^8.5.0    |
+| undici                                   | MIT          | git+https://github.com/nodejs/undici.git                       | n/a                                                                    | 8.7.0    | 8.5.0     | ^8.5.0    |
 | zod                                      | MIT          | git+https://github.com/colinhacks/zod.git                      | Colin McDonnell <zod@colinhacks.com>                                   | 4.4.3    | 4.4.3     | ^4.4.3    |
 
