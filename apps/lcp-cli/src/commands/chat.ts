@@ -374,6 +374,9 @@ export function registerChat(program: Command): void {
         ): Promise<void> => {
           const abort = new AbortController();
           currentAbort = abort;
+          // Typing stays possible while the turn runs, but Enter won't submit
+          // until it finishes (the hint row explains why).
+          tui?.setBusy(true);
           const signal = AbortSignal.any([
             abort.signal,
             AbortSignal.timeout(35 * 60 * 1000),
@@ -450,6 +453,7 @@ export function registerChat(program: Command): void {
             }
           } finally {
             currentAbort = null;
+            tui?.setBusy(false);
           }
         };
 

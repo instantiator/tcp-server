@@ -1,99 +1,140 @@
 // Full-screen multi-agent TUI: one tab per monitored agent, independent
 // scrollback per tab, and an input box shown only for the talkable (root)
-// agent. Built on terminal-kit's Document/Container/TextBox/InlineInput
-// widgets (see terminal-kit-document.d.ts for why these need a local ambient
-// declaration) plus the pure PaneManager/PaneEntryLog helpers, which carry
-// the actual pane/tab and formatting logic so it's testable without a live
-// terminal.
+// agent. Built directly on terminal-kit's Document/TextBox/InlineInput
+// widgets (see terminal-kit-document.d.ts) plus the pure
+// PaneManager/PaneEntryLog helpers that carry the tab and formatting logic.
+//
+// Layout, top to bottom:
+//   row 0                        — tab bar
+//   rows 1..                     — the active pane's scrollback (TextBox)
+//   3 rows (talkable panes only) — input box ('> ' prompt; Alt+Enter grows it)
+//   last row                     — key hints
+//
+// Testability: the constructor accepts a `term` (size + key/resize event
+// source) and an `outputDst` draw-target override, so specs can drive the
+// REAL widgets off-screen — synthetic 'key' events in, a ScreenBuffer
+// character dump out. No fake widget classes: faking terminal-kit's widget
+// API is exactly how the original, never-rendering implementation slipped
+// past its tests.
 
 import {
-  Container,
   Document,
   InlineInput,
   TextBox,
   terminal as sharedTerminal,
-  Terminal,
 } from 'terminal-kit';
 import { Renderer } from './render';
 import { SseEvent } from './sse';
 import { PaneEntryLog } from './tui-format';
 import { PaneManager, PaneSpec } from './tui-state';
 
-/** Result of interpreting one raw key-press against the current focus state. */
+/** Result of interpreting one raw key-press at the terminal level. */
 export type KeyAction = 'next-pane' | 'prev-pane' | 'quit' | 'none';
 
 /**
- * Pure keybinding decision: Ctrl+Left/Right always switch tabs (this, rather
- * than plain Tab, avoids fighting with the Document widget system's own
- * default Tab-cycles-focus behaviour, and avoids colliding with normal text
- * entry in the talkable pane's input box). Ctrl+C quits regardless of focus.
+ * Pure keybinding decision for the keys handled globally. Everything else is
+ * routed by the Document to the focused widget: the input box on a talkable
+ * pane (arrows/Home/End edit, Enter submits, Alt+Enter inserts a newline),
+ * or the scrollback TextBox on a spectator pane (arrows/PgUp/PgDn/Home/End
+ * scroll natively). Tab/Shift+Tab are safe to take for pane switching: the
+ * focused InlineInput binds Tab to auto-complete, a no-op with no completer
+ * configured, and TextBox doesn't bind Tab at all.
  */
 export function interpretKey(name: string): KeyAction {
-  if (name === 'CTRL_RIGHT') return 'next-pane';
-  if (name === 'CTRL_LEFT') return 'prev-pane';
+  if (name === 'TAB') return 'next-pane';
+  if (name === 'SHIFT_TAB') return 'prev-pane';
   if (name === 'CTRL_C') return 'quit';
   return 'none';
 }
 
-interface PaneWidgets {
-  container: Container;
-  textBox: TextBox;
-  log: PaneEntryLog;
+/**
+ * The structural slice of terminal-kit's Terminal that {@link Tui} drives —
+ * also what the spec's fake implements (an EventEmitter with a size).
+ */
+export interface TuiTerminal {
+  width: number;
+  height: number;
+  fullscreen(on: boolean): void;
+  grabInput(on: boolean | Record<string, unknown>): void;
+  processExit(code: number): void;
+  on(event: string, handler: (...args: unknown[]) => void): unknown;
 }
-
-/** Widget constructors, injectable so tests can substitute lightweight fakes. */
-export interface TuiWidgetClasses {
-  Document: typeof Document;
-  Container: typeof Container;
-  TextBox: typeof TextBox;
-  InlineInput: typeof InlineInput;
-}
-
-const defaultWidgets: TuiWidgetClasses = {
-  Document,
-  Container,
-  TextBox,
-  InlineInput,
-};
 
 export interface TuiOptions {
-  term?: Terminal;
+  term?: TuiTerminal;
+  /** Where the Document draws; defaults to `term`. Specs pass a ScreenBuffer. */
+  outputDst?: unknown;
   hideReasoning?: boolean;
-  widgets?: TuiWidgetClasses;
 }
 
-const TAB_BAR_ROW = 1;
-const INPUT_ROW_HEIGHT = 1;
+interface Pane {
+  spec: PaneSpec;
+  textBox: TextBox;
+  log: PaneEntryLog;
+  /** Auto-scroll to the newest entry; cleared when the user scrolls up. */
+  follow: boolean;
+}
+
+const TAB_ROWS = 1;
+const HINT_ROWS = 1;
+/** Rows reserved for the input box — it starts at 1 high and can grow to
+ * this many rows via Alt+Enter before further lines draw over the hint row. */
+const INPUT_ROWS = 3;
 
 /**
- * Orchestrates the full-screen multi-pane view: creates/destroys terminal-kit
- * widgets per pane, forwards SSE events to each pane's {@link PaneEntryLog},
- * and shows an {@link InlineInput} only when the active pane is talkable.
+ * Orchestrates the full-screen multi-pane view: one scrollback TextBox per
+ * agent, a tab bar, a key-hint row, and an {@link InlineInput} shown only
+ * when the active pane is talkable.
  */
 export class Tui {
-  private readonly term: Terminal;
-  private readonly widgetClasses: TuiWidgetClasses;
+  private readonly term: TuiTerminal;
   private readonly hideReasoning: boolean;
   private readonly document: Document;
   private readonly manager = new PaneManager();
-  private readonly panes = new Map<string, PaneWidgets>();
+  private readonly panes = new Map<string, Pane>();
+  private readonly tabBar: TextBox;
+  private readonly hintBar: TextBox;
   private input: InlineInput | null = null;
-  private inputPaneId: string | null = null;
+  /** Preserves mid-typed input across switches to spectator panes. */
+  private draft = '';
+  private busy = false;
   private submitHandler: ((message: string) => void) | null = null;
   private quitHandler: (() => void) | null = null;
 
   constructor(opts: TuiOptions = {}) {
     this.term = opts.term ?? sharedTerminal;
-    this.widgetClasses = opts.widgets ?? defaultWidgets;
     this.hideReasoning = opts.hideReasoning ?? false;
     this.term.fullscreen(true);
-    this.term.grabInput(true);
-    this.document = new this.widgetClasses.Document({
-      outputDst: this.term,
+    this.document = new Document({
+      outputDst: opts.outputDst ?? this.term,
       eventSource: this.term,
     });
-    this.term.on('key', (name: string) => this.handleKey(name));
-    this.term.on('resize', () => this.layout());
+    // The Document's own Tab binding cycles focus across every element (tab
+    // bar and hidden panes included) — disable it; Tab is a pane switch here.
+    this.document.keyBindings = {};
+    this.tabBar = new TextBox({
+      parent: this.document,
+      x: 0,
+      y: 0,
+      width: this.term.width,
+      height: TAB_ROWS,
+    });
+    this.hintBar = new TextBox({
+      parent: this.document,
+      x: 0,
+      y: this.term.height - HINT_ROWS,
+      width: this.term.width,
+      height: HINT_ROWS,
+    });
+    this.term.on('key', (name) => this.handleKey(name as string));
+    this.term.on('resize', () => {
+      // The input must be rebuilt, not repositioned: InlineInput places its
+      // prompt TextBox at construction coordinates only, so a later
+      // setSizeAndPosition would move the editable area but leave the '> '
+      // prompt behind. refresh() recreates it at the new position.
+      this.dropInput();
+      this.refresh();
+    });
   }
 
   /** Registers the callback fired when the user submits a message. */
@@ -114,50 +155,68 @@ export class Tui {
 
   /** Adds a new tab for an agent (talkable = the root agent the user can address). */
   addPane(spec: PaneSpec): void {
+    if (this.panes.has(spec.id)) return;
     this.manager.addPane(spec);
-    const container = new this.widgetClasses.Container({
+    const textBox = new TextBox({
       parent: this.document,
-      hidden: true,
-    });
-    const textBox = new this.widgetClasses.TextBox({
-      parent: container,
+      x: 0,
+      y: TAB_ROWS,
+      width: this.term.width,
+      height: 1,
       scrollable: true,
       vScrollBar: true,
-      wordWrap: true,
-      lineWrap: true,
+      hidden: true,
     });
-    this.panes.set(spec.id, {
-      container,
+    const pane: Pane = {
+      spec,
       textBox,
       log: new PaneEntryLog(this.hideReasoning),
+      follow: true,
+    };
+    // Wheel/scrollbar/native-key scrolls land here: keep following the tail
+    // only while the user is actually at the bottom.
+    textBox.on('scroll', () => {
+      pane.follow = this.atBottom(textBox);
     });
-    this.layout();
+    this.panes.set(spec.id, pane);
     this.refresh();
   }
 
   /** Removes a pane (e.g. a consultation follower whose agent finished). */
   removePane(id: string): void {
-    const widgets = this.panes.get(id);
-    if (widgets) {
-      widgets.container.destroy();
+    const pane = this.panes.get(id);
+    if (pane) {
+      pane.textBox.destroy(false, true);
       this.panes.delete(id);
     }
     this.manager.removePane(id);
-    this.layout();
     this.refresh();
   }
 
   /** Appends one SSE event to the named pane and redraws it if active. */
   appendEvent(paneId: string, event: SseEvent): void {
-    const widgets = this.panes.get(paneId);
-    if (!widgets) return;
-    widgets.log.append(event);
+    const pane = this.panes.get(paneId);
+    if (!pane) return;
+    pane.log.append(event);
     if (this.manager.activePane?.id === paneId) this.redrawActivePane();
+  }
+
+  /**
+   * Marks a turn as in flight: the input keeps accepting typed text (the user
+   * can compose the next message) but Enter won't submit until the turn ends,
+   * and the hint row says why.
+   */
+  setBusy(busy: boolean): void {
+    this.busy = busy;
+    if (this.input) this.input.disabled = busy;
+    this.renderChrome();
+    this.document.draw();
   }
 
   /** Tears down fullscreen/input capture, restoring the normal terminal. */
   stop(): void {
     this.input?.destroy();
+    this.input = null;
     this.term.grabInput(false);
     this.term.fullscreen(false);
   }
@@ -167,100 +226,174 @@ export class Tui {
     if (action === 'next-pane') {
       this.manager.next();
       this.refresh();
-    } else if (action === 'prev-pane') {
+      return;
+    }
+    if (action === 'prev-pane') {
       this.manager.prev();
       this.refresh();
-    } else if (action === 'quit') {
+      return;
+    }
+    if (action === 'quit') {
       if (this.quitHandler) {
         this.quitHandler();
       } else {
         this.stop();
         this.term.processExit(0);
       }
+      return;
+    }
+    // On a talkable pane the input holds focus, so the scrollback's native
+    // PgUp/PgDn bindings never fire — page the log from here instead. On
+    // spectator panes the TextBox is focused and pages itself natively.
+    if (this.input && (name === 'PAGE_UP' || name === 'PAGE_DOWN')) {
+      this.pageActivePane(name === 'PAGE_UP' ? 1 : -1);
     }
   }
 
-  /** Repositions every pane's container to fill the area between the tab bar and the input row. */
+  /** Scrolls the active pane by a page; +1 = towards older content. */
+  private pageActivePane(direction: 1 | -1): void {
+    const pane = this.activePaneWidgets();
+    if (!pane) return;
+    const step = Math.max(pane.textBox.textAreaHeight - 1, 1);
+    pane.textBox.scroll(0, direction * step, true);
+    pane.follow = this.atBottom(pane.textBox);
+    this.document.draw();
+  }
+
+  /** Whether the box is scrolled to its very bottom (scrollY is ≤ 0). */
+  private atBottom(textBox: TextBox): boolean {
+    return (
+      textBox.scrollY <=
+      textBox.textAreaHeight - textBox.getContentSize().height
+    );
+  }
+
+  private activePaneWidgets(): Pane | undefined {
+    const active = this.manager.activePane;
+    return active ? this.panes.get(active.id) : undefined;
+  }
+
+  /** Re-derives the whole screen for the current pane/tab/input state. */
+  private refresh(): void {
+    this.updateInput();
+    this.layout();
+    const activeId = this.manager.activePane?.id;
+    for (const [id, pane] of this.panes) {
+      if (id === activeId) pane.textBox.show(true);
+      else pane.textBox.hide(true);
+    }
+    this.renderChrome();
+    this.focus();
+    this.redrawActivePane();
+  }
+
+  /** Positions every widget for the current terminal size and input presence. */
   private layout(): void {
-    const height = this.term.height - TAB_BAR_ROW - INPUT_ROW_HEIGHT;
-    for (const { container } of this.panes.values()) {
-      container.resize({
+    const { width, height } = this.term;
+    const inputRows = this.input ? INPUT_ROWS : 0;
+    const logHeight = Math.max(height - TAB_ROWS - HINT_ROWS - inputRows, 1);
+    this.tabBar.setSizeAndPosition({ x: 0, y: 0, width, height: TAB_ROWS });
+    this.hintBar.setSizeAndPosition({
+      x: 0,
+      y: height - HINT_ROWS,
+      width,
+      height: HINT_ROWS,
+    });
+    for (const pane of this.panes.values()) {
+      pane.textBox.setSizeAndPosition({
         x: 0,
-        y: TAB_BAR_ROW,
-        width: this.term.width,
-        height: Math.max(height, 1),
+        y: TAB_ROWS,
+        width,
+        height: logHeight,
       });
     }
-    this.redrawActivePane();
   }
 
-  /** Shows only the active pane's container, redraws the tab bar, and updates the input box. */
-  private refresh(): void {
-    for (const { container } of this.panes.values()) container.hide();
-    const active = this.manager.activePane;
-    if (active) this.panes.get(active.id)?.container.show();
-    this.renderTabBar();
-    this.redrawActivePane();
-    this.updateInput();
-  }
-
-  private redrawActivePane(): void {
-    const active = this.manager.activePane;
-    if (!active) return;
-    const widgets = this.panes.get(active.id);
-    if (!widgets) return;
-    const width = widgets.textBox.outputWidth || this.term.width;
-    widgets.textBox.setContent(widgets.log.render(width).join('\n'));
-    widgets.textBox.scrollToBottom();
-  }
-
-  private renderTabBar(): void {
-    const panes = this.manager.panesInOrder;
+  /** Renders the tab bar and the key-hint row (content only; no draw). */
+  private renderChrome(): void {
     const active = this.manager.activePane;
     const label = (p: PaneSpec) =>
-      p.id === active?.id ? `[${p.label}]` : ` ${p.label} `;
-    const line = panes.map(label).join(' | ');
-    this.term.moveTo(1, TAB_BAR_ROW);
-    this.term.eraseLine();
-    this.term(line);
+      p.id === active?.id ? `[ ${p.label} ]` : `  ${p.label}  `;
+    this.tabBar.setContent(
+      this.manager.panesInOrder.map(label).join('|'),
+      false,
+      true,
+    );
+    const hints = [
+      ...(this.input
+        ? this.busy
+          ? ['waiting for response…']
+          : ['Enter send', 'Alt+Enter newline']
+        : []),
+      'Tab switch',
+      'PgUp/PgDn scroll',
+      'Ctrl+C quit',
+    ];
+    this.hintBar.setContent(hints.join(' · '), false, true);
+  }
+
+  /** Focuses the input when present, else the active scrollback (native scroll keys). */
+  private focus(): void {
+    const target = this.input ?? this.activePaneWidgets()?.textBox;
+    if (target) this.document.giveFocusTo(target);
+  }
+
+  /** Renders the active pane's log into its TextBox and draws the document. */
+  private redrawActivePane(): void {
+    const pane = this.activePaneWidgets();
+    if (pane) {
+      const width = Math.max(pane.textBox.textAreaWidth, 1);
+      pane.textBox.setContent(pane.log.render(width).join('\n'), false, true);
+      if (pane.follow) pane.textBox.scrollToBottom(true);
+    }
+    this.document.draw();
+  }
+
+  /** Stashes the draft and destroys the input (recreated by updateInput). */
+  private dropInput(): void {
+    if (!this.input) return;
+    this.draft = this.input.getValue();
+    this.input.destroy();
+    this.input = null;
   }
 
   /**
-   * Creates/destroys the input box, but only actually rebuilds it when the
-   * active pane's talkability changed or `force` is set. Without this guard,
-   * every pane add/remove/switch would rebuild the input box even when the
-   * active pane didn't change, silently wiping whatever the user was
-   * mid-typing in the still-active, still-talkable root pane. `force` is used
-   * after a submit, where the box must be rebuilt to clear the just-submitted
-   * text even though the active pane hasn't changed.
+   * Creates or destroys the input box when the active pane's talkability
+   * changes. The current draft survives a round-trip through spectator panes.
    */
-  private updateInput(force = false): void {
-    const activeId = this.manager.activePane?.id ?? null;
+  private updateInput(): void {
     const shouldShow = this.manager.inputEnabled;
-    if (
-      !force &&
-      activeId === this.inputPaneId &&
-      (this.input !== null) === shouldShow
-    ) {
+    if (shouldShow === (this.input !== null)) return;
+    if (!shouldShow) {
+      this.dropInput();
       return;
     }
-    this.input?.destroy();
-    this.input = null;
-    this.inputPaneId = activeId;
-    if (!shouldShow) return;
-    this.input = new this.widgetClasses.InlineInput({
+    this.input = new InlineInput({
       parent: this.document,
       x: 0,
-      y: this.term.height,
+      // Constructed at its final position: InlineInput's '> ' prompt is a
+      // separate TextBox placed at construction coordinates only, so this
+      // element cannot be repositioned later (see the resize handler).
+      y: this.term.height - HINT_ROWS - INPUT_ROWS,
       width: this.term.width,
-      value: '',
+      value: this.draft,
+      prompt: { content: '> ' },
     });
-    this.input.on('submit', (value: unknown) => {
+    // Alt+Enter inserts a line break. Shift+Enter can't: classic terminals
+    // send the same byte for Enter and Shift+Enter, so they're
+    // indistinguishable here.
+    this.input.keyBindings = {
+      ...this.input.keyBindings,
+      ALT_ENTER: 'newLine',
+    };
+    this.input.disabled = this.busy;
+    this.input.on('submit', (value) => {
       const message = typeof value === 'string' ? value.trim() : '';
+      this.draft = '';
+      this.input?.setValue('', true);
+      this.redrawActivePane();
       if (message) this.submitHandler?.(message);
-      this.updateInput(true);
     });
-    this.document.giveFocusTo(this.input);
   }
 }
 

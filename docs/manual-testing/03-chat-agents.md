@@ -177,7 +177,7 @@ full-screen TUI, the default rendering mode since 008.6.
   - `--hide-reasoning` suppresses the reasoning block; the response still renders.
 - **Consultation tab:** trigger a consultation and confirm a **new tab**
   appears for the consulted agent (labelled with its role name), switchable via
-  **Ctrl+Right**/**Ctrl+Left**. That tab has no input box (spectate-only) and
+  **Tab**/**Shift+Tab**. That tab has no input box (spectate-only) and
   its own independent scrollback — switching back to the root tab and back
   again should not lose or reorder anything in either tab.
 - **Ctrl+C mid-turn** stops watching (prints nothing destructive to either

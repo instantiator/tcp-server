@@ -183,7 +183,7 @@ block.
 At a real terminal, `chat` opens a full-screen TUI: one tab per agent you're
 monitoring (your own conversation, plus a tab per consultation it triggers),
 each with its own scrollback, and an input line at the bottom for your own
-tab. Switch tabs with **Ctrl+Right**/**Ctrl+Left**. Since this is a live,
+tab. Switch tabs with **Tab**/**Shift+Tab**. Since this is a live,
 full-screen view it can't be captured as a static transcript — see
 [lcp-cli.md](lcp-cli.md#chat) for the full behaviour, or pass `--no-tui` for
 the original linear renderer shown in 1.6.1.

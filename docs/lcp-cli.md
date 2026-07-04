@@ -206,18 +206,27 @@ full-screen view instead of scrolling text:
 
 - **One tab per monitored agent** — the root agent (the one you're chatting
   with) plus one tab per consultation it triggers, added live as
-  `consultation_started` events arrive. Switch tabs with **Ctrl+Right** /
-  **Ctrl+Left**.
+  `consultation_started` events arrive. Switch tabs with **Tab** /
+  **Shift+Tab**.
 - **Independent scrollback per tab** — each agent's events accumulate in its
   own pane; switching tabs doesn't lose or interleave another agent's output,
-  unlike the plain renderer's single interleaved stream.
+  unlike the plain renderer's single interleaved stream. Scroll with
+  **PgUp/PgDn** (or the mouse wheel); scrolling up stops the view following
+  new output, paging back to the bottom resumes it. On spectator tabs the
+  arrow keys and Home/End scroll too.
 - **Input box only on the talkable tab** — only the root agent's tab shows an
-  input line, since consultation tabs are spectate-only. In `-q` mode there's
-  no input box at all (see below).
+  input line (`> `), since consultation tabs are spectate-only. In `-q` mode
+  there's no input box at all (see below). **Enter** sends; **Alt+Enter**
+  inserts a line break (Shift+Enter can't — terminals send the same byte for
+  Shift+Enter and Enter); arrow keys, Home/End, and Backspace/Delete edit as
+  usual. While a turn is in flight the input still accepts typing but won't
+  submit until the response arrives (the hint row at the bottom of the screen
+  says `waiting for response…`). A mid-typed draft survives switching tabs.
 - Events render as `hh:mm:ss | event_type | text`, blank-line separated;
   reasoning deltas render specially — indented two spaces, no columns, word-
   wrapped — with a blank line whenever reasoning is interrupted by another
   event or resumes afterwards.
+- **The bottom row always shows the active keybindings** for the current tab.
 - **Ctrl+C**: while a turn is in flight, stops watching (the agent keeps
   running server-side) and returns to the prompt. At the idle prompt, tears
   down the TUI, cleans up the agent, and exits — the same two-stage behaviour
@@ -232,7 +241,7 @@ printed to stdout exactly as in piped mode, then the process exits.
 
 ```bash
 ./lcp-cli.sh -t $TOKEN chat -r <roleId>
-# (full-screen TUI opens; type at the bottom input line, Ctrl+Right/Left to
+# (full-screen TUI opens; type at the bottom input line, Tab/Shift+Tab to
 # switch tabs if a consultation is in progress, Ctrl+C or 'exit' to leave)
 ```
 
