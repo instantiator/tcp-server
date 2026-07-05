@@ -9,7 +9,7 @@
 import { EventEmitter } from 'events';
 import { ScreenBuffer } from 'terminal-kit';
 import { interpretKey, Tui, tuiRenderer, TuiTerminal } from './tui';
-import { SseEvent } from './sse';
+import { SseEvent } from '../core/sse';
 
 const WIDTH = 80;
 const HEIGHT = 16;
@@ -170,7 +170,7 @@ describe('Tui input box', () => {
     type('  hello  ');
     pressKey('ENTER');
 
-    expect(onSubmit).toHaveBeenCalledWith('hello');
+    expect(onSubmit).toHaveBeenCalledWith('hello', 'root');
     expect(text()).not.toContain('hello');
   });
 
@@ -186,7 +186,7 @@ describe('Tui input box', () => {
     expect(onSubmit).not.toHaveBeenCalled();
 
     pressKey('ENTER');
-    expect(onSubmit).toHaveBeenCalledWith('ab\ncd');
+    expect(onSubmit).toHaveBeenCalledWith('ab\ncd', 'root');
   });
 
   it('supports arrow-key editing within the input', () => {
@@ -200,7 +200,7 @@ describe('Tui input box', () => {
     type('b');
     pressKey('ENTER');
 
-    expect(onSubmit).toHaveBeenCalledWith('abc');
+    expect(onSubmit).toHaveBeenCalledWith('abc', 'root');
   });
 
   it('hides the input on spectator panes and restores the draft when switching back', () => {
@@ -223,15 +223,48 @@ describe('Tui input box', () => {
     const onSubmit = jest.fn();
     tui.onSubmit(onSubmit);
 
-    tui.setBusy(true);
+    tui.setBusy('root', true);
     expect(rows()[term.height - 1]).toContain('waiting for response');
     type('queued');
     pressKey('ENTER');
     expect(onSubmit).not.toHaveBeenCalled();
 
-    tui.setBusy(false);
+    tui.setBusy('root', false);
     pressKey('ENTER');
-    expect(onSubmit).toHaveBeenCalledWith('queued');
+    expect(onSubmit).toHaveBeenCalledWith('queued', 'root');
+  });
+
+  it('routes submit and busy state per-pane when multiple talkable panes exist', () => {
+    const { tui, rows, term, text, type, pressKey } = makeTui();
+    tui.addPane({ id: 'a', label: 'Cat', talkable: true });
+    tui.addPane({ id: 'b', label: 'Chicken', talkable: true });
+    const onSubmit = jest.fn();
+    tui.onSubmit(onSubmit);
+
+    // Draft typed on 'a' survives a switch to 'b' and back, independently.
+    type('for-cat');
+    pressKey('TAB');
+    expect(text()).not.toContain('for-cat');
+    type('for-chicken');
+    expect(text()).toContain('> for-chicken');
+
+    // Busy on 'b' only affects 'b's hint row and submission.
+    tui.setBusy('b', true);
+    expect(rows()[term.height - 1]).toContain('waiting for response');
+    pressKey('ENTER');
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    pressKey('SHIFT_TAB'); // back to 'a', which isn't busy
+    expect(text()).toContain('> for-cat');
+    expect(rows()[term.height - 1]).toContain('Enter send');
+    pressKey('ENTER');
+    expect(onSubmit).toHaveBeenCalledWith('for-cat', 'a');
+
+    tui.setBusy('b', false);
+    pressKey('TAB');
+    expect(text()).toContain('> for-chicken');
+    pressKey('ENTER');
+    expect(onSubmit).toHaveBeenCalledWith('for-chicken', 'b');
   });
 });
 
@@ -253,6 +286,116 @@ describe('Tui scrolling', () => {
     for (let i = 0; i < 20; i++) pressKey('PAGE_DOWN');
     tui.appendEvent('root', statusEvent('resumed-marker'));
     expect(text()).toContain('resumed-marker');
+  });
+});
+
+describe('Tui company roster pane', () => {
+  it('renders the role list with the first row highlighted by default', () => {
+    const { tui, rows, text } = makeTui();
+    tui.addRosterPane({
+      id: 'acme',
+      label: 'Acme Corp',
+      roles: [
+        { id: 'r1', name: 'Cat assistant' },
+        { id: 'r2', name: 'Chicken assistant' },
+      ],
+    });
+    expect(rows()[0]).toContain('[ Acme Corp ]');
+    expect(text()).toContain('> Cat assistant');
+    expect(text()).toContain('  Chicken assistant');
+  });
+
+  it('has no input box and shows roster-specific hints', () => {
+    const { tui, rows, term } = makeTui();
+    tui.addRosterPane({
+      id: 'acme',
+      label: 'Acme Corp',
+      roles: [{ id: 'r1', name: 'Cat assistant' }],
+    });
+    expect(rows()[term.height - 1]).not.toContain('Enter send');
+    expect(rows()[term.height - 1]).toContain('Up/Down select');
+    expect(rows()[term.height - 1]).toContain('Enter chat');
+    expect(rows()[term.height - 1]).toContain('r refresh');
+  });
+
+  it('moves the highlight with Up/Down, wrapping at the ends', () => {
+    const { tui, text, pressKey } = makeTui();
+    tui.addRosterPane({
+      id: 'acme',
+      label: 'Acme Corp',
+      roles: [
+        { id: 'r1', name: 'Cat assistant' },
+        { id: 'r2', name: 'Chicken assistant' },
+      ],
+    });
+
+    pressKey('DOWN');
+    expect(text()).toContain('> Chicken assistant');
+    expect(text()).toContain('  Cat assistant');
+
+    pressKey('DOWN'); // wraps back to the first row
+    expect(text()).toContain('> Cat assistant');
+
+    pressKey('UP'); // wraps the other way, back to the last row
+    expect(text()).toContain('> Chicken assistant');
+  });
+
+  it('calls onSelectRole with the highlighted role on Enter', () => {
+    const { tui, pressKey } = makeTui();
+    tui.addRosterPane({
+      id: 'acme',
+      label: 'Acme Corp',
+      roles: [
+        { id: 'r1', name: 'Cat assistant' },
+        { id: 'r2', name: 'Chicken assistant' },
+      ],
+    });
+    const onSelectRole = jest.fn();
+    tui.onSelectRole(onSelectRole);
+
+    pressKey('DOWN');
+    pressKey('ENTER');
+
+    expect(onSelectRole).toHaveBeenCalledWith({
+      id: 'r2',
+      name: 'Chicken assistant',
+    });
+  });
+
+  it("calls onRefreshRoster on 'r' and re-renders via updateRosterRoles", () => {
+    const { tui, text, pressKey } = makeTui();
+    tui.addRosterPane({
+      id: 'acme',
+      label: 'Acme Corp',
+      roles: [{ id: 'r1', name: 'Cat assistant' }],
+    });
+    const onRefreshRoster = jest.fn(() => {
+      tui.updateRosterRoles('acme', [
+        { id: 'r1', name: 'Cat assistant' },
+        { id: 'r2', name: 'Chicken assistant' },
+      ]);
+    });
+    tui.onRefreshRoster(onRefreshRoster);
+
+    pressKey('r');
+
+    expect(onRefreshRoster).toHaveBeenCalled();
+    expect(text()).toContain('Chicken assistant');
+  });
+
+  it('switchToPane activates a talkable pane started from the roster', () => {
+    const { tui, rows, text } = makeTui();
+    tui.addRosterPane({
+      id: 'acme',
+      label: 'Acme Corp',
+      roles: [{ id: 'r1', name: 'Cat assistant' }],
+    });
+    tui.addPane({ id: 'r1', label: 'Cat assistant', talkable: true });
+
+    tui.switchToPane('r1');
+
+    expect(rows()[0]).toContain('[ Cat assistant ]');
+    expect(text()).toContain('> '); // input box now shown for the talkable pane
   });
 });
 

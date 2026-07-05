@@ -10,6 +10,12 @@ export interface PaneSpec {
   talkable: boolean;
 }
 
+/** A role offered by the company roster pane's "initiate chat" list. */
+export interface RoleOption {
+  id: string;
+  name: string;
+}
+
 /** Tracks the set of open panes and which one is currently focused. */
 export class PaneManager {
   private order: string[] = [];

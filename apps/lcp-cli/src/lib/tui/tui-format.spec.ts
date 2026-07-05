@@ -1,4 +1,4 @@
-import { PaneEntryLog, wrapText } from './tui-format';
+import { PaneEntryLog, renderRoleList, wrapText } from './tui-format';
 
 describe('wrapText', () => {
   it('packs words onto lines up to the given width', () => {
@@ -235,5 +235,22 @@ describe('PaneEntryLog', () => {
     log.append({ kind: 'agent_status', data: { status: 'running' } });
     const lines = log.render(80);
     expect(lines[0]).toMatch(/^\d{2}:\d{2}:\d{2} \| agent_status \| running$/);
+  });
+});
+
+describe('renderRoleList', () => {
+  it('marks the selected row and leaves the rest unmarked', () => {
+    const roles = [
+      { id: 'r1', name: 'Cat assistant' },
+      { id: 'r2', name: 'Chicken assistant' },
+    ];
+    expect(renderRoleList(roles, 1)).toEqual([
+      '  Cat assistant',
+      '> Chicken assistant',
+    ]);
+  });
+
+  it('shows a placeholder when the company has no roles', () => {
+    expect(renderRoleList([], 0)).toEqual(['(no roles in this company)']);
   });
 });

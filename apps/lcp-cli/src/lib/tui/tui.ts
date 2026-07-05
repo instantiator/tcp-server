@@ -1,8 +1,13 @@
 // Full-screen multi-agent TUI: one tab per monitored agent, independent
-// scrollback per tab, and an input box shown only for the talkable (root)
-// agent. Built directly on terminal-kit's Document/TextBox/InlineInput
-// widgets (see terminal-kit-document.d.ts) plus the pure
-// PaneManager/PaneEntryLog helpers that carry the tab and formatting logic.
+// scrollback per tab, and an input box shown only for talkable (chat) panes.
+// Built directly on terminal-kit's Document/TextBox/InlineInput widgets (see
+// terminal-kit-document.d.ts) plus the pure PaneManager/PaneEntryLog helpers
+// that carry the tab and formatting logic.
+//
+// One pane is special: the company roster (added via addRosterPane), listing
+// the company's roles with an up/down-moved highlight. It has no InlineInput,
+// so arrow keys and Enter are free for list navigation and "initiate chat"
+// (see handleKey's roster branch) instead of being routed to a text box.
 //
 // Layout, top to bottom:
 //   row 0                        — tab bar
@@ -23,10 +28,12 @@ import {
   TextBox,
   terminal as sharedTerminal,
 } from 'terminal-kit';
-import { Renderer } from './render';
-import { SseEvent } from './sse';
-import { PaneEntryLog } from './tui-format';
-import { PaneManager, PaneSpec } from './tui-state';
+import { Renderer } from '../core/render';
+import { SseEvent } from '../core/sse';
+import { PaneEntryLog, renderRoleList } from './tui-format';
+import { PaneManager, PaneSpec, RoleOption } from './tui-state';
+
+export type { RoleOption } from './tui-state';
 
 /** Result of interpreting one raw key-press at the terminal level. */
 export type KeyAction = 'next-pane' | 'prev-pane' | 'quit' | 'none';
@@ -70,9 +77,16 @@ export interface TuiOptions {
 interface Pane {
   spec: PaneSpec;
   textBox: TextBox;
-  log: PaneEntryLog;
+  /** Absent for the roster pane, which renders its role list instead. */
+  log?: PaneEntryLog;
+  /** Present only for the company roster pane. */
+  roster?: { roles: RoleOption[]; selectedIndex: number };
   /** Auto-scroll to the newest entry; cleared when the user scrolls up. */
   follow: boolean;
+  /** Whether this pane's agent has a turn in flight. */
+  busy: boolean;
+  /** Mid-typed input, preserved across switches away and back. */
+  draft: string;
 }
 
 const TAB_ROWS = 1;
@@ -83,8 +97,8 @@ const INPUT_ROWS = 3;
 
 /**
  * Orchestrates the full-screen multi-pane view: one scrollback TextBox per
- * agent, a tab bar, a key-hint row, and an {@link InlineInput} shown only
- * when the active pane is talkable.
+ * agent (or a role roster for the company pane), a tab bar, a key-hint row,
+ * and an {@link InlineInput} shown only when the active pane is talkable.
  */
 export class Tui {
   private readonly term: TuiTerminal;
@@ -95,11 +109,13 @@ export class Tui {
   private readonly tabBar: TextBox;
   private readonly hintBar: TextBox;
   private input: InlineInput | null = null;
-  /** Preserves mid-typed input across switches to spectator panes. */
-  private draft = '';
-  private busy = false;
-  private submitHandler: ((message: string) => void) | null = null;
+  /** Which pane's draft the current `input` widget holds, if any. */
+  private inputPaneId: string | null = null;
+  private submitHandler: ((message: string, paneId: string) => void) | null =
+    null;
   private quitHandler: (() => void) | null = null;
+  private selectRoleHandler: ((role: RoleOption) => void) | null = null;
+  private refreshRosterHandler: (() => void) | null = null;
 
   constructor(opts: TuiOptions = {}) {
     this.term = opts.term ?? sharedTerminal;
@@ -137,8 +153,8 @@ export class Tui {
     });
   }
 
-  /** Registers the callback fired when the user submits a message. */
-  onSubmit(handler: (message: string) => void): void {
+  /** Registers the callback fired when the user submits a message on some pane. */
+  onSubmit(handler: (message: string, paneId: string) => void): void {
     this.submitHandler = handler;
   }
 
@@ -153,7 +169,17 @@ export class Tui {
     this.quitHandler = handler;
   }
 
-  /** Adds a new tab for an agent (talkable = the root agent the user can address). */
+  /** Registers the callback fired when Enter selects a role on a roster pane. */
+  onSelectRole(handler: (role: RoleOption) => void): void {
+    this.selectRoleHandler = handler;
+  }
+
+  /** Registers the callback fired when 'r' is pressed on a roster pane. */
+  onRefreshRoster(handler: () => void): void {
+    this.refreshRosterHandler = handler;
+  }
+
+  /** Adds a new tab for an agent (talkable = the user can address it directly). */
   addPane(spec: PaneSpec): void {
     if (this.panes.has(spec.id)) return;
     this.manager.addPane(spec);
@@ -172,6 +198,8 @@ export class Tui {
       textBox,
       log: new PaneEntryLog(this.hideReasoning),
       follow: true,
+      busy: false,
+      draft: '',
     };
     // Wheel/scrollbar/native-key scrolls land here: keep following the tail
     // only while the user is actually at the bottom.
@@ -182,10 +210,64 @@ export class Tui {
     this.refresh();
   }
 
+  /**
+   * Adds the company roster pane: a spectate-only (no InlineInput) tab
+   * listing the company's roles, navigated with Up/Down and Enter (see
+   * handleKey). Only one roster pane is expected per session.
+   */
+  addRosterPane(spec: {
+    id: string;
+    label: string;
+    roles: RoleOption[];
+  }): void {
+    if (this.panes.has(spec.id)) return;
+    const paneSpec: PaneSpec = {
+      id: spec.id,
+      label: spec.label,
+      talkable: false,
+    };
+    this.manager.addPane(paneSpec);
+    const textBox = new TextBox({
+      parent: this.document,
+      x: 0,
+      y: TAB_ROWS,
+      width: this.term.width,
+      height: 1,
+      hidden: true,
+    });
+    const pane: Pane = {
+      spec: paneSpec,
+      textBox,
+      roster: { roles: spec.roles, selectedIndex: 0 },
+      follow: true,
+      busy: false,
+      draft: '',
+    };
+    this.panes.set(spec.id, pane);
+    this.refresh();
+  }
+
+  /** Replaces a roster pane's role list (e.g. the 'r' refresh key). */
+  updateRosterRoles(paneId: string, roles: RoleOption[]): void {
+    const pane = this.panes.get(paneId);
+    if (!pane?.roster) return;
+    pane.roster.roles = roles;
+    pane.roster.selectedIndex = Math.min(
+      pane.roster.selectedIndex,
+      Math.max(roles.length - 1, 0),
+    );
+    if (this.manager.activePane?.id === paneId) this.redrawActivePane();
+  }
+
   /** Removes a pane (e.g. a consultation follower whose agent finished). */
   removePane(id: string): void {
     const pane = this.panes.get(id);
     if (pane) {
+      if (this.inputPaneId === id) {
+        this.input?.destroy();
+        this.input = null;
+        this.inputPaneId = null;
+      }
       pane.textBox.destroy(false, true);
       this.panes.delete(id);
     }
@@ -193,30 +275,41 @@ export class Tui {
     this.refresh();
   }
 
+  /** Switches the active tab programmatically (e.g. after initiating a chat). */
+  switchToPane(id: string): void {
+    this.manager.switchTo(id);
+    this.refresh();
+  }
+
   /** Appends one SSE event to the named pane and redraws it if active. */
   appendEvent(paneId: string, event: SseEvent): void {
     const pane = this.panes.get(paneId);
-    if (!pane) return;
+    if (!pane?.log) return;
     pane.log.append(event);
     if (this.manager.activePane?.id === paneId) this.redrawActivePane();
   }
 
   /**
-   * Marks a turn as in flight: the input keeps accepting typed text (the user
-   * can compose the next message) but Enter won't submit until the turn ends,
-   * and the hint row says why.
+   * Marks one pane's turn as in flight: its input keeps accepting typed text
+   * (the user can compose the next message) but Enter won't submit until the
+   * turn ends, and — while this pane is active — the hint row says why.
    */
-  setBusy(busy: boolean): void {
-    this.busy = busy;
-    if (this.input) this.input.disabled = busy;
-    this.renderChrome();
-    this.document.draw();
+  setBusy(paneId: string, busy: boolean): void {
+    const pane = this.panes.get(paneId);
+    if (!pane) return;
+    pane.busy = busy;
+    if (this.manager.activePane?.id === paneId) {
+      if (this.input) this.input.disabled = busy;
+      this.renderChrome();
+      this.document.draw();
+    }
   }
 
   /** Tears down fullscreen/input capture, restoring the normal terminal. */
   stop(): void {
     this.input?.destroy();
     this.input = null;
+    this.inputPaneId = null;
     this.term.grabInput(false);
     this.term.fullscreen(false);
   }
@@ -242,12 +335,45 @@ export class Tui {
       }
       return;
     }
+
+    const activePane = this.activePaneWidgets();
+    if (activePane?.roster) {
+      // No InlineInput exists on a roster pane, so these keys are free for
+      // list navigation/selection instead of text editing or native scroll.
+      if (name === 'UP') {
+        this.moveRosterSelection(activePane, -1);
+        return;
+      }
+      if (name === 'DOWN') {
+        this.moveRosterSelection(activePane, 1);
+        return;
+      }
+      if (name === 'ENTER') {
+        const role = activePane.roster.roles[activePane.roster.selectedIndex];
+        if (role) this.selectRoleHandler?.(role);
+        return;
+      }
+      if (name === 'r' || name === 'R') {
+        this.refreshRosterHandler?.();
+        return;
+      }
+      return;
+    }
+
     // On a talkable pane the input holds focus, so the scrollback's native
     // PgUp/PgDn bindings never fire — page the log from here instead. On
     // spectator panes the TextBox is focused and pages itself natively.
     if (this.input && (name === 'PAGE_UP' || name === 'PAGE_DOWN')) {
       this.pageActivePane(name === 'PAGE_UP' ? 1 : -1);
     }
+  }
+
+  private moveRosterSelection(pane: Pane, delta: number): void {
+    const roster = pane.roster;
+    if (!roster || roster.roles.length === 0) return;
+    const n = roster.roles.length;
+    roster.selectedIndex = (roster.selectedIndex + delta + n) % n;
+    this.redrawActivePane();
   }
 
   /** Scrolls the active pane by a page; +1 = towards older content. */
@@ -319,12 +445,15 @@ export class Tui {
       false,
       true,
     );
+    const activePane = this.activePaneWidgets();
     const hints = [
       ...(this.input
-        ? this.busy
+        ? activePane?.busy
           ? ['waiting for response…']
           : ['Enter send', 'Alt+Enter newline']
-        : []),
+        : activePane?.roster
+          ? ['Up/Down select', 'Enter chat', 'r refresh']
+          : []),
       'Tab switch',
       'PgUp/PgDn scroll',
       'Ctrl+C quit',
@@ -338,36 +467,47 @@ export class Tui {
     if (target) this.document.giveFocusTo(target);
   }
 
-  /** Renders the active pane's log into its TextBox and draws the document. */
+  /** Renders the active pane's content into its TextBox and draws the document. */
   private redrawActivePane(): void {
     const pane = this.activePaneWidgets();
     if (pane) {
       const width = Math.max(pane.textBox.textAreaWidth, 1);
-      pane.textBox.setContent(pane.log.render(width).join('\n'), false, true);
+      const lines = pane.roster
+        ? renderRoleList(pane.roster.roles, pane.roster.selectedIndex)
+        : (pane.log?.render(width) ?? []);
+      pane.textBox.setContent(lines.join('\n'), false, true);
       if (pane.follow) pane.textBox.scrollToBottom(true);
     }
     this.document.draw();
   }
 
-  /** Stashes the draft and destroys the input (recreated by updateInput). */
+  /** Stashes the outgoing pane's draft and destroys the input (recreated by updateInput). */
   private dropInput(): void {
     if (!this.input) return;
-    this.draft = this.input.getValue();
+    if (this.inputPaneId) {
+      const prevPane = this.panes.get(this.inputPaneId);
+      if (prevPane) prevPane.draft = this.input.getValue();
+    }
     this.input.destroy();
     this.input = null;
+    this.inputPaneId = null;
   }
 
   /**
-   * Creates or destroys the input box when the active pane's talkability
-   * changes. The current draft survives a round-trip through spectator panes.
+   * Creates or destroys the input box when the active pane's talkability (or
+   * identity, with multiple talkable panes) changes. Each pane's draft and
+   * busy state survive round-trips through other panes.
    */
   private updateInput(): void {
+    const active = this.manager.activePane;
     const shouldShow = this.manager.inputEnabled;
-    if (shouldShow === (this.input !== null)) return;
     if (!shouldShow) {
       this.dropInput();
       return;
     }
+    if (this.input && this.inputPaneId === active?.id) return;
+    this.dropInput();
+    const pane = this.panes.get(active!.id)!;
     this.input = new InlineInput({
       parent: this.document,
       x: 0,
@@ -376,9 +516,10 @@ export class Tui {
       // element cannot be repositioned later (see the resize handler).
       y: this.term.height - HINT_ROWS - INPUT_ROWS,
       width: this.term.width,
-      value: this.draft,
+      value: pane.draft,
       prompt: { content: '> ' },
     });
+    this.inputPaneId = pane.spec.id;
     // Alt+Enter inserts a line break. Shift+Enter can't: classic terminals
     // send the same byte for Enter and Shift+Enter, so they're
     // indistinguishable here.
@@ -386,13 +527,13 @@ export class Tui {
       ...this.input.keyBindings,
       ALT_ENTER: 'newLine',
     };
-    this.input.disabled = this.busy;
+    this.input.disabled = pane.busy;
     this.input.on('submit', (value) => {
       const message = typeof value === 'string' ? value.trim() : '';
-      this.draft = '';
+      pane.draft = '';
       this.input?.setValue('', true);
       this.redrawActivePane();
-      if (message) this.submitHandler?.(message);
+      if (message) this.submitHandler?.(message, pane.spec.id);
     });
   }
 }

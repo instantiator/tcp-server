@@ -3,7 +3,8 @@
 // indent/grey special case, and blank-line separation rules can be
 // unit-tested without a live terminal-kit screen.
 
-import { SseEvent } from './sse';
+import { SseEvent } from '../core/sse';
+import { RoleOption } from './tui-state';
 
 /** Reads a string field from an event's data payload, defaulting to ''. */
 function str(data: Record<string, unknown> | undefined, key: string): string {
@@ -172,4 +173,15 @@ export class PaneEntryLog {
     const wrapped = wrapText(entry.text, Math.max(width - header.length, 1));
     return wrapped.map((line, i) => (i === 0 ? header + line : line));
   }
+}
+
+/** Renders a company's role roster for the company pane, marking the highlighted row. */
+export function renderRoleList(
+  roles: RoleOption[],
+  selectedIndex: number,
+): string[] {
+  if (roles.length === 0) return ['(no roles in this company)'];
+  return roles.map(
+    (role, i) => `${i === selectedIndex ? '> ' : '  '}${role.name}`,
+  );
 }

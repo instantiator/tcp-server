@@ -180,13 +180,19 @@ block.
 > [!TIP]
 > Type `quit` or `exit`, or press Ctrl+C at the prompt, to leave interactive mode.
 
-At a real terminal, `chat` opens a full-screen TUI: one tab per agent you're
-monitoring (your own conversation, plus a tab per consultation it triggers),
-each with its own scrollback, and an input line at the bottom for your own
-tab. Switch tabs with **Tab**/**Shift+Tab**. Since this is a live,
+At a real terminal, `chat` opens a full-screen TUI: the first tab is always
+the company's role roster (Up/Down to highlight a role, Enter to start
+chatting with it — useful if you don't already have a role ID to hand), then
+one tab per agent you're monitoring (your own conversation, plus a tab per
+consultation it triggers, plus one per extra role chatted with from the
+roster), each with its own scrollback and an input line at the bottom for
+talkable tabs. Switch tabs with **Tab**/**Shift+Tab**. Since this is a live,
 full-screen view it can't be captured as a static transcript — see
 [lcp-cli.md](lcp-cli.md#chat) for the full behaviour, or pass `--no-tui` for
 the original linear renderer shown in 1.6.1.
+
+You can also skip `--role-id` entirely and pass `--company-id` instead — the
+TUI opens straight onto the roster with no agent started yet.
 
 ```bash
 ./lcp-cli.sh --rebuild --username test --password test chat --role-id 'c62b82b9-c046-4ba2-8842-824f4bfdc25c'

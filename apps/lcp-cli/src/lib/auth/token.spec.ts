@@ -1,10 +1,10 @@
-import { resolveToken, resolveSession, renewToken } from './auth';
+import { resolveToken, resolveSession, renewToken } from './token';
 
 // Mock the api module so we don't make real HTTP calls
-jest.mock('./api', () => ({
+jest.mock('../core/api', () => ({
   apiRequest: jest.fn(),
 }));
-import { apiRequest } from './api';
+import { apiRequest } from '../core/api';
 const mockApiRequest = apiRequest as jest.Mock;
 
 describe('resolveSession', () => {

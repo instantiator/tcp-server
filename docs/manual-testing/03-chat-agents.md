@@ -175,11 +175,21 @@ full-screen TUI, the default rendering mode since 008.6.
     before and after it.
   - No raw/unformatted event JSON leaks into any pane.
   - `--hide-reasoning` suppresses the reasoning block; the response still renders.
+- **Company roster (pane 0):** the first tab is always the company, listing
+  its roles. **Up/Down** moves the highlight, **Enter** starts a new chat
+  with the highlighted role (a new talkable tab opens and becomes active),
+  **r** re-fetches the list. This tab has no input box — confirm arrow keys
+  and Enter never fall through to the input from an adjacent talkable tab.
 - **Consultation tab:** trigger a consultation and confirm a **new tab**
   appears for the consulted agent (labelled with its role name), switchable via
   **Tab**/**Shift+Tab**. That tab has no input box (spectate-only) and
   its own independent scrollback — switching back to the root tab and back
   again should not lose or reorder anything in either tab.
+- **Multiple talkable tabs:** start a second chat from the roster while the
+  root agent's turn is still running. Confirm the new tab's input works
+  immediately (busy state is per-tab, not global), a draft typed on one
+  talkable tab survives switching away and back, and submitting on each tab
+  reaches the right agent (not whichever tab was active first).
 - **Ctrl+C mid-turn** stops watching (prints nothing destructive to either
   pane; the agent keeps running server-side) and returns you to the input box.
   **Ctrl+C at the idle prompt** tears down the TUI, cleans up the agent, and
@@ -204,6 +214,20 @@ full-screen TUI, the default rendering mode since 008.6.
 - **Consultation follow:** when the agent consults another role, its activity is
   rendered inline prefixed with the consulted role name (e.g.
   `[Cat assistant] Response: …`).
+
+**What to check (`--company-id`, no role given):**
+
+```bash
+./lcp-cli.sh --username test --password test chat --company-id "$COMPANY_ID"
+```
+
+- Opens straight onto the company roster — no agent tab exists yet, no agent
+  is created until a role is picked.
+- Enter on a role starts a chat and switches to its new talkable tab; Ctrl+C
+  at the idle prompt still cleans up every agent created this way, not just
+  one.
+- Passing `--company-id` alone with `--no-tui` (or piped) is rejected with a
+  clear error — there's no roster to browse without the TUI.
 
 `scripts/manual-verify.sh` automates the consultation scenario (`-r 4` runs just
 the consultation prompt) and asks these as yes/no checks, covering both modes.

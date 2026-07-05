@@ -66,23 +66,23 @@ See [schema.md](schema.md) for the full field reference, VS Code integration, ex
 
 ## Verbs
 
-| Verb                                                    | Invocation                                                   | Description                                              |
-| ------------------------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------- |
-| [`get-token`](#get-token)                               | `get-token`                                                  | Exchange username + password for an OIDC access token    |
-| [`list-companies`](#list-companies)                     | `list-companies`                                             | List all companies                                       |
-| [`list-roles`](#list-roles)                             | `list-roles [-c <uuid>]`                                     | List roles, optionally filtered to one company           |
-| [`set-company`](#set-company)                           | `set-company [-i <json>]`                                    | Create or update a company                               |
-| [`set-role`](#set-role)                                 | `set-role -c <uuid> [-i <json>]`                             | Create or update a role                                  |
-| [`chat`](#chat)                                         | `chat -r <uuid> [-q <message>]`                              | Interactive or single-query chat with a role             |
-| [`store-role-documents`](#store-role-documents)         | `store-role-documents -r <uuid> -s <paths...>`               | Upload OKF Markdown documents to a role's knowledge base |
-| [`list-role-documents`](#list-role-documents)           | `list-role-documents -r <uuid>`                              | List knowledge-base documents stored for a role          |
-| [`remove-role-documents`](#remove-role-documents)       | `remove-role-documents -r <uuid> -p <patterns...>`           | Remove knowledge-base documents by filename pattern      |
-| [`open-document-store`](#open-document-store)           | `open-document-store [--no-open]`                            | Print (and open) the MinIO console URL                   |
-| [`list-open-queries`](#list-open-queries)               | `list-open-queries [-c <uuid>] [--format table\|json\|csv]`  | List open agent-to-human queries                         |
-| [`read-query`](#read-query)                             | `read-query <slug>`                                          | Read a query's full question and conversation history    |
-| [`respond`](#respond)                                   | `respond <slug> <message>`                                   | Reply to a query and resume the waiting agent            |
-| [`download-shared-document`](#download-shared-document) | `download-shared-document --source <path> [--target <path>]` | Download a file from shared company storage              |
-| [`upload-shared-document`](#upload-shared-document)     | `upload-shared-document --source <path> --target <path>`     | Upload a local file to shared company storage            |
+| Verb                                                    | Invocation                                                   | Description                                                                |
+| ------------------------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| [`get-token`](#get-token)                               | `get-token`                                                  | Exchange username + password for an OIDC access token                      |
+| [`list-companies`](#list-companies)                     | `list-companies`                                             | List all companies                                                         |
+| [`list-roles`](#list-roles)                             | `list-roles [-c <uuid>]`                                     | List roles, optionally filtered to one company                             |
+| [`set-company`](#set-company)                           | `set-company [-i <json>]`                                    | Create or update a company                                                 |
+| [`set-role`](#set-role)                                 | `set-role -c <uuid> [-i <json>]`                             | Create or update a role                                                    |
+| [`chat`](#chat)                                         | `chat (-r <uuid>\|-c <uuid>) [-q <message>]`                 | Interactive or single-query chat with a role, or browse a company's roster |
+| [`store-role-documents`](#store-role-documents)         | `store-role-documents -r <uuid> -s <paths...>`               | Upload OKF Markdown documents to a role's knowledge base                   |
+| [`list-role-documents`](#list-role-documents)           | `list-role-documents -r <uuid>`                              | List knowledge-base documents stored for a role                            |
+| [`remove-role-documents`](#remove-role-documents)       | `remove-role-documents -r <uuid> -p <patterns...>`           | Remove knowledge-base documents by filename pattern                        |
+| [`open-document-store`](#open-document-store)           | `open-document-store [--no-open]`                            | Print (and open) the MinIO console URL                                     |
+| [`list-open-queries`](#list-open-queries)               | `list-open-queries [-c <uuid>] [--format table\|json\|csv]`  | List open agent-to-human queries                                           |
+| [`read-query`](#read-query)                             | `read-query <slug>`                                          | Read a query's full question and conversation history                      |
+| [`respond`](#respond)                                   | `respond <slug> <message>`                                   | Reply to a query and resume the waiting agent                              |
+| [`download-shared-document`](#download-shared-document) | `download-shared-document --source <path> [--target <path>]` | Download a file from shared company storage                                |
+| [`upload-shared-document`](#upload-shared-document)     | `upload-shared-document --source <path> --target <path>`     | Upload a local file to shared company storage                              |
 
 ### `get-token`
 
@@ -167,12 +167,15 @@ Create or update a role. Reads JSON from `--input` or stdin.
 
 ### `chat`
 
-Initiate a conversation with an agent running a given role.
+Initiate a conversation with an agent running a given role — or, with `--company-id`
+instead of `--role-id`, open the TUI on that company's role roster with no agent
+started yet, and pick one there.
 
 Conversation history is maintained server-side in the LangGraph checkpoint store.
-Each chat session creates a new agent record; the agent is deleted when the session ends.
-If the access token expires mid-session, it is renewed automatically using the refresh token
-(provided via `-T` or obtained from the initial username+password grant).
+Every agent a chat session creates (the initial one, plus any started later from
+the roster) is deleted when the session ends. If the access token expires
+mid-session, it is renewed automatically using the refresh token (provided via
+`-T` or obtained from the initial username+password grant).
 
 If the agent consults another role mid-chat and that consultation fails (the consulted
 agent errors, times out, or never calls `complete_task` despite reminders), the failure
@@ -192,47 +195,61 @@ renders its activity too — as its own tab in the TUI, or inline prefixed with
 the consulted role's name (e.g. `[Cat assistant] Response: …`) in the plain
 renderer. Nested consultations are followed recursively either way.
 
-| Flag                | Alias | Description                                       |
-| ------------------- | ----- | ------------------------------------------------- |
-| `--role-id <uuid>`  | `-r`  | **(Required)** Role UUID for the agent            |
-| `--query <message>` | `-q`  | Single question (auto-submitted, no input box)    |
-| `--hide-reasoning`  |       | Suppress the reasoning stream                     |
-| `--no-tui`          |       | Force the plain scrolling renderer, even on a TTY |
+| Flag                  | Alias | Description                                                           |
+| --------------------- | ----- | --------------------------------------------------------------------- |
+| `--role-id <uuid>`    | `-r`  | Role UUID for the agent (omit to browse company roles instead)        |
+| `--company-id <uuid>` | `-c`  | Company UUID — browse and start chats from its role roster (TUI only) |
+| `--query <message>`   | `-q`  | Single question (auto-submitted, no input box) — requires `-r`        |
+| `--hide-reasoning`    |       | Suppress the reasoning stream                                         |
+| `--no-tui`            |       | Force the plain scrolling renderer, even on a TTY                     |
+
+Exactly one of `--role-id`/`--company-id` is required. `--company-id` alone
+needs the TUI's roster pane to pick a role, so it's rejected outside a TTY (or
+with `--no-tui`) — pass `--role-id` directly for non-interactive use instead.
 
 #### Full-screen TUI (default on a TTY)
 
 When stdout is a real terminal, `chat` (both interactive and `-q`) opens a
 full-screen view instead of scrolling text:
 
-- **One tab per monitored agent** — the root agent (the one you're chatting
-  with) plus one tab per consultation it triggers, added live as
-  `consultation_started` events arrive. Switch tabs with **Tab** /
-  **Shift+Tab**.
+- **Pane 0 is always the company roster** — labelled with the company's name,
+  listing its roles. **Up/Down** moves the highlight, **Enter** starts a chat
+  with the highlighted role (opening a new talkable tab and switching to it —
+  this also works mid-session, so you can chat with more than one role at
+  once), and **r** re-fetches the role list. It has no input box, so these
+  keys are free for navigation rather than typing.
+- **One tab per other monitored agent** — the root agent (if `-r` was given;
+  it opens immediately alongside the roster and becomes active), one per role
+  chatted with from the roster, and one per consultation any of them
+  triggers, added live as `consultation_started` events arrive. Switch tabs
+  with **Tab** / **Shift+Tab**.
 - **Independent scrollback per tab** — each agent's events accumulate in its
   own pane; switching tabs doesn't lose or interleave another agent's output,
   unlike the plain renderer's single interleaved stream. Scroll with
   **PgUp/PgDn** (or the mouse wheel); scrolling up stops the view following
   new output, paging back to the bottom resumes it. On spectator tabs the
   arrow keys and Home/End scroll too.
-- **Input box only on the talkable tab** — only the root agent's tab shows an
-  input line (`> `), since consultation tabs are spectate-only. In `-q` mode
-  there's no input box at all (see below). **Enter** sends; **Alt+Enter**
-  inserts a line break (Shift+Enter can't — terminals send the same byte for
+- **Input box only on talkable tabs** — the root agent's tab and any tab
+  started from the roster show an input line (`> `); consultation tabs are
+  spectate-only, and the roster tab has none (see above). In `-q` mode there's
+  no input box at all (see below). **Enter** sends; **Alt+Enter** inserts a
+  line break (Shift+Enter can't — terminals send the same byte for
   Shift+Enter and Enter); arrow keys, Home/End, and Backspace/Delete edit as
-  usual. While a turn is in flight the input still accepts typing but won't
-  submit until the response arrives (the hint row at the bottom of the screen
-  says `waiting for response…`). A mid-typed draft survives switching tabs.
+  usual. While a turn is in flight, that tab's input still accepts typing but
+  won't submit until the response arrives (its hint row says `waiting for
+response…`) — other tabs are unaffected and can run turns concurrently. A
+  mid-typed draft survives switching tabs, tracked independently per tab.
 - Events render as `hh:mm:ss | event_type | text`, blank-line separated;
   reasoning deltas render specially — indented two spaces, no columns, word-
   wrapped — with a blank line whenever reasoning is interrupted by another
   event or resumes afterwards.
 - **The bottom row always shows the active keybindings** for the current tab.
-- **Ctrl+C**: while a turn is in flight, stops watching (the agent keeps
-  running server-side) and returns to the prompt. At the idle prompt, tears
-  down the TUI, cleans up the agent, and exits — the same two-stage behaviour
-  as the plain renderer's Ctrl+C.
-- Typing `exit` or `quit` in the root tab's input box ends the session, same
-  as the plain renderer.
+- **Ctrl+C**: while any turn is in flight, stops watching all of them (the
+  agents keep running server-side) and returns to the prompt. At the idle
+  prompt, tears down the TUI, cleans up every agent created this session, and
+  exits — the same two-stage behaviour as the plain renderer's Ctrl+C.
+- Typing `exit` or `quit` in a talkable tab's input box ends the whole
+  session, same as the plain renderer.
 
 **`-q`/`--query` at a TTY** also opens the TUI: the message is submitted
 automatically (no input box needed), and as soon as the root agent's turn
@@ -243,6 +260,10 @@ printed to stdout exactly as in piped mode, then the process exits.
 ./lcp-cli.sh -t $TOKEN chat -r <roleId>
 # (full-screen TUI opens; type at the bottom input line, Tab/Shift+Tab to
 # switch tabs if a consultation is in progress, Ctrl+C or 'exit' to leave)
+
+./lcp-cli.sh -t $TOKEN chat -c <companyId>
+# (opens straight onto the company's role roster — no agent yet; Up/Down to
+# pick a role, Enter to start chatting)
 ```
 
 #### Plain renderer (piped output, or `--no-tui`)

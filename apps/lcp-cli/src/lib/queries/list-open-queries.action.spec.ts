@@ -1,29 +1,4 @@
-// Tests for the format helpers extracted from list-open-queries.
-// The formatTable function is not exported, so we test its observable output
-// via the command's stdout — but since that requires wiring Commander, we
-// test the underlying logic inline here using the same rules.
-
-/** Mirrors the internal formatTable logic for testing. */
-function formatTable(
-  rows: { slug: string; roleName: string; question: string }[],
-): string {
-  if (rows.length === 0) return 'No open queries.\n';
-  const slugW = Math.max(4, ...rows.map((r) => r.slug.length));
-  const roleW = Math.max(4, ...rows.map((r) => r.roleName.length));
-  const header =
-    'SLUG'.padEnd(slugW) + '  ' + 'ROLE'.padEnd(roleW) + '  ' + 'QUESTION';
-  const divider =
-    '-'.repeat(slugW) + '  ' + '-'.repeat(roleW) + '  ' + '-'.repeat(40);
-  const body = rows.map(
-    (r) =>
-      r.slug.padEnd(slugW) +
-      '  ' +
-      r.roleName.padEnd(roleW) +
-      '  ' +
-      r.question.slice(0, 120).replace(/\n/g, ' '),
-  );
-  return [header, divider, ...body].join('\n') + '\n';
-}
+import { formatTable } from './list-open-queries.action';
 
 describe('list-open-queries formatTable', () => {
   it('returns a no-queries message for an empty list', () => {
