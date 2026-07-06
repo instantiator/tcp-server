@@ -172,7 +172,12 @@ full-screen TUI, the default rendering mode since 008.6.
     `14:32:01 | agent_status | running`), blank-line separated.
   - Reasoning renders specially: no time/type columns, indented two spaces,
     grey, word-wrapped — with a blank line separating it from the events
-    before and after it.
+    before and after it. Confirm it's an actual colour, not literal `^K`/`^:`
+    text leaking into the pane.
+  - The active tab is shown in bold/bright colour in the tab bar; switch tabs
+    and confirm the highlight moves with focus, not just the `[ ]` brackets.
+  - If the model ever emits a literal `^` (e.g. in code or math), confirm it
+    displays as a single `^` and doesn't corrupt the colour of anything after it.
   - No raw/unformatted event JSON leaks into any pane.
   - `--hide-reasoning` suppresses the reasoning block; the response still renders.
 - **Company roster (pane 0):** the first tab is always the company, listing
@@ -190,6 +195,14 @@ full-screen TUI, the default rendering mode since 008.6.
   immediately (busy state is per-tab, not global), a draft typed on one
   talkable tab survives switching away and back, and submitting on each tab
   reaches the right agent (not whichever tab was active first).
+- **Closing a tab (Ctrl+W):** on a talkable tab with a turn in flight, confirm
+  Ctrl+W removes the tab immediately, the turn stops (no further output for
+  that agent), and the agent is deleted server-side (check `Agent ... removed`
+  on stderr). On a consultation-follower tab, confirm Ctrl+W just removes the
+  tab without a deletion message (that agent isn't ours to delete). On the
+  roster tab, confirm Ctrl+W does nothing — it's never closable. After closing
+  the last agent tab, confirm you're left on the roster, same as starting with
+  `--company-id` alone.
 - **Ctrl+C mid-turn** stops watching (prints nothing destructive to either
   pane; the agent keeps running server-side) and returns you to the input box.
   **Ctrl+C at the idle prompt** tears down the TUI, cleans up the agent, and

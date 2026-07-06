@@ -17,6 +17,7 @@ interface RoleRecord {
 
 interface CompanyRecord {
   id: string;
+  slug: string;
   name: string;
   llmDefault?: LlmConfig | null;
 }
@@ -26,6 +27,7 @@ export interface ChatContext {
   token: string;
   refreshToken?: string;
   companyId: string;
+  companySlug: string;
   companyName: string;
   roleName: string;
 }
@@ -79,7 +81,14 @@ export async function resolveChatContext(
 
   printBanner(opts, cmdOpts, roleName, companyName, llmConfig, useTui);
 
-  return { token, refreshToken, companyId, companyName, roleName };
+  return {
+    token,
+    refreshToken,
+    companyId,
+    companySlug: company.slug,
+    companyName,
+    roleName,
+  };
 }
 
 /** Prints the server/LLM-or-company/role banner shown before the session starts. */

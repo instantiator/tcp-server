@@ -1,4 +1,25 @@
-import { PaneEntryLog, renderRoleList, wrapText } from './tui-format';
+import {
+  escapeMarkup,
+  PaneEntryLog,
+  renderPaneHeading,
+  renderRoleList,
+  renderRosterPane,
+  wrapText,
+} from './tui-format';
+
+describe('escapeMarkup', () => {
+  it('doubles a literal caret so terminal-kit displays it as-is', () => {
+    expect(escapeMarkup('x^2')).toBe('x^^2');
+  });
+
+  it('leaves text with no caret unchanged', () => {
+    expect(escapeMarkup('plain text')).toBe('plain text');
+  });
+
+  it('escapes every caret in a string with several', () => {
+    expect(escapeMarkup('^^a^b^')).toBe('^^^^a^^b^^');
+  });
+});
 
 describe('wrapText', () => {
   it('packs words onto lines up to the given width', () => {
@@ -107,14 +128,34 @@ describe('PaneEntryLog', () => {
     ]);
   });
 
-  it('renders reasoning deltas indented and without columns', () => {
+  it('renders reasoning deltas indented, without columns, in grey markup', () => {
     const log = new PaneEntryLog(false);
     log.append({
       kind: 'reasoning',
       timestamp: ts('06'),
       data: { delta: 'thinking' },
     });
-    expect(log.render(80)).toEqual(['  thinking']);
+    expect(log.render(80)).toEqual(['^K  thinking^:']);
+  });
+
+  it('escapes a literal caret in reasoning text so it survives markup rendering', () => {
+    const log = new PaneEntryLog(false);
+    log.append({
+      kind: 'reasoning',
+      timestamp: ts('06'),
+      data: { delta: 'x^2 + y^2' },
+    });
+    expect(log.render(80)).toEqual(['^K  x^^2 + y^^2^:']);
+  });
+
+  it('escapes a literal caret in discrete/response text too', () => {
+    const log = new PaneEntryLog(false);
+    log.append({
+      kind: 'agent_status',
+      timestamp: ts('01'),
+      data: { status: 'x^2' },
+    });
+    expect(log.render(80)).toEqual([`${clock('01')} | agent_status | x^^2`]);
   });
 
   it('suppresses reasoning entirely when hideReasoning is set', () => {
@@ -139,7 +180,7 @@ describe('PaneEntryLog', () => {
       timestamp: ts('07'),
       data: { delta: 'b' },
     });
-    expect(log.render(80)).toEqual(['  ab']);
+    expect(log.render(80)).toEqual(['^K  ab^:']);
   });
 
   it('merges consecutive response deltas into one entry, printing the header once', () => {
@@ -170,7 +211,7 @@ describe('PaneEntryLog', () => {
       data: { activity: 'tool_started', tool: 'x' },
     });
     expect(log.render(80)).toEqual([
-      '  thinking',
+      '^K  thinking^:',
       '',
       `${clock('07')} | llm | tool_started: x`,
     ]);
@@ -194,11 +235,11 @@ describe('PaneEntryLog', () => {
       data: { delta: 'second' },
     });
     expect(log.render(80)).toEqual([
-      '  first',
+      '^K  first^:',
       '',
       `${clock('07')} | llm | tool_started: x`,
       '',
-      '  second',
+      '^K  second^:',
     ]);
   });
 
@@ -239,18 +280,68 @@ describe('PaneEntryLog', () => {
 });
 
 describe('renderRoleList', () => {
-  it('marks the selected row and leaves the rest unmarked', () => {
+  it('marks the selected row with an inverse ">" and leaves the rest unmarked', () => {
     const roles = [
       { id: 'r1', name: 'Cat assistant' },
       { id: 'r2', name: 'Chicken assistant' },
     ];
     expect(renderRoleList(roles, 1)).toEqual([
       '  Cat assistant',
-      '> Chicken assistant',
+      '^!>^: Chicken assistant',
     ]);
   });
 
   it('shows a placeholder when the company has no roles', () => {
     expect(renderRoleList([], 0)).toEqual(['(no roles in this company)']);
+  });
+
+  it('escapes a literal caret in a role name', () => {
+    expect(renderRoleList([{ id: 'r1', name: 'x^2 assistant' }], 0)).toEqual([
+      '^!>^: x^^2 assistant',
+    ]);
+  });
+});
+
+describe('renderRosterPane', () => {
+  it('renders a Slug/Id heading, a prompt, a blank separator, then the role list', () => {
+    const { lines, listStartIndex } = renderRosterPane(
+      'acme-corp',
+      'company-1',
+      [{ id: 'r1', name: 'Cat assistant' }],
+      0,
+    );
+    expect(lines).toEqual([
+      'Slug: acme-corp',
+      'Id: company-1',
+      '',
+      'Please select a role to initiate a chat:',
+      '',
+      '^!>^: Cat assistant',
+    ]);
+    expect(listStartIndex).toBe(5);
+  });
+
+  it('escapes a literal caret in the company slug/id', () => {
+    const { lines } = renderRosterPane('a^b', 'c^d', [], 0);
+    expect(lines[0]).toBe('Slug: a^^b');
+    expect(lines[1]).toBe('Id: c^^d');
+  });
+});
+
+describe('renderPaneHeading', () => {
+  it('renders a Name/Id heading followed by a blank separator line', () => {
+    expect(renderPaneHeading('Cat assistant', 'role-1')).toEqual([
+      'Name: Cat assistant',
+      'Id: role-1',
+      '',
+    ]);
+  });
+
+  it('escapes a literal caret in the name/id', () => {
+    expect(renderPaneHeading('x^2', 'id^y')).toEqual([
+      'Name: x^^2',
+      'Id: id^^y',
+      '',
+    ]);
   });
 });

@@ -25,10 +25,16 @@ export interface ChatCmdOpts {
  * roster pane with no agent started yet — pick a role there (Up/Down, Enter)
  * to start chatting. Every chat session's agents are deleted when it ends.
  *
- * Single-query mode (-q, requires --role-id): creates the agent, sends one
- * message, streams the response to stderr while printing the final answer to
- * stdout, then deletes the agent. Interactive mode: enters a readline loop
- * (or the TUI's input box); agents are deleted on exit or Ctrl+C.
+ * Single-query mode (-q, requires --role-id): creates the agent and sends one
+ * message. Without the TUI (piped output, or `--no-tui`), this is fully
+ * one-shot: streams the response to stderr, prints the final answer to
+ * stdout, deletes the agent, and exits — pipeable. With the TUI, the query is
+ * just the first message of an otherwise normal interactive session: it
+ * renders into the pane and the TUI stays open afterward (see
+ * `wiring.ts`'s `runOneShotQuery`), so the answer isn't lost the instant it
+ * arrives — same exit paths (Ctrl+C, `exit`/`quit`) as any other session.
+ * Interactive mode (no -q): enters a readline loop (or the TUI's input box);
+ * agents are deleted on exit or Ctrl+C either way.
  *
  * Each turn returns `202 Accepted`; all output (agent state, LLM activity,
  * reasoning, response, and completion) arrives on the agent's SSE event
@@ -40,11 +46,9 @@ export interface ChatCmdOpts {
  * is always the company roster (its roles, Enter to start a chat, 'r' to
  * refresh); with `--role-id`, a talkable pane for that agent opens
  * immediately alongside it and becomes active. Each consultation followed
- * and each role chatted with via the roster gets its own tab. `--query` at a
- * TTY also uses the TUI: the query is submitted automatically, and the TUI
- * tears down as soon as the root agent's turn reaches its terminal event.
- * When stdout is not a TTY, or `--no-tui` is passed, the linear renderer is
- * used unchanged — see `../core/render.ts`.
+ * and each role chatted with via the roster gets its own tab. When stdout is
+ * not a TTY, or `--no-tui` is passed, the linear renderer is used unchanged
+ * — see `../core/render.ts`.
  */
 export async function chatAction(
   opts: GlobalOptions,
@@ -80,14 +84,19 @@ export async function chatAction(
       tui.addRosterPane({
         id: context.companyId,
         label: context.companyName,
+        slug: context.companySlug,
         roles,
       });
     }
     if (cmdOpts.roleId) {
+      // Always talkable, even under --query: with the TUI, the session
+      // stays open after the query's answer arrives (see runOneShotQuery),
+      // so the root pane needs its input box from the start, not just
+      // after the first turn finishes.
       rootAgentId = await session.startAgentPane(
         cmdOpts.roleId,
         context.roleName,
-        !cmdOpts.query,
+        true,
       );
       if (tui) tui.switchToPane(rootAgentId);
     }

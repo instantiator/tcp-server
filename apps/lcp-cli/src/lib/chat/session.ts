@@ -80,13 +80,18 @@ export class ChatSession {
     this.abortControllers.clear();
   }
 
-  /** Fetches the company's current role roster (used at startup and on refresh). */
-  fetchRoles(): Promise<RoleOption[]> {
-    return apiRequest<RoleOption[]>(
+  /**
+   * Fetches the company's current role roster (used at startup and on
+   * refresh), sorted alphabetically by name — roles have no `slug` field
+   * yet, so name is the best available stable sort key for now.
+   */
+  async fetchRoles(): Promise<RoleOption[]> {
+    const roles = await apiRequest<RoleOption[]>(
       this.apiOpts(),
       'GET',
       `/api/company/${this.companyId}/roles`,
     );
+    return roles.sort((a, b) => a.name.localeCompare(b.name));
   }
 
   /** Reports a roster-pane-triggered failure (initiate-chat / refresh) into its pane log. */
@@ -119,30 +124,57 @@ export class ChatSession {
       { companyId: this.companyId, roleId },
     );
     this.agentIds.add(agent.id);
-    this.tui?.addPane({ id: agent.id, label, talkable });
+    this.tui?.addPane({ id: agent.id, label, talkable, roleId });
     return agent.id;
   }
 
   /** Deletes every agent created this session (best-effort). */
   async cleanup(): Promise<void> {
     for (const id of this.agentIds) {
-      try {
-        await apiRequest(this.apiOpts(), 'DELETE', `/api/agent/${id}`);
-        process.stderr.write(`\nAgent ${id} removed.\n`);
-      } catch {
-        // best-effort cleanup
-      }
+      await this.deleteAgent(id);
     }
     this.agentIds.clear();
   }
 
   /**
+   * Handles a tab being closed (Ctrl+W — the tab itself is already gone from
+   * the TUI by the time this is called): aborts any turn in flight on that
+   * pane, and deletes the underlying agent if this session created it.
+   * Consultation-follower panes aren't session-owned agents, so closing one
+   * of those just stops watching it — nothing to delete.
+   */
+  async closeTab(paneId: string): Promise<void> {
+    const controller = this.abortControllers.get(paneId);
+    if (controller) {
+      controller.abort();
+      this.abortControllers.delete(paneId);
+    }
+    if (this.agentIds.has(paneId)) {
+      this.agentIds.delete(paneId);
+      await this.deleteAgent(paneId);
+    }
+  }
+
+  /** DELETEs one agent (best-effort — failures are logged, not thrown). */
+  private async deleteAgent(id: string): Promise<void> {
+    try {
+      await apiRequest(this.apiOpts(), 'DELETE', `/api/agent/${id}`);
+      process.stderr.write(`\nAgent ${id} removed.\n`);
+    } catch {
+      // best-effort cleanup
+    }
+  }
+
+  /**
    * Runs one turn on `paneId`'s agent: opens the event stream, posts the
    * message, waits for the terminal event, then prints the final response.
-   * Interactive turns stream the response live; `--query` turns stream
-   * progress to stderr and print the final answer to stdout once (keeping
-   * it pipeable). Multiple panes can each have a turn in flight
-   * concurrently — state is tracked per `paneId`.
+   * `interactive` is only ever false for a `--query` turn with no TUI (piped
+   * output, or `--no-tui`): progress streams to stderr and the final answer
+   * prints to stdout once, keeping it pipeable. Every other case — normal
+   * interactive turns, and `--query` turns once a TUI is involved — passes
+   * `interactive: true`, so the response renders into the pane like any
+   * other turn instead of being printed and torn down. Multiple panes can
+   * each have a turn in flight concurrently — state is tracked per `paneId`.
    */
   async runTurn(
     paneId: string,

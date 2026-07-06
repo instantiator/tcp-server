@@ -3,9 +3,13 @@ import { Tui } from '../tui/tui';
 import { ChatSession } from './session';
 
 /**
- * `--query` mode: runs the single turn, then always tears down the TUI (if
- * any) and cleans up every agent created this session, whether the turn
- * succeeded or not.
+ * `--query` mode. Without a TUI (piped output, or `--no-tui`), this is fully
+ * one-shot: run the turn, print the final answer to stdout, clean up, and
+ * exit — the classic pipeable behaviour. With the TUI, the query is just the
+ * first message of an otherwise normal interactive session: it renders into
+ * the root pane like any other turn, and the TUI stays open afterward so the
+ * response isn't lost the instant it arrives — the user can keep chatting,
+ * switch tabs, or quit whenever they're done.
  */
 export async function runOneShotQuery(
   session: ChatSession,
@@ -13,13 +17,18 @@ export async function runOneShotQuery(
   rootAgentId: string,
   query: string,
 ): Promise<void> {
-  if (!tui) process.stderr.write('Sending...\n');
-  try {
-    await session.runTurn(rootAgentId, query, false);
-  } finally {
-    tui?.stop();
-    await session.cleanup();
+  if (!tui) {
+    process.stderr.write('Sending...\n');
+    try {
+      await session.runTurn(rootAgentId, query, false);
+    } finally {
+      await session.cleanup();
+    }
+    return;
   }
+
+  await session.runTurn(rootAgentId, query, true);
+  await runTuiInteractive(session, tui);
 }
 
 /**
@@ -68,6 +77,10 @@ export async function runTuiInteractive(
       .fetchRoles()
       .then((roles) => tui.updateRosterRoles(session.companyId, roles))
       .catch((err) => session.reportRosterError(err));
+  });
+
+  tui.onCloseTab((paneId) => {
+    void session.closeTab(paneId);
   });
 
   await quit;

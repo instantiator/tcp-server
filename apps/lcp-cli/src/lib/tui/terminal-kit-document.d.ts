@@ -83,6 +83,8 @@ declare module 'terminal-kit' {
     setContent(content: string, hasMarkup?: boolean, dontDraw?: boolean): void;
     getContentSize(): { width: number; height: number };
     scroll(dx: number, dy: number, dontDraw?: boolean): void;
+    /** Absolute scroll (null leaves that axis unchanged); same sign convention as `scrollY`. */
+    scrollTo(x: number | null, y: number | null, dontDraw?: boolean): void;
     scrollToBottom(dontDraw?: boolean): void;
   }
 

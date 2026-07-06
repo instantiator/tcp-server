@@ -20,6 +20,20 @@ function clockTime(timestamp: string | undefined): string {
 }
 
 /**
+ * Escapes a literal `^` so it survives markup-enabled rendering unchanged.
+ * terminal-kit's caret markup (`^K` grey, `^+` bold, `^:` reset, etc. — see
+ * tui.ts's colour use) reads any other `^x` as a style code; text that isn't
+ * ours to control — model reasoning/response output, role/company names —
+ * must be escaped before it reaches a `setContent(text, true)` call, or a
+ * stray caret in that text corrupts the colours of everything after it.
+ * Applied at render time (not when text is first accumulated) so word-wrap
+ * width calculations still operate on true, unescaped character counts.
+ */
+export function escapeMarkup(text: string): string {
+  return text.replace(/\^/g, '^^');
+}
+
+/**
  * Greedy word-wrap: splits on existing newlines (kept as hard breaks, with
  * trailing ones stripped), then packs words onto lines up to `width`.
  */
@@ -162,8 +176,11 @@ export class PaneEntryLog {
 
   private renderEntry(entry: PaneEntry, width: number): string[] {
     if (entry.style === 'reasoning') {
+      // Grey (^K), reset (^:) per line — independent per line rather than
+      // one span across the whole block, so colour can't leak past a line
+      // that gets dropped or reordered.
       return wrapText(entry.text, Math.max(width - 2, 1)).map(
-        (line) => `  ${line}`,
+        (line) => `^K  ${escapeMarkup(line)}^:`,
       );
     }
     const header = `${entry.time} | ${entry.label} | `;
@@ -171,17 +188,62 @@ export class PaneEntryLog {
     // rather than the full pane width — narrower than strictly necessary, but
     // keeps wrapping a single pass over the text instead of two.
     const wrapped = wrapText(entry.text, Math.max(width - header.length, 1));
-    return wrapped.map((line, i) => (i === 0 ? header + line : line));
+    return wrapped.map((line, i) =>
+      i === 0 ? header + escapeMarkup(line) : escapeMarkup(line),
+    );
   }
 }
 
-/** Renders a company's role roster for the company pane, marking the highlighted row. */
+/**
+ * Renders a company's role roster, marking the highlighted row. The `>` on
+ * the selected row is rendered in inverse video (`^!`/`^:`) rather than
+ * relying on the terminal's own cursor, which terminal-kit never draws (or
+ * hides) for a plain, non-editable TextBox like this one — see tui.ts's
+ * cursor-visibility note.
+ */
 export function renderRoleList(
   roles: RoleOption[],
   selectedIndex: number,
 ): string[] {
   if (roles.length === 0) return ['(no roles in this company)'];
-  return roles.map(
-    (role, i) => `${i === selectedIndex ? '> ' : '  '}${role.name}`,
+  return roles.map((role, i) =>
+    i === selectedIndex
+      ? `^!>^: ${escapeMarkup(role.name)}`
+      : `  ${escapeMarkup(role.name)}`,
   );
+}
+
+/** One logical block of the company roster pane's rendered content. */
+export interface RosterRender {
+  lines: string[];
+  /** Index within `lines` where the role list begins — role `i`'s line is `listStartIndex + i`. */
+  listStartIndex: number;
+}
+
+/**
+ * Renders the full company roster pane: an identifying heading (slug + id),
+ * a prompt, a blank separator, then the role list. `listStartIndex` is
+ * returned (rather than hardcoded elsewhere) so the caller's "keep the
+ * selection in view" scrolling can never drift out of sync with this layout.
+ */
+export function renderRosterPane(
+  companySlug: string,
+  companyId: string,
+  roles: RoleOption[],
+  selectedIndex: number,
+): RosterRender {
+  const heading = [
+    `Slug: ${escapeMarkup(companySlug)}`,
+    `Id: ${escapeMarkup(companyId)}`,
+    '',
+    'Please select a role to initiate a chat:',
+    '',
+  ];
+  const lines = [...heading, ...renderRoleList(roles, selectedIndex)];
+  return { lines, listStartIndex: heading.length };
+}
+
+/** Renders the identifying heading shown at the top of every chat pane. */
+export function renderPaneHeading(name: string, id: string): string[] {
+  return [`Name: ${escapeMarkup(name)}`, `Id: ${escapeMarkup(id)}`, ''];
 }

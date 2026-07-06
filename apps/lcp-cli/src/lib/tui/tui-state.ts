@@ -8,6 +8,13 @@ export interface PaneSpec {
   /** Whether the user can type to this agent (the root agent), vs. a
    * consultation-follower pane that is spectate-only. */
   talkable: boolean;
+  /**
+   * The role's own id, for the pane's "Name: … / Id: …" heading — distinct
+   * from `id` (the agent id) since a role can have many agents over time.
+   * Absent for consultation-follower panes (the SSE event that creates them
+   * carries a role name but no role id); the heading falls back to `id`.
+   */
+  roleId?: string;
 }
 
 /** A role offered by the company roster pane's "initiate chat" list. */

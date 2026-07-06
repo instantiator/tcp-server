@@ -199,7 +199,7 @@ renderer. Nested consultations are followed recursively either way.
 | --------------------- | ----- | --------------------------------------------------------------------- |
 | `--role-id <uuid>`    | `-r`  | Role UUID for the agent (omit to browse company roles instead)        |
 | `--company-id <uuid>` | `-c`  | Company UUID — browse and start chats from its role roster (TUI only) |
-| `--query <message>`   | `-q`  | Single question (auto-submitted, no input box) — requires `-r`        |
+| `--query <message>`   | `-q`  | Single question, auto-submitted on startup — requires `-r`            |
 | `--hide-reasoning`    |       | Suppress the reasoning stream                                         |
 | `--no-tui`            |       | Force the plain scrolling renderer, even on a TTY                     |
 
@@ -213,37 +213,62 @@ When stdout is a real terminal, `chat` (both interactive and `-q`) opens a
 full-screen view instead of scrolling text:
 
 - **Pane 0 is always the company roster** — labelled with the company's name,
-  listing its roles. **Up/Down** moves the highlight, **Enter** starts a chat
-  with the highlighted role (opening a new talkable tab and switching to it —
-  this also works mid-session, so you can chat with more than one role at
-  once), and **r** re-fetches the role list. It has no input box, so these
-  keys are free for navigation rather than typing.
+  opening with a `Slug: …` / `Id: …` heading and a "Please select a role to
+  initiate a chat:" prompt, then a blank line, then the role list (roles have
+  no `slug` of their own yet, so the list is just role names, sorted
+  alphabetically). **Up/Down** moves the highlight (the view scrolls to keep
+  it visible on a long list), **Enter** starts a chat with the highlighted
+  role (opening a new talkable tab and switching to it — this also works
+  mid-session, so you can chat with more than one role at once), and **r**
+  re-fetches the role list. It has no input box, so these keys are free for
+  navigation rather than typing.
 - **One tab per other monitored agent** — the root agent (if `-r` was given;
   it opens immediately alongside the roster and becomes active), one per role
   chatted with from the roster, and one per consultation any of them
   triggers, added live as `consultation_started` events arrive. Switch tabs
-  with **Tab** / **Shift+Tab**.
+  with **Tab** / **Shift+Tab**; the active tab is shown in bold/bright colour.
+  **Ctrl+W** closes the active tab (any tab except the roster, which is
+  permanent) — for a talkable tab this also aborts its turn if one is in
+  flight and deletes its agent; closing a consultation-follower tab just
+  stops watching it. Closing the last agent tab leaves you back on the
+  roster, the same state `--company-id` alone starts in.
 - **Independent scrollback per tab** — each agent's events accumulate in its
-  own pane; switching tabs doesn't lose or interleave another agent's output,
-  unlike the plain renderer's single interleaved stream. Scroll with
+  own pane, opening with a `Name: …` / `Id: …` heading identifying the role
+  and its id; switching tabs doesn't lose or interleave another agent's
+  output, unlike the plain renderer's single interleaved stream. Scroll with
   **PgUp/PgDn** (or the mouse wheel); scrolling up stops the view following
   new output, paging back to the bottom resumes it. On spectator tabs the
-  arrow keys and Home/End scroll too.
+  arrow keys and Home/End scroll too. A blank row always separates the tab
+  bar from a pane's content.
 - **Input box only on talkable tabs** — the root agent's tab and any tab
   started from the roster show an input line (`> `); consultation tabs are
-  spectate-only, and the roster tab has none (see above). In `-q` mode there's
-  no input box at all (see below). **Enter** sends; **Alt+Enter** inserts a
-  line break (Shift+Enter can't — terminals send the same byte for
+  spectate-only, and the roster tab has none (see above). This includes `-q`
+  mode: the root tab's input is present but disabled while the query's turn
+  is in flight, the same as any busy talkable tab (see below). **Enter**
+  sends; **Alt+Enter** inserts a line break (Shift+Enter can't — terminals
+  send the same byte for
   Shift+Enter and Enter); arrow keys, Home/End, and Backspace/Delete edit as
   usual. While a turn is in flight, that tab's input still accepts typing but
   won't submit until the response arrives (its hint row says `waiting for
 response…`) — other tabs are unaffected and can run turns concurrently. A
   mid-typed draft survives switching tabs, tracked independently per tab.
+  The terminal's own text cursor only ever appears on an enabled input box —
+  it's hidden everywhere else (the roster, spectator tabs, a busy talkable
+  tab), rather than lingering wherever it last was.
 - Events render as `hh:mm:ss | event_type | text`, blank-line separated;
-  reasoning deltas render specially — indented two spaces, no columns, word-
-  wrapped — with a blank line whenever reasoning is interrupted by another
-  event or resumes afterwards.
-- **The bottom row always shows the active keybindings** for the current tab.
+  reasoning deltas render specially — indented two spaces, no columns, grey,
+  word-wrapped — with a blank line whenever reasoning is interrupted by
+  another event or resumes afterwards.
+- **The bottom row always shows the active keybindings** for the current
+  tab, in priority order — on a narrow terminal the least important hints
+  (e.g. scrolling) drop first rather than truncating mid-word, so `Ctrl+C
+quit` and the tab's primary action are always visible.
+- **F1** (or **Ctrl+G**) opens a help tab listing every keybinding, from any
+  pane — Ctrl+G is a fallback for when F1 never reaches the terminal at all
+  (e.g. it's bound to brightness on Mac laptops unless Fn is held). Unlike
+  other tabs it self-closes — **Tab**, **Shift+Tab**, or **Esc** away from it
+  removes it outright (landing on a sensible neighbouring tab) rather than
+  leaving it around like a normal tab; **Ctrl+W** closes it too.
 - **Ctrl+C**: while any turn is in flight, stops watching all of them (the
   agents keep running server-side) and returns to the prompt. At the idle
   prompt, tears down the TUI, cleans up every agent created this session, and
@@ -252,9 +277,13 @@ response…`) — other tabs are unaffected and can run turns concurrently. A
   session, same as the plain renderer.
 
 **`-q`/`--query` at a TTY** also opens the TUI: the message is submitted
-automatically (no input box needed), and as soon as the root agent's turn
-reaches its terminal event, the TUI tears down and the final response is
-printed to stdout exactly as in piped mode, then the process exits.
+automatically on startup, but the query is otherwise just the first message of
+a normal interactive session — the response renders into the root pane like
+any other turn, and the TUI **stays open afterward** rather than exiting the
+moment the answer arrives, so it isn't lost if you want to ask a follow-up.
+Leave the same way as any other session (Ctrl+C, or `exit`/`quit`). Piped
+output (or `--no-tui`) keeps the original one-shot behaviour: print the final
+answer to stdout and exit, unchanged — see the plain renderer section below.
 
 ```bash
 ./lcp-cli.sh -t $TOKEN chat -r <roleId>
