@@ -1,9 +1,56 @@
 #!/usr/bin/env bash
-# Pre-commit hook: runs the dev-environment fast quality gate
-# (format check, lint, typecheck, shellcheck).
+# Pre-commit hook:
+#   1. Format, then regenerate derived files (licenses, schema); stage any
+#      resulting changes into this commit.
+#   2. Gate on typecheck, shellcheck, and lint — a failure here aborts the
+#      commit.
+#   3. Best-effort: run unit tests, but only warn (never block) on failure.
 # Install: npm run hooks:install
 # Bypass: git commit --no-verify
 set -euo pipefail
 
 TOP="$(git rev-parse --show-toplevel)"
-exec bash "$TOP/dev-environment/scripts/check.sh" --fast --project "$TOP"
+cd "$TOP"
+
+# Paths format/licenses:generate/schema:generate can touch — scoping `git add`
+# to these avoids sweeping up unrelated tracked-file changes sitting dirty
+# elsewhere in the working tree.
+GENERATED_PATHS=(apps libs test docs schemas '*.md')
+
+echo "→ pre-commit: formatting..."
+npm run format --silent
+
+echo "→ pre-commit: regenerating licenses..."
+npm run licenses:generate --silent
+
+echo "→ pre-commit: regenerating schema..."
+npm run schema:generate --silent
+
+git add -u -- "${GENERATED_PATHS[@]}"
+
+echo "→ pre-commit: typecheck..."
+npm run typecheck --silent
+
+echo "→ pre-commit: shellcheck..."
+npm run shellcheck --silent
+
+echo "→ pre-commit: lint..."
+npm run lint --silent
+
+# lint --fix may have modified files too; restage anything it touched so the
+# commit reflects the post-fix state.
+git add -u -- "${GENERATED_PATHS[@]}"
+
+echo "✓ pre-commit checks passed."
+
+echo "→ pre-commit: running unit tests (best-effort — failures won't block the commit)..."
+if npm test --silent; then
+  echo "✓ unit tests passed."
+else
+  echo ""
+  echo "⚠ pre-commit: unit tests failed — proceeding with the commit anyway."
+  echo "  Please fix the failing tests before pushing."
+  echo ""
+fi
+
+exit 0

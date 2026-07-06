@@ -27,6 +27,22 @@ set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 
+# ANSI colours for operator-facing output. Empty when stdout is not a TTY so
+# piped/captured logs stay clean.
+if [[ -t 1 ]]; then
+  BLUE=$'\e[34m'
+  YELLOW=$'\e[33m'
+  GREEN=$'\e[32m'
+  RED=$'\e[31m'
+  RESET=$'\e[0m'
+else
+  BLUE=""
+  YELLOW=""
+  GREEN=""
+  RED=""
+  RESET=""
+fi
+
 USERNAME=""
 PASSWORD=""
 LCP_SERVER="http://localhost:3000"
@@ -116,7 +132,7 @@ cli() {
 # Prints a failure message and halts the script immediately (exit 1).
 fail() {
   echo "" >&2
-  echo "FAIL: $1" >&2
+  echo "${RED}FAIL: $1${RESET}" >&2
   exit 1
 }
 
@@ -131,15 +147,22 @@ scenario_selected() {
   return 1
 }
 
-# Presents one yes/no check to the operator; any answer other than "y" halts
-# the script via fail(), per the spec ("halt the script on any failure").
+# Presents one yes/no check to the operator and compares the answer against the
+# expected outcome (default "y"). A mismatch halts the script via fail(); a
+# match prints a green "Success" before the next question. This lets a scenario
+# assert that the answer to some checks should be "n".
 ask_yn() {
   local question="$1"
+  local expected="${2:-y}"
   echo ""
   local answer
-  read -rn 1 -p "  CHECK: $question [y/n] " answer
+  read -rn 1 -p "  ${YELLOW}CHECK: $question [y/n]${RESET} " answer
   echo ""
-  [[ "$answer" == "y" ]] || fail "Check failed: $question"
+  if [[ "$answer" == "$expected" ]]; then
+    echo "  ${GREEN}Success${RESET}"
+  else
+    fail "Check failed (expected '$expected'): $question"
+  fi
 }
 
 trap 'stop_docker_capture; stop_lm_studio_capture' EXIT
@@ -148,7 +171,7 @@ start_lm_studio_capture
 
 # Step 1: create the test company from fixture JSON, then confirm it round-trips
 # through list-companies before trusting its id for the steps that follow.
-echo "=== 1. Creating test company ==="
+echo "${BLUE}=== 1. Creating test company ===${RESET}"
 COMPANY_JSON=$(cat "$ROOT/scripts/test-data/simple-company.json" | cli set-company) \
   || fail "set-company failed"
 COMPANY_ID=$(jq -r '.id' <<< "$COMPANY_JSON")
@@ -162,7 +185,7 @@ cli list-companies | jq -e --arg id "$COMPANY_ID" \
 # Step 2: create the chicken assistant role under that company, same
 # create-then-verify pattern as step 1.
 echo ""
-echo "=== 2. Creating chicken assistant role ==="
+echo "${BLUE}=== 2. Creating chicken assistant role ===${RESET}"
 CHICKEN_JSON=$(cat "$ROOT/scripts/test-data/chicken-assistant.json" \
   | cli set-role --company-id "$COMPANY_ID") || fail "set-role (chicken) failed"
 CHICKEN_ROLE_ID=$(jq -r '.id' <<< "$CHICKEN_JSON")
@@ -177,7 +200,7 @@ cli list-roles --company-id "$COMPANY_ID" | jq -e --arg id "$CHICKEN_ROLE_ID" \
 # (step 2) has someone to recommend consulting, and the cat (here) has someone
 # to actually consult in the scenarios below.
 echo ""
-echo "=== 3. Creating cat assistant role ==="
+echo "${BLUE}=== 3. Creating cat assistant role ===${RESET}"
 CAT_JSON=$(cat "$ROOT/scripts/test-data/cat-assistant.json" \
   | cli set-role --company-id "$COMPANY_ID") || fail "set-role (cat) failed"
 CAT_ROLE_ID=$(jq -r '.id' <<< "$CAT_JSON")
@@ -192,7 +215,7 @@ cli list-roles --company-id "$COMPANY_ID" | jq -e --arg id "$CAT_ROLE_ID" \
 # id created above, send the prompt via a single-query chat session, then ask
 # the operator every check listed for that prompt before moving on.
 echo ""
-echo "=== 4. Running scenarios ==="
+echo "${BLUE}=== 4. Running scenarios ===${RESET}"
 SCENARIO_COUNT=$(jq 'length' "$SCENARIOS_FILE")
 for i in $(seq 0 $((SCENARIO_COUNT - 1))); do
   scenario_selected $((i + 1)) || continue
@@ -207,15 +230,16 @@ for i in $(seq 0 $((SCENARIO_COUNT - 1))); do
   esac
 
   echo ""
-  echo "--- Scenario $((i + 1))/$SCENARIO_COUNT — [$ROLE_KEY] $PROMPT ---"
+  echo "${BLUE}--- Scenario $((i + 1))/$SCENARIO_COUNT — [$ROLE_KEY] $PROMPT ---${RESET}"
   cli chat --role-id "$ROLE_ID" --query "$PROMPT" || fail "chat request failed for scenario $((i + 1))"
 
   CHECK_COUNT=$(jq ".[$i].checks | length" "$SCENARIOS_FILE")
   for j in $(seq 0 $((CHECK_COUNT - 1))); do
-    CHECK_TEXT=$(jq -r ".[$i].checks[$j]" "$SCENARIOS_FILE")
-    ask_yn "$CHECK_TEXT"
+    CHECK_TEXT=$(jq -r ".[$i].checks[$j].question" "$SCENARIOS_FILE")
+    CHECK_EXPECTED=$(jq -r ".[$i].checks[$j].expected // \"y\"" "$SCENARIOS_FILE")
+    ask_yn "$CHECK_TEXT" "$CHECK_EXPECTED"
   done
 done
 
 echo ""
-echo "=== All scenarios passed ==="
+echo "${GREEN}=== All scenarios passed ===${RESET}"

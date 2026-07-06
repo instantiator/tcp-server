@@ -8,9 +8,10 @@
 
   // Body text for prompt part 3. Follows the heading, before the per-service bullet list.
   // Deliberately omits tool names/parameters/descriptions — those are already sent to the
-  // LLM via bindTools on every turn. Only the "when to use this service" framing is added
-  // here; the prompt itself still points the agent at describe_server for anything deeper.
-  "services_intro": "You have access to the following external services via tools. Each service's tools are already available to you; the list below is just guidance on when to reach for each one. Call `{name}__describe_server` on any service for more detail.",
+  // LLM via bindTools once a service has been described. Only the "when to use this
+  // service" framing is added here; the prompt itself still points the agent at
+  // describe_server for anything deeper.
+  "services_intro": "You have access to the following external services via tools. Each service's other tools only become available once you call its `describe_server` tool — they stay available for a few turns, then are hidden again until you re-describe. Be sparing: only describe a service you actually need for the current step.",
 
   // Template for a single service bullet in prompt part 3. {{name}} and {{usage}} are substituted.
   "services_item": "- **{{name}}**: use for {{usage}}",
@@ -19,25 +20,26 @@
   // {{name}} is substituted.
   "services_item_unknown": "- **{{name}}**: call `{{name}}__describe_server` for a full tool list and usage guide",
 
+  // Reminder sent when the stream ends without the agent having invoked its required
+  // tool call(s) at all. {{tools}} is the comma-separated list of callable tool names.
+  "required_tools_reminder": "Your task is NOT complete. You have not called the required tool(s): {{tools}}. Writing out or describing a tool call is not sufficient — you must actually invoke the tool. Do so now: finish any remaining work, then call {{tools}} as your final action.",
+
+  // Reminder sent when the required tool(s) were invoked but the call did not succeed
+  // (the task was never marked complete). {{tools}} is the comma-separated list of callable tool names.
+  "required_tools_call_failed": "Your task is NOT complete: your call to {{tools}} did not succeed. Review the tool error message above, fix the problem it describes, and call {{tools}} again now.",
+
   // Introductory sentence for prompt part 5 (RAG knowledge-base excerpts).
   "rag_intro": "The following excerpts from your knowledge base are relevant to your current task. Draw on them as needed:",
 
   // Template for the heading of each RAG chunk section. {{documentPath}} is replaced with the source path.
   "rag_source_header": "### Source: {{documentPath}}",
 
-  // Prompt sent to the LLM to generate a completion summary once an agent loop finishes.
-  // {{initialPrompt}}, {{actionLines}}, {{created}}, {{modified}}, {{deleted}}, {{moved}} are substituted.
-  "completion_summary_prompt": "Your task is now complete.\n\nOriginal task: {{initialPrompt}}\n\nActions taken (in order):\n{{actionLines}}\n\nStorage changes:\n- Created: {{created}}\n- Modified: {{modified}}\n- Deleted: {{deleted}}\n- Moved: {{moved}}\n\nRespond with ONLY a JSON object — no markdown, no extra text:\n{\"summary\": \"One or two sentences describing what was accomplished at a high level.\"}\n\nThe summary should be concise and factual, suitable for an audit log.",
+  // Deterministic completion summary, built directly from tracked actions/storage
+  // changes — no LLM call. {{actionLines}}, {{created}}, {{modified}}, {{deleted}},
+  // {{moved}} are substituted.
+  "completion_summary_deterministic": "Task completed.\n\nActions taken (in order):\n{{actionLines}}\n\nStorage changes:\n- Created: {{created}}\n- Modified: {{modified}}\n- Deleted: {{deleted}}\n- Moved: {{moved}}",
 
-  // Placeholder text used in the completion summary prompt when no actions/storage changes were recorded.
+  // Placeholder text used in the completion summary when no actions/storage changes were recorded.
   "completion_summary_no_actions": "(none recorded)",
-  "completion_summary_no_storage": "(none)",
-
-  // Structured fallback summary used when the LLM call fails. {{taskSnippet}}, {{actionsSummary}},
-  // {{storageSummary}} are substituted.
-  "completion_fallback_summary": "Completed task: \"{{taskSnippet}}\"; {{actionsSummary}}; {{storageSummary}}.",
-  "completion_fallback_actions": "{{count}} action(s) taken",
-  "completion_fallback_no_actions": "no actions recorded",
-  "completion_fallback_storage": "{{count}} file(s) affected",
-  "completion_fallback_no_storage": "no storage changes"
+  "completion_summary_no_storage": "(none)"
 }

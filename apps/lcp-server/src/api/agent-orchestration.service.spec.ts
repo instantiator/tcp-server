@@ -11,6 +11,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Queue } from 'bullmq';
 import { randomUUID } from 'crypto';
 import { DbService } from '../db/db.service';
+import { AgentEventService } from '../events/agent-event.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 
 // Prevent BullMQ from trying to open a real Redis connection
@@ -18,6 +19,7 @@ jest.mock('bullmq', () => ({
   Queue: jest.fn().mockImplementation(() => ({
     add: jest.fn().mockResolvedValue(undefined),
     close: jest.fn().mockResolvedValue(undefined),
+    on: jest.fn(),
   })),
 }));
 
@@ -41,12 +43,32 @@ function makeAgent(overrides: Partial<LcpAgent> = {}): LcpAgent {
   };
 }
 
+/**
+ * Mocks the chainable `createQueryBuilder().update().set().where().andWhere()
+ * .execute()` call `resumeAgent` uses to atomically claim a pause episode's
+ * resume. `execute` defaults to `{ affected: 1 }` (claim succeeds); tests
+ * simulating a losing concurrent call override it to `{ affected: 0 }`.
+ */
+function makeUpdateQueryBuilder() {
+  const qb = {
+    update: jest.fn().mockReturnThis(),
+    set: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    execute: jest.fn().mockResolvedValue({ affected: 1 }),
+  };
+  return qb;
+}
+
 function makeRepo() {
+  const updateQueryBuilder = makeUpdateQueryBuilder();
   return {
     update: jest.fn().mockResolvedValue({ affected: 1 }),
     count: jest.fn().mockResolvedValue(0),
     find: jest.fn().mockResolvedValue([]),
     findOne: jest.fn().mockResolvedValue(null),
+    createQueryBuilder: jest.fn().mockReturnValue(updateQueryBuilder),
+    updateQueryBuilder,
   };
 }
 
@@ -58,12 +80,14 @@ describe('AgentOrchestrationService', () => {
   let consultRepo: ReturnType<typeof makeRepo>;
   let convRepo: ReturnType<typeof makeRepo>;
   let msgRepo: ReturnType<typeof makeRepo>;
+  let emitEvent: jest.Mock;
 
   beforeEach(async () => {
     mockDb = {
       createAgent: jest.fn(),
       getAgent: jest.fn(),
     };
+    emitEvent = jest.fn();
     agentRepo = makeRepo();
     consultRepo = makeRepo();
     convRepo = makeRepo();
@@ -89,6 +113,7 @@ describe('AgentOrchestrationService', () => {
           provide: getRepositoryToken(ConversationMessage),
           useValue: msgRepo,
         },
+        { provide: AgentEventService, useValue: { emit: emitEvent } },
       ],
     }).compile();
 
@@ -141,6 +166,21 @@ describe('AgentOrchestrationService', () => {
         agentId: agent.id,
         type: 'resume',
       });
+    });
+
+    it('emits a running (resumed) status event after enqueueing', async () => {
+      const agent = makeAgent({ status: AgentStatus.Paused });
+      mockDb.getAgent.mockResolvedValue(agent);
+
+      await service.resumeAgent(agent.id);
+
+      expect(emitEvent).toHaveBeenCalledWith(
+        agent.id,
+        expect.objectContaining({
+          kind: 'agent_status',
+          data: { status: AgentStatus.Running, reason: 'resumed' },
+        }),
+      );
     });
 
     it('enqueues a resume job for a failed agent', async () => {
@@ -207,7 +247,11 @@ describe('AgentOrchestrationService', () => {
       const agent = makeAgent({ status: AgentStatus.Paused, pausedAt });
       mockDb.getAgent.mockResolvedValue(agent);
       consultRepo.find.mockResolvedValue([
-        { id: randomUUID(), result: 'Consultation answer.' },
+        {
+          id: randomUUID(),
+          status: 'complete',
+          result: 'Consultation answer.',
+        },
       ]);
       const conversationId = randomUUID();
       convRepo.find.mockResolvedValue([{ id: conversationId }]);
@@ -227,18 +271,67 @@ describe('AgentOrchestrationService', () => {
       expect(payload.replyContent).toContain('User answer.');
     });
 
-    it('clears pausedAt after a successful resume', async () => {
-      const agent = makeAgent({
-        status: AgentStatus.Paused,
-        pausedAt: new Date(),
-      });
+    it('includes failed consultations with a FAILED marker and escalation guidance', async () => {
+      const pausedAt = new Date('2026-06-01T00:00:00Z');
+      const agent = makeAgent({ status: AgentStatus.Paused, pausedAt });
+      mockDb.getAgent.mockResolvedValue(agent);
+      consultRepo.find.mockResolvedValue([
+        { id: randomUUID(), status: 'complete', result: 'All good.' },
+        {
+          id: randomUUID(),
+          status: 'failed',
+          result: 'Agent ended without calling complete_task',
+        },
+      ]);
+
+      await service.resumeAgent(agent.id);
+
+      const [, payload] = mockQueueInstance.add.mock.calls[0] as [
+        string,
+        { replyContent: string },
+      ];
+      expect(payload.replyContent).toContain(
+        'Consultation response: All good.',
+      );
+      expect(payload.replyContent).toContain(
+        'Consultation FAILED: Agent ended without calling complete_task',
+      );
+      expect(payload.replyContent).toContain('request_user_input');
+    });
+
+    it('clears pausedAt via an atomic conditional update after a successful resume', async () => {
+      const pausedAt = new Date();
+      const agent = makeAgent({ status: AgentStatus.Paused, pausedAt });
       mockDb.getAgent.mockResolvedValue(agent);
 
       await service.resumeAgent(agent.id);
 
-      expect(agentRepo.update).toHaveBeenCalledWith(agent.id, {
+      expect(agentRepo.createQueryBuilder).toHaveBeenCalled();
+      expect(agentRepo.updateQueryBuilder.set).toHaveBeenCalledWith({
         pausedAt: expect.any(Function) as () => string,
       });
+      expect(agentRepo.updateQueryBuilder.where).toHaveBeenCalledWith(
+        'id = :agentId',
+        { agentId: agent.id },
+      );
+      expect(agentRepo.updateQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'pausedAt = :pausedAt',
+        { pausedAt },
+      );
+    });
+
+    it('skips enqueueing a duplicate resume job when a concurrent call already claimed the pause episode', async () => {
+      const pausedAt = new Date();
+      const agent = makeAgent({ status: AgentStatus.Paused, pausedAt });
+      mockDb.getAgent.mockResolvedValue(agent);
+      // Simulate losing the race: another call already cleared pausedAt.
+      agentRepo.updateQueryBuilder.execute.mockResolvedValue({ affected: 0 });
+
+      const result = await service.resumeAgent(agent.id);
+
+      expect(mockQueueInstance.add).not.toHaveBeenCalled();
+      expect(emitEvent).not.toHaveBeenCalled();
+      expect(result.id).toBe(agent.id);
     });
 
     it('falls back to the explicit replyContent param when pausedAt is unset', async () => {

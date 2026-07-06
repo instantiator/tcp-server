@@ -16,6 +16,8 @@ import { AuditService } from '../../../apps/lcp-server/src/audit/audit.service';
 import { AppModule } from '../../../apps/lcp-server/src/app.module';
 import { makeTestJwt } from '../helpers/test-jwt';
 
+const INTERNAL_KEY = process.env.INTERNAL_API_KEY ?? 'e2e-test-internal-key';
+
 describe('AuditController (e2e)', () => {
   let app: INestApplication<App>;
   let companyRepo: Repository<LcpCompany>;
@@ -94,6 +96,88 @@ describe('AuditController (e2e)', () => {
           payload: {},
         })
         .expect(401));
+
+    it('returns 403 with the wrong internal API key', () =>
+      request(app.getHttpServer())
+        .post('/internal/audit')
+        .set('X-Internal-Api-Key', 'wrong-key')
+        .send({
+          agentId,
+          companyId,
+          role: 'Auditor',
+          eventType: AuditEventType.LlmResponse,
+          payload: {},
+        })
+        .expect(403));
+
+    // Regression test: CreateAuditEventDto originally had no class-validator
+    // decorators, so the app-wide `ValidationPipe({ whitelist: true })`
+    // silently stripped every field, leaving companyId/role/eventType/payload
+    // undefined and failing the entity's NOT NULL constraints with a generic
+    // 500 — every real caller of this endpoint was broken. This drives the
+    // actual HTTP path (not `AuditService.record()` directly), which is the
+    // only way to catch a whitelist-stripping regression like this again.
+    it('persists a full audit event through the real HTTP endpoint with the internal API key', async () => {
+      await request(app.getHttpServer())
+        .post('/internal/audit')
+        .set('X-Internal-Api-Key', INTERNAL_KEY)
+        .send({
+          agentId,
+          companyId,
+          role: 'Auditor',
+          eventType: AuditEventType.ToolCall,
+          payload: { tool: 'describe_server' },
+        })
+        .expect(204);
+
+      const events = await auditRepo.find({ where: { agentId } });
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        companyId,
+        role: 'Auditor',
+        agentId,
+        eventType: AuditEventType.ToolCall,
+        payload: { tool: 'describe_server' },
+      });
+    });
+
+    it('persists an audit event with agentId omitted (system-level event)', async () => {
+      await request(app.getHttpServer())
+        .post('/internal/audit')
+        .set('X-Internal-Api-Key', INTERNAL_KEY)
+        .send({
+          companyId,
+          role: 'system',
+          eventType: AuditEventType.Decision,
+          payload: { note: 'no agent' },
+        })
+        .expect(204);
+
+      const events = await auditRepo.find({
+        where: { companyId, role: 'system' },
+      });
+      expect(events).toHaveLength(1);
+      expect(events[0].agentId).toBeNull();
+    });
+
+    it('rejects a request missing required fields with a 400, not a 500', () =>
+      request(app.getHttpServer())
+        .post('/internal/audit')
+        .set('X-Internal-Api-Key', INTERNAL_KEY)
+        .send({ agentId })
+        .expect(400));
+
+    it('rejects an invalid eventType with a 400', () =>
+      request(app.getHttpServer())
+        .post('/internal/audit')
+        .set('X-Internal-Api-Key', INTERNAL_KEY)
+        .send({
+          companyId,
+          role: 'Auditor',
+          eventType: 'not_a_real_event_type',
+          payload: {},
+        })
+        .expect(400));
 
     it('persists an audit event written via AuditService.record()', async () => {
       await auditService.record(

@@ -1,4 +1,4 @@
-import { AgentStatus, AuditEventType, LcpAgent } from '@lcp/shared';
+import { AgentEvent, AgentStatus, AuditEventType, LcpAgent } from '@lcp/shared';
 import {
   BadRequestException,
   Body,
@@ -12,20 +12,19 @@ import {
   NotFoundException,
   Param,
   Post,
-  Req,
   Sse,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { UUID } from 'crypto';
-import type { Request } from 'express';
-import { map } from 'rxjs/operators';
+import { defer, from, merge, Observable } from 'rxjs';
+import { filter, map } from 'rxjs/operators';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuditService } from '../audit/audit.service';
 import { DbService } from '../db/db.service';
 import { AgentEventService } from '../events/agent-event.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
-import { ChatMessageResponse, ChatService } from './chat.service';
+import { ChatService } from './chat.service';
 import { SendMessageDto, StartAgentDto, StartChatDto } from './dto/agent.dto';
 
 /** REST controller for starting, resuming, chatting with, and inspecting {@link LcpAgent} instances. */
@@ -79,49 +78,77 @@ export class AgentController {
   }
 
   /**
-   * Sends a single message to a chat agent and returns the agent's response.
-   * The HTTP connection is held open for the duration of the LLM call.
-   *
-   * When the client disconnects before the response arrives, the request socket
-   * emits a `close` event which aborts the in-flight LLM call, returning the
-   * agent to `idle` status rather than leaving it stuck in `running`.
+   * Accepts a message for a chat agent and returns `202 Accepted` immediately.
+   * The turn runs detached; its reasoning, response, and completion are
+   * delivered on the `GET /api/agent/:id/events` SSE stream. Clients should
+   * open that stream before (or right after) posting, then watch for the
+   * `completed` (or `failed`) event.
    */
-  @ApiOperation({ summary: 'Send a message to a chat agent' })
+  @ApiOperation({
+    summary: 'Send a message to a chat agent (accepted; watch SSE)',
+  })
   @Post(':id/message')
+  @HttpCode(HttpStatus.ACCEPTED)
   async sendMessage(
     @Param('id') id: UUID,
     @Body() body: SendMessageDto,
-    @Req() req: Request,
-  ): Promise<ChatMessageResponse> {
+  ): Promise<{ accepted: true }> {
     if (!body.message) {
       throw new BadRequestException('message is required');
     }
-    const abort = new AbortController();
-    req.socket.on('close', () => abort.abort('client_disconnect'));
     try {
-      return await this.chat.sendMessage(id, body.message, abort.signal);
+      await this.chat.sendMessage(id, body.message);
+      return { accepted: true };
     } catch (err) {
-      if (
-        err instanceof NotFoundException ||
-        err instanceof InternalServerErrorException
-      ) {
-        throw err;
-      }
+      if (err instanceof NotFoundException) throw err;
       throw new InternalServerErrorException('Unexpected error during chat');
     }
   }
 
   /**
-   * SSE stream of processing and compaction events for a chat agent.
+   * SSE stream of turn activity for a chat agent — status transitions, LLM
+   * activity, reasoning/response deltas, consultation hand-offs, and the
+   * terminal `completed`/`failed` event.
    *
-   * Clients may connect here after sending a message to receive real-time
-   * updates such as `compaction_started` and `compaction_complete` without
-   * polling. The stream stays open until the client disconnects.
+   * On connect, if the agent has already reached a terminal state (the client
+   * subscribed after the turn finished), a synthesized terminal event is
+   * replayed from the persisted status/output so the client still terminates.
    */
   @ApiOperation({ summary: 'Subscribe to agent events (SSE)' })
   @Sse(':id/events')
-  streamEvents(@Param('id') id: UUID): import('rxjs').Observable<MessageEvent> {
-    return this.agentEvents.observe(id).pipe(map((event) => ({ data: event })));
+  streamEvents(@Param('id') id: UUID): Observable<MessageEvent> {
+    const replay$ = defer(() => from(this.replayTerminal(id))).pipe(
+      filter((event): event is AgentEvent => event !== null),
+    );
+    return merge(replay$, this.agentEvents.observe(id)).pipe(
+      map((event) => ({ data: event })),
+    );
+  }
+
+  /**
+   * Synthesizes a terminal {@link AgentEvent} for an agent already in a
+   * terminal state, or null when it is still running / not found. Used to
+   * recover the outcome for clients that subscribe after the turn ended.
+   */
+  private async replayTerminal(id: UUID): Promise<AgentEvent | null> {
+    const agent = await this.db.getAgent(id);
+    if (!agent) return null;
+    const timestamp = new Date().toISOString();
+    if (agent.status === AgentStatus.Completed) {
+      return {
+        timestamp,
+        kind: 'completed',
+        data: { response: agent.output ?? '' },
+      };
+    }
+    if (agent.status === AgentStatus.Failed) {
+      return {
+        timestamp,
+        kind: 'failed',
+        data: { error: agent.output ?? 'Agent failed' },
+      };
+    }
+    return null;
   }
 
   /**

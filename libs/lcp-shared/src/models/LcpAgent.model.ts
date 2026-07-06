@@ -111,6 +111,16 @@ export class LcpAgent extends VersionedEntity {
     moved: { from: string; to: string }[];
   } | null;
 
+  /**
+   * Tool names (unprefixed, e.g. `complete_task`) that must have been invoked
+   * successfully before the agent loop may end. Null means the default
+   * (`['complete_task']`); an empty array disables enforcement.
+   *
+   * Uses `simple-json` (stored as TEXT) for cross-DB compatibility with SQLite unit tests.
+   */
+  @Column({ type: 'simple-json', nullable: true })
+  requiredToolCalls?: string[] | null;
+
   /** Timestamp of the last status or field update. */
   @UpdateDateColumn()
   updatedAt!: Date;

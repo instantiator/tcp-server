@@ -15,8 +15,9 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Queue } from 'bullmq';
 import { UUID } from 'crypto';
-import { MoreThanOrEqual, Repository } from 'typeorm';
+import { In, MoreThanOrEqual, Repository } from 'typeorm';
 import { DbService } from '../db/db.service';
+import { AgentEventService } from '../events/agent-event.service';
 import { LcpAgentTemplate } from '../templates/LcpAgentTemplate';
 
 /** Payload dispatched to the `agent-jobs` BullMQ queue. */
@@ -52,12 +53,20 @@ export class AgentOrchestrationService
     private readonly convRepo: Repository<Conversation>,
     @InjectRepository(ConversationMessage)
     private readonly msgRepo: Repository<ConversationMessage>,
+    private readonly events: AgentEventService,
   ) {}
 
   /** Connects to the Redis-backed BullMQ queue on startup. */
   onModuleInit(): void {
     const url = this.config.getOrThrow<string>('REDIS_URL');
     this.queue = new Queue<AgentJob>('agent-jobs', { connection: { url } });
+    // BullMQ surfaces Redis connection problems (including a post-close
+    // "Connection is closed") as 'error' events; with no listener they become
+    // unhandled rejections that can crash unrelated code — e.g. a later e2e
+    // suite sharing the process. Mirror the worker: log and swallow.
+    this.queue.on('error', (err) => {
+      this.logger.warn(`agent-jobs queue error: ${err.message}`);
+    });
     this.logger.log('Connected to agent-jobs queue');
   }
 
@@ -135,16 +144,40 @@ export class AgentOrchestrationService
     // Combine every response received since this pause episode began, so
     // the resumed agent sees all the answers it asked for, not just the
     // last one to arrive.
-    const aggregated = agent.pausedAt
-      ? await this.collectRepliesSince(agentId, agent.pausedAt)
-      : null;
-
-    await this.agentRepo.update(agentId, { pausedAt: () => 'NULL' });
+    let aggregated: string | null = null;
+    if (agent.pausedAt) {
+      // Atomically claim this pause episode's resume: only the caller that
+      // actually clears pausedAt proceeds to enqueue. Without this, two
+      // near-simultaneous resume triggers (e.g. a retried fire-and-forget
+      // completion notification) can both read the same pausedAt, both find
+      // zero outstanding requests, and both enqueue a resume job carrying
+      // the same aggregated reply — injecting it into the agent twice.
+      const claim = await this.agentRepo
+        .createQueryBuilder()
+        .update(LcpAgent)
+        .set({ pausedAt: () => 'NULL' })
+        .where('id = :agentId', { agentId })
+        .andWhere('pausedAt = :pausedAt', { pausedAt: agent.pausedAt })
+        .execute();
+      if (claim.affected === 0) {
+        this.logger.log(
+          `Agent ${agentId} resume already claimed by a concurrent call — skipping duplicate resume job`,
+        );
+        return agent;
+      }
+      aggregated = await this.collectRepliesSince(agentId, agent.pausedAt);
+    }
 
     await this.queue.add('resume', {
       agentId: agent.id,
       type: 'resume',
       replyContent: aggregated ?? replyContent,
+    });
+    // Let any client observing the calling agent see it come back to life.
+    this.events.emit(agent.id, {
+      timestamp: new Date().toISOString(),
+      kind: 'agent_status',
+      data: { status: AgentStatus.Running, reason: 'resumed' },
     });
     this.logger.log(`Dispatched resume job for agent ${agent.id}`);
     return agent;
@@ -174,7 +207,7 @@ export class AgentOrchestrationService
       this.consultRepo.find({
         where: {
           callingAgentId: agentId,
-          status: 'complete',
+          status: In(['complete', 'failed']),
           createdAt: MoreThanOrEqual(pausedAt),
         },
       }),
@@ -199,8 +232,16 @@ export class AgentOrchestrationService
 
     const parts = [
       ...consultations
-        .filter((c) => c.result)
+        .filter((c) => c.status === 'complete' && c.result)
         .map((c) => `Consultation response: ${c.result}`),
+      ...consultations
+        .filter((c) => c.status === 'failed')
+        .map(
+          (c) =>
+            `Consultation FAILED: ${c.result ?? 'no reason given'}. ` +
+            'Use your own judgement about how to proceed; if a response is ' +
+            'essential, consider escalating to a user via request_user_input.',
+        ),
       ...conversationReplies
         .filter((content): content is string => Boolean(content))
         .map((content) => `User response: ${content}`),

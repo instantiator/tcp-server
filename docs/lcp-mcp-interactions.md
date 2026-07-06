@@ -21,8 +21,7 @@ See [agent-services.md → MCP Servers](agent-services.md#mcp-servers) for how a
 | Tool                                                        | Signature                                                                               | Description                                                  |
 | ----------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
 | [`describe_server`](#describe_server)                       | `describe_server()`                                                                     | Overview of the interactions service                         |
-| [`list_available_users`](#list_available_users)             | `list_available_users(companyId)`                                                       | List human users registered in the company                   |
-| [`list_available_roles`](#list_available_roles)             | `list_available_roles(companyId)`                                                       | List agent roles that can be consulted                       |
+| [`list_available_contacts`](#list_available_contacts)       | `list_available_contacts(companyId, kind?)`                                             | List human users and/or agent roles available to ask/consult |
 | [`request_user_input`](#request_user_input)                 | `request_user_input(agentId, companyId, question, context?, userIds?)`                  | Pause and submit a question to human users                   |
 | [`request_agent_consultation`](#request_agent_consultation) | `request_agent_consultation(agentId, companyId, roleId, question, context?, roleName?)` | Consult another agent role                                   |
 | [`complete_task`](#complete_task)                           | `complete_task(agentId, companyId, finalAnswer, outputFiles?)`                          | Mark the task complete; optionally verify output files exist |
@@ -39,19 +38,22 @@ Returns a markdown overview of the interactions service and its tools.
 
 **Usage pattern:** Agents should call this first when they discover the interactions server is available. Prompt part 3 directs agents to do this automatically.
 
+**Note:** unlike other MCP servers, this server's tools are _not_ subject to describe-then-reveal tool-schema gating (see [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-0086)) — `request_user_input`, `request_agent_consultation`, and especially `complete_task` are essential control-flow calls that must stay reachable at all times, so all of this server's tools are always bound regardless of whether `describe_server` has been called.
+
 ---
 
-## `list_available_users`
+## `list_available_contacts`
 
-Lists the human users registered in the company, including their roles and knowledge domains. Useful before calling `request_user_input` to know who will be notified.
+Lists the human users and/or agent roles available in the company — users can be asked questions via `request_user_input`, roles can be consulted via `request_agent_consultation`. Replaces the earlier separate `list_available_users`/`list_available_roles` tools with one call (fewer iterations, smaller schema footprint).
 
 **Arguments:**
 
-| Parameter   | Type | Required | Description          |
-| ----------- | ---- | -------- | -------------------- |
-| `companyId` | UUID | yes      | The company to query |
+| Parameter   | Type                               | Required | Description                                   |
+| ----------- | ---------------------------------- | -------- | --------------------------------------------- |
+| `companyId` | UUID                               | yes      | The company to query                          |
+| `kind`      | `'users'` \| `'roles'` \| `'both'` | no       | Which contacts to list. Defaults to `'both'`. |
 
-**Returns:** JSON array of user records:
+**Returns:** With `kind: 'users'` or `kind: 'roles'`, the raw JSON array for that collection (same shape as before):
 
 ```json
 [
@@ -66,19 +68,7 @@ Lists the human users registered in the company, including their roles and knowl
 ]
 ```
 
----
-
-## `list_available_roles`
-
-Lists the agent roles defined in the company that can be consulted via `request_agent_consultation`.
-
-**Arguments:**
-
-| Parameter   | Type | Required | Description          |
-| ----------- | ---- | -------- | -------------------- |
-| `companyId` | UUID | yes      | The company to query |
-
-**Returns:** JSON array of role records (name, slug, description).
+With `kind: 'both'` (or omitted), a JSON object keyed by collection: `{ "users": [...], "roles": [...] }`. If one collection's lookup fails, that key holds `{ "error": "..." }` instead — the other collection's data is still returned.
 
 ---
 
@@ -88,13 +78,13 @@ Pauses the current agent and submits a question to the relevant human users in t
 
 **Arguments:**
 
-| Parameter   | Type   | Required | Description                                                                                         |
-| ----------- | ------ | -------- | --------------------------------------------------------------------------------------------------- |
-| `agentId`   | UUID   | yes      | The calling agent's UUID                                                                            |
-| `companyId` | UUID   | yes      | The company UUID                                                                                    |
-| `question`  | string | yes      | The question to ask the user (shown in `list-open-queries`)                                         |
-| `context`   | string | no       | Optional background context to help the user respond                                                |
-| `userIds`   | UUID[] | no       | Company user ids (from `list_available_users`) to target. Omit to auto-route based on the question. |
+| Parameter   | Type   | Required | Description                                                                                            |
+| ----------- | ------ | -------- | ------------------------------------------------------------------------------------------------------ |
+| `agentId`   | UUID   | yes      | The calling agent's UUID                                                                               |
+| `companyId` | UUID   | yes      | The company UUID                                                                                       |
+| `question`  | string | yes      | The question to ask the user (shown in `list-open-queries`)                                            |
+| `context`   | string | no       | Optional background context to help the user respond                                                   |
+| `userIds`   | UUID[] | no       | Company user ids (from `list_available_contacts`) to target. Omit to auto-route based on the question. |
 
 **Returns:** A confirmation message containing the conversation slug (e.g. `"Paused. Query submitted as analyst-3. Your task will resume when the user responds."`).
 
@@ -115,14 +105,14 @@ Pauses the current agent and dispatches a consultation job to another agent role
 
 **Arguments:**
 
-| Parameter   | Type   | Required | Description                                                                                                                          |
-| ----------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `agentId`   | UUID   | yes      | The calling agent's UUID                                                                                                             |
-| `companyId` | UUID   | yes      | The company UUID                                                                                                                     |
-| `roleId`    | UUID   | yes      | The id of the role to consult (from `list_available_roles`) — role names aren't unique within a company, so the id is the lookup key |
-| `question`  | string | yes      | The question to pose to the consulting agent                                                                                         |
-| `context`   | string | no       | Optional context for the consultation                                                                                                |
-| `roleName`  | string | no       | Optional human-readable label, used only for friendlier logging                                                                      |
+| Parameter   | Type   | Required | Description                                                                                                                             |
+| ----------- | ------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `agentId`   | UUID   | yes      | The calling agent's UUID                                                                                                                |
+| `companyId` | UUID   | yes      | The company UUID                                                                                                                        |
+| `roleId`    | UUID   | yes      | The id of the role to consult (from `list_available_contacts`) — role names aren't unique within a company, so the id is the lookup key |
+| `question`  | string | yes      | The question to pose to the consulting agent                                                                                            |
+| `context`   | string | no       | Optional context for the consultation                                                                                                   |
+| `roleName`  | string | no       | Optional human-readable label, used only for friendlier logging                                                                         |
 
 **Returns:** A confirmation message containing the consultation ID and the resolved role name.
 
@@ -130,6 +120,7 @@ Pauses the current agent and dispatches a consultation job to another agent role
 
 1. `POST /internal/pause` on lcp-server — looks up the role by `roleId` (scoped to `companyId`), creates a `PendingConsultation` record, sets the calling agent to `paused`, starts a new agent job for the target role with a supplementary context prompt: `"This is a consultation from {callingRoleName}. Give a complete, concise answer in a single response."`
 2. When the consulting agent calls `complete_task`, lcp-server attempts to resume the calling agent with the consultation result — see [Resume conditions](cross-agent-consultations.md#resume-conditions)
+3. Consulting agents are created with `requiredToolCalls: ['complete_task']`. If the consultation fails (error, timeout, or the required call never fires despite reminders), the calling agent is resumed with a `Consultation FAILED: <reason>` message instead of staying paused — see [Consultation failure](cross-agent-consultations.md#consultation-failure)
 
 ---
 
@@ -152,9 +143,9 @@ Marks the current agent task as complete and stores a final answer summary. Agen
 
 1. If `outputFiles` is non-empty, queries lcp-mcp-storage `GET /files/exists` for each path. Missing paths trigger the error response (no completion written). Fails open — if lcp-mcp-storage is unreachable, completion proceeds.
 2. On success: `POST /internal/agent/:agentId/complete` — sets `LcpAgent.status = completed` and stores `finalAnswer` as `LcpAgent.output`. For consultation agents, also triggers the calling agent's resume.
-3. Records an `agent_loop_completion` audit event with a prose summary, the ordered action log, and storage changes (created, modified, deleted, moved files).
+3. Records an `agent_loop_completion` audit event with a deterministic summary built from the tracked action log and storage changes (created, modified, deleted, moved files) — no separate LLM call.
 
-**Completion enforcement:** If the agent loop exits without having called `complete_task` and iterations remain, lcp-agent injects one final HumanMessage instructing the agent to call `complete_task`. If still not called, lcp-agent sets the status to `completed` with the last AI message as the output, and logs a warning.
+**Completion enforcement:** `LcpAgent.requiredToolCalls` (null → default `['complete_task']`, `[]` opts out) lists the tools an agent must invoke before its loop may end. If the stream ends without them, lcp-agent injects a reminder HumanMessage and re-streams, up to `AGENT_REQUIRED_TOOL_RETRIES` times (default 2). If the calls still haven't succeeded, the run is failed and the failure propagates via `POST /internal/agent/:agentId/fail` (resolving any pending consultation as `failed` and resuming the caller). Narrated text is never accepted in place of a required call; agents with `requiredToolCalls: []` keep the legacy fallback where the last AI message becomes the output.
 
 ---
 

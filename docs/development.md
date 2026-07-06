@@ -55,8 +55,13 @@ apps/
   lcp-cli/
     src/
       main.ts                # commander entry point; global options
-      commands/              # get-token, list-companies, list-roles, set-company, set-role, chat
-      lib/                   # api.ts (fetch wrapper), auth.ts (token resolution), types.ts
+      commands/              # thin per-command registration (flags → lib/<domain> action)
+      lib/
+        core/                # api.ts, cli-options.ts, run-command.ts, sse.ts, render.ts, ...
+        auth/                # token.ts (resolution/renewal) + get-token action
+        chat/                # chat command: flags, context, session, wiring, action
+        tui/                 # full-screen TUI (terminal-kit widgets)
+        crud/, docs/, queries/, links/  # remaining commands' actions, grouped by purpose
     tsconfig.app.json        # extends root; adds @lcp/shared paths
     tsconfig.json            # extends tsconfig.app.json; includes spec files (for ESLint)
 libs/

@@ -3,33 +3,68 @@
     "role": "chicken",
     "prompt": "What is your name?",
     "checks": [
-      "Does the chat interface identify the role it is submitting the query to as 'Chicken assistant'?",
-      "Has the agent chosen an appropriate name for itself?",
-      "Is the response delivered in the style of a chicken?"
+      {
+        "question": "Does the chat interface identify the role it is submitting the query to as 'Chicken assistant'?",
+        "expected": "y"
+      },
+      {
+        "question": "Has the agent chosen an appropriate name for itself?",
+        "expected": "y"
+      },
+      {
+        "question": "Is the response delivered in the style of a chicken?",
+        "expected": "y"
+      }
     ]
   },
   {
     "role": "chicken",
     "prompt": "Who would you consult if I asked about mice?",
     "checks": [
-      "Does the response indicate that it would consult 'Cat assistant'?"
+      {
+        "question": "Does the response indicate that it would consult 'Cat assistant'?",
+        "expected": "y"
+      }
     ]
   },
   {
     "role": "cat",
     "prompt": "Who is available to consult with from this company?",
     "checks": [
-      "Does the response include: Chicken assistant and Cat assistant?",
-      "Is the response delivered in the style of a cat?"
+      {
+        "question": "Does the response include: Chicken assistant and Cat assistant?",
+        "expected": "y"
+      },
+      {
+        "question": "Is the response delivered in the style of a cat?",
+        "expected": "y"
+      }
     ]
   },
   {
     "role": "cat",
     "prompt": "Ask the chicken assistant if it would like a worm. Let me know if it does, and how you enjoyed the interaction.",
     "checks": [
-      "Was the chicken assistant consulted successfully?",
-      "Did the chicken assistant want a worm?",
-      "Did the cat assistant give its perspective?"
+      {
+        "question": "Was the chicken assistant consulted successfully?",
+        "expected": "y"
+      },
+      {
+        "question": "Did you see the consulted agent's live activity prefixed with its role name (e.g. '[Chicken assistant]')?",
+        "expected": "y"
+      },
+      {
+        "question": "Did the chicken assistant want a worm?",
+        "expected": "y"
+      },
+      {
+        "question": "Did the cat assistant give its perspective?",
+        "expected": "y"
+      },
+      {
+        "question": "Did any raw or unformatted event JSON appear in the output?",
+        "expected": "n"
+      }
     ]
   }
 ]

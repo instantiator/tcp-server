@@ -1,13 +1,19 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { HumanMessage, RemoveMessage } from '@langchain/core/messages';
 import type { RunnableConfig } from '@langchain/core/runnables';
-import { AuditEventType, LcpAgent, LcpRole } from '@lcp/shared';
+import { DynamicStructuredTool } from '@langchain/core/tools';
 import { randomUUID } from 'crypto';
-import { AuditService } from '../audit/audit.service';
-import { AgentEventService } from '../events/agent-event.service';
+import { z } from 'zod';
+import { AuditEventType } from '../models/AuditEvent.model';
+import type { LcpAgent } from '../models/LcpAgent.model';
+import type { LcpRole } from '../models/LcpRole.model';
 import { ContextBudgetService } from './context-budget.service';
 import { ContextCompactorService } from './context-compactor.service';
-import { ContextManagerService } from './context-manager.service';
+import {
+  ContextAuditSink,
+  ContextEventSink,
+  ContextManagerService,
+} from './context-manager.service';
 import { IncomingDataGuardService } from './incoming-data-guard.service';
 
 // tiktoken is loaded by ContextBudgetService; mock it so tests are fast
@@ -39,8 +45,8 @@ describe('ContextManagerService', () => {
   let budget: ContextBudgetService;
   let compactor: jest.Mocked<ContextCompactorService>;
   let guard: jest.Mocked<IncomingDataGuardService>;
-  let events: jest.Mocked<AgentEventService>;
-  let auditService: jest.Mocked<AuditService>;
+  let events: jest.Mocked<ContextEventSink>;
+  let auditSink: jest.Mocked<ContextAuditSink>;
   let service: ContextManagerService;
 
   beforeEach(() => {
@@ -61,16 +67,14 @@ describe('ContextManagerService', () => {
           Promise.resolve({ text, compacted: false, activity: null }),
         ),
     } as unknown as jest.Mocked<IncomingDataGuardService>;
-    events = { emit: jest.fn() } as unknown as jest.Mocked<AgentEventService>;
-    auditService = {
-      record: jest.fn().mockResolvedValue(undefined),
-    } as unknown as jest.Mocked<AuditService>;
+    events = { emit: jest.fn() };
+    auditSink = { record: jest.fn().mockResolvedValue(undefined) };
     service = new ContextManagerService(
       budget,
       compactor,
       guard,
       events,
-      auditService,
+      auditSink,
     );
   });
 
@@ -149,6 +153,43 @@ describe('ContextManagerService', () => {
       expect(compactor.trimHistory).not.toHaveBeenCalled();
       expect(events.emit).not.toHaveBeenCalled();
     });
+
+    it('counts bound-tools schema overhead toward the budget, triggering compaction a bound-tools-unaware check would miss', async () => {
+      // A handful of tools with sizeable descriptions/schemas push the total
+      // over budget even though the checkpoint alone would not.
+      const makeTool = (n: number) =>
+        new DynamicStructuredTool({
+          name: `server__tool_${n}`,
+          description: 'x'.repeat(400),
+          schema: z.object({ path: z.string(), content: z.string() }),
+          func: () => Promise.resolve(''),
+        });
+      const tools = Array.from({ length: 20 }, (_, i) => makeTool(i));
+      const graph = makeGraph([]);
+      compactor.trimHistory.mockResolvedValue({
+        trimmed: [],
+        removedIds: [],
+        activity: 'Trimmed',
+      });
+
+      await service.prepare(
+        'agent-1',
+        'Short message',
+        {} as BaseChatModel,
+        WINDOW,
+        graph,
+        {},
+        false,
+        makeAgent(),
+        makeRole(),
+        tools,
+      );
+
+      expect(events.emit).toHaveBeenCalledWith(
+        'agent-1',
+        expect.objectContaining({ kind: 'compaction_started' }),
+      );
+    });
   });
 
   describe('prepare — over budget, triggers Tier-1 compaction', () => {
@@ -209,7 +250,7 @@ describe('ContextManagerService', () => {
         role,
       );
 
-      expect(auditService.record).toHaveBeenCalledWith(
+      expect(auditSink.record).toHaveBeenCalledWith(
         agent.companyId,
         role.name,
         agent.id,
@@ -273,6 +314,87 @@ describe('ContextManagerService', () => {
       );
 
       expect(result.report?.strategies).toContain('trim_messages');
+    });
+  });
+
+  describe('checkBudget', () => {
+    it('reports not over budget and no report when the checkpoint fits', async () => {
+      const graph = makeGraph([]);
+      const result = await service.checkBudget(
+        'agent-1',
+        {} as BaseChatModel,
+        WINDOW,
+        graph,
+        {},
+        makeAgent(),
+        makeRole(),
+      );
+      expect(result.stillOverBudget).toBe(false);
+      expect(result.report).toBeNull();
+    });
+
+    it('compacts and reports not-still-over-budget when Tier-1 trim succeeds', async () => {
+      const bigMsg = new HumanMessage('x'.repeat(10000));
+      const graph = makeGraph([bigMsg]);
+      compactor.trimHistory.mockResolvedValue({
+        trimmed: [],
+        removedIds: ['msg-1'],
+        activity: 'Trimmed',
+      });
+      compactor.buildRemoveMessages.mockReturnValue([]);
+
+      const result = await service.checkBudget(
+        'agent-1',
+        {} as BaseChatModel,
+        WINDOW,
+        graph,
+        {},
+        makeAgent(),
+        makeRole(),
+      );
+
+      expect(result.report).not.toBeNull();
+      // Trimming didn't actually shrink the mocked checkpoint (trimHistory's
+      // effect on the underlying messages is itself mocked out), so this
+      // fixture's tokensAfter remains over budget — proving the signal
+      // reflects the real post-compaction state, not just "compaction ran".
+      expect(result.stillOverBudget).toBe(true);
+    });
+
+    it('reports stillOverBudget=false once the compacted checkpoint fits', async () => {
+      // Stateful checkpoint: updateState (Tier-1 trim applied) empties the
+      // messages array, and getState always reflects the current value —
+      // simulating a real checkpoint shrinking after a trim.
+      let currentMessages: unknown[] = [new HumanMessage('x'.repeat(10000))];
+      const graph = {
+        getState: jest
+          .fn()
+          .mockImplementation(() =>
+            Promise.resolve({ values: { messages: currentMessages } }),
+          ),
+        updateState: jest.fn().mockImplementation(() => {
+          currentMessages = [];
+          return Promise.resolve({});
+        }),
+      };
+      compactor.trimHistory.mockResolvedValue({
+        trimmed: [],
+        removedIds: ['msg-1'],
+        activity: 'Trimmed',
+      });
+      compactor.buildRemoveMessages.mockReturnValue([]);
+
+      const result = await service.checkBudget(
+        'agent-1',
+        {} as BaseChatModel,
+        WINDOW,
+        graph,
+        {},
+        makeAgent(),
+        makeRole(),
+      );
+
+      expect(result.stillOverBudget).toBe(false);
     });
   });
 

@@ -252,7 +252,8 @@
       "description": "Lifecycle states for an inter-agent consultation.",
       "enum": [
         "pending",
-        "complete"
+        "complete",
+        "failed"
       ],
       "type": "string"
     },
@@ -565,6 +566,20 @@
           "description": "Set when this agent transitions to  {@link  AgentStatus.Paused } ; cleared on resume. Scopes which consultation/conversation responses belong to the current pause episode when aggregating a resume message.",
           "format": "date-time",
           "type": "string"
+        },
+        "requiredToolCalls": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Tool names (unprefixed, e.g. `complete_task`) that must have been invoked successfully before the agent loop may end. Null means the default (`['complete_task']`); an empty array disables enforcement.\n\nUses `simple-json` (stored as TEXT) for cross-DB compatibility with SQLite unit tests."
         },
         "role": {
           "$ref": "#/definitions/LcpRole",

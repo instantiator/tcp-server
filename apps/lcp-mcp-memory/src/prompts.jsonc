@@ -1,6 +1,6 @@
 {
   // Returned by describe_server — gives the agent an overview of available memory tools.
-  "describe_server": "## Memory Service\n\nProvides semantic search over the role's knowledge base and episodic memory.\nAll searches use pgvector cosine similarity against the company embedding model.\n\n### Tools\n- **describe_server** — this overview\n- **recall(roleId, companyId, query, top_k?)** — search both episodic memory and knowledge base\n- **remember(roleId, companyId, content, agentId?, tags?)** — store an episodic memory entry\n- **search_knowledge(roleId, companyId, query, top_k?)** — search the role knowledge base only",
+  "describe_server": "## Memory Service\n\nProvides semantic search over the role's knowledge base and episodic memory, using pgvector cosine similarity against the company embedding model. Use it to recall relevant prior knowledge or memories, or to store a new episodic memory — its tools are now available to call directly.",
 
   // Returned when no embedding config is configured for the company.
   "no_embedding_config": "No embedding config found for this company — cannot perform semantic search.",

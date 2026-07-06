@@ -1,6 +1,6 @@
 # ADR-015: Agent Completion via SSE Instead of Long-Poll
 
-**Status:** Proposed
+**Status:** Accepted (amended 2026-07-02 — see "Amendments as implemented")
 
 ## Context
 
@@ -92,3 +92,47 @@ external surface: a non-blocking `202` plus SSE rather than a blocked `200`.
   removed. The Redis subscriber moves from `chat.service` into
   `AgentEventService` — one subscriber per agent regardless of how many SSE
   clients are connected.
+
+## Amendments as implemented (008.4)
+
+The proposal above was implemented with the following changes, driven by the
+008.4 streamed-chat work (full live observability, not just completion):
+
+1. **`POST /api/agent/:id/message` returns `202` on _every_ turn**, not only
+   when a pause is detected. The turn runs detached (`ChatService.runTurn`) and
+   the entire turn — status transitions, LLM activity, token-by-token reasoning
+   and response deltas, and the terminal `completed`/`failed` event — streams
+   over `GET /api/agent/:id/events`. There is no synchronous `200` body; the
+   long-poll is gone entirely.
+
+2. **No `completionMessage` column.** The existing `LcpAgent.output` column
+   (already written before completion is signalled) plus `status` is the
+   recovery source. A client that missed the SSE `completed` event recovers via
+   `GET /api/agent/:id`; the SSE endpoint additionally **synthesises** a
+   terminal event from `output`+`status` for clients that subscribe after the
+   turn has already finished (`AgentController.replayTerminal`). No migration.
+
+3. **Event vocabulary is shared** in `@lcp/shared` (`events/agent-events.ts`) as
+   a single `AgentEvent` union used by lcp-server, lcp-agent, and lcp-cli:
+   `agent_status`, `llm`, `reasoning`, `response`, `consultation_started`,
+   `completed`, `failed`, and the existing `compaction_*` kinds.
+
+4. **The `agent:completed:{agentId}` Redis channel is retired.** lcp-agent now
+   publishes observability events (LLM/tool activity, reasoning/response deltas,
+   worker status transitions) to `agent:events:{agentId}` via a persistent
+   publisher connection; `AgentEventService` lazily subscribes (reference-counted
+   per agent over one shared connection) and relays them onto the in-memory
+   Subject. **Terminal `completed`/`failed` events originate in lcp-server**
+   (`PauseAndResumeService.completeAgent`/`failAgent` for worker-run agents;
+   `ChatService.runTurn` for in-process chat turns), so `publishCompletion` is
+   deleted.
+
+5. **Consultation follow.** When an agent pauses to consult another, the caller's
+   stream emits `consultation_started { agentId, roleName }`; `lcp-cli chat`
+   opens an additional (recursively nested) event stream for the consulted agent
+   and renders its lines prefixed with the consulted role's name.
+
+**Note:** after a consultation cycle the chat agent may rest at `Completed`
+rather than `Idle` (the old `Idle` reset lived in the deleted long-poll
+`finally`). This is harmless — `sendMessage` does not gate on status, and the
+recovery poll treats `Completed`-with-output as a finished turn.

@@ -84,6 +84,7 @@ if [ "$INFRA_ALREADY_UP" = false ]; then
   $DC down -v
   $DC up -d postgres redis minio
   wait_for postgres "$DC exec -T postgres pg_isready -U lcp"
+  wait_for redis "$DC exec -T redis redis-cli ping | grep -q PONG"
 fi
 
 export DATABASE_URL="postgres://lcp:${POSTGRES_PASSWORD}@localhost:5432/lcp"

@@ -4,4 +4,5 @@ import { LcpAgent } from '@lcp/shared';
 export type LcpAgentTemplate = Pick<
   LcpAgent,
   'companyId' | 'roleId' | 'initialPrompt'
->;
+> &
+  Partial<Pick<LcpAgent, 'requiredToolCalls'>>;

@@ -51,6 +51,13 @@ export class CompleteDto {
   output!: string;
 }
 
+/** Body for `POST /internal/agent/:agentId/fail`. */
+export class FailDto {
+  @IsString()
+  @IsNotEmpty()
+  reason!: string;
+}
+
 /** Body for `PATCH /internal/agent/:agentId/storage`. */
 export class UpdateStorageChangesDto {
   @IsOptional()

@@ -1,6 +1,6 @@
 # ADR-013: Agent Prompt Assembly and Context Management
 
-Status: Partially Implemented
+Status: Partially Implemented (amended 2026-07-03 — see [Amendments](#amendments-as-implemented-0086) at the end)
 
 ## Context
 
@@ -29,6 +29,8 @@ The intended prompt for each agent turn consists of eight parts, assembled in or
 | 8   | Final instruction    | A fixed suffix HumanMessage instructing the agent what to do next                                   | ✅ Implemented |
 
 Part 6 (pre-fetched MCP responses) remains unimplemented; agents call MCP tools reactively via the LangGraph tool node instead.
+
+Part 3 (services available) directs the agent to a server's `describe_server` tool for detail — since 008.6, that detail (the server's other tools' full schemas) is only actually bound to the model once `describe_server` has been called, for a bounded number of iterations (see [Amendments](#amendments-as-implemented-0086)).
 
 ## Context window management
 
@@ -69,30 +71,45 @@ Before a new message (or RAG/MCP data) is added to the context, `IncomingDataGua
 
 ### Compaction reporting
 
+> **Note (008.6):** the "Response JSON" path below predates [ADR-015](ADR-015-agent-completion-sse.md) (amended) — `ChatMessageResponse`/`compactionReport` on the HTTP response no longer exist; the turn is detached and all output, including compaction activity, streams over SSE. The `completed` terminal event's payload carries the final `compactionReport` instead. See [Amendments](#amendments-as-implemented-0086).
+
 Compaction is communicated to clients in two ways:
 
-1. **Response JSON**: `ChatMessageResponse.compactionReport` is populated when compaction ran during the turn. Includes `strategies`, `activities`, `duration`, and `before`/`after` token snapshots.
+1. ~~**Response JSON**: `ChatMessageResponse.compactionReport` is populated when compaction ran during the turn.~~ Superseded — see note above.
 
-2. **SSE stream**: `GET /api/agent/:id/events` streams `AgentEvent` objects (kind `compaction_started`, `compaction_complete`) in real time. The CLI connects to this endpoint after 3 seconds of no response to display progress.
+2. **SSE stream**: `GET /api/agent/:id/events` streams `AgentEvent` objects (kind `compaction_started`, `compaction_complete`) in real time, alongside every other turn event (LLM activity, reasoning/response deltas, terminal status).
 
 ## Decision
 
 - `trimMessages` (Tier 1) as the primary compaction strategy — no LLM cost, handles the common case.
 - LangGraph `getState`/`updateState` + `RemoveMessage` to apply compaction to the checkpoint in-place, so the compacted history persists across subsequent turns.
 - `LlmConfig.contextWindow` as an optional field (no migration required, JSONB column).
-- `AgentEventService` uses an in-memory RxJS Subject per agent — no Redis required while the server runs as a single instance.
+- `AgentEventService` uses an in-memory RxJS Subject per agent, relayed across a Redis channel for events published from lcp-agent — see [ADR-015](ADR-015-agent-completion-sse.md) (amended).
 
 ## Consequences
 
-- Five new services in `apps/lcp-server/src/context/` and `apps/lcp-server/src/events/`.
-- `ChatService.sendMessage()` gains an optional `AbortSignal` parameter; client disconnect aborts the LLM call and returns the agent to `Idle` status.
-- `ApiModule` imports `ContextModule` and provides `AgentEventService`.
+- `ContextBudgetService`, `ContextCompactorService`, `IncomingDataGuardService`, and `ContextManagerService` live in `libs/lcp-shared/src/context/` (moved from `apps/lcp-server/src/context/` in 008.6 so lcp-agent's worker can share them — see [Amendments](#amendments-as-implemented-0086)).
+- `ApiModule` imports `ContextModule`, which now wires the shared services' two sink dependencies (`ContextEventSink`, `ContextAuditSink`) to lcp-server's `AgentEventService`/`AuditService`; lcp-agent's `AgentWorkerModule` wires the same services to `AgentEventPublisherService`/`AuditClientService`.
 - Integration tests require the `stub-llm` Docker service (profile `integration`).
 
 ## Open questions
 
-**Essential-information anchoring**: The sliding-window and drop strategies risk losing critical early context (decisions made, constraints established, commitments given). A future enhancement: before dropping any message, call the LLM to identify and extract passages tagged as essential, then inject a compact "context anchor" `HumanMessage` preserving those facts. This trades one LLM call per drop batch for much higher fidelity compaction.
+**Essential-information anchoring**: The sliding-window and drop strategies risk losing critical early context (decisions made, constraints established, commitments given). A future enhancement: before dropping any message, call the LLM to identify and extract passages tagged as essential, then inject a compact "context anchor" `HumanMessage` preserving those facts. This trades one LLM call per drop batch for much higher fidelity compaction. Still deferred as of 008.6 — the per-iteration checking and tool-schema gating added there reduce how often aggressive dropping is reached, making this less urgent in practice, not irrelevant.
 
 A `// TODO` comment marks the drop-messages intervention point in `ContextCompactorService.summariseMessage` until the loss of early context becomes a measurable problem.
 
 **Per-role thresholds**: `TRIGGER_PCT` and `TARGET_PCT` are global constants. Per-role tuning via `LcpRole.runConfig` JSONB is deferred; ponytail comments mark the location in `ContextBudgetService`.
+
+## Amendments as implemented (008.6)
+
+A real end-to-end test (an agent consulting another over a task) surfaced two compounding gaps this ADR's original design didn't account for, both now fixed:
+
+1. **The worker path (`agent-loop.service.ts`'s `runLoop`, i.e. every standard run, resumed run, and consulted-agent run) had zero context-budget coverage.** Only `chat.service.ts`'s inline chat turns ever called `ContextManagerService.prepare()`. Since BullMQ `resume` jobs — including a chat agent's own post-consultation resume — are always handled by the lcp-agent worker, an agent's final segment after a multi-step consultation could accumulate unbounded context with no protection at all. Fixed by relocating the context services to `libs/lcp-shared` and wiring `ContextManagerService` into `AgentLoopService.runLoop` (mirroring chat.service.ts's resolved-window-size pattern).
+2. **The budget was checked once per turn/run, not once per iteration.** A long tool-calling run could grow well past the trigger threshold between the initial check and the final response with no further checks. Fixed by extracting a shared `runSupervisedGraph` (`libs/lcp-shared/src/llm/run-supervised-graph.ts`) used by both `chat.service.ts` and `agent-loop.service.ts`: the graph is compiled with `interruptAfterTools: true` (LangGraph deterministically halts after every tool-node execution instead of automatically continuing), and between every such interruption the runner re-checks context budget, tool visibility, and terminal agent status before resuming with a fresh `streamEvents(null, config)` call against the same checkpoint. A budget check also always runs once more when the graph reaches its natural end, in case a tool call moved the agent to a terminal status without leaving the graph itself anything pending.
+
+Also implemented:
+
+- **`ContextBudgetService.countTools(tools)`** — the bound-tools schema LangChain's `bindTools` sends on every request was previously invisible to budget checks (message-content-only counting). Now folded into every "current tokens" calculation.
+- **Reactive backstop**: a `try/catch` around each `streamEvents` pass classifies context-length-exceeded errors from the provider (`isContextLengthError`, `libs/lcp-shared/src/llm/context-length-error.ts`) as a defense-in-depth complement to the proactive tiktoken-based check. One compaction attempt is allowed; if the budget is still exceeded (proactively or reactively), the run fails cleanly with `"Context window exceeded even after compaction"` instead of proceeding to a doomed model call.
+- **Tool-schema gating (describe-then-reveal)**: `ToolVisibilityTracker` (`libs/lcp-shared/src/llm/tool-visibility-tracker.ts`) keeps only each MCP server's own `describe_server` tool bound until the agent calls it, at which point that server's other tools become bound for a small number of iterations before being hidden again. The `interactions` server is exempt (its tools are essential control-flow calls that must stay reachable, and it has few enough tools that gating it saves little context anyway). This is the single biggest lever for supporting models with smaller context windows, since tool-schema overhead (point 1 above) scales with the number of MCP servers loaded.
+- **Root cause of the originally reported bug**: a consultation-resolution tool call (or `complete_task`) mutates the agent's DB status, but the LangGraph `tools → agent` edge would still route back to the `agent` node for one more (unwanted, context-length-risking) model call unless something actually stops it. Breaking the event-consumption loop is not enough — it doesn't reliably stop LangGraph's own internal execution. `interruptAfterTools: true` fixes this structurally: the graph cannot proceed past a tool result without the runner explicitly resuming it, so a terminal-status check between iterations reliably prevents the wasted call.

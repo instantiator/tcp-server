@@ -18,6 +18,7 @@ import { InternalApiKeyGuard } from '../audit/internal-api-key.guard';
 import { PauseAndResumeService } from './pause-and-resume.service';
 import {
   CompleteDto,
+  FailDto,
   PauseDto,
   UpdateStorageChangesDto,
 } from './dto/internal.dto';
@@ -107,6 +108,23 @@ export class InternalController {
   }
 
   /**
+   * Marks an agent run as failed with the given reason.
+   * If the agent was a consultation agent, resolves the pending consultation
+   * as `failed` and re-enqueues the calling agent so it can react to the
+   * failure instead of waiting forever.
+   * Returns 204 No Content.
+   */
+  @ApiOperation({ summary: 'Mark an agent run as failed (internal)' })
+  @Post('agent/:agentId/fail')
+  @HttpCode(204)
+  async fail(
+    @Param('agentId') agentId: UUID,
+    @Body() body: FailDto,
+  ): Promise<void> {
+    await this.pauseResume.failAgent(agentId, body.reason);
+  }
+
+  /**
    * Merges a storage change snapshot into the agent's tracked storage state.
    * Called fire-and-forget by lcp-agent after each storage tool result.
    * Returns 204 No Content.
@@ -121,14 +139,14 @@ export class InternalController {
     await this.pauseResume.updateStorageChanges(agentId, body);
   }
 
-  /** Returns all roles belonging to the given company. Used by lcp-mcp-interactions' `list_available_roles`. */
+  /** Returns all roles belonging to the given company. Used by lcp-mcp-interactions' `list_available_contacts`. */
   @ApiOperation({ summary: 'List roles for a company (internal)' })
   @Get('company/:companyId/roles')
   async listRoles(@Param('companyId') companyId: UUID): Promise<LcpRole[]> {
     return this.roleRepo.findBy({ companyId });
   }
 
-  /** Returns all users belonging to the given company. Used by lcp-mcp-interactions' `list_available_users`. */
+  /** Returns all users belonging to the given company. Used by lcp-mcp-interactions' `list_available_contacts`. */
   @ApiOperation({ summary: 'List users for a company (internal)' })
   @Get('company/:companyId/users')
   async listUsers(@Param('companyId') companyId: UUID): Promise<CompanyUser[]> {

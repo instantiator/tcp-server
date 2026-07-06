@@ -10,7 +10,7 @@ See [lcp-mcp-interactions.md](lcp-mcp-interactions.md) for the MCP tool referenc
 
 ### 1. Agent requests user input
 
-The agent calls `request_user_input(agentId, companyId, question, context?, userIds?)` on lcp-mcp-interactions. `userIds` (from `list_available_users`) targets specific company users directly; if omitted, the question is auto-routed based on its content.
+The agent calls `request_user_input(agentId, companyId, question, context?, userIds?)` on lcp-mcp-interactions. `userIds` (from `list_available_contacts`) targets specific company users directly; if omitted, the question is auto-routed based on its content.
 
 ```
 Agent ──► interactions__request_user_input

@@ -27,6 +27,14 @@ export const DEFAULT_AGENT_ITERATIONS = 10;
 export const DEFAULT_AGENT_LOOP_TIMEOUT_MS = 30 * 60 * 1000; // 30m
 
 /**
+ * Default number of reminder retries when an agent run ends without all of its
+ * required tool calls (see {@link LcpAgent.requiredToolCalls}) having fired.
+ * Overridden by `AGENT_REQUIRED_TOOL_RETRIES` (lcp-agent env).
+ * Used in {@link AgentLoopService}.
+ */
+export const DEFAULT_REQUIRED_TOOL_RETRIES = 2;
+
+/**
  * Default per-request timeout in milliseconds for a single LLM API call.
  * Overridden by `LlmConfig.timeoutMs` (set via `LLM_TIMEOUT_MS` env when
  * built by {@link resolveEnvLlmConfig}, or stored directly on a role/company

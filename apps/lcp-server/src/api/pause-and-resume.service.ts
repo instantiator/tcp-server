@@ -8,6 +8,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { UUID } from 'crypto';
 import { Repository } from 'typeorm';
+import { AgentEventService } from '../events/agent-event.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { ConversationService } from './conversation.service';
 
@@ -44,7 +45,21 @@ export class PauseAndResumeService {
     private readonly consultRepo: Repository<PendingConsultation>,
     private readonly convService: ConversationService,
     private readonly orchestration: AgentOrchestrationService,
+    private readonly events: AgentEventService,
   ) {}
+
+  /** Emits an `agent_status` transition to any SSE clients observing `agentId`. */
+  private emitStatus(
+    agentId: UUID,
+    status: AgentStatus,
+    extra?: { reason?: string; conversationSlug?: string },
+  ): void {
+    this.events.emit(agentId, {
+      timestamp: new Date().toISOString(),
+      kind: 'agent_status',
+      data: { status, ...extra },
+    });
+  }
 
   /**
    * Pauses the agent and creates a human-readable {@link Conversation} query.
@@ -80,6 +95,10 @@ export class PauseAndResumeService {
       userIds,
     );
 
+    this.emitStatus(agentId, AgentStatus.Paused, {
+      reason: 'user_input',
+      conversationSlug: conv.slug,
+    });
     this.logger.log(
       `Agent ${agentId} paused for user input — conversation ${conv.slug}`,
     );
@@ -139,6 +158,9 @@ export class PauseAndResumeService {
       companyId,
       roleId: role.id,
       initialPrompt,
+      // Consultation results are only delivered via complete_task — a narrated
+      // answer would never resolve the PendingConsultation, so enforce the call.
+      requiredToolCalls: ['complete_task'],
     });
 
     // Record the link between the paused caller and the new consulting agent.
@@ -154,6 +176,17 @@ export class PauseAndResumeService {
 
     // Only now dispatch the job — the PendingConsultation row is committed.
     await this.orchestration.dispatchStartJob(consultAgent.id);
+
+    // Tell any client watching the calling agent that it paused to consult, and
+    // which agent to follow for the consultation's own activity.
+    this.emitStatus(callingAgentId, AgentStatus.Paused, {
+      reason: 'consultation',
+    });
+    this.events.emit(callingAgentId, {
+      timestamp: new Date().toISOString(),
+      kind: 'consultation_started',
+      data: { agentId: consultAgent.id, roleName: role.name },
+    });
 
     this.logger.log(
       `Agent ${callingAgentId} (${callingRole?.name ?? '?'}) paused for consultation — consulting agent ${consultAgent.id} (${role.name}), consultation ${consultation.id}`,
@@ -188,6 +221,18 @@ export class PauseAndResumeService {
     // Completed — the lcp-agent fallback path sets status synchronously
     // before this HTTP call arrives, leaving the consultation pending.
     const resolvedOutput = output || agent.output || '';
+
+    // Terminal event for any client observing this agent (a chat agent resumed
+    // in the worker, or a consultation agent being followed). Emitted here —
+    // before the consultation early-return below — so every worker completion
+    // reaches its watchers, regardless of the idempotency guard above.
+    this.events.emit(agentId, {
+      timestamp: new Date().toISOString(),
+      kind: 'completed',
+      data: { response: resolvedOutput },
+    });
+    this.emitStatus(agentId, AgentStatus.Completed);
+
     const consultation = await this.consultRepo.findOne({
       where: { consultationAgentId: agentId, status: 'pending' },
     });
@@ -212,6 +257,65 @@ export class PauseAndResumeService {
       .then(() =>
         this.logger.log(
           `Resumed calling agent ${consultation.callingAgentId} with consultation result`,
+        ),
+      )
+      .catch((err: unknown) =>
+        this.logger.error(
+          `Failed to resume calling agent ${consultation.callingAgentId}: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+  }
+
+  /**
+   * Marks an agent run as {@link AgentStatus.Failed} with the given reason.
+   * If the agent was performing a consultation, resolves the pending record as
+   * `failed` (storing the reason as its result) and re-enqueues the calling
+   * agent so it can decide how to proceed rather than wait forever.
+   *
+   * Does not overwrite a Completed agent — `complete_task` may have won the
+   * race against the failure notification.
+   */
+  async failAgent(agentId: UUID, reason: string): Promise<void> {
+    const agent = await this.agentRepo.findOneBy({ id: agentId });
+    if (!agent) return;
+
+    if (agent.status !== AgentStatus.Completed) {
+      await this.agentRepo.update(agentId, { status: AgentStatus.Failed });
+      this.logger.warn(`Agent ${agentId} failed: ${reason}`);
+    }
+
+    // Terminal event for observers — emitted before the consultation
+    // early-return so every worker failure reaches its watchers.
+    this.events.emit(agentId, {
+      timestamp: new Date().toISOString(),
+      kind: 'failed',
+      data: { error: reason },
+    });
+    this.emitStatus(agentId, AgentStatus.Failed);
+
+    const consultation = await this.consultRepo.findOne({
+      where: { consultationAgentId: agentId, status: 'pending' },
+    });
+    if (!consultation) return;
+
+    await this.consultRepo.update(consultation.id, {
+      status: 'failed',
+      result: reason,
+    });
+
+    const calling = await this.agentRepo.findOneBy({
+      id: consultation.callingAgentId,
+    });
+    if (calling?.status !== AgentStatus.Paused) return;
+
+    // Same resume contract as completeAgent: the orchestrator aggregates all
+    // responses (including this failure) once nothing else is outstanding.
+    // Fire-and-forget — DB state is already consistent; don't block on Redis.
+    void this.orchestration
+      .resumeAgent(consultation.callingAgentId)
+      .then(() =>
+        this.logger.log(
+          `Resumed calling agent ${consultation.callingAgentId} after consultation failure`,
         ),
       )
       .catch((err: unknown) =>

@@ -53,6 +53,12 @@ The nudge round-trip (the original unusable message, and the nudge itself) isn't
 
 ---
 
+## Related: per-run tool visibility isn't a checkpointed loop state
+
+Not a model quirk, but worth knowing when debugging tool-calling behaviour in either service: which MCP tools are currently bound to the model is tracked by `ToolVisibilityTracker` (`libs/lcp-shared/src/llm/tool-visibility-tracker.ts`) in a plain in-memory map, keyed per run/turn — it is **not** part of the LangGraph checkpoint. If a process restarts mid-run, the resumed run starts with only `describe_server` tools visible again, same as a fresh run, rather than remembering what had already been described. This is a deliberate simplification (see [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-0086)): re-describing costs one extra tool call, which is cheap compared to adding a new persisted LangGraph state channel for it. If you see a resumed run re-calling `describe_server` for a service it already used before a restart, this is why — it's expected, not a bug.
+
+---
+
 ## Adding a new special case
 
 1. Confirm it's a model/provider quirk, not a bug in our prompt construction or LangChain usage — check the raw HTTP response if possible.

@@ -1,0 +1,123 @@
+import { createRenderer, RenderOptions } from './render';
+
+/** A minimal in-memory writable that records everything written to it. */
+function fakeStream(): { chunks: string[]; stream: NodeJS.WritableStream } {
+  const chunks: string[] = [];
+  const stream = {
+    write: (s: string) => {
+      chunks.push(s);
+      return true;
+    },
+  } as unknown as NodeJS.WritableStream;
+  return { chunks, stream };
+}
+
+function setup(overrides: Partial<RenderOptions> = {}) {
+  const out = fakeStream();
+  const err = fakeStream();
+  const renderer = createRenderer({
+    hideReasoning: false,
+    out: out.stream,
+    err: err.stream,
+    ...overrides,
+  });
+  return {
+    renderer,
+    out,
+    err,
+    outText: () => out.chunks.join(''),
+    errText: () => err.chunks.join(''),
+  };
+}
+
+describe('createRenderer', () => {
+  it('renders an agent_status event on its own coloured line to stderr', () => {
+    const { renderer, errText } = setup();
+    renderer.render({ kind: 'agent_status', data: { status: 'running' } });
+    expect(errText()).toContain('Agent state: running');
+  });
+
+  it('includes the reason in an agent_status line when present', () => {
+    const { renderer, errText } = setup();
+    renderer.render({
+      kind: 'agent_status',
+      data: { status: 'paused', reason: 'consultation' },
+    });
+    expect(errText()).toContain('Agent state: paused (consultation)');
+  });
+
+  it('renders response deltas to stdout and marks responseSeen', () => {
+    const { renderer, outText } = setup();
+    renderer.render({ kind: 'response', data: { delta: 'Hello ' } });
+    renderer.render({ kind: 'response', data: { delta: 'world' } });
+    expect(renderer.responseSeen).toBe(true);
+    expect(outText()).toContain('Hello world');
+  });
+
+  it('prints the Response prefix once for consecutive response deltas', () => {
+    const { renderer, outText } = setup();
+    renderer.render({ kind: 'response', data: { delta: 'a' } });
+    renderer.render({ kind: 'response', data: { delta: 'b' } });
+    const occurrences = outText().split('Response: ').length - 1;
+    expect(occurrences).toBe(1);
+  });
+
+  it('hides reasoning when hideReasoning is set', () => {
+    const { renderer, errText } = setup({ hideReasoning: true });
+    renderer.render({ kind: 'reasoning', data: { delta: 'thinking hard' } });
+    expect(errText()).not.toContain('thinking hard');
+    expect(renderer.responseSeen).toBe(false);
+  });
+
+  it('shows reasoning by default on stderr', () => {
+    const { renderer, errText } = setup();
+    renderer.render({ kind: 'reasoning', data: { delta: 'pondering' } });
+    expect(errText()).toContain('Reasoning: ');
+    expect(errText()).toContain('pondering');
+  });
+
+  it('prefixes lines with the role name when following a consulted agent', () => {
+    const { renderer, errText } = setup({ rolePrefix: 'Cat assistant' });
+    renderer.render({ kind: 'agent_status', data: { status: 'running' } });
+    expect(errText()).toContain('[Cat assistant] Agent state: running');
+  });
+
+  it('separates distinct blocks with a blank line', () => {
+    const { renderer, errText } = setup();
+    renderer.render({ kind: 'agent_status', data: { status: 'running' } });
+    renderer.render({ kind: 'llm', data: { activity: 'request_started' } });
+    // The second block is preceded by a standalone newline (blank line).
+    expect(errText()).toContain('\n');
+    expect(errText().indexOf('LLM state:')).toBeGreaterThan(
+      errText().indexOf('Agent state:'),
+    );
+  });
+
+  it('renders an llm tool event with the tool name', () => {
+    const { renderer, errText } = setup();
+    renderer.render({
+      kind: 'llm',
+      data: { activity: 'tool_started', tool: 'request_agent_consultation' },
+    });
+    expect(errText()).toContain(
+      'LLM state: tool_started: request_agent_consultation',
+    );
+  });
+
+  it('renders a consultation_started event as an agent-state line', () => {
+    const { renderer, errText } = setup();
+    renderer.render({
+      kind: 'consultation_started',
+      data: { agentId: 'x', roleName: 'Chicken assistant' },
+    });
+    expect(errText()).toContain('consulting Chicken assistant');
+  });
+
+  it('ignores terminal and unknown event kinds', () => {
+    const { renderer, outText, errText } = setup();
+    renderer.render({ kind: 'completed', data: { response: 'done' } });
+    renderer.render({ kind: 'mystery', data: {} });
+    expect(outText()).toBe('');
+    expect(errText()).toBe('');
+  });
+});

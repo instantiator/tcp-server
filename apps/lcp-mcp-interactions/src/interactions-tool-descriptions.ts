@@ -5,8 +5,7 @@ import JSON5 from 'json5';
 /** Tool names and descriptions for the lcp-mcp-interactions service. */
 export interface InteractionToolDescriptions {
   describe_server: string;
-  list_available_users: string;
-  list_available_roles: string;
+  list_available_contacts: string;
   request_user_input: string;
   request_agent_consultation: string;
   complete_task: string;

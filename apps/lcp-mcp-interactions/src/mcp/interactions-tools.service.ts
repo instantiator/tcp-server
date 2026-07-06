@@ -62,8 +62,7 @@ export class InteractionsToolsService {
     });
 
     this.registerDescribeServer(server);
-    this.registerListAvailableUsers(server);
-    this.registerListAvailableRoles(server);
+    this.registerListAvailableContacts(server);
     this.registerRequestUserInput(server);
     this.registerRequestAgentConsultation(server);
     this.registerCompleteTask(server);
@@ -79,52 +78,83 @@ export class InteractionsToolsService {
     );
   }
 
-  private registerListAvailableUsers(server: McpServer): void {
+  /**
+   * Registers a read-only tool listing company users and/or agent roles
+   * (`kind`), proxying a GET to lcp-server's internal company sub-collection
+   * endpoint (`/internal/company/{id}/{collection}`) for each requested
+   * collection. A single collection returns its raw JSON array directly
+   * (matching the pre-merge single-purpose tools' output shape); `kind:
+   * 'both'` returns `{ users, roles }`, each independently falling back to
+   * an error message if that collection's fetch fails — one collection
+   * failing doesn't hide the other's data.
+   */
+  private registerListAvailableContacts(server: McpServer): void {
     server.registerTool(
-      'list_available_users',
+      'list_available_contacts',
       {
-        description: interactionToolDescriptions.list_available_users,
+        description: interactionToolDescriptions.list_available_contacts,
         inputSchema: {
           companyId: z.uuid().describe('The company UUID.'),
+          kind: z
+            .enum(['users', 'roles', 'both'])
+            .optional()
+            .describe(
+              "Which contacts to list: 'users', 'roles', or 'both' (default).",
+            ),
         },
       },
-      async ({ companyId }): Promise<ToolResult> => {
-        try {
-          const res = await axios.get<unknown[]>(
-            `${this.serverUrl}/internal/company/${companyId}/users`,
-            { headers: { 'X-Internal-Api-Key': this.apiKey } },
-          );
-          return ok(JSON.stringify(res.data, null, 2));
-        } catch (e) {
-          this.logger.warn(`list_available_users failed: ${String(e)}`);
-          return err(interactionPrompts.error_list_users);
+      async ({ companyId, kind }): Promise<ToolResult> => {
+        const collections: Array<'users' | 'roles'> =
+          kind === 'users' || kind === 'roles' ? [kind] : ['users', 'roles'];
+
+        const fetched = await Promise.all(
+          collections.map((collection) =>
+            this.fetchCompanyCollection(companyId, collection),
+          ),
+        );
+
+        if (collections.length === 1) {
+          const [only] = fetched;
+          return only.ok
+            ? ok(JSON.stringify(only.data, null, 2))
+            : err(only.errorPrompt);
         }
+
+        const combined: Record<string, unknown> = {};
+        for (const [i, collection] of collections.entries()) {
+          const result = fetched[i];
+          combined[collection] = result.ok
+            ? result.data
+            : { error: result.errorPrompt };
+        }
+        return ok(JSON.stringify(combined, null, 2));
       },
     );
   }
 
-  private registerListAvailableRoles(server: McpServer): void {
-    server.registerTool(
-      'list_available_roles',
-      {
-        description: interactionToolDescriptions.list_available_roles,
-        inputSchema: {
-          companyId: z.uuid().describe('The company UUID.'),
-        },
-      },
-      async ({ companyId }): Promise<ToolResult> => {
-        try {
-          const res = await axios.get<unknown[]>(
-            `${this.serverUrl}/internal/company/${companyId}/roles`,
-            { headers: { 'X-Internal-Api-Key': this.apiKey } },
-          );
-          return ok(JSON.stringify(res.data, null, 2));
-        } catch (e) {
-          this.logger.warn(`list_available_roles failed: ${String(e)}`);
-          return err(interactionPrompts.error_list_roles);
-        }
-      },
-    );
+  /** Fetches one company sub-collection, reporting success/failure per-collection. */
+  private async fetchCompanyCollection(
+    companyId: string,
+    collection: 'users' | 'roles',
+  ): Promise<{ ok: true; data: unknown } | { ok: false; errorPrompt: string }> {
+    try {
+      const res = await axios.get<unknown[]>(
+        `${this.serverUrl}/internal/company/${companyId}/${collection}`,
+        { headers: { 'X-Internal-Api-Key': this.apiKey } },
+      );
+      return { ok: true, data: res.data };
+    } catch (e) {
+      this.logger.warn(
+        `list_available_contacts (${collection}) failed: ${String(e)}`,
+      );
+      return {
+        ok: false,
+        errorPrompt:
+          collection === 'users'
+            ? interactionPrompts.error_list_users
+            : interactionPrompts.error_list_roles,
+      };
+    }
   }
 
   private registerRequestUserInput(server: McpServer): void {
@@ -147,7 +177,7 @@ export class InteractionsToolsService {
             .min(1)
             .optional()
             .describe(
-              'Optional company user ids (from list_available_users) to target this question to. Omit to auto-route based on the question.',
+              'Optional company user ids (from list_available_contacts) to target this question to. Omit to auto-route based on the question.',
             ),
         },
       },
@@ -198,7 +228,7 @@ export class InteractionsToolsService {
           roleId: z
             .uuid()
             .describe(
-              'The id of the role to consult — get it from list_available_roles. Role names are not unique within a company, so the id is required.',
+              'The id of the role to consult — get it from list_available_contacts. Role names are not unique within a company, so the id is required.',
             ),
           roleName: z
             .string()

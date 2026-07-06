@@ -1,5 +1,5 @@
 import * as readline from 'readline';
-import { apiRequest, ApiOptions } from './api';
+import { apiRequest, ApiOptions } from '../core/api';
 
 /** Options that control how a token is obtained. */
 export interface AuthOptions {

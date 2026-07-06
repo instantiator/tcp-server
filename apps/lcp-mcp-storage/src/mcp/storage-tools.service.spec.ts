@@ -380,11 +380,11 @@ describe('StorageToolsService', () => {
   // describe_server
 
   describe('describe_server', () => {
-    it('returns overview text containing key tool names', async () => {
+    it('returns an overview mentioning describe_folder and path conventions', async () => {
       const text = await callTool(makeService(send), 'describe_server', {});
       expect(text).toContain('Storage Service');
-      expect(text).toContain('list_files');
-      expect(text).toContain('write_file');
+      expect(text).toContain('describe_folder');
+      expect(text).toContain('Path conventions');
     });
   });
 

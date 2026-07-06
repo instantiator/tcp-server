@@ -244,12 +244,19 @@ See also: [docs/testing.md](testing.md).
 ## manual-verify.sh
 
 Interactive scenario walkthrough for human-judged verification (response tone,
-correct role identification, successful agent-to-agent consultation) that
-automated tests can't assert on. Creates a test company and two roles
-(chicken/cat assistant) from `scripts/test-data/`, then runs each prompt in
-`scripts/test-data/manual-verify-scenarios.json` through `lcp-cli.sh chat -q`,
-asking the operator a yes/no check after every response. Halts on the first
-failed API call or "n" answer.
+correct role identification, successful agent-to-agent consultation, live
+streamed rendering) that automated tests can't assert on. Creates a test company
+and two roles (chicken/cat assistant) from `scripts/test-data/`, then runs each
+prompt in `scripts/test-data/manual-verify-scenarios.json` through
+`lcp-cli.sh chat -q`, asking the operator a yes/no check after every response.
+Output is colourised — blue step headings, yellow questions, a green `Success`
+after each passing check, red failures. Halts on the first failed API call or a
+check whose answer doesn't match its expected outcome.
+
+Each scenario's `checks` is an array of `{ "question": <string>, "expected":
+"y" | "n" }` objects (`expected` defaults to `"y"` when omitted). This lets a
+check assert that the correct answer is `"n"` — e.g. "Did any raw event JSON
+appear in the output?" should be answered `n` on a healthy run.
 
 ```bash
 ./scripts/start-deployment.sh --project lcp-dev --env-file .env.testing

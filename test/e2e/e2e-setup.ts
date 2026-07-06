@@ -1,5 +1,9 @@
-// Set stub env vars for e2e tests that run without external services.
-// Real service URLs are injected by CI / run-e2e-tests.sh when available.
+// Fallback env vars so the Nest app can boot under e2e. These are NOT
+// sufficient on their own: the suite exercises paths that require Postgres and
+// Redis (BullMQ enqueue/orchestration), so run it via scripts/run-e2e-tests.sh,
+// which starts those services and overrides these defaults. Running jest
+// directly with no Redis will HANG — enqueues block on the unreachable broker
+// until each test times out — rather than failing fast.
 process.env.DATABASE_URL ||= 'sqlite::memory:';
 process.env.REDIS_URL ||= 'redis://localhost:6379';
 process.env.MINIO_ENDPOINT ||= 'http://localhost:9000';

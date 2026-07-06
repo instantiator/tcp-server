@@ -14,26 +14,20 @@ export interface AgentPrompts {
   services_item: string;
   /** Bullet template for a server with no known {@link MCP_REGISTRY} usage text; `{{name}}` is substituted (prompt part 3). */
   services_item_unknown: string;
+  /** Reminder when required tool(s) were never invoked; `{{tools}}` is substituted. */
+  required_tools_reminder: string;
+  /** Reminder when required tool(s) were invoked but the call failed; `{{tools}}` is substituted. */
+  required_tools_call_failed: string;
   /** Introductory sentence before RAG excerpts (prompt part 5). */
   rag_intro: string;
   /** Per-chunk heading template; `{{documentPath}}` is replaced with the source path (prompt part 5). */
   rag_source_header: string;
-  /** LLM prompt requesting a completion summary; `{{initialPrompt}}`, `{{actionLines}}`, `{{created}}`, `{{modified}}`, `{{deleted}}`, `{{moved}}` are substituted. */
-  completion_summary_prompt: string;
-  /** Placeholder used in {@link completion_summary_prompt} when no actions were recorded. */
+  /** Deterministic completion summary (no LLM call); `{{actionLines}}`, `{{created}}`, `{{modified}}`, `{{deleted}}`, `{{moved}}` are substituted. */
+  completion_summary_deterministic: string;
+  /** Placeholder used in {@link completion_summary_deterministic} when no actions were recorded. */
   completion_summary_no_actions: string;
-  /** Placeholder used in {@link completion_summary_prompt} when no storage changes were recorded. */
+  /** Placeholder used in {@link completion_summary_deterministic} when no storage changes were recorded. */
   completion_summary_no_storage: string;
-  /** Structured fallback summary template used when the LLM call fails; `{{taskSnippet}}`, `{{actionsSummary}}`, `{{storageSummary}}` are substituted. */
-  completion_fallback_summary: string;
-  /** Fragment used in {@link completion_fallback_summary} when actions were taken; `{{count}}` is substituted. */
-  completion_fallback_actions: string;
-  /** Fragment used in {@link completion_fallback_summary} when no actions were taken. */
-  completion_fallback_no_actions: string;
-  /** Fragment used in {@link completion_fallback_summary} when storage changed; `{{count}}` is substituted. */
-  completion_fallback_storage: string;
-  /** Fragment used in {@link completion_fallback_summary} when no storage changed. */
-  completion_fallback_no_storage: string;
 }
 
 /** Loaded once at module initialisation from the co-located {@link prompts.jsonc} file. */

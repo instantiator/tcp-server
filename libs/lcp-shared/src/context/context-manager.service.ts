@@ -1,14 +1,45 @@
 import { BaseMessage } from '@langchain/core/messages';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import type { DynamicStructuredTool } from '@langchain/core/tools';
 import type { RunnableConfig } from '@langchain/core/runnables';
-import { Injectable, Logger } from '@nestjs/common';
-import { AuditEventType, LcpAgent, LcpRole } from '@lcp/shared';
-import { AuditService } from '../audit/audit.service';
-import { AgentEventService } from '../events/agent-event.service';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { AuditEventType } from '../models/AuditEvent.model';
+import type { LcpAgent } from '../models/LcpAgent.model';
+import type { LcpRole } from '../models/LcpRole.model';
+import type { AgentEvent } from '../events/agent-events';
 import { ContextBudgetService } from './context-budget.service';
 import { ContextCompactorService } from './context-compactor.service';
 import { IncomingDataGuardService } from './incoming-data-guard.service';
 import type { CompactionReport, CompactionSnapshot } from './context.types';
+
+/**
+ * Minimal event-emission dependency, satisfied structurally by lcp-server's
+ * `AgentEventService.emit` and (via a thin adapter) lcp-agent's
+ * `AgentEventPublisherService.publish`. Provide via {@link CONTEXT_EVENT_SINK}.
+ */
+export interface ContextEventSink {
+  emit(agentId: string, event: AgentEvent): void;
+}
+
+/**
+ * Minimal audit-recording dependency, satisfied structurally by lcp-server's
+ * `AuditService.record` and lcp-agent's `AuditClientService.record`. Provide
+ * via {@link CONTEXT_AUDIT_SINK}.
+ */
+export interface ContextAuditSink {
+  record(
+    companyId: string,
+    role: string,
+    agentId: string | null,
+    eventType: AuditEventType,
+    payload: Record<string, unknown>,
+  ): void | Promise<void>;
+}
+
+/** DI token for the {@link ContextEventSink}. */
+export const CONTEXT_EVENT_SINK = Symbol('CONTEXT_EVENT_SINK');
+/** DI token for the {@link ContextAuditSink}. */
+export const CONTEXT_AUDIT_SINK = Symbol('CONTEXT_AUDIT_SINK');
 
 /** Minimal checkpoint state shape that context management needs from LangGraph. */
 interface CheckpointState {
@@ -20,7 +51,7 @@ interface CheckpointState {
  * {@link ContextManagerService}. The full `CompiledStateGraph` generic type
  * is complex; this structural type captures only what context management needs.
  */
-interface CheckpointableGraph {
+export interface CheckpointableGraph {
   getState(config: RunnableConfig): Promise<CheckpointState>;
   updateState(
     config: RunnableConfig,
@@ -37,17 +68,21 @@ export interface PrepareResult {
 }
 
 /**
- * Orchestrates context budget checks and compaction for each chat turn.
+ * Orchestrates context budget checks and compaction for each chat turn or
+ * agent-loop run. Shared by lcp-server (chat turns) and lcp-agent (worker
+ * runs) — each host app provides its own {@link ContextEventSink} and
+ * {@link ContextAuditSink} implementations via DI.
  *
  * Before a new message is invoked on the graph, this service:
  * 1. Checks the incoming message size via {@link IncomingDataGuardService}.
- * 2. Loads the current checkpoint state and counts total tokens.
+ * 2. Loads the current checkpoint state and counts total tokens — including
+ *    the bound-tools schema overhead via {@link ContextBudgetService.countTools},
+ *    which is otherwise invisible to message-only token counting.
  * 3. If over budget, runs Tier-1 (trim_messages) compaction via
  *    {@link ContextCompactorService} and writes the result back to the
  *    checkpoint using `graph.updateState()`.
  * 4. If still over budget, runs Tier-2 (LLM summarisation) on oversized messages.
- * 5. Emits {@link AgentEvent} SSE events and writes audit rows via {@link AuditService}
- *    before and after compaction.
+ * 5. Emits {@link AgentEvent}s and writes audit rows before and after compaction.
  *
  * When no compaction is needed the method returns immediately with no side effects.
  */
@@ -59,8 +94,8 @@ export class ContextManagerService {
     private readonly budget: ContextBudgetService,
     private readonly compactor: ContextCompactorService,
     private readonly guard: IncomingDataGuardService,
-    private readonly events: AgentEventService,
-    private readonly auditService: AuditService,
+    @Inject(CONTEXT_EVENT_SINK) private readonly events: ContextEventSink,
+    @Inject(CONTEXT_AUDIT_SINK) private readonly auditSink: ContextAuditSink,
   ) {}
 
   /**
@@ -79,6 +114,8 @@ export class ContextManagerService {
    * @param isFirstMessage - When `true`, skips checkpoint state loading.
    * @param agent - Current agent record (for audit logging).
    * @param role - Agent's role (for audit logging).
+   * @param tools - Tools currently bound to the model, counted toward the
+   *   budget alongside message content (see class docs point 2).
    */
   async prepare(
     agentId: string,
@@ -90,14 +127,16 @@ export class ContextManagerService {
     isFirstMessage: boolean,
     agent: LcpAgent,
     role: LcpRole,
+    tools: DynamicStructuredTool[] = [],
   ): Promise<PrepareResult> {
     const startMs = Date.now();
     const activities: string[] = [];
     const strategies: string[] = [];
 
+    const toolTokens = await this.budget.countTools(tools);
     const currentTokens = isFirstMessage
-      ? 0
-      : await this.loadCheckpointTokens(graph, config);
+      ? toolTokens
+      : toolTokens + (await this.loadCheckpointTokens(graph, config));
 
     const guardResult = await this.guard.check(
       message,
@@ -121,7 +160,7 @@ export class ContextManagerService {
                 startMs,
                 currentTokens,
                 windowSize,
-                await this.budget.countText(guardResult.text),
+                currentTokens + (await this.budget.countText(guardResult.text)),
                 windowSize,
               )
             : null,
@@ -162,7 +201,7 @@ export class ContextManagerService {
         strategies: [],
       },
     });
-    await this.auditService.record(
+    await this.auditSink.record(
       agent.companyId,
       role.name,
       agent.id,
@@ -200,7 +239,8 @@ export class ContextManagerService {
           messages: removes,
         });
 
-        tokensAfter = await this.loadCheckpointTokens(graph, config);
+        tokensAfter =
+          toolTokens + (await this.loadCheckpointTokens(graph, config));
         tokensAfter += incomingTokens;
       }
     }
@@ -234,7 +274,8 @@ export class ContextManagerService {
         activities.push(
           `Summarised ${oversized.length} oversized message(s) via LLM`,
         );
-        tokensAfter = await this.loadCheckpointTokens(graph, config);
+        tokensAfter =
+          toolTokens + (await this.loadCheckpointTokens(graph, config));
         tokensAfter += incomingTokens;
       }
     }
@@ -250,7 +291,7 @@ export class ContextManagerService {
         activities,
       },
     });
-    await this.auditService.record(
+    await this.auditSink.record(
       agent.companyId,
       role.name,
       agent.id,
@@ -284,18 +325,60 @@ export class ContextManagerService {
   }
 
   /**
+   * Checks current checkpoint + tool-schema token usage and compacts if
+   * needed, without an incoming message. Used mid-run (by
+   * {@link runSupervisedGraph}, between every tool-loop iteration) for
+   * per-iteration protection, complementing {@link prepare}'s once-per-turn
+   * pre-invocation check with the same message/incoming-data guard logic.
+   *
+   * Reuses {@link prepare} with an empty incoming message (trivially small,
+   * so the guard never compacts it) — this method only adds the
+   * `stillOverBudget` signal: whether the checkpoint remains over
+   * {@link ContextBudgetService.TRIGGER_PCT} even after Tier-1/Tier-2
+   * compaction ran, meaning the caller should fail the run rather than
+   * attempt a doomed model call.
+   */
+  async checkBudget(
+    agentId: string,
+    model: BaseChatModel,
+    windowSize: number,
+    graph: CheckpointableGraph,
+    config: RunnableConfig,
+    agent: LcpAgent,
+    role: LcpRole,
+    tools: DynamicStructuredTool[] = [],
+  ): Promise<{ report: CompactionReport | null; stillOverBudget: boolean }> {
+    const { report } = await this.prepare(
+      agentId,
+      '',
+      model,
+      windowSize,
+      graph,
+      config,
+      false,
+      agent,
+      role,
+      tools,
+    );
+    const stillOverBudget = report
+      ? this.budget.isOverBudget(report.after.tokens, report.after.windowSize)
+      : false;
+    return { report, stillOverBudget };
+  }
+
+  /**
    * Runs the incoming-data guard on a discrete context section (e.g. RAG data,
    * MCP responses) before it is injected into the prompt.
    *
    * Unlike {@link prepare}, this does not touch the LangGraph checkpoint — it
    * only evaluates and optionally compacts the section text. Pass `overflowPath`
-   * (a sanitised MinIO key prefix) to enable overflow storage when the compacted
-   * version is still too large.
+   * (a sanitised overflow-store key prefix) to enable overflow storage when the
+   * compacted version is still too large.
    *
    * @param text - Section content to guard.
    * @param model - LLM used for compaction if needed.
    * @param windowSize - Full context window size in tokens.
-   * @param overflowPath - Optional MinIO key prefix for overflow storage.
+   * @param overflowPath - Optional overflow-store key prefix.
    */
   async guardSection(
     text: string,

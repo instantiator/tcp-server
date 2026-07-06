@@ -1,25 +1,4 @@
-// Tests for the mimeFromExt helper.
-
-function mimeFromExt(filePath: string): string {
-  const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
-  switch ('.' + ext) {
-    case '.md':
-      return 'text/markdown';
-    case '.txt':
-      return 'text/plain';
-    case '.json':
-      return 'application/json';
-    case '.pdf':
-      return 'application/pdf';
-    case '.png':
-      return 'image/png';
-    case '.jpg':
-    case '.jpeg':
-      return 'image/jpeg';
-    default:
-      return 'application/octet-stream';
-  }
-}
+import { mimeFromExt } from './upload-shared-document.action';
 
 describe('upload-shared-document mimeFromExt', () => {
   it('returns text/markdown for .md', () => {

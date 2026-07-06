@@ -108,13 +108,15 @@ This avoids LangGraph's `interrupt()` mechanism entirely. The checkpoint store (
 
 **`Conversation` links to `agentId`, not `task_id/step_id`.** `Task` and `TaskStep` entities do not yet exist. Conversations are linked to `LcpAgent.id` instead.
 
-**`complete_task` is a mandatory tool call, not a passive flow.** Agents must call `complete_task` (on lcp-mcp-interactions) as their final action. This writes the agent's `output` field and triggers consultation resume if applicable. lcp-agent enforces this with a completion enforcement loop.
+**`complete_task` is a mandatory tool call, not a passive flow.** Agents must call `complete_task` (on lcp-mcp-interactions) as their final action. This writes the agent's `output` field and triggers consultation resume if applicable. lcp-agent enforces this via `LcpAgent.requiredToolCalls`: when the stream ends without every required call having fired (default `['complete_task']`; an empty array opts out), the agent is re-prompted with an explicit reminder up to `AGENT_REQUIRED_TOOL_RETRIES` times (default 2) before the run is failed. Narrated text is never accepted in place of the required calls for enforced agents.
 
-**Consultations target a role id, not a role name.** Role names aren't unique within a company, so `request_agent_consultation` looks the role up by `roleId` (from `list_available_roles`), scoped to `companyId`. `roleName` is accepted only as an optional label for logging.
+**Consultations target a role id, not a role name.** Role names aren't unique within a company, so `request_agent_consultation` looks the role up by `roleId` (from `list_available_contacts`), scoped to `companyId`. `roleName` is accepted only as an optional label for logging.
 
-**`request_user_input` can target specific users.** An optional `userIds` argument (from `list_available_users`) routes the question directly to those users, bypassing the keyword-matching heuristic. Any one of the targeted users replying resolves the request.
+**`request_user_input` can target specific users.** An optional `userIds` argument (from `list_available_contacts`) routes the question directly to those users, bypassing the keyword-matching heuristic. Any one of the targeted users replying resolves the request.
 
 **Resume is gated and aggregates multiple responses.** `LcpAgent.pausedAt` is set whenever an agent transitions to `Paused`. `AgentOrchestrationService.resumeAgent` — the single choke point both pause flows call into — only re-enqueues the agent once it has no remaining outstanding `PendingConsultation` (`status: 'pending'`) or `Conversation` (`status: 'awaiting_user'`) rows. When the gate passes, the resume message combines every response received since `pausedAt`, not just the one that happened to resolve last. This lets an agent raise multiple requests (e.g. consult a role and ask a user) before pausing and see every answer on resume.
+
+> **Note (008.6):** clearing `pausedAt` is now an atomic conditional `UPDATE ... WHERE id = :agentId AND pausedAt = :pausedAt` (via `createQueryBuilder`), not a plain read-then-write. Two near-simultaneous resume triggers for the same pause episode (e.g. a retried fire-and-forget completion notification) used to both pass the outstanding-requests check and both enqueue a duplicate `resume` job carrying the same aggregated reply — the observed "duplicate Consultation response message" bug. Only the caller that wins the conditional update (`affected: 1`) proceeds; the loser (`affected: 0`) no-ops and returns the agent unchanged. See [ADR-013 Amendments](ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-0086).
 
 ### Implemented
 
@@ -133,6 +135,8 @@ This avoids LangGraph's `interrupt()` mechanism entirely. The checkpoint store (
 - Query routing in `ConversationService`: keyword match on question content against user `knowledgeDomains` and `roles`; falls back to all owners
 - Slug generation: `{role-slug}-{queryIndex}` — `queryIndex` incremented atomically in a DB transaction
 - CLI commands: `list-open-queries`, `read-query`, `respond` (see [lcp-cli.md](../lcp-cli.md))
+- **Required tool call tracking** — `LcpAgent.requiredToolCalls?: string[]` (null → default `['complete_task']`, `[]` opts out); `AgentLoopService` tracks fired tool names during the stream and re-prompts up to `AGENT_REQUIRED_TOOL_RETRIES` (default 2) times when required calls are missing, then fails the run. Consultation agents are created with `requiredToolCalls: ['complete_task']` explicitly. Required tools absent from the loaded toolset are skipped with a warning.
+- **Consultation failure propagation** — every failure exit in the agent loop notifies `POST /internal/agent/:agentId/fail` (via `AuditClientService.notifyFailed`, fire-and-forget like `notifyComplete`); `PauseAndResumeService.failAgent` marks the pending consultation `status: 'failed'` with the reason as `result` and resumes the calling agent, whose resume message renders it as `Consultation FAILED: <reason>…` with guidance to escalate via `request_user_input` if a response is essential. A lost `notifyFailed` HTTP call leaves the caller paused until the client's SSE timeout — the same exposure as `notifyComplete`. (Historically the failing run also published `''` on `agent:completed:{agentId}`; that channel was retired by [ADR-015](ADR-015-agent-completion-sse.md) — the terminal `failed` event now originates in `PauseAndResumeService.failAgent`.)
 
 ### Deferred
 
@@ -140,8 +144,7 @@ This avoids LangGraph's `interrupt()` mechanism entirely. The checkpoint store (
 - WebSocket upgrade for real-time conversation UX
 - Teaching flow (`{ teach: 'memory' | 'knowledge' }` in replies)
 - `GET /tasks/{task_id}/audit/stream` SSE endpoint
-- **SSE-based completion delivery** — replace the current long-poll (`waitForAgentCompletion`) with `202 Accepted` + `completed` SSE event; see [ADR-015](ADR-015-agent-completion-sse.md)
-- **Required tool call tracking** — `LcpAgent.requiredToolCalls?: string[]` set at creation (e.g. `['complete_task']` for consultation agents); `AgentLoopService` warns or retries if the stream ends without all required calls having fired; reduces silent fallback completions where the agent narrated a tool call instead of invoking it
+- ~~**SSE-based completion delivery** — replace the current long-poll (`waitForAgentCompletion`) with `202 Accepted` + `completed` SSE event~~ — **done**, see [ADR-015](ADR-015-agent-completion-sse.md) (amended)
 
 ## Agent-to-agent consultation flow
 
@@ -152,6 +155,8 @@ pauses. The `chat.service` HTTP handler returns at that point with whatever
 the LLM said before pausing — typically a placeholder like "I've asked the
 chicken…" — and the HTTP connection closes. The resumed run later produces the
 real answer, but no one is waiting for it.
+
+> **Note (008.6):** the "LLM produces empty response" / "ReasoningContentRecovery nudges" / "last tool was terminal — no nudge" steps shown in both diagrams below were, at the time of writing, a _suppressed symptom_ — the graph's `tools → agent` edge still routed back into one more (unwanted) model call after a terminal tool result, and `ReasoningContentRecovery` just papered over the resulting empty/placeholder response. Since 008.6 this no longer happens at all: `runSupervisedGraph` (`libs/lcp-shared/src/llm/run-supervised-graph.ts`) compiles the graph with `interruptAfterTools: true` and calls `abortController.abort()` as soon as a post-tool status check finds `Paused`/`Completed`, so the graph cannot reach that extra model call in the first place. The diagrams are left as historical record of the symptom this fix eliminates structurally; see [ADR-013 Amendments](ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-0086) for the fix itself.
 
 ```mermaid
 sequenceDiagram
@@ -189,6 +194,14 @@ sequenceDiagram
 ```
 
 ### Proposed improvement: Redis pub/sub notification
+
+> **Superseded by [ADR-015](ADR-015-agent-completion-sse.md) (amended).** The
+> Redis long-poll described below (`agent:completed:{agentId}` +
+> `waitForAgentCompletion`, HTTP held open) was implemented and has since been
+> replaced: `POST /message` now returns `202` immediately and the resumed run's
+> answer is delivered over the agent's SSE event stream. The pause/resume
+> mechanics (points 1–2) still hold; only the completion-delivery transport
+> changed. The sequence diagram below is retained for historical context.
 
 Two changes close the gap without holding any BullMQ thread open:
 
@@ -245,7 +258,7 @@ sequenceDiagram
 
 - `Conversation`, `ConversationMessage`, `PendingConsultation` entities in `libs/lcp-shared/src/models/`
 - Pause/resume is BullMQ-based (checkpoint + re-enqueue), not LangGraph `interrupt()`
-- Agents must call `complete_task` as their last action; lcp-agent enforces this with a one-shot completion prompt if they forget
+- Agents must call `complete_task` as their last action; lcp-agent enforces this via `requiredToolCalls` with up to `AGENT_REQUIRED_TOOL_RETRIES` (default 2) reminder prompts, then fails the run and propagates the failure to any waiting caller
 
 ## Open Questions / Assumptions
 

@@ -1,13 +1,6 @@
 import { Command } from 'commander';
-import { apiRequest } from '../lib/api';
-import { resolveToken } from '../lib/auth';
-
-interface DocumentSummary {
-  key: string;
-  name: string;
-  size: number;
-  lastModified: string;
-}
+import { getGlobalOptions } from '../lib/core/cli-options';
+import { listRoleDocumentsAction } from '../lib/docs/list-role-documents.action';
 
 /**
  * Lists OKF knowledge-base documents stored for a role.
@@ -20,27 +13,7 @@ export function registerListRoleDocuments(program: Command): void {
     .command('list-role-documents')
     .description('List knowledge-base documents stored for a role')
     .requiredOption('-r, --role-id <uuid>', 'Role UUID')
-    .action(async (cmdOpts: { roleId: string }) => {
-      const opts = program.opts<{
-        lcpServer: string;
-        accessToken?: string;
-        accessTokenEnvVar?: string;
-        username?: string;
-        password?: string;
-      }>();
-      try {
-        const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
-        const docs = await apiRequest<DocumentSummary[]>(
-          { baseUrl: opts.lcpServer, token },
-          'GET',
-          `/api/role/${cmdOpts.roleId}/documents`,
-        );
-        process.stdout.write(JSON.stringify(docs, null, 2) + '\n');
-      } catch (err) {
-        process.stderr.write(
-          `Error: ${String(err instanceof Error ? err.message : err)}\n`,
-        );
-        process.exit(1);
-      }
-    });
+    .action((cmdOpts: { roleId: string }) =>
+      listRoleDocumentsAction(getGlobalOptions(program), cmdOpts),
+    );
 }

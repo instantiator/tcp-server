@@ -1,8 +1,10 @@
 import { BaseMessage } from '@langchain/core/messages';
 import { getEncoding } from '@langchain/core/utils/tiktoken';
-import { DEFAULT_LLM_CONTEXT_WINDOW } from '@lcp/shared';
+import type { DynamicStructuredTool } from '@langchain/core/tools';
+import { convertToOpenAITool } from '@langchain/core/utils/function_calling';
 import { Injectable, Logger } from '@nestjs/common';
 import type { Tiktoken } from 'js-tiktoken';
+import { DEFAULT_LLM_CONTEXT_WINDOW } from '../config/defaults';
 
 /**
  * Estimates token usage and evaluates context budget for an LLM context window.
@@ -62,6 +64,22 @@ export class ContextBudgetService {
           ? msg.content
           : JSON.stringify(msg.content);
       total += await this.countText(text);
+    }
+    return total;
+  }
+
+  /**
+   * Estimates the token footprint of a bound-tools schema — the `tools` array
+   * sent alongside every completion request. LangChain's `bindTools` sends
+   * the full name/description/parameter-schema of every tool on every turn,
+   * which is otherwise invisible to budget checks based on message content
+   * alone. Converts each tool via the same `convertToOpenAITool` LangChain
+   * uses internally, so the counted JSON matches what's actually sent.
+   */
+  async countTools(tools: DynamicStructuredTool[]): Promise<number> {
+    let total = 0;
+    for (const tool of tools) {
+      total += await this.countText(JSON.stringify(convertToOpenAITool(tool)));
     }
     return total;
   }

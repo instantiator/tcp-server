@@ -45,6 +45,29 @@ export class AuditClientService {
       });
   }
 
+  /**
+   * Notifies lcp-server that an agent run has failed with the given reason.
+   * Fire-and-forget — errors are logged but never thrown.
+   *
+   * The server resolves any pending consultation as `failed` and resumes the
+   * calling agent so it can react to the failure rather than wait forever.
+   *
+   * Only used by lcp-agent; MCP services do not call this method.
+   */
+  notifyFailed(agentId: string, reason: string): void {
+    axios
+      .post(
+        `${this.serverUrl}/internal/agent/${agentId}/fail`,
+        { reason },
+        { headers: { 'X-Internal-Api-Key': this.apiKey } },
+      )
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `Agent failure notification failed for ${agentId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+  }
+
   /** Writes an audit event. Never throws. */
   record(
     companyId: string,

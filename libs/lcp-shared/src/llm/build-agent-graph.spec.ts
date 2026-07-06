@@ -1,7 +1,8 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { AIMessage, HumanMessage } from '@langchain/core/messages';
-import type { DynamicStructuredTool } from '@langchain/core/tools';
+import { DynamicStructuredTool } from '@langchain/core/tools';
 import { MemorySaver } from '@langchain/langgraph';
+import { z } from 'zod';
 import { buildAgentGraph } from './build-agent-graph';
 
 function makeModel(invoke: jest.Mock, bindTools?: jest.Mock): BaseChatModel {
@@ -146,5 +147,101 @@ describe('buildAgentGraph', () => {
       { configurable?: { thread_id?: string } },
     ];
     expect(invokeOptions.configurable?.thread_id).toBe('test-thread');
+  });
+
+  describe('interruptAfterTools', () => {
+    function makeTool(): DynamicStructuredTool {
+      return new DynamicStructuredTool({
+        name: 'some_tool',
+        description: 'A tool.',
+        schema: z.object({}),
+        func: () => Promise.resolve('tool result'),
+      });
+    }
+
+    it('halts after the tool node instead of automatically re-invoking the model', async () => {
+      const boundInvoke = jest.fn().mockResolvedValue(
+        new AIMessage({
+          content: '',
+          tool_calls: [{ name: 'some_tool', args: {}, id: 'call-1' }],
+        }),
+      );
+      const bindTools = jest.fn().mockReturnValue(makeModel(boundInvoke));
+
+      const graph = buildAgentGraph({
+        model: makeModel(jest.fn(), bindTools),
+        checkpointer: new MemorySaver(),
+        tools: [makeTool()],
+        interruptAfterTools: true,
+      });
+
+      await graph.invoke({ messages: [new HumanMessage('Hi')] }, RUN_CONFIG);
+
+      // The model was invoked exactly once (for the tool call) — LangGraph
+      // did not automatically continue tools -> agent on its own.
+      expect(boundInvoke).toHaveBeenCalledTimes(1);
+
+      const state = await graph.getState(RUN_CONFIG);
+      expect(state.next).toContain('agent');
+    });
+
+    it('resumes with a null input and continues to the final answer', async () => {
+      const boundInvoke = jest
+        .fn()
+        .mockResolvedValueOnce(
+          new AIMessage({
+            content: '',
+            tool_calls: [{ name: 'some_tool', args: {}, id: 'call-1' }],
+          }),
+        )
+        .mockResolvedValueOnce(new AIMessage('Final answer after the tool.'));
+      const bindTools = jest.fn().mockReturnValue(makeModel(boundInvoke));
+
+      const graph = buildAgentGraph({
+        model: makeModel(jest.fn(), bindTools),
+        checkpointer: new MemorySaver(),
+        tools: [makeTool()],
+        interruptAfterTools: true,
+      });
+
+      await graph.invoke({ messages: [new HumanMessage('Hi')] }, RUN_CONFIG);
+      const result = await graph.invoke(null, RUN_CONFIG);
+
+      expect(boundInvoke).toHaveBeenCalledTimes(2);
+      expect(result.messages.at(-1)?.content).toBe(
+        'Final answer after the tool.',
+      );
+      const state = await graph.getState(RUN_CONFIG);
+      expect(state.next).toHaveLength(0);
+    });
+
+    it('does not interrupt when interruptAfterTools is not set (existing behaviour unchanged)', async () => {
+      const boundInvoke = jest
+        .fn()
+        .mockResolvedValueOnce(
+          new AIMessage({
+            content: '',
+            tool_calls: [{ name: 'some_tool', args: {}, id: 'call-1' }],
+          }),
+        )
+        .mockResolvedValueOnce(new AIMessage('Final answer after the tool.'));
+      const bindTools = jest.fn().mockReturnValue(makeModel(boundInvoke));
+
+      const graph = buildAgentGraph({
+        model: makeModel(jest.fn(), bindTools),
+        checkpointer: new MemorySaver(),
+        tools: [makeTool()],
+      });
+
+      const result = await graph.invoke(
+        { messages: [new HumanMessage('Hi')] },
+        RUN_CONFIG,
+      );
+
+      expect(boundInvoke).toHaveBeenCalledTimes(2);
+      expect(result.messages.at(-1)?.content).toBe(
+        'Final answer after the tool.',
+      );
+    });
   });
 });

@@ -136,41 +136,56 @@ describe('lcp-mcp-interactions -> lcp-server (cross-service e2e)', () => {
     return res.body as CompanyUser;
   }
 
-  describe('list_available_roles', () => {
-    it('returns the real roles for the company over the wire', async () => {
+  describe('list_available_contacts', () => {
+    it("kind: 'roles' returns the real roles for the company over the wire", async () => {
       const company = await createCompany();
       await createRole(company.id);
 
-      const text = await callTool(tools, 'list_available_roles', {
+      const text = await callTool(tools, 'list_available_contacts', {
         companyId: company.id,
+        kind: 'roles',
       });
 
       expect(text).not.toContain('Error');
       expect(text).toContain('analyst');
     });
 
-    it('returns an empty list for a company with no roles', async () => {
+    it("kind: 'roles' returns an empty list for a company with no roles", async () => {
       const company = await createCompany();
 
-      const text = await callTool(tools, 'list_available_roles', {
+      const text = await callTool(tools, 'list_available_contacts', {
         companyId: company.id,
+        kind: 'roles',
       });
 
       expect(text).not.toContain('Error');
       expect(JSON.parse(text)).toEqual([]);
     });
-  });
 
-  describe('list_available_users', () => {
-    it('returns the real users for the company over the wire', async () => {
+    it("kind: 'users' returns the real users for the company over the wire", async () => {
       const company = await createCompany();
       await createCompanyUser(company.id);
 
-      const text = await callTool(tools, 'list_available_users', {
+      const text = await callTool(tools, 'list_available_contacts', {
+        companyId: company.id,
+        kind: 'users',
+      });
+
+      expect(text).not.toContain('Error');
+      expect(text).toContain('alice@example.com');
+    });
+
+    it('defaults to both, returning real users and roles for the company in one call', async () => {
+      const company = await createCompany();
+      await createRole(company.id);
+      await createCompanyUser(company.id);
+
+      const text = await callTool(tools, 'list_available_contacts', {
         companyId: company.id,
       });
 
       expect(text).not.toContain('Error');
+      expect(text).toContain('analyst');
       expect(text).toContain('alice@example.com');
     });
   });
