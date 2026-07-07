@@ -6,6 +6,7 @@ import {
   AuditEventType,
   ContextManagerService,
   DEFAULT_LLM_CONTEXT_WINDOW,
+  DEFAULT_SYSTEM_PROMPT_TEMPLATE,
   LcpAgent,
   LcpCompany,
   LcpRole,
@@ -14,10 +15,14 @@ import {
   ToolVisibilityTracker,
   buildAgentGraph,
   buildChatModel,
+  buildPromptDateVars,
   mapStreamEvent,
   renderTemplate,
   resolveEnvLlmConfig,
+  resolveLlmConfig,
+  resolveMcpServerList,
   resolveMcpServerUrls,
+  resolveSystemPromptTemplate,
   runSupervisedGraph,
 } from '@lcp/shared';
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
@@ -90,11 +95,14 @@ export class ChatService {
     if (!role) throw new NotFoundException(`Role ${agent.roleId} not found`);
 
     const company = await this.companyRepo.findOneBy({ id: agent.companyId });
-    const llmConfig =
-      role.llmConfig ?? company?.llmDefault ?? resolveEnvLlmConfig(this.config);
+    const llmConfig = resolveLlmConfig(
+      role,
+      company,
+      resolveEnvLlmConfig(this.config),
+    );
     if (!llmConfig) {
       throw new NotFoundException(
-        `No LLM config for agent ${agentId}: role has no llmConfig, company has no llmDefault, and no LLM env fallback is configured`,
+        `No LLM config for agent ${agentId}: role has no llmConfig, company has no llmConfig, and no LLM env fallback is configured`,
       );
     }
 
@@ -165,12 +173,13 @@ export class ChatService {
       await checkpointer.setup();
 
       const mcpServerUrls = resolveMcpServerUrls(this.config);
-      const mcpServerNames = [
-        ...new Set([
-          ...Object.keys(mcpServerUrls),
-          ...(role.mcpServerList ?? []),
-        ]),
-      ];
+      // Additive union: default registry servers, plus any extras from the
+      // company and the role (not a precedence chain — every source contributes).
+      const mcpServerNames = resolveMcpServerList(
+        Object.keys(mcpServerUrls),
+        company,
+        role,
+      );
       const mcpTools = await this.mcp.loadTools(mcpServerNames, mcpServerUrls, {
         agentId,
         companyId: agent.companyId,
@@ -237,16 +246,23 @@ export class ChatService {
         }
       }
 
+      const systemPromptTemplate = resolveSystemPromptTemplate(
+        role,
+        company,
+        DEFAULT_SYSTEM_PROMPT_TEMPLATE,
+      );
       const messages = isFirstMessage
         ? [
-            // Prompt part 0: system prompt — rendered from the role's systemPromptTemplate
+            // Prompt part 0: system prompt — rendered from the resolved systemPromptTemplate
             new SystemMessage(
-              renderTemplate(role.systemPromptTemplate, {
+              renderTemplate(systemPromptTemplate, {
                 name: role.name,
                 description: role.description,
-                date: new Date().toISOString().split('T')[0],
+                ...buildPromptDateVars(company),
                 companyId: agent.companyId,
                 roleId: role.id,
+                companySlug: company?.slug ?? '',
+                roleSlug: role.slug,
               }),
             ),
             // Prompt part 1: role prompt (identity, attitude, domain knowledge, behavioural guidelines)

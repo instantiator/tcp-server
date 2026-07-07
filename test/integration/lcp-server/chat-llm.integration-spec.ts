@@ -121,7 +121,7 @@ describe('ChatService integration (stub LLM)', () => {
         name: 'Integration Test Co',
         slug: 'test-co',
         description: 'For integration tests',
-        llmDefault: {
+        llmConfig: {
           provider: 'lm-studio',
           model: 'stub',
           baseUrl: STUB_LLM_URL,
@@ -133,6 +133,7 @@ describe('ChatService integration (stub LLM)', () => {
     const role = await roleRepo.save(
       roleRepo.create({
         companyId: testCompanyId,
+        slug: 'stub-analyst',
         name: 'stub-analyst',
         description: 'Stub test role',
         systemPromptTemplate: 'You are {{name}}, an analyst.',

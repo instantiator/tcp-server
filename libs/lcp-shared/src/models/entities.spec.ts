@@ -64,6 +64,7 @@ async function seedRole(companyId: UUID) {
   return roles.save(
     roles.create({
       companyId,
+      slug: 'analyst',
       name: 'analyst',
       description: 'Analyses data.',
       llmConfig: {
@@ -77,13 +78,13 @@ async function seedRole(companyId: UUID) {
 }
 
 describe('LcpCompany entity', () => {
-  it('persists llmDefault as JSONB and retrieves it correctly', async () => {
+  it('persists llmConfig as JSONB and retrieves it correctly', async () => {
     const company = await companies.save(
       companies.create({
         slug: 'llm-co',
         name: 'LLM Co',
         description: 'LLM Company',
-        llmDefault: {
+        llmConfig: {
           provider: 'openai',
           model: 'gpt-4o',
           apiKey: 'OPENAI_API_KEY',
@@ -91,11 +92,11 @@ describe('LcpCompany entity', () => {
       }),
     );
     const found = await companies.findOneByOrFail({ id: company.id });
-    expect(found.llmDefault?.provider).toBe('openai');
-    expect(found.llmDefault?.model).toBe('gpt-4o');
+    expect(found.llmConfig?.provider).toBe('openai');
+    expect(found.llmConfig?.model).toBe('gpt-4o');
   });
 
-  it('allows a company with no llmDefault', async () => {
+  it('allows a company with no llmConfig', async () => {
     const company = await companies.save(
       companies.create({
         slug: 'plain-co',
@@ -104,7 +105,7 @@ describe('LcpCompany entity', () => {
       }),
     );
     const found = await companies.findOneByOrFail({ id: company.id });
-    expect(found.llmDefault).toBeNull();
+    expect(found.llmConfig).toBeNull();
   });
 });
 
@@ -126,12 +127,13 @@ describe('LcpRole entity', () => {
         slug: 'default-llm',
         name: 'Default LLM Co',
         description: 'A default company',
-        llmDefault: { provider: 'openai', model: 'gpt-4o' },
+        llmConfig: { provider: 'openai', model: 'gpt-4o' },
       }),
     );
     const role = await roles.save(
       roles.create({
         companyId: company.id,
+        slug: 'inheritor',
         name: 'inheritor',
         description: 'Uses company default.',
         systemPromptTemplate: 'You are {{name}}.',
@@ -146,6 +148,7 @@ describe('LcpRole entity', () => {
     const role = await roles.save(
       roles.create({
         companyId: company.id,
+        slug: 'planner',
         name: 'planner',
         description: 'Plans tasks.',
         llmConfig: {

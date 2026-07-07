@@ -52,6 +52,7 @@ describe('AuditController (e2e)', () => {
     companyId = company.id;
     const role = await roleRepo.save(
       roleRepo.create({
+        slug: 'auditor',
         name: 'Auditor',
         description: 'Test role',
         systemPromptTemplate: 'Audit.',

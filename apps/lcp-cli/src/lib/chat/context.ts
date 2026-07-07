@@ -19,7 +19,7 @@ interface CompanyRecord {
   id: string;
   slug: string;
   name: string;
-  llmDefault?: LlmConfig | null;
+  llmConfig?: LlmConfig | null;
 }
 
 /** Resolved session + company/role identifiers a chat session needs to start. */
@@ -77,7 +77,7 @@ export async function resolveChatContext(
     `/api/company/${companyId}`,
   );
   const companyName = company.name;
-  if (cmdOpts.roleId && !llmConfig) llmConfig = company.llmDefault;
+  if (cmdOpts.roleId && !llmConfig) llmConfig = company.llmConfig;
 
   printBanner(opts, cmdOpts, roleName, companyName, llmConfig, useTui);
 

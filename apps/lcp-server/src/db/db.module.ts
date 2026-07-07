@@ -1,4 +1,10 @@
-import { AuditEvent, LcpAgent, LcpCompany, LcpRole } from '@lcp/shared';
+import {
+  AuditEvent,
+  CompanyUser,
+  LcpAgent,
+  LcpCompany,
+  LcpRole,
+} from '@lcp/shared';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DbService } from './db.service';
@@ -9,7 +15,13 @@ import { DbService } from './db.service';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([LcpCompany, LcpRole, LcpAgent, AuditEvent]),
+    TypeOrmModule.forFeature([
+      LcpCompany,
+      LcpRole,
+      LcpAgent,
+      AuditEvent,
+      CompanyUser,
+    ]),
   ],
   providers: [DbService],
   exports: [DbService],

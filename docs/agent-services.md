@@ -43,7 +43,7 @@ Add an `embeddingConfig` to the company:
 }
 ```
 
-`embeddingConfig` follows the same shape as `llmDefault` but points to a model that supports `/v1/embeddings`. LM Studio with `nomic-embed-text` is the recommended local option. If `embeddingConfig` is absent, RAG is silently skipped.
+`embeddingConfig` follows the same shape as `llmConfig` but points to a model that supports `/v1/embeddings`. LM Studio with `nomic-embed-text` is the recommended local option. If `embeddingConfig` is absent, RAG is silently skipped.
 
 ### CLI commands
 

@@ -141,6 +141,7 @@ describeIf('AgentLoopService (integration)', () => {
     const role = await roleRepo.save(
       roleRepo.create({
         companyId: company.id,
+        slug: 'analyst',
         name: 'Analyst',
         description: 'Analyses things.',
         llmConfig: {
@@ -187,13 +188,13 @@ describeIf('AgentLoopService (integration)', () => {
     );
   }, 30_000);
 
-  it('uses company llmDefault when role.llmConfig is absent', async () => {
+  it('uses company llmConfig when role.llmConfig is absent', async () => {
     const company = await companyRepo.save(
       companyRepo.create({
         slug: 'default-llm',
         name: 'Default LLM Co',
         description: 'Default company',
-        llmDefault: {
+        llmConfig: {
           provider: 'lm-studio',
           model: 'test-model',
           baseUrl: 'http://127.0.0.1:1/v1',
@@ -204,6 +205,7 @@ describeIf('AgentLoopService (integration)', () => {
     const role = await roleRepo.save(
       roleRepo.create({
         companyId: company.id,
+        slug: 'inheritor',
         name: 'Inheritor',
         description: 'Uses company default.',
         systemPromptTemplate: 'You are {{name}}.',

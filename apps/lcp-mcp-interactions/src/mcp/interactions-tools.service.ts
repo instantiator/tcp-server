@@ -224,11 +224,27 @@ export class InteractionsToolsService {
         description: interactionToolDescriptions.request_agent_consultation,
         inputSchema: {
           agentId: z.uuid().describe('The calling agent UUID.'),
-          companyId: z.uuid().describe('The company UUID.'),
+          companyId: z
+            .uuid()
+            .optional()
+            .describe('The company UUID. Provide this or companySlug.'),
+          companySlug: z
+            .string()
+            .min(1)
+            .optional()
+            .describe('The company slug, as an alternative to companyId.'),
           roleId: z
             .uuid()
+            .optional()
             .describe(
-              'The id of the role to consult — get it from list_available_contacts. Role names are not unique within a company, so the id is required.',
+              'The id of the role to consult — get it from list_available_contacts. Provide this or roleSlug.',
+            ),
+          roleSlug: z
+            .string()
+            .min(1)
+            .optional()
+            .describe(
+              'The slug of the role to consult, as an alternative to roleId (unique within the company, not globally).',
             ),
           roleName: z
             .string()
@@ -250,16 +266,19 @@ export class InteractionsToolsService {
       async ({
         agentId,
         companyId,
+        companySlug,
         roleId,
+        roleSlug,
         roleName,
         question,
         context,
       }): Promise<ToolResult> => {
         try {
           // Ask lcp-server to pause this agent and dispatch a new consulting
-          // agent for roleId — it looks the role up by id (unambiguous even
-          // when multiple roles share a name), starts the consulting agent,
-          // and records the PendingConsultation link between them.
+          // agent for the resolved role — it looks the role up by id or slug
+          // (scoped to the company either way, so it's unambiguous even when
+          // multiple roles share a name), starts the consulting agent, and
+          // records the PendingConsultation link between them.
           const res = await axios.post<{
             consultationId: string;
             roleName: string;
@@ -269,7 +288,9 @@ export class InteractionsToolsService {
               type: 'agent_consultation',
               agentId,
               companyId,
+              companySlug,
               roleId,
+              roleSlug,
               roleName,
               question,
               context,
@@ -291,7 +312,7 @@ export class InteractionsToolsService {
           this.logger.error(`request_agent_consultation failed: ${String(e)}`);
           return err(
             interpolate(interactionPrompts.error_consultation, {
-              roleName: roleName ?? roleId,
+              roleName: roleName ?? roleId ?? roleSlug ?? 'unknown role',
             }),
           );
         }

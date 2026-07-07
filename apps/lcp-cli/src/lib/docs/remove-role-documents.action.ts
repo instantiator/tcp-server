@@ -1,5 +1,6 @@
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest } from '../core/api';
+import { RoleIdentifierOpts, resolveRoleId } from '../core/resolve-identifiers';
 import { runCommand } from '../core/run-command';
 import { resolveToken } from '../auth/token';
 
@@ -35,16 +36,17 @@ export function globToRegex(pattern: string): RegExp {
  */
 export function removeRoleDocumentsAction(
   opts: GlobalOptions,
-  cmdOpts: { roleId: string; pattern: string[] },
+  cmdOpts: RoleIdentifierOpts & { pattern: string[] },
 ): Promise<void> {
   return runCommand(async () => {
     const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
     const api = apiOptions(opts, token);
+    const roleId = await resolveRoleId(api, cmdOpts);
 
     const allDocs = await apiRequest<DocumentSummary[]>(
       api,
       'GET',
-      `/api/role/${cmdOpts.roleId}/documents`,
+      `/api/role/${roleId}/documents`,
     );
 
     const regexes = cmdOpts.pattern.map(globToRegex);
@@ -63,7 +65,7 @@ export function removeRoleDocumentsAction(
       process.stderr.write(`  ${doc.name}\n`);
     }
 
-    await apiRequest(api, 'DELETE', `/api/role/${cmdOpts.roleId}/documents`, {
+    await apiRequest(api, 'DELETE', `/api/role/${roleId}/documents`, {
       keys: matched.map((d) => d.key),
     });
 

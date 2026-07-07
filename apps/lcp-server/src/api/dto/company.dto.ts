@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -23,7 +24,7 @@ export class CreateCompanyDto {
   @IsOptional()
   @ValidateNested()
   @Type(() => LlmConfigDto)
-  llmDefault?: LlmConfigDto;
+  llmConfig?: LlmConfigDto;
 
   @IsOptional()
   @ValidateNested()
@@ -33,6 +34,19 @@ export class CreateCompanyDto {
   @IsOptional()
   @IsString()
   companyContext?: string;
+
+  @IsOptional()
+  @IsString()
+  systemPromptTemplate?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  mcpServerList?: string[];
+
+  @IsOptional()
+  @IsString()
+  timezone?: string;
 }
 
 export class UpdateCompanyDto {
@@ -49,7 +63,7 @@ export class UpdateCompanyDto {
   @IsOptional()
   @ValidateNested()
   @Type(() => LlmConfigDto)
-  llmDefault?: LlmConfigDto;
+  llmConfig?: LlmConfigDto;
 
   @IsOptional()
   @ValidateNested()
@@ -59,4 +73,17 @@ export class UpdateCompanyDto {
   @IsOptional()
   @IsString()
   companyContext?: string;
+
+  @IsOptional()
+  @IsString()
+  systemPromptTemplate?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  mcpServerList?: string[];
+
+  @IsOptional()
+  @IsString()
+  timezone?: string;
 }

@@ -9,6 +9,7 @@ function makeRole(overrides: Partial<LcpRole> = {}): LcpRole {
   return {
     id: randomUUID(),
     companyId: randomUUID(),
+    slug: 'analyst',
     name: 'analyst',
     description: 'Analyses things.',
     systemPromptTemplate: '',
@@ -26,6 +27,7 @@ function makeCompany(overrides: Partial<LcpCompany> = {}): LcpCompany {
     slug: 'acme',
     name: 'ACME',
     description: 'Test company',
+    mcpServerList: [],
     ...overrides,
   };
 }

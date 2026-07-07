@@ -6,7 +6,6 @@ import {
   IsOptional,
   IsString,
   IsUUID,
-  ValidateIf,
 } from 'class-validator';
 
 export class PauseDto {
@@ -24,15 +23,32 @@ export class PauseDto {
   @IsString()
   context?: string;
 
-  /** Required when type === 'agent_consultation'. */
-  @ValidateIf((o: PauseDto) => o.type === 'agent_consultation')
+  /**
+   * Required when type === 'agent_consultation', unless `companySlug` is
+   * given instead — the controller resolves whichever is present and 400s
+   * if neither is.
+   */
+  @IsOptional()
   @IsUUID()
   companyId?: UUID;
 
-  /** Required when type === 'agent_consultation' — the unambiguous lookup key. */
-  @ValidateIf((o: PauseDto) => o.type === 'agent_consultation')
+  /** Alternate to `companyId` — resolved the same way `LcpCompany.slug` is elsewhere. */
+  @IsOptional()
+  @IsString()
+  companySlug?: string;
+
+  /**
+   * Required when type === 'agent_consultation', unless `roleSlug` is given
+   * instead. Role slugs are scoped to the resolved company.
+   */
+  @IsOptional()
   @IsUUID()
   roleId?: UUID;
+
+  /** Alternate to `roleId` — resolved against the company from `companyId`/`companySlug`. */
+  @IsOptional()
+  @IsString()
+  roleSlug?: string;
 
   /** Optional human-readable label, used only for friendlier error messages. */
   @IsOptional()

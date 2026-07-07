@@ -25,10 +25,10 @@ Developer CLI tool for interacting with the system: obtaining OIDC tokens, manag
 ## Domain entities
 
 **Company (`LcpCompany`)**
-A tenant organisation. Owns roles, agents, and a MinIO storage bucket. Carries a `llmDefault` config used by roles that do not specify their own.
+A tenant organisation. Owns roles, agents, and a MinIO storage bucket. Carries a `llmConfig` config used by roles that do not specify their own, an optional company-wide `systemPromptTemplate` default, an additive `mcpServerList`, and a display-only `timezone` (IANA name) used for CLI/UI timestamp presentation and prompt localization — never for storage.
 
 **Role (`LcpRole`)**
-A named persona within a company (e.g., "Analyst", "Senior Developer"). Defines the system prompt template, LLM config, MCP servers the role can use, and knowledge domains for query routing.
+A named persona within a company (e.g., "Analyst", "Senior Developer"). Defines the (optional) system prompt template, LLM config, MCP servers the role can use, and knowledge domains for query routing.
 
 **Agent (`LcpAgent`)**
 The canonical unit of work. One agent record is created per run and tracks the full lifecycle from initial prompt to a terminal status (`completed` or `failed`). Carries `status`, `threadId` (for LangGraph checkpoint resumability), and `output`. Informally called a **run** — the two terms are interchangeable.
@@ -71,7 +71,7 @@ A special role designated per company to generate structured task plans from a t
 ## Prompt and context
 
 **System prompt template**
-The base system message configured on a role. Supports `{{name}}`, `{{description}}`, and `{{date}}` placeholders.
+The base system message rendered for prompt part 0. Resolved with role → company → baked-in default precedence (`SystemPromptTemplateResolver`; a blank template counts as unset). Supports `{{name}}`, `{{description}}`, `{{date}}`, `{{datetime}}`, `{{timezone}}`, `{{localDatetime}}`, `{{companyId}}`, and `{{roleId}}` placeholders — see [`buildPromptDateVars`](../libs/lcp-shared/src/llm/prompt-vars.ts).
 
 **Prompt parts**
 The prompt assembled for each LLM call is composed of up to 8 numbered sections (parts 0–8): system intro, role description, company environment, MCP server list, supplementary context, RAG knowledge, MCP pre-fetched responses, and output instructions. See [ADR-013](ADRs/ADR-013-prompt-assembly-context-management.md).
@@ -88,7 +88,7 @@ When data (RAG results, MCP responses) still exceeds the context budget after co
 ## LLM and embeddings
 
 **LlmConfig**
-The configuration block for an LLM provider: `provider`, `model`, `baseUrl`, `apiKey`, `contextWindow`. Stored as JSONB on a role or as `llmDefault` on a company.
+The configuration block for an LLM provider: `provider`, `model`, `baseUrl`, `apiKey`, `contextWindow`. Stored as JSONB `llmConfig` on both a role and a company (both implement `WithLlmConfig`); resolved role → company → environment fallback via `LlmConfigResolver`.
 
 **embeddingConfig**
 Configuration for an embedding model. Same shape as `LlmConfig` but points to a model that supports `/v1/embeddings`. Required for RAG; if absent, RAG is silently skipped.

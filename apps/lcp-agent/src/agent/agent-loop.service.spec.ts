@@ -245,7 +245,7 @@ describe('AgentLoopService', () => {
   async function seedAgentAndRole(
     opts: {
       llmConfig?: LlmConfig;
-      companyLlmDefault?: LlmConfig;
+      companyLlmConfig?: LlmConfig;
       systemPromptTemplate?: string;
     } = {
       llmConfig: {
@@ -260,12 +260,13 @@ describe('AgentLoopService', () => {
         slug: 'acme',
         name: 'ACME',
         description: 'A Company that Makes Everything',
-        llmDefault: opts.companyLlmDefault,
+        llmConfig: opts.companyLlmConfig,
       }),
     );
     const role = await roleRepo.save(
       roleRepo.create({
         companyId: company.id,
+        slug: 'analyst',
         name: 'analyst',
         description: 'Analyses.',
         llmConfig: opts.llmConfig,
@@ -412,10 +413,10 @@ describe('AgentLoopService', () => {
     );
   });
 
-  it('uses company llmDefault when role has no llmConfig', async () => {
+  it('uses company llmConfig when role has no llmConfig', async () => {
     const { agent } = await seedAgentAndRole({
       llmConfig: undefined,
-      companyLlmDefault: {
+      companyLlmConfig: {
         provider: 'lm-studio',
         model: 'qwen3-5b',
         apiKey: 'test-key',
@@ -431,7 +432,7 @@ describe('AgentLoopService', () => {
   it('fails the agent when neither role nor company has an LLM config', async () => {
     const { agent } = await seedAgentAndRole({
       llmConfig: undefined,
-      companyLlmDefault: undefined,
+      companyLlmConfig: undefined,
     });
 
     await service.run(agent.id, undefined, new AbortController());

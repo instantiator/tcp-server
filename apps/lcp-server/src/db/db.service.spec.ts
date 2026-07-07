@@ -2,6 +2,7 @@ import {
   AgentStatus,
   AuditEvent,
   AuditEventType,
+  CompanyUser,
   LcpAgent,
   LcpCompany,
   LcpRole,
@@ -13,7 +14,7 @@ import { randomUUID, UUID } from 'crypto';
 import { QueryFailedError, Repository } from 'typeorm';
 import { DbService } from './db.service';
 
-const ALL_ENTITIES = [LcpCompany, LcpRole, LcpAgent, AuditEvent];
+const ALL_ENTITIES = [LcpCompany, LcpRole, LcpAgent, AuditEvent, CompanyUser];
 
 describe('DbService', () => {
   let dbService: DbService;
@@ -21,6 +22,7 @@ describe('DbService', () => {
   let roleRepo: Repository<LcpRole>;
   let agentRepo: Repository<LcpAgent>;
   let auditRepo: Repository<AuditEvent>;
+  let companyUserRepo: Repository<CompanyUser>;
 
   beforeAll(async () => {
     const testingModule: TestingModule = await Test.createTestingModule({
@@ -41,12 +43,14 @@ describe('DbService', () => {
     roleRepo = testingModule.get(getRepositoryToken(LcpRole));
     agentRepo = testingModule.get(getRepositoryToken(LcpAgent));
     auditRepo = testingModule.get(getRepositoryToken(AuditEvent));
+    companyUserRepo = testingModule.get(getRepositoryToken(CompanyUser));
   });
 
   afterEach(async () => {
     await auditRepo.clear();
     await agentRepo.clear();
     await roleRepo.clear();
+    await companyUserRepo.clear();
     await companyRepo.clear();
   });
 
@@ -66,6 +70,7 @@ describe('DbService', () => {
     return roleRepo.save(
       roleRepo.create({
         companyId,
+        slug: 'analyst',
         name: 'analyst',
         description: 'Analyses data.',
         llmConfig: { provider: 'lm-studio', model: 'qwen3-5b' },
@@ -79,8 +84,13 @@ describe('DbService', () => {
   describe('createCompany', () => {
     it('persists a new record with the given slug and template fields', async () => {
       await dbService.createCompany(
-        { name: 'Acme Corp', description: 'A Company That Makes Everything' },
+        {
+          name: 'Acme Corp',
+          description: 'A Company That Makes Everything',
+          mcpServerList: [],
+        },
         'acme',
+        'alice',
       );
       const record = await companyRepo.findOneBy({ slug: 'acme' });
       expect(record).not.toBeNull();
@@ -90,8 +100,13 @@ describe('DbService', () => {
 
     it('assigns a UUID to the new record', async () => {
       const result = await dbService.createCompany(
-        { name: 'Acme Corp', description: 'A Company That Makes Everything' },
+        {
+          name: 'Acme Corp',
+          description: 'A Company That Makes Everything',
+          mcpServerList: [],
+        },
         'acme',
+        'alice',
       );
       expect(result.id).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
@@ -100,221 +115,234 @@ describe('DbService', () => {
 
     it('replaces an existing record with the same slug', async () => {
       await dbService.createCompany(
-        { name: 'First', description: 'v1' },
+        { name: 'First', description: 'v1', mcpServerList: [] },
         'acme',
+        'alice',
       );
       await dbService.createCompany(
-        { name: 'Second', description: 'v2' },
+        { name: 'Second', description: 'v2', mcpServerList: [] },
         'acme',
+        'alice',
       );
 
       expect(await companyRepo.count({ where: { slug: 'acme' } })).toBe(1);
       expect((await companyRepo.findOneBy({ slug: 'acme' }))!.name).toBe(
         'Second',
       );
+    });
+
+    it('adds the creator as a CompanyUser with memberType "creator"', async () => {
+      const company = await dbService.createCompany(
+        { name: 'Acme Corp', description: 'A co', mcpServerList: [] },
+        'acme',
+        'alice',
+        'Alice',
+      );
+      const creator = await companyUserRepo.findOneBy({
+        companyId: company.id,
+        identifier: 'alice',
+      });
+      expect(creator).not.toBeNull();
+      expect(creator!.memberType).toBe('creator');
+      expect(creator!.name).toBe('Alice');
     });
   });
 
   // setCompany
 
   describe('setCompany', () => {
-    it('creates a new record when replace=true and no prior record exists', async () => {
-      await dbService.setCompany(
-        {
-          slug: 'acme',
-          name: 'Acme Corp',
-          description: 'A company that makes everything',
-        },
-        true,
-      );
+    it('creates a new record when no identifiers resolve to an existing one', async () => {
+      await dbService.setCompany({
+        slug: 'acme',
+        name: 'Acme Corp',
+        description: 'A company that makes everything',
+      });
       expect(await companyRepo.count()).toBe(1);
     });
 
-    it('creates a new record when replace=false', async () => {
-      await dbService.setCompany(
-        {
-          slug: 'acme',
-          name: 'Acme Corp',
-          description: 'A Company that Makes Everything',
-        },
-        false,
-      );
-      const record = await companyRepo.findOneBy({ slug: 'acme' });
-      expect(record).not.toBeNull();
-      expect(record!.slug).toBe('acme');
-    });
-
-    it('updates an existing record when replace=false and the id matches', async () => {
-      const id = randomUUID();
-      await dbService.setCompany(
-        { id, slug: 'acme', name: 'Original Name', description: 'Company' },
-        false,
-      );
-      await dbService.setCompany(
-        { id, slug: 'acme', name: 'Updated Name' },
-        false,
-      );
+    it('updates an existing record when company.id matches', async () => {
+      const created = await dbService.setCompany({
+        slug: 'acme',
+        name: 'Original Name',
+        description: 'Company',
+      });
+      await dbService.setCompany({
+        id: created.id,
+        slug: 'acme',
+        name: 'Updated Name',
+      });
 
       expect(await companyRepo.count()).toBe(1);
-      const record = await companyRepo.findOneBy({ id });
+      const record = await companyRepo.findOneBy({ id: created.id });
       expect(record!.name).toBe('Updated Name');
     });
 
-    it('does not overwrite unmodified fields when updating', async () => {
-      const id = randomUUID();
-      await dbService.setCompany(
-        {
-          id,
-          slug: 'acme',
-          name: 'Original Name',
-          description: 'Original company',
-        },
-        false,
+    it('updates an existing record when identifiers.id is given instead of company.id', async () => {
+      const created = await dbService.setCompany({
+        slug: 'acme',
+        name: 'Original Name',
+        description: 'Company',
+      });
+      const updated = await dbService.setCompany(
+        { name: 'Updated Name' },
+        { id: created.id },
       );
-      await dbService.setCompany({ id, name: 'Updated Name' }, false);
 
-      const record = await companyRepo.findOneBy({ id });
+      expect(await companyRepo.count()).toBe(1);
+      expect(updated.name).toBe('Updated Name');
+      expect(updated.id).toBe(created.id);
+    });
+
+    it('updates an existing record when identifiers.slug is given', async () => {
+      const created = await dbService.setCompany({
+        slug: 'acme',
+        name: 'Original Name',
+        description: 'Company',
+      });
+      const updated = await dbService.setCompany(
+        { name: 'Updated Name' },
+        { slug: 'acme' },
+      );
+
+      expect(await companyRepo.count()).toBe(1);
+      expect(updated.name).toBe('Updated Name');
+      expect(updated.id).toBe(created.id);
+    });
+
+    it('does not overwrite unmodified fields when updating', async () => {
+      const created = await dbService.setCompany({
+        slug: 'acme',
+        name: 'Original Name',
+        description: 'Original company',
+      });
+      await dbService.setCompany({ id: created.id, name: 'Updated Name' });
+
+      const record = await companyRepo.findOneBy({ id: created.id });
       expect(record!.slug).toBe('acme');
     });
 
-    it('destroys the prior record with the same slug when replace=true', async () => {
-      await dbService.setCompany(
-        { slug: 'acme', name: 'First', description: 'Company 1' },
-        true,
-      );
-      await dbService.setCompany(
-        { slug: 'acme', name: 'Second', description: 'Company 2' },
-        true,
-      );
-
-      expect(await companyRepo.count({ where: { slug: 'acme' } })).toBe(1);
-      expect((await companyRepo.findOneBy({ slug: 'acme' }))!.name).toBe(
-        'Second',
-      );
+    it('throws NotFoundException when identifiers.id does not match an existing record', async () => {
+      await expect(
+        dbService.setCompany({ name: 'Updated Name' }, { id: randomUUID() }),
+      ).rejects.toThrow(NotFoundException);
     });
 
-    it('throws on a duplicate slug when replace=false', async () => {
-      await dbService.setCompany(
-        {
-          slug: 'acme',
-          name: 'First',
-          description: 'A company that makes everything',
-        },
-        false,
-      );
+    it('throws NotFoundException when identifiers.slug does not match an existing record', async () => {
       await expect(
         dbService.setCompany(
-          {
-            slug: 'acme',
-            name: 'Second',
-            description: 'A company that makes everything',
-          },
-          false,
+          { name: 'Updated Name' },
+          { slug: 'no-such-slug' },
         ),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('never leaves the company missing between calls (no delete-then-recreate)', async () => {
+      const created = await dbService.setCompany({
+        slug: 'acme',
+        name: 'Original Name',
+        description: 'Company',
+      });
+      // If this were still delete-by-slug-then-insert, a lookup racing between
+      // the two setCompany calls could observe the company as gone. Since
+      // there's no delete step at all, it's always found via getCompany here.
+      await dbService.setCompany({ name: 'Updated Name' }, { slug: 'acme' });
+      expect(await dbService.getCompany(created.id)).not.toBeNull();
+    });
+
+    it('throws on a duplicate slug when creating a new company', async () => {
+      await dbService.setCompany({
+        slug: 'acme',
+        name: 'First',
+        description: 'A company that makes everything',
+      });
+      await expect(
+        dbService.setCompany({
+          slug: 'acme',
+          name: 'Second',
+          description: 'A company that makes everything',
+        }),
       ).rejects.toThrow(QueryFailedError);
     });
 
-    it('allows removing llmDefault even when roles have no llmConfig (env fallback covers)', async () => {
-      const id = randomUUID();
-      await dbService.setCompany(
-        {
-          id,
-          slug: 'llm-co',
-          name: 'LLM Co',
-          description: 'LLM Company',
-          llmDefault: { provider: 'openai', model: 'gpt-4o' },
-        },
-        false,
-      );
+    it('allows removing llmConfig even when roles have no llmConfig (env fallback covers)', async () => {
+      const created = await dbService.setCompany({
+        slug: 'llm-co',
+        name: 'LLM Co',
+        description: 'LLM Company',
+        llmConfig: { provider: 'openai', model: 'gpt-4o' },
+      });
       await roleRepo.save(
         roleRepo.create({
-          companyId: id,
+          companyId: created.id,
+          slug: 'inheritor',
           name: 'inheritor',
           description: 'Uses company default.',
           systemPromptTemplate: 'You are {{name}}.',
         }),
       );
-      // Removing llmDefault must succeed — env fallback covers orphaned roles at runtime
+      // Removing llmConfig must succeed — env fallback covers orphaned roles at runtime
       await expect(
-        dbService.setCompany(
-          {
-            id,
-            slug: 'llm-co',
-            name: 'LLM Co',
-            description: 'LLM Company',
-            llmDefault: null,
-          },
-          false,
-        ),
+        dbService.setCompany({
+          id: created.id,
+          slug: 'llm-co',
+          name: 'LLM Co',
+          description: 'LLM Company',
+          llmConfig: null,
+        }),
       ).resolves.toBeDefined();
     });
 
-    it('deep-merges llmDefault so a partial patch preserves other fields', async () => {
-      const id = randomUUID();
-      await dbService.setCompany(
-        {
-          id,
-          slug: 'merge-co',
-          name: 'Merge Co',
-          description: 'Merge Company',
-          llmDefault: {
-            provider: 'openai',
-            model: 'gpt-4o',
-            apiKey: 'test-api-key',
-          },
+    it('deep-merges llmConfig so a partial patch preserves other fields', async () => {
+      const created = await dbService.setCompany({
+        slug: 'merge-co',
+        name: 'Merge Co',
+        description: 'Merge Company',
+        llmConfig: {
+          provider: 'openai',
+          model: 'gpt-4o',
+          apiKey: 'test-api-key',
         },
-        false,
-      );
+      });
 
-      const updated = await dbService.setCompany(
-        {
-          id,
-          slug: 'merge-co',
-          name: 'Merge Co',
-          description: 'Merge Company',
-          llmDefault: { model: 'gpt-4o-mini' },
-        },
-        false,
-      );
+      const updated = await dbService.setCompany({
+        id: created.id,
+        slug: 'merge-co',
+        name: 'Merge Co',
+        description: 'Merge Company',
+        llmConfig: { model: 'gpt-4o-mini' },
+      });
 
-      expect(updated.llmDefault!.model).toBe('gpt-4o-mini');
-      expect(updated.llmDefault!.provider).toBe('openai');
-      expect(updated.llmDefault!.apiKey).toBe('test-api-key');
+      expect(updated.llmConfig!.model).toBe('gpt-4o-mini');
+      expect(updated.llmConfig!.provider).toBe('openai');
+      expect(updated.llmConfig!.apiKey).toBe('test-api-key');
     });
 
-    it('allows removing llmDefault when all roles have their own llmConfig', async () => {
-      const id = randomUUID();
-      await dbService.setCompany(
-        {
-          id,
-          slug: 'llm-co2',
-          name: 'LLM Co 2',
-          description: 'LLM Company 1',
-          llmDefault: { provider: 'openai', model: 'gpt-4o' },
-        },
-        false,
-      );
+    it('allows removing llmConfig when all roles have their own llmConfig', async () => {
+      const created = await dbService.setCompany({
+        slug: 'llm-co2',
+        name: 'LLM Co 2',
+        description: 'LLM Company 1',
+        llmConfig: { provider: 'openai', model: 'gpt-4o' },
+      });
       // Role has its own llmConfig — not reliant on the company default
       await roleRepo.save(
         roleRepo.create({
-          companyId: id,
+          companyId: created.id,
+          slug: 'self-configured',
           name: 'self-configured',
           description: 'Has own config.',
           llmConfig: { provider: 'lm-studio', model: 'qwen3-5b' },
           systemPromptTemplate: 'You are {{name}}.',
         }),
       );
-      // Removing llmDefault must succeed
+      // Removing llmConfig must succeed
       await expect(
-        dbService.setCompany(
-          {
-            id,
-            slug: 'llm-co2',
-            name: 'LLM Co 2',
-            description: 'LLM company 2',
-          },
-          false,
-        ),
+        dbService.setCompany({
+          id: created.id,
+          slug: 'llm-co2',
+          name: 'LLM Co 2',
+          description: 'LLM company 2',
+        }),
       ).resolves.toBeDefined();
     });
   });
@@ -323,31 +351,23 @@ describe('DbService', () => {
 
   describe('getCompany', () => {
     it('retrieves a company by UUID', async () => {
-      const id = randomUUID();
-      await dbService.setCompany(
-        {
-          id,
-          slug: 'acme',
-          name: 'Acme Corp',
-          description: 'A Company that Makes Everything',
-        },
-        false,
-      );
+      const created = await dbService.setCompany({
+        slug: 'acme',
+        name: 'Acme Corp',
+        description: 'A Company that Makes Everything',
+      });
 
-      const result = await dbService.getCompany(id);
+      const result = await dbService.getCompany(created.id);
       expect(result).not.toBeNull();
-      expect(result!.id).toBe(id);
+      expect(result!.id).toBe(created.id);
     });
 
     it('retrieves a company by slug', async () => {
-      await dbService.setCompany(
-        {
-          slug: 'acme',
-          name: 'Acme Corp',
-          description: 'A Company that Makes Everything',
-        },
-        true,
-      );
+      await dbService.setCompany({
+        slug: 'acme',
+        name: 'Acme Corp',
+        description: 'A Company that Makes Everything',
+      });
 
       const result = await dbService.getCompany('acme');
       expect(result).not.toBeNull();
@@ -363,30 +383,26 @@ describe('DbService', () => {
     });
 
     it('routes UUID-shaped strings to findByPk and plain strings to findOne', async () => {
-      const id = randomUUID();
-      await dbService.setCompany(
-        {
-          id,
-          slug: 'plainslug',
-          name: 'Acme',
-          description: 'A Company that Makes Everything',
-        },
-        false,
-      );
+      const created = await dbService.setCompany({
+        slug: 'plainslug',
+        name: 'Acme',
+        description: 'A Company that Makes Everything',
+      });
 
-      expect(await dbService.getCompany(id)).not.toBeNull();
+      expect(await dbService.getCompany(created.id)).not.toBeNull();
       expect(await dbService.getCompany('plainslug')).not.toBeNull();
       expect(await dbService.getCompany('other-slug')).toBeNull();
     });
   });
 
-  // createRole / getRole / listRoles
+  // setRole (create path) / getRole / listRoles
 
-  describe('createRole', () => {
+  describe('setRole — create', () => {
     it('creates and retrieves a role', async () => {
       const company = await seedCompany();
-      const role = await dbService.createRole({
+      const role = await dbService.setRole({
         companyId: company.id,
+        slug: 'analyst',
         name: 'analyst',
         description: 'Analyses data.',
         llmConfig: { provider: 'lm-studio', model: 'qwen3-5b' },
@@ -407,8 +423,9 @@ describe('DbService', () => {
 
     it('listRoles returns only roles for the given company', async () => {
       const company = await seedCompany();
-      await dbService.createRole({
+      await dbService.setRole({
         companyId: company.id,
+        slug: 'planner',
         name: 'planner',
         description: 'Plans.',
         llmConfig: { provider: 'lm-studio', model: 'qwen3-5b' },
@@ -422,17 +439,18 @@ describe('DbService', () => {
       expect(result[0].name).toBe('planner');
     });
 
-    it('accepts a role with no llmConfig when the company has llmDefault', async () => {
+    it('accepts a role with no llmConfig when the company has llmConfig', async () => {
       const company = await companyRepo.save(
         companyRepo.create({
           slug: 'default-llm',
           name: 'Default LLM Co',
           description: 'A default company',
-          llmDefault: { provider: 'openai', model: 'gpt-4o' },
+          llmConfig: { provider: 'openai', model: 'gpt-4o' },
         }),
       );
-      const role = await dbService.createRole({
+      const role = await dbService.setRole({
         companyId: company.id,
+        slug: 'inheritor',
         name: 'inheritor',
         description: 'Uses company default.',
         systemPromptTemplate: 'You are {{name}}.',
@@ -443,10 +461,11 @@ describe('DbService', () => {
       expect(role.llmConfig).toBeNull();
     });
 
-    it('accepts a role with no llmConfig when the company also has no llmDefault (env fallback covers)', async () => {
+    it('accepts a role with no llmConfig when the company also has no llmConfig (env fallback covers)', async () => {
       const company = await seedCompany();
-      const role = await dbService.createRole({
+      const role = await dbService.setRole({
         companyId: company.id,
+        slug: 'env-reliant',
         name: 'env-reliant',
         description: 'Relies on env fallback.',
         systemPromptTemplate: 'You are {{name}}.',
@@ -459,8 +478,9 @@ describe('DbService', () => {
 
     it('throws NotFoundException when companyId does not exist in the database', async () => {
       await expect(
-        dbService.createRole({
+        dbService.setRole({
           companyId: randomUUID(),
+          slug: 'orphan',
           name: 'orphan',
           description: 'No company.',
           llmConfig: { provider: 'lm-studio', model: 'qwen3-5b' },
@@ -473,8 +493,9 @@ describe('DbService', () => {
 
     it('throws NotFoundException even without llmConfig when companyId does not exist', async () => {
       await expect(
-        dbService.createRole({
+        dbService.setRole({
           companyId: randomUUID(),
+          slug: 'orphan',
           name: 'orphan',
           description: 'No company.',
           systemPromptTemplate: 'You are {{name}}.',
@@ -485,26 +506,62 @@ describe('DbService', () => {
     });
   });
 
-  // updateRole
+  // setRole (update path)
 
-  describe('updateRole', () => {
-    it('returns null for an unknown role id', async () => {
-      expect(
-        await dbService.updateRole(randomUUID(), { name: 'x' }),
-      ).toBeNull();
+  describe('setRole — update', () => {
+    it('throws NotFoundException for an unknown identifiers.id', async () => {
+      await expect(
+        dbService.setRole({ name: 'x' }, { id: randomUUID() }),
+      ).rejects.toThrow(NotFoundException);
     });
 
-    it('updates a top-level field while leaving others unchanged', async () => {
+    it('throws NotFoundException (not a fallback create) for an unknown identifiers.slug', async () => {
+      const company = await seedCompany();
+      await expect(
+        dbService.setRole(
+          { companyId: company.id, name: 'x' },
+          { slug: 'no-such-role' },
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('updates a top-level field while leaving others unchanged, via role.id', async () => {
       const company = await seedCompany();
       const role = await seedRole(company.id);
 
-      const updated = await dbService.updateRole(role.id, {
+      const updated = await dbService.setRole({
+        id: role.id,
         name: 'updated-name',
       });
 
-      expect(updated!.name).toBe('updated-name');
-      expect(updated!.description).toBe(role.description);
-      expect(updated!.llmConfig!.provider).toBe('lm-studio');
+      expect(updated.name).toBe('updated-name');
+      expect(updated.description).toBe(role.description);
+      expect(updated.llmConfig!.provider).toBe('lm-studio');
+    });
+
+    it('updates a role via identifiers.id instead of role.id', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+
+      const updated = await dbService.setRole(
+        { name: 'updated-name' },
+        { id: role.id },
+      );
+
+      expect(updated.name).toBe('updated-name');
+    });
+
+    it('updates a role via identifiers.slug scoped to companyId', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+
+      const updated = await dbService.setRole(
+        { companyId: company.id, name: 'updated-name' },
+        { slug: role.slug },
+      );
+
+      expect(updated.name).toBe('updated-name');
+      expect(updated.id).toBe(role.id);
     });
 
     it('deep-merges llmConfig so a partial patch preserves other fields', async () => {
@@ -512,6 +569,7 @@ describe('DbService', () => {
       const role = await roleRepo.save(
         roleRepo.create({
           companyId: company.id,
+          slug: 'planner',
           name: 'planner',
           description: 'Plans.',
           llmConfig: {
@@ -523,14 +581,85 @@ describe('DbService', () => {
         }),
       );
 
-      const updated = await dbService.updateRole(role.id, {
+      const updated = await dbService.setRole({
+        id: role.id,
         llmConfig: { model: 'gpt-4o-mini' },
       });
 
-      expect(updated!.llmConfig!.model).toBe('gpt-4o-mini');
+      expect(updated.llmConfig!.model).toBe('gpt-4o-mini');
       // Provider and apiKey must survive the partial patch
-      expect(updated!.llmConfig!.provider).toBe('openai');
-      expect(updated!.llmConfig!.apiKey).toBe('test-api-key');
+      expect(updated.llmConfig!.provider).toBe('openai');
+      expect(updated.llmConfig!.apiKey).toBe('test-api-key');
+    });
+  });
+
+  // findRoleByIdOrSlug
+
+  describe('findRoleByIdOrSlug', () => {
+    it('finds a role by UUID within the given company', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+
+      const found = await dbService.findRoleByIdOrSlug(company.id, role.id);
+      expect(found?.id).toBe(role.id);
+    });
+
+    it('finds a role by slug within the given company', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+
+      const found = await dbService.findRoleByIdOrSlug(company.id, role.slug);
+      expect(found?.id).toBe(role.id);
+    });
+
+    it('returns null when the slug exists but for a different company', async () => {
+      const company = await seedCompany();
+      await seedRole(company.id);
+      const otherCompany = await companyRepo.save(
+        companyRepo.create({
+          slug: 'other-co',
+          name: 'Other Co',
+          description: 'A different company',
+        }),
+      );
+
+      expect(
+        await dbService.findRoleByIdOrSlug(otherCompany.id, 'analyst'),
+      ).toBeNull();
+    });
+
+    it('returns null for an unknown slug', async () => {
+      const company = await seedCompany();
+      expect(
+        await dbService.findRoleByIdOrSlug(company.id, 'no-such-role'),
+      ).toBeNull();
+    });
+  });
+
+  // deleteCompany / deleteRole
+
+  describe('deleteCompany', () => {
+    it('deletes an existing company and returns true', async () => {
+      const company = await seedCompany();
+      expect(await dbService.deleteCompany(company.id)).toBe(true);
+      expect(await companyRepo.findOneBy({ id: company.id })).toBeNull();
+    });
+
+    it('returns false for an unknown company id', async () => {
+      expect(await dbService.deleteCompany(randomUUID())).toBe(false);
+    });
+  });
+
+  describe('deleteRole', () => {
+    it('deletes an existing role and returns true', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      expect(await dbService.deleteRole(role.id)).toBe(true);
+      expect(await roleRepo.findOneBy({ id: role.id })).toBeNull();
+    });
+
+    it('returns false for an unknown role id', async () => {
+      expect(await dbService.deleteRole(randomUUID())).toBe(false);
     });
   });
 

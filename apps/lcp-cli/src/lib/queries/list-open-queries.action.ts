@@ -1,5 +1,6 @@
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest } from '../core/api';
+import { resolveCompanyId } from '../core/resolve-identifiers';
 import { runCommand } from '../core/run-command';
 import { resolveToken } from '../auth/token';
 
@@ -55,14 +56,16 @@ function formatCsv(rows: ConversationSummary[]): string {
  */
 export function listOpenQueriesAction(
   opts: GlobalOptions,
-  cmdOpts: { companyId?: string; format: string },
+  cmdOpts: { companyId?: string; companySlug?: string; format: string },
 ): Promise<void> {
   return runCommand(async () => {
     const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
     const api = apiOptions(opts, token);
 
     const qs = new URLSearchParams({ status: 'awaiting_user' });
-    if (cmdOpts.companyId) qs.set('companyId', cmdOpts.companyId);
+    if (cmdOpts.companyId || cmdOpts.companySlug) {
+      qs.set('companyId', await resolveCompanyId(api, cmdOpts));
+    }
 
     const rows = await apiRequest<Conversation[]>(
       api,

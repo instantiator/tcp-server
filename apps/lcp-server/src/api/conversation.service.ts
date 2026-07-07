@@ -3,6 +3,7 @@ import {
   Conversation,
   ConversationMessage,
   ConversationStatus,
+  LcpCompany,
   LcpRole,
 } from '@lcp/shared';
 import {
@@ -33,6 +34,8 @@ export class ConversationService {
     private readonly userRepo: Repository<CompanyUser>,
     @InjectRepository(LcpRole)
     private readonly roleRepo: Repository<LcpRole>,
+    @InjectRepository(LcpCompany)
+    private readonly companyRepo: Repository<LcpCompany>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -46,9 +49,11 @@ export class ConversationService {
   }
 
   /** Returns a conversation together with its messages, or throws 404. */
-  async get(
-    slug: string,
-  ): Promise<{ conversation: Conversation; messages: ConversationMessage[] }> {
+  async get(slug: string): Promise<{
+    conversation: Conversation;
+    messages: ConversationMessage[];
+    companyTimezone: string | null;
+  }> {
     const conversation = await this.convRepo.findOne({ where: { slug } });
     if (!conversation)
       throw new NotFoundException(`Conversation ${slug} not found`);
@@ -56,7 +61,14 @@ export class ConversationService {
       where: { conversationId: conversation.id },
       order: { timestamp: 'ASC' },
     });
-    return { conversation, messages };
+    const company = await this.companyRepo.findOneBy({
+      id: conversation.companyId,
+    });
+    return {
+      conversation,
+      messages,
+      companyTimezone: company?.timezone ?? null,
+    };
   }
 
   /**

@@ -11,3 +11,4 @@ export * from './LcpCompany.model';
 export * from './PendingConsultation.model';
 export * from './LlmConfig.model';
 export * from './LcpRole.model';
+export * from './WithLlmConfig';

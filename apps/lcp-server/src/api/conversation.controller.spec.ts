@@ -50,6 +50,7 @@ describe('ConversationController', () => {
       const expected = {
         conversation: { slug: 'cto-1' } as Conversation,
         messages: [] as ConversationMessage[],
+        companyTimezone: null,
       };
       service.get.mockResolvedValue(expected);
 

@@ -37,6 +37,10 @@ import { AddRunConfig1782247600000 } from './migrations/1782247600000-AddRunConf
 import { AddVersionColumns1782247700000 } from './migrations/1782247700000-AddVersionColumns';
 import { AddAgentPausedAt1782831650682 } from './migrations/1782831650682-AddAgentPausedAt';
 import { AddAgentRequiredToolCalls1783007161076 } from './migrations/1783007161076-AddAgentRequiredToolCalls';
+import { CompanyLlmConfigAndPromptFields1783357408215 } from './migrations/1783357408215-CompanyLlmConfigAndPromptFields';
+import { TimestamptzConsistency1783357408216 } from './migrations/1783357408216-TimestamptzConsistency';
+import { AddRoleSlug1783357408217 } from './migrations/1783357408217-AddRoleSlug';
+import { AddMissingCompanyRoleForeignKeys1783357408218 } from './migrations/1783357408218-AddMissingCompanyRoleForeignKeys';
 import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
 
 /**
@@ -80,6 +84,10 @@ import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
         AddVersionColumns1782247700000,
         AddAgentPausedAt1782831650682,
         AddAgentRequiredToolCalls1783007161076,
+        CompanyLlmConfigAndPromptFields1783357408215,
+        TimestamptzConsistency1783357408216,
+        AddRoleSlug1783357408217,
+        AddMissingCompanyRoleForeignKeys1783357408218,
       ],
     ),
     ApiModule,

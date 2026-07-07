@@ -22,14 +22,20 @@ describe('ApiService', () => {
   });
 
   describe('createCompany', () => {
-    it('calls dbService.createCompany with the template and slug', async () => {
+    it('calls dbService.createCompany with the template, slug, and creator identity', async () => {
       const template: LcpCompanyTemplate = {
         name: 'Acme Corp',
         description: 'A Company That Makes Everything',
+        mcpServerList: [],
       };
       const slug = 'acme';
-      await api.createCompany(template, slug);
-      expect(db.createCompany).toHaveBeenCalledWith(template, slug);
+      await api.createCompany(template, slug, 'alice', 'Alice');
+      expect(db.createCompany).toHaveBeenCalledWith(
+        template,
+        slug,
+        'alice',
+        'Alice',
+      );
     });
 
     it('returns the result from dbService.createCompany', async () => {
@@ -40,33 +46,30 @@ describe('ApiService', () => {
       } as LcpCompany;
       db.createCompany.mockResolvedValue(fakeCompany);
       const result = await api.createCompany(
-        { name: 'Acme Corp', description: 'A Company That Makes Everything' },
+        {
+          name: 'Acme Corp',
+          description: 'A Company That Makes Everything',
+          mcpServerList: [],
+        },
         'acme',
+        'alice',
       );
       expect(result).toBe(fakeCompany);
     });
   });
 
   describe('setCompany', () => {
-    it('calls dbService.setCompany with replace=false', async () => {
+    it('resolves a UUID-shaped path identifier to identifiers.id', async () => {
       const id = randomUUID();
       const company = { slug: 'acme', name: 'Acme' };
       await api.setCompany(id, company);
-      expect(db.setCompany).toHaveBeenCalledWith({ ...company, id }, false);
+      expect(db.setCompany).toHaveBeenCalledWith(company, { id });
     });
 
-    it('merges the id parameter into the company object', async () => {
-      const id = randomUUID();
-      await api.setCompany(id, { slug: 'acme', name: 'Acme' });
-      const [called] = db.setCompany.mock.calls[0];
-      expect(called.id).toBe(id);
-    });
-
-    it('passes the path id to dbService regardless of body content', async () => {
-      const correctId = randomUUID();
-      await api.setCompany(correctId, { slug: 'acme', name: 'Acme' });
-      const [called] = db.setCompany.mock.calls[0];
-      expect(called.id).toBe(correctId);
+    it('resolves a non-UUID path identifier to identifiers.slug', async () => {
+      const company = { name: 'Acme' };
+      await api.setCompany('acme', company);
+      expect(db.setCompany).toHaveBeenCalledWith(company, { slug: 'acme' });
     });
   });
 
@@ -84,6 +87,7 @@ describe('ApiService', () => {
         slug: 'acme',
         name: 'Acme',
         description: 'A Company That Makes Everything',
+        mcpServerList: [],
       };
       db.getCompany.mockResolvedValue(fakeCompany);
 

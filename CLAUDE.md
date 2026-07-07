@@ -1,6 +1,6 @@
-# Little Computer People — LCP Server
+# LCP Server
 
-NestJS monorepo for the LCP mini-office simulation: `lcp-server` (REST API + orchestration), `lcp-agent` (agent loop runner), three MCP servers, and a shared library (`libs/lcp-shared`, imported as `@lcp/shared`).
+NestJS monorepo for the LCP simulation: `lcp-server` (REST API + orchestration), `lcp-agent` (agent loop runner), three MCP servers, and a shared library (`libs/lcp-shared`, imported as `@lcp/shared`).
 
 ## Mandatory instructions
 

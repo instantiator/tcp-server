@@ -40,6 +40,7 @@ describe('AgentController (e2e)', () => {
     companyId = company.id;
     const role = await roleRepo.save(
       roleRepo.create({
+        slug: 'engineer',
         name: 'Engineer',
         description: 'Test role',
         systemPromptTemplate: 'You are a helpful assistant.',

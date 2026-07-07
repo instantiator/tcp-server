@@ -6,6 +6,11 @@
  * whether to crash or continue.
  */
 
+import { printWarning } from './warn';
+
+/** Header the server uses to report soft data-quality warnings (see `validation-warnings.ts` in lcp-server). */
+const WARNINGS_HEADER = 'X-Lcp-Warnings';
+
 export interface ApiOptions {
   /** Base URL of the lcp-server (e.g. `http://localhost:3000`). */
   baseUrl: string;
@@ -51,8 +56,22 @@ export async function apiRequest<T>(
     );
   }
 
+  reportWarnings(res);
+
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
+}
+
+/** Prints any `X-Lcp-Warnings` reported by the server (see {@link WARNINGS_HEADER}). */
+function reportWarnings(res: Response): void {
+  const raw = res.headers?.get(WARNINGS_HEADER);
+  if (!raw) return;
+  try {
+    const warnings = JSON.parse(raw) as string[];
+    warnings.forEach(printWarning);
+  } catch {
+    // ignore malformed header — not worth failing the command over
+  }
 }
 
 /**

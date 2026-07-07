@@ -157,6 +157,7 @@ describeIf('AgentWorkerService (integration)', () => {
     const role = await roleRepo.save(
       roleRepo.create({
         companyId: company.id,
+        slug: 'analyst',
         name: 'Analyst',
         description: 'Analyses things.',
         llmConfig: {
@@ -202,6 +203,7 @@ describeIf('AgentWorkerService (integration)', () => {
     const role = await roleRepo.save(
       roleRepo.create({
         companyId: company.id,
+        slug: 'analyst',
         name: 'Analyst',
         description: 'Analyses things.',
         llmConfig: {

@@ -20,16 +20,25 @@ interface ConversationMessage {
   timestamp: string;
 }
 
+/** Formats a UTC timestamp string for display, localized to `timezone` when set. */
+function formatTimestamp(timestamp: string, timezone: string | null): string {
+  return new Date(timestamp).toLocaleString(
+    'en-US',
+    timezone ? { timeZone: timezone } : undefined,
+  );
+}
+
 /** Builds the formatted text report for a conversation and its messages. */
-function formatConversation(
+export function formatConversation(
   conversation: Conversation,
   messages: ConversationMessage[],
+  companyTimezone: string | null,
 ): string {
   const lines: string[] = [
     `Slug:   ${conversation.slug}`,
     `Role:   ${conversation.roleName}`,
     `Status: ${conversation.status}`,
-    `Date:   ${new Date(conversation.createdAt).toLocaleString()}`,
+    `Date:   ${formatTimestamp(conversation.createdAt, companyTimezone)}`,
     '',
     '--- Question ---',
     conversation.question,
@@ -45,7 +54,7 @@ function formatConversation(
       const who = m.authorIdentifier
         ? `${m.author} (${m.authorIdentifier})`
         : m.author;
-      lines.push(`[${new Date(m.timestamp).toLocaleString()}] ${who}:`);
+      lines.push(`[${formatTimestamp(m.timestamp, companyTimezone)}] ${who}:`);
       lines.push(m.content);
       lines.push('');
     }
@@ -68,11 +77,14 @@ export function readQueryAction(
     const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
     const api = apiOptions(opts, token);
 
-    const { conversation, messages } = await apiRequest<{
+    const { conversation, messages, companyTimezone } = await apiRequest<{
       conversation: Conversation;
       messages: ConversationMessage[];
+      companyTimezone: string | null;
     }>(api, 'GET', `/api/conversation/${slug}`);
 
-    process.stdout.write(formatConversation(conversation, messages));
+    process.stdout.write(
+      formatConversation(conversation, messages, companyTimezone),
+    );
   });
 }

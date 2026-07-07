@@ -78,6 +78,7 @@ The `CompanyMembership` entity described here was simplified. The implemented en
 - `passport-jwt` + `jwks-rsa` + `@nestjs/passport` installed; `JwtStrategy` fetches JWKS on first use (cached)
 - `AuthModule` wired into lcp-server's `AppModule`; `JwtAuthGuard` available for any controller
 - **`CompanyUser` entity** in `libs/lcp-shared/src/models/`: `(id, companyId, identifier, name, memberType, roles[], knowledgeDomains[], createdAt)`. Used for query routing in the conversation flow.
+- Since 009.2: `POST /api/company` auto-creates a `CompanyUser` with `memberType: 'creator'` for the requesting user (from the JWT `sub`/`email` claims), skipped if one already exists for that `(companyId, identifier)` pair.
 - `GET /api/company/:companyId/users`, `POST /api/company/:companyId/users`, `PATCH /api/company/:companyId/users/:userId`, `DELETE /api/company/:companyId/users/:userId` — full CRUD
 - Keycloak setup documented in `docs/keycloak-setup.md`
 - `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` required at startup (validated by ConfigModule)

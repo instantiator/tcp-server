@@ -19,6 +19,11 @@ import { App } from 'supertest/types';
 import { Repository } from 'typeorm';
 import { AppModule } from '../../../apps/lcp-server/src/app.module';
 import { makeTestJwt } from '../helpers/test-jwt';
+import {
+  captureNestLogs,
+  expectLoggedError,
+  LogCapture,
+} from '../helpers/log-capture';
 
 const INTERNAL_KEY = process.env.INTERNAL_API_KEY ?? 'e2e-test-internal-key';
 
@@ -90,6 +95,7 @@ describe('InternalController + ConversationController (e2e)', () => {
       .set('Authorization', `Bearer ${jwt}`)
       .send({
         companyId,
+        slug: 'analyst',
         name: 'analyst',
         description: 'Analyses things.',
         llmConfig: { provider: 'lm-studio', model: 'qwen3-5b' },
@@ -254,6 +260,7 @@ describe('InternalController + ConversationController (e2e)', () => {
         .set('Authorization', `Bearer ${jwt}`)
         .send({
           companyId: company.id,
+          slug: 'analyst-2',
           name: 'analyst',
           description: 'A second, identically-named role.',
           llmConfig: { provider: 'lm-studio', model: 'qwen3-5b' },
@@ -424,6 +431,15 @@ describe('InternalController + ConversationController (e2e)', () => {
   // ---------------------------------------------------------------------------
 
   describe('POST /internal/agent/:agentId/fail', () => {
+    // failAgent() logs a warning for every failure — expected noise for
+    // these intentionally-triggered failure paths, so capture (and silence)
+    // it rather than letting it print during a normal test run.
+    let capture: LogCapture;
+    beforeEach(() => {
+      capture = captureNestLogs();
+    });
+    afterEach(() => capture.restore());
+
     it('marks the agent Failed when no consultation is pending', async () => {
       const company = await createCompany();
       const role = await createRole(company.id);
@@ -437,6 +453,7 @@ describe('InternalController + ConversationController (e2e)', () => {
 
       const fresh = await agentRepo.findOneByOrFail({ id: agent.id });
       expect(fresh.status).toBe(AgentStatus.Failed);
+      expectLoggedError(capture.logs, 'LLM produced no output after retry');
     });
 
     it('resolves the pending consultation as failed with the reason as its result', async () => {
@@ -491,6 +508,7 @@ describe('InternalController + ConversationController (e2e)', () => {
       });
       expect(consult.status).toBe('failed');
       expect(consult.result).toContain('complete_task');
+      expectLoggedError(capture.logs, /complete_task/);
     });
 
     it('does not clobber an already-Completed agent (complete_task won the race)', async () => {

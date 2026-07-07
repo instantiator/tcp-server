@@ -3,6 +3,7 @@ import * as path from 'path';
 import { load } from 'js-yaml';
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiUpload } from '../core/api';
+import { RoleIdentifierOpts, resolveRoleId } from '../core/resolve-identifiers';
 import { runCommand } from '../core/run-command';
 import { resolveToken } from '../auth/token';
 
@@ -86,13 +87,14 @@ function readAndValidateFiles(
  */
 export function storeRoleDocumentsAction(
   opts: GlobalOptions,
-  cmdOpts: { roleId: string; src: string[] },
+  cmdOpts: RoleIdentifierOpts & { src: string[] },
 ): Promise<void> {
   return runCommand(async () => {
     const files = readAndValidateFiles(cmdOpts.src);
 
     const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
     const api = apiOptions(opts, token);
+    const roleId = await resolveRoleId(api, cmdOpts);
     const results: DocumentSummary[] = [];
 
     for (const { filePath, content } of files) {
@@ -100,7 +102,7 @@ export function storeRoleDocumentsAction(
       process.stderr.write(`Uploading ${filename}...\n`);
       const doc = await apiUpload<DocumentSummary>(
         api,
-        `/api/role/${cmdOpts.roleId}/documents`,
+        `/api/role/${roleId}/documents`,
         filename,
         content,
       );

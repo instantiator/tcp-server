@@ -1,4 +1,4 @@
-# Little Computer People (LCP) Server
+# LCP server
 
 LCP manages one or more companies of AI agents that collaborate to complete tasks.
 

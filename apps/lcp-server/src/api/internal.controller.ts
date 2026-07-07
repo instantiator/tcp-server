@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -15,6 +16,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import type { UUID } from 'crypto';
 import { InternalApiKeyGuard } from '../audit/internal-api-key.guard';
+import { DbService } from '../db/db.service';
 import { PauseAndResumeService } from './pause-and-resume.service';
 import {
   CompleteDto,
@@ -37,6 +39,7 @@ import {
 export class InternalController {
   constructor(
     private readonly pauseResume: PauseAndResumeService,
+    private readonly db: DbService,
     @InjectRepository(LcpAgent)
     private readonly agentRepo: Repository<LcpAgent>,
     @InjectRepository(LcpRole)
@@ -79,11 +82,36 @@ export class InternalController {
       return { slug: result.slug };
     }
 
+    // Consulting agents may address the company/role by slug instead of
+    // UUID (see docs/prompts/009.2) — resolve whichever was given.
+    const companyIdentifier = body.companyId ?? body.companySlug;
+    if (!companyIdentifier) {
+      throw new BadRequestException(
+        'agent_consultation requires companyId or companySlug',
+      );
+    }
+    const company = await this.db.getCompany(companyIdentifier);
+    if (!company) {
+      throw new NotFoundException(`Company ${companyIdentifier} not found`);
+    }
+
+    const roleIdentifier = body.roleId ?? body.roleSlug;
+    if (!roleIdentifier) {
+      throw new BadRequestException(
+        'agent_consultation requires roleId or roleSlug',
+      );
+    }
+    const role = await this.db.findRoleByIdOrSlug(company.id, roleIdentifier);
+    if (!role) {
+      throw new NotFoundException(
+        `Role ${roleIdentifier} not found in company ${company.id}`,
+      );
+    }
+
     const result = await this.pauseResume.pauseForConsultation(
       body.agentId,
-      // ValidateIf guarantees these are present when type === 'agent_consultation'
-      body.companyId!,
-      body.roleId!,
+      company.id,
+      role.id,
       body.question,
       body.context,
       body.roleName,

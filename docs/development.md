@@ -4,7 +4,7 @@ The tech stack, source layout, everyday commands, and project conventions. Read 
 
 ## Project overview
 
-NestJS monorepo for the Little Computer People (LCP) mini-office simulation. Two services: `lcp-server` (REST API + orchestration) and `lcp-agent` (agent loop runner). Shared entities live in `libs/lcp-shared`. Data is persisted in PostgreSQL + pgvector in production; better-sqlite3 in-memory for unit tests.
+NestJS monorepo for the (LCP) server. Two services: `lcp-server` (REST API + orchestration) and `lcp-agent` (agent loop runner). Shared entities live in `libs/lcp-shared`. Data is persisted in PostgreSQL + pgvector in production; better-sqlite3 in-memory for unit tests.
 
 ## Tech stack (currently implemented)
 
@@ -152,6 +152,8 @@ npm run migration:revert      # Revert last migration
 - **`schemas/schema.json`** and **`docs/licenses.md`** are generated artefacts — never edit them directly; regenerate via `npm run build`.
 - **Unit tests** (`.spec.ts`) use `better-sqlite3` in-memory; wire TypeORM directly in `Test.createTestingModule`, never through `AppModule`.
 - **E2E tests** use `AppModule` with SQLite fallback (env vars set in `test/e2e-setup.ts`). Pass a real `DATABASE_URL` env var to run against PostgreSQL instead.
+- **Testing intentional error paths**: when a test deliberately triggers a service-level `Logger.warn`/`.error` call (e.g. `POST /internal/agent/:id/fail`), use `captureNestLogs()`/`expectLoggedError()` from `test/e2e/helpers/log-capture.ts` to silence and assert on it, instead of letting it print during a normal test run. HTTP-level errors (404/400/401/409 via `HttpException`) aren't logged by Nest's default filter, so most error-path tests don't need this — it's only for paths that call a `Logger` directly.
 - **Migrations**: use `synchronize: false` in production. Always create a migration when changing entity schema. Never use `synchronize: true` with PostgreSQL.
 - **No secrets in code.** Use environment variables for all credentials. Required vars are validated by Joi on startup — the app will not start if any are missing.
 - **Keycloak** is optional for local dev. Run without it by setting stub OIDC env vars (see `.env.example`). Auth guards are in place but not yet applied to endpoints.
+- **Soft data-quality warnings** (e.g. a role with no `knowledgeDomains`, a blank `companyContext`/`rolePrompt`) never fail the request — they're reported via the `X-Lcp-Warnings` response header (JSON array of strings) on `POST`/`PUT` company and role routes. See `apps/lcp-server/src/api/validation-warnings.ts`; `lcp-cli` prints these to stderr (see `docs/lcp-cli.md`).
