@@ -15,6 +15,10 @@ import type { Request } from 'express';
  * Returns 401 when the header is absent, 403 when the key is present but wrong.
  * This provides lightweight authentication for service-to-service calls within
  * the Docker Compose network. Not a substitute for JWT auth — see ADR-011.
+ *
+ * Shared across apps so every service-to-service endpoint (audit ingestion,
+ * agent lifecycle callbacks, internal storage actions) uses one implementation
+ * rather than a per-app duplicate.
  */
 @Injectable()
 export class InternalApiKeyGuard implements CanActivate {

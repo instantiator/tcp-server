@@ -4,11 +4,11 @@ import { ContextBudgetService } from './context-budget.service';
 import { ContextCompactorService } from './context-compactor.service';
 
 /**
- * Minimal structural dependency on lcp-server's `MinioService` — kept as an
+ * Minimal structural dependency on lcp-server's `StorageService` — kept as an
  * interface (rather than importing the concrete class) so this shared service
  * doesn't depend on an app-specific storage client. Provide via
  * {@link OVERFLOW_STORE} in the host app's module (e.g.
- * `{ provide: OVERFLOW_STORE, useExisting: MinioService }`); omit entirely
+ * `{ provide: OVERFLOW_STORE, useExisting: StorageService }`); omit entirely
  * (e.g. in lcp-agent) to disable overflow storage — the guard falls back to
  * best-effort compaction.
  */

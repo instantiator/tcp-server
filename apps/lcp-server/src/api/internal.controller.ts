@@ -11,11 +11,15 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
-import { CompanyUser, LcpAgent, LcpRole } from '@lcp/shared';
+import {
+  CompanyUser,
+  InternalApiKeyGuard,
+  LcpAgent,
+  LcpRole,
+} from '@lcp/shared';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import type { UUID } from 'crypto';
-import { InternalApiKeyGuard } from '../audit/internal-api-key.guard';
 import { DbService } from '../db/db.service';
 import { PauseAndResumeService } from './pause-and-resume.service';
 import {

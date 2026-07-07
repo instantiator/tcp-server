@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { load } from 'js-yaml';
+import { validateOkf } from '@lcp/shared';
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiUpload } from '../core/api';
 import { RoleIdentifierOpts, resolveRoleId } from '../core/resolve-identifiers';
@@ -17,7 +17,13 @@ interface DocumentSummary {
 /**
  * Validates that a file is an OKF document:
  * - Must have a `.md` extension.
- * - Must have valid YAML front-matter with a non-empty `title` field.
+ * - Must have valid YAML front-matter with a non-empty `title` field
+ *   (delegates to the shared `validateOkf` — see `libs/lcp-shared/src/storage/validation`).
+ *
+ * This is a fast, offline pre-check so obviously-invalid files fail before
+ * any network call; the server enforces the same rule authoritatively on
+ * write (see docs/prompts/009.4), since a user could also write to storage
+ * without going through the CLI.
  *
  * Returns a validation error string, or null when valid.
  */
@@ -28,19 +34,9 @@ export function validateOkfDocument(
   if (path.extname(filePath).toLowerCase() !== '.md') {
     return `${filePath}: must be a Markdown (.md) file`;
   }
-  let data: Record<string, unknown>;
-  try {
-    const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-    data = match ? ((load(match[1]) as Record<string, unknown>) ?? {}) : {};
-  } catch {
-    return `${filePath}: failed to parse YAML front-matter`;
-  }
-  if (
-    !data['title'] ||
-    typeof data['title'] !== 'string' ||
-    !data['title'].trim()
-  ) {
-    return `${filePath}: front-matter must include a non-empty 'title' field`;
+  const result = validateOkf(content);
+  if (!result.valid) {
+    return `${filePath}: ${result.errors[0].llmHint}`;
   }
   return null;
 }

@@ -118,7 +118,8 @@ step "Starting deployment for API + smoke tests"
 DEPLOYMENT_STARTED=true
 "$SCRIPTS/start-deployment.sh" \
   --project "$DEPLOYMENT_PROJECT" \
-  --env-file "$REPO_ROOT/.env.testing"
+  --env-file "$REPO_ROOT/.env.testing" \
+  --rebuild
 echo
 
 step "API tests"

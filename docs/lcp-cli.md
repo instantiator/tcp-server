@@ -86,6 +86,7 @@ See [schema.md](schema.md) for the full field reference, VS Code integration, ex
 | [`download-shared-document`](#download-shared-document) | `download-shared-document --source <path> [--target <path>]`                                 | Download a file from shared company storage                                |
 | [`upload-shared-document`](#upload-shared-document)     | `upload-shared-document --source <path> --target <path>`                                     | Upload a local file to shared company storage                              |
 | [`estimate-context-window`](#estimate-context-window)   | `estimate-context-window [-c <uuid>\|--company-slug <slug>] [-r <uuid>\|--role-slug <slug>]` | Estimate a role's worst-case prompt token footprint                        |
+| [`validate-shared-document`](#validate-shared-document) | `validate-shared-document --path <path\|glob> [--recursive]`                                | Re-validate document(s) already in shared storage                          |
 
 `--role-slug` requires `--company-id`/`--company-slug` alongside it — role slugs are unique only within a company, not globally.
 
@@ -655,6 +656,35 @@ baked-in default system prompt template and the registered MCP services.
 
 # Full breakdown, without hitting a live server
 ./lcp-cli.sh estimate-context-window --from-file ./role-fixture.json --json
+```
+
+### `validate-shared-document`
+
+Re-validates document(s) already in shared storage against the same rules
+enforced when lcp-server writes a document (JSON/YAML/OKF Markdown/plain
+Markdown/XML/CSV — see [shared-storage.md](shared-storage.md#write-validation)).
+Exists because a user could write directly to the backing object store,
+bypassing lcp-server's write-time validation gate entirely — this gives an
+independent way to check what's actually there.
+
+`--path` accepts a specific object key or a glob (`*`, `?`), matched against
+full keys. `--recursive` includes nested entries under a directory/glob
+prefix; by default only immediate children are checked.
+
+- **stdout**: JSON `{ query: { path, recursive }, validations: [{ path, found, size, valid, errors }] }`
+- **Exit codes**: `0` on a completed check (even when some `validations[].valid` are `false` — that's a successful check that found problems, not a failed request), `1` if the server returns a non-2xx response — a 404 when `--path` names a specific file or directory that doesn't exist (a glob matching zero files is still a `0`/success), or a 500 for an unexpected server error.
+
+| Flag              | Description                                                                    |
+| ------------------ | ------------------------------------------------------------------------------ |
+| `--path <path>`    | Object key or glob pattern (`*`, `?`) to validate (required)                    |
+| `--recursive`      | Include nested entries under a directory/glob prefix (default: immediate only) |
+
+```bash
+# Validate a single document
+./lcp-cli.sh validate-shared-document --path acme/knowledge/analyst/report.md
+
+# Validate every document under a role's knowledge base, including subfolders
+./lcp-cli.sh validate-shared-document --path "acme/knowledge/analyst/*" --recursive
 ```
 
 ---

@@ -20,6 +20,7 @@ import { registerSetCompany } from './commands/set-company';
 import { registerSetRole } from './commands/set-role';
 import { registerStoreRoleDocuments } from './commands/store-role-documents';
 import { registerUploadSharedDocument } from './commands/upload-shared-document';
+import { registerValidateSharedDocument } from './commands/validate-shared-document';
 
 // Node.js 18+ built-in fetch uses undici with a 5-minute headersTimeout by
 // default. The chat SSE event stream stays open for the whole turn (which can
@@ -71,5 +72,6 @@ registerRespond(program);
 registerDownloadSharedDocument(program);
 registerUploadSharedDocument(program);
 registerEstimateContextWindow(program);
+registerValidateSharedDocument(program);
 
 program.parse(process.argv);

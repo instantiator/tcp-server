@@ -6,6 +6,7 @@ import {
   ParseFilePipeBuilder,
   Post,
   Query,
+  Req,
   Res,
   UploadedFile,
   UseGuards,
@@ -18,10 +19,11 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import * as path from 'path';
+import { getCurrentUserId } from '../auth/current-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { MinioService } from '../storage/minio.service';
+import { StorageService } from '../storage/storage.service';
 
 /** Maximum upload size accepted by {@link StorageProxyController.upload}. */
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB
@@ -53,7 +55,7 @@ function assertSafePath(p: string): void {
 @UseGuards(JwtAuthGuard)
 @Controller({ path: 'api/storage' })
 export class StorageProxyController {
-  constructor(private readonly minio: MinioService) {}
+  constructor(private readonly storage: StorageService) {}
 
   /**
    * Downloads the object at `path` from shared storage and streams it to the
@@ -66,7 +68,7 @@ export class StorageProxyController {
     @Res() res: Response,
   ): Promise<void> {
     assertSafePath(objectPath);
-    const result = await this.minio.getByKey(objectPath);
+    const result = await this.storage.getByKey(objectPath);
     if (!result) throw new NotFoundException(`Not found: ${objectPath}`);
 
     const filename = path.basename(objectPath);
@@ -91,12 +93,14 @@ export class StorageProxyController {
         .build({ fileIsRequired: true }),
     )
     file: Express.Multer.File,
+    @Req() req: Request,
   ): Promise<{ key: string; size: number }> {
     assertSafePath(objectPath);
-    const size = await this.minio.putByKey(
+    const size = await this.storage.putByKey(
       objectPath,
       file.buffer,
       file.mimetype,
+      { user: getCurrentUserId(req), agent: null, task: null },
     );
     return { key: objectPath, size };
   }

@@ -67,7 +67,7 @@ ponytail: move to `LcpRole.runConfig` JSONB when per-role tuning is needed.
 
 ### Incoming data guard
 
-Before a new message (or RAG/MCP data) is added to the context, `IncomingDataGuardService` checks whether it would push the total over `TRIGGER_PCT`. If so, it compacts the incoming data using `compact_section` before inclusion. If compacted data still doesn't fit and an overflow path and `MinioService` are provided, the original content is written to `{overflowPath}/{timestamp}.txt` and a reference summary is injected instead (implemented as part of ADR-007 integration).
+Before a new message (or RAG/MCP data) is added to the context, `IncomingDataGuardService` checks whether it would push the total over `TRIGGER_PCT`. If so, it compacts the incoming data using `compact_section` before inclusion. If compacted data still doesn't fit and an overflow path and a `StorageService` (see [ADR-007 amendment](ADR-007-shared-company-storage.md#amendments-as-implemented-0094); `MinioService` prior to 009.4) are provided, the original content is written to `{overflowPath}/{timestamp}.txt` and a reference summary is injected instead (implemented as part of ADR-007 integration).
 
 ### Compaction reporting
 

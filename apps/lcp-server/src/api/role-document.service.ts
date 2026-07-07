@@ -4,7 +4,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { RagIndexService } from '../rag/rag-index.service';
-import { MinioService, StorageObject } from '../storage/minio.service';
+import {
+  Originators,
+  StorageObject,
+  StorageService,
+} from '../storage/storage.service';
 
 /** Summary returned by {@link RoleDocumentService.listDocuments}. */
 export interface DocumentSummary {
@@ -27,7 +31,7 @@ export interface DocumentSummary {
 @Injectable()
 export class RoleDocumentService {
   constructor(
-    private readonly minio: MinioService,
+    private readonly storage: StorageService,
     private readonly ragIndex: RagIndexService,
     @InjectRepository(LcpRole)
     private readonly roleRepo: Repository<LcpRole>,
@@ -42,7 +46,7 @@ export class RoleDocumentService {
    */
   async listDocuments(roleId: UUID): Promise<DocumentSummary[]> {
     const { company, role } = await this.resolveRoleAndCompany(roleId);
-    const objects = await this.minio.listKnowledgeFiles(
+    const objects = await this.storage.listKnowledgeFiles(
       company.slug,
       role.name,
     );
@@ -62,13 +66,15 @@ export class RoleDocumentService {
     roleId: UUID,
     filename: string,
     content: Buffer,
+    originators?: Originators,
   ): Promise<DocumentSummary> {
     const { company, role } = await this.resolveRoleAndCompany(roleId);
-    const key = await this.minio.putKnowledgeFile(
+    const key = await this.storage.putKnowledgeFile(
       company.slug,
       role.name,
       filename,
       content,
+      originators,
     );
     await this.ragIndex.ingestDocument(
       company.id,
@@ -97,7 +103,11 @@ export class RoleDocumentService {
     await Promise.all(
       keys.map(async (key) => {
         const filename = key.split('/').at(-1) ?? key;
-        await this.minio.deleteKnowledgeFile(company.slug, role.name, filename);
+        await this.storage.deleteKnowledgeFile(
+          company.slug,
+          role.name,
+          filename,
+        );
         await this.ragIndex.removeDocument(role.id, key);
       }),
     );

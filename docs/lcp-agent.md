@@ -241,3 +241,5 @@ Query: `SELECT * FROM audit_event WHERE agent_id = $1 ORDER BY timestamp`.
 ## Health check
 
 `GET http://localhost:3001/health` — checks PostgreSQL connectivity and Redis connectivity. Returns HTTP 200 when both are up, 503 when either is down.
+
+> **Known gap (non-blocking):** `config/config.schema.ts` still requires `MINIO_ENDPOINT`/`MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` at startup, but lcp-agent never constructs an S3 client anywhere — since `docs/prompts/009.4`, storage access across the whole monorepo goes through `lcp-server`'s `StorageService`/`/internal/storage/*` endpoints. Likely leftover from an earlier design. Not removed in this pass; flagged here as a follow-up cleanup opportunity.

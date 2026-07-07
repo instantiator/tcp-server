@@ -1,8 +1,8 @@
+import { InternalApiKeyGuard } from '@lcp/shared';
 import { Body, Controller, HttpCode, Post, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { AuditService } from './audit.service';
 import { CreateAuditEventDto } from './create-audit-event.dto';
-import { InternalApiKeyGuard } from './internal-api-key.guard';
 
 /**
  * Internal endpoint for writing audit events from other services.
