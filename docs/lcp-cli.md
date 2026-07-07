@@ -66,26 +66,26 @@ See [schema.md](schema.md) for the full field reference, VS Code integration, ex
 
 ## Verbs
 
-| Verb                                                    | Invocation                                                   | Description                                                                |
-| ------------------------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------------------- |
-| [`get-token`](#get-token)                               | `get-token`                                                  | Exchange username + password for an OIDC access token                      |
-| [`list-companies`](#list-companies)                     | `list-companies`                                             | List all companies                                                         |
-| [`list-roles`](#list-roles)                             | `list-roles [-c <uuid>\|--company-slug <slug>]`              | List roles, optionally filtered to one company                             |
-| [`set-company`](#set-company)                           | `set-company [-c <uuid>\|--company-slug <slug>] [-i <json>]` | Create or update a company                                                 |
-| [`set-role`](#set-role)                                 | `set-role [-c <uuid>\|--company-slug <slug>] [-r <uuid>\|--role-slug <slug>] [-i <json>]` | Create or update a role                                    |
-| [`delete-company`](#delete-company)                     | `delete-company (-c <uuid>\|--company-slug <slug>) [-f]`     | Delete a company and everything in it                                     |
-| [`delete-role`](#delete-role)                           | `delete-role (-r <uuid>\|--role-slug <slug>) [-f]`           | Delete a role and everything tied to it                                   |
-| [`chat`](#chat)                                         | `chat (-r <uuid>\|-c <uuid>) [-q <message>]`                 | Interactive or single-query chat with a role, or browse a company's roster |
-| [`store-role-documents`](#store-role-documents)         | `store-role-documents (-r <uuid>\|--role-slug <slug>) -s <paths...>` | Upload OKF Markdown documents to a role's knowledge base           |
-| [`list-role-documents`](#list-role-documents)           | `list-role-documents (-r <uuid>\|--role-slug <slug>)`        | List knowledge-base documents stored for a role                            |
-| [`remove-role-documents`](#remove-role-documents)       | `remove-role-documents (-r <uuid>\|--role-slug <slug>) -p <patterns...>` | Remove knowledge-base documents by filename pattern             |
-| [`open-document-store`](#open-document-store)           | `open-document-store [--no-open]`                            | Print (and open) the MinIO console URL                                     |
-| [`list-open-queries`](#list-open-queries)               | `list-open-queries [-c <uuid>\|--company-slug <slug>] [--format table\|json\|csv]` | List open agent-to-human queries                              |
-| [`read-query`](#read-query)                             | `read-query <slug>`                                          | Read a query's full question and conversation history                      |
-| [`respond`](#respond)                                   | `respond <slug> <message>`                                   | Reply to a query and resume the waiting agent                              |
-| [`download-shared-document`](#download-shared-document) | `download-shared-document --source <path> [--target <path>]` | Download a file from shared company storage                                |
-| [`upload-shared-document`](#upload-shared-document)     | `upload-shared-document --source <path> --target <path>`     | Upload a local file to shared company storage                              |
-| [`estimate-context-window`](#estimate-context-window)   | `estimate-context-window [-c <uuid>\|--company-slug <slug>] [-r <uuid>\|--role-slug <slug>]` | Estimate a role's worst-case prompt token footprint             |
+| Verb                                                    | Invocation                                                                                   | Description                                                                |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| [`get-token`](#get-token)                               | `get-token`                                                                                  | Exchange username + password for an OIDC access token                      |
+| [`list-companies`](#list-companies)                     | `list-companies`                                                                             | List all companies                                                         |
+| [`list-roles`](#list-roles)                             | `list-roles [-c <uuid>\|--company-slug <slug>]`                                              | List roles, optionally filtered to one company                             |
+| [`set-company`](#set-company)                           | `set-company [-c <uuid>\|--company-slug <slug>] [-i <json>]`                                 | Create or update a company                                                 |
+| [`set-role`](#set-role)                                 | `set-role [-c <uuid>\|--company-slug <slug>] [-r <uuid>\|--role-slug <slug>] [-i <json>]`    | Create or update a role                                                    |
+| [`delete-company`](#delete-company)                     | `delete-company (-c <uuid>\|--company-slug <slug>) [-f]`                                     | Delete a company and everything in it                                      |
+| [`delete-role`](#delete-role)                           | `delete-role (-r <uuid>\|--role-slug <slug>) [-f]`                                           | Delete a role and everything tied to it                                    |
+| [`chat`](#chat)                                         | `chat (-r <uuid>\|-c <uuid>) [-q <message>]`                                                 | Interactive or single-query chat with a role, or browse a company's roster |
+| [`store-role-documents`](#store-role-documents)         | `store-role-documents (-r <uuid>\|--role-slug <slug>) -s <paths...>`                         | Upload OKF Markdown documents to a role's knowledge base                   |
+| [`list-role-documents`](#list-role-documents)           | `list-role-documents (-r <uuid>\|--role-slug <slug>)`                                        | List knowledge-base documents stored for a role                            |
+| [`remove-role-documents`](#remove-role-documents)       | `remove-role-documents (-r <uuid>\|--role-slug <slug>) -p <patterns...>`                     | Remove knowledge-base documents by filename pattern                        |
+| [`open-document-store`](#open-document-store)           | `open-document-store [--no-open]`                                                            | Print (and open) the MinIO console URL                                     |
+| [`list-open-queries`](#list-open-queries)               | `list-open-queries [-c <uuid>\|--company-slug <slug>] [--format table\|json\|csv]`           | List open agent-to-human queries                                           |
+| [`read-query`](#read-query)                             | `read-query <slug>`                                                                          | Read a query's full question and conversation history                      |
+| [`respond`](#respond)                                   | `respond <slug> <message>`                                                                   | Reply to a query and resume the waiting agent                              |
+| [`download-shared-document`](#download-shared-document) | `download-shared-document --source <path> [--target <path>]`                                 | Download a file from shared company storage                                |
+| [`upload-shared-document`](#upload-shared-document)     | `upload-shared-document --source <path> --target <path>`                                     | Upload a local file to shared company storage                              |
+| [`estimate-context-window`](#estimate-context-window)   | `estimate-context-window [-c <uuid>\|--company-slug <slug>] [-r <uuid>\|--role-slug <slug>]` | Estimate a role's worst-case prompt token footprint                        |
 
 `--role-slug` requires `--company-id`/`--company-slug` alongside it — role slugs are unique only within a company, not globally.
 
@@ -120,9 +120,9 @@ List roles grouped by company.
 - **stderr**: progress/errors
 
 | Flag                    | Alias | Description                               |
-| ----------------------- | ----- | ------------------------------------------ |
-| `--company-id <uuid>`   | `-c`  | Filter to a single company                 |
-| `--company-slug <slug>` |       | Filter to a single company, instead of ID  |
+| ----------------------- | ----- | ----------------------------------------- |
+| `--company-id <uuid>`   | `-c`  | Filter to a single company                |
+| `--company-slug <slug>` |       | Filter to a single company, instead of ID |
 
 ```bash
 ./lcp-cli.sh -t $TOKEN list-roles
@@ -138,10 +138,10 @@ Create or update a company. Reads JSON from `--input` or stdin.
 - **stderr**: progress/errors, plus any data-quality warnings (see below)
 - Update (`PUT`) when `--company-id`/`--company-slug` is given, or the input JSON contains `id`; otherwise creates (`POST`)
 
-| Flag                    | Alias | Description                                        |
+| Flag                    | Alias | Description                                         |
 | ----------------------- | ----- | --------------------------------------------------- |
 | `--company-id <uuid>`   | `-c`  | Company UUID to update (overrides `id` in the JSON) |
-| `--company-slug <slug>` |       | Company slug to update instead of `--company-id`     |
+| `--company-slug <slug>` |       | Company slug to update instead of `--company-id`    |
 | `--input <json>`        | `-i`  | JSON body (`DeepPartial<LcpCompany>`)               |
 
 ```bash
@@ -164,13 +164,13 @@ Create or update a role. Reads JSON from `--input` or stdin.
 - Update (`PUT`) when `--role-id`/`--role-slug` is given, or the input JSON contains `id`; otherwise creates (`POST`)
 - `--role-slug` requires `--company-id`/`--company-slug` (role slugs are unique only within a company)
 
-| Flag                    | Alias | Description                                                |
-| ----------------------- | ----- | ------------------------------------------------------------ |
+| Flag                    | Alias | Description                                                          |
+| ----------------------- | ----- | -------------------------------------------------------------------- |
 | `--company-id <uuid>`   | `-c`  | Company UUID (required when creating, or updating via `--role-slug`) |
-| `--company-slug <slug>` |       | Company slug, instead of `--company-id`                     |
-| `--role-id <uuid>`      | `-r`  | Role UUID to update (overrides `id` in the JSON)             |
-| `--role-slug <slug>`    |       | Role slug to update instead of `--role-id`                   |
-| `--input <json>`        | `-i`  | JSON body (`DeepPartial<LcpRole>`)                          |
+| `--company-slug <slug>` |       | Company slug, instead of `--company-id`                              |
+| `--role-id <uuid>`      | `-r`  | Role UUID to update (overrides `id` in the JSON)                     |
+| `--role-slug <slug>`    |       | Role slug to update instead of `--role-id`                           |
+| `--input <json>`        | `-i`  | JSON body (`DeepPartial<LcpRole>`)                                   |
 
 ```bash
 # Create
@@ -213,11 +213,11 @@ confirmation before deleting.
 - **stdout**: a one-line confirmation once deleted
 - **stderr**: errors
 
-| Flag                    | Alias | Description                             |
+| Flag                    | Alias | Description                              |
 | ----------------------- | ----- | ---------------------------------------- |
 | `--company-id <uuid>`   | `-c`  | Company UUID to delete                   |
 | `--company-slug <slug>` |       | Company slug to delete instead of the ID |
-| `--force`                | `-f`  | Skip the y/n confirmation prompt         |
+| `--force`               | `-f`  | Skip the y/n confirmation prompt         |
 
 ```bash
 ./lcp-cli.sh -t $TOKEN delete-company --company-slug acme
@@ -236,13 +236,13 @@ confirmation before deleting. `--role-slug` requires `--company-id`/
 - **stdout**: a one-line confirmation once deleted
 - **stderr**: errors
 
-| Flag                    | Alias | Description                                          |
-| ----------------------- | ----- | ------------------------------------------------------ |
-| `--role-id <uuid>`      | `-r`  | Role UUID to delete                                   |
+| Flag                    | Alias | Description                                             |
+| ----------------------- | ----- | ------------------------------------------------------- |
+| `--role-id <uuid>`      | `-r`  | Role UUID to delete                                     |
 | `--role-slug <slug>`    |       | Role slug to delete instead of the ID (needs a company) |
-| `--company-id <uuid>`   | `-c`  | Company UUID (required with `--role-slug`)             |
-| `--company-slug <slug>` |       | Company slug, instead of `--company-id`                |
-| `--force`                | `-f`  | Skip the y/n confirmation prompt                       |
+| `--company-id <uuid>`   | `-c`  | Company UUID (required with `--role-slug`)              |
+| `--company-slug <slug>` |       | Company slug, instead of `--company-id`                 |
+| `--force`               | `-f`  | Skip the y/n confirmation prompt                        |
 
 ```bash
 ./lcp-cli.sh -t $TOKEN delete-role --company-slug acme --role-slug analyst
@@ -438,13 +438,13 @@ Each file must be a `.md` file with valid YAML front-matter containing a non-emp
 - **stdout**: JSON array of `{ key, name, size, lastModified }` for each uploaded document
 - **stderr**: validation errors and per-file progress
 
-| Flag                    | Alias | Description                                                        |
-| ----------------------- | ----- | -------------------------------------------------------------------- |
-| `--role-id <uuid>`      | `-r`  | Role UUID (required unless `--role-slug` is given)                   |
-| `--role-slug <slug>`    |       | Role slug instead of `--role-id` (requires a company identifier)     |
-| `--company-id <uuid>`   | `-c`  | Company UUID (for `--role-slug`)                                     |
-| `--company-slug <slug>` |       | Company slug (for `--role-slug`)                                     |
-| `--src <paths...>`      | `-s`  | **(Required)** One or more file paths to upload                     |
+| Flag                    | Alias | Description                                                      |
+| ----------------------- | ----- | ---------------------------------------------------------------- |
+| `--role-id <uuid>`      | `-r`  | Role UUID (required unless `--role-slug` is given)               |
+| `--role-slug <slug>`    |       | Role slug instead of `--role-id` (requires a company identifier) |
+| `--company-id <uuid>`   | `-c`  | Company UUID (for `--role-slug`)                                 |
+| `--company-slug <slug>` |       | Company slug (for `--role-slug`)                                 |
+| `--src <paths...>`      | `-s`  | **(Required)** One or more file paths to upload                  |
 
 ```bash
 ./lcp-cli.sh -t $TOKEN store-role-documents -r <roleId> -s policy.md handbook.md
@@ -459,12 +459,12 @@ List the knowledge-base documents currently stored for a role.
 
 - **stdout**: JSON array of `{ key, name, size, lastModified }` — empty array if none stored
 
-| Flag                    | Alias | Description                                                    |
-| ----------------------- | ----- | ------------------------------------------------------------------ |
-| `--role-id <uuid>`      | `-r`  | Role UUID (required unless `--role-slug` is given)                |
-| `--role-slug <slug>`    |       | Role slug instead of `--role-id` (requires a company identifier)  |
-| `--company-id <uuid>`   | `-c`  | Company UUID (for `--role-slug`)                                   |
-| `--company-slug <slug>` |       | Company slug (for `--role-slug`)                                   |
+| Flag                    | Alias | Description                                                      |
+| ----------------------- | ----- | ---------------------------------------------------------------- |
+| `--role-id <uuid>`      | `-r`  | Role UUID (required unless `--role-slug` is given)               |
+| `--role-slug <slug>`    |       | Role slug instead of `--role-id` (requires a company identifier) |
+| `--company-id <uuid>`   | `-c`  | Company UUID (for `--role-slug`)                                 |
+| `--company-slug <slug>` |       | Company slug (for `--role-slug`)                                 |
 
 ```bash
 ./lcp-cli.sh -t $TOKEN list-role-documents -r <roleId>
@@ -478,13 +478,13 @@ Remove knowledge-base documents from a role by filename pattern. Supports `*` (a
 - **stdout**: JSON array of deleted document keys
 - **stderr**: list of matched filenames before deletion, or a message if nothing matched
 
-| Flag                      | Alias | Description                                                       |
-| ------------------------- | ----- | -------------------------------------------------------------------- |
-| `--role-id <uuid>`        | `-r`  | Role UUID (required unless `--role-slug` is given)                  |
-| `--role-slug <slug>`      |       | Role slug instead of `--role-id` (requires a company identifier)    |
-| `--company-id <uuid>`     | `-c`  | Company UUID (for `--role-slug`)                                     |
-| `--company-slug <slug>`   |       | Company slug (for `--role-slug`)                                     |
-| `--pattern <patterns...>` | `-p`  | **(Required)** One or more filename patterns (e.g. `"*.md"`)        |
+| Flag                      | Alias | Description                                                      |
+| ------------------------- | ----- | ---------------------------------------------------------------- |
+| `--role-id <uuid>`        | `-r`  | Role UUID (required unless `--role-slug` is given)               |
+| `--role-slug <slug>`      |       | Role slug instead of `--role-id` (requires a company identifier) |
+| `--company-id <uuid>`     | `-c`  | Company UUID (for `--role-slug`)                                 |
+| `--company-slug <slug>`   |       | Company slug (for `--role-slug`)                                 |
+| `--pattern <patterns...>` | `-p`  | **(Required)** One or more filename patterns (e.g. `"*.md"`)     |
 
 ```bash
 # Remove a specific file
@@ -635,19 +635,19 @@ baked-in default system prompt template and the registered MCP services.
 - **stdout**: the total token count (default), or the full breakdown as JSON (`--json`)
 - **stderr**: the window size, turn count, and RAG estimate actually used
 
-| Flag                    | Alias | Description                                                                |
-| ----------------------- | ----- | --------------------------------------------------------------------------- |
-| `--company-id <uuid>`   | `-c`  | Company to estimate for                                                     |
-| `--company-slug <slug>` |       | Company slug, instead of `--company-id`                                     |
-| `--role-id <uuid>`      | `-r`  | Role to estimate for                                                        |
-| `--role-slug <slug>`    |       | Role slug, instead of `--role-id` (requires a company identifier)           |
-| `--from-file <path>`    |       | Read `{"company":...,"role":...}` from a JSON file instead of a live server |
-| `--query <text>`        |       | Actual task query text to size (counted exactly)                            |
-| `--query-tokens <n>`    |       | Estimated query size in tokens, when `--query` isn't given (default: 200)   |
+| Flag                    | Alias | Description                                                                                       |
+| ----------------------- | ----- | ------------------------------------------------------------------------------------------------- |
+| `--company-id <uuid>`   | `-c`  | Company to estimate for                                                                           |
+| `--company-slug <slug>` |       | Company slug, instead of `--company-id`                                                           |
+| `--role-id <uuid>`      | `-r`  | Role to estimate for                                                                              |
+| `--role-slug <slug>`    |       | Role slug, instead of `--role-id` (requires a company identifier)                                 |
+| `--from-file <path>`    |       | Read `{"company":...,"role":...}` from a JSON file instead of a live server                       |
+| `--query <text>`        |       | Actual task query text to size (counted exactly)                                                  |
+| `--query-tokens <n>`    |       | Estimated query size in tokens, when `--query` isn't given (default: 200)                         |
 | `--rag-tokens <n>`      |       | Estimated RAG retrieval size in tokens (default: worst case, 5 chunks × 2000 chars ≈ 2500 tokens) |
-| `--turn-tokens <n>`     |       | Estimated tokens per further conversation turn (default: 300)               |
-| `--turns <n>`           | `-n`  | Number of further turns to project (default: 20)                            |
-| `--json`                |       | Print the full breakdown instead of just the total                          |
+| `--turn-tokens <n>`     |       | Estimated tokens per further conversation turn (default: 300)                                     |
+| `--turns <n>`           | `-n`  | Number of further turns to project (default: 20)                                                  |
+| `--json`                |       | Print the full breakdown instead of just the total                                                |
 
 ```bash
 # Quick total for a specific role

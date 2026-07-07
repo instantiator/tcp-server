@@ -79,14 +79,14 @@ cat scripts/test-data/simple-role.json
 
 Key fields:
 
-| Field                  | Purpose                                                                           |
-| ---------------------- | --------------------------------------------------------------------------------- |
-| `name`                 | Role name used in MinIO paths and audit logs                                      |
-| `description`          | Short description embedded in the system prompt                                   |
-| `rolePrompt`           | Persona, domain knowledge, and behavioural guidelines for this role               |
+| Field                  | Purpose                                                                                                                                                                                                     |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`                 | Role name used in MinIO paths and audit logs                                                                                                                                                                |
+| `description`          | Short description embedded in the system prompt                                                                                                                                                             |
+| `rolePrompt`           | Persona, domain knowledge, and behavioural guidelines for this role                                                                                                                                         |
 | `systemPromptTemplate` | Optional handlebars-style template; `{{name}}`, `{{description}}`, `{{date}}`, `{{datetime}}`, `{{timezone}}`, `{{localDatetime}}` are replaced. Blank falls back to the company's, then a baked-in default |
-| `llmConfig`            | Optional role-specific LLM config; falls back to company `llmConfig`, then environment |
-| `mcpServerList`        | List of MCP server names available to this role (e.g. `["storage", "memory"]`)    |
+| `llmConfig`            | Optional role-specific LLM config; falls back to company `llmConfig`, then environment                                                                                                                      |
+| `mcpServerList`        | List of MCP server names available to this role (e.g. `["storage", "memory"]`)                                                                                                                              |
 
 Create the role, setting the `companyId` to the value from 2.1:
 

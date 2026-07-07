@@ -91,16 +91,16 @@ curl -X POST http://localhost:3000/api/role \
 
 ### Template placeholders
 
-| Placeholder         | Value                                                          |
-| ------------------- | --------------------------------------------------------------- |
-| `{{name}}`          | `LcpRole.name`                                                 |
-| `{{description}}`   | `LcpRole.description`                                          |
-| `{{date}}`          | Current UTC date, `YYYY-MM-DD` (kept for older templates)      |
+| Placeholder         | Value                                                                         |
+| ------------------- | ----------------------------------------------------------------------------- |
+| `{{name}}`          | `LcpRole.name`                                                                |
+| `{{description}}`   | `LcpRole.description`                                                         |
+| `{{date}}`          | Current UTC date, `YYYY-MM-DD` (kept for older templates)                     |
 | `{{datetime}}`      | Current UTC date and time, explicitly labeled — the LLM's authoritative "now" |
-| `{{timezone}}`      | The company's IANA timezone name, or `UTC` when unset          |
-| `{{localDatetime}}` | `{{datetime}}` localized to `{{timezone}}`; equals `{{datetime}}` when unset |
-| `{{companyId}}`     | `LcpAgent.companyId` — for tool calls that require it           |
-| `{{roleId}}`        | `LcpRole.id` — for tool calls that require it                   |
+| `{{timezone}}`      | The company's IANA timezone name, or `UTC` when unset                         |
+| `{{localDatetime}}` | `{{datetime}}` localized to `{{timezone}}`; equals `{{datetime}}` when unset  |
+| `{{companyId}}`     | `LcpAgent.companyId` — for tool calls that require it                         |
+| `{{roleId}}`        | `LcpRole.id` — for tool calls that require it                                 |
 
 ---
 
