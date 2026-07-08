@@ -21,26 +21,72 @@ Tasks are given to the company, who then work collaboratively to resolve them. A
 
 ## System architecture
 
-The main service topology — solid borders are implemented, dashed borders are planned but not yet built.
+The main service topology.
 
 ```mermaid
 graph TD
-  User["User / Browser"] -->|REST API :3000| LcpServer["lcp-server\n(NestJS)"]
-  LcpServer -->|OIDC token\nvalidation| Keycloak["Keycloak :8080\n(optional --profile auth)"]
-  LcpServer -->|TypeORM| Postgres[(PostgreSQL\n+ pgvector :5432)]
-  LcpServer -->|BullMQ jobs| Redis[(Redis :6379)]
-  LcpServer -->|S3 API| MinIO[(MinIO :9000\nconsole :9001)]
-  LcpAgent["lcp-agent\n(NestJS) :3001"] -->|BullMQ results| Redis
+  User["User / Browser"]
+  LcpServer["lcp-server\n(NestJS)"]
+  LcpAgent["lcp-agent\n(NestJS) :3001"]
+  Redis[(Redis :6379)]
+  Keycloak["Keycloak :8080\n(optional --profile auth)"]
+  Postgres[(PostgreSQL\n+ pgvector :5432)]
+  MinIO[(MinIO :9000\nconsole :9001)]
+  McpStorage["lcp-mcp-storage\n:3010"]
+  McpMemory["lcp-mcp-memory\n:3011\n(stub)"]
+  McpInteract["lcp-mcp-interactions\n:3012\n(stub)"]
+
+  subgraph LCP["LCP (containers)"]
+      direction LR
+      Server ~~~ Dbs ~~~ Agent ~~~ ThirdParty
+  end
+
+  subgraph Server["Server"]
+      LcpServer
+  end
+
+  subgraph Dbs["Persistence"]
+      Postgres ~~~ Redis
+  end
+
+
+  subgraph Agent["Agent"]
+      LcpAgent
+      subgraph MCP
+        McpStorage ~~~ McpMemory ~~~ McpInteract
+      end
+  end
+
+  subgraph ThirdParty["3rd-party services"]
+      MinIO ~~~ Keycloak
+  end
+
+  User -->|REST API :3000| LcpServer
+  LcpServer -->|OIDC token\nvalidation| Keycloak
+  LcpServer -->|S3 API| MinIO
+  LcpServer -->|BullMQ jobs| Redis
+  LcpAgent -->|BullMQ results| Redis
+  LcpServer -->|TypeORM| Postgres
   LcpAgent -->|TypeORM| Postgres
-  LcpAgent -->|HTTP /mcp| McpStorage["lcp-mcp-storage\n:3010"]
-  LcpAgent -->|HTTP /mcp| McpMemory["lcp-mcp-memory\n:3011\n(stub)"]
-  LcpAgent -->|HTTP /mcp| McpInteract["lcp-mcp-interactions\n:3012\n(stub)"]
+  LcpAgent -->|HTTP /mcp| McpStorage
+  LcpAgent -->|HTTP /mcp| McpMemory
+  LcpAgent -->|HTTP /mcp| McpInteract
   McpStorage -->|HTTP /internal/storage/*\nX-Internal-Api-Key| LcpServer
-  style McpMemory stroke-dasharray: 5 5
-  style McpInteract stroke-dasharray: 5 5
 ```
 
-> Service overview: lcp-server is the REST API and orchestration layer, and owns the only direct S3 client to MinIO. lcp-agent consumes BullMQ jobs and runs the LangGraph agent loop. Three MCP servers provide tool access to agents: lcp-mcp-storage proxies file operations over HTTP to lcp-server's internal storage endpoints rather than talking to MinIO itself; lcp-mcp-memory and lcp-mcp-interactions are currently stubs. PostgreSQL (with pgvector) stores entities, agent checkpoints, and knowledge embeddings. MinIO stores knowledge documents, task files, and context-overflow data. Keycloak is optional and only starts under the `--profile auth` flag.
+> ### Service overview
+>
+> - **lcp-server** is the REST API and orchestration layer
+> - **lcp-server** communicates directly with the authorisation service, and storage service
+> - **lcp-server** and **lcp-agent** use Postgres to store and manage state, and Redis with BullMQ queues to communicate
+> - **lcp-agent** consumes BullMQ jobs and runs the LangGraph agent loop.
+> - Three MCP servers provide tool access to agents:
+>   - **lcp-mcp-storage** proxies file operations to lcp-server's internal storage endpoints
+>   - **lcp-mcp-memory** manages RAG access to embeddings from role-knowledge and company-knowledge, and memories
+>   - **lcp-mcp-interactions** manages interactions between
+> - **PostgreSQL** (with pgvector) stores entities, agent checkpoints, and knowledge embeddings
+> - **MinIO** stores knowledge documents, task files, and context-overflow data
+> - **Keycloak** is an optional auth service, which starts if the `auth` profile is specified (ie. with `--profile auth`)
 
 ---
 
@@ -75,9 +121,9 @@ sequenceDiagram
   S-->>U: response text
 ```
 
-> Agent turn flow: the agent receives a message or is dispatched as a background job. The system loads the LangGraph checkpoint (conversation history) from PostgreSQL, retrieves relevant RAG chunks via pgvector, and loads MCP tools for the role. The LLM is invoked with the assembled prompt. If the model requests a tool call, the tool is executed via the appropriate MCP server and the result is fed back. The final response and checkpoint are persisted.
-
----
+> #### Agent turn flow
+>
+> The agent receives a message or is dispatched as a background job. The system loads the LangGraph checkpoint (conversation history) from PostgreSQL, retrieves relevant RAG chunks via pgvector, and loads MCP tools for the role. The LLM is invoked with the assembled prompt. If the model requests a tool call, the tool is executed via the appropriate MCP server and the result is fed back. The final response and checkpoint are persisted.
 
 ### RAG subsystem
 
