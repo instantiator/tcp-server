@@ -97,6 +97,7 @@ function makeRole(overrides: Partial<LcpRole> = {}): LcpRole {
   return {
     id: randomUUID(),
     companyId: randomUUID(),
+    slug: 'analyst',
     name: 'analyst',
     description: 'Analyses things.',
     llmConfig: { provider: 'lm-studio', model: 'qwen3-5b' },
@@ -287,7 +288,7 @@ describe('ChatService', () => {
     const role = makeRole({ llmConfig: null });
     agentRepo.findOneBy.mockResolvedValue(agent);
     roleRepo.findOneBy.mockResolvedValue(role);
-    companyRepo.findOneBy.mockResolvedValue({ llmDefault: null });
+    companyRepo.findOneBy.mockResolvedValue({ llmConfig: null });
     // config.get already returns undefined for all LLM vars (set in beforeEach)
     await expect(service.sendMessage(agent.id, 'Hello')).rejects.toThrow(
       NotFoundException,
@@ -299,7 +300,7 @@ describe('ChatService', () => {
     const role = makeRole({ llmConfig: null });
     agentRepo.findOneBy.mockResolvedValue(agent);
     roleRepo.findOneBy.mockResolvedValue(role);
-    companyRepo.findOneBy.mockResolvedValue({ llmDefault: null });
+    companyRepo.findOneBy.mockResolvedValue({ llmConfig: null });
     (config.get as jest.Mock).mockImplementation((key: string) => {
       if (key === 'LLM_PROVIDER') return 'lm-studio';
       if (key === 'LLM_MODEL') return 'qwen3-5b';

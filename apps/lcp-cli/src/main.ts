@@ -1,6 +1,26 @@
 #!/usr/bin/env node
-import { Agent, setGlobalDispatcher } from 'undici';
 import { Command } from 'commander';
+import { Agent, setGlobalDispatcher } from 'undici';
+import { registerChat } from './commands/chat';
+import { registerDeleteCompany } from './commands/delete-company';
+import { registerDeleteRole } from './commands/delete-role';
+import { registerDownloadSharedDocument } from './commands/download-shared-document';
+import { registerEstimateContextWindow } from './commands/estimate-context-window';
+import { registerGetToken } from './commands/get-token';
+import { registerListCompanies } from './commands/list-companies';
+import { registerListOpenQueries } from './commands/list-open-queries';
+import { registerListRoleDocuments } from './commands/list-role-documents';
+import { registerListRoles } from './commands/list-roles';
+import { registerOpenDocumentStore } from './commands/open-document-store';
+import { registerOpenSwagger } from './commands/open-swagger';
+import { registerReadQuery } from './commands/read-query';
+import { registerRemoveRoleDocuments } from './commands/remove-role-documents';
+import { registerRespond } from './commands/respond';
+import { registerSetCompany } from './commands/set-company';
+import { registerSetRole } from './commands/set-role';
+import { registerStoreRoleDocuments } from './commands/store-role-documents';
+import { registerUploadSharedDocument } from './commands/upload-shared-document';
+import { registerValidateSharedDocument } from './commands/validate-shared-document';
 
 // Node.js 18+ built-in fetch uses undici with a 5-minute headersTimeout by
 // default. The chat SSE event stream stays open for the whole turn (which can
@@ -9,28 +29,12 @@ import { Command } from 'commander';
 setGlobalDispatcher(
   new Agent({ headersTimeout: 35 * 60 * 1000, bodyTimeout: 35 * 60 * 1000 }),
 );
-import { registerGetToken } from './commands/get-token';
-import { registerListCompanies } from './commands/list-companies';
-import { registerListRoles } from './commands/list-roles';
-import { registerListRoleDocuments } from './commands/list-role-documents';
-import { registerStoreRoleDocuments } from './commands/store-role-documents';
-import { registerRemoveRoleDocuments } from './commands/remove-role-documents';
-import { registerOpenDocumentStore } from './commands/open-document-store';
-import { registerOpenSwagger } from './commands/open-swagger';
-import { registerSetCompany } from './commands/set-company';
-import { registerSetRole } from './commands/set-role';
-import { registerChat } from './commands/chat';
-import { registerListOpenQueries } from './commands/list-open-queries';
-import { registerReadQuery } from './commands/read-query';
-import { registerRespond } from './commands/respond';
-import { registerDownloadSharedDocument } from './commands/download-shared-document';
-import { registerUploadSharedDocument } from './commands/upload-shared-document';
 
 const program = new Command();
 
 program
   .name('lcp-cli')
-  .description('Developer CLI for the Little Computer People LCP server')
+  .description('Developer CLI for the LCP server')
   .version('0.0.1')
   .option(
     '-s, --lcp-server <url>',
@@ -59,11 +63,15 @@ registerOpenDocumentStore(program);
 registerOpenSwagger(program);
 registerSetCompany(program);
 registerSetRole(program);
+registerDeleteCompany(program);
+registerDeleteRole(program);
 registerChat(program);
 registerListOpenQueries(program);
 registerReadQuery(program);
 registerRespond(program);
 registerDownloadSharedDocument(program);
 registerUploadSharedDocument(program);
+registerEstimateContextWindow(program);
+registerValidateSharedDocument(program);
 
 program.parse(process.argv);

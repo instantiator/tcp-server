@@ -4,11 +4,11 @@
 **Port:** 3010
 **Transport:** MCP Streamable HTTP — stateless, one session per request
 
-`lcp-mcp-storage` is a NestJS MCP server that gives agents read/write access to the shared MinIO object store. It lives in `apps/lcp-mcp-storage/` and runs as a Docker Compose service alongside lcp-agent.
+`lcp-mcp-storage` is a NestJS MCP server that gives agents read/write access to the shared document store. It lives in `apps/lcp-mcp-storage/` and runs as a Docker Compose service alongside lcp-agent.
 
 Each tool call creates a fresh MCP session (`McpServer` + `StreamableHTTPServerTransport`) so no state is shared across requests. The server exposes `GET /health` and `POST /mcp`.
 
-Every tool call writes `tool_call` and `tool_result` audit events to lcp-server via the internal audit endpoint.
+Since `docs/prompts/009.4 - doc type validations.md`, this service no longer talks to MinIO directly — it's a thin HTTP proxy to `lcp-server`'s `POST /internal/storage/*` endpoints (guarded by `X-Internal-Api-Key`), which own the actual S3 client, path validation, soft-delete mechanics, content analysis, document validation, and audit recording. This service's job is purely the MCP `ToolResult` presentation layer: forwarding tool calls as HTTP requests and translating lcp-server's response (or error) into the text the LLM sees. Every write/delete/restore/copy/move tool call is recorded as a properly-attributed audit event by lcp-server itself (carrying `originators.agent`, resolved via the `agentId` field each of those tools declares in its schema — hidden from the LLM and injected by `McpClientService`'s `fixedArgs` mechanism, the same pattern used by `lcp-mcp-interactions`).
 
 See [shared-storage.md](shared-storage.md) for the full folder structure and authentication details. See [agent-services.md → MCP Servers](agent-services.md#mcp-servers) for how agents connect.
 

@@ -15,7 +15,11 @@ export function registerListRoles(program: Command): void {
     .command('list-roles')
     .description('List roles grouped by company')
     .option('-c, --company-id <uuid>', 'Filter to a single company')
-    .action((cmdOpts: { companyId?: string }) =>
+    .option(
+      '--company-slug <slug>',
+      'Filter to a single company, by slug instead of ID',
+    )
+    .action((cmdOpts: { companyId?: string; companySlug?: string }) =>
       listRolesAction(getGlobalOptions(program), cmdOpts),
     );
 }

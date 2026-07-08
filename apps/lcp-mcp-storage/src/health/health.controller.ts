@@ -1,32 +1,23 @@
 import { Controller, Get } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import {
-  HealthCheck,
-  HealthCheckResult,
-  HealthCheckService,
-  HttpHealthIndicator,
-} from '@nestjs/terminus';
 
 /**
- * Exposes `GET /health` to report liveness of lcp-mcp-storage's dependencies.
- * Returns HTTP 200 when all pass, 503 when any fail.
+ * Exposes `GET /health` for liveness checks.
+ *
+ * Since docs/prompts/009.4, this service no longer talks to MinIO directly —
+ * it proxies all storage actions to lcp-server's `/internal/storage/*`
+ * endpoints, so it has no direct infrastructure dependency left to check.
+ * Its runtime dependency (lcp-server) is guaranteed healthy before this
+ * service starts by Docker Compose `depends_on: condition: service_healthy`.
+ * Probing lcp-server here would add no information and would create a
+ * circular health dependency chain (lcp-server doesn't probe downstream
+ * services either — see docs/database.md's cross-service-communication
+ * section). Cross-service communication health is validated by the smoke
+ * test suite instead.
  */
 @Controller('health')
 export class HealthController {
-  constructor(
-    private readonly health: HealthCheckService,
-    private readonly http: HttpHealthIndicator,
-    private readonly config: ConfigService,
-  ) {}
-
-  /** Checks that the MinIO object store is reachable. */
   @Get()
-  @HealthCheck()
-  check(): Promise<HealthCheckResult> {
-    const endpoint =
-      this.config.get<string>('MINIO_ENDPOINT') ?? 'http://localhost:9000';
-    return this.health.check([
-      () => this.http.pingCheck('minio', `${endpoint}/minio/health/live`),
-    ]);
+  check(): { status: string } {
+    return { status: 'ok' };
   }
 }

@@ -23,6 +23,13 @@ jest.mock('bullmq', () => ({
   })),
 }));
 
+// The startup Redis reachability probe would otherwise open a real connection;
+// unit tests have no Redis, so stub it to resolve.
+jest.mock('@lcp/shared', () => ({
+  ...jest.requireActual<typeof import('@lcp/shared')>('@lcp/shared'),
+  assertRedisReachable: jest.fn().mockResolvedValue(undefined),
+}));
+
 const MockQueue = Queue as jest.MockedClass<typeof Queue>;
 
 function makeAgent(overrides: Partial<LcpAgent> = {}): LcpAgent {
@@ -118,7 +125,7 @@ describe('AgentOrchestrationService', () => {
     }).compile();
 
     service = testingModule.get(AgentOrchestrationService);
-    service.onModuleInit();
+    await service.onModuleInit();
     // mock.results[0].value is the object returned by `new Queue(...)`, which
     // has our jest.fn() add/close methods
     mockQueueInstance = MockQueue.mock.results[0].value as {

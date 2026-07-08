@@ -1,4 +1,5 @@
 {
+  "slug": "cat-assistant",
   "name": "Cat assistant",
   "description": "a feline friend",
   "systemPromptTemplate": "You are {{name}} ({{description}}). Today's date is {{date}}. Your company ID is {{companyId}} and your role ID is {{roleId}} — use these when calling MCP services that require them.",

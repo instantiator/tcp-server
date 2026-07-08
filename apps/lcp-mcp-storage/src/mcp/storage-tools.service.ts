@@ -1,16 +1,7 @@
-import { AuditEventType, AuditClientService } from '@lcp/shared';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  CopyObjectCommand,
-  DeleteObjectCommand,
-  GetObjectCommand,
-  HeadObjectCommand,
-  ListObjectsV2Command,
-  PutObjectCommand,
-  S3Client,
-} from '@aws-sdk/client-s3';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import axios from 'axios';
 import { z } from 'zod';
 import { storagePrompts } from '../storage-prompts';
 import { storageToolDescriptions } from '../storage-tool-descriptions';
@@ -18,6 +9,7 @@ import { storageToolDescriptions } from '../storage-tool-descriptions';
 /** Shape of a single entry returned by list/search tools. */
 interface FileEntry {
   key: string;
+  name: string;
   size: number;
   lastModified: string;
 }
@@ -37,56 +29,25 @@ interface ToolResult {
   content: Array<{ type: 'text'; text: string }>;
 }
 
-/** Nil UUID used as companyId placeholder when company context is unavailable. */
-const NIL_UUID = '00000000-0000-0000-0000-000000000000';
-
-/** Prefix under which soft-deleted files are stored. */
-const DELETED_PREFIX = '_deleted/';
-
-const MIME_MAP: Record<string, string> = {
-  '.json': 'application/json',
-  '.jsonc': 'application/json',
-  '.md': 'text/markdown',
-  '.mdx': 'text/markdown',
-  '.ts': 'application/typescript',
-  '.js': 'application/javascript',
-  '.mjs': 'application/javascript',
-  '.yaml': 'application/x-yaml',
-  '.yml': 'application/x-yaml',
-  '.txt': 'text/plain',
-  '.csv': 'text/csv',
-  '.html': 'text/html',
-  '.xml': 'application/xml',
-};
-
 /**
  * Builds fresh {@link McpServer} instances pre-loaded with all storage tools.
  * A new server is created per request so state is never shared across sessions.
  * Tool handlers are public methods so integration tests can call them directly.
+ *
+ * All file-action logic (validation, soft-delete, content analysis, audit)
+ * lives on `lcp-server` behind `/internal/storage/*` (see
+ * docs/prompts/009.4 - doc type validations.md) — this service is a thin
+ * HTTP proxy plus the MCP `ToolResult` presentation layer.
  */
 @Injectable()
 export class StorageToolsService {
-  private readonly s3: S3Client;
-  private readonly bucket: string;
+  private readonly logger = new Logger(StorageToolsService.name);
+  private readonly serverUrl: string;
+  private readonly apiKey: string;
 
-  constructor(
-    private readonly config: ConfigService,
-    private readonly audit: AuditClientService,
-  ) {
-    const endpoint =
-      this.config.get<string>('MINIO_ENDPOINT') ?? 'http://localhost:9000';
-    const accessKeyId =
-      this.config.get<string>('MINIO_ACCESS_KEY') ?? 'minioadmin';
-    const secretAccessKey =
-      this.config.get<string>('MINIO_SECRET_KEY') ?? 'minioadmin';
-    this.bucket = this.config.get<string>('MINIO_BUCKET') ?? 'lcp';
-
-    this.s3 = new S3Client({
-      endpoint,
-      region: 'us-east-1',
-      credentials: { accessKeyId, secretAccessKey },
-      forcePathStyle: true,
-    });
+  constructor(private readonly config: ConfigService) {
+    this.serverUrl = this.config.getOrThrow<string>('LCP_SERVER_URL');
+    this.apiKey = this.config.getOrThrow<string>('INTERNAL_API_KEY');
   }
 
   /** Creates and returns a configured McpServer with all storage tools registered. */
@@ -109,41 +70,23 @@ export class StorageToolsService {
     return server;
   }
 
-  // Tool handlers (public for testability)
+  // Tool handlers (public for testability) — each proxies to lcp-server.
 
   async listFiles(prefix?: string): Promise<ToolResult> {
-    const command = new ListObjectsV2Command({
-      Bucket: this.bucket,
-      Prefix: prefix ?? '',
+    const { entries } = await this.post<{ entries: FileEntry[] }>('list', {
+      prefix,
     });
-    const response = await this.s3.send(command);
-    const entries: FileEntry[] = (response.Contents ?? [])
-      .filter((obj) => !obj.Key?.startsWith(DELETED_PREFIX))
-      .map((obj) => ({
-        key: obj.Key ?? '',
-        size: obj.Size ?? 0,
-        lastModified: obj.LastModified?.toISOString() ?? '',
-      }));
-    return {
-      content: [{ type: 'text', text: JSON.stringify(entries, null, 2) }],
-    };
+    return this.textResult(JSON.stringify(entries, null, 2));
   }
 
   async readFile(path: string): Promise<ToolResult> {
-    const err = this.validatePath(path);
-    if (err) return this.textResult(err);
-
     try {
-      const response = await this.s3.send(
-        new GetObjectCommand({ Bucket: this.bucket, Key: path }),
-      );
-      const text = await (
-        response.Body as { transformToString: () => Promise<string> }
-      ).transformToString();
-      return this.textResult(text);
+      const { content } = await this.post<{ content: string }>('read', {
+        path,
+      });
+      return this.textResult(content);
     } catch (e) {
-      if (this.isNotFound(e)) return this.textResult(`File not found: ${path}`);
-      throw e;
+      return this.textResult(this.extractErrorMessage(e));
     }
   }
 
@@ -151,363 +94,158 @@ export class StorageToolsService {
     path: string,
     content: string,
     overwrite = false,
+    agentId?: string,
   ): Promise<ToolResult> {
-    const err = this.validatePath(path);
-    if (err) return this.textResult(err);
-
-    if (!overwrite && (await this.objectExists(path))) {
-      return this.textResult(
-        `File already exists at ${path}. Set overwrite: true to replace it.`,
-      );
+    try {
+      await this.post('write', {
+        path,
+        content,
+        overwrite,
+        originators: { agent: agentId ?? null },
+      });
+      return this.textResult(`Written: ${path}`);
+    } catch (e) {
+      return this.textResult(this.extractErrorMessage(e));
     }
-
-    await this.s3.send(
-      new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: path,
-        Body: content,
-        ContentType: 'text/plain',
-      }),
-    );
-    this.emitAudit('write_file', path, { overwrite });
-    return this.textResult(`Written: ${path}`);
   }
 
-  async deleteFile(path: string): Promise<ToolResult> {
-    const err = this.validatePath(path);
-    if (err) return this.textResult(err);
-
-    if (!(await this.objectExists(path))) {
-      return this.textResult(`File not found: ${path}`);
+  async deleteFile(path: string, agentId?: string): Promise<ToolResult> {
+    try {
+      await this.post('delete', {
+        path,
+        originators: { agent: agentId ?? null },
+      });
+      return this.textResult(`Deleted: ${path} (restorable via restore_file)`);
+    } catch (e) {
+      return this.textResult(this.extractErrorMessage(e));
     }
-
-    // Soft delete: copy to _deleted/ prefix, then remove original
-    await this.s3.send(
-      new CopyObjectCommand({
-        Bucket: this.bucket,
-        CopySource: `${this.bucket}/${path}`,
-        Key: `${DELETED_PREFIX}${path}`,
-      }),
-    );
-    await this.s3.send(
-      new DeleteObjectCommand({ Bucket: this.bucket, Key: path }),
-    );
-    this.emitAudit('delete_file', path, {});
-    return this.textResult(`Deleted: ${path} (restorable via restore_file)`);
   }
 
-  async restoreFile(path: string): Promise<ToolResult> {
-    const err = this.validatePath(path);
-    if (err) return this.textResult(err);
-
-    const deletedKey = `${DELETED_PREFIX}${path}`;
-    if (!(await this.objectExists(deletedKey))) {
-      return this.textResult(`No soft-deleted file found at ${deletedKey}`);
+  async restoreFile(path: string, agentId?: string): Promise<ToolResult> {
+    try {
+      await this.post('restore', {
+        path,
+        originators: { agent: agentId ?? null },
+      });
+      return this.textResult(`Restored: ${path}`);
+    } catch (e) {
+      return this.textResult(this.extractErrorMessage(e));
     }
-
-    await this.s3.send(
-      new CopyObjectCommand({
-        Bucket: this.bucket,
-        CopySource: `${this.bucket}/${deletedKey}`,
-        Key: path,
-      }),
-    );
-    await this.s3.send(
-      new DeleteObjectCommand({ Bucket: this.bucket, Key: deletedKey }),
-    );
-    this.emitAudit('restore_file', path, {});
-    return this.textResult(`Restored: ${path}`);
   }
 
   async searchFiles(prefix?: string, pattern?: string): Promise<ToolResult> {
-    const command = new ListObjectsV2Command({
-      Bucket: this.bucket,
-      Prefix: prefix ?? '',
+    const { entries } = await this.post<{ entries: FileEntry[] }>('search', {
+      prefix,
+      pattern,
     });
-    const response = await this.s3.send(command);
-    let entries: FileEntry[] = (response.Contents ?? [])
-      .filter((obj) => !obj.Key?.startsWith(DELETED_PREFIX))
-      .map((obj) => ({
-        key: obj.Key ?? '',
-        size: obj.Size ?? 0,
-        lastModified: obj.LastModified?.toISOString() ?? '',
-      }));
-
-    if (pattern) {
-      const re = this.globToRegex(pattern);
-      entries = entries.filter((e) => re.test(e.key));
-    }
-
-    return {
-      content: [{ type: 'text', text: JSON.stringify(entries, null, 2) }],
-    };
+    return this.textResult(JSON.stringify(entries, null, 2));
   }
 
   async getFileProperties(path: string): Promise<ToolResult> {
-    const err = this.validatePath(path);
-    if (err) return this.textResult(err);
-
     try {
-      const response = await this.s3.send(
-        new HeadObjectCommand({ Bucket: this.bucket, Key: path }),
-      );
-      const props: FileProperties = {
-        key: path,
-        exists: true,
-        size: response.ContentLength,
-        contentType: response.ContentType,
-        lastModified: response.LastModified?.toISOString(),
-      };
-      return {
-        content: [{ type: 'text', text: JSON.stringify(props, null, 2) }],
-      };
+      const props = await this.post<FileProperties>('properties', { path });
+      return this.textResult(JSON.stringify(props, null, 2));
     } catch (e) {
-      if (this.isNotFound(e)) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({ key: path, exists: false }),
-            },
-          ],
-        };
-      }
-      throw e;
+      return this.textResult(this.extractErrorMessage(e));
     }
   }
 
-  async copyFile(source: string, destination: string): Promise<ToolResult> {
-    const srcErr = this.validatePath(source, 'source');
-    if (srcErr) return this.textResult(srcErr);
-    const dstErr = this.validatePath(destination, 'destination');
-    if (dstErr) return this.textResult(dstErr);
-
-    if (!(await this.objectExists(source))) {
-      return this.textResult(`Source file not found: ${source}`);
+  async copyFile(
+    source: string,
+    destination: string,
+    agentId?: string,
+  ): Promise<ToolResult> {
+    try {
+      await this.post('copy', {
+        source,
+        destination,
+        originators: { agent: agentId ?? null },
+      });
+      return this.textResult(`Copied: ${source} → ${destination}`);
+    } catch (e) {
+      return this.textResult(this.extractErrorMessage(e));
     }
-
-    await this.s3.send(
-      new CopyObjectCommand({
-        Bucket: this.bucket,
-        CopySource: `${this.bucket}/${source}`,
-        Key: destination,
-      }),
-    );
-    this.emitAudit('copy_file', source, { destination });
-    return this.textResult(`Copied: ${source} → ${destination}`);
   }
 
-  async moveFile(source: string, destination: string): Promise<ToolResult> {
-    const srcErr = this.validatePath(source, 'source');
-    if (srcErr) return this.textResult(srcErr);
-    const dstErr = this.validatePath(destination, 'destination');
-    if (dstErr) return this.textResult(dstErr);
-
-    if (!(await this.objectExists(source))) {
-      return this.textResult(`Source file not found: ${source}`);
+  async moveFile(
+    source: string,
+    destination: string,
+    agentId?: string,
+  ): Promise<ToolResult> {
+    try {
+      await this.post('move', {
+        source,
+        destination,
+        originators: { agent: agentId ?? null },
+      });
+      return this.textResult(`Moved: ${source} → ${destination}`);
+    } catch (e) {
+      return this.textResult(this.extractErrorMessage(e));
     }
-
-    await this.s3.send(
-      new CopyObjectCommand({
-        Bucket: this.bucket,
-        CopySource: `${this.bucket}/${source}`,
-        Key: destination,
-      }),
-    );
-    await this.s3.send(
-      new DeleteObjectCommand({ Bucket: this.bucket, Key: source }),
-    );
-    this.emitAudit('move_file', source, { destination });
-    return this.textResult(`Moved: ${source} → ${destination}`);
   }
 
   async getFileSummary(path: string): Promise<ToolResult> {
-    const err = this.validatePath(path);
-    if (err) return this.textResult(err);
-
-    let content: string;
-    let size: number | undefined;
-
     try {
-      const head = await this.s3.send(
-        new HeadObjectCommand({ Bucket: this.bucket, Key: path }),
-      );
-      size = head.ContentLength;
-      const response = await this.s3.send(
-        new GetObjectCommand({ Bucket: this.bucket, Key: path }),
-      );
-      content = await (
-        response.Body as { transformToString: () => Promise<string> }
-      ).transformToString();
+      const summary = await this.post<Record<string, unknown>>('summary', {
+        path,
+      });
+      return this.textResult(JSON.stringify(summary, null, 2));
     } catch (e) {
-      if (this.isNotFound(e)) return this.textResult(`File not found: ${path}`);
-      throw e;
+      return this.textResult(this.extractErrorMessage(e));
     }
+  }
 
-    const summary = this.analyzeContent(path, content, size);
-    return {
-      content: [{ type: 'text', text: JSON.stringify(summary, null, 2) }],
-    };
+  /**
+   * Proxies to `GET /internal/storage/exists` — used by the `files/exists`
+   * internal endpoint (see `StorageCheckController`).
+   *
+   * Builds the query string manually (`path=a&path=b`) rather than passing
+   * an array via axios's `params` option — axios's default array
+   * serialisation uses bracket notation (`path[]=a&path[]=b`), which Nest's
+   * `@Query('path')` does not recognise as the same key.
+   */
+  async checkMissingFiles(paths: string[]): Promise<string[]> {
+    const query = new URLSearchParams();
+    for (const p of paths) query.append('path', p);
+    const res = await axios.get<{ missing: string[] }>(
+      `${this.serverUrl}/internal/storage/exists?${query.toString()}`,
+      { headers: this.headers() },
+    );
+    return res.data.missing;
   }
 
   // Private helpers
 
-  private validatePath(path: string, label = 'path'): string | null {
-    if (!path || path.includes('..')) {
-      return `Invalid ${label}: must be non-empty and must not contain "..".`;
-    }
-    if (path.startsWith(DELETED_PREFIX)) {
-      return `Invalid ${label}: cannot directly access the soft-delete folder.`;
-    }
-    return null;
-  }
-
-  async checkMissingFiles(paths: string[]): Promise<string[]> {
-    const results = await Promise.all(
-      paths.map(async (p) => ({ path: p, exists: await this.objectExists(p) })),
+  private async post<T>(action: string, body: unknown): Promise<T> {
+    const res = await axios.post<T>(
+      `${this.serverUrl}/internal/storage/${action}`,
+      body,
+      { headers: this.headers() },
     );
-    return results.filter((r) => !r.exists).map((r) => r.path);
+    return res.data;
   }
 
-  private async objectExists(key: string): Promise<boolean> {
-    try {
-      await this.s3.send(
-        new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
-      );
-      return true;
-    } catch {
-      return false;
+  private headers(): Record<string, string> {
+    return { 'X-Internal-Api-Key': this.apiKey };
+  }
+
+  /** Extracts a friendly message from an lcp-server error response (422 validation errors, 404s, etc.). */
+  private extractErrorMessage(error: unknown): string {
+    if (axios.isAxiosError(error)) {
+      const data = error.response?.data as
+        | { message?: string; errors?: { llmHint: string }[] }
+        | undefined;
+      if (data?.errors?.length) {
+        return data.errors.map((e) => e.llmHint).join(' ');
+      }
+      if (data?.message) return data.message;
+      return error.message;
     }
-  }
-
-  private isNotFound(err: unknown): boolean {
-    if (!(err instanceof Error)) return false;
-    return (
-      err.name === 'NoSuchKey' || err.name === 'NotFound' || err.name === '404'
-    );
+    return error instanceof Error ? error.message : String(error);
   }
 
   private textResult(text: string): ToolResult {
     return { content: [{ type: 'text', text }] };
-  }
-
-  /** Convert a simple glob pattern (*, ?) to a RegExp. */
-  private globToRegex(pattern: string): RegExp {
-    const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(
-      '^' + escaped.replace(/\*/g, '.*').replace(/\?/g, '.') + '$',
-    );
-  }
-
-  /**
-   * Structural analysis of file content — no LLM required.
-   * Returns format-specific metadata based on file extension.
-   */
-  private analyzeContent(
-    path: string,
-    content: string,
-    size: number | undefined,
-  ): Record<string, unknown> {
-    const ext = path.includes('.')
-      ? '.' + path.split('.').pop()!.toLowerCase()
-      : '';
-    const base: Record<string, unknown> = {
-      path,
-      size,
-      contentType: MIME_MAP[ext] ?? 'application/octet-stream',
-    };
-
-    if (ext === '.json' || ext === '.jsonc') {
-      try {
-        // Strip // comments for jsonc
-        const stripped =
-          ext === '.jsonc' ? content.replace(/^\s*\/\/.*$/gm, '') : content;
-        const parsed: unknown = JSON.parse(stripped);
-        if (Array.isArray(parsed)) {
-          base.format = 'json-array';
-          base.length = parsed.length;
-          if (
-            parsed.length > 0 &&
-            typeof parsed[0] === 'object' &&
-            parsed[0] !== null
-          ) {
-            base.sampleKeys = Object.keys(parsed[0] as object).slice(0, 10);
-          }
-        } else if (typeof parsed === 'object' && parsed !== null) {
-          base.format = 'json-object';
-          base.keys = Object.keys(parsed);
-        }
-      } catch {
-        base.format = 'json-invalid';
-      }
-      return base;
-    }
-
-    if (ext === '.md' || ext === '.mdx') {
-      const lines = content.split('\n');
-      const fmEnd = lines[0] === '---' ? lines.indexOf('---', 1) : -1;
-      const frontmatterKeys =
-        fmEnd > 0
-          ? lines
-              .slice(1, fmEnd)
-              .filter((l) => l.includes(':'))
-              .map((l) => l.split(':')[0].trim())
-          : [];
-      const headings = lines
-        .filter((l) => /^#{1,6}\s/.test(l))
-        .map((l) => {
-          const m = l.match(/^(#{1,6})\s+(.+)/);
-          return m ? { level: m[1].length, text: m[2].trim() } : null;
-        })
-        .filter(Boolean);
-      base.format = 'markdown';
-      base.frontmatterKeys = frontmatterKeys;
-      base.headings = headings;
-      return base;
-    }
-
-    if (ext === '.yaml' || ext === '.yml') {
-      const topLevelKeys = content
-        .split('\n')
-        .filter((l) => /^[a-zA-Z_][a-zA-Z0-9_]*\s*:/.test(l))
-        .map((l) => l.split(':')[0].trim());
-      base.format = 'yaml';
-      base.topLevelKeys = topLevelKeys;
-      return base;
-    }
-
-    if (ext === '.ts' || ext === '.js' || ext === '.mjs') {
-      const declarations: string[] = [];
-      const patterns = [
-        /^export\s+(?:default\s+)?(?:async\s+)?(?:class|function|interface|type|const|enum)\s+(\w+)/gm,
-        /^(?:class|function|interface|type|const|enum)\s+(\w+)/gm,
-      ];
-      for (const re of patterns) {
-        let m: RegExpExecArray | null;
-        while ((m = re.exec(content)) !== null) {
-          if (m[1] && !declarations.includes(m[1])) declarations.push(m[1]);
-        }
-      }
-      base.format = 'typescript';
-      base.declarations = declarations;
-      return base;
-    }
-
-    base.format = 'text';
-    base.lineCount = content.split('\n').length;
-    return base;
-  }
-
-  private emitAudit(
-    tool: string,
-    path: string,
-    extra: Record<string, unknown>,
-  ): void {
-    this.audit.record(NIL_UUID, 'storage', null, AuditEventType.ToolCall, {
-      tool,
-      path,
-      ...extra,
-    });
   }
 
   // Server registration
@@ -598,10 +336,12 @@ export class StorageToolsService {
             .boolean()
             .optional()
             .describe('Replace an existing file (default: false).'),
+          agentId: z.uuid().describe('The calling agent UUID.'),
+          companyId: z.uuid().describe('The company UUID.'),
         },
       },
-      ({ path, content, overwrite }) =>
-        this.writeFile(path, content, overwrite ?? false),
+      ({ path, content, overwrite, agentId }) =>
+        this.writeFile(path, content, overwrite ?? false, agentId),
     );
   }
 
@@ -612,9 +352,11 @@ export class StorageToolsService {
         description: storageToolDescriptions.delete_file,
         inputSchema: {
           path: z.string().describe('The object key to delete.'),
+          agentId: z.uuid().describe('The calling agent UUID.'),
+          companyId: z.uuid().describe('The company UUID.'),
         },
       },
-      ({ path }) => this.deleteFile(path),
+      ({ path, agentId }) => this.deleteFile(path, agentId),
     );
   }
 
@@ -625,9 +367,11 @@ export class StorageToolsService {
         description: storageToolDescriptions.restore_file,
         inputSchema: {
           path: z.string().describe('The original object key to restore.'),
+          agentId: z.uuid().describe('The calling agent UUID.'),
+          companyId: z.uuid().describe('The company UUID.'),
         },
       },
-      ({ path }) => this.restoreFile(path),
+      ({ path, agentId }) => this.restoreFile(path, agentId),
     );
   }
 
@@ -674,9 +418,12 @@ export class StorageToolsService {
         inputSchema: {
           source: z.string().describe('The source object key.'),
           destination: z.string().describe('The destination object key.'),
+          agentId: z.uuid().describe('The calling agent UUID.'),
+          companyId: z.uuid().describe('The company UUID.'),
         },
       },
-      ({ source, destination }) => this.copyFile(source, destination),
+      ({ source, destination, agentId }) =>
+        this.copyFile(source, destination, agentId),
     );
   }
 
@@ -688,9 +435,12 @@ export class StorageToolsService {
         inputSchema: {
           source: z.string().describe('The source object key.'),
           destination: z.string().describe('The destination object key.'),
+          agentId: z.uuid().describe('The calling agent UUID.'),
+          companyId: z.uuid().describe('The company UUID.'),
         },
       },
-      ({ source, destination }) => this.moveFile(source, destination),
+      ({ source, destination, agentId }) =>
+        this.moveFile(source, destination, agentId),
     );
   }
 

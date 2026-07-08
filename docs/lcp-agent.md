@@ -34,7 +34,7 @@ The `/health` endpoints on both services are public and do not require a token.
 
 ## Company-level LLM default
 
-A company can carry a `llmDefault` — a fallback `LlmConfig` used by any role that does not supply its own. This avoids repeating provider and model details on every role when all roles in a company share the same LLM.
+A company can carry a `llmConfig` — a fallback `LlmConfig` used by any role that does not supply its own. This avoids repeating provider and model details on every role when all roles in a company share the same LLM.
 
 ```bash
 curl -X POST http://localhost:3000/api/company \
@@ -43,7 +43,7 @@ curl -X POST http://localhost:3000/api/company \
   -d '{
     "slug": "acme",
     "name": "Acme Corp",
-    "llmDefault": {
+    "llmConfig": {
       "provider": "lm-studio",
       "model": "qwen3-5b",
       "baseUrl": "http://localhost:1234/v1",
@@ -52,22 +52,20 @@ curl -X POST http://localhost:3000/api/company \
   }'
 ```
 
-**Fallback rules:**
+**Fallback rules** (see `LlmConfigResolver` in `@lcp/shared`):
 
 1. If the role has its own `llmConfig`, that is used.
-2. Otherwise the company's `llmDefault` is used.
-3. If neither is set, the agent run fails immediately with status `failed`.
+2. Otherwise the company's `llmConfig` is used.
+3. Otherwise the server/agent environment's `LLM_PROVIDER`/`LLM_MODEL` fallback is used.
+4. If none of the three is set, the agent run fails immediately with status `failed`.
 
-**Guard:** The API rejects:
-
-- Creating a role with no `llmConfig` when the company has no `llmDefault` (HTTP 400)
-- Updating a company to remove `llmDefault` when any of its roles have no `llmConfig` (HTTP 400)
+A role with no `llmConfig` and a company with no `llmConfig` are both accepted at create/update time — the environment fallback (or a failed run, if that's also unset) covers it at run time. Nothing is rejected up front.
 
 ---
 
 ## Creating a role
 
-`llmConfig` is optional when the company has a `llmDefault`.
+`llmConfig` is optional when the company has a `llmConfig`, or when the server/agent environment has an `LLM_PROVIDER`/`LLM_MODEL` fallback configured.
 
 ```bash
 curl -X POST http://localhost:3000/api/role \
@@ -83,19 +81,26 @@ curl -X POST http://localhost:3000/api/role \
       "baseUrl": "http://localhost:1234/v1",
       "apiKey": "your-lm-studio-token"
     },
-    "systemPromptTemplate": "You are {{name}}, a specialist at {{description}}. Today is {{date}}."
+    "systemPromptTemplate": "You are {{name}}, a specialist at {{description}}. It is {{datetime}} — you are in region {{timezone}}, where the local time is {{localDatetime}}."
   }'
 ```
 
 `apiKey` holds the API key for the provider. It is stored in the database as part of the JSONB config block and masked (`***`) in API responses by default. Set `LCP_MASK_API_KEYS=false` in the environment to expose raw keys during local debugging.
 
+`systemPromptTemplate` is optional — a blank or omitted value resolves via `SystemPromptTemplateResolver`: the role's own template, then the company's, then a baked-in default (`DEFAULT_SYSTEM_PROMPT_TEMPLATE`).
+
 ### Template placeholders
 
-| Placeholder       | Value                                     |
-| ----------------- | ----------------------------------------- |
-| `{{name}}`        | `LcpRole.name`                            |
-| `{{description}}` | `LcpRole.description`                     |
-| `{{date}}`        | Current date (ISO format, date part only) |
+| Placeholder         | Value                                                                         |
+| ------------------- | ----------------------------------------------------------------------------- |
+| `{{name}}`          | `LcpRole.name`                                                                |
+| `{{description}}`   | `LcpRole.description`                                                         |
+| `{{date}}`          | Current UTC date, `YYYY-MM-DD` (kept for older templates)                     |
+| `{{datetime}}`      | Current UTC date and time, explicitly labeled — the LLM's authoritative "now" |
+| `{{timezone}}`      | The company's IANA timezone name, or `UTC` when unset                         |
+| `{{localDatetime}}` | `{{datetime}}` localized to `{{timezone}}`; equals `{{datetime}}` when unset  |
+| `{{companyId}}`     | `LcpAgent.companyId` — for tool calls that require it                         |
+| `{{roleId}}`        | `LcpRole.id` — for tool calls that require it                                 |
 
 ---
 
@@ -159,6 +164,11 @@ Returns `{ provider, model, supportsTools, supportsStructuredOutput, compatible,
 | Timeout       | 60 s  | Hard-coded in `AgentLoopService` |
 
 Both are candidates for `LcpRole.runConfig` JSONB once per-role tuning is needed (see `docs/prompts/003.3`).
+
+To estimate a role's worst-case initial-prompt token footprint against its
+LLM's context window before running it, see `lcp-cli`'s
+[`estimate-context-window`](lcp-cli.md#estimate-context-window) — it reuses
+the same `ContextBudgetService` used at runtime to decide when to compact context.
 
 ---
 
@@ -231,3 +241,7 @@ Query: `SELECT * FROM audit_event WHERE agent_id = $1 ORDER BY timestamp`.
 ## Health check
 
 `GET http://localhost:3001/health` — checks PostgreSQL connectivity and Redis connectivity. Returns HTTP 200 when both are up, 503 when either is down.
+
+The Redis check uses the shared bounded `assertRedisReachable` probe, so it cannot hang. lcp-agent also fails fast at **startup** if Redis is unreachable (`AgentWorkerService.onModuleInit`): rather than letting the BullMQ worker block indefinitely against a downed broker, it throws a clear error. `main.ts` calls `app.enableShutdownHooks()` so the worker and its Redis connection close cleanly on `SIGTERM`.
+
+> **Known gap (non-blocking):** `config/config.schema.ts` still requires `MINIO_ENDPOINT`/`MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` at startup, but lcp-agent never constructs an S3 client anywhere — since `docs/prompts/009.4`, storage access across the whole monorepo goes through `lcp-server`'s `StorageService`/`/internal/storage/*` endpoints. Likely leftover from an earlier design. Not removed in this pass; flagged here as a follow-up cleanup opportunity.

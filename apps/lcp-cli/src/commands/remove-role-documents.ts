@@ -12,12 +12,24 @@ export function registerRemoveRoleDocuments(program: Command): void {
     .description(
       'Remove knowledge-base documents from a role (supports * and ? wildcards)',
     )
-    .requiredOption('-r, --role-id <uuid>', 'Role UUID')
+    .option('-r, --role-id <uuid>', 'Role UUID')
+    .option(
+      '--role-slug <slug>',
+      'Role slug instead of ID (requires --company-id or --company-slug)',
+    )
+    .option('-c, --company-id <uuid>', 'Company UUID (for --role-slug)')
+    .option('--company-slug <slug>', 'Company slug (for --role-slug)')
     .requiredOption(
       '-p, --pattern <patterns...>',
       'One or more filename patterns to match (e.g. "*.md", "report-?.md")',
     )
-    .action((cmdOpts: { roleId: string; pattern: string[] }) =>
-      removeRoleDocumentsAction(getGlobalOptions(program), cmdOpts),
+    .action(
+      (cmdOpts: {
+        roleId?: string;
+        roleSlug?: string;
+        companyId?: string;
+        companySlug?: string;
+        pattern: string[];
+      }) => removeRoleDocumentsAction(getGlobalOptions(program), cmdOpts),
     );
 }

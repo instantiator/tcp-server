@@ -25,14 +25,14 @@ cat scripts/test-data/simple-company.json
 
 The key fields are:
 
-| Field                 | Purpose                                               |
-| --------------------- | ----------------------------------------------------- |
-| `name`                | Human-readable company name                           |
-| `slug`                | URL-safe ID used in MinIO paths (e.g. `acme`)         |
-| `llmDefault.provider` | LLM provider: `lm-studio` or `openai`                 |
-| `llmDefault.baseUrl`  | URL of the LLM API                                    |
-| `llmDefault.model`    | Model identifier                                      |
-| `companyContext`      | Company-wide context injected into every agent prompt |
+| Field                | Purpose                                               |
+| -------------------- | ----------------------------------------------------- |
+| `name`               | Human-readable company name                           |
+| `slug`               | URL-safe ID used in MinIO paths (e.g. `acme`)         |
+| `llmConfig.provider` | LLM provider: `lm-studio` or `openai`                 |
+| `llmConfig.baseUrl`  | URL of the LLM API                                    |
+| `llmConfig.model`    | Model identifier                                      |
+| `companyContext`     | Company-wide context injected into every agent prompt |
 
 Update the `baseUrl` and `model` to match your LLM provider, then create the company:
 
@@ -79,14 +79,14 @@ cat scripts/test-data/simple-role.json
 
 Key fields:
 
-| Field                  | Purpose                                                                           |
-| ---------------------- | --------------------------------------------------------------------------------- |
-| `name`                 | Role name used in MinIO paths and audit logs                                      |
-| `description`          | Short description embedded in the system prompt                                   |
-| `rolePrompt`           | Persona, domain knowledge, and behavioural guidelines for this role               |
-| `systemPromptTemplate` | Handlebars-style template; `{{name}}`, `{{description}}`, `{{date}}` are replaced |
-| `llmConfig`            | Optional role-specific LLM config; falls back to company `llmDefault`             |
-| `mcpServerList`        | List of MCP server names available to this role (e.g. `["storage", "memory"]`)    |
+| Field                  | Purpose                                                                                                                                                                                                     |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`                 | Role name used in MinIO paths and audit logs                                                                                                                                                                |
+| `description`          | Short description embedded in the system prompt                                                                                                                                                             |
+| `rolePrompt`           | Persona, domain knowledge, and behavioural guidelines for this role                                                                                                                                         |
+| `systemPromptTemplate` | Optional handlebars-style template; `{{name}}`, `{{description}}`, `{{date}}`, `{{datetime}}`, `{{timezone}}`, `{{localDatetime}}` are replaced. Blank falls back to the company's, then a baked-in default |
+| `llmConfig`            | Optional role-specific LLM config; falls back to company `llmConfig`, then environment                                                                                                                      |
+| `mcpServerList`        | List of MCP server names available to this role (e.g. `["storage", "memory"]`)                                                                                                                              |
 
 Create the role, setting the `companyId` to the value from 2.1:
 

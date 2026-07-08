@@ -59,12 +59,12 @@ You can use this to modify default configuration - most of it is sufficient for 
 The LLM used for each role is determined by checking, in order:
 
 1. the LLM config on the role itself (`$.llmConfig`), or
-2. the LLM config on the role's company (`$.llmDefault`), or
+2. the LLM config on the role's company (`$.llmConfig`), or
 3. the LLM config in the underlying `.env` file you are using
 
 _The first found is used._ This allows you to individualise the configuration for your agents (eg. coding agents might need a more powerful, coding-capable model, and others may be able to work with lighter, simpler models).
 
-For the simplest configuration, set the `LLM_*` variables in your `.env` file, leave `$.llmDefault` off the company, and leave `$.llmConfig` off the role.
+For the simplest configuration, set the `LLM_*` variables in your `.env` file, and leave `$.llmConfig` off both the company and the role.
 
 See `.env.example` for all available environment variables.
 
@@ -99,9 +99,12 @@ The response will be a full instance of the company, _including its `id`_ - indi
 {
   "name": "Test Company",
   "description": "A test company",
-  "llmDefault": null,
+  "llmConfig": null,
   "embeddingConfig": null,
   "companyContext": "This company is responsible for testing things.",
+  "systemPromptTemplate": null,
+  "mcpServerList": [],
+  "timezone": null,
   "id": "3fb3528a-3520-4489-b5bd-83247a631d87",
   "slug": "test-company",
   "runConfig": null
@@ -164,6 +167,7 @@ It'll give you a list of all roles in each company:
       {
         "id": "fc37ccc0-51a2-46b2-b642-a3d8b1dd0c9b",
         "companyId": "3fb3528a-3520-4489-b5bd-83247a631d87",
+        "slug": "chicken-assistant",
         "name": "Chicken assistant",
         "description": "a grub-hungry, squawking role",
         "llmConfig": null,
@@ -177,6 +181,7 @@ It'll give you a list of all roles in each company:
       {
         "id": "e37504b0-1b90-451e-be50-944bffa8d57f",
         "companyId": "3fb3528a-3520-4489-b5bd-83247a631d87",
+        "slug": "cat-assistant",
         "name": "Cat assistant",
         "description": "a feline friend",
         "llmConfig": null,

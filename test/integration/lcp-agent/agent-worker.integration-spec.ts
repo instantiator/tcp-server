@@ -25,16 +25,16 @@ import { AgentRagService } from '../../../apps/lcp-agent/src/rag/agent-rag.servi
 import { AgentRegistryService } from '../../../apps/lcp-agent/src/registry/agent-registry.service';
 import { AgentWorkerService } from '../../../apps/lcp-agent/src/worker/agent-worker.service';
 import { StorageTrackingClientService } from '../../../apps/lcp-agent/src/storage-tracking/storage-tracking-client.service';
+import { requireEnv } from '../../support/require-env';
 
-// Requires DOCKER services: PostgreSQL (DATABASE_URL) and Redis (REDIS_URL).
+// PostgreSQL and Redis are provisioned by the integration global setup;
+// DATABASE_URL and REDIS_URL are always present.
 // Run via: ./scripts/run-integration-tests.sh
 
 const ALL_ENTITIES = [LcpCompany, LcpRole, LcpAgent];
 
-const dbUrl = process.env.DATABASE_URL;
-const redisUrl = process.env.REDIS_URL;
-
-const describeIf = dbUrl && redisUrl ? describe : describe.skip;
+const dbUrl = requireEnv('DATABASE_URL');
+const redisUrl = requireEnv('REDIS_URL');
 
 async function pollUntil(
   check: () => Promise<boolean>,
@@ -48,7 +48,7 @@ async function pollUntil(
   throw new Error(`pollUntil: timed out after ${timeoutMs}ms`);
 }
 
-describeIf('AgentWorkerService (integration)', () => {
+describe('AgentWorkerService (integration)', () => {
   let module: TestingModule;
   let companyRepo: Repository<LcpCompany>;
   let roleRepo: Repository<LcpRole>;
@@ -157,6 +157,7 @@ describeIf('AgentWorkerService (integration)', () => {
     const role = await roleRepo.save(
       roleRepo.create({
         companyId: company.id,
+        slug: 'analyst',
         name: 'Analyst',
         description: 'Analyses things.',
         llmConfig: {
@@ -202,6 +203,7 @@ describeIf('AgentWorkerService (integration)', () => {
     const role = await roleRepo.save(
       roleRepo.create({
         companyId: company.id,
+        slug: 'analyst',
         name: 'Analyst',
         description: 'Analyses things.',
         llmConfig: {

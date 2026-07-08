@@ -51,3 +51,7 @@ One service covers all four requirements. The `@langchain/langgraph-checkpoint-p
 
 - pgvector version compatibility with PostgreSQL — use the official `pgvector/pgvector` Docker image which bundles both
 - TypeORM does not natively model `vector` columns; a raw column type (`vector(1536)`) with manual query for similarity search, or the `typeorm-extension` / raw SQL approach, will be used for vector queries
+
+## Amendment as implemented (009.2)
+
+**Timestamp storage convention**: `Date`-typed entity columns (e.g. `LcpAgent.createdAt`) are deliberately left **untyped** (no explicit `type: 'timestamptz'`/`'datetime'`) so the same entities work against both `better-sqlite3` (tests) and PostgreSQL (production) — an explicit type string breaks one driver or the other. A hand-written, PostgreSQL-only migration (`TimestamptzConsistency`) converts the underlying columns to `TIMESTAMPTZ` directly in schema DDL (assuming a UTC Postgres session timezone), without touching entity metadata. `npm run migration:generate` will report this as permanent "drift" against the untyped entities — expected, and already covered by the project's existing drift-is-diagnostic-only convention (see `docs/database.md#timestamp-storage-convention`), not something to "fix" by adding explicit types back.

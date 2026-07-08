@@ -1,7 +1,8 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { CompanyUser, LcpAgent, LcpRole } from '@lcp/shared';
+import { DbService } from '../db/db.service';
 import { InternalController } from './internal.controller';
 import { PauseAndResumeService } from './pause-and-resume.service';
 
@@ -13,6 +14,7 @@ describe('InternalController', () => {
     failAgent: jest.Mock;
     updateStorageChanges: jest.Mock;
   };
+  let db: { getCompany: jest.Mock; findRoleByIdOrSlug: jest.Mock };
   let agentRepo: { findOneBy: jest.Mock };
   let roleRepo: { findBy: jest.Mock };
   let userRepo: { findBy: jest.Mock };
@@ -26,11 +28,13 @@ describe('InternalController', () => {
       failAgent: jest.fn().mockResolvedValue(undefined),
       updateStorageChanges: jest.fn().mockResolvedValue(undefined),
     };
+    db = { getCompany: jest.fn(), findRoleByIdOrSlug: jest.fn() };
     agentRepo = { findOneBy: jest.fn() };
     roleRepo = { findBy: jest.fn() };
     userRepo = { findBy: jest.fn() };
     controller = new InternalController(
       pauseResume as unknown as PauseAndResumeService,
+      db as unknown as DbService,
       agentRepo as unknown as Repository<LcpAgent>,
       roleRepo as unknown as Repository<LcpRole>,
       userRepo as unknown as Repository<CompanyUser>,
@@ -85,6 +89,8 @@ describe('InternalController', () => {
       const companyId = randomUUID();
       const roleId = randomUUID();
       const consultationId = randomUUID();
+      db.getCompany.mockResolvedValue({ id: companyId });
+      db.findRoleByIdOrSlug.mockResolvedValue({ id: roleId });
       pauseResume.pauseForConsultation.mockResolvedValue({
         consultationId,
         roleName: 'Legal Advisor',
@@ -99,6 +105,8 @@ describe('InternalController', () => {
         question: 'Is this compliant?',
       });
 
+      expect(db.getCompany).toHaveBeenCalledWith(companyId);
+      expect(db.findRoleByIdOrSlug).toHaveBeenCalledWith(companyId, roleId);
       expect(pauseResume.pauseForConsultation).toHaveBeenCalledWith(
         agentId,
         companyId,
@@ -111,6 +119,90 @@ describe('InternalController', () => {
         consultationId,
         roleName: 'Legal Advisor',
       });
+    });
+
+    it('resolves companySlug and roleSlug to real UUIDs before delegating', async () => {
+      const agentId = randomUUID();
+      const companyId = randomUUID();
+      const roleId = randomUUID();
+      db.getCompany.mockResolvedValue({ id: companyId });
+      db.findRoleByIdOrSlug.mockResolvedValue({ id: roleId });
+      pauseResume.pauseForConsultation.mockResolvedValue({
+        consultationId: randomUUID(),
+        roleName: 'Legal Advisor',
+      });
+
+      await controller.pause({
+        type: 'agent_consultation',
+        agentId,
+        companySlug: 'acme',
+        roleSlug: 'legal-advisor',
+        question: 'Is this compliant?',
+      });
+
+      expect(db.getCompany).toHaveBeenCalledWith('acme');
+      expect(db.findRoleByIdOrSlug).toHaveBeenCalledWith(
+        companyId,
+        'legal-advisor',
+      );
+      expect(pauseResume.pauseForConsultation).toHaveBeenCalledWith(
+        agentId,
+        companyId,
+        roleId,
+        'Is this compliant?',
+        undefined,
+        undefined,
+      );
+    });
+
+    it('throws NotFoundException when the company does not resolve', async () => {
+      db.getCompany.mockResolvedValue(null);
+      await expect(
+        controller.pause({
+          type: 'agent_consultation',
+          agentId: randomUUID(),
+          companySlug: 'no-such-co',
+          roleSlug: 'analyst',
+          question: 'Q',
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws NotFoundException when the role does not resolve', async () => {
+      db.getCompany.mockResolvedValue({ id: randomUUID() });
+      db.findRoleByIdOrSlug.mockResolvedValue(null);
+      await expect(
+        controller.pause({
+          type: 'agent_consultation',
+          agentId: randomUUID(),
+          companyId: randomUUID(),
+          roleSlug: 'no-such-role',
+          question: 'Q',
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws BadRequestException when neither companyId nor companySlug is given', async () => {
+      await expect(
+        controller.pause({
+          type: 'agent_consultation',
+          agentId: randomUUID(),
+          roleId: randomUUID(),
+          question: 'Q',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws BadRequestException when neither roleId nor roleSlug is given', async () => {
+      db.getCompany.mockResolvedValue({ id: randomUUID() });
+      await expect(
+        controller.pause({
+          type: 'agent_consultation',
+          agentId: randomUUID(),
+          companyId: randomUUID(),
+          question: 'Q',
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

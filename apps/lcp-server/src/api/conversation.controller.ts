@@ -42,12 +42,18 @@ export class ConversationController {
     return this.service.list(companyId, status);
   }
 
-  /** Returns a conversation and its messages identified by slug. */
+  /**
+   * Returns a conversation and its messages identified by slug, along with
+   * the owning company's `timezone` (for client-side display formatting —
+   * timestamps themselves are always UTC).
+   */
   @ApiOperation({ summary: 'Get a conversation by slug' })
   @Get(':slug')
-  async get(
-    @Param('slug') slug: string,
-  ): Promise<{ conversation: Conversation; messages: ConversationMessage[] }> {
+  async get(@Param('slug') slug: string): Promise<{
+    conversation: Conversation;
+    messages: ConversationMessage[];
+    companyTimezone: string | null;
+  }> {
     return this.service.get(slug);
   }
 

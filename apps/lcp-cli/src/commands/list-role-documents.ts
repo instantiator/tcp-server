@@ -12,8 +12,19 @@ export function registerListRoleDocuments(program: Command): void {
   program
     .command('list-role-documents')
     .description('List knowledge-base documents stored for a role')
-    .requiredOption('-r, --role-id <uuid>', 'Role UUID')
-    .action((cmdOpts: { roleId: string }) =>
-      listRoleDocumentsAction(getGlobalOptions(program), cmdOpts),
+    .option('-r, --role-id <uuid>', 'Role UUID')
+    .option(
+      '--role-slug <slug>',
+      'Role slug instead of ID (requires --company-id or --company-slug)',
+    )
+    .option('-c, --company-id <uuid>', 'Company UUID (for --role-slug)')
+    .option('--company-slug <slug>', 'Company slug (for --role-slug)')
+    .action(
+      (cmdOpts: {
+        roleId?: string;
+        roleSlug?: string;
+        companyId?: string;
+        companySlug?: string;
+      }) => listRoleDocumentsAction(getGlobalOptions(program), cmdOpts),
     );
 }

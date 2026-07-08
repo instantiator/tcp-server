@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { UUID } from 'crypto';
 import { LcpCompany } from '@lcp/shared';
+import type { UUID } from 'crypto';
 import type { DeepPartial } from 'typeorm';
 import { DbService } from '../db/db.service';
 import { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
+import { isUUID } from '../utils/ObjectUtils';
 
 /** Orchestrates company operations, delegating persistence to {@link DbService}. */
 @Injectable()
@@ -12,25 +13,39 @@ export class ApiService {
 
   /**
    * Creates a new {@link LcpCompany} from the given template and slug,
-   * replacing any existing record with the same slug.
+   * replacing any existing record with the same slug. Adds `creatorIdentifier`
+   * as a {@link CompanyUser} with `memberType: 'creator'`.
    */
   async createCompany(
     template: LcpCompanyTemplate,
     slug: string,
+    creatorIdentifier: string,
+    creatorName?: string | null,
   ): Promise<LcpCompany> {
-    return await this.dbService.createCompany(template, slug);
+    return await this.dbService.createCompany(
+      template,
+      slug,
+      creatorIdentifier,
+      creatorName,
+    );
   }
 
   /**
-   * Updates the fields of an existing {@link LcpCompany} by id,
-   * or creates it if no record with that id exists.
-   * The `id` from the path parameter always takes precedence.
+   * Updates the fields of an existing {@link LcpCompany} identified by UUID
+   * or slug (the path parameter is checked against UUID shape to tell them
+   * apart). Throws {@link NotFoundException} (via {@link DbService.setCompany})
+   * if no company matches — this never falls back to creating a new record.
    */
   async setCompany(
-    id: UUID,
+    pathIdentifier: string,
     partial: DeepPartial<Omit<LcpCompany, 'id'>>,
   ): Promise<LcpCompany> {
-    return await this.dbService.setCompany({ ...partial, id }, false);
+    return await this.dbService.setCompany(
+      partial,
+      isUUID(pathIdentifier)
+        ? { id: pathIdentifier }
+        : { slug: pathIdentifier },
+    );
   }
 
   /**

@@ -34,6 +34,7 @@ describe('RoleDocumentController (e2e)', () => {
     );
     const role = await roleRepo.save(
       roleRepo.create({
+        slug: 'writer',
         name: 'Writer',
         description: 'Test role',
         systemPromptTemplate: 'Write.',

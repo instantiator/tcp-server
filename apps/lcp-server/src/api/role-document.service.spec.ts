@@ -2,13 +2,14 @@ import { NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { LcpCompany, LcpRole } from '@lcp/shared';
 import { RagIndexService } from '../rag/rag-index.service';
-import { MinioService, StorageObject } from '../storage/minio.service';
+import { StorageObject, StorageService } from '../storage/storage.service';
 import { RoleDocumentService } from './role-document.service';
 
 function makeRole(overrides: Partial<LcpRole> = {}): LcpRole {
   return {
     id: randomUUID(),
     companyId: randomUUID(),
+    slug: 'analyst',
     name: 'analyst',
     description: 'Analyses things.',
     systemPromptTemplate: '',
@@ -26,6 +27,7 @@ function makeCompany(overrides: Partial<LcpCompany> = {}): LcpCompany {
     slug: 'acme',
     name: 'ACME',
     description: 'Test company',
+    mcpServerList: [],
     ...overrides,
   };
 }
@@ -69,7 +71,7 @@ describe('RoleDocumentService', () => {
     companyRepo = { findOneBy: jest.fn().mockResolvedValue(company) };
 
     service = new RoleDocumentService(
-      minio as unknown as MinioService,
+      minio as unknown as StorageService,
       ragIndex as unknown as RagIndexService,
       roleRepo as never,
       companyRepo as never,
@@ -112,6 +114,7 @@ describe('RoleDocumentService', () => {
         role.name,
         'report.md',
         content,
+        undefined,
       );
       expect(ragIndex.ingestDocument).toHaveBeenCalledWith(
         company.id,
@@ -119,6 +122,19 @@ describe('RoleDocumentService', () => {
         'acme/knowledge/analyst/report.md',
         '# Hello\ncontent',
         company.embeddingConfig,
+      );
+    });
+
+    it('passes originators through to the storage layer', async () => {
+      const content = Buffer.from('# Hello\ncontent');
+      const originators = { user: 'user-1', agent: null, task: null };
+      await service.storeDocument(role.id, 'report.md', content, originators);
+      expect(minio.putKnowledgeFile).toHaveBeenCalledWith(
+        company.slug,
+        role.name,
+        'report.md',
+        content,
+        originators,
       );
     });
 

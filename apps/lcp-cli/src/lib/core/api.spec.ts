@@ -84,6 +84,52 @@ describe('apiRequest', () => {
     ).rejects.toThrow('HTTP 404');
   });
 
+  it('prints X-Lcp-Warnings to stderr in yellow with a warning emoji', async () => {
+    const stderrSpy = jest.spyOn(process.stderr, 'write').mockReturnValue(true);
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({
+        'X-Lcp-Warnings': JSON.stringify([
+          'Role has a blank or missing rolePrompt.',
+        ]),
+      }),
+      json: () => Promise.resolve({ id: '1' }),
+    });
+
+    await apiRequest(
+      { baseUrl: 'http://localhost:3000' },
+      'POST',
+      '/api/role',
+      {},
+    );
+
+    expect(stderrSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Role has a blank or missing rolePrompt.'),
+    );
+    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('⚠️'));
+    stderrSpy.mockRestore();
+  });
+
+  it('does not write to stderr when there are no warnings', async () => {
+    const stderrSpy = jest.spyOn(process.stderr, 'write').mockReturnValue(true);
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: () => Promise.resolve({ id: '1' }),
+    });
+
+    await apiRequest(
+      { baseUrl: 'http://localhost:3000' },
+      'GET',
+      '/api/role/1',
+    );
+
+    expect(stderrSpy).not.toHaveBeenCalled();
+    stderrSpy.mockRestore();
+  });
+
   it('strips trailing slash from baseUrl', async () => {
     fetchSpy.mockResolvedValue({
       ok: true,

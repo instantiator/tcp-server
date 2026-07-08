@@ -16,15 +16,19 @@ export class CreateRoleDto {
 
   @IsString()
   @IsNotEmpty()
+  slug!: string;
+
+  @IsString()
+  @IsNotEmpty()
   name!: string;
 
   @IsString()
   @IsNotEmpty()
   description!: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  systemPromptTemplate!: string;
+  systemPromptTemplate?: string;
 
   @IsArray()
   @IsString({ each: true })
@@ -45,6 +49,11 @@ export class CreateRoleDto {
 }
 
 export class UpdateRoleDto {
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  slug?: string;
+
   @IsOptional()
   @IsString()
   @IsNotEmpty()

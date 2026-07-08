@@ -1,4 +1,4 @@
-import { UUID } from 'crypto';
+import { randomUUID, UUID } from 'crypto';
 import { DeepPartial } from 'typeorm';
 import { LcpCompany, LcpRole } from '../../../libs/lcp-shared/src/models';
 
@@ -122,6 +122,10 @@ export class ApiHelper {
       path: `/api/role`,
       body: {
         name,
+        // Slugs are unique per company; callers may reuse the same `name`
+        // across multiple roles in one test run, so derive a unique slug
+        // per call rather than reusing `name` verbatim.
+        slug: `${name}-${randomUUID().slice(0, 8)}`,
         companyId,
         description: 'Test role',
         systemPromptTemplate: 'You are {{name}}.',

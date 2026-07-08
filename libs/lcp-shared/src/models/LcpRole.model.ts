@@ -3,13 +3,14 @@ import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import type { AgentRunConfig } from './AgentRunConfig.model';
 import { LcpCompany } from './LcpCompany.model';
 import type { LlmConfig } from './LlmConfig.model';
+import type { WithLlmConfig } from './WithLlmConfig';
 
 /**
  * A role template that defines the behaviour and LLM configuration for an agent.
  * Multiple {@link LcpAgent} instances can run from the same role within a company.
  */
 @Entity()
-export class LcpRole {
+export class LcpRole implements WithLlmConfig {
   /**
    * Auto-generated primary key for this role.
    * @format uuid
@@ -29,6 +30,16 @@ export class LcpRole {
   companyId!: UUID;
 
   /**
+   * URL-safe identifier used to address this role without its UUID (e.g. in
+   * `lcp-cli` or agent-to-agent consultation). Unique **within the owning
+   * company** only — unlike {@link LcpCompany.slug}, which is unique
+   * globally, the same role slug may be reused across different companies.
+   * @minLength 1
+   */
+  @Column()
+  slug!: string;
+
+  /**
    * Short identifier for this role within the company (e.g. `'analyst'`, `'planner'`).
    * @minLength 1
    */
@@ -44,19 +55,25 @@ export class LcpRole {
 
   /**
    * LLM provider and model configuration for agents running in this role.
-   * Stored as JSONB. When absent, the agent loop falls back to {@link LcpCompany.llmDefault}.
+   * Stored as JSONB. When absent, resolved via {@link LlmConfigResolver}
+   * against {@link LcpCompany.llmConfig}, then the environment fallback.
    */
   @Column({ type: 'jsonb', nullable: true })
   llmConfig?: LlmConfig | null;
 
   /**
    * Handlebars-style prompt template injected as the system message at agent start.
-   * Available variables: `{{name}}`, `{{description}}`, `{{date}}`, `{{companyId}}`,
+   * Optional — when blank, resolved via {@link SystemPromptTemplateResolver}
+   * against {@link LcpCompany.systemPromptTemplate}, then
+   * `DEFAULT_SYSTEM_PROMPT_TEMPLATE`.
+   *
+   * Available variables: `{{name}}`, `{{description}}`, `{{date}}`,
+   * `{{datetime}}`, `{{timezone}}`, `{{localDatetime}}`, `{{companyId}}`,
    * `{{roleId}}`. The latter two let the agent supply identifiers required by
    * company- and role-scoped MCP tool calls.
    */
-  @Column({ type: 'text' })
-  systemPromptTemplate!: string;
+  @Column({ type: 'text', nullable: true })
+  systemPromptTemplate?: string | null;
 
   /**
    * Optional role prompt injected as prompt part 1 immediately after the system prompt.

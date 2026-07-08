@@ -31,12 +31,12 @@ describe('MaskSecretsInterceptor', () => {
   it('replaces apiKey strings with *** when masking is enabled', async () => {
     const result = asRecord(
       await intercept(true, {
-        llmDefault: { provider: 'openai', apiKey: 'test-secret-key' },
+        llmConfig: { provider: 'openai', apiKey: 'test-secret-key' },
       }),
     );
-    const llmDefault = asRecord(result['llmDefault']);
-    expect(llmDefault['apiKey']).toBe('***');
-    expect(llmDefault['provider']).toBe('openai');
+    const llmConfig = asRecord(result['llmConfig']);
+    expect(llmConfig['apiKey']).toBe('***');
+    expect(llmConfig['provider']).toBe('openai');
   });
 
   it('passes apiKey through unchanged when masking is disabled', async () => {
@@ -65,7 +65,7 @@ describe('MaskSecretsInterceptor', () => {
   });
 
   it('leaves null values unchanged', async () => {
-    const result = asRecord(await intercept(true, { llmDefault: null }));
-    expect(result['llmDefault']).toBeNull();
+    const result = asRecord(await intercept(true, { llmConfig: null }));
+    expect(result['llmConfig']).toBeNull();
   });
 });

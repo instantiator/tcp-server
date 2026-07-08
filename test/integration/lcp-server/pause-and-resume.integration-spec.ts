@@ -2,23 +2,18 @@ import { DataSource } from 'typeorm';
 import { AddAgentOutputAndConsultation1782247400000 } from '../../../apps/lcp-server/src/migrations/1782247400000-AddAgentOutputAndConsultation';
 import { AddAgentPausedAt1782831650682 } from '../../../apps/lcp-server/src/migrations/1782831650682-AddAgentPausedAt';
 import { AddAgentRequiredToolCalls1783007161076 } from '../../../apps/lcp-server/src/migrations/1783007161076-AddAgentRequiredToolCalls';
+import { requireEnv } from '../../support/require-env';
 
-// Requires DATABASE_URL pointing to a running PostgreSQL instance.
-// Run via: ./scripts/run-integration-tests.sh
+// PostgreSQL is provisioned by the integration global setup; DATABASE_URL is
+// always present. Run via: ./scripts/run-integration-tests.sh
 //
 // Calls the migration's up() method directly (idempotent — uses IF NOT EXISTS)
 // to create the schema, then verifies the resulting DB state.
 describe('Pause-and-resume schema (migration verification)', () => {
   let ds: DataSource;
-  let skip = false;
 
   beforeAll(async () => {
-    const url = process.env.DATABASE_URL;
-    if (!url || url.startsWith('sqlite')) {
-      skip = true;
-      return;
-    }
-    ds = new DataSource({ type: 'postgres', url });
+    ds = new DataSource({ type: 'postgres', url: requireEnv('DATABASE_URL') });
     await ds.initialize();
 
     // Ensure lcp_agent exists before the migration tries to ALTER it.
@@ -54,8 +49,6 @@ describe('Pause-and-resume schema (migration verification)', () => {
   });
 
   it('lcp_agent has an output column of type text', async () => {
-    if (skip) return console.log('Skipping — no postgres DATABASE_URL');
-
     const rows = await ds.query<{ column_name: string; data_type: string }[]>(`
       SELECT column_name, data_type
       FROM information_schema.columns
@@ -66,8 +59,6 @@ describe('Pause-and-resume schema (migration verification)', () => {
   });
 
   it('pending_consultation table exists with expected columns', async () => {
-    if (skip) return console.log('Skipping — no postgres DATABASE_URL');
-
     const rows = await ds.query<{ column_name: string }[]>(`
       SELECT column_name
       FROM information_schema.columns
@@ -85,8 +76,6 @@ describe('Pause-and-resume schema (migration verification)', () => {
   });
 
   it('pending_consultation has an index on consultationAgentId', async () => {
-    if (skip) return console.log('Skipping — no postgres DATABASE_URL');
-
     const rows = await ds.query<{ indexname: string }[]>(`
       SELECT indexname FROM pg_indexes
       WHERE tablename = 'pending_consultation'
@@ -96,8 +85,6 @@ describe('Pause-and-resume schema (migration verification)', () => {
   });
 
   it('pending_consultation has a composite index on (callingAgentId, status)', async () => {
-    if (skip) return console.log('Skipping — no postgres DATABASE_URL');
-
     const rows = await ds.query<{ indexname: string }[]>(`
       SELECT indexname FROM pg_indexes
       WHERE tablename = 'pending_consultation'
@@ -107,8 +94,6 @@ describe('Pause-and-resume schema (migration verification)', () => {
   });
 
   it('pending_consultation.status defaults to pending', async () => {
-    if (skip) return console.log('Skipping — no postgres DATABASE_URL');
-
     const rows = await ds.query<{ column_default: string }[]>(`
       SELECT column_default
       FROM information_schema.columns
@@ -118,8 +103,6 @@ describe('Pause-and-resume schema (migration verification)', () => {
   });
 
   it('lcp_agent has a nullable requiredToolCalls column of type text', async () => {
-    if (skip) return console.log('Skipping — no postgres DATABASE_URL');
-
     const rows = await ds.query<{ data_type: string; is_nullable: string }[]>(`
       SELECT data_type, is_nullable
       FROM information_schema.columns
@@ -131,8 +114,6 @@ describe('Pause-and-resume schema (migration verification)', () => {
   });
 
   it('lcp_agent has a nullable pausedAt column', async () => {
-    if (skip) return console.log('Skipping — no postgres DATABASE_URL');
-
     const rows = await ds.query<{ is_nullable: string }[]>(`
       SELECT is_nullable
       FROM information_schema.columns

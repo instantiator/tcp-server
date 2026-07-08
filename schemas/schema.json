@@ -716,7 +716,7 @@
           "description": "Auto-generated primary key for this company.",
           "format": "uuid"
         },
-        "llmDefault": {
+        "llmConfig": {
           "anyOf": [
             {
               "$ref": "#/definitions/LlmConfig"
@@ -725,7 +725,14 @@
               "type": "null"
             }
           ],
-          "description": "Optional company-wide default LLM configuration. Roles that do not specify their own  {@link  LcpRole.llmConfig  }  fall back to this value at run time, then to the environment-configured LLM fallback (`LLM_PROVIDER` / `LLM_MODEL`), before failing."
+          "description": "Optional company-wide default LLM configuration. Roles that do not specify their own  {@link  LcpRole.llmConfig  }  fall back to this value at run time, then to the environment-configured LLM fallback (`LLM_PROVIDER` / `LLM_MODEL`), before failing. Resolved via  {@link  LlmConfigResolver  } ."
+        },
+        "mcpServerList": {
+          "description": "Additional MCP server identifiers made available to every agent in this company, on top of the system's default servers and any extras listed on the running role. Additive, not a precedence override — resolved via  {@link  resolveMcpServerList  } .",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "name": {
           "description": "Human-readable display name for the company.",
@@ -747,13 +754,28 @@
           "description": "URL-safe identifier used in API paths and agent namespacing. Must be globally unique across all companies.",
           "minLength": 1,
           "type": "string"
+        },
+        "systemPromptTemplate": {
+          "description": "Optional company-wide default `systemPromptTemplate`. Used when a role does not specify its own  {@link  LcpRole.systemPromptTemplate  } ; falls back to `DEFAULT_SYSTEM_PROMPT_TEMPLATE` when neither is set. Resolved via  {@link  SystemPromptTemplateResolver  } .",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timezone": {
+          "description": "IANA timezone name (e.g. `'Europe/London'`) used only for *display* and prompt localization — CLI/UI timestamp formatting, and the `{{timezone}}`/ `{{localDatetime}}` prompt variables (see `buildPromptDateVars`). Never used for storage (always UTC) or as a replacement for the UTC time given to the LLM (`{{datetime}}` remains the authoritative anchor).",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
         "id",
         "slug",
         "name",
-        "description"
+        "description",
+        "mcpServerList"
       ],
       "type": "object"
     },
@@ -796,7 +818,7 @@
               "type": "null"
             }
           ],
-          "description": "LLM provider and model configuration for agents running in this role. Stored as JSONB. When absent, the agent loop falls back to  {@link  LcpCompany.llmDefault } ."
+          "description": "LLM provider and model configuration for agents running in this role. Stored as JSONB. When absent, resolved via  {@link  LlmConfigResolver  }  against  {@link  LcpCompany.llmConfig } , then the environment fallback."
         },
         "mcpServerList": {
           "description": "List of MCP server identifiers this role is permitted to call. Stored now; wired to the agent loop once MCP servers are implemented. ponytail: unused for MVP; consumed by the MCP integration phase",
@@ -832,18 +854,26 @@
           ],
           "description": "Optional agent-loop resource overrides for agents running in this role. Takes precedence over  {@link  LcpCompany.runConfig }  and environment variables. See  {@link  AgentRunConfig }  for available fields."
         },
-        "systemPromptTemplate": {
-          "description": "Handlebars-style prompt template injected as the system message at agent start. Available variables: `{{name}}`, `{{description}}`, `{{date}}`, `{{companyId}}`, `{{roleId}}`. The latter two let the agent supply identifiers required by company- and role-scoped MCP tool calls.",
+        "slug": {
+          "description": "URL-safe identifier used to address this role without its UUID (e.g. in `lcp-cli` or agent-to-agent consultation). Unique **within the owning company** only — unlike  {@link  LcpCompany.slug } , which is unique globally, the same role slug may be reused across different companies.",
+          "minLength": 1,
           "type": "string"
+        },
+        "systemPromptTemplate": {
+          "description": "Handlebars-style prompt template injected as the system message at agent start. Optional — when blank, resolved via  {@link  SystemPromptTemplateResolver  }  against  {@link  LcpCompany.systemPromptTemplate } , then `DEFAULT_SYSTEM_PROMPT_TEMPLATE`.\n\nAvailable variables: `{{name}}`, `{{description}}`, `{{date}}`, `{{datetime}}`, `{{timezone}}`, `{{localDatetime}}`, `{{companyId}}`, `{{roleId}}`. The latter two let the agent supply identifiers required by company- and role-scoped MCP tool calls.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
         "id",
         "company",
         "companyId",
+        "slug",
         "name",
         "description",
-        "systemPromptTemplate",
         "knowledgeDomains",
         "mcpServerList",
         "queryIndex"
@@ -966,6 +996,23 @@
       "required": [
         "version"
       ],
+      "type": "object"
+    },
+    "WithLlmConfig": {
+      "additionalProperties": false,
+      "description": "Marks an entity as carrying an optional LLM configuration, so callers can treat role/company objects uniformly when resolving precedence between them (see  {@link  LlmConfigResolver  } ) instead of reading differently-named fields per entity.",
+      "properties": {
+        "llmConfig": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LlmConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
       "type": "object"
     },
     "seedCompany": {

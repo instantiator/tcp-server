@@ -1,3 +1,4 @@
+import { assertRedisReachable } from '@lcp/shared';
 import {
   Injectable,
   Logger,
@@ -39,6 +40,11 @@ export class AgentWorkerService implements OnModuleInit, OnModuleDestroy {
   /** Starts the BullMQ worker on module init. */
   async onModuleInit(): Promise<void> {
     const redisUrl = this.config.getOrThrow<string>('REDIS_URL');
+
+    // Fail fast if Redis is unreachable. Without this, the Worker below (and
+    // its waitUntilReady() call) would block startup indefinitely against a
+    // downed Redis rather than erroring with a clear message.
+    await assertRedisReachable(redisUrl);
 
     this.worker = new Worker<AgentJobPayload>(
       'agent-jobs',

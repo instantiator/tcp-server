@@ -13,11 +13,16 @@ export function registerListOpenQueries(program: Command): void {
     .description('List open agent-to-human queries awaiting a response')
     .option('-c, --company-id <uuid>', 'Filter to a specific company')
     .option(
+      '--company-slug <slug>',
+      'Filter to a specific company, by slug instead of ID',
+    )
+    .option(
       '-f, --format <fmt>',
       'Output format: table, json, or csv (default: table)',
       'table',
     )
-    .action((cmdOpts: { companyId?: string; format: string }) =>
-      listOpenQueriesAction(getGlobalOptions(program), cmdOpts),
+    .action(
+      (cmdOpts: { companyId?: string; companySlug?: string; format: string }) =>
+        listOpenQueriesAction(getGlobalOptions(program), cmdOpts),
     );
 }

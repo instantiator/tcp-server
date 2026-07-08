@@ -174,14 +174,10 @@ services:
     image: lcp-mcp-storage:latest
     restart: unless-stopped
     environment:
-      MINIO_ENDPOINT: http://minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_BUCKET: ${MINIO_BUCKET:-lcp}
       LCP_SERVER_URL: http://lcp-server:3000
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
     depends_on:
-      minio:
+      lcp-server:
         condition: service_healthy
     ports:
       - "3010:3010"

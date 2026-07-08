@@ -1,35 +1,6 @@
-import {
-  CanActivate,
-  Controller,
-  ExecutionContext,
-  ForbiddenException,
-  Get,
-  Injectable,
-  Query,
-  UnauthorizedException,
-  UseGuards,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import type { Request } from 'express';
+import { InternalApiKeyGuard } from '@lcp/shared';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { StorageToolsService } from './storage-tools.service';
-
-/** Guards the file-existence endpoint with the internal API key header. */
-@Injectable()
-class InternalApiKeyGuard implements CanActivate {
-  private readonly expectedKey: string;
-  constructor(config: ConfigService) {
-    this.expectedKey = config.getOrThrow<string>('INTERNAL_API_KEY');
-  }
-  canActivate(context: ExecutionContext): boolean {
-    const req = context.switchToHttp().getRequest<Request>();
-    const provided = req.headers['x-internal-api-key'];
-    if (!provided)
-      throw new UnauthorizedException('X-Internal-Api-Key is required');
-    if (provided !== this.expectedKey)
-      throw new ForbiddenException('Invalid internal API key');
-    return true;
-  }
-}
 
 /**
  * Internal HTTP endpoint for file existence checking.

@@ -1,4 +1,10 @@
-import { AuditEvent, LcpAgent, LcpCompany, LcpRole } from '@lcp/shared';
+import {
+  AuditEvent,
+  CompanyUser,
+  LcpAgent,
+  LcpCompany,
+  LcpRole,
+} from '@lcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -14,6 +20,7 @@ describe('CompanyController (e2e)', () => {
   let roleRepo: Repository<LcpRole>;
   let agentRepo: Repository<LcpAgent>;
   let auditRepo: Repository<AuditEvent>;
+  let companyUserRepo: Repository<CompanyUser>;
   let jwt: string;
 
   beforeAll(async () => {
@@ -27,6 +34,7 @@ describe('CompanyController (e2e)', () => {
     roleRepo = moduleFixture.get(getRepositoryToken(LcpRole));
     agentRepo = moduleFixture.get(getRepositoryToken(LcpAgent));
     auditRepo = moduleFixture.get(getRepositoryToken(AuditEvent));
+    companyUserRepo = moduleFixture.get(getRepositoryToken(CompanyUser));
     jwt = makeTestJwt();
   });
 
@@ -35,6 +43,7 @@ describe('CompanyController (e2e)', () => {
     await auditRepo.createQueryBuilder().delete().execute();
     await agentRepo.createQueryBuilder().delete().execute();
     await roleRepo.createQueryBuilder().delete().execute();
+    await companyUserRepo.createQueryBuilder().delete().execute();
     await companyRepo.createQueryBuilder().delete().execute();
   });
 
@@ -64,6 +73,58 @@ describe('CompanyController (e2e)', () => {
           description: 'A company that makes everything',
         })
         .expect(401);
+    });
+
+    it('adds the requesting user (JWT sub) as a CompanyUser with memberType "creator"', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/company')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({
+          slug: 'acme',
+          name: 'Acme Corp',
+          description: 'A company that makes everything',
+        })
+        .expect(201);
+      const company = res.body as LcpCompany;
+
+      const creator = await companyUserRepo.findOneBy({
+        companyId: company.id,
+        identifier: 'test-user',
+      });
+      expect(creator).not.toBeNull();
+      expect(creator!.memberType).toBe('creator');
+    });
+
+    it('reports X-Lcp-Warnings when companyContext is blank', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/company')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({
+          slug: 'acme',
+          name: 'Acme Corp',
+          description: 'A company that makes everything',
+        })
+        .expect(201);
+
+      const warnings = JSON.parse(res.headers['x-lcp-warnings']) as string[];
+      expect(warnings).toEqual(
+        expect.arrayContaining([expect.stringContaining('companyContext')]),
+      );
+    });
+
+    it('omits X-Lcp-Warnings when companyContext is set', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/company')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({
+          slug: 'acme',
+          name: 'Acme Corp',
+          description: 'A company that makes everything',
+          companyContext: 'We build widgets.',
+        })
+        .expect(201);
+
+      expect(res.headers['x-lcp-warnings']).toBeUndefined();
     });
   });
 
@@ -157,9 +218,51 @@ describe('CompanyController (e2e)', () => {
         );
       });
     });
+
+    describe('DELETE /api/company/:id', () => {
+      it('returns 204 and removes the company, cascading to its roles', async () => {
+        await request(app.getHttpServer())
+          .post('/api/role')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            companyId: company.id,
+            slug: 'analyst',
+            name: 'analyst',
+            description: 'Analyses.',
+            systemPromptTemplate: 'You are {{name}}.',
+            knowledgeDomains: [],
+            mcpServerList: [],
+          })
+          .expect(201);
+
+        await request(app.getHttpServer())
+          .delete(`/api/company/${company.id}`)
+          .set('Authorization', `Bearer ${jwt}`)
+          .expect(204);
+
+        expect(await companyRepo.findOneBy({ id: company.id })).toBeNull();
+        expect(await roleRepo.findOneBy({ companyId: company.id })).toBeNull();
+      });
+
+      it('deletes a company by slug', async () => {
+        await request(app.getHttpServer())
+          .delete('/api/company/acme')
+          .set('Authorization', `Bearer ${jwt}`)
+          .expect(204);
+
+        expect(await companyRepo.findOneBy({ id: company.id })).toBeNull();
+      });
+
+      it('returns 404 for an unknown company', async () => {
+        await request(app.getHttpServer())
+          .delete('/api/company/00000000-0000-0000-0000-000000000000')
+          .set('Authorization', `Bearer ${jwt}`)
+          .expect(404);
+      });
+    });
   });
 
-  describe('with a company that has llmDefault', () => {
+  describe('with a company that has llmConfig', () => {
     let company: LcpCompany;
 
     beforeEach(async () => {
@@ -170,18 +273,19 @@ describe('CompanyController (e2e)', () => {
           slug: 'llm-co',
           name: 'LLM Co',
           description: 'LLM Company',
-          llmDefault: { provider: 'openai', model: 'gpt-4o' },
+          llmConfig: { provider: 'openai', model: 'gpt-4o' },
         });
       company = await companyRepo.findOneByOrFail({ slug: 'llm-co' });
     });
 
-    describe('with a role that inherits llmDefault', () => {
+    describe('with a role that inherits llmConfig', () => {
       beforeEach(async () => {
         await request(app.getHttpServer())
           .post('/api/role')
           .set('Authorization', `Bearer ${jwt}`)
           .send({
             companyId: company.id,
+            slug: 'inheritor',
             name: 'inheritor',
             description: 'Uses company default.',
             systemPromptTemplate: 'You are {{name}}.',
@@ -191,13 +295,13 @@ describe('CompanyController (e2e)', () => {
       });
 
       describe('PUT /api/company/:id', () => {
-        it('returns 200 when removing llmDefault even when roles have no llmConfig (env fallback covers)', async () => {
-          // Removing llmDefault is now permitted — orphaned roles fall back to the
+        it('returns 200 when removing llmConfig even when roles have no llmConfig (env fallback covers)', async () => {
+          // Removing llmConfig is now permitted — orphaned roles fall back to the
           // environment-level LLM config (LLM_PROVIDER / LLM_MODEL) at runtime.
           await request(app.getHttpServer())
             .put(`/api/company/${company.id}`)
             .set('Authorization', `Bearer ${jwt}`)
-            .send({ slug: 'llm-co', name: 'LLM Co', llmDefault: null })
+            .send({ slug: 'llm-co', name: 'LLM Co', llmConfig: null })
             .expect(200);
         });
       });
@@ -245,6 +349,7 @@ describe('RoleController (e2e)', () => {
         .set('Authorization', `Bearer ${jwt}`)
         .send({
           companyId: '00000000-0000-0000-0000-000000000000',
+          slug: 'orphan',
           name: 'orphan',
           description: 'No company.',
           llmConfig: { provider: 'lm-studio', model: 'qwen3-5b' },
@@ -261,6 +366,7 @@ describe('RoleController (e2e)', () => {
         .set('Authorization', `Bearer ${jwt}`)
         .send({
           companyId: 'not-a-uuid',
+          slug: 'invalid',
           name: 'invalid',
           description: 'Bad companyId.',
           llmConfig: { provider: 'lm-studio', model: 'qwen3-5b' },
@@ -294,6 +400,7 @@ describe('RoleController (e2e)', () => {
           .set('Authorization', `Bearer ${jwt}`)
           .send({
             companyId: company.id,
+            slug: 'analyst',
             name: 'analyst',
             description: 'Analyses.',
             llmConfig: { provider: 'lm-studio', model: 'qwen3-5b' },
@@ -304,7 +411,7 @@ describe('RoleController (e2e)', () => {
           .expect(201);
       });
 
-      it('returns 201 when role has no llmConfig and company has no llmDefault (env fallback covers)', async () => {
+      it('returns 201 when role has no llmConfig and company has no llmConfig (env fallback covers)', async () => {
         // The role can be created without any DB-level LLM config; the env fallback
         // (LLM_PROVIDER / LLM_MODEL) is checked at runtime when a message is sent.
         await request(app.getHttpServer())
@@ -312,6 +419,7 @@ describe('RoleController (e2e)', () => {
           .set('Authorization', `Bearer ${jwt}`)
           .send({
             companyId: company.id,
+            slug: 'env-reliant',
             name: 'env-reliant',
             description: 'Relies on env fallback.',
             systemPromptTemplate: 'You are {{name}}.',
@@ -320,10 +428,101 @@ describe('RoleController (e2e)', () => {
           })
           .expect(201);
       });
+
+      it('reports X-Lcp-Warnings when knowledgeDomains is empty and rolePrompt is blank', async () => {
+        const res = await request(app.getHttpServer())
+          .post('/api/role')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            companyId: company.id,
+            slug: 'analyst',
+            name: 'analyst',
+            description: 'Analyses.',
+            systemPromptTemplate: 'You are {{name}}.',
+            knowledgeDomains: [],
+            mcpServerList: [],
+          })
+          .expect(201);
+
+        const warnings = JSON.parse(res.headers['x-lcp-warnings']) as string[];
+        expect(warnings).toEqual(
+          expect.arrayContaining([
+            expect.stringContaining('knowledgeDomains'),
+            expect.stringContaining('rolePrompt'),
+          ]),
+        );
+      });
+    });
+
+    describe('DELETE /api/role/:id', () => {
+      it('returns 204 and removes the role', async () => {
+        const created = await request(app.getHttpServer())
+          .post('/api/role')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            companyId: company.id,
+            slug: 'analyst',
+            name: 'analyst',
+            description: 'Analyses.',
+            systemPromptTemplate: 'You are {{name}}.',
+            knowledgeDomains: [],
+            mcpServerList: [],
+          })
+          .expect(201);
+        const role = created.body as LcpRole;
+
+        await request(app.getHttpServer())
+          .delete(`/api/role/${role.id}`)
+          .set('Authorization', `Bearer ${jwt}`)
+          .expect(204);
+
+        expect(await roleRepo.findOneBy({ id: role.id })).toBeNull();
+      });
+
+      it('returns 404 for an unknown role', async () => {
+        await request(app.getHttpServer())
+          .delete('/api/role/00000000-0000-0000-0000-000000000000')
+          .set('Authorization', `Bearer ${jwt}`)
+          .expect(404);
+      });
+    });
+
+    describe('DELETE /api/company/:companyId/roles/by-slug/:slug', () => {
+      it('returns 204 and removes the role by slug', async () => {
+        await request(app.getHttpServer())
+          .post('/api/role')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            companyId: company.id,
+            slug: 'analyst',
+            name: 'analyst',
+            description: 'Analyses.',
+            systemPromptTemplate: 'You are {{name}}.',
+            knowledgeDomains: [],
+            mcpServerList: [],
+          })
+          .expect(201);
+
+        await request(app.getHttpServer())
+          .delete(`/api/company/${company.id}/roles/by-slug/analyst`)
+          .set('Authorization', `Bearer ${jwt}`)
+          .expect(204);
+
+        expect(
+          await roleRepo.findOneBy({ companyId: company.id, slug: 'analyst' }),
+        ).toBeNull();
+      });
+
+      it('returns 404 for an unknown role slug', async () => {
+        await request(app.getHttpServer())
+          .delete(`/api/company/${company.id}/roles/by-slug/no-such-role`)
+          .set('Authorization', `Bearer ${jwt}`)
+          .expect(404);
+      });
     });
   });
 
-  describe('with a company that has llmDefault', () => {
+  describe('with a company that has llmConfig', () => {
     let company: LcpCompany;
 
     beforeEach(async () => {
@@ -334,18 +533,19 @@ describe('RoleController (e2e)', () => {
           slug: 'acme',
           name: 'Acme Corp',
           description: 'A company that makes everything',
-          llmDefault: { provider: 'openai', model: 'gpt-4o' },
+          llmConfig: { provider: 'openai', model: 'gpt-4o' },
         });
       company = await companyRepo.findOneByOrFail({ slug: 'acme' });
     });
 
     describe('POST /api/role', () => {
-      it('returns 201 when role has no llmConfig but company has llmDefault', async () => {
+      it('returns 201 when role has no llmConfig but company has llmConfig', async () => {
         await request(app.getHttpServer())
           .post('/api/role')
           .set('Authorization', `Bearer ${jwt}`)
           .send({
             companyId: company.id,
+            slug: 'inheritor',
             name: 'inheritor',
             description: 'Uses company default.',
             systemPromptTemplate: 'You are {{name}}.',

@@ -6,6 +6,7 @@ import {
   HttpCode,
   Param,
   Post,
+  Req,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -18,6 +19,8 @@ import {
 } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { UUID } from 'crypto';
+import type { Request } from 'express';
+import { getCurrentUserId } from '../auth/current-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
   RoleDocumentService,
@@ -77,8 +80,13 @@ export class RoleDocumentController {
   async storeDocument(
     @Param('roleId') roleId: UUID,
     @UploadedFile() file: UploadedFileBuffer,
+    @Req() req: Request,
   ): Promise<DocumentSummary> {
-    return this.docs.storeDocument(roleId, file.originalname, file.buffer);
+    return this.docs.storeDocument(roleId, file.originalname, file.buffer, {
+      user: getCurrentUserId(req),
+      agent: null,
+      task: null,
+    });
   }
 
   /**

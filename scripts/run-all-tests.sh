@@ -33,8 +33,10 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPTS="$REPO_ROOT/scripts"
 
 # Pre-flight: bail if any lcp-* containers are already running.
-# A running lcp-dev (or any other lcp project) will compete for the same ports
-# and BullMQ queues, causing flaky integration test failures.
+# The integration and e2e suites now get their own testcontainers-managed
+# stacks on random host ports, so they no longer collide with a dev stack. This
+# check remains for the api/smoke step below, which starts the full deployment
+# on fixed host ports (3000, 8080, ...) that a running lcp-dev would clash with.
 conflicting=$(docker ps --format '{{.Names}}' 2>/dev/null | grep '^lcp-' || true)
 if [ -n "$conflicting" ]; then
   echo "ERROR: LCP containers are already running:" >&2
@@ -93,10 +95,10 @@ step "Unit tests"
 "$SCRIPTS/run-unit-tests.sh"
 echo
 
-# Integration and e2e suites manage their own minimal infrastructure (postgres,
-# redis, minio, stub-llm). The full lcp-all stack must NOT be running here —
-# its lcp-agent worker would compete with the integration test's in-process
-# BullMQ worker for queue jobs.
+# Integration and e2e suites start their own ephemeral infrastructure
+# (postgres, redis, minio, stub-llm) via testcontainers, on random host ports.
+# The full lcp-all stack must NOT be running here — its lcp-agent worker would
+# compete with the integration test's in-process BullMQ worker for queue jobs.
 step "Integration tests"
 "$SCRIPTS/run-integration-tests.sh"
 echo
@@ -118,7 +120,8 @@ step "Starting deployment for API + smoke tests"
 DEPLOYMENT_STARTED=true
 "$SCRIPTS/start-deployment.sh" \
   --project "$DEPLOYMENT_PROJECT" \
-  --env-file "$REPO_ROOT/.env.testing"
+  --env-file "$REPO_ROOT/.env.testing" \
+  --rebuild
 echo
 
 step "API tests"

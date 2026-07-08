@@ -24,24 +24,35 @@ external dependencies.
 **Integration tests** start only the infrastructure services (no app images,
 no Keycloak) and verify that the application code can query PostgreSQL, ping
 Redis, and reach MinIO. A failure here points to a connectivity or schema
-problem, not an application logic problem.
+problem, not an application logic problem. The infrastructure is started by
+[testcontainers](https://node.testcontainers.org/) from Jest's global setup,
+using the project's own `docker-compose.yml` on **random host ports** (see
+[Test infrastructure](#test-infrastructure) below), so a run never collides
+with a dev stack.
 
-**API tests** require Keycloak and run the full stack. They first verify that
-every `GET /health` endpoint returns 200, then send authenticated HTTP requests
-directly to the lcp-server API (using real JWTs) and assert on response shapes
-and status codes. Smoke tests can still be run independently against a remote
-deployment via `run-smoke-tests.sh`. A failure here points to a deployment,
-API contract, or authentication issue rather than an infrastructure problem.
+**API tests** require Keycloak and run the full, deployed stack. They first
+verify that every `GET /health` endpoint returns 200, then send authenticated
+HTTP requests directly to the lcp-server API (using real JWTs) and assert on
+response shapes and status codes. Both API and smoke tests are pure black-box
+clients: they run against _any_ already-running instance via `--base-url` and
+never start, stop, or otherwise manage that instance — so they can target a
+local stack, the CI deployment, or a remote environment unchanged. A failure
+here points to a deployment, API contract, or authentication issue rather than
+an infrastructure problem.
 
 **E2E tests** run HTTP requests against a real NestJS application (via
-`supertest`) backed by PostgreSQL. They test full request/response cycles
+`supertest`) backed by PostgreSQL, Redis, and MinIO — also started by
+testcontainers from Jest's global setup. They test full request/response cycles
 including middleware, guards, and TypeORM queries. Keycloak is not required —
-OIDC env vars are set as stubs.
+auth is mocked (jwks-rsa).
 
 ## Running the tests
 
-Each script manages its own Docker services and tears them down on exit.
-All scripts accept `-- <jest options>` to filter or configure the Jest run.
+The integration and e2e suites start their own ephemeral Docker services from
+Jest's global setup (via testcontainers) and tear them down automatically; their
+runner scripts are thin wrappers around `npm run test:integration`/`test:e2e`.
+The api and smoke suites are clients against an already-running stack. All
+scripts accept `-- <jest options>` to filter or configure the Jest run.
 
 ### All tests
 
@@ -70,8 +81,9 @@ No external services. Safe to run at any time. See
 ./scripts/run-integration-tests.sh -- --testNamePattern="redis"
 ```
 
-Starts postgres, redis, and minio. Requires Docker. See
-[scripts/run-integration-tests.sh](../scripts/run-integration-tests.sh).
+Jest's global setup starts postgres, redis, minio, and the stub-llm service via
+testcontainers (random host ports) and tears them down after the run. Requires
+Docker. See [scripts/run-integration-tests.sh](../scripts/run-integration-tests.sh).
 
 ### API & smoke tests
 
@@ -112,11 +124,40 @@ See [scripts/run-api-tests.sh](../scripts/run-api-tests.sh) and
 
 ```bash
 ./scripts/run-e2e-tests.sh
-./scripts/run-e2e-tests.sh -- --testPathPattern="company"
+./scripts/run-e2e-tests.sh -- --testPathPatterns="company"
 ```
 
-Starts postgres, redis, and minio. Requires Docker. See
+Jest's global setup starts postgres, redis, and minio via testcontainers
+(random host ports) and tears them down after the run. Requires Docker. Because
+global setup provisions the infrastructure, `npm run test:e2e` (bare jest) works
+directly too — it no longer hangs on an unreachable Redis. See
 [scripts/run-e2e-tests.sh](../scripts/run-e2e-tests.sh).
+
+## Test infrastructure
+
+The **integration** and **e2e** tiers provision their backing services with
+[testcontainers](https://node.testcontainers.org/), driven from Jest
+`globalSetup`/`globalTeardown` (`test/integration/global-*.ts`,
+`test/e2e/global-*.ts`). The shared helper `test/support/testcontainers-env.ts`
+starts the services from the project's own `docker-compose.yml`, so there is one
+source of truth for how they are configured.
+
+A small test-only overlay, `test/support/docker-compose.dynamic-ports.yml`,
+replaces the fixed host-port bindings with random ones (via the Compose Spec's
+`!override` tag). This is what lets a test run coexist with a dev stack — and is
+why the runner scripts no longer pause a dev container or probe for
+already-running infrastructure.
+
+Required env vars are read via `test/support/require-env.ts`, which throws if a
+value is missing rather than letting a spec silently skip. If a container fails
+to start, the helper writes each service's logs to
+`test-results/<tier>-compose-logs/` (uploaded as a CI artifact on failure) and
+raises an error that distinguishes a crash-looping container from a
+port-binding failure.
+
+The **api** and **smoke** tiers are unchanged: they use `docker-compose.yml` +
+`start-deployment.sh` (including the Keycloak realm bootstrap) and act purely as
+clients against an already-running instance.
 
 ## Test file locations
 

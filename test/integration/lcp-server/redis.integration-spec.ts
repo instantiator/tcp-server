@@ -1,14 +1,13 @@
 import { createClient } from 'redis';
+import { requireEnv } from '../../support/require-env';
 
-// Requires REDIS_URL pointing to a running Redis instance.
-// Run via: ./scripts/run-integration-tests.sh
+// Redis is provisioned by the integration global setup; REDIS_URL is always
+// present. Run via: ./scripts/run-integration-tests.sh
 describe('Redis connectivity', () => {
   let client: ReturnType<typeof createClient>;
 
   beforeAll(async () => {
-    const url = process.env.REDIS_URL;
-    if (!url) return;
-    client = createClient({ url });
+    client = createClient({ url: requireEnv('REDIS_URL') });
     await client.connect();
   });
 
@@ -19,10 +18,6 @@ describe('Redis connectivity', () => {
   });
 
   it('responds to PING', async () => {
-    if (!client?.isOpen) {
-      console.log('Skipping — no REDIS_URL set');
-      return;
-    }
     const result = await client.ping();
     expect(result).toBe('PONG');
   });

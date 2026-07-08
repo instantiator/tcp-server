@@ -116,6 +116,7 @@ describe('lcp-mcp-interactions -> lcp-server (cross-service e2e)', () => {
       .set('Authorization', `Bearer ${jwt}`)
       .send({
         companyId,
+        slug: 'analyst',
         name: 'analyst',
         description: 'Analyses things.',
         llmConfig: { provider: 'lm-studio', model: 'qwen3-5b' },

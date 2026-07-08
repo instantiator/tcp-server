@@ -1,5 +1,6 @@
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest } from '../core/api';
+import { RoleIdentifierOpts, resolveRoleId } from '../core/resolve-identifiers';
 import { runCommand } from '../core/run-command';
 import { resolveToken } from '../auth/token';
 
@@ -18,14 +19,16 @@ interface DocumentSummary {
  */
 export function listRoleDocumentsAction(
   opts: GlobalOptions,
-  cmdOpts: { roleId: string },
+  cmdOpts: RoleIdentifierOpts,
 ): Promise<void> {
   return runCommand(async () => {
     const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+    const api = apiOptions(opts, token);
+    const roleId = await resolveRoleId(api, cmdOpts);
     const docs = await apiRequest<DocumentSummary[]>(
-      apiOptions(opts, token),
+      api,
       'GET',
-      `/api/role/${cmdOpts.roleId}/documents`,
+      `/api/role/${roleId}/documents`,
     );
     process.stdout.write(JSON.stringify(docs, null, 2) + '\n');
   });

@@ -3,5 +3,5 @@
   "name": "Test Company",
   "description": "A test company",
   "companyContext": "This company is responsible for testing things.",
-  "llmDefault": null
+  "llmConfig": null
 }

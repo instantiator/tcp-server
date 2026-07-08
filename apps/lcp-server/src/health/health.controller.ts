@@ -1,15 +1,17 @@
+import { assertRedisReachable } from '@lcp/shared';
 import { Controller, Get } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   HealthCheck,
   HealthCheckService,
+  HealthIndicatorResult,
   HttpHealthIndicator,
   TypeOrmHealthIndicator,
 } from '@nestjs/terminus';
-import { ConfigService } from '@nestjs/config';
 
 /**
  * Exposes `GET /health` to report the liveness of lcp-server's dependencies:
- * PostgreSQL, MinIO, and the OIDC provider.
+ * PostgreSQL, Redis, MinIO, and the OIDC provider.
  */
 @Controller('health')
 export class HealthController {
@@ -21,8 +23,8 @@ export class HealthController {
   ) {}
 
   /**
-   * Runs health checks against the database, MinIO, and the OIDC provider.
-   * Returns HTTP 200 when all checks pass, 503 when any fail.
+   * Runs health checks against the database, Redis, MinIO, and the OIDC
+   * provider. Returns HTTP 200 when all checks pass, 503 when any fail.
    */
   @Get()
   @HealthCheck()
@@ -40,6 +42,7 @@ export class HealthController {
     const oidcBaseUrl = new URL(oidcIssuer).origin;
     return this.health.check([
       () => this.db.pingCheck('database'),
+      () => this.pingRedis(),
       () => this.http.pingCheck('minio', `${minioEndpoint}/minio/health/live`),
       () =>
         this.http.pingCheck(
@@ -47,5 +50,25 @@ export class HealthController {
           `${oidcBaseUrl}/realms/master/.well-known/openid-configuration`,
         ),
     ]);
+  }
+
+  /**
+   * Reports Redis liveness. lcp-server depends on Redis for the agent-jobs
+   * BullMQ queue and the event relay, so a downed Redis should surface here.
+   * Uses the shared bounded reachability probe so the check itself cannot hang.
+   */
+  private async pingRedis(): Promise<HealthIndicatorResult> {
+    const url = this.config.getOrThrow<string>('REDIS_URL');
+    try {
+      await assertRedisReachable(url);
+      return { redis: { status: 'up' } };
+    } catch (err) {
+      return {
+        redis: {
+          status: 'down',
+          message: err instanceof Error ? err.message : String(err),
+        },
+      };
+    }
   }
 }

@@ -2,6 +2,7 @@ import {
   AgentStatus,
   AuditEvent,
   AuditEventType,
+  CompanyUser,
   LcpAgent,
   LcpCompany,
   LcpRole,
@@ -12,8 +13,7 @@ import { UUID } from 'crypto';
 import { DeepPartial, Repository } from 'typeorm';
 import { LcpAgentTemplate } from '../templates/LcpAgentTemplate';
 import { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
-import { LcpRoleTemplate } from '../templates/LcpRoleTemplate';
-import { defined, isUUID } from '../utils/ObjectUtils';
+import { isUUID } from '../utils/ObjectUtils';
 
 /**
  * Thin TypeORM wrapper providing create, update, and retrieval operations
@@ -30,20 +30,49 @@ export class DbService {
     private readonly agentRepo: Repository<LcpAgent>,
     @InjectRepository(AuditEvent)
     private readonly auditRepo: Repository<AuditEvent>,
+    @InjectRepository(CompanyUser)
+    private readonly companyUserRepo: Repository<CompanyUser>,
   ) {}
 
   // Company
 
   /**
-   * Creates a new {@link LcpCompany} from template,
-   * replacing any existing record with the same slug.
+   * Creates a new {@link LcpCompany} from template, replacing any existing
+   * record with the same slug, and adds `creatorIdentifier` as a
+   * {@link CompanyUser} with `memberType: 'creator'` (skipped if one already
+   * exists for this company+identifier).
    */
   async createCompany(
     template: LcpCompanyTemplate,
     slug: string,
+    creatorIdentifier: string,
+    creatorName?: string | null,
   ): Promise<LcpCompany> {
     await this.companyRepo.delete({ slug });
-    return this.companyRepo.save({ ...template, id: undefined!, slug });
+    const company = await this.companyRepo.save({
+      ...template,
+      id: undefined!,
+      slug,
+    });
+
+    const existingCreator = await this.companyUserRepo.findOneBy({
+      companyId: company.id,
+      identifier: creatorIdentifier,
+    });
+    if (!existingCreator) {
+      await this.companyUserRepo.save(
+        this.companyUserRepo.create({
+          companyId: company.id,
+          identifier: creatorIdentifier,
+          name: creatorName ?? null,
+          memberType: 'creator',
+          roles: [],
+          knowledgeDomains: [],
+        }),
+      );
+    }
+
+    return company;
   }
 
   /**
@@ -51,33 +80,55 @@ export class DbService {
    * Accepts a deep-partial shape so callers can patch nested JSONB fields without
    * providing a complete object.
    *
+   * The entity to update is resolved — in order — from `identifiers.id`,
+   * `company.id`, then a lookup of `identifiers.slug`. If any identifier is
+   * given but resolves to no existing row, this throws {@link NotFoundException}
+   * rather than silently creating a new record — callers that want a create
+   * must omit all three. There is no delete-then-recreate: an update is
+   * always a merge-and-save onto the row already found, so there is never a
+   * window where the row doesn't exist.
+   *
    * @param company the company fields to create or merge
-   * @param replace if `true`, removes any existing record matching the slug first
+   * @param identifiers optional `id`/`slug` used to resolve an existing record to update
    */
   async setCompany(
     company: DeepPartial<LcpCompany>,
-    replace: boolean,
+    identifiers: { id?: UUID; slug?: string } = {},
   ): Promise<LcpCompany> {
-    if (replace) {
-      await this.companyRepo.delete({ slug: company.slug });
+    // An identifier being *given* (even one that resolves to nothing) always
+    // means "update" — only the total absence of id/slug means "create".
+    // Without this distinction, a slug that doesn't exist would silently
+    // fall through to creating a new (slug-less, invalid) row instead of a 404.
+    const isUpdate =
+      identifiers.id !== undefined ||
+      company.id !== undefined ||
+      identifiers.slug !== undefined;
+    const idFromSlug = identifiers.slug
+      ? (await this.companyRepo.findOneBy({ slug: identifiers.slug }))?.id
+      : undefined;
+    const updateIndex = identifiers.id ?? company.id ?? idFromSlug;
+
+    const existing = updateIndex
+      ? await this.companyRepo.findOneBy({ id: updateIndex })
+      : null;
+    if (isUpdate && !existing) {
+      throw new NotFoundException(
+        `Company ${updateIndex ?? identifiers.slug} not found`,
+      );
     }
 
-    const existing = company.id
-      ? await this.companyRepo.findOneBy({ id: company.id })
-      : null;
-
-    const merged = defined(existing)
+    const merged = existing
       ? {
           ...existing,
           ...company,
-          // Deep-merge llmDefault so a partial patch (e.g. only model) preserves other fields.
-          // When llmDefault is explicitly null, pass it through as-is to allow removal.
-          llmDefault:
-            company.llmDefault !== undefined
-              ? company.llmDefault !== null && existing.llmDefault != null
-                ? { ...existing.llmDefault, ...company.llmDefault }
-                : company.llmDefault
-              : existing.llmDefault,
+          // Deep-merge llmConfig so a partial patch (e.g. only model) preserves other fields.
+          // When llmConfig is explicitly null, pass it through as-is to allow removal.
+          llmConfig:
+            company.llmConfig !== undefined
+              ? company.llmConfig !== null && existing.llmConfig != null
+                ? { ...existing.llmConfig, ...company.llmConfig }
+                : company.llmConfig
+              : existing.llmConfig,
         }
       : company;
 
@@ -96,17 +147,88 @@ export class DbService {
       : this.companyRepo.findOneBy({ slug: identifier });
   }
 
+  /**
+   * Deletes a company by UUID. Cascades to its roles, agents, audit events,
+   * conversations, knowledge chunks, episodic memory, and company users (see
+   * `AddMissingCompanyRoleForeignKeys` migration). Returns `true` if a record
+   * was deleted, `false` if no company with that id exists.
+   */
+  async deleteCompany(id: UUID): Promise<boolean> {
+    const result = await this.companyRepo.delete(id);
+    return (result.affected ?? 0) > 0;
+  }
+
   // Role
 
-  /** Creates a new {@link LcpRole} from the given template. */
-  async createRole(template: LcpRoleTemplate): Promise<LcpRole> {
-    const company = await this.companyRepo.findOneBy({
-      id: template.companyId,
-    });
-    if (!company) {
-      throw new NotFoundException(`Company ${template.companyId} not found`);
+  /**
+   * Either creates or updates an {@link LcpRole}.
+   * Accepts a deep-partial shape so callers can patch nested JSONB fields
+   * without providing a complete object.
+   *
+   * Mirrors {@link setCompany}'s pattern: the entity to update is resolved —
+   * in order — from `identifiers.id`, `role.id`, then a lookup of
+   * `identifiers.slug` (scoped to `role.companyId`, since role slugs are
+   * only unique within a company). If any identifier is given but resolves
+   * to no existing row, this throws {@link NotFoundException}. On create,
+   * the owning company must exist. No delete-then-recreate — an update is
+   * always a merge-and-save onto the row already found.
+   *
+   * @param role the role fields to create or merge
+   * @param identifiers optional `id`/`slug` used to resolve an existing record to update
+   */
+  async setRole(
+    role: DeepPartial<LcpRole>,
+    identifiers: { id?: UUID; slug?: string } = {},
+  ): Promise<LcpRole> {
+    // See setCompany: an identifier being *given* (even one that resolves to
+    // nothing) always means "update" — only its total absence means "create".
+    const isUpdate =
+      identifiers.id !== undefined ||
+      role.id !== undefined ||
+      identifiers.slug !== undefined;
+    const idFromSlug =
+      identifiers.slug && role.companyId
+        ? (
+            await this.roleRepo.findOneBy({
+              slug: identifiers.slug,
+              companyId: role.companyId,
+            })
+          )?.id
+        : undefined;
+    const updateIndex = identifiers.id ?? role.id ?? idFromSlug;
+
+    const existing = updateIndex
+      ? await this.roleRepo.findOneBy({ id: updateIndex })
+      : null;
+    if (isUpdate && !existing) {
+      throw new NotFoundException(
+        `Role ${updateIndex ?? identifiers.slug} not found`,
+      );
     }
-    return this.roleRepo.save(this.roleRepo.create(template));
+
+    if (!isUpdate) {
+      const company = await this.companyRepo.findOneBy({
+        id: role.companyId,
+      });
+      if (!company) {
+        throw new NotFoundException(`Company ${role.companyId} not found`);
+      }
+    }
+
+    const merged = existing
+      ? {
+          ...existing,
+          ...role,
+          llmConfig:
+            role.llmConfig !== undefined
+              ? role.llmConfig !== null && existing.llmConfig != null
+                ? { ...existing.llmConfig, ...role.llmConfig }
+                : role.llmConfig
+              : existing.llmConfig,
+        }
+      : role;
+
+    return this.roleRepo.save(this.roleRepo.create(merged));
   }
 
   /** Retrieves a role by its UUID. Returns `null` if not found. */
@@ -115,31 +237,33 @@ export class DbService {
   }
 
   /**
-   * Partially updates an existing {@link LcpRole} by id.
-   * Deep-merges `llmConfig` so a partial patch (e.g. only `model`) preserves other fields.
-   * Returns the updated role, or `null` if no role with that id exists.
+   * Retrieves a role within a given company by its UUID or slug (role slugs
+   * are unique only within their owning company, so the company must be
+   * known). Returns `null` if not found.
    */
-  async updateRole(
-    id: UUID,
-    partial: DeepPartial<Omit<LcpRole, 'id' | 'company'>>,
+  async findRoleByIdOrSlug(
+    companyId: UUID,
+    identifier: string,
   ): Promise<LcpRole | null> {
-    const existing = await this.roleRepo.findOneBy({ id });
-    if (!existing) return null;
-    const merged = {
-      ...existing,
-      ...partial,
-      id,
-      llmConfig:
-        partial.llmConfig !== undefined
-          ? { ...existing.llmConfig, ...partial.llmConfig }
-          : existing.llmConfig,
-    };
-    return this.roleRepo.save(merged);
+    return isUUID(identifier)
+      ? this.roleRepo.findOneBy({ id: identifier, companyId })
+      : this.roleRepo.findOneBy({ slug: identifier, companyId });
   }
 
   /** Returns all roles for a given company. */
   async listRoles(companyId: UUID): Promise<LcpRole[]> {
     return this.roleRepo.findBy({ companyId });
+  }
+
+  /**
+   * Deletes a role by UUID. Cascades to its agents, knowledge chunks,
+   * episodic memory, and conversations (see
+   * `AddMissingCompanyRoleForeignKeys` migration). Returns `true` if a
+   * record was deleted, `false` if no role with that id exists.
+   */
+  async deleteRole(id: UUID): Promise<boolean> {
+    const result = await this.roleRepo.delete(id);
+    return (result.affected ?? 0) > 0;
   }
 
   // Agent

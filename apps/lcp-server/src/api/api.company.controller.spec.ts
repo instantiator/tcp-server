@@ -1,21 +1,52 @@
+import { NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import type { Request, Response } from 'express';
 import { DbService } from '../db/db.service';
 import { CompanyController } from './api.company.controller';
 import { ApiService } from './api.service';
 
+const fakeReq = (user: Record<string, unknown> = { sub: 'alice' }): Request =>
+  ({ user }) as unknown as Request;
+
+const fakeRes = (): Response =>
+  ({ setHeader: jest.fn() }) as unknown as Response;
+
+const fakeCompany = {
+  id: randomUUID(),
+  slug: 'acme',
+  name: 'Acme',
+  description: 'A Company That Makes Everything',
+  companyContext: 'We build widgets.',
+  mcpServerList: [],
+} as never;
+
 const makeApiService = (): jest.Mocked<
   Pick<ApiService, 'createCompany' | 'setCompany' | 'getCompany'>
 > => ({
-  createCompany: jest.fn().mockResolvedValue(undefined),
-  setCompany: jest.fn().mockResolvedValue(undefined),
+  createCompany: jest.fn().mockResolvedValue(fakeCompany),
+  setCompany: jest.fn().mockResolvedValue(fakeCompany),
   getCompany: jest.fn().mockResolvedValue(null),
 });
 
 const makeDbService = (): jest.Mocked<
-  Pick<DbService, 'listRoles' | 'listCompanies'>
+  Pick<
+    DbService,
+    | 'listRoles'
+    | 'listCompanies'
+    | 'getCompany'
+    | 'findRoleByIdOrSlug'
+    | 'setRole'
+    | 'deleteCompany'
+    | 'deleteRole'
+  >
 > => ({
   listRoles: jest.fn().mockResolvedValue([]),
   listCompanies: jest.fn().mockResolvedValue([]),
+  getCompany: jest.fn().mockResolvedValue(null),
+  findRoleByIdOrSlug: jest.fn().mockResolvedValue(null),
+  setRole: jest.fn(),
+  deleteCompany: jest.fn().mockResolvedValue(true),
+  deleteRole: jest.fn().mockResolvedValue(true),
 });
 
 describe('CompanyController', () => {
@@ -33,25 +64,57 @@ describe('CompanyController', () => {
   });
 
   describe('postCompany', () => {
-    it('calls apiService.createCompany with the template and slug', async () => {
-      await controller.postCompany({
-        name: 'Acme Corp',
-        slug: 'acme',
-        description: 'A Company That Makes Everything',
-      });
+    it('calls apiService.createCompany with the template, slug, and creator identity', async () => {
+      await controller.postCompany(
+        {
+          name: 'Acme Corp',
+          slug: 'acme',
+          description: 'A Company That Makes Everything',
+        },
+        fakeReq({ sub: 'alice', email: 'alice@example.com' }),
+        fakeRes(),
+      );
       expect(api.createCompany).toHaveBeenCalledWith(
-        { name: 'Acme Corp', description: 'A Company That Makes Everything' },
+        {
+          name: 'Acme Corp',
+          description: 'A Company That Makes Everything',
+          mcpServerList: [],
+        },
         'acme',
+        'alice',
+        'alice@example.com',
+      );
+    });
+
+    it('falls back to "unknown" when the token has no sub claim', async () => {
+      await controller.postCompany(
+        {
+          name: 'Acme Corp',
+          slug: 'acme',
+          description: 'A Company That Makes Everything',
+        },
+        fakeReq({}),
+        fakeRes(),
+      );
+      expect(api.createCompany).toHaveBeenCalledWith(
+        expect.anything(),
+        'acme',
+        'unknown',
+        null,
       );
     });
 
     it('resolves without throwing', async () => {
       await expect(
-        controller.postCompany({
-          name: 'Acme',
-          slug: 'acme',
-          description: 'A Company That Makes Everything',
-        }),
+        controller.postCompany(
+          {
+            name: 'Acme',
+            slug: 'acme',
+            description: 'A Company That Makes Everything',
+          },
+          fakeReq(),
+          fakeRes(),
+        ),
       ).resolves.not.toThrow();
     });
   });
@@ -60,22 +123,22 @@ describe('CompanyController', () => {
     it('calls apiService.setCompany with the path id and partial body', async () => {
       const id = randomUUID();
       const partial = { slug: 'acme', name: 'Acme' };
-      await controller.putCompany(id, partial);
+      await controller.putCompany(id, partial, fakeRes());
       expect(api.setCompany).toHaveBeenCalledWith(id, partial);
     });
 
     it('allows a partial body with only some fields', async () => {
       const id = randomUUID();
-      await controller.putCompany(id, { name: 'Updated Name' });
+      await controller.putCompany(id, { name: 'Updated Name' }, fakeRes());
       expect(api.setCompany).toHaveBeenCalledWith(id, { name: 'Updated Name' });
     });
 
-    it('allows patching a nested llmDefault field', async () => {
+    it('allows patching a nested llmConfig field', async () => {
       const id = randomUUID();
       const partial = {
-        llmDefault: { provider: 'openai', model: 'gpt-4o-mini' },
+        llmConfig: { provider: 'openai', model: 'gpt-4o-mini' },
       };
-      await controller.putCompany(id, partial);
+      await controller.putCompany(id, partial, fakeRes());
       expect(api.setCompany).toHaveBeenCalledWith(id, partial);
     });
   });
@@ -94,6 +157,7 @@ describe('CompanyController', () => {
         slug: 'acme',
         name: 'Acme',
         description: 'A Company That Makes Everything',
+        mcpServerList: [],
       };
       api.getCompany.mockResolvedValue(fakeCompany);
 
@@ -116,6 +180,7 @@ describe('CompanyController', () => {
           slug: 'acme',
           name: 'Acme',
           description: 'A Company That Makes Everything',
+          mcpServerList: [],
         },
       ];
       db.listCompanies.mockResolvedValue(companies);
@@ -127,10 +192,111 @@ describe('CompanyController', () => {
   });
 
   describe('listRoles', () => {
-    it('delegates to dbService.listRoles with the company id', async () => {
+    it('resolves the company by ID or slug, then delegates to dbService.listRoles', async () => {
       const id = randomUUID();
-      await controller.listRoles(id);
+      db.getCompany.mockResolvedValue({ id } as never);
+
+      await controller.listRoles('acme-slug');
+      expect(db.getCompany).toHaveBeenCalledWith('acme-slug');
       expect(db.listRoles).toHaveBeenCalledWith(id);
+    });
+
+    it('throws NotFoundException when the company does not resolve', async () => {
+      db.getCompany.mockResolvedValue(null);
+      await expect(controller.listRoles('no-such-co')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('getRoleBySlug', () => {
+    it('resolves the company then delegates to findRoleByIdOrSlug', async () => {
+      const companyId = randomUUID();
+      const role = { id: randomUUID(), slug: 'analyst' };
+      db.getCompany.mockResolvedValue({ id: companyId } as never);
+      db.findRoleByIdOrSlug.mockResolvedValue(role as never);
+
+      const result = await controller.getRoleBySlug('acme-slug', 'analyst');
+      expect(db.getCompany).toHaveBeenCalledWith('acme-slug');
+      expect(db.findRoleByIdOrSlug).toHaveBeenCalledWith(companyId, 'analyst');
+      expect(result).toBe(role);
+    });
+
+    it('throws NotFoundException when the role does not resolve', async () => {
+      db.getCompany.mockResolvedValue({ id: randomUUID() } as never);
+      db.findRoleByIdOrSlug.mockResolvedValue(null);
+      await expect(
+        controller.getRoleBySlug('acme', 'no-such-role'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws NotFoundException when the company does not resolve', async () => {
+      db.getCompany.mockResolvedValue(null);
+      await expect(
+        controller.getRoleBySlug('no-such-co', 'analyst'),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('putRoleBySlug', () => {
+    it('resolves the company, then delegates to setRole with the resolved companyId', async () => {
+      const companyId = randomUUID();
+      db.getCompany.mockResolvedValue({ id: companyId } as never);
+      db.setRole.mockResolvedValue({
+        id: randomUUID(),
+        knowledgeDomains: ['finance'],
+        rolePrompt: 'You are a careful analyst.',
+      } as never);
+
+      await controller.putRoleBySlug(
+        'acme-slug',
+        'analyst',
+        { name: 'Updated' },
+        fakeRes(),
+      );
+      expect(db.setRole).toHaveBeenCalledWith(
+        { name: 'Updated', companyId },
+        { slug: 'analyst' },
+      );
+    });
+  });
+
+  describe('deleteCompany', () => {
+    it('resolves the company then delegates to dbService.deleteCompany', async () => {
+      const companyId = randomUUID();
+      db.getCompany.mockResolvedValue({ id: companyId } as never);
+
+      await controller.deleteCompany('acme-slug');
+      expect(db.getCompany).toHaveBeenCalledWith('acme-slug');
+      expect(db.deleteCompany).toHaveBeenCalledWith(companyId);
+    });
+
+    it('throws NotFoundException when the company does not resolve', async () => {
+      db.getCompany.mockResolvedValue(null);
+      await expect(controller.deleteCompany('no-such-co')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('deleteRoleBySlug', () => {
+    it('resolves the company and role, then delegates to dbService.deleteRole', async () => {
+      const companyId = randomUUID();
+      const roleId = randomUUID();
+      db.getCompany.mockResolvedValue({ id: companyId } as never);
+      db.findRoleByIdOrSlug.mockResolvedValue({ id: roleId } as never);
+
+      await controller.deleteRoleBySlug('acme-slug', 'analyst');
+      expect(db.findRoleByIdOrSlug).toHaveBeenCalledWith(companyId, 'analyst');
+      expect(db.deleteRole).toHaveBeenCalledWith(roleId);
+    });
+
+    it('throws NotFoundException when the role does not resolve', async () => {
+      db.getCompany.mockResolvedValue({ id: randomUUID() } as never);
+      db.findRoleByIdOrSlug.mockResolvedValue(null);
+      await expect(
+        controller.deleteRoleBySlug('acme', 'no-such-role'),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

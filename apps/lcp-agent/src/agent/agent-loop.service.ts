@@ -12,16 +12,21 @@ import {
   DEFAULT_AGENT_LOOP_TIMEOUT_MS,
   DEFAULT_LLM_CONTEXT_WINDOW,
   DEFAULT_REQUIRED_TOOL_RETRIES,
+  DEFAULT_SYSTEM_PROMPT_TEMPLATE,
   LcpAgent,
   LlmConfig,
   StreamEventLike,
   SupervisedGraphResult,
   ToolVisibilityTracker,
   buildAgentGraph,
+  buildPromptDateVars,
   mapStreamEvent,
   renderTemplate,
   resolveEnvLlmConfig,
+  resolveLlmConfig,
+  resolveMcpServerList,
   resolveRunConfig,
+  resolveSystemPromptTemplate,
   runSupervisedGraph,
 } from '@lcp/shared';
 import { Injectable, Logger } from '@nestjs/common';
@@ -153,15 +158,16 @@ export class AgentLoopService {
       return;
     }
 
-    const llmConfig =
-      agent.role.llmConfig ??
-      agent.company.llmDefault ??
-      resolveEnvLlmConfig(this.config);
+    const llmConfig = resolveLlmConfig(
+      agent.role,
+      agent.company,
+      resolveEnvLlmConfig(this.config),
+    );
 
     if (!llmConfig) {
       await this.failRun(
         agent,
-        'No LLM config: role has no llmConfig, company has no llmDefault, and no LLM env fallback is configured',
+        'No LLM config: role has no llmConfig, company has no llmConfig, and no LLM env fallback is configured',
       );
       return;
     }
@@ -231,13 +237,13 @@ export class AgentLoopService {
     replyContent?: string,
   ): Promise<void> {
     const mcpServerUrls = resolveMcpServerUrls(this.config);
-    // Default servers (all configured registry entries) are always included; role list adds extras.
-    const mcpServerNames = [
-      ...new Set([
-        ...Object.keys(mcpServerUrls),
-        ...(agent.role.mcpServerList ?? []),
-      ]),
-    ];
+    // Additive union: default registry servers, plus any extras from the
+    // company and the role (not a precedence chain — every source contributes).
+    const mcpServerNames = resolveMcpServerList(
+      Object.keys(mcpServerUrls),
+      agent.company,
+      agent.role,
+    );
     const mcpTools = await this.mcp.loadTools(mcpServerNames, mcpServerUrls, {
       agentId: agent.id,
       companyId: agent.companyId,
@@ -613,12 +619,22 @@ export class AgentLoopService {
     initialPrompt: string,
   ): Promise<typeof MessagesAnnotation.State> {
     const { role, company } = agent;
-    const systemPrompt = renderTemplate(role.systemPromptTemplate, {
+    const systemPromptTemplate = resolveSystemPromptTemplate(
+      role,
+      company,
+      DEFAULT_SYSTEM_PROMPT_TEMPLATE,
+    );
+    const systemPrompt = renderTemplate(systemPromptTemplate, {
       name: role.name,
       description: role.description,
-      date: new Date().toISOString().split('T')[0],
+      ...buildPromptDateVars(company),
       companyId: agent.companyId,
       roleId: role.id,
+      // Slugs alongside the ids so the agent can consult by slug (see
+      // request_agent_consultation's companySlug/roleSlug), which reads
+      // more naturally in a rendered prompt than a bare UUID.
+      companySlug: company.slug,
+      roleSlug: role.slug,
     });
 
     const ragChunks = await this.rag.retrieve(

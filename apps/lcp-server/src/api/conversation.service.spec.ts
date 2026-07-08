@@ -2,6 +2,7 @@ import {
   CompanyUser,
   Conversation,
   ConversationMessage,
+  LcpCompany,
   LcpRole,
 } from '@lcp/shared';
 import {
@@ -14,11 +15,15 @@ import type { DataSource, EntityManager, Repository } from 'typeorm';
 import { ConversationService } from './conversation.service';
 
 const makeRepo = <T extends object>(): jest.Mocked<
-  Pick<Repository<T>, 'find' | 'findOne' | 'findBy' | 'create' | 'save'>
+  Pick<
+    Repository<T>,
+    'find' | 'findOne' | 'findBy' | 'findOneBy' | 'create' | 'save'
+  >
 > => ({
   find: jest.fn().mockResolvedValue([]),
   findOne: jest.fn().mockResolvedValue(null),
   findBy: jest.fn().mockResolvedValue([]),
+  findOneBy: jest.fn().mockResolvedValue(null),
   create: jest.fn().mockImplementation((d) => d as T),
   save: jest.fn().mockImplementation((e) => Promise.resolve(e as T)),
 });
@@ -49,6 +54,7 @@ describe('ConversationService', () => {
   let msgRepo: ReturnType<typeof makeRepo<ConversationMessage>>;
   let userRepo: ReturnType<typeof makeRepo<CompanyUser>>;
   let roleRepo: ReturnType<typeof makeRepo<LcpRole>>;
+  let companyRepo: ReturnType<typeof makeRepo<LcpCompany>>;
   let dataSource: ReturnType<typeof makeDataSource>;
   let service: ConversationService;
 
@@ -61,12 +67,14 @@ describe('ConversationService', () => {
     msgRepo = makeRepo();
     userRepo = makeRepo();
     roleRepo = makeRepo();
+    companyRepo = makeRepo();
     dataSource = makeDataSource();
     service = new ConversationService(
       convRepo as unknown as Repository<Conversation>,
       msgRepo as unknown as Repository<ConversationMessage>,
       userRepo as unknown as Repository<CompanyUser>,
       roleRepo as unknown as Repository<LcpRole>,
+      companyRepo as unknown as Repository<LcpCompany>,
       dataSource as unknown as DataSource,
     );
   });
@@ -96,13 +104,35 @@ describe('ConversationService', () => {
     });
 
     it('returns conversation and messages', async () => {
-      const conv = { id: randomUUID(), slug: 'analyst-1' } as Conversation;
+      const conv = {
+        id: randomUUID(),
+        slug: 'analyst-1',
+        companyId,
+      } as Conversation;
       convRepo.findOne.mockResolvedValue(conv);
       msgRepo.find.mockResolvedValue([]);
+      companyRepo.findOneBy.mockResolvedValue(null);
 
       const result = await service.get('analyst-1');
       expect(result.conversation).toBe(conv);
       expect(result.messages).toEqual([]);
+      expect(result.companyTimezone).toBeNull();
+    });
+
+    it('includes the owning company timezone when set', async () => {
+      const conv = {
+        id: randomUUID(),
+        slug: 'analyst-1',
+        companyId,
+      } as Conversation;
+      convRepo.findOne.mockResolvedValue(conv);
+      msgRepo.find.mockResolvedValue([]);
+      companyRepo.findOneBy.mockResolvedValue({
+        timezone: 'Europe/London',
+      } as LcpCompany);
+
+      const result = await service.get('analyst-1');
+      expect(result.companyTimezone).toBe('Europe/London');
     });
   });
 

@@ -18,20 +18,18 @@ import { AuditService } from '../../../apps/lcp-server/src/audit/audit.service';
 import { ContextModule } from '../../../apps/lcp-server/src/context/context.module';
 import { AgentEventService } from '../../../apps/lcp-server/src/events/agent-event.service';
 import { RagRetrievalService } from '../../../apps/lcp-server/src/rag/rag-retrieval.service';
+import { requireEnv } from '../../support/require-env';
 
 /**
  * Integration tests for {@link ChatService} against a live PostgreSQL instance
- * and a stub LLM service.
- *
- * Requires:
- *  - DATABASE_URL pointing to a running PostgreSQL instance
- *  - STUB_LLM_URL pointing to the stub-llm service (docker/stub-llm)
+ * and a stub LLM service. Both are provisioned by the integration global setup,
+ * so DATABASE_URL and STUB_LLM_URL are always present.
  *
  * Run via: ./scripts/run-integration-tests.sh
  */
 
-const STUB_LLM_URL = process.env.STUB_LLM_URL ?? 'http://localhost:3002/v1';
-const DATABASE_URL = process.env.DATABASE_URL ?? '';
+const STUB_LLM_URL = requireEnv('STUB_LLM_URL');
+const DATABASE_URL = requireEnv('DATABASE_URL');
 
 async function setStubResponse(response: string): Promise<void> {
   await fetch(`${STUB_LLM_URL.replace('/v1', '')}/stub/config`, {
@@ -72,12 +70,7 @@ describe('ChatService integration (stub LLM)', () => {
     });
   }
 
-  const skip =
-    !DATABASE_URL || DATABASE_URL.startsWith('sqlite') || !STUB_LLM_URL;
-
   beforeAll(async () => {
-    if (skip) return;
-
     const moduleRef = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({ isGlobal: true }),
@@ -121,7 +114,7 @@ describe('ChatService integration (stub LLM)', () => {
         name: 'Integration Test Co',
         slug: 'test-co',
         description: 'For integration tests',
-        llmDefault: {
+        llmConfig: {
           provider: 'lm-studio',
           model: 'stub',
           baseUrl: STUB_LLM_URL,
@@ -133,6 +126,7 @@ describe('ChatService integration (stub LLM)', () => {
     const role = await roleRepo.save(
       roleRepo.create({
         companyId: testCompanyId,
+        slug: 'stub-analyst',
         name: 'stub-analyst',
         description: 'Stub test role',
         systemPromptTemplate: 'You are {{name}}, an analyst.',
@@ -142,7 +136,7 @@ describe('ChatService integration (stub LLM)', () => {
   });
 
   afterAll(async () => {
-    if (skip || !dataSource?.isInitialized) return;
+    if (!dataSource?.isInitialized) return;
     // Clean up test fixtures
     await auditRepo.delete({ companyId: testCompanyId });
     await agentRepo.delete({ companyId: testCompanyId });
@@ -152,18 +146,7 @@ describe('ChatService integration (stub LLM)', () => {
     await dataSource.destroy();
   });
 
-  it('skips when DATABASE_URL or STUB_LLM_URL is not set', () => {
-    if (skip) {
-      console.log(
-        'Skipping integration tests — DATABASE_URL or STUB_LLM_URL not set',
-      );
-    }
-    expect(true).toBe(true);
-  });
-
   it('streams a message end-to-end and completes with the stub response', async () => {
-    if (skip) return;
-
     await setStubResponse('Hello from stub LLM!');
 
     const agent = await agentRepo.save(
@@ -195,8 +178,6 @@ describe('ChatService integration (stub LLM)', () => {
   });
 
   it('writes LlmRequest and LlmResponse audit events', async () => {
-    if (skip) return;
-
     await setStubResponse('Audit test response');
 
     const agent = await agentRepo.save(

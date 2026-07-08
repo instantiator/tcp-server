@@ -73,7 +73,7 @@ describe('Smoke', () => {
   });
 
   describe('lcp-mcp-storage', () => {
-    it('/health returns 200 with status ok (MinIO reachable)', async () => {
+    it('/health returns 200 with status ok', async () => {
       const res = await get(`${LCP_MCP_STORAGE}/health`);
       expect(res.status).toBe(200);
       expectHealthy(res.body);

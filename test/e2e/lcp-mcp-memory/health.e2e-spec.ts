@@ -1,13 +1,15 @@
-// lcp-mcp-memory requires a real Postgres connection — skip if DATABASE_URL is absent or sqlite.
+// lcp-mcp-memory requires a real Postgres connection, provisioned by the e2e
+// global setup — DATABASE_URL is always a real postgres URL.
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../../../apps/lcp-mcp-memory/src/app.module';
+import { requireEnv } from '../../support/require-env';
 
-const hasPg = process.env.DATABASE_URL?.startsWith('postgres');
+requireEnv('DATABASE_URL');
 
-(hasPg ? describe : describe.skip)('lcp-mcp-memory health (e2e)', () => {
+describe('lcp-mcp-memory health (e2e)', () => {
   let app: INestApplication<App>;
 
   beforeAll(async () => {
