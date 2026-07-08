@@ -93,11 +93,11 @@ Each MCP server uses the **Streamable HTTP transport** with a stateless per-requ
 
 ### Available servers
 
-| Server                                          | Port | Status      | Description                                                      |
-| ----------------------------------------------- | ---- | ----------- | ---------------------------------------------------------------- |
+| Server                                          | Port | Status      | Description                                                                    |
+| ----------------------------------------------- | ---- | ----------- | ------------------------------------------------------------------------------ |
 | [lcp-mcp-storage](lcp-mcp-storage.md)           | 3010 | Implemented | Read/write access to the shared MinIO object store, proxied through lcp-server |
-| [lcp-mcp-memory](lcp-mcp-memory.md)             | 3011 | Stub        | Semantic search over episodic memory and role knowledge base     |
-| [lcp-mcp-interactions](lcp-mcp-interactions.md) | 3012 | Stub        | Request input from a human user or consult another agent by role |
+| [lcp-mcp-memory](lcp-mcp-memory.md)             | 3011 | Stub        | Semantic search over episodic memory and role knowledge base                   |
+| [lcp-mcp-interactions](lcp-mcp-interactions.md) | 3012 | Stub        | Request input from a human user or consult another agent by role               |
 
 See the individual server docs for tool reference, argument details, and implementation status.
 
