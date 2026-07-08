@@ -34,34 +34,67 @@ export class AddMissingCompanyRoleForeignKeys1783357408218 implements MigrationI
     );
 
     await queryRunner.query(
+      `DELETE FROM "conversation" WHERE "companyId" IS NOT NULL AND "companyId" NOT IN (SELECT "id" FROM "lcp_company")`,
+    );
+    await queryRunner.query(
       `ALTER TABLE "conversation" ADD CONSTRAINT "FK_conversation_company" FOREIGN KEY ("companyId") REFERENCES "lcp_company"("id") ON DELETE CASCADE`,
+    );
+    await queryRunner.query(
+      `DELETE FROM "conversation" WHERE "roleId" IS NOT NULL AND "roleId" NOT IN (SELECT "id" FROM "lcp_role")`,
     );
     await queryRunner.query(
       `ALTER TABLE "conversation" ADD CONSTRAINT "FK_conversation_role" FOREIGN KEY ("roleId") REFERENCES "lcp_role"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
+      `DELETE FROM "conversation_message" WHERE "conversationId" IS NOT NULL AND "conversationId" NOT IN (SELECT "id" FROM "conversation")`,
+    );
+    await queryRunner.query(
       `ALTER TABLE "conversation_message" ADD CONSTRAINT "FK_conversation_message_conversation" FOREIGN KEY ("conversationId") REFERENCES "conversation"("id") ON DELETE CASCADE`,
+    );
+    await queryRunner.query(
+      `DELETE FROM "knowledge_chunk" WHERE "companyId" IS NOT NULL AND "companyId" NOT IN (SELECT "id" FROM "lcp_company")`,
     );
     await queryRunner.query(
       `ALTER TABLE "knowledge_chunk" ADD CONSTRAINT "FK_knowledge_chunk_company" FOREIGN KEY ("companyId") REFERENCES "lcp_company"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
+      `DELETE FROM "knowledge_chunk" WHERE "roleId" IS NOT NULL AND "roleId" NOT IN (SELECT "id" FROM "lcp_role")`,
+    );
+    await queryRunner.query(
       `ALTER TABLE "knowledge_chunk" ADD CONSTRAINT "FK_knowledge_chunk_role" FOREIGN KEY ("roleId") REFERENCES "lcp_role"("id") ON DELETE CASCADE`,
+    );
+    await queryRunner.query(
+      `DELETE FROM "episodic_memory" WHERE "companyId" IS NOT NULL AND "companyId" NOT IN (SELECT "id" FROM "lcp_company")`,
     );
     await queryRunner.query(
       `ALTER TABLE "episodic_memory" ADD CONSTRAINT "FK_episodic_memory_company" FOREIGN KEY ("companyId") REFERENCES "lcp_company"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
+      `DELETE FROM "episodic_memory" WHERE "roleId" IS NOT NULL AND "roleId" NOT IN (SELECT "id" FROM "lcp_role")`,
+    );
+    await queryRunner.query(
       `ALTER TABLE "episodic_memory" ADD CONSTRAINT "FK_episodic_memory_role" FOREIGN KEY ("roleId") REFERENCES "lcp_role"("id") ON DELETE CASCADE`,
+    );
+    await queryRunner.query(
+      `DELETE FROM "company_user" WHERE "companyId" IS NOT NULL AND "companyId" NOT IN (SELECT "id" FROM "lcp_company")`,
     );
     await queryRunner.query(
       `ALTER TABLE "company_user" ADD CONSTRAINT "FK_company_user_company" FOREIGN KEY ("companyId") REFERENCES "lcp_company"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
+      `DELETE FROM "pending_consultation" WHERE "companyId" IS NOT NULL AND "companyId" NOT IN (SELECT "id" FROM "lcp_company")`,
+    );
+    await queryRunner.query(
       `ALTER TABLE "pending_consultation" ADD CONSTRAINT "FK_pending_consultation_company" FOREIGN KEY ("companyId") REFERENCES "lcp_company"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
+      `DELETE FROM "pending_consultation" WHERE "callingAgentId" IS NOT NULL AND "callingAgentId" NOT IN (SELECT "id" FROM "lcp_agent")`,
+    );
+    await queryRunner.query(
       `ALTER TABLE "pending_consultation" ADD CONSTRAINT "FK_pending_consultation_calling_agent" FOREIGN KEY ("callingAgentId") REFERENCES "lcp_agent"("id") ON DELETE CASCADE`,
+    );
+    await queryRunner.query(
+      `DELETE FROM "pending_consultation" WHERE "consultationAgentId" IS NOT NULL AND "consultationAgentId" NOT IN (SELECT "id" FROM "lcp_agent")`,
     );
     await queryRunner.query(
       `ALTER TABLE "pending_consultation" ADD CONSTRAINT "FK_pending_consultation_consultation_agent" FOREIGN KEY ("consultationAgentId") REFERENCES "lcp_agent"("id") ON DELETE CASCADE`,
