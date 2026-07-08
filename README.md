@@ -24,7 +24,7 @@ Tasks are given to the company, who then work collaboratively to resolve them. A
 The main service topology.
 
 ```mermaid
-graph TD
+flowchart TD
   User["User / Browser"]
   LcpServer["lcp-server\n(NestJS)"]
   LcpAgent["lcp-agent\n(NestJS) :3001"]
