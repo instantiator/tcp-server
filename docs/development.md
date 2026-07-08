@@ -122,9 +122,9 @@ npm run format                # Prettier over apps/ and libs/
 
 # Testing
 npm test                      # Unit tests (no external services, SQLite in-memory)
-npm run test:e2e              # E2E tests (SQLite fallback, no external services)
-npm run test:integration      # Integration tests (requires Docker services)
-npm run test:smoke            # Smoke tests (requires docker compose --profile auth up)
+npm run test:e2e              # E2E tests (testcontainers starts postgres/redis/minio)
+npm run test:integration      # Integration tests (testcontainers starts postgres/redis/minio/stub-llm)
+npm run test:smoke            # Smoke tests (requires a running deployment)
 npm run test:cov              # Coverage report
 
 # Test scripts (mirrors CI, starts Docker services as needed)
@@ -151,7 +151,8 @@ npm run migration:revert      # Revert last migration
 - **Entities in `libs/lcp-shared/src/models/`** double as TypeORM entities and JSON Schema sources. Annotate with TSDoc validation tags (`@format`, `@minLength`, etc.) so the generated schema is accurate.
 - **`schemas/schema.json`** and **`docs/licenses.md`** are generated artefacts — never edit them directly; regenerate via `npm run build`.
 - **Unit tests** (`.spec.ts`) use `better-sqlite3` in-memory; wire TypeORM directly in `Test.createTestingModule`, never through `AppModule`.
-- **E2E tests** use `AppModule` with SQLite fallback (env vars set in `test/e2e-setup.ts`). Pass a real `DATABASE_URL` env var to run against PostgreSQL instead.
+- **Integration and e2e tests** boot against real PostgreSQL, Redis, and MinIO started by [testcontainers](https://node.testcontainers.org/) from Jest's global setup (`test/{integration,e2e}/global-setup.ts`), on random host ports. Connection env vars are provisioned there, so `require-env.ts` (not a silent skip) guards each spec. See [docs/testing.md](testing.md#test-infrastructure).
+- **Redis fail-fast**: services that depend on Redis (agent orchestration, the agent worker) probe reachability at startup via `assertRedisReachable` (`@lcp/shared`) and refuse to start with a clear error if it's unreachable, rather than letting BullMQ block forever. Both services call `app.enableShutdownHooks()` so their queue/worker/Redis connections close cleanly on `SIGTERM`.
 - **Testing intentional error paths**: when a test deliberately triggers a service-level `Logger.warn`/`.error` call (e.g. `POST /internal/agent/:id/fail`), use `captureNestLogs()`/`expectLoggedError()` from `test/e2e/helpers/log-capture.ts` to silence and assert on it, instead of letting it print during a normal test run. HTTP-level errors (404/400/401/409 via `HttpException`) aren't logged by Nest's default filter, so most error-path tests don't need this — it's only for paths that call a `Logger` directly.
 - **Migrations**: use `synchronize: false` in production. Always create a migration when changing entity schema. Never use `synchronize: true` with PostgreSQL.
 - **No secrets in code.** Use environment variables for all credentials. Required vars are validated by Joi on startup — the app will not start if any are missing.

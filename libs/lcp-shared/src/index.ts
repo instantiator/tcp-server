@@ -32,3 +32,4 @@ export * from './llm/default-system-prompt-template';
 export * from './rag/embedding.service';
 export * from './storage/validation';
 export * from './storage/stream-to-buffer';
+export * from './redis/redis-reachability';

@@ -1,16 +1,13 @@
 import { DataSource } from 'typeorm';
+import { requireEnv } from '../../support/require-env';
 
-// Requires DATABASE_URL pointing to a running PostgreSQL instance.
-// Run via: ./scripts/run-integration-tests.sh
+// PostgreSQL is provisioned by the integration global setup; DATABASE_URL is
+// always present. Run via: ./scripts/run-integration-tests.sh
 describe('Database connectivity', () => {
   let ds: DataSource;
 
   beforeAll(async () => {
-    const url = process.env.DATABASE_URL;
-    if (!url || url.startsWith('sqlite')) {
-      return;
-    }
-    ds = new DataSource({ type: 'postgres', url });
+    ds = new DataSource({ type: 'postgres', url: requireEnv('DATABASE_URL') });
     await ds.initialize();
   });
 
@@ -21,10 +18,6 @@ describe('Database connectivity', () => {
   });
 
   it('connects to PostgreSQL', async () => {
-    if (!ds?.isInitialized) {
-      console.log('Skipping — no postgres DATABASE_URL set');
-      return;
-    }
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const result = await ds.query('SELECT 1 AS ok');
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
@@ -32,9 +25,6 @@ describe('Database connectivity', () => {
   });
 
   it('has pgvector extension available', async () => {
-    if (!ds?.isInitialized) {
-      return;
-    }
     // pg_available_extensions lists what can be installed; pg_extension only
     // lists what has already been created (which requires migrations to have run).
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment

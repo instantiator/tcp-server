@@ -23,17 +23,16 @@ import * as factory from '../../../apps/lcp-agent/src/llm/llm-factory';
 import { McpClientService } from '../../../apps/lcp-agent/src/mcp/mcp-client.service';
 import { AgentRagService } from '../../../apps/lcp-agent/src/rag/agent-rag.service';
 import { StorageTrackingClientService } from '../../../apps/lcp-agent/src/storage-tracking/storage-tracking-client.service';
+import { requireEnv } from '../../support/require-env';
 
-// Requires DOCKER services: PostgreSQL (DATABASE_URL).
-// Run via: ./scripts/run-integration-tests.sh
+// PostgreSQL is provisioned by the integration global setup; DATABASE_URL is
+// always present. Run via: ./scripts/run-integration-tests.sh
 
 const ALL_ENTITIES = [LcpCompany, LcpRole, LcpAgent];
 
-const dbUrl = process.env.DATABASE_URL;
+const DATABASE_URL = requireEnv('DATABASE_URL');
 
-const describeIf = dbUrl ? describe : describe.skip;
-
-describeIf('AgentLoopService (integration)', () => {
+describe('AgentLoopService (integration)', () => {
   let module: TestingModule;
   let service: AgentLoopService;
   let companyRepo: Repository<LcpCompany>;
@@ -48,7 +47,7 @@ describeIf('AgentLoopService (integration)', () => {
       imports: [
         TypeOrmModule.forRoot({
           type: 'postgres',
-          url: dbUrl,
+          url: DATABASE_URL,
           entities: ALL_ENTITIES,
           synchronize: true,
         }),
@@ -80,7 +79,7 @@ describeIf('AgentLoopService (integration)', () => {
           provide: ConfigService,
           useValue: {
             get: jest.fn().mockReturnValue(undefined),
-            getOrThrow: () => dbUrl,
+            getOrThrow: () => DATABASE_URL,
           },
         },
         // Real context-management wiring (mirrors AgentWorkerModule) so this

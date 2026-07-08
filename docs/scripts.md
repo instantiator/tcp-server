@@ -11,19 +11,26 @@ arguments through to Jest (e.g. `--testNamePattern`, `--testPathPattern`).
 Each deployment gets a distinct Docker Compose project name so containers,
 networks, and volumes are completely independent of each other:
 
-| Launcher                                | Project name      |
-| --------------------------------------- | ----------------- |
-| `start-deployment.sh --project lcp-dev` | `lcp-dev`         |
-| `start-deployment.sh --project lcp-api` | `lcp-api`         |
-| `run-all-tests.sh` (auto-started)       | `lcp-all`         |
-| `run-integration-tests.sh`              | `lcp-integration` |
-| `run-e2e-tests.sh`                      | `lcp-e2e`         |
+| Launcher                                | Project name             |
+| --------------------------------------- | ------------------------ |
+| `start-deployment.sh --project lcp-dev` | `lcp-dev`                |
+| `start-deployment.sh --project lcp-api` | `lcp-api`                |
+| `run-all-tests.sh` (auto-started)       | `lcp-all`                |
+| `run-integration-tests.sh`              | `lcp-integration-<pid>`¹ |
+| `run-e2e-tests.sh`                      | `lcp-e2e-<pid>`¹         |
 
 A running dev environment is never touched by a test teardown, and test data
 never contaminates dev data.
 
+¹ The integration and e2e suites are started by testcontainers from Jest's
+global setup, using a per-run project name and **random host ports**. They can
+therefore run alongside a dev stack (or each other) without conflict.
+
 > [!WARNING]
-> Port conflicts still prevent two deployments from running simultaneously on the same machine. (They all use the same host port bindings.)
+> The fixed-port deployments (`lcp-dev`, `lcp-api`, `lcp-all`) all use the same
+> host port bindings, so no two of them can run simultaneously on one machine.
+> The testcontainers-managed integration/e2e stacks are exempt — they use random
+> host ports.
 
 ## Summary
 
@@ -144,9 +151,11 @@ See also: [docs/testing.md](testing.md) for the full testing strategy.
 
 ## run-integration-tests.sh
 
-Starts PostgreSQL, Redis, and MinIO via Docker Compose, waits for each to be
-healthy, runs the integration suite, then tears down the containers. Tests
-verify that the application can connect to and use each backing service.
+A thin wrapper around `npm run test:integration`. PostgreSQL, Redis, MinIO, and
+the stub-llm service are started (on random host ports) and torn down by Jest's
+global setup via testcontainers — the script itself does no Docker
+orchestration. Tests verify that the application can connect to and use each
+backing service.
 
 ```bash
 ./scripts/run-integration-tests.sh
@@ -228,13 +237,15 @@ See also: [docs/testing.md](testing.md).
 
 ## run-e2e-tests.sh
 
-Starts PostgreSQL, Redis, and MinIO via Docker Compose, runs the E2E suite
-(HTTP requests against a real NestJS application via `supertest`), then tears
-down. Keycloak is not required — OIDC env vars are provided as stubs.
+A thin wrapper around `npm run test:e2e`. PostgreSQL, Redis, and MinIO are
+started (on random host ports) and torn down by Jest's global setup via
+testcontainers. The E2E suite runs HTTP requests against a real NestJS
+application via `supertest`. Keycloak is not required — auth is mocked
+(jwks-rsa).
 
 ```bash
 ./scripts/run-e2e-tests.sh
-./scripts/run-e2e-tests.sh -- --testPathPattern="company"
+./scripts/run-e2e-tests.sh -- --testPathPatterns="company"
 ```
 
 **Requires:** Docker and Docker Compose, `.env.testing` in the repo root.

@@ -1,3 +1,4 @@
+import { assertRedisReachable } from '@lcp/shared';
 import { Controller, Get } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -7,7 +8,6 @@ import {
   HealthIndicatorResult,
   TypeOrmHealthIndicator,
 } from '@nestjs/terminus';
-import { createClient } from 'redis';
 
 /**
  * Exposes `GET /health` to report the liveness of lcp-agent's dependencies:
@@ -36,10 +36,8 @@ export class HealthController {
 
   private async pingRedis(): Promise<HealthIndicatorResult> {
     const url = this.config.getOrThrow<string>('REDIS_URL');
-    const client = createClient({ url });
     try {
-      await client.connect();
-      await client.ping();
+      await assertRedisReachable(url);
       return { redis: { status: 'up' } };
     } catch (err) {
       return {
@@ -48,8 +46,6 @@ export class HealthController {
           message: err instanceof Error ? err.message : String(err),
         },
       };
-    } finally {
-      client.destroy();
     }
   }
 }

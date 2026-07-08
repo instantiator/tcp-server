@@ -12,6 +12,13 @@ jest.mock('bullmq', () => ({
   })),
 }));
 
+// The startup Redis reachability probe would otherwise open a real connection;
+// unit tests have no Redis, so stub it to resolve.
+jest.mock('@lcp/shared', () => ({
+  ...jest.requireActual<typeof import('@lcp/shared')>('@lcp/shared'),
+  assertRedisReachable: jest.fn().mockResolvedValue(undefined),
+}));
+
 describe('AgentWorkerService', () => {
   let module: TestingModule;
   let registry: AgentRegistryService;

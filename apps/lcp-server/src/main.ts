@@ -5,6 +5,9 @@ import { AppModule } from './app.module';
 /** Bootstraps the NestJS application and listens on {@link process.env.PORT} (default 3000). */
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  // Run onModuleDestroy hooks on SIGTERM/SIGINT so the BullMQ queue, Redis
+  // event relay, and other connections close cleanly on shutdown.
+  app.enableShutdownHooks();
 
   const config = new DocumentBuilder()
     .setTitle('LCP Server')

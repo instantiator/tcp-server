@@ -65,6 +65,10 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
+      # Diagnostic: testcontainers drives the `docker compose` CLI, whose
+      # behaviour is version-sensitive. Surface the version to catch drift early.
+      - name: Docker Compose version
+        run: docker compose version
       - run: ./scripts/run-integration-tests.sh
       - name: Publish test results
         uses: dorny/test-reporter@v3
@@ -74,8 +78,16 @@ jobs:
           path: test-results/integration.xml
           reporter: jest-junit
           fail-on-error: false
-      - if: always()
-        run: docker compose down -v
+      # Containers are torn down by Jest global teardown (and testcontainers'
+      # Ryuk reaper on ungraceful exit), so no explicit `docker compose down`.
+      # Retain the compose logs a failed startup wrote, for later analysis.
+      - name: Upload compose logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: integration-compose-logs
+          path: test-results/integration-compose-logs/
+          if-no-files-found: ignore
 
   api-test:
     name: API & smoke tests
@@ -185,6 +197,10 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
+      # Diagnostic: testcontainers drives the `docker compose` CLI, whose
+      # behaviour is version-sensitive. Surface the version to catch drift early.
+      - name: Docker Compose version
+        run: docker compose version
       - run: ./scripts/run-e2e-tests.sh
       - name: Publish test results
         uses: dorny/test-reporter@v3
@@ -194,5 +210,13 @@ jobs:
           path: test-results/e2e.xml
           reporter: jest-junit
           fail-on-error: false
-      - if: always()
-        run: docker compose down -v
+      # Containers are torn down by Jest global teardown (and testcontainers'
+      # Ryuk reaper on ungraceful exit), so no explicit `docker compose down`.
+      # Retain the compose logs a failed startup wrote, for later analysis.
+      - name: Upload compose logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-compose-logs
+          path: test-results/e2e-compose-logs/
+          if-no-files-found: ignore

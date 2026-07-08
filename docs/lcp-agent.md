@@ -242,4 +242,6 @@ Query: `SELECT * FROM audit_event WHERE agent_id = $1 ORDER BY timestamp`.
 
 `GET http://localhost:3001/health` — checks PostgreSQL connectivity and Redis connectivity. Returns HTTP 200 when both are up, 503 when either is down.
 
+The Redis check uses the shared bounded `assertRedisReachable` probe, so it cannot hang. lcp-agent also fails fast at **startup** if Redis is unreachable (`AgentWorkerService.onModuleInit`): rather than letting the BullMQ worker block indefinitely against a downed broker, it throws a clear error. `main.ts` calls `app.enableShutdownHooks()` so the worker and its Redis connection close cleanly on `SIGTERM`.
+
 > **Known gap (non-blocking):** `config/config.schema.ts` still requires `MINIO_ENDPOINT`/`MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` at startup, but lcp-agent never constructs an S3 client anywhere — since `docs/prompts/009.4`, storage access across the whole monorepo goes through `lcp-server`'s `StorageService`/`/internal/storage/*` endpoints. Likely leftover from an earlier design. Not removed in this pass; flagged here as a follow-up cleanup opportunity.

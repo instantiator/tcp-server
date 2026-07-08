@@ -18,6 +18,7 @@ import { Repository } from 'typeorm';
 import { AuditService } from '../../../apps/lcp-server/src/audit/audit.service';
 import { DocumentValidationException } from '../../../apps/lcp-server/src/storage/document-validation.exception';
 import { MinioStorageAdapter } from '../../../apps/lcp-server/src/storage/minio-storage.adapter';
+import { requireEnv } from '../../support/require-env';
 
 /**
  * Integration tests for {@link MinioStorageAdapter} against a real MinIO
@@ -27,15 +28,14 @@ import { MinioStorageAdapter } from '../../../apps/lcp-server/src/storage/minio-
  * no longer talks to MinIO directly — this is the real S3-wire-protocol
  * coverage the unit tests (mocked `S3Client`) can't provide.
  *
- * Requires MINIO_ENDPOINT and DATABASE_URL pointing to running instances.
+ * MinIO and PostgreSQL are provisioned by the integration global setup;
+ * MINIO_ENDPOINT and DATABASE_URL are always present.
  * Run via: ./scripts/run-integration-tests.sh
  */
-const ENDPOINT = process.env.MINIO_ENDPOINT;
-const DATABASE_URL = process.env.DATABASE_URL;
+const ENDPOINT = requireEnv('MINIO_ENDPOINT');
+const DATABASE_URL = requireEnv('DATABASE_URL');
 const BUCKET = 'lcp-storage-adapter-test';
 const COMPANY_SLUG = 'acme';
-
-const describeIf = ENDPOINT && DATABASE_URL ? describe : describe.skip;
 
 async function purgeTestBucket(s3: S3Client): Promise<void> {
   const list = await s3.send(new ListObjectsV2Command({ Bucket: BUCKET }));
@@ -46,7 +46,7 @@ async function purgeTestBucket(s3: S3Client): Promise<void> {
   );
 }
 
-describeIf('MinioStorageAdapter (integration)', () => {
+describe('MinioStorageAdapter (integration)', () => {
   let module: TestingModule;
   let adapter: MinioStorageAdapter;
   let companyRepo: Repository<LcpCompany>;

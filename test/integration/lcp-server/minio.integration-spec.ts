@@ -1,15 +1,12 @@
 import * as https from 'https';
 import * as http from 'http';
+import { requireEnv } from '../../support/require-env';
 
-// Requires MINIO_ENDPOINT pointing to a running MinIO instance.
-// Run via: ./scripts/run-integration-tests.sh
+// MinIO is provisioned by the integration global setup; MINIO_ENDPOINT is
+// always present. Run via: ./scripts/run-integration-tests.sh
 describe('MinIO connectivity', () => {
   it('health endpoint returns 200', async () => {
-    const endpoint = process.env.MINIO_ENDPOINT;
-    if (!endpoint) {
-      console.log('Skipping — no MINIO_ENDPOINT set');
-      return;
-    }
+    const endpoint = requireEnv('MINIO_ENDPOINT');
     const healthUrl = `${endpoint}/minio/health/live`;
     const status = await new Promise<number>((resolve, reject) => {
       const mod = healthUrl.startsWith('https') ? https : http;

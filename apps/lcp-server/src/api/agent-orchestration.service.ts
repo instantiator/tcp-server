@@ -1,5 +1,6 @@
 import {
   AgentStatus,
+  assertRedisReachable,
   Conversation,
   ConversationMessage,
   LcpAgent,
@@ -57,8 +58,12 @@ export class AgentOrchestrationService
   ) {}
 
   /** Connects to the Redis-backed BullMQ queue on startup. */
-  onModuleInit(): void {
+  async onModuleInit(): Promise<void> {
     const url = this.config.getOrThrow<string>('REDIS_URL');
+    // Fail fast if Redis is unreachable: BullMQ would otherwise retry the
+    // connection forever, so enqueue calls hang indefinitely instead of
+    // erroring. Better to refuse to start with a clear message.
+    await assertRedisReachable(url);
     this.queue = new Queue<AgentJob>('agent-jobs', { connection: { url } });
     // BullMQ surfaces Redis connection problems (including a post-close
     // "Connection is closed") as 'error' events; with no listener they become
