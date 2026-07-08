@@ -85,7 +85,8 @@ flowchart LR
     MC -->|HTTP POST /mcp| S[lcp-mcp-storage :3010]
     MC -->|HTTP POST /mcp| M[lcp-mcp-memory :3011]
     MC -->|HTTP POST /mcp| I[lcp-mcp-interactions :3012]
-    S --> MIO[(MinIO)]
+    S -->|HTTP POST /internal/storage/*, X-Internal-Api-Key| LS[lcp-server]
+    LS --> MIO[(MinIO)]
 ```
 
 Each MCP server uses the **Streamable HTTP transport** with a stateless per-request model — a fresh MCP session is created for each tool call. The servers expose `GET /health` and `POST /mcp`.
@@ -94,7 +95,7 @@ Each MCP server uses the **Streamable HTTP transport** with a stateless per-requ
 
 | Server                                          | Port | Status      | Description                                                      |
 | ----------------------------------------------- | ---- | ----------- | ---------------------------------------------------------------- |
-| [lcp-mcp-storage](lcp-mcp-storage.md)           | 3010 | Implemented | Read/write access to the shared MinIO object store               |
+| [lcp-mcp-storage](lcp-mcp-storage.md)           | 3010 | Implemented | Read/write access to the shared MinIO object store, proxied through lcp-server |
 | [lcp-mcp-memory](lcp-mcp-memory.md)             | 3011 | Stub        | Semantic search over episodic memory and role knowledge base     |
 | [lcp-mcp-interactions](lcp-mcp-interactions.md) | 3012 | Stub        | Request input from a human user or consult another agent by role |
 

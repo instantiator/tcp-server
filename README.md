@@ -35,12 +35,12 @@ graph TD
   LcpAgent -->|HTTP /mcp| McpStorage["lcp-mcp-storage\n:3010"]
   LcpAgent -->|HTTP /mcp| McpMemory["lcp-mcp-memory\n:3011\n(stub)"]
   LcpAgent -->|HTTP /mcp| McpInteract["lcp-mcp-interactions\n:3012\n(stub)"]
-  McpStorage -->|S3 API| MinIO
+  McpStorage -->|HTTP /internal/storage/*\nX-Internal-Api-Key| LcpServer
   style McpMemory stroke-dasharray: 5 5
   style McpInteract stroke-dasharray: 5 5
 ```
 
-> Service overview: lcp-server is the REST API and orchestration layer. lcp-agent consumes BullMQ jobs and runs the LangGraph agent loop. Three MCP servers provide tool access to agents: lcp-mcp-storage offers real MinIO file operations; lcp-mcp-memory and lcp-mcp-interactions are currently stubs. PostgreSQL (with pgvector) stores entities, agent checkpoints, and knowledge embeddings. MinIO stores knowledge documents, task files, and context-overflow data. Keycloak is optional and only starts under the `--profile auth` flag.
+> Service overview: lcp-server is the REST API and orchestration layer, and owns the only direct S3 client to MinIO. lcp-agent consumes BullMQ jobs and runs the LangGraph agent loop. Three MCP servers provide tool access to agents: lcp-mcp-storage proxies file operations over HTTP to lcp-server's internal storage endpoints rather than talking to MinIO itself; lcp-mcp-memory and lcp-mcp-interactions are currently stubs. PostgreSQL (with pgvector) stores entities, agent checkpoints, and knowledge embeddings. MinIO stores knowledge documents, task files, and context-overflow data. Keycloak is optional and only starts under the `--profile auth` flag.
 
 ---
 
