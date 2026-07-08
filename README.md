@@ -37,7 +37,6 @@ graph TD
   McpInteract["lcp-mcp-interactions\n:3012\n(stub)"]
 
   subgraph LCP["LCP (containers)"]
-      direction LR
       Server ~~~ Dbs ~~~ Agent ~~~ ThirdParty
   end
 
