@@ -80,6 +80,7 @@ See [schema.md](schema.md) for the full field reference, VS Code integration, ex
 | [`get-knowledge`](#get-knowledge)                       | `get-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename> [-o <path>]`      | Get a knowledge-base document's content                                    |
 | [`store-knowledge`](#store-knowledge)                   | `store-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -s <path> [-t <filename>]`    | Upload an OKF Markdown document to a role or company knowledge base        |
 | [`delete-knowledge`](#delete-knowledge)                 | `delete-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename>`               | Delete a knowledge-base document by filename                               |
+| [`reindex-knowledge`](#reindex-knowledge)               | `reindex-knowledge --company <slug-or-id>`                                                   | Force a full RAG rebuild of every knowledge scope of a company             |
 | [`open-document-store`](#open-document-store)           | `open-document-store [--no-open]`                                                            | Print (and open) the MinIO console URL                                     |
 | [`list-open-queries`](#list-open-queries)               | `list-open-queries [-c <uuid>\|--company-slug <slug>] [--format table\|json\|csv]`           | List open agent-to-human queries                                           |
 | [`read-query`](#read-query)                             | `read-query <slug>`                                                                          | Read a query's full question and conversation history                      |
@@ -507,6 +508,20 @@ Delete a single knowledge-base document by filename, from a role's knowledge bas
 ```bash
 ./lcp-cli.sh -t $TOKEN delete-knowledge -r <roleId> -f policy.md
 ./lcp-cli.sh -t $TOKEN delete-knowledge -c acme -f handbook.md
+```
+
+### `reindex-knowledge`
+
+Force a full RAG rebuild of every knowledge scope of a company (shared plus every role). Embeddings normally stay in sync automatically — via a write hook on every knowledge write and a background reconciliation poller (see [shared-storage.md → Automatic RAG sync](shared-storage.md#automatic-rag-sync-01022)). Use this to rebuild immediately after editing files directly in the MinIO console, rather than waiting for the poller. The server responds `202 Accepted` and rebuilds asynchronously.
+
+- **stdout**: JSON `{ reindexing: true }`
+
+| Flag                     | Alias | Description                         |
+| ------------------------ | ----- | ----------------------------------- |
+| `--company <slug-or-id>` | `-c`  | **(Required)** Company slug or UUID |
+
+```bash
+./lcp-cli.sh -t $TOKEN reindex-knowledge -c acme
 ```
 
 ### `open-document-store`

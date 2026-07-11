@@ -11,6 +11,8 @@ export interface StorageObject {
   size: number;
   /** Last-modified timestamp. */
   lastModified: Date;
+  /** Entity tag (content hash) of the object, when the backend reports one. */
+  etag?: string;
 }
 
 /** Who/what requested a storage action, threaded through for audit attribution. */

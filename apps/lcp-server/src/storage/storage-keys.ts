@@ -64,6 +64,27 @@ export function knowledgeScopePrefix(scope: KnowledgeScope): string {
     : knowledgePrefix(scope.companySlug, scope.roleSlug);
 }
 
+/**
+ * Parses an object key into the {@link KnowledgeScope} it belongs to, or
+ * returns `null` when the key is not a knowledge-store document
+ * (`{companySlug}/knowledge/{segment}/{filename}`). The `shared` segment maps
+ * to `roleSlug: null`; any other segment is treated as a role slug.
+ *
+ * Used by the storage write hook to decide whether a write should trigger a
+ * RAG rebuild, and for which scope.
+ */
+export function parseKnowledgePath(key: string): KnowledgeScope | null {
+  const parts = key.split('/');
+  // Need at least companySlug/knowledge/segment/filename.
+  if (parts.length < 4 || parts[1] !== 'knowledge') return null;
+  const [companySlug, , segment] = parts;
+  if (!companySlug || !segment) return null;
+  return {
+    companySlug,
+    roleSlug: segment === SHARED_KNOWLEDGE_ROLE_SLUG ? null : segment,
+  };
+}
+
 // Future additions (not yet implemented — ADR-007 bucket layout):
 // - taskMaterialsKey(companySlug, taskId, filename)
 // - taskOutputKey(companySlug, taskId, filename)

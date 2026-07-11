@@ -5,6 +5,7 @@ import {
   ConversationMessage,
   EpisodicMemory,
   KnowledgeChunk,
+  KnowledgeIndexState,
   LcpAgent,
   LcpCompany,
   LcpRole,
@@ -42,6 +43,7 @@ import { TimestamptzConsistency1783357408216 } from './migrations/1783357408216-
 import { AddRoleSlug1783357408217 } from './migrations/1783357408217-AddRoleSlug';
 import { AddMissingCompanyRoleForeignKeys1783357408218 } from './migrations/1783357408218-AddMissingCompanyRoleForeignKeys';
 import { AllowSharedKnowledgeChunks1783900000000 } from './migrations/1783900000000-AllowSharedKnowledgeChunks';
+import { AddKnowledgeIndexState1783950000000 } from './migrations/1783950000000-AddKnowledgeIndexState';
 import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
 
 /**
@@ -62,6 +64,7 @@ import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
         LcpAgent,
         AuditEvent,
         KnowledgeChunk,
+        KnowledgeIndexState,
         EpisodicMemory,
         CompanyUser,
         Conversation,
@@ -90,6 +93,7 @@ import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
         AddRoleSlug1783357408217,
         AddMissingCompanyRoleForeignKeys1783357408218,
         AllowSharedKnowledgeChunks1783900000000,
+        AddKnowledgeIndexState1783950000000,
       ],
     ),
     ApiModule,

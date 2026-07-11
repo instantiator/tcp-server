@@ -3,8 +3,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
 import { Repository } from 'typeorm';
-import { RagIndexService } from '../rag/rag-index.service';
-import { KnowledgeScope, knowledgeScopeKey } from '../storage/storage-keys';
+import { KnowledgeReindexService } from '../rag/knowledge-reindex.service';
+import { KnowledgeScope } from '../storage/storage-keys';
 import {
   Originators,
   StorageObject,
@@ -40,14 +40,16 @@ interface ResolvedScope {
  * shared (company-wide) knowledge.
  *
  * Stores documents in MinIO under `{companySlug}/knowledge/{roleSlug}/` (or
- * `{companySlug}/knowledge/shared/` for company scope) and keeps the RAG
- * index in sync via {@link RagIndexService}.
+ * `{companySlug}/knowledge/shared/` for company scope). RAG embeddings are
+ * kept in sync by {@link StorageService}'s write hook, which enqueues a
+ * scope rebuild via {@link KnowledgeReindexService} — this service never
+ * indexes synchronously.
  */
 @Injectable()
 export class KnowledgeService {
   constructor(
     private readonly storage: StorageService,
-    private readonly ragIndex: RagIndexService,
+    private readonly reindex: KnowledgeReindexService,
     @InjectRepository(LcpRole)
     private readonly roleRepo: Repository<LcpRole>,
     @InjectRepository(LcpCompany)
@@ -85,10 +87,11 @@ export class KnowledgeService {
   }
 
   /**
-   * Stores a document and (re-)indexes it for RAG retrieval.
+   * Stores a document. Its RAG chunks are (re)built asynchronously by the
+   * storage write hook (see {@link KnowledgeReindexService}), so indexing is
+   * not awaited here.
    *
-   * If a document with the same `filename` already exists, it is overwritten
-   * and its RAG chunks are replaced.
+   * If a document with the same `filename` already exists, it is overwritten.
    *
    * @throws {@link NotFoundException} when the role/company does not exist.
    * @returns The {@link DocumentSummary} for the newly stored document.
@@ -106,13 +109,6 @@ export class KnowledgeService {
       content,
       originators,
     );
-    await this.ragIndex.ingestDocument(
-      company.id,
-      role?.id ?? null,
-      key,
-      content.toString('utf-8'),
-      company.embeddingConfig,
-    );
     return {
       key,
       name: filename,
@@ -122,7 +118,8 @@ export class KnowledgeService {
   }
 
   /**
-   * Deletes a document by filename and removes its RAG chunks.
+   * Deletes a document by filename. Its RAG chunks are removed by the
+   * subsequent scope rebuild triggered by the storage write hook.
    *
    * An unknown filename is not an error — the operation is idempotent.
    *
@@ -140,8 +137,17 @@ export class KnowledgeService {
     } catch (err) {
       if (!(err instanceof NotFoundException)) throw err;
     }
-    const key = knowledgeScopeKey(scope, filename);
-    await this.ragIndex.removeDocument(role?.id ?? null, key);
+  }
+
+  /**
+   * Bumps every knowledge scope of a company (shared + each role), enqueuing a
+   * rebuild for each — backs the manual `POST .../knowledge/reindex` trigger.
+   *
+   * @throws {@link NotFoundException} when the company does not exist.
+   */
+  async reindexCompany(companyId: string): Promise<void> {
+    const { company } = await this.resolveScope({ kind: 'company', companyId });
+    await this.reindex.bumpCompany(company);
   }
 
   /** Resolves a {@link KnowledgeScopeRef} to its owning role (if any) and company. */

@@ -1,7 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { LcpCompany, LcpRole } from '@lcp/shared';
-import { RagIndexService } from '../rag/rag-index.service';
+import { KnowledgeReindexService } from '../rag/knowledge-reindex.service';
 import { StorageObject, StorageService } from '../storage/storage.service';
 import { KnowledgeService } from './knowledge.service';
 
@@ -49,8 +49,8 @@ describe('KnowledgeService', () => {
     getKnowledgeFile: jest.Mock;
     deleteKnowledgeFile: jest.Mock;
   };
-  let ragIndex: { ingestDocument: jest.Mock; removeDocument: jest.Mock };
-  let roleRepo: { findOneBy: jest.Mock };
+  let reindex: { bumpCompany: jest.Mock };
+  let roleRepo: { findOneBy: jest.Mock; findBy: jest.Mock };
   let companyRepo: { findOneBy: jest.Mock };
 
   const role = makeRole();
@@ -65,16 +65,16 @@ describe('KnowledgeService', () => {
       getKnowledgeFile: jest.fn().mockResolvedValue(null),
       deleteKnowledgeFile: jest.fn().mockResolvedValue(undefined),
     };
-    ragIndex = {
-      ingestDocument: jest.fn().mockResolvedValue(undefined),
-      removeDocument: jest.fn().mockResolvedValue(undefined),
+    reindex = { bumpCompany: jest.fn().mockResolvedValue(undefined) };
+    roleRepo = {
+      findOneBy: jest.fn().mockResolvedValue(role),
+      findBy: jest.fn().mockResolvedValue([role]),
     };
-    roleRepo = { findOneBy: jest.fn().mockResolvedValue(role) };
     companyRepo = { findOneBy: jest.fn().mockResolvedValue(company) };
 
     service = new KnowledgeService(
       storage as unknown as StorageService,
-      ragIndex as unknown as RagIndexService,
+      reindex as unknown as KnowledgeReindexService,
       roleRepo as never,
       companyRepo as never,
     );
@@ -157,9 +157,9 @@ describe('KnowledgeService', () => {
   });
 
   describe('store (role scope)', () => {
-    it('stores in the storage layer and triggers RAG indexing with the role id', async () => {
+    it('stores in the storage layer (RAG indexing is triggered by the write hook)', async () => {
       const content = Buffer.from('# Hello\ncontent');
-      await service.store(
+      const summary = await service.store(
         { kind: 'role', roleId: role.id },
         'report.md',
         content,
@@ -170,13 +170,10 @@ describe('KnowledgeService', () => {
         content,
         undefined,
       );
-      expect(ragIndex.ingestDocument).toHaveBeenCalledWith(
-        company.id,
-        role.id,
-        'acme/knowledge/analyst/report.md',
-        '# Hello\ncontent',
-        company.embeddingConfig,
-      );
+      expect(summary.key).toBe('acme/knowledge/analyst/report.md');
+      // The service no longer indexes synchronously — the storage adapter's
+      // write hook enqueues the rebuild.
+      expect(reindex.bumpCompany).not.toHaveBeenCalled();
     });
 
     it('passes originators through to the storage layer', async () => {
@@ -198,12 +195,12 @@ describe('KnowledgeService', () => {
   });
 
   describe('store (company scope)', () => {
-    it('triggers RAG indexing with a null role id', async () => {
+    it('stores under the shared scope (roleSlug: null)', async () => {
       const content = Buffer.from('# Shared\ncontent');
       storage.putKnowledgeFile.mockResolvedValue(
         'acme/knowledge/shared/policy.md',
       );
-      await service.store(
+      const summary = await service.store(
         { kind: 'company', companyId: company.id },
         'policy.md',
         content,
@@ -214,27 +211,17 @@ describe('KnowledgeService', () => {
         content,
         undefined,
       );
-      expect(ragIndex.ingestDocument).toHaveBeenCalledWith(
-        company.id,
-        null,
-        'acme/knowledge/shared/policy.md',
-        '# Shared\ncontent',
-        company.embeddingConfig,
-      );
+      expect(summary.key).toBe('acme/knowledge/shared/policy.md');
     });
   });
 
   describe('delete', () => {
-    it('deletes from storage and removes RAG chunks', async () => {
+    it('deletes from storage (RAG chunks are removed by the write hook)', async () => {
       await service.delete({ kind: 'role', roleId: role.id }, 'report.md');
       expect(storage.deleteKnowledgeFile).toHaveBeenCalledWith(
         { companySlug: 'acme', roleSlug: 'analyst' },
         'report.md',
         undefined,
-      );
-      expect(ragIndex.removeDocument).toHaveBeenCalledWith(
-        role.id,
-        'acme/knowledge/analyst/report.md',
       );
     });
 
@@ -245,11 +232,6 @@ describe('KnowledgeService', () => {
       await expect(
         service.delete({ kind: 'role', roleId: role.id }, 'missing.md'),
       ).resolves.toBeUndefined();
-      // Still attempts to clear any (non-existent) RAG chunks.
-      expect(ragIndex.removeDocument).toHaveBeenCalledWith(
-        role.id,
-        'acme/knowledge/analyst/missing.md',
-      );
     });
 
     it('re-throws unexpected storage errors', async () => {
@@ -258,16 +240,20 @@ describe('KnowledgeService', () => {
         service.delete({ kind: 'role', roleId: role.id }, 'report.md'),
       ).rejects.toThrow('boom');
     });
+  });
 
-    it('removes shared-scope chunks (null role id) for company scope', async () => {
-      await service.delete(
-        { kind: 'company', companyId: company.id },
-        'policy.md',
+  describe('reindexCompany', () => {
+    it('bumps every scope of the resolved company', async () => {
+      await service.reindexCompany(company.id);
+      expect(reindex.bumpCompany).toHaveBeenCalledWith(company);
+    });
+
+    it('throws NotFoundException when the company does not exist', async () => {
+      companyRepo.findOneBy.mockResolvedValue(null);
+      await expect(service.reindexCompany('no-such-co')).rejects.toThrow(
+        NotFoundException,
       );
-      expect(ragIndex.removeDocument).toHaveBeenCalledWith(
-        null,
-        'acme/knowledge/shared/policy.md',
-      );
+      expect(reindex.bumpCompany).not.toHaveBeenCalled();
     });
   });
 });

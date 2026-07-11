@@ -17,6 +17,7 @@ import { ConfigService } from '@nestjs/config';
 import { Readable } from 'stream';
 import type { Repository } from 'typeorm';
 import type { AuditService } from '../audit/audit.service';
+import type { KnowledgeReindexService } from '../rag/knowledge-reindex.service';
 import { MinioStorageAdapter } from './minio-storage.adapter';
 import { DocumentValidationException } from './document-validation.exception';
 
@@ -60,15 +61,22 @@ function makeCompanyRepo(
   return { findOneBy: jest.fn().mockResolvedValue(company) };
 }
 
+/** `bumpByKey` mock for the injected {@link KnowledgeReindexService} write hook. */
+function makeReindex(): { bumpByKey: jest.Mock } {
+  return { bumpByKey: jest.fn().mockResolvedValue(undefined) };
+}
+
 function makeAdapter(
   config: ConfigService,
   audit = makeAudit(),
   companyRepo = makeCompanyRepo(),
+  reindex = makeReindex(),
 ): MinioStorageAdapter {
   return new MinioStorageAdapter(
     config,
     audit as unknown as AuditService,
     companyRepo as unknown as Repository<LcpCompany>,
+    reindex as unknown as KnowledgeReindexService,
   );
 }
 
@@ -138,6 +146,36 @@ describe('MinioStorageAdapter', () => {
         svc.putKnowledgeFile(ROLE_SCOPE, 'report.md', '# no front-matter'),
       ).rejects.toBeInstanceOf(DocumentValidationException);
       expect(send).not.toHaveBeenCalledWith(expect.any(PutObjectCommand));
+    });
+
+    it('triggers a RAG reindex for the written key', async () => {
+      send.mockResolvedValue({});
+      const reindex = makeReindex();
+      const svc = makeAdapter(
+        makeConfig(),
+        makeAudit(),
+        makeCompanyRepo(),
+        reindex,
+      );
+      await svc.putKnowledgeFile(ROLE_SCOPE, 'report.md', VALID_OKF);
+      expect(reindex.bumpByKey).toHaveBeenCalledWith(
+        'acme/knowledge/analyst/report.md',
+      );
+    });
+
+    it('does not fail the write when the reindex trigger throws', async () => {
+      send.mockResolvedValue({});
+      const reindex = makeReindex();
+      reindex.bumpByKey.mockRejectedValue(new Error('redis down'));
+      const svc = makeAdapter(
+        makeConfig(),
+        makeAudit(),
+        makeCompanyRepo(),
+        reindex,
+      );
+      await expect(
+        svc.putKnowledgeFile(ROLE_SCOPE, 'report.md', VALID_OKF),
+      ).resolves.toBe('acme/knowledge/analyst/report.md');
     });
 
     it('records a storage audit event with a real company id', async () => {

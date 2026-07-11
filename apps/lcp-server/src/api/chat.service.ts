@@ -228,6 +228,7 @@ export class ChatService {
       if (isFirstMessage) {
         const ragChunks = await this.ragRetrieval.retrieve(
           role.id,
+          role.companyId,
           preparedMessage,
           company?.embeddingConfig,
         );

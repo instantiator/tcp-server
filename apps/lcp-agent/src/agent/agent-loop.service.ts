@@ -639,6 +639,7 @@ export class AgentLoopService {
 
     const ragChunks = await this.rag.retrieve(
       role.id,
+      company.id,
       initialPrompt,
       company.embeddingConfig,
     );

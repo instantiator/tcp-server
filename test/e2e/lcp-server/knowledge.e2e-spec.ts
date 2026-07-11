@@ -6,6 +6,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { Repository } from 'typeorm';
 import { AppModule } from '../../../apps/lcp-server/src/app.module';
+import { makeTestJwt } from '../helpers/test-jwt';
 
 describe('KnowledgeController (e2e)', () => {
   let app: INestApplication<App>;
@@ -105,5 +106,27 @@ describe('KnowledgeController (e2e)', () => {
       request(app.getHttpServer())
         .delete(`/api/company/${companyId}/knowledge/policy.md`)
         .expect(401));
+  });
+
+  describe('reindex', () => {
+    it('POST /api/company/:companyId/knowledge/reindex returns 401 without a token', () =>
+      request(app.getHttpServer())
+        .post(`/api/company/${companyId}/knowledge/reindex`)
+        .expect(401));
+
+    it('POST /api/company/:companyId/knowledge/reindex returns 202 for a known company', () =>
+      request(app.getHttpServer())
+        .post(`/api/company/${companyId}/knowledge/reindex`)
+        .set('Authorization', `Bearer ${makeTestJwt()}`)
+        .expect(202)
+        .expect((res) => {
+          expect(res.body).toEqual({ reindexing: true });
+        }));
+
+    it('POST /api/company/:companyId/knowledge/reindex returns 404 for an unknown company', () =>
+      request(app.getHttpServer())
+        .post(`/api/company/no-such-company/knowledge/reindex`)
+        .set('Authorization', `Bearer ${makeTestJwt()}`)
+        .expect(404));
   });
 });

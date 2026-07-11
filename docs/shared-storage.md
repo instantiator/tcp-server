@@ -101,9 +101,25 @@ Every write also records an audit event carrying `originators: { user, agent, ta
 
 ## Managing knowledge documents
 
-Knowledge documents are uploaded via lcp-cli, scoped to either a role (`knowledge/{role_slug}/`) or a company's shared knowledge (`knowledge/shared/`). The server chunks, embeds, and indexes them for RAG retrieval automatically on upload.
+Knowledge documents are uploaded via lcp-cli, scoped to either a role (`knowledge/{role_slug}/`) or a company's shared knowledge (`knowledge/shared/`). The server chunks, embeds, and indexes them for RAG retrieval automatically.
 
 > **Migration note (010.2.1):** the knowledge folder layout moved from name-based (`knowledge/{role_name}/`) to slug-based (`knowledge/{role_slug}/`), and the `AllowSharedKnowledgeChunks` migration truncates the `knowledge_chunk` table (existing chunks referenced the old paths and can no longer be resolved). Any knowledge documents previously uploaded must be re-uploaded via `store-knowledge` after this migration runs — the underlying MinIO objects are untouched, only their RAG index is cleared.
+
+### Automatic RAG sync (010.2.2)
+
+Embeddings are kept in sync with the folder contents automatically, whoever changes them — you via the API/CLI, an agent via the storage tools, or a person editing directly in the MinIO console. The unit of reindexing is a whole _scope_ (`knowledge/{role_slug}/` or `knowledge/shared/`): a rebuild re-lists, re-chunks, and re-embeds every file in the scope and replaces that scope's rows in `knowledge_chunk`. Two triggers feed one BullMQ queue (`knowledge-reindex`), and both run inside lcp-server:
+
+1. **Write hook (fast path).** `StorageService` is the single chokepoint for all lcp-server-mediated writes; after any successful write/delete/restore/move/copy under a `knowledge/` prefix it enqueues a rebuild for the affected scope.
+2. **Reconciliation poller (safety net).** A periodic in-process loop (interval `KNOWLEDGE_POLL_INTERVAL_MS`, default `60000`) fingerprints each scope's storage listing and enqueues a rebuild for any scope that has drifted from the fingerprint recorded at its last successful rebuild. This is what catches direct MinIO-console edits that never went through the write hook. Each running lcp-server instance polls independently; bumps are generation-guarded, so overlapping polls are harmless.
+
+Restart-on-change is handled by a per-scope generation counter (`knowledge_index_state`): every trigger atomically bumps the counter and enqueues a job carrying the new value. The worker skips any job older than the current generation and aborts + re-enqueues if the generation changes mid-rebuild, so a burst of writes collapses into a single up-to-date rebuild with no half-indexed state. Because indexing is asynchronous, chunks may appear a moment after an upload rather than synchronously.
+
+To force a rebuild of every scope of a company immediately (rather than waiting for the poller), use the manual trigger:
+
+```bash
+./lcp-cli.sh reindex-knowledge -c <company-slug-or-id>
+# → POST /api/company/:companyId/knowledge/reindex (202 Accepted)
+```
 
 ```bash
 # Upload a document to a role's knowledge base
@@ -121,6 +137,9 @@ Knowledge documents are uploaded via lcp-cli, scoped to either a role (`knowledg
 
 # Remove a document by filename
 ./lcp-cli.sh delete-knowledge -r <roleId> -f policy.md
+
+# Force a full RAG rebuild of every scope of a company
+./lcp-cli.sh reindex-knowledge -c <companyId>
 ```
 
 See [`lcp-cli.md` → knowledge management verbs](lcp-cli.md#list-knowledge) and [Agent Services → RAG](agent-services.md#rag-retrieval-augmented-generation) for full details.

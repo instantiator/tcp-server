@@ -138,6 +138,21 @@ describe('MemoryToolsService', () => {
       expect(sql).not.toContain('episodic_memory');
     });
 
+    it('scopes to the role plus the company shared chunks', async () => {
+      const dataSource = makeDataSource([]);
+      const svc = makeService({ dataSource });
+      await svc.knowledgeSearch(COMPANY_ID, ROLE_ID, 'q', 5);
+      const [sql, params] = dataSource.query.mock.calls[0] as [
+        string,
+        unknown[],
+      ];
+      expect(sql).toContain(
+        '(("roleId" = $2::uuid) OR ("roleId" IS NULL AND "companyId" = $3::uuid))',
+      );
+      expect(params).toContain(ROLE_ID);
+      expect(params).toContain(COMPANY_ID);
+    });
+
     it('returns no_results for empty results', async () => {
       const svc = makeService({ dataSource: makeDataSource([]) });
       const text = await svc.knowledgeSearch(COMPANY_ID, ROLE_ID, 'q', 5);

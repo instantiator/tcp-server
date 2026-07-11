@@ -158,6 +158,21 @@ export class KnowledgeController {
     );
   }
 
+  /**
+   * Rebuilds every knowledge scope of the company (shared + each role):
+   * bumps their generations and enqueues rebuild jobs. Returns 202 — indexing
+   * happens asynchronously on the reindex worker.
+   */
+  @ApiOperation({ summary: 'Reindex all knowledge for a company' })
+  @Post('company/:companyId/knowledge/reindex')
+  @HttpCode(202)
+  async reindexCompanyKnowledge(
+    @Param('companyId') companyId: string,
+  ): Promise<{ reindexing: true }> {
+    await this.knowledge.reindexCompany(companyId);
+    return { reindexing: true };
+  }
+
   /** Deletes a company-shared knowledge document and its RAG chunks. Idempotent. */
   @ApiOperation({ summary: 'Delete a company-shared OKF document' })
   @Delete('company/:companyId/knowledge/:filename')

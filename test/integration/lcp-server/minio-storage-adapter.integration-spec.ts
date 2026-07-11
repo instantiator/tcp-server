@@ -16,6 +16,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken, TypeOrmModule } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuditService } from '../../../apps/lcp-server/src/audit/audit.service';
+import { KnowledgeReindexService } from '../../../apps/lcp-server/src/rag/knowledge-reindex.service';
 import { DocumentValidationException } from '../../../apps/lcp-server/src/storage/document-validation.exception';
 import { MinioStorageAdapter } from '../../../apps/lcp-server/src/storage/minio-storage.adapter';
 import { requireEnv } from '../../support/require-env';
@@ -82,6 +83,10 @@ describe('MinioStorageAdapter (integration)', () => {
       providers: [
         MinioStorageAdapter,
         { provide: AuditService, useValue: { record: jest.fn() } },
+        {
+          provide: KnowledgeReindexService,
+          useValue: { bumpByKey: jest.fn() },
+        },
         {
           provide: ConfigService,
           useValue: {

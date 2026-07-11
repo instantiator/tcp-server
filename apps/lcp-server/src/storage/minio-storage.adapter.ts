@@ -18,10 +18,12 @@ import {
 } from '@lcp/shared';
 import {
   ConflictException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
   OnModuleInit,
+  forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -30,6 +32,7 @@ import * as nodePath from 'path';
 import { Readable } from 'stream';
 import { Repository } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
+import { KnowledgeReindexService } from '../rag/knowledge-reindex.service';
 import { analyzeContent } from './content-analysis';
 import { DocumentValidationException } from './document-validation.exception';
 import {
@@ -75,6 +78,8 @@ export class MinioStorageAdapter
     private readonly audit: AuditService,
     @InjectRepository(LcpCompany)
     private readonly companyRepo: Repository<LcpCompany>,
+    @Inject(forwardRef(() => KnowledgeReindexService))
+    private readonly reindex: KnowledgeReindexService,
   ) {
     super();
     registerDefaultValidators();
@@ -159,6 +164,26 @@ export class MinioStorageAdapter
     }
   }
 
+  /**
+   * Enqueues a RAG rebuild for any affected key that falls under a
+   * `knowledge/` folder — the single chokepoint that keeps embeddings in sync
+   * with storage, whoever wrote the file (user, agent, or CLI). A no-op for
+   * non-knowledge keys ({@link KnowledgeReindexService.bumpByKey} filters
+   * them). Never throws: the write it accompanies has already succeeded, so a
+   * queue-side failure must not turn it into an error for the caller.
+   */
+  private async triggerReindex(...keys: string[]): Promise<void> {
+    for (const key of keys) {
+      try {
+        await this.reindex.bumpByKey(key);
+      } catch (err) {
+        this.logger.warn(
+          `Knowledge reindex trigger failed for ${key}: ${String(err instanceof Error ? err.message : err)}`,
+        );
+      }
+    }
+  }
+
   async onModuleInit(): Promise<void> {
     await this.ensureBucketExists();
   }
@@ -202,6 +227,7 @@ export class MinioStorageAdapter
       scope.companySlug,
       originators,
     );
+    await this.triggerReindex(key);
     return key;
   }
 
@@ -226,6 +252,7 @@ export class MinioStorageAdapter
           name: obj.Key.slice(prefix.length),
           size: obj.Size ?? 0,
           lastModified: obj.LastModified ?? new Date(0),
+          etag: obj.ETag,
         });
       }
 
@@ -302,6 +329,7 @@ export class MinioStorageAdapter
     await this.emitStorageAudit('put_by_key', key, companySlug, originators, {
       contentType,
     });
+    await this.triggerReindex(key);
     return data.length;
   }
 
@@ -385,6 +413,7 @@ export class MinioStorageAdapter
     await this.emitStorageAudit('write_file', path, companySlug, originators, {
       overwrite,
     });
+    await this.triggerReindex(path);
     return { key: path, size: Buffer.byteLength(content, 'utf-8') };
   }
 
@@ -406,10 +435,9 @@ export class MinioStorageAdapter
     );
     const companySlug = path.split('/')[0];
     await this.emitStorageAudit('delete_file', path, companySlug, originators);
+    await this.triggerReindex(path);
   }
 
-  // TODO(rag-sync, docs/prompts/010.3): restoring a knowledge/ file should
-  // trigger RAG re-chunking — not implemented here.
   async restoreFile(path: string, originators?: Originators): Promise<void> {
     assertValidStoragePath(path);
     const deletedKey = `${DELETED_PREFIX}${path}`;
@@ -430,6 +458,7 @@ export class MinioStorageAdapter
     );
     const companySlug = path.split('/')[0];
     await this.emitStorageAudit('restore_file', path, companySlug, originators);
+    await this.triggerReindex(path);
   }
 
   async searchFiles(
@@ -488,6 +517,7 @@ export class MinioStorageAdapter
     await this.emitStorageAudit('copy_file', source, companySlug, originators, {
       destination,
     });
+    await this.triggerReindex(destination);
   }
 
   async moveFile(
@@ -514,6 +544,7 @@ export class MinioStorageAdapter
     await this.emitStorageAudit('move_file', source, companySlug, originators, {
       destination,
     });
+    await this.triggerReindex(source, destination);
   }
 
   async getFileSummary(path: string): Promise<Record<string, unknown>> {

@@ -3,6 +3,7 @@ import {
   knowledgePrefix,
   knowledgeScopeKey,
   knowledgeScopePrefix,
+  parseKnowledgePath,
   sharedKnowledgeKey,
   sharedKnowledgePrefix,
 } from './storage-keys';
@@ -60,5 +61,27 @@ describe('knowledgeScopePrefix', () => {
     expect(knowledgeScopePrefix({ companySlug: 'acme', roleSlug: null })).toBe(
       'acme/knowledge/shared/',
     );
+  });
+});
+
+describe('parseKnowledgePath', () => {
+  it('parses a role knowledge key', () => {
+    expect(parseKnowledgePath('acme/knowledge/analyst/report.md')).toEqual({
+      companySlug: 'acme',
+      roleSlug: 'analyst',
+    });
+  });
+
+  it('maps the shared/ segment to a null role', () => {
+    expect(parseKnowledgePath('acme/knowledge/shared/policy.md')).toEqual({
+      companySlug: 'acme',
+      roleSlug: null,
+    });
+  });
+
+  it('returns null for non-knowledge keys', () => {
+    expect(parseKnowledgePath('acme/tasks/123/output.md')).toBeNull();
+    expect(parseKnowledgePath('acme/knowledge/analyst')).toBeNull();
+    expect(parseKnowledgePath('report.md')).toBeNull();
   });
 });

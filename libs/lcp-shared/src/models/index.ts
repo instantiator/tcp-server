@@ -6,6 +6,7 @@ export * from './Conversation.model';
 export * from './ConversationMessage.model';
 export * from './EpisodicMemory.model';
 export * from './KnowledgeChunk.model';
+export * from './KnowledgeIndexState.model';
 export * from './LcpAgent.model';
 export * from './LcpCompany.model';
 export * from './PendingConsultation.model';
