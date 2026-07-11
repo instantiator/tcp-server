@@ -60,6 +60,20 @@ export class DbService {
       slug,
     });
 
+    // A brand-new company has no roles of its own yet, so a plannerRoleId
+    // given at creation can never validly belong to it — validated here
+    // (rather than skipped) so the failure is reported clearly instead of
+    // silently leaving a dangling reference.
+    if (template.plannerRoleId) {
+      await this.assertPlannerRoleBelongsToCompany(
+        company.id,
+        template.plannerRoleId,
+      ).catch(async (err: unknown) => {
+        await this.companyRepo.delete(company.id);
+        throw err;
+      });
+    }
+
     const existingCreator = await this.companyUserRepo.findOneBy({
       companyId: company.id,
       identifier: creatorIdentifier,
@@ -137,7 +151,31 @@ export class DbService {
         }
       : company;
 
+    const targetCompanyId = existing?.id ?? company.id;
+    if (company.plannerRoleId && targetCompanyId) {
+      await this.assertPlannerRoleBelongsToCompany(
+        targetCompanyId,
+        company.plannerRoleId,
+      );
+    }
+
     return this.companyRepo.save(this.companyRepo.create(merged));
+  }
+
+  /** @throws {@link BadRequestException} when `plannerRoleId` does not belong to `companyId`. */
+  private async assertPlannerRoleBelongsToCompany(
+    companyId: UUID,
+    plannerRoleId: UUID,
+  ): Promise<void> {
+    const role = await this.roleRepo.findOneBy({
+      id: plannerRoleId,
+      companyId,
+    });
+    if (!role) {
+      throw new BadRequestException(
+        `Role ${plannerRoleId} does not belong to company ${companyId}`,
+      );
+    }
   }
 
   /** Returns all {@link LcpCompany} records. */

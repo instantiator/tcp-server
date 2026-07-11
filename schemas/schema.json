@@ -744,6 +744,302 @@
       ],
       "type": "object"
     },
+    "LcpArtifact": {
+      "additionalProperties": false,
+      "description": "`{ type, value }` pointer to (or literal content of) a single artifact.",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/LcpArtifactType"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "value"
+      ],
+      "type": "object"
+    },
+    "LcpArtifactType": {
+      "description": "Where an artifact lives. The three `-path` variants are filenames relative to a location in the task/assignment storage tree (see `storage-keys.ts`); `inline-text` carries literal text directly instead of pointing at storage.",
+      "enum": [
+        "task-materials-path",
+        "task-completed-path",
+        "assignment-working-path",
+        "assignment-completed-path",
+        "inline-text"
+      ],
+      "type": "string"
+    },
+    "LcpAssignment": {
+      "additionalProperties": false,
+      "description": "A unit of work performed by a single agent. Implement-mode assignments belonging to a task, ordered by  {@link  orderIndex } , form that task's plan — there is no separate plan entity. Assignments also exist outside any task (\"orphan\" assignments — plain conversations/consultations, `taskId: null`) and in `plan`/`qa` modes (the planner's own assignment, and QA review assignments).",
+      "properties": {
+        "agent": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LcpAgent"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The agent currently (or last) working this assignment."
+        },
+        "agentId": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/UUID"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Foreign key for  {@link  agent } .",
+          "format": "uuid"
+        },
+        "approved": {
+          "description": "Set when QA accepts: the artifacts promoted into the assignment's completed directory.",
+          "items": {
+            "$ref": "#/definitions/LcpAssignmentCompletedArtifact"
+          },
+          "type": "array"
+        },
+        "company": {
+          "$ref": "#/definitions/LcpCompany",
+          "description": "The company this assignment belongs to — needed directly for orphans."
+        },
+        "companyId": {
+          "$ref": "#/definitions/UUID",
+          "description": "Foreign key for the owning  {@link  LcpCompany } .",
+          "format": "uuid"
+        },
+        "createdAt": {
+          "description": "Timestamp when this assignment was created.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "expected": {
+          "description": "Artifacts the assignment is expected to produce.",
+          "items": {
+            "$ref": "#/definitions/LcpAssignmentWorkingArtifact"
+          },
+          "type": "array"
+        },
+        "id": {
+          "$ref": "#/definitions/UUID",
+          "format": "uuid"
+        },
+        "materials": {
+          "description": "Materials supplied to the assignment.\n\nUses `simple-json` (stored as TEXT) for cross-DB compatibility with SQLite unit tests.",
+          "items": {
+            "$ref": "#/definitions/LcpMaterialArtifact"
+          },
+          "type": "array"
+        },
+        "mode": {
+          "$ref": "#/definitions/LcpAssignmentMode",
+          "description": "The kind of work this assignment represents."
+        },
+        "orderIndex": {
+          "description": "Position in the task plan. Set only for implement-mode assignments belonging to a task; null for orphans, plan-mode, and qa-mode assignments.\n\nponytail: a linear plan (one integer per step) is the shipped shape — future DAG-shaped plans (branch/join) replace this with an edge list; `selectNextAssignments` is the intended extension point.",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "prepared": {
+          "description": "Set by `complete_assignment`: the artifacts the agent prepared for review.",
+          "items": {
+            "$ref": "#/definitions/LcpAssignmentWorkingArtifact"
+          },
+          "type": "array"
+        },
+        "prompt": {
+          "description": "The instructions given to the assigned agent.",
+          "type": "string"
+        },
+        "qaAttempts": {
+          "description": "Number of QA review cycles this assignment has been through. Never reset.",
+          "type": "number"
+        },
+        "qaFeedback": {
+          "description": "QA reviewer's feedback. Cleared alongside  {@link  qaStatus } .",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "qaStatus": {
+          "$ref": "#/definitions/LcpAssignmentQaStatus",
+          "description": "Outcome of the current/last QA review. Cleared (with  {@link  qaFeedback } ) whenever the assignment (re-)enters `in-progress`."
+        },
+        "role": {
+          "$ref": "#/definitions/LcpRole",
+          "description": "The role this assignment must be worked by."
+        },
+        "roleId": {
+          "$ref": "#/definitions/UUID",
+          "description": "Foreign key for  {@link  role } .",
+          "format": "uuid"
+        },
+        "status": {
+          "$ref": "#/definitions/LcpAssignmentStatus",
+          "description": "Current lifecycle state of this assignment."
+        },
+        "summary": {
+          "description": "The completing agent's final answer, recorded by `complete_assignment`. Becomes the agent's `output` when QA accepts.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "targetAssignment": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LcpAssignment"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "qa-mode only: the assignment under review."
+        },
+        "targetAssignmentId": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/UUID"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Foreign key for  {@link  targetAssignment } .",
+          "format": "uuid"
+        },
+        "task": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LcpTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The task this assignment belongs to. Null for orphan assignments."
+        },
+        "taskId": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/UUID"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Foreign key for  {@link  task } . Null for orphan assignments.",
+          "format": "uuid"
+        },
+        "updatedAt": {
+          "description": "Timestamp of the last status or field update.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "version": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "approved",
+        "company",
+        "companyId",
+        "createdAt",
+        "expected",
+        "id",
+        "materials",
+        "mode",
+        "prepared",
+        "prompt",
+        "qaAttempts",
+        "qaFeedback",
+        "qaStatus",
+        "role",
+        "roleId",
+        "status",
+        "summary",
+        "updatedAt",
+        "version"
+      ],
+      "type": "object"
+    },
+    "LcpAssignmentCompletedArtifact": {
+      "additionalProperties": false,
+      "description": "An artifact promoted into an assignment's completed directory, or inline text.",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/LcpArtifactType"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "value"
+      ],
+      "type": "object"
+    },
+    "LcpAssignmentMode": {
+      "description": "The kind of work an assignment represents. The agent's mode IS its assignment's mode — there is no separate mode column on  {@link  LcpAgent } .",
+      "enum": [
+        "plan",
+        "implement",
+        "qa"
+      ],
+      "type": "string"
+    },
+    "LcpAssignmentQaStatus": {
+      "description": "Outcome of a QA review — set by `assure_assignment`; null while not under (or before) review.",
+      "enum": [
+        "accepted",
+        "rejected",
+        null
+      ],
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "LcpAssignmentStatus": {
+      "description": "Lifecycle states for a  {@link  LcpAssignment } . A QA rejection returns the assignment from `in-qa` to `in-progress` (`qaStatus`/`qaFeedback` are cleared on that re-entry; `qaAttempts` is never reset).",
+      "enum": [
+        "ready",
+        "in-progress",
+        "in-qa",
+        "succeeded",
+        "failed",
+        "cancelled"
+      ],
+      "type": "string"
+    },
+    "LcpAssignmentWorkingArtifact": {
+      "additionalProperties": false,
+      "description": "An artifact living in an assignment's own working directory, or inline text.",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/LcpArtifactType"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "value"
+      ],
+      "type": "object"
+    },
     "LcpCompany": {
       "additionalProperties": false,
       "description": "Represents a company (tenant) within the LCP simulation. Each company has its own isolated set of agents, memory, and resources.",
@@ -785,7 +1081,7 @@
               "type": "null"
             }
           ],
-          "description": "Optional company-wide default LLM configuration. Roles that do not specify their own  {@link  LcpRole.llmConfig  }  fall back to this value at run time, then to the environment-configured LLM fallback (`LLM_PROVIDER` / `LLM_MODEL`), before failing. Resolved via  {@link  LlmConfigResolver  } ."
+          "description": "Optional company-wide default LLM configuration. Roles that do not specify their own  {@link  LcpRole.llmConfig }  fall back to this value at run time, then to the environment-configured LLM fallback (`LLM_PROVIDER` / `LLM_MODEL`), before failing. Resolved via  {@link  LlmConfigResolver  } ."
         },
         "mcpServerList": {
           "description": "Additional MCP server identifiers made available to every agent in this company, on top of the system's default servers and any extras listed on the running role. Additive, not a precedence override — resolved via  {@link  resolveMcpServerList  } .",
@@ -799,6 +1095,29 @@
           "minLength": 1,
           "type": "string"
         },
+        "plannerRole": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LcpRole"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Company-default planner role, used by  {@link  LcpTask.plannerRole  }  when a task does not specify its own. Must belong to this company — enforced at write time by `DbService`/`ApiService`, not by the FK alone."
+        },
+        "plannerRoleId": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/UUID"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Foreign key for  {@link  plannerRole } .",
+          "format": "uuid"
+        },
         "runConfig": {
           "anyOf": [
             {
@@ -808,7 +1127,7 @@
               "type": "null"
             }
           ],
-          "description": "Optional company-wide agent-loop resource overrides. Applied when the running role has no  {@link  LcpRole.runConfig  }  set. See  {@link  AgentRunConfig }  for available fields."
+          "description": "Optional company-wide agent-loop resource overrides. Applied when the running role has no  {@link  LcpRole.runConfig }  set. See  {@link  AgentRunConfig }  for available fields."
         },
         "slug": {
           "description": "URL-safe identifier used in API paths and agent namespacing. Must be globally unique across all companies.",
@@ -816,7 +1135,7 @@
           "type": "string"
         },
         "systemPromptTemplate": {
-          "description": "Optional company-wide default `systemPromptTemplate`. Used when a role does not specify its own  {@link  LcpRole.systemPromptTemplate  } ; falls back to `DEFAULT_SYSTEM_PROMPT_TEMPLATE` when neither is set. Resolved via  {@link  SystemPromptTemplateResolver  } .",
+          "description": "Optional company-wide default `systemPromptTemplate`. Used when a role does not specify its own  {@link  LcpRole.systemPromptTemplate } ; falls back to `DEFAULT_SYSTEM_PROMPT_TEMPLATE` when neither is set. Resolved via  {@link  SystemPromptTemplateResolver  } .",
           "type": [
             "string",
             "null"
@@ -836,6 +1155,23 @@
         "name",
         "description",
         "mcpServerList"
+      ],
+      "type": "object"
+    },
+    "LcpMaterialArtifact": {
+      "additionalProperties": false,
+      "description": "An artifact usable as task materials: an uploaded file, a promoted assignment output, or inline text.",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/LcpArtifactType"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "value"
       ],
       "type": "object"
     },
@@ -939,6 +1275,148 @@
         "queryIndex"
       ],
       "type": "object"
+    },
+    "LcpTask": {
+      "additionalProperties": false,
+      "description": "A piece of work requested by a user. A planner agent turns a task into a plan — an ordered list of implement-mode  {@link  LcpAssignment  }  records (there is no separate plan entity; see `LcpAssignment.orderIndex`).",
+      "properties": {
+        "company": {
+          "$ref": "#/definitions/LcpCompany",
+          "description": "The company this task belongs to."
+        },
+        "companyId": {
+          "$ref": "#/definitions/UUID",
+          "description": "Foreign key for the owning  {@link  LcpCompany } .",
+          "format": "uuid"
+        },
+        "completed": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/definitions/LcpTaskCompletedArtifact"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Set at finalisation: the artifacts actually produced by the task."
+        },
+        "createdAt": {
+          "description": "Timestamp when this task was created.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "expected": {
+          "description": "Artifacts the task is expected to produce.",
+          "items": {
+            "$ref": "#/definitions/LcpTaskCompletedArtifact"
+          },
+          "type": "array"
+        },
+        "failureReason": {
+          "description": "Why the task failed — planner failure, QA exhaustion, etc. Null unless `status` is `failed`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "$ref": "#/definitions/UUID",
+          "format": "uuid"
+        },
+        "materials": {
+          "description": "Task materials supplied at creation or upload time — `task-materials-path` or `inline-text` artifacts only.\n\nUses `simple-json` (stored as TEXT) for cross-DB compatibility with SQLite unit tests.",
+          "items": {
+            "$ref": "#/definitions/LcpMaterialArtifact"
+          },
+          "type": "array"
+        },
+        "plannerRole": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LcpRole"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Explicit planner role for this task. Falls back to  {@link  LcpCompany.plannerRoleId }  at start time when unset."
+        },
+        "plannerRoleId": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/UUID"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Foreign key for  {@link  plannerRole } .",
+          "format": "uuid"
+        },
+        "request": {
+          "description": "The user's statement of the work to be done.",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/LcpTaskStatus",
+          "description": "Current lifecycle state of this task."
+        },
+        "updatedAt": {
+          "description": "Timestamp of the last status or field update.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "version": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "company",
+        "companyId",
+        "completed",
+        "createdAt",
+        "expected",
+        "failureReason",
+        "id",
+        "materials",
+        "request",
+        "status",
+        "updatedAt",
+        "version"
+      ],
+      "type": "object"
+    },
+    "LcpTaskCompletedArtifact": {
+      "additionalProperties": false,
+      "description": "An artifact promoted into a task's completed directory, or inline text.",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/LcpArtifactType"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "value"
+      ],
+      "type": "object"
+    },
+    "LcpTaskStatus": {
+      "description": "Lifecycle states for a  {@link  LcpTask } . `planning` reflects an active planner dispatch; other transitions derive from the task's implement-mode assignments (see `deriveTaskStatus`).",
+      "enum": [
+        "ready",
+        "planning",
+        "in-progress",
+        "succeeded",
+        "failed",
+        "cancelled"
+      ],
+      "type": "string"
     },
     "LlmConfig": {
       "additionalProperties": false,
@@ -1071,6 +1549,60 @@
               "type": "null"
             }
           ]
+        }
+      },
+      "type": "object"
+    },
+    "assignment": {
+      "$comment": "(\n  status: LcpAssignment['status']) => Pick<LcpAssignment, 'status'>",
+      "properties": {
+        "namedArgs": {
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "$ref": "#/definitions/LcpAssignmentStatus",
+              "description": "Current lifecycle state of this assignment."
+            }
+          },
+          "required": [
+            "status"
+          ],
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "deriveTaskStatus": {
+      "$comment": "(\n  current: LcpTaskStatus,\n  planAssignments: Pick<LcpAssignment, 'status'>[]) => LcpTaskStatus",
+      "properties": {
+        "namedArgs": {
+          "additionalProperties": false,
+          "properties": {
+            "current": {
+              "$ref": "#/definitions/LcpTaskStatus"
+            },
+            "planAssignments": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "status": {
+                    "$ref": "#/definitions/LcpAssignmentStatus",
+                    "description": "Current lifecycle state of this assignment."
+                  }
+                },
+                "required": [
+                  "status"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "current",
+            "planAssignments"
+          ],
+          "type": "object"
         }
       },
       "type": "object"

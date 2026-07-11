@@ -66,29 +66,32 @@ See [schema.md](schema.md) for the full field reference, VS Code integration, ex
 
 ## Verbs
 
-| Verb                                                    | Invocation                                                                                   | Description                                                                |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| [`get-token`](#get-token)                               | `get-token`                                                                                  | Exchange username + password for an OIDC access token                      |
-| [`list-companies`](#list-companies)                     | `list-companies`                                                                             | List all companies                                                         |
-| [`list-roles`](#list-roles)                             | `list-roles [-c <uuid>\|--company-slug <slug>]`                                              | List roles, optionally filtered to one company                             |
-| [`set-company`](#set-company)                           | `set-company [-c <uuid>\|--company-slug <slug>] [-i <json>]`                                 | Create or update a company                                                 |
-| [`set-role`](#set-role)                                 | `set-role [-c <uuid>\|--company-slug <slug>] [-r <uuid>\|--role-slug <slug>] [-i <json>]`    | Create or update a role                                                    |
-| [`delete-company`](#delete-company)                     | `delete-company (-c <uuid>\|--company-slug <slug>) [-f]`                                     | Delete a company and everything in it                                      |
-| [`delete-role`](#delete-role)                           | `delete-role (-r <uuid>\|--role-slug <slug>) [-f]`                                           | Delete a role and everything tied to it                                    |
-| [`chat`](#chat)                                         | `chat (-r <uuid>\|-c <uuid>) [-q <message>]`                                                 | Interactive or single-query chat with a role, or browse a company's roster |
-| [`list-knowledge`](#list-knowledge)                     | `list-knowledge (--role <slug-or-id>\|--company <slug-or-id>)`                               | List knowledge-base documents for a role or company (shared knowledge)     |
-| [`get-knowledge`](#get-knowledge)                       | `get-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename> [-o <path>]`      | Get a knowledge-base document's content                                    |
-| [`store-knowledge`](#store-knowledge)                   | `store-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -s <path> [-t <filename>]`    | Upload an OKF Markdown document to a role or company knowledge base        |
-| [`delete-knowledge`](#delete-knowledge)                 | `delete-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename>`               | Delete a knowledge-base document by filename                               |
-| [`reindex-knowledge`](#reindex-knowledge)               | `reindex-knowledge --company <slug-or-id>`                                                   | Force a full RAG rebuild of every knowledge scope of a company             |
-| [`open-document-store`](#open-document-store)           | `open-document-store [--no-open]`                                                            | Print (and open) the MinIO console URL                                     |
-| [`list-open-queries`](#list-open-queries)               | `list-open-queries [-c <uuid>\|--company-slug <slug>] [--format table\|json\|csv]`           | List open agent-to-human queries                                           |
-| [`read-query`](#read-query)                             | `read-query <slug>`                                                                          | Read a query's full question and conversation history                      |
-| [`respond`](#respond)                                   | `respond <slug> <message>`                                                                   | Reply to a query and resume the waiting agent                              |
-| [`download-shared-document`](#download-shared-document) | `download-shared-document --source <path> [--target <path>]`                                 | Download a file from shared company storage                                |
-| [`upload-shared-document`](#upload-shared-document)     | `upload-shared-document --source <path> --target <path>`                                     | Upload a local file to shared company storage                              |
-| [`estimate-context-window`](#estimate-context-window)   | `estimate-context-window [-c <uuid>\|--company-slug <slug>] [-r <uuid>\|--role-slug <slug>]` | Estimate a role's worst-case prompt token footprint                        |
-| [`validate-shared-document`](#validate-shared-document) | `validate-shared-document --path <path\|glob> [--recursive]`                                 | Re-validate document(s) already in shared storage                          |
+| Verb                                                    | Invocation                                                                                              | Description                                                                |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| [`get-token`](#get-token)                               | `get-token`                                                                                             | Exchange username + password for an OIDC access token                      |
+| [`list-companies`](#list-companies)                     | `list-companies`                                                                                        | List all companies                                                         |
+| [`list-roles`](#list-roles)                             | `list-roles [-c <uuid>\|--company-slug <slug>]`                                                         | List roles, optionally filtered to one company                             |
+| [`set-company`](#set-company)                           | `set-company [-c <uuid>\|--company-slug <slug>] [-i <json>]`                                            | Create or update a company                                                 |
+| [`set-role`](#set-role)                                 | `set-role [-c <uuid>\|--company-slug <slug>] [-r <uuid>\|--role-slug <slug>] [-i <json>]`               | Create or update a role                                                    |
+| [`delete-company`](#delete-company)                     | `delete-company (-c <uuid>\|--company-slug <slug>) [-f]`                                                | Delete a company and everything in it                                      |
+| [`delete-role`](#delete-role)                           | `delete-role (-r <uuid>\|--role-slug <slug>) [-f]`                                                      | Delete a role and everything tied to it                                    |
+| [`chat`](#chat)                                         | `chat (-r <uuid>\|-c <uuid>) [-q <message>]`                                                            | Interactive or single-query chat with a role, or browse a company's roster |
+| [`list-knowledge`](#list-knowledge)                     | `list-knowledge (--role <slug-or-id>\|--company <slug-or-id>)`                                          | List knowledge-base documents for a role or company (shared knowledge)     |
+| [`get-knowledge`](#get-knowledge)                       | `get-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename> [-o <path>]`                 | Get a knowledge-base document's content                                    |
+| [`store-knowledge`](#store-knowledge)                   | `store-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -s <path> [-t <filename>]`               | Upload an OKF Markdown document to a role or company knowledge base        |
+| [`delete-knowledge`](#delete-knowledge)                 | `delete-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename>`                          | Delete a knowledge-base document by filename                               |
+| [`reindex-knowledge`](#reindex-knowledge)               | `reindex-knowledge --company <slug-or-id>`                                                              | Force a full RAG rebuild of every knowledge scope of a company             |
+| [`open-document-store`](#open-document-store)           | `open-document-store [--no-open]`                                                                       | Print (and open) the MinIO console URL                                     |
+| [`list-open-queries`](#list-open-queries)               | `list-open-queries [-c <uuid>\|--company-slug <slug>] [--format table\|json\|csv]`                      | List open agent-to-human queries                                           |
+| [`read-query`](#read-query)                             | `read-query <slug>`                                                                                     | Read a query's full question and conversation history                      |
+| [`respond`](#respond)                                   | `respond <slug> <message>`                                                                              | Reply to a query and resume the waiting agent                              |
+| [`download-shared-document`](#download-shared-document) | `download-shared-document --source <path> [--target <path>]`                                            | Download a file from shared company storage                                |
+| [`upload-shared-document`](#upload-shared-document)     | `upload-shared-document --source <path> --target <path>`                                                | Upload a local file to shared company storage                              |
+| [`estimate-context-window`](#estimate-context-window)   | `estimate-context-window [-c <uuid>\|--company-slug <slug>] [-r <uuid>\|--role-slug <slug>]`            | Estimate a role's worst-case prompt token footprint                        |
+| [`validate-shared-document`](#validate-shared-document) | `validate-shared-document --path <path\|glob> [--recursive]`                                            | Re-validate document(s) already in shared storage                          |
+| [`create-task`](#create-task)                           | `create-task -c <slug-or-id> -r <text> [-p <slug-or-id>] [-m <paths...>] [-e <filenames...>] [--start]` | Create a task, optionally uploading materials and starting it              |
+| [`list-tasks`](#list-tasks)                             | `list-tasks -c <slug-or-id>`                                                                            | List a company's tasks                                                     |
+| [`get-task`](#get-task)                                 | `get-task --task-id <uuid>`                                                                             | Get a task, including its assignment statuses and QA outcomes              |
 
 `--role-slug` requires `--company-id`/`--company-slug` alongside it — role slugs are unique only within a company, not globally.
 
@@ -645,6 +648,55 @@ Upload a local file to shared company storage.
 ```
 
 MIME type is inferred from the file extension. Supported formats include `.md`, `.txt`, `.json`, `.pdf`, `.png`, `.jpg`, and `.jpeg`.
+
+---
+
+### `create-task`
+
+Creates a task in the `ready` state, optionally uploads material files, and
+optionally starts it. See [tasks.md](tasks.md) for the task/assignment data
+model.
+
+- **stdout**: the created (or started) task as JSON
+- **stderr**: upload/start progress messages
+
+| Flag                          | Alias | Description                                                       |
+| ----------------------------- | ----- | ----------------------------------------------------------------- |
+| `--company <slug-or-id>`      | `-c`  | Required. Company slug or UUID                                    |
+| `--request <text>`            | `-r`  | Required. The user's statement of the work                        |
+| `--planner-role <slug-or-id>` | `-p`  | Explicit planner role; falls back to the company default at start |
+| `--materials <paths...>`      | `-m`  | Local material file paths to upload                               |
+| `--expected <filenames...>`   | `-e`  | Filenames expected in the task's completed directory              |
+| `--start`                     |       | Start the task immediately after creation (and materials upload)  |
+
+```bash
+./lcp-cli.sh -t $TOKEN create-task -c acme -r "Write a market analysis report" -e report.md
+
+./lcp-cli.sh -t $TOKEN create-task -c acme -r "Summarise the attached brief" \
+  -m ./brief.pdf -p planner --start
+```
+
+### `list-tasks`
+
+Lists a company's tasks.
+
+- **stdout**: `LcpTask[]` as JSON
+
+```bash
+./lcp-cli.sh -t $TOKEN list-tasks -c acme
+```
+
+### `get-task`
+
+Retrieves a task with its assignments (ordered: implement-mode plan
+assignments by `orderIndex`, then the rest by creation time), including QA
+outcomes.
+
+- **stdout**: `{ task, assignments }` as JSON
+
+```bash
+./lcp-cli.sh -t $TOKEN get-task --task-id <uuid>
+```
 
 ### `estimate-context-window`
 

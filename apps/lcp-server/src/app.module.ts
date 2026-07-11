@@ -7,8 +7,10 @@ import {
   KnowledgeChunk,
   KnowledgeIndexState,
   LcpAgent,
+  LcpAssignment,
   LcpCompany,
   LcpRole,
+  LcpTask,
   PendingConsultation,
   makeTypeOrmConfig,
 } from '@lcp/shared';
@@ -44,6 +46,9 @@ import { AddRoleSlug1783357408217 } from './migrations/1783357408217-AddRoleSlug
 import { AddMissingCompanyRoleForeignKeys1783357408218 } from './migrations/1783357408218-AddMissingCompanyRoleForeignKeys';
 import { AllowSharedKnowledgeChunks1783900000000 } from './migrations/1783900000000-AllowSharedKnowledgeChunks';
 import { AddKnowledgeIndexState1783950000000 } from './migrations/1783950000000-AddKnowledgeIndexState';
+import { AddLcpTask1784050000000 } from './migrations/1784050000000-AddLcpTask';
+import { AddLcpAssignment1784050000001 } from './migrations/1784050000001-AddLcpAssignment';
+import { AddCompanyPlannerRole1784050000002 } from './migrations/1784050000002-AddCompanyPlannerRole';
 import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
 
 /**
@@ -62,6 +67,8 @@ import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
         LcpCompany,
         LcpRole,
         LcpAgent,
+        LcpTask,
+        LcpAssignment,
         AuditEvent,
         KnowledgeChunk,
         KnowledgeIndexState,
@@ -94,6 +101,9 @@ import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
         AddMissingCompanyRoleForeignKeys1783357408218,
         AllowSharedKnowledgeChunks1783900000000,
         AddKnowledgeIndexState1783950000000,
+        AddLcpTask1784050000000,
+        AddLcpAssignment1784050000001,
+        AddCompanyPlannerRole1784050000002,
       ],
     ),
     ApiModule,

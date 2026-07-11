@@ -3,8 +3,10 @@ import {
   Conversation,
   ConversationMessage,
   LcpAgent,
+  LcpAssignment,
   LcpCompany,
   LcpRole,
+  LcpTask,
   PendingConsultation,
 } from '@lcp/shared';
 import { Module } from '@nestjs/common';
@@ -28,11 +30,14 @@ import { RoleController } from './api.role.controller';
 import { StorageActionsController } from './storage-actions.controller';
 import { StorageProxyController } from './storage-proxy.controller';
 import { StorageValidationController } from './storage-validation.controller';
+import { TaskController } from './task.controller';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { ApiService } from './api.service';
 import { ChatService } from './chat.service';
 import { KnowledgeService } from './knowledge.service';
 import { PauseAndResumeService } from './pause-and-resume.service';
+import { TaskDispatcher } from './task-dispatcher.service';
+import { TaskService } from './task.service';
 
 /** HTTP API module: wires all REST controllers and supporting services. */
 @Module({
@@ -46,8 +51,10 @@ import { PauseAndResumeService } from './pause-and-resume.service';
     StorageModule,
     TypeOrmModule.forFeature([
       LcpAgent,
+      LcpAssignment,
       LcpRole,
       LcpCompany,
+      LcpTask,
       CompanyUser,
       Conversation,
       ConversationMessage,
@@ -64,6 +71,7 @@ import { PauseAndResumeService } from './pause-and-resume.service';
     StorageActionsController,
     StorageProxyController,
     StorageValidationController,
+    TaskController,
     AgentController,
     ModelController,
   ],
@@ -74,6 +82,8 @@ import { PauseAndResumeService } from './pause-and-resume.service';
     ConversationService,
     KnowledgeService,
     PauseAndResumeService,
+    TaskDispatcher,
+    TaskService,
   ],
 })
 export class ApiModule {}

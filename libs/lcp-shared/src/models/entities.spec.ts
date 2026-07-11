@@ -7,17 +7,28 @@ import {
   AuditEvent,
   AuditEventType,
   LcpAgent,
+  LcpAssignment,
   LcpCompany,
   LcpRole,
+  LcpTask,
 } from './index';
 
-const ALL_ENTITIES = [LcpCompany, LcpRole, LcpAgent, AuditEvent];
+const ALL_ENTITIES = [
+  LcpCompany,
+  LcpRole,
+  LcpAgent,
+  LcpTask,
+  LcpAssignment,
+  AuditEvent,
+];
 
 let testingModule: TestingModule;
 let companies: Repository<LcpCompany>;
 let roles: Repository<LcpRole>;
 let agents: Repository<LcpAgent>;
 let events: Repository<AuditEvent>;
+let tasks: Repository<LcpTask>;
+let assignments: Repository<LcpAssignment>;
 
 beforeAll(async () => {
   testingModule = await Test.createTestingModule({
@@ -36,6 +47,8 @@ beforeAll(async () => {
   roles = testingModule.get(getRepositoryToken(LcpRole));
   agents = testingModule.get(getRepositoryToken(LcpAgent));
   events = testingModule.get(getRepositoryToken(AuditEvent));
+  tasks = testingModule.get(getRepositoryToken(LcpTask));
+  assignments = testingModule.get(getRepositoryToken(LcpAssignment));
 });
 
 afterAll(async () => {
@@ -45,6 +58,8 @@ afterAll(async () => {
 afterEach(async () => {
   // Delete in FK-safe order
   await events.clear();
+  await assignments.clear();
+  await tasks.clear();
   await agents.clear();
   await roles.clear();
   await companies.clear();
@@ -287,5 +302,191 @@ describe('AuditEvent entity', () => {
       }),
     );
     expect(event.timestamp).toBeInstanceOf(Date);
+  });
+});
+
+describe('LcpCompany.plannerRoleId', () => {
+  it('allows a null plannerRoleId', async () => {
+    const company = await seedCompany();
+    const found = await companies.findOneByOrFail({ id: company.id });
+    expect(found.plannerRoleId).toBeNull();
+  });
+
+  it('persists a plannerRoleId pointing at one of the company roles', async () => {
+    const company = await seedCompany();
+    const role = await seedRole(company.id);
+    await companies.update(company.id, { plannerRoleId: role.id });
+    const found = await companies.findOneByOrFail({ id: company.id });
+    expect(found.plannerRoleId).toBe(role.id);
+  });
+});
+
+describe('LcpTask entity', () => {
+  it('creates a task with default status ready and empty array defaults', async () => {
+    const company = await seedCompany();
+    const task = await tasks.save(
+      tasks.create({ companyId: company.id, request: 'Write a report' }),
+    );
+    const found = await tasks.findOneByOrFail({ id: task.id });
+    expect(found.status).toBe('ready');
+    expect(found.materials).toEqual([]);
+    expect(found.expected).toEqual([]);
+    expect(found.completed).toBeNull();
+    expect(found.plannerRoleId).toBeNull();
+  });
+
+  it('persists materials/expected artifact arrays', async () => {
+    const company = await seedCompany();
+    const task = await tasks.save(
+      tasks.create({
+        companyId: company.id,
+        request: 'Write a report',
+        materials: [{ type: 'inline-text', value: 'context notes' }],
+        expected: [{ type: 'task-completed-path', value: 'report.md' }],
+      }),
+    );
+    const found = await tasks.findOneByOrFail({ id: task.id });
+    expect(found.materials).toEqual([
+      { type: 'inline-text', value: 'context notes' },
+    ]);
+    expect(found.expected).toEqual([
+      { type: 'task-completed-path', value: 'report.md' },
+    ]);
+  });
+
+  it('persists an explicit plannerRoleId', async () => {
+    const company = await seedCompany();
+    const role = await seedRole(company.id);
+    const task = await tasks.save(
+      tasks.create({
+        companyId: company.id,
+        request: 'Write a report',
+        plannerRoleId: role.id,
+      }),
+    );
+    const found = await tasks.findOneByOrFail({ id: task.id });
+    expect(found.plannerRoleId).toBe(role.id);
+  });
+});
+
+describe('LcpAssignment entity', () => {
+  it('creates an orphan assignment with default mode implement and status ready', async () => {
+    const company = await seedCompany();
+    const role = await seedRole(company.id);
+    const assignment = await assignments.save(
+      assignments.create({
+        companyId: company.id,
+        roleId: role.id,
+        prompt: 'Consult on X',
+      }),
+    );
+    const found = await assignments.findOneByOrFail({ id: assignment.id });
+    expect(found.taskId).toBeNull();
+    expect(found.mode).toBe('implement');
+    expect(found.status).toBe('ready');
+    expect(found.orderIndex).toBeNull();
+    expect(found.agentId).toBeNull();
+    expect(found.qaAttempts).toBe(0);
+    expect(found.materials).toEqual([]);
+    expect(found.expected).toEqual([]);
+    expect(found.prepared).toEqual([]);
+    expect(found.approved).toEqual([]);
+  });
+
+  it('creates a task-scoped implement assignment with an orderIndex', async () => {
+    const company = await seedCompany();
+    const role = await seedRole(company.id);
+    const task = await tasks.save(
+      tasks.create({ companyId: company.id, request: 'Write a report' }),
+    );
+    const assignment = await assignments.save(
+      assignments.create({
+        companyId: company.id,
+        taskId: task.id,
+        roleId: role.id,
+        mode: 'implement',
+        orderIndex: 0,
+        prompt: 'Draft the report',
+      }),
+    );
+    const found = await assignments.findOneByOrFail({ id: assignment.id });
+    expect(found.taskId).toBe(task.id);
+    expect(found.orderIndex).toBe(0);
+  });
+
+  it('persists a qa-mode assignment with a targetAssignmentId', async () => {
+    const company = await seedCompany();
+    const role = await seedRole(company.id);
+    const task = await tasks.save(
+      tasks.create({ companyId: company.id, request: 'Write a report' }),
+    );
+    const target = await assignments.save(
+      assignments.create({
+        companyId: company.id,
+        taskId: task.id,
+        roleId: role.id,
+        mode: 'implement',
+        orderIndex: 0,
+        prompt: 'Draft the report',
+      }),
+    );
+    const qa = await assignments.save(
+      assignments.create({
+        companyId: company.id,
+        taskId: task.id,
+        roleId: role.id,
+        mode: 'qa',
+        targetAssignmentId: target.id,
+        prompt: 'Review the draft',
+      }),
+    );
+    const found = await assignments.findOneByOrFail({ id: qa.id });
+    expect(found.mode).toBe('qa');
+    expect(found.targetAssignmentId).toBe(target.id);
+    expect(found.orderIndex).toBeNull();
+  });
+
+  it('nulls agentId when the referenced agent is deleted', async () => {
+    const company = await seedCompany();
+    const role = await seedRole(company.id);
+    const agent = await agents.save(
+      agents.create({
+        companyId: company.id,
+        roleId: role.id,
+        initialPrompt: 'Go.',
+      }),
+    );
+    const assignment = await assignments.save(
+      assignments.create({
+        companyId: company.id,
+        roleId: role.id,
+        prompt: 'Consult on X',
+        agentId: agent.id,
+      }),
+    );
+    await agents.delete(agent.id);
+    const found = await assignments.findOneByOrFail({ id: assignment.id });
+    expect(found.agentId).toBeNull();
+  });
+
+  it('cascades delete from its task', async () => {
+    const company = await seedCompany();
+    const role = await seedRole(company.id);
+    const task = await tasks.save(
+      tasks.create({ companyId: company.id, request: 'Write a report' }),
+    );
+    const assignment = await assignments.save(
+      assignments.create({
+        companyId: company.id,
+        taskId: task.id,
+        roleId: role.id,
+        mode: 'implement',
+        orderIndex: 0,
+        prompt: 'Draft the report',
+      }),
+    );
+    await tasks.delete(task.id);
+    const found = await assignments.findOneBy({ id: assignment.id });
+    expect(found).toBeNull();
   });
 });

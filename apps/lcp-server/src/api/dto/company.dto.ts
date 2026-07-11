@@ -1,8 +1,10 @@
+import type { UUID } from 'crypto';
 import {
   IsArray,
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUUID,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -47,6 +49,10 @@ export class CreateCompanyDto {
   @IsOptional()
   @IsString()
   timezone?: string;
+
+  @IsOptional()
+  @IsUUID()
+  plannerRoleId?: UUID;
 }
 
 export class UpdateCompanyDto {
@@ -86,4 +92,8 @@ export class UpdateCompanyDto {
   @IsOptional()
   @IsString()
   timezone?: string;
+
+  @IsOptional()
+  @IsUUID()
+  plannerRoleId?: UUID;
 }

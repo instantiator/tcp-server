@@ -5,7 +5,7 @@ import {
   ListObjectsV2Command,
   S3Client,
 } from '@aws-sdk/client-s3';
-import { LcpCompany } from '@lcp/shared';
+import { LcpCompany, LcpRole } from '@lcp/shared';
 import {
   BadRequestException,
   ConflictException,
@@ -75,7 +75,9 @@ describe('MinioStorageAdapter (integration)', () => {
         TypeOrmModule.forRoot({
           type: 'postgres',
           url: DATABASE_URL,
-          entities: [LcpCompany],
+          // LcpRole is registered but never queried here — required so
+          // TypeORM can resolve LcpCompany.plannerRole's relation target.
+          entities: [LcpCompany, LcpRole],
           synchronize: true,
         }),
         TypeOrmModule.forFeature([LcpCompany]),

@@ -1,6 +1,7 @@
 import type { UUID } from 'crypto';
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import type { AgentRunConfig } from './AgentRunConfig.model';
+import { LcpRole } from './LcpRole.model';
 import type { LlmConfig } from './LlmConfig.model';
 import type { WithLlmConfig } from './WithLlmConfig';
 
@@ -105,4 +106,19 @@ export class LcpCompany implements WithLlmConfig {
    */
   @Column({ type: 'jsonb', nullable: true })
   runConfig?: AgentRunConfig | null;
+
+  /**
+   * Company-default planner role, used by {@link LcpTask.plannerRole} when a
+   * task does not specify its own. Must belong to this company — enforced at
+   * write time by `DbService`/`ApiService`, not by the FK alone.
+   */
+  @ManyToOne(() => LcpRole, { nullable: true, onDelete: 'SET NULL' })
+  plannerRole?: LcpRole | null;
+
+  /**
+   * Foreign key for {@link plannerRole}.
+   * @format uuid
+   */
+  @Column({ nullable: true })
+  plannerRoleId?: UUID | null;
 }

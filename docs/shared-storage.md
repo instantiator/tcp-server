@@ -56,30 +56,37 @@ Each company's data lives under a top-level prefix derived from the company's `s
 {company_slug}/
   tasks/
     {task_id}/
-      materials/         ← user-submitted inputs; read-only for agents
-      output/            ← agent working area during task execution
+      materials/               ← user-submitted inputs; read-only for agents
+      completed/                ← final outputs of the task
+      assignments/
+        {orderIndex}/
+          working/               ← private working area for the assignment's agent
+          completed/             ← files promoted from working/ when QA accepts
+  assignments/
+    {assignment_id}/
+      working/                 ← working area for ORPHAN assignments (agents outside any task)
   knowledge/
-    {role_slug}/         ← OKF Markdown documents used for RAG indexing (knowledge for the role)
-    shared/              ← OKF Markdown documents used for RAG indexing (company-wide knowledge)
-  finished/
-    {category}/          ← reports | specifications | designs | code | other
-      {task_id}/
-        {filename}       ← stable artefacts promoted from tasks/*/output/
+    {role_slug}/               ← OKF Markdown documents used for RAG indexing (knowledge for the role)
+    shared/                    ← OKF Markdown documents used for RAG indexing (company-wide knowledge)
   audit/
     {task_id}/
-      {step_id}.jsonl    ← append-only audit log per task step
+      {step_id}.jsonl          ← append-only audit log per task step
 ```
+
+> **Migration note (010.2.3):** the `tasks/{id}/output/` and `finished/{category}/{id}/` layout drafted in ADR-007 was never implemented and is superseded by the tree above — see [tasks.md](tasks.md) for the full `LcpTask`/`LcpAssignment` data model.
 
 ### Folder purposes
 
-| Path                        | Written by                     | Read by                   | Notes                                                                                                               |
-| --------------------------- | ------------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `tasks/{id}/materials/`     | lcp-server (task creation)     | Agents (read-only)        | Task inputs submitted by the user                                                                                   |
-| `tasks/{id}/output/`        | Agents                         | Agents, orchestrator      | Working files created during execution                                                                              |
-| `knowledge/{role_slug}/`    | lcp-cli `store-knowledge`      | lcp-server (RAG indexing) | Source documents for a role's RAG; see [Agent Services](agent-services.md#rag-retrieval-augmented-generation)       |
-| `knowledge/shared/`         | lcp-cli `store-knowledge`      | lcp-server (RAG indexing) | Source documents for company-wide RAG (all roles); `shared` is a reserved role slug and cannot be claimed by a role |
-| `finished/{category}/{id}/` | Reviewing agent / orchestrator | All agents                | Stable artefacts promoted on task completion                                                                        |
-| `audit/{id}/`               | lcp-agent (planned)            | Operations tooling        | Append-only JSONL audit records per task step                                                                       |
+| Path                                             | Written by                        | Read by                   | Notes                                                                                                                                  |
+| ------------------------------------------------ | --------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `tasks/{id}/materials/`                          | lcp-server (`POST .../materials`) | Agents (read-only)        | Task inputs submitted by the user                                                                                                      |
+| `tasks/{id}/completed/`                          | Orchestrator (finalisation)       | All agents                | Final outputs of the task, copied from its assignments' `completed/` directories                                                       |
+| `tasks/{id}/assignments/{orderIndex}/working/`   | The assignment's agent            | The assignment's agent    | Private scratch area for one plan step (a task's implement-mode assignment)                                                            |
+| `tasks/{id}/assignments/{orderIndex}/completed/` | Orchestrator (on QA accept)       | Later assignments, task   | Files promoted from `working/` when QA accepts; `resolveArtifactKey` finds the most recent prior assignment approving a given filename |
+| `assignments/{assignment_id}/working/`           | The (orphan) assignment's agent   | The assignment's agent    | Working area for assignments outside any task — plain conversations/consultations                                                      |
+| `knowledge/{role_slug}/`                         | lcp-cli `store-knowledge`         | lcp-server (RAG indexing) | Source documents for a role's RAG; see [Agent Services](agent-services.md#rag-retrieval-augmented-generation)                          |
+| `knowledge/shared/`                              | lcp-cli `store-knowledge`         | lcp-server (RAG indexing) | Source documents for company-wide RAG (all roles); `shared` is a reserved role slug and cannot be claimed by a role                    |
+| `audit/{id}/`                                    | lcp-agent (planned)               | Operations tooling        | Append-only JSONL audit records per task step                                                                                          |
 
 ### Context overflow
 

@@ -146,6 +146,38 @@ describe('DbService', () => {
       expect(creator!.memberType).toBe('creator');
       expect(creator!.name).toBe('Alice');
     });
+
+    it('throws BadRequestException and rolls back when plannerRoleId does not belong to the new company', async () => {
+      // A brand-new company has no roles of its own yet, so a plannerRoleId
+      // referencing a role that belongs to a different (existing) company is
+      // the case that must be caught — an outright unknown role id already
+      // fails the FK constraint before reaching this check. Uses a distinct
+      // slug from 'acme' — createCompany('acme', ...) deletes (and cascades)
+      // any existing 'acme'-slugged company first, which would take the
+      // fixture role down with it.
+      const other = await companyRepo.save(
+        companyRepo.create({
+          slug: 'other-co',
+          name: 'Other',
+          description: 'd',
+        }),
+      );
+      const foreignRole = await seedRole(other.id);
+
+      await expect(
+        dbService.createCompany(
+          {
+            name: 'Acme Corp',
+            description: 'A co',
+            mcpServerList: [],
+            plannerRoleId: foreignRole.id,
+          },
+          'acme',
+          'alice',
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(await companyRepo.count({ where: { slug: 'acme' } })).toBe(0);
+    });
   });
 
   // setCompany
@@ -344,6 +376,54 @@ describe('DbService', () => {
           description: 'LLM company 2',
         }),
       ).resolves.toBeDefined();
+    });
+
+    it('persists plannerRoleId when it belongs to the company being updated', async () => {
+      const created = await dbService.setCompany({
+        slug: 'planner-co',
+        name: 'Planner Co',
+        description: 'd',
+      });
+      const role = await seedRole(created.id);
+      const updated = await dbService.setCompany(
+        { plannerRoleId: role.id },
+        { id: created.id },
+      );
+      expect(updated.plannerRoleId).toBe(role.id);
+    });
+
+    it('throws BadRequestException when plannerRoleId belongs to a different company', async () => {
+      const created = await dbService.setCompany({
+        slug: 'planner-co-a',
+        name: 'Planner Co A',
+        description: 'd',
+      });
+      const other = await dbService.setCompany({
+        slug: 'planner-co-b',
+        name: 'Planner Co B',
+        description: 'd',
+      });
+      const foreignRole = await seedRole(other.id);
+      await expect(
+        dbService.setCompany(
+          { plannerRoleId: foreignRole.id },
+          { id: created.id },
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws BadRequestException when plannerRoleId does not exist at all', async () => {
+      const created = await dbService.setCompany({
+        slug: 'planner-co-c',
+        name: 'Planner Co C',
+        description: 'd',
+      });
+      await expect(
+        dbService.setCompany(
+          { plannerRoleId: randomUUID() },
+          { id: created.id },
+        ),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

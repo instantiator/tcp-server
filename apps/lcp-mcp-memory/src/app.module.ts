@@ -1,4 +1,4 @@
-import { EpisodicMemory, LcpCompany } from '@lcp/shared';
+import { EpisodicMemory, LcpCompany, LcpRole } from '@lcp/shared';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -20,7 +20,9 @@ import { McpModule } from './mcp/mcp.module';
       useFactory: (config: ConfigService) => ({
         type: 'postgres',
         url: config.getOrThrow<string>('DATABASE_URL'),
-        entities: [LcpCompany, EpisodicMemory],
+        // LcpRole is registered but never queried here — required so
+        // TypeORM can resolve LcpCompany.plannerRole's target entity metadata.
+        entities: [LcpCompany, LcpRole, EpisodicMemory],
         synchronize: false,
       }),
     }),

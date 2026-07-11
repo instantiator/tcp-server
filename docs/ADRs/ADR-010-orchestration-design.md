@@ -156,3 +156,38 @@ On lcp-server startup:
 
 - Parallel task steps: the current design is sequential. Parallel steps (where the plan specifies no dependency between them) are a future extension — the BullMQ dispatch logic and plan data model support it but the orchestrator loop handles sequential first.
 - Dead-letter queue for permanently failed jobs: note for implementation
+
+## Amendments as implemented (010.2.3)
+
+The drafted `TaskStep` (JSONB steps embedded in a task config) is superseded
+by two entities and a small set of REST/CLI surfaces. No orchestration
+behaviour (planner dispatch, plan execution, QA) is implemented yet — this
+amendment covers the data layer only. Full details: [tasks.md](../tasks.md).
+
+- **`LcpTask`** (replaces the `created → planning → in_progress → reviewing →
+completed` lifecycle sketch): `status` is
+  `ready | planning | in-progress | succeeded | failed | cancelled`, derived
+  from its assignments by `deriveTaskStatus` except `planning` (set
+  explicitly on dispatch) and the terminal states.
+- **`LcpAssignment`** (replaces `TaskStep`): `taskId` nullable (null = an
+  "orphan" assignment — a plain conversation/consultation outside any task);
+  `mode` (`plan | implement | qa`) is the agent's mode — there is no `mode`
+  column on `LcpAgent`, it derives its mode via its assignment (added in
+  part 4). A task's plan is its implement-mode assignments ordered by
+  `orderIndex`; there is no separate plan entity.
+- **Artifact model**: no artifact table — `{ type, value }` pairs in
+  `simple-json` columns, constrained by four TypeScript union types
+  (`LcpMaterialArtifact`, `LcpAssignmentWorkingArtifact`,
+  `LcpAssignmentCompletedArtifact`, `LcpTaskCompletedArtifact`). Storage keys
+  extend the ADR-007 layout with `tasks/{id}/assignments/{orderIndex}/{working,completed}/`
+  and an orphan `assignments/{id}/working/` directory.
+- **`LcpCompany.plannerRoleId`**: company-wide default planner role, used
+  when a task doesn't specify its own.
+- **REST/CLI**: `POST /api/task` (create), `POST /api/task/:id/materials`
+  (upload), `POST /api/task/:id/start` (atomic `ready → planning` + a logged
+  no-op planner dispatch, replaced in part 7), `GET /api/task`, `GET
+/api/task/:id`; CLI verbs `create-task`/`list-tasks`/`get-task`.
+
+Still outstanding: the planner role agent, multi-step plan execution, the QA
+review cycle, and task/assignment cancellation — tracked across the
+remaining `010.2.x` sub-plans.
