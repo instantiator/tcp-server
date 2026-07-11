@@ -9,6 +9,7 @@
  * Requires: docker compose --profile auth up, Keycloak lcp realm configured.
  */
 
+import { randomUUID } from 'crypto';
 import { LcpCompany, LcpRole } from '../../libs/lcp-shared/src';
 import {
   ApiHelper,
@@ -141,6 +142,106 @@ describe('lcp-cli API flows', () => {
               });
             });
           });
+
+          describe('role knowledge (/api/role/:roleId/knowledge)', () => {
+            const scopePath = () => `role/${role.id}`;
+
+            it('GET lists no documents initially', async () => {
+              const docs = await api.listKnowledge(scopePath());
+              expect(docs).toEqual([]);
+            });
+
+            it('POST stores an OKF document and it is then listed', async () => {
+              const stored = await api.storeKnowledge(
+                scopePath(),
+                'role-doc.md',
+                '---\ntitle: Role doc\n---\n\nContent.',
+              );
+              expect(stored?.name).toBe('role-doc.md');
+
+              const docs = await api.listKnowledge(scopePath());
+              expect(docs.some((d) => d.name === 'role-doc.md')).toBe(true);
+            });
+
+            it('GET :filename returns the stored content', async () => {
+              const content = await api.getKnowledgeText(
+                scopePath(),
+                'role-doc.md',
+              );
+              expect(content).toContain('Content.');
+            });
+
+            it('GET :filename returns 404 for an unknown file', async () => {
+              await api.getKnowledgeText(scopePath(), 'no-such-file.md', 404);
+            });
+
+            it('POST returns 422 for a document missing OKF front-matter', async () => {
+              await api.storeKnowledge(
+                scopePath(),
+                'invalid.md',
+                '# no front-matter',
+                422,
+              );
+            });
+
+            it('DELETE :filename removes the document', async () => {
+              await api.deleteKnowledge(scopePath(), 'role-doc.md');
+              const docs = await api.listKnowledge(scopePath());
+              expect(docs.some((d) => d.name === 'role-doc.md')).toBe(false);
+            });
+
+            it('DELETE :filename is idempotent for an unknown file', async () => {
+              await api.deleteKnowledge(scopePath(), 'no-such-file.md');
+            });
+
+            it('GET returns 404 for an unknown role', async () => {
+              const res = await fetch(
+                `${BASE}/api/role/${randomUUID()}/knowledge`,
+                { headers: { Authorization: `Bearer ${api.token}` } },
+              );
+              expect(res.status).toBe(404);
+            });
+          });
+        });
+      });
+
+      describe('company knowledge (/api/company/:companyId/knowledge)', () => {
+        const scopePath = () => `company/${company.id}`;
+
+        it('GET lists no documents initially', async () => {
+          const docs = await api.listKnowledge(scopePath());
+          expect(docs).toEqual([]);
+        });
+
+        it('POST stores an OKF document and it is then listed', async () => {
+          const stored = await api.storeKnowledge(
+            scopePath(),
+            'shared-doc.md',
+            '---\ntitle: Shared doc\n---\n\nShared content.',
+          );
+          expect(stored?.name).toBe('shared-doc.md');
+
+          const docs = await api.listKnowledge(scopePath());
+          expect(docs.some((d) => d.name === 'shared-doc.md')).toBe(true);
+        });
+
+        it('GET :filename returns the stored content', async () => {
+          const content = await api.getKnowledgeText(
+            scopePath(),
+            'shared-doc.md',
+          );
+          expect(content).toContain('Shared content.');
+        });
+
+        it('DELETE :filename removes the document', async () => {
+          await api.deleteKnowledge(scopePath(), 'shared-doc.md');
+          const docs = await api.listKnowledge(scopePath());
+          expect(docs.some((d) => d.name === 'shared-doc.md')).toBe(false);
+        });
+
+        it('resolves the company by slug as well as by id', async () => {
+          const docs = await api.listKnowledge(`company/${company.slug}`);
+          expect(Array.isArray(docs)).toBe(true);
         });
       });
     });

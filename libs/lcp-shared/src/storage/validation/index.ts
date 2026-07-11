@@ -22,7 +22,7 @@ export { isLocalSchemaRef } from './schema-ref';
  * re-registers), which keeps test setup simple.
  *
  * Order matters: OKF's path-based matcher is registered ahead of the
- * generic Markdown matcher so OKF documents (`knowledge/{role}/*.md`) get
+ * generic Markdown matcher so OKF documents (`knowledge/{role_slug}/*.md`) get
  * the stricter front-matter check instead of the permissive plain-Markdown
  * fallback.
  */

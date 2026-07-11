@@ -1,4 +1,4 @@
-import { validateOkfDocument } from './store-role-documents.action';
+import { validateOkfDocument } from './store-knowledge.action';
 
 describe('validateOkfDocument', () => {
   const validContent = `---

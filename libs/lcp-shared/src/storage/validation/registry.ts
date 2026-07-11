@@ -7,7 +7,7 @@ import { DocumentValidator, ValidationResult } from './types';
  * the canonical example.
  *
  * Matchers are tried in registration order; the first match wins. This lets
- * path-specific rules (e.g. OKF documents under `knowledge/{role}/*.md`) be
+ * path-specific rules (e.g. OKF documents under `knowledge/{role_slug}/*.md`) be
  * registered ahead of a more general fallback for the same extension.
  */
 interface RegisteredValidator {

@@ -41,6 +41,7 @@ import { CompanyLlmConfigAndPromptFields1783357408215 } from './migrations/17833
 import { TimestamptzConsistency1783357408216 } from './migrations/1783357408216-TimestamptzConsistency';
 import { AddRoleSlug1783357408217 } from './migrations/1783357408217-AddRoleSlug';
 import { AddMissingCompanyRoleForeignKeys1783357408218 } from './migrations/1783357408218-AddMissingCompanyRoleForeignKeys';
+import { AllowSharedKnowledgeChunks1783900000000 } from './migrations/1783900000000-AllowSharedKnowledgeChunks';
 import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
 
 /**
@@ -88,6 +89,7 @@ import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
         TimestamptzConsistency1783357408216,
         AddRoleSlug1783357408217,
         AddMissingCompanyRoleForeignKeys1783357408218,
+        AllowSharedKnowledgeChunks1783900000000,
       ],
     ),
     ApiModule,

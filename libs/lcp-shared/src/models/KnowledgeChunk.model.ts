@@ -13,12 +13,15 @@ import {
  * directly in PostgreSQL as a `vector(1536)` column (pgvector extension)
  * and is not mapped by TypeORM — all vector reads and writes use raw SQL.
  *
- * Chunks are scoped to a {@link LcpRole} within a {@link LcpCompany}.
+ * Chunks are scoped to a {@link LcpCompany}, and optionally to a
+ * {@link LcpRole} within it — `roleId` is `null` for chunks from the
+ * company-wide `knowledge/shared/` folder (see storage-keys.ts).
  * All chunks for a given `documentPath` are replaced atomically on re-index.
  */
 @Entity()
 @Index(['companyId', 'roleId'])
 @Index(['roleId', 'documentPath'])
+@Index(['companyId', 'documentPath'])
 export class KnowledgeChunk {
   /**
    * Auto-generated primary key.
@@ -35,11 +38,12 @@ export class KnowledgeChunk {
   companyId!: UUID;
 
   /**
-   * The role whose knowledge base this chunk belongs to.
+   * The role whose knowledge base this chunk belongs to. `null` for chunks
+   * indexed from the company-wide `knowledge/shared/` folder.
    * @format uuid
    */
-  @Column({ type: 'varchar' })
-  roleId!: UUID;
+  @Column({ type: 'varchar', nullable: true })
+  roleId!: UUID | null;
 
   /**
    * MinIO path of the OKF source document this chunk was extracted from.

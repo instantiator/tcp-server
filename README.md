@@ -131,8 +131,8 @@ How knowledge documents flow from upload to retrieval.
 ```mermaid
 flowchart TD
   subgraph Upload
-    CLI[lcp-cli store-role-documents] -->|POST /api/roles/:id/documents| API[lcp-server]
-    API -->|store raw file| MinIO2[(MinIO\nknowledge/role_name/)]
+    CLI[lcp-cli store-knowledge] -->|POST /api/role/:id/knowledge| API[lcp-server]
+    API -->|store raw file| MinIO2[(MinIO\nknowledge/role_slug/)]
     API -->|chunk 800 tokens| Chunker[Chunker]
     Chunker -->|embed /v1/embeddings| Embed[Embedding Model]
     Embed -->|INSERT vector| PG[(pgvector\nknowledge_chunk)]

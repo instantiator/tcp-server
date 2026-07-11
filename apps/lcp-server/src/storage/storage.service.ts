@@ -1,4 +1,5 @@
 import { Readable } from 'stream';
+import type { KnowledgeScope } from './storage-keys';
 
 /** Summary of a single stored object (e.g. returned by {@link StorageService.listKnowledgeFiles}). */
 export interface StorageObject {
@@ -36,32 +37,26 @@ export abstract class StorageService {
   /** Writes arbitrary text content to a specific object key. Not validated — used for internal/system writes (e.g. context overflow), not user-facing documents. */
   abstract putRaw(key: string, body: string): Promise<void>;
 
-  /** Uploads a document to the knowledge store for a role. Returns the full object key. */
+  /** Uploads a document to the knowledge store for the given scope (a role, or company-shared). Returns the full object key. */
   abstract putKnowledgeFile(
-    companySlug: string,
-    roleName: string,
+    scope: KnowledgeScope,
     filename: string,
     content: Buffer | string,
     originators?: Originators,
   ): Promise<string>;
 
-  /** Returns all objects stored under a role's knowledge directory. */
-  abstract listKnowledgeFiles(
-    companySlug: string,
-    roleName: string,
-  ): Promise<StorageObject[]>;
+  /** Returns all objects stored under the given knowledge scope's directory. */
+  abstract listKnowledgeFiles(scope: KnowledgeScope): Promise<StorageObject[]>;
 
   /** Downloads a knowledge-base document's text content. Returns `null` when it does not exist. */
   abstract getKnowledgeFile(
-    companySlug: string,
-    roleName: string,
+    scope: KnowledgeScope,
     filename: string,
   ): Promise<string | null>;
 
   /** Soft-deletes a knowledge-base document (see {@link deleteFile}). Safe to call when the object does not exist. */
   abstract deleteKnowledgeFile(
-    companySlug: string,
-    roleName: string,
+    scope: KnowledgeScope,
     filename: string,
     originators?: Originators,
   ): Promise<void>;

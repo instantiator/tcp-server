@@ -107,3 +107,10 @@ When a user teaches a role during a conversation (see [ADR-012](./ADR-012-human-
 
 - Embedding dimension must match across memory writes and queries. Changing the embedding model later requires re-embedding all existing memories — plan for a re-index migration script.
 - Topic-tagging strategy for scrubbing: tags are free-form strings. A taxonomy may be useful later but is not enforced now.
+
+## Amendments as implemented (010.2.1)
+
+Since `docs/prompts/010.2.1 - task orchestration: knowledge folders and knowledge API.md`:
+
+- **Knowledge is now role-or-shared scoped, not role-only**: a role's knowledge base (`knowledge_base.storage_path` in the schema above) lives at `knowledge/{role_slug}/`; a new company-wide scope lives at `knowledge/shared/` and is queried by all of a company's roles. `KnowledgeChunk.roleId` is nullable — `null` marks a shared-scope chunk — rather than every chunk necessarily belonging to exactly one role.
+- **`search_knowledge`/`recall` are not yet shared-aware**: this pass only extended the ingest/remove path (`RagIndexService.ingestDocument`/`removeDocument` now accept `roleId: UUID | null`) to cover the shared scope; retrieval still queries a single `roleId` and does not yet also pull in `knowledge/shared/` chunks. That's deferred to the next piece of work (embedding-sync/scoped-retrieval).

@@ -23,8 +23,8 @@ flowchart LR
     VEC -->|cosine similarity top-k| PROMPT[Prompt part 5]
 ```
 
-1. Knowledge documents (Markdown, OKF format) are uploaded per role via `lcp-cli store-role-documents`.
-2. Each document is split into ~800-token chunks, embedded via the company's `embeddingConfig` model, and stored in the `knowledge_chunk` PostgreSQL table (pgvector column).
+1. Knowledge documents (Markdown, OKF format) are uploaded per role, or to a company's shared knowledge, via `lcp-cli store-knowledge`.
+2. Each document is split into ~800-token chunks, embedded via the company's `embeddingConfig` model, and stored in the `knowledge_chunk` PostgreSQL table (pgvector column) — `roleId` is `null` for company-shared chunks.
 3. When an agent runs, the initial prompt is embedded and the top-k most similar chunks above a 0.7 cosine threshold are retrieved.
 4. Retrieved chunks are injected as prompt part 5. If the RAG text exceeds the context budget, it is compacted or stored to MinIO (context overflow) before injection.
 
@@ -47,12 +47,13 @@ Add an `embeddingConfig` to the company:
 
 ### CLI commands
 
-| Command                                             | Description                       |
-| --------------------------------------------------- | --------------------------------- |
-| `store-role-documents --role-id <id> --src <glob>`  | Upload and index `.md` documents  |
-| `list-role-documents --role-id <id>`                | List indexed documents            |
-| `remove-role-documents --role-id <id> --src <glob>` | Remove documents and their chunks |
-| `open-document-store`                               | Print/open the MinIO console URL  |
+| Command                                                         | Description                       |
+| --------------------------------------------------------------- | --------------------------------- |
+| `store-knowledge (--role <id>\|--company <id>) --source <path>` | Upload and index a `.md` document |
+| `list-knowledge (--role <id>\|--company <id>)`                  | List indexed documents            |
+| `get-knowledge (--role <id>\|--company <id>) --file <name>`     | Get a document's content          |
+| `delete-knowledge (--role <id>\|--company <id>) --file <name>`  | Remove a document and its chunks  |
+| `open-document-store`                                           | Print/open the MinIO console URL  |
 
 ### OKF document format
 
@@ -142,7 +143,8 @@ All company data is stored in a single MinIO bucket per company, namespaced by `
       materials/       ← user-submitted task inputs (read-only for agents)
       output/          ← files written during task execution (agent working area)
   knowledge/
-    {role_name}/       ← OKF knowledge documents for RAG indexing
+    {role_slug}/       ← OKF knowledge documents for a role's RAG indexing
+    shared/            ← OKF knowledge documents for company-wide RAG indexing
   finished/
     {category}/        ← reports | specifications | designs | code | other
       {task_id}/

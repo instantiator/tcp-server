@@ -3,14 +3,15 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
 import pgvector from 'pgvector';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, IsNull, Repository } from 'typeorm';
 import { EmbeddingService } from './embedding.service';
 
 /** Maximum characters per chunk before splitting (≈ 400–600 tokens at 4 chars/token). */
 const MAX_CHUNK_CHARS = 2000;
 
 /**
- * Ingests and removes OKF knowledge-base documents for a role.
+ * Ingests and removes OKF knowledge-base documents for a role, or for a
+ * company's shared knowledge (when `roleId` is `null`).
  *
  * On ingest, the document is split into chunks, each chunk is embedded via
  * {@link EmbeddingService}, and all rows are written to the `knowledge_chunk`
@@ -40,10 +41,12 @@ export class RagIndexService {
    * removed first.
    *
    * No-op when `embeddingConfig` is null (RAG disabled for this company).
+   *
+   * @param roleId the owning role, or `null` for a company-shared document
    */
   async ingestDocument(
     companyId: UUID,
-    roleId: UUID,
+    roleId: UUID | null,
     documentPath: string,
     content: string,
     embeddingConfig: LlmConfig | null | undefined,
@@ -84,9 +87,17 @@ export class RagIndexService {
   /**
    * Deletes all chunks for a document from the knowledge base.
    * Safe to call when no chunks exist (no-op).
+   *
+   * @param roleId the owning role, or `null` for a company-shared document
    */
-  async removeDocument(roleId: UUID, documentPath: string): Promise<void> {
-    await this.chunkRepo.delete({ roleId, documentPath });
+  async removeDocument(
+    roleId: UUID | null,
+    documentPath: string,
+  ): Promise<void> {
+    await this.chunkRepo.delete({
+      roleId: roleId ?? IsNull(),
+      documentPath,
+    });
   }
 }
 

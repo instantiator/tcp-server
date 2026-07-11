@@ -59,7 +59,8 @@ Each company's data lives under a top-level prefix derived from the company's `s
       materials/         ← user-submitted inputs; read-only for agents
       output/            ← agent working area during task execution
   knowledge/
-    {role_name}/         ← OKF Markdown documents used for RAG indexing
+    {role_slug}/         ← OKF Markdown documents used for RAG indexing (knowledge for the role)
+    shared/              ← OKF Markdown documents used for RAG indexing (company-wide knowledge)
   finished/
     {category}/          ← reports | specifications | designs | code | other
       {task_id}/
@@ -71,13 +72,14 @@ Each company's data lives under a top-level prefix derived from the company's `s
 
 ### Folder purposes
 
-| Path                        | Written by                     | Read by                   | Notes                                                                                                |
-| --------------------------- | ------------------------------ | ------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `tasks/{id}/materials/`     | lcp-server (task creation)     | Agents (read-only)        | Task inputs submitted by the user                                                                    |
-| `tasks/{id}/output/`        | Agents                         | Agents, orchestrator      | Working files created during execution                                                               |
-| `knowledge/{role}/`         | lcp-cli `store-role-documents` | lcp-server (RAG indexing) | Source documents for RAG; see [Agent Services](agent-services.md#rag-retrieval-augmented-generation) |
-| `finished/{category}/{id}/` | Reviewing agent / orchestrator | All agents                | Stable artefacts promoted on task completion                                                         |
-| `audit/{id}/`               | lcp-agent (planned)            | Operations tooling        | Append-only JSONL audit records per task step                                                        |
+| Path                        | Written by                     | Read by                   | Notes                                                                                                               |
+| --------------------------- | ------------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `tasks/{id}/materials/`     | lcp-server (task creation)     | Agents (read-only)        | Task inputs submitted by the user                                                                                   |
+| `tasks/{id}/output/`        | Agents                         | Agents, orchestrator      | Working files created during execution                                                                              |
+| `knowledge/{role_slug}/`    | lcp-cli `store-knowledge`      | lcp-server (RAG indexing) | Source documents for a role's RAG; see [Agent Services](agent-services.md#rag-retrieval-augmented-generation)       |
+| `knowledge/shared/`         | lcp-cli `store-knowledge`      | lcp-server (RAG indexing) | Source documents for company-wide RAG (all roles); `shared` is a reserved role slug and cannot be claimed by a role |
+| `finished/{category}/{id}/` | Reviewing agent / orchestrator | All agents                | Stable artefacts promoted on task completion                                                                        |
+| `audit/{id}/`               | lcp-agent (planned)            | Operations tooling        | Append-only JSONL audit records per task step                                                                       |
 
 ### Context overflow
 
@@ -91,28 +93,37 @@ If the write fails, the compacted (truncated) version is used instead. See [Cont
 
 ## Write validation
 
-Documents written through the storage abstraction (`StorageService`, currently backed by `MinioStorageAdapter`) are validated before being accepted — JSON, YAML, OKF Markdown, plain Markdown, XML, and CSV each have a registered validator (`libs/lcp-shared/src/storage/validation/`). OKF documents (under `knowledge/{role}/`) require YAML front-matter with a non-empty `title` field; other formats get structural well-formedness checks, plus JSON-Schema validation when the document names a local `$schema` reference (remote schema URLs are never fetched — see `docs/prompts/009.4 - doc type validations.md` §Risks for why).
+Documents written through the storage abstraction (`StorageService`, currently backed by `MinioStorageAdapter`) are validated before being accepted — JSON, YAML, OKF Markdown, plain Markdown, XML, and CSV each have a registered validator (`libs/lcp-shared/src/storage/validation/`). OKF documents (under `knowledge/{role_slug}/` or `knowledge/shared/`) require YAML front-matter with a non-empty `title` field; other formats get structural well-formedness checks, plus JSON-Schema validation when the document names a local `$schema` reference (remote schema URLs are never fetched — see `docs/prompts/009.4 - doc type validations.md` §Risks for why).
 
 A failed validation returns `422 Unprocessable Entity` with a body of `{ statusCode, message, errors: [{ message, path?, llmHint }] }`. `errors[].llmHint` is written to be directly actionable by the calling agent — relay it back into the agent's context rather than the raw parser error.
 
-Every write also records an audit event carrying `originators: { user, agent, task }` — `user` is populated for direct JWT-authenticated writes (`POST /api/storage`, `POST /api/role/:roleId/documents`); `agent`/`task` are populated for MCP-tool-initiated writes once wired (see the shared-lib `AuditEvent.payload` shape in `docs/database.md`).
+Every write also records an audit event carrying `originators: { user, agent, task }` — `user` is populated for direct JWT-authenticated writes (`POST /api/storage`, `POST /api/role/:roleId/knowledge`, `POST /api/company/:companyId/knowledge`); `agent`/`task` are populated for MCP-tool-initiated writes once wired (see the shared-lib `AuditEvent.payload` shape in `docs/database.md`).
 
 ## Managing knowledge documents
 
-Role knowledge documents are uploaded via lcp-cli and stored under `knowledge/{role_name}/`. The server chunks, embeds, and indexes them for RAG retrieval automatically on upload.
+Knowledge documents are uploaded via lcp-cli, scoped to either a role (`knowledge/{role_slug}/`) or a company's shared knowledge (`knowledge/shared/`). The server chunks, embeds, and indexes them for RAG retrieval automatically on upload.
+
+> **Migration note (010.2.1):** the knowledge folder layout moved from name-based (`knowledge/{role_name}/`) to slug-based (`knowledge/{role_slug}/`), and the `AllowSharedKnowledgeChunks` migration truncates the `knowledge_chunk` table (existing chunks referenced the old paths and can no longer be resolved). Any knowledge documents previously uploaded must be re-uploaded via `store-knowledge` after this migration runs — the underlying MinIO objects are untouched, only their RAG index is cleared.
 
 ```bash
-# Upload documents
-./lcp-cli.sh store-role-documents -r <roleId> -s policy.md handbook.md
+# Upload a document to a role's knowledge base
+./lcp-cli.sh store-knowledge -r <roleId> -s policy.md
+
+# Upload a document to the company's shared knowledge
+./lcp-cli.sh store-knowledge -c <companyId> -s handbook.md
 
 # List stored documents
-./lcp-cli.sh list-role-documents -r <roleId>
+./lcp-cli.sh list-knowledge -r <roleId>
+./lcp-cli.sh list-knowledge -c <companyId>
 
-# Remove documents by pattern
-./lcp-cli.sh remove-role-documents -r <roleId> -p "*.md"
+# Retrieve a document's content
+./lcp-cli.sh get-knowledge -r <roleId> -f policy.md
+
+# Remove a document by filename
+./lcp-cli.sh delete-knowledge -r <roleId> -f policy.md
 ```
 
-See [`lcp-cli.md` → document management verbs](lcp-cli.md#store-role-documents) and [Agent Services → RAG](agent-services.md#rag-retrieval-augmented-generation) for full details.
+See [`lcp-cli.md` → knowledge management verbs](lcp-cli.md#list-knowledge) and [Agent Services → RAG](agent-services.md#rag-retrieval-augmented-generation) for full details.
 
 ---
 

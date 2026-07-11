@@ -7,7 +7,7 @@ import {
   LcpCompany,
   LcpRole,
 } from '@lcp/shared';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken, TypeOrmModule } from '@nestjs/typeorm';
 import { randomUUID, UUID } from 'crypto';
@@ -504,6 +504,21 @@ describe('DbService', () => {
         }),
       ).rejects.toThrow(NotFoundException);
     });
+
+    it('rejects "shared" as a role slug (reserved for company-wide knowledge)', async () => {
+      const company = await seedCompany();
+      await expect(
+        dbService.setRole({
+          companyId: company.id,
+          slug: 'shared',
+          name: 'shared',
+          description: 'Attempting to claim the reserved slug.',
+          systemPromptTemplate: '',
+          knowledgeDomains: [],
+          mcpServerList: [],
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 
   // setRole (update path)
@@ -590,6 +605,15 @@ describe('DbService', () => {
       // Provider and apiKey must survive the partial patch
       expect(updated.llmConfig!.provider).toBe('openai');
       expect(updated.llmConfig!.apiKey).toBe('test-api-key');
+    });
+
+    it('rejects renaming a role\'s slug to "shared" (reserved for company-wide knowledge)', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+
+      await expect(
+        dbService.setRole({ id: role.id, slug: 'shared' }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

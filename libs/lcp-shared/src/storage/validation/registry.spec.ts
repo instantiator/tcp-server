@@ -46,7 +46,7 @@ describe('validateDocument', () => {
   describe('with the default validators registered', () => {
     beforeEach(() => registerDefaultValidators());
 
-    it('dispatches an OKF path (knowledge/{role}/*.md) to the OKF validator, not plain Markdown', async () => {
+    it('dispatches an OKF path (knowledge/{role_slug}/*.md) to the OKF validator, not plain Markdown', async () => {
       const result = await validateDocument(
         'acme/knowledge/analyst/report.md',
         '# no front-matter',

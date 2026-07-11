@@ -7,10 +7,15 @@ import {
   LcpCompany,
   LcpRole,
 } from '@lcp/shared';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
 import { DeepPartial, Repository } from 'typeorm';
+import { SHARED_KNOWLEDGE_ROLE_SLUG } from '../storage/storage-keys';
 import { LcpAgentTemplate } from '../templates/LcpAgentTemplate';
 import { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
 import { isUUID } from '../utils/ObjectUtils';
@@ -180,6 +185,14 @@ export class DbService {
     role: DeepPartial<LcpRole>,
     identifiers: { id?: UUID; slug?: string } = {},
   ): Promise<LcpRole> {
+    // "shared" is reserved for the company-wide knowledge folder
+    // (`knowledge/shared/`) — no role may claim it as its own slug.
+    if (role.slug === SHARED_KNOWLEDGE_ROLE_SLUG) {
+      throw new BadRequestException(
+        `Role slug "${SHARED_KNOWLEDGE_ROLE_SLUG}" is reserved for company-wide knowledge and cannot be used by a role`,
+      );
+    }
+
     // See setCompany: an identifier being *given* (even one that resolves to
     // nothing) always means "update" — only its total absence means "create".
     const isUpdate =

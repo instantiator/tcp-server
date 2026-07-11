@@ -22,17 +22,17 @@ import { CompanyUserController } from './company-user.controller';
 import { ConversationController } from './conversation.controller';
 import { ConversationService } from './conversation.service';
 import { InternalController } from './internal.controller';
+import { KnowledgeController } from './knowledge.controller';
 import { ModelController } from './api.model.controller';
 import { RoleController } from './api.role.controller';
-import { RoleDocumentController } from './role-document.controller';
 import { StorageActionsController } from './storage-actions.controller';
 import { StorageProxyController } from './storage-proxy.controller';
 import { StorageValidationController } from './storage-validation.controller';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { ApiService } from './api.service';
 import { ChatService } from './chat.service';
+import { KnowledgeService } from './knowledge.service';
 import { PauseAndResumeService } from './pause-and-resume.service';
-import { RoleDocumentService } from './role-document.service';
 
 /** HTTP API module: wires all REST controllers and supporting services. */
 @Module({
@@ -59,8 +59,8 @@ import { RoleDocumentService } from './role-document.service';
     CompanyUserController,
     ConversationController,
     InternalController,
+    KnowledgeController,
     RoleController,
-    RoleDocumentController,
     StorageActionsController,
     StorageProxyController,
     StorageValidationController,
@@ -72,8 +72,8 @@ import { RoleDocumentService } from './role-document.service';
     AgentOrchestrationService,
     ChatService,
     ConversationService,
+    KnowledgeService,
     PauseAndResumeService,
-    RoleDocumentService,
   ],
 })
 export class ApiModule {}

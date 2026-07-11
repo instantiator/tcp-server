@@ -32,7 +32,11 @@ import { Repository } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
 import { analyzeContent } from './content-analysis';
 import { DocumentValidationException } from './document-validation.exception';
-import { knowledgeKey } from './storage-keys';
+import {
+  KnowledgeScope,
+  knowledgeScopeKey,
+  knowledgeScopePrefix,
+} from './storage-keys';
 import {
   assertValidStoragePath,
   DELETED_PREFIX,
@@ -52,7 +56,8 @@ const DEFAULT_ORIGINATORS: Originators = {
  * MinIO/S3 implementation of {@link StorageService}.
  *
  * Uses a single shared bucket (`lcp` by default) with structured object keys
- * that follow the ADR-007 layout: `{company_slug}/knowledge/{role_name}/{filename}`.
+ * that follow the ADR-007 layout: `{company_slug}/knowledge/{role_slug}/{filename}`
+ * (or `{company_slug}/knowledge/shared/{filename}` for company-wide knowledge).
  *
  * The bucket is created on startup if it does not already exist.
  */
@@ -171,13 +176,12 @@ export class MinioStorageAdapter
   }
 
   async putKnowledgeFile(
-    companySlug: string,
-    roleName: string,
+    scope: KnowledgeScope,
     filename: string,
     content: Buffer | string,
     originators?: Originators,
   ): Promise<string> {
-    const key = knowledgeKey(companySlug, roleName, filename);
+    const key = knowledgeScopeKey(scope, filename);
     const text =
       typeof content === 'string' ? content : content.toString('utf-8');
     await this.validateBeforeWrite(key, text);
@@ -195,17 +199,14 @@ export class MinioStorageAdapter
     await this.emitStorageAudit(
       'put_knowledge_file',
       key,
-      companySlug,
+      scope.companySlug,
       originators,
     );
     return key;
   }
 
-  async listKnowledgeFiles(
-    companySlug: string,
-    roleName: string,
-  ): Promise<StorageObject[]> {
-    const prefix = `${companySlug}/knowledge/${roleName}/`;
+  async listKnowledgeFiles(scope: KnowledgeScope): Promise<StorageObject[]> {
+    const prefix = knowledgeScopePrefix(scope);
     const results: StorageObject[] = [];
     let continuationToken: string | undefined;
 
@@ -235,11 +236,10 @@ export class MinioStorageAdapter
   }
 
   async getKnowledgeFile(
-    companySlug: string,
-    roleName: string,
+    scope: KnowledgeScope,
     filename: string,
   ): Promise<string | null> {
-    const key = knowledgeKey(companySlug, roleName, filename);
+    const key = knowledgeScopeKey(scope, filename);
     try {
       const resp = await this.client.send(
         new GetObjectCommand({ Bucket: this.bucket, Key: key }),
@@ -257,12 +257,11 @@ export class MinioStorageAdapter
    * — see docs/prompts/009.4 for why hard-delete was unified to soft-delete.
    */
   deleteKnowledgeFile(
-    companySlug: string,
-    roleName: string,
+    scope: KnowledgeScope,
     filename: string,
     originators?: Originators,
   ): Promise<void> {
-    const key = knowledgeKey(companySlug, roleName, filename);
+    const key = knowledgeScopeKey(scope, filename);
     return this.deleteFile(key, originators);
   }
 

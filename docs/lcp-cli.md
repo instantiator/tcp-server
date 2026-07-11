@@ -76,9 +76,10 @@ See [schema.md](schema.md) for the full field reference, VS Code integration, ex
 | [`delete-company`](#delete-company)                     | `delete-company (-c <uuid>\|--company-slug <slug>) [-f]`                                     | Delete a company and everything in it                                      |
 | [`delete-role`](#delete-role)                           | `delete-role (-r <uuid>\|--role-slug <slug>) [-f]`                                           | Delete a role and everything tied to it                                    |
 | [`chat`](#chat)                                         | `chat (-r <uuid>\|-c <uuid>) [-q <message>]`                                                 | Interactive or single-query chat with a role, or browse a company's roster |
-| [`store-role-documents`](#store-role-documents)         | `store-role-documents (-r <uuid>\|--role-slug <slug>) -s <paths...>`                         | Upload OKF Markdown documents to a role's knowledge base                   |
-| [`list-role-documents`](#list-role-documents)           | `list-role-documents (-r <uuid>\|--role-slug <slug>)`                                        | List knowledge-base documents stored for a role                            |
-| [`remove-role-documents`](#remove-role-documents)       | `remove-role-documents (-r <uuid>\|--role-slug <slug>) -p <patterns...>`                     | Remove knowledge-base documents by filename pattern                        |
+| [`list-knowledge`](#list-knowledge)                     | `list-knowledge (--role <slug-or-id>\|--company <slug-or-id>)`                               | List knowledge-base documents for a role or company (shared knowledge)     |
+| [`get-knowledge`](#get-knowledge)                       | `get-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename> [-o <path>]`      | Get a knowledge-base document's content                                    |
+| [`store-knowledge`](#store-knowledge)                   | `store-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -s <path> [-t <filename>]`    | Upload an OKF Markdown document to a role or company knowledge base        |
+| [`delete-knowledge`](#delete-knowledge)                 | `delete-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename>`               | Delete a knowledge-base document by filename                               |
 | [`open-document-store`](#open-document-store)           | `open-document-store [--no-open]`                                                            | Print (and open) the MinIO console URL                                     |
 | [`list-open-queries`](#list-open-queries)               | `list-open-queries [-c <uuid>\|--company-slug <slug>] [--format table\|json\|csv]`           | List open agent-to-human queries                                           |
 | [`read-query`](#read-query)                             | `read-query <slug>`                                                                          | Read a query's full question and conversation history                      |
@@ -89,6 +90,8 @@ See [schema.md](schema.md) for the full field reference, VS Code integration, ex
 | [`validate-shared-document`](#validate-shared-document) | `validate-shared-document --path <path\|glob> [--recursive]`                                 | Re-validate document(s) already in shared storage                          |
 
 `--role-slug` requires `--company-id`/`--company-slug` alongside it — role slugs are unique only within a company, not globally.
+
+The knowledge verbs' `--role`/`--company` values are each a single slug-or-id: a value matching the UUID format is treated as an id, otherwise as a slug. A role slug (not a UUID) additionally requires `--company` to disambiguate — role slugs are unique only within a company, not globally. `--company` alone selects the company's shared (company-wide) knowledge scope.
 
 ### `get-token`
 
@@ -430,72 +433,80 @@ mode compatible with piping the final answer to another command:
 # Agent <id> removed.
 ```
 
-### `store-role-documents`
+### `list-knowledge`
 
-Upload OKF Markdown documents to a role's knowledge base. All files are validated before any are uploaded — if any fail, none are sent.
-
-Each file must be a `.md` file with valid YAML front-matter containing a non-empty `title` field (OKF format).
-
-- **stdout**: JSON array of `{ key, name, size, lastModified }` for each uploaded document
-- **stderr**: validation errors and per-file progress
-
-| Flag                    | Alias | Description                                                      |
-| ----------------------- | ----- | ---------------------------------------------------------------- |
-| `--role-id <uuid>`      | `-r`  | Role UUID (required unless `--role-slug` is given)               |
-| `--role-slug <slug>`    |       | Role slug instead of `--role-id` (requires a company identifier) |
-| `--company-id <uuid>`   | `-c`  | Company UUID (for `--role-slug`)                                 |
-| `--company-slug <slug>` |       | Company slug (for `--role-slug`)                                 |
-| `--src <paths...>`      | `-s`  | **(Required)** One or more file paths to upload                  |
-
-```bash
-./lcp-cli.sh -t $TOKEN store-role-documents -r <roleId> -s policy.md handbook.md
-./lcp-cli.sh -t $TOKEN store-role-documents --company-slug acme --role-slug analyst -s policy.md
-```
-
-Documents are stored in MinIO under `{company_slug}/knowledge/{role_name}/` and automatically indexed for RAG retrieval. See [shared-storage.md](shared-storage.md) for the storage layout.
-
-### `list-role-documents`
-
-List the knowledge-base documents currently stored for a role.
+List the knowledge-base documents currently stored for a role, or for a company's shared knowledge.
 
 - **stdout**: JSON array of `{ key, name, size, lastModified }` — empty array if none stored
 
-| Flag                    | Alias | Description                                                      |
-| ----------------------- | ----- | ---------------------------------------------------------------- |
-| `--role-id <uuid>`      | `-r`  | Role UUID (required unless `--role-slug` is given)               |
-| `--role-slug <slug>`    |       | Role slug instead of `--role-id` (requires a company identifier) |
-| `--company-id <uuid>`   | `-c`  | Company UUID (for `--role-slug`)                                 |
-| `--company-slug <slug>` |       | Company slug (for `--role-slug`)                                 |
+| Flag                     | Alias | Description                                   |
+| ------------------------ | ----- | --------------------------------------------- |
+| `--role <slug-or-id>`    | `-r`  | Role slug or UUID                             |
+| `--company <slug-or-id>` | `-c`  | Company slug or UUID (shared knowledge scope) |
 
 ```bash
-./lcp-cli.sh -t $TOKEN list-role-documents -r <roleId>
-./lcp-cli.sh -t $TOKEN list-role-documents --company-slug acme --role-slug analyst
+./lcp-cli.sh -t $TOKEN list-knowledge -r <roleId>
+./lcp-cli.sh -t $TOKEN list-knowledge --company acme --role analyst
+./lcp-cli.sh -t $TOKEN list-knowledge -c acme
 ```
 
-### `remove-role-documents`
+### `get-knowledge`
 
-Remove knowledge-base documents from a role by filename pattern. Supports `*` (any sequence of characters) and `?` (any single character) wildcards. Matched documents are deleted from MinIO and their RAG chunks removed from the database.
+Retrieve a single knowledge-base document's content, for a role or a company's shared knowledge.
 
-- **stdout**: JSON array of deleted document keys
-- **stderr**: list of matched filenames before deletion, or a message if nothing matched
+- **stdout**: the document's raw content (unless `--out` is given)
 
-| Flag                      | Alias | Description                                                      |
-| ------------------------- | ----- | ---------------------------------------------------------------- |
-| `--role-id <uuid>`        | `-r`  | Role UUID (required unless `--role-slug` is given)               |
-| `--role-slug <slug>`      |       | Role slug instead of `--role-id` (requires a company identifier) |
-| `--company-id <uuid>`     | `-c`  | Company UUID (for `--role-slug`)                                 |
-| `--company-slug <slug>`   |       | Company slug (for `--role-slug`)                                 |
-| `--pattern <patterns...>` | `-p`  | **(Required)** One or more filename patterns (e.g. `"*.md"`)     |
+| Flag                     | Alias | Description                                        |
+| ------------------------ | ----- | -------------------------------------------------- |
+| `--role <slug-or-id>`    | `-r`  | Role slug or UUID                                  |
+| `--company <slug-or-id>` | `-c`  | Company slug or UUID (shared knowledge scope)      |
+| `--file <filename>`      | `-f`  | **(Required)** Filename to retrieve                |
+| `--out <path>`           | `-o`  | Save to a local file instead of printing to stdout |
 
 ```bash
-# Remove a specific file
-./lcp-cli.sh -t $TOKEN remove-role-documents -r <roleId> -p "handbook.md"
+./lcp-cli.sh -t $TOKEN get-knowledge -r <roleId> -f policy.md
+./lcp-cli.sh -t $TOKEN get-knowledge -c acme -f handbook.md -o ./handbook.md
+```
 
-# Remove all markdown files
-./lcp-cli.sh -t $TOKEN remove-role-documents -r <roleId> -p "*.md"
+### `store-knowledge`
 
-# Remove files matching multiple patterns
-./lcp-cli.sh -t $TOKEN remove-role-documents -r <roleId> -p "policy-?.md" "archive-*.md"
+Upload (or overwrite) a single OKF Markdown document into a role's knowledge base, or a company's shared knowledge. The file is validated before upload — if it fails, nothing is sent.
+
+The file must be a `.md` file with valid YAML front-matter containing a non-empty `title` field (OKF format).
+
+- **stdout**: JSON `{ key, name, size, lastModified }` for the stored document
+- **stderr**: validation errors and upload progress
+
+| Flag                     | Alias | Description                                            |
+| ------------------------ | ----- | ------------------------------------------------------ |
+| `--role <slug-or-id>`    | `-r`  | Role slug or UUID                                      |
+| `--company <slug-or-id>` | `-c`  | Company slug or UUID (shared knowledge scope)          |
+| `--source <path>`        | `-s`  | **(Required)** Local Markdown file path to upload      |
+| `--target <filename>`    | `-t`  | Filename to store as (defaults to the source filename) |
+
+```bash
+./lcp-cli.sh -t $TOKEN store-knowledge -r <roleId> -s policy.md
+./lcp-cli.sh -t $TOKEN store-knowledge --company acme --role analyst -s policy.md
+./lcp-cli.sh -t $TOKEN store-knowledge -c acme -s ./handbook.md -t company-handbook.md
+```
+
+Documents are stored in MinIO under `{company_slug}/knowledge/{role_slug}/` (or `{company_slug}/knowledge/shared/` for company scope) and automatically indexed for RAG retrieval. See [shared-storage.md](shared-storage.md) for the storage layout.
+
+### `delete-knowledge`
+
+Delete a single knowledge-base document by filename, from a role's knowledge base or a company's shared knowledge. Removes it from MinIO and its RAG chunks from the database. Idempotent — deleting an unknown filename is not an error.
+
+- **stdout**: JSON `{ deleted: filename }`
+
+| Flag                     | Alias | Description                                   |
+| ------------------------ | ----- | --------------------------------------------- |
+| `--role <slug-or-id>`    | `-r`  | Role slug or UUID                             |
+| `--company <slug-or-id>` | `-c`  | Company slug or UUID (shared knowledge scope) |
+| `--file <filename>`      | `-f`  | **(Required)** Filename to delete             |
+
+```bash
+./lcp-cli.sh -t $TOKEN delete-knowledge -r <roleId> -f policy.md
+./lcp-cli.sh -t $TOKEN delete-knowledge -c acme -f handbook.md
 ```
 
 ### `open-document-store`

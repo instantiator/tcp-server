@@ -479,7 +479,7 @@
     },
     "KnowledgeChunk": {
       "additionalProperties": false,
-      "description": "A single chunk of text extracted from an OKF knowledge-base document and stored for RAG retrieval. The corresponding embedding vector is stored directly in PostgreSQL as a `vector(1536)` column (pgvector extension) and is not mapped by TypeORM — all vector reads and writes use raw SQL.\n\nChunks are scoped to a  {@link  LcpRole  }  within a  {@link  LcpCompany  } . All chunks for a given `documentPath` are replaced atomically on re-index.",
+      "description": "A single chunk of text extracted from an OKF knowledge-base document and stored for RAG retrieval. The corresponding embedding vector is stored directly in PostgreSQL as a `vector(1536)` column (pgvector extension) and is not mapped by TypeORM — all vector reads and writes use raw SQL.\n\nChunks are scoped to a  {@link  LcpCompany  } , and optionally to a  {@link  LcpRole  }  within it — `roleId` is `null` for chunks from the company-wide `knowledge/shared/` folder (see storage-keys.ts). All chunks for a given `documentPath` are replaced atomically on re-index.",
       "properties": {
         "chunkIndex": {
           "description": "Zero-based position of this chunk within its source document.",
@@ -511,8 +511,15 @@
           "format": "uuid"
         },
         "roleId": {
-          "$ref": "#/definitions/UUID",
-          "description": "The role whose knowledge base this chunk belongs to.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/UUID"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The role whose knowledge base this chunk belongs to. `null` for chunks indexed from the company-wide `knowledge/shared/` folder.",
           "format": "uuid"
         }
       },

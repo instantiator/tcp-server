@@ -1,6 +1,9 @@
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest } from '../core/api';
-import { RoleIdentifierOpts, resolveRoleId } from '../core/resolve-identifiers';
+import {
+  KnowledgeScopeOpts,
+  resolveKnowledgeScopePath,
+} from '../core/resolve-knowledge-scope';
 import { runCommand } from '../core/run-command';
 import { resolveToken } from '../auth/token';
 
@@ -12,23 +15,24 @@ interface DocumentSummary {
 }
 
 /**
- * Lists OKF knowledge-base documents stored for a role.
+ * Lists OKF knowledge-base documents stored for a role or a company's
+ * shared knowledge.
  *
  * stdout: JSON array of `{ key, name, size, lastModified }` objects.
- * An empty array is printed when the role has no documents.
+ * An empty array is printed when the scope has no documents.
  */
-export function listRoleDocumentsAction(
+export function listKnowledgeAction(
   opts: GlobalOptions,
-  cmdOpts: RoleIdentifierOpts,
+  cmdOpts: KnowledgeScopeOpts,
 ): Promise<void> {
   return runCommand(async () => {
     const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
     const api = apiOptions(opts, token);
-    const roleId = await resolveRoleId(api, cmdOpts);
+    const scopePath = await resolveKnowledgeScopePath(api, cmdOpts);
     const docs = await apiRequest<DocumentSummary[]>(
       api,
       'GET',
-      `/api/role/${roleId}/documents`,
+      `/api/${scopePath}/knowledge`,
     );
     process.stdout.write(JSON.stringify(docs, null, 2) + '\n');
   });

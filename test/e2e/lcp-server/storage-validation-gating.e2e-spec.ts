@@ -97,17 +97,17 @@ describe('Storage write-time validation gating (e2e)', () => {
     });
   });
 
-  describe('POST /api/role/:roleId/documents', () => {
+  describe('POST /api/role/:roleId/knowledge', () => {
     it('rejects an OKF document missing front-matter with 422 and never lists it', async () => {
       const postRes = await request(app.getHttpServer())
-        .post(`/api/role/${role.id}/documents`)
+        .post(`/api/role/${role.id}/knowledge`)
         .set('Authorization', `Bearer ${jwt}`)
         .attach('file', Buffer.from('# no front-matter'), 'bad.md');
 
       expect(postRes.status).toBe(422);
 
       const listRes = await request(app.getHttpServer())
-        .get(`/api/role/${role.id}/documents`)
+        .get(`/api/role/${role.id}/knowledge`)
         .set('Authorization', `Bearer ${jwt}`);
       expect(listRes.status).toBe(200);
       expect(
@@ -118,13 +118,13 @@ describe('Storage write-time validation gating (e2e)', () => {
     it('accepts a valid OKF document and lists it', async () => {
       const content = '---\ntitle: Report\n---\n\nBody.';
       const postRes = await request(app.getHttpServer())
-        .post(`/api/role/${role.id}/documents`)
+        .post(`/api/role/${role.id}/knowledge`)
         .set('Authorization', `Bearer ${jwt}`)
         .attach('file', Buffer.from(content), 'good.md');
       expect(postRes.status).toBe(201);
 
       const listRes = await request(app.getHttpServer())
-        .get(`/api/role/${role.id}/documents`)
+        .get(`/api/role/${role.id}/knowledge`)
         .set('Authorization', `Bearer ${jwt}`);
       expect(
         (listRes.body as { name: string }[]).some((d) => d.name === 'good.md'),
