@@ -9,7 +9,9 @@ import { resolveToken } from '../auth/token';
 
 interface CompanySummary {
   id: string;
+  slug: string;
   name: string;
+  description: string;
 }
 
 /** Lists all companies from the LCP server and writes them to stdout as JSON. */
@@ -23,7 +25,12 @@ export function listCompaniesAction(opts: GlobalOptions): Promise<void> {
     );
     process.stdout.write(
       JSON.stringify(
-        companies.map(({ id, name }) => ({ id, name })),
+        companies.map(({ id, slug, name, description }) => ({
+          id,
+          slug,
+          name,
+          description,
+        })),
         null,
         2,
       ) + '\n',

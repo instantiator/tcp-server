@@ -14,17 +14,24 @@ import { resolveToken } from '../auth/token';
 
 interface CompanySummary {
   id: string;
+  slug: string;
   name: string;
+  description: string;
 }
 
 interface RoleSummary {
   id: string;
+  slug: string;
   name: string;
+  description: string;
+  knowledgeDomains: string[];
 }
 
 interface CompanyWithRoles {
   id: string;
+  slug: string;
   name: string;
+  description: string;
   roles: RoleSummary[];
 }
 
@@ -34,7 +41,7 @@ interface CompanyWithRoles {
  * Without --company-id: fetches all companies then their roles (N+1 calls).
  * With --company-id: fetches a single company and its roles.
  *
- * stdout: `{ id, name, roles: { id, name }[] }[]`
+ * stdout: `{ id, slug, name, description, roles: { id, slug, name, description, knowledgeDomains }[] }[]`
  */
 export function listRolesAction(
   opts: GlobalOptions,
@@ -69,7 +76,19 @@ async function fetchCompanyWithRoles(
     'GET',
     `/api/company/${companyId}/roles`,
   );
-  return { id: company.id, name: company.name, roles };
+  return {
+    id: company.id,
+    slug: company.slug,
+    name: company.name,
+    description: company.description,
+    roles: roles.map(({ id, slug, name, description, knowledgeDomains }) => ({
+      id,
+      slug,
+      name,
+      description,
+      knowledgeDomains,
+    })),
+  };
 }
 
 async function fetchAllCompaniesWithRoles(

@@ -44,4 +44,3 @@
 | typeorm                                  | MIT          | git+https://github.com/typeorm/typeorm.git                     | TypeORM maintainers@typeorm.io                                         | 1.0.0    | 1.0.0     | ^1.0.0    |
 | undici                                   | MIT          | git+https://github.com/nodejs/undici.git                       | n/a                                                                    | 8.7.0    | 8.5.0     | ^8.5.0    |
 | zod                                      | MIT          | git+https://github.com/colinhacks/zod.git                      | Colin McDonnell <zod@colinhacks.com>                                   | 4.4.3    | 4.4.3     | ^4.4.3    |
-

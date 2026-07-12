@@ -129,7 +129,9 @@ You'll get a condensed list of companies:
 [
   {
     "id": "3fb3528a-3520-4489-b5bd-83247a631d87",
-    "name": "Test Company"
+    "slug": "test-company",
+    "name": "Test Company",
+    "description": "A test company"
   }
 ]
 ```
@@ -169,41 +171,29 @@ It'll give you a list of all roles in each company:
 [
   {
     "id": "3fb3528a-3520-4489-b5bd-83247a631d87",
+    "slug": "test-company",
     "name": "Test Company",
+    "description": "A test company",
     "roles": [
       {
         "id": "fc37ccc0-51a2-46b2-b642-a3d8b1dd0c9b",
-        "companyId": "3fb3528a-3520-4489-b5bd-83247a631d87",
         "slug": "chicken-assistant",
         "name": "Chicken assistant",
         "description": "a grub-hungry, squawking role",
-        "llmConfig": null,
-        "systemPromptTemplate": "You are {{name}} ({{description}}). Today's date is {{date}}. Your company ID is {{companyId}} and your role ID is {{roleId}} — use these when calling MCP services that require them.",
-        "rolePrompt": "You are a chicken through and through. Relate every request to fowl-interests: grubs, worms, seed, scratching in the dust, roosting at night, pecking, squawking, and flapping your wings. No matter what you are asked, answer it from the perspective of a chicken who cares deeply about these things.",
-        "knowledgeDomains": ["grubs", "worms", "seed", "roosting", "feathers"],
-        "mcpServerList": [],
-        "runConfig": null,
-        "queryIndex": 0
+        "knowledgeDomains": ["grubs", "worms", "seed", "roosting", "feathers"]
       },
       {
         "id": "e37504b0-1b90-451e-be50-944bffa8d57f",
-        "companyId": "3fb3528a-3520-4489-b5bd-83247a631d87",
         "slug": "cat-assistant",
         "name": "Cat assistant",
         "description": "a feline friend",
-        "llmConfig": null,
-        "systemPromptTemplate": "You are {{name}} ({{description}}). Today's date is {{date}}. Your company ID is {{companyId}} and your role ID is {{roleId}} — use these when calling MCP services that require them.",
-        "rolePrompt": "You are a little furry cat. You are young and playful and you like balls of string and kibble. Answer helpfully, and try to sound wise - even though you are still young and haven't seen much of the world beyond the back garden.",
         "knowledgeDomains": [
           "mice",
           "kibble",
           "litter boxes",
           "grooming",
           "cat toys"
-        ],
-        "mcpServerList": [],
-        "runConfig": null,
-        "queryIndex": 0
+        ]
       }
     ]
   }

@@ -135,11 +135,11 @@ The `start` transition uses an atomic conditional `UPDATE ... WHERE status =
 
 ```bash
 # Create a task, optionally with expected output filenames
-./lcp-cli.sh create-task -c acme -r "Write a market analysis report" -e report.md
+./lcp-cli.sh create-task -c acme -r "Write a market analysis report" --expected report.md
 
 # Create, attach materials, and start in one call
 ./lcp-cli.sh create-task -c acme -r "Summarise the attached brief" \
-  -m ./brief.pdf -p planner --start
+  -m ./brief.pdf --planner-role planner --start
 
 # List a company's tasks
 ./lcp-cli.sh list-tasks -c acme

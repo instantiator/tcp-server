@@ -114,7 +114,7 @@ Exchange username + password for an OIDC access token.
 
 List all companies.
 
-- **stdout**: `{ id, name }[]` as JSON
+- **stdout**: `{ id, slug, name, description }[]` as JSON
 
 ```bash
 ./lcp-cli.sh -t $TOKEN list-companies
@@ -124,7 +124,7 @@ List all companies.
 
 List roles grouped by company.
 
-- **stdout**: `{ id, name, roles: { id, name }[] }[]` as JSON
+- **stdout**: `{ id, slug, name, description, roles: { id, slug, name, description, knowledgeDomains }[] }[]` as JSON
 - **stderr**: progress/errors
 
 | Flag                    | Alias | Description                               |
@@ -675,16 +675,23 @@ model.
 | ----------------------------- | ----- | ----------------------------------------------------------------- |
 | `--company <slug-or-id>`      | `-c`  | Required. Company slug or UUID                                    |
 | `--request <text>`            | `-r`  | Required. The user's statement of the work                        |
-| `--planner-role <slug-or-id>` | `-p`  | Explicit planner role; falls back to the company default at start |
+| `--planner-role <slug-or-id>` |       | Explicit planner role; falls back to the company default at start |
 | `--materials <paths...>`      | `-m`  | Local material file paths to upload                               |
-| `--expected <filenames...>`   | `-e`  | Filenames expected in the task's completed directory              |
+| `--expected <filenames...>`   |       | Filenames expected in the task's completed directory              |
 | `--start`                     |       | Start the task immediately after creation (and materials upload)  |
 
+> [!NOTE]
+> `--planner-role`/`--expected` have no short alias: `-p` collides with the
+> global `-p, --password` (Commander silently binds the subcommand's `-p` to
+> the root option instead — the password ends up overwritten by whatever
+> `-p` value follows the subcommand), and `-e` is claimed by `./lcp-cli.sh`'s
+> own `-e`/`--env` wrapper flag before the argument list ever reaches Node.
+
 ```bash
-./lcp-cli.sh -t $TOKEN create-task -c acme -r "Write a market analysis report" -e report.md
+./lcp-cli.sh -t $TOKEN create-task -c acme -r "Write a market analysis report" --expected report.md
 
 ./lcp-cli.sh -t $TOKEN create-task -c acme -r "Summarise the attached brief" \
-  -m ./brief.pdf -p planner --start
+  -m ./brief.pdf --planner-role planner --start
 ```
 
 ### `list-tasks`

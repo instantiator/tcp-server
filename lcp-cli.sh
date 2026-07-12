@@ -3,7 +3,11 @@
 #
 # Usage: ./lcp-cli.sh [--rebuild] [-e|--env <file>] [lcp-cli options]
 #
-# Wrapper-only flags (consumed before the rest are forwarded to the node binary):
+# Wrapper-only flags — recognised ONLY up to the first argument that isn't one
+# of these (typically the verb name); everything from that point on is passed
+# straight through to the node binary untouched, so a subcommand is free to
+# define its own -e or any other short flag without colliding with the
+# wrapper's:
 #   --rebuild          Force a fresh build even if dist/ is present.
 #   -e, --env <file>   Environment file to load. When provided, also syncs the
 #                      running lcp-server and lcp-agent Docker containers with
@@ -29,7 +33,11 @@ while [[ $# -gt 0 ]]; do
       [[ -n "${2:-}" ]] || { echo "ERROR: --env requires a path" >&2; exit 1; }
       EXPLICIT_ENV="$2"; shift 2 ;;
     *)
-      NODE_ARGS+=("$1"); shift ;;
+      # First non-wrapper token (the verb, or anything else): stop parsing
+      # wrapper flags here — this and everything after it belongs to the node
+      # CLI verbatim, so its own flags (e.g. a subcommand's -e) are untouched.
+      NODE_ARGS=("$@")
+      break ;;
   esac
 done
 
