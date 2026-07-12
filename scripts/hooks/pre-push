@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
-# Pre-push hook. Format/licenses:generate/schema:generate are content changes
-# already handled by pre-commit, so this doesn't repeat them. It does:
+# Pre-push hook. Regenerating licenses/schema is pre-commit's job only (this
+# hook never calls licenses:generate/schema:generate — see scripts/hooks/pre-commit) —
+# doing it here too was a duplicate write that could produce spurious drift
+# (e.g. registry-dependent fields) and fail the push over nothing already
+# committed. This hook does:
 #   1. typecheck, shellcheck, lint — defensive re-checks in case pre-commit
 #      was bypassed or hooks were only just installed.
-#   2. build (also catches Nest's own compilation) and an aislop scan.
+#   2. a compile-only build (npm run build:apps — no schema/license
+#      regeneration) and an aislop scan.
 #   3. A migration drift check, scoped to the commits being pushed.
 #   4. The service-backed quality gate: unit, integration, and e2e tests.
 # Install: npm run hooks:install
@@ -26,23 +30,7 @@ echo "→ pre-push: lint..."
 npm run lint:check --silent
 
 echo "→ pre-push: build..."
-npm run build --silent
-
-# `npm run build` ends by re-running schema:generate/licenses:generate (same
-# as pre-commit) — normally a no-op since pre-commit already regenerated
-# them, but if pre-commit was bypassed or a dependency changed since the last
-# commit, this catches the drift before it's pushed uncommitted.
-if ! git diff --quiet -- docs/licenses.md schemas/schema.json; then
-  echo ""
-  echo "✗ pre-push: build regenerated derived files that aren't committed:"
-  drifted=$(git diff --name-only -- docs/licenses.md schemas/schema.json)
-  echo "    ${drifted//$'\n'/$'\n'    }"
-  echo ""
-  echo "  Run:  git add docs/licenses.md schemas/schema.json && git commit -m 'chore: update generated files'"
-  echo "  Then retry the push."
-  echo ""
-  exit 1
-fi
+npm run build:apps --silent
 
 echo "→ pre-push: aislop scan..."
 npx --no-install aislop ci

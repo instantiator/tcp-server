@@ -6,7 +6,8 @@
   "private": true,
   "license": "MIT",
   "scripts": {
-    "build": "nest build lcp-server && nest build lcp-agent && nest build lcp-mcp-storage && nest build lcp-mcp-memory && nest build lcp-mcp-interactions && nest build lcp-cli && npm run schema:generate && npm run licenses:generate",
+    "build": "npm run build:apps && npm run schema:generate && npm run licenses:generate",
+    "build:apps": "nest build lcp-server && nest build lcp-agent && nest build lcp-mcp-storage && nest build lcp-mcp-memory && nest build lcp-mcp-interactions && nest build lcp-cli",
     "build:lcp-cli": "nest build lcp-cli",
     "start:lcp-cli": "node dist/apps/lcp-cli/main",
     "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\" \"test/**/*.ts\" \"docs/**/*.md\" \"*.md\" \"apps/**/*.jsonc\"",

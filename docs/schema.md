@@ -287,10 +287,10 @@ ajv validate -s schemas/schema.json --ref '#/definitions/LcpRole' -d analyst-rol
 
 ## Keeping the schema current
 
-The pre-push git hook regenerates the schema automatically before each push and will block the push if the output differs from what is already committed. To regenerate manually at any time:
+The pre-commit git hook regenerates the schema automatically on every commit and stages any resulting change into it, so the committed `schemas/schema.json` never lags a model change for long. Pre-push does not regenerate it again — it only runs a compile-only build (`npm run build:apps`) to verify the apps still build. To regenerate manually at any time:
 
 ```bash
 npm run schema:generate
 ```
 
-If you add or change a field on any entity in `libs/lcp-shared/src/models/`, regenerate the schema and commit the updated `schemas/schema.json` alongside the entity change.
+If you add or change a field on any entity in `libs/lcp-shared/src/models/`, regenerate the schema and commit the updated `schemas/schema.json` alongside the entity change (pre-commit does this for you automatically if the hooks are installed).

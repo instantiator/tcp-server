@@ -33,10 +33,13 @@ npm install
 npm run hooks:install
 ```
 
-The second command copies `scripts/hooks/pre-push` into `.git/hooks/` so that
-formatting, schema generation, and migration-drift checks run automatically
-before each push. See [docs/schema.md](schema.md) for what the hook does and
-how to bypass it with `--no-verify` when needed.
+The second command copies `scripts/hooks/pre-commit` and `scripts/hooks/pre-push`
+into `.git/hooks/`. Pre-commit formats, regenerates `schemas/schema.json` and
+`docs/licenses.md`, and stages the results into the commit; pre-push re-checks
+typecheck/lint/build and migration drift, then runs the unit, integration, and
+e2e test tiers — it does not regenerate anything itself. See
+[docs/schema.md](schema.md) for more on the schema hook, and bypass either
+hook with `--no-verify` when needed.
 
 ## 4. Configure environment variables
 
