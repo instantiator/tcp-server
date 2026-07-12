@@ -28,6 +28,12 @@
   // (the task was never marked complete). {{tools}} is the comma-separated list of callable tool names.
   "required_tools_call_failed": "Your task is NOT complete: your call to {{tools}} did not succeed. Review the tool error message above, fix the problem it describes, and call {{tools}} again now.",
 
+  // Heading for the materials list in the assignment-presentation prompt part (part 4).
+  "assignment_materials_header": "## Materials",
+
+  // Heading for the expected-outputs list in the assignment-presentation prompt part (part 4).
+  "assignment_expected_header": "## Expected outputs",
+
   // Introductory sentence for prompt part 5 (RAG knowledge-base excerpts).
   "rag_intro": "The following excerpts from your knowledge base are relevant to your current task. Draw on them as needed:",
 

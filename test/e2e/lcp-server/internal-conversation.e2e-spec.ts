@@ -7,6 +7,7 @@ import {
   Conversation,
   ConversationMessage,
   LcpAgent,
+  LcpAssignment,
   LcpCompany,
   LcpRole,
   PendingConsultation,
@@ -32,6 +33,7 @@ describe('InternalController + ConversationController (e2e)', () => {
   let companyRepo: Repository<LcpCompany>;
   let roleRepo: Repository<LcpRole>;
   let agentRepo: Repository<LcpAgent>;
+  let assignmentRepo: Repository<LcpAssignment>;
   let convRepo: Repository<Conversation>;
   let msgRepo: Repository<ConversationMessage>;
   let consultRepo: Repository<PendingConsultation>;
@@ -50,6 +52,7 @@ describe('InternalController + ConversationController (e2e)', () => {
     companyRepo = moduleFixture.get(getRepositoryToken(LcpCompany));
     roleRepo = moduleFixture.get(getRepositoryToken(LcpRole));
     agentRepo = moduleFixture.get(getRepositoryToken(LcpAgent));
+    assignmentRepo = moduleFixture.get(getRepositoryToken(LcpAssignment));
     convRepo = moduleFixture.get(getRepositoryToken(Conversation));
     msgRepo = moduleFixture.get(getRepositoryToken(ConversationMessage));
     consultRepo = moduleFixture.get(getRepositoryToken(PendingConsultation));
@@ -64,6 +67,7 @@ describe('InternalController + ConversationController (e2e)', () => {
     await convRepo.createQueryBuilder().delete().execute();
     await auditRepo.createQueryBuilder().delete().execute();
     await agentRepo.createQueryBuilder().delete().execute();
+    await assignmentRepo.createQueryBuilder().delete().execute();
     await roleRepo.createQueryBuilder().delete().execute();
     await userRepo.createQueryBuilder().delete().execute();
     await companyRepo.createQueryBuilder().delete().execute();
@@ -107,15 +111,34 @@ describe('InternalController + ConversationController (e2e)', () => {
     return res.body as LcpRole;
   }
 
+  /** Orphan implement-mode assignment for an agent's mandatory FK. */
+  async function seedAssignment(
+    companyId: UUID,
+    roleId: UUID,
+  ): Promise<LcpAssignment> {
+    return assignmentRepo.save(
+      assignmentRepo.create({
+        taskId: null,
+        companyId,
+        roleId,
+        mode: 'implement',
+        prompt: 'Do some analysis.',
+        status: 'in-progress',
+      }),
+    );
+  }
+
   /** Inserts a Running agent directly — bypasses BullMQ so no Redis needed. */
   async function createRunningAgent(
     companyId: UUID,
     roleId: UUID,
   ): Promise<LcpAgent> {
+    const assignment = await seedAssignment(companyId, roleId);
     return agentRepo.save(
       agentRepo.create({
         companyId,
         roleId,
+        assignmentId: assignment.id,
         status: AgentStatus.Running,
         initialPrompt: 'Do some analysis.',
         output: null,
@@ -378,19 +401,23 @@ describe('InternalController + ConversationController (e2e)', () => {
       const role = await createRole(company.id);
 
       // Caller is Paused; consultant is Running — created directly to avoid BullMQ
+      const callerAssignment = await seedAssignment(company.id, role.id);
       const caller = await agentRepo.save(
         agentRepo.create({
           companyId: company.id,
           roleId: role.id,
+          assignmentId: callerAssignment.id,
           status: AgentStatus.Paused,
           initialPrompt: 'Wait for analyst.',
           output: null,
         }),
       );
+      const consultantAssignment = await seedAssignment(company.id, role.id);
       const consultant = await agentRepo.save(
         agentRepo.create({
           companyId: company.id,
           roleId: role.id,
+          assignmentId: consultantAssignment.id,
           status: AgentStatus.Running,
           initialPrompt: 'Analyse this.',
           output: null,
@@ -460,19 +487,23 @@ describe('InternalController + ConversationController (e2e)', () => {
       const company = await createCompany();
       const role = await createRole(company.id);
 
+      const callerAssignment = await seedAssignment(company.id, role.id);
       const caller = await agentRepo.save(
         agentRepo.create({
           companyId: company.id,
           roleId: role.id,
+          assignmentId: callerAssignment.id,
           status: AgentStatus.Paused,
           initialPrompt: 'Wait for analyst.',
           output: null,
         }),
       );
+      const consultantAssignment = await seedAssignment(company.id, role.id);
       const consultant = await agentRepo.save(
         agentRepo.create({
           companyId: company.id,
           roleId: role.id,
+          assignmentId: consultantAssignment.id,
           status: AgentStatus.Running,
           initialPrompt: 'Analyse this.',
           output: null,

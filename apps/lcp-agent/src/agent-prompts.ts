@@ -18,6 +18,10 @@ export interface AgentPrompts {
   required_tools_reminder: string;
   /** Reminder when required tool(s) were invoked but the call failed; `{{tools}}` is substituted. */
   required_tools_call_failed: string;
+  /** Heading for the materials list in the assignment-presentation prompt part (part 4). */
+  assignment_materials_header: string;
+  /** Heading for the expected-outputs list in the assignment-presentation prompt part (part 4). */
+  assignment_expected_header: string;
   /** Introductory sentence before RAG excerpts (prompt part 5). */
   rag_intro: string;
   /** Per-chunk heading template; `{{documentPath}}` is replaced with the source path (prompt part 5). */

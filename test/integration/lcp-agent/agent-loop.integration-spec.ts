@@ -9,12 +9,15 @@ import {
   ContextManagerService,
   IncomingDataGuardService,
   LcpAgent,
+  LcpAssignment,
   LcpCompany,
   LcpRole,
+  LcpTask,
 } from '@lcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
+import { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { AgentEventPublisherService } from '../../../apps/lcp-agent/src/agent/agent-event-publisher.service';
 import { AgentLoopService } from '../../../apps/lcp-agent/src/agent/agent-loop.service';
@@ -28,7 +31,7 @@ import { requireEnv } from '../../support/require-env';
 // PostgreSQL is provisioned by the integration global setup; DATABASE_URL is
 // always present. Run via: ./scripts/run-integration-tests.sh
 
-const ALL_ENTITIES = [LcpCompany, LcpRole, LcpAgent];
+const ALL_ENTITIES = [LcpCompany, LcpRole, LcpAgent, LcpTask, LcpAssignment];
 
 const DATABASE_URL = requireEnv('DATABASE_URL');
 
@@ -38,6 +41,7 @@ describe('AgentLoopService (integration)', () => {
   let companyRepo: Repository<LcpCompany>;
   let roleRepo: Repository<LcpRole>;
   let agentRepo: Repository<LcpAgent>;
+  let assignmentRepo: Repository<LcpAssignment>;
   let auditRecord: jest.Mock;
 
   beforeAll(async () => {
@@ -111,6 +115,7 @@ describe('AgentLoopService (integration)', () => {
     companyRepo = module.get(getRepositoryToken(LcpCompany));
     roleRepo = module.get(getRepositoryToken(LcpRole));
     agentRepo = module.get(getRepositoryToken(LcpAgent));
+    assignmentRepo = module.get(getRepositoryToken(LcpAssignment));
   });
 
   afterAll(async () => {
@@ -122,12 +127,27 @@ describe('AgentLoopService (integration)', () => {
   // beforeEach ensures a clean slate even when a previous run failed mid-cleanup.
   async function cleanDb() {
     await agentRepo.createQueryBuilder().delete().execute();
+    await assignmentRepo.createQueryBuilder().delete().execute();
     await roleRepo.createQueryBuilder().delete().execute();
     await companyRepo.createQueryBuilder().delete().execute();
   }
 
   beforeEach(cleanDb);
   afterEach(cleanDb);
+
+  /** Creates an orphan implement-mode assignment for an agent's mandatory FK. */
+  async function seedAssignment(companyId: UUID, roleId: UUID) {
+    return assignmentRepo.save(
+      assignmentRepo.create({
+        taskId: null,
+        companyId,
+        roleId,
+        mode: 'implement',
+        prompt: 'Summarise what you can do.',
+        status: 'in-progress',
+      }),
+    );
+  }
 
   async function seedAgentAndRole() {
     const company = await companyRepo.save(
@@ -152,10 +172,12 @@ describe('AgentLoopService (integration)', () => {
         systemPromptTemplate: 'You are {{name}} as of {{date}}.',
       }),
     );
+    const assignment = await seedAssignment(company.id, role.id);
     const agent = await agentRepo.save(
       agentRepo.create({
         companyId: company.id,
         roleId: role.id,
+        assignmentId: assignment.id,
         initialPrompt: 'Summarise what you can do.',
       }),
     );
@@ -210,10 +232,12 @@ describe('AgentLoopService (integration)', () => {
         systemPromptTemplate: 'You are {{name}}.',
       }),
     );
+    const assignment = await seedAssignment(company.id, role.id);
     const agent = await agentRepo.save(
       agentRepo.create({
         companyId: company.id,
         roleId: role.id,
+        assignmentId: assignment.id,
         initialPrompt: 'Hello.',
       }),
     );

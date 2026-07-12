@@ -92,6 +92,20 @@ async function seedRole(companyId: UUID) {
   );
 }
 
+/** Seeds an orphan implement-mode assignment for the agent's mandatory FK. */
+async function seedAssignment(companyId: UUID, roleId: UUID) {
+  return assignments.save(
+    assignments.create({
+      taskId: null,
+      companyId,
+      roleId,
+      mode: 'implement',
+      prompt: 'Do it.',
+      status: 'in-progress',
+    }),
+  );
+}
+
 describe('LcpCompany entity', () => {
   it('persists llmConfig as JSONB and retrieves it correctly', async () => {
     const company = await companies.save(
@@ -187,10 +201,12 @@ describe('LcpAgent entity', () => {
   it('creates an agent with default status idle and null threadId', async () => {
     const company = await seedCompany();
     const role = await seedRole(company.id);
+    const assignment = await seedAssignment(company.id, role.id);
     const agent = await agents.save(
       agents.create({
         companyId: company.id,
         roleId: role.id,
+        assignmentId: assignment.id,
         initialPrompt: 'Summarise the market.',
       }),
     );
@@ -203,10 +219,12 @@ describe('LcpAgent entity', () => {
   it('sets createdAt and updatedAt timestamps on creation', async () => {
     const company = await seedCompany();
     const role = await seedRole(company.id);
+    const assignment = await seedAssignment(company.id, role.id);
     const agent = await agents.save(
       agents.create({
         companyId: company.id,
         roleId: role.id,
+        assignmentId: assignment.id,
         initialPrompt: 'Go.',
       }),
     );
@@ -220,10 +238,12 @@ describe('LcpAgent entity', () => {
     const role = await seedRole(company.id);
 
     for (const status of Object.values(AgentStatus)) {
+      const assignment = await seedAssignment(company.id, role.id);
       const agent = await agents.save(
         agents.create({
           companyId: company.id,
           roleId: role.id,
+          assignmentId: assignment.id,
           initialPrompt: 'test',
           status,
         }),
@@ -237,10 +257,12 @@ describe('LcpAgent entity', () => {
   it('persists a threadId and status update', async () => {
     const company = await seedCompany();
     const role = await seedRole(company.id);
+    const assignment = await seedAssignment(company.id, role.id);
     const agent = await agents.save(
       agents.create({
         companyId: company.id,
         roleId: role.id,
+        assignmentId: assignment.id,
         initialPrompt: 'Go.',
       }),
     );
@@ -449,10 +471,12 @@ describe('LcpAssignment entity', () => {
   it('nulls agentId when the referenced agent is deleted', async () => {
     const company = await seedCompany();
     const role = await seedRole(company.id);
+    const agentAssignment = await seedAssignment(company.id, role.id);
     const agent = await agents.save(
       agents.create({
         companyId: company.id,
         roleId: role.id,
+        assignmentId: agentAssignment.id,
         initialPrompt: 'Go.',
       }),
     );

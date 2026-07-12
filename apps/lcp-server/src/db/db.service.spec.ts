@@ -4,8 +4,10 @@ import {
   AuditEventType,
   CompanyUser,
   LcpAgent,
+  LcpAssignment,
   LcpCompany,
   LcpRole,
+  LcpTask,
 } from '@lcp/shared';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -14,13 +16,22 @@ import { randomUUID, UUID } from 'crypto';
 import { QueryFailedError, Repository } from 'typeorm';
 import { DbService } from './db.service';
 
-const ALL_ENTITIES = [LcpCompany, LcpRole, LcpAgent, AuditEvent, CompanyUser];
+const ALL_ENTITIES = [
+  LcpCompany,
+  LcpRole,
+  LcpAgent,
+  LcpTask,
+  LcpAssignment,
+  AuditEvent,
+  CompanyUser,
+];
 
 describe('DbService', () => {
   let dbService: DbService;
   let companyRepo: Repository<LcpCompany>;
   let roleRepo: Repository<LcpRole>;
   let agentRepo: Repository<LcpAgent>;
+  let assignmentRepo: Repository<LcpAssignment>;
   let auditRepo: Repository<AuditEvent>;
   let companyUserRepo: Repository<CompanyUser>;
 
@@ -42,13 +53,16 @@ describe('DbService', () => {
     companyRepo = testingModule.get(getRepositoryToken(LcpCompany));
     roleRepo = testingModule.get(getRepositoryToken(LcpRole));
     agentRepo = testingModule.get(getRepositoryToken(LcpAgent));
+    assignmentRepo = testingModule.get(getRepositoryToken(LcpAssignment));
     auditRepo = testingModule.get(getRepositoryToken(AuditEvent));
     companyUserRepo = testingModule.get(getRepositoryToken(CompanyUser));
   });
 
   afterEach(async () => {
     await auditRepo.clear();
+    // Agents before assignments (agent.assignmentId FK), assignments before roles.
     await agentRepo.clear();
+    await assignmentRepo.clear();
     await roleRepo.clear();
     await companyUserRepo.clear();
     await companyRepo.clear();
@@ -783,6 +797,74 @@ describe('DbService', () => {
       expect(found).not.toBeNull();
       expect(found!.status).toBe(AgentStatus.Idle);
       expect(found!.threadId).toBeNull();
+    });
+
+    it('creates and cross-links an orphan implement-mode assignment', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const agent = await dbService.createAgent({
+        companyId: company.id,
+        roleId: role.id,
+        initialPrompt: 'Summarise.',
+      });
+
+      const assignment = await assignmentRepo.findOneByOrFail({
+        id: agent.assignmentId,
+      });
+      // Orphan (no task), implement mode, prompt copied, back-linked to the agent.
+      expect(assignment.taskId).toBeNull();
+      expect(assignment.mode).toBe('implement');
+      expect(assignment.status).toBe('in-progress');
+      expect(assignment.prompt).toBe('Summarise.');
+      expect(assignment.agentId).toBe(agent.id);
+      expect(assignment.companyId).toBe(company.id);
+      expect(assignment.roleId).toBe(role.id);
+      // Default required tool for implement mode (TODO(010.2.5): complete_assignment).
+      expect(agent.requiredToolCalls).toEqual(['complete_task']);
+    });
+
+    it('honours a supplied mode and does not create a second assignment', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const agent = await dbService.createAgent({
+        companyId: company.id,
+        roleId: role.id,
+        initialPrompt: 'Plan it.',
+        mode: 'plan',
+      });
+
+      const assignment = await assignmentRepo.findOneByOrFail({
+        id: agent.assignmentId,
+      });
+      expect(assignment.mode).toBe('plan');
+      expect(agent.requiredToolCalls).toEqual(['create_plan']);
+      expect(await assignmentRepo.count()).toBe(1);
+    });
+
+    it('attaches to a supplied assignment without creating an orphan', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const existing = await assignmentRepo.save(
+        assignmentRepo.create({
+          taskId: null,
+          companyId: company.id,
+          roleId: role.id,
+          mode: 'implement',
+          prompt: 'Pre-made.',
+          status: 'in-progress',
+        }),
+      );
+
+      const agent = await dbService.createAgent({
+        companyId: company.id,
+        roleId: role.id,
+        initialPrompt: 'Pre-made.',
+        assignmentId: existing.id,
+      });
+
+      expect(agent.assignmentId).toBe(existing.id);
+      // No extra assignment created.
+      expect(await assignmentRepo.count()).toBe(1);
     });
 
     it('getAgent returns null for unknown id', async () => {

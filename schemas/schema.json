@@ -591,6 +591,15 @@
       "additionalProperties": false,
       "description": "A running instance of an  {@link  LcpRole }  within an  {@link  LcpCompany } . Each agent has a LangGraph `thread_id` (stored as  {@link  LcpAgent.threadId } ) that links it to its checkpoint in the PostgreSQL checkpoint store, enabling resumability.",
       "properties": {
+        "assignment": {
+          "$ref": "#/definitions/LcpAssignment",
+          "description": "The  {@link  LcpAssignment }  this agent works. Every agent has one — task work uses the task's assignment; plain conversations, API-started agents, and consultations get an auto-created \"orphan\" assignment. The agent's mode is this assignment's mode (there is no mode column on the agent)."
+        },
+        "assignmentId": {
+          "$ref": "#/definitions/UUID",
+          "description": "Foreign key for the owning  {@link  LcpAssignment } .",
+          "format": "uuid"
+        },
         "company": {
           "$ref": "#/definitions/LcpCompany",
           "description": "The company this agent belongs to."
@@ -729,6 +738,8 @@
         }
       },
       "required": [
+        "assignment",
+        "assignmentId",
         "company",
         "companyId",
         "createdAt",
@@ -1601,6 +1612,28 @@
           "required": [
             "current",
             "planAssignments"
+          ],
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "seedAssignment": {
+      "$comment": "(companyId: UUID, roleId: UUID) =>undefined",
+      "properties": {
+        "namedArgs": {
+          "additionalProperties": false,
+          "properties": {
+            "companyId": {
+              "$ref": "#/definitions/UUID"
+            },
+            "roleId": {
+              "$ref": "#/definitions/UUID"
+            }
+          },
+          "required": [
+            "companyId",
+            "roleId"
           ],
           "type": "object"
         }

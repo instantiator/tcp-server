@@ -4,8 +4,10 @@ import {
   AuditEvent,
   AuditEventType,
   LcpAgent,
+  LcpAssignment,
   LcpCompany,
   LcpRole,
+  LcpTask,
   McpClientService,
 } from '@lcp/shared';
 import { ConfigModule } from '@nestjs/config';
@@ -43,6 +45,7 @@ describe('ChatService integration (stub LLM)', () => {
   let service: ChatService;
   let agentEvents: AgentEventService;
   let agentRepo: Repository<LcpAgent>;
+  let assignmentRepo: Repository<LcpAssignment>;
   let roleRepo: Repository<LcpRole>;
   let companyRepo: Repository<LcpCompany>;
   let auditRepo: Repository<AuditEvent>;
@@ -70,6 +73,20 @@ describe('ChatService integration (stub LLM)', () => {
     });
   }
 
+  /** Orphan implement-mode assignment for a chat agent's mandatory FK. */
+  function seedAssignment() {
+    return assignmentRepo.save(
+      assignmentRepo.create({
+        taskId: null,
+        companyId: testCompanyId,
+        roleId: testRoleId,
+        mode: 'implement',
+        prompt: '',
+        status: 'in-progress',
+      }),
+    );
+  }
+
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [
@@ -77,10 +94,24 @@ describe('ChatService integration (stub LLM)', () => {
         TypeOrmModule.forRoot({
           type: 'postgres',
           url: DATABASE_URL,
-          entities: [LcpAgent, LcpRole, LcpCompany, AuditEvent],
+          entities: [
+            LcpAgent,
+            LcpRole,
+            LcpCompany,
+            LcpTask,
+            LcpAssignment,
+            AuditEvent,
+          ],
           synchronize: true,
         }),
-        TypeOrmModule.forFeature([LcpAgent, LcpRole, LcpCompany, AuditEvent]),
+        TypeOrmModule.forFeature([
+          LcpAgent,
+          LcpRole,
+          LcpCompany,
+          LcpTask,
+          LcpAssignment,
+          AuditEvent,
+        ]),
         ContextModule,
       ],
       providers: [
@@ -103,6 +134,7 @@ describe('ChatService integration (stub LLM)', () => {
     service = moduleRef.get(ChatService);
     agentEvents = moduleRef.get(AgentEventService);
     agentRepo = moduleRef.get(getRepositoryToken(LcpAgent));
+    assignmentRepo = moduleRef.get(getRepositoryToken(LcpAssignment));
     roleRepo = moduleRef.get(getRepositoryToken(LcpRole));
     companyRepo = moduleRef.get(getRepositoryToken(LcpCompany));
     auditRepo = moduleRef.get(getRepositoryToken(AuditEvent));
@@ -140,6 +172,7 @@ describe('ChatService integration (stub LLM)', () => {
     // Clean up test fixtures
     await auditRepo.delete({ companyId: testCompanyId });
     await agentRepo.delete({ companyId: testCompanyId });
+    await assignmentRepo.delete({ companyId: testCompanyId });
     await roleRepo.delete({ companyId: testCompanyId });
     await companyRepo.delete({ id: testCompanyId });
     await agentEvents.onModuleDestroy();
@@ -149,10 +182,12 @@ describe('ChatService integration (stub LLM)', () => {
   it('streams a message end-to-end and completes with the stub response', async () => {
     await setStubResponse('Hello from stub LLM!');
 
+    const assignment = await seedAssignment();
     const agent = await agentRepo.save(
       agentRepo.create({
         companyId: testCompanyId,
         roleId: testRoleId,
+        assignmentId: assignment.id,
         status: AgentStatus.Idle,
         initialPrompt: '',
       }),
@@ -180,10 +215,12 @@ describe('ChatService integration (stub LLM)', () => {
   it('writes LlmRequest and LlmResponse audit events', async () => {
     await setStubResponse('Audit test response');
 
+    const assignment = await seedAssignment();
     const agent = await agentRepo.save(
       agentRepo.create({
         companyId: testCompanyId,
         roleId: testRoleId,
+        assignmentId: assignment.id,
         status: AgentStatus.Idle,
         initialPrompt: '',
       }),

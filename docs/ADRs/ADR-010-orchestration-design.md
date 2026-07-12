@@ -191,3 +191,19 @@ completed` lifecycle sketch): `status` is
 Still outstanding: the planner role agent, multi-step plan execution, the QA
 review cycle, and task/assignment cancellation — tracked across the
 remaining `010.2.x` sub-plans.
+
+## Amendments as implemented (010.2.4)
+
+- **Every `LcpAgent` now carries an assignment** (`assignmentId`, non-nullable
+  FK, `ON DELETE CASCADE`). Task work uses the task's assignment; plain
+  conversations, API-started agents (`/api/agent/start`, `/api/agent/chat/start`),
+  and consultations get an auto-created **orphan** implement-mode assignment
+  (`taskId: null`, `status: in-progress`, prompt copied from the agent's
+  `initialPrompt`). `DbService.createAgent` creates the orphan and cross-links
+  it (agent → assignment, assignment.agentId → agent) in one transaction. The
+  agent's mode is its assignment's mode; there is no mode column on `LcpAgent`.
+  The destructive `AddAgentAssignment` migration deletes all existing
+  `lcp_agent` rows (a non-nullable FK cannot be backfilled). See the
+  [ADR-013 010.2.4 amendment](ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-01024)
+  for how the assignment drives prompt part 4.
+- `plan`/`qa` modes exist but nothing dispatches them yet (parts 5/7).

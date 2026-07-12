@@ -12,21 +12,18 @@ import {
   DEFAULT_AGENT_LOOP_TIMEOUT_MS,
   DEFAULT_LLM_CONTEXT_WINDOW,
   DEFAULT_REQUIRED_TOOL_RETRIES,
-  DEFAULT_SYSTEM_PROMPT_TEMPLATE,
   LcpAgent,
   LlmConfig,
   StreamEventLike,
   SupervisedGraphResult,
   ToolVisibilityTracker,
   buildAgentGraph,
-  buildPromptDateVars,
   mapStreamEvent,
   renderTemplate,
   resolveEnvLlmConfig,
   resolveLlmConfig,
   resolveMcpServerList,
   resolveRunConfig,
-  resolveSystemPromptTemplate,
   runSupervisedGraph,
 } from '@lcp/shared';
 import { Injectable, Logger } from '@nestjs/common';
@@ -37,7 +34,7 @@ import { Repository } from 'typeorm';
 import { agentPrompts } from '../agent-prompts';
 import { buildChatModel } from '../llm/llm-factory';
 import { McpClientService } from '../mcp/mcp-client.service';
-import { MCP_REGISTRY, resolveMcpServerUrls } from '../mcp/mcp-registry';
+import { resolveMcpServerUrls } from '../mcp/mcp-registry';
 import { AgentRagService } from '../rag/agent-rag.service';
 import { StorageTrackingClientService } from '../storage-tracking/storage-tracking-client.service';
 import { AgentEventPublisherService } from './agent-event-publisher.service';
@@ -48,6 +45,12 @@ import {
   createTracker,
   generateActionString,
 } from './loop-tracker';
+import {
+  buildAssignmentMessage,
+  buildRagMessage,
+  buildServicesMessage,
+  renderSystemPrompt,
+} from './prompt-assembly';
 
 /** Maps LangGraph v2 event names to {@link AuditEventType} values. */
 const EVENT_TYPE_MAP: Record<string, AuditEventType> = {
@@ -151,7 +154,8 @@ export class AgentLoopService {
   ): Promise<void> {
     const agent = await this.agentRepo.findOne({
       where: { id: agentId },
-      relations: { role: true, company: true },
+      // The assignment (and its task) drive prompt part 4 — see buildInitialState.
+      relations: { role: true, company: true, assignment: { task: true } },
     });
     if (!agent) {
       this.logger.error(`Agent ${agentId} not found — skipping job`);
@@ -618,24 +622,8 @@ export class AgentLoopService {
     mcpServerUrls: Record<string, string>,
     initialPrompt: string,
   ): Promise<typeof MessagesAnnotation.State> {
-    const { role, company } = agent;
-    const systemPromptTemplate = resolveSystemPromptTemplate(
-      role,
-      company,
-      DEFAULT_SYSTEM_PROMPT_TEMPLATE,
-    );
-    const systemPrompt = renderTemplate(systemPromptTemplate, {
-      name: role.name,
-      description: role.description,
-      ...buildPromptDateVars(company),
-      companyId: agent.companyId,
-      roleId: role.id,
-      // Slugs alongside the ids so the agent can consult by slug (see
-      // request_agent_consultation's companySlug/roleSlug), which reads
-      // more naturally in a rendered prompt than a bare UUID.
-      companySlug: company.slug,
-      roleSlug: role.slug,
-    });
+    const { role, company, assignment } = agent;
+    const systemPrompt = renderSystemPrompt(agent, role, company);
 
     const ragChunks = await this.rag.retrieve(
       role.id,
@@ -648,12 +636,31 @@ export class AgentLoopService {
       : null;
 
     const loadedServerNames = [...new Set(mcpTools.map((t) => t.serverName))];
-    const servicesMessage =
-      loadedServerNames.length > 0
-        ? new HumanMessage(
-            buildServicesMessage(loadedServerNames, mcpServerUrls),
-          )
-        : null;
+    const servicesText = buildServicesMessage(loadedServerNames, mcpServerUrls);
+    const servicesMessage = servicesText
+      ? new HumanMessage(servicesText)
+      : null;
+
+    // Prompt part 4: assignment presentation — the mode prompt plus the
+    // assignment prompt (already context-prepared as `initialPrompt`) and any
+    // materials/expected outputs. Replaces the old bare initial-prompt message.
+    const assignmentMessage = new HumanMessage(
+      buildAssignmentMessage({
+        mode: assignment.mode,
+        prompt: initialPrompt,
+        materials: assignment.materials,
+        expected: assignment.expected,
+        resolutionContext: {
+          companySlug: company.slug,
+          task: assignment.task ?? null,
+          assignment: {
+            id: assignment.id,
+            taskId: assignment.taskId ?? null,
+            orderIndex: assignment.orderIndex ?? null,
+          },
+        },
+      }),
+    );
 
     return {
       messages: [
@@ -667,8 +674,8 @@ export class AgentLoopService {
           : []),
         // Prompt part 3: services available (MCP servers). Call describe_server on any for details.
         ...(servicesMessage ? [servicesMessage] : []),
-        // Prompt part 4: task / query prompt
-        new HumanMessage(initialPrompt),
+        // Prompt part 4: assignment presentation (mode prompt + assignment prompt + materials/expected)
+        assignmentMessage,
         // Prompt part 5: RAG data retrieved for the initial task (omitted when nothing relevant)
         ...(ragMessage ? [ragMessage] : []),
         // Prompt part 6: episodic memory — recalled prior run summaries relevant to this task (not yet implemented)
@@ -769,49 +776,4 @@ export class AgentLoopService {
       { newStatus, reason },
     );
   }
-}
-
-/**
- * Formats the services-available message for prompt part 3.
- * Each line gives the "when to use this" framing from {@link MCP_REGISTRY};
- * tool-level detail is deliberately omitted — a service's other tools only
- * become bound once the agent calls its `describe_server` tool (see
- * {@link ToolVisibilityTracker}), so restating them here would duplicate
- * what the model sees once it actually describes the service.
- */
-function buildServicesMessage(
-  serverNames: string[],
-  serverUrls: Record<string, string>,
-): string {
-  const lines = serverNames
-    .filter((n) => serverUrls[n])
-    .map((n) => {
-      const usage = MCP_REGISTRY.find((s) => s.name === n)?.usage;
-      return usage
-        ? renderTemplate(agentPrompts.services_item, { name: n, usage })
-        : renderTemplate(agentPrompts.services_item_unknown, { name: n });
-    });
-
-  if (lines.length === 0) return '';
-
-  return [
-    agentPrompts.services_header,
-    '',
-    agentPrompts.services_intro,
-    '',
-    lines.join('\n'),
-  ].join('\n');
-}
-
-/** Formats RAG chunks as a prompt part 5 message. */
-function buildRagMessage(
-  chunks: { documentPath: string; content: string }[],
-): string {
-  const sections = chunks
-    .map(
-      (c) =>
-        `${renderTemplate(agentPrompts.rag_source_header, { documentPath: c.documentPath })}\n\n${c.content}`,
-    )
-    .join('\n\n---\n\n');
-  return `${agentPrompts.rag_intro}\n\n${sections}`;
 }

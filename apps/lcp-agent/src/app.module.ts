@@ -2,8 +2,10 @@ import {
   AuditEvent,
   KnowledgeChunk,
   LcpAgent,
+  LcpAssignment,
   LcpCompany,
   LcpRole,
+  LcpTask,
   makeTypeOrmConfig,
 } from '@lcp/shared';
 import { Module } from '@nestjs/common';
@@ -28,6 +30,10 @@ import { AgentWorkerModule } from './worker/agent-worker.module';
       LcpCompany,
       LcpRole,
       LcpAgent,
+      // LcpAgent's mandatory assignment FK (and the assignment's task relation
+      // loaded in AgentLoopService.run) require these registered too.
+      LcpTask,
+      LcpAssignment,
       AuditEvent,
       KnowledgeChunk,
     ]),

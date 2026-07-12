@@ -7,6 +7,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { LcpAssignment } from './LcpAssignment.model';
 import { LcpCompany } from './LcpCompany.model';
 import { LcpRole } from './LcpRole.model';
 import { VersionedEntity } from './VersionedEntity';
@@ -64,6 +65,22 @@ export class LcpAgent extends VersionedEntity {
    */
   @Column()
   roleId!: UUID;
+
+  /**
+   * The {@link LcpAssignment} this agent works. Every agent has one — task
+   * work uses the task's assignment; plain conversations, API-started agents,
+   * and consultations get an auto-created "orphan" assignment. The agent's
+   * mode is this assignment's mode (there is no mode column on the agent).
+   */
+  @ManyToOne(() => LcpAssignment, { nullable: false, onDelete: 'CASCADE' })
+  assignment!: LcpAssignment;
+
+  /**
+   * Foreign key for the owning {@link LcpAssignment}.
+   * @format uuid
+   */
+  @Column()
+  assignmentId!: UUID;
 
   /** Current lifecycle state of this agent. */
   @Column({ type: 'varchar', default: AgentStatus.Idle })
