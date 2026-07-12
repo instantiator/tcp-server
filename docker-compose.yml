@@ -92,7 +92,8 @@ services:
   lcp-server:
     build:
       context: .
-      dockerfile: apps/lcp-server/Dockerfile
+      dockerfile: Dockerfile
+      target: lcp-server
     image: lcp-server:latest
     restart: unless-stopped
     environment:
@@ -135,7 +136,8 @@ services:
   lcp-agent:
     build:
       context: .
-      dockerfile: apps/lcp-agent/Dockerfile
+      dockerfile: Dockerfile
+      target: lcp-agent
     image: lcp-agent:latest
     restart: unless-stopped
     environment:
@@ -172,7 +174,8 @@ services:
   lcp-mcp-storage:
     build:
       context: .
-      dockerfile: apps/lcp-mcp-storage/Dockerfile
+      dockerfile: Dockerfile
+      target: lcp-mcp-storage
     image: lcp-mcp-storage:latest
     restart: unless-stopped
     environment:
@@ -192,7 +195,8 @@ services:
   lcp-mcp-memory:
     build:
       context: .
-      dockerfile: apps/lcp-mcp-memory/Dockerfile
+      dockerfile: Dockerfile
+      target: lcp-mcp-memory
     image: lcp-mcp-memory:latest
     restart: unless-stopped
     environment:
@@ -213,7 +217,8 @@ services:
   lcp-mcp-interactions:
     build:
       context: .
-      dockerfile: apps/lcp-mcp-interactions/Dockerfile
+      dockerfile: Dockerfile
+      target: lcp-mcp-interactions
     image: lcp-mcp-interactions:latest
     restart: unless-stopped
     environment:
@@ -233,7 +238,8 @@ services:
   lcp-mcp-tasks:
     build:
       context: .
-      dockerfile: apps/lcp-mcp-tasks/Dockerfile
+      dockerfile: Dockerfile
+      target: lcp-mcp-tasks
     image: lcp-mcp-tasks:latest
     restart: unless-stopped
     environment:
