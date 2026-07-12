@@ -32,20 +32,14 @@ done
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPTS="$REPO_ROOT/scripts"
 
-# Pre-flight: bail if any lcp-* containers are already running.
-# The integration and e2e suites now get their own testcontainers-managed
-# stacks on random host ports, so they no longer collide with a dev stack. This
-# check remains for the api/smoke step below, which starts the full deployment
-# on fixed host ports (3000, 8080, ...) that a running lcp-dev would clash with.
-conflicting=$(docker ps --format '{{.Names}}' 2>/dev/null | grep '^lcp-' || true)
-if [ -n "$conflicting" ]; then
-  echo "ERROR: LCP containers are already running:" >&2
-  # shellcheck disable=SC2001 # sed reads better than ${var//} for multi-line prefixing
-  echo "$conflicting" | sed 's/^/  /' >&2
-  echo "" >&2
-  echo "Stop them (e.g. 'docker compose -p lcp-dev down') before running the full suite." >&2
-  exit 1
-fi
+# shellcheck source=scripts/lib/check-no-lcp-running.sh
+source "$SCRIPTS/lib/check-no-lcp-running.sh"
+
+# Pre-flight: bail if any lcp-* containers are already running. Beyond the
+# resource contention the sourced check itself guards against, the api/smoke
+# step below starts the full deployment on fixed host ports (3000, 8080, ...)
+# that a running lcp-dev would collide with outright.
+check_no_lcp_containers_running || exit 1
 
 DEPLOYMENT_PROJECT=lcp-all
 DEPLOYMENT_STARTED=false
