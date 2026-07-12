@@ -26,10 +26,10 @@ Calling Agent ──► interactions__request_agent_consultation
 
 ### 2. Consultation agent runs
 
-The consultation agent runs as a normal agent job, created with `requiredToolCalls: ['complete_task']` — its answer is only delivered via `complete_task`, so lcp-agent will not accept a narrated (text-only) ending. If the stream ends without the call, the agent is reminded up to `AGENT_REQUIRED_TOOL_RETRIES` times (default 2) before the run is failed. When it calls `complete_task(agentId, finalAnswer)`:
+The consultation agent runs as a normal agent job, created with `requiredToolCalls: ['complete_assignment']` — its answer is only delivered via `complete_assignment`, so lcp-agent will not accept a narrated (text-only) ending. If the stream ends without the call, the agent is reminded up to `AGENT_REQUIRED_TOOL_RETRIES` times (default 2) before the run is failed. When it calls `complete_assignment(agentId, summary, prepared)`:
 
 ```
-Consulting Agent ──► interactions__complete_task
+Consulting Agent ──► tasks__complete_assignment
                        │
                        └──► POST /internal/agent/:agentId/complete
                              │
@@ -42,11 +42,11 @@ Consulting Agent ──► interactions__complete_task
 
 ### 3. Calling agent resumes
 
-Once the calling agent has no other outstanding requests (see below), it resumes from its checkpoint with the consultation result — and any other responses from the same pause episode — injected into context. It then continues with that information: asking for clarification, writing files, or calling `complete_task` itself.
+Once the calling agent has no other outstanding requests (see below), it resumes from its checkpoint with the consultation result — and any other responses from the same pause episode — injected into context. It then continues with that information: asking for clarification, writing files, or calling `complete_assignment` itself.
 
 ### Consultation failure
 
-If the consultation agent fails — an LLM error, a timeout or max-iterations abort, or exhausting its required-tool reminders without calling `complete_task` — the failure propagates instead of leaving the caller paused forever:
+If the consultation agent fails — an LLM error, a timeout or max-iterations abort, or exhausting its required-tool reminders without calling `complete_assignment` — the failure propagates instead of leaving the caller paused forever:
 
 ```
 lcp-agent (failing run) ──► POST /internal/agent/:agentId/fail { reason }
@@ -60,7 +60,7 @@ The resume message renders failed consultations as:
 
 > `Consultation FAILED: <reason>. Use your own judgement about how to proceed; if a response is essential, consider escalating to a user via request_user_input.`
 
-The calling agent decides what to do — retry with a different role, continue without the answer, or escalate to a human. An agent that merely _declines_ to answer is not a failure: it says so via `complete_task` and the refusal flows back as a normal consultation response.
+The calling agent decides what to do — retry with a different role, continue without the answer, or escalate to a human. An agent that merely _declines_ to answer is not a failure: it says so via `complete_assignment` and the refusal flows back as a normal consultation response.
 
 ### Sequence diagram
 
@@ -81,7 +81,7 @@ sequenceDiagram
     CA-->>CA: Detects paused, exits stream
 
     Q->>CON: Run consultation agent
-    CON->>I: complete_task(consultingAgentId, finalAnswer)
+    CON->>I: complete_assignment(consultingAgentId, summary, prepared)
     I->>S: POST /internal/agent/:consultingId/complete
     S-->>S: Set consulting agent = completed<br/>Mark PendingConsultation complete
     S->>S: resumeAgent(callingAgentId)

@@ -1,0 +1,498 @@
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
+import { Test, TestingModule } from '@nestjs/testing';
+import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
+import {
+  AgentStatus,
+  LcpAgent,
+  LcpAssignment,
+  LcpCompany,
+  LcpRole,
+  LcpTask,
+} from '@lcp/shared';
+import { randomUUID, type UUID } from 'crypto';
+import { Repository } from 'typeorm';
+import { DbService } from '../db/db.service';
+import { StorageService } from '../storage/storage.service';
+import { PauseAndResumeService } from './pause-and-resume.service';
+import { TaskDispatcher } from './task-dispatcher.service';
+import { AssignmentService } from './assignment.service';
+
+const ENTITIES = [LcpCompany, LcpRole, LcpAgent, LcpTask, LcpAssignment];
+
+/**
+ * Exercises {@link AssignmentService} against a real in-memory SQLite DB so the
+ * atomic conditional UPDATEs, the completion output-gate, and the state
+ * transitions are covered end-to-end (only StorageService, DbService,
+ * TaskDispatcher, and PauseAndResumeService — which have no DB of their own
+ * here — are mocked).
+ */
+describe('AssignmentService', () => {
+  let moduleRef: TestingModule;
+  let service: AssignmentService;
+  let agentRepo: Repository<LcpAgent>;
+  let assignmentRepo: Repository<LcpAssignment>;
+  let taskRepo: Repository<LcpTask>;
+  let companyRepo: Repository<LcpCompany>;
+  let roleRepo: Repository<LcpRole>;
+
+  let storage: { checkMissingFiles: jest.Mock };
+  let db: { getCompany: jest.Mock; findRoleByIdOrSlug: jest.Mock };
+  let dispatcher: {
+    taskPlanned: jest.Mock;
+    assignmentReadyForQa: jest.Mock;
+    assignmentAssured: jest.Mock;
+  };
+  let pauseResume: { completeAgent: jest.Mock };
+
+  beforeAll(async () => {
+    moduleRef = await Test.createTestingModule({
+      imports: [
+        TypeOrmModule.forRoot({
+          type: 'better-sqlite3',
+          database: ':memory:',
+          entities: ENTITIES,
+          synchronize: true,
+        }),
+        TypeOrmModule.forFeature(ENTITIES),
+      ],
+    }).compile();
+
+    agentRepo = moduleRef.get(getRepositoryToken(LcpAgent));
+    assignmentRepo = moduleRef.get(getRepositoryToken(LcpAssignment));
+    taskRepo = moduleRef.get(getRepositoryToken(LcpTask));
+    companyRepo = moduleRef.get(getRepositoryToken(LcpCompany));
+    roleRepo = moduleRef.get(getRepositoryToken(LcpRole));
+  });
+
+  afterAll(async () => {
+    await moduleRef.close();
+  });
+
+  beforeEach(() => {
+    storage = { checkMissingFiles: jest.fn().mockResolvedValue([]) };
+    db = {
+      getCompany: jest.fn(),
+      findRoleByIdOrSlug: jest.fn(),
+    };
+    dispatcher = {
+      taskPlanned: jest.fn().mockResolvedValue(undefined),
+      assignmentReadyForQa: jest.fn().mockResolvedValue(undefined),
+      assignmentAssured: jest.fn().mockResolvedValue(undefined),
+    };
+    pauseResume = { completeAgent: jest.fn().mockResolvedValue(undefined) };
+    service = new AssignmentService(
+      agentRepo,
+      assignmentRepo,
+      taskRepo,
+      db as unknown as DbService,
+      storage as unknown as StorageService,
+      dispatcher as unknown as TaskDispatcher,
+      pauseResume as unknown as PauseAndResumeService,
+    );
+  });
+
+  // --- fixtures -----------------------------------------------------------
+
+  async function seedCompany(): Promise<LcpCompany> {
+    return companyRepo.save(
+      companyRepo.create({
+        slug: `acme-${randomSlug()}`,
+        name: 'ACME',
+        description: 'A test company',
+      }),
+    );
+  }
+  async function seedRole(companyId: UUID): Promise<LcpRole> {
+    return roleRepo.save(
+      roleRepo.create({
+        companyId,
+        slug: `role-${randomSlug()}`,
+        name: 'analyst',
+        description: 'x',
+      }),
+    );
+  }
+  async function seedTask(
+    companyId: UUID,
+    status: LcpTask['status'] = 'planning',
+  ): Promise<LcpTask> {
+    return taskRepo.save(
+      taskRepo.create({ companyId, request: 'do it', status }),
+    );
+  }
+  async function seedAssignment(
+    partial: Partial<LcpAssignment>,
+  ): Promise<LcpAssignment> {
+    const company = partial.companyId
+      ? { id: partial.companyId }
+      : await seedCompany();
+    const role = partial.roleId
+      ? { id: partial.roleId }
+      : await seedRole(company.id);
+    return assignmentRepo.save(
+      assignmentRepo.create({
+        companyId: company.id,
+        roleId: role.id,
+        mode: 'implement',
+        prompt: 'work',
+        status: 'in-progress',
+        materials: [],
+        expected: [],
+        prepared: [],
+        approved: [],
+        ...partial,
+      }),
+    );
+  }
+  async function seedAgent(
+    companyId: UUID,
+    roleId: UUID,
+    assignmentId: UUID,
+  ): Promise<LcpAgent> {
+    return agentRepo.save(
+      agentRepo.create({ companyId, roleId, assignmentId, initialPrompt: 'x' }),
+    );
+  }
+  function randomSlug(): string {
+    return Math.random().toString(36).slice(2, 8);
+  }
+
+  // --- getAgentAssignment -------------------------------------------------
+
+  describe('getAgentAssignment', () => {
+    it('returns the assignment and its task', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id);
+      const assignment = await seedAssignment({
+        companyId: company.id,
+        roleId: role.id,
+        taskId: task.id,
+        mode: 'plan',
+      });
+      const agent = await seedAgent(company.id, role.id, assignment.id);
+
+      const result = await service.getAgentAssignment(agent.id);
+      expect(result.assignment.id).toBe(assignment.id);
+      expect(result.task?.id).toBe(task.id);
+    });
+
+    it('404s for an unknown agent', async () => {
+      await expect(
+        service.getAgentAssignment(randomUUID()),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  // --- planTask -----------------------------------------------------------
+
+  describe('planTask', () => {
+    async function setupPlanner(taskStatus: LcpTask['status'] = 'planning') {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, taskStatus);
+      const planAssignment = await seedAssignment({
+        companyId: company.id,
+        roleId: role.id,
+        taskId: task.id,
+        mode: 'plan',
+        status: 'in-progress',
+      });
+      const agent = await seedAgent(company.id, role.id, planAssignment.id);
+      db.findRoleByIdOrSlug.mockResolvedValue({ id: role.id });
+      return { company, role, task, agent };
+    }
+
+    it('creates ordered implement assignments and claims the task', async () => {
+      const { task, agent } = await setupPlanner();
+      const result = await service.planTask(task.id, agent.id, [
+        { prompt: 'a', role: 'analyst', expected: [] },
+        {
+          prompt: 'b',
+          role: 'analyst',
+          expected: [{ type: 'assignment-working-path', value: 'out.md' }],
+        },
+      ]);
+
+      expect(result.created).toBe(2);
+      const created = await assignmentRepo.find({
+        where: { taskId: task.id, mode: 'implement' },
+        order: { orderIndex: 'ASC' },
+      });
+      expect(created.map((a) => a.orderIndex)).toEqual([0, 1]);
+      expect(created.every((a) => a.status === 'ready')).toBe(true);
+      const freshTask = await taskRepo.findOneByOrFail({ id: task.id });
+      expect(freshTask.status).toBe('in-progress');
+      expect(dispatcher.taskPlanned).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects a non-plan-mode caller', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id);
+      const a = await seedAssignment({
+        companyId: company.id,
+        roleId: role.id,
+        taskId: task.id,
+        mode: 'implement',
+      });
+      const agent = await seedAgent(company.id, role.id, a.id);
+      await expect(
+        service.planTask(task.id, agent.id, [
+          { prompt: 'a', role: 'analyst', expected: [] },
+        ]),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('rejects an empty plan', async () => {
+      const { task, agent } = await setupPlanner();
+      await expect(
+        service.planTask(task.id, agent.id, []),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('rejects an unresolvable role', async () => {
+      const { task, agent } = await setupPlanner();
+      db.findRoleByIdOrSlug.mockResolvedValue(null);
+      await expect(
+        service.planTask(task.id, agent.id, [
+          { prompt: 'a', role: 'ghost', expected: [] },
+        ]),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('rejects a disallowed expected artifact type', async () => {
+      const { task, agent } = await setupPlanner();
+      await expect(
+        service.planTask(task.id, agent.id, [
+          {
+            prompt: 'a',
+            role: 'analyst',
+            expected: [{ type: 'task-materials-path', value: 'x' }] as never,
+          },
+        ]),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('409s a double plan (task no longer planning)', async () => {
+      const { task, agent } = await setupPlanner();
+      await service.planTask(task.id, agent.id, [
+        { prompt: 'a', role: 'analyst', expected: [] },
+      ]);
+      await expect(
+        service.planTask(task.id, agent.id, [
+          { prompt: 'a', role: 'analyst', expected: [] },
+        ]),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+  });
+
+  // --- completeAssignment -------------------------------------------------
+
+  describe('completeAssignment', () => {
+    async function setupImplementer(partial: Partial<LcpAssignment> = {}) {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const assignment = await seedAssignment({
+        companyId: company.id,
+        roleId: role.id,
+        status: 'in-progress',
+        mode: 'implement',
+        ...partial,
+      });
+      const agent = await seedAgent(company.id, role.id, assignment.id);
+      await assignmentRepo.update(assignment.id, { agentId: agent.id });
+      db.getCompany.mockResolvedValue({ id: company.id, slug: company.slug });
+      return { company, role, assignment, agent };
+    }
+
+    it('completes an orphan assignment and completes the agent', async () => {
+      const { assignment, agent } = await setupImplementer({ taskId: null });
+      await service.completeAssignment(assignment.id, agent.id, 'all done', []);
+
+      const fresh = await assignmentRepo.findOneByOrFail({ id: assignment.id });
+      expect(fresh.status).toBe('succeeded');
+      expect(fresh.summary).toBe('all done');
+      expect(pauseResume.completeAgent).toHaveBeenCalledWith(
+        agent.id,
+        'all done',
+      );
+    });
+
+    it('hands a task assignment to QA and pauses the agent', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, 'in-progress');
+      const { assignment, agent } = await setupImplementer({
+        companyId: company.id,
+        roleId: role.id,
+        taskId: task.id,
+        orderIndex: 0,
+      });
+      db.getCompany.mockResolvedValue({ id: company.id, slug: company.slug });
+
+      await service.completeAssignment(assignment.id, agent.id, 'done', []);
+
+      const fresh = await assignmentRepo.findOneByOrFail({ id: assignment.id });
+      expect(fresh.status).toBe('in-qa');
+      expect(fresh.prepared).toEqual([]);
+      const freshAgent = await agentRepo.findOneByOrFail({ id: agent.id });
+      expect(freshAgent.status).toBe(AgentStatus.Paused);
+      expect(freshAgent.pausedAt).toBeTruthy();
+      expect(dispatcher.assignmentReadyForQa).toHaveBeenCalledTimes(1);
+      expect(pauseResume.completeAgent).not.toHaveBeenCalled();
+    });
+
+    it('422s when an expected file is not among prepared', async () => {
+      const { assignment, agent } = await setupImplementer({
+        taskId: null,
+        expected: [{ type: 'assignment-working-path', value: 'report.md' }],
+      });
+      await expect(
+        service.completeAssignment(assignment.id, agent.id, 'done', []),
+      ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    });
+
+    it('422s when a prepared file is missing from storage', async () => {
+      const { company, assignment, agent } = await setupImplementer({
+        taskId: null,
+      });
+      storage.checkMissingFiles.mockResolvedValue([
+        `${company.slug}/assignments/${assignment.id}/working/out.md`,
+      ]);
+      await expect(
+        service.completeAssignment(assignment.id, agent.id, 'done', [
+          { type: 'assignment-working-path', value: 'out.md' },
+        ]),
+      ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    });
+
+    it('passes an inline-text expectation matched by regex', async () => {
+      const { assignment, agent } = await setupImplementer({
+        taskId: null,
+        expected: [{ type: 'inline-text', value: '^APPROVED' }],
+      });
+      await service.completeAssignment(assignment.id, agent.id, 'done', [
+        { type: 'inline-text', value: 'APPROVED: ship it' },
+      ]);
+      const fresh = await assignmentRepo.findOneByOrFail({ id: assignment.id });
+      expect(fresh.status).toBe('succeeded');
+    });
+
+    it('422s an inline-text expectation not matched by regex', async () => {
+      const { assignment, agent } = await setupImplementer({
+        taskId: null,
+        expected: [{ type: 'inline-text', value: '^APPROVED' }],
+      });
+      await expect(
+        service.completeAssignment(assignment.id, agent.id, 'done', [
+          { type: 'inline-text', value: 'rejected' },
+        ]),
+      ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    });
+
+    it('rejects a caller that is not the assignment agent', async () => {
+      const { assignment } = await setupImplementer({ taskId: null });
+      await expect(
+        service.completeAssignment(assignment.id, randomUUID(), 'done', []),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('409s a double completion', async () => {
+      const { assignment, agent } = await setupImplementer({ taskId: null });
+      await service.completeAssignment(assignment.id, agent.id, 'done', []);
+      await expect(
+        service.completeAssignment(assignment.id, agent.id, 'done', []),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+  });
+
+  // --- assureAssignment ---------------------------------------------------
+
+  describe('assureAssignment', () => {
+    async function setupQa() {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const target = await seedAssignment({
+        companyId: company.id,
+        roleId: role.id,
+        mode: 'implement',
+        status: 'in-qa',
+      });
+      const qaAssignment = await seedAssignment({
+        companyId: company.id,
+        roleId: role.id,
+        mode: 'qa',
+        status: 'in-progress',
+        targetAssignmentId: target.id,
+      });
+      const qaAgent = await seedAgent(company.id, role.id, qaAssignment.id);
+      return { target, qaAssignment, qaAgent };
+    }
+
+    it('records an accept verdict and completes the QA agent', async () => {
+      const { target, qaAssignment, qaAgent } = await setupQa();
+      await service.assureAssignment(
+        target.id,
+        qaAgent.id,
+        'accept',
+        undefined,
+      );
+
+      const freshTarget = await assignmentRepo.findOneByOrFail({
+        id: target.id,
+      });
+      expect(freshTarget.qaStatus).toBe('accepted');
+      const freshQa = await assignmentRepo.findOneByOrFail({
+        id: qaAssignment.id,
+      });
+      expect(freshQa.status).toBe('succeeded');
+      expect(dispatcher.assignmentAssured).toHaveBeenCalledTimes(1);
+      expect(pauseResume.completeAgent).toHaveBeenCalledTimes(1);
+    });
+
+    it('records a reject verdict with feedback', async () => {
+      const { target, qaAgent } = await setupQa();
+      await service.assureAssignment(target.id, qaAgent.id, 'reject', 'fix it');
+      const freshTarget = await assignmentRepo.findOneByOrFail({
+        id: target.id,
+      });
+      expect(freshTarget.qaStatus).toBe('rejected');
+      expect(freshTarget.qaFeedback).toBe('fix it');
+    });
+
+    it('409s a double assurance', async () => {
+      const { target, qaAgent } = await setupQa();
+      await service.assureAssignment(
+        target.id,
+        qaAgent.id,
+        'accept',
+        undefined,
+      );
+      await expect(
+        service.assureAssignment(target.id, qaAgent.id, 'accept', undefined),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('rejects a caller whose QA assignment targets a different assignment', async () => {
+      const { qaAgent } = await setupQa();
+      await expect(
+        service.assureAssignment(randomUUID(), qaAgent.id, 'accept', undefined),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('409s when the target is not in QA', async () => {
+      const { target, qaAgent } = await setupQa();
+      await assignmentRepo.update(target.id, { status: 'in-progress' });
+      await expect(
+        service.assureAssignment(target.id, qaAgent.id, 'accept', undefined),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+  });
+});

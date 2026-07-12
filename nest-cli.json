@@ -89,6 +89,20 @@
           { "include": "tools.jsonc", "outDir": "dist/apps/lcp-mcp-interactions" }
         ]
       }
+    },
+    "lcp-mcp-tasks": {
+      "type": "application",
+      "root": "apps/lcp-mcp-tasks",
+      "entryFile": "main",
+      "sourceRoot": "apps/lcp-mcp-tasks/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/lcp-mcp-tasks/tsconfig.app.json",
+        "plugins": ["@nestjs/swagger"],
+        "assets": [
+          { "include": "prompts.jsonc", "outDir": "dist/apps/lcp-mcp-tasks" },
+          { "include": "tools.jsonc", "outDir": "dist/apps/lcp-mcp-tasks" }
+        ]
+      }
     }
   }
 }

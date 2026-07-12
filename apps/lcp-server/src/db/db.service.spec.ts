@@ -819,8 +819,8 @@ describe('DbService', () => {
       expect(assignment.agentId).toBe(agent.id);
       expect(assignment.companyId).toBe(company.id);
       expect(assignment.roleId).toBe(role.id);
-      // Default required tool for implement mode (TODO(010.2.5): complete_assignment).
-      expect(agent.requiredToolCalls).toEqual(['complete_task']);
+      // Default required tool for implement mode.
+      expect(agent.requiredToolCalls).toEqual(['complete_assignment']);
     });
 
     it('honours a supplied mode and does not create a second assignment', async () => {

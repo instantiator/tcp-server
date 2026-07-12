@@ -24,6 +24,7 @@ import { CompanyUserController } from './company-user.controller';
 import { ConversationController } from './conversation.controller';
 import { ConversationService } from './conversation.service';
 import { InternalController } from './internal.controller';
+import { InternalTaskController } from './internal-task.controller';
 import { KnowledgeController } from './knowledge.controller';
 import { ModelController } from './api.model.controller';
 import { RoleController } from './api.role.controller';
@@ -33,6 +34,7 @@ import { StorageValidationController } from './storage-validation.controller';
 import { TaskController } from './task.controller';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { ApiService } from './api.service';
+import { AssignmentService } from './assignment.service';
 import { ChatService } from './chat.service';
 import { KnowledgeService } from './knowledge.service';
 import { PauseAndResumeService } from './pause-and-resume.service';
@@ -66,6 +68,7 @@ import { TaskService } from './task.service';
     CompanyUserController,
     ConversationController,
     InternalController,
+    InternalTaskController,
     KnowledgeController,
     RoleController,
     StorageActionsController,
@@ -78,6 +81,7 @@ import { TaskService } from './task.service';
   providers: [
     ApiService,
     AgentOrchestrationService,
+    AssignmentService,
     ChatService,
     ConversationService,
     KnowledgeService,

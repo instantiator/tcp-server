@@ -28,6 +28,11 @@ updates:
       interval: weekly
 
   - package-ecosystem: docker
+    directory: "/apps/lcp-mcp-tasks"
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
     directory: "/apps/lcp-mcp-memory"
     schedule:
       interval: weekly

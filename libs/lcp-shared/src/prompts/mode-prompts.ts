@@ -6,17 +6,15 @@ import type { LcpAssignmentMode } from '../models/LcpAssignment.model';
  * assignment's mode; this text tells the agent what "done" means for that mode
  * and which tool completes it.
  *
- * TODO(010.2.5): the `implement` prompt names the current completion tool
- * `complete_task`; part 5 renames it to `complete_assignment` (and makes the
- * `plan`/`qa` tools live). Until then nothing dispatches `plan`/`qa` agents,
- * so their prompts describe tools that are not yet callable — that is expected.
+ * The `implement` mode completes via `complete_assignment` on the tasks
+ * service (lcp-mcp-tasks); `plan`/`qa` complete via `create_plan`/
+ * `assure_assignment` on the same service.
  */
 export const MODE_PROMPTS: Record<LcpAssignmentMode, string> = {
   implement: [
     'You are working an IMPLEMENT assignment. Carry out the assignment prompt below and produce the work it asks for.',
     'Any highlighted materials are listed under "Materials"; they are your starting point, but you may also explore the shared storage service read-only for other material relevant to the work.',
-    // TODO(010.2.5): rename `complete_task` → `complete_assignment` here.
-    "You MUST finish by doing the work and then calling the `complete_task` tool on the tasks service, passing the artifacts to list as complete. Those artifacts must meet or exceed the assignment's expected outputs listed below.",
+    "You MUST finish by doing the work and then calling the `complete_assignment` tool on the tasks service, passing the artifacts you prepared. Those artifacts must meet or exceed the assignment's expected outputs listed below.",
     'Call `describe_server` on the tasks service first for the exact tool signature and details.',
   ].join('\n\n'),
 
@@ -38,9 +36,6 @@ export const MODE_PROMPTS: Record<LcpAssignmentMode, string> = {
 /**
  * The tool call an agent in the given mode must make before its run may end
  * (fed into {@link LcpAgent.requiredToolCalls} at creation).
- *
- * TODO(010.2.5): `implement` returns the current `complete_task`; part 5
- * renames it to `complete_assignment`.
  */
 export function requiredToolForMode(mode: LcpAssignmentMode): string {
   switch (mode) {
@@ -49,7 +44,6 @@ export function requiredToolForMode(mode: LcpAssignmentMode): string {
     case 'qa':
       return 'assure_assignment';
     case 'implement':
-      // TODO(010.2.5): rename to `complete_assignment`.
-      return 'complete_task';
+      return 'complete_assignment';
   }
 }

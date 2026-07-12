@@ -349,7 +349,7 @@ export class AgentLoopService {
       }
 
       // The stream ended without the agent reaching a terminal status. Agents
-      // with required tool calls (default: complete_task) are reminded and
+      // with required tool calls (default: complete_assignment) are reminded and
       // re-streamed instead of falling back to narrated text — a narrated
       // "completion" would never resolve a pending consultation.
       const requiredTools = this.resolveRequiredTools(agent, langchainTools);
@@ -384,7 +384,7 @@ export class AgentLoopService {
         return;
       }
 
-      // Fallback completion — notifyComplete is idempotent if complete_task was called.
+      // Fallback completion — notifyComplete is idempotent if complete_assignment was called.
       // Write output directly first so lcp-server's recovery/replay path can read
       // it (the completed event originates there); notifyComplete may lag.
       await this.agentRepo.update(agent.id, { output: content });
@@ -493,7 +493,7 @@ export class AgentLoopService {
 
   /**
    * Resolves the tool calls this agent must make before its run may end.
-   * Null on the agent means the default (`complete_task`); an empty array
+   * Null on the agent means the default (`complete_assignment`); an empty array
    * opts out. Required tools missing from the loaded toolset are dropped
    * with a warning — a role without the relevant MCP server must not fail
    * every run inevitably.
@@ -502,7 +502,7 @@ export class AgentLoopService {
     agent: LcpAgent,
     tools: { name: string }[],
   ): string[] {
-    const required = agent.requiredToolCalls ?? ['complete_task'];
+    const required = agent.requiredToolCalls ?? ['complete_assignment'];
     const available = new Set(tools.map((t) => baseToolName(t.name)));
     return required.filter((toolName) => {
       if (available.has(toolName)) return true;
@@ -537,7 +537,7 @@ export class AgentLoopService {
 
     for (let attempt = 1; attempt <= retries; attempt++) {
       // Distinguish "never called" from "called but the call did not succeed"
-      // (the tool fired yet the status never flipped, e.g. complete_task errored).
+      // (the tool fired yet the status never flipped, e.g. complete_assignment errored).
       const missing = requiredTools.filter((t) => !tracker.firedTools.has(t));
       const nudge = missing.length
         ? renderTemplate(agentPrompts.required_tools_reminder, {
@@ -592,7 +592,7 @@ export class AgentLoopService {
    * resumes the calling agent, and emits the terminal `failed` event to any SSE
    * clients observing this agent).
    *
-   * No-op if the agent has already reached Completed — `complete_task` may
+   * No-op if the agent has already reached Completed — `complete_assignment` may
    * have won the race against a late failure (e.g. a summary error).
    */
   private async failRun(agent: LcpAgent, reason: string): Promise<void> {

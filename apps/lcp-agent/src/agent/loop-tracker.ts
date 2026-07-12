@@ -76,8 +76,12 @@ export function generateActionString(
       // roleName is an optional label — roleId is always present and is the
       // actual lookup key, so fall back to it if no name was given.
       return `Consulted role '${s(input.roleName) || s(input.roleId)}': ${s(input.question)}`;
-    case 'complete_task':
-      return `Submitted task completion`;
+    case 'create_plan':
+      return `Submitted task plan`;
+    case 'complete_assignment':
+      return `Submitted assignment completion`;
+    case 'assure_assignment':
+      return `Submitted QA verdict: ${s(input.qa)}`;
     default:
       return `Called tool: ${toolName}`;
   }

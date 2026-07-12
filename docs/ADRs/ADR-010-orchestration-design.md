@@ -207,3 +207,23 @@ remaining `010.2.x` sub-plans.
   [ADR-013 010.2.4 amendment](ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-01024)
   for how the assignment drives prompt part 4.
 - `plan`/`qa` modes exist but nothing dispatches them yet (parts 5/7).
+
+## Amendments as implemented (010.2.5)
+
+- **Plan creation is now a tool**, not a drafted internal call. A `plan`-mode
+  agent turns its task into a plan via `create_plan` on the new
+  [lcp-mcp-tasks](../lcp-mcp-tasks.md) MCP server (port 3013), which proxies
+  `POST /internal/task/:taskId/plan`. The endpoint validates the caller
+  (plan mode, assignment belongs to the task), atomically claims the task
+  `planning → in-progress`, and creates the ordered implement-mode
+  `LcpAssignment` rows (`orderIndex` 0…n−1, status `ready`). The reaction that
+  actually dispatches the first assignment is part 7 — here `TaskDispatcher`
+  exposes `taskPlanned`/`assignmentReadyForQa`/`assignmentAssured` hooks that are
+  logged no-ops.
+- **The state transitions backing the three mode tools** (`create_plan`,
+  `complete_assignment`, `assure_assignment`) live in `AssignmentService` on
+  lcp-server, guarded by `InternalApiKeyGuard`. Each uses an atomic conditional
+  `UPDATE` (the `pausedAt` claim pattern) so double/concurrent calls resolve to
+  one winner; the loser gets a `409`. The MCP server holds no state — it
+  resolves the caller's assignment (`GET /internal/agent/:id/assignment`),
+  mode-gates the tool, and relays validation/gate errors verbatim.

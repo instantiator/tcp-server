@@ -86,7 +86,9 @@ flowchart LR
     MC -->|HTTP POST /mcp| S[lcp-mcp-storage :3010]
     MC -->|HTTP POST /mcp| M[lcp-mcp-memory :3011]
     MC -->|HTTP POST /mcp| I[lcp-mcp-interactions :3012]
+    MC -->|HTTP POST /mcp| T[lcp-mcp-tasks :3013]
     S -->|HTTP POST /internal/storage/*, X-Internal-Api-Key| LS[lcp-server]
+    T -->|HTTP POST /internal/*, X-Internal-Api-Key| LS
     LS --> MIO[(MinIO)]
 ```
 
@@ -94,11 +96,12 @@ Each MCP server uses the **Streamable HTTP transport** with a stateless per-requ
 
 ### Available servers
 
-| Server                                          | Port | Status      | Description                                                                    |
-| ----------------------------------------------- | ---- | ----------- | ------------------------------------------------------------------------------ |
-| [lcp-mcp-storage](lcp-mcp-storage.md)           | 3010 | Implemented | Read/write access to the shared MinIO object store, proxied through lcp-server |
-| [lcp-mcp-memory](lcp-mcp-memory.md)             | 3011 | Stub        | Semantic search over episodic memory and role knowledge base                   |
-| [lcp-mcp-interactions](lcp-mcp-interactions.md) | 3012 | Stub        | Request input from a human user or consult another agent by role               |
+| Server                                          | Port | Status      | Description                                                                             |
+| ----------------------------------------------- | ---- | ----------- | --------------------------------------------------------------------------------------- |
+| [lcp-mcp-storage](lcp-mcp-storage.md)           | 3010 | Implemented | Read/write access to the shared MinIO object store, proxied through lcp-server          |
+| [lcp-mcp-memory](lcp-mcp-memory.md)             | 3011 | Stub        | Semantic search over episodic memory and role knowledge base                            |
+| [lcp-mcp-interactions](lcp-mcp-interactions.md) | 3012 | Implemented | Request input from a human user or consult another agent by role                        |
+| [lcp-mcp-tasks](lcp-mcp-tasks.md)               | 3013 | Implemented | Complete your assignment — plan a task, submit finished work, or assure QA (mode-gated) |
 
 See the individual server docs for tool reference, argument details, and implementation status.
 
@@ -116,9 +119,9 @@ At agent startup, `McpClientService` loads tools from each listed server. Tools 
 
 The agent receives prompt part 3 listing available servers and is directed to call `describe_server` on each before using its tools.
 
-**Tool-schema gating (since 008.6):** only each server's `describe_server` tool is bound to the model from the start of a run; a server's other tools become bound only after the agent calls that server's `describe_server`, and stay bound for a small number of iterations before being hidden again. This is tracked per-run, in memory only (not checkpointed), by `ToolVisibilityTracker` (`libs/lcp-shared/src/llm/tool-visibility-tracker.ts`) and is orthogonal to the identity-stripping behaviour below — it changes _when_ a tool's schema is visible to the model, not what arguments it needs to supply. The `interactions` server is exempt (its tools are essential control-flow calls — e.g. `complete_task` — that must stay reachable at all times). See [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-0086).
+**Tool-schema gating (since 008.6):** only each server's `describe_server` tool is bound to the model from the start of a run; a server's other tools become bound only after the agent calls that server's `describe_server`, and stay bound for a small number of iterations before being hidden again. This is tracked per-run, in memory only (not checkpointed), by `ToolVisibilityTracker` (`libs/lcp-shared/src/llm/tool-visibility-tracker.ts`) and is orthogonal to the identity-stripping behaviour below — it changes _when_ a tool's schema is visible to the model, not what arguments it needs to supply. The `interactions` server is exempt (its tools are essential control-flow calls — e.g. `request_user_input` — that must stay reachable at all times). The `tasks` server is _not_ exempt: its `describe_server` is always visible but its mode-gated completion tools (`create_plan`/`complete_assignment`/`assure_assignment`) are revealed only after the agent describes it. See [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-0086).
 
-**Identity fields (`agentId`, `companyId`):** `loadTools` accepts an optional context (`{ agentId, companyId }`) for the agent currently running. Any tool parameter matching one of those names is removed from the schema the LLM sees and the real value substituted on every call, regardless of what (if anything) the LLM supplies — the LLM has no reliable way to know its own `agentId` (it's a DB id, not part of its context) and shouldn't be trusted to assert one. This is why `request_user_input`/`request_agent_consultation`/`complete_task` in `lcp-mcp-interactions` no longer need `agentId`/`companyId` filled in by the model, even though those fields are still part of the MCP server's published tool schema.
+**Identity fields (`agentId`, `companyId`):** `loadTools` accepts an optional context (`{ agentId, companyId }`) for the agent currently running. Any tool parameter matching one of those names is removed from the schema the LLM sees and the real value substituted on every call, regardless of what (if anything) the LLM supplies — the LLM has no reliable way to know its own `agentId` (it's a DB id, not part of its context) and shouldn't be trusted to assert one. This is why `request_user_input`/`request_agent_consultation` in `lcp-mcp-interactions` and `create_plan`/`complete_assignment`/`assure_assignment` in `lcp-mcp-tasks` no longer need `agentId`/`companyId` filled in by the model, even though those fields are still part of the MCP server's published tool schema.
 
 ### MCP server URLs
 
@@ -129,6 +132,7 @@ MCP server URLs are resolved from environment variables:
 | `MCP_STORAGE_URL`      | `http://lcp-mcp-storage:3010/mcp`      |
 | `MCP_MEMORY_URL`       | `http://lcp-mcp-memory:3011/mcp`       |
 | `MCP_INTERACTIONS_URL` | `http://lcp-mcp-interactions:3012/mcp` |
+| `MCP_TASKS_URL`        | `http://lcp-mcp-tasks:3013/mcp`        |
 
 If a variable is unset, that server is silently skipped. Agents run with only the servers that resolved successfully.
 

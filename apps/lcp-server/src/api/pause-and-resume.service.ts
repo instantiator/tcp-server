@@ -16,7 +16,7 @@ const CONSULTATION_PROMPT_SUFFIX = [
   '',
   'This is a consultation request from another agent. Provide a complete, concise answer.',
   'If you create output files, reference them in your final answer.',
-  'Call `interactions__complete_task` with your final answer when done.',
+  'Call `tasks__complete_assignment` with your answer as the summary when done.',
 ].join('\n');
 
 /**
@@ -158,9 +158,10 @@ export class PauseAndResumeService {
       companyId,
       roleId: role.id,
       initialPrompt,
-      // Consultation results are only delivered via complete_task — a narrated
-      // answer would never resolve the PendingConsultation, so enforce the call.
-      requiredToolCalls: ['complete_task'],
+      // Consultation results are only delivered via complete_assignment — a
+      // narrated answer would never resolve the PendingConsultation, so enforce
+      // the call. The consulting agent's orphan assignment is implement-mode.
+      requiredToolCalls: ['complete_assignment'],
     });
 
     // Record the link between the paused caller and the new consulting agent.

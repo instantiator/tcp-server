@@ -33,6 +33,7 @@ export const configSchema = Joi.object({
   MCP_STORAGE_URL: Joi.string().uri().empty('').optional(),
   MCP_MEMORY_URL: Joi.string().uri().empty('').optional(),
   MCP_INTERACTIONS_URL: Joi.string().uri().empty('').optional(),
+  MCP_TASKS_URL: Joi.string().uri().empty('').optional(),
   LLM_PROVIDER: Joi.string().empty('').optional(),
   LLM_MODEL: Joi.string().empty('').optional(),
   LLM_BASE_URL: Joi.string().uri().empty('').optional(),

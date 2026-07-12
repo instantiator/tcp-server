@@ -634,17 +634,17 @@ describe('AgentLoopService', () => {
 
   describe('required tool call enforcement', () => {
     const INTERACTIONS_TOOL = {
-      serverName: 'interactions',
-      tool: { name: 'interactions__complete_task' },
+      serverName: 'tasks',
+      tool: { name: 'tasks__complete_assignment' },
     };
 
-    // Event set where the agent invoked complete_task but the call did not
+    // Event set where the agent invoked complete_assignment but the call did not
     // flip the status (e.g. the tool errored). No on_tool_end, so no status
     // re-read fires mid-stream.
     const TOOL_FIRED_EVENTS = [
       {
         event: 'on_tool_start',
-        name: 'interactions__complete_task',
+        name: 'tasks__complete_assignment',
         run_id: 'run-1',
         data: { input: {} },
       },
@@ -665,7 +665,7 @@ describe('AgentLoopService', () => {
       );
     }
 
-    it('reminds the agent and takes the completed path when complete_task fires after the nudge', async () => {
+    it('reminds the agent and takes the completed path when complete_assignment fires after the nudge', async () => {
       mcpClient.loadTools.mockResolvedValueOnce([INTERACTIONS_TOOL]);
       const graph = makeSequentialStubGraph(SUCCESS_EVENTS, SUCCESS_EVENTS);
       mockToolGraphOnce(graph);
@@ -675,7 +675,7 @@ describe('AgentLoopService', () => {
         .spyOn(agentRepo, 'findOneBy')
         // Post-stream re-read: still running — enforcement kicks in
         .mockResolvedValueOnce({ ...agent, status: AgentStatus.Running })
-        // Re-read after the nudge round: complete_task flipped the status
+        // Re-read after the nudge round: complete_assignment flipped the status
         .mockResolvedValueOnce({
           ...agent,
           status: AgentStatus.Completed,
@@ -690,7 +690,7 @@ describe('AgentLoopService', () => {
       ];
       expect(nudgeInput.messages[0].content).toBe(
         renderTemplate(agentPrompts.required_tools_reminder, {
-          tools: 'interactions__complete_task',
+          tools: 'tasks__complete_assignment',
         }),
       );
       // Completed via the tool path — no fallback write, no failure
@@ -727,7 +727,7 @@ describe('AgentLoopService', () => {
       ];
       expect(nudgeInput.messages[0].content).toBe(
         renderTemplate(agentPrompts.required_tools_call_failed, {
-          tools: 'interactions__complete_task',
+          tools: 'tasks__complete_assignment',
         }),
       );
     });
@@ -756,7 +756,7 @@ describe('AgentLoopService', () => {
       expect(graph.streamEvents).toHaveBeenCalledTimes(3);
       expect(notifyFailed).toHaveBeenCalledWith(
         agent.id,
-        expect.stringContaining('complete_task'),
+        expect.stringContaining('complete_assignment'),
       );
       expect(notifyComplete).not.toHaveBeenCalled();
       const updated = await agentRepo.findOneByOrFail({ id: agent.id });
@@ -792,7 +792,7 @@ describe('AgentLoopService', () => {
       const { agent, role, company } = await seedAgentAndRole();
 
       // runLoop() re-reads agent status after the stream to detect a tool-set
-      // status change (e.g. complete_task); the initial run() lookup hits the
+      // status change (e.g. complete_assignment); the initial run() lookup hits the
       // real DB and eager-loads role/company normally.
       jest
         .spyOn(agentRepo, 'findOneBy')

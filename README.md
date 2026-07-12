@@ -20,7 +20,8 @@ LCP manages one or more companies of AI agents that collaborate to complete task
 | lcp-cli              | User-facing CLI interface to simplify interactions with lcp-server.                               |
 | lcp-server           | API and orchestration service for the system.                                                     |
 | lcp-agent            | Manages agents and the agent loop. Interacts with lcp-server to receive and complete assignments. |
-| lcp-mcp-interactions | MCP tools allowing agents to interact with assignments and task plans.                            |
+| lcp-mcp-interactions | MCP tools allowing agents to ask users questions and consult other agent roles.                   |
+| lcp-mcp-tasks        | MCP tools allowing agents to complete their assignment — plan, submit work, or assure QA.         |
 | lcp-mcp-memory       | MCP tools allowing agents to retrieve memory from their stored expertise.                         |
 | lcp-mcp-storage      | MCP tools allowing agents interact with shared storage.                                           |
 
@@ -114,7 +115,8 @@ flowchart TD
   MinIO[(MinIO :9000\nconsole :9001)]
   McpStorage["lcp-mcp-storage\n:3010"]
   McpMemory["lcp-mcp-memory\n:3011\n(stub)"]
-  McpInteract["lcp-mcp-interactions\n:3012\n(stub)"]
+  McpInteract["lcp-mcp-interactions\n:3012"]
+  McpTasks["lcp-mcp-tasks\n:3013"]
 
   subgraph LCP["LCP (containers)"]
       Server ~~~ Dbs ~~~ Agent ~~~ ThirdParty
@@ -132,7 +134,7 @@ flowchart TD
   subgraph Agent["Agent"]
       LcpAgent
       subgraph MCP
-        McpStorage ~~~ McpMemory ~~~ McpInteract
+        McpStorage ~~~ McpMemory ~~~ McpInteract ~~~ McpTasks
       end
   end
 
@@ -150,7 +152,9 @@ flowchart TD
   LcpAgent -->|HTTP /mcp| McpStorage
   LcpAgent -->|HTTP /mcp| McpMemory
   LcpAgent -->|HTTP /mcp| McpInteract
+  LcpAgent -->|HTTP /mcp| McpTasks
   McpStorage -->|HTTP /internal/storage/*\nX-Internal-Api-Key| LcpServer
+  McpTasks -->|HTTP /internal/*\nX-Internal-Api-Key| LcpServer
 ```
 
 > ### Service overview
@@ -159,10 +163,11 @@ flowchart TD
 > - **lcp-server** communicates directly with the authorisation service, and storage service
 > - **lcp-server** and **lcp-agent** use Postgres to store and manage state, and Redis with BullMQ queues to communicate
 > - **lcp-agent** consumes BullMQ jobs and runs the LangGraph agent loop.
-> - Three MCP servers provide tool access to agents:
+> - Four MCP servers provide tool access to agents:
 >   - **lcp-mcp-storage** proxies file operations to lcp-server's internal storage endpoints
 >   - **lcp-mcp-memory** manages RAG access to embeddings from role-knowledge and company-knowledge, and memories
->   - **lcp-mcp-interactions** manages interactions between
+>   - **lcp-mcp-interactions** lets agents ask users questions and consult other agent roles
+>   - **lcp-mcp-tasks** lets agents complete their assignment — plan a task, submit finished work, or assure another agent's work (mode-gated)
 > - **PostgreSQL** (with pgvector) stores entities, agent checkpoints, and knowledge embeddings
 > - **MinIO** stores knowledge documents, task files, and context-overflow data
 > - **Keycloak** is an optional auth service, which starts if the `auth` profile is specified (ie. with `--profile auth`)

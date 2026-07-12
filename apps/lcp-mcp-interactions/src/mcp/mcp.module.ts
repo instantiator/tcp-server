@@ -1,11 +1,10 @@
 import { Module } from '@nestjs/common';
-import { AuditClientService } from '@lcp/shared';
 import { McpController } from './mcp.controller';
 import { InteractionsToolsService } from './interactions-tools.service';
 
-/** Wires the MCP controller, interactions tools, and audit client. */
+/** Wires the MCP controller and interactions tools. */
 @Module({
   controllers: [McpController],
-  providers: [InteractionsToolsService, AuditClientService],
+  providers: [InteractionsToolsService],
 })
 export class McpModule {}

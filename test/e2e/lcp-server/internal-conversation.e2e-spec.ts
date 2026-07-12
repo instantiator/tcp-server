@@ -269,8 +269,8 @@ describe('InternalController + ConversationController (e2e)', () => {
         id: consult.consultationAgentId,
       });
       expect(consultant.roleId).toBe(role.id);
-      // Consultation agents must deliver their answer via complete_task
-      expect(consultant.requiredToolCalls).toEqual(['complete_task']);
+      // Consultation agents must deliver their answer via complete_assignment
+      expect(consultant.requiredToolCalls).toEqual(['complete_assignment']);
     });
 
     it('targets the correct role when two roles in the company share a name (regression)', async () => {
@@ -507,7 +507,7 @@ describe('InternalController + ConversationController (e2e)', () => {
           status: AgentStatus.Running,
           initialPrompt: 'Analyse this.',
           output: null,
-          requiredToolCalls: ['complete_task'],
+          requiredToolCalls: ['complete_assignment'],
         }),
       );
       await consultRepo.save(
@@ -525,7 +525,7 @@ describe('InternalController + ConversationController (e2e)', () => {
         .set('X-Internal-Api-Key', INTERNAL_KEY)
         .send({
           reason:
-            'Agent ended without successfully calling required tool(s): complete_task after 2 reminder(s)',
+            'Agent ended without successfully calling required tool(s): complete_assignment after 2 reminder(s)',
         })
         .expect(204);
 
@@ -538,11 +538,11 @@ describe('InternalController + ConversationController (e2e)', () => {
         consultationAgentId: consultant.id,
       });
       expect(consult.status).toBe('failed');
-      expect(consult.result).toContain('complete_task');
-      expectLoggedError(capture.logs, /complete_task/);
+      expect(consult.result).toContain('complete_assignment');
+      expectLoggedError(capture.logs, /complete_assignment/);
     });
 
-    it('does not clobber an already-Completed agent (complete_task won the race)', async () => {
+    it('does not clobber an already-Completed agent (complete_assignment won the race)', async () => {
       const company = await createCompany();
       const role = await createRole(company.id);
       const agent = await createRunningAgent(company.id, role.id);

@@ -107,8 +107,9 @@ export class LcpAgent extends VersionedEntity {
 
   /**
    * Final output produced by the agent on completion.
-   * Set via the `complete_task` MCP tool, or as a fallback from the last AI
-   * message when the loop exits naturally.
+   * Set from the assignment `summary` on completion (via the tasks service's
+   * `complete_assignment`), or as a fallback from the last AI message when the
+   * loop exits naturally.
    */
   @Column({ type: 'text', nullable: true })
   output!: string | null;
@@ -116,7 +117,7 @@ export class LcpAgent extends VersionedEntity {
   /**
    * Storage changes accumulated by the agent loop during the current (or last) run.
    * Updated incrementally by lcp-agent as storage MCP tool calls complete.
-   * Used by lcp-mcp-interactions to include context in `complete_task` error messages.
+   * Used to include context in completion/output-gate error messages.
    *
    * Uses `simple-json` (stored as TEXT) for cross-DB compatibility with SQLite unit tests.
    */
@@ -129,9 +130,9 @@ export class LcpAgent extends VersionedEntity {
   } | null;
 
   /**
-   * Tool names (unprefixed, e.g. `complete_task`) that must have been invoked
-   * successfully before the agent loop may end. Null means the default
-   * (`['complete_task']`); an empty array disables enforcement.
+   * Tool names (unprefixed, e.g. `complete_assignment`) that must have been
+   * invoked successfully before the agent loop may end. Null means the default
+   * (`['complete_assignment']`); an empty array disables enforcement.
    *
    * Uses `simple-json` (stored as TEXT) for cross-DB compatibility with SQLite unit tests.
    */

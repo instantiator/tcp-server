@@ -625,7 +625,7 @@
           "type": "string"
         },
         "output": {
-          "description": "Final output produced by the agent on completion. Set via the `complete_task` MCP tool, or as a fallback from the last AI message when the loop exits naturally.",
+          "description": "Final output produced by the agent on completion. Set from the assignment `summary` on completion (via the tasks service's `complete_assignment`), or as a fallback from the last AI message when the loop exits naturally.",
           "type": [
             "string",
             "null"
@@ -648,7 +648,7 @@
               "type": "null"
             }
           ],
-          "description": "Tool names (unprefixed, e.g. `complete_task`) that must have been invoked successfully before the agent loop may end. Null means the default (`['complete_task']`); an empty array disables enforcement.\n\nUses `simple-json` (stored as TEXT) for cross-DB compatibility with SQLite unit tests."
+          "description": "Tool names (unprefixed, e.g. `complete_assignment`) that must have been invoked successfully before the agent loop may end. Null means the default (`['complete_assignment']`); an empty array disables enforcement.\n\nUses `simple-json` (stored as TEXT) for cross-DB compatibility with SQLite unit tests."
         },
         "role": {
           "$ref": "#/definitions/LcpRole",
@@ -718,7 +718,7 @@
               "type": "null"
             }
           ],
-          "description": "Storage changes accumulated by the agent loop during the current (or last) run. Updated incrementally by lcp-agent as storage MCP tool calls complete. Used by lcp-mcp-interactions to include context in `complete_task` error messages.\n\nUses `simple-json` (stored as TEXT) for cross-DB compatibility with SQLite unit tests."
+          "description": "Storage changes accumulated by the agent loop during the current (or last) run. Updated incrementally by lcp-agent as storage MCP tool calls complete. Used to include context in completion/output-gate error messages.\n\nUses `simple-json` (stored as TEXT) for cross-DB compatibility with SQLite unit tests."
         },
         "threadId": {
           "description": "LangGraph checkpoint thread_id. Set to the agent's own UUID on first run. Null until the first BullMQ job is dispatched.",

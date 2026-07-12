@@ -7,8 +7,8 @@ import type { StorageChanges } from '../agent/loop-tracker';
  * Fire-and-forget HTTP client that persists the in-loop storage change tracker
  * to `PATCH /internal/agent/:id/storage` on lcp-server.
  *
- * Storing this on lcp-server allows lcp-mcp-interactions to read it when
- * returning file-validation error messages from `complete_task`.
+ * Storing this on lcp-server lets the assignment output-gate reference the
+ * files an agent created/modified when reporting missing outputs.
  * Errors are logged but never thrown — tracker failures must not affect the run.
  */
 @Injectable()

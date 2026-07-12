@@ -324,7 +324,7 @@ describe('PauseAndResumeService', () => {
         expect.objectContaining({
           companyId: caller.companyId,
           roleId: consultRole.id,
-          requiredToolCalls: ['complete_task'],
+          requiredToolCalls: ['complete_assignment'],
         }),
       );
       expect(consultRepo.save).toHaveBeenCalled();

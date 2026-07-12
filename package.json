@@ -7,7 +7,7 @@
   "license": "MIT",
   "scripts": {
     "build": "npm run build:apps && npm run schema:generate && npm run licenses:generate",
-    "build:apps": "nest build lcp-server && nest build lcp-agent && nest build lcp-mcp-storage && nest build lcp-mcp-memory && nest build lcp-mcp-interactions && nest build lcp-cli",
+    "build:apps": "nest build lcp-server && nest build lcp-agent && nest build lcp-mcp-storage && nest build lcp-mcp-memory && nest build lcp-mcp-interactions && nest build lcp-mcp-tasks && nest build lcp-cli",
     "build:lcp-cli": "nest build lcp-cli",
     "start:lcp-cli": "node dist/apps/lcp-cli/main",
     "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\" \"test/**/*.ts\" \"docs/**/*.md\" \"*.md\" \"apps/**/*.jsonc\"",
@@ -15,7 +15,7 @@
     "start:dev": "nest start lcp-server --watch",
     "start:debug": "nest start lcp-server --debug --watch",
     "start:prod": "node dist/apps/lcp-server/main",
-    "typecheck": "tsc --noemit -p apps/lcp-server/tsconfig.json && tsc --noemit -p apps/lcp-agent/tsconfig.json && tsc --noemit -p apps/lcp-cli/tsconfig.app.json && tsc --noemit -p apps/lcp-mcp-storage/tsconfig.app.json && tsc --noemit -p apps/lcp-mcp-memory/tsconfig.app.json && tsc --noemit -p apps/lcp-mcp-interactions/tsconfig.app.json && tsc --noemit -p libs/lcp-shared/tsconfig.json && tsc --noemit -p test/tsconfig.json",
+    "typecheck": "tsc --noemit -p apps/lcp-server/tsconfig.json && tsc --noemit -p apps/lcp-agent/tsconfig.json && tsc --noemit -p apps/lcp-cli/tsconfig.app.json && tsc --noemit -p apps/lcp-mcp-storage/tsconfig.app.json && tsc --noemit -p apps/lcp-mcp-memory/tsconfig.app.json && tsc --noemit -p apps/lcp-mcp-interactions/tsconfig.app.json && tsc --noemit -p apps/lcp-mcp-tasks/tsconfig.app.json && tsc --noemit -p libs/lcp-shared/tsconfig.json && tsc --noemit -p test/tsconfig.json",
     "lint": "NODE_OPTIONS=--max-old-space-size=4096 eslint \"{apps,libs,test}/**/*.ts\" \"apps/**/*.jsonc\" --fix --cache",
     "lint:check": "NODE_OPTIONS=--max-old-space-size=4096 eslint \"{apps,libs,test}/**/*.ts\" \"apps/**/*.jsonc\" --cache",
     "test": "jest --runInBand",

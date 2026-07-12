@@ -117,10 +117,22 @@ describe('generateActionString', () => {
     ).toBe("Consulted role 'role-123': Check this");
   });
 
-  it('handles complete_task', () => {
-    expect(generateActionString('interactions__complete_task', {})).toBe(
-      'Submitted task completion',
+  it('handles complete_assignment', () => {
+    expect(generateActionString('tasks__complete_assignment', {})).toBe(
+      'Submitted assignment completion',
     );
+  });
+
+  it('handles create_plan', () => {
+    expect(generateActionString('tasks__create_plan', {})).toBe(
+      'Submitted task plan',
+    );
+  });
+
+  it('handles assure_assignment', () => {
+    expect(
+      generateActionString('tasks__assure_assignment', { qa: 'accept' }),
+    ).toBe('Submitted QA verdict: accept');
   });
 
   it('falls back for unknown tools', () => {

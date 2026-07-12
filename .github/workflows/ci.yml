@@ -113,8 +113,8 @@ jobs:
           push: false
           load: true
           tags: lcp-server:latest
-          cache-from: type=gha,scope=lcp-server
-          cache-to: type=gha,scope=lcp-server,mode=max
+          cache-from: type=gha,scope=monorepo-build
+          cache-to: type=gha,scope=monorepo-build,mode=max
       - name: Build lcp-agent image
         uses: docker/build-push-action@v7
         with:
@@ -123,8 +123,8 @@ jobs:
           push: false
           load: true
           tags: lcp-agent:latest
-          cache-from: type=gha,scope=lcp-agent
-          cache-to: type=gha,scope=lcp-agent,mode=max
+          cache-from: type=gha,scope=monorepo-build
+          cache-to: type=gha,scope=monorepo-build,mode=max
       - name: Build lcp-mcp-storage image
         uses: docker/build-push-action@v7
         with:
@@ -133,8 +133,8 @@ jobs:
           push: false
           load: true
           tags: lcp-mcp-storage:latest
-          cache-from: type=gha,scope=lcp-mcp-storage
-          cache-to: type=gha,scope=lcp-mcp-storage,mode=max
+          cache-from: type=gha,scope=monorepo-build
+          cache-to: type=gha,scope=monorepo-build,mode=max
       - name: Build lcp-mcp-memory image
         uses: docker/build-push-action@v7
         with:
@@ -143,8 +143,8 @@ jobs:
           push: false
           load: true
           tags: lcp-mcp-memory:latest
-          cache-from: type=gha,scope=lcp-mcp-memory
-          cache-to: type=gha,scope=lcp-mcp-memory,mode=max
+          cache-from: type=gha,scope=monorepo-build
+          cache-to: type=gha,scope=monorepo-build,mode=max
       - name: Build lcp-mcp-interactions image
         uses: docker/build-push-action@v7
         with:
@@ -153,8 +153,18 @@ jobs:
           push: false
           load: true
           tags: lcp-mcp-interactions:latest
-          cache-from: type=gha,scope=lcp-mcp-interactions
-          cache-to: type=gha,scope=lcp-mcp-interactions,mode=max
+          cache-from: type=gha,scope=monorepo-build
+          cache-to: type=gha,scope=monorepo-build,mode=max
+      - name: Build lcp-mcp-tasks image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/lcp-mcp-tasks/Dockerfile
+          push: false
+          load: true
+          tags: lcp-mcp-tasks:latest
+          cache-from: type=gha,scope=monorepo-build
+          cache-to: type=gha,scope=monorepo-build,mode=max
       - run: npm ci
       - name: Start deployment stack
         run: ./scripts/start-deployment.sh --project lcp-api --env-file .env.testing

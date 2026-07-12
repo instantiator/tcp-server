@@ -1,7 +1,7 @@
 {
   // Directive appended to every agent prompt after all context has been established.
   // Signals the agent to begin work rather than ask clarifying questions.
-  "final_instruction": "You have been given your task and all relevant context above. Proceed now: be thorough, draw on your expertise, and deliver your best work. When you have finished, you MUST invoke the complete_task tool — do not write out what a tool call would look like, actually call it.",
+  "final_instruction": "You have been given your task and all relevant context above. Proceed now: be thorough, draw on your expertise, and deliver your best work. When you have finished, you MUST invoke the completion tool for your mode on the tasks service (see the assignment instructions above) — do not write out what a tool call would look like, actually call it.",
 
   // Heading for prompt part 3 (available MCP services).
   "services_header": "## Available Services",

@@ -128,6 +128,7 @@ wait_for lcp-agent            "curl -sf http://localhost:3001/health"
 wait_for lcp-mcp-storage      "curl -sf http://localhost:3010/health"
 wait_for lcp-mcp-memory       "curl -sf http://localhost:3011/health"
 wait_for lcp-mcp-interactions "curl -sf http://localhost:3012/health"
+wait_for lcp-mcp-tasks        "curl -sf http://localhost:3013/health"
 
 # Keycloak setup (skipped when auth profile is not active)
 if [[ -n "$AUTH_PROFILE" ]]; then
@@ -211,6 +212,7 @@ echo "  lcp-agent              →  http://localhost:3001"
 echo "  lcp-mcp-storage        →  http://localhost:3010"
 echo "  lcp-mcp-memory         →  http://localhost:3011"
 echo "  lcp-mcp-interactions   →  http://localhost:3012"
+echo "  lcp-mcp-tasks          →  http://localhost:3013"
 if [[ -n "$AUTH_PROFILE" ]]; then
   echo "  Keycloak admin         →  http://localhost:8080  (admin / ${KEYCLOAK_ADMIN_PASSWORD})"
 fi
