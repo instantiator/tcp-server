@@ -61,6 +61,36 @@ export class DeleteFileDto {
 
 export class RestoreFileDto extends DeleteFileDto {}
 
+export class AppendFileDto {
+  @IsString()
+  path!: string;
+
+  @IsString()
+  content!: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => OriginatorsDto)
+  originators?: OriginatorsDto;
+}
+
+export class ReplaceFileDto {
+  @IsString()
+  path!: string;
+
+  /** The literal string to find (all occurrences are replaced). */
+  @IsString()
+  find!: string;
+
+  @IsString()
+  replace!: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => OriginatorsDto)
+  originators?: OriginatorsDto;
+}
+
 export class SearchFilesDto {
   @IsOptional()
   @IsString()

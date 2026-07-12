@@ -173,8 +173,23 @@ Both commands write a JSON result to stdout and progress messages to stderr. See
 
 ## Agent access via MCP
 
-Agents read and write files through the [lcp-mcp-storage](lcp-mcp-storage.md) MCP server rather than directly via the S3 API. The server exposes 12 tools including soft delete (files moved to `_deleted/` rather than permanently removed), overwrite safety, file search with glob patterns, metadata inspection, copy, move, and structural file summary. See [lcp-mcp-storage.md](lcp-mcp-storage.md) for the full tool reference.
+Agents interact with storage through the [lcp-mcp-storage](lcp-mcp-storage.md) MCP server rather than directly via the S3 API. Since `docs/prompts/010.2.6` the tools fall into three tiers:
+
+- **Read-only exploration** — `describe_server`, `describe_folder`, `list_files`, `read_file`, `search_files`, `get_file_properties`, `get_file_summary`. Agents may browse and read anything in the shared company folder by full object key.
+- **Assignment-scoped working files** — `list_working_files`, `get_working_file_properties`, `read_working_file`, `append_working_file`, `replace_in_working_file`, `delete_working_file`, `restore_working_file`. The agent supplies **only a filename** (subdirectories allowed); the working-directory prefix is derived server-side from the caller's assignment (see below), so an agent can only write inside its own working area. In **qa mode** these are read-only and target the assignment under review — the mutating variants return a "not available in qa mode" message.
+- **Assignment-scoped materials** — `list_material_files`, `get_material_file_properties`, `read_material_file`. Exposes the caller's assignment's `materials`, resolved to concrete keys (`resolveArtifactKey`); `inline-text` materials are keyed by a synthetic `inline-N` name and read back as their literal content.
+
+The permissive general **write** tools (`write_file`, `delete_file`, `restore_file`, `copy_file`, `move_file`) are no longer exposed to agents — the internal endpoints behind them remain for the knowledge API, storage proxy, and orchestration. See [lcp-mcp-storage.md](lcp-mcp-storage.md) for the full tool reference.
+
+### Scope resolution
+
+The scoped tools resolve their working prefix and materials via `GET /internal/agent/:agentId/storage-scope` (the `agentId` is injected by `McpClientService`, never model-supplied). lcp-server returns `{ mode, readOnly, workingPrefix, materials }`:
+
+- `implement`/`plan` callers get their **own** assignment's working directory (`tasks/{taskId}/assignments/{orderIndex}/working/`, or `assignments/{assignmentId}/working/` for orphans), read/write.
+- `qa` callers get the **target assignment**'s working directory, read-only, and the target's materials view.
+
+Filenames are normalised and rejected if absolute or containing a `..` segment, so a resolved key can never escape the working prefix.
 
 ## Internal storage-action endpoints
 
-Since `docs/prompts/009.4 - doc type validations.md`, the full file-action surface (list, read, write, delete, restore, search, properties, copy, move, summary, exists) lives on `lcp-server` under `POST /internal/storage/*` (plus `GET /internal/storage/exists`), guarded by `X-Internal-Api-Key` rather than JWT — these are service-to-service endpoints backing `lcp-mcp-storage`'s MCP tools, not for direct CLI/human use. `StorageProxyController`'s JWT-guarded `GET/POST /api/storage` remains the human-facing generic get/put-by-key surface. `delete`/`restore` are soft-delete (files move to `_deleted/`), matching the MCP tool semantics described above — `deleteKnowledgeFile` now delegates to the same soft-delete primitive rather than hard-deleting.
+Since `docs/prompts/009.4 - doc type validations.md`, the full file-action surface (list, read, write, delete, restore, search, properties, copy, move, summary, exists) lives on `lcp-server` under `POST /internal/storage/*` (plus `GET /internal/storage/exists`), guarded by `X-Internal-Api-Key` rather than JWT — these are service-to-service endpoints backing `lcp-mcp-storage`'s MCP tools, not for direct CLI/human use. `docs/prompts/010.2.6` added `POST /internal/storage/append` (read-modify-write that creates the file when absent, `created` in the response) and `POST /internal/storage/replace` (all-occurrence literal string replace, returning `count`); both are variants of `write` and re-use its validation/audit/origination plumbing. `StorageProxyController`'s JWT-guarded `GET/POST /api/storage` remains the human-facing generic get/put-by-key surface. `delete`/`restore` are soft-delete (files move to `_deleted/`), matching the MCP tool semantics described above — `deleteKnowledgeFile` now delegates to the same soft-delete primitive rather than hard-deleting.

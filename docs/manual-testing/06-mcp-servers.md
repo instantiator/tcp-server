@@ -92,14 +92,16 @@ curl -s -X POST http://localhost:3010/mcp \
 
 Expected tool list:
 
-| Tool              | Description                                     |
-| ----------------- | ----------------------------------------------- |
-| `describe_server` | Returns an overview of the storage service      |
-| `describe_folder` | Explains the purpose of a folder by path prefix |
-| `list_files`      | Lists files under a path prefix                 |
-| `read_file`       | Reads a file's text content                     |
-| `write_file`      | Creates or overwrites a file                    |
-| `delete_file`     | Deletes a file                                  |
+| Tool                                                                                                                                                                            | Description                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `describe_server`                                                                                                                                                               | Returns an overview of the storage service                            |
+| `describe_folder`                                                                                                                                                               | Explains the purpose of a folder by path prefix                       |
+| `list_files` / `read_file` / `search_files`                                                                                                                                     | Read-only exploration by full object key                              |
+| `get_file_properties` / `get_file_summary`                                                                                                                                      | File metadata / structural summary                                    |
+| `list_working_files` / `read_working_file` / `append_working_file` / `replace_in_working_file` / `delete_working_file` / `restore_working_file` / `get_working_file_properties` | Assignment-scoped working files (filename-only; require an `agentId`) |
+| `list_material_files` / `read_material_file` / `get_material_file_properties`                                                                                                   | Assignment-scoped materials (require an `agentId`)                    |
+
+> The `*_working_file` and `*_material_file` tools take an `agentId` that in production is injected by `McpClientService` and resolved server-side to a working directory. A bare `curl` has no agent context, so the sections below exercise the read-only exploration tools; drive the scoped tools through a real agent run instead.
 
 ---
 
@@ -184,32 +186,12 @@ Expected: a JSON array of file entries including `test-knowledge.md`.
 
 ---
 
-## 6.6 — Write and read a file via MCP
+## 6.6 — Read a file via MCP
 
-Test the write and read tools end to end:
-
-```bash
-# Write
-curl -s -X POST http://localhost:3010/mcp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": 6,
-    "method": "tools/call",
-    "params": {
-      "name": "write_file",
-      "arguments": {
-        "path": "acme/tasks/manual-test/output/hello.txt",
-        "content": "Hello from the MCP storage server."
-      }
-    }
-  }' | jq -r '.result.content[0].text'
-```
-
-Expected: `Written: acme/tasks/manual-test/output/hello.txt`
+Read back a document you uploaded in Section 5 through the read-only `read_file` tool (agent writes go through the assignment-scoped `append_working_file` tool, which needs a real agent context — see the note in 6.2):
 
 ```bash
-# Read back
+# Read (replace the key with one from the 6.5 listing)
 curl -s -X POST http://localhost:3010/mcp \
   -H "Content-Type: application/json" \
   -d '{
@@ -218,12 +200,12 @@ curl -s -X POST http://localhost:3010/mcp \
     "method": "tools/call",
     "params": {
       "name": "read_file",
-      "arguments": { "path": "acme/tasks/manual-test/output/hello.txt" }
+      "arguments": { "path": "acme/knowledge/analyst/test-knowledge.md" }
     }
   }' | jq -r '.result.content[0].text'
 ```
 
-Expected: `Hello from the MCP storage server.`
+Expected: the file's text content, or `File not found: {path}` if the key does not exist.
 
 ---
 

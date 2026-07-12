@@ -14,6 +14,7 @@ export const MODE_PROMPTS: Record<LcpAssignmentMode, string> = {
   implement: [
     'You are working an IMPLEMENT assignment. Carry out the assignment prompt below and produce the work it asks for.',
     'Any highlighted materials are listed under "Materials"; they are your starting point, but you may also explore the shared storage service read-only for other material relevant to the work.',
+    'Produce your outputs as working files via the storage service: `append_working_file` (creates the file on first use), `replace_in_working_file`, and `read_working_file`/`list_working_files` operate on your own working directory — you pass just a filename. These are the files you then hand to `complete_assignment`.',
     "You MUST finish by doing the work and then calling the `complete_assignment` tool on the tasks service, passing the artifacts you prepared. Those artifacts must meet or exceed the assignment's expected outputs listed below.",
     'Call `describe_server` on the tasks service first for the exact tool signature and details.',
   ].join('\n\n'),

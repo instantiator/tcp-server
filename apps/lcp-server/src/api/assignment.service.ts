@@ -1,12 +1,15 @@
 import {
   AgentStatus,
+  assignmentWorkingPrefix,
   deriveTaskStatus,
   LcpAgent,
   LcpArtifact,
   LcpAssignment,
+  LcpAssignmentMode,
   LcpAssignmentStatus,
   LcpAssignmentWorkingArtifact,
   LcpTask,
+  orphanWorkingPrefix,
   resolveArtifactKey,
 } from '@lcp/shared';
 import {
@@ -26,6 +29,31 @@ import { StorageService } from '../storage/storage.service';
 import { PauseAndResumeService } from './pause-and-resume.service';
 import { TaskDispatcher } from './task-dispatcher.service';
 import type { PlanAssignmentInput } from './dto/internal-task.dto';
+
+/** A single material resolved to a concrete storage key (or literal inline text). */
+export interface ResolvedMaterial {
+  /** Stable name the model addresses the material by (`inline-N` for inline text). */
+  name: string;
+  /** Full storage key, or `null` for an inline-text material. */
+  key: string | null;
+  /** Literal content, present only for inline-text materials. */
+  inlineText?: string;
+}
+
+/**
+ * The storage scope for an agent, resolved server-side from its assignment —
+ * backs the assignment-scoped storage tools in lcp-mcp-storage (part 6). For a
+ * qa-mode caller the scope is the *target* assignment's (read-only).
+ */
+export interface StorageScope {
+  mode: LcpAssignmentMode;
+  /** True for qa-mode callers — the working tools may only read. */
+  readOnly: boolean;
+  /** Object-key prefix (ending in `/`) of the scoped working directory. */
+  workingPrefix: string;
+  /** The scoped assignment's materials, resolved to concrete keys/inline text. */
+  materials: ResolvedMaterial[];
+}
 
 /** Artifact types permitted in an assignment's `expected`/`prepared` lists. */
 const WORKING_ARTIFACT_TYPES = new Set([
@@ -95,6 +123,102 @@ export class AssignmentService {
       ? await this.taskRepo.findOneBy({ id: assignment.taskId })
       : null;
     return { assignment, task };
+  }
+
+  /**
+   * Resolves the {@link StorageScope} for an agent — the working-directory
+   * prefix and materials the assignment-scoped storage tools operate on.
+   *
+   * `implement`/`plan` callers get their own assignment's working directory
+   * (read/write); a `qa` caller gets the *target* assignment's working
+   * directory, read-only. Materials are the scoped assignment's `materials`,
+   * resolved to concrete storage keys ({@link resolveArtifactKey}), with
+   * inline-text materials keyed by a stable `inline-N` synthetic name.
+   */
+  async resolveStorageScope(agentId: UUID): Promise<StorageScope> {
+    const { assignment: caller } = await this.getAgentAssignment(agentId);
+    const readOnly = caller.mode === 'qa';
+    const target = readOnly ? await this.loadTargetAssignment(caller) : caller;
+
+    const company = await this.db.getCompany(caller.companyId);
+    if (!company) {
+      throw new NotFoundException(`Company ${caller.companyId} not found`);
+    }
+    const slug = company.slug;
+
+    const workingPrefix =
+      target.taskId != null && target.orderIndex != null
+        ? assignmentWorkingPrefix(slug, target.taskId, target.orderIndex)
+        : orphanWorkingPrefix(slug, target.id);
+
+    const materials = await this.resolveMaterials(slug, target);
+    return { mode: caller.mode, readOnly, workingPrefix, materials };
+  }
+
+  /** Loads the assignment a qa-mode caller is reviewing. */
+  private async loadTargetAssignment(
+    caller: LcpAssignment,
+  ): Promise<LcpAssignment> {
+    if (!caller.targetAssignmentId) {
+      throw new BadRequestException(
+        `Your qa assignment has no target assignment to review.`,
+      );
+    }
+    return this.loadAssignment(caller.targetAssignmentId);
+  }
+
+  /**
+   * Resolves an assignment's `materials` list to {@link ResolvedMaterial}s.
+   * Storage-backed materials that cannot yet be resolved (e.g. an
+   * `assignment-completed-path` no prior assignment has approved) are omitted
+   * rather than failing the whole scope lookup.
+   */
+  private async resolveMaterials(
+    slug: string,
+    target: LcpAssignment,
+  ): Promise<ResolvedMaterial[]> {
+    const planAssignments = target.taskId
+      ? (
+          await this.assignmentRepo.find({
+            where: { taskId: target.taskId, mode: 'implement' },
+          })
+        ).map((a) => ({ orderIndex: a.orderIndex, approved: a.approved }))
+      : undefined;
+    const ctx = {
+      companySlug: slug,
+      task: target.taskId ? { id: target.taskId } : null,
+      planAssignments,
+      assignment: {
+        id: target.id,
+        taskId: target.taskId ?? null,
+        orderIndex: target.orderIndex ?? null,
+      },
+    };
+
+    const materials: ResolvedMaterial[] = [];
+    let inlineCount = 0;
+    for (const m of target.materials) {
+      if (m.type === 'inline-text') {
+        inlineCount += 1;
+        materials.push({
+          name: `inline-${inlineCount}`,
+          key: null,
+          inlineText: m.value,
+        });
+        continue;
+      }
+      try {
+        const key = resolveArtifactKey(m, ctx);
+        // ponytail: name = the artifact's filename; two path materials with
+        // the same basename would collide — acceptable until it bites.
+        if (key) materials.push({ name: m.value, key });
+      } catch (e) {
+        this.logger.warn(
+          `Skipping unresolvable material '${m.value}' (${m.type}): ${String(e)}`,
+        );
+      }
+    }
+    return materials;
   }
 
   /**

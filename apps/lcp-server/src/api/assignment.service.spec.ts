@@ -190,6 +190,102 @@ describe('AssignmentService', () => {
     });
   });
 
+  // --- resolveStorageScope ------------------------------------------------
+
+  describe('resolveStorageScope', () => {
+    it('scopes an implement task assignment to its own working directory (read/write)', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id);
+      const assignment = await seedAssignment({
+        companyId: company.id,
+        roleId: role.id,
+        taskId: task.id,
+        orderIndex: 2,
+        materials: [{ type: 'task-materials-path', value: 'brief.md' }],
+      });
+      const agent = await seedAgent(company.id, role.id, assignment.id);
+      db.getCompany.mockResolvedValue({ id: company.id, slug: 'acme' });
+
+      const scope = await service.resolveStorageScope(agent.id);
+      expect(scope.readOnly).toBe(false);
+      expect(scope.mode).toBe('implement');
+      expect(scope.workingPrefix).toBe(
+        `acme/tasks/${task.id}/assignments/2/working/`,
+      );
+      expect(scope.materials).toEqual([
+        { name: 'brief.md', key: `acme/tasks/${task.id}/materials/brief.md` },
+      ]);
+    });
+
+    it('scopes an orphan assignment to the orphan working directory', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const assignment = await seedAssignment({
+        companyId: company.id,
+        roleId: role.id,
+        taskId: null,
+      });
+      const agent = await seedAgent(company.id, role.id, assignment.id);
+      db.getCompany.mockResolvedValue({ id: company.id, slug: 'acme' });
+
+      const scope = await service.resolveStorageScope(agent.id);
+      expect(scope.workingPrefix).toBe(
+        `acme/assignments/${assignment.id}/working/`,
+      );
+    });
+
+    it('scopes a qa caller to the target assignment, read-only', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id);
+      const target = await seedAssignment({
+        companyId: company.id,
+        roleId: role.id,
+        taskId: task.id,
+        orderIndex: 0,
+      });
+      const qaAssignment = await seedAssignment({
+        companyId: company.id,
+        roleId: role.id,
+        taskId: task.id,
+        mode: 'qa',
+        targetAssignmentId: target.id,
+      });
+      const agent = await seedAgent(company.id, role.id, qaAssignment.id);
+      db.getCompany.mockResolvedValue({ id: company.id, slug: 'acme' });
+
+      const scope = await service.resolveStorageScope(agent.id);
+      expect(scope.readOnly).toBe(true);
+      expect(scope.mode).toBe('qa');
+      expect(scope.workingPrefix).toBe(
+        `acme/tasks/${task.id}/assignments/0/working/`,
+      );
+    });
+
+    it('resolves inline-text materials to stable synthetic names', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const assignment = await seedAssignment({
+        companyId: company.id,
+        roleId: role.id,
+        taskId: null,
+        materials: [
+          { type: 'inline-text', value: 'first note' },
+          { type: 'inline-text', value: 'second note' },
+        ],
+      });
+      const agent = await seedAgent(company.id, role.id, assignment.id);
+      db.getCompany.mockResolvedValue({ id: company.id, slug: 'acme' });
+
+      const scope = await service.resolveStorageScope(agent.id);
+      expect(scope.materials).toEqual([
+        { name: 'inline-1', key: null, inlineText: 'first note' },
+        { name: 'inline-2', key: null, inlineText: 'second note' },
+      ]);
+    });
+  });
+
   // --- planTask -----------------------------------------------------------
 
   describe('planTask', () => {

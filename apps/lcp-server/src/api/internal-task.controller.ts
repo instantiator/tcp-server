@@ -11,7 +11,7 @@ import {
 import { ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { InternalApiKeyGuard, LcpAssignment, LcpTask } from '@lcp/shared';
 import type { UUID } from 'crypto';
-import { AssignmentService } from './assignment.service';
+import { AssignmentService, StorageScope } from './assignment.service';
 import {
   AssureAssignmentDto,
   CompleteAssignmentDto,
@@ -41,6 +41,20 @@ export class InternalTaskController {
     @Param('agentId') agentId: UUID,
   ): Promise<{ assignment: LcpAssignment; task: LcpTask | null }> {
     return this.assignments.getAgentAssignment(agentId);
+  }
+
+  /**
+   * Returns the caller agent's resolved storage scope — the working-directory
+   * prefix and materials the assignment-scoped storage tools operate on (see
+   * `docs/prompts/010.2.6`). qa-mode callers get the target assignment's scope,
+   * read-only.
+   */
+  @ApiOperation({ summary: "Get an agent's storage scope (internal)" })
+  @Get('agent/:agentId/storage-scope')
+  async getStorageScope(
+    @Param('agentId') agentId: UUID,
+  ): Promise<StorageScope> {
+    return this.assignments.resolveStorageScope(agentId);
   }
 
   /** Creates a task's plan from a planning agent's `create_plan` call. */

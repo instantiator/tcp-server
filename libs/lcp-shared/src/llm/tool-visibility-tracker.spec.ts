@@ -14,7 +14,7 @@ function makeTool(name: string): DynamicStructuredTool {
 const ALL_TOOLS = [
   makeTool('storage__describe_server'),
   makeTool('storage__read_file'),
-  makeTool('storage__write_file'),
+  makeTool('storage__append_working_file'),
   makeTool('memory__describe_server'),
   makeTool('memory__recall'),
   makeTool('interactions__describe_server'),
@@ -49,7 +49,7 @@ describe('ToolVisibilityTracker', () => {
       ]),
     );
     expect(visible).not.toContain('storage__read_file');
-    expect(visible).not.toContain('storage__write_file');
+    expect(visible).not.toContain('storage__append_working_file');
     expect(visible).not.toContain('memory__recall');
   });
 
@@ -60,7 +60,7 @@ describe('ToolVisibilityTracker', () => {
     const visible = names(tracker.resolveVisibleTools(ALL_TOOLS));
 
     expect(visible).toContain('storage__read_file');
-    expect(visible).toContain('storage__write_file');
+    expect(visible).toContain('storage__append_working_file');
     // memory was never described — still gated
     expect(visible).not.toContain('memory__recall');
   });

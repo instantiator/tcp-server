@@ -825,15 +825,15 @@ describe('AgentLoopService', () => {
       const toolEvents = [
         {
           event: 'on_tool_start',
-          name: 'storage__write_file',
+          name: 'storage__append_working_file',
           run_id: 'run-1',
-          data: { input: { path: 'notes.md', content: 'hi' } },
+          data: { input: { filename: 'notes.md', content: 'hi' } },
         },
         {
           event: 'on_tool_end',
-          name: 'storage__write_file',
+          name: 'storage__append_working_file',
           run_id: 'run-1',
-          data: { output: 'Created notes.md' },
+          data: { output: 'Created working file: notes.md' },
         },
         ...SUCCESS_EVENTS,
       ];
