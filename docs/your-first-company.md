@@ -105,6 +105,7 @@ The response will be a full instance of the company, _including its `id`_ - indi
   "systemPromptTemplate": null,
   "mcpServerList": [],
   "timezone": null,
+  "plannerRoleId": null,
   "id": "3fb3528a-3520-4489-b5bd-83247a631d87",
   "slug": "test-company",
   "runConfig": null
@@ -112,7 +113,7 @@ The response will be a full instance of the company, _including its `id`_ - indi
 ```
 
 > [!TIP]
-> You can modify a company by passing in only the fields you want to change with the `set-company` verb. Make sure you provide the `id` to target the company you wish to change.
+> You can modify a company by passing in only the fields you want to change with the `set-company` verb. Target it with `--company-slug test-company` (or `--company-id`/a body `id`) — you don't need to look up its id first.
 
 ### 1.3 List all companies
 
@@ -135,18 +136,18 @@ You'll get a condensed list of companies:
 
 ### 1.4 Create some roles
 
-Create a role in the new company with the `set-role` verb. Provide your company's id in the `--company-id` field to let it know which company to associate the role with:
+Create a role in the new company with the `set-role` verb. Provide your company's slug in the `--company-slug` field to let it know which company to associate the role with:
 
 ```bash
-cat scripts/test-data/chicken-assistant.json | lcp-cli.sh --username test --password test set-role --company-id '3fb3528a-3520-4489-b5bd-83247a631d87'
+cat scripts/test-data/chicken-assistant.json | lcp-cli.sh --username test --password test set-role --company-slug test-company
 ```
 
 ```bash
-cat scripts/test-data/cat-assistant.json | lcp-cli.sh --username test --password test set-role --company-id '3fb3528a-3520-4489-b5bd-83247a631d87'
+cat scripts/test-data/cat-assistant.json | lcp-cli.sh --username test --password test set-role --company-slug test-company
 ```
 
 > [!TIP]
-> You can modify a role by passing in only the fields you want to change - either piped in, or with the `--input` parameter (provide your input as a JSON object). Make sure you provide the `id` to target the role you wish to change. You do not need the `--company-id` property to do this.
+> You can modify a role by passing in only the fields you want to change - either piped in, or with the `--input` parameter (provide your input as a JSON object). Target it with `--company-slug test-company --role-slug chicken-assistant` (or a body `id`) — you do not need to look up its id first.
 
 ### 1.5 List all roles
 
@@ -154,6 +155,12 @@ List the roles available with the `list-roles` verb:
 
 ```bash
 lcp-cli.sh --username test --password test list-roles
+```
+
+Or scope it to just your company:
+
+```bash
+lcp-cli.sh --username test --password test list-roles --company-slug test-company
 ```
 
 It'll give you a list of all roles in each company:
@@ -211,9 +218,9 @@ Using the `chat` verb allows you create an **agent** from a defined **role** and
 
 The `chat` verb has several options:
 
-- `-r` / `--role-id` - a role to talk to (optional)
-- `-c` / `--company-id` - the company context (mutually exclusive with `--role-id` - provide exactly one)
-- `-q` / `--query` - provide the query or prompt for your agent as a parameter (requires `--role-id`)
+- `-r` / `--role-id`, or `--role-slug` (needs `--company-id`/`--company-slug` alongside it — role slugs are only unique within a company) - a role to talk to
+- `-c` / `--company-id`, or `--company-slug` - the company context (mutually exclusive with a role identifier - provide exactly one)
+- `-q` / `--query` - provide the query or prompt for your agent as a parameter (requires a role)
 - `--hide-reasoning` - doesn't show the reasoning stream before an answer
 - `--no-tui` - disables the full-screen TUI in favour of a plain scrolling renderer; still interactive on its own (a readline prompt) - combine with `--query` for fully non-interactive, pipeable output
 
@@ -224,14 +231,14 @@ The `chat` verb has several options:
 
 TUI mode is the easiest way to manually interact with agents.
 
-Provide a `--role-id` if you know which role you wish to talk to. Otherwise, provide `--company-id`. In each case, your company tab provides a list of roles, and you can initiate a new agent for any role and talk to it.
+Provide a role (`--role-id`, or `--role-slug` alongside `--company-slug`/`--company-id`) if you know which one you wish to talk to. Otherwise, provide a company (`--company-slug` or `--company-id`). In each case, your company tab provides a list of roles, and you can initiate a new agent for any role and talk to it.
 
 `--query` works here too: it's submitted automatically as the agent's first message, but the session stays open afterwards - the TUI doesn't exit once the answer arrives, so you can keep chatting. (Combine `--query` with `--no-tui` instead if you want a true one-shot: see 1.6.2.)
 
-In the example below, the TUI is launched with a company id.
+In the example below, the TUI is launched with a company slug.
 
 ```bash
-./lcp-cli.sh --username test --password test chat --company-id 3fb3528a-3520-4489-b5bd-83247a631d87
+./lcp-cli.sh --username test --password test chat --company-slug test-company
 ```
 
 > [!TIP]
@@ -257,7 +264,7 @@ In the example below, the TUI is launched with a company id.
 In the example below, `chat` is started without TUI, and the prompt is provided directly:
 
 ```bash
-./lcp-cli.sh --username test --password test chat --role-id fc37ccc0-51a2-46b2-b642-a3d8b1dd0c9b --no-tui --query 'Tell me about yourself'
+./lcp-cli.sh --username test --password test chat --company-slug test-company --role-slug chicken-assistant --no-tui --query 'Tell me about yourself'
 ```
 
 The agent will be invoked to answer the query, and will then be closed.

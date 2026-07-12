@@ -41,13 +41,56 @@ describe('validateChatFlags', () => {
     );
   });
 
-  it('rejects --query without --role-id', () => {
+  it('rejects --query without a role', () => {
     expect(validateChatFlags({ companyId: 'c1', query: 'hi' }, true)).toMatch(
-      /--query requires --role-id/,
+      /--query requires a role/,
     );
   });
 
   it('accepts --query with --role-id', () => {
     expect(validateChatFlags({ roleId: 'r1', query: 'hi' }, true)).toBeNull();
+  });
+
+  it('accepts --role-slug scoped by --company-id', () => {
+    expect(
+      validateChatFlags({ roleSlug: 'analyst', companyId: 'c1' }, true),
+    ).toBeNull();
+  });
+
+  it('accepts --role-slug scoped by --company-slug', () => {
+    expect(
+      validateChatFlags({ roleSlug: 'analyst', companySlug: 'acme' }, true),
+    ).toBeNull();
+  });
+
+  it('rejects --role-slug without a company', () => {
+    expect(validateChatFlags({ roleSlug: 'analyst' }, true)).toMatch(
+      /--role-slug requires --company-id or --company-slug/,
+    );
+  });
+
+  it('rejects --role-id combined with --role-slug', () => {
+    expect(
+      validateChatFlags({ roleId: 'r1', roleSlug: 'analyst' }, true),
+    ).toMatch(/not both/);
+  });
+
+  it('rejects --company-id combined with --company-slug', () => {
+    expect(
+      validateChatFlags({ companyId: 'c1', companySlug: 'acme' }, true),
+    ).toMatch(/not both/);
+  });
+
+  it('rejects --role-id combined with a company flag (role-id already implies its company)', () => {
+    expect(
+      validateChatFlags({ roleId: 'r1', companySlug: 'acme' }, true),
+    ).toMatch(/not both/);
+  });
+
+  it('accepts --company-slug alone only when the TUI is available', () => {
+    expect(validateChatFlags({ companySlug: 'acme' }, true)).toBeNull();
+    expect(validateChatFlags({ companySlug: 'acme' }, false)).toMatch(
+      /requires? a tty|full-screen tui/i,
+    );
   });
 });

@@ -13,27 +13,47 @@ export function shouldUseTui(
 }
 
 /**
- * Validates the `--role-id`/`--company-id`/`--query` combination, returning
- * an error message (or `null` if valid). Exactly one of `--role-id`/
- * `--company-id` is required; `--query` needs a specific role up front (a
- * one-shot can't wait for an interactive roster pick); browsing a company
- * with no role needs the TUI's roster pane, so it requires a TTY.
+ * Validates the role/company/query flag combination, returning an error
+ * message (or `null` if valid). A role is identified either by `--role-id`
+ * alone, or by `--role-slug` plus a company (`--company-id`/`--company-slug`)
+ * to scope it — role slugs are only unique within a company. Exactly one of
+ * a role or a bare company is required; `--query` needs a specific role up
+ * front (a one-shot can't wait for an interactive roster pick); browsing a
+ * company with no role needs the TUI's roster pane, so it requires a TTY.
  */
 export function validateChatFlags(
-  cmdOpts: { roleId?: string; companyId?: string; query?: string },
+  cmdOpts: {
+    roleId?: string;
+    roleSlug?: string;
+    companyId?: string;
+    companySlug?: string;
+    query?: string;
+  },
   useTui: boolean,
 ): string | null {
-  if (!cmdOpts.roleId && !cmdOpts.companyId) {
-    return 'either --role-id or --company-id is required';
+  const companyGiven = Boolean(cmdOpts.companyId || cmdOpts.companySlug);
+  const roleGiven = Boolean(cmdOpts.roleId || cmdOpts.roleSlug);
+
+  if (!roleGiven && !companyGiven) {
+    return 'pass a role (--role-id or --role-slug) or a company (--company-id or --company-slug)';
   }
-  if (cmdOpts.roleId && cmdOpts.companyId) {
-    return 'pass either --role-id or --company-id, not both (role-id already implies its company)';
+  if (cmdOpts.roleId && cmdOpts.roleSlug) {
+    return 'pass either --role-id or --role-slug, not both';
   }
-  if (cmdOpts.query && !cmdOpts.roleId) {
-    return '--query requires --role-id (a one-shot needs a target role)';
+  if (cmdOpts.companyId && cmdOpts.companySlug) {
+    return 'pass either --company-id or --company-slug, not both';
   }
-  if (cmdOpts.companyId && !useTui) {
-    return '--company-id without --role-id needs the full-screen TUI to browse roles (requires a TTY) — pass --role-id directly for non-interactive use, or drop --no-tui';
+  if (cmdOpts.roleId && companyGiven) {
+    return 'pass either a role or a company, not both (--role-id already implies its company)';
+  }
+  if (cmdOpts.roleSlug && !companyGiven) {
+    return '--role-slug requires --company-id or --company-slug (role slugs are only unique within a company)';
+  }
+  if (cmdOpts.query && !roleGiven) {
+    return '--query requires a role (--role-id, or --role-slug with a company)';
+  }
+  if (companyGiven && !roleGiven && !useTui) {
+    return 'browsing a company without a role needs the full-screen TUI (requires a TTY) — pass a role directly for non-interactive use, or drop --no-tui';
   }
   return null;
 }

@@ -4,22 +4,102 @@ LCP manages one or more companies of AI agents that collaborate to complete task
 
 [![CI](https://github.com/instantiator/lcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/instantiator/lcp-server/actions/workflows/ci.yml)
 
-## Companies
+## Key concepts
 
-A company consists of several specialists or generalists, each provided with:
+| Entity     | Definition                                                                      |
+| ---------- | ------------------------------------------------------------------------------- |
+| Company    | A collection roles, with shared resources, that can be tasked.                  |
+| Role       | A dataset giving an agent a set of expertise to draw from.                      |
+| Agent      | An instance of an LLM, given a role, and an assignment.                         |
+| Task       | A high level task for a company to achieve.                                     |
+| Plan       | A series of assignments designed to complete a task.                            |
+| Assignment | A smaller piece of a task, given to an agent with a specified role to complete. |
 
-- Overview of the organisation
-- Identity prompt
-- Reference material
-- Personal knowledge database
-- Access to tools
-- Membership of a group where they can initiate conversations with other agents
+| Application          | Purpose                                                                                           |
+| -------------------- | ------------------------------------------------------------------------------------------------- |
+| lcp-cli              | User-facing CLI interface to simplify interactions with lcp-server.                               |
+| lcp-server           | API and orchestration service for the system.                                                     |
+| lcp-agent            | Manages agents and the agent loop. Interacts with lcp-server to receive and complete assignments. |
+| lcp-mcp-interactions | MCP tools allowing agents to interact with assignments and task plans.                            |
+| lcp-mcp-memory       | MCP tools allowing agents to retrieve memory from their stored expertise.                         |
+| lcp-mcp-storage      | MCP tools allowing agents interact with shared storage.                                           |
 
-## Tasks
+```mermaid
+flowchart LR
+  User(["User"])
+  CLI["lcp-cli"]
 
-Tasks are given to the company, who then work collaboratively to resolve them. A planner agent creates a plan incorporating knowledge of the company's roles and their skills. Each plan step is assigned to an agent role that executes it and reports back.
+  subgraph LCP["LCP"]
+    subgraph Server["lcp-server"]
+      API["API"]
+      subgraph DB["Database"]
+        Company["Company"]
+        Role1["Role"]
+        Role2["Role"]
+        Company --- Role1
+        Company --- Role2
+      end
+      API --> DB
+    end
+
+    subgraph AgentSvc["lcp-agent"]
+      Agent["Agent"]
+    end
+
+    Storage[("Shared storage")]
+
+    Server --- Storage
+    AgentSvc --- Storage
+  end
+
+  User --> CLI
+  CLI -->|request| API
+  Role1 -.->|runs as| Agent
+```
+
+> A user talks to LCP through `lcp-cli`, which calls lcp-server's API. Companies and their roles are persisted in the database; an agent is a running instance of one role, executing in lcp-agent.
+
+## Getting started
+
+See **[Setup checklist](docs/setup-checklist.md)** for a step-by-step first-time setup guide.
+
+**Quick start** (prerequisites: Docker, Node.js 24):
+
+> [!NOTE]
+> The `start-dev.sh` script builds and launches LCP with an instance of Keycloak to manage authorisation. This will be configured with an `lcp` realm, and a default user. It can take several minutes to launch.
+>
+> - **Username:** `test`
+> - **Password:** `test`
+
+```bash
+git clone --recurse-submodules https://github.com/instantiator/lcp-server.git && cd lcp-server
+cp .env.example .env
+npm install
+scripts/run-dev.sh
+```
+
+### Tutorial
+
+Follow the steps in **[Your first company](docs/your-first-company.md)** to populate and interact with a simple agent in a company.
+
+---
 
 ## System architecture
+
+| Concern               | Technology                     |
+| --------------------- | ------------------------------ |
+| Framework             | NestJS 11                      |
+| ORM                   | TypeORM                        |
+| Database (production) | PostgreSQL 16 + pgvector       |
+| Database (unit tests) | better-sqlite3 (in-memory)     |
+| Auth                  | OAuth2/OIDC (Keycloak default) |
+| Object storage        | MinIO                          |
+| Task queue            | Redis (BullMQ)                 |
+| Schema export         | ts-json-schema-generator       |
+
+See [docs/ADRs/](docs/ADRs/) for decisions on upcoming components (agent runner, memory, orchestration).
+
+### Main service
 
 The main service topology.
 
@@ -87,8 +167,6 @@ flowchart TD
 > - **MinIO** stores knowledge documents, task files, and context-overflow data
 > - **Keycloak** is an optional auth service, which starts if the `auth` profile is specified (ie. with `--profile auth`)
 
----
-
 ### Agent loop
 
 How a single agent turn flows through the system.
@@ -146,24 +224,13 @@ flowchart TD
 
 > RAG subsystem: knowledge documents are uploaded via the CLI, chunked into ~800-token segments, embedded using the company's embedding model, and stored as vectors in PostgreSQL (pgvector). When an agent runs, the initial prompt is embedded and the most similar chunks above the 0.7 cosine threshold are retrieved and injected into the prompt. The embedding model is configured separately from the chat LLM via `company.embeddingConfig`.
 
+### Documentation
+
+Key architectural decisions are documented as ADRs in [docs/ADRs/](docs/ADRs/).
+
+See [docs/index.md](docs/index.md) for the full list with implementation status.
+
 ---
-
-Key architectural decisions are documented as ADRs in [docs/ADRs/](docs/ADRs/). See [docs/index.md](docs/index.md) for the full list with implementation status.
-
-## Getting started
-
-See **[Setup checklist](docs/setup-checklist.md)** for a step-by-step first-time setup guide.
-
-**Quick start** (prerequisites: Docker, Node.js 24):
-
-```bash
-git clone --recurse-submodules https://github.com/instantiator/lcp-server.git && cd lcp-server
-cp .env.example .env
-npm install
-docker compose up -d
-```
-
-Follow the steps in **[Your first company](docs/your-first-company.md)** to populate and interact with a simple agent in a company.
 
 ## Testing
 
@@ -178,21 +245,6 @@ Quick reference:
 ./scripts/run-smoke-tests.sh        # starts full stack including Keycloak
 ./scripts/run-e2e-tests.sh          # starts postgres, redis, minio
 ```
-
-## Technologies
-
-| Concern               | Choice                         |
-| --------------------- | ------------------------------ |
-| Framework             | NestJS 11                      |
-| ORM                   | TypeORM                        |
-| Database (production) | PostgreSQL 16 + pgvector       |
-| Database (unit tests) | better-sqlite3 (in-memory)     |
-| Auth                  | OAuth2/OIDC (Keycloak default) |
-| Object storage        | MinIO                          |
-| Task queue            | Redis (BullMQ)                 |
-| Schema export         | ts-json-schema-generator       |
-
-See [docs/ADRs/](docs/ADRs/) for decisions on upcoming components (agent runner, memory, orchestration).
 
 ## Commands reference
 

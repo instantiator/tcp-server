@@ -75,7 +75,7 @@ See [schema.md](schema.md) for the full field reference, VS Code integration, ex
 | [`set-role`](#set-role)                                 | `set-role [-c <uuid>\|--company-slug <slug>] [-r <uuid>\|--role-slug <slug>] [-i <json>]`               | Create or update a role                                                    |
 | [`delete-company`](#delete-company)                     | `delete-company (-c <uuid>\|--company-slug <slug>) [-f]`                                                | Delete a company and everything in it                                      |
 | [`delete-role`](#delete-role)                           | `delete-role (-r <uuid>\|--role-slug <slug>) [-f]`                                                      | Delete a role and everything tied to it                                    |
-| [`chat`](#chat)                                         | `chat (-r <uuid>\|-c <uuid>) [-q <message>]`                                                            | Interactive or single-query chat with a role, or browse a company's roster |
+| [`chat`](#chat)                                         | `chat (-r <uuid>\|--role-slug <slug>\|-c <uuid>\|--company-slug <slug>) [-q <message>]`                 | Interactive or single-query chat with a role, or browse a company's roster |
 | [`list-knowledge`](#list-knowledge)                     | `list-knowledge (--role <slug-or-id>\|--company <slug-or-id>)`                                          | List knowledge-base documents for a role or company (shared knowledge)     |
 | [`get-knowledge`](#get-knowledge)                       | `get-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename> [-o <path>]`                 | Get a knowledge-base document's content                                    |
 | [`store-knowledge`](#store-knowledge)                   | `store-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -s <path> [-t <filename>]`               | Upload an OKF Markdown document to a role or company knowledge base        |
@@ -259,9 +259,9 @@ confirmation before deleting. `--role-slug` requires `--company-id`/
 
 ### `chat`
 
-Initiate a conversation with an agent running a given role — or, with `--company-id`
-instead of `--role-id`, open the TUI on that company's role roster with no agent
-started yet, and pick one there.
+Initiate a conversation with an agent running a given role — or, with a
+company instead of a role, open the TUI on that company's role roster with no
+agent started yet, and pick one there.
 
 Conversation history is maintained server-side in the LangGraph checkpoint store.
 Every agent a chat session creates (the initial one, plus any started later from
@@ -287,17 +287,28 @@ renders its activity too — as its own tab in the TUI, or inline prefixed with
 the consulted role's name (e.g. `[Cat assistant] Response: …`) in the plain
 renderer. Nested consultations are followed recursively either way.
 
-| Flag                  | Alias | Description                                                           |
-| --------------------- | ----- | --------------------------------------------------------------------- |
-| `--role-id <uuid>`    | `-r`  | Role UUID for the agent (omit to browse company roles instead)        |
-| `--company-id <uuid>` | `-c`  | Company UUID — browse and start chats from its role roster (TUI only) |
-| `--query <message>`   | `-q`  | Single question, auto-submitted on startup — requires `-r`            |
-| `--hide-reasoning`    |       | Suppress the reasoning stream                                         |
-| `--no-tui`            |       | Force the plain scrolling renderer, even on a TTY                     |
+| Flag                    | Alias | Description                                                              |
+| ----------------------- | ----- | ------------------------------------------------------------------------ |
+| `--role-id <uuid>`      | `-r`  | Role UUID for the agent (omit to browse company roles instead)           |
+| `--role-slug <slug>`    |       | Role slug instead of `--role-id` (needs `--company-id`/`--company-slug`) |
+| `--company-id <uuid>`   | `-c`  | Company UUID — browse and start chats from its role roster (TUI only)    |
+| `--company-slug <slug>` |       | Company slug instead of `--company-id`                                   |
+| `--query <message>`     | `-q`  | Single question, auto-submitted on startup — requires a role             |
+| `--hide-reasoning`      |       | Suppress the reasoning stream                                            |
+| `--no-tui`              |       | Force the plain scrolling renderer, even on a TTY                        |
 
-Exactly one of `--role-id`/`--company-id` is required. `--company-id` alone
-needs the TUI's roster pane to pick a role, so it's rejected outside a TTY (or
-with `--no-tui`) — pass `--role-id` directly for non-interactive use instead.
+Exactly one of a role (`--role-id`, or `--role-slug` scoped to a company) or a
+bare company (`--company-id`/`--company-slug`) is required — role slugs are
+unique only within a company, not globally, so `--role-slug` needs one of the
+company flags alongside it (`--role-id` is self-sufficient and can't be
+combined with either). A bare company alone needs the TUI's roster pane to
+pick a role, so it's rejected outside a TTY (or with `--no-tui`) — pass a role
+directly for non-interactive use instead.
+
+```bash
+./lcp-cli.sh -t $TOKEN chat --company-slug acme --role-slug chicken-assistant --no-tui -q 'Tell me about yourself'
+./lcp-cli.sh -t $TOKEN chat --company-slug acme   # browse the roster (TUI)
+```
 
 #### Full-screen TUI (default on a TTY)
 
