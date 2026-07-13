@@ -49,3 +49,12 @@ export const DEFAULT_LLM_TIMEOUT_MS = 30 * 60 * 1000; // 30m
  * Used in {@link ContextBudgetService.DEFAULT_WINDOW} and {@link ChatService.sendMessage}.
  */
 export const DEFAULT_LLM_CONTEXT_WINDOW = 8192;
+
+/**
+ * Default maximum QA rejections a task assignment may accrue before it is
+ * failed (and its task with it).
+ * Overridden by `TASK_MAX_QA_ATTEMPTS` (lcp-server env), then by
+ * {@link AgentRunConfig.maxQaAttempts} via {@link resolveRunConfig}.
+ * Used in {@link TaskOrchestrationService}.
+ */
+export const DEFAULT_TASK_MAX_QA_ATTEMPTS = 3;

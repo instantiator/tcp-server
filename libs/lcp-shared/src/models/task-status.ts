@@ -49,3 +49,32 @@ export function deriveTaskStatus(
   }
   return 'ready';
 }
+
+/**
+ * Selects the assignments to dispatch next for a task, given its implement-mode
+ * plan. The orchestrator must treat the result as a *set* and dispatch each,
+ * even though a linear plan yields at most one.
+ *
+ * Rules:
+ * - Something already running (any assignment `in-progress` or `in-qa`) → `[]`.
+ * - Otherwise the single `ready` assignment with the lowest `orderIndex` → `[it]`.
+ * - Otherwise `[]` (plan complete, failed, or empty).
+ *
+ * ponytail: this is the DAG extension point. A linear plan selects one step by
+ * `orderIndex`; future branch/join plans replace this body with edge-list
+ * traversal and may return several ready assignments at once — callers already
+ * iterate the returned set, so they need no change.
+ */
+export function selectNextAssignments<
+  T extends Pick<LcpAssignment, 'status' | 'orderIndex'>,
+>(planAssignments: T[]): T[] {
+  const running = planAssignments.some(
+    (a) => a.status === 'in-progress' || a.status === 'in-qa',
+  );
+  if (running) return [];
+
+  const ready = planAssignments
+    .filter((a) => a.status === 'ready' && a.orderIndex != null)
+    .sort((a, b) => a.orderIndex! - b.orderIndex!);
+  return ready.length > 0 ? [ready[0]] : [];
+}

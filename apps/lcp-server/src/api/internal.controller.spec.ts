@@ -5,6 +5,7 @@ import { CompanyUser, LcpAgent, LcpRole } from '@lcp/shared';
 import { DbService } from '../db/db.service';
 import { InternalController } from './internal.controller';
 import { PauseAndResumeService } from './pause-and-resume.service';
+import { TaskOrchestrationService } from './task-orchestration.service';
 
 describe('InternalController', () => {
   let pauseResume: {
@@ -14,6 +15,7 @@ describe('InternalController', () => {
     failAgent: jest.Mock;
     updateStorageChanges: jest.Mock;
   };
+  let taskOrchestration: { handleAgentFailed: jest.Mock };
   let db: { getCompany: jest.Mock; findRoleByIdOrSlug: jest.Mock };
   let agentRepo: { findOneBy: jest.Mock };
   let roleRepo: { findBy: jest.Mock };
@@ -28,12 +30,16 @@ describe('InternalController', () => {
       failAgent: jest.fn().mockResolvedValue(undefined),
       updateStorageChanges: jest.fn().mockResolvedValue(undefined),
     };
+    taskOrchestration = {
+      handleAgentFailed: jest.fn().mockResolvedValue(undefined),
+    };
     db = { getCompany: jest.fn(), findRoleByIdOrSlug: jest.fn() };
     agentRepo = { findOneBy: jest.fn() };
     roleRepo = { findBy: jest.fn() };
     userRepo = { findBy: jest.fn() };
     controller = new InternalController(
       pauseResume as unknown as PauseAndResumeService,
+      taskOrchestration as unknown as TaskOrchestrationService,
       db as unknown as DbService,
       agentRepo as unknown as Repository<LcpAgent>,
       roleRepo as unknown as Repository<LcpRole>,

@@ -1,10 +1,18 @@
 import type { LcpAssignment } from './LcpAssignment.model';
-import { deriveTaskStatus } from './task-status';
+import { deriveTaskStatus, selectNextAssignments } from './task-status';
 
 function assignment(
   status: LcpAssignment['status'],
 ): Pick<LcpAssignment, 'status'> {
   return { status };
+}
+
+/** A plan step with just the fields `selectNextAssignments` inspects. */
+function step(
+  status: LcpAssignment['status'],
+  orderIndex: number,
+): Pick<LcpAssignment, 'status' | 'orderIndex'> {
+  return { status, orderIndex };
 }
 
 describe('deriveTaskStatus', () => {
@@ -83,5 +91,46 @@ describe('deriveTaskStatus', () => {
 
   it('defaults to ready otherwise', () => {
     expect(deriveTaskStatus('ready', [assignment('ready')])).toBe('ready');
+  });
+});
+
+describe('selectNextAssignments', () => {
+  it('returns nothing while an assignment is in-progress', () => {
+    expect(
+      selectNextAssignments([step('in-progress', 0), step('ready', 1)]),
+    ).toEqual([]);
+  });
+
+  it('returns nothing while an assignment is in-qa', () => {
+    expect(selectNextAssignments([step('in-qa', 0), step('ready', 1)])).toEqual(
+      [],
+    );
+  });
+
+  it('returns the lowest-orderIndex ready assignment when nothing runs', () => {
+    const two = step('ready', 2);
+    const one = step('ready', 1);
+    expect(selectNextAssignments([two, one])).toEqual([one]);
+  });
+
+  it('skips a completed lower step and picks the next ready one', () => {
+    const next = step('ready', 1);
+    expect(selectNextAssignments([step('succeeded', 0), next])).toEqual([next]);
+  });
+
+  it('returns nothing when the plan is empty', () => {
+    expect(selectNextAssignments([])).toEqual([]);
+  });
+
+  it('returns nothing when all assignments have succeeded', () => {
+    expect(
+      selectNextAssignments([step('succeeded', 0), step('succeeded', 1)]),
+    ).toEqual([]);
+  });
+
+  it('returns nothing when a step has failed (no ready steps remain)', () => {
+    expect(
+      selectNextAssignments([step('succeeded', 0), step('failed', 1)]),
+    ).toEqual([]);
   });
 });

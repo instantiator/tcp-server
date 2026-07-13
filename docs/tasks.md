@@ -10,11 +10,13 @@ the plan is simply the task's implement-mode assignments ordered by
 
 Assignments also exist outside any task ("orphan" assignments — plain
 conversations/consultations), and in `plan`/`qa` modes (the planner's own
-assignment, and QA review assignments). See ADR-010 for the design record;
-this document covers the data model shipped in `docs/prompts/010.2.3` — no
-orchestration behaviour (planner dispatch, plan execution, QA) is wired yet.
-That lands in later parts of the `010.2.x` series (see
-`docs/prompts/010.2.0 - task orchestration: overview.md`).
+assignment, and QA review assignments). See ADR-010 for the design record.
+
+The full lifecycle — planner dispatch, plan execution, QA review, file
+promotion, finalisation, failure propagation, and startup recovery — is
+implemented by `TaskOrchestrationService`
+(`apps/lcp-server/src/api/task-orchestration.service.ts`). See
+[Orchestration flow](#orchestration-flow) below.
 
 ## Entities
 
@@ -69,7 +71,7 @@ Must belong to the company it's set on; the API returns `400` otherwise.
 
 `planning` is set explicitly when the planner agent is dispatched (`POST
 /api/task/:id/start`) and left when `create_plan` lands (`in-progress`) or the
-planner fails (`failed`) — part 7. Every other transition is derived from the
+planner fails (`failed`). Every other transition is derived from the
 task's implement-mode assignments by `deriveTaskStatus`
 (`libs/lcp-shared/src/models/task-status.ts`):
 
@@ -86,8 +88,7 @@ task's implement-mode assignments by `deriveTaskStatus`
 
 A QA rejection returns the assignment from `in-qa` to `in-progress`
 (`qaStatus`/`qaFeedback` cleared on that re-entry; `qaAttempts` is never
-reset). This part does not implement the QA cycle itself — see
-`docs/prompts/010.2.5` and `010.2.7`.
+reset), up to the QA-attempt cap (see [Orchestration flow](#orchestration-flow)).
 
 ## Artifact model
 
@@ -119,17 +120,106 @@ storage tree, including the orphan-assignment working directory.
 All routes are JWT-guarded. See the Swagger UI (`GET /swagger`) for full
 request/response schemas.
 
-| Method & path                  | Purpose                                                                                                                                                                                                              |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/task`               | Create a task (`ready` state)                                                                                                                                                                                        |
-| `POST /api/task/:id/materials` | Upload a material file (`multipart/form-data`, field `file`); rejected once the task has left `ready` (`409`)                                                                                                        |
-| `POST /api/task/:id/start`     | Resolve a planner role (task's own, falling back to the company default — `422` if neither), atomically transition `ready → planning` (`409` if not `ready`), and dispatch the planner (a logged no-op until part 7) |
-| `GET /api/task?companyId=`     | List a company's tasks                                                                                                                                                                                               |
-| `GET /api/task/:id`            | Get a task with its assignments — plan assignments ordered by `orderIndex`, then the rest by creation time                                                                                                           |
+| Method & path                  | Purpose                                                                                                                                                                                      |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/task`               | Create a task (`ready` state)                                                                                                                                                                |
+| `POST /api/task/:id/materials` | Upload a material file (`multipart/form-data`, field `file`); rejected once the task has left `ready` (`409`)                                                                                |
+| `POST /api/task/:id/start`     | Resolve a planner role (task's own, falling back to the company default — `422` if neither), atomically transition `ready → planning` (`409` if not `ready`), and dispatch the planner agent |
+| `GET /api/task?companyId=`     | List a company's tasks                                                                                                                                                                       |
+| `GET /api/task/:id`            | Get a task with its assignments — plan assignments ordered by `orderIndex`, then the rest by creation time                                                                                   |
 
 The `start` transition uses an atomic conditional `UPDATE ... WHERE status =
 'ready'` (the same pattern as `AgentOrchestrationService.resumeAgent`'s
 `pausedAt` claim), so a double `POST /start` can't dispatch the planner twice.
+
+## Orchestration flow
+
+`TaskOrchestrationService` is the real dispatcher behind the `TaskDispatcher`
+hooks that `TaskService` and `AssignmentService` fire after each validated
+state transition. Every handler re-reads current state and advances it with an
+atomic conditional `UPDATE`, so it is idempotent under duplicate or concurrent
+calls — only the caller that actually flips a status runs the side effects.
+Each task and assignment transition is recorded as an
+`AuditEventType.StateChange` event.
+
+```
+user creates task ──▶ POST /start ──▶ planner agent (plan mode)
+                                          │ create_plan
+                                          ▼
+   ┌───────────────── implement assignment (lowest ready orderIndex)
+   │                      │ complete_assignment  (→ in-qa, agent paused)
+   │                      ▼
+   │                   QA agent (qa mode, same role)
+   │                      │ assure_assignment
+   │            ┌─────────┴──────────┐
+   │        accept                reject
+   │            │                    │
+   │   promote working/→completed/   ├─ qaAttempts < cap ─▶ resume implement
+   │   assignment succeeded          │                       agent with feedback
+   │            │                    └─ qaAttempts ≥ cap  ─▶ assignment failed
+   │            ▼                                              → task failed
+   └──▶ next ready assignment … or, when all succeed:
+                          finalisation ──▶ task succeeded
+```
+
+**Planner.** `start` creates a `plan`-mode assignment (carrying the task
+request + materials) and dispatches an agent required to call `create_plan`.
+`create_plan` validates and writes the ordered implement-mode assignments, then
+the first ready one is dispatched.
+
+**Assignment dispatch.** Before an implement assignment runs, its materials are
+merged from: the task's own materials, the `assignment-completed-path` outputs
+approved by every prior succeeded assignment, and the planner's per-assignment
+hints — deduplicated by `(type, value)` (a filename approved by several prior
+assignments resolves to the most recent via `resolveArtifactKey`). The
+assignment is atomically claimed `ready → in-progress` and an agent required to
+call `complete_assignment` is dispatched.
+
+**Which assignment runs next** is chosen by the pure function
+`selectNextAssignments` (`libs/lcp-shared/src/models/task-status.ts`): nothing
+while any assignment is `in-progress`/`in-qa`, else the single lowest-`orderIndex`
+`ready` assignment. This is the **DAG extension point** — a future branch/join
+plan replaces the linear `orderIndex` selection here and may return several
+assignments at once; the orchestrator already dispatches the return value as a
+set.
+
+**QA cycle.** `complete_assignment` moves the assignment to `in-qa` and pauses
+its agent; the orchestrator dispatches a QA agent of the **same role** (a fresh
+instance with the domain expertise — a dedicated company QA role is future
+work) required to call `assure_assignment`.
+
+- **Accept** promotes each prepared `assignment-working-path` file from the
+  assignment's `working/` directory to its `completed/` directory, records the
+  `approved` artifacts, transitions `in-qa → succeeded`, completes the paused
+  implementing agent (its `summary` becomes the agent output), and advances the
+  task.
+- **Reject** increments `qaAttempts`. Below the cap, the assignment returns to
+  `in-progress` and the paused implementing agent is resumed with the QA
+  feedback. At the cap the assignment fails, its agent is failed, and the task
+  fails.
+
+**QA-attempt cap.** Resolved per assignment as role → company → env
+(`TASK_MAX_QA_ATTEMPTS`) → code default (`DEFAULT_TASK_MAX_QA_ATTEMPTS = 3`),
+via `runConfig.maxQaAttempts` and `resolveRunConfig`.
+
+**Finalisation.** When every implement assignment has succeeded, each
+assignment's `completed/` files are copied into the task's `completed/`
+directory (on a filename collision the highest `orderIndex` wins), `task.completed`
+is set (one `task-completed-path` per distinct filename, plus approved
+`inline-text` items), and the task becomes `succeeded`.
+
+**Failure propagation.** A failed agent whose assignment is task-linked fails
+the task: a planner failure (`planner failed: …`), an implement-agent failure
+(assignment `in-progress → failed` → task failed), or a QA-agent failure (the
+target assignment fails → task failed; a failed QA agent is not retried).
+
+**Startup recovery.** On module init, `reconcileTask` idempotently repairs every
+non-terminal task: a `planning` task with no live planner → failed; an
+`in-progress` assignment whose agent died → failure propagated; an `in-qa`
+assignment with no live QA agent → a fresh QA agent dispatched; nothing running
+with a ready step → dispatched; all succeeded but not finalised → finalised.
+Agents still `Running`/`Paused` are left alone (BullMQ and pause/resume own
+their recovery).
 
 ## CLI
 

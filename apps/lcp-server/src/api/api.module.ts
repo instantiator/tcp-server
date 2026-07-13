@@ -39,6 +39,7 @@ import { ChatService } from './chat.service';
 import { KnowledgeService } from './knowledge.service';
 import { PauseAndResumeService } from './pause-and-resume.service';
 import { TaskDispatcher } from './task-dispatcher.service';
+import { TaskOrchestrationService } from './task-orchestration.service';
 import { TaskService } from './task.service';
 
 /** HTTP API module: wires all REST controllers and supporting services. */
@@ -86,7 +87,10 @@ import { TaskService } from './task.service';
     ConversationService,
     KnowledgeService,
     PauseAndResumeService,
-    TaskDispatcher,
+    TaskOrchestrationService,
+    // The real dispatcher: TaskDispatcher (the token the transition services
+    // inject) resolves to the single TaskOrchestrationService instance.
+    { provide: TaskDispatcher, useExisting: TaskOrchestrationService },
     TaskService,
   ],
 })

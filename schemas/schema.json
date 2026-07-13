@@ -82,6 +82,10 @@
           "description": "Maximum number of LLM invocations before the run is cancelled as failed.",
           "type": "number"
         },
+        "maxQaAttempts": {
+          "description": "Maximum QA rejections a task assignment may accrue before it fails.",
+          "type": "number"
+        },
         "timeoutMs": {
           "description": "Wall-clock timeout in milliseconds before the run is cancelled as failed.",
           "type": "number"
@@ -1655,6 +1659,50 @@
           },
           "required": [
             "companyId"
+          ],
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "selectNextAssignments": {
+      "$comment": "(planAssignments: T[]) => T[]",
+      "properties": {
+        "namedArgs": {
+          "additionalProperties": false,
+          "properties": {
+            "planAssignments": {
+              "items": {
+                "description": "Failed to correctly infer type"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "planAssignments"
+          ],
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "step": {
+      "$comment": "(\n  status: LcpAssignment['status'],\n  orderIndex: number) => Pick<LcpAssignment, 'status' | 'orderIndex'>",
+      "properties": {
+        "namedArgs": {
+          "additionalProperties": false,
+          "properties": {
+            "orderIndex": {
+              "type": "number"
+            },
+            "status": {
+              "$ref": "#/definitions/LcpAssignmentStatus",
+              "description": "Current lifecycle state of this assignment."
+            }
+          },
+          "required": [
+            "status",
+            "orderIndex"
           ],
           "type": "object"
         }

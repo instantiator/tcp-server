@@ -1,48 +1,23 @@
 import type { LcpAssignment, LcpTask } from '@lcp/shared';
-import { Injectable, Logger } from '@nestjs/common';
 
 /**
- * Orchestration reaction hooks for the task lifecycle. Every method is a
- * logged no-op today — the state transitions that call them (in `TaskService`
- * and `AssignmentService`) are complete, but the *reactions* (dispatching the
- * planner/first assignment/QA agent, resuming after a QA verdict) are
- * task-orchestration part 7 (`docs/prompts/010.2.7`), which replaces these
- * bodies with the real dispatch. Keeping the hooks here fixes the wiring points
- * so part 7 needs no changes to its callers.
+ * Orchestration reaction hooks for the task lifecycle, invoked by
+ * {@link TaskService} and {@link AssignmentService} after each validated state
+ * transition. This abstract class is the DI token and contract; the real
+ * implementation is {@link TaskOrchestrationService}, bound to this token in
+ * {@link ApiModule}. Keeping the hooks behind a token means the transition
+ * callers never depend on the (heavier) orchestration service directly.
  */
-@Injectable()
-export class TaskDispatcher {
-  private readonly logger = new Logger(TaskDispatcher.name);
+export abstract class TaskDispatcher {
+  /** Called after a task enters `planning` — dispatches the planner agent. */
+  abstract dispatchPlanner(task: LcpTask): Promise<void>;
 
-  /** Called after a task enters `planning` — part 7 dispatches the planner. */
-  async dispatchPlanner(task: LcpTask): Promise<void> {
-    this.logger.log(
-      `dispatchPlanner(${task.id}) — no-op until task-orchestration part 7`,
-    );
-    await Promise.resolve();
-  }
+  /** Called after a planner submits a plan — dispatches the first ready assignment. */
+  abstract taskPlanned(task: LcpTask): Promise<void>;
 
-  /** Called after a planner submits a plan — part 7 dispatches the first assignment. */
-  async taskPlanned(task: LcpTask): Promise<void> {
-    this.logger.log(
-      `taskPlanned(${task.id}) — no-op until task-orchestration part 7`,
-    );
-    await Promise.resolve();
-  }
+  /** Called after an implement agent completes — dispatches a QA agent. */
+  abstract assignmentReadyForQa(assignment: LcpAssignment): Promise<void>;
 
-  /** Called after an implement agent completes — part 7 dispatches a QA agent. */
-  async assignmentReadyForQa(assignment: LcpAssignment): Promise<void> {
-    this.logger.log(
-      `assignmentReadyForQa(${assignment.id}) — no-op until task-orchestration part 7`,
-    );
-    await Promise.resolve();
-  }
-
-  /** Called after a QA verdict — part 7 copies approved files / resumes on reject. */
-  async assignmentAssured(assignment: LcpAssignment): Promise<void> {
-    this.logger.log(
-      `assignmentAssured(${assignment.id}) — no-op until task-orchestration part 7`,
-    );
-    await Promise.resolve();
-  }
+  /** Called after a QA verdict — promotes approved files, or resumes on reject. */
+  abstract assignmentAssured(assignment: LcpAssignment): Promise<void>;
 }

@@ -227,3 +227,50 @@ remaining `010.2.x` sub-plans.
   one winner; the loser gets a `409`. The MCP server holds no state — it
   resolves the caller's assignment (`GET /internal/agent/:id/assignment`),
   mode-gates the tool, and relays validation/gate errors verbatim.
+
+## Amendments as implemented (010.2.7)
+
+The sequential orchestration flow is now fully wired.
+`TaskOrchestrationService` (`apps/lcp-server/src/api/task-orchestration.service.ts`)
+is the real `TaskDispatcher` — the abstract `TaskDispatcher` class is now the DI
+token, bound to the single `TaskOrchestrationService` instance via `useExisting`.
+See [tasks.md § Orchestration flow](../tasks.md#orchestration-flow) for the
+behavioural walk-through; the design record:
+
+- **Sequential lifecycle.** planner (`create_plan`) → the lowest-`orderIndex`
+  ready implement assignment → QA agent (`assure_assignment`) → accept promotes
+  `working/`→`completed/` and advances; reject resumes the implementing agent
+  with feedback → next assignment → finalisation (assignment `completed/` files
+  copied into the task `completed/`, highest `orderIndex` wins on collision;
+  `task.completed` set) → task `succeeded`. Which assignment(s) run next is the
+  pure `selectNextAssignments` (`libs/lcp-shared/src/models/task-status.ts`),
+  documented as the DAG extension point — it returns a set the orchestrator
+  dispatches, so a future branch/join plan changes only that function.
+- **Idempotency & races.** Every handler re-reads state and advances it with an
+  atomic conditional `UPDATE`; only the status-flip winner runs side effects, so
+  duplicate/concurrent hook calls, double-completes, and double-assures are safe.
+  Each transition writes an `AuditEventType.StateChange` event.
+- **QA role decision (recorded).** The QA agent uses the **same role** as the
+  assignment under review — a fresh instance with the domain expertise. A
+  dedicated company QA role is future work.
+- **QA-attempt cap.** `runConfig.maxQaAttempts`, resolved role → company → env
+  `TASK_MAX_QA_ATTEMPTS` → `DEFAULT_TASK_MAX_QA_ATTEMPTS` (3). Exhaustion fails
+  the assignment and the task.
+- **Failure propagation** is hooked at `POST /internal/agent/:id/fail`: a
+  task-linked planner/implement/QA agent failure fails the task. A failed QA
+  agent is not retried (fails the target assignment) — re-dispatching QA once is
+  the noted upgrade path.
+- **Startup recovery.** `reconcileTask` runs for every non-terminal task on
+  module init: dead planner → task failed; dead implement agent → failure
+  propagated; `in-qa` with no live QA agent → fresh QA dispatched; idle with a
+  ready step → dispatched; all succeeded but unfinalised → finalised. Agents
+  still `Running`/`Paused` are left to BullMQ + pause/resume.
+- **Coverage.** Unit tests over a real in-memory SQLite DB
+  (`task-orchestration.service.spec.ts`) plus a no-LLM lifecycle e2e driving the
+  internal endpoints against real Postgres/Redis/MinIO
+  (`test/e2e/lcp-server/task-orchestration.e2e-spec.ts`). A stub-LLM e2e through
+  the real agent loop was deferred — there is no scriptable LLM stub able to
+  emit a deterministic multi-agent tool-call sequence (see the plan file's
+  implementation notes).
+- **Deferred:** task/assignment cancellation, plan revision, and parallel/DAG
+  plans.
