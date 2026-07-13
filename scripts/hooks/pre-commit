@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Pre-commit hook:
-#   1. Format, then regenerate derived files (licenses, schema); stage any
-#      resulting changes into this commit.
+#   1. Regenerate derived files (licenses, schema), then format so their
+#      output is covered by the formatter too; stage any resulting changes
+#      into this commit.
 #   2. Gate on typecheck, shellcheck, and lint — a failure here aborts the
 #      commit.
 #   3. Best-effort: run unit tests, but only warn (never block) on failure.
@@ -17,14 +18,14 @@ cd "$TOP"
 # elsewhere in the working tree.
 GENERATED_PATHS=(apps libs test docs schemas '*.md')
 
-echo "→ pre-commit: formatting..."
-npm run format --silent
-
 echo "→ pre-commit: regenerating licenses..."
 npm run licenses:generate --silent
 
 echo "→ pre-commit: regenerating schema..."
 npm run schema:generate --silent
+
+echo "→ pre-commit: formatting..."
+npm run format --silent
 
 git add -u -- "${GENERATED_PATHS[@]}"
 
