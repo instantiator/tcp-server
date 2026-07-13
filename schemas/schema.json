@@ -1010,7 +1010,8 @@
       "enum": [
         "plan",
         "implement",
-        "qa"
+        "qa",
+        "chat"
       ],
       "type": "string"
     },

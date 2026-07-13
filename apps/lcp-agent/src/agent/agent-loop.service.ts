@@ -18,7 +18,11 @@ import {
   SupervisedGraphResult,
   ToolVisibilityTracker,
   buildAgentGraph,
+  buildAssignmentMessage,
+  buildRagMessage,
+  buildServicesMessage,
   mapStreamEvent,
+  renderSystemPrompt,
   renderTemplate,
   resolveEnvLlmConfig,
   resolveLlmConfig,
@@ -45,12 +49,6 @@ import {
   createTracker,
   generateActionString,
 } from './loop-tracker';
-import {
-  buildAssignmentMessage,
-  buildRagMessage,
-  buildServicesMessage,
-  renderSystemPrompt,
-} from './prompt-assembly';
 
 /** Maps LangGraph v2 event names to {@link AuditEventType} values. */
 const EVENT_TYPE_MAP: Record<string, AuditEventType> = {
@@ -632,11 +630,15 @@ export class AgentLoopService {
       company.embeddingConfig,
     );
     const ragMessage = ragChunks.length
-      ? new HumanMessage(buildRagMessage(ragChunks))
+      ? new HumanMessage(buildRagMessage(ragChunks, agentPrompts))
       : null;
 
     const loadedServerNames = [...new Set(mcpTools.map((t) => t.serverName))];
-    const servicesText = buildServicesMessage(loadedServerNames, mcpServerUrls);
+    const servicesText = buildServicesMessage(
+      loadedServerNames,
+      mcpServerUrls,
+      agentPrompts,
+    );
     const servicesMessage = servicesText
       ? new HumanMessage(servicesText)
       : null;
@@ -645,21 +647,24 @@ export class AgentLoopService {
     // assignment prompt (already context-prepared as `initialPrompt`) and any
     // materials/expected outputs. Replaces the old bare initial-prompt message.
     const assignmentMessage = new HumanMessage(
-      buildAssignmentMessage({
-        mode: assignment.mode,
-        prompt: initialPrompt,
-        materials: assignment.materials,
-        expected: assignment.expected,
-        resolutionContext: {
-          companySlug: company.slug,
-          task: assignment.task ?? null,
-          assignment: {
-            id: assignment.id,
-            taskId: assignment.taskId ?? null,
-            orderIndex: assignment.orderIndex ?? null,
+      buildAssignmentMessage(
+        {
+          mode: assignment.mode,
+          prompt: initialPrompt,
+          materials: assignment.materials,
+          expected: assignment.expected,
+          resolutionContext: {
+            companySlug: company.slug,
+            task: assignment.task ?? null,
+            assignment: {
+              id: assignment.id,
+              taskId: assignment.taskId ?? null,
+              orderIndex: assignment.orderIndex ?? null,
+            },
           },
         },
-      }),
+        agentPrompts,
+      ),
     );
 
     return {

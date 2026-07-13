@@ -841,6 +841,24 @@ describe('DbService', () => {
       expect(await assignmentRepo.count()).toBe(1);
     });
 
+    it('creates a chat-mode assignment with no required tool calls', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const agent = await dbService.createAgent({
+        companyId: company.id,
+        roleId: role.id,
+        initialPrompt: '',
+        mode: 'chat',
+      });
+
+      const assignment = await assignmentRepo.findOneByOrFail({
+        id: agent.assignmentId,
+      });
+      expect(assignment.mode).toBe('chat');
+      // A chat turn ends with narrated text — no completion tool is required.
+      expect(agent.requiredToolCalls).toEqual([]);
+    });
+
     it('attaches to a supplied assignment without creating an orphan', async () => {
       const company = await seedCompany();
       const role = await seedRole(company.id);

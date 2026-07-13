@@ -46,6 +46,11 @@ function encodeEmbedding(v, format) {
 // Override per-test via POST /stub/config { "response": "..." }.
 let stubResponse = process.env.STUB_RESPONSE ?? 'stub response';
 
+// Body of the most recent /v1/chat/completions request, so a test can assert
+// what prompt the caller actually sent (e.g. the mode prompt). Read via
+// GET /stub/last-request; reset via POST /stub/config.
+let lastChatRequest = null;
+
 function completionBody(content) {
   return JSON.stringify({
     id: 'chatcmpl-stub',
@@ -108,7 +113,9 @@ http
       req.on('end', () => {
         let wantsStream = false;
         try {
-          wantsStream = JSON.parse(body).stream === true;
+          const parsed = JSON.parse(body);
+          wantsStream = parsed.stream === true;
+          lastChatRequest = parsed;
         } catch {
           // Non-JSON body — fall back to a non-streaming response.
         }
@@ -156,6 +163,13 @@ http
 
     res.setHeader('Content-Type', 'application/json');
 
+    // Returns the most recent chat-completion request body (or null).
+    if (req.method === 'GET' && req.url === '/stub/last-request') {
+      res.writeHead(200);
+      res.end(JSON.stringify(lastChatRequest));
+      return;
+    }
+
     // Control endpoint — lets individual tests set the next response body
     if (req.method === 'POST' && req.url === '/stub/config') {
       let body = '';
@@ -166,6 +180,7 @@ http
           if (typeof parsed.response === 'string') {
             stubResponse = parsed.response;
           }
+          lastChatRequest = null;
           res.writeHead(200);
           res.end(JSON.stringify({ ok: true, response: stubResponse }));
         } catch {

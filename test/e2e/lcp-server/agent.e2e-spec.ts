@@ -82,15 +82,15 @@ describe('AgentController (e2e)', () => {
         .expect(201);
       expect((res.body as LcpAgent).id).toBeDefined();
       expect((res.body as LcpAgent).status).toBe('idle');
-      // Every agent is created with an assignment — an orphan implement-mode
-      // one here (empty prompt for chat-start).
+      // Every agent is created with an assignment — an orphan chat-mode one
+      // here (empty prompt for chat-start).
       const assignmentId = (res.body as LcpAgent).assignmentId;
       expect(assignmentId).toBeDefined();
       const assignment = await assignmentRepo.findOneByOrFail({
         id: assignmentId,
       });
       expect(assignment.taskId).toBeNull();
-      expect(assignment.mode).toBe('implement');
+      expect(assignment.mode).toBe('chat');
       expect(assignment.agentId).toBe((res.body as LcpAgent).id);
     });
 

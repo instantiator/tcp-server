@@ -274,3 +274,28 @@ behavioural walk-through; the design record:
   implementation notes).
 - **Deferred:** task/assignment cancellation, plan revision, and parallel/DAG
   plans.
+
+## Amendments as implemented (010.2.8)
+
+_2026-07-13._
+
+- **`chat` added to the assignment mode set.** `LcpAssignmentMode` is now
+  `plan | implement | qa | chat` (a TypeScript union widening only — `mode` is a
+  `varchar` column, no migration). `/api/agent/chat/start` creates the agent's
+  orphan assignment in `chat` mode (empty prompt); `/api/agent/start` and
+  consultations remain `implement`. `requiredToolForMode` now returns a
+  `string[]` (the full `requiredToolCalls` list) and returns `[]` for `chat` — a
+  chat turn ends with narrated text and has no completion tool. `MODE_PROMPTS.chat`
+  states the conversational behaviour explicitly (interact / ground in
+  knowledge & storage / consult rather than invent / act via tools / no
+  completion tool), so it can be refined over time rather than living implicitly
+  in the role prompt.
+- **Toward one agent-operation core.** Creation already consolidated onto
+  `DbService.createAgent` (010.2.4); this part consolidates prompt assembly onto
+  the shared `@lcp/shared` builders across both the chat and worker paths (see
+  [ADR-013 010.2.8 amendment](ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-01028)).
+  What remains genuinely per-caller (not duplication to remove): the request
+  lifecycle vs. the BullMQ job lifecycle/dispatch; idle-between-turns terminal
+  semantics (chat returns to `Idle`) vs. run-to-completion (`Completed`/`Paused`/
+  `Failed`); and who owns the abort signal. Full extraction of the supervised-run
+  spine into a single shared `runAgentTurn` is the noted next step.

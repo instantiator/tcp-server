@@ -369,9 +369,8 @@ export class DbService {
           companyId: template.companyId,
           roleId: template.roleId,
           initialPrompt: template.initialPrompt,
-          requiredToolCalls: template.requiredToolCalls ?? [
-            requiredToolForMode(mode),
-          ],
+          requiredToolCalls:
+            template.requiredToolCalls ?? requiredToolForMode(mode),
           assignmentId,
         }),
       );

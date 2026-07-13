@@ -23,7 +23,7 @@ import { VersionedEntity } from './VersionedEntity';
  * The kind of work an assignment represents. The agent's mode IS its
  * assignment's mode — there is no separate mode column on {@link LcpAgent}.
  */
-export type LcpAssignmentMode = 'plan' | 'implement' | 'qa';
+export type LcpAssignmentMode = 'plan' | 'implement' | 'qa' | 'chat';
 
 /**
  * Lifecycle states for a {@link LcpAssignment}. A QA rejection returns the

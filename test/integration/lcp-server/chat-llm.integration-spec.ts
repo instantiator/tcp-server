@@ -9,6 +9,7 @@ import {
   LcpRole,
   LcpTask,
   McpClientService,
+  MODE_PROMPTS,
 } from '@lcp/shared';
 import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
@@ -73,18 +74,30 @@ describe('ChatService integration (stub LLM)', () => {
     });
   }
 
-  /** Orphan implement-mode assignment for a chat agent's mandatory FK. */
+  /** Orphan chat-mode assignment for a chat agent's mandatory FK. */
   function seedAssignment() {
     return assignmentRepo.save(
       assignmentRepo.create({
         taskId: null,
         companyId: testCompanyId,
         roleId: testRoleId,
-        mode: 'implement',
+        mode: 'chat',
         prompt: '',
         status: 'in-progress',
       }),
     );
+  }
+
+  /** Reads the body of the last chat-completion request the stub received. */
+  async function lastChatRequest(): Promise<{
+    messages: { role: string; content: string }[];
+  } | null> {
+    const res = await fetch(
+      `${STUB_LLM_URL.replace('/v1', '')}/stub/last-request`,
+    );
+    return res.json() as Promise<{
+      messages: { role: string; content: string }[];
+    } | null>;
   }
 
   beforeAll(async () => {
@@ -207,6 +220,13 @@ describe('ChatService integration (stub LLM)', () => {
       const updated = await agentRepo.findOneBy({ id: agent.id });
       expect(updated?.status).toBe(AgentStatus.Idle);
       expect(updated?.output).toBe('Hello from stub LLM!');
+
+      // The first turn now carries the chat mode prompt as part 4, so the chat
+      // agent knows it is in a conversation (not a bare user message).
+      const req = await lastChatRequest();
+      const promptText = (req?.messages ?? []).map((m) => m.content).join('\n');
+      expect(promptText).toContain(MODE_PROMPTS.chat);
+      expect(promptText).toContain('Hi there');
     } finally {
       await agentRepo.delete({ id: agent.id });
     }

@@ -121,7 +121,7 @@ export class TasksToolsService {
     const modeNote = mode
       ? interpolate(taskPrompts.current_mode, {
           mode,
-          tool: requiredToolForMode(mode),
+          tool: requiredToolForMode(mode).join(', '),
         })
       : '';
     return [
@@ -319,7 +319,7 @@ export class TasksToolsService {
     return err(
       interpolate(taskPrompts.error_wrong_mode, {
         mode,
-        tool: requiredToolForMode(mode),
+        tool: requiredToolForMode(mode).join(', '),
       }),
     );
   }

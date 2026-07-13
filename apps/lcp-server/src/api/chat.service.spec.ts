@@ -10,6 +10,7 @@ import {
   IncomingDataGuardService,
   LcpAgent,
   LcpRole,
+  MODE_PROMPTS,
 } from '@lcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { AuditService } from '../audit/audit.service';
@@ -84,7 +85,17 @@ function makeAgent(overrides: Partial<LcpAgent> = {}): LcpAgent {
     threadId: null,
     initialPrompt: '',
     assignmentId: randomUUID(),
-    assignment: {} as never,
+    // A chat agent carries a chat-mode orphan assignment; runTurn renders it as
+    // prompt part 4 (mode prompt + user message).
+    assignment: {
+      mode: 'chat',
+      materials: [],
+      expected: [],
+      task: null,
+      taskId: null,
+      orderIndex: null,
+      id: randomUUID(),
+    } as never,
     output: null,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -145,7 +156,11 @@ function completedResponse(events: AgentEvent[]): string | undefined {
 }
 
 describe('ChatService', () => {
-  let agentRepo: { findOneBy: jest.Mock; update: jest.Mock };
+  let agentRepo: {
+    findOne: jest.Mock;
+    findOneBy: jest.Mock;
+    update: jest.Mock;
+  };
   let roleRepo: { findOneBy: jest.Mock };
   let companyRepo: { findOneBy: jest.Mock };
   let auditService: { write: jest.Mock; record: jest.Mock };
@@ -164,8 +179,15 @@ describe('ChatService', () => {
   let mcpClient: { loadTools: jest.Mock };
 
   beforeEach(() => {
+    // sendMessage loads the agent (with its assignment relation) via findOne;
+    // runTurn's internal terminal-status/re-fetch checks use findOneBy. The two
+    // are aliased so a test's `findOneBy.mockResolvedValue(agent)` drives both,
+    // and call order (load first, then internal checks) preserves the Once
+    // sequences used by the pause/complete-race tests.
+    const findAgent = jest.fn();
     agentRepo = {
-      findOneBy: jest.fn(),
+      findOne: findAgent,
+      findOneBy: findAgent,
       update: jest.fn().mockResolvedValue(undefined),
     };
     roleRepo = { findOneBy: jest.fn() };
@@ -537,6 +559,23 @@ describe('ChatService', () => {
 
     const messages = streamedMessages();
     expect(messages[messages.length - 1].content).toMatch(/Proceed now/);
+  });
+
+  it('renders prompt part 4 as the chat mode prompt plus the user message on the first turn', async () => {
+    const agent = makeAgent({ threadId: null });
+    const role = makeRole({ rolePrompt: null });
+    agentRepo.findOneBy.mockResolvedValue(agent);
+    roleRepo.findOneBy.mockResolvedValue(role);
+    companyRepo.findOneBy.mockResolvedValue(null);
+
+    await sendAndCollect(agent.id, 'What should I do?');
+
+    // System prompt + part 4 + final instruction = 3; part 4 carries the chat
+    // mode prompt so the agent knows it is in a conversation.
+    const messages = streamedMessages();
+    expect(messages[1].content).toBe(
+      `${MODE_PROMPTS.chat}\n\nWhat should I do?`,
+    );
   });
 
   it('does not append final instruction on subsequent turns', async () => {

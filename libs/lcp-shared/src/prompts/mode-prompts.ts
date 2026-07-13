@@ -8,7 +8,8 @@ import type { LcpAssignmentMode } from '../models/LcpAssignment.model';
  *
  * The `implement` mode completes via `complete_assignment` on the tasks
  * service (lcp-mcp-tasks); `plan`/`qa` complete via `create_plan`/
- * `assure_assignment` on the same service.
+ * `assure_assignment` on the same service. The `chat` mode has no completion
+ * tool — a conversational turn ends with narrated text.
  */
 export const MODE_PROMPTS: Record<LcpAssignmentMode, string> = {
   implement: [
@@ -32,19 +33,31 @@ export const MODE_PROMPTS: Record<LcpAssignmentMode, string> = {
     'Then submit your assurance via the `assure_assignment` tool on the tasks service: accept it, or reject it with actionable feedback the implementing agent can act on.',
     'You MUST call `assure_assignment` before ending. Call `describe_server` on the tasks service first for the exact tool signature and details.',
   ].join('\n\n'),
+
+  chat: [
+    'You are in a CONVERSATION with a user. Interact naturally: answer their questions, offer advice and options, and think out loud when it helps.',
+    'Draw on your knowledge base and episodic memory, and read from the shared storage service (read-only), to ground your answers in real material rather than guessing.',
+    "When a question needs another role's expertise, or needs the user to decide something, consult them (agent consultation / user query) rather than inventing an answer.",
+    "When the user asks you to do something, take the action using the tools available to you; don't just describe what you would do.",
+    'There is no completion tool and no fixed deliverable — the conversation continues until the user ends it. End each turn with your reply and wait for the next message.',
+  ].join('\n\n'),
 };
 
 /**
- * The tool call an agent in the given mode must make before its run may end
- * (fed into {@link LcpAgent.requiredToolCalls} at creation).
+ * The tool calls an agent in the given mode must make before its run may end
+ * (fed into {@link LcpAgent.requiredToolCalls} at creation). A `chat`-mode
+ * agent has no required tool — its turn ends with narrated text — so it
+ * returns an empty list.
  */
-export function requiredToolForMode(mode: LcpAssignmentMode): string {
+export function requiredToolForMode(mode: LcpAssignmentMode): string[] {
   switch (mode) {
     case 'plan':
-      return 'create_plan';
+      return ['create_plan'];
     case 'qa':
-      return 'assure_assignment';
+      return ['assure_assignment'];
     case 'implement':
-      return 'complete_assignment';
+      return ['complete_assignment'];
+    case 'chat':
+      return [];
   }
 }
