@@ -53,10 +53,27 @@ if git rev-parse --verify --quiet "$upstream" >/dev/null; then
   models_changed=$(echo "$changed" | grep -E 'libs/lcp-shared/src/models/.*\.model\.ts' || true)
   migrations_changed=$(echo "$changed" | grep -E 'apps/lcp-server/src/migrations/.*\.ts' || true)
 
-  if [[ -n "$models_changed" && -z "$migrations_changed" ]]; then
+  # A .model.ts file only implies schema when it actually declares a table or
+  # column (@Entity/@Column). Pure interfaces/types whose values live inside a
+  # jsonb column (e.g. AgentRunConfig, stored in runConfig) change no schema, so
+  # exclude them to avoid false positives. Inspect the pushed (HEAD) version,
+  # falling back to the pre-change version so a *deleted* entity still counts.
+  entity_models=""
+  if [[ -n "$models_changed" ]]; then
+    while IFS= read -r f; do
+      [[ -z "$f" ]] && continue
+      content=$(git show "HEAD:$f" 2>/dev/null || git show "$upstream:$f" 2>/dev/null || true)
+      if grep -qE '@Entity|@Column' <<< "$content"; then
+        entity_models+="$f"$'\n'
+      fi
+    done <<< "$models_changed"
+  fi
+  entity_models=${entity_models%$'\n'}
+
+  if [[ -n "$entity_models" && -z "$migrations_changed" ]]; then
     echo ""
     echo "✗ pre-push: this branch changes entity models without a migration:"
-    echo "    ${models_changed//$'\n'/$'\n'    }"
+    echo "    ${entity_models//$'\n'/$'\n'    }"
     echo ""
     echo "  If the schema changed, generate a migration before pushing:"
     echo "    npm run migration:generate -- apps/lcp-server/src/migrations/<Name>"
