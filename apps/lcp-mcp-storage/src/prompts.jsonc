@@ -4,13 +4,10 @@
 
   // Folder descriptions returned by describe_folder, keyed by folder type.
   "describe_folder_task_materials": "**Task materials** — User-submitted inputs for this task (briefs, data files, reference documents). Read-only after task creation.",
-  "describe_folder_task_output": "**Task output** — Files created during task execution. This is your working area: write intermediate results and final artefacts here before review.",
-  "describe_folder_knowledge": "**Knowledge base** — OKF Markdown source documents for RAG indexing. Managed by the `store-role-documents` CLI command. Treat as read-only from within an agent.",
-  "describe_folder_finished_reports": "**Finished reports** — Reviewed, stable report artefacts accessible to all agents and stakeholders.",
-  "describe_folder_finished_specifications": "**Finished specifications** — Reviewed technical or functional specifications.",
-  "describe_folder_finished_designs": "**Finished designs** — Reviewed design documents (wireframes, architecture diagrams, etc.).",
-  "describe_folder_finished_code": "**Finished code** — Reviewed and signed-off code artefacts.",
-  "describe_folder_finished_other": "**Finished (other)** — Stable artefacts that do not fit a named category.",
+  "describe_folder_task_completed": "**Task completed outputs** — The task's final deliverables, promoted from its assignments' `completed/` directories once every assignment succeeds. Accessible to all agents working the task.",
+  "describe_folder_assignment_working": "**Assignment working area** — The private scratch area for one assignment's agent. Write intermediate results and final artefacts here before submitting via `complete_assignment`.",
+  "describe_folder_assignment_completed": "**Assignment completed outputs** — Files promoted from an assignment's working area once QA accepts them. Later assignments and the task's finalisation step read from here.",
+  "describe_folder_knowledge": "**Knowledge base** — OKF Markdown source documents for RAG indexing. Managed by the `store-knowledge` CLI command. Treat as read-only from within an agent.",
   "describe_folder_audit": "**Audit log** — Append-only JSONL audit entries written by the system. Do not modify.",
   "describe_folder_fallback": "No specific description is available for this path. Use `list_files` to explore its contents."
 }

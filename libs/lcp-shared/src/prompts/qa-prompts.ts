@@ -1,10 +1,12 @@
-import type { LcpArtifact, LcpAssignment } from '@lcp/shared';
+import type { LcpArtifact } from '../models/LcpArtifact';
+import type { LcpAssignment } from '../models/LcpAssignment.model';
 
 /**
- * Presentation strings the {@link TaskOrchestrationService} feeds to the agents
- * it dispatches. Kept out of the service body so the wording lives in one place
- * (mirrors `PauseAndResumeService`'s consultation prompt suffix and
- * lcp-mcp-tasks' `prompts.jsonc`), and is unit-testable in isolation.
+ * Presentation strings `TaskOrchestrationService` feeds to the agents it
+ * dispatches for QA. Kept alongside `prompt-assembly.ts` so all prompt
+ * content shares one home (mirrors `PauseAndResumeService`'s consultation
+ * prompt suffix and lcp-mcp-tasks' `prompts.jsonc`), and is unit-testable
+ * in isolation.
  */
 
 /** Renders an artifact list as `- {type}: {value}` lines, or a placeholder when empty. */
@@ -18,7 +20,9 @@ function renderArtifacts(artifacts: LcpArtifact[]): string {
  * that assignment was expected to produce, and the artifacts the implementing
  * agent actually prepared.
  */
-export function renderQaPresentation(target: LcpAssignment): string {
+export function renderQaPresentation(
+  target: Pick<LcpAssignment, 'prompt' | 'expected' | 'prepared'>,
+): string {
   return [
     'You are reviewing another agent’s completed assignment.',
     '',

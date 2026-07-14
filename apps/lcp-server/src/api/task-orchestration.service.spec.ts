@@ -266,6 +266,27 @@ describe('TaskOrchestrationService', () => {
         'ready',
       );
     });
+
+    it('recomputes the task status to in-progress once the first step is dispatched', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      // A task's status derives to 'ready' the moment its plan exists but no
+      // step has started yet — dispatching the first step must move it to
+      // 'in-progress' immediately, not leave it stale until that step finishes.
+      const task = await seedTask(company.id, { status: 'ready' });
+      await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        orderIndex: 0,
+      });
+
+      await service.taskPlanned(task);
+
+      expect((await taskRepo.findOneBy({ id: task.id }))!.status).toBe(
+        'in-progress',
+      );
+    });
   });
 
   // --- materials merge ------------------------------------------------------

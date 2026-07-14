@@ -418,25 +418,6 @@ export class StorageToolsService {
     }
   }
 
-  /**
-   * Proxies to `GET /internal/storage/exists` — used by the `files/exists`
-   * internal endpoint (see `StorageCheckController`).
-   *
-   * Builds the query string manually (`path=a&path=b`) rather than passing
-   * an array via axios's `params` option — axios's default array
-   * serialisation uses bracket notation (`path[]=a&path[]=b`), which Nest's
-   * `@Query('path')` does not recognise as the same key.
-   */
-  async checkMissingFiles(paths: string[]): Promise<string[]> {
-    const query = new URLSearchParams();
-    for (const p of paths) query.append('path', p);
-    const res = await axios.get<{ missing: string[] }>(
-      `${this.serverUrl}/internal/storage/exists?${query.toString()}`,
-      { headers: this.headers() },
-    );
-    return res.data.missing;
-  }
-
   // Private helpers
 
   /** Resolves the caller's storage scope for the current tool call. */
@@ -521,20 +502,18 @@ export class StorageToolsService {
   private describeFolder(p: string): string {
     if (p.includes('/tasks/') && p.includes('/materials'))
       return storagePrompts.describe_folder_task_materials;
-    if (p.includes('/tasks/') && p.includes('/output'))
-      return storagePrompts.describe_folder_task_output;
+    if (
+      p.includes('/tasks/') &&
+      p.includes('/completed') &&
+      !p.includes('/assignments/')
+    )
+      return storagePrompts.describe_folder_task_completed;
+    if (p.includes('/working'))
+      return storagePrompts.describe_folder_assignment_working;
+    if (p.includes('/assignments/') && p.includes('/completed'))
+      return storagePrompts.describe_folder_assignment_completed;
     if (p.includes('/knowledge/') || p.endsWith('/knowledge'))
       return storagePrompts.describe_folder_knowledge;
-    if (p.includes('/finished/reports'))
-      return storagePrompts.describe_folder_finished_reports;
-    if (p.includes('/finished/specifications'))
-      return storagePrompts.describe_folder_finished_specifications;
-    if (p.includes('/finished/designs'))
-      return storagePrompts.describe_folder_finished_designs;
-    if (p.includes('/finished/code'))
-      return storagePrompts.describe_folder_finished_code;
-    if (p.includes('/finished/other'))
-      return storagePrompts.describe_folder_finished_other;
     if (p.includes('/audit/') || p.endsWith('/audit'))
       return storagePrompts.describe_folder_audit;
     return storagePrompts.describe_folder_fallback;

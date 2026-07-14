@@ -10,7 +10,6 @@ import {
   LcpArtifact,
   LcpAssignment,
   LcpAssignmentMode,
-  LcpAssignmentStatus,
   LcpAssignmentWorkingArtifact,
   LcpMaterialArtifact,
   LcpTask,
@@ -33,6 +32,7 @@ import type { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { DbService } from '../db/db.service';
 import { StorageService } from '../storage/storage.service';
+import { claimStatus } from './claim-status';
 import { PauseAndResumeService } from './pause-and-resume.service';
 import { TaskDispatcher } from './task-dispatcher.service';
 import type { PlanAssignmentInput } from './dto/internal-task.dto';
@@ -339,14 +339,13 @@ export class AssignmentService {
 
     // Atomic claim: only the caller that flips planning → in-progress creates
     // the plan, so a double create_plan can't produce two sets of rows.
-    const claim = await this.taskRepo
-      .createQueryBuilder()
-      .update(LcpTask)
-      .set({ status: 'in-progress' })
-      .where('id = :id', { id: taskId })
-      .andWhere('status = :planning', { planning: 'planning' })
-      .execute();
-    if (claim.affected === 0) {
+    const claim = await claimStatus(
+      this.taskRepo,
+      taskId,
+      'planning',
+      'in-progress',
+    );
+    if (claim === 0) {
       throw new ConflictException(
         `Task ${taskId} is not awaiting a plan (already planned, or in a terminal state).`,
       );
@@ -466,7 +465,8 @@ export class AssignmentService {
       if (problems.length > 0) {
         throw new UnprocessableEntityException(this.buildGateMessage(problems));
       }
-      const claim = await this.claimStatus(
+      const claim = await claimStatus(
+        this.assignmentRepo,
         assignmentId,
         'in-progress',
         'succeeded',
@@ -491,7 +491,8 @@ export class AssignmentService {
 
     if (assignment.taskId === null || assignment.taskId === undefined) {
       // Orphan: the prepared work is immediately final (there is no QA cycle).
-      const claim = await this.claimStatus(
+      const claim = await claimStatus(
+        this.assignmentRepo,
         assignmentId,
         'in-progress',
         'succeeded',
@@ -514,7 +515,12 @@ export class AssignmentService {
 
     // Task assignment: hand off to QA. Record prepared/summary, pause the
     // agent so part 7 can resume it with the QA verdict.
-    const claim = await this.claimStatus(assignmentId, 'in-progress', 'in-qa');
+    const claim = await claimStatus(
+      this.assignmentRepo,
+      assignmentId,
+      'in-progress',
+      'in-qa',
+    );
     if (claim === 0) {
       throw new ConflictException(
         `Assignment ${assignmentId} was already handed to QA.`,
@@ -744,22 +750,6 @@ export class AssignmentService {
     if (next !== task.status) {
       await this.taskRepo.update(taskId, { status: next });
     }
-  }
-
-  /** Atomic status claim; returns the number of rows affected (0 = lost the race). */
-  private async claimStatus(
-    id: UUID,
-    from: LcpAssignmentStatus,
-    to: LcpAssignmentStatus,
-  ): Promise<number> {
-    const result = await this.assignmentRepo
-      .createQueryBuilder()
-      .update(LcpAssignment)
-      .set({ status: to })
-      .where('id = :id', { id })
-      .andWhere('status = :from', { from })
-      .execute();
-    return result.affected ?? 0;
   }
 
   private async loadAssignment(id: UUID): Promise<LcpAssignment> {

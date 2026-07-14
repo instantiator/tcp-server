@@ -82,6 +82,7 @@ See [schema.md](schema.md) for the full field reference, VS Code integration, ex
 | [`delete-knowledge`](#delete-knowledge)                 | `delete-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename>`                          | Delete a knowledge-base document by filename                               |
 | [`reindex-knowledge`](#reindex-knowledge)               | `reindex-knowledge --company <slug-or-id>`                                                              | Force a full RAG rebuild of every knowledge scope of a company             |
 | [`open-document-store`](#open-document-store)           | `open-document-store [--no-open]`                                                                       | Print (and open) the MinIO console URL                                     |
+| [`open-swagger`](#open-swagger)                         | `open-swagger --service <name> [--no-open]`                                                             | Print (and open) a service's Swagger UI URL                                |
 | [`list-open-queries`](#list-open-queries)               | `list-open-queries [-c <uuid>\|--company-slug <slug>] [--format table\|json\|csv]`                      | List open agent-to-human queries                                           |
 | [`read-query`](#read-query)                             | `read-query <slug>`                                                                                     | Read a query's full question and conversation history                      |
 | [`respond`](#respond)                                   | `respond <slug> <message>`                                                                              | Reply to a query and resume the waiting agent                              |
@@ -558,6 +559,29 @@ Print the MinIO console URL and open it in the default browser. Useful for brows
 ```
 
 No authentication required — the MinIO console has its own login (see [shared-storage.md → Authentication](shared-storage.md#authentication)).
+
+---
+
+### `open-swagger`
+
+Print the Swagger UI URL for one of the six server apps and open it in the default browser.
+
+- **stdout**: the Swagger UI URL (`{base}/swagger`)
+- Base URLs come from `LCP_<SERVICE>_BROWSER_URL` env vars (Docker-internal `LCP_*_URL` values aren't reachable from the host browser), defaulting to `http://localhost:<port>`
+
+| Flag               | Description                                                                                                            |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `--service <name>` | **(Required)** `lcp-server \| lcp-agent \| lcp-mcp-storage \| lcp-mcp-memory \| lcp-mcp-interactions \| lcp-mcp-tasks` |
+| `--no-open`        | Print the URL without opening it                                                                                       |
+
+```bash
+./lcp-cli.sh open-swagger --service lcp-server
+
+# Print URL only
+./lcp-cli.sh open-swagger --service lcp-mcp-tasks --no-open
+```
+
+No authentication required to print/open the URL — the Swagger UI itself has no separate login.
 
 ---
 

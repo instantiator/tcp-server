@@ -234,11 +234,11 @@ It'll give you a list of all roles in each company:
 ]
 ```
 
-### 1.5 Talk to an agent
+## 2. Talk to an agent
 
 Using the `chat` verb allows you create an **agent** from a defined **role** and talk to it. It'll enter chat mode, where you can ask it about itself, other agents, and shared resources.
 
-### 1.5.0 Options
+### 2.1 Options
 
 The `chat` verb has several options:
 
@@ -251,7 +251,7 @@ The `chat` verb has several options:
 > [!NOTE]
 > When neither the role nor the company carries an explicit LLM config, the CLI will display `LLM: (using server environment default)`. The actual provider and model are determined by the `LLM_PROVIDER` / `LLM_MODEL` env vars on the server.
 
-### 1.5.1 Interactive mode (TUI)
+### 2.2 Interactive mode (TUI)
 
 TUI mode is the easiest way to manually interact with agents.
 
@@ -280,7 +280,7 @@ In the example below, the TUI is launched with a company slug.
 | ![Asking a question of the chicken assistant](./screenshots/002.chat.tui.chicken-assistant-input.png) | Each new agent is given a tab. Switch between tabs with `tab`. Type your question or prompt for the agent and press enter. |
 | ![Chicken assistant response](./screenshots/003.chat.tui.chicken-assistant-response.png)              | The agent will respond to your request. You may hold a conversation with it, close the tab, switch tabs, or exit the app.  |
 
-### 1.5.2 Non-TUI mode
+### 2.3 Non-TUI mode
 
 > [!TIP]
 > Using `chat --no-tui --query <query>` means your agents' answers are easily read by other tools. You can include it in pipes, or redirect the answer into a file for analysis later.
@@ -428,7 +428,7 @@ But tell you what—if this company isn't going to be testing for grubs or roost
 
 </details>
 
-### 1.6 Agents that consult each other
+### 2.4 Agents that consult each other
 
 If necessary, an agent may choose to pause mid-chat, and consult another role.
 
@@ -447,8 +447,43 @@ If the consultation fails (eg. the consulted agent errors, times out, or never s
 > [!NOTE]
 > See [cross-agent-consultations.md](cross-agent-consultations.md) for more information about consultations and user queries.
 
-### 1.7 User queries
+### 2.5 User queries
 
 Agents may also choose to initiate a user query. These are asynchronous messages sent to users known to the system.
 
 A user may view all outstanding queries, and may choose to respond to one. On receipt of a response, the agent will resume and use the information from that response.
+
+## 3. Give the company a task
+
+The core functionality of LCP is built around planned tasks. You can give a task to the company, and a planner agent will create a plan, with assignments for different agents.
+
+### 3.1 Create a task
+
+```bash
+./lcp-cli.sh -u test -p test create-task \
+  -c test-company \
+  -r "Create a very short report on what chickens like to eat" \
+  --planner-role cat-assistant \
+  --expected "chicken-food.txt" \
+  --start
+```
+
+On successful creation of a task, `lcp-cli` will respond with a full JSON description of the task.
+
+Note the task's id - so you can use it to monitor the task.
+
+### 3.2 List all tasks
+
+```bash
+./lcp-cli.sh -u test -p test list-tasks -c test-company
+```
+
+This shows each task the company has.
+
+### 3.3 Monitor the task
+
+```bash
+./lcp-cli.sh -u test -p test get-task --task-id 'the-task-id'
+```
+
+This will show the current state of the task, and the assignments in its plan.

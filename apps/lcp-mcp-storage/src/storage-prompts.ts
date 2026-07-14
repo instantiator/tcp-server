@@ -6,13 +6,10 @@ import JSON5 from 'json5';
 export interface StoragePrompts {
   describe_server: string;
   describe_folder_task_materials: string;
-  describe_folder_task_output: string;
+  describe_folder_task_completed: string;
+  describe_folder_assignment_working: string;
+  describe_folder_assignment_completed: string;
   describe_folder_knowledge: string;
-  describe_folder_finished_reports: string;
-  describe_folder_finished_specifications: string;
-  describe_folder_finished_designs: string;
-  describe_folder_finished_code: string;
-  describe_folder_finished_other: string;
   describe_folder_audit: string;
   describe_folder_fallback: string;
 }

@@ -35,7 +35,7 @@ Returns a markdown overview of the memory service and its tools.
 
 **Usage pattern:** Agents should call this first when they discover the memory server is available. Prompt part 3 directs agents to do this automatically.
 
-**Tool-schema gating:** `recall`, `remember`, and `search_knowledge` are only bound to the model after `describe_server` has been called, and stay bound for a small number of iterations before being hidden again (see [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-0086)).
+**Tool-schema gating:** removed in 010.2.8.2 — `recall`, `remember`, and `search_knowledge` are bound to the model from turn 1, like every other mode-filtered tool (see [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-010282)).
 
 ---
 
@@ -56,7 +56,7 @@ Runs a hybrid semantic search across both episodic memory (`episodic_memory` tab
 
 **Behaviour when no embedding config exists:** Returns an informative message directing the agent to use the RAG context already injected into its initial prompt instead.
 
-**Similarity threshold:** 0.7 (cosine). Results below this threshold are discarded. The top-k limit is applied after threshold filtering.
+**Similarity threshold:** 0.5 (cosine) — lower than the 0.7 threshold used by the automatic RAG injection (prompt part 5), since this is an agent-initiated on-demand search rather than a fixed initial-prompt query. Results below this threshold are discarded. The top-k limit is applied after threshold filtering.
 
 **Relationship to RAG injection:** The automatic RAG injection (prompt part 5) runs once before the first LLM call, using the initial task prompt as the query. `recall` is an on-demand search that the agent can call at any point mid-task, with any query.
 

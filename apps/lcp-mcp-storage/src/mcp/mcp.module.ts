@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { McpController } from './mcp.controller';
-import { StorageCheckController } from './storage-check.controller';
 import { StorageToolsService } from './storage-tools.service';
 
 /**
@@ -9,7 +8,7 @@ import { StorageToolsService } from './storage-tools.service';
  * audit client needed here, lcp-server records the audit event itself.
  */
 @Module({
-  controllers: [McpController, StorageCheckController],
+  controllers: [McpController],
   providers: [StorageToolsService],
 })
 export class McpModule {}

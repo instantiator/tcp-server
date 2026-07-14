@@ -16,6 +16,7 @@ import { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { taskMaterialsKey } from '../storage/storage-keys';
 import { StorageService } from '../storage/storage.service';
+import { claimStatus } from './claim-status';
 import { CreateTaskDto } from './dto/task.dto';
 import { TaskDispatcher } from './task-dispatcher.service';
 
@@ -138,14 +139,13 @@ export class TaskService {
     // Atomic conditional UPDATE (see AgentOrchestrationService.resumeAgent's
     // pausedAt claim): only the caller that actually flips ready → planning
     // proceeds to dispatch, so a double POST /start can't dispatch twice.
-    const result = await this.taskRepo
-      .createQueryBuilder()
-      .update(LcpTask)
-      .set({ status: 'planning' })
-      .where('id = :id', { id: taskId })
-      .andWhere('status = :ready', { ready: 'ready' })
-      .execute();
-    if (result.affected === 0) {
+    const claimed = await claimStatus(
+      this.taskRepo,
+      taskId,
+      'ready',
+      'planning',
+    );
+    if (claimed === 0) {
       throw new ConflictException(
         `Task ${taskId} is not ready (already started, or in a terminal state)`,
       );

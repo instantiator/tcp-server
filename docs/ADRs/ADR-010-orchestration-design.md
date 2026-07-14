@@ -150,7 +150,7 @@ On lcp-server startup:
 - The orchestrator is a NestJS service within lcp-server — no new deployable
 - BullMQ workers run within lcp-agent; the queue is the only coupling between lcp-server and lcp-agent
 - All task and plan state lives in PostgreSQL; Redis is ephemeral (queue transport only)
-- **MCP tool loading (since 008.6):** `McpClientService`'s per-agent-run tool loading (see [agent-services.md](../agent-services.md#enabling-mcp-tools-for-a-role)) is layered with a tool-schema visibility gate — only each server's `describe_server` tool is bound to the model until it's called, sitting alongside the existing auto-inject/strip-identity behaviour `McpClientService` already provides. See [ADR-013 Amendments](ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-0086).
+- ~~**MCP tool loading (since 008.6):** `McpClientService`'s per-agent-run tool loading (see [agent-services.md](../agent-services.md#enabling-mcp-tools-for-a-role)) is layered with a tool-schema visibility gate — only each server's `describe_server` tool is bound to the model until it's called~~ — **superseded 010.2.8.2**: the gate is removed; all mode-filtered tools are bound from turn 1. The auto-inject/strip-identity behaviour `McpClientService` provides is unaffected. See [ADR-013 Amendments](ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-010282).
 
 ## Open Questions / Assumptions
 

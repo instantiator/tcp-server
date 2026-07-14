@@ -15,6 +15,8 @@ import {
   LcpTask,
   LcpTaskCompletedArtifact,
   LcpTaskStatus,
+  renderQaPresentation,
+  renderQaRejectionMessage,
   resolveRunConfig,
   selectNextAssignments,
   taskCompletedKey,
@@ -28,12 +30,9 @@ import { Repository } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
 import { StorageService } from '../storage/storage.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
+import { claimStatus } from './claim-status';
 import { PauseAndResumeService } from './pause-and-resume.service';
 import { TaskDispatcher } from './task-dispatcher.service';
-import {
-  renderQaPresentation,
-  renderQaRejectionMessage,
-} from './task-orchestration.prompts';
 
 /** Agent statuses a recovery pass treats as "no longer live". */
 const DEAD_AGENT_STATES: AgentStatus[] = [
@@ -223,6 +222,8 @@ export class TaskOrchestrationService
     );
     if (!claimed) return;
 
+    await this.recomputeTaskStatus(assignment.taskId!);
+
     const agentId = await this.dispatchAgentFor(
       assignment,
       assignment.prompt,
@@ -289,7 +290,12 @@ export class TaskOrchestrationService
       approved.push({ type: 'assignment-completed-path', value: item.value });
     }
 
-    const claimed = await this.claimAssignment(target.id, 'in-qa', 'succeeded');
+    const claimed = await claimStatus(
+      this.assignmentRepo,
+      target.id,
+      'in-qa',
+      'succeeded',
+    );
     if (claimed === 0) return;
 
     await this.assignmentRepo.update(target.id, { approved });
@@ -615,7 +621,8 @@ export class TaskOrchestrationService
     // ponytail: no QA-retry — a failed QA agent fails the task; re-dispatching
     // QA once is the upgrade path if this proves noisy.
     if (assignment.mode === 'qa' && assignment.targetAssignmentId) {
-      const claimed = await this.claimAssignment(
+      const claimed = await claimStatus(
+        this.assignmentRepo,
         assignment.targetAssignmentId,
         'in-qa',
         'failed',
@@ -831,22 +838,6 @@ export class TaskOrchestrationService
     });
   }
 
-  /** Atomic assignment status claim; returns rows affected (0 = lost the race). */
-  private async claimAssignment(
-    id: UUID,
-    from: LcpAssignmentStatus,
-    to: LcpAssignmentStatus,
-  ): Promise<number> {
-    const result = await this.assignmentRepo
-      .createQueryBuilder()
-      .update(LcpAssignment)
-      .set({ status: to })
-      .where('id = :id', { id })
-      .andWhere('status = :from', { from })
-      .execute();
-    return result.affected ?? 0;
-  }
-
   /**
    * Atomically moves an assignment `from → to` and records the transition;
    * returns `false` when the claim was lost (another writer won the race).
@@ -857,7 +848,9 @@ export class TaskOrchestrationService
     to: LcpAssignmentStatus,
     reason: string,
   ): Promise<boolean> {
-    if ((await this.claimAssignment(assignment.id, from, to)) === 0) {
+    if (
+      (await claimStatus(this.assignmentRepo, assignment.id, from, to)) === 0
+    ) {
       return false;
     }
     assignment.status = to;

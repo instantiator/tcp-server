@@ -74,7 +74,7 @@ Documents failing this validation are rejected at upload time.
 
 ## MCP Servers
 
-Agents access external tools via the Model Context Protocol. Three MCP servers run as Docker Compose services.
+Agents access external tools via the Model Context Protocol. Four MCP servers run as Docker Compose services.
 
 ### Architecture
 
@@ -96,12 +96,12 @@ Each MCP server uses the **Streamable HTTP transport** with a stateless per-requ
 
 ### Available servers
 
-| Server                                          | Port | Status      | Description                                                                             |
-| ----------------------------------------------- | ---- | ----------- | --------------------------------------------------------------------------------------- |
-| [lcp-mcp-storage](lcp-mcp-storage.md)           | 3010 | Implemented | Read/write access to the shared MinIO object store, proxied through lcp-server          |
-| [lcp-mcp-memory](lcp-mcp-memory.md)             | 3011 | Stub        | Semantic search over episodic memory and role knowledge base                            |
-| [lcp-mcp-interactions](lcp-mcp-interactions.md) | 3012 | Implemented | Request input from a human user or consult another agent by role                        |
-| [lcp-mcp-tasks](lcp-mcp-tasks.md)               | 3013 | Implemented | Complete your assignment — plan a task, submit finished work, or assure QA (mode-gated) |
+| Server                                          | Port | Status      | Description                                                                                                      |
+| ----------------------------------------------- | ---- | ----------- | ---------------------------------------------------------------------------------------------------------------- |
+| [lcp-mcp-storage](lcp-mcp-storage.md)           | 3010 | Implemented | Read/write access to the shared MinIO object store, proxied through lcp-server                                   |
+| [lcp-mcp-memory](lcp-mcp-memory.md)             | 3011 | Implemented | Hybrid pgvector search over episodic memory and role/shared knowledge (`recall`, `remember`, `search_knowledge`) |
+| [lcp-mcp-interactions](lcp-mcp-interactions.md) | 3012 | Implemented | Request input from a human user or consult another agent by role                                                 |
+| [lcp-mcp-tasks](lcp-mcp-tasks.md)               | 3013 | Implemented | Complete your assignment — plan a task, submit finished work, or assure QA (mode-gated)                          |
 
 See the individual server docs for tool reference, argument details, and implementation status.
 
@@ -119,7 +119,7 @@ At agent startup, `McpClientService` loads tools from each listed server. Tools 
 
 The agent receives prompt part 3 listing available servers and is directed to call `describe_server` on each before using its tools.
 
-**Tool-schema gating — removed in 010.2.8.2.** The describe-then-reveal gating below (and `ToolVisibilityTracker`) was removed: all mode-filtered tools are now bound to the model from turn 1, since their schemas are compact and the gating cost extra round-trips and let weak models "forget" a tool. Mode filtering (`@lcp/shared` `mode-tools.ts`) still limits which servers/tools a mode gets. The rest of this paragraph is retained for historical context pending the 010.2.9 docs sweep. **Tool-schema gating (008.6–010.2.8, now removed):** only each server's `describe_server` tool was bound to the model from the start of a run; a server's other tools become bound only after the agent calls that server's `describe_server`, and stay bound for a small number of iterations before being hidden again. This is tracked per-run, in memory only (not checkpointed), by `ToolVisibilityTracker` (`libs/lcp-shared/src/llm/tool-visibility-tracker.ts`) and is orthogonal to the identity-stripping behaviour below — it changes _when_ a tool's schema is visible to the model, not what arguments it needs to supply. The `interactions` server is exempt (its tools are essential control-flow calls — e.g. `request_user_input` — that must stay reachable at all times). The `tasks` server is _not_ exempt: its `describe_server` is always visible but its mode-gated completion tools (`create_plan`/`complete_assignment`/`assure_assignment`) are revealed only after the agent describes it. See [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-0086).
+**Tool-schema gating — removed in 010.2.8.2.** From 008.6 through 010.2.8, only each server's `describe_server` tool was bound to the model at first; a server's other tools became bound only after the agent called `describe_server`, tracked per-run by `ToolVisibilityTracker`. That mechanism (and `ToolVisibilityTracker`) is gone: all mode-filtered tools are now bound to the model from turn 1, since their schemas are compact and the gating cost extra round-trips and let weak models "forget" a tool. Mode filtering (`@lcp/shared` `mode-tools.ts`) still limits which servers/tools a mode gets. See [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-010282).
 
 **Identity fields (`agentId`, `companyId`):** `loadTools` accepts an optional context (`{ agentId, companyId }`) for the agent currently running. Any tool parameter matching one of those names is removed from the schema the LLM sees and the real value substituted on every call, regardless of what (if anything) the LLM supplies — the LLM has no reliable way to know its own `agentId` (it's a DB id, not part of its context) and shouldn't be trusted to assert one. This is why `request_user_input`/`request_agent_consultation` in `lcp-mcp-interactions` and `create_plan`/`complete_assignment`/`assure_assignment` in `lcp-mcp-tasks` no longer need `agentId`/`companyId` filled in by the model, even though those fields are still part of the MCP server's published tool schema.
 
@@ -138,34 +138,4 @@ If a variable is unset, that server is silently skipped. Agents run with only th
 
 ## Storage layout
 
-All company data is stored in a single MinIO bucket per company, namespaced by `company.slug`:
-
-```
-{company_slug}/
-  tasks/
-    {task_id}/
-      materials/       ← user-submitted task inputs (read-only for agents)
-      output/          ← files written during task execution (agent working area)
-  knowledge/
-    {role_slug}/       ← OKF knowledge documents for a role's RAG indexing
-    shared/            ← OKF knowledge documents for company-wide RAG indexing
-  finished/
-    {category}/        ← reports | specifications | designs | code | other
-      {task_id}/
-        {filename}     ← stable artefacts promoted from tasks/*/output/
-  audit/
-    {task_id}/
-      {step_id}.jsonl  ← append-only audit log per task step
-```
-
-`tasks/*/output/` is the agent's working area. Finalised artefacts are promoted to `finished/{category}/{task_id}/` by the reviewing agent or orchestrator once a task completes — this keeps in-progress work separate from stable outputs accessible to all agents.
-
-### Context overflow
-
-When incoming RAG data or MCP responses still exceed the context budget after compaction, the original content is written to:
-
-```
-{company_slug}/tasks/{agent_id}/context-overflow/{timestamp}.txt
-```
-
-A reference summary is injected into the prompt in its place, noting the overflow location. If MinIO is unreachable or the write fails, the compacted (truncated) version is used instead.
+All company data is stored in a single MinIO bucket per company, namespaced by `company.slug`. See [Shared Storage → Folder structure](shared-storage.md#folder-structure) for the full, current layout (tasks, assignment working/completed areas, knowledge, audit), the toolset table, and context-overflow handling.
