@@ -18,6 +18,7 @@ export interface StorageToolDescriptions {
   replace_in_working_file: string;
   delete_working_file: string;
   restore_working_file: string;
+  rename_working_file: string;
   list_material_files: string;
   get_material_file_properties: string;
   read_material_file: string;

@@ -1,37 +1,74 @@
 import type { LcpAssignmentMode } from '../models/LcpAssignment.model';
+import { MCP_REGISTRY } from '../mcp/mcp-registry';
+
+/** A registered MCP server name (`'tasks' | 'storage' | 'memory' | 'interactions'`). */
+export type McpServerName = (typeof MCP_REGISTRY)[number]['name'];
 
 /**
- * Per-mode capability restriction: MCP servers whose tools an agent in the
- * given mode must not be offered at all. Dropping a whole server (rather than
- * naming each tool) is the right grain when *none* of a server's tools suit
- * the mode.
+ * The mutating storage tools — the ones a `read-only` storage scope withholds.
+ * The single source of truth for both the client-side tool filter
+ * ({@link filterToolsForMode}) and the read-only inspect-tools message the
+ * storage service builds by inverting this set.
+ */
+export const STORAGE_WRITE_TOOLS: readonly string[] = [
+  'append_working_file',
+  'replace_in_working_file',
+  'rename_working_file',
+  'delete_working_file',
+  'restore_working_file',
+];
+
+/** What tools a given mode is offered. */
+export interface ModeToolAccess {
+  /** MCP servers offered to this mode. */
+  servers: readonly McpServerName[];
+  /**
+   * Storage tools offered: `read-write` (mutating + read) or `read-only`
+   * (read/list/search only). Drives both the client-side tool filter and the
+   * server-side {@link resolveStorageScope} read-only flag, so the two can't
+   * drift.
+   */
+  storage: 'read-write' | 'read-only';
+}
+
+/**
+ * The positive, per-mode tool profile — the single source of truth for which
+ * MCP servers and storage tools each mode gets. Stated as an allowlist (rather
+ * than a denylist) so a new developer can read off exactly what a mode can do.
  *
- * Only `plan` is restricted today: a planner's single job is to call
- * `create_plan`, so it is denied the `interactions` server entirely — no agent
- * consultation and no user queries. That removes every pause vector from a
- * planning run, so the `create_plan` required-tool enforcement can always drive
- * the run to completion or a clean failure rather than wedging the task in
- * `planning` (see {@link requiredToolForMode}).
+ * Notable restrictions: `plan` drops the `interactions` server entirely (no
+ * consultation / user queries — removes every pause vector so planning always
+ * terminates) and is storage read-only (it plans, it doesn't do the work); `qa`
+ * is storage read-only (it reviews, it doesn't edit).
  */
-export const MODE_DENIED_SERVERS: Partial<Record<LcpAssignmentMode, string[]>> =
-  {
-    plan: ['interactions'],
-  };
-
-/**
- * Per-mode capability restriction at the individual-tool grain, for servers a
- * mode otherwise keeps. A `plan` agent keeps the `storage` server for read-only
- * inspection of its materials, but is denied its mutating tools so it cannot
- * short-circuit into doing the work itself.
- */
-export const MODE_DENIED_TOOLS: Partial<Record<LcpAssignmentMode, string[]>> = {
-  plan: [
-    'append_working_file',
-    'replace_in_working_file',
-    'delete_working_file',
-    'restore_working_file',
-  ],
+export const MODE_TOOLS: Record<LcpAssignmentMode, ModeToolAccess> = {
+  plan: { servers: ['tasks', 'storage', 'memory'], storage: 'read-only' },
+  implement: {
+    servers: ['tasks', 'storage', 'memory', 'interactions'],
+    storage: 'read-write',
+  },
+  qa: {
+    servers: ['tasks', 'storage', 'memory', 'interactions'],
+    storage: 'read-only',
+  },
+  chat: {
+    servers: ['tasks', 'storage', 'memory', 'interactions'],
+    storage: 'read-write',
+  },
+  consultee: {
+    servers: ['tasks', 'storage', 'memory', 'interactions'],
+    storage: 'read-write',
+  },
+  finalise: {
+    servers: ['tasks', 'storage', 'memory', 'interactions'],
+    storage: 'read-write',
+  },
 };
+
+/** Whether the storage scope for `mode` is read-only (server-side enforcement). */
+export function isStorageReadOnly(mode: LcpAssignmentMode): boolean {
+  return MODE_TOOLS[mode].storage === 'read-only';
+}
 
 /** Strips the `serverName__` prefix from a loaded tool name, if present. */
 function stripServerPrefix(toolName: string): string {
@@ -41,36 +78,33 @@ function stripServerPrefix(toolName: string): string {
 }
 
 /**
- * Narrows an MCP server name list to those allowed for the given mode, dropping
- * any server in {@link MODE_DENIED_SERVERS}. Apply before loading tools so a
- * fully-denied server is never even contacted.
+ * Narrows an MCP server name list to those a mode is offered ({@link MODE_TOOLS}
+ * `.servers`). Apply before loading tools so a server the mode doesn't get is
+ * never even contacted.
  */
 export function serverNamesForMode(
   serverNames: string[],
   mode: LcpAssignmentMode,
 ): string[] {
-  const denied = new Set(MODE_DENIED_SERVERS[mode] ?? []);
-  return serverNames.filter((name) => !denied.has(name));
+  const allowed = new Set<string>(MODE_TOOLS[mode].servers);
+  return serverNames.filter((name) => allowed.has(name));
 }
 
 /**
- * Filters already-loaded tools to those allowed for the given mode, dropping
- * any whose server is denied ({@link MODE_DENIED_SERVERS}) or whose base tool
- * name is denied ({@link MODE_DENIED_TOOLS}). Generic over the loaded-tool
+ * Filters already-loaded tools to those a mode is offered: only servers in
+ * {@link MODE_TOOLS} `.servers`, and — for a `read-only` storage mode — with the
+ * mutating {@link STORAGE_WRITE_TOOLS} dropped. Generic over the loaded-tool
  * shape so both the shared `McpTool` and any test double satisfy it.
  */
 export function filterToolsForMode<
   T extends { serverName: string; toolName: string },
 >(tools: T[], mode: LcpAssignmentMode): T[] {
-  const deniedServers = MODE_DENIED_SERVERS[mode] ?? [];
-  const deniedTools = MODE_DENIED_TOOLS[mode] ?? [];
-  // Unrestricted mode: leave the toolset (and each tool's fields) untouched.
-  if (deniedServers.length === 0 && deniedTools.length === 0) return tools;
-
-  const servers = new Set(deniedServers);
-  const names = new Set(deniedTools);
+  const allowedServers = new Set<string>(MODE_TOOLS[mode].servers);
+  const dropWrites = MODE_TOOLS[mode].storage === 'read-only';
+  const writeTools = new Set(STORAGE_WRITE_TOOLS);
   return tools.filter(
     (t) =>
-      !servers.has(t.serverName) && !names.has(stripServerPrefix(t.toolName)),
+      allowedServers.has(t.serverName) &&
+      !(dropWrites && writeTools.has(stripServerPrefix(t.toolName))),
   );
 }

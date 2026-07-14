@@ -222,6 +222,56 @@ describe('Task orchestration lifecycle (e2e)', () => {
     expect(completedFiles.map((f) => f.name)).toContain('out.md');
   });
 
+  it('runs a finalise agent when the task states expected outputs, then succeeds', async () => {
+    // Create + start a task that expects a file named out.md.
+    const created = await request(app.getHttpServer())
+      .post('/api/task')
+      .set('Authorization', `Bearer ${jwt}`)
+      .send({
+        companyId: company.id,
+        request: 'Produce a report',
+        plannerRoleId: role.id,
+        expected: [{ type: 'task-completed-path', value: 'out.md' }],
+      })
+      .expect(201);
+    const taskId = (created.body as LcpTask).id;
+    await request(app.getHttpServer())
+      .post(`/api/task/${taskId}/start`)
+      .set('Authorization', `Bearer ${jwt}`)
+      .expect(202);
+
+    await submitPlan(taskId, 1);
+    const s0 = await completeStep(taskId, 0);
+    await assure(s0.assignmentId, 'accept');
+
+    // Plan done + task has expected → held in `finalising`, a finalise agent
+    // dispatched, and the deliverables already promoted to the task completed/ dir.
+    const task = await taskRepo.findOneByOrFail({ id: taskId });
+    expect(task.status).toBe('finalising');
+    const finalise = await assignmentRepo.findOneByOrFail({
+      taskId,
+      mode: 'finalise',
+    });
+    expect(finalise.status).toBe('in-progress');
+
+    // Drive the finalise agent's completion: out.md is present in completed/,
+    // so the finalise gate passes and the task succeeds.
+    const finaliseAgentId = await agentIdFor(finalise.id);
+    await request(app.getHttpServer())
+      .post(`/internal/assignment/${finalise.id}/complete`)
+      .set('X-Internal-Api-Key', INTERNAL_KEY)
+      .send({ agentId: finaliseAgentId, summary: 'finalised', prepared: [] })
+      .expect(200);
+
+    const done = await taskRepo.findOneByOrFail({ id: taskId });
+    expect(done.status).toBe('succeeded');
+    expect(done.completed).toEqual(
+      expect.arrayContaining([
+        { type: 'task-completed-path', value: 'out.md' },
+      ]),
+    );
+  });
+
   it('returns a rejected assignment to the agent, then accepts the retry', async () => {
     const taskId = await createAndStart();
     await submitPlan(taskId, 1);

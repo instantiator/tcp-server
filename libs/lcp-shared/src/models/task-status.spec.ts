@@ -26,6 +26,15 @@ describe('deriveTaskStatus', () => {
     expect(deriveTaskStatus('cancelled', [])).toBe('cancelled');
   });
 
+  it('keeps finalising sticky even when the plan is all succeeded', () => {
+    expect(
+      deriveTaskStatus('finalising', [
+        assignment('succeeded'),
+        assignment('succeeded'),
+      ]),
+    ).toBe('finalising');
+  });
+
   it('returns failed when any assignment failed', () => {
     expect(
       deriveTaskStatus('in-progress', [

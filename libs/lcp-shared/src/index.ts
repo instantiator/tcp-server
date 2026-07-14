@@ -35,5 +35,6 @@ export * from './prompts/mode-prompts';
 export * from './prompts/mode-tools';
 export * from './prompts/prompt-assembly';
 export * from './validation/enum-validation';
+export * from './validation/sanitize';
 export * from './storage/stream-to-buffer';
 export * from './redis/redis-reachability';

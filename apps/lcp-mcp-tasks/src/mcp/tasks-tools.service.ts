@@ -223,7 +223,12 @@ export class TasksToolsService {
       }): Promise<ToolResult> => {
         const caller = await this.tryFetchAssignment(agentId);
         if (!caller) return err(taskPrompts.error_no_assignment);
-        if (caller.mode !== 'implement') return this.wrongMode(caller.mode);
+        if (
+          caller.mode !== 'implement' &&
+          caller.mode !== 'consultee' &&
+          caller.mode !== 'finalise'
+        )
+          return this.wrongMode(caller.mode);
 
         try {
           await axios.post(

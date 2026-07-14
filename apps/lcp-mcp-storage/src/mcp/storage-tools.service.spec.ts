@@ -271,23 +271,34 @@ describe('StorageToolsService', () => {
     });
   });
 
-  describe('qa mode is read-only', () => {
+  describe('read-only scope refuses mutating tools', () => {
     it.each([
-      ['appendWorkingFile', ['agent-1', 'f.md', 'x']],
-      ['replaceInWorkingFile', ['agent-1', 'f.md', 'a', 'b']],
-      ['deleteWorkingFile', ['agent-1', 'f.md']],
-      ['restoreWorkingFile', ['agent-1', 'f.md']],
-    ] as const)('%s refuses in qa mode', async (method, args) => {
-      mockScope({ mode: 'qa', readOnly: true });
-      const svc = makeService();
-      const result = await (
-        svc[method] as (
-          ...a: unknown[]
-        ) => Promise<{ content: { text: string }[] }>
-      )(...args);
-      expect(result.content[0].text).toContain('qa mode');
-      expect(mockedAxios.post).not.toHaveBeenCalled();
-    });
+      ['appendWorkingFile', 'append_working_file', ['agent-1', 'f.md', 'x']],
+      [
+        'replaceInWorkingFile',
+        'replace_in_working_file',
+        ['agent-1', 'f.md', 'a', 'b'],
+      ],
+      ['deleteWorkingFile', 'delete_working_file', ['agent-1', 'f.md']],
+      ['restoreWorkingFile', 'restore_working_file', ['agent-1', 'f.md']],
+      ['renameWorkingFile', 'rename_working_file', ['agent-1', 'a.md', 'b.md']],
+    ] as const)(
+      '%s names the tool and the read tools',
+      async (method, tool, args) => {
+        mockScope({ mode: 'qa', readOnly: true });
+        const svc = makeService();
+        const result = await (
+          svc[method] as (
+            ...a: unknown[]
+          ) => Promise<{ content: { text: string }[] }>
+        )(...args);
+        expect(result.content[0].text).toContain(tool);
+        expect(result.content[0].text).toContain('read-only');
+        expect(result.content[0].text).toContain('read_working_file');
+        expect(result.content[0].text).not.toContain('mode:');
+        expect(mockedAxios.post).not.toHaveBeenCalled();
+      },
+    );
 
     it('still allows reading in qa mode', async () => {
       mockScope({ mode: 'qa', readOnly: true });

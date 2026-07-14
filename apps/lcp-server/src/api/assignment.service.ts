@@ -4,6 +4,7 @@ import {
   buildEnumValidationError,
   canonicaliseArtifacts,
   deriveTaskStatus,
+  isStorageReadOnly,
   InvalidEnumValue,
   LcpAgent,
   LcpArtifact,
@@ -15,6 +16,8 @@ import {
   LcpTask,
   orphanWorkingPrefix,
   resolveArtifactKey,
+  stripControlChars,
+  taskCompletedPrefix,
 } from '@lcp/shared';
 import {
   BadRequestException,
@@ -133,16 +136,24 @@ export class AssignmentService {
    * Resolves the {@link StorageScope} for an agent — the working-directory
    * prefix and materials the assignment-scoped storage tools operate on.
    *
-   * `implement`/`plan` callers get their own assignment's working directory
-   * (read/write); a `qa` caller gets the *target* assignment's working
-   * directory, read-only. Materials are the scoped assignment's `materials`,
-   * resolved to concrete storage keys ({@link resolveArtifactKey}), with
-   * inline-text materials keyed by a stable `inline-N` synthetic name.
+   * The read/write vs read-only distinction comes from {@link MODE_TOOLS} (via
+   * {@link isStorageReadOnly}), the single source of truth shared with the
+   * client-side tool filter. The working area depends on the mode:
+   * `implement`/`consultee` get their own assignment's working directory; a `qa`
+   * caller gets the *target* assignment's working directory (read-only); a
+   * `finalise` caller gets the *task* `completed/` directory (read-write, to
+   * bring the deliverables up to the task's expected outputs); `plan` gets its
+   * own (read-only). Materials are the scoped assignment's `materials`, resolved
+   * to concrete storage keys ({@link resolveArtifactKey}), with inline-text
+   * materials keyed by a stable `inline-N` synthetic name.
    */
   async resolveStorageScope(agentId: UUID): Promise<StorageScope> {
     const { assignment: caller } = await this.getAgentAssignment(agentId);
-    const readOnly = caller.mode === 'qa';
-    const target = readOnly ? await this.loadTargetAssignment(caller) : caller;
+    const readOnly = isStorageReadOnly(caller.mode);
+    // Only qa works against another assignment's output; every other mode works
+    // in its own area.
+    const target =
+      caller.mode === 'qa' ? await this.loadTargetAssignment(caller) : caller;
 
     const company = await this.db.getCompany(caller.companyId);
     if (!company) {
@@ -151,9 +162,11 @@ export class AssignmentService {
     const slug = company.slug;
 
     const workingPrefix =
-      target.taskId != null && target.orderIndex != null
-        ? assignmentWorkingPrefix(slug, target.taskId, target.orderIndex)
-        : orphanWorkingPrefix(slug, target.id);
+      caller.mode === 'finalise' && caller.taskId != null
+        ? taskCompletedPrefix(slug, caller.taskId)
+        : target.taskId != null && target.orderIndex != null
+          ? assignmentWorkingPrefix(slug, target.taskId, target.orderIndex)
+          : orphanWorkingPrefix(slug, target.id);
 
     const materials = await this.resolveMaterials(slug, target);
     return { mode: caller.mode, readOnly, workingPrefix, materials };
@@ -403,9 +416,13 @@ export class AssignmentService {
         `Agent ${agentId} is not the agent assigned to ${assignmentId}.`,
       );
     }
-    if (assignment.mode !== 'implement') {
+    if (
+      assignment.mode !== 'implement' &&
+      assignment.mode !== 'consultee' &&
+      assignment.mode !== 'finalise'
+    ) {
       throw new BadRequestException(
-        `complete_assignment is only valid for implement-mode assignments.`,
+        `complete_assignment is only valid for implement, consultee, or finalise assignments.`,
       );
     }
     if (assignment.status !== 'in-progress') {
@@ -414,9 +431,16 @@ export class AssignmentService {
       );
     }
 
+    // Strip stray control chars from model text so stored JSON stays valid.
+    const cleanSummary = stripControlChars(summary);
     // Normalise alias/near-miss types (e.g. `text` → `inline-text`) before
-    // validating and storing, so a good answer isn't rejected on a spelling.
-    const canonPrepared = canonicaliseArtifacts(prepared);
+    // validating and storing, so a good answer isn't rejected on a spelling;
+    // sanitise inline-text values the same way.
+    const canonPrepared = canonicaliseArtifacts(prepared).map((p) =>
+      p.type === 'inline-text'
+        ? { ...p, value: stripControlChars(p.value) }
+        : p,
+    );
     const invalidPrepared = this.invalidArtifactTypes(
       canonPrepared,
       WORKING_ARTIFACT_TYPES,
@@ -429,6 +453,35 @@ export class AssignmentService {
       throw new BadRequestException(
         buildEnumValidationError('complete the assignment', invalidPrepared),
       );
+    }
+
+    // Finalise is a task-level check against the task's expected outputs over
+    // the task completed/ directory (the finalise agent's working area) — not
+    // the per-assignment output gate.
+    if (assignment.mode === 'finalise') {
+      const problems = await this.checkTaskExpectations(
+        assignment,
+        canonPrepared,
+      );
+      if (problems.length > 0) {
+        throw new UnprocessableEntityException(this.buildGateMessage(problems));
+      }
+      const claim = await this.claimStatus(
+        assignmentId,
+        'in-progress',
+        'succeeded',
+      );
+      if (claim === 0) {
+        throw new ConflictException(
+          `Assignment ${assignmentId} was already finalised.`,
+        );
+      }
+      assignment.prepared = canonPrepared;
+      assignment.summary = cleanSummary;
+      assignment.status = 'succeeded';
+      await this.assignmentRepo.save(assignment);
+      await this.dispatcher.assignmentFinalised(assignment);
+      return;
     }
 
     const gate = await this.checkOutputGate(assignment, canonPrepared);
@@ -449,12 +502,12 @@ export class AssignmentService {
         );
       }
       assignment.prepared = canonPrepared;
-      assignment.summary = summary;
+      assignment.summary = cleanSummary;
       assignment.status = 'succeeded';
       await this.assignmentRepo.save(assignment);
       // Same completion path as complete_task used to take — resolves any
       // pending consultation/conversation for this agent.
-      await this.pauseResume.completeAgent(agentId, summary);
+      await this.pauseResume.completeAgent(agentId, cleanSummary);
       this.logger.log(`Orphan assignment ${assignmentId} completed`);
       return;
     }
@@ -468,7 +521,7 @@ export class AssignmentService {
       );
     }
     assignment.prepared = canonPrepared;
-    assignment.summary = summary;
+    assignment.summary = cleanSummary;
     assignment.status = 'in-qa';
     await this.assignmentRepo.save(assignment);
 
@@ -515,12 +568,15 @@ export class AssignmentService {
     }
 
     const qaStatus = qa === 'accept' ? 'accepted' : 'rejected';
+    // Strip stray control chars from the model's feedback so stored JSON stays
+    // valid for strict parsers.
+    const cleanFeedback = feedback ? stripControlChars(feedback) : null;
     // Atomic claim: only the first assure with status still `in-qa` and no
     // verdict yet wins; a duplicate gets a 409.
     const claim = await this.assignmentRepo
       .createQueryBuilder()
       .update(LcpAssignment)
-      .set({ qaStatus, qaFeedback: feedback ?? null })
+      .set({ qaStatus, qaFeedback: cleanFeedback })
       .where('id = :id', { id: targetAssignmentId })
       .andWhere('status = :inQa', { inQa: 'in-qa' })
       .andWhere('qaStatus IS NULL')
@@ -634,6 +690,47 @@ export class AssignmentService {
       '',
       'Fix each item above, then call complete_assignment again with the corrected `prepared` list. `prepared` holds the artifacts you are handing over — a `{ type: "assignment-working-path", value }` entry per file, and/or a `{ type: "inline-text", value }` entry per text answer.',
     ].join('\n');
+  }
+
+  /**
+   * The finalise gate: checks the task's `expected` outputs against the files
+   * actually in the task `completed/` directory (the finalise agent's working
+   * area). Shape only — each expected `task-completed-path` file must be
+   * present, each expected `inline-text` must have a non-empty inline-text
+   * artifact in `prepared`. Returns the list of unmet requirements.
+   */
+  private async checkTaskExpectations(
+    finalise: LcpAssignment,
+    prepared: LcpAssignmentWorkingArtifact[],
+  ): Promise<string[]> {
+    const problems: string[] = [];
+    const company = await this.db.getCompany(finalise.companyId);
+    if (!company) return [`Company ${finalise.companyId} not found.`];
+    const task = await this.taskRepo.findOneBy({ id: finalise.taskId! });
+    if (!task) return [`Task ${finalise.taskId} not found.`];
+
+    const present = new Set(
+      (
+        await this.storage.listFiles(taskCompletedPrefix(company.slug, task.id))
+      ).map((f) => f.name),
+    );
+    const hasInline = prepared.some(
+      (p) => p.type === 'inline-text' && p.value.trim() !== '',
+    );
+    for (const exp of task.expected) {
+      if (exp.type === 'task-completed-path' && !present.has(exp.value)) {
+        problems.push(
+          `Expected deliverable '${exp.value}' is not among the task's completed files (present: ${[...present].join(', ') || 'none'}). Rename or create a file so '${exp.value}' appears in the completed set.`,
+        );
+      } else if (exp.type === 'inline-text' && !hasInline) {
+        problems.push(
+          exp.value
+            ? `Expected a text answer (${exp.value}): include it as an inline-text artifact in your prepared list.`
+            : `Expected a text answer: include it as an inline-text artifact in your prepared list.`,
+        );
+      }
+    }
+    return problems;
   }
 
   /** Recomputes and persists a task's status from its implement-mode plan. */

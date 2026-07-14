@@ -67,20 +67,26 @@ Must belong to the company it's set on; the API returns `400` otherwise.
 
 ## Task status
 
-`LcpTaskStatus`: `ready | planning | in-progress | succeeded | failed | cancelled`.
+`LcpTaskStatus`: `ready | planning | in-progress | finalising | succeeded | failed | cancelled`.
 
 `planning` is set explicitly when the planner agent is dispatched (`POST
 /api/task/:id/start`) and left when `create_plan` lands (`in-progress`) or the
-planner fails (`failed`). Every other transition is derived from the
-task's implement-mode assignments by `deriveTaskStatus`
+planner fails (`failed`). `finalising` is entered when the plan (and its QA) is
+complete but the task states `expected` outputs — a finalise agent must first
+bring the deliverables up to them (see [Orchestration flow](#orchestration-flow));
+it is left only by the finalise reaction (`succeeded`, or `failed` when finalise
+can't meet the expectations — files still promoted). Every other transition is
+derived from the task's implement-mode assignments by `deriveTaskStatus`
 (`libs/lcp-shared/src/models/task-status.ts`):
 
 1. A terminal `status` (`succeeded | failed | cancelled`) always sticks.
-2. Any assignment `failed` → `failed`; else any `cancelled` → `cancelled`.
-3. Any assignment `in-progress` or `in-qa` → `in-progress`.
-4. At least one assignment and all `succeeded` → `succeeded`.
-5. `status === 'planning'` and no assignments yet → stays `planning`.
-6. Otherwise → `ready`.
+2. `status === 'finalising'` sticks — only the finalise reaction moves it.
+3. Any assignment `failed` → `failed`; else any `cancelled` → `cancelled`.
+4. Any assignment `in-progress` or `in-qa` → `in-progress`.
+5. At least one assignment and all `succeeded` → `succeeded` (held at
+   `finalising` by the orchestrator when the task has `expected` outputs).
+6. `status === 'planning'` and no assignments yet → stays `planning`.
+7. Otherwise → `ready`.
 
 ## Assignment status
 
@@ -89,6 +95,28 @@ task's implement-mode assignments by `deriveTaskStatus`
 A QA rejection returns the assignment from `in-qa` to `in-progress`
 (`qaStatus`/`qaFeedback` cleared on that re-entry; `qaAttempts` is never
 reset), up to the QA-attempt cap (see [Orchestration flow](#orchestration-flow)).
+
+## Agent modes
+
+`LcpAssignmentMode`: `plan | implement | qa | chat | consultee | finalise`. An
+agent's mode **is** its assignment's mode; it drives the prompt
+(`MODE_PROMPTS`), the required completion tool (`requiredToolForMode`), and the
+tools offered (`MODE_TOOLS` in `@lcp/shared`). `MODE_TOOLS` is the single source
+of truth for both the client-side tool filter and the server-side storage
+read-only scope.
+
+| Mode        | Purpose                                                | Prompt source                                      | Tools available                                                                    | Behaviour                                                                                                  | Expectation (required tool) |
+| ----------- | ------------------------------------------------------ | -------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | --------------------------- |
+| `plan`      | Design a task's plan                                   | `MODE_PROMPTS.plan` + injected company role roster | tasks, storage (read-only), memory                                                 | Reads materials/storage to design a plan; **cannot** consult, query the user, or write files               | `create_plan`               |
+| `implement` | Carry out one plan step                                | `MODE_PROMPTS.implement`                           | tasks, storage (read-write), memory, interactions                                  | Produces the step's outputs; may consult other roles; result goes to QA                                    | `complete_assignment`       |
+| `qa`        | Review a completed step                                | `MODE_PROMPTS.qa`                                  | tasks, storage (**read-only**, target's dir), memory, interactions                 | Reads the prepared artifacts and accepts or rejects with feedback                                          | `assure_assignment`         |
+| `chat`      | Converse with a user                                   | `MODE_PROMPTS.chat`                                | tasks, storage (read-write), memory, interactions                                  | Ongoing conversation; may consult/act; returns to `Idle` after each turn                                   | _none_ (narrated reply)     |
+| `consultee` | Answer another agent's consultation                    | `MODE_PROMPTS.consultee`                           | tasks, storage (read-write), memory, interactions                                  | Answers the question concisely in the `summary` (a file only if genuinely needed); orphan assignment       | `complete_assignment`       |
+| `finalise`  | Bring a task's deliverables up to its expected outputs | `MODE_PROMPTS.finalise` + task request/expected    | tasks, storage (**read-write on the task `completed/` dir**), memory, interactions | Edits/renames/deletes deliverables, may consult; runs after all steps + QA when the task states `expected` | `complete_assignment`       |
+
+`consultee` and `finalise` were added in 010.2.8.3. `plan` and `qa` are storage
+read-only; every other mode is read-write. Only `plan` drops the `interactions`
+server (no consultation/user-query — so a planning run always terminates).
 
 ## Artifact model
 

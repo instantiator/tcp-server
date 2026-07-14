@@ -19,6 +19,7 @@
   "replace_in_working_file": "Replaces every occurrence of a literal string in a working-directory file and reports the replacement count. Errors if the file is missing or the string is not found.",
   "delete_working_file": "Soft-deletes a file in your working directory. Reverse with restore_working_file.",
   "restore_working_file": "Restores a soft-deleted file in your working directory.",
+  "rename_working_file": "Renames (moves) a file within your working directory, from one filename to another.",
 
   // Assignment materials (inputs handed to your assignment). Read-only.
   "list_material_files": "Lists the materials supplied to your assignment (uploaded files, prior outputs, and inline text).",

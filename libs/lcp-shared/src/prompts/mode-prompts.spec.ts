@@ -27,9 +27,30 @@ describe('buildAvailableRolesMessage', () => {
 
 describe('MODE_PROMPTS', () => {
   it('has a non-empty prompt for every mode', () => {
-    for (const mode of ['plan', 'implement', 'qa', 'chat'] as const) {
+    for (const mode of [
+      'plan',
+      'implement',
+      'qa',
+      'chat',
+      'consultee',
+      'finalise',
+    ] as const) {
       expect(MODE_PROMPTS[mode].length).toBeGreaterThan(0);
     }
+  });
+
+  it('frames consultee as answering a consultation via complete_assignment', () => {
+    const consultee = MODE_PROMPTS.consultee.toLowerCase();
+    expect(consultee).toContain('consulted you');
+    expect(consultee).toContain('summary');
+    expect(consultee).toContain('complete_assignment');
+  });
+
+  it('frames finalise as meeting the task expected outputs via complete_assignment', () => {
+    const finalise = MODE_PROMPTS.finalise.toLowerCase();
+    expect(finalise).toContain('expected outputs');
+    expect(finalise).toContain('rename_working_file');
+    expect(finalise).toContain('complete_assignment');
   });
 
   it('names the completion tool and describe_server per work mode', () => {
@@ -77,6 +98,11 @@ describe('requiredToolForMode', () => {
     expect(requiredToolForMode('implement')).toEqual(['complete_assignment']);
     expect(requiredToolForMode('plan')).toEqual(['create_plan']);
     expect(requiredToolForMode('qa')).toEqual(['assure_assignment']);
+  });
+
+  it('requires complete_assignment for consultee and finalise', () => {
+    expect(requiredToolForMode('consultee')).toEqual(['complete_assignment']);
+    expect(requiredToolForMode('finalise')).toEqual(['complete_assignment']);
   });
 
   it('requires no tool for chat mode', () => {

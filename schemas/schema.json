@@ -1006,12 +1006,14 @@
       "type": "object"
     },
     "LcpAssignmentMode": {
-      "description": "The kind of work an assignment represents. The agent's mode IS its assignment's mode — there is no separate mode column on  {@link  LcpAgent } .",
+      "description": "The kind of work an assignment represents. The agent's mode IS its assignment's mode — there is no separate mode column on  {@link  LcpAgent } .\n\n- `plan` — design a task's plan (`create_plan`).\n- `implement` — carry out one plan step (`complete_assignment`).\n- `qa` — review a completed step (`assure_assignment`).\n- `chat` — a conversation with a user (no completion tool).\n- `consultee` — answer another agent's consultation (`complete_assignment`).\n- `finalise` — make a task's deliverables meet its expected outputs   (`complete_assignment`), the task-level check after all steps + QA.",
       "enum": [
         "plan",
         "implement",
         "qa",
-        "chat"
+        "chat",
+        "consultee",
+        "finalise"
       ],
       "type": "string"
     },
@@ -1428,6 +1430,7 @@
         "ready",
         "planning",
         "in-progress",
+        "finalising",
         "succeeded",
         "failed",
         "cancelled"

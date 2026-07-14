@@ -20,4 +20,11 @@ export abstract class TaskDispatcher {
 
   /** Called after a QA verdict — promotes approved files, or resumes on reject. */
   abstract assignmentAssured(assignment: LcpAssignment): Promise<void>;
+
+  /**
+   * Called after a finalise agent completes — records the task's final
+   * `completed` set from the completed/ directory and marks the task
+   * `succeeded`.
+   */
+  abstract assignmentFinalised(assignment: LcpAssignment): Promise<void>;
 }

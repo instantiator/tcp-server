@@ -1,9 +1,11 @@
 import {
   filterToolsForMode,
   serverNamesForMode,
-  MODE_DENIED_SERVERS,
-  MODE_DENIED_TOOLS,
+  isStorageReadOnly,
+  MODE_TOOLS,
+  STORAGE_WRITE_TOOLS,
 } from './mode-tools';
+import type { LcpAssignmentMode } from '../models/LcpAssignment.model';
 
 const tool = (serverName: string, base: string) => ({
   serverName,
@@ -12,52 +14,103 @@ const tool = (serverName: string, base: string) => ({
 
 const FULL_SET = [
   tool('tasks', 'create_plan'),
-  tool('tasks', 'describe_server'),
   tool('storage', 'read_working_file'),
   tool('storage', 'list_working_files'),
   tool('storage', 'append_working_file'),
   tool('storage', 'replace_in_working_file'),
+  tool('storage', 'rename_working_file'),
   tool('storage', 'delete_working_file'),
   tool('storage', 'restore_working_file'),
   tool('memory', 'search_knowledge'),
   tool('interactions', 'request_agent_consultation'),
-  tool('interactions', 'request_user_input'),
 ];
 
+const ALL_MODES: LcpAssignmentMode[] = [
+  'plan',
+  'implement',
+  'qa',
+  'chat',
+  'consultee',
+  'finalise',
+];
+
+describe('MODE_TOOLS', () => {
+  it('covers every mode', () => {
+    for (const mode of ALL_MODES) expect(MODE_TOOLS[mode]).toBeDefined();
+  });
+
+  it('makes only plan and qa storage read-only; plan alone drops interactions', () => {
+    expect(isStorageReadOnly('plan')).toBe(true);
+    expect(isStorageReadOnly('qa')).toBe(true);
+    for (const mode of [
+      'implement',
+      'chat',
+      'consultee',
+      'finalise',
+    ] as const) {
+      expect(isStorageReadOnly(mode)).toBe(false);
+    }
+    expect(MODE_TOOLS.plan.servers).not.toContain('interactions');
+    for (const mode of [
+      'implement',
+      'qa',
+      'chat',
+      'consultee',
+      'finalise',
+    ] as const) {
+      expect(MODE_TOOLS[mode].servers).toContain('interactions');
+    }
+  });
+});
+
 describe('serverNamesForMode', () => {
-  it('drops the interactions server for plan mode only', () => {
-    const names = ['tasks', 'storage', 'memory', 'interactions'];
+  const names = ['tasks', 'storage', 'memory', 'interactions'];
+  it('drops interactions for plan; keeps all servers for every other mode', () => {
     expect(serverNamesForMode(names, 'plan')).toEqual([
       'tasks',
       'storage',
       'memory',
     ]);
-    for (const mode of ['implement', 'qa', 'chat'] as const) {
+    for (const mode of [
+      'implement',
+      'qa',
+      'chat',
+      'consultee',
+      'finalise',
+    ] as const) {
       expect(serverNamesForMode(names, mode)).toEqual(names);
     }
   });
 });
 
 describe('filterToolsForMode', () => {
-  it('strips consultation, user-query and file-write tools from plan mode', () => {
+  it('plan: drops interactions and all storage write tools, keeps reads + tasks', () => {
     const kept = filterToolsForMode(FULL_SET, 'plan').map((t) => t.toolName);
-    // create_plan + storage reads survive
     expect(kept).toContain('tasks__create_plan');
     expect(kept).toContain('storage__read_working_file');
-    expect(kept).toContain('storage__list_working_files');
     expect(kept).toContain('memory__search_knowledge');
-    // interactions server gone entirely
     expect(kept).not.toContain('interactions__request_agent_consultation');
-    expect(kept).not.toContain('interactions__request_user_input');
-    // storage mutators gone
-    expect(kept).not.toContain('storage__append_working_file');
-    expect(kept).not.toContain('storage__replace_in_working_file');
-    expect(kept).not.toContain('storage__delete_working_file');
-    expect(kept).not.toContain('storage__restore_working_file');
+    for (const w of STORAGE_WRITE_TOOLS) {
+      expect(kept).not.toContain(`storage__${w}`);
+    }
   });
 
-  it('leaves other modes untouched', () => {
-    for (const mode of ['implement', 'qa', 'chat'] as const) {
+  it('qa: keeps interactions but drops storage write tools (read-only review)', () => {
+    const kept = filterToolsForMode(FULL_SET, 'qa').map((t) => t.toolName);
+    expect(kept).toContain('interactions__request_agent_consultation');
+    expect(kept).toContain('storage__read_working_file');
+    for (const w of STORAGE_WRITE_TOOLS) {
+      expect(kept).not.toContain(`storage__${w}`);
+    }
+  });
+
+  it('read-write modes keep the full set', () => {
+    for (const mode of [
+      'implement',
+      'chat',
+      'consultee',
+      'finalise',
+    ] as const) {
       expect(filterToolsForMode(FULL_SET, mode)).toHaveLength(FULL_SET.length);
     }
   });
@@ -65,12 +118,5 @@ describe('filterToolsForMode', () => {
   it('handles unprefixed tool names', () => {
     const bare = [{ serverName: 'storage', toolName: 'append_working_file' }];
     expect(filterToolsForMode(bare, 'plan')).toHaveLength(0);
-  });
-});
-
-describe('restriction tables', () => {
-  it('only restrict plan mode', () => {
-    expect(Object.keys(MODE_DENIED_SERVERS)).toEqual(['plan']);
-    expect(Object.keys(MODE_DENIED_TOOLS)).toEqual(['plan']);
   });
 });

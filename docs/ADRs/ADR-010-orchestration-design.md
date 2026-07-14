@@ -360,3 +360,44 @@ _2026-07-13._
 - **No knowledge service for empty-KB roles.** `AgentRagService.hasKnowledge`
   (a cheap `EXISTS` check, no embedding) drops the `memory` server and skips RAG
   retrieval for a role with no indexed chunks.
+
+## Amendments as implemented (010.2.8.3)
+
+_2026-07-14._
+
+- **`finalise` mode — a task-level check that guarantees the task's expected
+  outputs.** When the plan (and its QA) completes and the task states `expected`
+  outputs, the deliverables are promoted to the task `completed/` directory and a
+  `finalise`-mode agent is dispatched over that directory (read-write). It edits,
+  renames (`rename_working_file`), or removes files — and may consult another
+  role — until the expected outputs are met, then `complete_assignment`. Pass →
+  task `succeeded`; the run failing → task `failed` with the files it has still
+  promoted. The task is held in a new `finalising` status meanwhile (a sticky
+  rule in `deriveTaskStatus`; `recomputeTaskStatus` holds there instead of
+  jumping to `succeeded`). Tasks with no `expected` still finalise mechanically.
+  `AssignmentService.checkTaskExpectations` is the shape gate; the reaction is
+  `TaskOrchestrationService.assignmentFinalised` / the `finalise` branch of
+  `handleAgentFailed` / `reconcileTask`.
+- **`consultee` mode.** A consultation now runs in a first-class `consultee` mode
+  (`MODE_PROMPTS.consultee`) instead of the old `implement` + prompt-suffix hack;
+  `pause-and-resume` creates the consultee agent with `mode: 'consultee'`. Same
+  completion (`complete_assignment`, orphan assignment).
+- **`MODE_TOOLS` (positive) replaces `MODE_DENIED_*`.** `@lcp/shared`
+  `mode-tools.ts` now states, per mode, the servers offered and a storage access
+  level (`read-write | read-only`) — the single source of truth for both the
+  client-side tool filter and the server-side `resolveStorageScope` read-only
+  flag (which no longer hard-codes `mode === 'qa'`).
+- **`rename_working_file`** storage tool (over the existing
+  `StorageService.moveFile`); a read-only-scope refusal is now
+  `getReadOnlyMessage(tool, readTools)` (in `storage-prompts.ts`), which names
+  the refused tool and the read tools — no mode/dir.
+- **Control-char sanitisation (automatic).** `stripControlChars` (`@lcp/shared`)
+  removes stray C0 control chars (keeping `\t\n\r`) from model-produced text so
+  task/assignment JSON stays valid for strict parsers and terminal-escape
+  sequences never reach an operator's console. Applied automatically via TypeORM
+  column transformers (`sanitiseTextColumn` / `sanitiseArtifactsColumn`) on the
+  model-text columns of `LcpTask`/`LcpAssignment`/`LcpAgent` (`request`,
+  `prompt`, `summary`, `qaFeedback`, agent `output`/`initialPrompt`, and every
+  artifact-list column's `value`), so every write is sanitised at the DB layer
+  with no per-call discipline; `AssignmentService` also strips the `qaFeedback`
+  query-builder update path (where transformers don't apply).

@@ -12,13 +12,6 @@ import { AgentEventService } from '../events/agent-event.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { ConversationService } from './conversation.service';
 
-const CONSULTATION_PROMPT_SUFFIX = [
-  '',
-  'This is a consultation from another agent — usually a question that needs your expertise, not a document to produce.',
-  'Answer it concisely and completely, and return your answer as the `summary` when you complete. You do not need to create any files; only do so if the question genuinely calls for a document, and if you do, reference it in your summary.',
-  'When done, actually invoke `tasks__complete_assignment` with your answer as the summary — writing the answer out as text is not enough on its own.',
-].join('\n');
-
 /**
  * Coordinates the pause/resume lifecycle for agents interrupted by a
  * `request_user_input` or `request_agent_consultation` MCP tool call.
@@ -141,10 +134,12 @@ export class PauseAndResumeService {
     const callingRole = await this.roleRepo.findOneBy({
       id: callingAgent.roleId,
     });
+    // The consultee-mode prompt (MODE_PROMPTS.consultee) frames the task — how to
+    // answer and to complete via complete_assignment — so the initial prompt
+    // just carries the question and context.
     const initialPrompt = [
       context ? `Context: ${context}` : null,
       `Question: ${question}`,
-      CONSULTATION_PROMPT_SUFFIX,
     ]
       .filter(Boolean)
       .join('\n');
@@ -160,7 +155,8 @@ export class PauseAndResumeService {
       initialPrompt,
       // Consultation results are only delivered via complete_assignment — a
       // narrated answer would never resolve the PendingConsultation, so enforce
-      // the call. The consulting agent's orphan assignment is implement-mode.
+      // the call. The consulting agent's orphan assignment is consultee-mode.
+      mode: 'consultee',
       requiredToolCalls: ['complete_assignment'],
     });
 

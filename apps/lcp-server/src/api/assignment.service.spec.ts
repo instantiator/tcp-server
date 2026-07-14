@@ -41,7 +41,7 @@ describe('AssignmentService', () => {
   let companyRepo: Repository<LcpCompany>;
   let roleRepo: Repository<LcpRole>;
 
-  let storage: { checkMissingFiles: jest.Mock };
+  let storage: { checkMissingFiles: jest.Mock; listFiles: jest.Mock };
   let db: {
     getCompany: jest.Mock;
     findRoleByIdOrSlug: jest.Mock;
@@ -51,6 +51,7 @@ describe('AssignmentService', () => {
     taskPlanned: jest.Mock;
     assignmentReadyForQa: jest.Mock;
     assignmentAssured: jest.Mock;
+    assignmentFinalised: jest.Mock;
   };
   let pauseResume: { completeAgent: jest.Mock };
 
@@ -79,7 +80,10 @@ describe('AssignmentService', () => {
   });
 
   beforeEach(() => {
-    storage = { checkMissingFiles: jest.fn().mockResolvedValue([]) };
+    storage = {
+      checkMissingFiles: jest.fn().mockResolvedValue([]),
+      listFiles: jest.fn().mockResolvedValue([]),
+    };
     db = {
       getCompany: jest.fn(),
       findRoleByIdOrSlug: jest.fn(),
@@ -89,6 +93,7 @@ describe('AssignmentService', () => {
       taskPlanned: jest.fn().mockResolvedValue(undefined),
       assignmentReadyForQa: jest.fn().mockResolvedValue(undefined),
       assignmentAssured: jest.fn().mockResolvedValue(undefined),
+      assignmentFinalised: jest.fn().mockResolvedValue(undefined),
     };
     pauseResume = { completeAgent: jest.fn().mockResolvedValue(undefined) };
     service = new AssignmentService(
@@ -167,6 +172,34 @@ describe('AssignmentService', () => {
   function randomSlug(): string {
     return Math.random().toString(36).slice(2, 8);
   }
+
+  // --- column-transformer sanitisation ------------------------------------
+
+  describe('control-char sanitisation (column transformers)', () => {
+    it('strips control chars from text + artifact columns on save', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const ESC = String.fromCharCode(0x1b);
+      const saved = await assignmentRepo.save(
+        assignmentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          mode: 'implement',
+          prompt: `do${ESC}[31m it`,
+          status: 'in-progress',
+          summary: `all${ESC} done`,
+          materials: [],
+          expected: [],
+          prepared: [{ type: 'inline-text', value: `res${ESC}ult` }],
+          approved: [],
+        }),
+      );
+      const fresh = await assignmentRepo.findOneByOrFail({ id: saved.id });
+      expect(fresh.prompt).toBe('do[31m it');
+      expect(fresh.summary).toBe('all done');
+      expect(fresh.prepared[0].value).toBe('result');
+    });
+  });
 
   // --- getAgentAssignment -------------------------------------------------
 
@@ -558,6 +591,75 @@ describe('AssignmentService', () => {
           { type: 'assignment-working-path', value: 'report.md' },
         ]),
       ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    });
+
+    it('completes a consultee (orphan) assignment and completes the agent', async () => {
+      const { assignment, agent } = await setupImplementer({
+        taskId: null,
+        mode: 'consultee',
+      });
+      await service.completeAssignment(
+        assignment.id,
+        agent.id,
+        'worms are great',
+        [],
+      );
+      const fresh = await assignmentRepo.findOneByOrFail({ id: assignment.id });
+      expect(fresh.status).toBe('succeeded');
+      expect(pauseResume.completeAgent).toHaveBeenCalledWith(
+        agent.id,
+        'worms are great',
+      );
+    });
+
+    describe('finalise', () => {
+      async function setupFinalise() {
+        const company = await seedCompany();
+        const role = await seedRole(company.id);
+        const task = await taskRepo.save(
+          taskRepo.create({
+            companyId: company.id,
+            request: 'do it',
+            status: 'finalising',
+            expected: [{ type: 'task-completed-path', value: 'report.txt' }],
+          }),
+        );
+        const { assignment, agent } = await setupImplementer({
+          companyId: company.id,
+          roleId: role.id,
+          taskId: task.id,
+          mode: 'finalise',
+        });
+        db.getCompany.mockResolvedValue({ id: company.id, slug: company.slug });
+        return { task, assignment, agent };
+      }
+
+      it('succeeds and calls assignmentFinalised when the expected file is present', async () => {
+        const { assignment, agent } = await setupFinalise();
+        storage.listFiles.mockResolvedValue([
+          {
+            key: 'k/report.txt',
+            name: 'report.txt',
+            size: 1,
+            lastModified: 'x',
+          },
+        ]);
+        await service.completeAssignment(assignment.id, agent.id, 'ok', []);
+        const fresh = await assignmentRepo.findOneByOrFail({
+          id: assignment.id,
+        });
+        expect(fresh.status).toBe('succeeded');
+        expect(dispatcher.assignmentFinalised).toHaveBeenCalledTimes(1);
+      });
+
+      it('422s when the expected file is not in the completed dir', async () => {
+        const { assignment, agent } = await setupFinalise();
+        storage.listFiles.mockResolvedValue([]); // completed dir empty
+        await expect(
+          service.completeAssignment(assignment.id, agent.id, 'ok', []),
+        ).rejects.toBeInstanceOf(UnprocessableEntityException);
+        expect(dispatcher.assignmentFinalised).not.toHaveBeenCalled();
+      });
     });
 
     it('rejects a caller that is not the assignment agent', async () => {

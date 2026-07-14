@@ -7,6 +7,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { sanitiseTextColumn } from '../validation/sanitize';
 import { LcpAssignment } from './LcpAssignment.model';
 import { LcpCompany } from './LcpCompany.model';
 import { LcpRole } from './LcpRole.model';
@@ -98,7 +99,7 @@ export class LcpAgent extends VersionedEntity {
    * The task prompt supplied when the agent was started.
    * @minLength 1
    */
-  @Column({ type: 'text' })
+  @Column({ type: 'text', transformer: sanitiseTextColumn })
   initialPrompt!: string;
 
   /** Timestamp when this agent record was created. */
@@ -111,7 +112,7 @@ export class LcpAgent extends VersionedEntity {
    * `complete_assignment`), or as a fallback from the last AI message when the
    * loop exits naturally.
    */
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'text', nullable: true, transformer: sanitiseTextColumn })
   output!: string | null;
 
   /**

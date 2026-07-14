@@ -18,6 +18,7 @@ import {
   resolveRunConfig,
   selectNextAssignments,
   taskCompletedKey,
+  taskCompletedPrefix,
 } from '@lcp/shared';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -374,7 +375,11 @@ export class TaskOrchestrationService
 
   // Advancement / finalisation
 
-  /** Dispatches the next ready assignment(s), or finalises when the plan is done. */
+  /**
+   * Dispatches the next ready assignment(s); when the plan is complete either
+   * dispatches a finalise agent (task has expected outputs) or finalises
+   * mechanically (no expected outputs).
+   */
   private async advance(taskId: UUID): Promise<void> {
     const plan = await this.planAssignments(taskId);
     const next = selectNextAssignments(plan);
@@ -385,19 +390,23 @@ export class TaskOrchestrationService
 
     const task = await this.taskRepo.findOneBy({ id: taskId });
     if (!task) return;
-    if (deriveTaskStatus(task.status, plan) === 'succeeded') {
-      await this.finalise(task);
+    const planComplete =
+      plan.length > 0 && plan.every((a) => a.status === 'succeeded');
+    if (!planComplete) return;
+
+    if ((task.expected?.length ?? 0) > 0) {
+      await this.dispatchFinalise(task);
+    } else {
+      await this.finaliseMechanical(task);
     }
   }
 
   /**
    * Copies every assignment's completed files into the task's completed
-   * directory (highest `orderIndex` wins on a filename collision), records the
-   * task's `completed` artifacts, and marks the task `succeeded`. Idempotent —
-   * no-op once `completed` is set.
+   * directory (highest `orderIndex` wins on a filename collision). Idempotent —
+   * a re-copy writes the same bytes. Returns the set of copied filenames.
    */
-  private async finalise(task: LcpTask): Promise<void> {
-    if (task.completed != null) return;
+  private async promoteToTaskCompleted(task: LcpTask): Promise<void> {
     const slug = await this.companySlug(task.companyId);
     const plan = await this.planAssignments(task.id);
     // Ascending order so a later assignment's file overwrites an earlier one —
@@ -405,33 +414,41 @@ export class TaskOrchestrationService
     const ordered = [...plan].sort(
       (a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0),
     );
-
-    const filenames = new Set<string>();
     for (const assignment of ordered) {
       if (assignment.orderIndex == null) continue;
-      const prefix = assignmentCompletedPrefix(
-        slug,
-        task.id,
-        assignment.orderIndex,
+      const files = await this.storage.listFiles(
+        assignmentCompletedPrefix(slug, task.id, assignment.orderIndex),
       );
-      const files = await this.storage.listFiles(prefix);
       for (const file of files) {
         await this.storage.copyFile(
           file.key,
           taskCompletedKey(slug, task.id, file.name),
         );
-        filenames.add(file.name);
       }
     }
+  }
 
-    const completed: LcpTaskCompletedArtifact[] = [
-      ...[...filenames].map(
-        (value): LcpTaskCompletedArtifact => ({
+  /**
+   * Builds the task's `completed` artifact list from the files currently in its
+   * completed/ directory (so a finalise agent's renames/edits are reflected)
+   * plus any approved `inline-text` from the plan assignments.
+   */
+  private async buildTaskCompleted(
+    task: LcpTask,
+  ): Promise<LcpTaskCompletedArtifact[]> {
+    const slug = await this.companySlug(task.companyId);
+    const files = await this.storage.listFiles(
+      taskCompletedPrefix(slug, task.id),
+    );
+    const plan = await this.planAssignments(task.id);
+    return [
+      ...files.map(
+        (f): LcpTaskCompletedArtifact => ({
           type: 'task-completed-path',
-          value,
+          value: f.name,
         }),
       ),
-      ...ordered.flatMap((a) =>
+      ...plan.flatMap((a) =>
         a.approved
           .filter((art) => art.type === 'inline-text')
           .map(
@@ -442,9 +459,108 @@ export class TaskOrchestrationService
           ),
       ),
     ];
+  }
 
+  /**
+   * Finalises a task with no stated `expected` outputs: promote the assignment
+   * deliverables, record `completed`, mark `succeeded`. Idempotent — no-op once
+   * `completed` is set.
+   */
+  private async finaliseMechanical(task: LcpTask): Promise<void> {
+    if (task.completed != null) return;
+    await this.promoteToTaskCompleted(task);
+    const completed = await this.buildTaskCompleted(task);
     await this.taskRepo.update(task.id, { completed, status: 'succeeded' });
     await this.recordTaskState(task, 'succeeded', 'task finalised');
+    this.logger.log(`Task ${task.id} finalised (succeeded)`);
+  }
+
+  /**
+   * Dispatches a finalise agent to bring the task's deliverables up to its
+   * expected outputs. Promotes the assignment files first (so they exist even
+   * if finalise fails — "fail but still promote"), holds the task in
+   * `finalising`, and creates + dispatches a finalise-mode assignment.
+   * Idempotent — no-op if a finalise assignment already exists.
+   */
+  private async dispatchFinalise(task: LcpTask): Promise<void> {
+    const existing = await this.assignmentRepo.findOneBy({
+      taskId: task.id,
+      mode: 'finalise',
+    });
+    if (existing) return;
+
+    await this.promoteToTaskCompleted(task);
+    await this.taskRepo.update(task.id, { status: 'finalising' });
+    await this.recordTaskState(
+      task,
+      'finalising',
+      'dispatching finalise agent',
+    );
+
+    const company = await this.companyRepo.findOneByOrFail({
+      id: task.companyId,
+    });
+    const roleId = task.plannerRoleId ?? company.plannerRoleId;
+    if (!roleId) {
+      throw new Error(`Task ${task.id} has no resolvable role for finalise`);
+    }
+
+    const expectedLines = task.expected
+      .map((e) =>
+        e.type === 'task-completed-path'
+          ? `- file: ${e.value}`
+          : `- text: ${e.value || '(any text)'}`,
+      )
+      .join('\n');
+    const prompt = `Task: ${task.request}\n\nThe task's expected outputs — make the completed deliverables meet or exceed these:\n${expectedLines}`;
+
+    const finalise = await this.assignmentRepo.save(
+      this.assignmentRepo.create({
+        taskId: task.id,
+        companyId: task.companyId,
+        mode: 'finalise',
+        prompt,
+        roleId,
+        status: 'in-progress',
+        materials: [],
+        expected: [],
+      }),
+    );
+    await this.recordAssignmentState(
+      finalise,
+      'assignment dispatched (finalise)',
+    );
+
+    const agentId = await this.dispatchAgentFor(
+      finalise,
+      prompt,
+      'complete_assignment',
+    );
+    this.logger.log(`Dispatched finalise agent ${agentId} for task ${task.id}`);
+  }
+
+  /**
+   * Reaction to a finalise agent completing (its assignment already claimed
+   * `succeeded`): record the task's final `completed` set from the completed/
+   * directory, mark the task `succeeded`, and complete the finalise agent.
+   */
+  async assignmentFinalised(finalise: LcpAssignment): Promise<void> {
+    if (!finalise.taskId) return;
+    const task = await this.taskRepo.findOneBy({ id: finalise.taskId });
+    if (!task) return;
+    const completed = await this.buildTaskCompleted(task);
+    await this.taskRepo.update(task.id, { completed, status: 'succeeded' });
+    await this.recordTaskState(
+      task,
+      'succeeded',
+      'task finalised (expectations met)',
+    );
+    if (finalise.agentId) {
+      await this.pauseResume.completeAgent(
+        finalise.agentId,
+        finalise.summary ?? '',
+      );
+    }
     this.logger.log(`Task ${task.id} finalised (succeeded)`);
   }
 
@@ -465,6 +581,18 @@ export class TaskOrchestrationService
 
     if (assignment.mode === 'plan') {
       await this.failTask(assignment.taskId, `planner failed: ${reason}`);
+      return;
+    }
+
+    // finalise-mode: the task fails, but the files it already promoted stay —
+    // record `completed` from the completed/ directory before failing.
+    if (assignment.mode === 'finalise') {
+      const task = await this.taskRepo.findOneBy({ id: assignment.taskId });
+      if (task) {
+        const completed = await this.buildTaskCompleted(task);
+        await this.taskRepo.update(task.id, { completed });
+      }
+      await this.failTask(assignment.taskId, `finalise failed: ${reason}`);
       return;
     }
 
@@ -554,6 +682,24 @@ export class TaskOrchestrationService
         (agent.status === AgentStatus.Completed && plan.length === 0);
       if (plannerDead) {
         await this.failTask(task.id, 'planner did not produce a plan');
+      }
+      return;
+    }
+
+    if (task.status === 'finalising') {
+      // A finalise agent that died mid-run fails the task (its files were
+      // already promoted); a live one is left to BullMQ/pause-resume.
+      const finalise = await this.assignmentRepo.findOneBy({
+        taskId: task.id,
+        mode: 'finalise',
+      });
+      const agent = finalise?.agentId
+        ? await this.agentRepo.findOneBy({ id: finalise.agentId })
+        : null;
+      if (finalise && (!agent || DEAD_AGENT_STATES.includes(agent.status))) {
+        const completed = await this.buildTaskCompleted(task);
+        await this.taskRepo.update(task.id, { completed });
+        await this.failTask(task.id, 'finalise agent died before restart');
       }
       return;
     }
@@ -660,7 +806,18 @@ export class TaskOrchestrationService
     const task = await this.taskRepo.findOneBy({ id: taskId });
     if (!task) return;
     const plan = await this.planAssignments(taskId);
-    const next = deriveTaskStatus(task.status, plan);
+    let next = deriveTaskStatus(task.status, plan);
+    // When the plan completes but the task states expected outputs, hold it in
+    // `finalising` (not `succeeded`) — a finalise agent must first bring the
+    // deliverables up to those outputs. Guarded so an already-`succeeded` task
+    // (finalise done) is never reverted.
+    if (
+      next === 'succeeded' &&
+      task.status !== 'succeeded' &&
+      (task.expected?.length ?? 0) > 0
+    ) {
+      next = 'finalising';
+    }
     if (next !== task.status) {
       await this.taskRepo.update(taskId, { status: next });
       await this.recordTaskState(task, next, 'status recomputed');

@@ -9,6 +9,8 @@ import type { LcpTaskStatus } from './LcpTask.model';
  *
  * Rules, in order:
  * 1. A terminal `current` (`succeeded | failed | cancelled`) always sticks.
+ * 1b. `current === 'finalising'` sticks — only the orchestrator's finalise
+ *     hooks move a task out of finalising (to `succeeded` or `failed`).
  * 2. Any assignment `failed` → `failed`; else any `cancelled` → `cancelled`.
  * 3. Any assignment `in-progress` or `in-qa` → `in-progress`.
  * 4. At least one assignment and all `succeeded` → `succeeded`.
@@ -26,6 +28,8 @@ export function deriveTaskStatus(
   ) {
     return current;
   }
+
+  if (current === 'finalising') return 'finalising';
 
   if (planAssignments.some((a) => a.status === 'failed')) return 'failed';
   if (planAssignments.some((a) => a.status === 'cancelled')) {

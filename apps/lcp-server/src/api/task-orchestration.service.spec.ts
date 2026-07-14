@@ -669,6 +669,73 @@ describe('TaskOrchestrationService', () => {
     });
   });
 
+  // --- finalise mode --------------------------------------------------------
+
+  describe('finalise', () => {
+    async function seedFinalising() {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, {
+        status: 'finalising',
+        plannerRoleId: role.id,
+        expected: [{ type: 'task-completed-path', value: 'report.txt' }],
+      });
+      const finalise = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        mode: 'finalise',
+        status: 'succeeded',
+        summary: 'done',
+      });
+      const agent = await agentRepo.save(
+        agentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          assignmentId: finalise.id,
+          initialPrompt: 'x',
+        }),
+      );
+      await assignmentRepo.update(finalise.id, { agentId: agent.id });
+      return { company, task, finalise, agent };
+    }
+
+    it('assignmentFinalised: succeeds the task with completed from the completed/ dir', async () => {
+      const { task, finalise } = await seedFinalising();
+      storage.listFiles.mockResolvedValue([
+        { key: 'k/report.txt', name: 'report.txt', size: 1, lastModified: 'x' },
+      ]);
+
+      await service.assignmentFinalised(
+        await assignmentRepo.findOneByOrFail({ id: finalise.id }),
+      );
+
+      const fresh = await taskRepo.findOneByOrFail({ id: task.id });
+      expect(fresh.status).toBe('succeeded');
+      expect(fresh.completed).toEqual([
+        { type: 'task-completed-path', value: 'report.txt' },
+      ]);
+      expect(pauseResume.completeAgent).toHaveBeenCalled();
+    });
+
+    it('handleAgentFailed(finalise): fails the task but keeps files promoted', async () => {
+      const { task, agent } = await seedFinalising();
+      storage.listFiles.mockResolvedValue([
+        { key: 'k/report.txt', name: 'report.txt', size: 1, lastModified: 'x' },
+      ]);
+
+      await service.handleAgentFailed(agent.id, 'boom');
+
+      const fresh = await taskRepo.findOneByOrFail({ id: task.id });
+      expect(fresh.status).toBe('failed');
+      expect(fresh.failureReason).toContain('finalise failed');
+      // Files still recorded as completed.
+      expect(fresh.completed).toEqual([
+        { type: 'task-completed-path', value: 'report.txt' },
+      ]);
+    });
+  });
+
   // --- reconcileTask --------------------------------------------------------
 
   describe('reconcileTask', () => {

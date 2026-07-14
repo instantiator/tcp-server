@@ -11,6 +11,10 @@ import type {
   LcpMaterialArtifact,
   LcpTaskCompletedArtifact,
 } from './LcpArtifact';
+import {
+  sanitiseArtifactsColumn,
+  sanitiseTextColumn,
+} from '../validation/sanitize';
 import { LcpCompany } from './LcpCompany.model';
 import { LcpRole } from './LcpRole.model';
 import { VersionedEntity } from './VersionedEntity';
@@ -24,6 +28,9 @@ export type LcpTaskStatus =
   | 'ready'
   | 'planning'
   | 'in-progress'
+  // The plan (and its QA) is complete; a finalise agent is bringing the
+  // deliverables up to the task's expected outputs before success.
+  | 'finalising'
   | 'succeeded'
   | 'failed'
   | 'cancelled';
@@ -51,7 +58,7 @@ export class LcpTask extends VersionedEntity {
   companyId!: UUID;
 
   /** The user's statement of the work to be done. */
-  @Column({ type: 'text' })
+  @Column({ type: 'text', transformer: sanitiseTextColumn })
   request!: string;
 
   /**
@@ -78,15 +85,27 @@ export class LcpTask extends VersionedEntity {
    *
    * Uses `simple-json` (stored as TEXT) for cross-DB compatibility with SQLite unit tests.
    */
-  @Column({ type: 'simple-json', default: '[]' })
+  @Column({
+    type: 'simple-json',
+    default: '[]',
+    transformer: sanitiseArtifactsColumn,
+  })
   materials!: LcpMaterialArtifact[];
 
   /** Artifacts the task is expected to produce. */
-  @Column({ type: 'simple-json', default: '[]' })
+  @Column({
+    type: 'simple-json',
+    default: '[]',
+    transformer: sanitiseArtifactsColumn,
+  })
   expected!: LcpTaskCompletedArtifact[];
 
   /** Set at finalisation: the artifacts actually produced by the task. */
-  @Column({ type: 'simple-json', nullable: true })
+  @Column({
+    type: 'simple-json',
+    nullable: true,
+    transformer: sanitiseArtifactsColumn,
+  })
   completed!: LcpTaskCompletedArtifact[] | null;
 
   /** Why the task failed — planner failure, QA exhaustion, etc. Null unless `status` is `failed`. */

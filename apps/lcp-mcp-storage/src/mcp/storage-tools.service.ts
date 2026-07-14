@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import axios from 'axios';
 import { z } from 'zod';
-import { storagePrompts } from '../storage-prompts';
+import { getReadOnlyMessage, storagePrompts } from '../storage-prompts';
 import { storageToolDescriptions } from '../storage-tool-descriptions';
 
 /** Shape of a single entry returned by list/search tools. */
@@ -32,7 +32,7 @@ interface ResolvedMaterial {
 
 /** The caller's storage scope, resolved by `GET /internal/agent/:id/storage-scope`. */
 interface StorageScope {
-  mode: 'plan' | 'implement' | 'qa';
+  mode: string;
   readOnly: boolean;
   workingPrefix: string;
   materials: ResolvedMaterial[];
@@ -44,9 +44,12 @@ interface ToolResult {
   content: Array<{ type: 'text'; text: string }>;
 }
 
-const QA_READONLY_MESSAGE =
-  'Not available in qa mode: the working directory is read-only while reviewing. ' +
-  'Use read_working_file / list_working_files to inspect the work.';
+/** The working-directory inspect tools an agent keeps in a read-only scope. */
+const READ_ONLY_WORKING_TOOLS = [
+  'read_working_file',
+  'list_working_files',
+  'get_working_file_properties',
+];
 
 /**
  * Validates a model-supplied filename and joins it under a working prefix.
@@ -121,6 +124,7 @@ export class StorageToolsService {
     this.registerReplaceInWorkingFile(server);
     this.registerDeleteWorkingFile(server);
     this.registerRestoreWorkingFile(server);
+    this.registerRenameWorkingFile(server);
 
     // Assignment-scoped materials.
     this.registerListMaterialFiles(server);
@@ -231,7 +235,10 @@ export class StorageToolsService {
   ): Promise<ToolResult> {
     try {
       const scope = await this.fetchScope(agentId);
-      if (scope.readOnly) return this.textResult(QA_READONLY_MESSAGE);
+      if (scope.readOnly)
+        return this.textResult(
+          getReadOnlyMessage('append_working_file', READ_ONLY_WORKING_TOOLS),
+        );
       const key = resolveScopedKey(scope.workingPrefix, filename);
       const { created } = await this.post<{ created: boolean }>('append', {
         path: key,
@@ -254,7 +261,13 @@ export class StorageToolsService {
   ): Promise<ToolResult> {
     try {
       const scope = await this.fetchScope(agentId);
-      if (scope.readOnly) return this.textResult(QA_READONLY_MESSAGE);
+      if (scope.readOnly)
+        return this.textResult(
+          getReadOnlyMessage(
+            'replace_in_working_file',
+            READ_ONLY_WORKING_TOOLS,
+          ),
+        );
       const key = resolveScopedKey(scope.workingPrefix, filename);
       const { count } = await this.post<{ count: number }>('replace', {
         path: key,
@@ -276,7 +289,10 @@ export class StorageToolsService {
   ): Promise<ToolResult> {
     try {
       const scope = await this.fetchScope(agentId);
-      if (scope.readOnly) return this.textResult(QA_READONLY_MESSAGE);
+      if (scope.readOnly)
+        return this.textResult(
+          getReadOnlyMessage('delete_working_file', READ_ONLY_WORKING_TOOLS),
+        );
       const key = resolveScopedKey(scope.workingPrefix, filename);
       await this.post('delete', {
         path: key,
@@ -296,13 +312,41 @@ export class StorageToolsService {
   ): Promise<ToolResult> {
     try {
       const scope = await this.fetchScope(agentId);
-      if (scope.readOnly) return this.textResult(QA_READONLY_MESSAGE);
+      if (scope.readOnly)
+        return this.textResult(
+          getReadOnlyMessage('restore_working_file', READ_ONLY_WORKING_TOOLS),
+        );
       const key = resolveScopedKey(scope.workingPrefix, filename);
       await this.post('restore', {
         path: key,
         originators: { agent: agentId },
       });
       return this.textResult(`Restored working file: ${filename}`);
+    } catch (e) {
+      return this.textResult(this.extractErrorMessage(e));
+    }
+  }
+
+  async renameWorkingFile(
+    agentId: string,
+    from: string,
+    to: string,
+  ): Promise<ToolResult> {
+    try {
+      const scope = await this.fetchScope(agentId);
+      if (scope.readOnly)
+        return this.textResult(
+          getReadOnlyMessage('rename_working_file', READ_ONLY_WORKING_TOOLS),
+        );
+      // Both ends are confined to the working directory by resolveScopedKey.
+      const source = resolveScopedKey(scope.workingPrefix, from);
+      const destination = resolveScopedKey(scope.workingPrefix, to);
+      await this.post('move', {
+        source,
+        destination,
+        originators: { agent: agentId },
+      });
+      return this.textResult(`Renamed working file: ${from} → ${to}`);
     } catch (e) {
       return this.textResult(this.extractErrorMessage(e));
     }
@@ -688,6 +732,25 @@ export class StorageToolsService {
         },
       },
       ({ agentId, filename }) => this.restoreWorkingFile(agentId, filename),
+    );
+  }
+
+  private registerRenameWorkingFile(server: McpServer): void {
+    server.registerTool(
+      'rename_working_file',
+      {
+        description: storageToolDescriptions.rename_working_file,
+        inputSchema: {
+          agentId: z.uuid().describe('The calling agent UUID.'),
+          from: z
+            .string()
+            .describe('Current filename, relative to your working directory.'),
+          to: z
+            .string()
+            .describe('New filename, relative to your working directory.'),
+        },
+      },
+      ({ agentId, from, to }) => this.renameWorkingFile(agentId, from, to),
     );
   }
 

@@ -43,6 +43,18 @@ export const MODE_PROMPTS: Record<LcpAssignmentMode, string> = {
     "When the user asks you to do something, take the action using the tools available to you; don't just describe what you would do. Actually invoke each tool, and use its exact name (call `describe_server` on a service for its exact tool names and signatures).",
     'There is no completion tool and no fixed deliverable — the conversation continues until the user ends it. End each turn with your reply and wait for the next message.',
   ].join('\n\n'),
+
+  consultee: [
+    'Another agent has CONSULTED you — this is usually a question that needs your expertise, not a document to produce. The question (and any context) is below.',
+    'Answer it concisely and completely, drawing on your knowledge base and read-only access to the shared storage service. Return your answer as the `summary` when you complete — you do not need to create any files; only do so if the question genuinely calls for a document, and if you do, reference it in your summary.',
+    '`complete_assignment` is available to call directly by its exact name. Actually invoke it once with your answer as the summary — writing the answer out as text in your reply is not enough on its own.',
+  ].join('\n\n'),
+
+  finalise: [
+    "You are working a FINALISE assignment — the task-level check after all steps and their QA. Your job is to make the task's completed deliverables meet or exceed the task's expected outputs, listed below.",
+    "The deliverables are in your working directory (the task's completed files). Read them, and where they fall short of the expected outputs make the changes: edit content (`replace_in_working_file`/`append_working_file`), rename a file to the expected name (`rename_working_file`), or remove a stray file (`delete_working_file`). For a change you cannot make confidently yourself, consult the role best placed to advise before making it.",
+    'When the expected outputs are satisfied, hand the final deliverables over with `complete_assignment` (list them in `prepared`). Actually invoke the tool by its exact name — you MUST call `complete_assignment` before ending.',
+  ].join('\n\n'),
 };
 
 /** Minimal role shape for {@link buildAvailableRolesMessage}. */
@@ -84,6 +96,8 @@ export function requiredToolForMode(mode: LcpAssignmentMode): string[] {
     case 'qa':
       return ['assure_assignment'];
     case 'implement':
+    case 'consultee':
+    case 'finalise':
       return ['complete_assignment'];
     case 'chat':
       return [];

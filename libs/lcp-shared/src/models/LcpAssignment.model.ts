@@ -13,6 +13,10 @@ import type {
   LcpAssignmentWorkingArtifact,
   LcpMaterialArtifact,
 } from './LcpArtifact';
+import {
+  sanitiseArtifactsColumn,
+  sanitiseTextColumn,
+} from '../validation/sanitize';
 import { LcpAgent } from './LcpAgent.model';
 import { LcpCompany } from './LcpCompany.model';
 import { LcpRole } from './LcpRole.model';
@@ -22,8 +26,22 @@ import { VersionedEntity } from './VersionedEntity';
 /**
  * The kind of work an assignment represents. The agent's mode IS its
  * assignment's mode — there is no separate mode column on {@link LcpAgent}.
+ *
+ * - `plan` — design a task's plan (`create_plan`).
+ * - `implement` — carry out one plan step (`complete_assignment`).
+ * - `qa` — review a completed step (`assure_assignment`).
+ * - `chat` — a conversation with a user (no completion tool).
+ * - `consultee` — answer another agent's consultation (`complete_assignment`).
+ * - `finalise` — make a task's deliverables meet its expected outputs
+ *   (`complete_assignment`), the task-level check after all steps + QA.
  */
-export type LcpAssignmentMode = 'plan' | 'implement' | 'qa' | 'chat';
+export type LcpAssignmentMode =
+  | 'plan'
+  | 'implement'
+  | 'qa'
+  | 'chat'
+  | 'consultee'
+  | 'finalise';
 
 /**
  * Lifecycle states for a {@link LcpAssignment}. A QA rejection returns the
@@ -97,7 +115,7 @@ export class LcpAssignment extends VersionedEntity {
   orderIndex?: number | null;
 
   /** The instructions given to the assigned agent. */
-  @Column({ type: 'text' })
+  @Column({ type: 'text', transformer: sanitiseTextColumn })
   prompt!: string;
 
   /** The role this assignment must be worked by. */
@@ -142,26 +160,42 @@ export class LcpAssignment extends VersionedEntity {
    *
    * Uses `simple-json` (stored as TEXT) for cross-DB compatibility with SQLite unit tests.
    */
-  @Column({ type: 'simple-json', default: '[]' })
+  @Column({
+    type: 'simple-json',
+    default: '[]',
+    transformer: sanitiseArtifactsColumn,
+  })
   materials!: LcpMaterialArtifact[];
 
   /** Artifacts the assignment is expected to produce. */
-  @Column({ type: 'simple-json', default: '[]' })
+  @Column({
+    type: 'simple-json',
+    default: '[]',
+    transformer: sanitiseArtifactsColumn,
+  })
   expected!: LcpAssignmentWorkingArtifact[];
 
   /** Set by `complete_assignment`: the artifacts the agent prepared for review. */
-  @Column({ type: 'simple-json', default: '[]' })
+  @Column({
+    type: 'simple-json',
+    default: '[]',
+    transformer: sanitiseArtifactsColumn,
+  })
   prepared!: LcpAssignmentWorkingArtifact[];
 
   /** Set when QA accepts: the artifacts promoted into the assignment's completed directory. */
-  @Column({ type: 'simple-json', default: '[]' })
+  @Column({
+    type: 'simple-json',
+    default: '[]',
+    transformer: sanitiseArtifactsColumn,
+  })
   approved!: LcpAssignmentCompletedArtifact[];
 
   /**
    * The completing agent's final answer, recorded by `complete_assignment`.
    * Becomes the agent's `output` when QA accepts.
    */
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'text', nullable: true, transformer: sanitiseTextColumn })
   summary!: string | null;
 
   /** Outcome of the current/last QA review. Cleared (with {@link qaFeedback}) whenever the assignment (re-)enters `in-progress`. */
@@ -169,7 +203,7 @@ export class LcpAssignment extends VersionedEntity {
   qaStatus!: LcpAssignmentQaStatus;
 
   /** QA reviewer's feedback. Cleared alongside {@link qaStatus}. */
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'text', nullable: true, transformer: sanitiseTextColumn })
   qaFeedback!: string | null;
 
   /** Number of QA review cycles this assignment has been through. Never reset. */
