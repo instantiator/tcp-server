@@ -150,7 +150,7 @@ flowchart TD
   Postgres[(PostgreSQL\n+ pgvector :5432)]
   MinIO[(MinIO :9000\nconsole :9001)]
   McpStorage["lcp-mcp-storage\n:3010"]
-  McpMemory["lcp-mcp-memory\n:3011\n(stub)"]
+  McpMemory["lcp-mcp-memory\n:3011"]
   McpInteract["lcp-mcp-interactions\n:3012"]
   McpTasks["lcp-mcp-tasks\n:3013"]
 
@@ -280,27 +280,30 @@ Quick reference:
 
 ```bash
 ./scripts/run-unit-tests.sh         # no services required
-./scripts/run-integration-tests.sh  # starts postgres, redis, minio
-./scripts/run-smoke-tests.sh        # starts full stack including Keycloak
+./scripts/run-integration-tests.sh  # starts postgres, redis, minio, stub-llm
 ./scripts/run-e2e-tests.sh          # starts postgres, redis, minio
+./scripts/run-api-tests.sh          # starts full stack including Keycloak
+./scripts/run-smoke-tests.sh        # starts full stack including Keycloak
+./scripts/run-all-tests.sh          # all five tiers
 ```
 
 ## Commands reference
 
-| Command                      | Purpose                                                |
-| ---------------------------- | ------------------------------------------------------ |
-| `npm run build`              | Compile both apps to `dist/`                           |
-| `npm run build lcp-server`   | Compile lcp-server only                                |
-| `npm run build lcp-agent`    | Compile lcp-agent only                                 |
-| `npm run start:dev`          | Start lcp-server with hot reload                       |
-| `npm run lint`               | ESLint with auto-fix                                   |
-| `npm run format`             | Prettier over `apps/`, `libs/`, and `docs/`            |
-| `npm test`                   | Unit tests                                             |
-| `npm run test:e2e`           | E2E tests                                              |
-| `npm run test:integration`   | Integration tests (needs Docker)                       |
-| `npm run test:smoke`         | Smoke tests (needs `docker compose up --profile auth`) |
-| `npm run schema:generate`    | Regenerate [schemas/schema.json](schemas/schema.json)  |
-| `npm run licenses:generate`  | Regenerate [docs/licenses.md](docs/licenses.md)        |
-| `npm run migration:generate` | Generate a new TypeORM migration                       |
-| `npm run migration:run`      | Run pending migrations                                 |
-| `npm run migration:revert`   | Revert the last migration                              |
+| Command                      | Purpose                                                                    |
+| ---------------------------- | -------------------------------------------------------------------------- |
+| `npm run build`              | Compile all apps to `dist/`, then regenerate the schema and license report |
+| `npm run build lcp-server`   | Compile lcp-server only                                                    |
+| `npm run build lcp-agent`    | Compile lcp-agent only                                                     |
+| `npm run start:dev`          | Start lcp-server with hot reload                                           |
+| `npm run lint`               | ESLint with auto-fix                                                       |
+| `npm run format`             | Prettier over `apps/`, `libs/`, `test/`, and `docs/`                       |
+| `npm test`                   | Unit tests                                                                 |
+| `npm run test:e2e`           | E2E tests                                                                  |
+| `npm run test:integration`   | Integration tests (needs Docker)                                           |
+| `npm run test:api`           | API contract tests (needs `docker compose up --profile auth`)              |
+| `npm run test:smoke`         | Smoke tests (needs `docker compose up --profile auth`)                     |
+| `npm run schema:generate`    | Regenerate [schemas/schema.json](schemas/schema.json)                      |
+| `npm run licenses:generate`  | Regenerate [docs/licenses.md](docs/licenses.md)                            |
+| `npm run migration:generate` | Generate a new TypeORM migration                                           |
+| `npm run migration:run`      | Run pending migrations                                                     |
+| `npm run migration:revert`   | Revert the last migration                                                  |

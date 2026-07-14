@@ -62,7 +62,7 @@ Returns a markdown overview of the storage service: available tools and path con
 
 **Usage pattern:** Agents should call this first when they discover the storage server is available. Prompt part 3 directs agents to do this automatically.
 
-**Tool-schema gating:** all other tools in this table are only bound to the model after `describe_server` has been called, and stay bound for a small number of iterations before being hidden again (see [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-0086)). Calling any other tool before `describe_server` will fail because the LLM was never given that tool's schema in the first place.
+**Tool-schema gating:** removed in 010.2.8.2 — all tools in this table are bound to the model from turn 1 (subject to mode filtering; see [Agent Services → Enabling MCP tools](agent-services.md#enabling-mcp-tools-for-a-role) and [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-010282)), not gated behind a `describe_server` call.
 
 ---
 

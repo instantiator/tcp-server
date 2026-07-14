@@ -37,6 +37,26 @@ function axiosError(status: number, body: unknown): unknown {
   return err;
 }
 
+/** Calls a registered MCP tool directly, bypassing the transport layer. */
+async function callTool(
+  service: StorageToolsService,
+  toolName: string,
+  args: Record<string, unknown>,
+): Promise<string> {
+  const server = service.createServer();
+  const tools = (server as unknown as { _registeredTools: unknown })
+    ._registeredTools as Record<
+    string,
+    {
+      handler: (
+        args: Record<string, unknown>,
+      ) => Promise<{ content: { text: string }[] }>;
+    }
+  >;
+  const result = await tools[toolName].handler(args);
+  return result.content[0].text;
+}
+
 /** Routes the scope GET to `scope`; any other GET falls through to a default. */
 function mockScope(scope: Partial<Scope>): void {
   const full: Scope = {
@@ -114,20 +134,23 @@ describe('StorageToolsService', () => {
     });
   });
 
-  describe('checkMissingFiles', () => {
-    it('proxies to GET /internal/storage/exists with a repeated (non-bracket) query string', async () => {
-      mockedAxios.get.mockResolvedValue({
-        data: { missing: ['acme/missing.txt'] },
-      });
-      const missing = await makeService().checkMissingFiles([
-        'acme/exists.txt',
-        'acme/missing.txt',
-      ]);
-      expect(mockedAxios.get).toHaveBeenCalledWith(
-        'http://lcp-server:3000/internal/storage/exists?path=acme%2Fexists.txt&path=acme%2Fmissing.txt',
-        { headers: { 'X-Internal-Api-Key': 'secret-key' } },
-      );
-      expect(missing).toEqual(['acme/missing.txt']);
+  describe('describe_folder', () => {
+    it.each([
+      ['acme/tasks/t1/materials/', 'Task materials'],
+      ['acme/tasks/t1/completed/', 'Task completed outputs'],
+      ['acme/tasks/t1/assignments/0/working/', 'Assignment working area'],
+      ['acme/assignments/orphan-1/working/', 'Assignment working area'],
+      [
+        'acme/tasks/t1/assignments/0/completed/',
+        'Assignment completed outputs',
+      ],
+      ['acme/knowledge/analyst/', 'Knowledge base'],
+      ['acme/knowledge/shared/', 'Knowledge base'],
+      ['acme/audit/t1/', 'Audit log'],
+      ['acme/unrecognised/path/', 'No specific description'],
+    ])('describes %s as %s', async (path, expectedPrefix) => {
+      const text = await callTool(makeService(), 'describe_folder', { path });
+      expect(text).toContain(expectedPrefix);
     });
   });
 

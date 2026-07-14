@@ -44,7 +44,7 @@ When prompt sections (role description, company environment, RAG data, MCP respo
 
 ### Tool-schema token counting
 
-`ContextBudgetService.countTools(tools)` counts the exact JSON schema LangChain's `bindTools` sends for every currently-bound tool (via `convertToOpenAITool`), and this is folded into every "current tokens" calculation. Bound-tool overhead was previously invisible to budgeting — a run with several MCP servers loaded could be much closer to its window limit than message-only counting suggested. This is also why [tool-schema gating](#tool-schema-gating) matters for budgeting, not just prompt hygiene: narrowing which tools are bound directly reduces the counted total.
+`ContextBudgetService.countTools(tools)` counts the exact JSON schema LangChain's `bindTools` sends for every currently-bound tool (via `convertToOpenAITool`), and this is folded into every "current tokens" calculation. Bound-tool overhead was previously invisible to budgeting — a run with several MCP servers loaded could be much closer to its window limit than message-only counting suggested. This is also why [mode-based tool filtering](#tool-schema-gating-removed) matters for budgeting, not just prompt hygiene: narrowing which tools are bound directly reduces the counted total.
 
 ### Reactive backstop
 
@@ -54,9 +54,9 @@ The proactive tiktoken-based estimate can still be wrong (encoding differences b
 
 Before any new data (user message, RAG results, MCP responses) is added to the context, its size is checked. If it would push the total over the trigger threshold, it is compacted first. If shared storage is available, very large payloads will be stored there with a compact reference summary included in the context instead (not yet implemented — see [ADR-007](ADRs/ADR-007-shared-company-storage.md)).
 
-### Tool-schema gating
+### Tool-schema gating (removed)
 
-Only each MCP server's `describe_server` tool is bound to the model until the agent calls it; the server's other tools then become bound for a small number of iterations before being hidden again (`ToolVisibilityTracker`, `libs/lcp-shared/src/llm/tool-visibility-tracker.ts`). This is per-run, in-memory state — not persisted in the LangGraph checkpoint — so a process restart simply costs one extra `describe_server` call on retry. The `interactions` server is exempt (its tools, e.g. `complete_task`, are essential control-flow calls that must always stay reachable). See [agent-services.md](agent-services.md#enabling-mcp-tools-for-a-role) and [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-0086).
+From 008.6 through 010.2.8, only each MCP server's `describe_server` tool was bound to the model until the agent called it; the server's other tools then became bound for a small number of iterations before being hidden again (`ToolVisibilityTracker`). This describe-then-reveal gating was removed in 010.2.8.2 — all mode-filtered tools are now bound from turn 1 (the per-mode server/tool filtering in `@lcp/shared` `mode-tools.ts` is what actually keeps the bound-tool count, and therefore the token count, down). See [agent-services.md](agent-services.md#enabling-mcp-tools-for-a-role) and [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-010282).
 
 ## Compaction reporting
 
@@ -103,7 +103,6 @@ See [ADR-013](ADRs/ADR-013-prompt-assembly-context-management.md) for the full d
 | `ContextCompactorService`  | `libs/lcp-shared/src/context/context-compactor.service.ts`   | Trim and summarise operations                                                                   |
 | `IncomingDataGuardService` | `libs/lcp-shared/src/context/incoming-data-guard.service.ts` | Pre-check incoming data size                                                                    |
 | `ContextManagerService`    | `libs/lcp-shared/src/context/context-manager.service.ts`     | Orchestrates budget checks and compaction (`prepare()` per-turn, `checkBudget()` per-iteration) |
-| `ToolVisibilityTracker`    | `libs/lcp-shared/src/llm/tool-visibility-tracker.ts`         | Describe-then-reveal tool-schema gating                                                         |
 | `isContextLengthError`     | `libs/lcp-shared/src/llm/context-length-error.ts`            | Provider-agnostic reactive-backstop classifier                                                  |
 | `runSupervisedGraph`       | `libs/lcp-shared/src/llm/run-supervised-graph.ts`            | Shared per-iteration loop: budget, tool visibility, terminal-status, abort-on-pause             |
 | `AgentEventService`        | `apps/lcp-server/src/events/agent-event.service.ts`          | In-memory SSE event bus per agent (lcp-server's `ContextEventSink`)                             |

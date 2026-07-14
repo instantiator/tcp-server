@@ -31,7 +31,7 @@ See [agent-services.md → MCP Servers](agent-services.md#mcp-servers) for how a
 | [`complete_assignment`](#complete_assignment) | `complete_assignment(agentId, companyId, summary, prepared)` | `implement` |
 | [`assure_assignment`](#assure_assignment)     | `assure_assignment(agentId, companyId, qa, feedback?)`       | `qa`        |
 
-The three non-`describe_server` tools are **mode-gated**: calling the wrong one for your mode returns a clear error naming the tool you should use instead. Unlike `lcp-mcp-interactions`, this server _is_ subject to describe-then-reveal tool-schema gating — only `describe_server` is bound from the start of a run; the completion tools are revealed after the agent calls `describe_server`.
+The three non-`describe_server` tools are **mode-gated**: calling the wrong one for your mode returns a clear error naming the tool you should use instead. All four tools are bound to the model from turn 1 — the describe-then-reveal gating that used to delay the completion tools until after `describe_server` was called was removed in 010.2.8.2 (see [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-010282)); which tools a mode gets is now decided entirely by `@lcp/shared` `mode-tools.ts`.
 
 ---
 

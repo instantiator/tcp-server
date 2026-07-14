@@ -67,7 +67,7 @@ Agents access company storage via a **storage MCP server** (S3-compatible). Tool
 
 The storage MCP server is scoped to the company bucket at startup — it cannot access other companies' buckets.
 
-> **Note (008.6):** since [ADR-013's tool-schema gating](ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-0086), the four tools above are not all bound to the model from the start of a run — only `describe_server` is, until the agent calls it, after which `read_file`/`write_file`/`list_files`/`delete_file` become bound for a few iterations before being hidden again. The tool count and behaviour are unchanged; only the timing of when their schemas are visible to the model differs. `storage-tools.service.ts`'s `describe_server` response text was shortened accordingly (a usage blurb instead of a full tool catalogue, since the catalogue now arrives via the `tools` array itself once revealed).
+> **Note (008.6, superseded 010.2.6/010.2.8.2):** the four-tool table above is superseded — `write_file`/`delete_file` were replaced by assignment-scoped working/material tools in 010.2.6, and the describe-then-reveal tool-schema gating referenced here was itself removed in 010.2.8.2 (all mode-filtered tools are now bound from turn 1). See the [010.2.6 amendment](#amendments-as-implemented-01026) below for the actual current tool set, and [ADR-013 Amendments](ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-010282) for the gating removal.
 
 ### Agent access and overwrite safety
 

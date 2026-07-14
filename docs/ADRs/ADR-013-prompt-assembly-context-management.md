@@ -1,6 +1,6 @@
 # ADR-013: Agent Prompt Assembly and Context Management
 
-Status: Partially Implemented (amended 2026-07-13 — see [Amendments](#amendments-as-implemented-01028) at the end)
+Status: Partially Implemented (amended — see [Amendments](#amendments-as-implemented-010282) at the end)
 
 ## Context
 
@@ -30,7 +30,7 @@ The intended prompt for each agent turn consists of eight parts, assembled in or
 
 Part 6 (pre-fetched MCP responses) remains unimplemented; agents call MCP tools reactively via the LangGraph tool node instead.
 
-Part 3 (services available) directs the agent to a server's `describe_server` tool for detail — since 008.6, that detail (the server's other tools' full schemas) is only actually bound to the model once `describe_server` has been called, for a bounded number of iterations (see [Amendments](#amendments-as-implemented-0086)).
+Part 3 (services available) directs the agent to a server's `describe_server` tool for detail. From 008.6 to 010.2.8, that detail (the server's other tools' full schemas) was only actually bound to the model once `describe_server` had been called, for a bounded number of iterations; that describe-then-reveal gating was removed in 010.2.8.2 — every mode-filtered tool's schema is now bound from turn 1 (see [Amendments](#amendments-as-implemented-010282)).
 
 ## Context window management
 
@@ -111,7 +111,7 @@ Also implemented:
 
 - **`ContextBudgetService.countTools(tools)`** — the bound-tools schema LangChain's `bindTools` sends on every request was previously invisible to budget checks (message-content-only counting). Now folded into every "current tokens" calculation.
 - **Reactive backstop**: a `try/catch` around each `streamEvents` pass classifies context-length-exceeded errors from the provider (`isContextLengthError`, `libs/lcp-shared/src/llm/context-length-error.ts`) as a defense-in-depth complement to the proactive tiktoken-based check. One compaction attempt is allowed; if the budget is still exceeded (proactively or reactively), the run fails cleanly with `"Context window exceeded even after compaction"` instead of proceeding to a doomed model call.
-- **Tool-schema gating (describe-then-reveal)**: `ToolVisibilityTracker` (`libs/lcp-shared/src/llm/tool-visibility-tracker.ts`) keeps only each MCP server's own `describe_server` tool bound until the agent calls it, at which point that server's other tools become bound for a small number of iterations before being hidden again. The `interactions` server is exempt (its tools are essential control-flow calls that must stay reachable, and it has few enough tools that gating it saves little context anyway). This is the single biggest lever for supporting models with smaller context windows, since tool-schema overhead (point 1 above) scales with the number of MCP servers loaded.
+- **Tool-schema gating (describe-then-reveal), removed in 010.2.8.2 — see that section below.** `ToolVisibilityTracker` kept only each MCP server's own `describe_server` tool bound until the agent called it, at which point that server's other tools became bound for a small number of iterations before being hidden again. The `interactions` server was exempt (its tools are essential control-flow calls that must stay reachable, and it has few enough tools that gating it saved little context anyway). At the time, this was the single biggest lever for supporting models with smaller context windows, since tool-schema overhead (point 1 above) scales with the number of MCP servers loaded — 010.2.8.2 replaced it with static mode-based tool filtering instead.
 - **Root cause of the originally reported bug**: a consultation-resolution tool call (or `complete_task`) mutates the agent's DB status, but the LangGraph `tools → agent` edge would still route back to the `agent` node for one more (unwanted, context-length-risking) model call unless something actually stops it. Breaking the event-consumption loop is not enough — it doesn't reliably stop LangGraph's own internal execution. `interruptAfterTools: true` fixes this structurally: the graph cannot proceed past a tool result without the runner explicitly resuming it, so a terminal-status check between iterations reliably prevents the wasted call.
 
 ## Amendments as implemented (009.2)
@@ -131,3 +131,14 @@ _2026-07-13._
 
 - **Prompt-assembly moved to `@lcp/shared` and shared by both operation paths.** The pure per-part builders (`renderSystemPrompt`, `buildServicesMessage`, `buildRagMessage`, `buildAssignmentMessage`) now live in `libs/lcp-shared/src/prompts/prompt-assembly.ts` (relocated from `apps/lcp-agent/src/agent/prompt-assembly.ts`). Both `AgentLoopService.buildInitialState` (lcp-agent worker runs) and `ChatService` (lcp-server in-process chat turns) build their first-turn message list from these same builders — the chat path previously duplicated its own `buildServicesMessage`/`buildRagMessage` and rendered a bare user message as part 4. The two lcp-agent-specific fixed strings the builders closed over are now passed in as a `PromptAssemblyStrings` argument (lcp-agent supplies its jsonc-loaded `agentPrompts`; lcp-server supplies its own equivalent set); the MCP `usage` lookup uses the already-shared `MCP_REGISTRY`.
 - **The chat path now renders the mode-aware part 4.** A chat agent carries a `chat`-mode orphan assignment (see [ADR-010 010.2.8 amendment](ADR-010-orchestration-design.md#amendments-as-implemented-01028)); `ChatService` renders part 4 via `buildAssignmentMessage` with `MODE_PROMPTS.chat`, so a conversational agent now knows it is in a conversation rather than inferring it from the role prompt. Chat behaviour is otherwise preserved: SSE streaming, per-turn user message on resume turns, RAG overflow-guarding, and returning the agent to `Idle` after each turn (`requiredToolCalls: []` keeps required-tool enforcement out of a chat turn).
+
+## Amendments as implemented (010.2.8.2)
+
+**Describe-then-reveal tool-schema gating (008.6) is removed.** `ToolVisibilityTracker` no longer exists. Every tool a mode is allowed to use is now bound to the model from turn 1, for two reasons found during 010.2.8.2's mode-gating work: the schemas involved are compact enough that the token savings from gating were small, and gating actively hurt weaker models, which would sometimes "forget" a tool existed after it was hidden again. What replaced it is a static, per-mode allow-list rather than a dynamic reveal-on-use mechanism:
+
+- **`@lcp/shared` `mode-tools.ts`** (`MODE_TOOLS`) is the single source of truth for which MCP servers — and, for `storage`, whether the scope is read-only — each mode gets. `filterToolsForMode` applies this to the tool list `McpClientService.loadTools` binds, and the same map drives the server-side storage read-only check, so the client-side filter and the server-side enforcement can't drift apart.
+- **Forced tool calls for work modes.** `plan`/`implement`/`qa` now bind with `tool_choice: 'required'`, so a model can't narrate an action instead of calling the tool that performs it.
+- **`plan` mode is read-only planning.** It drops the `interactions` server entirely (no consultation or user queries) and gets read-only storage — a planning run can no longer stall waiting on a human, or short-circuit by writing files instead of producing a plan.
+- **The `memory` service is skipped for empty-knowledge-base roles** (`AgentRagService.hasKnowledge`), rather than being bound and immediately failing every `recall`/`search_knowledge` call.
+
+This section supersedes the 008.6 tool-schema-gating bullet above and the Part 3 row's earlier description; see also [ADR-010's 010.2.8.2 amendment](ADR-010-orchestration-design.md#amendments-as-implemented-010282), which this work was originally recorded under.

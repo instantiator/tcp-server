@@ -33,6 +33,7 @@ services:
   lcp-mcp-storage:        Storage MCP server (MinIO tools) — port 3010
   lcp-mcp-memory:         Memory/RAG MCP server — port 3011
   lcp-mcp-interactions:   Interactions MCP server — port 3012
+  lcp-mcp-tasks:          Tasks MCP server (added 010.2.5) — port 3013
   postgres:               PostgreSQL 16 + pgvector (pgvector/pgvector image)
   minio:                  MinIO object storage (minio/minio image)
   redis:                  Redis 7 (BullMQ queue backend)
