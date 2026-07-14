@@ -10,9 +10,12 @@ import {
   AuditEventType,
   ContextManagerService,
   LcpAgent,
+  LcpAssignment,
   LcpCompany,
   LcpRole,
+  LcpTask,
   LlmConfig,
+  MODE_PROMPTS,
   renderTemplate,
 } from '@lcp/shared';
 import { Logger } from '@nestjs/common';
@@ -29,7 +32,7 @@ import { agentPrompts } from '../agent-prompts';
 import { AgentEventPublisherService } from './agent-event-publisher.service';
 import { AgentLoopService } from './agent-loop.service';
 
-const ALL_ENTITIES = [LcpCompany, LcpRole, LcpAgent];
+const ALL_ENTITIES = [LcpCompany, LcpRole, LcpAgent, LcpTask, LcpAssignment];
 
 // Returns a compiled-graph stub whose streamEvents yields the given events.
 // getState defaults to next: [] (natural end) — these tests exercise one
@@ -132,6 +135,7 @@ jest.mock('@langchain/langgraph', () => {
 describe('AgentLoopService', () => {
   let service: AgentLoopService;
   let agentRepo: Repository<LcpAgent>;
+  let assignmentRepo: Repository<LcpAssignment>;
   let roleRepo: Repository<LcpRole>;
   let companyRepo: Repository<LcpCompany>;
   let auditRecord: jest.Mock;
@@ -194,7 +198,10 @@ describe('AgentLoopService', () => {
         },
         {
           provide: AgentRagService,
-          useValue: { retrieve: jest.fn().mockResolvedValue([]) },
+          useValue: {
+            retrieve: jest.fn().mockResolvedValue([]),
+            hasKnowledge: jest.fn().mockResolvedValue(true),
+          },
         },
         {
           provide: McpClientService,
@@ -212,6 +219,7 @@ describe('AgentLoopService', () => {
 
     service = testingModule.get(AgentLoopService);
     agentRepo = testingModule.get(getRepositoryToken(LcpAgent));
+    assignmentRepo = testingModule.get(getRepositoryToken(LcpAssignment));
     roleRepo = testingModule.get(getRepositoryToken(LcpRole));
     companyRepo = testingModule.get(getRepositoryToken(LcpCompany));
     mcpClient = testingModule.get(McpClientService);
@@ -224,7 +232,9 @@ describe('AgentLoopService', () => {
     publishEvent.mockClear();
     prepareContext.mockClear();
     checkBudget.mockClear();
+    // Agents before assignments (agent.assignmentId FK).
     await agentRepo.clear();
+    await assignmentRepo.clear();
     await roleRepo.clear();
     await companyRepo.clear();
     jest.clearAllMocks();
@@ -247,6 +257,9 @@ describe('AgentLoopService', () => {
       llmConfig?: LlmConfig;
       companyLlmConfig?: LlmConfig;
       systemPromptTemplate?: string;
+      mode?: LcpAssignment['mode'];
+      materials?: LcpAssignment['materials'];
+      expected?: LcpAssignment['expected'];
     } = {
       llmConfig: {
         provider: 'lm-studio',
@@ -274,14 +287,29 @@ describe('AgentLoopService', () => {
           opts.systemPromptTemplate ?? 'You are {{name}} as of {{date}}.',
       }),
     );
+    // Every agent carries an assignment (orphan for this plain run).
+    const assignment = await assignmentRepo.save(
+      assignmentRepo.create({
+        taskId: null,
+        companyId: company.id,
+        roleId: role.id,
+        mode: opts.mode ?? 'implement',
+        prompt: 'Summarise the market.',
+        status: 'in-progress',
+        materials: opts.materials ?? [],
+        expected: opts.expected ?? [],
+      }),
+    );
     const agent = await agentRepo.save(
       agentRepo.create({
         companyId: company.id,
         roleId: role.id,
+        assignmentId: assignment.id,
         initialPrompt: 'Summarise the market.',
       }),
     );
-    return { company, role, agent };
+    await assignmentRepo.update(assignment.id, { agentId: agent.id });
+    return { company, role, agent, assignment };
   }
 
   it('sets status to running then completed on a successful run', async () => {
@@ -334,8 +362,17 @@ describe('AgentLoopService', () => {
       { messages: { content: string }[] },
     ];
     const contents = input.messages.map((m) => m.content);
-    expect(contents).toContain('compacted task text');
-    expect(contents).not.toContain('Summarise the market.');
+    // The compacted prompt is now embedded in the assignment-presentation part.
+    expect(
+      contents.some(
+        (c) => typeof c === 'string' && c.includes('compacted task text'),
+      ),
+    ).toBe(true);
+    expect(
+      contents.some(
+        (c) => typeof c === 'string' && c.includes('Summarise the market.'),
+      ),
+    ).toBe(false);
   });
 
   it('publishes agent_status and llm observability events during a successful run', async () => {
@@ -600,17 +637,17 @@ describe('AgentLoopService', () => {
 
   describe('required tool call enforcement', () => {
     const INTERACTIONS_TOOL = {
-      serverName: 'interactions',
-      tool: { name: 'interactions__complete_task' },
+      serverName: 'tasks',
+      tool: { name: 'tasks__complete_assignment' },
     };
 
-    // Event set where the agent invoked complete_task but the call did not
+    // Event set where the agent invoked complete_assignment but the call did not
     // flip the status (e.g. the tool errored). No on_tool_end, so no status
     // re-read fires mid-stream.
     const TOOL_FIRED_EVENTS = [
       {
         event: 'on_tool_start',
-        name: 'interactions__complete_task',
+        name: 'tasks__complete_assignment',
         run_id: 'run-1',
         data: { input: {} },
       },
@@ -631,7 +668,7 @@ describe('AgentLoopService', () => {
       );
     }
 
-    it('reminds the agent and takes the completed path when complete_task fires after the nudge', async () => {
+    it('reminds the agent and takes the completed path when complete_assignment fires after the nudge', async () => {
       mcpClient.loadTools.mockResolvedValueOnce([INTERACTIONS_TOOL]);
       const graph = makeSequentialStubGraph(SUCCESS_EVENTS, SUCCESS_EVENTS);
       mockToolGraphOnce(graph);
@@ -641,7 +678,7 @@ describe('AgentLoopService', () => {
         .spyOn(agentRepo, 'findOneBy')
         // Post-stream re-read: still running — enforcement kicks in
         .mockResolvedValueOnce({ ...agent, status: AgentStatus.Running })
-        // Re-read after the nudge round: complete_task flipped the status
+        // Re-read after the nudge round: complete_assignment flipped the status
         .mockResolvedValueOnce({
           ...agent,
           status: AgentStatus.Completed,
@@ -656,7 +693,7 @@ describe('AgentLoopService', () => {
       ];
       expect(nudgeInput.messages[0].content).toBe(
         renderTemplate(agentPrompts.required_tools_reminder, {
-          tools: 'interactions__complete_task',
+          tools: 'tasks__complete_assignment',
         }),
       );
       // Completed via the tool path — no fallback write, no failure
@@ -693,7 +730,7 @@ describe('AgentLoopService', () => {
       ];
       expect(nudgeInput.messages[0].content).toBe(
         renderTemplate(agentPrompts.required_tools_call_failed, {
-          tools: 'interactions__complete_task',
+          tools: 'tasks__complete_assignment',
         }),
       );
     });
@@ -722,7 +759,7 @@ describe('AgentLoopService', () => {
       expect(graph.streamEvents).toHaveBeenCalledTimes(3);
       expect(notifyFailed).toHaveBeenCalledWith(
         agent.id,
-        expect.stringContaining('complete_task'),
+        expect.stringContaining('complete_assignment'),
       );
       expect(notifyComplete).not.toHaveBeenCalled();
       const updated = await agentRepo.findOneByOrFail({ id: agent.id });
@@ -758,7 +795,7 @@ describe('AgentLoopService', () => {
       const { agent, role, company } = await seedAgentAndRole();
 
       // runLoop() re-reads agent status after the stream to detect a tool-set
-      // status change (e.g. complete_task); the initial run() lookup hits the
+      // status change (e.g. complete_assignment); the initial run() lookup hits the
       // real DB and eager-loads role/company normally.
       jest
         .spyOn(agentRepo, 'findOneBy')
@@ -791,15 +828,15 @@ describe('AgentLoopService', () => {
       const toolEvents = [
         {
           event: 'on_tool_start',
-          name: 'storage__write_file',
+          name: 'storage__append_working_file',
           run_id: 'run-1',
-          data: { input: { path: 'notes.md', content: 'hi' } },
+          data: { input: { filename: 'notes.md', content: 'hi' } },
         },
         {
           event: 'on_tool_end',
-          name: 'storage__write_file',
+          name: 'storage__append_working_file',
           run_id: 'run-1',
-          data: { output: 'Created notes.md' },
+          data: { output: 'Created working file: notes.md' },
         },
         ...SUCCESS_EVENTS,
       ];
@@ -868,7 +905,7 @@ describe('AgentLoopService', () => {
       );
     });
 
-    it('includes the task initialPrompt as a HumanMessage', async () => {
+    it('presents the assignment as the mode prompt followed by the task prompt', async () => {
       let capturedInput: typeof MessagesAnnotation.State | undefined;
 
       jest.mocked(StateGraph).mockImplementationOnce(
@@ -898,11 +935,58 @@ describe('AgentLoopService', () => {
       await service.run(agent.id, undefined, new AbortController());
 
       const messages = capturedInput!.messages;
-      const hasTaskPrompt = messages.some(
+      // Prompt part 4 now carries the implement-mode prompt plus the task prompt.
+      const assignmentMsg = messages.find(
         (m) =>
-          m instanceof HumanMessage && m.content === 'Summarise the market.',
+          m instanceof HumanMessage &&
+          typeof m.content === 'string' &&
+          m.content.includes('Summarise the market.'),
       );
-      expect(hasTaskPrompt).toBe(true);
+      expect(assignmentMsg).toBeDefined();
+      expect((assignmentMsg as HumanMessage).content).toContain(
+        MODE_PROMPTS.implement,
+      );
+    });
+
+    it('uses the assignment mode prompt for a non-implement mode', async () => {
+      let capturedInput: typeof MessagesAnnotation.State | undefined;
+
+      jest.mocked(StateGraph).mockImplementationOnce(
+        () =>
+          ({
+            addNode: jest.fn().mockReturnThis(),
+            addEdge: jest.fn().mockReturnThis(),
+            compile: jest.fn().mockReturnValue({
+              streamEvents: jest
+                .fn()
+                .mockImplementation(
+                  (input: typeof MessagesAnnotation.State) => {
+                    capturedInput = input;
+                    return {
+                      // eslint-disable-next-line @typescript-eslint/require-await
+                      [Symbol.asyncIterator]: async function* () {
+                        for (const ev of SUCCESS_EVENTS) yield ev;
+                      },
+                    };
+                  },
+                ),
+            }),
+          }) as unknown as InstanceType<typeof StateGraph>,
+      );
+
+      const { agent } = await seedAgentAndRole({
+        llmConfig: { provider: 'lm-studio', model: 'qwen3-5b', apiKey: 'k' },
+        mode: 'plan',
+      });
+      await service.run(agent.id, undefined, new AbortController());
+
+      const hasPlanPrompt = capturedInput!.messages.some(
+        (m) =>
+          m instanceof HumanMessage &&
+          typeof m.content === 'string' &&
+          m.content.includes(MODE_PROMPTS.plan),
+      );
+      expect(hasPlanPrompt).toBe(true);
     });
 
     it('substitutes companyId and roleId into the rendered system prompt', async () => {

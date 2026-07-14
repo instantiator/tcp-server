@@ -208,7 +208,8 @@ export class MemoryToolsService {
          SELECT 'knowledge' AS source, id::text, "documentPath" AS path, content,
                 1 - (embedding <=> $1::vector) AS similarity
          FROM knowledge_chunk
-         WHERE "roleId" = $2::uuid AND embedding IS NOT NULL
+         WHERE (("roleId" = $2::uuid) OR ("roleId" IS NULL AND "companyId" = $3::uuid))
+           AND embedding IS NOT NULL
          UNION ALL
          SELECT 'episodic', id::text, '' AS path, content,
                 1 - (embedding <=> $1::vector) AS similarity
@@ -217,8 +218,8 @@ export class MemoryToolsService {
        ) combined
        WHERE similarity >= 0.5
        ORDER BY similarity DESC
-       LIMIT $3`,
-      [vec, roleId, topK],
+       LIMIT $4`,
+      [vec, roleId, companyId, topK],
     );
 
     return this.formatResults(rows);
@@ -239,10 +240,11 @@ export class MemoryToolsService {
       `SELECT 'knowledge' AS source, id::text, "documentPath" AS path, content,
               1 - (embedding <=> $1::vector) AS similarity
        FROM knowledge_chunk
-       WHERE "roleId" = $2::uuid AND embedding IS NOT NULL AND 1 - (embedding <=> $1::vector) >= 0.5
+       WHERE (("roleId" = $2::uuid) OR ("roleId" IS NULL AND "companyId" = $3::uuid))
+         AND embedding IS NOT NULL AND 1 - (embedding <=> $1::vector) >= 0.5
        ORDER BY similarity DESC
-       LIMIT $3`,
-      [pgvector.toSql(queryVector), roleId, topK],
+       LIMIT $4`,
+      [pgvector.toSql(queryVector), roleId, companyId, topK],
     );
 
     return this.formatResults(rows);

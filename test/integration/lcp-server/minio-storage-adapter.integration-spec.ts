@@ -5,7 +5,7 @@ import {
   ListObjectsV2Command,
   S3Client,
 } from '@aws-sdk/client-s3';
-import { LcpCompany } from '@lcp/shared';
+import { LcpCompany, LcpRole } from '@lcp/shared';
 import {
   BadRequestException,
   ConflictException,
@@ -16,6 +16,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken, TypeOrmModule } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuditService } from '../../../apps/lcp-server/src/audit/audit.service';
+import { StorageActionsController } from '../../../apps/lcp-server/src/api/storage-actions.controller';
+import { KnowledgeReindexService } from '../../../apps/lcp-server/src/rag/knowledge-reindex.service';
 import { DocumentValidationException } from '../../../apps/lcp-server/src/storage/document-validation.exception';
 import { MinioStorageAdapter } from '../../../apps/lcp-server/src/storage/minio-storage.adapter';
 import { requireEnv } from '../../support/require-env';
@@ -74,7 +76,9 @@ describe('MinioStorageAdapter (integration)', () => {
         TypeOrmModule.forRoot({
           type: 'postgres',
           url: DATABASE_URL,
-          entities: [LcpCompany],
+          // LcpRole is registered but never queried here — required so
+          // TypeORM can resolve LcpCompany.plannerRole's relation target.
+          entities: [LcpCompany, LcpRole],
           synchronize: true,
         }),
         TypeOrmModule.forFeature([LcpCompany]),
@@ -82,6 +86,10 @@ describe('MinioStorageAdapter (integration)', () => {
       providers: [
         MinioStorageAdapter,
         { provide: AuditService, useValue: { record: jest.fn() } },
+        {
+          provide: KnowledgeReindexService,
+          useValue: { bumpByKey: jest.fn() },
+        },
         {
           provide: ConfigService,
           useValue: {
@@ -263,5 +271,95 @@ describe('MinioStorageAdapter (integration)', () => {
     await expect(
       adapter.writeFile('acme/test/bad.json', '{invalid'),
     ).rejects.toBeInstanceOf(DocumentValidationException);
+  });
+
+  // The append/replace endpoints are read-modify-write variants of write; this
+  // exercises them against real MinIO through the controller that backs the
+  // assignment-scoped working-file tools (docs/prompts/010.2.6).
+  describe('StorageActionsController append/replace', () => {
+    let ctrl: StorageActionsController;
+    let audit: { record: jest.Mock };
+
+    beforeAll(() => {
+      ctrl = new StorageActionsController(adapter);
+      audit = module.get(AuditService);
+    });
+
+    it('append creates the file when absent and records origination', async () => {
+      audit.record.mockClear();
+      const result = await ctrl.append({
+        path: 'acme/test/append-new.md',
+        content: '# Hello\n',
+        originators: { agent: 'agent-1' },
+      });
+      expect(result.created).toBe(true);
+      expect(await adapter.readFile('acme/test/append-new.md')).toBe(
+        '# Hello\n',
+      );
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.any(String),
+        'storage',
+        'agent-1',
+        expect.anything(),
+        expect.objectContaining({
+          tool: 'write_file',
+          path: 'acme/test/append-new.md',
+          originators: { user: null, agent: 'agent-1', task: null },
+        }),
+      );
+    });
+
+    it('append concatenates onto existing content (created: false)', async () => {
+      await adapter.writeFile('acme/test/append-existing.md', 'one\n', true);
+      const result = await ctrl.append({
+        path: 'acme/test/append-existing.md',
+        content: 'two\n',
+      });
+      expect(result.created).toBe(false);
+      expect(await adapter.readFile('acme/test/append-existing.md')).toBe(
+        'one\ntwo\n',
+      );
+    });
+
+    it('append validates the resulting document', async () => {
+      await adapter.writeFile(
+        'acme/test/append.json',
+        JSON.stringify({ a: 1 }),
+        true,
+      );
+      await expect(
+        ctrl.append({ path: 'acme/test/append.json', content: 'garbage' }),
+      ).rejects.toBeInstanceOf(DocumentValidationException);
+    });
+
+    it('replace substitutes every occurrence and reports the count', async () => {
+      await adapter.writeFile('acme/test/replace.md', 'foo foo bar foo', true);
+      const result = await ctrl.replace({
+        path: 'acme/test/replace.md',
+        find: 'foo',
+        replace: 'baz',
+      });
+      expect(result.count).toBe(3);
+      expect(await adapter.readFile('acme/test/replace.md')).toBe(
+        'baz baz bar baz',
+      );
+    });
+
+    it('replace throws NotFoundException for a missing file', async () => {
+      await expect(
+        ctrl.replace({ path: 'acme/test/absent.md', find: 'a', replace: 'b' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('replace throws BadRequestException when the string is absent', async () => {
+      await adapter.writeFile('acme/test/nomatch.md', 'nothing here', true);
+      await expect(
+        ctrl.replace({
+          path: 'acme/test/nomatch.md',
+          find: 'zzz',
+          replace: 'b',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
   });
 });

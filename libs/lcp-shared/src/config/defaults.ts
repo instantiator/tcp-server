@@ -15,6 +15,15 @@
 export const DEFAULT_AGENT_ITERATIONS = 10;
 
 /**
+ * Default number of agent jobs the lcp-agent worker processes concurrently.
+ * Overridden by `AGENT_WORKER_CONCURRENCY` (lcp-agent env). Used in
+ * {@link AgentWorkerService}. Lower it to `1` when agents share a single
+ * capacity-limited model endpoint (e.g. one local LLM), so parallel runs don't
+ * starve each other of model time.
+ */
+export const DEFAULT_AGENT_WORKER_CONCURRENCY = 5;
+
+/**
  * Default wall-clock timeout in milliseconds for an entire agent run.
  * Overridden by `AGENT_LOOP_TIMEOUT_MS` (lcp-agent env), then by
  * {@link AgentRunConfig.timeoutMs} via {@link resolveRunConfig}.
@@ -49,3 +58,12 @@ export const DEFAULT_LLM_TIMEOUT_MS = 30 * 60 * 1000; // 30m
  * Used in {@link ContextBudgetService.DEFAULT_WINDOW} and {@link ChatService.sendMessage}.
  */
 export const DEFAULT_LLM_CONTEXT_WINDOW = 8192;
+
+/**
+ * Default maximum QA rejections a task assignment may accrue before it is
+ * failed (and its task with it).
+ * Overridden by `TASK_MAX_QA_ATTEMPTS` (lcp-server env), then by
+ * {@link AgentRunConfig.maxQaAttempts} via {@link resolveRunConfig}.
+ * Used in {@link TaskOrchestrationService}.
+ */
+export const DEFAULT_TASK_MAX_QA_ATTEMPTS = 3;

@@ -1,9 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import { z } from 'zod';
-import { AuditClientService } from '@lcp/shared';
 import { interactionPrompts } from '../interactions-prompts';
 import { interactionToolDescriptions } from '../interactions-tool-descriptions';
 
@@ -30,12 +29,30 @@ function err(text: string): ToolResult {
 }
 
 /**
+ * Relays a 4xx server error's message to the model as a normal (non-error)
+ * tool result so it can self-correct and retry; falls back to `fallback` for
+ * 5xx/transport errors it cannot act on. Mirrors lcp-mcp-tasks' `relayOrError`.
+ */
+function relay4xxOrError(e: unknown, fallback: string): ToolResult {
+  const axiosErr = e as AxiosError<{ message?: string | string[] }>;
+  const status = axiosErr.response?.status;
+  if (status && status >= 400 && status < 500) {
+    const raw = axiosErr.response?.data?.message;
+    const message = Array.isArray(raw) ? raw.join('; ') : raw;
+    if (message) return ok(message);
+  }
+  return err(fallback);
+}
+
+/**
  * Builds fresh {@link McpServer} instances pre-loaded with real interaction tools.
  * A new server is created per request so state is never shared across sessions.
  *
- * All state-mutating operations (`request_user_input`, `request_agent_consultation`,
- * `complete_task`) delegate to lcp-server's internal endpoints, which handle
- * all database writes and BullMQ job dispatch.
+ * All state-mutating operations (`request_user_input`,
+ * `request_agent_consultation`) delegate to lcp-server's internal endpoints,
+ * which handle all database writes and BullMQ job dispatch. Assignment
+ * completion moved to the lcp-mcp-tasks service (`complete_assignment`) in
+ * task-orchestration part 5.
  */
 @Injectable()
 export class InteractionsToolsService {
@@ -43,14 +60,8 @@ export class InteractionsToolsService {
   private readonly serverUrl: string;
   private readonly apiKey: string;
 
-  private readonly storageUrl: string;
-
-  constructor(
-    private readonly audit: AuditClientService,
-    config: ConfigService,
-  ) {
+  constructor(config: ConfigService) {
     this.serverUrl = config.getOrThrow<string>('LCP_SERVER_URL');
-    this.storageUrl = config.getOrThrow<string>('LCP_STORAGE_URL');
     this.apiKey = config.getOrThrow<string>('INTERNAL_API_KEY');
   }
 
@@ -65,7 +76,6 @@ export class InteractionsToolsService {
     this.registerListAvailableContacts(server);
     this.registerRequestUserInput(server);
     this.registerRequestAgentConsultation(server);
-    this.registerCompleteTask(server);
 
     return server;
   }
@@ -310,7 +320,12 @@ export class InteractionsToolsService {
           );
         } catch (e) {
           this.logger.error(`request_agent_consultation failed: ${String(e)}`);
-          return err(
+          // A 4xx carries a corrective message (e.g. an unknown target role,
+          // naming the valid roles) — relay it verbatim as a normal tool result
+          // so the model can retry with a valid value, rather than a generic
+          // failure it can't act on.
+          return relay4xxOrError(
+            e,
             interpolate(interactionPrompts.error_consultation, {
               roleName: roleName ?? roleId ?? roleSlug ?? 'unknown role',
             }),
@@ -318,122 +333,5 @@ export class InteractionsToolsService {
         }
       },
     );
-  }
-
-  private registerCompleteTask(server: McpServer): void {
-    server.registerTool(
-      'complete_task',
-      {
-        description: interactionToolDescriptions.complete_task,
-        inputSchema: {
-          agentId: z.uuid().describe('The calling agent UUID.'),
-          companyId: z.uuid().describe('The company UUID.'),
-          finalAnswer: z
-            .string()
-            .min(1)
-            .describe(
-              'A concise summary of the completed task and its outputs.',
-            ),
-          outputFiles: z
-            .array(z.string().min(1))
-            .optional()
-            .describe(
-              'Paths in shared storage that this task produced or references as output. Each will be verified to exist.',
-            ),
-        },
-      },
-      async ({
-        agentId,
-        companyId,
-        finalAnswer,
-        outputFiles,
-      }): Promise<ToolResult> => {
-        try {
-          // File existence validation — only if the agent listed output files
-          if (outputFiles && outputFiles.length > 0) {
-            const missing = await this.checkMissingFiles(outputFiles);
-            if (missing.length > 0) {
-              const changes = await this.fetchStorageChanges(agentId);
-              return ok(this.buildMissingFilesPrompt(missing, changes));
-            }
-          }
-
-          await axios.post(
-            `${this.serverUrl}/internal/agent/${agentId}/complete`,
-            { output: finalAnswer },
-            { headers: { 'X-Internal-Api-Key': this.apiKey } },
-          );
-          this.audit.record(companyId, 'agent', agentId, 'state_change', {
-            newStatus: 'completed',
-            source: 'complete_task',
-          });
-          return ok(interactionPrompts.task_complete);
-        } catch (e) {
-          this.logger.error(
-            `complete_task failed for agent ${agentId}: ${String(e)}`,
-          );
-          return err(interactionPrompts.error_complete_task);
-        }
-      },
-    );
-  }
-
-  /** Returns paths from `outputFiles` that do not exist in shared storage. */
-  private async checkMissingFiles(paths: string[]): Promise<string[]> {
-    try {
-      const params = new URLSearchParams(paths.map((p) => ['path', p]));
-      const res = await axios.get<{ missing: string[] }>(
-        `${this.storageUrl}/files/exists?${params.toString()}`,
-        { headers: { 'X-Internal-Api-Key': this.apiKey } },
-      );
-      return res.data.missing;
-    } catch (e) {
-      this.logger.warn(`File existence check failed: ${String(e)}`);
-      // Fail open — if the storage service is unreachable, allow completion
-      return [];
-    }
-  }
-
-  /** Fetches the storage change tracker for the given agent from lcp-server. */
-  private async fetchStorageChanges(agentId: string): Promise<{
-    created: string[];
-    modified: string[];
-  }> {
-    try {
-      const res = await axios.get<{
-        storageChanges?: {
-          created?: string[];
-          modified?: string[];
-        } | null;
-      }>(`${this.serverUrl}/internal/agent/${agentId}`, {
-        headers: { 'X-Internal-Api-Key': this.apiKey },
-      });
-      const sc = res.data.storageChanges;
-      return {
-        created: sc?.created ?? [],
-        modified: sc?.modified ?? [],
-      };
-    } catch {
-      return { created: [], modified: [] };
-    }
-  }
-
-  /** Builds the canned error prompt for missing output files. */
-  private buildMissingFilesPrompt(
-    missing: string[],
-    changes: { created: string[]; modified: string[] },
-  ): string {
-    const missingList = missing.map((p) => `- ${p}`).join('\n');
-    const created = changes.created.length
-      ? changes.created.join(', ')
-      : '(none)';
-    const modified = changes.modified.length
-      ? changes.modified.join(', ')
-      : '(none)';
-    return interpolate(interactionPrompts.missing_output_files, {
-      missingList,
-      created,
-      modified,
-    });
   }
 }

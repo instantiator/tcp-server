@@ -16,6 +16,8 @@ function makeAgent(overrides: Partial<LcpAgent> = {}): LcpAgent {
     status: AgentStatus.Idle,
     threadId: null,
     initialPrompt: 'Do something.',
+    assignmentId: randomUUID(),
+    assignment: {} as never,
     output: null,
     createdAt: new Date(),
     updatedAt: new Date(),

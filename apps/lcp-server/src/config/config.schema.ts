@@ -12,6 +12,8 @@ export const configSchema = Joi.object({
   MINIO_ACCESS_KEY: Joi.string().required(),
   MINIO_SECRET_KEY: Joi.string().required(),
   MINIO_BUCKET_PREFIX: Joi.string().default('lcp'),
+  /** Interval (ms) between knowledge-reindex reconciliation poll cycles. */
+  KNOWLEDGE_POLL_INTERVAL_MS: Joi.number().integer().positive().default(60000),
   OIDC_ISSUER_URL: Joi.string().uri().required(),
   // Override for container-to-container calls; OIDC_ISSUER_URL is still used for iss validation.
   OIDC_INTERNAL_ISSUER_URL: Joi.string().uri().optional(),
@@ -31,6 +33,7 @@ export const configSchema = Joi.object({
   MCP_STORAGE_URL: Joi.string().uri().empty('').optional(),
   MCP_MEMORY_URL: Joi.string().uri().empty('').optional(),
   MCP_INTERACTIONS_URL: Joi.string().uri().empty('').optional(),
+  MCP_TASKS_URL: Joi.string().uri().empty('').optional(),
   LLM_PROVIDER: Joi.string().empty('').optional(),
   LLM_MODEL: Joi.string().empty('').optional(),
   LLM_BASE_URL: Joi.string().uri().empty('').optional(),

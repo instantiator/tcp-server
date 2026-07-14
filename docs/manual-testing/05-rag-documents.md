@@ -11,7 +11,7 @@ You are testing the RAG (Retrieval-Augmented Generation) pipeline. Knowledge doc
 ```mermaid
 flowchart TD
     subgraph Upload
-        CLI[lcp-cli store-role-documents] -->|POST /api/roles/:id/documents| API[lcp-server]
+        CLI[lcp-cli store-knowledge] -->|POST /api/role/:id/knowledge| API[lcp-server]
         API -->|store| MIO[MinIO :9000]
         API -->|chunk + embed| EMBED[Embedding Model]
         EMBED -->|vectors| PG[(pgvector)]
@@ -58,9 +58,9 @@ EOF
 ## 5.2 — Upload the document
 
 ```bash
-./lcp-cli.sh store-role-documents \
-  --role-id "$ROLE_ID" \
-  --src /tmp/test-knowledge.md
+./lcp-cli.sh store-knowledge \
+  --role "$ROLE_ID" \
+  --source /tmp/test-knowledge.md
 ```
 
 Expected output:
@@ -77,12 +77,12 @@ If validation fails (e.g. missing `title`), the CLI reports the error and upload
 ## 5.3 — List stored documents
 
 ```bash
-./lcp-cli.sh list-role-documents --role-id "$ROLE_ID"
+./lcp-cli.sh list-knowledge --role "$ROLE_ID"
 ```
 
 Expected: a table showing `test-knowledge.md` with its size and last-modified date.
 
-You can also verify the file is in MinIO by checking the console at [http://localhost:9001](http://localhost:9001) under the path `{company-slug}/knowledge/{role-name}/test-knowledge.md`.
+You can also verify the file is in MinIO by checking the console at [http://localhost:9001](http://localhost:9001) under the path `{company-slug}/knowledge/{role-slug}/test-knowledge.md`.
 
 ---
 
@@ -132,9 +132,9 @@ docker compose logs lcp-server | grep -i "rag\|chunk\|retriev"
 ## 5.6 — Remove a document
 
 ```bash
-./lcp-cli.sh remove-role-documents \
-  --role-id "$ROLE_ID" \
-  --pattern "test-knowledge.md"
+./lcp-cli.sh delete-knowledge \
+  --role "$ROLE_ID" \
+  --file "test-knowledge.md"
 ```
 
 Expected: success message. The document is removed from MinIO and all associated `KnowledgeChunk` rows are deleted from PostgreSQL. Subsequent agents will not retrieve content from it.

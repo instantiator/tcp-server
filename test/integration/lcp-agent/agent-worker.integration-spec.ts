@@ -8,13 +8,16 @@ import {
   ContextManagerService,
   IncomingDataGuardService,
   LcpAgent,
+  LcpAssignment,
   LcpCompany,
   LcpRole,
+  LcpTask,
 } from '@lcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import { Queue } from 'bullmq';
+import { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { AgentEventPublisherService } from '../../../apps/lcp-agent/src/agent/agent-event-publisher.service';
 import { AgentLoopService } from '../../../apps/lcp-agent/src/agent/agent-loop.service';
@@ -31,7 +34,7 @@ import { requireEnv } from '../../support/require-env';
 // DATABASE_URL and REDIS_URL are always present.
 // Run via: ./scripts/run-integration-tests.sh
 
-const ALL_ENTITIES = [LcpCompany, LcpRole, LcpAgent];
+const ALL_ENTITIES = [LcpCompany, LcpRole, LcpAgent, LcpTask, LcpAssignment];
 
 const dbUrl = requireEnv('DATABASE_URL');
 const redisUrl = requireEnv('REDIS_URL');
@@ -53,6 +56,7 @@ describe('AgentWorkerService (integration)', () => {
   let companyRepo: Repository<LcpCompany>;
   let roleRepo: Repository<LcpRole>;
   let agentRepo: Repository<LcpAgent>;
+  let assignmentRepo: Repository<LcpAssignment>;
 
   beforeAll(async () => {
     module = await Test.createTestingModule({
@@ -75,7 +79,10 @@ describe('AgentWorkerService (integration)', () => {
         },
         {
           provide: AgentRagService,
-          useValue: { retrieve: jest.fn().mockResolvedValue([]) },
+          useValue: {
+            retrieve: jest.fn().mockResolvedValue([]),
+            hasKnowledge: jest.fn().mockResolvedValue(true),
+          },
         },
         {
           provide: McpClientService,
@@ -128,6 +135,7 @@ describe('AgentWorkerService (integration)', () => {
     companyRepo = module.get(getRepositoryToken(LcpCompany));
     roleRepo = module.get(getRepositoryToken(LcpRole));
     agentRepo = module.get(getRepositoryToken(LcpAgent));
+    assignmentRepo = module.get(getRepositoryToken(LcpAssignment));
   });
 
   afterAll(async () => {
@@ -139,12 +147,27 @@ describe('AgentWorkerService (integration)', () => {
   // beforeEach ensures a clean slate even when a previous run failed mid-cleanup.
   async function cleanDb() {
     await agentRepo.createQueryBuilder().delete().execute();
+    await assignmentRepo.createQueryBuilder().delete().execute();
     await roleRepo.createQueryBuilder().delete().execute();
     await companyRepo.createQueryBuilder().delete().execute();
   }
 
   beforeEach(cleanDb);
   afterEach(cleanDb);
+
+  /** Creates an orphan implement-mode assignment for an agent's mandatory FK. */
+  async function seedAssignment(companyId: UUID, roleId: UUID) {
+    return assignmentRepo.save(
+      assignmentRepo.create({
+        taskId: null,
+        companyId,
+        roleId,
+        mode: 'implement',
+        prompt: 'Task.',
+        status: 'in-progress',
+      }),
+    );
+  }
 
   it('worker picks up a queued job and runs the agent to Completed', async () => {
     const company = await companyRepo.save(
@@ -169,10 +192,12 @@ describe('AgentWorkerService (integration)', () => {
         systemPromptTemplate: 'You are {{name}}.',
       }),
     );
+    const assignment = await seedAssignment(company.id, role.id);
     const agent = await agentRepo.save(
       agentRepo.create({
         companyId: company.id,
         roleId: role.id,
+        assignmentId: assignment.id,
         initialPrompt: 'Summarise what you can do.',
       }),
     );
@@ -215,11 +240,14 @@ describe('AgentWorkerService (integration)', () => {
         systemPromptTemplate: 'You are {{name}}.',
       }),
     );
+    const assignmentA = await seedAssignment(company.id, role.id);
+    const assignmentB = await seedAssignment(company.id, role.id);
     const [agentA, agentB] = await Promise.all([
       agentRepo.save(
         agentRepo.create({
           companyId: company.id,
           roleId: role.id,
+          assignmentId: assignmentA.id,
           initialPrompt: 'Task A',
         }),
       ),
@@ -227,6 +255,7 @@ describe('AgentWorkerService (integration)', () => {
         agentRepo.create({
           companyId: company.id,
           roleId: role.id,
+          assignmentId: assignmentB.id,
           initialPrompt: 'Task B',
         }),
       ),

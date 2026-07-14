@@ -1,6 +1,6 @@
 import { KnowledgeChunk } from '@lcp/shared';
 import { randomUUID } from 'crypto';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, IsNull, Repository } from 'typeorm';
 import { EmbeddingService } from './embedding.service';
 import { RagIndexService } from './rag-index.service';
 
@@ -148,6 +148,37 @@ describe('RagIndexService', () => {
         roleId: ROLE_ID,
         documentPath: 'doc.md',
       });
+    });
+
+    it('deletes shared-scope chunks (roleId IS NULL) when roleId is null', async () => {
+      await service.removeDocument(null, 'doc.md');
+      expect(chunkRepo.delete).toHaveBeenCalledWith({
+        roleId: IsNull(),
+        documentPath: 'doc.md',
+      });
+    });
+  });
+
+  describe('ingestDocument (shared scope)', () => {
+    it('saves chunks with a null roleId for a company-shared document', async () => {
+      const savedChunks: KnowledgeChunk[] = [];
+      chunkRepo.save.mockImplementation((chunk) => {
+        savedChunks.push(chunk as KnowledgeChunk);
+        return Promise.resolve(chunk as KnowledgeChunk);
+      });
+      await service.ingestDocument(
+        COMPANY_ID,
+        null,
+        'shared-doc.md',
+        'Shared content.',
+        CONFIG,
+      );
+      expect(chunkRepo.delete).toHaveBeenCalledWith({
+        roleId: IsNull(),
+        documentPath: 'shared-doc.md',
+      });
+      expect(savedChunks).toHaveLength(1);
+      expect(savedChunks[0].roleId).toBeNull();
     });
   });
 });

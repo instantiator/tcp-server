@@ -26,21 +26,29 @@ describe('RagRetrievalService', () => {
       makeEmbedding(),
       makeDataSource([]) as never,
     );
-    const result = await svc.retrieve(randomUUID(), 'query', null);
+    const result = await svc.retrieve(
+      randomUUID(),
+      randomUUID(),
+      'query',
+      null,
+    );
     expect(result).toEqual([]);
   });
 
-  it('passes roleId and threshold to the SQL query', async () => {
+  it('scopes the query to the role plus the company shared chunks', async () => {
     const ds = makeDataSource([]);
     const embedding = makeEmbedding();
     const svc = new RagRetrievalService(embedding, ds as never);
     const roleId = randomUUID();
+    const companyId = randomUUID();
 
-    await svc.retrieve(roleId, 'query', config, 5, 0.8);
+    await svc.retrieve(roleId, companyId, 'query', config, 5, 0.8);
 
     expect(ds.query).toHaveBeenCalledWith(
-      expect.stringContaining('"roleId" = $2'),
-      expect.arrayContaining([roleId, 0.8, 5]),
+      expect.stringContaining(
+        '(("roleId" = $2) OR ("roleId" IS NULL AND "companyId" = $3))',
+      ),
+      expect.arrayContaining([roleId, companyId, 0.8, 5]),
     );
   });
 
@@ -55,7 +63,12 @@ describe('RagRetrievalService', () => {
     const ds = makeDataSource([chunk]);
     const svc = new RagRetrievalService(makeEmbedding(), ds as never);
 
-    const result = await svc.retrieve(randomUUID(), 'query', config);
+    const result = await svc.retrieve(
+      randomUUID(),
+      randomUUID(),
+      'query',
+      config,
+    );
     expect(result).toHaveLength(1);
     expect(result[0]).toEqual(chunk);
   });
@@ -63,7 +76,12 @@ describe('RagRetrievalService', () => {
   it('skips retrieval and returns empty array when embeddingConfig is undefined', async () => {
     const ds = makeDataSource([]);
     const svc = new RagRetrievalService(makeEmbedding(), ds as never);
-    const result = await svc.retrieve(randomUUID(), 'query', undefined);
+    const result = await svc.retrieve(
+      randomUUID(),
+      randomUUID(),
+      'query',
+      undefined,
+    );
     expect(result).toEqual([]);
     expect(ds.query).not.toHaveBeenCalled();
   });

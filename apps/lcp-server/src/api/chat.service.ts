@@ -6,23 +6,23 @@ import {
   AuditEventType,
   ContextManagerService,
   DEFAULT_LLM_CONTEXT_WINDOW,
-  DEFAULT_SYSTEM_PROMPT_TEMPLATE,
   LcpAgent,
   LcpCompany,
   LcpRole,
   LlmConfig,
   McpClientService,
-  ToolVisibilityTracker,
+  PromptAssemblyStrings,
   buildAgentGraph,
+  buildAssignmentMessage,
   buildChatModel,
-  buildPromptDateVars,
+  buildRagMessage,
+  buildServicesMessage,
   mapStreamEvent,
-  renderTemplate,
+  renderSystemPrompt,
   resolveEnvLlmConfig,
   resolveLlmConfig,
   resolveMcpServerList,
   resolveMcpServerUrls,
-  resolveSystemPromptTemplate,
   runSupervisedGraph,
 } from '@lcp/shared';
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
@@ -41,6 +41,26 @@ import { RagRetrievalService } from '../rag/rag-retrieval.service';
  */
 const FINAL_INSTRUCTION =
   'You have been given your task and all relevant context above. Proceed now: be thorough, draw on your expertise, and deliver your best work.';
+
+/**
+ * Fixed strings for the shared prompt-part builders (see
+ * {@link PromptAssemblyStrings}). lcp-server supplies its own set, mirroring
+ * lcp-agent's jsonc-loaded `agentPrompts`, so chat and worker turns render the
+ * same structure.
+ */
+const CHAT_PROMPT_STRINGS: PromptAssemblyStrings = {
+  services_header: '## Available Services',
+  services_intro:
+    "You have access to the following external services via tools. Each service's other tools only become available once you call its `describe_server` tool — they stay available for a few turns, then are hidden again until you re-describe. Be sparing: only describe a service you actually need for the current step.",
+  services_item: '- **{{name}}**: use for {{usage}}',
+  services_item_unknown:
+    '- **{{name}}**: call `{{name}}__describe_server` for a full tool list and usage guide',
+  rag_intro:
+    'The following excerpts from your knowledge base are relevant to your current task. Draw on them as needed:',
+  rag_source_header: '### Source: {{documentPath}}',
+  assignment_materials_header: '## Materials',
+  assignment_expected_header: '## Expected outputs',
+};
 
 /** Resolved context for one detached chat turn, passed to {@link ChatService.runTurn}. */
 interface TurnContext {
@@ -88,7 +108,12 @@ export class ChatService {
    * @throws {@link NotFoundException} when the agent or its role/LLM config cannot be found.
    */
   async sendMessage(agentId: UUID, message: string): Promise<void> {
-    const agent = await this.agentRepo.findOneBy({ id: agentId });
+    const agent = await this.agentRepo.findOne({
+      where: { id: agentId },
+      // The (chat-mode) assignment drives prompt part 4 — same load the worker
+      // path uses in AgentLoopService.run.
+      relations: { assignment: { task: true } },
+    });
     if (!agent) throw new NotFoundException(`Agent ${agentId} not found`);
 
     const role = await this.roleRepo.findOneBy({ id: agent.roleId });
@@ -197,14 +222,10 @@ export class ChatService {
           interruptAfterTools: true,
           signal: abortController.signal,
         });
-      // Tool-schema gating: only each server's describe_server tool (plus
-      // always-visible servers, e.g. interactions) is bound until the agent
-      // describes it — the initial graph and budget check below must use
-      // this same gated set, not the full one, or the very first turn would
-      // bind everything regardless.
-      const toolVisibility = new ToolVisibilityTracker();
-      const initialTools = toolVisibility.resolveVisibleTools(langchainTools);
-      const graph = buildGraph(initialTools);
+      // All tools are bound from turn 1 (compact schemas) — no describe-then-
+      // reveal gating. Chat leaves `tool_choice` on auto so a turn can end with
+      // a prose reply rather than a forced tool call.
+      const graph = buildGraph(langchainTools);
 
       const runConfig = { configurable: { thread_id: agentId } };
 
@@ -221,18 +242,19 @@ export class ChatService {
         isFirstMessage,
         agent,
         role,
-        initialTools,
+        langchainTools,
       );
 
       let ragMessage: HumanMessage | null = null;
       if (isFirstMessage) {
         const ragChunks = await this.ragRetrieval.retrieve(
           role.id,
+          role.companyId,
           preparedMessage,
           company?.embeddingConfig,
         );
         if (ragChunks.length) {
-          const rawRagText = buildRagMessage(ragChunks);
+          const rawRagText = buildRagMessage(ragChunks, CHAT_PROMPT_STRINGS);
           const overflowPath = company?.slug
             ? `${sanitiseSlug(company.slug)}/tasks/${agentId}/context-overflow`
             : undefined;
@@ -246,25 +268,41 @@ export class ChatService {
         }
       }
 
-      const systemPromptTemplate = resolveSystemPromptTemplate(
-        role,
-        company,
-        DEFAULT_SYSTEM_PROMPT_TEMPLATE,
+      const servicesText = buildServicesMessage(
+        [...new Set(mcpTools.map((t) => t.serverName))],
+        mcpServerUrls,
+        CHAT_PROMPT_STRINGS,
+      );
+      // Prompt part 4: assignment presentation. For a chat agent this is the
+      // chat mode prompt (MODE_PROMPTS.chat) followed by the user's message —
+      // built via the same shared builder the worker path uses, so the chat
+      // agent now knows it is in a conversation. materials/expected are empty
+      // for the chat orphan assignment.
+      const assignment = agent.assignment;
+      const assignmentMessage = new HumanMessage(
+        buildAssignmentMessage(
+          {
+            mode: assignment.mode,
+            prompt: preparedMessage,
+            materials: assignment.materials,
+            expected: assignment.expected,
+            resolutionContext: {
+              companySlug: company?.slug ?? '',
+              task: assignment.task ?? null,
+              assignment: {
+                id: assignment.id,
+                taskId: assignment.taskId ?? null,
+                orderIndex: assignment.orderIndex ?? null,
+              },
+            },
+          },
+          CHAT_PROMPT_STRINGS,
+        ),
       );
       const messages = isFirstMessage
         ? [
             // Prompt part 0: system prompt — rendered from the resolved systemPromptTemplate
-            new SystemMessage(
-              renderTemplate(systemPromptTemplate, {
-                name: role.name,
-                description: role.description,
-                ...buildPromptDateVars(company),
-                companyId: agent.companyId,
-                roleId: role.id,
-                companySlug: company?.slug ?? '',
-                roleSlug: role.slug,
-              }),
-            ),
+            new SystemMessage(renderSystemPrompt(agent, role, company)),
             // Prompt part 1: role prompt (identity, attitude, domain knowledge, behavioural guidelines)
             ...(role.rolePrompt ? [new HumanMessage(role.rolePrompt)] : []),
             // Prompt part 2: company environment (name, description, shared storage layout, etc.)
@@ -272,12 +310,9 @@ export class ChatService {
               ? [new HumanMessage(company.companyContext)]
               : []),
             // Prompt part 3: services available (MCP servers loaded for this turn)
-            ...buildServicesMessage(
-              [...new Set(mcpTools.map((t) => t.serverName))],
-              mcpServerUrls,
-            ),
-            // Prompt part 4: task / query prompt
-            new HumanMessage(preparedMessage),
+            ...(servicesText ? [new HumanMessage(servicesText)] : []),
+            // Prompt part 4: assignment presentation (chat mode prompt + user message)
+            assignmentMessage,
             // Prompt part 5: RAG data retrieved for this query (omitted when nothing relevant)
             ...(ragMessage ? [ragMessage] : []),
             // Prompt part 6: MCP pre-task responses (none for stub servers; wired here for future use)
@@ -308,7 +343,6 @@ export class ChatService {
         hooks: {
           buildGraph,
           onEvent: (event) => {
-            toolVisibility.onEvent(event);
             for (const observabilityEvent of mapStreamEvent(event)) {
               this.agentEvents.emit(agentId, observabilityEvent);
             }
@@ -320,8 +354,6 @@ export class ChatService {
               ? fresh.status
               : null;
           },
-          resolveVisibleTools: (tools) =>
-            toolVisibility.resolveVisibleTools(tools),
         },
       });
 
@@ -399,44 +431,6 @@ export class ChatService {
       await closeCheckpointer();
     }
   }
-}
-
-/** Formats RAG chunks as a prompt part 5 message. */
-function buildRagMessage(
-  chunks: { documentPath: string; content: string }[],
-): string {
-  const sections = chunks
-    .map((c) => `### Source: ${c.documentPath}\n\n${c.content}`)
-    .join('\n\n---\n\n');
-  return `The following excerpts from your knowledge base are relevant to your current task. Draw on them as needed:\n\n${sections}`;
-}
-
-/**
- * Returns zero or one HumanMessage announcing the MCP services available to the
- * agent. Only includes servers present in `serverUrls` (i.e. those that loaded
- * successfully). Returns an empty array when no services are available.
- */
-function buildServicesMessage(
-  serverNames: string[],
-  serverUrls: Record<string, string>,
-): HumanMessage[] {
-  const lines = serverNames
-    .filter((n) => serverUrls[n])
-    .map(
-      (n) =>
-        `- **${n}**: call \`${n}__describe_server\` for a full tool list and usage guide`,
-    );
-
-  if (lines.length === 0) return [];
-
-  const text =
-    '## Available Services\n\n' +
-    'You have access to the following external services via tools. ' +
-    "Each service's other tools only become available once you call its `describe_server` tool — they stay available for a few turns, then are hidden again until you re-describe. " +
-    'Be sparing: only describe a service you actually need for the current step.\n\n' +
-    lines.join('\n');
-
-  return [new HumanMessage(text)];
 }
 
 /** Strips characters unsafe for use as a MinIO path component. */

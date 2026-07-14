@@ -29,6 +29,8 @@ const makeAgent = (overrides: Partial<LcpAgent> = {}): LcpAgent => ({
   status: AgentStatus.Running,
   threadId: null,
   initialPrompt: 'Do stuff.',
+  assignmentId: randomUUID(),
+  assignment: {} as never,
   output: null,
   createdAt: new Date(),
   updatedAt: new Date(),
@@ -322,7 +324,7 @@ describe('PauseAndResumeService', () => {
         expect.objectContaining({
           companyId: caller.companyId,
           roleId: consultRole.id,
-          requiredToolCalls: ['complete_task'],
+          requiredToolCalls: ['complete_assignment'],
         }),
       );
       expect(consultRepo.save).toHaveBeenCalled();

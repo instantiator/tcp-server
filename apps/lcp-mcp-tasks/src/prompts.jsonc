@@ -1,0 +1,29 @@
+{
+  // Framing shown at the top of describe_server, before the per-mode instructions
+  // (which are embedded live from @lcp/shared's MODE_PROMPTS so they can't drift).
+  "describe_header": "## Tasks Service\n\nThe tasks service is how you complete your assignment. Which tool you call depends on your mode:\n- plan mode → `create_plan`\n- implement mode → `complete_assignment`\n- qa mode → `assure_assignment`\n\nYou may only call the tool that matches your current mode; the others will return an error explaining this. Call your mode's tool exactly once, as your final action, after the work is done.",
+
+  // Prepended to the per-mode blocks when the caller's mode is known.
+  "current_mode": "You are currently in **{{mode}}** mode — your completion tool is `{{tool}}`.",
+
+  // create_plan success. {{count}} is the number of assignments created.
+  "plan_created": "Plan created: {{count}} assignment(s). Your planning work is complete.",
+
+  // complete_assignment success.
+  "assignment_completed": "Assignment submitted. Your run is now finished; any QA review happens automatically.",
+
+  // assure_assignment success. {{verdict}} is 'accepted' or 'rejected'.
+  "assignment_assured": "Assurance recorded ({{verdict}}). Your QA run is now finished.",
+
+  // Returned when the caller's mode does not permit the tool it called.
+  // {{mode}} is the caller's actual mode, {{tool}} the tool they should use instead.
+  "error_wrong_mode": "You cannot use this tool: you are in {{mode}} mode. Use the `{{tool}}` tool instead.",
+
+  // Returned when the caller's assignment could not be resolved.
+  "error_no_assignment": "Could not resolve your current assignment. Try again shortly.",
+
+  // Generic failures (non-corrective — network/server errors).
+  "error_create_plan": "Could not submit the plan. Check your inputs and try again.",
+  "error_complete_assignment": "Could not submit the assignment. Your work may still have been recorded.",
+  "error_assure_assignment": "Could not record your assurance. Try again."
+}

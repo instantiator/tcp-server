@@ -35,44 +35,48 @@ describe('baseToolName', () => {
 describe('generateActionString', () => {
   it('strips server prefix from tool name', () => {
     expect(
-      generateActionString('storage__write_file', { path: 'foo/bar.md' }),
-    ).toBe('Wrote file: foo/bar.md');
-  });
-
-  it('handles write_file', () => {
-    expect(generateActionString('write_file', { path: 'doc.md' })).toBe(
-      'Wrote file: doc.md',
-    );
-  });
-
-  it('handles delete_file', () => {
-    expect(
-      generateActionString('storage__delete_file', { path: 'old.md' }),
-    ).toBe('Deleted file: old.md');
-  });
-
-  it('handles move_file', () => {
-    expect(
-      generateActionString('storage__move_file', {
-        source: 'a.md',
-        destination: 'b.md',
+      generateActionString('storage__append_working_file', {
+        filename: 'foo/bar.md',
       }),
-    ).toBe('Moved file: a.md → b.md');
+    ).toBe('Appended to working file: foo/bar.md');
   });
 
-  it('handles copy_file', () => {
+  it('handles append_working_file', () => {
     expect(
-      generateActionString('storage__copy_file', {
-        source: 'src.md',
-        destination: 'dst.md',
+      generateActionString('append_working_file', { filename: 'doc.md' }),
+    ).toBe('Appended to working file: doc.md');
+  });
+
+  it('handles replace_in_working_file', () => {
+    expect(
+      generateActionString('storage__replace_in_working_file', {
+        filename: 'doc.md',
       }),
-    ).toBe('Copied file: src.md → dst.md');
+    ).toBe('Edited working file: doc.md');
   });
 
-  it('handles restore_file', () => {
+  it('handles delete_working_file', () => {
     expect(
-      generateActionString('storage__restore_file', { path: 'doc.md' }),
-    ).toBe('Restored file: doc.md');
+      generateActionString('storage__delete_working_file', {
+        filename: 'old.md',
+      }),
+    ).toBe('Deleted working file: old.md');
+  });
+
+  it('handles restore_working_file', () => {
+    expect(
+      generateActionString('storage__restore_working_file', {
+        filename: 'doc.md',
+      }),
+    ).toBe('Restored working file: doc.md');
+  });
+
+  it('handles read_material_file', () => {
+    expect(
+      generateActionString('storage__read_material_file', {
+        filename: 'brief.md',
+      }),
+    ).toBe('Read material: brief.md');
   });
 
   it('handles read_file', () => {
@@ -117,10 +121,22 @@ describe('generateActionString', () => {
     ).toBe("Consulted role 'role-123': Check this");
   });
 
-  it('handles complete_task', () => {
-    expect(generateActionString('interactions__complete_task', {})).toBe(
-      'Submitted task completion',
+  it('handles complete_assignment', () => {
+    expect(generateActionString('tasks__complete_assignment', {})).toBe(
+      'Submitted assignment completion',
     );
+  });
+
+  it('handles create_plan', () => {
+    expect(generateActionString('tasks__create_plan', {})).toBe(
+      'Submitted task plan',
+    );
+  });
+
+  it('handles assure_assignment', () => {
+    expect(
+      generateActionString('tasks__assure_assignment', { qa: 'accept' }),
+    ).toBe('Submitted QA verdict: accept');
   });
 
   it('falls back for unknown tools', () => {
@@ -152,95 +168,76 @@ describe('applyStorageResult', () => {
     });
   });
 
-  describe('write_file', () => {
-    it('adds to created when overwrite is false', () => {
+  describe('append_working_file', () => {
+    it('adds to created when the file was created', () => {
       applyStorageResult(
-        'storage__write_file',
-        { path: 'new.md', overwrite: false },
-        { content: 'Written: new.md' },
+        'storage__append_working_file',
+        { filename: 'new.md' },
+        { content: 'Created working file: new.md' },
         tracker,
       );
       expect(tracker.storage.created).toEqual(['new.md']);
       expect(tracker.storage.modified).toEqual([]);
     });
 
-    it('adds to modified when overwrite is true', () => {
+    it('adds to modified when the file already existed', () => {
       applyStorageResult(
-        'storage__write_file',
-        { path: 'existing.md', overwrite: true },
-        { content: 'Written: existing.md' },
+        'storage__append_working_file',
+        { filename: 'existing.md' },
+        { content: 'Appended to working file: existing.md' },
         tracker,
       );
       expect(tracker.storage.modified).toEqual(['existing.md']);
       expect(tracker.storage.created).toEqual([]);
     });
 
-    it('defaults to created when overwrite is absent', () => {
+    it('ignores append_working_file on an error result', () => {
       applyStorageResult(
-        'storage__write_file',
-        { path: 'doc.md' },
-        { content: 'Written: doc.md' },
-        tracker,
-      );
-      expect(tracker.storage.created).toEqual(['doc.md']);
-    });
-
-    it('ignores write_file when result does not start with Written:', () => {
-      applyStorageResult(
-        'storage__write_file',
-        { path: 'bad.md' },
-        { content: 'File already exists at bad.md.' },
+        'storage__append_working_file',
+        { filename: 'bad.md' },
+        { content: 'Fix the JSON syntax.' },
         tracker,
       );
       expect(tracker.storage.created).toEqual([]);
+      expect(tracker.storage.modified).toEqual([]);
     });
   });
 
-  it('tracks delete_file on success', () => {
+  it('tracks replace_in_working_file as modified', () => {
     applyStorageResult(
-      'storage__delete_file',
-      { path: 'gone.md' },
-      { content: 'Deleted: gone.md (restorable via restore_file)' },
+      'storage__replace_in_working_file',
+      { filename: 'doc.md' },
+      { content: 'Replaced 2 occurrence(s) in working file: doc.md' },
+      tracker,
+    );
+    expect(tracker.storage.modified).toEqual(['doc.md']);
+  });
+
+  it('tracks delete_working_file on success', () => {
+    applyStorageResult(
+      'storage__delete_working_file',
+      { filename: 'gone.md' },
+      { content: 'Deleted working file: gone.md (restorable via ...)' },
       tracker,
     );
     expect(tracker.storage.deleted).toEqual(['gone.md']);
   });
 
-  it('ignores delete_file on failure', () => {
+  it('ignores delete_working_file on failure', () => {
     applyStorageResult(
-      'storage__delete_file',
-      { path: 'missing.md' },
+      'storage__delete_working_file',
+      { filename: 'missing.md' },
       { content: 'File not found: missing.md' },
       tracker,
     );
     expect(tracker.storage.deleted).toEqual([]);
   });
 
-  it('tracks move_file on success', () => {
+  it('tracks restore_working_file on success (added to created)', () => {
     applyStorageResult(
-      'storage__move_file',
-      { source: 'a.md', destination: 'b.md' },
-      { content: 'Moved: a.md → b.md' },
-      tracker,
-    );
-    expect(tracker.storage.moved).toEqual([{ from: 'a.md', to: 'b.md' }]);
-  });
-
-  it('tracks copy_file on success (destination added to created)', () => {
-    applyStorageResult(
-      'storage__copy_file',
-      { source: 'template.md', destination: 'copy.md' },
-      { content: 'Copied: template.md → copy.md' },
-      tracker,
-    );
-    expect(tracker.storage.created).toEqual(['copy.md']);
-  });
-
-  it('tracks restore_file on success (added to created)', () => {
-    applyStorageResult(
-      'storage__restore_file',
-      { path: 'recovered.md' },
-      { content: 'Restored: recovered.md' },
+      'storage__restore_working_file',
+      { filename: 'recovered.md' },
+      { content: 'Restored working file: recovered.md' },
       tracker,
     );
     expect(tracker.storage.created).toEqual(['recovered.md']);
@@ -248,9 +245,9 @@ describe('applyStorageResult', () => {
 
   it('handles plain string output', () => {
     applyStorageResult(
-      'storage__write_file',
-      { path: 'x.md' },
-      'Written: x.md',
+      'storage__append_working_file',
+      { filename: 'x.md' },
+      'Created working file: x.md',
       tracker,
     );
     expect(tracker.storage.created).toEqual(['x.md']);
@@ -258,9 +255,9 @@ describe('applyStorageResult', () => {
 
   it('handles array content output', () => {
     applyStorageResult(
-      'storage__write_file',
-      { path: 'y.md' },
-      { content: [{ type: 'text', text: 'Written: y.md' }] },
+      'storage__append_working_file',
+      { filename: 'y.md' },
+      { content: [{ type: 'text', text: 'Created working file: y.md' }] },
       tracker,
     );
     expect(tracker.storage.created).toEqual(['y.md']);

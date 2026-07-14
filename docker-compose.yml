@@ -92,7 +92,8 @@ services:
   lcp-server:
     build:
       context: .
-      dockerfile: apps/lcp-server/Dockerfile
+      dockerfile: Dockerfile
+      target: lcp-server
     image: lcp-server:latest
     restart: unless-stopped
     environment:
@@ -108,6 +109,7 @@ services:
       MCP_STORAGE_URL: http://lcp-mcp-storage:3010
       MCP_MEMORY_URL: http://lcp-mcp-memory:3011
       MCP_INTERACTIONS_URL: http://lcp-mcp-interactions:3012
+      MCP_TASKS_URL: http://lcp-mcp-tasks:3013
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
@@ -134,7 +136,8 @@ services:
   lcp-agent:
     build:
       context: .
-      dockerfile: apps/lcp-agent/Dockerfile
+      dockerfile: Dockerfile
+      target: lcp-agent
     image: lcp-agent:latest
     restart: unless-stopped
     environment:
@@ -146,6 +149,7 @@ services:
       MCP_STORAGE_URL: http://lcp-mcp-storage:3010
       MCP_MEMORY_URL: http://lcp-mcp-memory:3011
       MCP_INTERACTIONS_URL: http://lcp-mcp-interactions:3012
+      MCP_TASKS_URL: http://lcp-mcp-tasks:3013
       LCP_SERVER_URL: http://lcp-server:3000
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       LLM_MODEL: ${LLM_MODEL:-}
@@ -170,7 +174,8 @@ services:
   lcp-mcp-storage:
     build:
       context: .
-      dockerfile: apps/lcp-mcp-storage/Dockerfile
+      dockerfile: Dockerfile
+      target: lcp-mcp-storage
     image: lcp-mcp-storage:latest
     restart: unless-stopped
     environment:
@@ -190,7 +195,8 @@ services:
   lcp-mcp-memory:
     build:
       context: .
-      dockerfile: apps/lcp-mcp-memory/Dockerfile
+      dockerfile: Dockerfile
+      target: lcp-mcp-memory
     image: lcp-mcp-memory:latest
     restart: unless-stopped
     environment:
@@ -211,22 +217,41 @@ services:
   lcp-mcp-interactions:
     build:
       context: .
-      dockerfile: apps/lcp-mcp-interactions/Dockerfile
+      dockerfile: Dockerfile
+      target: lcp-mcp-interactions
     image: lcp-mcp-interactions:latest
     restart: unless-stopped
     environment:
       LCP_SERVER_URL: http://lcp-server:3000
-      LCP_STORAGE_URL: http://lcp-mcp-storage:3010
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
     depends_on:
       lcp-server:
-        condition: service_healthy
-      lcp-mcp-storage:
         condition: service_healthy
     ports:
       - "3012:3012"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3012/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  lcp-mcp-tasks:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: lcp-mcp-tasks
+    image: lcp-mcp-tasks:latest
+    restart: unless-stopped
+    environment:
+      LCP_SERVER_URL: http://lcp-server:3000
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+    depends_on:
+      lcp-server:
+        condition: service_healthy
+    ports:
+      - "3013:3013"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3013/health"]
       interval: 15s
       timeout: 5s
       retries: 5

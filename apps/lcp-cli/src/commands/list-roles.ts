@@ -8,7 +8,7 @@ import { listRolesAction } from '../lib/crud/role.action';
  * Without --company-id: fetches all companies then their roles (N+1 calls).
  * With --company-id: fetches a single company and its roles.
  *
- * stdout: `{ id, name, roles: { id, name }[] }[]`
+ * stdout: `{ id, slug, name, description, roles: { id, slug, name, description, knowledgeDomains }[] }[]`
  */
 export function registerListRoles(program: Command): void {
   program

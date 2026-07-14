@@ -5,9 +5,12 @@ import {
   ConversationMessage,
   EpisodicMemory,
   KnowledgeChunk,
+  KnowledgeIndexState,
   LcpAgent,
+  LcpAssignment,
   LcpCompany,
   LcpRole,
+  LcpTask,
   PendingConsultation,
   makeTypeOrmConfig,
 } from '@lcp/shared';
@@ -41,6 +44,12 @@ import { CompanyLlmConfigAndPromptFields1783357408215 } from './migrations/17833
 import { TimestamptzConsistency1783357408216 } from './migrations/1783357408216-TimestamptzConsistency';
 import { AddRoleSlug1783357408217 } from './migrations/1783357408217-AddRoleSlug';
 import { AddMissingCompanyRoleForeignKeys1783357408218 } from './migrations/1783357408218-AddMissingCompanyRoleForeignKeys';
+import { AllowSharedKnowledgeChunks1783900000000 } from './migrations/1783900000000-AllowSharedKnowledgeChunks';
+import { AddKnowledgeIndexState1783950000000 } from './migrations/1783950000000-AddKnowledgeIndexState';
+import { AddLcpTask1784050000000 } from './migrations/1784050000000-AddLcpTask';
+import { AddLcpAssignment1784050000001 } from './migrations/1784050000001-AddLcpAssignment';
+import { AddCompanyPlannerRole1784050000002 } from './migrations/1784050000002-AddCompanyPlannerRole';
+import { AddAgentAssignment1784050000003 } from './migrations/1784050000003-AddAgentAssignment';
 import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
 
 /**
@@ -59,8 +68,11 @@ import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
         LcpCompany,
         LcpRole,
         LcpAgent,
+        LcpTask,
+        LcpAssignment,
         AuditEvent,
         KnowledgeChunk,
+        KnowledgeIndexState,
         EpisodicMemory,
         CompanyUser,
         Conversation,
@@ -88,6 +100,12 @@ import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
         TimestamptzConsistency1783357408216,
         AddRoleSlug1783357408217,
         AddMissingCompanyRoleForeignKeys1783357408218,
+        AllowSharedKnowledgeChunks1783900000000,
+        AddKnowledgeIndexState1783950000000,
+        AddLcpTask1784050000000,
+        AddLcpAssignment1784050000001,
+        AddCompanyPlannerRole1784050000002,
+        AddAgentAssignment1784050000003,
       ],
     ),
     ApiModule,

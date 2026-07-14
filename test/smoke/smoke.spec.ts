@@ -12,6 +12,7 @@ const LCP_MCP_MEMORY =
   process.env.LCP_MCP_MEMORY_URL ?? 'http://localhost:3011';
 const LCP_MCP_INTERACTIONS =
   process.env.LCP_MCP_INTERACTIONS_URL ?? 'http://localhost:3012';
+const LCP_MCP_TASKS = process.env.LCP_MCP_TASKS_URL ?? 'http://localhost:3013';
 /**
  * Full OIDC discovery URL. Defaults to Keycloak's master realm on localhost.
  * Override with OIDC_DISCOVERY_URL for non-Keycloak providers or remote deployments.
@@ -107,6 +108,19 @@ describe('Smoke', () => {
 
     it('/swagger returns 200', async () => {
       const res = await get(`${LCP_MCP_INTERACTIONS}/swagger`);
+      expect(res.status).toBe(200);
+    });
+  });
+
+  describe('lcp-mcp-tasks', () => {
+    it('/health returns 200 with status ok', async () => {
+      const res = await get(`${LCP_MCP_TASKS}/health`);
+      expect(res.status).toBe(200);
+      expectHealthy(res.body);
+    });
+
+    it('/swagger returns 200', async () => {
+      const res = await get(`${LCP_MCP_TASKS}/swagger`);
       expect(res.status).toBe(200);
     });
   });

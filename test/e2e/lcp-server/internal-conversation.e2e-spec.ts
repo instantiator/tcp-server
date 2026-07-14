@@ -7,6 +7,7 @@ import {
   Conversation,
   ConversationMessage,
   LcpAgent,
+  LcpAssignment,
   LcpCompany,
   LcpRole,
   PendingConsultation,
@@ -32,6 +33,7 @@ describe('InternalController + ConversationController (e2e)', () => {
   let companyRepo: Repository<LcpCompany>;
   let roleRepo: Repository<LcpRole>;
   let agentRepo: Repository<LcpAgent>;
+  let assignmentRepo: Repository<LcpAssignment>;
   let convRepo: Repository<Conversation>;
   let msgRepo: Repository<ConversationMessage>;
   let consultRepo: Repository<PendingConsultation>;
@@ -50,6 +52,7 @@ describe('InternalController + ConversationController (e2e)', () => {
     companyRepo = moduleFixture.get(getRepositoryToken(LcpCompany));
     roleRepo = moduleFixture.get(getRepositoryToken(LcpRole));
     agentRepo = moduleFixture.get(getRepositoryToken(LcpAgent));
+    assignmentRepo = moduleFixture.get(getRepositoryToken(LcpAssignment));
     convRepo = moduleFixture.get(getRepositoryToken(Conversation));
     msgRepo = moduleFixture.get(getRepositoryToken(ConversationMessage));
     consultRepo = moduleFixture.get(getRepositoryToken(PendingConsultation));
@@ -64,6 +67,7 @@ describe('InternalController + ConversationController (e2e)', () => {
     await convRepo.createQueryBuilder().delete().execute();
     await auditRepo.createQueryBuilder().delete().execute();
     await agentRepo.createQueryBuilder().delete().execute();
+    await assignmentRepo.createQueryBuilder().delete().execute();
     await roleRepo.createQueryBuilder().delete().execute();
     await userRepo.createQueryBuilder().delete().execute();
     await companyRepo.createQueryBuilder().delete().execute();
@@ -107,15 +111,34 @@ describe('InternalController + ConversationController (e2e)', () => {
     return res.body as LcpRole;
   }
 
+  /** Orphan implement-mode assignment for an agent's mandatory FK. */
+  async function seedAssignment(
+    companyId: UUID,
+    roleId: UUID,
+  ): Promise<LcpAssignment> {
+    return assignmentRepo.save(
+      assignmentRepo.create({
+        taskId: null,
+        companyId,
+        roleId,
+        mode: 'implement',
+        prompt: 'Do some analysis.',
+        status: 'in-progress',
+      }),
+    );
+  }
+
   /** Inserts a Running agent directly — bypasses BullMQ so no Redis needed. */
   async function createRunningAgent(
     companyId: UUID,
     roleId: UUID,
   ): Promise<LcpAgent> {
+    const assignment = await seedAssignment(companyId, roleId);
     return agentRepo.save(
       agentRepo.create({
         companyId,
         roleId,
+        assignmentId: assignment.id,
         status: AgentStatus.Running,
         initialPrompt: 'Do some analysis.',
         output: null,
@@ -246,8 +269,8 @@ describe('InternalController + ConversationController (e2e)', () => {
         id: consult.consultationAgentId,
       });
       expect(consultant.roleId).toBe(role.id);
-      // Consultation agents must deliver their answer via complete_task
-      expect(consultant.requiredToolCalls).toEqual(['complete_task']);
+      // Consultation agents must deliver their answer via complete_assignment
+      expect(consultant.requiredToolCalls).toEqual(['complete_assignment']);
     });
 
     it('targets the correct role when two roles in the company share a name (regression)', async () => {
@@ -378,19 +401,23 @@ describe('InternalController + ConversationController (e2e)', () => {
       const role = await createRole(company.id);
 
       // Caller is Paused; consultant is Running — created directly to avoid BullMQ
+      const callerAssignment = await seedAssignment(company.id, role.id);
       const caller = await agentRepo.save(
         agentRepo.create({
           companyId: company.id,
           roleId: role.id,
+          assignmentId: callerAssignment.id,
           status: AgentStatus.Paused,
           initialPrompt: 'Wait for analyst.',
           output: null,
         }),
       );
+      const consultantAssignment = await seedAssignment(company.id, role.id);
       const consultant = await agentRepo.save(
         agentRepo.create({
           companyId: company.id,
           roleId: role.id,
+          assignmentId: consultantAssignment.id,
           status: AgentStatus.Running,
           initialPrompt: 'Analyse this.',
           output: null,
@@ -460,23 +487,27 @@ describe('InternalController + ConversationController (e2e)', () => {
       const company = await createCompany();
       const role = await createRole(company.id);
 
+      const callerAssignment = await seedAssignment(company.id, role.id);
       const caller = await agentRepo.save(
         agentRepo.create({
           companyId: company.id,
           roleId: role.id,
+          assignmentId: callerAssignment.id,
           status: AgentStatus.Paused,
           initialPrompt: 'Wait for analyst.',
           output: null,
         }),
       );
+      const consultantAssignment = await seedAssignment(company.id, role.id);
       const consultant = await agentRepo.save(
         agentRepo.create({
           companyId: company.id,
           roleId: role.id,
+          assignmentId: consultantAssignment.id,
           status: AgentStatus.Running,
           initialPrompt: 'Analyse this.',
           output: null,
-          requiredToolCalls: ['complete_task'],
+          requiredToolCalls: ['complete_assignment'],
         }),
       );
       await consultRepo.save(
@@ -494,7 +525,7 @@ describe('InternalController + ConversationController (e2e)', () => {
         .set('X-Internal-Api-Key', INTERNAL_KEY)
         .send({
           reason:
-            'Agent ended without successfully calling required tool(s): complete_task after 2 reminder(s)',
+            'Agent ended without successfully calling required tool(s): complete_assignment after 2 reminder(s)',
         })
         .expect(204);
 
@@ -507,11 +538,11 @@ describe('InternalController + ConversationController (e2e)', () => {
         consultationAgentId: consultant.id,
       });
       expect(consult.status).toBe('failed');
-      expect(consult.result).toContain('complete_task');
-      expectLoggedError(capture.logs, /complete_task/);
+      expect(consult.result).toContain('complete_assignment');
+      expectLoggedError(capture.logs, /complete_assignment/);
     });
 
-    it('does not clobber an already-Completed agent (complete_task won the race)', async () => {
+    it('does not clobber an already-Completed agent (complete_assignment won the race)', async () => {
       const company = await createCompany();
       const role = await createRole(company.id);
       const agent = await createRunningAgent(company.id, role.id);

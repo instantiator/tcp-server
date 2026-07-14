@@ -4,7 +4,9 @@ import { StorageToolsService } from './storage-tools.service';
 
 /**
  * Internal HTTP endpoint for file existence checking.
- * Called by lcp-mcp-interactions when validating `complete_task` output files.
+ * A generic storage utility (previously used by lcp-mcp-interactions'
+ * `complete_task`; the assignment output-gate now checks storage inside
+ * lcp-server via StorageService).
  */
 @Controller('files')
 @UseGuards(InternalApiKeyGuard)

@@ -10,4 +10,6 @@ export interface AgentRunConfig {
   maxIterations?: number;
   /** Wall-clock timeout in milliseconds before the run is cancelled as failed. */
   timeoutMs?: number;
+  /** Maximum QA rejections a task assignment may accrue before it fails. */
+  maxQaAttempts?: number;
 }

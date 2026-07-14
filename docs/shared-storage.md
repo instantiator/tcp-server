@@ -56,28 +56,37 @@ Each company's data lives under a top-level prefix derived from the company's `s
 {company_slug}/
   tasks/
     {task_id}/
-      materials/         ← user-submitted inputs; read-only for agents
-      output/            ← agent working area during task execution
+      materials/               ← user-submitted inputs; read-only for agents
+      completed/                ← final outputs of the task
+      assignments/
+        {orderIndex}/
+          working/               ← private working area for the assignment's agent
+          completed/             ← files promoted from working/ when QA accepts
+  assignments/
+    {assignment_id}/
+      working/                 ← working area for ORPHAN assignments (agents outside any task)
   knowledge/
-    {role_name}/         ← OKF Markdown documents used for RAG indexing
-  finished/
-    {category}/          ← reports | specifications | designs | code | other
-      {task_id}/
-        {filename}       ← stable artefacts promoted from tasks/*/output/
+    {role_slug}/               ← OKF Markdown documents used for RAG indexing (knowledge for the role)
+    shared/                    ← OKF Markdown documents used for RAG indexing (company-wide knowledge)
   audit/
     {task_id}/
-      {step_id}.jsonl    ← append-only audit log per task step
+      {step_id}.jsonl          ← append-only audit log per task step
 ```
+
+> **Migration note (010.2.3):** the `tasks/{id}/output/` and `finished/{category}/{id}/` layout drafted in ADR-007 was never implemented and is superseded by the tree above — see [tasks.md](tasks.md) for the full `LcpTask`/`LcpAssignment` data model.
 
 ### Folder purposes
 
-| Path                        | Written by                     | Read by                   | Notes                                                                                                |
-| --------------------------- | ------------------------------ | ------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `tasks/{id}/materials/`     | lcp-server (task creation)     | Agents (read-only)        | Task inputs submitted by the user                                                                    |
-| `tasks/{id}/output/`        | Agents                         | Agents, orchestrator      | Working files created during execution                                                               |
-| `knowledge/{role}/`         | lcp-cli `store-role-documents` | lcp-server (RAG indexing) | Source documents for RAG; see [Agent Services](agent-services.md#rag-retrieval-augmented-generation) |
-| `finished/{category}/{id}/` | Reviewing agent / orchestrator | All agents                | Stable artefacts promoted on task completion                                                         |
-| `audit/{id}/`               | lcp-agent (planned)            | Operations tooling        | Append-only JSONL audit records per task step                                                        |
+| Path                                             | Written by                        | Read by                   | Notes                                                                                                                                  |
+| ------------------------------------------------ | --------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `tasks/{id}/materials/`                          | lcp-server (`POST .../materials`) | Agents (read-only)        | Task inputs submitted by the user                                                                                                      |
+| `tasks/{id}/completed/`                          | Orchestrator (finalisation)       | All agents                | Final outputs of the task, copied from its assignments' `completed/` directories                                                       |
+| `tasks/{id}/assignments/{orderIndex}/working/`   | The assignment's agent            | The assignment's agent    | Private scratch area for one plan step (a task's implement-mode assignment)                                                            |
+| `tasks/{id}/assignments/{orderIndex}/completed/` | Orchestrator (on QA accept)       | Later assignments, task   | Files promoted from `working/` when QA accepts; `resolveArtifactKey` finds the most recent prior assignment approving a given filename |
+| `assignments/{assignment_id}/working/`           | The (orphan) assignment's agent   | The assignment's agent    | Working area for assignments outside any task — plain conversations/consultations                                                      |
+| `knowledge/{role_slug}/`                         | lcp-cli `store-knowledge`         | lcp-server (RAG indexing) | Source documents for a role's RAG; see [Agent Services](agent-services.md#rag-retrieval-augmented-generation)                          |
+| `knowledge/shared/`                              | lcp-cli `store-knowledge`         | lcp-server (RAG indexing) | Source documents for company-wide RAG (all roles); `shared` is a reserved role slug and cannot be claimed by a role                    |
+| `audit/{id}/`                                    | lcp-agent (planned)               | Operations tooling        | Append-only JSONL audit records per task step                                                                                          |
 
 ### Context overflow
 
@@ -91,28 +100,56 @@ If the write fails, the compacted (truncated) version is used instead. See [Cont
 
 ## Write validation
 
-Documents written through the storage abstraction (`StorageService`, currently backed by `MinioStorageAdapter`) are validated before being accepted — JSON, YAML, OKF Markdown, plain Markdown, XML, and CSV each have a registered validator (`libs/lcp-shared/src/storage/validation/`). OKF documents (under `knowledge/{role}/`) require YAML front-matter with a non-empty `title` field; other formats get structural well-formedness checks, plus JSON-Schema validation when the document names a local `$schema` reference (remote schema URLs are never fetched — see `docs/prompts/009.4 - doc type validations.md` §Risks for why).
+Documents written through the storage abstraction (`StorageService`, currently backed by `MinioStorageAdapter`) are validated before being accepted — JSON, YAML, OKF Markdown, plain Markdown, XML, and CSV each have a registered validator (`libs/lcp-shared/src/storage/validation/`). OKF documents (under `knowledge/{role_slug}/` or `knowledge/shared/`) require YAML front-matter with a non-empty `title` field; other formats get structural well-formedness checks, plus JSON-Schema validation when the document names a local `$schema` reference (remote schema URLs are never fetched — see `docs/prompts/009.4 - doc type validations.md` §Risks for why).
 
 A failed validation returns `422 Unprocessable Entity` with a body of `{ statusCode, message, errors: [{ message, path?, llmHint }] }`. `errors[].llmHint` is written to be directly actionable by the calling agent — relay it back into the agent's context rather than the raw parser error.
 
-Every write also records an audit event carrying `originators: { user, agent, task }` — `user` is populated for direct JWT-authenticated writes (`POST /api/storage`, `POST /api/role/:roleId/documents`); `agent`/`task` are populated for MCP-tool-initiated writes once wired (see the shared-lib `AuditEvent.payload` shape in `docs/database.md`).
+Every write also records an audit event carrying `originators: { user, agent, task }` — `user` is populated for direct JWT-authenticated writes (`POST /api/storage`, `POST /api/role/:roleId/knowledge`, `POST /api/company/:companyId/knowledge`); `agent`/`task` are populated for MCP-tool-initiated writes once wired (see the shared-lib `AuditEvent.payload` shape in `docs/database.md`).
 
 ## Managing knowledge documents
 
-Role knowledge documents are uploaded via lcp-cli and stored under `knowledge/{role_name}/`. The server chunks, embeds, and indexes them for RAG retrieval automatically on upload.
+Knowledge documents are uploaded via lcp-cli, scoped to either a role (`knowledge/{role_slug}/`) or a company's shared knowledge (`knowledge/shared/`). The server chunks, embeds, and indexes them for RAG retrieval automatically.
+
+> **Migration note (010.2.1):** the knowledge folder layout moved from name-based (`knowledge/{role_name}/`) to slug-based (`knowledge/{role_slug}/`), and the `AllowSharedKnowledgeChunks` migration truncates the `knowledge_chunk` table (existing chunks referenced the old paths and can no longer be resolved). Any knowledge documents previously uploaded must be re-uploaded via `store-knowledge` after this migration runs — the underlying MinIO objects are untouched, only their RAG index is cleared.
+
+### Automatic RAG sync (010.2.2)
+
+Embeddings are kept in sync with the folder contents automatically, whoever changes them — you via the API/CLI, an agent via the storage tools, or a person editing directly in the MinIO console. The unit of reindexing is a whole _scope_ (`knowledge/{role_slug}/` or `knowledge/shared/`): a rebuild re-lists, re-chunks, and re-embeds every file in the scope and replaces that scope's rows in `knowledge_chunk`. Two triggers feed one BullMQ queue (`knowledge-reindex`), and both run inside lcp-server:
+
+1. **Write hook (fast path).** `StorageService` is the single chokepoint for all lcp-server-mediated writes; after any successful write/delete/restore/move/copy under a `knowledge/` prefix it enqueues a rebuild for the affected scope.
+2. **Reconciliation poller (safety net).** A periodic in-process loop (interval `KNOWLEDGE_POLL_INTERVAL_MS`, default `60000`) fingerprints each scope's storage listing and enqueues a rebuild for any scope that has drifted from the fingerprint recorded at its last successful rebuild. This is what catches direct MinIO-console edits that never went through the write hook. Each running lcp-server instance polls independently; bumps are generation-guarded, so overlapping polls are harmless.
+
+Restart-on-change is handled by a per-scope generation counter (`knowledge_index_state`): every trigger atomically bumps the counter and enqueues a job carrying the new value. The worker skips any job older than the current generation and aborts + re-enqueues if the generation changes mid-rebuild, so a burst of writes collapses into a single up-to-date rebuild with no half-indexed state. Because indexing is asynchronous, chunks may appear a moment after an upload rather than synchronously.
+
+To force a rebuild of every scope of a company immediately (rather than waiting for the poller), use the manual trigger:
 
 ```bash
-# Upload documents
-./lcp-cli.sh store-role-documents -r <roleId> -s policy.md handbook.md
-
-# List stored documents
-./lcp-cli.sh list-role-documents -r <roleId>
-
-# Remove documents by pattern
-./lcp-cli.sh remove-role-documents -r <roleId> -p "*.md"
+./lcp-cli.sh reindex-knowledge -c <company-slug-or-id>
+# → POST /api/company/:companyId/knowledge/reindex (202 Accepted)
 ```
 
-See [`lcp-cli.md` → document management verbs](lcp-cli.md#store-role-documents) and [Agent Services → RAG](agent-services.md#rag-retrieval-augmented-generation) for full details.
+```bash
+# Upload a document to a role's knowledge base
+./lcp-cli.sh store-knowledge -r <roleId> -s policy.md
+
+# Upload a document to the company's shared knowledge
+./lcp-cli.sh store-knowledge -c <companyId> -s handbook.md
+
+# List stored documents
+./lcp-cli.sh list-knowledge -r <roleId>
+./lcp-cli.sh list-knowledge -c <companyId>
+
+# Retrieve a document's content
+./lcp-cli.sh get-knowledge -r <roleId> -f policy.md
+
+# Remove a document by filename
+./lcp-cli.sh delete-knowledge -r <roleId> -f policy.md
+
+# Force a full RAG rebuild of every scope of a company
+./lcp-cli.sh reindex-knowledge -c <companyId>
+```
+
+See [`lcp-cli.md` → knowledge management verbs](lcp-cli.md#list-knowledge) and [Agent Services → RAG](agent-services.md#rag-retrieval-augmented-generation) for full details.
 
 ---
 
@@ -136,8 +173,23 @@ Both commands write a JSON result to stdout and progress messages to stderr. See
 
 ## Agent access via MCP
 
-Agents read and write files through the [lcp-mcp-storage](lcp-mcp-storage.md) MCP server rather than directly via the S3 API. The server exposes 12 tools including soft delete (files moved to `_deleted/` rather than permanently removed), overwrite safety, file search with glob patterns, metadata inspection, copy, move, and structural file summary. See [lcp-mcp-storage.md](lcp-mcp-storage.md) for the full tool reference.
+Agents interact with storage through the [lcp-mcp-storage](lcp-mcp-storage.md) MCP server rather than directly via the S3 API. Since `docs/prompts/010.2.6` the tools fall into three tiers:
+
+- **Read-only exploration** — `describe_server`, `describe_folder`, `list_files`, `read_file`, `search_files`, `get_file_properties`, `get_file_summary`. Agents may browse and read anything in the shared company folder by full object key.
+- **Assignment-scoped working files** — `list_working_files`, `get_working_file_properties`, `read_working_file`, `append_working_file`, `replace_in_working_file`, `delete_working_file`, `restore_working_file`. The agent supplies **only a filename** (subdirectories allowed); the working-directory prefix is derived server-side from the caller's assignment (see below), so an agent can only write inside its own working area. In **qa mode** these are read-only and target the assignment under review — the mutating variants return a "not available in qa mode" message.
+- **Assignment-scoped materials** — `list_material_files`, `get_material_file_properties`, `read_material_file`. Exposes the caller's assignment's `materials`, resolved to concrete keys (`resolveArtifactKey`); `inline-text` materials are keyed by a synthetic `inline-N` name and read back as their literal content.
+
+The permissive general **write** tools (`write_file`, `delete_file`, `restore_file`, `copy_file`, `move_file`) are no longer exposed to agents — the internal endpoints behind them remain for the knowledge API, storage proxy, and orchestration. See [lcp-mcp-storage.md](lcp-mcp-storage.md) for the full tool reference.
+
+### Scope resolution
+
+The scoped tools resolve their working prefix and materials via `GET /internal/agent/:agentId/storage-scope` (the `agentId` is injected by `McpClientService`, never model-supplied). lcp-server returns `{ mode, readOnly, workingPrefix, materials }`:
+
+- `implement`/`plan` callers get their **own** assignment's working directory (`tasks/{taskId}/assignments/{orderIndex}/working/`, or `assignments/{assignmentId}/working/` for orphans), read/write.
+- `qa` callers get the **target assignment**'s working directory, read-only, and the target's materials view.
+
+Filenames are normalised and rejected if absolute or containing a `..` segment, so a resolved key can never escape the working prefix.
 
 ## Internal storage-action endpoints
 
-Since `docs/prompts/009.4 - doc type validations.md`, the full file-action surface (list, read, write, delete, restore, search, properties, copy, move, summary, exists) lives on `lcp-server` under `POST /internal/storage/*` (plus `GET /internal/storage/exists`), guarded by `X-Internal-Api-Key` rather than JWT — these are service-to-service endpoints backing `lcp-mcp-storage`'s MCP tools, not for direct CLI/human use. `StorageProxyController`'s JWT-guarded `GET/POST /api/storage` remains the human-facing generic get/put-by-key surface. `delete`/`restore` are soft-delete (files move to `_deleted/`), matching the MCP tool semantics described above — `deleteKnowledgeFile` now delegates to the same soft-delete primitive rather than hard-deleting.
+Since `docs/prompts/009.4 - doc type validations.md`, the full file-action surface (list, read, write, delete, restore, search, properties, copy, move, summary, exists) lives on `lcp-server` under `POST /internal/storage/*` (plus `GET /internal/storage/exists`), guarded by `X-Internal-Api-Key` rather than JWT — these are service-to-service endpoints backing `lcp-mcp-storage`'s MCP tools, not for direct CLI/human use. `docs/prompts/010.2.6` added `POST /internal/storage/append` (read-modify-write that creates the file when absent, `created` in the response) and `POST /internal/storage/replace` (all-occurrence literal string replace, returning `count`); both are variants of `write` and re-use its validation/audit/origination plumbing. `StorageProxyController`'s JWT-guarded `GET/POST /api/storage` remains the human-facing generic get/put-by-key surface. `delete`/`restore` are soft-delete (files move to `_deleted/`), matching the MCP tool semantics described above — `deleteKnowledgeFile` now delegates to the same soft-delete primitive rather than hard-deleting.

@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import axios from 'axios';
 import { z } from 'zod';
-import { storagePrompts } from '../storage-prompts';
+import { getReadOnlyMessage, storagePrompts } from '../storage-prompts';
 import { storageToolDescriptions } from '../storage-tool-descriptions';
 
 /** Shape of a single entry returned by list/search tools. */
@@ -23,10 +23,55 @@ interface FileProperties {
   lastModified?: string;
 }
 
+/** A material resolved server-side to a concrete key (or literal inline text). */
+interface ResolvedMaterial {
+  name: string;
+  key: string | null;
+  inlineText?: string;
+}
+
+/** The caller's storage scope, resolved by `GET /internal/agent/:id/storage-scope`. */
+interface StorageScope {
+  mode: string;
+  readOnly: boolean;
+  workingPrefix: string;
+  materials: ResolvedMaterial[];
+}
+
 /** MCP tool result envelope — index signature satisfies the SDK's Zod-inferred type. */
 interface ToolResult {
   [key: string]: unknown;
   content: Array<{ type: 'text'; text: string }>;
+}
+
+/** The working-directory inspect tools an agent keeps in a read-only scope. */
+const READ_ONLY_WORKING_TOOLS = [
+  'read_working_file',
+  'list_working_files',
+  'get_working_file_properties',
+];
+
+/**
+ * Validates a model-supplied filename and joins it under a working prefix.
+ * Rejects absolute paths and any `..` segment so a resolved key can never
+ * escape the working directory.
+ *
+ * @throws {Error} with a corrective message the tool relays to the model.
+ */
+function resolveScopedKey(prefix: string, filename: string): string {
+  const norm = filename.trim().replace(/\\/g, '/');
+  if (norm === '') {
+    throw new Error('A filename is required.');
+  }
+  if (norm.startsWith('/')) {
+    throw new Error(`Filename must be relative, not absolute: '${filename}'.`);
+  }
+  if (norm.split('/').some((segment) => segment === '..')) {
+    throw new Error(
+      `Filename must not contain '..' path segments: '${filename}'.`,
+    );
+  }
+  return `${prefix}${norm}`;
 }
 
 /**
@@ -34,9 +79,17 @@ interface ToolResult {
  * A new server is created per request so state is never shared across sessions.
  * Tool handlers are public methods so integration tests can call them directly.
  *
+ * Two tiers of tool:
+ * - **Read-only exploration** (`list_files`, `read_file`, `search_files`, …) —
+ *   thin proxies over `/internal/storage/*` letting agents browse shared storage.
+ * - **Assignment-scoped** (`*_working_file`, `*_material_file`) — the model
+ *   supplies only a filename; the working-directory prefix and materials are
+ *   resolved server-side from the caller's assignment
+ *   (`GET /internal/agent/:id/storage-scope`), so an agent can only write inside
+ *   its own working area, and qa-mode callers are read-only.
+ *
  * All file-action logic (validation, soft-delete, content analysis, audit)
- * lives on `lcp-server` behind `/internal/storage/*` (see
- * docs/prompts/009.4 - doc type validations.md) — this service is a thin
+ * lives on `lcp-server` behind `/internal/storage/*` — this service is a thin
  * HTTP proxy plus the MCP `ToolResult` presentation layer.
  */
 @Injectable()
@@ -54,23 +107,34 @@ export class StorageToolsService {
   createServer(): McpServer {
     const server = new McpServer({ name: 'lcp-mcp-storage', version: '1.0.0' });
 
+    // Read-only exploration of shared storage.
     this.registerDescribeServer(server);
     this.registerDescribeFolder(server);
     this.registerListFiles(server);
     this.registerReadFile(server);
-    this.registerWriteFile(server);
-    this.registerDeleteFile(server);
-    this.registerRestoreFile(server);
     this.registerSearchFiles(server);
     this.registerGetFileProperties(server);
-    this.registerCopyFile(server);
-    this.registerMoveFile(server);
     this.registerGetFileSummary(server);
+
+    // Assignment-scoped working files.
+    this.registerListWorkingFiles(server);
+    this.registerGetWorkingFileProperties(server);
+    this.registerReadWorkingFile(server);
+    this.registerAppendWorkingFile(server);
+    this.registerReplaceInWorkingFile(server);
+    this.registerDeleteWorkingFile(server);
+    this.registerRestoreWorkingFile(server);
+    this.registerRenameWorkingFile(server);
+
+    // Assignment-scoped materials.
+    this.registerListMaterialFiles(server);
+    this.registerGetMaterialFileProperties(server);
+    this.registerReadMaterialFile(server);
 
     return server;
   }
 
-  // Tool handlers (public for testability) — each proxies to lcp-server.
+  // Read-only exploration handlers (public for testability).
 
   async listFiles(prefix?: string): Promise<ToolResult> {
     const { entries } = await this.post<{ entries: FileEntry[] }>('list', {
@@ -85,49 +149,6 @@ export class StorageToolsService {
         path,
       });
       return this.textResult(content);
-    } catch (e) {
-      return this.textResult(this.extractErrorMessage(e));
-    }
-  }
-
-  async writeFile(
-    path: string,
-    content: string,
-    overwrite = false,
-    agentId?: string,
-  ): Promise<ToolResult> {
-    try {
-      await this.post('write', {
-        path,
-        content,
-        overwrite,
-        originators: { agent: agentId ?? null },
-      });
-      return this.textResult(`Written: ${path}`);
-    } catch (e) {
-      return this.textResult(this.extractErrorMessage(e));
-    }
-  }
-
-  async deleteFile(path: string, agentId?: string): Promise<ToolResult> {
-    try {
-      await this.post('delete', {
-        path,
-        originators: { agent: agentId ?? null },
-      });
-      return this.textResult(`Deleted: ${path} (restorable via restore_file)`);
-    } catch (e) {
-      return this.textResult(this.extractErrorMessage(e));
-    }
-  }
-
-  async restoreFile(path: string, agentId?: string): Promise<ToolResult> {
-    try {
-      await this.post('restore', {
-        path,
-        originators: { agent: agentId ?? null },
-      });
-      return this.textResult(`Restored: ${path}`);
     } catch (e) {
       return this.textResult(this.extractErrorMessage(e));
     }
@@ -150,46 +171,248 @@ export class StorageToolsService {
     }
   }
 
-  async copyFile(
-    source: string,
-    destination: string,
-    agentId?: string,
-  ): Promise<ToolResult> {
-    try {
-      await this.post('copy', {
-        source,
-        destination,
-        originators: { agent: agentId ?? null },
-      });
-      return this.textResult(`Copied: ${source} → ${destination}`);
-    } catch (e) {
-      return this.textResult(this.extractErrorMessage(e));
-    }
-  }
-
-  async moveFile(
-    source: string,
-    destination: string,
-    agentId?: string,
-  ): Promise<ToolResult> {
-    try {
-      await this.post('move', {
-        source,
-        destination,
-        originators: { agent: agentId ?? null },
-      });
-      return this.textResult(`Moved: ${source} → ${destination}`);
-    } catch (e) {
-      return this.textResult(this.extractErrorMessage(e));
-    }
-  }
-
   async getFileSummary(path: string): Promise<ToolResult> {
     try {
       const summary = await this.post<Record<string, unknown>>('summary', {
         path,
       });
       return this.textResult(JSON.stringify(summary, null, 2));
+    } catch (e) {
+      return this.textResult(this.extractErrorMessage(e));
+    }
+  }
+
+  // Assignment-scoped working-file handlers (public for testability).
+
+  async listWorkingFiles(agentId: string): Promise<ToolResult> {
+    try {
+      const scope = await this.fetchScope(agentId);
+      const { entries } = await this.post<{ entries: FileEntry[] }>('list', {
+        prefix: scope.workingPrefix,
+      });
+      return this.textResult(JSON.stringify(entries, null, 2));
+    } catch (e) {
+      return this.textResult(this.extractErrorMessage(e));
+    }
+  }
+
+  async getWorkingFileProperties(
+    agentId: string,
+    filename: string,
+  ): Promise<ToolResult> {
+    try {
+      const scope = await this.fetchScope(agentId);
+      const key = resolveScopedKey(scope.workingPrefix, filename);
+      const props = await this.post<FileProperties>('properties', {
+        path: key,
+      });
+      return this.textResult(JSON.stringify(props, null, 2));
+    } catch (e) {
+      return this.textResult(this.extractErrorMessage(e));
+    }
+  }
+
+  async readWorkingFile(
+    agentId: string,
+    filename: string,
+  ): Promise<ToolResult> {
+    try {
+      const scope = await this.fetchScope(agentId);
+      const key = resolveScopedKey(scope.workingPrefix, filename);
+      const { content } = await this.post<{ content: string }>('read', {
+        path: key,
+      });
+      return this.textResult(content);
+    } catch (e) {
+      return this.textResult(this.extractErrorMessage(e));
+    }
+  }
+
+  async appendWorkingFile(
+    agentId: string,
+    filename: string,
+    content: string,
+  ): Promise<ToolResult> {
+    try {
+      const scope = await this.fetchScope(agentId);
+      if (scope.readOnly)
+        return this.textResult(
+          getReadOnlyMessage('append_working_file', READ_ONLY_WORKING_TOOLS),
+        );
+      const key = resolveScopedKey(scope.workingPrefix, filename);
+      const { created } = await this.post<{ created: boolean }>('append', {
+        path: key,
+        content,
+        originators: { agent: agentId },
+      });
+      return this.textResult(
+        `${created ? 'Created' : 'Appended to'} working file: ${filename}`,
+      );
+    } catch (e) {
+      return this.textResult(this.extractErrorMessage(e));
+    }
+  }
+
+  async replaceInWorkingFile(
+    agentId: string,
+    filename: string,
+    find: string,
+    replace: string,
+  ): Promise<ToolResult> {
+    try {
+      const scope = await this.fetchScope(agentId);
+      if (scope.readOnly)
+        return this.textResult(
+          getReadOnlyMessage(
+            'replace_in_working_file',
+            READ_ONLY_WORKING_TOOLS,
+          ),
+        );
+      const key = resolveScopedKey(scope.workingPrefix, filename);
+      const { count } = await this.post<{ count: number }>('replace', {
+        path: key,
+        find,
+        replace,
+        originators: { agent: agentId },
+      });
+      return this.textResult(
+        `Replaced ${count} occurrence(s) in working file: ${filename}`,
+      );
+    } catch (e) {
+      return this.textResult(this.extractErrorMessage(e));
+    }
+  }
+
+  async deleteWorkingFile(
+    agentId: string,
+    filename: string,
+  ): Promise<ToolResult> {
+    try {
+      const scope = await this.fetchScope(agentId);
+      if (scope.readOnly)
+        return this.textResult(
+          getReadOnlyMessage('delete_working_file', READ_ONLY_WORKING_TOOLS),
+        );
+      const key = resolveScopedKey(scope.workingPrefix, filename);
+      await this.post('delete', {
+        path: key,
+        originators: { agent: agentId },
+      });
+      return this.textResult(
+        `Deleted working file: ${filename} (restorable via restore_working_file)`,
+      );
+    } catch (e) {
+      return this.textResult(this.extractErrorMessage(e));
+    }
+  }
+
+  async restoreWorkingFile(
+    agentId: string,
+    filename: string,
+  ): Promise<ToolResult> {
+    try {
+      const scope = await this.fetchScope(agentId);
+      if (scope.readOnly)
+        return this.textResult(
+          getReadOnlyMessage('restore_working_file', READ_ONLY_WORKING_TOOLS),
+        );
+      const key = resolveScopedKey(scope.workingPrefix, filename);
+      await this.post('restore', {
+        path: key,
+        originators: { agent: agentId },
+      });
+      return this.textResult(`Restored working file: ${filename}`);
+    } catch (e) {
+      return this.textResult(this.extractErrorMessage(e));
+    }
+  }
+
+  async renameWorkingFile(
+    agentId: string,
+    from: string,
+    to: string,
+  ): Promise<ToolResult> {
+    try {
+      const scope = await this.fetchScope(agentId);
+      if (scope.readOnly)
+        return this.textResult(
+          getReadOnlyMessage('rename_working_file', READ_ONLY_WORKING_TOOLS),
+        );
+      // Both ends are confined to the working directory by resolveScopedKey.
+      const source = resolveScopedKey(scope.workingPrefix, from);
+      const destination = resolveScopedKey(scope.workingPrefix, to);
+      await this.post('move', {
+        source,
+        destination,
+        originators: { agent: agentId },
+      });
+      return this.textResult(`Renamed working file: ${from} → ${to}`);
+    } catch (e) {
+      return this.textResult(this.extractErrorMessage(e));
+    }
+  }
+
+  // Assignment-scoped material handlers (public for testability).
+
+  async listMaterialFiles(agentId: string): Promise<ToolResult> {
+    try {
+      const scope = await this.fetchScope(agentId);
+      const list = scope.materials.map((m) => ({
+        name: m.name,
+        kind: m.key === null ? 'inline-text' : 'file',
+      }));
+      return this.textResult(JSON.stringify(list, null, 2));
+    } catch (e) {
+      return this.textResult(this.extractErrorMessage(e));
+    }
+  }
+
+  async getMaterialFileProperties(
+    agentId: string,
+    filename: string,
+  ): Promise<ToolResult> {
+    try {
+      const scope = await this.fetchScope(agentId);
+      const material = this.findMaterial(scope, filename);
+      if (!material) return this.textResult(this.materialNotFound(filename));
+      if (material.key === null) {
+        return this.textResult(
+          JSON.stringify(
+            {
+              name: material.name,
+              kind: 'inline-text',
+              exists: true,
+              size: Buffer.byteLength(material.inlineText ?? '', 'utf-8'),
+            },
+            null,
+            2,
+          ),
+        );
+      }
+      const props = await this.post<FileProperties>('properties', {
+        path: material.key,
+      });
+      return this.textResult(JSON.stringify(props, null, 2));
+    } catch (e) {
+      return this.textResult(this.extractErrorMessage(e));
+    }
+  }
+
+  async readMaterialFile(
+    agentId: string,
+    filename: string,
+  ): Promise<ToolResult> {
+    try {
+      const scope = await this.fetchScope(agentId);
+      const material = this.findMaterial(scope, filename);
+      if (!material) return this.textResult(this.materialNotFound(filename));
+      if (material.key === null) {
+        return this.textResult(material.inlineText ?? '');
+      }
+      const { content } = await this.post<{ content: string }>('read', {
+        path: material.key,
+      });
+      return this.textResult(content);
     } catch (e) {
       return this.textResult(this.extractErrorMessage(e));
     }
@@ -215,6 +438,26 @@ export class StorageToolsService {
   }
 
   // Private helpers
+
+  /** Resolves the caller's storage scope for the current tool call. */
+  private async fetchScope(agentId: string): Promise<StorageScope> {
+    const res = await axios.get<StorageScope>(
+      `${this.serverUrl}/internal/agent/${agentId}/storage-scope`,
+      { headers: this.headers() },
+    );
+    return res.data;
+  }
+
+  private findMaterial(
+    scope: StorageScope,
+    name: string,
+  ): ResolvedMaterial | undefined {
+    return scope.materials.find((m) => m.name === name);
+  }
+
+  private materialNotFound(name: string): string {
+    return `No material named '${name}'. Use list_material_files to see the available materials.`;
+  }
 
   private async post<T>(action: string, body: unknown): Promise<T> {
     const res = await axios.post<T>(
@@ -324,57 +567,6 @@ export class StorageToolsService {
     );
   }
 
-  private registerWriteFile(server: McpServer): void {
-    server.registerTool(
-      'write_file',
-      {
-        description: storageToolDescriptions.write_file,
-        inputSchema: {
-          path: z.string().describe('The object key to write.'),
-          content: z.string().describe('The text content to write.'),
-          overwrite: z
-            .boolean()
-            .optional()
-            .describe('Replace an existing file (default: false).'),
-          agentId: z.uuid().describe('The calling agent UUID.'),
-          companyId: z.uuid().describe('The company UUID.'),
-        },
-      },
-      ({ path, content, overwrite, agentId }) =>
-        this.writeFile(path, content, overwrite ?? false, agentId),
-    );
-  }
-
-  private registerDeleteFile(server: McpServer): void {
-    server.registerTool(
-      'delete_file',
-      {
-        description: storageToolDescriptions.delete_file,
-        inputSchema: {
-          path: z.string().describe('The object key to delete.'),
-          agentId: z.uuid().describe('The calling agent UUID.'),
-          companyId: z.uuid().describe('The company UUID.'),
-        },
-      },
-      ({ path, agentId }) => this.deleteFile(path, agentId),
-    );
-  }
-
-  private registerRestoreFile(server: McpServer): void {
-    server.registerTool(
-      'restore_file',
-      {
-        description: storageToolDescriptions.restore_file,
-        inputSchema: {
-          path: z.string().describe('The original object key to restore.'),
-          agentId: z.uuid().describe('The calling agent UUID.'),
-          companyId: z.uuid().describe('The company UUID.'),
-        },
-      },
-      ({ path, agentId }) => this.restoreFile(path, agentId),
-    );
-  }
-
   private registerSearchFiles(server: McpServer): void {
     server.registerTool(
       'search_files',
@@ -410,40 +602,6 @@ export class StorageToolsService {
     );
   }
 
-  private registerCopyFile(server: McpServer): void {
-    server.registerTool(
-      'copy_file',
-      {
-        description: storageToolDescriptions.copy_file,
-        inputSchema: {
-          source: z.string().describe('The source object key.'),
-          destination: z.string().describe('The destination object key.'),
-          agentId: z.uuid().describe('The calling agent UUID.'),
-          companyId: z.uuid().describe('The company UUID.'),
-        },
-      },
-      ({ source, destination, agentId }) =>
-        this.copyFile(source, destination, agentId),
-    );
-  }
-
-  private registerMoveFile(server: McpServer): void {
-    server.registerTool(
-      'move_file',
-      {
-        description: storageToolDescriptions.move_file,
-        inputSchema: {
-          source: z.string().describe('The source object key.'),
-          destination: z.string().describe('The destination object key.'),
-          agentId: z.uuid().describe('The calling agent UUID.'),
-          companyId: z.uuid().describe('The company UUID.'),
-        },
-      },
-      ({ source, destination, agentId }) =>
-        this.moveFile(source, destination, agentId),
-    );
-  }
-
   private registerGetFileSummary(server: McpServer): void {
     server.registerTool(
       'get_file_summary',
@@ -454,6 +612,187 @@ export class StorageToolsService {
         },
       },
       ({ path }) => this.getFileSummary(path),
+    );
+  }
+
+  // The `agentId` field on scoped tools is injected server-side by
+  // McpClientService and never supplied by the model.
+
+  private registerListWorkingFiles(server: McpServer): void {
+    server.registerTool(
+      'list_working_files',
+      {
+        description: storageToolDescriptions.list_working_files,
+        inputSchema: {
+          agentId: z.uuid().describe('The calling agent UUID.'),
+        },
+      },
+      ({ agentId }) => this.listWorkingFiles(agentId),
+    );
+  }
+
+  private registerGetWorkingFileProperties(server: McpServer): void {
+    server.registerTool(
+      'get_working_file_properties',
+      {
+        description: storageToolDescriptions.get_working_file_properties,
+        inputSchema: {
+          agentId: z.uuid().describe('The calling agent UUID.'),
+          filename: z
+            .string()
+            .describe('Filename relative to your working directory.'),
+        },
+      },
+      ({ agentId, filename }) =>
+        this.getWorkingFileProperties(agentId, filename),
+    );
+  }
+
+  private registerReadWorkingFile(server: McpServer): void {
+    server.registerTool(
+      'read_working_file',
+      {
+        description: storageToolDescriptions.read_working_file,
+        inputSchema: {
+          agentId: z.uuid().describe('The calling agent UUID.'),
+          filename: z
+            .string()
+            .describe('Filename relative to your working directory.'),
+        },
+      },
+      ({ agentId, filename }) => this.readWorkingFile(agentId, filename),
+    );
+  }
+
+  private registerAppendWorkingFile(server: McpServer): void {
+    server.registerTool(
+      'append_working_file',
+      {
+        description: storageToolDescriptions.append_working_file,
+        inputSchema: {
+          agentId: z.uuid().describe('The calling agent UUID.'),
+          filename: z
+            .string()
+            .describe('Filename relative to your working directory.'),
+          content: z.string().describe('The text content to append.'),
+        },
+      },
+      ({ agentId, filename, content }) =>
+        this.appendWorkingFile(agentId, filename, content),
+    );
+  }
+
+  private registerReplaceInWorkingFile(server: McpServer): void {
+    server.registerTool(
+      'replace_in_working_file',
+      {
+        description: storageToolDescriptions.replace_in_working_file,
+        inputSchema: {
+          agentId: z.uuid().describe('The calling agent UUID.'),
+          filename: z
+            .string()
+            .describe('Filename relative to your working directory.'),
+          find: z
+            .string()
+            .describe('The literal string to find (all occurrences replaced).'),
+          replace: z.string().describe('The replacement string.'),
+        },
+      },
+      ({ agentId, filename, find, replace }) =>
+        this.replaceInWorkingFile(agentId, filename, find, replace),
+    );
+  }
+
+  private registerDeleteWorkingFile(server: McpServer): void {
+    server.registerTool(
+      'delete_working_file',
+      {
+        description: storageToolDescriptions.delete_working_file,
+        inputSchema: {
+          agentId: z.uuid().describe('The calling agent UUID.'),
+          filename: z
+            .string()
+            .describe('Filename relative to your working directory.'),
+        },
+      },
+      ({ agentId, filename }) => this.deleteWorkingFile(agentId, filename),
+    );
+  }
+
+  private registerRestoreWorkingFile(server: McpServer): void {
+    server.registerTool(
+      'restore_working_file',
+      {
+        description: storageToolDescriptions.restore_working_file,
+        inputSchema: {
+          agentId: z.uuid().describe('The calling agent UUID.'),
+          filename: z
+            .string()
+            .describe('Filename relative to your working directory.'),
+        },
+      },
+      ({ agentId, filename }) => this.restoreWorkingFile(agentId, filename),
+    );
+  }
+
+  private registerRenameWorkingFile(server: McpServer): void {
+    server.registerTool(
+      'rename_working_file',
+      {
+        description: storageToolDescriptions.rename_working_file,
+        inputSchema: {
+          agentId: z.uuid().describe('The calling agent UUID.'),
+          from: z
+            .string()
+            .describe('Current filename, relative to your working directory.'),
+          to: z
+            .string()
+            .describe('New filename, relative to your working directory.'),
+        },
+      },
+      ({ agentId, from, to }) => this.renameWorkingFile(agentId, from, to),
+    );
+  }
+
+  private registerListMaterialFiles(server: McpServer): void {
+    server.registerTool(
+      'list_material_files',
+      {
+        description: storageToolDescriptions.list_material_files,
+        inputSchema: {
+          agentId: z.uuid().describe('The calling agent UUID.'),
+        },
+      },
+      ({ agentId }) => this.listMaterialFiles(agentId),
+    );
+  }
+
+  private registerGetMaterialFileProperties(server: McpServer): void {
+    server.registerTool(
+      'get_material_file_properties',
+      {
+        description: storageToolDescriptions.get_material_file_properties,
+        inputSchema: {
+          agentId: z.uuid().describe('The calling agent UUID.'),
+          filename: z.string().describe('The material name to inspect.'),
+        },
+      },
+      ({ agentId, filename }) =>
+        this.getMaterialFileProperties(agentId, filename),
+    );
+  }
+
+  private registerReadMaterialFile(server: McpServer): void {
+    server.registerTool(
+      'read_material_file',
+      {
+        description: storageToolDescriptions.read_material_file,
+        inputSchema: {
+          agentId: z.uuid().describe('The calling agent UUID.'),
+          filename: z.string().describe('The material name to read.'),
+        },
+      },
+      ({ agentId, filename }) => this.readMaterialFile(agentId, filename),
     );
   }
 }

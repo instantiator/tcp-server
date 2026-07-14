@@ -37,6 +37,13 @@ export interface ChatResponse {
   status: string;
 }
 
+export interface DocumentSummary {
+  key: string;
+  name: string;
+  size: number;
+  lastModified: string;
+}
+
 export class ApiHelper {
   token: string;
 
@@ -178,6 +185,66 @@ export class ApiHelper {
       path: `/api/agent/${agentId}`,
       expectedStatus: 204,
     });
+  }
+
+  async listKnowledge(scopePath: string) {
+    const { data } = await this.invokeApi<undefined, DocumentSummary[]>({
+      method: 'GET',
+      path: `/api/${scopePath}/knowledge`,
+      expectedStatus: 200,
+    });
+    expect(Array.isArray(data)).toBe(true);
+    return data!;
+  }
+
+  async deleteKnowledge(scopePath: string, filename: string) {
+    await this.invokeApi({
+      method: 'DELETE',
+      path: `/api/${scopePath}/knowledge/${encodeURIComponent(filename)}`,
+      expectedStatus: 204,
+    });
+  }
+
+  /**
+   * Uploads a knowledge document via `multipart/form-data`. Not routed
+   * through {@link invokeApi} since that only sends JSON bodies.
+   */
+  async storeKnowledge(
+    scopePath: string,
+    filename: string,
+    content: string,
+    expectedStatus = 201,
+  ) {
+    const form = new FormData();
+    form.append(
+      'file',
+      new Blob([content], { type: 'text/markdown' }),
+      filename,
+    );
+    const res = await fetch(`${BASE}/api/${scopePath}/knowledge`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${this.token}` },
+      body: form,
+    });
+    expect(res.status).toBe(expectedStatus);
+    return res.status === 201 ? ((await res.json()) as DocumentSummary) : null;
+  }
+
+  /**
+   * Downloads a knowledge document's raw text content via `fetch` directly
+   * (not routed through {@link invokeApi}, which always parses JSON).
+   */
+  async getKnowledgeText(
+    scopePath: string,
+    filename: string,
+    expectedStatus = 200,
+  ) {
+    const res = await fetch(
+      `${BASE}/api/${scopePath}/knowledge/${encodeURIComponent(filename)}`,
+      { headers: { Authorization: `Bearer ${this.token}` } },
+    );
+    expect(res.status).toBe(expectedStatus);
+    return res.status === 200 ? await res.text() : null;
   }
 
   private async invokeApi<RequestType, ResponseType>(

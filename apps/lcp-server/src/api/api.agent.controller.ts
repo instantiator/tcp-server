@@ -63,6 +63,7 @@ export class AgentController {
       companyId: body.companyId,
       roleId: body.roleId,
       initialPrompt: '',
+      mode: 'chat',
     });
     await this.audit.record(
       agent.companyId,

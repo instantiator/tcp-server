@@ -156,3 +156,248 @@ On lcp-server startup:
 
 - Parallel task steps: the current design is sequential. Parallel steps (where the plan specifies no dependency between them) are a future extension — the BullMQ dispatch logic and plan data model support it but the orchestrator loop handles sequential first.
 - Dead-letter queue for permanently failed jobs: note for implementation
+
+## Amendments as implemented (010.2.3)
+
+The drafted `TaskStep` (JSONB steps embedded in a task config) is superseded
+by two entities and a small set of REST/CLI surfaces. No orchestration
+behaviour (planner dispatch, plan execution, QA) is implemented yet — this
+amendment covers the data layer only. Full details: [tasks.md](../tasks.md).
+
+- **`LcpTask`** (replaces the `created → planning → in_progress → reviewing →
+completed` lifecycle sketch): `status` is
+  `ready | planning | in-progress | succeeded | failed | cancelled`, derived
+  from its assignments by `deriveTaskStatus` except `planning` (set
+  explicitly on dispatch) and the terminal states.
+- **`LcpAssignment`** (replaces `TaskStep`): `taskId` nullable (null = an
+  "orphan" assignment — a plain conversation/consultation outside any task);
+  `mode` (`plan | implement | qa`) is the agent's mode — there is no `mode`
+  column on `LcpAgent`, it derives its mode via its assignment (added in
+  part 4). A task's plan is its implement-mode assignments ordered by
+  `orderIndex`; there is no separate plan entity.
+- **Artifact model**: no artifact table — `{ type, value }` pairs in
+  `simple-json` columns, constrained by four TypeScript union types
+  (`LcpMaterialArtifact`, `LcpAssignmentWorkingArtifact`,
+  `LcpAssignmentCompletedArtifact`, `LcpTaskCompletedArtifact`). Storage keys
+  extend the ADR-007 layout with `tasks/{id}/assignments/{orderIndex}/{working,completed}/`
+  and an orphan `assignments/{id}/working/` directory.
+- **`LcpCompany.plannerRoleId`**: company-wide default planner role, used
+  when a task doesn't specify its own.
+- **REST/CLI**: `POST /api/task` (create), `POST /api/task/:id/materials`
+  (upload), `POST /api/task/:id/start` (atomic `ready → planning` + a logged
+  no-op planner dispatch, replaced in part 7), `GET /api/task`, `GET
+/api/task/:id`; CLI verbs `create-task`/`list-tasks`/`get-task`.
+
+Still outstanding: the planner role agent, multi-step plan execution, the QA
+review cycle, and task/assignment cancellation — tracked across the
+remaining `010.2.x` sub-plans.
+
+## Amendments as implemented (010.2.4)
+
+- **Every `LcpAgent` now carries an assignment** (`assignmentId`, non-nullable
+  FK, `ON DELETE CASCADE`). Task work uses the task's assignment; plain
+  conversations, API-started agents (`/api/agent/start`, `/api/agent/chat/start`),
+  and consultations get an auto-created **orphan** implement-mode assignment
+  (`taskId: null`, `status: in-progress`, prompt copied from the agent's
+  `initialPrompt`). `DbService.createAgent` creates the orphan and cross-links
+  it (agent → assignment, assignment.agentId → agent) in one transaction. The
+  agent's mode is its assignment's mode; there is no mode column on `LcpAgent`.
+  The destructive `AddAgentAssignment` migration deletes all existing
+  `lcp_agent` rows (a non-nullable FK cannot be backfilled). See the
+  [ADR-013 010.2.4 amendment](ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-01024)
+  for how the assignment drives prompt part 4.
+- `plan`/`qa` modes exist but nothing dispatches them yet (parts 5/7).
+
+## Amendments as implemented (010.2.5)
+
+- **Plan creation is now a tool**, not a drafted internal call. A `plan`-mode
+  agent turns its task into a plan via `create_plan` on the new
+  [lcp-mcp-tasks](../lcp-mcp-tasks.md) MCP server (port 3013), which proxies
+  `POST /internal/task/:taskId/plan`. The endpoint validates the caller
+  (plan mode, assignment belongs to the task), atomically claims the task
+  `planning → in-progress`, and creates the ordered implement-mode
+  `LcpAssignment` rows (`orderIndex` 0…n−1, status `ready`). The reaction that
+  actually dispatches the first assignment is part 7 — here `TaskDispatcher`
+  exposes `taskPlanned`/`assignmentReadyForQa`/`assignmentAssured` hooks that are
+  logged no-ops.
+- **The state transitions backing the three mode tools** (`create_plan`,
+  `complete_assignment`, `assure_assignment`) live in `AssignmentService` on
+  lcp-server, guarded by `InternalApiKeyGuard`. Each uses an atomic conditional
+  `UPDATE` (the `pausedAt` claim pattern) so double/concurrent calls resolve to
+  one winner; the loser gets a `409`. The MCP server holds no state — it
+  resolves the caller's assignment (`GET /internal/agent/:id/assignment`),
+  mode-gates the tool, and relays validation/gate errors verbatim.
+
+## Amendments as implemented (010.2.7)
+
+The sequential orchestration flow is now fully wired.
+`TaskOrchestrationService` (`apps/lcp-server/src/api/task-orchestration.service.ts`)
+is the real `TaskDispatcher` — the abstract `TaskDispatcher` class is now the DI
+token, bound to the single `TaskOrchestrationService` instance via `useExisting`.
+See [tasks.md § Orchestration flow](../tasks.md#orchestration-flow) for the
+behavioural walk-through; the design record:
+
+- **Sequential lifecycle.** planner (`create_plan`) → the lowest-`orderIndex`
+  ready implement assignment → QA agent (`assure_assignment`) → accept promotes
+  `working/`→`completed/` and advances; reject resumes the implementing agent
+  with feedback → next assignment → finalisation (assignment `completed/` files
+  copied into the task `completed/`, highest `orderIndex` wins on collision;
+  `task.completed` set) → task `succeeded`. Which assignment(s) run next is the
+  pure `selectNextAssignments` (`libs/lcp-shared/src/models/task-status.ts`),
+  documented as the DAG extension point — it returns a set the orchestrator
+  dispatches, so a future branch/join plan changes only that function.
+- **Idempotency & races.** Every handler re-reads state and advances it with an
+  atomic conditional `UPDATE`; only the status-flip winner runs side effects, so
+  duplicate/concurrent hook calls, double-completes, and double-assures are safe.
+  Each transition writes an `AuditEventType.StateChange` event.
+- **QA role decision (recorded).** The QA agent uses the **same role** as the
+  assignment under review — a fresh instance with the domain expertise. A
+  dedicated company QA role is future work.
+- **QA-attempt cap.** `runConfig.maxQaAttempts`, resolved role → company → env
+  `TASK_MAX_QA_ATTEMPTS` → `DEFAULT_TASK_MAX_QA_ATTEMPTS` (3). Exhaustion fails
+  the assignment and the task.
+- **Failure propagation** is hooked at `POST /internal/agent/:id/fail`: a
+  task-linked planner/implement/QA agent failure fails the task. A failed QA
+  agent is not retried (fails the target assignment) — re-dispatching QA once is
+  the noted upgrade path.
+- **Startup recovery.** `reconcileTask` runs for every non-terminal task on
+  module init: dead planner → task failed; dead implement agent → failure
+  propagated; `in-qa` with no live QA agent → fresh QA dispatched; idle with a
+  ready step → dispatched; all succeeded but unfinalised → finalised. Agents
+  still `Running`/`Paused` are left to BullMQ + pause/resume.
+- **Coverage.** Unit tests over a real in-memory SQLite DB
+  (`task-orchestration.service.spec.ts`) plus a no-LLM lifecycle e2e driving the
+  internal endpoints against real Postgres/Redis/MinIO
+  (`test/e2e/lcp-server/task-orchestration.e2e-spec.ts`). A stub-LLM e2e through
+  the real agent loop was deferred — there is no scriptable LLM stub able to
+  emit a deterministic multi-agent tool-call sequence (see the plan file's
+  implementation notes).
+- **Deferred:** task/assignment cancellation, plan revision, and parallel/DAG
+  plans.
+
+## Amendments as implemented (010.2.8)
+
+_2026-07-13._
+
+- **`chat` added to the assignment mode set.** `LcpAssignmentMode` is now
+  `plan | implement | qa | chat` (a TypeScript union widening only — `mode` is a
+  `varchar` column, no migration). `/api/agent/chat/start` creates the agent's
+  orphan assignment in `chat` mode (empty prompt); `/api/agent/start` and
+  consultations remain `implement`. `requiredToolForMode` now returns a
+  `string[]` (the full `requiredToolCalls` list) and returns `[]` for `chat` — a
+  chat turn ends with narrated text and has no completion tool. `MODE_PROMPTS.chat`
+  states the conversational behaviour explicitly (interact / ground in
+  knowledge & storage / consult rather than invent / act via tools / no
+  completion tool), so it can be refined over time rather than living implicitly
+  in the role prompt.
+- **Toward one agent-operation core.** Creation already consolidated onto
+  `DbService.createAgent` (010.2.4); this part consolidates prompt assembly onto
+  the shared `@lcp/shared` builders across both the chat and worker paths (see
+  [ADR-013 010.2.8 amendment](ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-01028)).
+  What remains genuinely per-caller (not duplication to remove): the request
+  lifecycle vs. the BullMQ job lifecycle/dispatch; idle-between-turns terminal
+  semantics (chat returns to `Idle`) vs. run-to-completion (`Completed`/`Paused`/
+  `Failed`); and who owns the abort signal. Full extraction of the supervised-run
+  spine into a single shared `runAgentTurn` is the noted next step.
+
+## Amendments as implemented (010.2.8.2)
+
+_2026-07-13._
+
+- **Per-mode tool restriction — `plan` mode is read-only planning.** Previously
+  every agent got the additive union of registry + company + role MCP servers
+  regardless of mode, and only `qa` was constrained (read-only, storage-side). A
+  planner therefore had the consultation and file-write tools and could
+  short-circuit into consulting another role instead of producing a plan,
+  wedging the task in `planning`. New `MODE_DENIED_SERVERS`/`MODE_DENIED_TOOLS`
+  (`@lcp/shared` `mode-tools.ts`, only `plan` populated) with `serverNamesForMode`
+  / `filterToolsForMode`, applied in `AgentLoopService.runLoop`: a `plan` agent
+  is denied the `interactions` server (no agent consultation, no user queries)
+  and the mutating storage tools, keeping storage reads, memory, and
+  `create_plan`. With no pause vector, the `create_plan` required-tool
+  enforcement now always drives a planning run to completion or a clean failure.
+- **Runtime plan-completion safety net.** `TaskOrchestrationService.handleAgentCompleted`
+  (called from `POST /internal/agent/:id/complete`) fails a task if a `plan`-mode
+  agent reaches `Completed` while the task is still `planning` with an empty plan
+  — the same `plannerDead` predicate `reconcileTask` uses, now applied at runtime
+  rather than only at restart. `resolveRequiredTools` logs at `error` when a mode
+  completion tool is missing from the loaded toolset (a wiring bug).
+- **Mode prompts reworded** to steer better tool use: invoke tools rather than
+  narrate them, use exact tool names (`describe_server` for signatures), and
+  right-size output (a short answer is a `summary`/`inline-text`, not a file).
+  The consultation prompt suffix is reframed toward a concise inline answer. See
+  `010.2.8.2 - task orchestration fixes.md`.
+- **Enumerable-value validation feedback.** A shared
+  `buildEnumValidationError(purposeOfTool, invalid[])` (`@lcp/shared`) reports
+  every invalid enumerable value at once, names the valid values in English, and
+  closes with a corrective retry instruction. Applied to `create_plan` (roles +
+  artifact types), `complete_assignment` (prepared types), and
+  `request_agent_consultation` (target role — the interactions MCP tool now
+  relays 4xx corrective messages via `relay4xxOrError`). Plan-mode agents also
+  receive the company **role roster** in their initial prompt
+  (`buildAvailableRolesMessage`), so they assign steps to real role slugs rather
+  than inventing names — found via live testing, where the planner had stopped
+  consulting and correctly invoked `create_plan` but with a hallucinated role.
+- **`create_plan` ends the planner run.** `create_plan` is the planner's
+  completion (as `complete_assignment` is an implementer's): `planTask` now marks
+  the plan assignment `succeeded` and completes the planner agent, so its
+  supervised loop exits on the next terminal-status check instead of looping to
+  `max_iterations`. Prevents a finished planner from hogging the model.
+- **Worker concurrency configurable.** `AGENT_WORKER_CONCURRENCY`
+  (`DEFAULT_AGENT_WORKER_CONCURRENCY = 5`) replaces the hard-coded value; set to
+  `1` when agents share one capacity-limited model (e.g. a single local LLM) so
+  parallel runs don't starve each other of model time.
+- **Forced tool calls + tools enabled from turn 1.** `buildAgentGraph` forwards
+  a mode-aware `toolChoice` to `bindTools`: `'required'` for `plan`/`implement`/
+  `qa` (they must end in a tool call — the model can't narrate one instead),
+  `'auto'` for `chat`. The **describe-then-reveal tool-schema gating**
+  (`ToolVisibilityTracker`, since 008.6) is **removed** — it cost round-trips and
+  let the model "forget" a tool after a few iterations; all mode-filtered tools
+  are now bound from turn 1 (compact schemas). Supersedes the 008.6 gating in
+  [ADR-013](ADR-013-prompt-assembly-context-management.md) and its inline docs
+  (agent-services / context-management / lcp-agent-special-cases /
+  lcp-mcp-tasks|interactions — full sweep deferred to 010.2.9).
+- **No knowledge service for empty-KB roles.** `AgentRagService.hasKnowledge`
+  (a cheap `EXISTS` check, no embedding) drops the `memory` server and skips RAG
+  retrieval for a role with no indexed chunks.
+
+## Amendments as implemented (010.2.8.3)
+
+_2026-07-14._
+
+- **`finalise` mode — a task-level check that guarantees the task's expected
+  outputs.** When the plan (and its QA) completes and the task states `expected`
+  outputs, the deliverables are promoted to the task `completed/` directory and a
+  `finalise`-mode agent is dispatched over that directory (read-write). It edits,
+  renames (`rename_working_file`), or removes files — and may consult another
+  role — until the expected outputs are met, then `complete_assignment`. Pass →
+  task `succeeded`; the run failing → task `failed` with the files it has still
+  promoted. The task is held in a new `finalising` status meanwhile (a sticky
+  rule in `deriveTaskStatus`; `recomputeTaskStatus` holds there instead of
+  jumping to `succeeded`). Tasks with no `expected` still finalise mechanically.
+  `AssignmentService.checkTaskExpectations` is the shape gate; the reaction is
+  `TaskOrchestrationService.assignmentFinalised` / the `finalise` branch of
+  `handleAgentFailed` / `reconcileTask`.
+- **`consultee` mode.** A consultation now runs in a first-class `consultee` mode
+  (`MODE_PROMPTS.consultee`) instead of the old `implement` + prompt-suffix hack;
+  `pause-and-resume` creates the consultee agent with `mode: 'consultee'`. Same
+  completion (`complete_assignment`, orphan assignment).
+- **`MODE_TOOLS` (positive) replaces `MODE_DENIED_*`.** `@lcp/shared`
+  `mode-tools.ts` now states, per mode, the servers offered and a storage access
+  level (`read-write | read-only`) — the single source of truth for both the
+  client-side tool filter and the server-side `resolveStorageScope` read-only
+  flag (which no longer hard-codes `mode === 'qa'`).
+- **`rename_working_file`** storage tool (over the existing
+  `StorageService.moveFile`); a read-only-scope refusal is now
+  `getReadOnlyMessage(tool, readTools)` (in `storage-prompts.ts`), which names
+  the refused tool and the read tools — no mode/dir.
+- **Control-char sanitisation (automatic).** `stripControlChars` (`@lcp/shared`)
+  removes stray C0 control chars (keeping `\t\n\r`) from model-produced text so
+  task/assignment JSON stays valid for strict parsers and terminal-escape
+  sequences never reach an operator's console. Applied automatically via TypeORM
+  column transformers (`sanitiseTextColumn` / `sanitiseArtifactsColumn`) on the
+  model-text columns of `LcpTask`/`LcpAssignment`/`LcpAgent` (`request`,
+  `prompt`, `summary`, `qaFeedback`, agent `output`/`initialPrompt`, and every
+  artifact-list column's `value`), so every write is sanitised at the DB layer
+  with no per-call discipline; `AssignmentService` also strips the `qaFeedback`
+  query-builder update path (where transformers don't apply).

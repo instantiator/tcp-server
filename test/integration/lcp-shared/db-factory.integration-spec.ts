@@ -1,4 +1,4 @@
-import { LcpCompany } from '@lcp/shared';
+import { LcpCompany, LcpRole } from '@lcp/shared';
 import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
@@ -19,7 +19,9 @@ describe('makeTypeOrmConfig (lcp-shared)', () => {
         const module = await Test.createTestingModule({
           imports: [
             ConfigModule.forRoot({ isGlobal: true }),
-            makeTypeOrmConfig([LcpCompany]),
+            // LcpRole is registered but never queried here — required so
+            // TypeORM can resolve LcpCompany.plannerRole's relation target.
+            makeTypeOrmConfig([LcpCompany, LcpRole]),
             TypeOrmModule.forFeature([LcpCompany]),
           ],
         }).compile();
@@ -46,7 +48,7 @@ describe('makeTypeOrmConfig (lcp-shared)', () => {
       const module = await Test.createTestingModule({
         imports: [
           ConfigModule.forRoot({ isGlobal: true }),
-          makeTypeOrmConfig([LcpCompany]),
+          makeTypeOrmConfig([LcpCompany, LcpRole]),
           TypeOrmModule.forFeature([LcpCompany]),
         ],
       }).compile();

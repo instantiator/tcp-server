@@ -9,7 +9,7 @@ const MISSING_TITLE_HINT =
 /**
  * OKF documents are identified by *destination*, not extension — both plain
  * Markdown and OKF documents are `.md` files, but OKF is specifically the
- * knowledge-base layout `{company}/knowledge/{role}/*.md` (see
+ * knowledge-base layout `{company}/knowledge/{role_slug}/*.md` (see
  * docs/glossary.md). Register this matcher ahead of the generic Markdown
  * matcher so it takes precedence (first-match-wins registry order).
  */

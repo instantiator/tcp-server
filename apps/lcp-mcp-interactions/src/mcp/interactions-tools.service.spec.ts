@@ -1,7 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { randomUUID } from 'crypto';
-import { AuditClientService } from '@lcp/shared';
 import { InteractionsToolsService } from './interactions-tools.service';
 
 jest.mock('axios');
@@ -11,10 +10,6 @@ function makeConfig(vals: Record<string, string> = {}): ConfigService {
   return {
     getOrThrow: jest.fn((key: string) => vals[key] ?? 'http://localhost:3000'),
   } as unknown as ConfigService;
-}
-
-function makeAudit(): AuditClientService {
-  return { record: jest.fn() } as unknown as AuditClientService;
 }
 
 async function callTool(
@@ -41,7 +36,6 @@ async function callTool(
 
 describe('InteractionsToolsService', () => {
   let config: ConfigService;
-  let audit: AuditClientService;
   let service: InteractionsToolsService;
   let axiosPost: jest.Mock;
 
@@ -54,21 +48,19 @@ describe('InteractionsToolsService', () => {
     jest.clearAllMocks();
     config = makeConfig({
       LCP_SERVER_URL: 'http://lcp-server:3000',
-      LCP_STORAGE_URL: 'http://lcp-mcp-storage:3010',
       INTERNAL_API_KEY: 'test-key',
     });
-    audit = makeAudit();
-    service = new InteractionsToolsService(audit, config);
+    service = new InteractionsToolsService(config);
     // Spy on axios.post to get a bound reference (avoids @typescript-eslint/unbound-method)
     axiosPost = jest.spyOn(mockedAxios, 'post') as unknown as jest.Mock;
     axiosGet = jest.spyOn(mockedAxios, 'get') as unknown as jest.Mock;
   });
 
   describe('describe_server', () => {
-    it('returns an overview describing available tools', async () => {
+    it('returns an overview describing available tools without completion', async () => {
       const text = await callTool(service, 'describe_server', {});
       expect(text).toContain('Interactions Service');
-      expect(text).toContain('complete_task');
+      expect(text).not.toContain('complete_task');
     });
   });
 
@@ -279,109 +271,26 @@ describe('InteractionsToolsService', () => {
       expect(text).toContain('Error');
       expect(text).toContain(roleId);
     });
-  });
 
-  describe('complete_task', () => {
-    it('calls POST /internal/agent/:agentId/complete and returns confirmation', async () => {
-      mockedAxios.post.mockResolvedValue({ data: {} });
-
-      const text = await callTool(service, 'complete_task', {
-        agentId,
-        companyId,
-        finalAnswer: 'The analysis is complete. See report.md.',
+    it('relays a 4xx corrective message (e.g. unknown role naming valid roles) so the model can retry', async () => {
+      const corrective =
+        'One value was not valid:\n- role: "ghost" is not one of the allowed values. Valid values are: chicken-assistant, cat-assistant.\nIf you still intend to consult that role, try again with corrected values for role.';
+      mockedAxios.post.mockRejectedValue({
+        response: { status: 404, data: { message: corrective } },
       });
 
-      expect(axiosPost).toHaveBeenCalledWith(
-        `http://lcp-server:3000/internal/agent/${agentId}/complete`,
-        { output: 'The analysis is complete. See report.md.' },
-        expect.objectContaining({
-          headers: { 'X-Internal-Api-Key': 'test-key' },
-        }),
+      const text = await callTool(service, 'request_agent_consultation', {
+        agentId,
+        companyId,
+        roleSlug: 'ghost',
+        question: 'Is this legal?',
+      });
+
+      // Relayed verbatim as a normal (non-"Error:") result, naming valid roles.
+      expect(text).toContain(
+        'Valid values are: chicken-assistant, cat-assistant.',
       );
-      expect(text).toContain('complete');
-    });
-
-    it('returns error message when complete fails', async () => {
-      mockedAxios.post.mockRejectedValue(new Error('Server error'));
-
-      const text = await callTool(service, 'complete_task', {
-        agentId,
-        companyId,
-        finalAnswer: 'Done.',
-      });
-
-      expect(text).toContain('Error');
-    });
-
-    it('completes successfully when all outputFiles exist', async () => {
-      // GET /files/exists → no missing; GET /internal/agent → storageChanges; POST complete
-      axiosGet.mockResolvedValueOnce({ data: { missing: [] } }); // files/exists
-      mockedAxios.post.mockResolvedValue({ data: {} });
-
-      const text = await callTool(service, 'complete_task', {
-        agentId,
-        companyId,
-        finalAnswer: 'Done.',
-        outputFiles: ['docs/report.md'],
-      });
-
-      expect(axiosGet).toHaveBeenCalledWith(
-        expect.stringContaining('/files/exists'),
-        expect.objectContaining({
-          headers: { 'X-Internal-Api-Key': 'test-key' },
-        }),
-      );
-      expect(text).toContain('complete');
-    });
-
-    it('returns missing-files error and does not complete when outputFiles are absent', async () => {
-      axiosGet
-        .mockResolvedValueOnce({ data: { missing: ['docs/missing.md'] } }) // files/exists
-        .mockResolvedValueOnce({
-          // internal/agent
-          data: {
-            storageChanges: { created: ['docs/report.md'], modified: [] },
-          },
-        });
-
-      const text = await callTool(service, 'complete_task', {
-        agentId,
-        companyId,
-        finalAnswer: 'Done.',
-        outputFiles: ['docs/missing.md'],
-      });
-
-      expect(axiosPost).not.toHaveBeenCalled();
-      expect(text).toContain('docs/missing.md');
-      expect(text).toContain('docs/report.md');
-    });
-
-    it('fails open (completes) when the storage check itself errors', async () => {
-      axiosGet.mockRejectedValue(new Error('Storage unreachable'));
-      mockedAxios.post.mockResolvedValue({ data: {} });
-
-      const text = await callTool(service, 'complete_task', {
-        agentId,
-        companyId,
-        finalAnswer: 'Done.',
-        outputFiles: ['docs/report.md'],
-      });
-
-      // Storage check failed, so should proceed with completion
-      expect(text).toContain('complete');
-    });
-
-    it('skips file check when outputFiles is omitted', async () => {
-      mockedAxios.post.mockResolvedValue({ data: {} });
-
-      await callTool(service, 'complete_task', {
-        agentId,
-        companyId,
-        finalAnswer: 'Done.',
-      });
-
-      expect(axiosGet).not.toHaveBeenCalled();
-      expect(axiosPost).toHaveBeenCalled();
+      expect(text).not.toContain('Error:');
     });
   });
 });

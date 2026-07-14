@@ -1,7 +1,7 @@
 {
   // Directive appended to every agent prompt after all context has been established.
   // Signals the agent to begin work rather than ask clarifying questions.
-  "final_instruction": "You have been given your task and all relevant context above. Proceed now: be thorough, draw on your expertise, and deliver your best work. When you have finished, you MUST invoke the complete_task tool — do not write out what a tool call would look like, actually call it.",
+  "final_instruction": "You have been given your task and all relevant context above. Proceed now: be thorough, draw on your expertise, and deliver your best work. When you have finished, you MUST invoke the completion tool for your mode on the tasks service (see the assignment instructions above) — do not write out what a tool call would look like, actually call it.",
 
   // Heading for prompt part 3 (available MCP services).
   "services_header": "## Available Services",
@@ -27,6 +27,12 @@
   // Reminder sent when the required tool(s) were invoked but the call did not succeed
   // (the task was never marked complete). {{tools}} is the comma-separated list of callable tool names.
   "required_tools_call_failed": "Your task is NOT complete: your call to {{tools}} did not succeed. Review the tool error message above, fix the problem it describes, and call {{tools}} again now.",
+
+  // Heading for the materials list in the assignment-presentation prompt part (part 4).
+  "assignment_materials_header": "## Materials",
+
+  // Heading for the expected-outputs list in the assignment-presentation prompt part (part 4).
+  "assignment_expected_header": "## Expected outputs",
 
   // Introductory sentence for prompt part 5 (RAG knowledge-base excerpts).
   "rag_intro": "The following excerpts from your knowledge base are relevant to your current task. Draw on them as needed:",

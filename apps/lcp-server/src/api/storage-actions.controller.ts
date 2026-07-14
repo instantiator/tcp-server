@@ -1,5 +1,6 @@
 import { InternalApiKeyGuard } from '@lcp/shared';
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -10,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiSecurity, ApiTags } from '@nestjs/swagger';
 import {
+  AppendFileDto,
   CopyFileDto,
   DeleteFileDto,
   GetFilePropertiesDto,
@@ -18,6 +20,7 @@ import {
   MoveFileDto,
   OriginatorsDto,
   ReadFileDto,
+  ReplaceFileDto,
   RestoreFileDto,
   SearchFilesDto,
   WriteFileDto,
@@ -91,6 +94,60 @@ export class StorageActionsController {
   async restore(@Body() body: RestoreFileDto): Promise<{ restored: true }> {
     await this.storage.restoreFile(body.path, toOriginators(body.originators));
     return { restored: true };
+  }
+
+  /**
+   * Appends text to an object, creating it when absent. A read-modify-write
+   * variant of `write` — the combined document is validated exactly as a
+   * direct write, so an append that breaks the document's format is rejected.
+   */
+  @Post('append')
+  async append(
+    @Body() body: AppendFileDto,
+  ): Promise<{ key: string; size: number; created: boolean }> {
+    const existing = await this.storage.readFile(body.path);
+    const combined = (existing ?? '') + body.content;
+    const result = await this.storage.writeFile(
+      body.path,
+      combined,
+      true,
+      toOriginators(body.originators),
+    );
+    return { ...result, created: existing === null };
+  }
+
+  /**
+   * Replaces every occurrence of the literal string `find` in an object and
+   * writes the result back (validated as a normal write). Fails if the file is
+   * missing or `find` occurs zero times; returns the replacement count.
+   */
+  @Post('replace')
+  async replace(
+    @Body() body: ReplaceFileDto,
+  ): Promise<{ key: string; count: number }> {
+    if (body.find === '') {
+      throw new BadRequestException('The find string must not be empty.');
+    }
+    const existing = await this.storage.readFile(body.path);
+    if (existing === null) {
+      throw new NotFoundException(
+        `File not found: ${body.path}. Nothing to replace in.`,
+      );
+    }
+    const count = existing.split(body.find).length - 1;
+    if (count === 0) {
+      throw new BadRequestException(
+        `The string "${body.find}" does not occur in ${body.path}; nothing was replaced.`,
+      );
+    }
+    const updated = existing.split(body.find).join(body.replace);
+    const result = await this.storage.writeFile(
+      body.path,
+      updated,
+      true,
+      toOriginators(body.originators),
+    );
+    return { key: result.key, count };
   }
 
   @Post('search')

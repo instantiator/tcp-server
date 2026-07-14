@@ -32,8 +32,13 @@ export const MCP_REGISTRY = [
   {
     name: 'interactions',
     envKey: 'MCP_INTERACTIONS_URL',
+    usage: 'asking a human a question or consulting another agent role.',
+  },
+  {
+    name: 'tasks',
+    envKey: 'MCP_TASKS_URL',
     usage:
-      'asking a human a question, consulting another agent role, or marking your task complete.',
+      'completing your assignment — planning a task, submitting finished work, or assuring another agent’s work (the exact tool depends on your mode).',
   },
 ] as const;
 

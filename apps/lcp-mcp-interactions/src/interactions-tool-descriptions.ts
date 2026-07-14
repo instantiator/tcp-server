@@ -8,7 +8,6 @@ export interface InteractionToolDescriptions {
   list_available_contacts: string;
   request_user_input: string;
   request_agent_consultation: string;
-  complete_task: string;
 }
 
 /** Loaded once at module initialisation from the co-located {@link tools.jsonc} file. */

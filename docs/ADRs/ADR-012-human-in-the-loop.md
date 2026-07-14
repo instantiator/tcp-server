@@ -138,6 +138,25 @@ This avoids LangGraph's `interrupt()` mechanism entirely. The checkpoint store (
 - **Required tool call tracking** — `LcpAgent.requiredToolCalls?: string[]` (null → default `['complete_task']`, `[]` opts out); `AgentLoopService` tracks fired tool names during the stream and re-prompts up to `AGENT_REQUIRED_TOOL_RETRIES` (default 2) times when required calls are missing, then fails the run. Consultation agents are created with `requiredToolCalls: ['complete_task']` explicitly. Required tools absent from the loaded toolset are skipped with a warning.
 - **Consultation failure propagation** — every failure exit in the agent loop notifies `POST /internal/agent/:agentId/fail` (via `AuditClientService.notifyFailed`, fire-and-forget like `notifyComplete`); `PauseAndResumeService.failAgent` marks the pending consultation `status: 'failed'` with the reason as `result` and resumes the calling agent, whose resume message renders it as `Consultation FAILED: <reason>…` with guidance to escalate via `request_user_input` if a response is essential. A lost `notifyFailed` HTTP call leaves the caller paused until the client's SSE timeout — the same exposure as `notifyComplete`. (Historically the failing run also published `''` on `agent:completed:{agentId}`; that channel was retired by [ADR-015](ADR-015-agent-completion-sse.md) — the terminal `failed` event now originates in `PauseAndResumeService.failAgent`.)
 
+### Amendments as implemented (010.2.5)
+
+- **`complete_task` is retired; agents complete via `complete_assignment`** on
+  the new [lcp-mcp-tasks](../lcp-mcp-tasks.md) MCP server (the historical
+  references above are left as record). Implement-mode agents now default to
+  `requiredToolCalls: ['complete_assignment']` (`requiredToolForMode`), and
+  consultation agents are created with that explicitly. The interactions server
+  keeps only `request_user_input`, `request_agent_consultation`,
+  `list_available_contacts`, and `describe_server`.
+- **Orphan-assignment completion preserves the old behaviour.** For an agent
+  whose assignment has `taskId === null` (a plain conversation or
+  consultation), `complete_assignment` takes the same completion path as the
+  former `complete_task` — `POST /internal/assignment/:id/complete` sets the
+  assignment `succeeded` and completes the agent via
+  `PauseAndResumeService.completeAgent` (`summary` becomes the agent's
+  `output`), so consultation resolution and conversation resume are unchanged.
+  Task-assignment completion instead hands off to QA (`in-progress → in-qa`,
+  agent paused) — see the [ADR-010 010.2.5 amendment](ADR-010-orchestration-design.md#amendments-as-implemented-01025).
+
 ### Deferred
 
 - User-initiated conversations (`POST /conversations` independent of a running task)

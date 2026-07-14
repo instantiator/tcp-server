@@ -14,6 +14,7 @@ export const configSchema = Joi.object({
   MCP_STORAGE_URL: Joi.string().uri().optional(),
   MCP_MEMORY_URL: Joi.string().uri().optional(),
   MCP_INTERACTIONS_URL: Joi.string().uri().optional(),
+  MCP_TASKS_URL: Joi.string().uri().optional(),
   LCP_SERVER_URL: Joi.string().uri().required(),
   INTERNAL_API_KEY: Joi.string().required(),
   /** Overrides {@link DEFAULT_AGENT_ITERATIONS} when set. Per-role and per-company runConfig take precedence. */
@@ -22,6 +23,8 @@ export const configSchema = Joi.object({
   AGENT_LOOP_TIMEOUT_MS: Joi.number().integer().positive().optional(),
   /** Overrides {@link DEFAULT_REQUIRED_TOOL_RETRIES} when set — reminder rounds before a run missing its required tool calls is failed. */
   AGENT_REQUIRED_TOOL_RETRIES: Joi.number().integer().min(0).optional(),
+  /** Overrides {@link DEFAULT_AGENT_WORKER_CONCURRENCY} — parallel agent jobs. Set to 1 when sharing one local model. */
+  AGENT_WORKER_CONCURRENCY: Joi.number().integer().positive().optional(),
   // Environment-level LLM fallback — used when neither a role's llmConfig nor a company's llmConfig is set.
   // Both LLM_PROVIDER and LLM_MODEL must be present to activate the fallback; all other fields are optional.
   LLM_PROVIDER: Joi.string().empty('').optional(),

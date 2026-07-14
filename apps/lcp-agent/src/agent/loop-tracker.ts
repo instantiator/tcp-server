@@ -25,7 +25,7 @@ export function createTracker(): AgentLoopTracker {
   };
 }
 
-/** Strips the MCP server prefix from a tool name (e.g. `storage__write_file` → `write_file`). */
+/** Strips the MCP server prefix from a tool name (e.g. `storage__append_working_file` → `append_working_file`). */
 export function baseToolName(toolName: string): string {
   return toolName.includes('__')
     ? toolName.split('__').slice(1).join('__')
@@ -35,7 +35,7 @@ export function baseToolName(toolName: string): string {
 /**
  * Generates a human-readable action string for a tool call.
  *
- * @param toolName - The full tool name (possibly prefixed, e.g. `storage__write_file`)
+ * @param toolName - The full tool name (possibly prefixed, e.g. `storage__append_working_file`)
  * @param input - The tool input arguments from the `on_tool_start` event
  */
 export function generateActionString(
@@ -48,22 +48,28 @@ export function generateActionString(
     typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '';
 
   switch (base) {
-    case 'write_file':
-      return `Wrote file: ${s(input.path)}`;
-    case 'delete_file':
-      return `Deleted file: ${s(input.path)}`;
-    case 'move_file':
-      return `Moved file: ${s(input.source)} → ${s(input.destination)}`;
-    case 'copy_file':
-      return `Copied file: ${s(input.source)} → ${s(input.destination)}`;
-    case 'restore_file':
-      return `Restored file: ${s(input.path)}`;
     case 'read_file':
       return `Read file: ${s(input.path)}`;
     case 'list_files':
       return `Listed files`;
     case 'search_files':
       return `Searched files`;
+    case 'append_working_file':
+      return `Appended to working file: ${s(input.filename)}`;
+    case 'replace_in_working_file':
+      return `Edited working file: ${s(input.filename)}`;
+    case 'delete_working_file':
+      return `Deleted working file: ${s(input.filename)}`;
+    case 'restore_working_file':
+      return `Restored working file: ${s(input.filename)}`;
+    case 'read_working_file':
+      return `Read working file: ${s(input.filename)}`;
+    case 'list_working_files':
+      return `Listed working files`;
+    case 'read_material_file':
+      return `Read material: ${s(input.filename)}`;
+    case 'list_material_files':
+      return `Listed materials`;
     case 'recall':
       return `Recalled memory: ${s(input.query)}`;
     case 'remember':
@@ -76,8 +82,12 @@ export function generateActionString(
       // roleName is an optional label — roleId is always present and is the
       // actual lookup key, so fall back to it if no name was given.
       return `Consulted role '${s(input.roleName) || s(input.roleId)}': ${s(input.question)}`;
-    case 'complete_task':
-      return `Submitted task completion`;
+    case 'create_plan':
+      return `Submitted task plan`;
+    case 'complete_assignment':
+      return `Submitted assignment completion`;
+    case 'assure_assignment':
+      return `Submitted QA verdict: ${s(input.qa)}`;
     default:
       return `Called tool: ${toolName}`;
   }
@@ -85,11 +95,10 @@ export function generateActionString(
 
 /** Tool names (base, without server prefix) whose successful results affect storage. */
 const STORAGE_MUTATION_TOOLS = new Set([
-  'write_file',
-  'delete_file',
-  'move_file',
-  'copy_file',
-  'restore_file',
+  'append_working_file',
+  'replace_in_working_file',
+  'delete_working_file',
+  'restore_working_file',
 ]);
 
 /**
@@ -135,20 +144,21 @@ export function applyStorageResult(
   const s = (v: unknown): string =>
     typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '';
 
-  if (base === 'write_file' && text.startsWith('Written:')) {
-    const path = s(input.path);
-    if (input.overwrite === true) tracker.storage.modified.push(path);
-    else tracker.storage.created.push(path);
-  } else if (base === 'delete_file' && text.startsWith('Deleted:')) {
-    tracker.storage.deleted.push(s(input.path));
-  } else if (base === 'move_file' && text.startsWith('Moved:')) {
-    tracker.storage.moved.push({
-      from: s(input.source),
-      to: s(input.destination),
-    });
-  } else if (base === 'copy_file' && text.startsWith('Copied:')) {
-    tracker.storage.created.push(s(input.destination));
-  } else if (base === 'restore_file' && text.startsWith('Restored:')) {
-    tracker.storage.created.push(s(input.path));
+  const filename = s(input.filename);
+
+  if (base === 'append_working_file') {
+    // The result text distinguishes a first-time create from an append.
+    if (text.startsWith('Created')) tracker.storage.created.push(filename);
+    else if (text.startsWith('Appended'))
+      tracker.storage.modified.push(filename);
+  } else if (
+    base === 'replace_in_working_file' &&
+    text.startsWith('Replaced')
+  ) {
+    tracker.storage.modified.push(filename);
+  } else if (base === 'delete_working_file' && text.startsWith('Deleted')) {
+    tracker.storage.deleted.push(filename);
+  } else if (base === 'restore_working_file' && text.startsWith('Restored')) {
+    tracker.storage.created.push(filename);
   }
 }

@@ -4,23 +4,34 @@ import {
   AuditEventType,
   CompanyUser,
   LcpAgent,
+  LcpAssignment,
   LcpCompany,
   LcpRole,
+  LcpTask,
 } from '@lcp/shared';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken, TypeOrmModule } from '@nestjs/typeorm';
 import { randomUUID, UUID } from 'crypto';
 import { QueryFailedError, Repository } from 'typeorm';
 import { DbService } from './db.service';
 
-const ALL_ENTITIES = [LcpCompany, LcpRole, LcpAgent, AuditEvent, CompanyUser];
+const ALL_ENTITIES = [
+  LcpCompany,
+  LcpRole,
+  LcpAgent,
+  LcpTask,
+  LcpAssignment,
+  AuditEvent,
+  CompanyUser,
+];
 
 describe('DbService', () => {
   let dbService: DbService;
   let companyRepo: Repository<LcpCompany>;
   let roleRepo: Repository<LcpRole>;
   let agentRepo: Repository<LcpAgent>;
+  let assignmentRepo: Repository<LcpAssignment>;
   let auditRepo: Repository<AuditEvent>;
   let companyUserRepo: Repository<CompanyUser>;
 
@@ -42,13 +53,16 @@ describe('DbService', () => {
     companyRepo = testingModule.get(getRepositoryToken(LcpCompany));
     roleRepo = testingModule.get(getRepositoryToken(LcpRole));
     agentRepo = testingModule.get(getRepositoryToken(LcpAgent));
+    assignmentRepo = testingModule.get(getRepositoryToken(LcpAssignment));
     auditRepo = testingModule.get(getRepositoryToken(AuditEvent));
     companyUserRepo = testingModule.get(getRepositoryToken(CompanyUser));
   });
 
   afterEach(async () => {
     await auditRepo.clear();
+    // Agents before assignments (agent.assignmentId FK), assignments before roles.
     await agentRepo.clear();
+    await assignmentRepo.clear();
     await roleRepo.clear();
     await companyUserRepo.clear();
     await companyRepo.clear();
@@ -145,6 +159,38 @@ describe('DbService', () => {
       expect(creator).not.toBeNull();
       expect(creator!.memberType).toBe('creator');
       expect(creator!.name).toBe('Alice');
+    });
+
+    it('throws BadRequestException and rolls back when plannerRoleId does not belong to the new company', async () => {
+      // A brand-new company has no roles of its own yet, so a plannerRoleId
+      // referencing a role that belongs to a different (existing) company is
+      // the case that must be caught — an outright unknown role id already
+      // fails the FK constraint before reaching this check. Uses a distinct
+      // slug from 'acme' — createCompany('acme', ...) deletes (and cascades)
+      // any existing 'acme'-slugged company first, which would take the
+      // fixture role down with it.
+      const other = await companyRepo.save(
+        companyRepo.create({
+          slug: 'other-co',
+          name: 'Other',
+          description: 'd',
+        }),
+      );
+      const foreignRole = await seedRole(other.id);
+
+      await expect(
+        dbService.createCompany(
+          {
+            name: 'Acme Corp',
+            description: 'A co',
+            mcpServerList: [],
+            plannerRoleId: foreignRole.id,
+          },
+          'acme',
+          'alice',
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(await companyRepo.count({ where: { slug: 'acme' } })).toBe(0);
     });
   });
 
@@ -345,6 +391,54 @@ describe('DbService', () => {
         }),
       ).resolves.toBeDefined();
     });
+
+    it('persists plannerRoleId when it belongs to the company being updated', async () => {
+      const created = await dbService.setCompany({
+        slug: 'planner-co',
+        name: 'Planner Co',
+        description: 'd',
+      });
+      const role = await seedRole(created.id);
+      const updated = await dbService.setCompany(
+        { plannerRoleId: role.id },
+        { id: created.id },
+      );
+      expect(updated.plannerRoleId).toBe(role.id);
+    });
+
+    it('throws BadRequestException when plannerRoleId belongs to a different company', async () => {
+      const created = await dbService.setCompany({
+        slug: 'planner-co-a',
+        name: 'Planner Co A',
+        description: 'd',
+      });
+      const other = await dbService.setCompany({
+        slug: 'planner-co-b',
+        name: 'Planner Co B',
+        description: 'd',
+      });
+      const foreignRole = await seedRole(other.id);
+      await expect(
+        dbService.setCompany(
+          { plannerRoleId: foreignRole.id },
+          { id: created.id },
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws BadRequestException when plannerRoleId does not exist at all', async () => {
+      const created = await dbService.setCompany({
+        slug: 'planner-co-c',
+        name: 'Planner Co C',
+        description: 'd',
+      });
+      await expect(
+        dbService.setCompany(
+          { plannerRoleId: randomUUID() },
+          { id: created.id },
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 
   // getCompany
@@ -504,6 +598,21 @@ describe('DbService', () => {
         }),
       ).rejects.toThrow(NotFoundException);
     });
+
+    it('rejects "shared" as a role slug (reserved for company-wide knowledge)', async () => {
+      const company = await seedCompany();
+      await expect(
+        dbService.setRole({
+          companyId: company.id,
+          slug: 'shared',
+          name: 'shared',
+          description: 'Attempting to claim the reserved slug.',
+          systemPromptTemplate: '',
+          knowledgeDomains: [],
+          mcpServerList: [],
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 
   // setRole (update path)
@@ -590,6 +699,15 @@ describe('DbService', () => {
       // Provider and apiKey must survive the partial patch
       expect(updated.llmConfig!.provider).toBe('openai');
       expect(updated.llmConfig!.apiKey).toBe('test-api-key');
+    });
+
+    it('rejects renaming a role\'s slug to "shared" (reserved for company-wide knowledge)', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+
+      await expect(
+        dbService.setRole({ id: role.id, slug: 'shared' }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -679,6 +797,92 @@ describe('DbService', () => {
       expect(found).not.toBeNull();
       expect(found!.status).toBe(AgentStatus.Idle);
       expect(found!.threadId).toBeNull();
+    });
+
+    it('creates and cross-links an orphan implement-mode assignment', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const agent = await dbService.createAgent({
+        companyId: company.id,
+        roleId: role.id,
+        initialPrompt: 'Summarise.',
+      });
+
+      const assignment = await assignmentRepo.findOneByOrFail({
+        id: agent.assignmentId,
+      });
+      // Orphan (no task), implement mode, prompt copied, back-linked to the agent.
+      expect(assignment.taskId).toBeNull();
+      expect(assignment.mode).toBe('implement');
+      expect(assignment.status).toBe('in-progress');
+      expect(assignment.prompt).toBe('Summarise.');
+      expect(assignment.agentId).toBe(agent.id);
+      expect(assignment.companyId).toBe(company.id);
+      expect(assignment.roleId).toBe(role.id);
+      // Default required tool for implement mode.
+      expect(agent.requiredToolCalls).toEqual(['complete_assignment']);
+    });
+
+    it('honours a supplied mode and does not create a second assignment', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const agent = await dbService.createAgent({
+        companyId: company.id,
+        roleId: role.id,
+        initialPrompt: 'Plan it.',
+        mode: 'plan',
+      });
+
+      const assignment = await assignmentRepo.findOneByOrFail({
+        id: agent.assignmentId,
+      });
+      expect(assignment.mode).toBe('plan');
+      expect(agent.requiredToolCalls).toEqual(['create_plan']);
+      expect(await assignmentRepo.count()).toBe(1);
+    });
+
+    it('creates a chat-mode assignment with no required tool calls', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const agent = await dbService.createAgent({
+        companyId: company.id,
+        roleId: role.id,
+        initialPrompt: '',
+        mode: 'chat',
+      });
+
+      const assignment = await assignmentRepo.findOneByOrFail({
+        id: agent.assignmentId,
+      });
+      expect(assignment.mode).toBe('chat');
+      // A chat turn ends with narrated text — no completion tool is required.
+      expect(agent.requiredToolCalls).toEqual([]);
+    });
+
+    it('attaches to a supplied assignment without creating an orphan', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const existing = await assignmentRepo.save(
+        assignmentRepo.create({
+          taskId: null,
+          companyId: company.id,
+          roleId: role.id,
+          mode: 'implement',
+          prompt: 'Pre-made.',
+          status: 'in-progress',
+        }),
+      );
+
+      const agent = await dbService.createAgent({
+        companyId: company.id,
+        roleId: role.id,
+        initialPrompt: 'Pre-made.',
+        assignmentId: existing.id,
+      });
+
+      expect(agent.assignmentId).toBe(existing.id);
+      // No extra assignment created.
+      expect(await assignmentRepo.count()).toBe(1);
     });
 
     it('getAgent returns null for unknown id', async () => {

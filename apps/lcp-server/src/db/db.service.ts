@@ -4,13 +4,20 @@ import {
   AuditEventType,
   CompanyUser,
   LcpAgent,
+  LcpAssignment,
   LcpCompany,
   LcpRole,
+  requiredToolForMode,
 } from '@lcp/shared';
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
-import { DeepPartial, Repository } from 'typeorm';
+import { DataSource, DeepPartial, Repository } from 'typeorm';
+import { SHARED_KNOWLEDGE_ROLE_SLUG } from '../storage/storage-keys';
 import { LcpAgentTemplate } from '../templates/LcpAgentTemplate';
 import { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
 import { isUUID } from '../utils/ObjectUtils';
@@ -32,6 +39,8 @@ export class DbService {
     private readonly auditRepo: Repository<AuditEvent>,
     @InjectRepository(CompanyUser)
     private readonly companyUserRepo: Repository<CompanyUser>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
   ) {}
 
   // Company
@@ -54,6 +63,20 @@ export class DbService {
       id: undefined!,
       slug,
     });
+
+    // A brand-new company has no roles of its own yet, so a plannerRoleId
+    // given at creation can never validly belong to it — validated here
+    // (rather than skipped) so the failure is reported clearly instead of
+    // silently leaving a dangling reference.
+    if (template.plannerRoleId) {
+      await this.assertPlannerRoleBelongsToCompany(
+        company.id,
+        template.plannerRoleId,
+      ).catch(async (err: unknown) => {
+        await this.companyRepo.delete(company.id);
+        throw err;
+      });
+    }
 
     const existingCreator = await this.companyUserRepo.findOneBy({
       companyId: company.id,
@@ -132,7 +155,31 @@ export class DbService {
         }
       : company;
 
+    const targetCompanyId = existing?.id ?? company.id;
+    if (company.plannerRoleId && targetCompanyId) {
+      await this.assertPlannerRoleBelongsToCompany(
+        targetCompanyId,
+        company.plannerRoleId,
+      );
+    }
+
     return this.companyRepo.save(this.companyRepo.create(merged));
+  }
+
+  /** @throws {@link BadRequestException} when `plannerRoleId` does not belong to `companyId`. */
+  private async assertPlannerRoleBelongsToCompany(
+    companyId: UUID,
+    plannerRoleId: UUID,
+  ): Promise<void> {
+    const role = await this.roleRepo.findOneBy({
+      id: plannerRoleId,
+      companyId,
+    });
+    if (!role) {
+      throw new BadRequestException(
+        `Role ${plannerRoleId} does not belong to company ${companyId}`,
+      );
+    }
   }
 
   /** Returns all {@link LcpCompany} records. */
@@ -180,6 +227,14 @@ export class DbService {
     role: DeepPartial<LcpRole>,
     identifiers: { id?: UUID; slug?: string } = {},
   ): Promise<LcpRole> {
+    // "shared" is reserved for the company-wide knowledge folder
+    // (`knowledge/shared/`) — no role may claim it as its own slug.
+    if (role.slug === SHARED_KNOWLEDGE_ROLE_SLUG) {
+      throw new BadRequestException(
+        `Role slug "${SHARED_KNOWLEDGE_ROLE_SLUG}" is reserved for company-wide knowledge and cannot be used by a role`,
+      );
+    }
+
     // See setCompany: an identifier being *given* (even one that resolves to
     // nothing) always means "update" — only its total absence means "create".
     const isUpdate =
@@ -268,9 +323,65 @@ export class DbService {
 
   // Agent
 
-  /** Creates a new {@link LcpAgent} in the `idle` state. */
+  /**
+   * Creates a new {@link LcpAgent} in the `idle` state, always with an
+   * assignment. When `template.assignmentId` is given the agent attaches to
+   * that existing assignment; otherwise an orphan (`taskId: null`) assignment
+   * is created first — in `template.mode ?? 'implement'` mode, carrying the
+   * agent's `initialPrompt` — and the two are cross-linked. The agent's
+   * `initialPrompt`/`requiredToolCalls` are populated from the template
+   * (010.1.2 copy semantics); `requiredToolCalls` defaults to the mode's
+   * required tool ({@link requiredToolForMode}).
+   *
+   * Wrapped in a transaction so an agent never persists without its
+   * assignment (nor an orphan assignment without its back-linked agent).
+   */
   async createAgent(template: LcpAgentTemplate): Promise<LcpAgent> {
-    return this.agentRepo.save(this.agentRepo.create(template));
+    const mode = template.mode ?? 'implement';
+    return this.dataSource.transaction(async (em) => {
+      const assignmentRepo = em.getRepository(LcpAssignment);
+      const agentRepo = em.getRepository(LcpAgent);
+
+      // Orphan assignment first (agentId back-filled after the agent exists).
+      const isOrphan = template.assignmentId === undefined;
+      let assignmentId: UUID;
+      if (template.assignmentId !== undefined) {
+        assignmentId = template.assignmentId;
+      } else {
+        const assignment = await assignmentRepo.save(
+          assignmentRepo.create({
+            taskId: null,
+            companyId: template.companyId,
+            mode,
+            prompt: template.initialPrompt,
+            roleId: template.roleId,
+            status: 'in-progress',
+            agentId: null,
+            materials: [],
+            expected: [],
+          }),
+        );
+        assignmentId = assignment.id;
+      }
+
+      const agent = await agentRepo.save(
+        agentRepo.create({
+          companyId: template.companyId,
+          roleId: template.roleId,
+          initialPrompt: template.initialPrompt,
+          requiredToolCalls:
+            template.requiredToolCalls ?? requiredToolForMode(mode),
+          assignmentId,
+        }),
+      );
+
+      // Back-link the orphan assignment to the agent now working it.
+      if (isOrphan) {
+        await assignmentRepo.update(assignmentId, { agentId: agent.id });
+      }
+
+      return agent;
+    });
   }
 
   /** Retrieves an agent by its UUID. Returns `null` if not found. */

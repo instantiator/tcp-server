@@ -1,7 +1,8 @@
 import { LcpCompany } from '@lcp/shared';
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditModule } from '../audit/audit.module';
+import { RagModule } from '../rag/rag.module';
 import { MinioStorageAdapter } from './minio-storage.adapter';
 import { StorageService } from './storage.service';
 
@@ -11,9 +12,17 @@ import { StorageService } from './storage.service';
  * `MINIO_BUCKET_PREFIX` from the global config on startup. Imports
  * {@link AuditModule} and the `LcpCompany` repository so writes can record
  * a properly attributed audit event.
+ *
+ * {@link RagModule} is imported via `forwardRef` because the adapter's write
+ * hook calls `KnowledgeReindexService.bumpByKey` to keep RAG embeddings in
+ * sync — a deliberate cycle between the two modules.
  */
 @Module({
-  imports: [AuditModule, TypeOrmModule.forFeature([LcpCompany])],
+  imports: [
+    AuditModule,
+    TypeOrmModule.forFeature([LcpCompany]),
+    forwardRef(() => RagModule),
+  ],
   providers: [
     MinioStorageAdapter,
     { provide: StorageService, useExisting: MinioStorageAdapter },

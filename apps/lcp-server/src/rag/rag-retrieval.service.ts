@@ -40,9 +40,11 @@ export class RagRetrievalService {
   ) {}
 
   /**
-   * Returns the top-K most relevant chunks for `query` within `roleId`.
+   * Returns the top-K most relevant chunks for `query`, searching the role's
+   * own knowledge base **plus** its company's shared (`roleId IS NULL`) chunks.
    *
-   * @param roleId - Restrict search to this role's knowledge base.
+   * @param roleId - The querying role, whose chunks are searched.
+   * @param companyId - The role's company, whose shared chunks are also searched.
    * @param query - Natural-language query string (e.g. the task prompt).
    * @param embeddingConfig - Company embedding config. Returns empty when null.
    * @param topK - Maximum number of chunks to return (default 5).
@@ -50,6 +52,7 @@ export class RagRetrievalService {
    */
   async retrieve(
     roleId: UUID,
+    companyId: UUID,
     query: string,
     embeddingConfig: LlmConfig | null | undefined,
     topK = 5,
@@ -71,16 +74,16 @@ export class RagRetrievalService {
       `SELECT id, "documentPath", "chunkIndex", content,
               1 - (embedding <=> $1::vector) AS similarity
        FROM knowledge_chunk
-       WHERE "roleId" = $2
+       WHERE (("roleId" = $2) OR ("roleId" IS NULL AND "companyId" = $3))
          AND embedding IS NOT NULL
-         AND 1 - (embedding <=> $1::vector) >= $3
+         AND 1 - (embedding <=> $1::vector) >= $4
        ORDER BY similarity DESC
-       LIMIT $4`,
-      [pgvector.toSql(queryVector), roleId, threshold, topK],
+       LIMIT $5`,
+      [pgvector.toSql(queryVector), roleId, companyId, threshold, topK],
     );
 
     this.logger.debug(
-      `RAG: ${rows.length} chunk(s) above threshold ${threshold} for role ${roleId}`,
+      `RAG: ${rows.length} chunk(s) above threshold ${threshold} for role ${roleId} + shared`,
     );
     return rows;
   }

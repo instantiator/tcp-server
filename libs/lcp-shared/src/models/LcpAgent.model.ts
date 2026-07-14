@@ -7,6 +7,8 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { sanitiseTextColumn } from '../validation/sanitize';
+import { LcpAssignment } from './LcpAssignment.model';
 import { LcpCompany } from './LcpCompany.model';
 import { LcpRole } from './LcpRole.model';
 import { VersionedEntity } from './VersionedEntity';
@@ -65,6 +67,22 @@ export class LcpAgent extends VersionedEntity {
   @Column()
   roleId!: UUID;
 
+  /**
+   * The {@link LcpAssignment} this agent works. Every agent has one — task
+   * work uses the task's assignment; plain conversations, API-started agents,
+   * and consultations get an auto-created "orphan" assignment. The agent's
+   * mode is this assignment's mode (there is no mode column on the agent).
+   */
+  @ManyToOne(() => LcpAssignment, { nullable: false, onDelete: 'CASCADE' })
+  assignment!: LcpAssignment;
+
+  /**
+   * Foreign key for the owning {@link LcpAssignment}.
+   * @format uuid
+   */
+  @Column()
+  assignmentId!: UUID;
+
   /** Current lifecycle state of this agent. */
   @Column({ type: 'varchar', default: AgentStatus.Idle })
   status!: AgentStatus;
@@ -81,7 +99,7 @@ export class LcpAgent extends VersionedEntity {
    * The task prompt supplied when the agent was started.
    * @minLength 1
    */
-  @Column({ type: 'text' })
+  @Column({ type: 'text', transformer: sanitiseTextColumn })
   initialPrompt!: string;
 
   /** Timestamp when this agent record was created. */
@@ -90,16 +108,17 @@ export class LcpAgent extends VersionedEntity {
 
   /**
    * Final output produced by the agent on completion.
-   * Set via the `complete_task` MCP tool, or as a fallback from the last AI
-   * message when the loop exits naturally.
+   * Set from the assignment `summary` on completion (via the tasks service's
+   * `complete_assignment`), or as a fallback from the last AI message when the
+   * loop exits naturally.
    */
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'text', nullable: true, transformer: sanitiseTextColumn })
   output!: string | null;
 
   /**
    * Storage changes accumulated by the agent loop during the current (or last) run.
    * Updated incrementally by lcp-agent as storage MCP tool calls complete.
-   * Used by lcp-mcp-interactions to include context in `complete_task` error messages.
+   * Used to include context in completion/output-gate error messages.
    *
    * Uses `simple-json` (stored as TEXT) for cross-DB compatibility with SQLite unit tests.
    */
@@ -112,9 +131,9 @@ export class LcpAgent extends VersionedEntity {
   } | null;
 
   /**
-   * Tool names (unprefixed, e.g. `complete_task`) that must have been invoked
-   * successfully before the agent loop may end. Null means the default
-   * (`['complete_task']`); an empty array disables enforcement.
+   * Tool names (unprefixed, e.g. `complete_assignment`) that must have been
+   * invoked successfully before the agent loop may end. Null means the default
+   * (`['complete_assignment']`); an empty array disables enforcement.
    *
    * Uses `simple-json` (stored as TEXT) for cross-DB compatibility with SQLite unit tests.
    */

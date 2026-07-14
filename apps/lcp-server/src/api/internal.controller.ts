@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import {
+  buildEnumValidationError,
   CompanyUser,
   InternalApiKeyGuard,
   LcpAgent,
@@ -22,6 +23,7 @@ import { Repository } from 'typeorm';
 import type { UUID } from 'crypto';
 import { DbService } from '../db/db.service';
 import { PauseAndResumeService } from './pause-and-resume.service';
+import { TaskOrchestrationService } from './task-orchestration.service';
 import {
   CompleteDto,
   FailDto,
@@ -43,6 +45,7 @@ import {
 export class InternalController {
   constructor(
     private readonly pauseResume: PauseAndResumeService,
+    private readonly taskOrchestration: TaskOrchestrationService,
     private readonly db: DbService,
     @InjectRepository(LcpAgent)
     private readonly agentRepo: Repository<LcpAgent>,
@@ -107,8 +110,19 @@ export class InternalController {
     }
     const role = await this.db.findRoleByIdOrSlug(company.id, roleIdentifier);
     if (!role) {
+      // Name the roles the caller could consult, so it can retry with a real
+      // one rather than guessing (mirrors the create_plan role validation).
+      const validRoleSlugs = (await this.db.listRoles(company.id)).map(
+        (r) => r.slug,
+      );
       throw new NotFoundException(
-        `Role ${roleIdentifier} not found in company ${company.id}`,
+        buildEnumValidationError('consult that role', [
+          {
+            property: 'role',
+            value: roleIdentifier,
+            validValues: validRoleSlugs,
+          },
+        ]),
       );
     }
 
@@ -137,6 +151,9 @@ export class InternalController {
     @Body() body: CompleteDto,
   ): Promise<void> {
     await this.pauseResume.completeAgent(agentId, body.output);
+    // Belt-and-braces: fail the task if a planner reached Completed without
+    // producing a plan (a no-op for every other completion).
+    await this.taskOrchestration.handleAgentCompleted(agentId);
   }
 
   /**
@@ -154,6 +171,9 @@ export class InternalController {
     @Body() body: FailDto,
   ): Promise<void> {
     await this.pauseResume.failAgent(agentId, body.reason);
+    // Propagate the failure to the agent's task, when it has one (orphan/chat
+    // agents are unaffected).
+    await this.taskOrchestration.handleAgentFailed(agentId, body.reason);
   }
 
   /**

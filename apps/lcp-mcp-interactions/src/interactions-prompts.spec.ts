@@ -7,8 +7,6 @@ describe('interactionPrompts loader', () => {
     'error_user_input',
     'paused_consultation',
     'error_consultation',
-    'task_complete',
-    'error_complete_task',
     'error_list_users',
     'error_list_roles',
   ];

@@ -1,9 +1,4 @@
-import {
-  AuditClientService,
-  CompanyUser,
-  LcpCompany,
-  LcpRole,
-} from '@lcp/shared';
+import { CompanyUser, LcpCompany, LcpRole } from '@lcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -81,13 +76,11 @@ describe('lcp-mcp-interactions -> lcp-server (cross-service e2e)', () => {
     const config = {
       getOrThrow: (key: string) => {
         if (key === 'LCP_SERVER_URL') return baseUrl;
-        if (key === 'LCP_STORAGE_URL') return 'http://localhost:3010';
         if (key === 'INTERNAL_API_KEY') return INTERNAL_KEY;
         throw new Error(`Unexpected config key requested: ${key}`);
       },
     } as unknown as ConfigService;
-    const audit = { record: jest.fn() } as unknown as AuditClientService;
-    tools = new InteractionsToolsService(audit, config);
+    tools = new InteractionsToolsService(config);
   });
 
   afterAll(() => app.close());

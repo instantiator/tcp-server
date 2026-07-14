@@ -24,7 +24,8 @@ See [agent-services.md → MCP Servers](agent-services.md#mcp-servers) for how a
 | [`list_available_contacts`](#list_available_contacts)       | `list_available_contacts(companyId, kind?)`                                             | List human users and/or agent roles available to ask/consult |
 | [`request_user_input`](#request_user_input)                 | `request_user_input(agentId, companyId, question, context?, userIds?)`                  | Pause and submit a question to human users                   |
 | [`request_agent_consultation`](#request_agent_consultation) | `request_agent_consultation(agentId, companyId, roleId, question, context?, roleName?)` | Consult another agent role                                   |
-| [`complete_task`](#complete_task)                           | `complete_task(agentId, companyId, finalAnswer, outputFiles?)`                          | Mark the task complete; optionally verify output files exist |
+
+Assignment completion moved to [lcp-mcp-tasks](lcp-mcp-tasks.md) (`complete_assignment`) in task-orchestration part 5 — this server no longer owns a `complete_task` tool.
 
 ---
 
@@ -38,7 +39,7 @@ Returns a markdown overview of the interactions service and its tools.
 
 **Usage pattern:** Agents should call this first when they discover the interactions server is available. Prompt part 3 directs agents to do this automatically.
 
-**Note:** unlike other MCP servers, this server's tools are _not_ subject to describe-then-reveal tool-schema gating (see [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-0086)) — `request_user_input`, `request_agent_consultation`, and especially `complete_task` are essential control-flow calls that must stay reachable at all times, so all of this server's tools are always bound regardless of whether `describe_server` has been called.
+**Note:** unlike other MCP servers, this server's tools are _not_ subject to describe-then-reveal tool-schema gating (see [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-0086)) — `request_user_input` and `request_agent_consultation` are essential control-flow calls that must stay reachable at all times, so all of this server's tools are always bound regardless of whether `describe_server` has been called.
 
 ---
 
@@ -101,7 +102,7 @@ Pauses the current agent and submits a question to the relevant human users in t
 
 ## `request_agent_consultation`
 
-Pauses the current agent and dispatches a consultation job to another agent role. The calling agent is automatically resumed with the consulting agent's response once it calls `complete_task`.
+Pauses the current agent and dispatches a consultation job to another agent role. The calling agent is automatically resumed with the consulting agent's response once it calls `complete_assignment` (on the [tasks](lcp-mcp-tasks.md) service).
 
 **Arguments:**
 
@@ -119,33 +120,8 @@ Pauses the current agent and dispatches a consultation job to another agent role
 **What happens internally:**
 
 1. `POST /internal/pause` on lcp-server — looks up the role by `roleId` (scoped to `companyId`), creates a `PendingConsultation` record, sets the calling agent to `paused`, starts a new agent job for the target role with a supplementary context prompt: `"This is a consultation from {callingRoleName}. Give a complete, concise answer in a single response."`
-2. When the consulting agent calls `complete_task`, lcp-server attempts to resume the calling agent with the consultation result — see [Resume conditions](cross-agent-consultations.md#resume-conditions)
-3. Consulting agents are created with `requiredToolCalls: ['complete_task']`. If the consultation fails (error, timeout, or the required call never fires despite reminders), the calling agent is resumed with a `Consultation FAILED: <reason>` message instead of staying paused — see [Consultation failure](cross-agent-consultations.md#consultation-failure)
-
----
-
-## `complete_task`
-
-Marks the current agent task as complete and stores a final answer summary. Agents must call this as their last action before their task ends.
-
-**Arguments:**
-
-| Parameter     | Type     | Required | Description                                                                          |
-| ------------- | -------- | -------- | ------------------------------------------------------------------------------------ |
-| `agentId`     | UUID     | yes      | The calling agent's UUID                                                             |
-| `companyId`   | UUID     | yes      | The company UUID                                                                     |
-| `finalAnswer` | string   | yes      | A concise, human-readable summary of what was accomplished and any output file paths |
-| `outputFiles` | string[] | no       | Paths in shared storage produced by this task — each is verified to exist in MinIO   |
-
-**Returns:** A completion acknowledgement on success. If `outputFiles` is supplied and any path is missing from MinIO, returns a canned error listing the missing files alongside the files created or modified during the run — the agent should correct the paths or continue working before calling again.
-
-**What happens internally:**
-
-1. If `outputFiles` is non-empty, queries lcp-mcp-storage `GET /files/exists` for each path. Missing paths trigger the error response (no completion written). Fails open — if lcp-mcp-storage is unreachable, completion proceeds.
-2. On success: `POST /internal/agent/:agentId/complete` — sets `LcpAgent.status = completed` and stores `finalAnswer` as `LcpAgent.output`. For consultation agents, also triggers the calling agent's resume.
-3. Records an `agent_loop_completion` audit event with a deterministic summary built from the tracked action log and storage changes (created, modified, deleted, moved files) — no separate LLM call.
-
-**Completion enforcement:** `LcpAgent.requiredToolCalls` (null → default `['complete_task']`, `[]` opts out) lists the tools an agent must invoke before its loop may end. If the stream ends without them, lcp-agent injects a reminder HumanMessage and re-streams, up to `AGENT_REQUIRED_TOOL_RETRIES` times (default 2). If the calls still haven't succeeded, the run is failed and the failure propagates via `POST /internal/agent/:agentId/fail` (resolving any pending consultation as `failed` and resuming the caller). Narrated text is never accepted in place of a required call; agents with `requiredToolCalls: []` keep the legacy fallback where the last AI message becomes the output.
+2. When the consulting agent calls `complete_assignment`, lcp-server attempts to resume the calling agent with the consultation result — see [Resume conditions](cross-agent-consultations.md#resume-conditions)
+3. Consulting agents are created with `requiredToolCalls: ['complete_assignment']`. If the consultation fails (error, timeout, or the required call never fires despite reminders), the calling agent is resumed with a `Consultation FAILED: <reason>` message instead of staying paused — see [Consultation failure](cross-agent-consultations.md#consultation-failure)
 
 ---
 

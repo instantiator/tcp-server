@@ -1,6 +1,6 @@
 # ADR-013: Agent Prompt Assembly and Context Management
 
-Status: Partially Implemented (amended 2026-07-03 — see [Amendments](#amendments-as-implemented-0086) at the end)
+Status: Partially Implemented (amended 2026-07-13 — see [Amendments](#amendments-as-implemented-01028) at the end)
 
 ## Context
 
@@ -16,17 +16,17 @@ This ADR documents:
 
 The intended prompt for each agent turn consists of eight parts, assembled in order:
 
-| #   | Part                 | Source                                                                                              | Status         |
-| --- | -------------------- | --------------------------------------------------------------------------------------------------- | -------------- |
-| 0   | System prompt        | `LcpRole.systemPromptTemplate` (rendered with `name`, `description`, `date`, `companyId`, `roleId`) | ✅ Implemented |
-| 1   | Role prompt          | `LcpRole.rolePrompt` — role identity, attitude, domain knowledge, behavioural guidelines            | ✅ Implemented |
-| 2   | Company environment  | `LcpCompany.companyContext` — company name/description, shared context for all agents               | ✅ Implemented |
-| 3   | Services available   | Dynamic list generated from `role.mcpServerList`; directs agent to call `describe_server`           | ✅ Implemented |
-| 4   | Task / query prompt  | User message or `agent.initialPrompt`                                                               | ✅ Implemented |
-| 5   | RAG data             | Top-k chunks retrieved via pgvector cosine similarity for the current query                         | ✅ Implemented |
-| 6   | MCP responses        | Tool responses pre-fetched before the turn                                                          | ❌ Not yet     |
-| 7   | Conversation history | Maintained implicitly via the LangGraph PostgreSQL checkpoint                                       | ✅ Implemented |
-| 8   | Final instruction    | A fixed suffix HumanMessage instructing the agent what to do next                                   | ✅ Implemented |
+| #   | Part                    | Source                                                                                                                                                   | Status         |
+| --- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| 0   | System prompt           | `LcpRole.systemPromptTemplate` (rendered with `name`, `description`, `date`, `companyId`, `roleId`)                                                      | ✅ Implemented |
+| 1   | Role prompt             | `LcpRole.rolePrompt` — role identity, attitude, domain knowledge, behavioural guidelines                                                                 | ✅ Implemented |
+| 2   | Company environment     | `LcpCompany.companyContext` — company name/description, shared context for all agents                                                                    | ✅ Implemented |
+| 3   | Services available      | Dynamic list generated from `role.mcpServerList`; directs agent to call `describe_server`                                                                | ✅ Implemented |
+| 4   | Assignment presentation | Mode prompt (`MODE_PROMPTS[assignment.mode]`) + assignment prompt + Materials/Expected lists (see [010.2.4 amendment](#amendments-as-implemented-01024)) | ✅ Implemented |
+| 5   | RAG data                | Top-k chunks retrieved via pgvector cosine similarity for the current query                                                                              | ✅ Implemented |
+| 6   | MCP responses           | Tool responses pre-fetched before the turn                                                                                                               | ❌ Not yet     |
+| 7   | Conversation history    | Maintained implicitly via the LangGraph PostgreSQL checkpoint                                                                                            | ✅ Implemented |
+| 8   | Final instruction       | A fixed suffix HumanMessage instructing the agent what to do next                                                                                        | ✅ Implemented |
 
 Part 6 (pre-fetched MCP responses) remains unimplemented; agents call MCP tools reactively via the LangGraph tool node instead.
 
@@ -118,3 +118,16 @@ Also implemented:
 
 - **`{{date}}` duplication removed**: the identical `new Date().toISOString().split('T')[0]` snippet in `agent-loop.service.ts` and `chat.service.ts` (prompt part 0) is now `buildPromptDateVars(company)` (`libs/lcp-shared/src/llm/prompt-vars.ts`), which also adds `{{datetime}}` (an explicit, human-labeled UTC timestamp — the LLM's authoritative "now"), `{{timezone}}`, and `{{localDatetime}}` (re-rendered via `Intl.DateTimeFormat` against the new `LcpCompany.timezone` field). The UTC anchor is always present; region/local time is additional context, never a replacement.
 - **`estimate-context-window` CLI verb** (`lcp-cli`) reuses `ContextBudgetService` to project a role's worst-case initial-prompt token footprint (system prompt + role prompt + company context + services message + task query + RAG estimate) plus `n` further turns, against the resolved LLM's context window — a pre-flight sizing check ahead of the proactive/reactive budget enforcement described above, not a replacement for it. See `docs/lcp-cli.md#estimate-context-window`.
+
+## Amendments as implemented (010.2.4)
+
+- **Prompt part 4 is now the _assignment presentation_, not a bare task prompt.** Every agent carries an `LcpAssignment` (an orphan implement-mode assignment for plain conversations, API-started agents, and consultations; the task's assignment for task work — see [ADR-010](ADR-010-orchestration-design.md)). The agent's mode _is_ its assignment's mode. Part 4 is built from, in order: the mode prompt (`MODE_PROMPTS[assignment.mode]`, `libs/lcp-shared/src/prompts/mode-prompts.ts`); the assignment prompt (already passed through `ContextManagerService.prepare`; omitted when empty, e.g. chat-start); a **Materials** list; and an **Expected outputs** list. For orphans the prompt is exactly the old `agent.initialPrompt`, so existing chat/consultation/agent-start content is preserved (only the mode prompt is added, and Materials/Expected are empty).
+- **Prompt-part construction extracted to `apps/lcp-agent/src/agent/prompt-assembly.ts`.** `AgentLoopService.buildInitialState` was an inline monolith; the per-part builders (`renderSystemPrompt`, `buildServicesMessage`, `buildRagMessage`, and the new `buildAssignmentMessage`) are now pure, unit-tested functions there, and `buildInitialState` is a thin composition. Material/expected artifact keys are resolved via `resolveArtifactKey`, moved to `@lcp/shared` (`storage/artifact-keys.ts`, re-exported from lcp-server's `storage-keys.ts`) so lcp-agent can reach it.
+- **Modes `plan`/`qa` exist but are not yet dispatched** (parts 5/7). Their mode prompts name `create_plan`/`assure_assignment`; `implement` still names the current `complete_task` (renamed to `complete_assignment` in part 5 — `TODO(010.2.5)`). `requiredToolForMode(mode)` (same module) seeds `LcpAgent.requiredToolCalls` at creation, preserving the prior default `['complete_task']` for implement mode.
+
+## Amendments as implemented (010.2.8)
+
+_2026-07-13._
+
+- **Prompt-assembly moved to `@lcp/shared` and shared by both operation paths.** The pure per-part builders (`renderSystemPrompt`, `buildServicesMessage`, `buildRagMessage`, `buildAssignmentMessage`) now live in `libs/lcp-shared/src/prompts/prompt-assembly.ts` (relocated from `apps/lcp-agent/src/agent/prompt-assembly.ts`). Both `AgentLoopService.buildInitialState` (lcp-agent worker runs) and `ChatService` (lcp-server in-process chat turns) build their first-turn message list from these same builders — the chat path previously duplicated its own `buildServicesMessage`/`buildRagMessage` and rendered a bare user message as part 4. The two lcp-agent-specific fixed strings the builders closed over are now passed in as a `PromptAssemblyStrings` argument (lcp-agent supplies its jsonc-loaded `agentPrompts`; lcp-server supplies its own equivalent set); the MCP `usage` lookup uses the already-shared `MCP_REGISTRY`.
+- **The chat path now renders the mode-aware part 4.** A chat agent carries a `chat`-mode orphan assignment (see [ADR-010 010.2.8 amendment](ADR-010-orchestration-design.md#amendments-as-implemented-01028)); `ChatService` renders part 4 via `buildAssignmentMessage` with `MODE_PROMPTS.chat`, so a conversational agent now knows it is in a conversation rather than inferring it from the role prompt. Chat behaviour is otherwise preserved: SSE streaming, per-turn user message on resume turns, RAG overflow-guarding, and returning the agent to `Idle` after each turn (`requiredToolCalls: []` keeps required-tool enforcement out of a chat turn).

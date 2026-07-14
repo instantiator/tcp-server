@@ -1,0 +1,25 @@
+# Every service Dockerfile uses `context: .` (the repo root) and `COPY . .`
+# in its builder stage. Without this file, that COPY — and the build-context
+# transfer that precedes it — includes node_modules (~500MB) and .git,
+# which is slow to hash/transfer on Docker Desktop's VM and unnecessary:
+# each Dockerfile runs its own `npm ci` and never reads .git.
+node_modules
+.git
+
+# Build/test output — regenerated inside the image by `npm run build <app>`;
+# copying stale local output in would be pointless and adds transfer time.
+dist
+coverage
+test-results
+.eslintcache
+
+# Never bake local secrets into a build layer — env vars are injected at
+# container runtime via docker-compose's `environment:`, not at build time.
+.env
+.env.*
+!.env.example
+
+# Editors/OS cruft
+.vscode
+.idea
+.DS_Store

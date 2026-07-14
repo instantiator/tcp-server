@@ -3,8 +3,10 @@ import {
   Conversation,
   ConversationMessage,
   LcpAgent,
+  LcpAssignment,
   LcpCompany,
   LcpRole,
+  LcpTask,
   PendingConsultation,
 } from '@lcp/shared';
 import { Module } from '@nestjs/common';
@@ -22,17 +24,23 @@ import { CompanyUserController } from './company-user.controller';
 import { ConversationController } from './conversation.controller';
 import { ConversationService } from './conversation.service';
 import { InternalController } from './internal.controller';
+import { InternalTaskController } from './internal-task.controller';
+import { KnowledgeController } from './knowledge.controller';
 import { ModelController } from './api.model.controller';
 import { RoleController } from './api.role.controller';
-import { RoleDocumentController } from './role-document.controller';
 import { StorageActionsController } from './storage-actions.controller';
 import { StorageProxyController } from './storage-proxy.controller';
 import { StorageValidationController } from './storage-validation.controller';
+import { TaskController } from './task.controller';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { ApiService } from './api.service';
+import { AssignmentService } from './assignment.service';
 import { ChatService } from './chat.service';
+import { KnowledgeService } from './knowledge.service';
 import { PauseAndResumeService } from './pause-and-resume.service';
-import { RoleDocumentService } from './role-document.service';
+import { TaskDispatcher } from './task-dispatcher.service';
+import { TaskOrchestrationService } from './task-orchestration.service';
+import { TaskService } from './task.service';
 
 /** HTTP API module: wires all REST controllers and supporting services. */
 @Module({
@@ -46,8 +54,10 @@ import { RoleDocumentService } from './role-document.service';
     StorageModule,
     TypeOrmModule.forFeature([
       LcpAgent,
+      LcpAssignment,
       LcpRole,
       LcpCompany,
+      LcpTask,
       CompanyUser,
       Conversation,
       ConversationMessage,
@@ -59,21 +69,29 @@ import { RoleDocumentService } from './role-document.service';
     CompanyUserController,
     ConversationController,
     InternalController,
+    InternalTaskController,
+    KnowledgeController,
     RoleController,
-    RoleDocumentController,
     StorageActionsController,
     StorageProxyController,
     StorageValidationController,
+    TaskController,
     AgentController,
     ModelController,
   ],
   providers: [
     ApiService,
     AgentOrchestrationService,
+    AssignmentService,
     ChatService,
     ConversationService,
+    KnowledgeService,
     PauseAndResumeService,
-    RoleDocumentService,
+    TaskOrchestrationService,
+    // The real dispatcher: TaskDispatcher (the token the transition services
+    // inject) resolves to the single TaskOrchestrationService instance.
+    { provide: TaskDispatcher, useExisting: TaskOrchestrationService },
+    TaskService,
   ],
 })
 export class ApiModule {}
