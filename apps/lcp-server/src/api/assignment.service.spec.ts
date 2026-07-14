@@ -42,7 +42,11 @@ describe('AssignmentService', () => {
   let roleRepo: Repository<LcpRole>;
 
   let storage: { checkMissingFiles: jest.Mock };
-  let db: { getCompany: jest.Mock; findRoleByIdOrSlug: jest.Mock };
+  let db: {
+    getCompany: jest.Mock;
+    findRoleByIdOrSlug: jest.Mock;
+    listRoles: jest.Mock;
+  };
   let dispatcher: {
     taskPlanned: jest.Mock;
     assignmentReadyForQa: jest.Mock;
@@ -79,6 +83,7 @@ describe('AssignmentService', () => {
     db = {
       getCompany: jest.fn(),
       findRoleByIdOrSlug: jest.fn(),
+      listRoles: jest.fn().mockResolvedValue([]),
     };
     dispatcher = {
       taskPlanned: jest.fn().mockResolvedValue(undefined),
@@ -328,6 +333,41 @@ describe('AssignmentService', () => {
       expect(dispatcher.taskPlanned).toHaveBeenCalledTimes(1);
     });
 
+    it('completes the planner agent and marks its plan assignment succeeded (ends the run)', async () => {
+      const { task, agent } = await setupPlanner();
+      await service.planTask(task.id, agent.id, [
+        { prompt: 'a', role: 'analyst', expected: [] },
+      ]);
+
+      // create_plan IS the planner's completion — the plan assignment is done
+      // and the agent is completed so its worker loop exits promptly.
+      const planAssignment = await assignmentRepo.findOneByOrFail({
+        taskId: task.id,
+        mode: 'plan',
+      });
+      expect(planAssignment.status).toBe('succeeded');
+      expect(pauseResume.completeAgent).toHaveBeenCalledWith(
+        agent.id,
+        expect.stringContaining('Plan created'),
+      );
+    });
+
+    it('accepts an aliased artifact type and stores it canonicalised', async () => {
+      const { task, agent } = await setupPlanner();
+      await service.planTask(task.id, agent.id, [
+        {
+          prompt: 'a',
+          role: 'analyst',
+          expected: [{ type: 'text', value: 'a summary' }] as never,
+        },
+      ]);
+      const created = await assignmentRepo.findOneByOrFail({
+        taskId: task.id,
+        mode: 'implement',
+      });
+      expect(created.expected[0].type).toBe('inline-text');
+    });
+
     it('rejects a non-plan-mode caller', async () => {
       const company = await seedCompany();
       const role = await seedRole(company.id);
@@ -374,6 +414,31 @@ describe('AssignmentService', () => {
           },
         ]),
       ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('reports every invalid role and artifact type at once, naming the valid roles', async () => {
+      const { task, agent } = await setupPlanner();
+      db.findRoleByIdOrSlug.mockResolvedValue(null); // every role invalid
+      db.listRoles.mockResolvedValue([{ slug: 'analyst' }, { slug: 'writer' }]);
+      let message = '';
+      try {
+        await service.planTask(task.id, agent.id, [
+          {
+            prompt: 'a',
+            role: 'ghost',
+            expected: [{ type: 'task-materials-path', value: 'x' }] as never,
+          },
+        ]);
+      } catch (e) {
+        message = (e as Error).message;
+      }
+      // Both the bad role and the bad artifact type are reported together.
+      expect(message).toContain('assignment 0 role');
+      expect(message).toContain('Valid values are: analyst, writer.');
+      expect(message).toContain('assignment 0 expected type');
+      expect(message).toContain(
+        'If you still intend to create the plan, try again with corrected values for',
+      );
     });
 
     it('409s a double plan (task no longer planning)', async () => {
@@ -469,26 +534,28 @@ describe('AssignmentService', () => {
       ).rejects.toBeInstanceOf(UnprocessableEntityException);
     });
 
-    it('passes an inline-text expectation matched by regex', async () => {
+    it('passes an inline-text expectation on shape alone — content is not gate-matched (QA judges it)', async () => {
       const { assignment, agent } = await setupImplementer({
         taskId: null,
-        expected: [{ type: 'inline-text', value: '^APPROVED' }],
+        expected: [{ type: 'inline-text', value: 'a list of chicken foods' }],
       });
+      // The prepared text does not "match" the expected description, but the
+      // gate only checks shape (a non-empty inline-text artifact is present).
       await service.completeAssignment(assignment.id, agent.id, 'done', [
-        { type: 'inline-text', value: 'APPROVED: ship it' },
+        { type: 'inline-text', value: 'grubs, seed, and kitchen scraps' },
       ]);
       const fresh = await assignmentRepo.findOneByOrFail({ id: assignment.id });
       expect(fresh.status).toBe('succeeded');
     });
 
-    it('422s an inline-text expectation not matched by regex', async () => {
+    it('422s an inline-text expectation when no inline-text artifact is provided (a file does not satisfy it)', async () => {
       const { assignment, agent } = await setupImplementer({
         taskId: null,
-        expected: [{ type: 'inline-text', value: '^APPROVED' }],
+        expected: [{ type: 'inline-text', value: 'a summary' }],
       });
       await expect(
         service.completeAssignment(assignment.id, agent.id, 'done', [
-          { type: 'inline-text', value: 'rejected' },
+          { type: 'assignment-working-path', value: 'report.md' },
         ]),
       ).rejects.toBeInstanceOf(UnprocessableEntityException);
     });

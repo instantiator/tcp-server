@@ -1,13 +1,17 @@
 import {
   AgentStatus,
   assignmentWorkingPrefix,
+  buildEnumValidationError,
+  canonicaliseArtifacts,
   deriveTaskStatus,
+  InvalidEnumValue,
   LcpAgent,
   LcpArtifact,
   LcpAssignment,
   LcpAssignmentMode,
   LcpAssignmentStatus,
   LcpAssignmentWorkingArtifact,
+  LcpMaterialArtifact,
   LcpTask,
   orphanWorkingPrefix,
   resolveArtifactKey,
@@ -253,34 +257,70 @@ export class AssignmentService {
       );
     }
 
-    // Resolve every role and validate every artifact up front so the whole
-    // plan is rejected atomically (nothing is created on any failure).
-    const roleIds: UUID[] = [];
+    // Structural (non-enumerable) checks fail fast — there is no set of "valid
+    // values" to offer for a missing prompt.
     for (const [i, a] of assignments.entries()) {
       if (!a.prompt || !a.prompt.trim()) {
         throw new BadRequestException(`Assignment ${i}: prompt is required.`);
       }
-      if (!a.role || !a.role.trim()) {
-        throw new BadRequestException(`Assignment ${i}: role is required.`);
-      }
-      const role = await this.db.findRoleByIdOrSlug(caller.companyId, a.role);
+    }
+
+    // Resolve every role and validate every artifact type up front, collecting
+    // ALL invalid enumerable values so the planner can correct them in a single
+    // retry (nothing is created on any failure). Each invalid value's error
+    // names the valid options — the roles/types the planner must choose from.
+    const validRoleSlugs = (await this.db.listRoles(caller.companyId)).map(
+      (r) => r.slug,
+    );
+    const invalid: InvalidEnumValue[] = [];
+    const roleIds: UUID[] = [];
+    // Canonical (alias-normalised) artifact lists, kept per assignment so the
+    // stored rows use canonical types (e.g. `text` → `inline-text`).
+    const expectedByIndex: LcpAssignmentWorkingArtifact[][] = [];
+    const materialsByIndex: LcpMaterialArtifact[][] = [];
+    for (const [i, a] of assignments.entries()) {
+      const role = a.role?.trim()
+        ? await this.db.findRoleByIdOrSlug(caller.companyId, a.role)
+        : null;
       if (!role) {
-        throw new BadRequestException(
-          `Assignment ${i}: role '${a.role}' does not exist in this company.`,
-        );
+        invalid.push({
+          property: `assignment ${i} role`,
+          value: a.role ?? '',
+          validValues: validRoleSlugs,
+        });
       }
-      roleIds.push(role.id);
-      this.assertArtifactTypes(
-        i,
-        'expected',
-        a.expected ?? [],
+      // Placeholder keeps roleIds aligned with assignments; only read after the
+      // invalid check below passes (so an unresolved role is never used).
+      roleIds.push(role?.id ?? ('' as UUID));
+
+      const expected = canonicaliseArtifacts(a.expected ?? []);
+      const materials = canonicaliseArtifacts(a.materials ?? []);
+      expectedByIndex.push(expected);
+      materialsByIndex.push(materials);
+      for (const type of this.invalidArtifactTypes(
+        expected,
         WORKING_ARTIFACT_TYPES,
-      );
-      this.assertArtifactTypes(
-        i,
-        'materials',
-        a.materials ?? [],
+      )) {
+        invalid.push({
+          property: `assignment ${i} expected type`,
+          value: type,
+          validValues: [...WORKING_ARTIFACT_TYPES],
+        });
+      }
+      for (const type of this.invalidArtifactTypes(
+        materials,
         MATERIAL_ARTIFACT_TYPES,
+      )) {
+        invalid.push({
+          property: `assignment ${i} materials type`,
+          value: type,
+          validValues: [...MATERIAL_ARTIFACT_TYPES],
+        });
+      }
+    }
+    if (invalid.length > 0) {
+      throw new BadRequestException(
+        buildEnumValidationError('create the plan', invalid),
       );
     }
 
@@ -309,11 +349,22 @@ export class AssignmentService {
           prompt: a.prompt,
           roleId: roleIds[i],
           status: 'ready',
-          materials: a.materials ?? [],
-          expected: a.expected ?? [],
+          materials: materialsByIndex[i],
+          expected: expectedByIndex[i],
         }),
       );
     }
+
+    // Planning is done: `create_plan` IS the planner's completion (like
+    // `complete_assignment` is an implementer's). Mark the plan assignment
+    // succeeded and complete the planner agent so its worker run ends now — the
+    // supervised loop detects the terminal status on its next check and exits,
+    // instead of looping to `max_iterations` and needlessly hogging the model.
+    await this.assignmentRepo.update(caller.id, { status: 'succeeded' });
+    await this.pauseResume.completeAgent(
+      agentId,
+      `Plan created: ${assignments.length} assignment(s).`,
+    );
 
     const task = await this.taskRepo.findOneBy({ id: taskId });
     if (task) await this.dispatcher.taskPlanned(task);
@@ -363,9 +414,24 @@ export class AssignmentService {
       );
     }
 
-    this.assertArtifactTypes(0, 'prepared', prepared, WORKING_ARTIFACT_TYPES);
+    // Normalise alias/near-miss types (e.g. `text` → `inline-text`) before
+    // validating and storing, so a good answer isn't rejected on a spelling.
+    const canonPrepared = canonicaliseArtifacts(prepared);
+    const invalidPrepared = this.invalidArtifactTypes(
+      canonPrepared,
+      WORKING_ARTIFACT_TYPES,
+    ).map((type) => ({
+      property: 'prepared type',
+      value: type,
+      validValues: [...WORKING_ARTIFACT_TYPES],
+    }));
+    if (invalidPrepared.length > 0) {
+      throw new BadRequestException(
+        buildEnumValidationError('complete the assignment', invalidPrepared),
+      );
+    }
 
-    const gate = await this.checkOutputGate(assignment, prepared);
+    const gate = await this.checkOutputGate(assignment, canonPrepared);
     if (gate.length > 0) {
       throw new UnprocessableEntityException(this.buildGateMessage(gate));
     }
@@ -382,7 +448,7 @@ export class AssignmentService {
           `Assignment ${assignmentId} was already completed.`,
         );
       }
-      assignment.prepared = prepared;
+      assignment.prepared = canonPrepared;
       assignment.summary = summary;
       assignment.status = 'succeeded';
       await this.assignmentRepo.save(assignment);
@@ -401,7 +467,7 @@ export class AssignmentService {
         `Assignment ${assignmentId} was already handed to QA.`,
       );
     }
-    assignment.prepared = prepared;
+    assignment.prepared = canonPrepared;
     assignment.summary = summary;
     assignment.status = 'in-qa';
     await this.assignmentRepo.save(assignment);
@@ -484,12 +550,15 @@ export class AssignmentService {
   /**
    * The mechanical output gate: returns the list of unmet requirements (empty
    * when the prepared artifacts satisfy the assignment's expected outputs).
+   * It checks the *shape* of the output, not its content quality — judging
+   * whether the content is actually right is the QA agent's job, so the gate
+   * never blocks a reasonable submission before QA can see it.
    *
    * - each expected `assignment-working-path` must appear in `prepared` and its
    *   resolved storage key must exist;
-   * - each expected `inline-text` must be matched by a prepared `inline-text`
-   *   (empty expected value → any; otherwise the expected value is a regex the
-   *   prepared text must match);
+   * - each expected `inline-text` requires a non-empty `inline-text` artifact in
+   *   `prepared` (its content is judged by QA, not matched here — the expected
+   *   `value` is a description for the agent/QA, not an enforced pattern);
    * - each prepared `assignment-working-path` must exist in storage.
    */
   private async checkOutputGate(
@@ -517,23 +586,21 @@ export class AssignmentService {
     );
     const preparedInline = prepared.filter((p) => p.type === 'inline-text');
 
-    // Expected coverage.
+    // Expected coverage — shape only (QA judges content).
+    const hasInline = preparedInline.some((p) => p.value.trim() !== '');
     for (const exp of assignment.expected) {
       if (exp.type === 'assignment-working-path') {
         if (!preparedPaths.some((p) => p.value === exp.value)) {
-          problems.push(`Expected file '${exp.value}' was not provided.`);
-        }
-      } else if (exp.type === 'inline-text') {
-        const matched = preparedInline.some((p) =>
-          this.inlineMatches(exp.value, p.value),
-        );
-        if (!matched) {
           problems.push(
-            exp.value
-              ? `Expected inline text matching /${exp.value}/ was not provided.`
-              : `Expected inline text was not provided.`,
+            `Expected file '${exp.value}': create it in your working directory, then include it in your prepared list as { "type": "assignment-working-path", "value": "${exp.value}" }.`,
           );
         }
+      } else if (exp.type === 'inline-text' && !hasInline) {
+        problems.push(
+          exp.value
+            ? `Expected a text answer (${exp.value}): include it in your prepared list as { "type": "inline-text", "value": "<your text>" } — a file is not accepted for this output.`
+            : `Expected a text answer: include it in your prepared list as { "type": "inline-text", "value": "<your text>" } — a file is not accepted for this output.`,
+        );
       }
     }
 
@@ -559,24 +626,13 @@ export class AssignmentService {
     return problems;
   }
 
-  /** Whether a prepared inline text satisfies an expected inline-text entry. */
-  private inlineMatches(expectedValue: string, preparedValue: string): boolean {
-    if (expectedValue === '') return true;
-    try {
-      return new RegExp(expectedValue).test(preparedValue);
-    } catch {
-      // A malformed expected regex can never be satisfied — treat as unmatched.
-      return false;
-    }
-  }
-
   /** Builds the corrective message returned to the agent on a gate failure. */
   private buildGateMessage(problems: string[]): string {
     return [
       'Your submission does not yet meet the assignment’s expected outputs:',
       ...problems.map((p) => `- ${p}`),
       '',
-      'Write the missing outputs (or correct the paths/text) and call complete_assignment again.',
+      'Fix each item above, then call complete_assignment again with the corrected `prepared` list. `prepared` holds the artifacts you are handing over — a `{ type: "assignment-working-path", value }` entry per file, and/or a `{ type: "inline-text", value }` entry per text answer.',
     ].join('\n');
   }
 
@@ -618,18 +674,15 @@ export class AssignmentService {
   }
 
   /** Rejects any artifact whose `type` falls outside the allowed union. */
-  private assertArtifactTypes(
-    index: number,
-    field: string,
+  /** Returns the distinct artifact `type` values in `artifacts` not in `allowed`. */
+  private invalidArtifactTypes(
     artifacts: LcpArtifact[],
     allowed: Set<string>,
-  ): void {
-    for (const a of artifacts) {
-      if (!allowed.has(a.type)) {
-        throw new BadRequestException(
-          `Assignment ${index}: ${field} artifact type '${a.type}' is not allowed here.`,
-        );
-      }
-    }
+  ): string[] {
+    return [
+      ...new Set(
+        artifacts.map((a) => a.type).filter((type) => !allowed.has(type)),
+      ),
+    ];
   }
 }

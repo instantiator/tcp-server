@@ -30,6 +30,14 @@ export interface BuildAgentGraphOptions {
    * regardless of whether the external consumer keeps reading events.
    */
   interruptAfterTools?: boolean;
+  /**
+   * OpenAI-style `tool_choice` forwarded to `bindTools`. Pass `'required'` to
+   * force the model to call a tool every turn (used for work modes that must
+   * end in a tool call — the model cannot get away with narrating instead of
+   * invoking). Omit (or `'auto'`) to let the model choose, as chat needs so it
+   * can reply in prose.
+   */
+  toolChoice?: 'auto' | 'required' | 'none';
 }
 
 /**
@@ -47,10 +55,19 @@ export interface BuildAgentGraphOptions {
  * covers both services and is reflected in checkpointed conversation history.
  */
 export function buildAgentGraph(options: BuildAgentGraphOptions) {
-  const { model, checkpointer, tools, signal, logger, interruptAfterTools } =
-    options;
+  const {
+    model,
+    checkpointer,
+    tools,
+    signal,
+    logger,
+    interruptAfterTools,
+    toolChoice,
+  } = options;
   const boundModel =
-    tools.length > 0 && model.bindTools ? model.bindTools(tools) : model;
+    tools.length > 0 && model.bindTools
+      ? model.bindTools(tools, toolChoice ? { tool_choice: toolChoice } : {})
+      : model;
 
   const agentNode = async (
     state: typeof MessagesAnnotation.State,

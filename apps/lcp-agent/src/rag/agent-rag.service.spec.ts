@@ -124,4 +124,24 @@ describe('AgentRagService', () => {
       expect(params).toContain(5);
     });
   });
+
+  describe('hasKnowledge', () => {
+    it('is true when the existence query returns exists=true (no embedding call)', async () => {
+      const embedding = makeEmbedding();
+      const svc = new AgentRagService(
+        embedding,
+        makeDataSource([{ exists: true }]),
+      );
+      await expect(svc.hasKnowledge(ROLE_ID, COMPANY_ID)).resolves.toBe(true);
+      expect(embedding.embedQuery).not.toHaveBeenCalled();
+    });
+
+    it('is false when the role and its shared scope have no chunks', async () => {
+      const svc = new AgentRagService(
+        makeEmbedding(),
+        makeDataSource([{ exists: false }]),
+      );
+      await expect(svc.hasKnowledge(ROLE_ID, COMPANY_ID)).resolves.toBe(false);
+    });
+  });
 });

@@ -1588,6 +1588,45 @@
       },
       "type": "object"
     },
+    "canonicalArtifactType": {
+      "$comment": "(raw: string) => string",
+      "properties": {
+        "namedArgs": {
+          "additionalProperties": false,
+          "properties": {
+            "raw": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "raw"
+          ],
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "canonicaliseArtifacts": {
+      "$comment": "(\n  artifacts: T[]) => T[]",
+      "properties": {
+        "namedArgs": {
+          "additionalProperties": false,
+          "properties": {
+            "artifacts": {
+              "items": {
+                "description": "Failed to correctly infer type"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "artifacts"
+          ],
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "deriveTaskStatus": {
       "$comment": "(\n  current: LcpTaskStatus,\n  planAssignments: Pick<LcpAssignment, 'status'>[]) => LcpTaskStatus",
       "properties": {

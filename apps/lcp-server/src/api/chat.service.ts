@@ -12,7 +12,6 @@ import {
   LlmConfig,
   McpClientService,
   PromptAssemblyStrings,
-  ToolVisibilityTracker,
   buildAgentGraph,
   buildAssignmentMessage,
   buildChatModel,
@@ -223,14 +222,10 @@ export class ChatService {
           interruptAfterTools: true,
           signal: abortController.signal,
         });
-      // Tool-schema gating: only each server's describe_server tool (plus
-      // always-visible servers, e.g. interactions) is bound until the agent
-      // describes it — the initial graph and budget check below must use
-      // this same gated set, not the full one, or the very first turn would
-      // bind everything regardless.
-      const toolVisibility = new ToolVisibilityTracker();
-      const initialTools = toolVisibility.resolveVisibleTools(langchainTools);
-      const graph = buildGraph(initialTools);
+      // All tools are bound from turn 1 (compact schemas) — no describe-then-
+      // reveal gating. Chat leaves `tool_choice` on auto so a turn can end with
+      // a prose reply rather than a forced tool call.
+      const graph = buildGraph(langchainTools);
 
       const runConfig = { configurable: { thread_id: agentId } };
 
@@ -247,7 +242,7 @@ export class ChatService {
         isFirstMessage,
         agent,
         role,
-        initialTools,
+        langchainTools,
       );
 
       let ragMessage: HumanMessage | null = null;
@@ -348,7 +343,6 @@ export class ChatService {
         hooks: {
           buildGraph,
           onEvent: (event) => {
-            toolVisibility.onEvent(event);
             for (const observabilityEvent of mapStreamEvent(event)) {
               this.agentEvents.emit(agentId, observabilityEvent);
             }
@@ -360,8 +354,6 @@ export class ChatService {
               ? fresh.status
               : null;
           },
-          resolveVisibleTools: (tools) =>
-            toolVisibility.resolveVisibleTools(tools),
         },
       });
 

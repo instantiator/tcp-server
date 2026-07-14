@@ -500,6 +500,37 @@ export class TaskOrchestrationService
     }
   }
 
+  /**
+   * Belt-and-braces runtime check for a planner that reached `Completed`
+   * WITHOUT producing a plan. Called from the internal agent-completion
+   * endpoint. This is normally impossible — `plan` mode has no pause vector
+   * (the plan-mode tool filter drops consultation and user queries) and the
+   * `create_plan` required-tool
+   * enforcement fails such a run instead — but if it ever happens, fail the
+   * task now rather than leaving it wedged in `planning` until restart
+   * reconciliation ({@link reconcileTask}, same predicate). Idempotent via
+   * {@link failTask}; a no-op for every non-planner completion.
+   */
+  async handleAgentCompleted(agentId: UUID): Promise<void> {
+    const agent = await this.agentRepo.findOneBy({ id: agentId });
+    if (!agent?.assignmentId) return;
+    const assignment = await this.assignmentRepo.findOneBy({
+      id: agent.assignmentId,
+    });
+    if (assignment?.mode !== 'plan' || !assignment.taskId) return;
+
+    const task = await this.taskRepo.findOneBy({ id: assignment.taskId });
+    if (task?.status !== 'planning') return;
+
+    const plan = await this.planAssignments(assignment.taskId);
+    if (plan.length === 0) {
+      await this.failTask(
+        assignment.taskId,
+        'planner completed without producing a plan',
+      );
+    }
+  }
+
   // Startup recovery
 
   /**

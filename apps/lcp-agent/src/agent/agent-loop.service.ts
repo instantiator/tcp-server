@@ -13,22 +13,26 @@ import {
   DEFAULT_LLM_CONTEXT_WINDOW,
   DEFAULT_REQUIRED_TOOL_RETRIES,
   LcpAgent,
+  LcpRole,
   LlmConfig,
   StreamEventLike,
   SupervisedGraphResult,
-  ToolVisibilityTracker,
   buildAgentGraph,
   buildAssignmentMessage,
+  buildAvailableRolesMessage,
   buildRagMessage,
   buildServicesMessage,
+  filterToolsForMode,
   mapStreamEvent,
   renderSystemPrompt,
   renderTemplate,
+  requiredToolForMode,
   resolveEnvLlmConfig,
   resolveLlmConfig,
   resolveMcpServerList,
   resolveRunConfig,
   runSupervisedGraph,
+  serverNamesForMode,
 } from '@lcp/shared';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -49,6 +53,16 @@ import {
   createTracker,
   generateActionString,
 } from './loop-tracker';
+
+/**
+ * The mode completion tools (`create_plan`/`complete_assignment`/
+ * `assure_assignment`). If one of these is the required tool yet is absent
+ * from an agent's loaded toolset, that is a wiring bug — the mode's own
+ * completion server was not offered — not a benign optional skip.
+ */
+const COMPLETION_TOOLS = new Set(
+  (['plan', 'implement', 'qa', 'chat'] as const).flatMap(requiredToolForMode),
+);
 
 /** Maps LangGraph v2 event names to {@link AuditEventType} values. */
 const EVENT_TYPE_MAP: Record<string, AuditEventType> = {
@@ -82,10 +96,6 @@ interface SupervisedRunContext {
   buildGraph: (
     tools: DynamicStructuredTool[],
   ) => ReturnType<typeof buildAgentGraph>;
-  /** Shared across every {@link AgentLoopService.runSupervised} call for this
-   * job, so a server described during the main run stays visible through a
-   * subsequent retry or required-tool reminder. */
-  toolVisibility: ToolVisibilityTracker;
 }
 
 /**
@@ -126,6 +136,8 @@ export class AgentLoopService {
     private readonly contextManager: ContextManagerService,
     @InjectRepository(LcpAgent)
     private readonly agentRepo: Repository<LcpAgent>,
+    @InjectRepository(LcpRole)
+    private readonly roleRepo: Repository<LcpRole>,
   ) {
     this.databaseUrl = this.config.getOrThrow<string>('DATABASE_URL');
   }
@@ -238,21 +250,47 @@ export class AgentLoopService {
     maxIterations: number,
     replyContent?: string,
   ): Promise<void> {
+    const mode = agent.assignment?.mode ?? 'implement';
     const mcpServerUrls = resolveMcpServerUrls(this.config);
     // Additive union: default registry servers, plus any extras from the
     // company and the role (not a precedence chain — every source contributes).
-    const mcpServerNames = resolveMcpServerList(
-      Object.keys(mcpServerUrls),
-      agent.company,
-      agent.role,
+    // Then narrow to the servers the assignment mode is allowed — a `plan`
+    // agent drops `interactions` entirely (no consultation, no user queries),
+    // so it is never even contacted.
+    let mcpServerNames = serverNamesForMode(
+      resolveMcpServerList(
+        Object.keys(mcpServerUrls),
+        agent.company,
+        agent.role,
+      ),
+      mode,
     );
-    const mcpTools = await this.mcp.loadTools(mcpServerNames, mcpServerUrls, {
-      agentId: agent.id,
-      companyId: agent.companyId,
-    });
+    // Don't offer the knowledge (memory) service to a role whose knowledge base
+    // is empty — there is nothing for it to search, so it only wastes turns.
+    const hasKnowledge = await this.rag.hasKnowledge(
+      agent.role.id,
+      agent.company.id,
+    );
+    if (!hasKnowledge) {
+      mcpServerNames = mcpServerNames.filter((n) => n !== 'memory');
+    }
+    // Filter the loaded tools by mode too — a `plan` agent keeps the storage
+    // server for read-only inspection but loses its mutating tools, so it
+    // cannot short-circuit into doing the work instead of planning it.
+    const mcpTools = filterToolsForMode(
+      await this.mcp.loadTools(mcpServerNames, mcpServerUrls, {
+        agentId: agent.id,
+        companyId: agent.companyId,
+      }),
+      mode,
+    );
     const langchainTools = mcpTools.map((t) => t.tool);
 
     const model = buildChatModel(llmConfig);
+    // Work modes (plan/implement/qa) MUST end in a tool call, so force one every
+    // turn — the weak local model can't then narrate a tool call instead of
+    // invoking it. Chat needs to reply in prose, so it stays on `auto`.
+    const toolChoice = mode === 'chat' ? undefined : 'required';
     const buildGraph = (tools: DynamicStructuredTool[]) =>
       buildAgentGraph({
         model,
@@ -261,15 +299,12 @@ export class AgentLoopService {
         logger: this.logger,
         interruptAfterTools: true,
         signal: abortController.signal,
+        toolChoice,
       });
-    // Tool-schema gating: only each server's describe_server tool (plus
-    // always-visible servers, e.g. interactions) is bound until the agent
-    // describes it — the initial graph and budget check below must use this
-    // same gated set, not the full one, or the very first turn would bind
-    // everything regardless.
-    const toolVisibility = new ToolVisibilityTracker();
-    const initialTools = toolVisibility.resolveVisibleTools(langchainTools);
-    const graph = buildGraph(initialTools);
+    // All mode-filtered tools are bound from turn 1 (their schemas are compact,
+    // ~1k tokens per mode) — no describe-then-reveal gating, which cost the slow
+    // model extra round-trips and let it "forget" a tool after a few iterations.
+    const graph = buildGraph(langchainTools);
 
     const config = {
       configurable: { thread_id: agent.id },
@@ -293,7 +328,7 @@ export class AgentLoopService {
       isFirstMessage,
       agent,
       agent.role,
-      initialTools,
+      langchainTools,
     );
 
     // Resume path: inject reply as the next message; checkpoint holds prior state
@@ -304,6 +339,7 @@ export class AgentLoopService {
           mcpTools,
           mcpServerUrls,
           preparedMessage,
+          hasKnowledge,
         );
 
     const tracker = createTracker();
@@ -317,7 +353,6 @@ export class AgentLoopService {
       abortController,
       maxIterations,
       buildGraph,
-      toolVisibility,
     };
 
     try {
@@ -420,10 +455,7 @@ export class AgentLoopService {
       abortController: ctx.abortController,
       hooks: {
         buildGraph: ctx.buildGraph,
-        onEvent: (event) => {
-          ctx.toolVisibility.onEvent(event);
-          onEvent(event);
-        },
+        onEvent,
         checkTerminalStatus: async () => {
           const fresh = await this.agentRepo.findOneBy({ id: ctx.agent.id });
           return fresh?.status === AgentStatus.Paused ||
@@ -432,8 +464,6 @@ export class AgentLoopService {
             : null;
         },
         maxIterations: ctx.maxIterations,
-        resolveVisibleTools: (tools) =>
-          ctx.toolVisibility.resolveVisibleTools(tools),
       },
     });
   }
@@ -504,7 +534,11 @@ export class AgentLoopService {
     const available = new Set(tools.map((t) => baseToolName(t.name)));
     return required.filter((toolName) => {
       if (available.has(toolName)) return true;
-      this.logger.warn(
+      // A missing completion tool means the mode's own completion server was
+      // not offered — a wiring bug that will let the run end without ever
+      // completing its assignment. Louder than a benign optional-tool skip.
+      const level = COMPLETION_TOOLS.has(toolName) ? 'error' : 'warn';
+      this.logger[level](
         `Agent ${agent.id} requires tool '${toolName}' but it is not in the loaded toolset — skipping enforcement for it`,
       );
       return false;
@@ -619,16 +653,21 @@ export class AgentLoopService {
     mcpTools: Awaited<ReturnType<McpClientService['loadTools']>>,
     mcpServerUrls: Record<string, string>,
     initialPrompt: string,
+    hasKnowledge: boolean,
   ): Promise<typeof MessagesAnnotation.State> {
     const { role, company, assignment } = agent;
     const systemPrompt = renderSystemPrompt(agent, role, company);
 
-    const ragChunks = await this.rag.retrieve(
-      role.id,
-      company.id,
-      initialPrompt,
-      company.embeddingConfig,
-    );
+    // Skip RAG entirely (including the embedding call) when the role has no
+    // indexed knowledge — there is nothing to retrieve.
+    const ragChunks = hasKnowledge
+      ? await this.rag.retrieve(
+          role.id,
+          company.id,
+          initialPrompt,
+          company.embeddingConfig,
+        )
+      : [];
     const ragMessage = ragChunks.length
       ? new HumanMessage(buildRagMessage(ragChunks, agentPrompts))
       : null;
@@ -667,6 +706,19 @@ export class AgentLoopService {
       ),
     );
 
+    // Plan-mode agents assign each step to a role — give them the company's
+    // role roster up front so they pick a real role by its exact slug rather
+    // than inventing one (and, on a wrong guess, create_plan names the valid
+    // roles too). Only fetched for plan mode; other modes assign no roles.
+    let rolesMessage: HumanMessage | null = null;
+    if (assignment.mode === 'plan') {
+      const companyRoles = await this.roleRepo.findBy({
+        companyId: company.id,
+      });
+      const rolesText = buildAvailableRolesMessage(companyRoles);
+      if (rolesText) rolesMessage = new HumanMessage(rolesText);
+    }
+
     return {
       messages: [
         // Prompt part 0: system prompt — rendered from the role's systemPromptTemplate
@@ -681,6 +733,8 @@ export class AgentLoopService {
         ...(servicesMessage ? [servicesMessage] : []),
         // Prompt part 4: assignment presentation (mode prompt + assignment prompt + materials/expected)
         assignmentMessage,
+        // Prompt part 4b: available roles (plan mode only) — the roster a planner assigns steps to
+        ...(rolesMessage ? [rolesMessage] : []),
         // Prompt part 5: RAG data retrieved for the initial task (omitted when nothing relevant)
         ...(ragMessage ? [ragMessage] : []),
         // Prompt part 6: episodic memory — recalled prior run summaries relevant to this task (not yet implemented)

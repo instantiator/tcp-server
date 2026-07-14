@@ -1,3 +1,4 @@
+import { DEFAULT_AGENT_WORKER_CONCURRENCY } from '@lcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AgentLoopService } from '../agent/agent-loop.service';
@@ -37,7 +38,11 @@ describe('AgentWorkerService', () => {
         { provide: AgentLoopService, useValue: { run: loopRun } },
         {
           provide: ConfigService,
-          useValue: { getOrThrow: () => 'redis://localhost:6379' },
+          useValue: {
+            getOrThrow: () => 'redis://localhost:6379',
+            // AGENT_WORKER_CONCURRENCY unset → worker falls back to the default.
+            get: () => undefined,
+          },
         },
       ],
     }).compile();
@@ -75,6 +80,14 @@ describe('AgentWorkerService', () => {
       waitUntilReady: jest.Mock;
     };
     expect(instance.waitUntilReady).toHaveBeenCalled();
+  });
+
+  it('falls back to the default worker concurrency when AGENT_WORKER_CONCURRENCY is unset', () => {
+    const { Worker } = jest.requireMock<{ Worker: jest.Mock }>('bullmq');
+    const opts = (
+      Worker.mock.calls as Array<[string, unknown, { concurrency?: number }]>
+    )[0][2];
+    expect(opts.concurrency).toBe(DEFAULT_AGENT_WORKER_CONCURRENCY);
   });
 
   it('calls loop.run when the agent is not already running', async () => {

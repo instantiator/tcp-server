@@ -15,6 +15,15 @@
 export const DEFAULT_AGENT_ITERATIONS = 10;
 
 /**
+ * Default number of agent jobs the lcp-agent worker processes concurrently.
+ * Overridden by `AGENT_WORKER_CONCURRENCY` (lcp-agent env). Used in
+ * {@link AgentWorkerService}. Lower it to `1` when agents share a single
+ * capacity-limited model endpoint (e.g. one local LLM), so parallel runs don't
+ * starve each other of model time.
+ */
+export const DEFAULT_AGENT_WORKER_CONCURRENCY = 5;
+
+/**
  * Default wall-clock timeout in milliseconds for an entire agent run.
  * Overridden by `AGENT_LOOP_TIMEOUT_MS` (lcp-agent env), then by
  * {@link AgentRunConfig.timeoutMs} via {@link resolveRunConfig}.

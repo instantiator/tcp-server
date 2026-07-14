@@ -299,3 +299,64 @@ _2026-07-13._
   semantics (chat returns to `Idle`) vs. run-to-completion (`Completed`/`Paused`/
   `Failed`); and who owns the abort signal. Full extraction of the supervised-run
   spine into a single shared `runAgentTurn` is the noted next step.
+
+## Amendments as implemented (010.2.8.2)
+
+_2026-07-13._
+
+- **Per-mode tool restriction — `plan` mode is read-only planning.** Previously
+  every agent got the additive union of registry + company + role MCP servers
+  regardless of mode, and only `qa` was constrained (read-only, storage-side). A
+  planner therefore had the consultation and file-write tools and could
+  short-circuit into consulting another role instead of producing a plan,
+  wedging the task in `planning`. New `MODE_DENIED_SERVERS`/`MODE_DENIED_TOOLS`
+  (`@lcp/shared` `mode-tools.ts`, only `plan` populated) with `serverNamesForMode`
+  / `filterToolsForMode`, applied in `AgentLoopService.runLoop`: a `plan` agent
+  is denied the `interactions` server (no agent consultation, no user queries)
+  and the mutating storage tools, keeping storage reads, memory, and
+  `create_plan`. With no pause vector, the `create_plan` required-tool
+  enforcement now always drives a planning run to completion or a clean failure.
+- **Runtime plan-completion safety net.** `TaskOrchestrationService.handleAgentCompleted`
+  (called from `POST /internal/agent/:id/complete`) fails a task if a `plan`-mode
+  agent reaches `Completed` while the task is still `planning` with an empty plan
+  — the same `plannerDead` predicate `reconcileTask` uses, now applied at runtime
+  rather than only at restart. `resolveRequiredTools` logs at `error` when a mode
+  completion tool is missing from the loaded toolset (a wiring bug).
+- **Mode prompts reworded** to steer better tool use: invoke tools rather than
+  narrate them, use exact tool names (`describe_server` for signatures), and
+  right-size output (a short answer is a `summary`/`inline-text`, not a file).
+  The consultation prompt suffix is reframed toward a concise inline answer. See
+  `010.2.8.2 - task orchestration fixes.md`.
+- **Enumerable-value validation feedback.** A shared
+  `buildEnumValidationError(purposeOfTool, invalid[])` (`@lcp/shared`) reports
+  every invalid enumerable value at once, names the valid values in English, and
+  closes with a corrective retry instruction. Applied to `create_plan` (roles +
+  artifact types), `complete_assignment` (prepared types), and
+  `request_agent_consultation` (target role — the interactions MCP tool now
+  relays 4xx corrective messages via `relay4xxOrError`). Plan-mode agents also
+  receive the company **role roster** in their initial prompt
+  (`buildAvailableRolesMessage`), so they assign steps to real role slugs rather
+  than inventing names — found via live testing, where the planner had stopped
+  consulting and correctly invoked `create_plan` but with a hallucinated role.
+- **`create_plan` ends the planner run.** `create_plan` is the planner's
+  completion (as `complete_assignment` is an implementer's): `planTask` now marks
+  the plan assignment `succeeded` and completes the planner agent, so its
+  supervised loop exits on the next terminal-status check instead of looping to
+  `max_iterations`. Prevents a finished planner from hogging the model.
+- **Worker concurrency configurable.** `AGENT_WORKER_CONCURRENCY`
+  (`DEFAULT_AGENT_WORKER_CONCURRENCY = 5`) replaces the hard-coded value; set to
+  `1` when agents share one capacity-limited model (e.g. a single local LLM) so
+  parallel runs don't starve each other of model time.
+- **Forced tool calls + tools enabled from turn 1.** `buildAgentGraph` forwards
+  a mode-aware `toolChoice` to `bindTools`: `'required'` for `plan`/`implement`/
+  `qa` (they must end in a tool call — the model can't narrate one instead),
+  `'auto'` for `chat`. The **describe-then-reveal tool-schema gating**
+  (`ToolVisibilityTracker`, since 008.6) is **removed** — it cost round-trips and
+  let the model "forget" a tool after a few iterations; all mode-filtered tools
+  are now bound from turn 1 (compact schemas). Supersedes the 008.6 gating in
+  [ADR-013](ADR-013-prompt-assembly-context-management.md) and its inline docs
+  (agent-services / context-management / lcp-agent-special-cases /
+  lcp-mcp-tasks|interactions — full sweep deferred to 010.2.9).
+- **No knowledge service for empty-KB roles.** `AgentRagService.hasKnowledge`
+  (a cheap `EXISTS` check, no embedding) drops the `memory` server and skips RAG
+  retrieval for a role with no indexed chunks.

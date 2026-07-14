@@ -65,7 +65,10 @@ describe('AgentLoopService (integration)', () => {
         },
         {
           provide: AgentRagService,
-          useValue: { retrieve: jest.fn().mockResolvedValue([]) },
+          useValue: {
+            retrieve: jest.fn().mockResolvedValue([]),
+            hasKnowledge: jest.fn().mockResolvedValue(true),
+          },
         },
         {
           provide: McpClientService,

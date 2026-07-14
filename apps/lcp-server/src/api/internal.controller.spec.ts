@@ -15,8 +15,15 @@ describe('InternalController', () => {
     failAgent: jest.Mock;
     updateStorageChanges: jest.Mock;
   };
-  let taskOrchestration: { handleAgentFailed: jest.Mock };
-  let db: { getCompany: jest.Mock; findRoleByIdOrSlug: jest.Mock };
+  let taskOrchestration: {
+    handleAgentFailed: jest.Mock;
+    handleAgentCompleted: jest.Mock;
+  };
+  let db: {
+    getCompany: jest.Mock;
+    findRoleByIdOrSlug: jest.Mock;
+    listRoles: jest.Mock;
+  };
   let agentRepo: { findOneBy: jest.Mock };
   let roleRepo: { findBy: jest.Mock };
   let userRepo: { findBy: jest.Mock };
@@ -32,8 +39,13 @@ describe('InternalController', () => {
     };
     taskOrchestration = {
       handleAgentFailed: jest.fn().mockResolvedValue(undefined),
+      handleAgentCompleted: jest.fn().mockResolvedValue(undefined),
     };
-    db = { getCompany: jest.fn(), findRoleByIdOrSlug: jest.fn() };
+    db = {
+      getCompany: jest.fn(),
+      findRoleByIdOrSlug: jest.fn(),
+      listRoles: jest.fn().mockResolvedValue([]),
+    };
     agentRepo = { findOneBy: jest.fn() };
     roleRepo = { findBy: jest.fn() };
     userRepo = { findBy: jest.fn() };
@@ -221,6 +233,9 @@ describe('InternalController', () => {
       expect(pauseResume.completeAgent).toHaveBeenCalledWith(
         agentId,
         'My final answer.',
+      );
+      expect(taskOrchestration.handleAgentCompleted).toHaveBeenCalledWith(
+        agentId,
       );
     });
   });

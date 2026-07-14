@@ -89,9 +89,30 @@ describe('buildAgentGraph', () => {
 
     await graph.invoke({ messages: [new HumanMessage('Hi')] }, RUN_CONFIG);
 
-    expect(bindTools).toHaveBeenCalledWith([{ name: 'some_tool' }]);
+    expect(bindTools).toHaveBeenCalledWith([{ name: 'some_tool' }], {});
     expect(boundInvoke).toHaveBeenCalled();
     expect(unboundInvoke).not.toHaveBeenCalled();
+  });
+
+  it('forwards tool_choice to bindTools when provided', async () => {
+    const bindTools = jest
+      .fn()
+      .mockReturnValue(
+        makeModel(jest.fn().mockResolvedValue(new AIMessage(''))),
+      );
+
+    const graph = buildAgentGraph({
+      model: makeModel(jest.fn(), bindTools),
+      checkpointer: new MemorySaver(),
+      tools: [{ name: 'some_tool' } as unknown as DynamicStructuredTool],
+      toolChoice: 'required',
+    });
+
+    await graph.invoke({ messages: [new HumanMessage('Hi')] }, RUN_CONFIG);
+
+    expect(bindTools).toHaveBeenCalledWith([{ name: 'some_tool' }], {
+      tool_choice: 'required',
+    });
   });
 
   it('does not call bindTools when no tools are provided', async () => {

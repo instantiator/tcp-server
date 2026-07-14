@@ -271,5 +271,26 @@ describe('InteractionsToolsService', () => {
       expect(text).toContain('Error');
       expect(text).toContain(roleId);
     });
+
+    it('relays a 4xx corrective message (e.g. unknown role naming valid roles) so the model can retry', async () => {
+      const corrective =
+        'One value was not valid:\n- role: "ghost" is not one of the allowed values. Valid values are: chicken-assistant, cat-assistant.\nIf you still intend to consult that role, try again with corrected values for role.';
+      mockedAxios.post.mockRejectedValue({
+        response: { status: 404, data: { message: corrective } },
+      });
+
+      const text = await callTool(service, 'request_agent_consultation', {
+        agentId,
+        companyId,
+        roleSlug: 'ghost',
+        question: 'Is this legal?',
+      });
+
+      // Relayed verbatim as a normal (non-"Error:") result, naming valid roles.
+      expect(text).toContain(
+        'Valid values are: chicken-assistant, cat-assistant.',
+      );
+      expect(text).not.toContain('Error:');
+    });
   });
 });

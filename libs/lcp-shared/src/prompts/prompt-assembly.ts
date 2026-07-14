@@ -81,10 +81,9 @@ export function renderSystemPrompt(
 /**
  * Formats the services-available message for prompt part 3.
  * Each line gives the "when to use this" framing from {@link MCP_REGISTRY};
- * tool-level detail is deliberately omitted — a service's other tools only
- * become bound once the agent calls its `describe_server` tool (see
- * {@link ToolVisibilityTracker}), so restating them here would duplicate
- * what the model sees once it actually describes the service.
+ * tool-level detail is deliberately omitted — every tool's full schema is bound
+ * to the model from the first turn (so it already sees the parameters), and a
+ * service's `describe_server` tool provides richer per-tool docs on demand.
  */
 export function buildServicesMessage(
   serverNames: string[],

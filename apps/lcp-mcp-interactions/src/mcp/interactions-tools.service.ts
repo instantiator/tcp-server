@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import { z } from 'zod';
 import { interactionPrompts } from '../interactions-prompts';
 import { interactionToolDescriptions } from '../interactions-tool-descriptions';
@@ -26,6 +26,22 @@ function ok(text: string): ToolResult {
 
 function err(text: string): ToolResult {
   return { content: [{ type: 'text', text: `Error: ${text}` }] };
+}
+
+/**
+ * Relays a 4xx server error's message to the model as a normal (non-error)
+ * tool result so it can self-correct and retry; falls back to `fallback` for
+ * 5xx/transport errors it cannot act on. Mirrors lcp-mcp-tasks' `relayOrError`.
+ */
+function relay4xxOrError(e: unknown, fallback: string): ToolResult {
+  const axiosErr = e as AxiosError<{ message?: string | string[] }>;
+  const status = axiosErr.response?.status;
+  if (status && status >= 400 && status < 500) {
+    const raw = axiosErr.response?.data?.message;
+    const message = Array.isArray(raw) ? raw.join('; ') : raw;
+    if (message) return ok(message);
+  }
+  return err(fallback);
 }
 
 /**
@@ -304,7 +320,12 @@ export class InteractionsToolsService {
           );
         } catch (e) {
           this.logger.error(`request_agent_consultation failed: ${String(e)}`);
-          return err(
+          // A 4xx carries a corrective message (e.g. an unknown target role,
+          // naming the valid roles) — relay it verbatim as a normal tool result
+          // so the model can retry with a valid value, rather than a generic
+          // failure it can't act on.
+          return relay4xxOrError(
+            e,
             interpolate(interactionPrompts.error_consultation, {
               roleName: roleName ?? roleId ?? roleSlug ?? 'unknown role',
             }),

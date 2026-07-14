@@ -1,4 +1,7 @@
-import { assertRedisReachable } from '@lcp/shared';
+import {
+  assertRedisReachable,
+  DEFAULT_AGENT_WORKER_CONCURRENCY,
+} from '@lcp/shared';
 import {
   Injectable,
   Logger,
@@ -78,8 +81,13 @@ export class AgentWorkerService implements OnModuleInit, OnModuleDestroy {
       },
       {
         connection: { url: redisUrl },
-        // ponytail: move to config when per-role resource limits are addressed (see 003.3)
-        concurrency: 5,
+        // How many agent jobs run in parallel. Lower to 1 (via
+        // AGENT_WORKER_CONCURRENCY) when agents share one capacity-limited
+        // model endpoint, e.g. a single local LLM, so parallel runs don't
+        // starve each other of model time.
+        concurrency:
+          this.config.get<number>('AGENT_WORKER_CONCURRENCY') ??
+          DEFAULT_AGENT_WORKER_CONCURRENCY,
         // BullMQ's own default (30s) is far shorter than a single LLM turn can
         // take with a slow local model — the worker auto-renews the lock well
         // before it expires, but a transient Redis hiccup during any one of

@@ -31,6 +31,39 @@ export interface LcpArtifact {
   value: string;
 }
 
+/** Common near-miss spellings an LLM produces, mapped to the canonical type. */
+const ARTIFACT_TYPE_ALIASES: Record<string, LcpArtifactType> = {
+  text: 'inline-text',
+  inline: 'inline-text',
+  string: 'inline-text',
+};
+
+/**
+ * Normalises a caller-supplied artifact `type` to its canonical form so common
+ * LLM near-misses are accepted instead of rejected: case is folded, spaces and
+ * underscores become hyphens (`inline_text` → `inline-text`), and a few word
+ * aliases map through {@link ARTIFACT_TYPE_ALIASES} (`text` → `inline-text`).
+ * An unrecognised value is returned normalised (still invalid — the caller's
+ * validation then reports it against the allowed set).
+ */
+export function canonicalArtifactType(raw: string): string {
+  const normalised = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-');
+  return ARTIFACT_TYPE_ALIASES[normalised] ?? normalised;
+}
+
+/** Returns a copy of `artifacts` with each `type` run through {@link canonicalArtifactType}. */
+export function canonicaliseArtifacts<T extends LcpArtifact>(
+  artifacts: T[],
+): T[] {
+  return artifacts.map((a) => ({
+    ...a,
+    type: canonicalArtifactType(a.type) as LcpArtifactType,
+  }));
+}
+
 /** An artifact usable as task materials: an uploaded file, a promoted assignment output, or inline text. */
 export type LcpMaterialArtifact = LcpArtifact & {
   type: 'task-materials-path' | 'assignment-completed-path' | 'inline-text';

@@ -573,6 +573,102 @@ describe('TaskOrchestrationService', () => {
     });
   });
 
+  // --- handleAgentCompleted -------------------------------------------------
+
+  describe('handleAgentCompleted', () => {
+    it('fails a still-planning task when a planner completes with no plan', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, { status: 'planning' });
+      const plan = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        mode: 'plan',
+        status: 'in-progress',
+      });
+      const agent = await agentRepo.save(
+        agentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          assignmentId: plan.id,
+          initialPrompt: 'x',
+        }),
+      );
+
+      await service.handleAgentCompleted(agent.id);
+
+      const taskAfter = (await taskRepo.findOneBy({ id: task.id }))!;
+      expect(taskAfter.status).toBe('failed');
+      expect(taskAfter.failureReason).toContain('without producing a plan');
+    });
+
+    it('is a no-op when the planner produced a plan (task already in-progress)', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, { status: 'in-progress' });
+      const plan = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        mode: 'plan',
+        status: 'succeeded',
+      });
+      // The plan the planner created: one implement assignment.
+      await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        mode: 'implement',
+        orderIndex: 0,
+        status: 'ready',
+      });
+      const agent = await agentRepo.save(
+        agentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          assignmentId: plan.id,
+          initialPrompt: 'x',
+        }),
+      );
+
+      await service.handleAgentCompleted(agent.id);
+
+      expect((await taskRepo.findOneBy({ id: task.id }))!.status).toBe(
+        'in-progress',
+      );
+    });
+
+    it('does nothing for a non-planner (implement) completion', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, { status: 'in-progress' });
+      const step = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        mode: 'implement',
+        orderIndex: 0,
+        status: 'in-qa',
+      });
+      const agent = await agentRepo.save(
+        agentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          assignmentId: step.id,
+          initialPrompt: 'x',
+        }),
+      );
+
+      await expect(
+        service.handleAgentCompleted(agent.id),
+      ).resolves.toBeUndefined();
+      expect((await taskRepo.findOneBy({ id: task.id }))!.status).toBe(
+        'in-progress',
+      );
+    });
+  });
+
   // --- reconcileTask --------------------------------------------------------
 
   describe('reconcileTask', () => {

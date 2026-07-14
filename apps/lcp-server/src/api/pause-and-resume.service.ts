@@ -14,9 +14,9 @@ import { ConversationService } from './conversation.service';
 
 const CONSULTATION_PROMPT_SUFFIX = [
   '',
-  'This is a consultation request from another agent. Provide a complete, concise answer.',
-  'If you create output files, reference them in your final answer.',
-  'Call `tasks__complete_assignment` with your answer as the summary when done.',
+  'This is a consultation from another agent — usually a question that needs your expertise, not a document to produce.',
+  'Answer it concisely and completely, and return your answer as the `summary` when you complete. You do not need to create any files; only do so if the question genuinely calls for a document, and if you do, reference it in your summary.',
+  'When done, actually invoke `tasks__complete_assignment` with your answer as the summary — writing the answer out as text is not enough on its own.',
 ].join('\n');
 
 /**
