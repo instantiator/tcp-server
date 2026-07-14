@@ -17,11 +17,11 @@ LCP manages one or more companies of AI agents that collaborate to complete task
 
 ### Common usage
 
-A task is initiated by the user, describing the output. This is handed to a planner agent, which creates a plan - assigning steps in the plan to specific agents.
+A task for the Company is initiated by the user. This is handed to a planner Agent, which creates a Plan - with Assignments for specific Agents.
 
-Each assignment is handed to its agent, which completes the assignment. A QA agent reviews the assignment outputs. If approved, the assignment is completed, and the next assignment begins.
+Each Assignment is handed to its Agent, which completes the Assignment. A QA Agent reviews the Assignment outputs. If approved, the Assignment is completed, and the next Assignment begins.
 
-When all assignments in the plan are complete, a finalisation agent runs - checking and preparing the final task outputs.
+When all Assignments in the Plan are complete, a finalisation Agent runs - checking and preparing the final Task outputs.
 
 ### Simplified architecture
 
