@@ -1,4 +1,4 @@
-# First-time Setup Checklist
+# Developer setup checklist
 
 Work through this list top-to-bottom on a fresh machine. Each section links to
 the relevant documentation where more detail is available.

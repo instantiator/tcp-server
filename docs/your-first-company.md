@@ -2,37 +2,71 @@
 
 Once you have prepared your deployment with the [setup checklist](setup-checklist.md), you can create and test your first company.
 
-## 0. Test your set up
+## 0. Prepare your system
 
-### 0.0 Launch a dev instance
+### 0.0 Prerequisites
+
+> [!NOTE]
+> These are the bare minimum pre-requisites. Developers should follow steps at: [Developer setup checklist](./setup-checklist.md)
+
+> [!TIP]
+> The scripts in this repository use the `bash` shell by default. Run on a system with `bash` available - ie. Mac OS or Linux.
+
+1. [Install Docker](https://docs.docker.com/get-started/get-docker/)
+
+   ```bash
+   # If you prefer to use Homebrew, here's the invocation
+   brew install --cask docker-desktop
+   ```
+
+2. [Install NodeJS](https://nodejs.org/en/download)
+
+   ```bash
+   # If you prefer to use Homebrew, here's the invocation
+   brew install node
+   ```
+
+3. Clone this repository
+
+   ```bash
+   git clone https://github.com/instantiator/lcp-server.git
+   ```
+
+4. Install packages
+
+   ```bash
+   cd lcp-server
+   npm install
+   ```
+
+### 0.1 Launch a dev instance
 
 The dev instance is much like a production instance. It's launched with docker compose and has all services, including an OIDC provider (keycloak). This is configured to have an `admin` user for the `master`[^master] realm, and a test user for the `lcp` real.
 
-[^master]: I guess keycloak missed the memo around the time tech services moved away from master/slave terminology, over to `main` or `trunk`. My personal take: The intention is more important than the words, but I appreciate it's not ideal because even good intentions can evoke bad times. Let's do better in future.
+[^master]: I guess keycloak missed the memo around the time tech services moved away from master/slave terminology. Let's do better in future.
 
 ```bash
 scripts/start-dev.sh
 ```
 
-The `lcp` realm is created, and a couple of accounts are available by default:
+The `lcp` realm is created with a default account, if not already available:
 
-| Realm    | Username | Default password |
-| -------- | -------- | ---------------- |
-| `master` | `admin`  | `admin`          |
-| `lcp`    | `test`   | `test`           |
+| Realm | Username | Password |
+| ----- | -------- | -------- |
+| `lcp` | `test`   | `test`   |
 
 For more about working with keycloak, see:
 
 - [Keycloak setup](./keycloak-setup.md)
 
-### 0.1 Service healthchecks
+### 0.2 Service healthchecks
 
 Check the `/health` pages for the lcp-server, and lcp-agent applications.
 
 - http://localhost:3000/health
 - http://localhost:3001/health
 
-### 0.2 Check the `test` account
+### 0.3 Check the `test` account
 
 A `test` account is created for the dev server, and stored in keycloak. You can confirm that it's working by retrieving an access token:
 
@@ -42,9 +76,7 @@ A `test` account is created for the dev server, and stored in keycloak. You can 
 
 You should see a token returned - it _looks like_ a long string of random characters.
 
-## 1. Create a company
-
-### 1.0 Set up your environment config
+### 0.4 Set up your environment config
 
 Create a `.env` file for your setup. The easiest way to do this is to copy `.env.testing`
 
@@ -54,7 +86,7 @@ cp .env.testing .env
 
 You can use this to modify default configuration - most of it is sufficient for a dev or testing environment.
 
-### 1.1 Set LLM configuration
+### 0.5 Set LLM configuration
 
 The LLM used for each role is determined by checking, in order:
 
@@ -64,9 +96,9 @@ The LLM used for each role is determined by checking, in order:
 
 _The first found is used._ This allows you to individualise the configuration for your agents (eg. coding agents might need a more powerful, coding-capable model, and others may be able to work with lighter, simpler models).
 
-For the simplest configuration, set the `LLM_*` variables in your `.env` file, and leave `$.llmConfig` off both the company and the role.
+For the simplest configuration, set the `LLM_*` variables in your `.env` file.
 
-See `.env.example` for all available environment variables.
+See `.env.example` for the available environment variables.
 
 <details>
 <summary><b>LM Studio example...</b></summary>
@@ -83,7 +115,9 @@ LLM_API_KEY=<your API key goes here>
 
 </details>
 
-### 1.2 Create a new company
+## 1. Create a company
+
+### 1.1 Create the company
 
 `scripts/test-data/simple-company.json` is a minimal company definition with no LLM config — it relies on the environment-level fallback.
 
@@ -115,7 +149,7 @@ The response will be a full instance of the company, _including its `id`_ - indi
 > [!TIP]
 > You can modify a company by passing in only the fields you want to change with the `set-company` verb. Target it with `--company-slug test-company` (or `--company-id`/a body `id`) — you don't need to look up its id first.
 
-### 1.3 List all companies
+### 1.2 List all companies
 
 List the companies available with the `list-companies` verb:
 
@@ -136,7 +170,7 @@ You'll get a condensed list of companies:
 ]
 ```
 
-### 1.4 Create some roles
+### 1.3 Create some roles
 
 Create a role in the new company with the `set-role` verb. Provide your company's slug in the `--company-slug` field to let it know which company to associate the role with:
 
@@ -151,7 +185,7 @@ cat scripts/test-data/cat-assistant.json | lcp-cli.sh --username test --password
 > [!TIP]
 > You can modify a role by passing in only the fields you want to change - either piped in, or with the `--input` parameter (provide your input as a JSON object). Target it with `--company-slug test-company --role-slug chicken-assistant` (or a body `id`) — you do not need to look up its id first.
 
-### 1.5 List all roles
+### 1.4 List all roles
 
 List the roles available with the `list-roles` verb:
 
@@ -200,11 +234,11 @@ It'll give you a list of all roles in each company:
 ]
 ```
 
-### 1.6 Talk to an agent
+### 1.5 Talk to an agent
 
-Using the `chat` verb allows you create an **agent** from a defined **role** and talk to it.
+Using the `chat` verb allows you create an **agent** from a defined **role** and talk to it. It'll enter chat mode, where you can ask it about itself, other agents, and shared resources.
 
-### 1.6.0 Options
+### 1.5.0 Options
 
 The `chat` verb has several options:
 
@@ -217,7 +251,7 @@ The `chat` verb has several options:
 > [!NOTE]
 > When neither the role nor the company carries an explicit LLM config, the CLI will display `LLM: (using server environment default)`. The actual provider and model are determined by the `LLM_PROVIDER` / `LLM_MODEL` env vars on the server.
 
-### 1.6.1 Interactive mode (TUI)
+### 1.5.1 Interactive mode (TUI)
 
 TUI mode is the easiest way to manually interact with agents.
 
@@ -246,7 +280,7 @@ In the example below, the TUI is launched with a company slug.
 | ![Asking a question of the chicken assistant](./screenshots/002.chat.tui.chicken-assistant-input.png) | Each new agent is given a tab. Switch between tabs with `tab`. Type your question or prompt for the agent and press enter. |
 | ![Chicken assistant response](./screenshots/003.chat.tui.chicken-assistant-response.png)              | The agent will respond to your request. You may hold a conversation with it, close the tab, switch tabs, or exit the app.  |
 
-### 1.6.2 Non-TUI mode
+### 1.5.2 Non-TUI mode
 
 > [!TIP]
 > Using `chat --no-tui --query <query>` means your agents' answers are easily read by other tools. You can include it in pipes, or redirect the answer into a file for analysis later.
@@ -394,7 +428,7 @@ But tell you what—if this company isn't going to be testing for grubs or roost
 
 </details>
 
-### 1.7 Agents that consult each other
+### 1.6 Agents that consult each other
 
 If necessary, an agent may choose to pause mid-chat, and consult another role.
 
@@ -413,7 +447,7 @@ If the consultation fails (eg. the consulted agent errors, times out, or never s
 > [!NOTE]
 > See [cross-agent-consultations.md](cross-agent-consultations.md) for more information about consultations and user queries.
 
-### 1.8 User queries
+### 1.7 User queries
 
 Agents may also choose to initiate a user query. These are asynchronous messages sent to users known to the system.
 

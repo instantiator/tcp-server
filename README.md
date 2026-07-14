@@ -6,14 +6,78 @@ LCP manages one or more companies of AI agents that collaborate to complete task
 
 ## Key concepts
 
-| Entity     | Definition                                                                      |
-| ---------- | ------------------------------------------------------------------------------- |
-| Company    | A collection roles, with shared resources, that can be tasked.                  |
-| Role       | A dataset giving an agent a set of expertise to draw from.                      |
-| Agent      | An instance of an LLM, given a role, and an assignment.                         |
-| Task       | A high level task for a company to achieve.                                     |
-| Plan       | A series of assignments designed to complete a task.                            |
-| Assignment | A smaller piece of a task, given to an agent with a specified role to complete. |
+| Entity     | Definition                                                                     |
+| ---------- | ------------------------------------------------------------------------------ |
+| Company    | A collection Roles, with shared resources, that can be tasked.                 |
+| Role       | A dataset giving an Agent a set of expertise to draw from.                     |
+| Agent      | An instance of an LLM, given a Role, and an Assignment.                        |
+| Task       | A high level task for a company to achieve.                                    |
+| Plan       | A series of Assignments designed to complete a task.                           |
+| Assignment | A smaller piece of a Task, given to an Agent with a specific Role to complete. |
+
+### Common usage
+
+A task is initiated by the user, describing the output. This is handed to a planner agent, which creates a plan - assigning steps in the plan to specific agents.
+
+Each assignment is handed to its agent, which completes the assignment. A QA agent reviews the assignment outputs. If approved, the assignment is completed, and the next assignment begins.
+
+When all assignments in the plan are complete, a finalisation agent runs - checking and preparing the final task outputs.
+
+### Simplified architecture
+
+```mermaid
+flowchart LR
+  User(["User"])
+  CLI["lcp-cli"]
+
+  subgraph LCP["LCP"]
+    subgraph Server["LCP Server"]
+      API["API"]
+      subgraph DB["Database"]
+        Company["Company"]
+        Role["Role"]
+        Assignment["Assignment"]
+        Agent["Agent"]
+        Task["Task"]
+        Company -.->|belongs to| Role
+        Role -.->|has| Assignment
+        Task -.->|belongs to| Assignment
+        Assignment -.->|has| Agent
+      end
+      API --> Orchestration
+      Orchestration --> DB
+    end
+
+    subgraph AgentSvc["LCP Agent"]
+      AgentLoop["Agent loop"]
+    end
+
+    subgraph Services["MCP Services"]
+      direction TB
+      Storage[("Storage")]
+      Memory[("Memory")]
+      Tasks["Tasks"]
+      Interactions["Interactions"]
+      Storage ~~~ Memory ~~~ Tasks ~~~ Interactions
+    end
+
+    AgentLoop --> Services
+      Agent --> Queue[("Queue")]
+  end
+
+  User --> CLI
+  CLI -->|request| API
+  Queue --> AgentLoop
+```
+
+> ### Simplified summary
+>
+> - A user talks to LCP using **LCP CLI**, which calls **LCP Server**'s API.
+> - Companies, Roles, Agents, Tasks, and Assignments are persisted in the database.
+> - An agent is a running instance combining a role and assignment, executing in **LCP Agent**.
+> - Agents have access to **MCP Services** administering shared storage, individual knowledge, tasks and assignments.
+
+### Applications
 
 | Application          | Purpose                                                                                           |
 | -------------------- | ------------------------------------------------------------------------------------------------- |
@@ -25,46 +89,13 @@ LCP manages one or more companies of AI agents that collaborate to complete task
 | lcp-mcp-memory       | MCP tools allowing agents to retrieve memory from their stored expertise.                         |
 | lcp-mcp-storage      | MCP tools allowing agents interact with shared storage.                                           |
 
-```mermaid
-flowchart LR
-  User(["User"])
-  CLI["lcp-cli"]
-
-  subgraph LCP["LCP"]
-    subgraph Server["lcp-server"]
-      API["API"]
-      subgraph DB["Database"]
-        Company["Company"]
-        Role1["Role"]
-        Role2["Role"]
-        Company --- Role1
-        Company --- Role2
-      end
-      API --> DB
-    end
-
-    subgraph AgentSvc["lcp-agent"]
-      Agent["Agent"]
-    end
-
-    Storage[("Shared storage")]
-
-    Server --- Storage
-    AgentSvc --- Storage
-  end
-
-  User --> CLI
-  CLI -->|request| API
-  Role1 -.->|runs as| Agent
-```
-
-> A user talks to LCP through `lcp-cli`, which calls lcp-server's API. Companies and their roles are persisted in the database; an agent is a running instance of one role, executing in lcp-agent.
-
 ## Getting started
 
-See **[Setup checklist](docs/setup-checklist.md)** for a step-by-step first-time setup guide.
+Follow the steps in **[Your first company](docs/your-first-company.md)** to populate and interact with a simple agent in a company.
 
-**Quick start** (prerequisites: Docker, Node.js 24):
+### Quick start (very)
+
+> Prerequisites: Docker, Node.js 24
 
 > [!NOTE]
 > The `start-dev.sh` script builds and launches LCP with an instance of Keycloak to manage authorisation. This will be configured with an `lcp` realm, and a default user. It can take several minutes to launch.
@@ -75,15 +106,20 @@ See **[Setup checklist](docs/setup-checklist.md)** for a step-by-step first-time
 ```bash
 git clone --recurse-submodules https://github.com/instantiator/lcp-server.git && cd lcp-server
 cp .env.example .env
+```
+
+You will need an LLM service to provide inference. Once you've settled on one, update `.env` with the service details.
+
+```bash
 npm install
 scripts/run-dev.sh
 ```
 
-### Tutorial
-
-Follow the steps in **[Your first company](docs/your-first-company.md)** to populate and interact with a simple agent in a company.
-
 ---
+
+# Developer notes
+
+See **[Developer setup checklist](docs/setup-checklist.md)** for a step-by-step first-time setup guide.
 
 ## System architecture
 
@@ -98,7 +134,7 @@ Follow the steps in **[Your first company](docs/your-first-company.md)** to popu
 | Task queue            | Redis (BullMQ)                 |
 | Schema export         | ts-json-schema-generator       |
 
-See [docs/ADRs/](docs/ADRs/) for decisions on upcoming components (agent runner, memory, orchestration).
+See [docs/ADRs/](docs/ADRs/) for system design decisions.
 
 ### Main service
 
@@ -157,7 +193,7 @@ flowchart TD
   McpTasks -->|HTTP /internal/*\nX-Internal-Api-Key| LcpServer
 ```
 
-> ### Service overview
+> #### Service overview
 >
 > - **lcp-server** is the REST API and orchestration layer
 > - **lcp-server** communicates directly with the authorisation service, and storage service
@@ -234,8 +270,6 @@ flowchart TD
 Key architectural decisions are documented as ADRs in [docs/ADRs/](docs/ADRs/).
 
 See [docs/index.md](docs/index.md) for the full list with implementation status.
-
----
 
 ## Testing
 
