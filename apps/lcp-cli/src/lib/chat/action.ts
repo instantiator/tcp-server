@@ -1,3 +1,4 @@
+import { EntityRefOpts } from '../core/entity-ref';
 import { GlobalOptions } from '../core/cli-options';
 import { Tui } from '../tui/tui';
 import { shouldUseTui, validateChatFlags } from './flags';
@@ -9,11 +10,7 @@ import {
   runTuiInteractive,
 } from './wiring';
 
-export interface ChatCmdOpts {
-  roleId?: string;
-  roleSlug?: string;
-  companyId?: string;
-  companySlug?: string;
+export interface ChatCmdOpts extends EntityRefOpts {
   query?: string;
   hideReasoning?: boolean;
   tui?: boolean;

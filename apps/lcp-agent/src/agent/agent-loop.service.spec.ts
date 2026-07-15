@@ -322,6 +322,41 @@ describe('AgentLoopService', () => {
     expect(updated.threadId).toBe(agent.id);
   });
 
+  it('stops the loop without writing output or notifying when the agent is cancelled mid-run', async () => {
+    const { agent } = await seedAgentAndRole();
+    // Simulates a concurrent task cancellation: the agent's status flips to
+    // Cancelled (as TaskOrchestrationService.cancelTask does) partway
+    // through the streamed turn, mirroring checkTerminalStatus's DB poll.
+    const stubGraph = {
+      streamEvents: jest.fn().mockImplementation(() => ({
+        [Symbol.asyncIterator]: async function* () {
+          for (const ev of SUCCESS_EVENTS) yield ev;
+          await agentRepo.update(agent.id, { status: AgentStatus.Cancelled });
+        },
+      })),
+      getState: jest
+        .fn()
+        .mockResolvedValue({ values: { messages: [] }, next: [] }),
+      updateState: jest.fn().mockResolvedValue({}),
+    };
+    jest.mocked(StateGraph).mockImplementation(
+      () =>
+        ({
+          addNode: jest.fn().mockReturnThis(),
+          addEdge: jest.fn().mockReturnThis(),
+          compile: jest.fn().mockReturnValue(stubGraph),
+        }) as unknown as InstanceType<typeof StateGraph>,
+    );
+
+    await service.run(agent.id, undefined, new AbortController());
+
+    const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+    expect(updated.status).toBe(AgentStatus.Cancelled);
+    expect(updated.output).toBeNull();
+    expect(notifyComplete).not.toHaveBeenCalled();
+    expect(notifyFailed).not.toHaveBeenCalled();
+  });
+
   it('checks context budget before running, using the resolved window size and loaded tools', async () => {
     const { agent } = await seedAgentAndRole();
 

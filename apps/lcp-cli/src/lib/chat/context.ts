@@ -1,5 +1,6 @@
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest } from '../core/api';
+import { EntityRefOpts, resolveRoleId } from '../core/entity-ref';
 import { resolveSession } from '../auth/token';
 
 interface LlmConfig {
@@ -34,69 +35,52 @@ export interface ChatContext {
   roleName: string;
 }
 
-interface ChatContextCmdOpts {
-  roleId?: string;
-  roleSlug?: string;
-  companyId?: string;
-  companySlug?: string;
-}
-
 /**
  * Resolves the session token and company/role identifiers for a chat
- * session. A role is identified either by `--role-id` alone, or by
- * `--role-slug` scoped to a company (`--company-id`/`--company-slug`) — the
- * company is then derived from the role (mirroring the agent's own
- * LLM-config resolution: role → company default → server env fallback).
- * With only a company given, no role/LLM config exists yet. Prints the
- * startup banner as a side effect.
+ * session. A role is identified by exactly one of `--role`, `--role-id`,
+ * `--role-slug` — the company is then derived from the role (mirroring the
+ * agent's own LLM-config resolution: role → company default → server env
+ * fallback). With only a company given, no role/LLM config exists yet.
+ * Prints the startup banner as a side effect.
  */
 export async function resolveChatContext(
   opts: GlobalOptions,
-  cmdOpts: ChatContextCmdOpts,
+  cmdOpts: EntityRefOpts,
   useTui: boolean,
 ): Promise<ChatContext> {
   const { token, refreshToken } = await resolveSession({
     ...opts,
     baseUrl: opts.lcpServer,
   });
+  const api = apiOptions(opts, token);
+
+  const roleGiven = Boolean(cmdOpts.role || cmdOpts.roleId || cmdOpts.roleSlug);
 
   let companyId: string;
   let roleId: string | undefined;
   let roleName = '';
   let llmConfig: LlmConfig | null | undefined;
-  if (cmdOpts.roleId) {
+  if (roleGiven) {
+    // resolveRoleId enforces (with the same error validateChatFlags
+    // pre-checks) that a role slug is scoped to a resolvable company.
+    roleId = await resolveRoleId(api, cmdOpts);
     const role = await apiRequest<RoleRecord>(
-      apiOptions(opts, token),
+      api,
       'GET',
-      `/api/role/${cmdOpts.roleId}`,
+      `/api/role/${roleId}`,
     );
-    roleId = role.id;
-    companyId = role.companyId;
-    roleName = role.name;
-    llmConfig = role.llmConfig;
-  } else if (cmdOpts.roleSlug) {
-    // Role slugs are unique only within a company, so resolving one always
-    // requires a company identifier — enforced by validateChatFlags before
-    // this runs. The company routes accept a UUID or a slug directly.
-    const companyIdentifier = cmdOpts.companyId ?? cmdOpts.companySlug!;
-    const role = await apiRequest<RoleRecord>(
-      apiOptions(opts, token),
-      'GET',
-      `/api/company/${companyIdentifier}/roles/by-slug/${cmdOpts.roleSlug}`,
-    );
-    roleId = role.id;
     companyId = role.companyId;
     roleName = role.name;
     llmConfig = role.llmConfig;
   } else {
-    companyId = cmdOpts.companyId ?? cmdOpts.companySlug!;
+    // Company routes accept a UUID or a slug directly, so whichever was
+    // given is passed straight through to the single detail-fetch call
+    // below — no separate resolution round trip needed.
+    companyId = cmdOpts.companyId ?? cmdOpts.companySlug ?? cmdOpts.company!;
   }
 
-  // The company GET route accepts a UUID or a slug directly, so the lookup
-  // above works either way — this normalises companyId to the real UUID
-  // regardless of which form was used to resolve it.
   const company = await apiRequest<CompanyRecord>(
-    apiOptions(opts, token),
+    api,
     'GET',
     `/api/company/${companyId}`,
   );

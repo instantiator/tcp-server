@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { getGlobalOptions } from '../lib/core/cli-options';
+import { addCompanyOptions, addRoleOptions } from '../lib/core/entity-ref';
 import {
   estimateContextWindowAction,
   EstimateContextWindowOpts,
@@ -7,18 +8,14 @@ import {
 
 /** Registers the `estimate-context-window` command. */
 export function registerEstimateContextWindow(program: Command): void {
-  program
+  const cmd = program
     .command('estimate-context-window')
     .description(
       "Estimate a role's worst-case initial-prompt token footprint against its LLM's context window",
-    )
-    .option('-c, --company-id <uuid>', 'Company UUID')
-    .option('--company-slug <slug>', 'Company slug, instead of --company-id')
-    .option('-r, --role-id <uuid>', 'Role UUID')
-    .option(
-      '--role-slug <slug>',
-      'Role slug, instead of --role-id (requires --company-id or --company-slug)',
-    )
+    );
+  addCompanyOptions(cmd);
+  addRoleOptions(cmd);
+  cmd
     .option(
       '--from-file <path>',
       'Read {"company":...,"role":...} from a JSON file instead of a live server',

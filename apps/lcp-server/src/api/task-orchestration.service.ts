@@ -791,6 +791,57 @@ export class TaskOrchestrationService
     });
   }
 
+  /**
+   * Cascades a task cancellation (the task itself was already atomically
+   * moved to `cancelled` by {@link TaskService.cancel}) to its still-live
+   * assignments, then to their working agents — in that order, so an
+   * observer reading state mid-cascade never sees an agent stop before its
+   * assignment (or an assignment stop before the task) reflects it.
+   *
+   * Idempotent per assignment/agent: each uses its own atomic conditional
+   * UPDATE, so re-running (e.g. a duplicate call) only touches rows still in
+   * a non-terminal state.
+   */
+  async cancelTask(task: LcpTask): Promise<void> {
+    const assignments = await this.assignmentRepo.find({
+      where: { taskId: task.id },
+    });
+    const terminalAssignment: LcpAssignmentStatus[] = [
+      'succeeded',
+      'failed',
+      'cancelled',
+    ];
+    for (const assignment of assignments) {
+      if (terminalAssignment.includes(assignment.status)) continue;
+      const claimed = await claimStatus(
+        this.assignmentRepo,
+        assignment.id,
+        assignment.status,
+        'cancelled',
+      );
+      if (claimed === 0) continue;
+      assignment.status = 'cancelled';
+      await this.recordAssignmentState(assignment, 'task cancelled');
+
+      if (assignment.agentId) {
+        await this.agentRepo
+          .createQueryBuilder()
+          .update(LcpAgent)
+          .set({ status: AgentStatus.Cancelled })
+          .where('id = :id', { id: assignment.agentId })
+          .andWhere('status NOT IN (:...terminal)', {
+            terminal: [
+              AgentStatus.Completed,
+              AgentStatus.Failed,
+              AgentStatus.Cancelled,
+            ],
+          })
+          .execute();
+      }
+    }
+    await this.recordTaskState(task, 'cancelled', 'task cancelled');
+  }
+
   /** Fails a task: atomically claims a non-terminal status → `failed`, records the reason. */
   private async failTask(taskId: UUID, reason: string): Promise<void> {
     const claimed = await this.taskRepo

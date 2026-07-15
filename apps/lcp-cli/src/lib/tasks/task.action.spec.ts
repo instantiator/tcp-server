@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import { apiRequest, apiUpload } from '../core/api';
 import { resolveToken } from '../auth/token';
 import {
+  cancelTaskAction,
   createTaskAction,
   getTaskAction,
   listTasksAction,
@@ -224,6 +225,27 @@ describe('getTaskAction', () => {
       expect.anything(),
       'GET',
       `/api/task/${task.id}`,
+    );
+  });
+});
+
+describe('cancelTaskAction', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockedResolveToken.mockResolvedValue('token');
+    jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+  });
+
+  it('cancels the task by id', async () => {
+    const cancelled = { ...task, status: 'cancelled' };
+    mockedApiRequest.mockResolvedValueOnce(cancelled);
+
+    await cancelTaskAction(opts, { taskId: task.id });
+
+    expect(mockedApiRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      'POST',
+      `/api/task/${task.id}/cancel`,
     );
   });
 });

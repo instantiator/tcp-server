@@ -10,6 +10,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import request from 'supertest';
 import { App } from 'supertest/types';
+import type { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { AppModule } from '../../../apps/lcp-server/src/app.module';
 import { makeTestJwt } from '../helpers/test-jwt';
@@ -22,8 +23,8 @@ describe('AgentController (e2e)', () => {
   let assignmentRepo: Repository<LcpAssignment>;
   let auditRepo: Repository<AuditEvent>;
   let jwt: string;
-  let companyId: string;
-  let roleId: string;
+  let companyId: UUID;
+  let roleId: UUID;
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -121,6 +122,97 @@ describe('AgentController (e2e)', () => {
     it('returns 404 for an unknown agent id', () =>
       request(app.getHttpServer())
         .get('/api/agent/00000000-0000-0000-0000-000000000000')
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(404));
+  });
+
+  describe('GET /api/agent', () => {
+    it('returns 400 without companyId, roleId, or assignmentId', () =>
+      request(app.getHttpServer())
+        .get('/api/agent')
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(400));
+
+    it('lists agents for a company, defaulting to active statuses', async () => {
+      const created = (
+        await request(app.getHttpServer())
+          .post('/api/agent/chat/start')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({ companyId, roleId })
+          .expect(201)
+      ).body as LcpAgent;
+
+      const res = await request(app.getHttpServer())
+        .get(`/api/agent?companyId=${companyId}`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(200);
+      expect((res.body as LcpAgent[]).map((a) => a.id)).toContain(created.id);
+    });
+
+    it('filters by an explicit status', async () => {
+      const created = (
+        await request(app.getHttpServer())
+          .post('/api/agent/chat/start')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({ companyId, roleId })
+          .expect(201)
+      ).body as LcpAgent;
+
+      const res = await request(app.getHttpServer())
+        .get(`/api/agent?companyId=${companyId}&status=completed`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(200);
+      expect((res.body as LcpAgent[]).map((a) => a.id)).not.toContain(
+        created.id,
+      );
+    });
+  });
+
+  describe('GET /api/agent/:id/history', () => {
+    it('returns the audit rows recorded for the agent, oldest first', async () => {
+      const created = (
+        await request(app.getHttpServer())
+          .post('/api/agent/chat/start')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({ companyId, roleId })
+          .expect(201)
+      ).body as LcpAgent;
+
+      await auditRepo.save(
+        auditRepo.create({
+          companyId,
+          role: 'engineer',
+          agentId: created.id,
+          eventType: 'state_change',
+          payload: { newStatus: 'running', reason: 'test' },
+        }),
+      );
+      await auditRepo.save(
+        auditRepo.create({
+          companyId,
+          role: 'engineer',
+          agentId: created.id,
+          eventType: 'agent_loop_completion',
+          payload: { summary: 'done' },
+        }),
+      );
+
+      const res = await request(app.getHttpServer())
+        .get(`/api/agent/${created.id}/history`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(200);
+      const rows = res.body as AuditEvent[];
+      // /chat/start itself records a 'chat session created' state_change
+      // first, so the two rows added above land after it, oldest first.
+      expect(rows).toHaveLength(3);
+      expect(rows[1].eventType).toBe('state_change');
+      expect(rows[1].payload).toMatchObject({ reason: 'test' });
+      expect(rows[2].eventType).toBe('agent_loop_completion');
+    });
+
+    it('returns 404 for an unknown agent id', () =>
+      request(app.getHttpServer())
+        .get('/api/agent/00000000-0000-0000-0000-000000000000/history')
         .set('Authorization', `Bearer ${jwt}`)
         .expect(404));
   });

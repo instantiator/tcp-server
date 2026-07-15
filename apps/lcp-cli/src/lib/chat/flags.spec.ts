@@ -65,20 +65,20 @@ describe('validateChatFlags', () => {
 
   it('rejects --role-slug without a company', () => {
     expect(validateChatFlags({ roleSlug: 'analyst' }, true)).toMatch(
-      /--role-slug requires --company-id or --company-slug/,
+      /requires --company/,
     );
   });
 
   it('rejects --role-id combined with --role-slug', () => {
     expect(
       validateChatFlags({ roleId: 'r1', roleSlug: 'analyst' }, true),
-    ).toMatch(/not both/);
+    ).toMatch(/pass only one of --role/);
   });
 
   it('rejects --company-id combined with --company-slug', () => {
     expect(
       validateChatFlags({ companyId: 'c1', companySlug: 'acme' }, true),
-    ).toMatch(/not both/);
+    ).toMatch(/pass only one of --company/);
   });
 
   it('rejects --role-id combined with a company flag (role-id already implies its company)', () => {
@@ -92,5 +92,47 @@ describe('validateChatFlags', () => {
     expect(validateChatFlags({ companySlug: 'acme' }, false)).toMatch(
       /requires? a tty|full-screen tui/i,
     );
+  });
+
+  it('accepts a combined --role given as a UUID, TUI or not', () => {
+    const uuid = '11111111-2222-3333-4444-555555555555';
+    expect(validateChatFlags({ role: uuid }, true)).toBeNull();
+    expect(validateChatFlags({ role: uuid }, false)).toBeNull();
+  });
+
+  it('accepts a combined --role slug scoped by a combined --company', () => {
+    expect(
+      validateChatFlags({ role: 'analyst', company: 'acme' }, true),
+    ).toBeNull();
+  });
+
+  it('rejects a combined --role slug without a company', () => {
+    expect(validateChatFlags({ role: 'analyst' }, true)).toMatch(
+      /requires --company/,
+    );
+  });
+
+  it('rejects a combined --role UUID combined with a company (redundant)', () => {
+    const uuid = '11111111-2222-3333-4444-555555555555';
+    expect(validateChatFlags({ role: uuid, company: 'acme' }, true)).toMatch(
+      /not both/,
+    );
+  });
+
+  it('rejects --role combined with --role-id', () => {
+    expect(validateChatFlags({ role: 'r1', roleId: 'r1' }, true)).toMatch(
+      /pass only one of --role/,
+    );
+  });
+
+  it('rejects --company combined with --company-slug', () => {
+    expect(
+      validateChatFlags({ company: 'acme', companySlug: 'acme' }, true),
+    ).toMatch(/pass only one of --company/);
+  });
+
+  it('accepts --query with a combined --role UUID', () => {
+    const uuid = '11111111-2222-3333-4444-555555555555';
+    expect(validateChatFlags({ role: uuid, query: 'hi' }, true)).toBeNull();
   });
 });

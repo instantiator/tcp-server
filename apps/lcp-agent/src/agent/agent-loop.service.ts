@@ -380,6 +380,12 @@ export class AgentLoopService {
         this.recordCompletionSummary(agent, tracker);
         return;
       }
+      if (result.terminalStatus === AgentStatus.Cancelled) {
+        // Task cancellation already set this status (and recorded the audit
+        // event) — just stop the loop, no further writes.
+        this.logger.log(`Agent ${agent.id} loop ending: task cancelled`);
+        return;
+      }
 
       // The stream ended without the agent reaching a terminal status. Agents
       // with required tool calls (default: complete_assignment) are reminded and
@@ -459,7 +465,8 @@ export class AgentLoopService {
         checkTerminalStatus: async () => {
           const fresh = await this.agentRepo.findOneBy({ id: ctx.agent.id });
           return fresh?.status === AgentStatus.Paused ||
-            fresh?.status === AgentStatus.Completed
+            fresh?.status === AgentStatus.Completed ||
+            fresh?.status === AgentStatus.Cancelled
             ? fresh.status
             : null;
         },
@@ -608,6 +615,12 @@ export class AgentLoopService {
           `Agent ${agent.id} completed after required-tool reminder ${attempt}`,
         );
         this.recordCompletionSummary(agent, tracker);
+        return;
+      }
+      if (result.terminalStatus === AgentStatus.Cancelled) {
+        this.logger.log(
+          `Agent ${agent.id} loop ending during required-tool reminder: task cancelled`,
+        );
         return;
       }
     }

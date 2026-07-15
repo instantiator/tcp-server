@@ -120,4 +120,61 @@ describe('createRenderer', () => {
     expect(outText()).toBe('');
     expect(errText()).toBe('');
   });
+
+  describe('renderUserPrompt', () => {
+    it('renders the message on its own coloured line to stderr', () => {
+      const { renderer, errText } = setup();
+      renderer.renderUserPrompt('What is the capital of France?');
+      expect(errText()).toContain('You: What is the capital of France?');
+    });
+
+    it('participates in blank-line block spacing with subsequent lines', () => {
+      const { renderer, errText } = setup();
+      renderer.renderUserPrompt('hi');
+      renderer.render({ kind: 'agent_status', data: { status: 'running' } });
+      expect(errText().indexOf('Agent state:')).toBeGreaterThan(
+        errText().indexOf('You: hi'),
+      );
+      // A blank-line separator was inserted between the two blocks.
+      const between = errText().slice(
+        errText().indexOf('You: hi'),
+        errText().indexOf('Agent state:'),
+      );
+      expect(between).toContain('\n');
+    });
+  });
+
+  describe('blank response marker', () => {
+    it('renders (blank) for a single empty-string response delta', () => {
+      const { renderer, outText } = setup();
+      renderer.render({ kind: 'response', data: { delta: '' } });
+      renderer.finish();
+      expect(outText()).toContain('(blank)');
+    });
+
+    it('renders (blank) when only whitespace deltas arrive', () => {
+      const { renderer, outText } = setup();
+      renderer.render({ kind: 'response', data: { delta: '   ' } });
+      renderer.render({ kind: 'response', data: { delta: '\n' } });
+      renderer.finish();
+      expect(outText()).toContain('(blank)');
+    });
+
+    it('does not render (blank) for a non-empty response', () => {
+      const { renderer, outText } = setup();
+      renderer.render({ kind: 'response', data: { delta: 'Hello' } });
+      renderer.finish();
+      expect(outText()).not.toContain('(blank)');
+    });
+
+    it('resets the blank check between successive response blocks', () => {
+      const { renderer, outText } = setup();
+      renderer.render({ kind: 'response', data: { delta: 'Hello' } });
+      renderer.render({ kind: 'agent_status', data: { status: 'running' } }); // closes the block
+      renderer.render({ kind: 'response', data: { delta: '' } });
+      renderer.finish();
+      const occurrences = outText().split('(blank)').length - 1;
+      expect(occurrences).toBe(1);
+    });
+  });
 });

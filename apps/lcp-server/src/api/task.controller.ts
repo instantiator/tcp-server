@@ -1,4 +1,4 @@
-import type { LcpAssignment, LcpTask } from '@lcp/shared';
+import type { AuditEvent, LcpAssignment, LcpTask } from '@lcp/shared';
 import {
   BadRequestException,
   Body,
@@ -77,6 +77,17 @@ export class TaskController {
     return this.tasks.start(id);
   }
 
+  /**
+   * Cancels a task: transitions any non-terminal status → `cancelled` and
+   * cascades to its still-non-terminal assignments and their working agents.
+   */
+  @ApiOperation({ summary: 'Cancel a task' })
+  @Post(':id/cancel')
+  @HttpCode(202)
+  async cancelTask(@Param('id') id: UUID): Promise<LcpTask> {
+    return this.tasks.cancel(id);
+  }
+
   /** Lists a company's tasks. */
   @ApiOperation({ summary: 'List tasks for a company' })
   @Get()
@@ -94,5 +105,17 @@ export class TaskController {
     @Param('id') id: UUID,
   ): Promise<{ task: LcpTask; assignments: LcpAssignment[] }> {
     return this.tasks.getWithAssignments(id);
+  }
+
+  /**
+   * Retrieves a task's audit history — every event recorded for the agents
+   * that worked its own plan/implement/qa/finalise assignments, oldest
+   * first. Does not trace consultations spawned mid-assignment (see
+   * {@link TaskService.getHistory}).
+   */
+  @ApiOperation({ summary: "Get a task's audit history" })
+  @Get(':id/history')
+  async getTaskHistory(@Param('id') id: UUID): Promise<AuditEvent[]> {
+    return this.tasks.getHistory(id);
   }
 }

@@ -98,10 +98,12 @@ The `log_decision` MCP tool described in this ADR was not implemented. Instead, 
 
 > **Note (008.6):** `POST /internal/audit` was silently failing every real call with a `500` — `CreateAuditEventDto` had no `class-validator` decorators on any field, so the app-wide `ValidationPipe({ whitelist: true })` (see `AppModule`) stripped the entire body before validation, leaving `companyId`/`role`/`eventType`/`payload` all `undefined` and failing the entity's `NOT NULL` constraints. Fire-and-forget error handling meant this had no visible effect on agents or tools — only the audit log itself was silently empty. Found and fixed during 008.6's manual verification pass (not part of that plan's original scope): every `CreateAuditEventDto` field now has a decorator (`@IsUUID`, `@IsString`, `@IsIn`, `@IsObject`), with a regression test (`create-audit-event.dto.spec.ts`) driving the real `ValidationPipe` directly, plus e2e coverage (`audit.e2e-spec.ts`) exercising the actual HTTP endpoint end-to-end — the previous e2e suite only tested `AuditService.record()` in-process and the 401-unauthenticated case, never a valid authenticated request through the real endpoint, which is why this went undetected.
 
+> **Note (010.3.1):** The audit log query/filter API (listed as Deferred below) is now partially implemented — read-only, JWT-guarded endpoints for reconstructing an agent's or a task's history: `GET /api/agent/:id/history` and `GET /api/task/:id/history` (`AuditService.list`, ordered oldest-first, optionally scoped to a set of agent ids). These back the `lcp-cli eavesdrop --show-history` verb. No general-purpose filter API (by event type, date range, free-text) exists yet — only "every event for this agent" or "every event for this task's own assignments' agents" (consultations spawned mid-assignment are not traced, since they have no FK back to the task).
+
 ### Deferred
 
 - MinIO JSONL export (archival path) — export events to `audit/{id}/` as JSON Lines files
-- Audit log query/filter API
+- General-purpose audit log query/filter API (by event type, date range, free-text search) — see the 010.3.1 note above for what exists today
 - Retention policy and scheduled cleanup
 
 ## Consequences

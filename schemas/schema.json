@@ -100,7 +100,8 @@
         "running",
         "paused",
         "completed",
-        "failed"
+        "failed",
+        "cancelled"
       ],
       "type": "string"
     },

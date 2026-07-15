@@ -2,7 +2,7 @@ import type { LcpCompany } from '@lcp/shared';
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest } from '../core/api';
 import { confirmAction } from '../core/confirm';
-import { CompanyIdentifierOpts } from '../core/resolve-identifiers';
+import { EntityRefOpts } from '../core/entity-ref';
 import { readStdin } from '../core/stdin';
 import { runCommand } from '../core/run-command';
 import { resolveToken } from '../auth/token';
@@ -41,7 +41,7 @@ export function listCompaniesAction(opts: GlobalOptions): Promise<void> {
 /** Creates or updates a company from JSON (`--input` or stdin). */
 export function setCompanyAction(
   opts: GlobalOptions,
-  cmdOpts: { companyId?: string; companySlug?: string; input?: string },
+  cmdOpts: EntityRefOpts & { input?: string },
 ): Promise<void> {
   return runCommand(async () => {
     const raw = cmdOpts.input ?? (await readStdin());
@@ -59,7 +59,8 @@ export function setCompanyAction(
     // `/api/company/:id` accepts a UUID or a slug directly, so whichever
     // identifier is given (flag takes precedence over the body's id) is
     // passed straight through as the path segment.
-    const identifier = cmdOpts.companyId ?? cmdOpts.companySlug ?? bodyId;
+    const identifier =
+      cmdOpts.companyId ?? cmdOpts.companySlug ?? cmdOpts.company ?? bodyId;
     const result = identifier
       ? await apiRequest<LcpCompany>(
           api,
@@ -81,13 +82,14 @@ export function setCompanyAction(
  */
 export function deleteCompanyAction(
   opts: GlobalOptions,
-  cmdOpts: CompanyIdentifierOpts & { force?: boolean },
+  cmdOpts: EntityRefOpts & { force?: boolean },
 ): Promise<void> {
   return runCommand(async () => {
-    const identifier = cmdOpts.companyId ?? cmdOpts.companySlug;
+    const identifier =
+      cmdOpts.companyId ?? cmdOpts.companySlug ?? cmdOpts.company;
     if (!identifier) {
       process.stderr.write(
-        'Error: provide either --company-id or --company-slug\n',
+        'Error: provide --company, --company-id, or --company-slug\n',
       );
       process.exit(1);
       return;

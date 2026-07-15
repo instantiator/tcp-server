@@ -19,6 +19,7 @@ import { ContextModule } from '../context/context.module';
 import { RagModule } from '../rag/rag.module';
 import { StorageModule } from '../storage/storage.module';
 import { AgentController } from './api.agent.controller';
+import { AssignmentController } from './assignment.controller';
 import { CompanyController } from './api.company.controller';
 import { CompanyUserController } from './company-user.controller';
 import { ConversationController } from './conversation.controller';
@@ -65,6 +66,7 @@ import { TaskService } from './task.service';
     ]),
   ],
   controllers: [
+    AssignmentController,
     CompanyController,
     CompanyUserController,
     ConversationController,

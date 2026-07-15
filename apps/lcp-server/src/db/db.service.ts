@@ -16,7 +16,13 @@ import {
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
-import { DataSource, DeepPartial, Repository } from 'typeorm';
+import {
+  DataSource,
+  DeepPartial,
+  FindOptionsWhere,
+  In,
+  Repository,
+} from 'typeorm';
 import { SHARED_KNOWLEDGE_ROLE_SLUG } from '../storage/storage-keys';
 import { LcpAgentTemplate } from '../templates/LcpAgentTemplate';
 import { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
@@ -387,6 +393,30 @@ export class DbService {
   /** Retrieves an agent by its UUID. Returns `null` if not found. */
   async getAgent(id: UUID): Promise<LcpAgent | null> {
     return this.agentRepo.findOneBy({ id });
+  }
+
+  /**
+   * Lists agents filtered by company, role, and/or assignment, and/or
+   * status; any combination may be given. `status` defaults to currently
+   * active agents (`idle`, `running`, `paused`) when omitted — a
+   * general-purpose observability listing wants live agents by default, not
+   * the (usually much larger) set of finished ones.
+   */
+  async listAgents(filter: {
+    companyId?: UUID;
+    roleId?: UUID;
+    assignmentId?: UUID;
+    status?: AgentStatus;
+  }): Promise<LcpAgent[]> {
+    const where: FindOptionsWhere<LcpAgent> = {
+      ...(filter.companyId ? { companyId: filter.companyId } : {}),
+      ...(filter.roleId ? { roleId: filter.roleId } : {}),
+      ...(filter.assignmentId ? { assignmentId: filter.assignmentId } : {}),
+      status:
+        filter.status ??
+        In([AgentStatus.Idle, AgentStatus.Running, AgentStatus.Paused]),
+    };
+    return this.agentRepo.find({ where, order: { createdAt: 'DESC' } });
   }
 
   /**

@@ -148,17 +148,26 @@ storage tree, including the orphan-assignment working directory.
 All routes are JWT-guarded. See the Swagger UI (`GET /swagger`) for full
 request/response schemas.
 
-| Method & path                  | Purpose                                                                                                                                                                                      |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/task`               | Create a task (`ready` state)                                                                                                                                                                |
-| `POST /api/task/:id/materials` | Upload a material file (`multipart/form-data`, field `file`); rejected once the task has left `ready` (`409`)                                                                                |
-| `POST /api/task/:id/start`     | Resolve a planner role (task's own, falling back to the company default — `422` if neither), atomically transition `ready → planning` (`409` if not `ready`), and dispatch the planner agent |
-| `GET /api/task?companyId=`     | List a company's tasks                                                                                                                                                                       |
-| `GET /api/task/:id`            | Get a task with its assignments — plan assignments ordered by `orderIndex`, then the rest by creation time                                                                                   |
+| Method & path                                             | Purpose                                                                                                                                                                                      |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/task`                                          | Create a task (`ready` state)                                                                                                                                                                |
+| `POST /api/task/:id/materials`                            | Upload a material file (`multipart/form-data`, field `file`); rejected once the task has left `ready` (`409`)                                                                                |
+| `POST /api/task/:id/start`                                | Resolve a planner role (task's own, falling back to the company default — `422` if neither), atomically transition `ready → planning` (`409` if not `ready`), and dispatch the planner agent |
+| `POST /api/task/:id/cancel`                               | Transition any non-terminal status → `cancelled` (`409` if already terminal) and cascade to the task's still-non-terminal assignments and their working agents                               |
+| `GET /api/task?companyId=`                                | List a company's tasks                                                                                                                                                                       |
+| `GET /api/task/:id`                                       | Get a task with its assignments — plan assignments ordered by `orderIndex`, then the rest by creation time                                                                                   |
+| `GET /api/task/:id/history`                               | Get the task's audit history (its own assignments' agents only — see [ADR-008](ADRs/ADR-008-audit-logging.md#deferred))                                                                      |
+| `GET /api/agent?companyId=&roleId=&assignmentId=&status=` | List agents (default: currently active) — at least one of `companyId`/`roleId`/`assignmentId` required                                                                                       |
+| `GET /api/agent/:id/history`                              | Get an agent's audit history                                                                                                                                                                 |
+| `GET /api/assignment?companyId=&taskId=&roleId=&status=`  | List assignments (`taskId=null` for orphans) — at least one of `companyId`/`taskId` required                                                                                                 |
+| `GET /api/assignment/:id`                                 | Get a single assignment                                                                                                                                                                      |
 
 The `start` transition uses an atomic conditional `UPDATE ... WHERE status =
 'ready'` (the same pattern as `AgentOrchestrationService.resumeAgent`'s
 `pausedAt` claim), so a double `POST /start` can't dispatch the planner twice.
+`cancel` uses the equivalent `UPDATE ... WHERE status NOT IN (succeeded,
+failed, cancelled)` form, since any non-terminal status is a valid start
+point.
 
 ## Orchestration flow
 
@@ -264,6 +273,14 @@ their recovery).
 
 # Get a task and its assignments
 ./lcp-cli.sh get-task --task-id <uuid>
+
+# Cancel a task (and its still-running assignments/agents)
+./lcp-cli.sh cancel-task --task-id <uuid>
+
+# See what's going on: agents, assignments (including orphans), and history
+./lcp-cli.sh list-agents --company acme
+./lcp-cli.sh list-assignments --company acme --filter task=null
+./lcp-cli.sh eavesdrop --task-id <uuid> --show-history --tail
 ```
 
 See [lcp-cli.md](lcp-cli.md#create-task) for the full flag reference.

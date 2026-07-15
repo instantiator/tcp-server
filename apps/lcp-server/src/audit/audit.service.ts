@@ -2,7 +2,7 @@ import { AuditEvent, AuditEventType } from '@lcp/shared';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { UUID } from 'crypto';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, In, Repository } from 'typeorm';
 import { CreateAuditEventDto } from './create-audit-event.dto';
 
 /**
@@ -44,5 +44,18 @@ export class AuditService {
       eventType,
       payload,
     });
+  }
+
+  /**
+   * Lists a company's audit events, oldest first — optionally scoped to a
+   * given set of agent ids (e.g. the assignments belonging to a task).
+   * Backs history reconstruction for `lcp-cli eavesdrop --show-history`.
+   */
+  async list(companyId: UUID, agentIds?: UUID[]): Promise<AuditEvent[]> {
+    const where: FindOptionsWhere<AuditEvent> = {
+      companyId,
+      ...(agentIds && agentIds.length > 0 ? { agentId: In(agentIds) } : {}),
+    };
+    return this.repo.find({ where, order: { timestamp: 'ASC' } });
   }
 }

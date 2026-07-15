@@ -209,6 +209,7 @@ export class ChatSession {
         markConnected,
       );
       await connected;
+      renderer.renderUserPrompt(message);
       await this.postMessage(paneId, message, signal);
 
       let outcome = await streamPromise;
@@ -235,7 +236,8 @@ export class ChatSession {
               data: { delta: outcome.response },
             });
           } else {
-            process.stdout.write(`\nResponse: ${outcome.response}\n`);
+            const text = outcome.response.trim() ? outcome.response : '(blank)';
+            process.stdout.write(`\nResponse: ${text}\n`);
           }
         }
       } else if (outcome.error !== STREAM_ENDED) {

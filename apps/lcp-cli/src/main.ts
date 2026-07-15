@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import { Agent, setGlobalDispatcher } from 'undici';
+import { registerCancelTask } from './commands/cancel-task';
 import { registerChat } from './commands/chat';
 import { registerCreateTask } from './commands/create-task';
 import { registerDeleteCompany } from './commands/delete-company';
@@ -8,10 +9,13 @@ import { registerDeleteKnowledge } from './commands/delete-knowledge';
 import { registerReindexKnowledge } from './commands/reindex-knowledge';
 import { registerDeleteRole } from './commands/delete-role';
 import { registerDownloadSharedDocument } from './commands/download-shared-document';
+import { registerEavesdrop } from './commands/eavesdrop';
 import { registerEstimateContextWindow } from './commands/estimate-context-window';
 import { registerGetKnowledge } from './commands/get-knowledge';
 import { registerGetTask } from './commands/get-task';
 import { registerGetToken } from './commands/get-token';
+import { registerListAgents } from './commands/list-agents';
+import { registerListAssignments } from './commands/list-assignments';
 import { registerListCompanies } from './commands/list-companies';
 import { registerListKnowledge } from './commands/list-knowledge';
 import { registerListOpenQueries } from './commands/list-open-queries';
@@ -83,5 +87,9 @@ registerValidateSharedDocument(program);
 registerCreateTask(program);
 registerListTasks(program);
 registerGetTask(program);
+registerCancelTask(program);
+registerListAgents(program);
+registerListAssignments(program);
+registerEavesdrop(program);
 
 program.parse(process.argv);

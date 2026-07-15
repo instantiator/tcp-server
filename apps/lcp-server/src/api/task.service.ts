@@ -1,4 +1,5 @@
 import {
+  AuditEvent,
   LcpAssignment,
   LcpCompany,
   LcpRole,
@@ -14,6 +15,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
 import { Repository } from 'typeorm';
+import { AuditService } from '../audit/audit.service';
 import { taskMaterialsKey } from '../storage/storage-keys';
 import { StorageService } from '../storage/storage.service';
 import { claimStatus } from './claim-status';
@@ -46,6 +48,7 @@ export class TaskService {
     private readonly roleRepo: Repository<LcpRole>,
     private readonly storage: StorageService,
     private readonly dispatcher: TaskDispatcher,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -157,6 +160,38 @@ export class TaskService {
   }
 
   /**
+   * Cancels a task: atomically claims a non-terminal status → `cancelled`,
+   * then cascades to its still-non-terminal assignments and their working
+   * agents (see {@link TaskDispatcher.cancelTask}).
+   *
+   * @throws {@link NotFoundException} for an unknown task.
+   * @throws {@link ConflictException} when the task is already terminal
+   *   (`succeeded`, `failed`, or `cancelled`).
+   */
+  async cancel(taskId: UUID): Promise<LcpTask> {
+    await this.getTaskOrThrow(taskId);
+
+    const claimed = await this.taskRepo
+      .createQueryBuilder()
+      .update(LcpTask)
+      .set({ status: 'cancelled' })
+      .where('id = :id', { id: taskId })
+      .andWhere('status NOT IN (:...terminal)', {
+        terminal: ['succeeded', 'failed', 'cancelled'],
+      })
+      .execute();
+    if ((claimed.affected ?? 0) === 0) {
+      throw new ConflictException(
+        `Task ${taskId} is already in a terminal state`,
+      );
+    }
+
+    const cancelled = await this.getTaskOrThrow(taskId);
+    await this.dispatcher.cancelTask(cancelled);
+    return cancelled;
+  }
+
+  /**
    * Lists a company's tasks, most recently created first.
    * @throws {@link NotFoundException} for an unknown company.
    */
@@ -191,6 +226,28 @@ export class TaskService {
       return a.createdAt.getTime() - b.createdAt.getTime();
     });
     return { task, assignments };
+  }
+
+  /**
+   * Retrieves a task's audit history: every event recorded for the agents
+   * that worked its own assignments (plan, implement, qa, finalise),
+   * oldest first.
+   *
+   * ponytail: consultations spawned mid-assignment are orphan assignments
+   * with no FK back to the task, so they are not traced here — only the
+   * task's own assignments' agents are covered. Upgrade path: record the
+   * spawning task/assignment on a consultation's assignment row if deep
+   * consultation-chain history is needed later.
+   *
+   * @throws {@link NotFoundException} for an unknown task.
+   */
+  async getHistory(taskId: UUID): Promise<AuditEvent[]> {
+    const task = await this.getTaskOrThrow(taskId);
+    const assignments = await this.assignmentRepo.find({ where: { taskId } });
+    const agentIds = assignments
+      .map((a) => a.agentId)
+      .filter((id): id is UUID => Boolean(id));
+    return this.audit.list(task.companyId, agentIds);
   }
 
   private async getTaskOrThrow(taskId: UUID): Promise<LcpTask> {

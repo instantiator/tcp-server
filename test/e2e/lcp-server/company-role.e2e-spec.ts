@@ -126,6 +126,18 @@ describe('CompanyController (e2e)', () => {
 
       expect(res.headers['x-lcp-warnings']).toBeUndefined();
     });
+
+    it('returns 400 when slug looks like a UUID (would confuse id-vs-slug resolution)', async () => {
+      await request(app.getHttpServer())
+        .post('/api/company')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({
+          slug: '11111111-2222-3333-4444-555555555555',
+          name: 'Acme Corp',
+          description: 'A company that makes everything',
+        })
+        .expect(400);
+    });
   });
 
   describe('POST /api/company (slug replacement)', () => {
@@ -451,6 +463,22 @@ describe('RoleController (e2e)', () => {
             expect.stringContaining('rolePrompt'),
           ]),
         );
+      });
+
+      it('returns 400 when slug looks like a UUID (would confuse id-vs-slug resolution)', async () => {
+        await request(app.getHttpServer())
+          .post('/api/role')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            companyId: company.id,
+            slug: '11111111-2222-3333-4444-555555555555',
+            name: 'analyst',
+            description: 'Analyses.',
+            systemPromptTemplate: 'You are {{name}}.',
+            knowledgeDomains: [],
+            mcpServerList: [],
+          })
+          .expect(400);
       });
     });
 

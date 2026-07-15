@@ -1,9 +1,6 @@
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest } from '../core/api';
-import {
-  KnowledgeScopeOpts,
-  resolveKnowledgeScopePath,
-} from '../core/resolve-knowledge-scope';
+import { EntityRefOpts, resolveKnowledgeScopePath } from '../core/entity-ref';
 import { runCommand } from '../core/run-command';
 import { resolveToken } from '../auth/token';
 
@@ -23,7 +20,7 @@ interface DocumentSummary {
  */
 export function listKnowledgeAction(
   opts: GlobalOptions,
-  cmdOpts: KnowledgeScopeOpts,
+  cmdOpts: EntityRefOpts,
 ): Promise<void> {
   return runCommand(async () => {
     const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });

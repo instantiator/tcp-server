@@ -66,37 +66,55 @@ See [schema.md](schema.md) for the full field reference, VS Code integration, ex
 
 ## Verbs
 
-| Verb                                                    | Invocation                                                                                              | Description                                                                |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| [`get-token`](#get-token)                               | `get-token`                                                                                             | Exchange username + password for an OIDC access token                      |
-| [`list-companies`](#list-companies)                     | `list-companies`                                                                                        | List all companies                                                         |
-| [`list-roles`](#list-roles)                             | `list-roles [-c <uuid>\|--company-slug <slug>]`                                                         | List roles, optionally filtered to one company                             |
-| [`set-company`](#set-company)                           | `set-company [-c <uuid>\|--company-slug <slug>] [-i <json>]`                                            | Create or update a company                                                 |
-| [`set-role`](#set-role)                                 | `set-role [-c <uuid>\|--company-slug <slug>] [-r <uuid>\|--role-slug <slug>] [-i <json>]`               | Create or update a role                                                    |
-| [`delete-company`](#delete-company)                     | `delete-company (-c <uuid>\|--company-slug <slug>) [-f]`                                                | Delete a company and everything in it                                      |
-| [`delete-role`](#delete-role)                           | `delete-role (-r <uuid>\|--role-slug <slug>) [-f]`                                                      | Delete a role and everything tied to it                                    |
-| [`chat`](#chat)                                         | `chat (-r <uuid>\|--role-slug <slug>\|-c <uuid>\|--company-slug <slug>) [-q <message>]`                 | Interactive or single-query chat with a role, or browse a company's roster |
-| [`list-knowledge`](#list-knowledge)                     | `list-knowledge (--role <slug-or-id>\|--company <slug-or-id>)`                                          | List knowledge-base documents for a role or company (shared knowledge)     |
-| [`get-knowledge`](#get-knowledge)                       | `get-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename> [-o <path>]`                 | Get a knowledge-base document's content                                    |
-| [`store-knowledge`](#store-knowledge)                   | `store-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -s <path> [-t <filename>]`               | Upload an OKF Markdown document to a role or company knowledge base        |
-| [`delete-knowledge`](#delete-knowledge)                 | `delete-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename>`                          | Delete a knowledge-base document by filename                               |
-| [`reindex-knowledge`](#reindex-knowledge)               | `reindex-knowledge --company <slug-or-id>`                                                              | Force a full RAG rebuild of every knowledge scope of a company             |
-| [`open-document-store`](#open-document-store)           | `open-document-store [--no-open]`                                                                       | Print (and open) the MinIO console URL                                     |
-| [`open-swagger`](#open-swagger)                         | `open-swagger --service <name> [--no-open]`                                                             | Print (and open) a service's Swagger UI URL                                |
-| [`list-open-queries`](#list-open-queries)               | `list-open-queries [-c <uuid>\|--company-slug <slug>] [--format table\|json\|csv]`                      | List open agent-to-human queries                                           |
-| [`read-query`](#read-query)                             | `read-query <slug>`                                                                                     | Read a query's full question and conversation history                      |
-| [`respond`](#respond)                                   | `respond <slug> <message>`                                                                              | Reply to a query and resume the waiting agent                              |
-| [`download-shared-document`](#download-shared-document) | `download-shared-document --source <path> [--target <path>]`                                            | Download a file from shared company storage                                |
-| [`upload-shared-document`](#upload-shared-document)     | `upload-shared-document --source <path> --target <path>`                                                | Upload a local file to shared company storage                              |
-| [`estimate-context-window`](#estimate-context-window)   | `estimate-context-window [-c <uuid>\|--company-slug <slug>] [-r <uuid>\|--role-slug <slug>]`            | Estimate a role's worst-case prompt token footprint                        |
-| [`validate-shared-document`](#validate-shared-document) | `validate-shared-document --path <path\|glob> [--recursive]`                                            | Re-validate document(s) already in shared storage                          |
-| [`create-task`](#create-task)                           | `create-task -c <slug-or-id> -r <text> [-p <slug-or-id>] [-m <paths...>] [-e <filenames...>] [--start]` | Create a task, optionally uploading materials and starting it              |
-| [`list-tasks`](#list-tasks)                             | `list-tasks -c <slug-or-id>`                                                                            | List a company's tasks                                                     |
-| [`get-task`](#get-task)                                 | `get-task --task-id <uuid>`                                                                             | Get a task, including its assignment statuses and QA outcomes              |
+| Verb                                                    | Invocation                                                                                                          | Description                                                                |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| [`get-token`](#get-token)                               | `get-token`                                                                                                         | Exchange username + password for an OIDC access token                      |
+| [`list-companies`](#list-companies)                     | `list-companies`                                                                                                    | List all companies                                                         |
+| [`list-roles`](#list-roles)                             | `list-roles [-c <uuid>\|--company-slug <slug>]`                                                                     | List roles, optionally filtered to one company                             |
+| [`set-company`](#set-company)                           | `set-company [-c <uuid>\|--company-slug <slug>] [-i <json>]`                                                        | Create or update a company                                                 |
+| [`set-role`](#set-role)                                 | `set-role [-c <uuid>\|--company-slug <slug>] [-r <uuid>\|--role-slug <slug>] [-i <json>]`                           | Create or update a role                                                    |
+| [`delete-company`](#delete-company)                     | `delete-company (-c <uuid>\|--company-slug <slug>) [-f]`                                                            | Delete a company and everything in it                                      |
+| [`delete-role`](#delete-role)                           | `delete-role (-r <uuid>\|--role-slug <slug>) [-f]`                                                                  | Delete a role and everything tied to it                                    |
+| [`chat`](#chat)                                         | `chat (-r <uuid>\|--role-slug <slug>\|-c <uuid>\|--company-slug <slug>) [-q <message>]`                             | Interactive or single-query chat with a role, or browse a company's roster |
+| [`list-knowledge`](#list-knowledge)                     | `list-knowledge (--role <slug-or-id>\|--company <slug-or-id>)`                                                      | List knowledge-base documents for a role or company (shared knowledge)     |
+| [`get-knowledge`](#get-knowledge)                       | `get-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename> [-o <path>]`                             | Get a knowledge-base document's content                                    |
+| [`store-knowledge`](#store-knowledge)                   | `store-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -s <path> [-t <filename>]`                           | Upload an OKF Markdown document to a role or company knowledge base        |
+| [`delete-knowledge`](#delete-knowledge)                 | `delete-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename>`                                      | Delete a knowledge-base document by filename                               |
+| [`reindex-knowledge`](#reindex-knowledge)               | `reindex-knowledge --company <slug-or-id>`                                                                          | Force a full RAG rebuild of every knowledge scope of a company             |
+| [`open-document-store`](#open-document-store)           | `open-document-store [--no-open]`                                                                                   | Print (and open) the MinIO console URL                                     |
+| [`open-swagger`](#open-swagger)                         | `open-swagger --service <name> [--no-open]`                                                                         | Print (and open) a service's Swagger UI URL                                |
+| [`list-open-queries`](#list-open-queries)               | `list-open-queries [-c <uuid>\|--company-slug <slug>] [--format table\|json\|csv]`                                  | List open agent-to-human queries                                           |
+| [`read-query`](#read-query)                             | `read-query <slug>`                                                                                                 | Read a query's full question and conversation history                      |
+| [`respond`](#respond)                                   | `respond <slug> <message>`                                                                                          | Reply to a query and resume the waiting agent                              |
+| [`download-shared-document`](#download-shared-document) | `download-shared-document --source <path> [--target <path>]`                                                        | Download a file from shared company storage                                |
+| [`upload-shared-document`](#upload-shared-document)     | `upload-shared-document --source <path> --target <path>`                                                            | Upload a local file to shared company storage                              |
+| [`estimate-context-window`](#estimate-context-window)   | `estimate-context-window [-c <uuid>\|--company-slug <slug>] [-r <uuid>\|--role-slug <slug>]`                        | Estimate a role's worst-case prompt token footprint                        |
+| [`validate-shared-document`](#validate-shared-document) | `validate-shared-document --path <path\|glob> [--recursive]`                                                        | Re-validate document(s) already in shared storage                          |
+| [`create-task`](#create-task)                           | `create-task -c <slug-or-id> -r <text> [--planner-role <slug-or-id>] [-m <paths...>] [-e <filenames...>] [--start]` | Create a task, optionally uploading materials and starting it              |
+| [`list-tasks`](#list-tasks)                             | `list-tasks -c <slug-or-id>`                                                                                        | List a company's tasks                                                     |
+| [`get-task`](#get-task)                                 | `get-task --task-id <uuid>`                                                                                         | Get a task, including its assignment statuses and QA outcomes              |
+| [`cancel-task`](#cancel-task)                           | `cancel-task --task-id <uuid>`                                                                                      | Cancel a task and its still-non-terminal assignments/agents                |
+| [`list-agents`](#list-agents)                           | `list-agents (--role \| --company <slug-or-id>) [--filter k=v...]`                                                  | List agents for a role or company                                          |
+| [`list-assignments`](#list-assignments)                 | `list-assignments (--task-id <uuid> \| --company <slug-or-id>) [--filter k=v...]`                                   | List assignments for a task or company                                     |
+| [`eavesdrop`](#eavesdrop)                               | `eavesdrop (--agent-id \| --assignment-id \| --task-id <uuid>) [--show-history] [--tail]`                           | Replay and/or follow an agent's, assignment's, or task's activity          |
 
-`--role-slug` requires `--company-id`/`--company-slug` alongside it — role slugs are unique only within a company, not globally.
+### Entity identifiers: `--x`, `--x-id`, `--x-slug`
 
-The knowledge verbs' `--role`/`--company` values are each a single slug-or-id: a value matching the UUID format is treated as an id, otherwise as a slug. A role slug (not a UUID) additionally requires `--company` to disambiguate — role slugs are unique only within a company, not globally. `--company` alone selects the company's shared (company-wide) knowledge scope.
+Every verb that takes a role or company accepts all three forms for that
+entity, and they compose the same way everywhere:
+
+- `--role <slug-or-id>` / `--company <slug-or-id>` — a single combined value.
+  Looks like a UUID → treated as an id (no extra lookup); otherwise treated
+  as a slug.
+- `--role-id <uuid>` / `--company-id <uuid>` — always an id, used as-is.
+- `--role-slug <slug>` / `--company-slug <slug>` — always a slug.
+
+Pass at most one variant per entity. A role slug (from `--role-slug`, or a
+non-UUID `--role`) additionally requires a company (`--company`/
+`--company-id`/`--company-slug`) to disambiguate — role slugs are unique only
+within a company, not globally. A role UUID (from `--role-id`, or a
+UUID-shaped `--role`) already implies its company, so pairing it with a
+company flag is redundant (rejected on `chat`, harmlessly ignored elsewhere).
 
 ### `get-token`
 
@@ -406,13 +424,18 @@ When stdout is piped/redirected, or `--no-tui` is passed, output stays as
 colour-coded, blank-line-separated scrolling text — this is also the only
 mode compatible with piping the final answer to another command:
 
+- **You** (bright green, stderr) — the message you just sent, echoed before
+  the turn starts, so a scrolled-back transcript shows what was asked as well
+  as the answer.
 - **Agent state** (bright cyan) — lifecycle transitions: running, paused,
   resumed, completed.
 - **LLM state** (bright magenta) — request start/finish and tool calls.
 - **Reasoning** (grey, indented) — the model's reasoning tokens as they arrive,
   where the provider exposes them (e.g. LM Studio). Shown by default; suppress
   with `--hide-reasoning`.
-- **Response** (white) — the answer content, streamed token by token.
+- **Response** (white) — the answer content, streamed token by token. A
+  whitespace-only or empty response renders as `(blank)` rather than nothing,
+  so it's obvious the agent genuinely returned no content.
 
 **Single-query mode** (`-q` provided, piped or `--no-tui`):
 
@@ -437,6 +460,8 @@ mode compatible with piping the final answer to another command:
 ```bash
 ./lcp-cli.sh -t $TOKEN chat -r <roleId> --no-tui
 # > Tell me about Q3 trends.
+#
+# You: Tell me about Q3 trends.
 #
 # Agent state: running
 #
@@ -738,6 +763,103 @@ outcomes.
 
 ```bash
 ./lcp-cli.sh -t $TOKEN get-task --task-id <uuid>
+```
+
+### `cancel-task`
+
+Cancels a task: transitions any non-terminal status (`ready`, `planning`,
+`in-progress`, `finalising`) to `cancelled`, and cascades the cancellation to
+its still-non-terminal assignments and their working agents. A running
+agent's loop notices the cancellation on its next status check (typically
+within one iteration) and stops without writing further output.
+
+- **stdout**: the cancelled task as JSON
+- Returns `409` if the task is already terminal (`succeeded`, `failed`, or
+  already `cancelled`) — cancelling twice is safe (idempotent), the second
+  call just fails with 409 rather than repeating the cascade
+
+```bash
+./lcp-cli.sh -t $TOKEN cancel-task --task-id <uuid>
+```
+
+### `list-agents`
+
+Lists agents for a role or a company, defaulting to currently active agents
+(`idle`, `running`, `paused`) unless `--filter status=` overrides it.
+
+- **stdout**: `LcpAgent[]` as JSON
+
+| Flag                               | Description                                                |
+| ---------------------------------- | ---------------------------------------------------------- |
+| `--role`/`--role-id`/`--role-slug` | Role to filter to (any variant)                            |
+| `--company`/`-id`/`-slug`          | Company to filter to (any variant)                         |
+| `--filter status=<status>`         | Repeatable. Overrides the default active-status filter     |
+| `--filter role=<slug-or-id>`       | Repeatable. Overrides the top-level role scope             |
+| `--filter assignment=<id>`         | Repeatable. Filter to agents working a specific assignment |
+
+```bash
+./lcp-cli.sh -t $TOKEN list-agents --company acme
+./lcp-cli.sh -t $TOKEN list-agents --role analyst --company acme --filter status=paused
+```
+
+### `list-assignments`
+
+Lists assignments for a task or a company.
+
+- **stdout**: `LcpAssignment[]` as JSON
+
+| Flag                         | Description                                                               |
+| ---------------------------- | ------------------------------------------------------------------------- |
+| `--task-id <uuid>`           | Task to list assignments for                                              |
+| `--company`/`-id`/`-slug`    | Company to list assignments for (any variant)                             |
+| `--filter status=<status>`   | Repeatable                                                                |
+| `--filter task=<task-id>`    | Repeatable. Overrides `--task-id`                                         |
+| `--filter task=null`         | Repeatable. Lists orphan assignments (plain conversations, consultations) |
+| `--filter role=<slug-or-id>` | Repeatable                                                                |
+
+```bash
+./lcp-cli.sh -t $TOKEN list-assignments --task-id <uuid>
+./lcp-cli.sh -t $TOKEN list-assignments --company acme --filter task=null
+```
+
+### `eavesdrop`
+
+Reconstructs the history of, and/or follows live, an agent, assignment, or
+task — for understanding what a company is currently doing beyond what
+`get-task` shows, including orphaned (non-task) assignments.
+
+Exactly one target flag is required. `--show-history` and `--tail` may be
+combined (history prints first, then the tail follows).
+
+| Flag                     | Description                                                                       |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| `--agent-id <uuid>`      | Eavesdrop on a single agent                                                       |
+| `--assignment-id <uuid>` | Eavesdrop on an assignment (its working agent, if any)                            |
+| `--task-id <uuid>`       | Eavesdrop on a task (every plan/implement/qa/finalise assignment's working agent) |
+| `--show-history`         | Reconstruct past events from the audit log and print them to stdout               |
+| `--tail`                 | Follow current events live, via the same SSE stream `chat` uses                   |
+
+- **stdout** (`--show-history`): one `hh:mm:ss | eventType | summary` line per
+  recorded audit event, oldest first
+- **stdout/stderr** (`--tail`): rendered the same way `chat`'s plain renderer
+  renders its own agent's stream
+- `--tail` warns and exits non-zero if the target has already finished (or,
+  for `--assignment-id`, hasn't started yet — nothing to follow)
+- `--task-id` history/tail covers the task's own assignments only; a
+  consultation spawned mid-assignment is a separate orphan assignment with no
+  link back to the task, so it isn't traced (eavesdrop directly on that
+  consultation's `--assignment-id`/`--agent-id` instead, once you have its id
+  from `list-assignments --filter task=null`)
+
+```bash
+# Replay everything that happened on a task so far
+./lcp-cli.sh -t $TOKEN eavesdrop --task-id <uuid> --show-history
+
+# Watch a still-running assignment live
+./lcp-cli.sh -t $TOKEN eavesdrop --assignment-id <uuid> --tail
+
+# Both: catch up, then keep watching
+./lcp-cli.sh -t $TOKEN eavesdrop --agent-id <uuid> --show-history --tail
 ```
 
 ### `estimate-context-window`

@@ -5,12 +5,17 @@
 import { formatCompactionEvent, SseEvent } from './sse';
 
 // Raw ANSI codes — no colour dependency. Bright cyan for agent state, bright
-// magenta for LLM state, grey for reasoning, white for response.
+// magenta for LLM state, grey for reasoning, white for response, bright
+// green for the user's own input.
 const AGENT_COLOR = '\x1b[96m';
 const LLM_COLOR = '\x1b[95m';
 const REASONING_COLOR = '\x1b[90m';
 const RESPONSE_COLOR = '\x1b[37m';
+const USER_COLOR = '\x1b[92m';
 const RESET = '\x1b[0m';
+
+/** Placeholder printed in place of a whitespace-only or empty response. */
+const BLANK_RESPONSE_MARKER = '(blank)';
 
 export interface RenderOptions {
   /** Suppress reasoning blocks when true. */
@@ -30,6 +35,12 @@ export interface Renderer {
   readonly responseSeen: boolean;
   /** Closes any open delta block so the next output starts cleanly. */
   finish(): void;
+  /**
+   * Renders the user's own submitted message as a distinctly-coloured
+   * discrete line, participating in the same blank-line spacing as every
+   * other line. No-op for renderers that echo user input another way.
+   */
+  renderUserPrompt(text: string): void;
 }
 
 /** Reads a string field from an event's data payload, defaulting to ''. */
@@ -48,10 +59,12 @@ export function createRenderer(opts: RenderOptions): Renderer {
   let currentBlock: 'reasoning' | 'response' | null = null;
   let hasOutput = false;
   let responseSeen = false;
+  let responseHadContent = false;
 
   /** Ends an open delta block with a reset + newline. */
   function closeBlock(): void {
     if (currentBlock === 'response') {
+      if (!responseHadContent) opts.out.write(BLANK_RESPONSE_MARKER);
       opts.out.write(RESET + '\n');
     } else if (currentBlock === 'reasoning') {
       opts.err.write(RESET + '\n');
@@ -85,6 +98,10 @@ export function createRenderer(opts: RenderOptions): Renderer {
       stream.write(`${color}${label}${prefix}`);
       currentBlock = kind;
       hasOutput = true;
+      if (kind === 'response') responseHadContent = false;
+    }
+    if (kind === 'response' && delta.trim().length > 0) {
+      responseHadContent = true;
     }
     stream.write(delta);
   }
@@ -151,11 +168,16 @@ export function createRenderer(opts: RenderOptions): Renderer {
     }
   }
 
+  function renderUserPrompt(text: string): void {
+    discreteLine(opts.err, USER_COLOR, `You: ${text}`);
+  }
+
   return {
     render,
     get responseSeen() {
       return responseSeen;
     },
     finish: closeBlock,
+    renderUserPrompt,
   };
 }

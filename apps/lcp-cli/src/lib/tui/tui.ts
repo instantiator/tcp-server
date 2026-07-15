@@ -699,5 +699,9 @@ export function tuiRenderer(tui: Tui, paneId: string): Renderer {
       // Panes have no open-block state to flush; SSE-driven redraws already
       // reflect the latest content.
     },
+    renderUserPrompt(): void {
+      // TUI user-prompt echo lands in the pane log another way (010.3.3);
+      // this adapter has nothing to do for it yet.
+    },
   };
 }
