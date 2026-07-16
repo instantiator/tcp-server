@@ -1,6 +1,6 @@
 import { EntityRefOpts } from '../core/entity-ref';
 import { GlobalOptions } from '../core/cli-options';
-import { Tui } from '../tui/tui';
+import { resolveTaskListEntryMaxLines, Tui } from '../tui/tui';
 import { shouldUseTui, validateChatFlags } from './flags';
 import { resolveChatContext } from './context';
 import { ChatSession } from './session';
@@ -14,6 +14,7 @@ export interface ChatCmdOpts extends EntityRefOpts {
   query?: string;
   hideReasoning?: boolean;
   tui?: boolean;
+  taskListMaxLines?: string;
 }
 
 /**
@@ -63,6 +64,9 @@ export async function chatAction(
   }
 
   const hideReasoning = cmdOpts.hideReasoning ?? false;
+  const taskListEntryMaxLines = resolveTaskListEntryMaxLines(
+    cmdOpts.taskListMaxLines,
+  );
   let tui: Tui | null = null;
   let session: ChatSession;
   let rootAgentId: string | undefined;
@@ -71,7 +75,7 @@ export async function chatAction(
     const context = await resolveChatContext(opts, cmdOpts, useTui);
     // Constructed after the banner above prints, so it's briefly visible
     // in normal scrollback before the screen switches to the TUI.
-    tui = useTui ? new Tui({ hideReasoning }) : null;
+    tui = useTui ? new Tui({ hideReasoning, taskListEntryMaxLines }) : null;
     session = new ChatSession(
       opts,
       context.companyId,
@@ -88,6 +92,9 @@ export async function chatAction(
         slug: context.companySlug,
         roles,
       });
+      const tasks = await session.fetchTasks();
+      tui.updateRosterTasks(context.companyId, tasks);
+      session.watchCompanyEvents();
     }
     if (context.roleId) {
       // Always talkable, even under --query: with the TUI, the session

@@ -210,6 +210,102 @@ describe('TaskController (e2e)', () => {
             });
           });
 
+          describe('PUT /api/task/:id', () => {
+            it('edits request, plannerRoleId, materials, and expected while ready', async () => {
+              const res = await request(app.getHttpServer())
+                .put(`/api/task/${task.id}`)
+                .set('Authorization', `Bearer ${jwt}`)
+                .send({
+                  request: 'Write a longer report',
+                  plannerRoleId: role.id,
+                  materials: [{ type: 'inline-text', value: 'context' }],
+                  expected: [{ type: 'inline-text', value: 'a summary' }],
+                });
+              expect(res.status).toBe(200);
+              expect(res.body).toMatchObject({
+                request: 'Write a longer report',
+                plannerRoleId: role.id,
+                materials: [{ type: 'inline-text', value: 'context' }],
+                expected: [{ type: 'inline-text', value: 'a summary' }],
+                status: 'ready',
+              });
+            });
+
+            it('changes only the given fields, leaving others unchanged', async () => {
+              const res = await request(app.getHttpServer())
+                .put(`/api/task/${task.id}`)
+                .set('Authorization', `Bearer ${jwt}`)
+                .send({ plannerRoleId: role.id });
+              expect(res.status).toBe(200);
+              expect((res.body as LcpTask).request).toBe(task.request);
+              expect((res.body as LcpTask).plannerRoleId).toBe(role.id);
+            });
+
+            it('returns 404 for an unknown task', async () => {
+              const res = await request(app.getHttpServer())
+                .put('/api/task/00000000-0000-0000-0000-000000000000')
+                .set('Authorization', `Bearer ${jwt}`)
+                .send({ request: 'x' });
+              expect(res.status).toBe(404);
+            });
+
+            it('returns 404 when plannerRoleId is an unknown role', async () => {
+              const res = await request(app.getHttpServer())
+                .put(`/api/task/${task.id}`)
+                .set('Authorization', `Bearer ${jwt}`)
+                .send({
+                  plannerRoleId: '00000000-0000-0000-0000-000000000000',
+                });
+              expect(res.status).toBe(404);
+            });
+
+            it('returns 404 when plannerRoleId belongs to a different company', async () => {
+              const otherCompany = await companyRepo.save(
+                companyRepo.create({
+                  slug: `task-co-other-${Date.now()}`,
+                  name: 'Other Co',
+                  description: 'test',
+                }),
+              );
+              const otherRole = await roleRepo.save(
+                roleRepo.create({
+                  companyId: otherCompany.id,
+                  company: otherCompany,
+                  slug: 'other-planner',
+                  name: 'Other Planner',
+                  description: 'Plans tasks',
+                  knowledgeDomains: [],
+                  mcpServerList: [],
+                }),
+              );
+
+              const res = await request(app.getHttpServer())
+                .put(`/api/task/${task.id}`)
+                .set('Authorization', `Bearer ${jwt}`)
+                .send({ plannerRoleId: otherRole.id });
+              expect(res.status).toBe(404);
+
+              await roleRepo.delete(otherRole.id);
+              await companyRepo.delete(otherCompany.id);
+            });
+
+            it('returns 409 once the task has left ready', async () => {
+              await companyRepo.update(company.id, { plannerRoleId: role.id });
+              await request(app.getHttpServer())
+                .post(`/api/task/${task.id}/start`)
+                .set('Authorization', `Bearer ${jwt}`)
+                .expect(202);
+
+              const res = await request(app.getHttpServer())
+                .put(`/api/task/${task.id}`)
+                .set('Authorization', `Bearer ${jwt}`)
+                .send({ request: 'too late' });
+              expect(res.status).toBe(409);
+
+              await companyRepo.update(company.id, { plannerRoleId: null });
+            });
+          });
+
           describe('POST /api/task/:id/start', () => {
             it('returns 422 when no planner role is resolvable', async () => {
               const res = await request(app.getHttpServer())

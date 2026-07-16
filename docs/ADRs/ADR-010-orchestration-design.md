@@ -426,3 +426,27 @@ failed, cancelled)`). Every transition is recorded via the existing
   near-instant interruption is ever needed is to wire a Redis-published abort
   into that registry instead of waiting for the next poll.
 - **CLI**: `cancel-task --task-id <uuid>`.
+
+## Amendments as implemented (010.3.2)
+
+_2026-07-16._
+
+- **`LcpAssignment.parentAssignmentId`.** A nullable, indexed self-FK
+  (`ON DELETE SET NULL`) distinct from the existing `targetAssignmentId`
+  (what a QA assignment reviews) — this records which assignment's agent
+  spawned this one. Only `DbService.createAgent`'s orphan-assignment branch
+  needs it: when a caller supplies `LcpAgentTemplate.parentAssignmentId` (and
+  no `assignmentId`), the new orphan assignment inherits the parent
+  assignment's `taskId` directly and records `parentAssignmentId`, instead of
+  the previous hardcoded `taskId: null`. `PauseAndResumeService.pauseForConsultation`
+  is the one call site that needed it — it passes the calling agent's own
+  `assignmentId` as the new consultee assignment's `parentAssignmentId`. QA
+  and finalise assignments were never affected (they already set `taskId`
+  directly at creation); the standalone `chat` command and planner dispatch
+  stay parentless/taskless by omitting `parentAssignmentId`.
+- This closes the `eavesdrop --task-id` gap noted in 010.3.1: a consultation
+  spawned mid-task now appears in `GET /api/task/:id/history` and the task's
+  assignment list without any change to the query shape, because the
+  inheritance happens once, at creation, not per-query. See
+  [ADR-008's 010.3.2 amendment](./ADR-008-audit-logging.md) for the paired
+  `AuditEvent.assignmentId` denormalization.

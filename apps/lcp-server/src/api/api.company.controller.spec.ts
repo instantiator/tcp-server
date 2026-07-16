@@ -1,9 +1,13 @@
+import { CompanyEvent } from '@lcp/shared';
 import { NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import { firstValueFrom, Subject, take, toArray } from 'rxjs';
 import type { Request, Response } from 'express';
 import { DbService } from '../db/db.service';
+import { CompanyEventService } from '../events/company-event.service';
 import { CompanyController } from './api.company.controller';
 import { ApiService } from './api.service';
+import { TaskService } from './task.service';
 
 const fakeReq = (user: Record<string, unknown> = { sub: 'alice' }): Request =>
   ({ user }) as unknown as Request;
@@ -49,17 +53,36 @@ const makeDbService = (): jest.Mocked<
   deleteRole: jest.fn().mockResolvedValue(true),
 });
 
+const makeTaskService = (): jest.Mocked<
+  Pick<TaskService, 'listChangeSummaries'>
+> => ({
+  listChangeSummaries: jest.fn().mockResolvedValue([]),
+});
+
+const makeCompanyEventService = (): jest.Mocked<
+  Pick<CompanyEventService, 'emit' | 'observe'>
+> => ({
+  emit: jest.fn(),
+  observe: jest.fn().mockReturnValue(new Subject<CompanyEvent>()),
+});
+
 describe('CompanyController', () => {
   let api: ReturnType<typeof makeApiService>;
   let db: ReturnType<typeof makeDbService>;
+  let tasks: ReturnType<typeof makeTaskService>;
+  let companyEvents: ReturnType<typeof makeCompanyEventService>;
   let controller: CompanyController;
 
   beforeEach(() => {
     api = makeApiService();
     db = makeDbService();
+    tasks = makeTaskService();
+    companyEvents = makeCompanyEventService();
     controller = new CompanyController(
       api as unknown as ApiService,
       db as unknown as DbService,
+      tasks as unknown as TaskService,
+      companyEvents as unknown as CompanyEventService,
     );
   });
 
@@ -258,6 +281,53 @@ describe('CompanyController', () => {
         { name: 'Updated', companyId },
         { slug: 'analyst' },
       );
+    });
+  });
+
+  describe('streamCompanyEvents', () => {
+    it('resolves the company, primes company_changed + each task_changed, then relays live events', async () => {
+      const companyId = randomUUID();
+      db.getCompany.mockResolvedValue({ id: companyId } as never);
+      const taskSummary = {
+        id: randomUUID(),
+        status: 'ready' as const,
+        request: 'Write a report',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        completedSteps: 0,
+        totalSteps: 0,
+      };
+      tasks.listChangeSummaries.mockResolvedValue([taskSummary]);
+      const live = new Subject<CompanyEvent>();
+      companyEvents.observe.mockReturnValue(live);
+
+      const resultPromise = firstValueFrom(
+        controller.streamCompanyEvents('acme-slug').pipe(take(3), toArray()),
+      );
+      // Let the priming chain's awaits resolve before the live event arrives.
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      live.next({
+        timestamp: new Date().toISOString(),
+        kind: 'company_changed',
+        data: { companyId },
+      });
+
+      const results = await resultPromise;
+      expect(db.getCompany).toHaveBeenCalledWith('acme-slug');
+      expect(tasks.listChangeSummaries).toHaveBeenCalledWith(companyId);
+      expect(companyEvents.observe).toHaveBeenCalledWith(companyId);
+      expect(results.map((r) => (r.data as CompanyEvent).kind)).toEqual([
+        'company_changed',
+        'task_changed',
+        'company_changed',
+      ]);
+    });
+
+    it('throws NotFoundException when the company does not resolve', async () => {
+      db.getCompany.mockResolvedValue(null);
+      await expect(
+        firstValueFrom(controller.streamCompanyEvents('no-such-co')),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 

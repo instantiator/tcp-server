@@ -1,13 +1,22 @@
-import type { AuditEvent, LcpAssignment, LcpTask } from '@lcp/shared';
+import {
+  buildAssignmentChangeSummary,
+  type AuditEvent,
+  type LcpAssignment,
+  type LcpTask,
+  type TaskEvent,
+} from '@lcp/shared';
 import {
   BadRequestException,
   Body,
   Controller,
   Get,
   HttpCode,
+  MessageEvent,
   Param,
   Post,
+  Put,
   Query,
+  Sse,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -20,8 +29,11 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import type { UUID } from 'crypto';
+import { defer, from, merge, mergeMap, Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { CreateTaskDto } from './dto/task.dto';
+import { TaskEventService } from '../events/task-event.service';
+import { CreateTaskDto, UpdateTaskDto } from './dto/task.dto';
 import { TaskMaterialSummary, TaskService } from './task.service';
 
 /** Subset of the multer file object relevant to a materials upload. */
@@ -37,13 +49,30 @@ interface UploadedFileBuffer {
 @UseGuards(JwtAuthGuard)
 @Controller({ path: 'api/task' })
 export class TaskController {
-  constructor(private readonly tasks: TaskService) {}
+  constructor(
+    private readonly tasks: TaskService,
+    private readonly taskEvents: TaskEventService,
+  ) {}
 
   /** Creates a task in the `ready` state. No plan is generated until `POST /api/task/:id/start`. */
   @ApiOperation({ summary: 'Create a task' })
   @Post()
   async createTask(@Body() body: CreateTaskDto): Promise<LcpTask> {
     return this.tasks.create(body);
+  }
+
+  /**
+   * Edits an unstarted task's `request`/`plannerRoleId`/`materials`/`expected`.
+   * `id`, `companyId`, `status`, `completed`, and `failureReason` are not
+   * editable.
+   */
+  @ApiOperation({ summary: 'Partially update an unstarted task' })
+  @Put(':id')
+  async updateTask(
+    @Param('id') id: UUID,
+    @Body() body: UpdateTaskDto,
+  ): Promise<LcpTask> {
+    return this.tasks.update(id, body);
   }
 
   /**
@@ -109,13 +138,47 @@ export class TaskController {
 
   /**
    * Retrieves a task's audit history — every event recorded for the agents
-   * that worked its own plan/implement/qa/finalise assignments, oldest
-   * first. Does not trace consultations spawned mid-assignment (see
-   * {@link TaskService.getHistory}).
+   * that worked its own plan/implement/qa/finalise assignments (including
+   * consultations spawned mid-assignment), oldest first — see
+   * {@link TaskService.getHistory}.
    */
   @ApiOperation({ summary: "Get a task's audit history" })
   @Get(':id/history')
   async getTaskHistory(@Param('id') id: UUID): Promise<AuditEvent[]> {
     return this.tasks.getHistory(id);
+  }
+
+  /**
+   * SSE stream of `task_changed`/`assignment_changed` events for this task
+   * and its assignments. Primed with the task's current state (and each of
+   * its assignments') so a client that subscribes late renders immediately,
+   * then live updates via {@link TaskEventService}.
+   */
+  @ApiOperation({ summary: "Stream a task's and its assignments' events" })
+  @Sse(':id/events')
+  streamTaskEvents(@Param('id') id: UUID): Observable<MessageEvent> {
+    const replay$ = defer(() => from(this.primeTaskEvents(id))).pipe(
+      mergeMap((events) => from(events)),
+    );
+    return merge(replay$, this.taskEvents.observe(id)).pipe(
+      map((event) => ({ data: event })),
+    );
+  }
+
+  /** Builds the priming events for {@link streamTaskEvents}: the task's current state, then each assignment's. */
+  private async primeTaskEvents(taskId: UUID): Promise<TaskEvent[]> {
+    const timestamp = new Date().toISOString();
+    const summary = await this.tasks.getChangeSummary(taskId);
+    const { assignments } = await this.tasks.getWithAssignments(taskId);
+    return [
+      { timestamp, kind: 'task_changed', data: summary },
+      ...assignments.map(
+        (assignment): TaskEvent => ({
+          timestamp,
+          kind: 'assignment_changed',
+          data: buildAssignmentChangeSummary(assignment),
+        }),
+      ),
+    ];
   }
 }

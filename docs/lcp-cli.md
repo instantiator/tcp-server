@@ -306,15 +306,16 @@ renders its activity too — as its own tab in the TUI, or inline prefixed with
 the consulted role's name (e.g. `[Cat assistant] Response: …`) in the plain
 renderer. Nested consultations are followed recursively either way.
 
-| Flag                    | Alias | Description                                                              |
-| ----------------------- | ----- | ------------------------------------------------------------------------ |
-| `--role-id <uuid>`      | `-r`  | Role UUID for the agent (omit to browse company roles instead)           |
-| `--role-slug <slug>`    |       | Role slug instead of `--role-id` (needs `--company-id`/`--company-slug`) |
-| `--company-id <uuid>`   | `-c`  | Company UUID — browse and start chats from its role roster (TUI only)    |
-| `--company-slug <slug>` |       | Company slug instead of `--company-id`                                   |
-| `--query <message>`     | `-q`  | Single question, auto-submitted on startup — requires a role             |
-| `--hide-reasoning`      |       | Suppress the reasoning stream                                            |
-| `--no-tui`              |       | Force the plain scrolling renderer, even on a TTY                        |
+| Flag                        | Alias | Description                                                                                                           |
+| --------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------- |
+| `--role-id <uuid>`          | `-r`  | Role UUID for the agent (omit to browse company roles instead)                                                        |
+| `--role-slug <slug>`        |       | Role slug instead of `--role-id` (needs `--company-id`/`--company-slug`)                                              |
+| `--company-id <uuid>`       | `-c`  | Company UUID — browse and start chats from its role roster (TUI only)                                                 |
+| `--company-slug <slug>`     |       | Company slug instead of `--company-id`                                                                                |
+| `--query <message>`         | `-q`  | Single question, auto-submitted on startup — requires a role                                                          |
+| `--hide-reasoning`          |       | Suppress the reasoning stream                                                                                         |
+| `--no-tui`                  |       | Force the plain scrolling renderer, even on a TTY                                                                     |
+| `--task-list-max-lines <n>` |       | Max lines a highlighted company task-list entry expands to (TUI only; default 4, env `LCP_TASK_LIST_ENTRY_MAX_LINES`) |
 
 Exactly one of a role (`--role-id`, or `--role-slug` scoped to a company) or a
 bare company (`--company-id`/`--company-slug`) is required — role slugs are
@@ -336,15 +337,22 @@ full-screen view instead of scrolling text:
 
 - **Pane 0 is always the company roster** — labelled with the company's name,
   opening with a `Slug: …` / `Id: …` heading and a "Please select a role to
-  initiate a chat:" prompt, then a blank line, then the role list (the roster
-  pane doesn't render role slugs yet, so the list is just role names, sorted
-  alphabetically — see `--role-slug` elsewhere in this doc for scripted access
-  by slug). **Up/Down** moves the highlight (the view scrolls to keep
-  it visible on a long list), **Enter** starts a chat with the highlighted
-  role (opening a new talkable tab and switching to it — this also works
-  mid-session, so you can chat with more than one role at once), and **r**
-  re-fetches the role list. It has no input box, so these keys are free for
-  navigation rather than typing.
+  initiate a chat:" prompt, then a blank line, then two lists: **Roles** (the
+  "initiate chat" list — role slugs aren't rendered yet, so this is just role
+  names, sorted alphabetically; see `--role-slug` elsewhere in this doc for
+  scripted access by slug) and **Tasks** (the company's tasks, grouped
+  **Active** — `ready`/`planning`/`in-progress`/`finalising` — and
+  **Completed / failed** — `succeeded`/`failed`/`cancelled` — each most
+  recently updated first, live-updating from the company's SSE stream; a
+  highlighted task expands its full prompt, word-wrapped up to
+  `--task-list-max-lines` lines). **Up/Down** moves one highlight across both
+  lists, cycling top↔bottom; **[** / **]** jump straight to the previous/next
+  list; the view scrolls to keep the highlight visible on a long list.
+  **Enter** starts a chat with a highlighted role (opening a new talkable tab
+  and switching to it — this also works mid-session, so you can chat with
+  more than one role at once; Enter is a no-op on a highlighted task — task
+  detail panels are `010.3.3`), and **r** re-fetches the role list. It has no
+  input box, so these keys are free for navigation rather than typing.
 - **One tab per other monitored agent** — the root agent (if `-r` was given;
   it opens immediately alongside the roster and becomes active), one per role
   chatted with from the roster, and one per consultation any of them
@@ -726,18 +734,27 @@ model.
 | `--request <text>`            | `-r`  | Required. The user's statement of the work                        |
 | `--planner-role <slug-or-id>` |       | Explicit planner role; falls back to the company default at start |
 | `--materials <paths...>`      | `-m`  | Local material file paths to upload                               |
-| `--expected <filenames...>`   |       | Filenames expected in the task's completed directory              |
+| `--expected <filename>`       | `-e`  | Repeatable. Filename expected in the task's completed directory   |
 | `--start`                     |       | Start the task immediately after creation (and materials upload)  |
 
 > [!NOTE]
-> `--planner-role`/`--expected` have no short alias: `-p` collides with the
-> global `-p, --password` (Commander silently binds the subcommand's `-p` to
-> the root option instead — the password ends up overwritten by whatever
-> `-p` value follows the subcommand), and `-e` is claimed by `./lcp-cli.sh`'s
-> own `-e`/`--env` wrapper flag before the argument list ever reaches Node.
+> `--planner-role` has no short alias: `-p` collides with the global
+> `-p, --password` (Commander silently binds the subcommand's `-p` to the
+> root option instead — the password ends up overwritten by whatever `-p`
+> value follows the subcommand).
+>
+> **Behaviour change:** `--expected` used to be a Commander _variadic_ option
+> (`--expected a.txt b.txt` in one occurrence). It is now _repeatable_ instead
+> — repeat the flag once per filename (`-e a.txt -e b.txt`). `./lcp-cli.sh`'s
+> own `-e`/`--env` wrapper flag only intercepts `-e` up to the first
+> non-wrapper argument (the verb) — `create-task -e report.md` is unambiguous
+> since `-e` follows the verb.
 
 ```bash
-./lcp-cli.sh -t $TOKEN create-task -c acme -r "Write a market analysis report" --expected report.md
+./lcp-cli.sh -t $TOKEN create-task -c acme -r "Write a market analysis report" -e report.md
+
+./lcp-cli.sh -t $TOKEN create-task -c acme -r "Write a market analysis report" \
+  -e report.md -e summary.md
 
 ./lcp-cli.sh -t $TOKEN create-task -c acme -r "Summarise the attached brief" \
   -m ./brief.pdf --planner-role planner --start
@@ -763,6 +780,63 @@ outcomes.
 
 ```bash
 ./lcp-cli.sh -t $TOKEN get-task --task-id <uuid>
+```
+
+### `set-task`
+
+Edits an unstarted task (`request`/`plannerRoleId`/`materials`/`expected`).
+Reads JSON from `--input` or stdin — a deep-partial, like `set-company`/
+`set-role`, applied via `PUT /api/task/:id`. `id`, `companyId`, `status`,
+`completed`, and `failureReason` are not editable.
+
+- **stdout**: the updated task as JSON
+- Returns `409` once the task has left `ready` (already started) — only
+  unstarted tasks can be edited
+- Returns `400`/`404` if `plannerRoleId` is given but doesn't resolve to a
+  role belonging to the task's company
+
+| Flag               | Alias | Description                        |
+| ------------------ | ----- | ---------------------------------- |
+| `--task-id <uuid>` |       | Required. Task UUID                |
+| `--input <json>`   | `-i`  | JSON body (`DeepPartial<LcpTask>`) |
+
+```bash
+./lcp-cli.sh -t $TOKEN set-task --task-id <uuid> -i '{"request":"Write a longer report"}'
+echo '{"expected":[{"type":"inline-text","value":"a summary"}]}' | ./lcp-cli.sh -t $TOKEN set-task --task-id <uuid>
+```
+
+### `set-planner`
+
+Sets a company's or an unstarted task's planner role. Exactly one of a
+company target (`--company`/`--company-id`/`--company-slug`) or `--task-id`
+must be given; `--role`/`--role-id`/`--role-slug` is always required.
+
+- A company target updates `LcpCompany.plannerRoleId` (`PUT /api/company/:id`)
+  — the fallback used by any task in that company with no planner of its own.
+- A task target updates `LcpTask.plannerRoleId` (`PUT /api/task/:id`),
+  inheriting that endpoint's "unstarted only" guard (`409` once started). A
+  `--role-slug` is scoped to the task's own company (resolved via `GET
+/api/task/:id` first), even though only a task was named.
+- **stdout**: the updated company or task as JSON
+
+```bash
+./lcp-cli.sh -t $TOKEN set-planner --company-slug acme --role-slug planner
+./lcp-cli.sh -t $TOKEN set-planner --task-id <uuid> --role-slug planner
+```
+
+### `start-task`
+
+Starts a task that hasn't been started yet — the standalone equivalent of
+`create-task --start`, for a task already created (and possibly edited via
+`set-task`/`set-planner`) earlier.
+
+- **stdout**: the started task as JSON
+- Returns `422` if neither the task nor its company has a resolvable planner
+  role (set one first via `set-planner`)
+- Returns `409` on a double start
+
+```bash
+./lcp-cli.sh -t $TOKEN start-task --task-id <uuid>
 ```
 
 ### `cancel-task`

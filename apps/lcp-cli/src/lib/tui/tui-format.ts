@@ -3,8 +3,14 @@
 // indent/grey special case, and blank-line separation rules can be
 // unit-tested without a live terminal-kit screen.
 
+import type { TaskChangeSummary } from '@lcp/shared';
 import { SseEvent } from '../core/sse';
-import { RoleOption } from './tui-state';
+import {
+  ListEntry,
+  ListPosition,
+  RoleOption,
+  SelectableList,
+} from './tui-state';
 
 /** Reads a string field from an event's data payload, defaulting to ''. */
 function str(data: Record<string, unknown> | undefined, key: string): string {
@@ -194,53 +200,151 @@ export class PaneEntryLog {
   }
 }
 
-/**
- * Renders a company's role roster, marking the highlighted row. The `>` on
- * the selected row is rendered in inverse video (`^!`/`^:`) rather than
- * relying on the terminal's own cursor, which terminal-kit never draws (or
- * hides) for a plain, non-editable TextBox like this one — see tui.ts's
- * cursor-visibility note.
- */
-export function renderRoleList(
-  roles: RoleOption[],
-  selectedIndex: number,
-): string[] {
-  if (roles.length === 0) return ['(no roles in this company)'];
-  return roles.map((role, i) =>
-    i === selectedIndex
-      ? `^!>^: ${escapeMarkup(role.name)}`
-      : `  ${escapeMarkup(role.name)}`,
-  );
+/** The `>` marker rendered for a selected row, in inverse video (`^!`/`^:`) — the
+ * terminal's own cursor is never drawn/hidden for a plain, non-editable
+ * TextBox (see tui.ts's cursor-visibility note), so every selectable list
+ * marks its own highlight this way instead. */
+function marker(selected: boolean): string {
+  return selected ? '^!>^: ' : '  ';
 }
 
-/** One logical block of the company roster pane's rendered content. */
-export interface RosterRender {
-  lines: string[];
-  /** Index within `lines` where the role list begins — role `i`'s line is `listStartIndex + i`. */
-  listStartIndex: number;
+/** Builds one {@link ListEntry} for a role in the company roster's "Roles" list. */
+export function makeRoleEntry(role: RoleOption): ListEntry {
+  return {
+    id: role.id,
+    render: (_width: number, selected: boolean) => [
+      `${marker(selected)}${escapeMarkup(role.name)}`,
+    ],
+  };
 }
 
 /**
- * Renders the full company roster pane: an identifying heading (slug + id),
- * a prompt, a blank separator, then the role list. `listStartIndex` is
- * returned (rather than hardcoded elsewhere) so the caller's "keep the
- * selection in view" scrolling can never drift out of sync with this layout.
+ * Renders the company roster pane's identifying heading: slug + id, a
+ * prompt, and a blank separator — everything before the panel's
+ * {@link SelectableList}s (Roles, then Tasks).
  */
-export function renderRosterPane(
+export function renderRosterHeading(
   companySlug: string,
   companyId: string,
-  roles: RoleOption[],
-  selectedIndex: number,
-): RosterRender {
-  const heading = [
+): string[] {
+  return [
     `Slug: ${escapeMarkup(companySlug)}`,
     `Id: ${escapeMarkup(companyId)}`,
     '',
     'Please select a role to initiate a chat:',
     '',
   ];
-  const lines = [...heading, ...renderRoleList(roles, selectedIndex)];
-  return { lines, listStartIndex: heading.length };
+}
+
+/**
+ * Renders a panel's {@link SelectableList}s: each list's title, then per
+ * group an optional group title, then its entries — blank-line separated
+ * between lists. `selectedLine` is the line index (within the returned
+ * `lines`) of the current selection, so the caller can scroll it into view
+ * without hardcoding this layout a second time; `-1` if there is no
+ * selection (e.g. every list is empty).
+ */
+export function renderMultiListPanel(
+  lists: SelectableList[],
+  selected: ListPosition | undefined,
+  width: number,
+): { lines: string[]; selectedLine: number } {
+  const lines: string[] = [];
+  let selectedLine = -1;
+  lists.forEach((list, listIndex) => {
+    if (listIndex > 0) lines.push('');
+    lines.push(`^+${escapeMarkup(list.title)}^:`);
+    list.groups.forEach((group, groupIndex) => {
+      if (group.title) lines.push(escapeMarkup(group.title));
+      if (group.entries.length === 0 && group.title) {
+        lines.push('  (none)');
+      }
+      group.entries.forEach((entry, entryIndex) => {
+        const isSelected = Boolean(
+          selected &&
+          selected.listIndex === listIndex &&
+          selected.groupIndex === groupIndex &&
+          selected.entryIndex === entryIndex,
+        );
+        if (isSelected) selectedLine = lines.length;
+        lines.push(...entry.render(width, isSelected));
+      });
+    });
+  });
+  return { lines, selectedLine };
+}
+
+/** `yyyy-MM-dd HH:mm:ss` for a task-list entry's timestamp column. */
+export function dateTimeSeconds(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
+    `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+  );
+}
+
+/** Truncates `text` to `width` columns, replacing the last character with an ellipsis if it doesn't fit. */
+export function truncateWithEllipsis(text: string, width: number): string {
+  const w = Math.max(width, 1);
+  if (text.length <= w) return text;
+  return w === 1 ? text.slice(0, 1) : text.slice(0, w - 1) + '…';
+}
+
+/** The task-list state/completion indicator, e.g. `in progress: 2/3`, `succeeded`. */
+export function formatTaskState(summary: TaskChangeSummary): string {
+  return summary.status === 'in-progress'
+    ? `in progress: ${summary.completedSteps}/${summary.totalSteps}`
+    : summary.status;
+}
+
+/**
+ * Renders one company task-list entry: a single truncated line when not
+ * highlighted (`yyyy-MM-dd HH:mm:ss (state) "request"`), or — highlighted —
+ * the prompt expanded and word-wrapped up to `maxLines`, with a blank line
+ * of spacing before and after.
+ */
+export function renderTaskListEntry(
+  summary: TaskChangeSummary,
+  selected: boolean,
+  width: number,
+  maxLines: number,
+): string[] {
+  const w = Math.max(width, 1);
+  const mark = marker(selected);
+  const meta = `${dateTimeSeconds(summary.createdAt)} (${formatTaskState(summary)})`;
+  const body = `${meta} "${summary.request}"`;
+
+  if (!selected) {
+    return [
+      `${mark}${escapeMarkup(truncateWithEllipsis(body, w - mark.length))}`,
+    ];
+  }
+
+  const wrapped = wrapText(body, Math.max(w - mark.length, 1)).slice(
+    0,
+    Math.max(maxLines, 1),
+  );
+  return [
+    '',
+    ...wrapped.map((line, i) =>
+      i === 0 ? `${mark}${escapeMarkup(line)}` : `  ${escapeMarkup(line)}`,
+    ),
+    '',
+  ];
+}
+
+/** Builds one {@link ListEntry} for a task in the company roster's "Tasks" list. */
+export function makeTaskEntry(
+  summary: TaskChangeSummary,
+  maxLines: number,
+): ListEntry {
+  return {
+    id: summary.id,
+    render: (width: number, selected: boolean) =>
+      renderTaskListEntry(summary, selected, width, maxLines),
+  };
 }
 
 /** Renders the identifying heading shown at the top of every chat pane. */

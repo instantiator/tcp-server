@@ -46,6 +46,7 @@ export type AuditEventType =
  */
 @Entity()
 @Index(['companyId', 'agentId', 'timestamp'])
+@Index(['companyId', 'assignmentId', 'timestamp'])
 export class AuditEvent {
   /**
    * Auto-generated primary key.
@@ -86,6 +87,16 @@ export class AuditEvent {
    */
   @Column({ nullable: true, type: 'varchar' })
   agentId!: UUID | null;
+
+  /**
+   * Denormalised copy of the producing agent's assignment at write time (see
+   * {@link LcpAssignment.parentAssignmentId} for why assignments now always
+   * carry a task-traceable lineage). No relation object — like `agentId`,
+   * this is a plain column so hot-path writes never risk an accidental join.
+   * @format uuid
+   */
+  @Column({ nullable: true, type: 'varchar' })
+  assignmentId!: UUID | null;
 
   /** The category of event. */
   @Column({ type: 'varchar' })

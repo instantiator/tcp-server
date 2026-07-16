@@ -23,6 +23,106 @@ export interface RoleOption {
   name: string;
 }
 
+/**
+ * One row of a {@link SelectableList}. `render` draws it at a given content
+ * width, told whether it's the current selection (e.g. the `>` marker).
+ * `selectable` defaults to true — set it false for a non-interactive row
+ * such as a group heading rendered as its own entry (rare; group titles are
+ * usually handled by {@link ListGroup.title} instead).
+ */
+export interface ListEntry {
+  id: string;
+  render(width: number, selected: boolean): string[];
+  selectable?: boolean;
+}
+
+/** A titled cluster of entries within a {@link SelectableList} (e.g. "Active" tasks). */
+export interface ListGroup {
+  title?: string;
+  entries: ListEntry[];
+}
+
+/** One of a panel's named, groupable, selectable lists (e.g. "Roles", "Tasks"). */
+export interface SelectableList {
+  title: string;
+  groups: ListGroup[];
+}
+
+/** A selectable row's location within a panel's lists — what `MultiListSelection.current` resolves to. */
+export interface ListPosition {
+  listIndex: number;
+  groupIndex: number;
+  entryIndex: number;
+  entry: ListEntry;
+}
+
+/** Flattens a panel's lists into their selectable rows, in list/group/entry order. */
+function flattenSelectable(lists: SelectableList[]): ListPosition[] {
+  const flat: ListPosition[] = [];
+  lists.forEach((list, listIndex) => {
+    list.groups.forEach((group, groupIndex) => {
+      group.entries.forEach((entry, entryIndex) => {
+        if (entry.selectable ?? true) {
+          flat.push({ listIndex, groupIndex, entryIndex, entry });
+        }
+      });
+    });
+  });
+  return flat;
+}
+
+/**
+ * Tracks a single flat selection index over every selectable row across a
+ * panel's {@link SelectableList}s (skipping non-selectable rows, e.g. group
+ * headings). `moveSelection` cycles top↔bottom over the whole concatenated
+ * set; `jumpToList` moves to the first selectable entry of the previous/next
+ * list. Kept free of any terminal-kit dependency — the panel (`RosterPane`)
+ * owns rendering and calls back into this for navigation only.
+ */
+export class MultiListSelection {
+  private lists: SelectableList[] = [];
+  private index = 0;
+
+  /** Replaces the lists, clamping the current index if the flat row count shrank. */
+  setLists(lists: SelectableList[]): void {
+    this.lists = lists;
+    const count = flattenSelectable(lists).length;
+    this.index = count === 0 ? 0 : Math.min(this.index, count - 1);
+  }
+
+  /** The currently-selected row, or undefined if there are no selectable rows. */
+  get current(): ListPosition | undefined {
+    return flattenSelectable(this.lists)[this.index];
+  }
+
+  /** Moves the selection by `delta` rows, cycling at either end. */
+  moveSelection(delta: number): void {
+    const flat = flattenSelectable(this.lists);
+    if (flat.length === 0) return;
+    this.index = (this.index + delta + flat.length) % flat.length;
+  }
+
+  /**
+   * Moves the selection to the first selectable entry of the previous
+   * (`-1`) or next (`1`) list, wrapping around and skipping any list with no
+   * selectable entries. No-op with fewer than two lists.
+   */
+  jumpToList(direction: 1 | -1): void {
+    const flat = flattenSelectable(this.lists);
+    if (flat.length === 0 || this.lists.length <= 1) return;
+    const n = this.lists.length;
+    let target = (flat[this.index].listIndex + direction + n) % n;
+    for (let tries = 0; tries < n; tries++) {
+      const firstIndex = flat.findIndex((pos) => pos.listIndex === target);
+      if (firstIndex !== -1) {
+        this.index = firstIndex;
+        return;
+      }
+      target = (target + direction + n) % n;
+    }
+  }
+}
+
 /** Tracks the set of open panes and which one is currently focused. */
 export class PaneManager {
   private order: string[] = [];

@@ -136,3 +136,50 @@ The proposal above was implemented with the following changes, driven by the
 rather than `Idle` (the old `Idle` reset lived in the deleted long-poll
 `finally`). This is harmless — `sendMessage` does not gate on status, and the
 recovery poll treats `Completed`-with-output as a finished turn.
+
+## Amendments as implemented (010.3.2)
+
+_2026-07-16._ Two new streams follow the same shape, so the TUI's company
+task list and task/assignment panels can live-update without polling:
+
+- **`GET /api/company/:id/events`** (`CompanyController.streamCompanyEvents`)
+  — `CompanyEvent` union (`company_changed`, `task_changed`), on the
+  `company:events:{companyId}` channel.
+- **`GET /api/task/:id/events`** (`TaskController.streamTaskEvents`) —
+  `TaskEvent` union (`task_changed`, `assignment_changed`), on the
+  `task:events:{taskId}` channel.
+- Both event unions and channel helpers live in `libs/lcp-shared/src/events/`
+  (`company-events.ts`, `task-events.ts`), alongside the existing
+  `agent-events.ts`. A shared `TaskChangeSummary` (id, status, request,
+  timestamps, `completedSteps`/`totalSteps` from the implement-mode plan) is
+  the payload for every `task_changed` event and the priming snapshot — the
+  same shape a task-list row renders from, so the CLI never needs a refetch.
+- Both endpoints **prime** the stream with the current state before merging
+  in live events (`defer` + `merge`, the same pattern `AgentController`'s
+  `replayTerminal` uses) — the company stream primes with `company_changed` +
+  every current task's `task_changed`; the task stream primes with its own
+  `task_changed` + every current assignment's `assignment_changed`.
+- **One architectural difference from the agent bus**: every producer of
+  company/task events runs in-process within lcp-server (task/assignment
+  state changes always funnel through `TaskOrchestrationService`, itself
+  triggered by an HTTP call even when lcp-agent is the ultimate cause) — there
+  is no separate out-of-process publisher analogous to lcp-agent's
+  `AgentEventPublisherService`. So the new `KeyedEventBus` (generic base
+  shared by `CompanyEventService`/`TaskEventService`, `apps/lcp-server/src/
+events/keyed-event-bus.ts`) folds emit and relay into one class: `emit`
+  publishes to Redis and lets the channel subscription deliver the event back
+  to local observers (rather than pushing to the local `Subject` directly),
+  which avoids double-delivery on an instance that both emits and observes
+  the same key. When `REDIS_URL` is unset, `emit` falls back to a direct local
+  push (pure in-memory — the default in unit tests).
+- **Emit points**: `TaskOrchestrationService.recordTaskState`/
+  `recordAssignmentState` are the single place every task/assignment
+  transition is recorded (audit) and emitted (SSE) — including the
+  previously-unaudited `ready → planning` transition on task start, now
+  recorded/emitted from `dispatchPlanner`. Regression fixed along the way:
+  `acceptAssignment`/`rejectAssignment` claimed the new status atomically in
+  the DB but never updated the in-memory assignment object before calling
+  `recordAssignmentState`, so both the audit payload and (now) the SSE
+  payload would have reported the stale prior status (`in-qa`) instead of the
+  real new one (`succeeded`/`failed`/`in-progress`).
+- A company entity update (`ApiService.setCompany`) emits `company_changed`.

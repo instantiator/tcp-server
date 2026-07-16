@@ -5,15 +5,27 @@
 // (the company's role list, scrolling to keep the highlight in view), and
 // TextPane (fixed text — e.g. the help screen — with native scrolling).
 
+import type { TaskChangeSummary } from '@lcp/shared';
 import { TextBox } from 'terminal-kit';
 import { SseEvent } from '../core/sse';
 import {
+  makeRoleEntry,
+  makeTaskEntry,
   PaneEntryLog,
+  renderMultiListPanel,
   renderPaneHeading,
-  renderRosterPane,
+  renderRosterHeading,
   wrapText,
 } from './tui-format';
-import { RoleOption } from './tui-state';
+import { MultiListSelection, RoleOption, SelectableList } from './tui-state';
+
+/** Task statuses shown in the roster's "Active" task group, most-recently-updated first. */
+const ACTIVE_TASK_STATUSES = new Set([
+  'ready',
+  'planning',
+  'in-progress',
+  'finalising',
+]);
 
 /**
  * Common behaviour for every pane: identity, its backing TextBox, and the
@@ -132,15 +144,19 @@ export class ChatPane extends Pane {
 }
 
 /**
- * The company roster pane: lists the company's roles under a "Slug/Id" +
- * prompt heading, with an up/down-moved highlight. Never talkable — Up/Down/
- * Enter/r are handled by Tui.handleKey and routed into this pane's own
- * methods, since there's no InlineInput competing for those keys.
+ * The company roster pane: a "Slug/Id" + prompt heading, then two
+ * {@link SelectableList}s — Roles (the "initiate chat" list) and Tasks (the
+ * company's tasks, grouped Active/Completed-or-failed, live-updating from
+ * the company SSE stream) — with one flat `>` highlight moving across both.
+ * Never talkable — Up/Down/Enter/r/[/] are handled by Tui.handleKey and
+ * routed into this pane's own methods, since there's no InlineInput
+ * competing for those keys.
  */
 export class RosterPane extends Pane {
   readonly talkable = false;
-  selectedIndex = 0;
-  private listStartIndex = 0;
+  private readonly selection = new MultiListSelection();
+  private lists: SelectableList[] = [];
+  private selectedLine = -1;
 
   constructor(
     id: string,
@@ -148,44 +164,81 @@ export class RosterPane extends Pane {
     textBox: TextBox,
     public slug: string,
     public roles: RoleOption[],
+    private tasks: TaskChangeSummary[] = [],
+    private readonly taskListEntryMaxLines: number = 4,
   ) {
     super(id, label, textBox);
+    this.rebuildLists();
   }
 
+  /** The role at the current selection, or undefined when it's on the Tasks list (or nothing is selected). */
   get selectedRole(): RoleOption | undefined {
-    return this.roles[this.selectedIndex];
+    const pos = this.selection.current;
+    if (!pos || pos.listIndex !== 0) return undefined;
+    return this.roles.find((role) => role.id === pos.entry.id);
   }
 
-  /** Moves the highlight by `delta`, wrapping at the ends. */
+  /** Moves the flat highlight by `delta` rows, cycling top↔bottom across every list. */
   moveSelection(delta: number): void {
-    if (this.roles.length === 0) return;
-    const n = this.roles.length;
-    this.selectedIndex = (this.selectedIndex + delta + n) % n;
+    this.selection.moveSelection(delta);
+  }
+
+  /** Jumps the highlight to the first selectable row of the previous (`-1`) or next (`1`) list. */
+  jumpList(direction: 1 | -1): void {
+    this.selection.jumpToList(direction);
   }
 
   /** Replaces the role list (e.g. the 'r' refresh key), clamping the selection. */
   setRoles(roles: RoleOption[]): void {
     this.roles = roles;
-    this.selectedIndex = Math.min(
-      this.selectedIndex,
-      Math.max(roles.length - 1, 0),
-    );
+    this.rebuildLists();
   }
 
-  // Role names aren't wrapped, so the pane width isn't needed here.
-  protected render(): string[] {
-    const { lines, listStartIndex } = renderRosterPane(
-      this.slug,
-      this.id,
-      this.roles,
-      this.selectedIndex,
+  /** Replaces the task list (live updates from the company SSE stream). */
+  setTasks(tasks: TaskChangeSummary[]): void {
+    this.tasks = tasks;
+    this.rebuildLists();
+  }
+
+  private rebuildLists(): void {
+    const active = this.tasks
+      .filter((t) => ACTIVE_TASK_STATUSES.has(t.status))
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const done = this.tasks
+      .filter((t) => !ACTIVE_TASK_STATUSES.has(t.status))
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const taskEntry = (t: TaskChangeSummary) =>
+      makeTaskEntry(t, this.taskListEntryMaxLines);
+
+    this.lists = [
+      {
+        title: 'Roles',
+        groups: [{ entries: this.roles.map(makeRoleEntry) }],
+      },
+      {
+        title: 'Tasks',
+        groups: [
+          { title: 'Active', entries: active.map(taskEntry) },
+          { title: 'Completed / failed', entries: done.map(taskEntry) },
+        ],
+      },
+    ];
+    this.selection.setLists(this.lists);
+  }
+
+  protected render(width: number): string[] {
+    const heading = renderRosterHeading(this.slug, this.id);
+    const { lines, selectedLine } = renderMultiListPanel(
+      this.lists,
+      this.selection.current,
+      width,
     );
-    this.listStartIndex = listStartIndex;
-    return lines;
+    this.selectedLine = selectedLine < 0 ? -1 : heading.length + selectedLine;
+    return [...heading, ...lines];
   }
 
   protected afterRedraw(): void {
-    this.scrollLineIntoView(this.listStartIndex + this.selectedIndex);
+    if (this.selectedLine >= 0) this.scrollLineIntoView(this.selectedLine);
   }
 }
 

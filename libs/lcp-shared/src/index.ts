@@ -16,6 +16,8 @@ export * from './config/precedence-resolver';
 export * from './config/resolve-llm-config';
 export * from './config/resolve-system-prompt-template';
 export * from './events/agent-events';
+export * from './events/company-events';
+export * from './events/task-events';
 export * from './models';
 export * from './mcp/resolve-mcp-server-list';
 export * from './llm/llm-factory';

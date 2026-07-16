@@ -51,6 +51,7 @@
 // Ctrl+W closes the active tab (any pane except the roster, which is
 // permanent); see handleKey and onCloseTab.
 
+import type { TaskChangeSummary } from '@lcp/shared';
 import {
   Document,
   InlineInput,
@@ -95,6 +96,7 @@ export interface TuiTerminal {
   grabInput(on: boolean | Record<string, unknown>): void;
   processExit(code: number): void;
   on(event: string, handler: (...args: unknown[]) => void): unknown;
+  off(event: string, handler: (...args: unknown[]) => void): unknown;
   /** Shows/hides the terminal's own blinking cursor (see Tui's cursor-visibility note above). */
   hideCursor(hidden: boolean): void;
 }
@@ -104,6 +106,8 @@ export interface TuiOptions {
   /** Where the Document draws; defaults to `term`. Specs pass a ScreenBuffer. */
   outputDst?: unknown;
   hideReasoning?: boolean;
+  /** Max lines a highlighted company task-list entry expands to. See {@link resolveTaskListEntryMaxLines}. */
+  taskListEntryMaxLines?: number;
 }
 
 const TAB_ROWS = 1;
@@ -114,6 +118,26 @@ const HINT_ROWS = 1;
 /** Rows reserved for the input box — it starts at 1 high and can grow to
  * this many rows via Alt+Enter before further lines draw over the hint row. */
 const INPUT_ROWS = 3;
+
+/** Narrower than this and a pane's own content (headings, wrapped text, the
+ * scrollbar column) has nowhere sane to go — treated the same as "too
+ * short": panes stay hidden/unpositioned, and the resize isn't forwarded to
+ * terminal-kit's own Document#onEventSourceResize (see Tui's constructor). */
+const MIN_CONTENT_WIDTH = 3;
+
+/** Default max lines a highlighted company task-list entry expands to. */
+const TASK_LIST_ENTRY_MAX_LINES = 4;
+
+/**
+ * Resolves `--task-list-max-lines` (precedence: CLI flag → `LCP_TASK_LIST_ENTRY_MAX_LINES`
+ * env var → {@link TASK_LIST_ENTRY_MAX_LINES}), falling back to the default
+ * for anything that isn't a positive integer.
+ */
+export function resolveTaskListEntryMaxLines(flagValue?: string): number {
+  const raw = flagValue ?? process.env['LCP_TASK_LIST_ENTRY_MAX_LINES'];
+  const n = raw !== undefined ? Number(raw) : NaN;
+  return Number.isInteger(n) && n > 0 ? n : TASK_LIST_ENTRY_MAX_LINES;
+}
 
 /** Fixed id for the (at most one) help pane; see Tui.showHelp(). */
 const HELP_PANE_ID = '__help__';
@@ -129,7 +153,8 @@ const HELP_TEXT = [
   '                  OS or terminal — e.g. bound to brightness on Macs)',
   '',
   'On the company roster:',
-  '  Up / Down       Move the highlight',
+  '  Up / Down       Move the highlight (cycles across Roles and Tasks)',
+  '  [ / ]           Jump to the previous/next list (Roles, Tasks)',
   '  Enter           Start a chat with the highlighted role',
   '  r               Refresh the role list',
   '',
@@ -165,6 +190,7 @@ function fitHints(hints: string[], width: number): string {
 export class Tui {
   private readonly term: TuiTerminal;
   private readonly hideReasoning: boolean;
+  private readonly taskListEntryMaxLines: number;
   private readonly document: Document;
   private readonly manager = new PaneManager();
   private readonly panes = new Map<string, Pane>();
@@ -183,6 +209,8 @@ export class Tui {
   constructor(opts: TuiOptions = {}) {
     this.term = opts.term ?? sharedTerminal;
     this.hideReasoning = opts.hideReasoning ?? false;
+    this.taskListEntryMaxLines =
+      opts.taskListEntryMaxLines ?? TASK_LIST_ENTRY_MAX_LINES;
     this.term.fullscreen(true);
     this.document = new Document({
       outputDst: opts.outputDst ?? this.term,
@@ -195,17 +223,43 @@ export class Tui {
       parent: this.document,
       x: 0,
       y: 0,
-      width: this.term.width,
+      width: this.termWidth(),
       height: TAB_ROWS,
     });
     this.hintBar = new TextBox({
       parent: this.document,
       x: 0,
-      y: this.term.height - HINT_ROWS,
-      width: this.term.width,
+      y: Math.max(this.termHeight() - HINT_ROWS, 0),
+      width: this.termWidth(),
       height: HINT_ROWS,
     });
     this.term.on('key', (name) => this.handleKey(name as string));
+
+    // terminal-kit's own Document#onEventSourceResize (registered on `term`
+    // inside the Document constructor above, so it fires *before* anything
+    // we add below) resizes the Document's own internal compositing buffer
+    // to the raw, unclamped (width, height) and immediately redraws — using
+    // whatever positions our widgets were last set to. On a resize to a
+    // small/degenerate terminal, that draw runs before we ever get a chance
+    // to shrink/reposition our widgets for the new size, and can throw
+    // (ScreenBuffer offset out of range) — the crash this section fixes.
+    // Un-registering it and driving it ourselves, after our own resize
+    // handling (which repositions everything for the new, clamped size via
+    // refresh()/layout()), fixes the ordering half of the problem; but
+    // shrinking Document's own internal buffer down to a "no content room"
+    // size (see hasRoomForContent()) — even transiently — has been observed
+    // to corrupt it such that a *later* resize back up to a normal size then
+    // throws the same error. So: only forward the resize to Document at all
+    // when there's room for content; while there isn't, Document keeps
+    // compositing at its last good size (harmless — every content pane is
+    // hidden during this window anyway, see refresh()), and picks up the
+    // real size cleanly on the first resize event after the terminal grows
+    // back, with no broken intermediate state to recover from.
+    // Already bound to the Document instance in its own constructor — reuse
+    // that exact reference so `off` removes the listener terminal-kit
+    // registered, not a new (different) bound copy.
+    const documentOnResize = this.document.onEventSourceResize;
+    this.term.off('resize', documentOnResize);
     this.term.on('resize', () => {
       // The input must be rebuilt, not repositioned: InlineInput places its
       // prompt TextBox at construction coordinates only, so a later
@@ -213,6 +267,9 @@ export class Tui {
       // prompt behind. refresh() recreates it at the new position.
       this.dropInput();
       this.refresh();
+      if (this.hasRoomForContent()) {
+        documentOnResize(this.term.width, this.term.height);
+      }
     });
   }
 
@@ -293,6 +350,8 @@ export class Tui {
       textBox,
       spec.slug,
       spec.roles,
+      [],
+      this.taskListEntryMaxLines,
     );
     this.panes.set(spec.id, pane);
     this.refresh();
@@ -326,6 +385,14 @@ export class Tui {
     const pane = this.panes.get(paneId);
     if (!(pane instanceof RosterPane)) return;
     pane.setRoles(roles);
+    if (this.manager.activePane?.id === paneId) this.redrawActivePane();
+  }
+
+  /** Replaces a roster pane's task list (live updates from the company SSE stream). */
+  updateRosterTasks(paneId: string, tasks: TaskChangeSummary[]): void {
+    const pane = this.panes.get(paneId);
+    if (!(pane instanceof RosterPane)) return;
+    pane.setTasks(tasks);
     if (this.manager.activePane?.id === paneId) this.redrawActivePane();
   }
 
@@ -459,6 +526,15 @@ export class Tui {
         this.refreshRosterHandler?.();
         return;
       }
+      // '[' / ']' jump the highlight to the previous/next list (Roles ↔
+      // Tasks) — Tab/Shift+Tab already switch *panes*, so a distinct key is
+      // needed for switching *lists* within this one pane; neither bracket
+      // is bound anywhere else in this pane or the document.
+      if (name === '[' || name === ']') {
+        activePane.jumpList(name === '[' ? -1 : 1);
+        this.redrawActivePane();
+        return;
+      }
       return;
     }
 
@@ -496,12 +572,52 @@ export class Tui {
       parent: this.document,
       x: 0,
       y: CONTENT_TOP,
-      width: this.term.width,
+      width: this.termWidth(),
       height: 1,
       scrollable: true,
       vScrollBar: true,
       hidden: true,
     });
+  }
+
+  /** The terminal's current width, clamped ≥ 1 — a resize can momentarily
+   * report 0 (terminal-kit's degenerate-size default) before a real size
+   * follows; every widget size/position derives from this rather than
+   * `this.term.width` directly. */
+  private termWidth(): number {
+    return Math.max(this.term.width, 1);
+  }
+
+  /** The terminal's current height, clamped ≥ 1 — see {@link termWidth}. */
+  private termHeight(): number {
+    return Math.max(this.term.height, 1);
+  }
+
+  /**
+   * Whether the terminal is tall enough to hold the input row above the hint
+   * bar without overlapping the content area — false on a very short
+   * terminal, in which case the input is dropped entirely (view-only layout)
+   * rather than placed at an invalid/overlapping row. Re-checked on every
+   * resize, so the input reappears once the terminal grows back.
+   */
+  private inputFits(): boolean {
+    return this.termHeight() - HINT_ROWS - INPUT_ROWS > CONTENT_TOP;
+  }
+
+  /**
+   * Whether the terminal has at least one row for pane content between the
+   * tab bar (+ gap) and the hint bar, and is wide enough to be worth laying
+   * out at all. `CONTENT_TOP` is a fixed offset, not derived from the
+   * terminal size, so a terminal shorter than `CONTENT_TOP + HINT_ROWS`
+   * would otherwise position (or even just size) a pane's TextBox somewhere
+   * at/past the hint bar's row — every pane stays hidden and unpositioned
+   * while this is false, rather than risk that.
+   */
+  private hasRoomForContent(): boolean {
+    return (
+      this.termHeight() - CONTENT_TOP - HINT_ROWS >= 1 &&
+      this.termWidth() >= MIN_CONTENT_WIDTH
+    );
   }
 
   private activePaneWidgets(): Pane | undefined {
@@ -514,27 +630,40 @@ export class Tui {
     this.updateInput();
     this.layout();
     const activeId = this.manager.activePane?.id;
+    const showContent = this.hasRoomForContent();
     for (const [id, pane] of this.panes) {
-      if (id === activeId) pane.textBox.show(true);
+      if (showContent && id === activeId) pane.textBox.show(true);
       else pane.textBox.hide(true);
     }
     this.renderChrome();
     this.focus();
-    this.redrawActivePane();
+    if (showContent) {
+      this.redrawActivePane();
+    } else {
+      // No content pane is shown/positioned (see layout()) — just the tab
+      // and hint bars, which are always exactly 1 row each and safe.
+      this.draw();
+    }
   }
 
   /** Positions every widget for the current terminal size and input presence. */
   private layout(): void {
-    const { width, height } = this.term;
-    const inputRows = this.input ? INPUT_ROWS : 0;
-    const logHeight = Math.max(height - CONTENT_TOP - HINT_ROWS - inputRows, 1);
+    const width = this.termWidth();
+    const height = this.termHeight();
     this.tabBar.setSizeAndPosition({ x: 0, y: 0, width, height: TAB_ROWS });
     this.hintBar.setSizeAndPosition({
       x: 0,
-      y: height - HINT_ROWS,
+      y: Math.max(height - HINT_ROWS, 0),
       width,
       height: HINT_ROWS,
     });
+    // Too short to fit even one content row without overlapping the hint
+    // bar — leave every pane's TextBox at its last known (safe) size/position
+    // and hidden (see refresh()); repositioning it into an invalid row is
+    // exactly the crash this guards against.
+    if (!this.hasRoomForContent()) return;
+    const inputRows = this.input ? INPUT_ROWS : 0;
+    const logHeight = Math.max(height - CONTENT_TOP - HINT_ROWS - inputRows, 1);
     for (const pane of this.panes.values()) {
       pane.textBox.setSizeAndPosition({
         x: 0,
@@ -587,6 +716,7 @@ export class Tui {
             'r refresh',
             'Tab switch',
             'PgUp/PgDn scroll',
+            '[/] switch list',
             ...helpHint,
           ]
         : [
@@ -597,7 +727,7 @@ export class Tui {
             'PgUp/PgDn scroll',
             ...helpHint,
           ];
-    this.hintBar.setContent(fitHints(hints, this.term.width), false, true);
+    this.hintBar.setContent(fitHints(hints, this.termWidth()), false, true);
   }
 
   /** Focuses the input when present, else the active scrollback (native scroll keys). */
@@ -640,7 +770,11 @@ export class Tui {
    */
   private updateInput(): void {
     const active = this.manager.activePane;
-    const shouldShow = this.manager.inputEnabled;
+    // A too-short terminal drops the input even on a talkable pane (view-only
+    // layout) rather than place it at an invalid/overlapping row — see
+    // inputFits(). refresh() re-runs this on every resize, so it reappears
+    // once the terminal grows back.
+    const shouldShow = this.manager.inputEnabled && this.inputFits();
     if (!shouldShow) {
       this.dropInput();
       return;
@@ -655,8 +789,8 @@ export class Tui {
       // Constructed at its final position: InlineInput's '> ' prompt is a
       // separate TextBox placed at construction coordinates only, so this
       // element cannot be repositioned later (see the resize handler).
-      y: this.term.height - HINT_ROWS - INPUT_ROWS,
-      width: this.term.width,
+      y: this.termHeight() - HINT_ROWS - INPUT_ROWS,
+      width: this.termWidth(),
       value: pane.draft,
       prompt: { content: '> ' },
     });

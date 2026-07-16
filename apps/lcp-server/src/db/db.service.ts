@@ -332,9 +332,13 @@ export class DbService {
   /**
    * Creates a new {@link LcpAgent} in the `idle` state, always with an
    * assignment. When `template.assignmentId` is given the agent attaches to
-   * that existing assignment; otherwise an orphan (`taskId: null`) assignment
-   * is created first — in `template.mode ?? 'implement'` mode, carrying the
-   * agent's `initialPrompt` — and the two are cross-linked. The agent's
+   * that existing assignment; otherwise an orphan assignment is created first
+   * — in `template.mode ?? 'implement'` mode, carrying the agent's
+   * `initialPrompt` — and the two are cross-linked. When `template.parentAssignmentId`
+   * is also given, the orphan inherits that parent's `taskId` and records the
+   * link (so e.g. a consultation traces back to the task that spawned it);
+   * otherwise the orphan is fully parentless/taskless (top-level agents — planner
+   * dispatch, the standalone `chat` command). The agent's
    * `initialPrompt`/`requiredToolCalls` are populated from the template
    * (010.1.2 copy semantics); `requiredToolCalls` defaults to the mode's
    * required tool ({@link requiredToolForMode}).
@@ -354,15 +358,19 @@ export class DbService {
       if (template.assignmentId !== undefined) {
         assignmentId = template.assignmentId;
       } else {
+        const parent = template.parentAssignmentId
+          ? await assignmentRepo.findOneBy({ id: template.parentAssignmentId })
+          : null;
         const assignment = await assignmentRepo.save(
           assignmentRepo.create({
-            taskId: null,
+            taskId: parent?.taskId ?? null,
             companyId: template.companyId,
             mode,
             prompt: template.initialPrompt,
             roleId: template.roleId,
             status: 'in-progress',
             agentId: null,
+            parentAssignmentId: template.parentAssignmentId ?? null,
             materials: [],
             expected: [],
           }),

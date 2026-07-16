@@ -17,6 +17,11 @@ export function registerChat(program: Command): void {
     .option('-q, --query <message>', 'Single query (non-interactive)')
     .option('--hide-reasoning', 'Hide the model reasoning stream')
     .option('--no-tui', 'Disable the full-screen TUI even on a TTY')
+    .option(
+      '--task-list-max-lines <n>',
+      'Max lines a highlighted company task-list entry expands to ' +
+        '(default 4; env LCP_TASK_LIST_ENTRY_MAX_LINES)',
+    )
     .action((cmdOpts: ChatCmdOpts) =>
       chatAction(getGlobalOptions(program), cmdOpts),
     );

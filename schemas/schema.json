@@ -132,6 +132,18 @@
           "description": "Foreign key for the  {@link  LcpAgent }  that produced this event.",
           "format": "uuid"
         },
+        "assignmentId": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/UUID"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Denormalised copy of the producing agent's assignment at write time (see  {@link  LcpAssignment.parentAssignmentId  }  for why assignments now always carry a task-traceable lineage). No relation object — like `agentId`, this is a plain column so hot-path writes never risk an accidental join.",
+          "format": "uuid"
+        },
         "company": {
           "$ref": "#/definitions/LcpCompany",
           "description": "The company context for this event."
@@ -173,6 +185,7 @@
         "role",
         "agent",
         "agentId",
+        "assignmentId",
         "eventType",
         "payload"
       ],
@@ -864,6 +877,29 @@
             "number",
             "null"
           ]
+        },
+        "parentAssignment": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LcpAssignment"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The assignment whose agent spawned this one (e.g. a consultation). Distinct from  {@link  targetAssignment }  (what a QA assignment reviews) — this is \"who created me\", not \"what am I evaluating\"."
+        },
+        "parentAssignmentId": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/UUID"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Foreign key for  {@link  parentAssignment } .",
+          "format": "uuid"
         },
         "prepared": {
           "description": "Set by `complete_assignment`: the artifacts the agent prepared for review.",

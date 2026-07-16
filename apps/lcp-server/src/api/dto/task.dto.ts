@@ -52,3 +52,31 @@ export class CreateTaskDto {
   @Type(() => InlineTextMaterialDto)
   materials?: InlineTextMaterialDto[];
 }
+
+/**
+ * Deep-partial body for `PUT /api/task/:id`. Only accepted while the task is
+ * still `ready` (see {@link TaskService.update}) — `id`, `companyId`,
+ * `status`, `completed`, and `failureReason` are not editable.
+ */
+export class UpdateTaskDto {
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  request?: string;
+
+  @IsOptional()
+  @IsUUID()
+  plannerRoleId?: UUID;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TaskExpectedArtifactDto)
+  expected?: TaskExpectedArtifactDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => InlineTextMaterialDto)
+  materials?: InlineTextMaterialDto[];
+}

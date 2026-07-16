@@ -23,8 +23,10 @@ export function registerCreateTask(program: Command): void {
   cmd
     .option('-m, --materials <paths...>', 'Local material file paths to upload')
     .option(
-      '--expected <filenames...>',
-      'Filenames expected in the task completed directory',
+      '-e, --expected <filename>',
+      'expected output filename (repeatable)',
+      (value: string, previous: string[]) => [...previous, value],
+      [] as string[],
     )
     .option('--start', 'Start the task immediately after creation')
     .action(

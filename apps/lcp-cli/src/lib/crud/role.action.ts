@@ -8,7 +8,7 @@ import {
   resolveRoleId,
   UUID_RE,
 } from '../core/entity-ref';
-import { readStdin } from '../core/stdin';
+import { readJsonBody } from '../core/read-json-body';
 import { runCommand } from '../core/run-command';
 import { resolveToken } from '../auth/token';
 
@@ -111,13 +111,7 @@ export function setRoleAction(
   cmdOpts: EntityRefOpts & { input?: string },
 ): Promise<void> {
   return runCommand(async () => {
-    const raw = cmdOpts.input ?? (await readStdin());
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== 'object' || parsed === null) {
-      process.stderr.write('Error: input must be a JSON object\n');
-      process.exit(1);
-    }
-    const data = parsed as Record<string, unknown>;
+    const data = await readJsonBody(cmdOpts);
     const bodyId = typeof data['id'] === 'string' ? data['id'] : undefined;
 
     const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });

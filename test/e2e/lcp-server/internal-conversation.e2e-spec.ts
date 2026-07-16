@@ -10,6 +10,7 @@ import {
   LcpAssignment,
   LcpCompany,
   LcpRole,
+  LcpTask,
   PendingConsultation,
 } from '@lcp/shared';
 import { INestApplication } from '@nestjs/common';
@@ -34,6 +35,7 @@ describe('InternalController + ConversationController (e2e)', () => {
   let roleRepo: Repository<LcpRole>;
   let agentRepo: Repository<LcpAgent>;
   let assignmentRepo: Repository<LcpAssignment>;
+  let taskRepo: Repository<LcpTask>;
   let convRepo: Repository<Conversation>;
   let msgRepo: Repository<ConversationMessage>;
   let consultRepo: Repository<PendingConsultation>;
@@ -53,6 +55,7 @@ describe('InternalController + ConversationController (e2e)', () => {
     roleRepo = moduleFixture.get(getRepositoryToken(LcpRole));
     agentRepo = moduleFixture.get(getRepositoryToken(LcpAgent));
     assignmentRepo = moduleFixture.get(getRepositoryToken(LcpAssignment));
+    taskRepo = moduleFixture.get(getRepositoryToken(LcpTask));
     convRepo = moduleFixture.get(getRepositoryToken(Conversation));
     msgRepo = moduleFixture.get(getRepositoryToken(ConversationMessage));
     consultRepo = moduleFixture.get(getRepositoryToken(PendingConsultation));
@@ -68,6 +71,7 @@ describe('InternalController + ConversationController (e2e)', () => {
     await auditRepo.createQueryBuilder().delete().execute();
     await agentRepo.createQueryBuilder().delete().execute();
     await assignmentRepo.createQueryBuilder().delete().execute();
+    await taskRepo.createQueryBuilder().delete().execute();
     await roleRepo.createQueryBuilder().delete().execute();
     await userRepo.createQueryBuilder().delete().execute();
     await companyRepo.createQueryBuilder().delete().execute();
@@ -134,6 +138,38 @@ describe('InternalController + ConversationController (e2e)', () => {
     roleId: UUID,
   ): Promise<LcpAgent> {
     const assignment = await seedAssignment(companyId, roleId);
+    return agentRepo.save(
+      agentRepo.create({
+        companyId,
+        roleId,
+        assignmentId: assignment.id,
+        status: AgentStatus.Running,
+        initialPrompt: 'Do some analysis.',
+        output: null,
+      }),
+    );
+  }
+
+  /**
+   * Inserts a Running agent whose own assignment is task-linked (an
+   * implement-mode plan step), for consultation parent-tracing tests.
+   */
+  async function createRunningAgentForTask(
+    companyId: UUID,
+    roleId: UUID,
+    taskId: UUID,
+  ): Promise<LcpAgent> {
+    const assignment = await assignmentRepo.save(
+      assignmentRepo.create({
+        taskId,
+        companyId,
+        roleId,
+        mode: 'implement',
+        orderIndex: 0,
+        prompt: 'Do some analysis.',
+        status: 'in-progress',
+      }),
+    );
     return agentRepo.save(
       agentRepo.create({
         companyId,
@@ -337,6 +373,68 @@ describe('InternalController + ConversationController (e2e)', () => {
           question: 'Can you analyse this?',
         })
         .expect(404);
+    });
+
+    it("traces the new consultation assignment back to the calling assignment's task (parentAssignmentId/taskId inheritance)", async () => {
+      const company = await createCompany();
+      const role = await createRole(company.id);
+      const task = await taskRepo.save(
+        taskRepo.create({
+          companyId: company.id,
+          request: 'Write a report.',
+          materials: [],
+          expected: [],
+        }),
+      );
+      const caller = await createRunningAgentForTask(
+        company.id,
+        role.id,
+        task.id,
+      );
+
+      const res = await request(app.getHttpServer())
+        .post('/internal/pause')
+        .set('X-Internal-Api-Key', INTERNAL_KEY)
+        .send({
+          type: 'agent_consultation',
+          agentId: caller.id,
+          companyId: company.id,
+          roleId: role.id,
+          question: 'Can you analyse this?',
+        })
+        .expect(201);
+
+      const { consultationId } = res.body as { consultationId: UUID };
+      const consult = await consultRepo.findOneByOrFail({
+        id: consultationId,
+      });
+      const consultant = await agentRepo.findOneByOrFail({
+        id: consult.consultationAgentId,
+      });
+      const consultAssignment = await assignmentRepo.findOneByOrFail({
+        id: consultant.assignmentId,
+      });
+
+      expect(consultAssignment.taskId).toBe(task.id);
+      expect(consultAssignment.parentAssignmentId).toBe(caller.assignmentId);
+
+      // The task's history now includes the consultation, with no separate
+      // parent-chain walk needed — see TaskService.getHistory.
+      await auditRepo.save(
+        auditRepo.create({
+          companyId: company.id,
+          role: 'analyst',
+          agentId: consultant.id,
+          eventType: 'agent_loop_completion',
+          payload: { summary: 'consulted' },
+        }),
+      );
+      const historyRes = await request(app.getHttpServer())
+        .get(`/api/task/${task.id}/history`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(200);
+      const rows = historyRes.body as { agentId: string }[];
+      expect(rows.some((r) => r.agentId === consultant.id)).toBe(true);
     });
   });
 

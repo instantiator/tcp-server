@@ -10,10 +10,32 @@
 // row 1 = blank gap, row 2.. = pane content (which itself opens with a
 // heading — "Name/Id" on chat panes, "Slug/Id" + prompt on the roster).
 
+import type { TaskChangeSummary } from '@lcp/shared';
 import { EventEmitter } from 'events';
 import { ScreenBuffer } from 'terminal-kit';
-import { interpretKey, Tui, tuiRenderer, TuiTerminal } from './tui';
+import {
+  interpretKey,
+  resolveTaskListEntryMaxLines,
+  Tui,
+  tuiRenderer,
+  TuiTerminal,
+} from './tui';
 import { SseEvent } from '../core/sse';
+
+function taskSummary(
+  overrides: Partial<TaskChangeSummary> = {},
+): TaskChangeSummary {
+  return {
+    id: 't1',
+    status: 'ready',
+    request: 'Write a report',
+    createdAt: '2026-07-03T10:00:00.000Z',
+    updatedAt: '2026-07-03T10:00:00.000Z',
+    completedSteps: 0,
+    totalSteps: 0,
+    ...overrides,
+  };
+}
 
 const WIDTH = 80;
 const HEIGHT = 16;
@@ -89,6 +111,47 @@ describe('interpretKey', () => {
     expect(interpretKey('a')).toBe('none');
     expect(interpretKey('ENTER')).toBe('none');
     expect(interpretKey('UP')).toBe('none');
+  });
+});
+
+describe('resolveTaskListEntryMaxLines', () => {
+  const ENV_VAR = 'LCP_TASK_LIST_ENTRY_MAX_LINES';
+  const originalEnv = process.env[ENV_VAR];
+
+  afterEach(() => {
+    if (originalEnv === undefined) delete process.env[ENV_VAR];
+    else process.env[ENV_VAR] = originalEnv;
+  });
+
+  it('defaults to 4 when neither a flag nor the env var is given', () => {
+    delete process.env[ENV_VAR];
+    expect(resolveTaskListEntryMaxLines(undefined)).toBe(4);
+  });
+
+  it('uses the env var when no flag is given', () => {
+    process.env[ENV_VAR] = '7';
+    expect(resolveTaskListEntryMaxLines(undefined)).toBe(7);
+  });
+
+  it('the flag takes precedence over the env var', () => {
+    process.env[ENV_VAR] = '7';
+    expect(resolveTaskListEntryMaxLines('2')).toBe(2);
+  });
+
+  it('falls back to the default for a non-integer flag value', () => {
+    delete process.env[ENV_VAR];
+    expect(resolveTaskListEntryMaxLines('abc')).toBe(4);
+  });
+
+  it('falls back to the default for a zero or negative value', () => {
+    delete process.env[ENV_VAR];
+    expect(resolveTaskListEntryMaxLines('0')).toBe(4);
+    expect(resolveTaskListEntryMaxLines('-3')).toBe(4);
+  });
+
+  it('falls back to the default for a non-integer env var value', () => {
+    process.env[ENV_VAR] = 'garbage';
+    expect(resolveTaskListEntryMaxLines(undefined)).toBe(4);
   });
 });
 
@@ -423,6 +486,76 @@ describe('Tui scrolling', () => {
   });
 });
 
+describe('Tui resize resilience', () => {
+  function resize(
+    term: { width: number; height: number },
+    w: number,
+    h: number,
+  ): void {
+    term.width = w;
+    term.height = h;
+    (term as unknown as EventEmitter).emit('resize', w, h);
+  }
+
+  it('survives a resize to a degenerate terminal (height ≤ 4) on a talkable pane, and recovers when it grows back', () => {
+    const { tui, term, rows } = makeTui();
+    tui.addPane({ id: 'root', label: 'Cat', talkable: true });
+
+    expect(() => resize(term, 2, 3)).not.toThrow();
+    // Sane render: no exception, and it's still safe to keep interacting
+    // with the pane while the terminal is this small.
+    expect(() =>
+      tui.appendEvent('root', statusEvent('still-alive')),
+    ).not.toThrow();
+
+    // Recovers fully once the terminal grows back — no lingering corruption
+    // from having passed through the degenerate size.
+    resize(term, WIDTH, HEIGHT);
+    expect(rows()[0]).toContain('[ Cat ]');
+  });
+
+  it('survives a resize to a degenerate terminal (width ≤ 2) on a non-talkable (roster) pane, and recovers when it grows back', () => {
+    const { tui, term, rows } = makeTui();
+    tui.addRosterPane({
+      id: 'acme',
+      label: 'Acme',
+      slug: 'acme-corp',
+      roles: [{ id: 'r1', name: 'Cat assistant' }],
+    });
+
+    expect(() => resize(term, 2, 4)).not.toThrow();
+
+    resize(term, WIDTH, HEIGHT);
+    expect(rows()[0]).toContain('[ Acme ]');
+    expect(rows().join('\n')).toContain('Cat assistant');
+  });
+
+  it('treats a terminal-kit 1×1 degenerate resize as "too small" without throwing, and recovers on the next real-size resize', () => {
+    const { tui, term, rows } = makeTui();
+    tui.addPane({ id: 'root', label: 'Cat', talkable: true });
+
+    expect(() => resize(term, 1, 1)).not.toThrow();
+    expect(() => resize(term, WIDTH, HEIGHT)).not.toThrow();
+    expect(rows()[0]).toContain('[ Cat ]');
+  });
+
+  it('drops the input box when shrunk too short to hold it, and restores it when grown back', () => {
+    const { tui, term, rows } = makeTui();
+    tui.addPane({ id: 'root', label: 'Cat', talkable: true });
+    expect(rows().some((r) => r.includes('>'))).toBe(true); // the input prompt
+
+    resize(term, WIDTH, 3);
+    // Too short for the input row above the hint bar — dropped, not placed
+    // at an invalid/overlapping position.
+    expect(rows()[0]).toContain('Cat');
+
+    resize(term, WIDTH, HEIGHT);
+    // Re-layout on growing back restores the input and the chrome.
+    expect(rows()[0]).toContain('[ Cat ]');
+    expect(rows()[HEIGHT - 1]).toContain('Ctrl+C quit');
+  });
+});
+
 describe('Tui company roster pane', () => {
   it('renders the role list with the first row highlighted by default', () => {
     const { tui, rows, text } = makeTui();
@@ -440,7 +573,7 @@ describe('Tui company roster pane', () => {
     expect(text()).toContain('  Chicken assistant');
   });
 
-  it('opens with a Slug/Id heading, a prompt, and a blank line before the list', () => {
+  it('opens with a Slug/Id heading, a prompt, a blank line, then the Roles list title before the list', () => {
     const { tui, rows } = makeTui();
     tui.addRosterPane({
       id: 'acme',
@@ -455,7 +588,8 @@ describe('Tui company roster pane', () => {
       'Please select a role to initiate a chat:',
     );
     expect(rows()[CONTENT_TOP + 4].trim()).toBe('');
-    expect(rows()[CONTENT_TOP + 5]).toContain('> Cat assistant');
+    expect(rows()[CONTENT_TOP + 5]).toContain('Roles');
+    expect(rows()[CONTENT_TOP + 6]).toContain('> Cat assistant');
   });
 
   it('inverts the colour of the ">" marker on the selected row only', () => {
@@ -469,7 +603,7 @@ describe('Tui company roster pane', () => {
         { id: 'r2', name: 'Chicken assistant' },
       ],
     });
-    const selectedRow = CONTENT_TOP + 5;
+    const selectedRow = CONTENT_TOP + 6;
     expect(attrAt(0, selectedRow).char).toBe('>');
     expect(attrAt(0, selectedRow).attr.inverse).toBe(true);
     expect(attrAt(0, selectedRow + 1).char).toBe(' ');
@@ -511,6 +645,83 @@ describe('Tui company roster pane', () => {
 
     pressKey('UP'); // wraps the other way, back to the last row
     expect(text()).toContain('> Chicken assistant');
+  });
+
+  it('shows the company Tasks list grouped Active/Completed-or-failed, and `>` navigation crosses from Roles into Tasks, cycling top↔bottom', () => {
+    const { tui, rows, text, pressKey } = makeTui();
+    tui.addRosterPane({
+      id: 'acme',
+      label: 'Acme Corp',
+      slug: 'acme-corp',
+      roles: [{ id: 'r1', name: 'Cat assistant' }],
+    });
+    tui.updateRosterTasks('acme', [
+      taskSummary({
+        id: 't1',
+        status: 'in-progress',
+        completedSteps: 1,
+        totalSteps: 2,
+        request: 'Active task',
+      }),
+      taskSummary({
+        id: 't2',
+        status: 'succeeded',
+        request: 'Done task',
+      }),
+    ]);
+
+    // A selected task entry expands and pads with blank lines (see
+    // renderTaskListEntry), shifting row numbers around it — so look up each
+    // row by its distinguishing text rather than a fixed offset.
+    const markerFor = (needle: string): string =>
+      rows().find((r) => r.includes(needle))![0];
+
+    expect(text()).toContain('Active');
+    expect(text()).toContain('Completed / failed');
+    expect(text()).toContain('in progress: 1/2');
+
+    expect(markerFor('Cat assistant')).toBe('>');
+
+    pressKey('DOWN');
+    expect(markerFor('Cat assistant')).toBe(' ');
+    expect(markerFor('Active task')).toBe('>');
+
+    pressKey('DOWN');
+    expect(markerFor('Active task')).toBe(' ');
+    expect(markerFor('Done task')).toBe('>');
+
+    // Cycles back to the top (the role) rather than stopping at the bottom.
+    pressKey('DOWN');
+    expect(markerFor('Done task')).toBe(' ');
+    expect(markerFor('Cat assistant')).toBe('>');
+  });
+
+  it('the [ / ] shortcut jumps the highlight to the first entry of the previous/next list', () => {
+    const { tui, rows, pressKey } = makeTui();
+    tui.addRosterPane({
+      id: 'acme',
+      label: 'Acme Corp',
+      slug: 'acme-corp',
+      roles: [
+        { id: 'r1', name: 'Cat assistant' },
+        { id: 'r2', name: 'Chicken assistant' },
+      ],
+    });
+    tui.updateRosterTasks('acme', [
+      taskSummary({ id: 't1', request: 'Active task' }),
+    ]);
+    const markerFor = (needle: string): string =>
+      rows().find((r) => r.includes(needle))![0];
+
+    pressKey(']');
+    expect(markerFor('Active task')).toBe('>');
+    expect(markerFor('Cat assistant')).toBe(' ');
+
+    pressKey(']'); // wraps back to Roles
+    expect(markerFor('Cat assistant')).toBe('>');
+
+    pressKey('['); // and back the other way
+    expect(markerFor('Active task')).toBe('>');
   });
 
   it('scrolls to keep the highlighted role in view as the selection moves past the visible window', () => {

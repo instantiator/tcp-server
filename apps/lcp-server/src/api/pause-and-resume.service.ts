@@ -158,6 +158,9 @@ export class PauseAndResumeService {
       // the call. The consulting agent's orphan assignment is consultee-mode.
       mode: 'consultee',
       requiredToolCalls: ['complete_assignment'],
+      // Links the new consultation assignment back to the task it was spawned
+      // for (via the calling agent's own assignment) — see LcpAssignment.parentAssignmentId.
+      parentAssignmentId: callingAgent.assignmentId,
     });
 
     // Record the link between the paused caller and the new consulting agent.

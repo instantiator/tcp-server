@@ -5,23 +5,29 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  MessageEvent,
   NotFoundException,
   Param,
   Post,
   Put,
   Req,
   Res,
+  Sse,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { UUID } from 'crypto';
 import type { Request, Response } from 'express';
-import { LcpCompany, LcpRole } from '@lcp/shared';
+import { CompanyEvent, LcpCompany, LcpRole } from '@lcp/shared';
+import { defer, from, merge, mergeMap, Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { DbService } from '../db/db.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CompanyEventService } from '../events/company-event.service';
 import { ApiService } from './api.service';
 import { CreateCompanyDto, UpdateCompanyDto } from './dto/company.dto';
 import { UpdateRoleDto } from './dto/role.dto';
+import { TaskService } from './task.service';
 import { isUUID } from '../utils/ObjectUtils';
 import {
   computeCompanyWarnings,
@@ -38,6 +44,8 @@ export class CompanyController {
   constructor(
     private readonly api: ApiService,
     private readonly db: DbService,
+    private readonly tasks: TaskService,
+    private readonly companyEvents: CompanyEventService,
   ) {}
 
   /** Returns all {@link LcpCompany} records. */
@@ -199,6 +207,45 @@ export class CompanyController {
       );
     }
     await this.db.deleteRole(role.id);
+  }
+
+  /**
+   * SSE stream of `company_changed`/`task_changed` events for this company
+   * and its tasks. Primed with the company's current state and every current
+   * task's summary, so a client that subscribes late renders immediately,
+   * then live updates via {@link CompanyEventService}.
+   */
+  @ApiOperation({ summary: "Stream a company's and its tasks' events" })
+  @Sse(':id/events')
+  streamCompanyEvents(@Param('id') id: string): Observable<MessageEvent> {
+    return defer(() => from(this.buildCompanyStream(id))).pipe(
+      mergeMap((events$) => events$),
+      map((event) => ({ data: event })),
+    );
+  }
+
+  /**
+   * Resolves `id` once, then merges the priming events with the live
+   * {@link CompanyEventService} observable for the resolved company UUID.
+   */
+  private async buildCompanyStream(
+    id: string,
+  ): Promise<Observable<CompanyEvent>> {
+    const company = await this.resolveCompanyOrThrow(id);
+    const primed = await this.primeCompanyEvents(company.id);
+    return merge(from(primed), this.companyEvents.observe(company.id));
+  }
+
+  /** Builds the priming events for {@link buildCompanyStream}: the company signal, then each task's current summary. */
+  private async primeCompanyEvents(companyId: UUID): Promise<CompanyEvent[]> {
+    const timestamp = new Date().toISOString();
+    const taskSummaries = await this.tasks.listChangeSummaries(companyId);
+    return [
+      { timestamp, kind: 'company_changed', data: { companyId } },
+      ...taskSummaries.map(
+        (data): CompanyEvent => ({ timestamp, kind: 'task_changed', data }),
+      ),
+    ];
   }
 
   /** Resolves a company by UUID or slug, throwing 404 if no match. */

@@ -1,12 +1,24 @@
+import type { TaskChangeSummary } from '@lcp/shared';
+import type { UUID } from 'crypto';
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest, ApiOptions } from '../core/api';
 import { renewToken } from '../auth/token';
 import { createRenderer, Renderer } from '../core/render';
 import { parseSseBuffer, SseEvent } from '../core/sse';
+import { readSseStream } from '../core/sse-reader';
 import { RoleOption, Tui, tuiRenderer } from '../tui/tui';
 
 interface AgentRecord {
   id: string;
+}
+
+/** Plain shape of `GET /api/task?companyId=` rows — just what the task list needs. */
+interface TaskRecord {
+  id: string;
+  status: string;
+  request: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** Result of watching one agent's turn to its terminal event. */
@@ -19,6 +31,29 @@ const STREAM_ENDED = 'stream ended before completion';
 function eventStr(event: SseEvent, key: string): string {
   const value = event.data?.[key];
   return typeof value === 'string' ? value : '';
+}
+
+/**
+ * Validates and narrows a `task_changed` SSE event's payload into a
+ * {@link TaskChangeSummary}, rather than trusting/casting it directly —
+ * `null` for a payload missing its required fields.
+ */
+function parseTaskChangeSummary(
+  data: Record<string, unknown> | undefined,
+): TaskChangeSummary | null {
+  if (!data || typeof data.id !== 'string' || typeof data.status !== 'string') {
+    return null;
+  }
+  return {
+    id: data.id as UUID,
+    status: data.status as TaskChangeSummary['status'],
+    request: typeof data.request === 'string' ? data.request : '',
+    createdAt: typeof data.createdAt === 'string' ? data.createdAt : '',
+    updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : '',
+    completedSteps:
+      typeof data.completedSteps === 'number' ? data.completedSteps : 0,
+    totalSteps: typeof data.totalSteps === 'number' ? data.totalSteps : 0,
+  };
 }
 
 /** Resolves after `ms`, or immediately if the signal aborts. */
@@ -48,6 +83,9 @@ export class ChatSession {
   private readonly abortControllers = new Map<string, AbortController>();
   private token: string;
   private readonly refreshToken?: string;
+  /** The company's tasks, keyed by id — kept live by {@link watchCompanyEvents}. */
+  private readonly tasksById = new Map<string, TaskChangeSummary>();
+  private companyEventsAbort: AbortController | null = null;
 
   constructor(
     private readonly opts: GlobalOptions,
@@ -94,6 +132,57 @@ export class ChatSession {
     return roles.sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  /**
+   * Fetches the company's current tasks (used once at panel-open time, ahead
+   * of {@link watchCompanyEvents}'s live updates). Step counts aren't in this
+   * plain listing — placeholders here are corrected almost immediately by
+   * the company SSE stream's priming `task_changed` events.
+   */
+  async fetchTasks(): Promise<TaskChangeSummary[]> {
+    const tasks = await apiRequest<TaskRecord[]>(
+      this.apiOpts(),
+      'GET',
+      `/api/task?companyId=${this.companyId}`,
+    );
+    for (const task of tasks) {
+      this.tasksById.set(task.id, {
+        id: task.id as UUID,
+        status: task.status as TaskChangeSummary['status'],
+        request: task.request,
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt,
+        completedSteps: 0,
+        totalSteps: 0,
+      });
+    }
+    return [...this.tasksById.values()];
+  }
+
+  /**
+   * Opens `GET /api/company/:id/events` in the background and keeps the
+   * roster pane's Tasks list live: `task_changed` upserts the one task named;
+   * `company_changed` is just a signal today (no company-detail view to
+   * refresh yet), so it's ignored. Aborted on {@link cleanup}.
+   */
+  watchCompanyEvents(): void {
+    this.companyEventsAbort = new AbortController();
+    const url = `${this.opts.lcpServer.replace(/\/$/, '')}/api/company/${this.companyId}/events`;
+    void readSseStream(
+      url,
+      this.token,
+      this.companyEventsAbort.signal,
+      (event) => {
+        if (event.kind !== 'task_changed') return;
+        const summary = parseTaskChangeSummary(event.data);
+        if (!summary) return;
+        this.tasksById.set(summary.id, summary);
+        this.tui?.updateRosterTasks(this.companyId, [
+          ...this.tasksById.values(),
+        ]);
+      },
+    );
+  }
+
   /** Reports a roster-pane-triggered failure (initiate-chat / refresh) into its pane log. */
   reportRosterError(err: unknown): void {
     this.tui?.appendEvent(this.companyId, {
@@ -128,8 +217,10 @@ export class ChatSession {
     return agent.id;
   }
 
-  /** Deletes every agent created this session (best-effort). */
+  /** Deletes every agent created this session (best-effort), and stops watching company events. */
   async cleanup(): Promise<void> {
+    this.companyEventsAbort?.abort();
+    this.companyEventsAbort = null;
     for (const id of this.agentIds) {
       await this.deleteAgent(id);
     }
