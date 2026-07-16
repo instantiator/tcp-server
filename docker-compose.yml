@@ -86,7 +86,11 @@ services:
       test: ["CMD-SHELL", "curl -sf http://localhost:9000/health/ready || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 5
+      # start_period + retries*interval = 360s: generous headroom for Keycloak's
+      # boot under constrained resources (was 210s, too tight — lcp-server would
+      # start against a not-yet-ready Keycloak and its own health check would
+      # sometimes time out before Keycloak caught up).
+      retries: 10
       start_period: 60s
 
   lcp-server:
@@ -124,6 +128,15 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      # Only present (profile: auth) when Keycloak is part of the deployment;
+      # `required: false` lets Compose skip this dependency entirely when it
+      # isn't. When it is, wait for Keycloak's own healthcheck before starting
+      # lcp-server, rather than racing it (was: lcp-server started immediately
+      # and polled a not-yet-listening Keycloak, sometimes for longer than its
+      # own health check's retry budget).
+      keycloak:
+        condition: service_healthy
+        required: false
     ports:
       - "3000:3000"
     healthcheck:
