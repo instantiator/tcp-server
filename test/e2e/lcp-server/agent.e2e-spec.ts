@@ -25,6 +25,7 @@ describe('AgentController (e2e)', () => {
   let jwt: string;
   let companyId: UUID;
   let roleId: UUID;
+  let otherRoleId: UUID;
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -60,6 +61,19 @@ describe('AgentController (e2e)', () => {
       }),
     );
     roleId = role.id;
+    const otherRole = await roleRepo.save(
+      roleRepo.create({
+        slug: 'reviewer',
+        name: 'Reviewer',
+        description: 'Second test role for filter isolation',
+        systemPromptTemplate: 'You are a helpful assistant.',
+        knowledgeDomains: [],
+        mcpServerList: [],
+        company,
+        companyId: company.id,
+      }),
+    );
+    otherRoleId = otherRole.id;
   });
 
   afterEach(async () => {
@@ -165,6 +179,56 @@ describe('AgentController (e2e)', () => {
       expect((res.body as LcpAgent[]).map((a) => a.id)).not.toContain(
         created.id,
       );
+    });
+
+    it('filters by roleId, excluding agents of a different role', async () => {
+      const created = (
+        await request(app.getHttpServer())
+          .post('/api/agent/chat/start')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({ companyId, roleId })
+          .expect(201)
+      ).body as LcpAgent;
+      const otherRoleAgent = (
+        await request(app.getHttpServer())
+          .post('/api/agent/chat/start')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({ companyId, roleId: otherRoleId })
+          .expect(201)
+      ).body as LcpAgent;
+
+      const res = await request(app.getHttpServer())
+        .get(`/api/agent?roleId=${roleId}`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(200);
+      const ids = (res.body as LcpAgent[]).map((a) => a.id);
+      expect(ids).toContain(created.id);
+      expect(ids).not.toContain(otherRoleAgent.id);
+    });
+
+    it('filters by assignmentId', async () => {
+      const created = (
+        await request(app.getHttpServer())
+          .post('/api/agent/chat/start')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({ companyId, roleId })
+          .expect(201)
+      ).body as LcpAgent;
+      const other = (
+        await request(app.getHttpServer())
+          .post('/api/agent/chat/start')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({ companyId, roleId })
+          .expect(201)
+      ).body as LcpAgent;
+
+      const res = await request(app.getHttpServer())
+        .get(`/api/agent?assignmentId=${created.assignmentId}`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(200);
+      const ids = (res.body as LcpAgent[]).map((a) => a.id);
+      expect(ids).toEqual([created.id]);
+      expect(ids).not.toContain(other.id);
     });
   });
 

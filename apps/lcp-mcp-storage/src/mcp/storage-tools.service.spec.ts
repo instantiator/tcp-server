@@ -271,6 +271,86 @@ describe('StorageToolsService', () => {
     });
   });
 
+  describe('renameWorkingFile', () => {
+    it('renames the working file via POST /internal/storage/move', async () => {
+      mockScope({});
+      mockedAxios.post.mockResolvedValue({ data: {} });
+      const result = await makeService().renameWorkingFile(
+        'agent-1',
+        'a.md',
+        'b.md',
+      );
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        'http://lcp-server:3000/internal/storage/move',
+        {
+          source: 'acme/tasks/t1/assignments/0/working/a.md',
+          destination: 'acme/tasks/t1/assignments/0/working/b.md',
+          originators: { agent: 'agent-1' },
+        },
+        { headers: { 'X-Internal-Api-Key': 'secret-key' } },
+      );
+      expect(result.content[0].text).toBe('Renamed working file: a.md → b.md');
+    });
+  });
+
+  describe('deleteWorkingFile', () => {
+    it('deletes the working file via POST /internal/storage/delete', async () => {
+      mockScope({});
+      mockedAxios.post.mockResolvedValue({ data: {} });
+      const result = await makeService().deleteWorkingFile('agent-1', 'f.md');
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        'http://lcp-server:3000/internal/storage/delete',
+        {
+          path: 'acme/tasks/t1/assignments/0/working/f.md',
+          originators: { agent: 'agent-1' },
+        },
+        { headers: { 'X-Internal-Api-Key': 'secret-key' } },
+      );
+      expect(result.content[0].text).toBe(
+        'Deleted working file: f.md (restorable via restore_working_file)',
+      );
+    });
+  });
+
+  describe('restoreWorkingFile', () => {
+    it('restores the working file via POST /internal/storage/restore', async () => {
+      mockScope({});
+      mockedAxios.post.mockResolvedValue({ data: {} });
+      const result = await makeService().restoreWorkingFile('agent-1', 'f.md');
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        'http://lcp-server:3000/internal/storage/restore',
+        {
+          path: 'acme/tasks/t1/assignments/0/working/f.md',
+          originators: { agent: 'agent-1' },
+        },
+        { headers: { 'X-Internal-Api-Key': 'secret-key' } },
+      );
+      expect(result.content[0].text).toBe('Restored working file: f.md');
+    });
+  });
+
+  describe('getWorkingFileProperties', () => {
+    it('fetches properties via POST /internal/storage/properties, even in a read-only scope', async () => {
+      mockScope({ mode: 'qa', readOnly: true });
+      mockedAxios.post.mockResolvedValue({
+        data: { size: 42, lastModified: 'x' },
+      });
+      const result = await makeService().getWorkingFileProperties(
+        'agent-1',
+        'f.md',
+      );
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        'http://lcp-server:3000/internal/storage/properties',
+        { path: 'acme/tasks/t1/assignments/0/working/f.md' },
+        { headers: { 'X-Internal-Api-Key': 'secret-key' } },
+      );
+      expect(JSON.parse(result.content[0].text)).toEqual({
+        size: 42,
+        lastModified: 'x',
+      });
+    });
+  });
+
   describe('filename safety', () => {
     it('rejects a parent-traversal filename and never calls the append endpoint', async () => {
       mockScope({});
@@ -319,6 +399,36 @@ describe('StorageToolsService', () => {
         expect(result.content[0].text).toContain('read-only');
         expect(result.content[0].text).toContain('read_working_file');
         expect(result.content[0].text).not.toContain('mode:');
+        expect(mockedAxios.post).not.toHaveBeenCalled();
+      },
+    );
+
+    // isStorageReadOnly now covers both qa and plan modes — the matrix above
+    // only ever exercised qa; mirror it for plan since the rejection path is
+    // driven purely by scope.readOnly, not the mode value itself.
+    it.each([
+      ['appendWorkingFile', 'append_working_file', ['agent-1', 'f.md', 'x']],
+      [
+        'replaceInWorkingFile',
+        'replace_in_working_file',
+        ['agent-1', 'f.md', 'a', 'b'],
+      ],
+      ['deleteWorkingFile', 'delete_working_file', ['agent-1', 'f.md']],
+      ['restoreWorkingFile', 'restore_working_file', ['agent-1', 'f.md']],
+      ['renameWorkingFile', 'rename_working_file', ['agent-1', 'a.md', 'b.md']],
+    ] as const)(
+      '%s also refuses in plan-mode read-only scope',
+      async (method, tool, args) => {
+        mockScope({ mode: 'plan', readOnly: true });
+        const svc = makeService();
+        const result = await (
+          svc[method] as (
+            ...a: unknown[]
+          ) => Promise<{ content: { text: string }[] }>
+        )(...args);
+        expect(result.content[0].text).toContain(tool);
+        expect(result.content[0].text).toContain('read-only');
+        expect(result.content[0].text).toContain('read_working_file');
         expect(mockedAxios.post).not.toHaveBeenCalled();
       },
     );
@@ -382,6 +492,58 @@ describe('StorageToolsService', () => {
     it('reports an unknown material name', async () => {
       mockScope({ materials: [] });
       const result = await makeService().readMaterialFile('agent-1', 'nope.md');
+      expect(result.content[0].text).toContain("No material named 'nope.md'");
+    });
+  });
+
+  describe('getMaterialFileProperties', () => {
+    it('computes inline-text material properties with no HTTP call', async () => {
+      mockScope({
+        materials: [{ name: 'inline-1', key: null, inlineText: 'literal' }],
+      });
+      const result = await makeService().getMaterialFileProperties(
+        'agent-1',
+        'inline-1',
+      );
+      expect(JSON.parse(result.content[0].text)).toEqual({
+        name: 'inline-1',
+        kind: 'inline-text',
+        exists: true,
+        size: Buffer.byteLength('literal', 'utf-8'),
+      });
+      expect(mockedAxios.post).not.toHaveBeenCalled();
+    });
+
+    it('fetches storage-backed material properties via its resolved key', async () => {
+      mockScope({
+        materials: [
+          { name: 'brief.md', key: 'acme/tasks/t1/materials/brief.md' },
+        ],
+      });
+      mockedAxios.post.mockResolvedValue({
+        data: { size: 10, lastModified: 'x' },
+      });
+      const result = await makeService().getMaterialFileProperties(
+        'agent-1',
+        'brief.md',
+      );
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        'http://lcp-server:3000/internal/storage/properties',
+        { path: 'acme/tasks/t1/materials/brief.md' },
+        { headers: { 'X-Internal-Api-Key': 'secret-key' } },
+      );
+      expect(JSON.parse(result.content[0].text)).toEqual({
+        size: 10,
+        lastModified: 'x',
+      });
+    });
+
+    it('reports an unknown material name', async () => {
+      mockScope({ materials: [] });
+      const result = await makeService().getMaterialFileProperties(
+        'agent-1',
+        'nope.md',
+      );
       expect(result.content[0].text).toContain("No material named 'nope.md'");
     });
   });

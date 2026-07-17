@@ -606,6 +606,22 @@ describe('MinioStorageAdapter', () => {
       expect(send).toHaveBeenCalledWith(expect.any(CopyObjectCommand));
       expect(send).toHaveBeenCalledWith(expect.any(DeleteObjectCommand));
     });
+
+    it('rejects a ".." destination and never calls send', async () => {
+      const svc = makeAdapter(makeConfig());
+      await expect(
+        svc.moveFile('acme/a.txt', '../escaped.txt'),
+      ).rejects.toThrow('must not contain ".."');
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it('rejects a ".." source and never calls send', async () => {
+      const svc = makeAdapter(makeConfig());
+      await expect(
+        svc.moveFile('../escaped.txt', 'acme/b.txt'),
+      ).rejects.toThrow('must not contain ".."');
+      expect(send).not.toHaveBeenCalled();
+    });
   });
 
   describe('getFileSummary', () => {

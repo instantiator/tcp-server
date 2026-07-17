@@ -24,6 +24,11 @@
   // tool call(s) at all. {{tools}} is the comma-separated list of callable tool names.
   "required_tools_reminder": "Your task is NOT complete. You have not called the required tool(s): {{tools}}. Writing out or describing a tool call is not sufficient — you must actually invoke the tool. Do so now: finish any remaining work, then call {{tools}} as your final action.",
 
+  // Reminder sent when the model wrote out a <tool_call> block as text instead of invoking it.
+  // {{tools}} is the comma-separated list of callable tool names; {{describedCall}} quotes the
+  // block found in the model's last response.
+  "required_tools_reminder_with_described_call": "Your task is NOT complete. You wrote out a tool call instead of invoking it:\n\n<tool_call>{{describedCall}}</tool_call>\n\nYou don't need to think this through again — just invoke {{tools}} now, using the information already in the block above.",
+
   // Reminder sent when the required tool(s) were invoked but the call did not succeed
   // (the task was never marked complete). {{tools}} is the comma-separated list of callable tool names.
   "required_tools_call_failed": "Your task is NOT complete: your call to {{tools}} did not succeed. Review the tool error message above, fix the problem it describes, and call {{tools}} again now.",

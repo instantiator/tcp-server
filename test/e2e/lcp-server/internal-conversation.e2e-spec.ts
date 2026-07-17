@@ -417,6 +417,7 @@ describe('InternalController + ConversationController (e2e)', () => {
 
       expect(consultAssignment.taskId).toBe(task.id);
       expect(consultAssignment.parentAssignmentId).toBe(caller.assignmentId);
+      expect(consultAssignment.mode).toBe('consultee');
 
       // The task's history now includes the consultation, with no separate
       // parent-chain walk needed — see TaskService.getHistory.

@@ -102,6 +102,30 @@ describe('TaskController (e2e)', () => {
         expect(res.status).toBe(404);
       });
 
+      it('returns 400 for a materials entry with a type outside the allowed @IsIn set', async () => {
+        const res = await request(app.getHttpServer())
+          .post('/api/task')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            companyId: company.id,
+            request: 'Write a report',
+            materials: [{ type: 'not-a-real-type', value: 'x' }],
+          });
+        expect(res.status).toBe(400);
+      });
+
+      it('returns 400 for an expected entry with a type outside the allowed @IsIn set', async () => {
+        const res = await request(app.getHttpServer())
+          .post('/api/task')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            companyId: company.id,
+            request: 'Write a report',
+            expected: [{ type: 'not-a-real-type', value: 'x' }],
+          });
+        expect(res.status).toBe(400);
+      });
+
       it('returns 401 without a bearer token', async () => {
         const res = await request(app.getHttpServer())
           .post('/api/task')
@@ -191,6 +215,21 @@ describe('TaskController (e2e)', () => {
                 .set('Authorization', `Bearer ${jwt}`)
                 .attach('file', Buffer.from('hello'), 'brief.txt');
               expect(res.status).toBe(404);
+            });
+
+            it('returns 422 for invalid content and never appends the artifact', async () => {
+              const res = await request(app.getHttpServer())
+                .post(`/api/task/${task.id}/materials`)
+                .set('Authorization', `Bearer ${jwt}`)
+                .attach('file', Buffer.from('{not valid json'), 'bad.json');
+              expect(res.status).toBe(422);
+
+              const updated = await request(app.getHttpServer())
+                .get(`/api/task/${task.id}`)
+                .set('Authorization', `Bearer ${jwt}`);
+              expect(
+                (updated.body as { task: LcpTask }).task.materials,
+              ).toEqual([]);
             });
 
             it('returns 409 once the task has left ready', async () => {

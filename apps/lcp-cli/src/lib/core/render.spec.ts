@@ -113,6 +113,34 @@ describe('createRenderer', () => {
     expect(errText()).toContain('consulting Chicken assistant');
   });
 
+  it('wraps a long discrete line to the terminal width instead of printing it unwrapped', () => {
+    const { renderer, errText } = setup();
+    const longStatus = Array.from({ length: 20 }, (_, i) => `word${i}`).join(
+      ' ',
+    );
+    renderer.render({ kind: 'agent_status', data: { status: longStatus } });
+    const lines = errText().split('\n').filter(Boolean);
+    expect(lines.length).toBeGreaterThan(1);
+    for (const line of lines) {
+      // Strip ANSI colour codes before measuring visible width.
+      // eslint-disable-next-line no-control-regex
+      expect(line.replace(/\x1b\[[0-9;]*m/g, '').length).toBeLessThanOrEqual(
+        process.stdout.columns ?? 80,
+      );
+    }
+  });
+
+  it('renders agent_loop_completion with a fixed header, not the payload text as the header', () => {
+    const { renderer, errText } = setup();
+    renderer.render({
+      kind: 'agent_loop_completion',
+      data: {
+        summary: 'Task completed.\n\nActions taken (in order):\n- did a thing',
+      },
+    });
+    expect(errText()).toContain('assignment complete: Task completed.');
+  });
+
   it('ignores terminal and unknown event kinds', () => {
     const { renderer, outText, errText } = setup();
     renderer.render({ kind: 'completed', data: { response: 'done' } });

@@ -1,16 +1,30 @@
-import type { TaskChangeSummary } from '@lcp/shared';
+import type { LcpAssignment, LcpTask, TaskChangeSummary } from '@lcp/shared';
 import type { UUID } from 'crypto';
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest, ApiOptions } from '../core/api';
+import {
+  AuditRow,
+  mapAuditHistoryToEvents,
+} from '../core/audit-to-agent-events';
 import { renewToken } from '../auth/token';
 import { createRenderer, Renderer } from '../core/render';
 import { parseSseBuffer, SseEvent } from '../core/sse';
 import { readSseStream } from '../core/sse-reader';
-import { RoleOption, Tui, tuiRenderer } from '../tui/tui';
+import {
+  AssignmentInfo,
+  InitiateTaskSubmission,
+  RoleOption,
+  Tui,
+  tuiRenderer,
+} from '../tui/tui';
 
 interface AgentRecord {
   id: string;
+  status: string;
 }
+
+/** Statuses beyond which an assignment's working agent has nothing left to stream live. */
+const TERMINAL_AGENT_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 
 /** Plain shape of `GET /api/task?companyId=` rows — just what the task list needs. */
 interface TaskRecord {
@@ -86,6 +100,10 @@ export class ChatSession {
   /** The company's tasks, keyed by id — kept live by {@link watchCompanyEvents}. */
   private readonly tasksById = new Map<string, TaskChangeSummary>();
   private companyEventsAbort: AbortController | null = null;
+  /** Open task panels' event-stream subscriptions, keyed by task id. */
+  private readonly taskEventsAbort = new Map<string, AbortController>();
+  /** Open assignment chat panels' live-follow subscriptions, keyed by agent id. */
+  private readonly agentPaneWatchAbort = new Map<string, AbortController>();
 
   constructor(
     private readonly opts: GlobalOptions,
@@ -183,16 +201,151 @@ export class ChatSession {
     );
   }
 
-  /** Reports a roster-pane-triggered failure (initiate-chat / refresh) into its pane log. */
-  reportRosterError(err: unknown): void {
-    this.tui?.appendEvent(this.companyId, {
+  /**
+   * Reports a pane-triggered failure (initiate-chat/refresh on the roster,
+   * cancel/start on a task panel) — into the pane's own log when it has one
+   * (a {@link ChatPane}), and always to stderr too, since the roster and task
+   * panels have no log of their own for `Tui.appendEvent` to reach.
+   */
+  reportPaneError(paneId: string, err: unknown): void {
+    const message = String(err instanceof Error ? err.message : err);
+    this.tui?.appendEvent(paneId, {
       kind: 'agent_status',
       timestamp: new Date().toISOString(),
-      data: {
-        status: 'failed',
-        reason: String(err instanceof Error ? err.message : err),
-      },
+      data: { status: 'failed', reason: message },
     });
+    process.stderr.write(`\nError: ${message}\n`);
+  }
+
+  /**
+   * Fetches a task with its assignments, resolving each assignment's role id
+   * to its display name (an extra `GET /api/company/:id/roles` call) for the
+   * task panel's Assignments list. The two fetches are independent — a
+   * session's tasks always belong to its own `companyId` — so they run in
+   * parallel rather than waiting for the task fetch to learn its companyId.
+   */
+  async fetchTaskDetail(
+    taskId: string,
+  ): Promise<{ task: LcpTask; assignments: AssignmentInfo[] }> {
+    const [{ task, assignments }, roles] = await Promise.all([
+      apiRequest<{ task: LcpTask; assignments: LcpAssignment[] }>(
+        this.apiOpts(),
+        'GET',
+        `/api/task/${taskId}`,
+      ),
+      apiRequest<{ id: string; name: string }[]>(
+        this.apiOpts(),
+        'GET',
+        `/api/company/${this.companyId}/roles`,
+      ),
+    ]);
+    const roleNameById = new Map(roles.map((r) => [r.id, r.name]));
+    return {
+      task,
+      assignments: assignments.map((a) => ({
+        id: a.id,
+        role: roleNameById.get(a.roleId) ?? a.roleId,
+        status: a.status,
+        prompt: a.prompt,
+        agentId: a.agentId ?? null,
+      })),
+    };
+  }
+
+  /** Fetches the company's default planner role id (`LcpCompany.plannerRoleId`), if it has one. */
+  async fetchCompanyDefaultPlannerRoleId(): Promise<string | undefined> {
+    const company = await apiRequest<{ plannerRoleId?: string | null }>(
+      this.apiOpts(),
+      'GET',
+      `/api/company/${this.companyId}`,
+    );
+    return company.plannerRoleId ?? undefined;
+  }
+
+  /**
+   * Creates a task from the initiate-task form's submission, starting it
+   * immediately when requested, then returns its detail the same way
+   * {@link fetchTaskDetail} does (for the task panel this hands off to).
+   */
+  async createTask(
+    submission: InitiateTaskSubmission,
+  ): Promise<{ task: LcpTask; assignments: AssignmentInfo[] }> {
+    const expected = submission.expected.map((filename) => ({
+      type: 'task-completed-path' as const,
+      value: filename,
+    }));
+    const created = await apiRequest<LcpTask>(
+      this.apiOpts(),
+      'POST',
+      '/api/task',
+      {
+        companyId: submission.companyId,
+        request: submission.request,
+        plannerRoleId: submission.plannerRoleId,
+        ...(expected.length > 0 ? { expected } : {}),
+      },
+    );
+    if (submission.startImmediately) {
+      await apiRequest(this.apiOpts(), 'POST', `/api/task/${created.id}/start`);
+    }
+    return this.fetchTaskDetail(created.id);
+  }
+
+  /**
+   * Opens `GET /api/task/:id/events` for an open task panel and keeps it
+   * live: `task_changed` updates the pane's own status (drives the
+   * cancel/start hint and shortcut gating); `assignment_changed` re-fetches
+   * the task's full detail and refreshes the pane's Assignments list.
+   *
+   * ponytail: refetches on every assignment_changed rather than patching the
+   * one changed row in place (the event payload has no prompt/role, so a
+   * genuinely new assignment — e.g. QA, finalise — needs the full re-fetch
+   * anyway); promote to patch-in-place if this task's assignment churn ever
+   * makes the extra round-trips a real cost.
+   */
+  watchTaskEvents(taskId: string): void {
+    const abort = new AbortController();
+    this.taskEventsAbort.set(taskId, abort);
+    const url = `${this.opts.lcpServer.replace(/\/$/, '')}/api/task/${taskId}/events`;
+    void readSseStream(url, this.token, abort.signal, (event) => {
+      if (event.kind === 'task_changed') {
+        const status = eventStr(event, 'status');
+        if (status) this.tui?.updateTaskPaneStatus(taskId, status);
+        return;
+      }
+      if (event.kind !== 'assignment_changed') return;
+      void this.fetchTaskDetail(taskId)
+        .then(({ assignments }) => {
+          this.tui?.updateTaskPaneAssignments(taskId, assignments);
+        })
+        .catch(() => {
+          // best-effort live refresh — the panel keeps its last-known state
+        });
+    });
+  }
+
+  /** Stops watching a task panel's events (e.g. Ctrl+W closed it). */
+  stopWatchingTask(taskId: string): void {
+    this.taskEventsAbort.get(taskId)?.abort();
+    this.taskEventsAbort.delete(taskId);
+  }
+
+  /** Cancels a task from its task panel (`POST /api/task/:id/cancel`). */
+  async cancelTask(taskId: string): Promise<void> {
+    try {
+      await apiRequest(this.apiOpts(), 'POST', `/api/task/${taskId}/cancel`);
+    } catch (err) {
+      this.reportPaneError(taskId, err);
+    }
+  }
+
+  /** Starts a `ready` task from its task panel (`POST /api/task/:id/start`). */
+  async startTask(taskId: string): Promise<void> {
+    try {
+      await apiRequest(this.apiOpts(), 'POST', `/api/task/${taskId}/start`);
+    } catch (err) {
+      this.reportPaneError(taskId, err);
+    }
   }
 
   /**
@@ -217,10 +370,53 @@ export class ChatSession {
     return agent.id;
   }
 
-  /** Deletes every agent created this session (best-effort), and stops watching company events. */
+  /**
+   * Opens (or switches to, if already open) a read-only chat panel for a
+   * begun assignment's working agent: follows its live SSE stream while
+   * still running, or renders its full audit history (mapped into the same
+   * event shapes the live stream produces) once it has finished.
+   */
+  async openAssignmentChatPane(assignment: AssignmentInfo): Promise<void> {
+    const agentId = assignment.agentId;
+    if (!agentId) return; // shouldn't happen — the panel only offers begun assignments
+    if (this.tui?.hasPane(agentId)) {
+      this.tui.switchToPane(agentId);
+      return;
+    }
+    const agent = await apiRequest<AgentRecord>(
+      this.apiOpts(),
+      'GET',
+      `/api/agent/${agentId}`,
+    );
+    this.tui?.addPane({ id: agentId, label: assignment.role, talkable: false });
+    if (TERMINAL_AGENT_STATUSES.has(agent.status)) {
+      const rows = await apiRequest<AuditRow[]>(
+        this.apiOpts(),
+        'GET',
+        `/api/agent/${agentId}/history`,
+      );
+      for (const event of mapAuditHistoryToEvents(rows)) {
+        this.tui?.appendEvent(agentId, event);
+      }
+    } else {
+      const abort = new AbortController();
+      this.agentPaneWatchAbort.set(agentId, abort);
+      const url = `${this.opts.lcpServer.replace(/\/$/, '')}/api/agent/${agentId}/events`;
+      void readSseStream(url, this.token, abort.signal, (event) => {
+        this.tui?.appendEvent(agentId, event);
+      });
+    }
+    this.tui?.switchToPane(agentId);
+  }
+
+  /** Deletes every agent created this session (best-effort), and stops watching company/task/assignment events. */
   async cleanup(): Promise<void> {
     this.companyEventsAbort?.abort();
     this.companyEventsAbort = null;
+    for (const abort of this.taskEventsAbort.values()) abort.abort();
+    this.taskEventsAbort.clear();
+    for (const abort of this.agentPaneWatchAbort.values()) abort.abort();
+    this.agentPaneWatchAbort.clear();
     for (const id of this.agentIds) {
       await this.deleteAgent(id);
     }
@@ -230,11 +426,15 @@ export class ChatSession {
   /**
    * Handles a tab being closed (Ctrl+W — the tab itself is already gone from
    * the TUI by the time this is called): aborts any turn in flight on that
-   * pane, and deletes the underlying agent if this session created it.
+   * pane, deletes the underlying agent if this session created it, and stops
+   * watching its task/assignment-chat events if it was one of those panels.
    * Consultation-follower panes aren't session-owned agents, so closing one
    * of those just stops watching it — nothing to delete.
    */
   async closeTab(paneId: string): Promise<void> {
+    this.stopWatchingTask(paneId);
+    this.agentPaneWatchAbort.get(paneId)?.abort();
+    this.agentPaneWatchAbort.delete(paneId);
     const controller = this.abortControllers.get(paneId);
     if (controller) {
       controller.abort();

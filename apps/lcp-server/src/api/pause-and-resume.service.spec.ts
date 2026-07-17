@@ -324,6 +324,7 @@ describe('PauseAndResumeService', () => {
         expect.objectContaining({
           companyId: caller.companyId,
           roleId: consultRole.id,
+          mode: 'consultee',
           requiredToolCalls: ['complete_assignment'],
           parentAssignmentId: caller.assignmentId,
         }),

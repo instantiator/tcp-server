@@ -31,6 +31,7 @@ import { registerSetRole } from './commands/set-role';
 import { registerSetTask } from './commands/set-task';
 import { registerStartTask } from './commands/start-task';
 import { registerStoreKnowledge } from './commands/store-knowledge';
+import { registerTui } from './commands/tui';
 import { registerUploadSharedDocument } from './commands/upload-shared-document';
 import { registerValidateSharedDocument } from './commands/validate-shared-document';
 
@@ -80,6 +81,7 @@ registerSetRole(program);
 registerDeleteCompany(program);
 registerDeleteRole(program);
 registerChat(program);
+registerTui(program);
 registerListOpenQueries(program);
 registerReadQuery(program);
 registerRespond(program);

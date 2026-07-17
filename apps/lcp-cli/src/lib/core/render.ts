@@ -2,7 +2,9 @@
 // separated blocks. Kept separate from the chat command so the block/colour
 // logic can be unit-tested without a live SSE stream.
 
+import { ASSIGNMENT_COMPLETE_LABEL, isBlankText } from './agent-log-format';
 import { formatCompactionEvent, SseEvent } from './sse';
+import { wrapText } from './text-wrap';
 
 // Raw ANSI codes — no colour dependency. Bright cyan for agent state, bright
 // magenta for LLM state, grey for reasoning, white for response, bright
@@ -72,7 +74,11 @@ export function createRenderer(opts: RenderOptions): Renderer {
     currentBlock = null;
   }
 
-  /** Writes a self-contained coloured line for a discrete (non-delta) event. */
+  /**
+   * Writes a self-contained coloured line for a discrete (non-delta) event,
+   * word-wrapped to the terminal's width (today neither this nor eavesdrop
+   * wrapped at all).
+   */
   function discreteLine(
     stream: NodeJS.WritableStream,
     color: string,
@@ -80,7 +86,10 @@ export function createRenderer(opts: RenderOptions): Renderer {
   ): void {
     closeBlock();
     if (hasOutput) stream.write('\n');
-    stream.write(`${color}${label}${text}${RESET}\n`);
+    const width = process.stdout.columns ?? 80;
+    for (const line of wrapText(`${label}${text}`, width)) {
+      stream.write(`${color}${line}${RESET}\n`);
+    }
     hasOutput = true;
   }
 
@@ -100,7 +109,7 @@ export function createRenderer(opts: RenderOptions): Renderer {
       hasOutput = true;
       if (kind === 'response') responseHadContent = false;
     }
-    if (kind === 'response' && delta.trim().length > 0) {
+    if (kind === 'response' && !isBlankText(delta)) {
       responseHadContent = true;
     }
     stream.write(delta);
@@ -160,6 +169,14 @@ export function createRenderer(opts: RenderOptions): Renderer {
       case 'compaction_complete': {
         const line = formatCompactionEvent(event);
         if (line) discreteLine(opts.err, REASONING_COLOR, line);
+        break;
+      }
+      case 'agent_loop_completion': {
+        discreteLine(
+          opts.err,
+          AGENT_COLOR,
+          `${ASSIGNMENT_COMPLETE_LABEL}: ${str(data, 'summary')}`,
+        );
         break;
       }
       default:

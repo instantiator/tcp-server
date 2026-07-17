@@ -66,37 +66,38 @@ See [schema.md](schema.md) for the full field reference, VS Code integration, ex
 
 ## Verbs
 
-| Verb                                                    | Invocation                                                                                                          | Description                                                                |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| [`get-token`](#get-token)                               | `get-token`                                                                                                         | Exchange username + password for an OIDC access token                      |
-| [`list-companies`](#list-companies)                     | `list-companies`                                                                                                    | List all companies                                                         |
-| [`list-roles`](#list-roles)                             | `list-roles [-c <uuid>\|--company-slug <slug>]`                                                                     | List roles, optionally filtered to one company                             |
-| [`set-company`](#set-company)                           | `set-company [-c <uuid>\|--company-slug <slug>] [-i <json>]`                                                        | Create or update a company                                                 |
-| [`set-role`](#set-role)                                 | `set-role [-c <uuid>\|--company-slug <slug>] [-r <uuid>\|--role-slug <slug>] [-i <json>]`                           | Create or update a role                                                    |
-| [`delete-company`](#delete-company)                     | `delete-company (-c <uuid>\|--company-slug <slug>) [-f]`                                                            | Delete a company and everything in it                                      |
-| [`delete-role`](#delete-role)                           | `delete-role (-r <uuid>\|--role-slug <slug>) [-f]`                                                                  | Delete a role and everything tied to it                                    |
-| [`chat`](#chat)                                         | `chat (-r <uuid>\|--role-slug <slug>\|-c <uuid>\|--company-slug <slug>) [-q <message>]`                             | Interactive or single-query chat with a role, or browse a company's roster |
-| [`list-knowledge`](#list-knowledge)                     | `list-knowledge (--role <slug-or-id>\|--company <slug-or-id>)`                                                      | List knowledge-base documents for a role or company (shared knowledge)     |
-| [`get-knowledge`](#get-knowledge)                       | `get-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename> [-o <path>]`                             | Get a knowledge-base document's content                                    |
-| [`store-knowledge`](#store-knowledge)                   | `store-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -s <path> [-t <filename>]`                           | Upload an OKF Markdown document to a role or company knowledge base        |
-| [`delete-knowledge`](#delete-knowledge)                 | `delete-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename>`                                      | Delete a knowledge-base document by filename                               |
-| [`reindex-knowledge`](#reindex-knowledge)               | `reindex-knowledge --company <slug-or-id>`                                                                          | Force a full RAG rebuild of every knowledge scope of a company             |
-| [`open-document-store`](#open-document-store)           | `open-document-store [--no-open]`                                                                                   | Print (and open) the MinIO console URL                                     |
-| [`open-swagger`](#open-swagger)                         | `open-swagger --service <name> [--no-open]`                                                                         | Print (and open) a service's Swagger UI URL                                |
-| [`list-open-queries`](#list-open-queries)               | `list-open-queries [-c <uuid>\|--company-slug <slug>] [--format table\|json\|csv]`                                  | List open agent-to-human queries                                           |
-| [`read-query`](#read-query)                             | `read-query <slug>`                                                                                                 | Read a query's full question and conversation history                      |
-| [`respond`](#respond)                                   | `respond <slug> <message>`                                                                                          | Reply to a query and resume the waiting agent                              |
-| [`download-shared-document`](#download-shared-document) | `download-shared-document --source <path> [--target <path>]`                                                        | Download a file from shared company storage                                |
-| [`upload-shared-document`](#upload-shared-document)     | `upload-shared-document --source <path> --target <path>`                                                            | Upload a local file to shared company storage                              |
-| [`estimate-context-window`](#estimate-context-window)   | `estimate-context-window [-c <uuid>\|--company-slug <slug>] [-r <uuid>\|--role-slug <slug>]`                        | Estimate a role's worst-case prompt token footprint                        |
-| [`validate-shared-document`](#validate-shared-document) | `validate-shared-document --path <path\|glob> [--recursive]`                                                        | Re-validate document(s) already in shared storage                          |
-| [`create-task`](#create-task)                           | `create-task -c <slug-or-id> -r <text> [--planner-role <slug-or-id>] [-m <paths...>] [-e <filenames...>] [--start]` | Create a task, optionally uploading materials and starting it              |
-| [`list-tasks`](#list-tasks)                             | `list-tasks -c <slug-or-id>`                                                                                        | List a company's tasks                                                     |
-| [`get-task`](#get-task)                                 | `get-task --task-id <uuid>`                                                                                         | Get a task, including its assignment statuses and QA outcomes              |
-| [`cancel-task`](#cancel-task)                           | `cancel-task --task-id <uuid>`                                                                                      | Cancel a task and its still-non-terminal assignments/agents                |
-| [`list-agents`](#list-agents)                           | `list-agents (--role \| --company <slug-or-id>) [--filter k=v...]`                                                  | List agents for a role or company                                          |
-| [`list-assignments`](#list-assignments)                 | `list-assignments (--task-id <uuid> \| --company <slug-or-id>) [--filter k=v...]`                                   | List assignments for a task or company                                     |
-| [`eavesdrop`](#eavesdrop)                               | `eavesdrop (--agent-id \| --assignment-id \| --task-id <uuid>) [--show-history] [--tail]`                           | Replay and/or follow an agent's, assignment's, or task's activity          |
+| Verb                                                    | Invocation                                                                                                          | Description                                                            |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| [`get-token`](#get-token)                               | `get-token`                                                                                                         | Exchange username + password for an OIDC access token                  |
+| [`list-companies`](#list-companies)                     | `list-companies`                                                                                                    | List all companies                                                     |
+| [`list-roles`](#list-roles)                             | `list-roles [-c <uuid>\|--company-slug <slug>]`                                                                     | List roles, optionally filtered to one company                         |
+| [`set-company`](#set-company)                           | `set-company [-c <uuid>\|--company-slug <slug>] [-i <json>]`                                                        | Create or update a company                                             |
+| [`set-role`](#set-role)                                 | `set-role [-c <uuid>\|--company-slug <slug>] [-r <uuid>\|--role-slug <slug>] [-i <json>]`                           | Create or update a role                                                |
+| [`delete-company`](#delete-company)                     | `delete-company (-c <uuid>\|--company-slug <slug>) [-f]`                                                            | Delete a company and everything in it                                  |
+| [`delete-role`](#delete-role)                           | `delete-role (-r <uuid>\|--role-slug <slug>) [-f]`                                                                  | Delete a role and everything tied to it                                |
+| [`chat`](#chat)                                         | `chat (-r <uuid>\|--role-slug <slug>) [-q <message>]`                                                               | Interactive or single-query chat with a role                           |
+| [`tui`](#tui)                                           | `tui (-c <uuid>\|--company-slug <slug>)`                                                                            | Open the full-screen TUI on a company's roster (no role required)      |
+| [`list-knowledge`](#list-knowledge)                     | `list-knowledge (--role <slug-or-id>\|--company <slug-or-id>)`                                                      | List knowledge-base documents for a role or company (shared knowledge) |
+| [`get-knowledge`](#get-knowledge)                       | `get-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename> [-o <path>]`                             | Get a knowledge-base document's content                                |
+| [`store-knowledge`](#store-knowledge)                   | `store-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -s <path> [-t <filename>]`                           | Upload an OKF Markdown document to a role or company knowledge base    |
+| [`delete-knowledge`](#delete-knowledge)                 | `delete-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename>`                                      | Delete a knowledge-base document by filename                           |
+| [`reindex-knowledge`](#reindex-knowledge)               | `reindex-knowledge --company <slug-or-id>`                                                                          | Force a full RAG rebuild of every knowledge scope of a company         |
+| [`open-document-store`](#open-document-store)           | `open-document-store [--no-open]`                                                                                   | Print (and open) the MinIO console URL                                 |
+| [`open-swagger`](#open-swagger)                         | `open-swagger --service <name> [--no-open]`                                                                         | Print (and open) a service's Swagger UI URL                            |
+| [`list-open-queries`](#list-open-queries)               | `list-open-queries [-c <uuid>\|--company-slug <slug>] [--format table\|json\|csv]`                                  | List open agent-to-human queries                                       |
+| [`read-query`](#read-query)                             | `read-query <slug>`                                                                                                 | Read a query's full question and conversation history                  |
+| [`respond`](#respond)                                   | `respond <slug> <message>`                                                                                          | Reply to a query and resume the waiting agent                          |
+| [`download-shared-document`](#download-shared-document) | `download-shared-document --source <path> [--target <path>]`                                                        | Download a file from shared company storage                            |
+| [`upload-shared-document`](#upload-shared-document)     | `upload-shared-document --source <path> --target <path>`                                                            | Upload a local file to shared company storage                          |
+| [`estimate-context-window`](#estimate-context-window)   | `estimate-context-window [-c <uuid>\|--company-slug <slug>] [-r <uuid>\|--role-slug <slug>]`                        | Estimate a role's worst-case prompt token footprint                    |
+| [`validate-shared-document`](#validate-shared-document) | `validate-shared-document --path <path\|glob> [--recursive]`                                                        | Re-validate document(s) already in shared storage                      |
+| [`create-task`](#create-task)                           | `create-task -c <slug-or-id> -r <text> [--planner-role <slug-or-id>] [-m <paths...>] [-e <filenames...>] [--start]` | Create a task, optionally uploading materials and starting it          |
+| [`list-tasks`](#list-tasks)                             | `list-tasks -c <slug-or-id>`                                                                                        | List a company's tasks                                                 |
+| [`get-task`](#get-task)                                 | `get-task --task-id <uuid>`                                                                                         | Get a task, including its assignment statuses and QA outcomes          |
+| [`cancel-task`](#cancel-task)                           | `cancel-task --task-id <uuid>`                                                                                      | Cancel a task and its still-non-terminal assignments/agents            |
+| [`list-agents`](#list-agents)                           | `list-agents (--role \| --company <slug-or-id>) [--filter k=v...]`                                                  | List agents for a role or company                                      |
+| [`list-assignments`](#list-assignments)                 | `list-assignments (--task-id <uuid> \| --company <slug-or-id>) [--filter k=v...]`                                   | List assignments for a task or company                                 |
+| [`eavesdrop`](#eavesdrop)                               | `eavesdrop (--agent-id \| --assignment-id \| --task-id <uuid>) [--show-history] [--tail]`                           | Replay and/or follow an agent's, assignment's, or task's activity      |
 
 ### Entity identifiers: `--x`, `--x-id`, `--x-slug`
 
@@ -278,9 +279,10 @@ confirmation before deleting. `--role-slug` requires `--company-id`/
 
 ### `chat`
 
-Initiate a conversation with an agent running a given role — or, with a
-company instead of a role, open the TUI on that company's role roster with no
-agent started yet, and pick one there.
+Initiate a conversation with an agent running a given role. `chat` always
+means a talkable session with a role — to browse a company's roster and pick
+a role interactively without committing to one up front, use
+[`tui`](#tui) instead.
 
 Conversation history is maintained server-side in the LangGraph checkpoint store.
 Every agent a chat session creates (the initial one, plus any started later from
@@ -308,32 +310,31 @@ renderer. Nested consultations are followed recursively either way.
 
 | Flag                        | Alias | Description                                                                                                           |
 | --------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------- |
-| `--role-id <uuid>`          | `-r`  | Role UUID for the agent (omit to browse company roles instead)                                                        |
+| `--role-id <uuid>`          | `-r`  | Role UUID for the agent                                                                                               |
 | `--role-slug <slug>`        |       | Role slug instead of `--role-id` (needs `--company-id`/`--company-slug`)                                              |
-| `--company-id <uuid>`       | `-c`  | Company UUID — browse and start chats from its role roster (TUI only)                                                 |
+| `--company-id <uuid>`       | `-c`  | Company UUID, to scope `--role-slug`                                                                                  |
 | `--company-slug <slug>`     |       | Company slug instead of `--company-id`                                                                                |
-| `--query <message>`         | `-q`  | Single question, auto-submitted on startup — requires a role                                                          |
+| `--query <message>`         | `-q`  | Single question, auto-submitted on startup                                                                            |
 | `--hide-reasoning`          |       | Suppress the reasoning stream                                                                                         |
 | `--no-tui`                  |       | Force the plain scrolling renderer, even on a TTY                                                                     |
 | `--task-list-max-lines <n>` |       | Max lines a highlighted company task-list entry expands to (TUI only; default 4, env `LCP_TASK_LIST_ENTRY_MAX_LINES`) |
 
-Exactly one of a role (`--role-id`, or `--role-slug` scoped to a company) or a
-bare company (`--company-id`/`--company-slug`) is required — role slugs are
-unique only within a company, not globally, so `--role-slug` needs one of the
-company flags alongside it (`--role-id` is self-sufficient and can't be
-combined with either). A bare company alone needs the TUI's roster pane to
-pick a role, so it's rejected outside a TTY (or with `--no-tui`) — pass a role
-directly for non-interactive use instead.
+A role is required — `--role-id`, or `--role-slug` scoped to a company (role
+slugs are unique only within a company, not globally, so `--role-slug` needs
+one of the company flags alongside it; `--role-id` is self-sufficient and
+can't be combined with either). A bare company with no role is rejected —
+that's [`tui`](#tui)'s job.
 
 ```bash
 ./lcp-cli.sh -t $TOKEN chat --company-slug acme --role-slug chicken-assistant --no-tui -q 'Tell me about yourself'
-./lcp-cli.sh -t $TOKEN chat --company-slug acme   # browse the roster (TUI)
 ```
 
 #### Full-screen TUI (default on a TTY)
 
 When stdout is a real terminal, `chat` (both interactive and `-q`) opens a
-full-screen view instead of scrolling text:
+full-screen view instead of scrolling text — the same view [`tui`](#tui) opens
+directly on the roster, with no talkable tab. This section describes the view
+itself; see `chat` above and `tui` below for what each verb starts it with.
 
 - **Pane 0 is always the company roster** — labelled with the company's name,
   opening with a `Slug: …` / `Id: …` heading and a "Please select a role to
@@ -348,21 +349,53 @@ full-screen view instead of scrolling text:
   `--task-list-max-lines` lines). **Up/Down** moves one highlight across both
   lists, cycling top↔bottom; **[** / **]** jump straight to the previous/next
   list; the view scrolls to keep the highlight visible on a long list.
-  **Enter** starts a chat with a highlighted role (opening a new talkable tab
-  and switching to it — this also works mid-session, so you can chat with
-  more than one role at once; Enter is a no-op on a highlighted task — task
-  detail panels are `010.3.3`), and **r** re-fetches the role list. It has no
-  input box, so these keys are free for navigation rather than typing.
-- **One tab per other monitored agent** — the root agent (if `-r` was given;
-  it opens immediately alongside the roster and becomes active), one per role
-  chatted with from the roster, and one per consultation any of them
-  triggers, added live as `consultation_started` events arrive. Switch tabs
-  with **Tab** / **Shift+Tab**; the active tab is shown in bold/bright colour.
-  **Ctrl+W** closes the active tab (any tab except the roster, which is
-  permanent) — for a talkable tab this also aborts its turn if one is in
-  flight and deletes its agent; closing a consultation-follower tab just
-  stops watching it. Closing the last agent tab leaves you back on the
-  roster, the same state `--company-id` alone starts in.
+  **Enter** starts a chat with a highlighted role, or opens the task panel
+  (below) for a highlighted task; **r** re-fetches the role list; **n** opens
+  the initiate-task form (below), regardless of which list is currently
+  highlighted. It has no input box, so these keys are free for navigation
+  rather than typing.
+- **The task panel** (Enter on a task) shows `Id:`/`Prompt:` (the prompt
+  word-wrapped, continuation lines indented under the opening quote), then an
+  **Assignments** list — one row per plan/implement/qa/finalise assignment,
+  ordered the same way `get-task` returns them, `n. <role> <status>
+"<prompt>"`, the status colour-coded (grey `ready`, cyan while active, green
+  `succeeded`, red `failed`, yellow `cancelled`), and word-wrapping the full
+  prompt when highlighted (up to `--task-list-max-lines` lines), same as the
+  roster's own task list. Updates live from the task's SSE stream. **Up/Down**
+  moves the highlight, skipping assignments that haven't begun yet (nothing to
+  open); **Enter** opens the assignment chat panel (below) for a highlighted,
+  begun assignment; **c** cancels the task (shown/active only while it's
+  `planning`/`in-progress`/`finalising`); **s** starts it (shown/active only
+  while it's `ready`) — the panel updates from the SSE stream after either, no
+  manual refresh needed.
+- **The assignment chat panel** (Enter on a begun assignment in a task panel)
+  is a read-only scrollback of that assignment's working agent — no input box.
+  A still-running assignment streams live, the same as any other tab; a
+  finished one renders its full recorded history instead (reconstructed from
+  the audit log — every state change and the model's final response per turn,
+  though not its token-by-token reasoning, which isn't persisted).
+- **The initiate-task form** (`n` from the roster) is a fixed field list, not
+  a general form: **Prompt** (required; Enter to type, Enter again to commit,
+  Backspace to edit), **Planner role** (a list of the company's roles,
+  pre-selecting its default planner role if it has one; Enter to choose one),
+  **Expected outputs** (an add/remove list of filenames — zero is fine; Enter
+  on "+ Add expected output" to type one, **d** to remove a highlighted one),
+  and **Start task** (a `[ ]`/`[x]` checkbox, Enter to toggle; off by
+  default). **Up/Down** moves between fields; submitting with no prompt or no
+  role chosen shows an inline error instead of submitting. On success the form
+  is replaced (same tab, not a new one) by the new task's task panel, started
+  immediately if the checkbox was on.
+- **One tab per other monitored agent** — the root agent (`chat` only; it
+  opens immediately alongside the roster and becomes active), one per role
+  chatted with from the roster, one per assignment opened from a task panel,
+  and one per consultation any agent triggers, added live as
+  `consultation_started` events arrive. Switch tabs with **Tab** /
+  **Shift+Tab**; the active tab is shown in bold/bright colour. **Ctrl+W**
+  closes the active tab (any tab except the roster, which is permanent) — for
+  a talkable tab this also aborts its turn if one is in flight and deletes its
+  agent; closing a spectator tab (a consultation follower or an assignment
+  chat panel) just stops watching it. Closing the last agent tab leaves you
+  back on the roster.
 - **Independent scrollback per tab** — each agent's events accumulate in its
   own pane, opening with a `Name: …` / `Id: …` heading identifying the role
   and its id; switching tabs doesn't lose or interleave another agent's
@@ -372,24 +405,28 @@ full-screen view instead of scrolling text:
   arrow keys and Home/End scroll too. A blank row always separates the tab
   bar from a pane's content.
 - **Input box only on talkable tabs** — the root agent's tab and any tab
-  started from the roster show an input line (`> `); consultation tabs are
-  spectate-only, and the roster tab has none (see above). This includes `-q`
-  mode: the root tab's input is present but disabled while the query's turn
-  is in flight, the same as any busy talkable tab (see below). **Enter**
-  sends; **Alt+Enter** inserts a line break (Shift+Enter can't — terminals
-  send the same byte for
-  Shift+Enter and Enter); arrow keys, Home/End, and Backspace/Delete edit as
-  usual. While a turn is in flight, that tab's input still accepts typing but
-  won't submit until the response arrives (its hint row says `waiting for
+  started from the roster show an input line (`> `); consultation and
+  assignment-chat tabs are spectate-only, and the roster/task/initiate-task
+  panels have none (see above). This includes `-q` mode: the root tab's input
+  is present but disabled while the query's turn is in flight, the same as any
+  busy talkable tab (see below). **Enter** sends; **Alt+Enter** inserts a line
+  break (Shift+Enter can't — terminals send the same byte for Shift+Enter and
+  Enter); arrow keys, Home/End, and Backspace/Delete edit as usual. Sending
+  echoes your own message into the pane first (bright green, distinct from the
+  agent's own output), so a scrolled-back tab shows what was asked as well as
+  the answer. While a turn is in flight, that tab's input still accepts typing
+  but won't submit until the response arrives (its hint row says `waiting for
 response…`) — other tabs are unaffected and can run turns concurrently. A
-  mid-typed draft survives switching tabs, tracked independently per tab.
-  The terminal's own text cursor only ever appears on an enabled input box —
-  it's hidden everywhere else (the roster, spectator tabs, a busy talkable
-  tab), rather than lingering wherever it last was.
+  mid-typed draft survives switching tabs, tracked independently per tab. The
+  terminal's own text cursor only ever appears on an enabled input box — it's
+  hidden everywhere else (the roster, spectator tabs, a busy talkable tab),
+  rather than lingering wherever it last was.
 - Events render as `hh:mm:ss | event_type | text`, blank-line separated;
   reasoning deltas render specially — indented two spaces, no columns, grey,
   word-wrapped — with a blank line whenever reasoning is interrupted by
-  another event or resumes afterwards.
+  another event or resumes afterwards. A whitespace-only or empty response
+  renders as `(blank)` rather than an empty line, so it's obvious the agent
+  genuinely returned no content.
 - **The bottom row always shows the active keybindings** for the current
   tab, in priority order — on a narrow terminal the least important hints
   (e.g. scrolling) drop first rather than truncating mid-word, so `Ctrl+C
@@ -420,10 +457,6 @@ answer to stdout and exit, unchanged — see the plain renderer section below.
 ./lcp-cli.sh -t $TOKEN chat -r <roleId>
 # (full-screen TUI opens; type at the bottom input line, Tab/Shift+Tab to
 # switch tabs if a consultation is in progress, Ctrl+C or 'exit' to leave)
-
-./lcp-cli.sh -t $TOKEN chat -c <companyId>
-# (opens straight onto the company's role roster — no agent yet; Up/Down to
-# pick a role, Enter to start chatting)
 ```
 
 #### Plain renderer (piped output, or `--no-tui`)
@@ -480,6 +513,31 @@ mode compatible with piping the final answer to another command:
 # Agent state: completed
 # > exit
 # Agent <id> removed.
+```
+
+### `tui`
+
+Opens the full-screen TUI ([described above](#full-screen-tui-default-on-a-tty))
+straight onto a company's roster — no role required, and no agent started.
+Pick a role there (Up/Down, Enter) to start chatting, open a task (Enter) to
+see its assignments, or press **n** to initiate a new one. The dedicated way
+to browse a company without committing to a role up front; [`chat`](#chat)
+always requires one.
+
+| Flag                        | Alias | Description                                                                                                                            |
+| --------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `--company-id <uuid>`       | `-c`  | Company UUID                                                                                                                           |
+| `--company-slug <slug>`     |       | Company slug instead of `--company-id`                                                                                                 |
+| `--hide-reasoning`          |       | Suppress the reasoning stream                                                                                                          |
+| `--task-list-max-lines <n>` |       | Max lines a highlighted company task-list entry (or task-panel assignment) expands to (default 4, env `LCP_TASK_LIST_ENTRY_MAX_LINES`) |
+
+Requires a TTY — there is no piped/plain-renderer fallback, since the whole
+point of this verb is the interactive roster.
+
+```bash
+./lcp-cli.sh -t $TOKEN tui --company-slug acme
+# (opens straight onto the company's roster — no agent yet; Up/Down to pick a
+# role or a task, Enter to open it, 'n' to initiate a new task)
 ```
 
 ### `list-knowledge`
@@ -913,17 +971,38 @@ combined (history prints first, then the tail follows).
 | `--show-history`         | Reconstruct past events from the audit log and print them to stdout               |
 | `--tail`                 | Follow current events live, via the same SSE stream `chat` uses                   |
 
-- **stdout** (`--show-history`): one `hh:mm:ss | eventType | summary` line per
-  recorded audit event, oldest first
+- **stdout** (`--show-history`): a heading block (`Assignment id:`,
+  `Assignment role:`, `Agent id:`, `Agent role id:`, `Agent role slug:`)
+  whenever the active agent changes (a `--task-id` history spans several),
+  then each recorded audit event as one or more lines:
+  - `llm_request`/`llm_response` — a `hh:mm:ss | eventType` line, then the
+    payload pretty-printed (2-space indented) underneath; a request only
+    prints the messages appended since that agent's last request (it
+    otherwise re-sends the whole running history every turn), a response
+    prints in full every time (nothing to diff against)
+  - `tool_call`/`tool_result` — the same header line, then the full payload as
+    pretty, untruncated JSON, word-wrapped to the terminal width
+  - everything else — `hh:mm:ss | eventType | summary`, word-wrapped, with a
+    fixed `assignment complete` header for `agent_loop_completion` rows
+    (its deterministic text is one assignment's completion, not the whole
+    task's, even though the payload's own text starts "Task completed.")
 - **stdout/stderr** (`--tail`): rendered the same way `chat`'s plain renderer
-  renders its own agent's stream
+  renders its own agent's stream, prefixed `[<short id> (<role slug>)]`
+  instead of the full agent UUID, with the same per-agent heading block
+  printed whenever the active agent changes
 - `--tail` warns and exits non-zero if the target has already finished (or,
   for `--assignment-id`, hasn't started yet — nothing to follow)
+- `--tail --task-id` follows every assignment present when it starts, and
+  keeps watching the task's own SSE stream afterward so an assignment that
+  starts later (the next plan step, its QA review, the finalise pass, or a
+  consultation once it inherits the parent's `taskId`) is picked up too,
+  rather than only ever tailing what existed at start time
 - `--task-id` history/tail covers the task's own assignments only; a
-  consultation spawned mid-assignment is a separate orphan assignment with no
-  link back to the task, so it isn't traced (eavesdrop directly on that
-  consultation's `--assignment-id`/`--agent-id` instead, once you have its id
-  from `list-assignments --filter task=null`)
+  consultation spawned mid-assignment that predates `parentAssignmentId`
+  inheritance is a separate orphan assignment with no link back to the task,
+  so it isn't traced (eavesdrop directly on that consultation's
+  `--assignment-id`/`--agent-id` instead, once you have its id from
+  `list-assignments --filter task=null`)
 
 ```bash
 # Replay everything that happened on a task so far
@@ -935,6 +1014,16 @@ combined (history prints first, then the tail follows).
 # Both: catch up, then keep watching
 ./lcp-cli.sh -t $TOKEN eavesdrop --agent-id <uuid> --show-history --tail
 ```
+
+> **2026-07-16 — implementation note:** `--show-history` formats audit rows
+> with its own row-shaped renderer (heading blocks, JSON deltas, per-eventType
+> summaries — see above) rather than mapping rows into `AgentEvent`s and
+> reusing `chat`'s `createRenderer`, since audit rows carry the raw
+> `llm_request`/`llm_response`/`tool_call`/`tool_result` payloads (full
+> LangGraph event data) rather than the pre-formatted deltas the live SSE
+> stream produces — summarising them generically through `createRenderer`
+> would have lost the JSON-delta/heading-block detail this section describes.
+> `--tail` (a live SSE follow) does reuse `createRenderer`, same as `chat`.
 
 ### `estimate-context-window`
 

@@ -51,6 +51,8 @@ import {
   applyStorageResult,
   baseToolName,
   createTracker,
+  detectDescribedToolCall,
+  extractChatModelText,
   generateActionString,
 } from './loop-tracker';
 
@@ -507,6 +509,10 @@ export class AgentLoopService {
         this.events.publish(agent.id, observabilityEvent);
       }
 
+      if (event.event === 'on_chat_model_end') {
+        tracker.lastResponseText = extractChatModelText(event.data?.output);
+      }
+
       if (event.event === 'on_tool_start') {
         const input_ = event.data?.input ?? {};
         const runId = event.run_id ?? '';
@@ -578,10 +584,19 @@ export class AgentLoopService {
       // Distinguish "never called" from "called but the call did not succeed"
       // (the tool fired yet the status never flipped, e.g. complete_assignment errored).
       const missing = requiredTools.filter((t) => !tracker.firedTools.has(t));
+      const describedCall = detectDescribedToolCall(tracker.lastResponseText);
       const nudge = missing.length
-        ? renderTemplate(agentPrompts.required_tools_reminder, {
-            tools: missing.map(callableName).join(', '),
-          })
+        ? describedCall
+          ? renderTemplate(
+              agentPrompts.required_tools_reminder_with_described_call,
+              {
+                tools: missing.map(callableName).join(', '),
+                describedCall,
+              },
+            )
+          : renderTemplate(agentPrompts.required_tools_reminder, {
+              tools: missing.map(callableName).join(', '),
+            })
         : renderTemplate(agentPrompts.required_tools_call_failed, {
             tools: requiredTools.map(callableName).join(', '),
           });

@@ -13,7 +13,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken, TypeOrmModule } from '@nestjs/typeorm';
 import { randomUUID, UUID } from 'crypto';
-import { QueryFailedError, Repository } from 'typeorm';
+import { EntityManager, QueryFailedError, Repository } from 'typeorm';
 import { DbService } from './db.service';
 
 const ALL_ENTITIES = [
@@ -928,6 +928,7 @@ describe('DbService', () => {
       });
       expect(assignment.taskId).toBe(task.id);
       expect(assignment.parentAssignmentId).toBe(parent.id);
+      expect(assignment.mode).toBe('consultee');
     });
 
     it('leaves taskId null and parentAssignmentId unset when no parent is given', async () => {
@@ -946,6 +947,43 @@ describe('DbService', () => {
       });
       expect(assignment.taskId).toBeNull();
       expect(assignment.parentAssignmentId).toBeNull();
+    });
+
+    it('rolls back the orphan assignment insert when the agent insert fails (transactional guarantee)', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+
+      const originalGetRepository = EntityManager.prototype.getRepository;
+      const spy = jest
+        .spyOn(EntityManager.prototype, 'getRepository')
+        .mockImplementation(function (
+          this: EntityManager,
+          target: Parameters<typeof originalGetRepository>[0],
+        ) {
+          const repo = originalGetRepository.call(this, target);
+          if (target === LcpAgent) {
+            jest
+              .spyOn(repo, 'save')
+              .mockRejectedValueOnce(new Error('forced agent insert failure'));
+          }
+          return repo;
+        });
+
+      try {
+        await expect(
+          dbService.createAgent({
+            companyId: company.id,
+            roleId: role.id,
+            initialPrompt: 'Summarise.',
+          }),
+        ).rejects.toThrow('forced agent insert failure');
+      } finally {
+        spy.mockRestore();
+      }
+
+      // The orphan assignment created earlier in the same transaction must
+      // not survive — it was never committed.
+      expect(await assignmentRepo.count()).toBe(0);
     });
 
     it('getAgent returns null for unknown id', async () => {

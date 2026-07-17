@@ -142,6 +142,52 @@ describe('Storage scope + append (e2e)', () => {
     expect((readRes.body as { content: string }).content).toBe('# Report\n');
   });
 
+  it('renames a working file via /internal/storage/move and 404s reading the old key', async () => {
+    const assignment = await assignmentRepo.save(
+      assignmentRepo.create({
+        companyId: company.id,
+        roleId: role.id,
+        taskId: task.id,
+        mode: 'implement',
+        orderIndex: 2,
+        prompt: 'work',
+        status: 'in-progress',
+      }),
+    );
+    const agent = await seedAgent(assignment.id);
+    const prefix = `${company.slug}/tasks/${task.id}/assignments/2/working/`;
+    const source = `${prefix}draft.md`;
+    const destination = `${prefix}final.md`;
+
+    await request(app.getHttpServer())
+      .post('/internal/storage/append')
+      .set('X-Internal-Api-Key', INTERNAL_KEY)
+      .send({
+        path: source,
+        content: '# Draft\n',
+        originators: { agent: agent.id },
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post('/internal/storage/move')
+      .set('X-Internal-Api-Key', INTERNAL_KEY)
+      .send({ source, destination, originators: { agent: agent.id } })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post('/internal/storage/read')
+      .set('X-Internal-Api-Key', INTERNAL_KEY)
+      .send({ path: source })
+      .expect(404);
+
+    const readRes = await request(app.getHttpServer())
+      .post('/internal/storage/read')
+      .set('X-Internal-Api-Key', INTERNAL_KEY)
+      .send({ path: destination });
+    expect((readRes.body as { content: string }).content).toBe('# Draft\n');
+  });
+
   it('hands a qa caller a read-only scope pointed at the target assignment', async () => {
     const target = await assignmentRepo.save(
       assignmentRepo.create({

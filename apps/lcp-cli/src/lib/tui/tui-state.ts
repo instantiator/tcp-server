@@ -23,6 +23,17 @@ export interface RoleOption {
   name: string;
 }
 
+/** One assignment as shown in a task panel's Assignments list. */
+export interface AssignmentInfo {
+  id: string;
+  /** The assignment's role, resolved to its display name (not just an id). */
+  role: string;
+  status: string;
+  prompt: string;
+  /** The assignment's working agent, once dispatched — null before it begins. */
+  agentId: string | null;
+}
+
 /**
  * One row of a {@link SelectableList}. `render` draws it at a given content
  * width, told whether it's the current selection (e.g. the `>` marker).
@@ -135,6 +146,21 @@ export class PaneManager {
     this.panes.set(spec.id, spec);
     this.order.push(spec.id);
     if (this.activeId === null) this.activeId = spec.id;
+  }
+
+  /**
+   * Replaces one pane's identity in place, at the same tab position — used
+   * when a transient form pane (the initiate-task panel) hands off to its
+   * result pane (the newly created task's panel) without appending a new tab
+   * at the end. No-op if `oldId` isn't open.
+   */
+  replacePane(oldId: string, spec: PaneSpec): void {
+    const index = this.order.indexOf(oldId);
+    if (index === -1) return;
+    this.panes.delete(oldId);
+    this.order[index] = spec.id;
+    this.panes.set(spec.id, spec);
+    if (this.activeId === oldId) this.activeId = spec.id;
   }
 
   /** Removes a pane (e.g. a consultation follower whose agent finished). */

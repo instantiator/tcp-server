@@ -554,6 +554,28 @@ describe('Tui resize resilience', () => {
     expect(rows()[0]).toContain('[ Cat ]');
     expect(rows()[HEIGHT - 1]).toContain('Ctrl+C quit');
   });
+
+  it('survives a company SSE task_changed update (updateRosterTasks) landing while the terminal is degenerate', () => {
+    const { tui, term, rows } = makeTui();
+    tui.addRosterPane({
+      id: 'acme',
+      label: 'Acme',
+      slug: 'acme-corp',
+      roles: [{ id: 'r1', name: 'Cat assistant' }],
+    });
+
+    expect(() => resize(term, 2, 4)).not.toThrow();
+    // A task_changed-driven update landing while the pane is hidden/
+    // unpositioned (too small for content) must not throw.
+    expect(() =>
+      tui.updateRosterTasks('acme', [
+        taskSummary({ id: 't1', request: 'Mid-resize task' }),
+      ]),
+    ).not.toThrow();
+
+    resize(term, WIDTH, HEIGHT);
+    expect(rows().join('\n')).toContain('Mid-resize task');
+  });
 });
 
 describe('Tui company roster pane', () => {
@@ -804,6 +826,364 @@ describe('Tui company roster pane', () => {
 
     expect(rows()[0]).toContain('[ Cat assistant ]');
     expect(text()).toContain('> '); // input box now shown for the talkable pane
+  });
+
+  it('opens a task panel and switches to it on Enter over a task entry', () => {
+    const { tui, rows, pressKey } = makeTui();
+    tui.addRosterPane({
+      id: 'acme',
+      label: 'Acme Corp',
+      slug: 'acme-corp',
+      roles: [{ id: 'r1', name: 'Cat assistant' }],
+    });
+    tui.updateRosterTasks('acme', [
+      taskSummary({ id: 't1', request: 'Write a report' }),
+    ]);
+    const onSelectTask = jest.fn((task: TaskChangeSummary) => {
+      tui.addTaskPane({
+        id: task.id,
+        label: task.id,
+        prompt: task.request,
+        status: task.status,
+        assignments: [],
+      });
+      tui.switchToPane(task.id);
+    });
+    tui.onSelectTask(onSelectTask);
+
+    pressKey(']'); // jump from Roles to Tasks
+    pressKey('ENTER');
+
+    expect(onSelectTask).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 't1' }),
+    );
+    expect(rows()[0]).toContain('[ t1 ]');
+    expect(rows()[CONTENT_TOP]).toContain('Id:     t1');
+  });
+});
+
+describe('Tui task panel', () => {
+  function addTask(
+    tui: ReturnType<typeof makeTui>['tui'],
+    overrides: Partial<{
+      status: string;
+      assignments: Parameters<Tui['addTaskPane']>[0]['assignments'];
+    }> = {},
+  ) {
+    tui.addTaskPane({
+      id: 'task-1',
+      label: 'task-1',
+      prompt: 'Write a report',
+      status: overrides.status ?? 'in-progress',
+      assignments: overrides.assignments ?? [
+        {
+          id: 'a1',
+          role: 'Planner',
+          status: 'succeeded',
+          prompt: 'Draft the plan',
+          agentId: 'agent-1',
+        },
+        {
+          id: 'a2',
+          role: 'Implementer',
+          status: 'in-progress',
+          prompt: 'Write the report body',
+          agentId: 'agent-2',
+        },
+        {
+          id: 'a3',
+          role: 'QA',
+          status: 'ready',
+          prompt: 'Review the report',
+          agentId: null,
+        },
+      ],
+    });
+  }
+
+  it('renders the Id/Prompt heading and the Assignments list', () => {
+    const { tui, rows } = makeTui();
+    addTask(tui);
+    expect(rows()[CONTENT_TOP]).toContain('Id:     task-1');
+    expect(rows()[CONTENT_TOP + 1]).toContain('Prompt: "Write a report"');
+    expect(rows()[CONTENT_TOP + 3]).toContain('Assignments');
+  });
+
+  it('`>` skips not-yet-begun (ready) assignments', () => {
+    const { tui, text, pressKey } = makeTui();
+    addTask(tui);
+
+    // The first selectable row is a1 (succeeded) — a3 (ready) is skipped
+    // entirely by Down/Up navigation.
+    expect(text()).toContain('> 1. Planner');
+
+    pressKey('DOWN');
+    expect(text()).toContain('> 2. Implementer');
+
+    pressKey('DOWN'); // wraps back to a1 — a3 is never selectable
+    expect(text()).toContain('> 1. Planner');
+  });
+
+  it('colours each assignment status via terminal attributes', () => {
+    const { tui, rows, attrAt } = makeTui();
+    addTask(tui);
+    const succeededRow = rows().findIndex((r) => r.includes('1. Planner'));
+    const col = rows()[succeededRow].indexOf('succeeded');
+    // Bright green foreground (terminal-kit's 16-colour "bright" palette:
+    // base colour 2 + 8) for a succeeded assignment.
+    expect(attrAt(col, succeededRow).attr.color).toBe(10);
+  });
+
+  it('opens the assignment chat panel via onSelectAssignment on Enter over a begun assignment', () => {
+    const { tui, pressKey } = makeTui();
+    addTask(tui);
+    const onSelectAssignment = jest.fn();
+    tui.onSelectAssignment(onSelectAssignment);
+
+    pressKey('ENTER');
+
+    expect(onSelectAssignment).toHaveBeenCalledWith(
+      'task-1',
+      expect.objectContaining({ id: 'a1', role: 'Planner' }),
+    );
+  });
+
+  it('updates the assignment list live (e.g. an SSE assignment_changed update)', () => {
+    const { tui, text } = makeTui();
+    addTask(tui);
+    expect(text()).toContain('in-progress');
+
+    tui.updateTaskPaneAssignments('task-1', [
+      {
+        id: 'a1',
+        role: 'Planner',
+        status: 'succeeded',
+        prompt: 'Draft the plan',
+        agentId: 'agent-1',
+      },
+      {
+        id: 'a2',
+        role: 'Implementer',
+        status: 'succeeded',
+        prompt: 'Write the report body',
+        agentId: 'agent-2',
+      },
+      {
+        id: 'a3',
+        role: 'QA',
+        status: 'in-progress',
+        prompt: 'Review the report',
+        agentId: 'agent-3',
+      },
+    ]);
+
+    expect(text()).toContain('3. QA');
+    expect(text()).not.toContain('2. Implementer in-progress');
+  });
+
+  it('shows the cancel shortcut only while the task is running, and fires onCancelTask', () => {
+    const { tui, rows, term, pressKey } = makeTui();
+    addTask(tui, { status: 'in-progress' });
+    const onCancelTask = jest.fn();
+    tui.onCancelTask(onCancelTask);
+
+    expect(rows()[term.height - 1]).toContain('c cancel');
+    pressKey('c');
+    expect(onCancelTask).toHaveBeenCalledWith('task-1');
+  });
+
+  it('hides the cancel shortcut and ignores "c" once the task is no longer running', () => {
+    const { tui, rows, term, pressKey } = makeTui();
+    addTask(tui, { status: 'succeeded' });
+    const onCancelTask = jest.fn();
+    tui.onCancelTask(onCancelTask);
+
+    expect(rows()[term.height - 1]).not.toContain('c cancel');
+    pressKey('c');
+    expect(onCancelTask).not.toHaveBeenCalled();
+  });
+
+  it('shows the start shortcut only while the task is ready, and fires onStartTask', () => {
+    const { tui, rows, term, pressKey } = makeTui();
+    addTask(tui, { status: 'ready' });
+    const onStartTask = jest.fn();
+    tui.onStartTask(onStartTask);
+
+    expect(rows()[term.height - 1]).toContain('s start');
+    pressKey('s');
+    expect(onStartTask).toHaveBeenCalledWith('task-1');
+  });
+
+  it('hides the start shortcut and ignores "s" once the task is no longer ready', () => {
+    const { tui, rows, term, pressKey } = makeTui();
+    addTask(tui, { status: 'in-progress' });
+    const onStartTask = jest.fn();
+    tui.onStartTask(onStartTask);
+
+    expect(rows()[term.height - 1]).not.toContain('s start');
+    pressKey('s');
+    expect(onStartTask).not.toHaveBeenCalled();
+  });
+
+  it('updateTaskPaneStatus updates the hint bar without needing a full redraw of the list', () => {
+    const { tui, rows, term } = makeTui();
+    addTask(tui, { status: 'ready' });
+    expect(rows()[term.height - 1]).toContain('s start');
+
+    tui.updateTaskPaneStatus('task-1', 'in-progress');
+
+    expect(rows()[term.height - 1]).not.toContain('s start');
+    expect(rows()[term.height - 1]).toContain('c cancel');
+  });
+});
+
+describe('Tui initiate-task panel', () => {
+  function openFromRoster(tui: ReturnType<typeof makeTui>['tui']) {
+    tui.addRosterPane({
+      id: 'acme',
+      label: 'Acme Corp',
+      slug: 'acme-corp',
+      roles: [{ id: 'r1', name: 'Cat assistant' }],
+    });
+    tui.addInitiateTaskPane({
+      companyId: 'acme',
+      roles: [
+        { id: 'r1', name: 'Planner' },
+        { id: 'r2', name: 'Implementer' },
+      ],
+      defaultRoleId: 'r1',
+    });
+  }
+
+  it("opens via 'n' from the company roster", () => {
+    const { tui, rows, pressKey } = makeTui();
+    tui.addRosterPane({
+      id: 'acme',
+      label: 'Acme Corp',
+      slug: 'acme-corp',
+      roles: [{ id: 'r1', name: 'Cat assistant' }],
+    });
+    const onOpen = jest.fn(() => {
+      tui.addInitiateTaskPane({
+        companyId: 'acme',
+        roles: [],
+        defaultRoleId: undefined,
+      });
+    });
+    tui.onOpenInitiateTask(onOpen);
+
+    pressKey('n');
+
+    expect(onOpen).toHaveBeenCalled();
+    expect(rows()[0]).toContain('[ New task ]');
+  });
+
+  it('pre-selects the default planner role', () => {
+    const { tui, text } = makeTui();
+    openFromRoster(tui);
+    expect(text()).toContain('(*) Planner');
+    expect(text()).toContain('( ) Implementer');
+  });
+
+  it('types a prompt via Enter-to-edit, then commits on Enter', () => {
+    const { tui, text, pressKey, type } = makeTui();
+    openFromRoster(tui);
+
+    pressKey('ENTER'); // start editing the prompt (first row)
+    type('Write a report');
+    pressKey('ENTER'); // commit
+
+    expect(text()).toContain('Prompt: "Write a report"');
+  });
+
+  it('adds and removes an expected-output filename', () => {
+    const { tui, text, pressKey, type } = makeTui();
+    openFromRoster(tui);
+
+    // Navigate down to "+ Add expected output": prompt, 2 roles, then add-row.
+    pressKey('DOWN');
+    pressKey('DOWN');
+    pressKey('DOWN');
+    pressKey('ENTER'); // start editing the new filename
+    type('output.md');
+    pressKey('ENTER'); // commit
+
+    expect(text()).toContain('- output.md (d to remove)');
+
+    // The new row lands at the highlight's position (where "+ Add expected
+    // output" used to be), so it's already highlighted — no need to move.
+    pressKey('d');
+
+    expect(text()).not.toContain('output.md');
+  });
+
+  it('blocks submission with an inline message when the prompt is empty', () => {
+    const { tui, text, pressKey } = makeTui();
+    openFromRoster(tui);
+    const onSubmit = jest.fn();
+    tui.onSubmitInitiateTask(onSubmit);
+
+    // Navigate to the Submit row: prompt, 2 roles, add-row, start-toggle, submit.
+    for (let i = 0; i < 5; i++) pressKey('DOWN');
+    pressKey('ENTER');
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(text()).toContain('Enter a prompt before submitting.');
+  });
+
+  it('toggles Start immediately', () => {
+    const { tui, text, pressKey } = makeTui();
+    openFromRoster(tui);
+
+    // Navigate to the start-toggle row: prompt, 2 roles, add-row, start-toggle.
+    for (let i = 0; i < 4; i++) pressKey('DOWN');
+    expect(text()).toContain('[ ] Start immediately');
+
+    pressKey('ENTER');
+
+    expect(text()).toContain('[x] Start immediately');
+  });
+
+  it('submits with the built request once prompt and role are set', () => {
+    const { tui, pressKey, type } = makeTui();
+    openFromRoster(tui);
+    const onSubmit = jest.fn();
+    tui.onSubmitInitiateTask(onSubmit);
+
+    pressKey('ENTER');
+    type('Write a report');
+    pressKey('ENTER');
+    for (let i = 0; i < 5; i++) pressKey('DOWN'); // to the Submit row
+    pressKey('ENTER');
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      '__initiate_task__',
+      expect.objectContaining({
+        companyId: 'acme',
+        request: 'Write a report',
+        plannerRoleId: 'r1',
+        expected: [],
+        startImmediately: false,
+      }),
+    );
+  });
+
+  it('replaceWithTaskPane hands off to the task panel in the same tab slot', () => {
+    const { tui, rows } = makeTui();
+    openFromRoster(tui);
+    const tabCountBefore = rows()[0].split('|').length;
+
+    tui.replaceWithTaskPane('__initiate_task__', {
+      id: 'task-1',
+      label: 'task-1',
+      prompt: 'Write a report',
+      status: 'ready',
+      assignments: [],
+    });
+
+    expect(rows()[0].split('|').length).toBe(tabCountBefore);
+    expect(rows()[0]).toContain('[ task-1 ]');
+    expect(rows()[CONTENT_TOP]).toContain('Id:     task-1');
   });
 });
 

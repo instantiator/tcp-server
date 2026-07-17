@@ -21,14 +21,14 @@ export function shouldUseTui(
  * `--role` matching a UUID) already implies its company, while a slug form
  * (`--role-slug`, or a non-UUID `--role`) requires a company
  * (`--company`/`--company-id`/`--company-slug`) to scope it — role slugs are
- * only unique within a company. Exactly one of a role or a bare company is
- * required; `--query` needs a specific role up front (a one-shot can't wait
- * for an interactive roster pick); browsing a company with no role needs the
- * TUI's roster pane, so it requires a TTY.
+ * only unique within a company. `chat` always means a talkable session with a
+ * role: a bare company (no role) is rejected outright, pointed at `tui
+ * <company>` instead — see `010.3.2.1`'s feedback for why the two verbs were
+ * split. `--query` needs a specific role up front (a one-shot can't wait for
+ * an interactive roster pick).
  */
 export function validateChatFlags(
   cmdOpts: EntityRefOpts & { query?: string },
-  useTui: boolean,
 ): string | null {
   const companyGiven = Boolean(
     cmdOpts.company || cmdOpts.companyId || cmdOpts.companySlug,
@@ -68,8 +68,8 @@ export function validateChatFlags(
   if (cmdOpts.query && !roleGiven) {
     return '--query requires a role (--role, --role-id, or --role-slug)';
   }
-  if (companyGiven && !roleGiven && !useTui) {
-    return 'browsing a company without a role needs the full-screen TUI (requires a TTY) — pass a role directly for non-interactive use, or drop --no-tui';
+  if (companyGiven && !roleGiven) {
+    return "chat requires a role (--role, --role-id, or --role-slug) — to browse a company's roster without one, use `tui <company>` instead";
   }
   return null;
 }

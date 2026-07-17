@@ -131,4 +131,41 @@ describe('Storage write-time validation gating (e2e)', () => {
       ).toBe(true);
     });
   });
+
+  describe('POST /api/company/:companyId/knowledge', () => {
+    it('rejects an OKF document missing front-matter with 422 and never lists it', async () => {
+      const postRes = await request(app.getHttpServer())
+        .post(`/api/company/${company.id}/knowledge`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .attach('file', Buffer.from('# no front-matter'), 'bad.md');
+
+      expect(postRes.status).toBe(422);
+
+      const listRes = await request(app.getHttpServer())
+        .get(`/api/company/${company.id}/knowledge`)
+        .set('Authorization', `Bearer ${jwt}`);
+      expect(listRes.status).toBe(200);
+      expect(
+        (listRes.body as { name: string }[]).some((d) => d.name === 'bad.md'),
+      ).toBe(false);
+    });
+
+    it('accepts a valid OKF document and lists it', async () => {
+      const content = '---\ntitle: Policy\n---\n\nBody.';
+      const postRes = await request(app.getHttpServer())
+        .post(`/api/company/${company.id}/knowledge`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .attach('file', Buffer.from(content), 'good-shared.md');
+      expect(postRes.status).toBe(201);
+
+      const listRes = await request(app.getHttpServer())
+        .get(`/api/company/${company.id}/knowledge`)
+        .set('Authorization', `Bearer ${jwt}`);
+      expect(
+        (listRes.body as { name: string }[]).some(
+          (d) => d.name === 'good-shared.md',
+        ),
+      ).toBe(true);
+    });
+  });
 });

@@ -455,6 +455,48 @@ describe('TaskOrchestrationService', () => {
       await service.assignmentAssured(target);
       expect(pauseResume.completeAgent).not.toHaveBeenCalled();
     });
+
+    it('advance(): dispatches a finalise agent (not mechanical succeed) when task.expected is non-empty', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, {
+        status: 'in-progress',
+        plannerRoleId: role.id,
+        expected: [{ type: 'task-completed-path', value: 'report.txt' }],
+      });
+      const target = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        orderIndex: 0,
+        status: 'in-qa',
+        qaStatus: 'accepted',
+        summary: 'done',
+        prepared: [{ type: 'assignment-working-path', value: 'out.txt' }],
+      });
+      const agent = await agentRepo.save(
+        agentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          assignmentId: target.id,
+          initialPrompt: 'x',
+          status: AgentStatus.Paused,
+        }),
+      );
+      await assignmentRepo.update(target.id, { agentId: agent.id });
+
+      await service.assignmentAssured({ ...target, agentId: agent.id });
+
+      const taskAfter = (await taskRepo.findOneBy({ id: task.id }))!;
+      // Not mechanically succeeded — a finalise assignment is dispatched instead.
+      expect(taskAfter.status).toBe('finalising');
+      const finalise = await assignmentRepo.findOneBy({
+        taskId: task.id,
+        mode: 'finalise',
+      });
+      expect(finalise).not.toBeNull();
+      expect(finalise!.status).toBe('in-progress');
+    });
   });
 
   // --- reject ---------------------------------------------------------------
@@ -634,6 +676,167 @@ describe('TaskOrchestrationService', () => {
       ).resolves.toBeUndefined();
       expect((await assignmentRepo.findOneBy({ id: orphan.id }))!.status).toBe(
         'in-progress',
+      );
+    });
+
+    it('fails the target assignment and task when a QA agent fails', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, { status: 'in-progress' });
+      const target = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        orderIndex: 0,
+        status: 'in-qa',
+      });
+      const qa = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        mode: 'qa',
+        targetAssignmentId: target.id,
+        status: 'in-progress',
+      });
+      const agent = await agentRepo.save(
+        agentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          assignmentId: qa.id,
+          initialPrompt: 'x',
+        }),
+      );
+
+      await service.handleAgentFailed(agent.id, 'qa crashed');
+
+      expect((await assignmentRepo.findOneBy({ id: target.id }))!.status).toBe(
+        'failed',
+      );
+      expect((await taskRepo.findOneBy({ id: task.id }))!.status).toBe(
+        'failed',
+      );
+    });
+
+    it('is a no-op when the target assignment is no longer in-qa (lost the race to a concurrent QA accept)', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, { status: 'in-progress' });
+      const target = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        orderIndex: 0,
+        status: 'succeeded', // already resolved by a concurrent accept
+      });
+      const qa = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        mode: 'qa',
+        targetAssignmentId: target.id,
+        status: 'in-progress',
+      });
+      const agent = await agentRepo.save(
+        agentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          assignmentId: qa.id,
+          initialPrompt: 'x',
+        }),
+      );
+
+      await service.handleAgentFailed(agent.id, 'qa crashed late');
+
+      expect((await assignmentRepo.findOneBy({ id: target.id }))!.status).toBe(
+        'succeeded',
+      );
+      expect((await taskRepo.findOneBy({ id: task.id }))!.status).toBe(
+        'in-progress',
+      );
+    });
+  });
+
+  // --- cancelTask ------------------------------------------------------------
+
+  describe('cancelTask', () => {
+    it('cancels every non-terminal assignment and its agent, and the task itself', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, { status: 'in-progress' });
+      const step = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        orderIndex: 0,
+        status: 'in-progress',
+      });
+      const agent = await agentRepo.save(
+        agentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          assignmentId: step.id,
+          initialPrompt: 'x',
+        }),
+      );
+      await assignmentRepo.update(step.id, { agentId: agent.id });
+
+      await service.cancelTask(await taskRepo.findOneByOrFail({ id: task.id }));
+
+      expect(
+        (await assignmentRepo.findOneByOrFail({ id: step.id })).status,
+      ).toBe('cancelled');
+      expect((await agentRepo.findOneByOrFail({ id: agent.id })).status).toBe(
+        AgentStatus.Cancelled,
+      );
+      // cancelTask itself only cascades to assignments/agents and records the
+      // task's cancellation — the task row's own status is set by
+      // TaskService.cancel()'s atomic claim, one layer up, before this is
+      // ever called; that's exercised by the e2e/API-facing tests instead.
+      expect(audit.record).toHaveBeenCalledWith(
+        company.id,
+        'orchestrator',
+        null,
+        expect.anything(),
+        expect.objectContaining({ taskId: task.id, newStatus: 'cancelled' }),
+      );
+    });
+
+    it('does not cancel an assignment that completed concurrently — a stale in-memory snapshot loses the atomic claim', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, { status: 'in-progress' });
+      const step = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        orderIndex: 0,
+        status: 'in-progress',
+      });
+
+      // Simulates the exact race this atomic-claim mechanism guards against:
+      // cancelTask's own assignments fetch returns an in-progress snapshot,
+      // but by the time it tries to claim that assignment, a concurrent
+      // completion has already moved the real row on to 'succeeded'.
+      jest
+        .spyOn(assignmentRepo, 'find')
+        .mockResolvedValueOnce([{ ...step, status: 'in-progress' }]);
+      await assignmentRepo.update(step.id, { status: 'succeeded' });
+
+      await service.cancelTask(await taskRepo.findOneByOrFail({ id: task.id }));
+
+      // The claim (WHERE status = 'in-progress') affected 0 rows, so the
+      // concurrently-completed assignment is left exactly as it was.
+      expect(
+        (await assignmentRepo.findOneByOrFail({ id: step.id })).status,
+      ).toBe('succeeded');
+      // cancelTask still records the task's own cancellation regardless of
+      // how many of its assignments it actually claimed.
+      expect(audit.record).toHaveBeenCalledWith(
+        company.id,
+        'orchestrator',
+        null,
+        expect.anything(),
+        expect.objectContaining({ taskId: task.id, newStatus: 'cancelled' }),
       );
     });
   });
@@ -869,6 +1072,46 @@ describe('TaskOrchestrationService', () => {
       });
       expect(qa).not.toBeNull();
       expect(qa!.status).toBe('in-progress');
+    });
+
+    it('fails a finalising task whose finalise agent is dead', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, {
+        status: 'finalising',
+        expected: [{ type: 'task-completed-path', value: 'report.txt' }],
+      });
+      const finalise = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        mode: 'finalise',
+        status: 'in-progress',
+      });
+      const agent = await agentRepo.save(
+        agentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          assignmentId: finalise.id,
+          initialPrompt: 'x',
+          status: AgentStatus.Failed,
+        }),
+      );
+      await assignmentRepo.update(finalise.id, { agentId: agent.id });
+      storage.listFiles.mockResolvedValue([
+        { key: 'k/report.txt', name: 'report.txt', size: 1, lastModified: 'x' },
+      ]);
+
+      await service.reconcileTask(task);
+
+      const fresh = await taskRepo.findOneByOrFail({ id: task.id });
+      expect(fresh.status).toBe('failed');
+      expect(fresh.failureReason).toContain(
+        'finalise agent died before restart',
+      );
+      expect(fresh.completed).toEqual([
+        { type: 'task-completed-path', value: 'report.txt' },
+      ]);
     });
   });
 });

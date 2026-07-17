@@ -1,15 +1,20 @@
 import type { TaskChangeSummary } from '@lcp/shared';
 import {
+  AssignmentRow,
   dateTimeSeconds,
   escapeMarkup,
   formatTaskState,
+  makeAssignmentEntry,
   makeRoleEntry,
   makeTaskEntry,
   PaneEntryLog,
+  renderAssignmentListEntry,
   renderMultiListPanel,
   renderPaneHeading,
   renderRosterHeading,
   renderTaskListEntry,
+  renderTaskPaneHeading,
+  statusColor,
   truncateWithEllipsis,
   wrapText,
 } from './tui-format';
@@ -266,6 +271,45 @@ describe('PaneEntryLog', () => {
     ]);
   });
 
+  it('renders a user prompt with a distinct indicator/colour and standard spacing', () => {
+    const log = new PaneEntryLog(false);
+    log.append({
+      kind: 'agent_status',
+      timestamp: ts('01'),
+      data: { status: 'running' },
+    });
+    log.pushUserPrompt('hello there');
+    const lines = log.render(80);
+    expect(lines[0]).toBe(`${clock('01')} | agent_status | running`);
+    expect(lines[1]).toBe('');
+    expect(lines[2]).toMatch(/^\^G.* \| you \| hello there\^:$/);
+  });
+
+  it('renders a whitespace-only response as the blank marker', () => {
+    const log = new PaneEntryLog(false);
+    log.append({
+      kind: 'response',
+      timestamp: ts('01'),
+      data: { delta: '   ' },
+    });
+    expect(log.render(80)).toEqual([`${clock('01')} | response | (blank)`]);
+  });
+
+  it('renders agent_loop_completion with a fixed "assignment complete" header, not the payload text', () => {
+    const log = new PaneEntryLog(false);
+    log.append({
+      kind: 'agent_loop_completion',
+      timestamp: ts('01'),
+      data: {
+        summary: 'Task completed.\n\nActions taken (in order):\n- did a thing',
+      },
+    });
+    const lines = log.render(80);
+    expect(lines[0]).toBe(
+      `${clock('01')} | assignment complete | Task completed.`,
+    );
+  });
+
   it('ignores terminal and unknown event kinds', () => {
     const log = new PaneEntryLog(false);
     log.append({
@@ -469,6 +513,96 @@ describe('renderTaskListEntry', () => {
     const body = lines.slice(1, -1);
     expect(body.length).toBeLessThanOrEqual(3);
     expect(body[0].startsWith('^!>^: ')).toBe(true);
+  });
+});
+
+describe('statusColor', () => {
+  it('maps known statuses to their markup colour code', () => {
+    expect(statusColor('ready')).toBe('^K');
+    expect(statusColor('in-progress')).toBe('^C');
+    expect(statusColor('in-qa')).toBe('^C');
+    expect(statusColor('succeeded')).toBe('^G');
+    expect(statusColor('failed')).toBe('^R');
+    expect(statusColor('cancelled')).toBe('^Y');
+  });
+});
+
+describe('renderAssignmentListEntry', () => {
+  const row = (overrides: Partial<AssignmentRow> = {}): AssignmentRow => ({
+    id: 'a1',
+    index: 1,
+    role: 'Implementer',
+    status: 'in-progress',
+    prompt: 'Write the report',
+    agentId: 'agent-1',
+    ...overrides,
+  });
+
+  it('renders a single truncated line with the index, role, coloured status, and prompt when not selected', () => {
+    const lines = renderAssignmentListEntry(row(), false, 60, 4);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('1. Implementer');
+    expect(lines[0]).toContain('^Cin-progress^:');
+    expect(lines[0]).toContain('"Write the report"');
+  });
+
+  it('truncates a long prompt with an ellipsis when not selected', () => {
+    const lines = renderAssignmentListEntry(
+      row({ prompt: 'a'.repeat(200) }),
+      false,
+      40,
+      4,
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('…');
+  });
+
+  it('expands to word-wrapped lines (capped at maxLines) with blank spacing when selected', () => {
+    const lines = renderAssignmentListEntry(
+      row({
+        prompt:
+          'A very long prompt that should word-wrap across several lines when highlighted and expanded for reading',
+      }),
+      true,
+      30,
+      3,
+    );
+    expect(lines[0]).toBe('');
+    expect(lines[lines.length - 1]).toBe('');
+    const body = lines.slice(1, -1);
+    expect(body.length).toBeLessThanOrEqual(3);
+    expect(body[0]).toContain('^!>^: ');
+    expect(lines[lines.length - 2].endsWith('"')).toBe(true);
+  });
+
+  it('marks a not-yet-begun (ready) row non-selectable via makeAssignmentEntry', () => {
+    expect(makeAssignmentEntry(row({ status: 'ready' }), 4).selectable).toBe(
+      false,
+    );
+    expect(
+      makeAssignmentEntry(row({ status: 'in-progress' }), 4).selectable,
+    ).toBe(true);
+  });
+});
+
+describe('renderTaskPaneHeading', () => {
+  it('renders Id/Prompt lines followed by a blank separator', () => {
+    const lines = renderTaskPaneHeading('task-1', 'Write a report', 80);
+    expect(lines).toEqual(['Id:     task-1', 'Prompt: "Write a report"', '']);
+  });
+
+  it('word-wraps a long prompt, indenting continuation lines under the opening quote', () => {
+    const lines = renderTaskPaneHeading(
+      'task-1',
+      'A very long prompt that should word-wrap across several lines of the heading block',
+      30,
+    );
+    expect(lines[0]).toBe('Id:     task-1');
+    expect(lines.length).toBeGreaterThan(3);
+    expect(lines[1].startsWith('Prompt: "')).toBe(true);
+    expect(lines[2].startsWith('        ')).toBe(true);
+    expect(lines[lines.length - 2].endsWith('"')).toBe(true);
+    expect(lines[lines.length - 1]).toBe('');
   });
 });
 

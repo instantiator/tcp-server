@@ -61,10 +61,25 @@ import {
 import { Renderer } from '../core/render';
 import { SseEvent } from '../core/sse';
 import { escapeMarkup } from './tui-format';
-import { ChatPane, Pane, RosterPane, TextPane } from './panes';
-import { PaneManager, PaneSpec, RoleOption } from './tui-state';
+import {
+  ChatPane,
+  InitiateTaskPane,
+  InitiateTaskSubmission,
+  Pane,
+  RosterPane,
+  TaskPane,
+  TextPane,
+} from './panes';
+import { AssignmentInfo, PaneManager, PaneSpec, RoleOption } from './tui-state';
 
-export type { RoleOption } from './tui-state';
+export type { AssignmentInfo, RoleOption } from './tui-state';
+export type { InitiateTaskSubmission } from './panes';
+/** Statuses for which the task panel's cancel shortcut/hint should show. */
+const CANCELLABLE_TASK_STATUSES = new Set([
+  'planning',
+  'in-progress',
+  'finalising',
+]);
 
 /** Result of interpreting one raw key-press at the terminal level. */
 export type KeyAction = 'next-pane' | 'prev-pane' | 'quit' | 'none';
@@ -83,6 +98,20 @@ export function interpretKey(name: string): KeyAction {
   if (name === 'SHIFT_TAB') return 'prev-pane';
   if (name === 'CTRL_C') return 'quit';
   return 'none';
+}
+
+/** A pane whose Up/Down keys move a flat row highlight (RosterPane, TaskPane, InitiateTaskPane). */
+interface NavigableList {
+  moveSelection(delta: number): void;
+}
+
+/** Type guard for {@link NavigableList} — the three panes with no InlineInput and a movable highlight. */
+function isNavigableList(pane: Pane | undefined): pane is Pane & NavigableList {
+  return (
+    pane instanceof RosterPane ||
+    pane instanceof TaskPane ||
+    pane instanceof InitiateTaskPane
+  );
 }
 
 /**
@@ -142,6 +171,9 @@ export function resolveTaskListEntryMaxLines(flagValue?: string): number {
 /** Fixed id for the (at most one) help pane; see Tui.showHelp(). */
 const HELP_PANE_ID = '__help__';
 
+/** Fixed id for the (at most one) initiate-task form pane; see Tui.addInitiateTaskPane(). */
+const INITIATE_TASK_PANE_ID = '__initiate_task__';
+
 const HELP_TEXT = [
   'Keyboard shortcuts',
   '',
@@ -155,8 +187,23 @@ const HELP_TEXT = [
   'On the company roster:',
   '  Up / Down       Move the highlight (cycles across Roles and Tasks)',
   '  [ / ]           Jump to the previous/next list (Roles, Tasks)',
-  '  Enter           Start a chat with the highlighted role',
+  '  Enter           Start a chat with the highlighted role, or open the',
+  '                  highlighted task',
   '  r               Refresh the role list',
+  '  n               Open the initiate-task form',
+  '',
+  'On a task panel:',
+  '  Up / Down       Move the highlight (skips not-yet-begun assignments)',
+  '  Enter           Open the highlighted (begun) assignment',
+  '  c               Cancel the task (while it is running)',
+  '  s               Start the task (while it is ready)',
+  '',
+  'On the initiate-task form:',
+  '  Up / Down       Move the highlight',
+  '  Enter           Edit the prompt/add a filename, choose the highlighted',
+  '                  role, toggle "Start immediately", or submit',
+  '  d               Remove the highlighted expected-output filename',
+  '  (while editing) Type to enter text; Backspace deletes; Enter commits',
   '',
   'On a talkable tab:',
   '  Enter           Send the message',
@@ -205,6 +252,16 @@ export class Tui {
   private selectRoleHandler: ((role: RoleOption) => void) | null = null;
   private refreshRosterHandler: (() => void) | null = null;
   private closeTabHandler: ((paneId: string) => void) | null = null;
+  private selectTaskHandler: ((task: TaskChangeSummary) => void) | null = null;
+  private selectAssignmentHandler:
+    | ((taskId: string, assignment: AssignmentInfo) => void)
+    | null = null;
+  private cancelTaskHandler: ((taskId: string) => void) | null = null;
+  private startTaskHandler: ((taskId: string) => void) | null = null;
+  private openInitiateTaskHandler: (() => void) | null = null;
+  private submitInitiateTaskHandler:
+    | ((paneId: string, submission: InitiateTaskSubmission) => void)
+    | null = null;
 
   constructor(opts: TuiOptions = {}) {
     this.term = opts.term ?? sharedTerminal;
@@ -308,6 +365,49 @@ export class Tui {
     this.closeTabHandler = handler;
   }
 
+  /** Registers the callback fired when Enter selects a task on a roster pane. */
+  onSelectTask(handler: (task: TaskChangeSummary) => void): void {
+    this.selectTaskHandler = handler;
+  }
+
+  /** Registers the callback fired when Enter selects a begun assignment on a task panel. */
+  onSelectAssignment(
+    handler: (taskId: string, assignment: AssignmentInfo) => void,
+  ): void {
+    this.selectAssignmentHandler = handler;
+  }
+
+  /** Registers the callback fired when 'c' cancels a task from its task panel. */
+  onCancelTask(handler: (taskId: string) => void): void {
+    this.cancelTaskHandler = handler;
+  }
+
+  /** Registers the callback fired when 's' starts a `ready` task from its task panel. */
+  onStartTask(handler: (taskId: string) => void): void {
+    this.startTaskHandler = handler;
+  }
+
+  /** Registers the callback fired when 'n' opens the initiate-task form from the company roster. */
+  onOpenInitiateTask(handler: () => void): void {
+    this.openInitiateTaskHandler = handler;
+  }
+
+  /**
+   * Registers the callback fired when the initiate-task form validates and
+   * submits — `paneId` is always {@link INITIATE_TASK_PANE_ID}, passed
+   * through so the caller can hand off to {@link Tui.replaceWithTaskPane}.
+   */
+  onSubmitInitiateTask(
+    handler: (paneId: string, submission: InitiateTaskSubmission) => void,
+  ): void {
+    this.submitInitiateTaskHandler = handler;
+  }
+
+  /** Whether a pane with this id is already open (e.g. to avoid re-adding it). */
+  hasPane(id: string): boolean {
+    return this.panes.has(id);
+  }
+
   /** Adds a new tab for an agent (talkable = the user can address it directly). */
   addPane(spec: PaneSpec): void {
     if (this.panes.has(spec.id)) return;
@@ -355,6 +455,123 @@ export class Tui {
     );
     this.panes.set(spec.id, pane);
     this.refresh();
+  }
+
+  /** Builds a task pane's TaskPane instance — shared by addTaskPane and replaceWithTaskPane. */
+  private buildTaskPane(spec: {
+    id: string;
+    label: string;
+    prompt: string;
+    status: string;
+    assignments: AssignmentInfo[];
+  }): TaskPane {
+    const textBox = this.createContentTextBox();
+    return new TaskPane(
+      spec.id,
+      spec.label,
+      textBox,
+      spec.prompt,
+      spec.status,
+      spec.assignments,
+      this.taskListEntryMaxLines,
+    );
+  }
+
+  /**
+   * Adds (or, if already open, does nothing to) a task's pane: an `Id:`/
+   * `Prompt:` heading and an Assignments list, opened by selecting a task on
+   * the company roster (see handleKey's roster branch) — never talkable.
+   */
+  addTaskPane(spec: {
+    id: string;
+    label: string;
+    prompt: string;
+    status: string;
+    assignments: AssignmentInfo[];
+  }): void {
+    if (this.panes.has(spec.id)) return;
+    this.manager.addPane({ id: spec.id, label: spec.label, talkable: false });
+    this.panes.set(spec.id, this.buildTaskPane(spec));
+    this.refresh();
+  }
+
+  /**
+   * Replaces an open pane (the initiate-task form) with the newly created
+   * task's task panel, in the same tab slot rather than appending a new tab.
+   */
+  replaceWithTaskPane(
+    oldPaneId: string,
+    spec: {
+      id: string;
+      label: string;
+      prompt: string;
+      status: string;
+      assignments: AssignmentInfo[];
+    },
+  ): void {
+    const oldPane = this.panes.get(oldPaneId);
+    if (!oldPane) return;
+    if (this.inputPaneId === oldPaneId) this.dropInput();
+    oldPane.textBox.destroy(false, true);
+    this.panes.delete(oldPaneId);
+    this.manager.replacePane(oldPaneId, {
+      id: spec.id,
+      label: spec.label,
+      talkable: false,
+    });
+    this.panes.set(spec.id, this.buildTaskPane(spec));
+    this.refresh();
+  }
+
+  /**
+   * Adds (or, if already open, switches to) the initiate-task form pane —
+   * opened by 'n' from the company roster (see handleKey's roster branch).
+   * At most one is ever open, at the fixed {@link INITIATE_TASK_PANE_ID}.
+   */
+  addInitiateTaskPane(spec: {
+    companyId: string;
+    roles: RoleOption[];
+    defaultRoleId?: string;
+  }): void {
+    const id = INITIATE_TASK_PANE_ID;
+    if (this.panes.has(id)) {
+      this.switchToPane(id);
+      return;
+    }
+    this.manager.addPane({ id, label: 'New task', talkable: false });
+    const textBox = this.createContentTextBox();
+    const pane = new InitiateTaskPane(
+      id,
+      'New task',
+      textBox,
+      spec.companyId,
+      spec.roles,
+      spec.defaultRoleId,
+    );
+    this.panes.set(id, pane);
+    this.switchToPane(id);
+  }
+
+  /** Replaces a task pane's assignment list (initial fetch, or a task/assignment SSE update). */
+  updateTaskPaneAssignments(
+    paneId: string,
+    assignments: AssignmentInfo[],
+  ): void {
+    const pane = this.panes.get(paneId);
+    if (!(pane instanceof TaskPane)) return;
+    pane.setAssignments(assignments);
+    if (this.manager.activePane?.id === paneId) this.redrawActivePane();
+  }
+
+  /** Updates a task pane's own status (drives the cancel/start hint and shortcut gating). */
+  updateTaskPaneStatus(paneId: string, status: string): void {
+    const pane = this.panes.get(paneId);
+    if (!(pane instanceof TaskPane)) return;
+    pane.status = status;
+    if (this.manager.activePane?.id === paneId) {
+      this.renderChrome();
+      this.draw();
+    }
   }
 
   /**
@@ -426,6 +643,14 @@ export class Tui {
     if (this.manager.activePane?.id === paneId) this.redrawActivePane();
   }
 
+  /** Appends the user's own submitted message to the named pane and redraws it if active. */
+  appendUserPrompt(paneId: string, text: string): void {
+    const pane = this.panes.get(paneId);
+    if (!(pane instanceof ChatPane)) return;
+    pane.appendUserPrompt(text);
+    if (this.manager.activePane?.id === paneId) this.redrawActivePane();
+  }
+
   /**
    * Marks one pane's turn as in flight: its input keeps accepting typed text
    * (the user can compose the next message) but Enter won't submit until the
@@ -475,6 +700,27 @@ export class Tui {
       return;
     }
 
+    const activePane = this.activePaneWidgets();
+
+    // While a field on the initiate-task form is being typed into, this
+    // pane's own raw-key capture owns every key except Ctrl+C/quit (handled
+    // above) — including ones that would otherwise be global shortcuts
+    // (Esc, F1/Ctrl+G, Ctrl+W), so typing "f1" into a prompt doesn't pop up
+    // help mid-sentence.
+    if (activePane instanceof InitiateTaskPane && activePane.editingField) {
+      if (name === 'ENTER') {
+        activePane.commitEdit();
+        this.redrawActivePane();
+      } else if (name === 'BACKSPACE') {
+        activePane.backspace();
+        this.redrawActivePane();
+      } else if (name.length === 1) {
+        activePane.typeChar(name);
+        this.redrawActivePane();
+      }
+      return;
+    }
+
     // Esc is the other way to dismiss a self-closing pane (Tab/Shift+Tab —
     // handled above — being the primary one). No-op on every other pane.
     if (name === 'ESCAPE') {
@@ -490,8 +736,6 @@ export class Tui {
       return;
     }
 
-    const activePane = this.activePaneWidgets();
-
     // Ctrl+W closes any tab except the company roster, which is the
     // permanent anchor — closing the last agent tab just leaves you back
     // on the roster, the same state --company-id-only starts in.
@@ -504,26 +748,32 @@ export class Tui {
       return;
     }
 
+    // Up/Down move a flat row highlight the same way on every list-shaped
+    // pane (no InlineInput exists on any of these, so the keys are free for
+    // navigation) — handled once here rather than re-derived per pane type.
+    if (isNavigableList(activePane) && (name === 'UP' || name === 'DOWN')) {
+      activePane.moveSelection(name === 'UP' ? -1 : 1);
+      this.redrawActivePane();
+      return;
+    }
+
     if (activePane instanceof RosterPane) {
-      // No InlineInput exists on a roster pane, so these keys are free for
-      // list navigation/selection instead of text editing or native scroll.
-      if (name === 'UP') {
-        activePane.moveSelection(-1);
-        this.redrawActivePane();
-        return;
-      }
-      if (name === 'DOWN') {
-        activePane.moveSelection(1);
-        this.redrawActivePane();
-        return;
-      }
       if (name === 'ENTER') {
         const role = activePane.selectedRole;
-        if (role) this.selectRoleHandler?.(role);
+        if (role) {
+          this.selectRoleHandler?.(role);
+          return;
+        }
+        const task = activePane.selectedTask;
+        if (task) this.selectTaskHandler?.(task);
         return;
       }
       if (name === 'r' || name === 'R') {
         this.refreshRosterHandler?.();
+        return;
+      }
+      if (name === 'n' || name === 'N') {
+        this.openInitiateTaskHandler?.();
         return;
       }
       // '[' / ']' jump the highlight to the previous/next list (Roles ↔
@@ -532,6 +782,48 @@ export class Tui {
       // is bound anywhere else in this pane or the document.
       if (name === '[' || name === ']') {
         activePane.jumpList(name === '[' ? -1 : 1);
+        this.redrawActivePane();
+        return;
+      }
+      return;
+    }
+
+    if (activePane instanceof TaskPane) {
+      if (name === 'ENTER') {
+        const assignment = activePane.selectedAssignment;
+        if (assignment) {
+          this.selectAssignmentHandler?.(activePane.id, assignment);
+        }
+        return;
+      }
+      if (
+        (name === 'c' || name === 'C') &&
+        CANCELLABLE_TASK_STATUSES.has(activePane.status)
+      ) {
+        this.cancelTaskHandler?.(activePane.id);
+        return;
+      }
+      if (name === 's' || name === 'S') {
+        if (activePane.status === 'ready')
+          this.startTaskHandler?.(activePane.id);
+        return;
+      }
+      return;
+    }
+
+    if (activePane instanceof InitiateTaskPane) {
+      // Reached only when not currently editing a field — see the
+      // editingField intercept above.
+      if (name === 'ENTER') {
+        const submission = activePane.activateRow();
+        if (submission) {
+          this.submitInitiateTaskHandler?.(activePane.id, submission);
+        }
+        this.redrawActivePane();
+        return;
+      }
+      if (name === 'd' || name === 'D') {
+        activePane.removeCurrentExpected();
         this.redrawActivePane();
         return;
       }
@@ -691,6 +983,8 @@ export class Tui {
     const activePane = this.activePaneWidgets();
     const isRoster = activePane instanceof RosterPane;
     const isHelp = activePane instanceof TextPane;
+    const isTaskPane = activePane instanceof TaskPane;
+    const isInitiateTask = activePane instanceof InitiateTaskPane;
     const busy = activePane instanceof ChatPane && activePane.busy;
     const closable = activePane !== undefined && !isRoster;
     // The help hint is only worth showing when help isn't already open.
@@ -714,19 +1008,45 @@ export class Tui {
             'Ctrl+C quit',
             'Up/Down select',
             'r refresh',
+            'n new task',
             'Tab switch',
             'PgUp/PgDn scroll',
             '[/] switch list',
             ...helpHint,
           ]
-        : [
-            'Ctrl+C quit',
-            ...(closable ? ['Ctrl+W close'] : []),
-            ...(isHelp ? ['Esc close'] : []),
-            'Tab switch',
-            'PgUp/PgDn scroll',
-            ...helpHint,
-          ];
+        : isTaskPane
+          ? [
+              'Enter open',
+              'Ctrl+C quit',
+              ...(CANCELLABLE_TASK_STATUSES.has(activePane.status)
+                ? ['c cancel']
+                : []),
+              ...(activePane.status === 'ready' ? ['s start'] : []),
+              'Up/Down select',
+              ...(closable ? ['Ctrl+W close'] : []),
+              'Tab switch',
+              ...helpHint,
+            ]
+          : isInitiateTask
+            ? [
+                activePane.editingField
+                  ? 'Enter commit'
+                  : 'Enter edit/select/submit',
+                'Ctrl+C quit',
+                ...(activePane.editingField ? [] : ['Up/Down select']),
+                ...(activePane.editingField ? [] : ['d remove']),
+                ...(closable ? ['Ctrl+W close'] : []),
+                'Tab switch',
+                ...helpHint,
+              ]
+            : [
+                'Ctrl+C quit',
+                ...(closable ? ['Ctrl+W close'] : []),
+                ...(isHelp ? ['Esc close'] : []),
+                'Tab switch',
+                'PgUp/PgDn scroll',
+                ...helpHint,
+              ];
     this.hintBar.setContent(fitHints(hints, this.termWidth()), false, true);
   }
 
@@ -833,9 +1153,8 @@ export function tuiRenderer(tui: Tui, paneId: string): Renderer {
       // Panes have no open-block state to flush; SSE-driven redraws already
       // reflect the latest content.
     },
-    renderUserPrompt(): void {
-      // TUI user-prompt echo lands in the pane log another way (010.3.3);
-      // this adapter has nothing to do for it yet.
+    renderUserPrompt(text: string): void {
+      tui.appendUserPrompt(paneId, text);
     },
   };
 }
