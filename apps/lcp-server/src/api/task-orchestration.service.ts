@@ -6,6 +6,7 @@ import {
   assignmentWorkingKey,
   AuditEventType,
   buildAssignmentChangeSummary,
+  buildAssignmentShortcode,
   buildTaskChangeSummary,
   DEFAULT_TASK_MAX_QA_ATTEMPTS,
   deriveTaskStatus,
@@ -135,6 +136,7 @@ export class TaskOrchestrationService
         taskId: task.id,
         companyId: task.companyId,
         mode: 'plan',
+        shortcode: buildAssignmentShortcode(task.shortcode, 'plan', 0),
         prompt: task.request,
         roleId: plannerRoleId,
         status: 'in-progress',
@@ -191,6 +193,7 @@ export class TaskOrchestrationService
         taskId: assignment.taskId,
         companyId: assignment.companyId,
         mode: 'qa',
+        shortcode: await this.qaShortcode(assignment),
         targetAssignmentId: assignment.id,
         roleId: assignment.roleId,
         status: 'in-progress',
@@ -553,11 +556,18 @@ export class TaskOrchestrationService
       .join('\n');
     const prompt = `Task: ${task.request}\n\nThe task's expected outputs — make the completed deliverables meet or exceed these:\n${expectedLines}`;
 
+    // One past the last implement step — finalise runs after the whole plan.
+    const planIndex = (await this.planAssignments(task.id)).length + 1;
     const finalise = await this.assignmentRepo.save(
       this.assignmentRepo.create({
         taskId: task.id,
         companyId: task.companyId,
         mode: 'finalise',
+        shortcode: buildAssignmentShortcode(
+          task.shortcode,
+          'finalise',
+          planIndex,
+        ),
         prompt,
         roleId,
         status: 'in-progress',
@@ -964,6 +974,23 @@ export class TaskOrchestrationService
   private async companySlug(companyId: UUID): Promise<string> {
     const company = await this.companyRepo.findOneByOrFail({ id: companyId });
     return company.slug;
+  }
+
+  /**
+   * A qa-mode assignment's shortcode — it isn't itself in the plan, so it
+   * shares the plan index of the implement step it targets (`orderIndex + 1`).
+   * Null when the target isn't a task-linked, plan-indexed implement step
+   * (shouldn't happen — only implement assignments are ever sent to QA).
+   */
+  private async qaShortcode(target: LcpAssignment): Promise<string | null> {
+    if (!target.taskId || target.orderIndex == null) return null;
+    const task = await this.taskRepo.findOneBy({ id: target.taskId });
+    if (!task) return null;
+    return buildAssignmentShortcode(
+      task.shortcode,
+      'qa',
+      target.orderIndex + 1,
+    );
   }
 
   /**

@@ -20,6 +20,15 @@ import {
 interface AgentRecord {
   id: string;
   status: string;
+  assignmentId: string;
+}
+
+/** Plain shape of `GET /api/assignment/:id` — just what a pane's heading needs. */
+interface AssignmentRecord {
+  id: string;
+  shortcode: string | null;
+  status: string;
+  prompt: string;
 }
 
 /** Statuses beyond which an assignment's working agent has nothing left to stream live. */
@@ -30,6 +39,7 @@ interface TaskRecord {
   id: string;
   status: string;
   request: string;
+  shortcode: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -47,6 +57,18 @@ function eventStr(event: SseEvent, key: string): string {
 }
 
 /**
+ * Parses an assignment's plan index back out of its shortcode's middle
+ * segment (`{taskShortcode}-{planIndex}-{mode}`, e.g. `000-001-implement` →
+ * `1`) — see `buildAssignmentShortcode`. Null for a null/malformed shortcode
+ * (an orphan assignment, or a shape this client doesn't recognise).
+ */
+function planIndexFromShortcode(shortcode: string | null): number | null {
+  const segment = shortcode?.split('-')[1];
+  const index = segment !== undefined ? Number(segment) : NaN;
+  return Number.isInteger(index) ? index : null;
+}
+
+/**
  * Validates and narrows a `task_changed` SSE event's payload into a
  * {@link TaskChangeSummary}, rather than trusting/casting it directly —
  * `null` for a payload missing its required fields.
@@ -61,6 +83,7 @@ function parseTaskChangeSummary(
     id: data.id as UUID,
     status: data.status as TaskChangeSummary['status'],
     request: typeof data.request === 'string' ? data.request : '',
+    shortcode: typeof data.shortcode === 'string' ? data.shortcode : '',
     createdAt: typeof data.createdAt === 'string' ? data.createdAt : '',
     updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : '',
     completedSteps:
@@ -103,7 +126,10 @@ export class ChatSession {
   /** Open task panels' event-stream subscriptions, keyed by task id. */
   private readonly taskEventsAbort = new Map<string, AbortController>();
   /** Open assignment chat panels' live-follow subscriptions, keyed by agent id. */
-  private readonly agentPaneWatchAbort = new Map<string, AbortController>();
+  private readonly assignmentPaneWatchAbort = new Map<
+    string,
+    AbortController
+  >();
 
   constructor(
     private readonly opts: GlobalOptions,
@@ -133,8 +159,7 @@ export class ChatSession {
 
   /**
    * Fetches the company's current role roster (used at startup and on
-   * refresh), sorted alphabetically by name — roles have no `slug` field
-   * yet, so name is the best available stable sort key for now.
+   * refresh), sorted alphabetically by name.
    */
   async fetchRoles(): Promise<RoleOption[]> {
     const roles = await this.tokenManager.request<RoleOption[]>(
@@ -160,6 +185,7 @@ export class ChatSession {
         id: task.id as UUID,
         status: task.status as TaskChangeSummary['status'],
         request: task.request,
+        shortcode: task.shortcode,
         // Same discipline as parseTaskChangeSummary below: don't trust the
         // wire shape blindly — a non-string date field must not reach
         // RosterPane's `.localeCompare` sort and crash the TUI.
@@ -200,8 +226,8 @@ export class ChatSession {
   /**
    * Reports a pane-triggered failure (initiate-chat/refresh on the roster,
    * cancel/start on a task panel) — into the pane's own log when it has one
-   * (a {@link ChatPane}), and always to stderr too, since the roster and task
-   * panels have no log of their own for `Tui.appendEvent` to reach.
+   * (an {@link AssignmentPane}), and always to stderr too, since the roster
+   * and task panels have no log of their own for `Tui.appendEvent` to reach.
    */
   reportPaneError(paneId: string, err: unknown): void {
     const message = String(err instanceof Error ? err.message : err);
@@ -228,21 +254,27 @@ export class ChatSession {
         task: LcpTask;
         assignments: LcpAssignment[];
       }>('GET', `/api/task/${taskId}`),
-      this.tokenManager.request<{ id: string; name: string }[]>(
+      this.tokenManager.request<{ id: string; name: string; slug: string }[]>(
         'GET',
         `/api/company/${this.companyId}/roles`,
       ),
     ]);
-    const roleNameById = new Map(roles.map((r) => [r.id, r.name]));
+    const roleById = new Map(roles.map((r) => [r.id, r]));
     return {
       task,
-      assignments: assignments.map((a) => ({
-        id: a.id,
-        role: roleNameById.get(a.roleId) ?? a.roleId,
-        status: a.status,
-        prompt: a.prompt,
-        agentId: a.agentId ?? null,
-      })),
+      assignments: assignments.map((a) => {
+        const shortcode = a.shortcode ?? null;
+        return {
+          id: a.id,
+          role: roleById.get(a.roleId)?.name ?? a.roleId,
+          roleSlug: roleById.get(a.roleId)?.slug ?? a.roleId,
+          status: a.status,
+          prompt: a.prompt,
+          shortcode,
+          planIndex: planIndexFromShortcode(shortcode),
+          agentId: a.agentId ?? null,
+        };
+      }),
     };
   }
 
@@ -348,10 +380,14 @@ export class ChatSession {
    * Creates a new chat-mode agent for `roleId` and adds it as a pane (when
    * the TUI is active). Used both for the initial root agent (when
    * --role-id was given at startup) and for "initiate chat" selections made
-   * from the company roster pane.
+   * from the company roster pane. Its backing assignment is an orphan (a
+   * plain conversation, not part of any task's plan) — fetched anyway so the
+   * pane's heading can show its id/status/prompt (shortcode is always null
+   * here; the tab label falls back to `label`).
    */
-  async startAgentPane(
+  async startAssignmentPane(
     roleId: string,
+    roleSlug: string,
     label: string,
     talkable: boolean,
   ): Promise<string> {
@@ -361,7 +397,17 @@ export class ChatSession {
       { companyId: this.companyId, roleId },
     );
     this.agentIds.add(agent.id);
-    this.tui?.addPane({ id: agent.id, label, talkable, roleId });
+    const assignment = await this.tokenManager.request<AssignmentRecord>(
+      'GET',
+      `/api/assignment/${agent.assignmentId}`,
+    );
+    this.tui?.addPane({
+      id: agent.id,
+      label,
+      talkable,
+      roleSlug,
+      assignment,
+    });
     return agent.id;
   }
 
@@ -382,7 +428,18 @@ export class ChatSession {
       'GET',
       `/api/agent/${agentId}`,
     );
-    this.tui?.addPane({ id: agentId, label: assignment.role, talkable: false });
+    this.tui?.addPane({
+      id: agentId,
+      label: assignment.role,
+      talkable: false,
+      roleSlug: assignment.roleSlug,
+      assignment: {
+        id: assignment.id,
+        shortcode: assignment.shortcode,
+        status: assignment.status,
+        prompt: assignment.prompt,
+      },
+    });
     if (TERMINAL_AGENT_STATUSES.has(agent.status)) {
       const rows = await this.tokenManager.request<AuditRow[]>(
         'GET',
@@ -393,7 +450,7 @@ export class ChatSession {
       }
     } else {
       const abort = new AbortController();
-      this.agentPaneWatchAbort.set(agentId, abort);
+      this.assignmentPaneWatchAbort.set(agentId, abort);
       const url = `${this.opts.lcpServer.replace(/\/$/, '')}/api/agent/${agentId}/events`;
       void readSseStream(
         url,
@@ -413,8 +470,8 @@ export class ChatSession {
     this.companyEventsAbort = null;
     for (const abort of this.taskEventsAbort.values()) abort.abort();
     this.taskEventsAbort.clear();
-    for (const abort of this.agentPaneWatchAbort.values()) abort.abort();
-    this.agentPaneWatchAbort.clear();
+    for (const abort of this.assignmentPaneWatchAbort.values()) abort.abort();
+    this.assignmentPaneWatchAbort.clear();
     for (const id of this.agentIds) {
       await this.deleteAgent(id);
     }
@@ -432,8 +489,8 @@ export class ChatSession {
    */
   async closeTab(paneId: string): Promise<void> {
     this.stopWatchingTask(paneId);
-    this.agentPaneWatchAbort.get(paneId)?.abort();
-    this.agentPaneWatchAbort.delete(paneId);
+    this.assignmentPaneWatchAbort.get(paneId)?.abort();
+    this.assignmentPaneWatchAbort.delete(paneId);
     const controller = this.abortControllers.get(paneId);
     if (controller) {
       controller.abort();

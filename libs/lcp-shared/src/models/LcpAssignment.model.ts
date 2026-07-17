@@ -118,6 +118,16 @@ export class LcpAssignment extends VersionedEntity {
   @Column({ type: 'text', transformer: sanitiseTextColumn })
   prompt!: string;
 
+  /**
+   * Short identifier derived from the owning task's shortcode, this
+   * assignment's position in the task's plan, and its mode — e.g.
+   * `000-000-plan`, `000-001-implement`, `000-001-qa` (see
+   * `buildAssignmentShortcode`). Null for orphan assignments (`taskId`
+   * null — plain conversations and consultations spawned from one).
+   */
+  @Column({ type: 'varchar', nullable: true })
+  shortcode?: string | null;
+
   /** The role this assignment must be worked by. */
   @ManyToOne(() => LcpRole, { nullable: false, onDelete: 'CASCADE' })
   role!: LcpRole;

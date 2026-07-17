@@ -3,6 +3,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
@@ -41,6 +42,7 @@ export type LcpTaskStatus =
  * (there is no separate plan entity; see `LcpAssignment.orderIndex`).
  */
 @Entity()
+@Index(['companyId', 'shortcode'], { unique: true })
 export class LcpTask extends VersionedEntity {
   /** @format uuid */
   @PrimaryGeneratedColumn('uuid')
@@ -60,6 +62,14 @@ export class LcpTask extends VersionedEntity {
   /** The user's statement of the work to be done. */
   @Column({ type: 'text', transformer: sanitiseTextColumn })
   request!: string;
+
+  /**
+   * Short, per-company identifier assigned at creation (`'000'`, `'001'`,
+   * …) — see {@link LcpCompany.nextTaskShortcodeIndex}. Unique within the
+   * owning company only.
+   */
+  @Column()
+  shortcode!: string;
 
   /**
    * Explicit planner role for this task. Falls back to

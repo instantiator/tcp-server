@@ -13,6 +13,7 @@ interface RoleRecord {
   id: string;
   companyId: string;
   name: string;
+  slug: string;
   llmConfig?: LlmConfig | null;
 }
 
@@ -33,6 +34,8 @@ export interface ChatContext {
   companySlug: string;
   companyName: string;
   roleName: string;
+  /** The resolved role's slug — present exactly when `roleId` is. */
+  roleSlug?: string;
 }
 
 /**
@@ -59,6 +62,7 @@ export async function resolveChatContext(
   let companyId: string;
   let roleId: string | undefined;
   let roleName = '';
+  let roleSlug: string | undefined;
   let llmConfig: LlmConfig | null | undefined;
   if (roleGiven) {
     // resolveRoleId enforces (with the same error validateChatFlags
@@ -71,6 +75,7 @@ export async function resolveChatContext(
     );
     companyId = role.companyId;
     roleName = role.name;
+    roleSlug = role.slug;
     llmConfig = role.llmConfig;
   } else {
     // Company routes accept a UUID or a slug directly, so whichever was
@@ -98,6 +103,7 @@ export async function resolveChatContext(
     companySlug: company.slug,
     companyName,
     roleName,
+    roleSlug,
   };
 }
 

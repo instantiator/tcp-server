@@ -12,6 +12,7 @@ export interface TaskChangeSummary {
   id: UUID;
   status: LcpTaskStatus;
   request: string;
+  shortcode: string;
   createdAt: string;
   updatedAt: string;
   completedSteps: number;
@@ -20,13 +21,17 @@ export interface TaskChangeSummary {
 
 /** Builds a {@link TaskChangeSummary} from a task and its implement-mode plan assignments. */
 export function buildTaskChangeSummary(
-  task: Pick<LcpTask, 'id' | 'status' | 'request' | 'createdAt' | 'updatedAt'>,
+  task: Pick<
+    LcpTask,
+    'id' | 'status' | 'request' | 'shortcode' | 'createdAt' | 'updatedAt'
+  >,
   planAssignments: Pick<LcpAssignment, 'status'>[],
 ): TaskChangeSummary {
   return {
     id: task.id,
     status: task.status,
     request: task.request,
+    shortcode: task.shortcode,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
     completedSteps: planAssignments.filter((a) => a.status === 'succeeded')

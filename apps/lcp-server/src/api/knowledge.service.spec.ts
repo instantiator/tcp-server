@@ -28,6 +28,7 @@ function makeCompany(overrides: Partial<LcpCompany> = {}): LcpCompany {
     name: 'ACME',
     description: 'Test company',
     mcpServerList: [],
+    nextTaskShortcodeIndex: 0,
     ...overrides,
   };
 }

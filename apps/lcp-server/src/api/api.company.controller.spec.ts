@@ -181,6 +181,7 @@ describe('CompanyController', () => {
         name: 'Acme',
         description: 'A Company That Makes Everything',
         mcpServerList: [],
+        nextTaskShortcodeIndex: 0,
       };
       api.getCompany.mockResolvedValue(fakeCompany);
 
@@ -204,6 +205,7 @@ describe('CompanyController', () => {
           name: 'Acme',
           description: 'A Company That Makes Everything',
           mcpServerList: [],
+          nextTaskShortcodeIndex: 0,
         },
       ];
       db.listCompanies.mockResolvedValue(companies);
@@ -292,6 +294,7 @@ describe('CompanyController', () => {
         id: randomUUID(),
         status: 'ready' as const,
         request: 'Write a report',
+        shortcode: '000',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         completedSteps: 0,

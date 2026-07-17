@@ -101,6 +101,7 @@ describe('DbService', () => {
       taskRepo.create({
         companyId,
         request: 'Do the thing.',
+        shortcode: '000',
         materials: [],
         expected: [],
       }),

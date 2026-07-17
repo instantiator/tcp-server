@@ -80,7 +80,22 @@ describe('TaskController (e2e)', () => {
           request: 'Write a report',
           status: 'ready',
           materials: [],
+          shortcode: '000',
         });
+      });
+
+      it('gives each task in a company a unique, incrementing shortcode', async () => {
+        const create = async () => {
+          const res = await request(app.getHttpServer())
+            .post('/api/task')
+            .set('Authorization', `Bearer ${jwt}`)
+            .send({ companyId: company.id, request: 'Write a report' });
+          return (res.body as LcpTask).shortcode;
+        };
+        const first = await create();
+        const second = await create();
+        expect(second).not.toBe(first);
+        expect(Number(second)).toBe(Number(first) + 1);
       });
 
       it('returns 400 for a missing request body field', async () => {

@@ -79,7 +79,7 @@ describe('AssignmentController (e2e)', () => {
 
     it('lists assignments for a company', async () => {
       const task = await taskRepo.save(
-        taskRepo.create({ companyId, request: 'Do a thing' }),
+        taskRepo.create({ companyId, request: 'Do a thing', shortcode: '000' }),
       );
       const orphan = await assignmentRepo.save(
         assignmentRepo.create({
@@ -110,7 +110,7 @@ describe('AssignmentController (e2e)', () => {
 
     it('filters to orphan assignments with taskId=null', async () => {
       const task = await taskRepo.save(
-        taskRepo.create({ companyId, request: 'Do a thing' }),
+        taskRepo.create({ companyId, request: 'Do a thing', shortcode: '000' }),
       );
       const orphan = await assignmentRepo.save(
         assignmentRepo.create({
@@ -141,7 +141,7 @@ describe('AssignmentController (e2e)', () => {
 
     it('filters by taskId', async () => {
       const task = await taskRepo.save(
-        taskRepo.create({ companyId, request: 'Do a thing' }),
+        taskRepo.create({ companyId, request: 'Do a thing', shortcode: '000' }),
       );
       const owned = await assignmentRepo.save(
         assignmentRepo.create({

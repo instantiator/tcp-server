@@ -70,6 +70,7 @@ describe('Storage scope + append (e2e)', () => {
       taskRepo.create({
         companyId: company.id,
         request: 'do it',
+        shortcode: '000',
         status: 'in-progress',
       }),
     );

@@ -21,6 +21,7 @@ function makeCompany(overrides: Partial<LcpCompany> = {}): LcpCompany {
     name: 'ACME',
     description: '',
     mcpServerList: [],
+    nextTaskShortcodeIndex: 0,
     embeddingConfig: EMBEDDING_CONFIG,
     ...overrides,
   };

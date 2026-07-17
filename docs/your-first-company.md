@@ -142,7 +142,8 @@ The response will be a full instance of the company, _including its `id`_ - indi
   "plannerRoleId": null,
   "id": "3fb3528a-3520-4489-b5bd-83247a631d87",
   "slug": "test-company",
-  "runConfig": null
+  "runConfig": null,
+  "nextTaskShortcodeIndex": 0
 }
 ```
 

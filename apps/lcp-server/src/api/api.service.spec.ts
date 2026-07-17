@@ -114,6 +114,7 @@ describe('ApiService', () => {
         name: 'Acme',
         description: 'A Company That Makes Everything',
         mcpServerList: [],
+        nextTaskShortcodeIndex: 0,
       };
       db.getCompany.mockResolvedValue(fakeCompany);
 

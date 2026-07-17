@@ -52,6 +52,7 @@ describe('ChatSession', () => {
               roleId: 'role-1',
               status: 'succeeded',
               prompt: 'Plan it',
+              shortcode: '000-000-plan',
               agentId: 'agent-1',
             },
             {
@@ -59,13 +60,14 @@ describe('ChatSession', () => {
               roleId: 'role-2',
               status: 'ready',
               prompt: 'Do it',
+              shortcode: '000-001-implement',
               agentId: null,
             },
           ],
         })
         .mockResolvedValueOnce([
-          { id: 'role-1', name: 'Planner' },
-          { id: 'role-2', name: 'Implementer' },
+          { id: 'role-1', name: 'Planner', slug: 'planner' },
+          { id: 'role-2', name: 'Implementer', slug: 'implementer' },
         ]);
 
       const session = makeSession();
@@ -76,15 +78,21 @@ describe('ChatSession', () => {
         {
           id: 'a1',
           role: 'Planner',
+          roleSlug: 'planner',
           status: 'succeeded',
           prompt: 'Plan it',
+          shortcode: '000-000-plan',
+          planIndex: 0,
           agentId: 'agent-1',
         },
         {
           id: 'a2',
           role: 'Implementer',
+          roleSlug: 'implementer',
           status: 'ready',
           prompt: 'Do it',
+          shortcode: '000-001-implement',
+          planIndex: 1,
           agentId: null,
         },
       ]);
@@ -248,11 +256,14 @@ describe('ChatSession', () => {
               roleId: 'role-1',
               status: 'in-progress',
               prompt: 'x',
+              shortcode: '000-000-implement',
               agentId: 'agent-1',
             },
           ],
         })
-        .mockResolvedValueOnce([{ id: 'role-1', name: 'Implementer' }]);
+        .mockResolvedValueOnce([
+          { id: 'role-1', name: 'Implementer', slug: 'implementer' },
+        ]);
 
       const tui = fakeTui();
       const session = makeSession(tui);
@@ -272,8 +283,11 @@ describe('ChatSession', () => {
         {
           id: 'a1',
           role: 'Implementer',
+          roleSlug: 'implementer',
           status: 'in-progress',
           prompt: 'x',
+          shortcode: '000-000-implement',
+          planIndex: 0,
           agentId: 'agent-1',
         },
       ]);
@@ -371,8 +385,11 @@ describe('ChatSession', () => {
     const assignment = {
       id: 'a1',
       role: 'Implementer',
+      roleSlug: 'implementer',
       status: 'in-progress',
       prompt: 'Write the report',
+      shortcode: '000-000-implement',
+      planIndex: 0,
       agentId: 'agent-1',
     };
 
@@ -416,6 +433,13 @@ describe('ChatSession', () => {
         id: 'agent-1',
         label: 'Implementer',
         talkable: false,
+        roleSlug: 'implementer',
+        assignment: {
+          id: 'a1',
+          shortcode: '000-000-implement',
+          status: 'in-progress',
+          prompt: 'Write the report',
+        },
       });
       expect(tui.appendEvent).toHaveBeenCalledWith(
         'agent-1',

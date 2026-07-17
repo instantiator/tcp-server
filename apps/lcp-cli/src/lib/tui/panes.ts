@@ -1,22 +1,26 @@
 // The pane class hierarchy for the TUI (see tui.ts, which orchestrates tabs,
 // the tab bar/hint row, and the input box across whichever pane is active).
 // Each concrete pane owns its own content and any post-render scroll
-// behaviour: ChatPane (an agent's event log, following the tail), RosterPane
-// (the company's role list, scrolling to keep the highlight in view), and
-// TextPane (fixed text — e.g. the help screen — with native scrolling).
+// behaviour: AssignmentPane (one agent's event log, following the tail — its
+// backing assignment is what a task's plan actually schedules, hence the
+// name, even though it's also used for a root/consultation agent's chat),
+// RosterPane (the company's role list, scrolling to keep the highlight in
+// view), and TextPane (fixed text — e.g. the help screen — with native
+// scrolling).
 
 import type { TaskChangeSummary } from '@lcp/shared';
 import { TextBox } from 'terminal-kit';
 import { SseEvent } from '../core/sse';
 import {
+  AssignmentRow,
   escapeMarkup,
   makeAssignmentEntry,
   makeRoleEntry,
   makeTaskEntry,
   marker,
   PaneEntryLog,
+  renderAssignmentPaneHeading,
   renderMultiListPanel,
-  renderPaneHeading,
   renderRosterHeading,
   renderTaskPaneHeading,
   wrapText,
@@ -24,6 +28,7 @@ import {
 import {
   AssignmentInfo,
   MultiListSelection,
+  PaneAssignmentInfo,
   RoleOption,
   SelectableList,
 } from './tui-state';
@@ -34,6 +39,13 @@ const ACTIVE_TASK_STATUSES = new Set([
   'planning',
   'in-progress',
   'finalising',
+]);
+
+/** Assignment statuses shown in a task pane's "Complete" group. */
+const COMPLETE_ASSIGNMENT_STATUSES = new Set([
+  'succeeded',
+  'failed',
+  'cancelled',
 ]);
 
 /**
@@ -79,17 +91,23 @@ export abstract class Pane {
 }
 
 /**
- * A monitored agent's tab: its event log (rendered under a "Name/Id"
- * heading), auto-scrolling to the newest entry unless the user has
- * scrolled up to read back through it.
+ * A monitored agent's tab: its event log (rendered under the agent/role/
+ * assignment identifying heading — see {@link renderAssignmentPaneHeading}),
+ * auto-scrolling to the newest entry unless the user has scrolled up to read
+ * back through it. Named for its *backing assignment* (every agent works
+ * exactly one — see `LcpAssignment`), not the chat UI, since that's what a
+ * task's plan actually schedules and what the heading/tab now key off.
  */
-export class ChatPane extends Pane {
+export class AssignmentPane extends Pane {
   readonly talkable: boolean;
-  /** The role's own id, for the heading — distinct from `id` (the agent id)
-   * since a role can have many agents over time. Undefined for
-   * consultation-follower panes (the SSE event that creates them carries a
-   * role name but no role id); the heading then falls back to `id`. */
-  private readonly roleId: string | undefined;
+  /** The role's slug, for the heading's "Role name (and slug)" line.
+   * Undefined for consultation-follower panes (the SSE event that creates
+   * them carries a role name but no role id/slug). */
+  private readonly roleSlug: string | undefined;
+  /** This pane's backing assignment. Undefined for a consultation-follower
+   * pane (not fetched — see `ChatSession.streamAgent`); heading fields that
+   * need it render as `'—'` instead. */
+  private readonly assignment: PaneAssignmentInfo | undefined;
   private readonly log: PaneEntryLog;
   /** Auto-scroll to the newest entry; cleared when the user scrolls up. */
   private follow = true;
@@ -103,18 +121,25 @@ export class ChatPane extends Pane {
     label: string,
     textBox: TextBox,
     talkable: boolean,
-    roleId: string | undefined,
+    roleSlug: string | undefined,
+    assignment: PaneAssignmentInfo | undefined,
     hideReasoning: boolean,
   ) {
     super(id, label, textBox);
     this.talkable = talkable;
-    this.roleId = roleId;
+    this.roleSlug = roleSlug;
+    this.assignment = assignment;
     this.log = new PaneEntryLog(hideReasoning);
     // Wheel/scrollbar/native-key scrolls land here: keep following the tail
     // only while the user is actually at the bottom.
     textBox.on('scroll', () => {
       this.follow = this.atBottom();
     });
+  }
+
+  /** This pane's assignment shortcode, if known — used by Tui's tab label. */
+  get assignmentShortcode(): string | null | undefined {
+    return this.assignment?.shortcode;
   }
 
   /** Appends one SSE event to this pane's log. */
@@ -140,7 +165,13 @@ export class ChatPane extends Pane {
   }
 
   protected render(width: number): string[] {
-    const heading = renderPaneHeading(this.label, this.roleId ?? this.id);
+    const heading = renderAssignmentPaneHeading(
+      this.id,
+      this.label,
+      this.roleSlug,
+      this.assignment,
+      width,
+    );
     return [...heading, ...this.log.render(width)];
   }
 
@@ -269,12 +300,11 @@ export class RosterPane extends Pane {
 }
 
 /**
- * A task's pane: an `Id:`/`Prompt:` heading, then a single-list
- * {@link SelectableList} ("Assignments") — ordered exactly as
- * `GET /api/task/:id` already returns them (plan-ordered implement steps,
- * then everything else by creation time). Never talkable. Only assignments
- * that have begun are selectable (see `makeAssignmentEntry`); selecting one
- * opens the assignment chat panel.
+ * A task's pane: a `Task id:`/`Status:`/`Prompt:` heading, then a
+ * single-list {@link SelectableList} ("Assignments", split Incomplete/
+ * Complete — see {@link TaskPane.setAssignments}). Never talkable. Only
+ * assignments that have begun are selectable (see `makeAssignmentEntry`);
+ * selecting one opens the assignment pane.
  */
 export class TaskPane extends Pane {
   readonly talkable = false;
@@ -297,28 +327,40 @@ export class TaskPane extends Pane {
     this.setAssignments(assignments);
   }
 
-  /** Replaces the assignment list (initial fetch, or a task/assignment SSE update). */
+  /**
+   * Replaces the assignment list (initial fetch, or a task/assignment SSE
+   * update), split into "Incomplete"/"Complete" groups — a terminal status
+   * (`succeeded`/`failed`/`cancelled`) moves an assignment into Complete,
+   * sorted (within each group) by its plan index, which it *keeps* even once
+   * moved — the planning assignment stays index 0, an implement step keeps
+   * its plan position, regardless of which group it's rendered in.
+   */
   setAssignments(assignments: AssignmentInfo[]): void {
     this.assignments = assignments;
+    const rows = assignments.map((a, i) => ({
+      id: a.id,
+      index: a.planIndex ?? i,
+      role: a.role,
+      status: a.status,
+      prompt: a.prompt,
+      agentId: a.agentId,
+    }));
+    const byIndex = (a: { index: number }, b: { index: number }) =>
+      a.index - b.index;
+    const complete = rows
+      .filter((r) => COMPLETE_ASSIGNMENT_STATUSES.has(r.status))
+      .sort(byIndex);
+    const incomplete = rows
+      .filter((r) => !COMPLETE_ASSIGNMENT_STATUSES.has(r.status))
+      .sort(byIndex);
+    const toEntry = (row: AssignmentRow) =>
+      makeAssignmentEntry(row, this.assignmentListEntryMaxLines);
     this.lists = [
       {
         title: 'Assignments',
         groups: [
-          {
-            entries: assignments.map((a, i) =>
-              makeAssignmentEntry(
-                {
-                  id: a.id,
-                  index: i + 1,
-                  role: a.role,
-                  status: a.status,
-                  prompt: a.prompt,
-                  agentId: a.agentId,
-                },
-                this.assignmentListEntryMaxLines,
-              ),
-            ),
-          },
+          { title: 'Incomplete', entries: incomplete.map(toEntry) },
+          { title: 'Complete', entries: complete.map(toEntry) },
         ],
       },
     ];
@@ -338,7 +380,12 @@ export class TaskPane extends Pane {
   }
 
   protected render(width: number): string[] {
-    const heading = renderTaskPaneHeading(this.id, this.prompt, width);
+    const heading = renderTaskPaneHeading(
+      this.id,
+      this.status,
+      this.prompt,
+      width,
+    );
     const { lines, selectedLine } = renderMultiListPanel(
       this.lists,
       this.selection.current,

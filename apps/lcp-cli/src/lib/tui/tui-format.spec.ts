@@ -9,8 +9,8 @@ import {
   makeTaskEntry,
   PaneEntryLog,
   renderAssignmentListEntry,
+  renderAssignmentPaneHeading,
   renderMultiListPanel,
-  renderPaneHeading,
   renderRosterHeading,
   renderTaskListEntry,
   renderTaskPaneHeading,
@@ -27,6 +27,7 @@ function taskSummary(
     id: 't1',
     status: 'ready',
     request: 'Write a short story about a cat.',
+    shortcode: '000',
     createdAt: '2026-07-03T10:00:00.000Z',
     updatedAt: '2026-07-03T10:00:00.000Z',
     completedSteps: 0,
@@ -399,7 +400,7 @@ describe('renderMultiListPanel', () => {
       '',
       '^+Tasks^:',
       'Active',
-      `  ${dateTimeSeconds(taskSummary().createdAt)} (ready) "${taskSummary().request}"`,
+      `  ${dateTimeSeconds(taskSummary().createdAt)} [${taskSummary().shortcode}] (ready) "${taskSummary().request}"`,
       'Completed / failed',
       '  (none)',
     ]);
@@ -586,40 +587,95 @@ describe('renderAssignmentListEntry', () => {
 });
 
 describe('renderTaskPaneHeading', () => {
-  it('renders Id/Prompt lines followed by a blank separator', () => {
-    const lines = renderTaskPaneHeading('task-1', 'Write a report', 80);
-    expect(lines).toEqual(['Id:     task-1', 'Prompt: "Write a report"', '']);
+  it('renders Task id/Status/Prompt lines followed by a blank separator', () => {
+    const lines = renderTaskPaneHeading(
+      'task-1',
+      'ready',
+      'Write a report',
+      80,
+    );
+    expect(lines).toEqual([
+      'Task id:  task-1',
+      'Status:   ^Kready^:',
+      'Prompt:   "Write a report"',
+      '',
+    ]);
+  });
+
+  it('colours the status via statusColor', () => {
+    const lines = renderTaskPaneHeading('task-1', 'succeeded', 'x', 80);
+    expect(lines[1]).toBe('Status:   ^Gsucceeded^:');
   });
 
   it('word-wraps a long prompt, indenting continuation lines under the opening quote', () => {
     const lines = renderTaskPaneHeading(
       'task-1',
+      'ready',
       'A very long prompt that should word-wrap across several lines of the heading block',
       30,
     );
-    expect(lines[0]).toBe('Id:     task-1');
-    expect(lines.length).toBeGreaterThan(3);
-    expect(lines[1].startsWith('Prompt: "')).toBe(true);
-    expect(lines[2].startsWith('        ')).toBe(true);
+    expect(lines[0]).toBe('Task id:  task-1');
+    expect(lines.length).toBeGreaterThan(4);
+    expect(lines[2].startsWith('Prompt:   "')).toBe(true);
+    expect(lines[3].startsWith('          ')).toBe(true);
     expect(lines[lines.length - 2].endsWith('"')).toBe(true);
     expect(lines[lines.length - 1]).toBe('');
   });
 });
 
-describe('renderPaneHeading', () => {
-  it('renders a Name/Id heading followed by a blank separator line', () => {
-    expect(renderPaneHeading('Cat assistant', 'role-1')).toEqual([
-      'Name: Cat assistant',
-      'Id: role-1',
+describe('renderAssignmentPaneHeading', () => {
+  it('renders the full heading block when the role slug and assignment are known', () => {
+    const lines = renderAssignmentPaneHeading(
+      'agent-1',
+      'Cat assistant',
+      'cat-assistant',
+      {
+        id: 'a1',
+        shortcode: '000-001-implement',
+        status: 'in-progress',
+        prompt: 'Write a report',
+      },
+      80,
+    );
+    expect(lines).toEqual([
+      'Agent id:             agent-1',
+      'Role name (and slug): Cat assistant (cat-assistant)',
+      'Assignment id:        a1',
+      'Assignment shortcode: 000-001-implement',
+      'Assignment status:    ^Cin-progress^:',
+      'Prompt:               "Write a report"',
       '',
     ]);
   });
 
-  it('escapes a literal caret in the name/id', () => {
-    expect(renderPaneHeading('x^2', 'id^y')).toEqual([
-      'Name: x^^2',
-      'Id: id^^y',
+  it('falls back to em-dashes for an absent role slug/assignment (a consultation follower)', () => {
+    const lines = renderAssignmentPaneHeading(
+      'agent-1',
+      'Cat assistant',
+      undefined,
+      undefined,
+      80,
+    );
+    expect(lines).toEqual([
+      'Agent id:             agent-1',
+      'Role name (and slug): Cat assistant',
+      'Assignment id:        —',
+      'Assignment shortcode: —',
+      'Assignment status:    —',
+      'Prompt:               "—"',
       '',
     ]);
+  });
+
+  it('escapes a literal caret in agent/role/assignment text', () => {
+    const lines = renderAssignmentPaneHeading(
+      'a^1',
+      'x^2',
+      's^3',
+      undefined,
+      80,
+    );
+    expect(lines[0]).toBe('Agent id:             a^^1');
+    expect(lines[1]).toBe('Role name (and slug): x^^2 (s^^3)');
   });
 });

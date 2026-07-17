@@ -29,6 +29,7 @@ function taskSummary(
     id: 't1',
     status: 'ready',
     request: 'Write a report',
+    shortcode: '000',
     createdAt: '2026-07-03T10:00:00.000Z',
     updatedAt: '2026-07-03T10:00:00.000Z',
     completedSteps: 0,
@@ -42,11 +43,22 @@ const HEIGHT = 16;
 /** Row where a pane's own content (heading, then log/list) begins. */
 const CONTENT_TOP = 2;
 
-function makeTui(opts: { hideReasoning?: boolean } = {}) {
+function makeTui(
+  opts: {
+    hideReasoning?: boolean;
+    width?: number;
+    height?: number;
+    /** Fixed capacity of the fake screen buffer backing outputDst — see the
+     * 'Tui resize resilience' describe block's module comment. Defaults to
+     * just past (WIDTH, HEIGHT), the size every other spec resizes within. */
+    bufferWidth?: number;
+    bufferHeight?: number;
+  } = {},
+) {
   const emitter = new EventEmitter();
   const term = Object.assign(emitter, {
-    width: WIDTH,
-    height: HEIGHT,
+    width: opts.width ?? WIDTH,
+    height: opts.height ?? HEIGHT,
     fullscreen: jest.fn(),
     grabInput: jest.fn(),
     processExit: jest.fn(),
@@ -57,8 +69,8 @@ function makeTui(opts: { hideReasoning?: boolean } = {}) {
   // `dst` is only used by ScreenBuffer.draw(), never called here — the
   // runtime accepts its absence, but @types marks it required.
   const screen = new ScreenBuffer({
-    width: WIDTH + 1,
-    height: HEIGHT + 1,
+    width: (opts.bufferWidth ?? WIDTH) + 1,
+    height: (opts.bufferHeight ?? HEIGHT) + 1,
   } as ScreenBuffer.Options);
   const tui = new Tui({
     term,
@@ -162,22 +174,35 @@ describe('Tui rendering', () => {
     expect(rows()[0]).toContain('[ Cat Assistant ]');
   });
 
-  it('opens each chat pane with a Name/Id heading, falling back to the pane id', () => {
+  it('opens each chat pane with the agent/role/assignment heading, falling back to "—" for an unknown role slug/assignment', () => {
     const { tui, rows } = makeTui();
     tui.addPane({ id: 'root', label: 'Cat', talkable: true });
-    expect(rows()[CONTENT_TOP]).toContain('Name: Cat');
-    expect(rows()[CONTENT_TOP + 1]).toContain('Id: root');
+    expect(rows()[CONTENT_TOP]).toContain('Agent id:             root');
+    expect(rows()[CONTENT_TOP + 1]).toContain('Role name (and slug): Cat');
+    expect(rows()[CONTENT_TOP + 2]).toContain('Assignment id:        —');
   });
 
-  it("uses the role's own id in the heading when roleId is given, not the pane (agent) id", () => {
+  it('shows the role slug and assignment fields in the heading when given', () => {
     const { tui, rows } = makeTui();
     tui.addPane({
       id: 'agent-1',
       label: 'Cat',
       talkable: true,
-      roleId: 'role-xyz',
+      roleSlug: 'cat-assistant',
+      assignment: {
+        id: 'a1',
+        shortcode: '000-000-plan',
+        status: 'in-progress',
+        prompt: 'Do the thing',
+      },
     });
-    expect(rows()[CONTENT_TOP + 1]).toContain('Id: role-xyz');
+    expect(rows()[CONTENT_TOP + 1]).toContain(
+      'Role name (and slug): Cat (cat-assistant)',
+    );
+    expect(rows()[CONTENT_TOP + 2]).toContain('Assignment id:        a1');
+    expect(rows()[CONTENT_TOP + 3]).toContain(
+      'Assignment shortcode: 000-000-plan',
+    );
   });
 
   it('renders appended discrete events into the pane scrollback', () => {
@@ -253,8 +278,9 @@ describe('Tui colour markup', () => {
       timestamp: new Date().toISOString(),
       data: { delta: 'thinking' },
     });
-    // Heading occupies 3 rows (Name, Id, blank) above the log content.
-    const firstLogRow = CONTENT_TOP + 3;
+    // Heading occupies 7 rows (Agent id, Role name, Assignment id/shortcode/
+    // status, Prompt, blank) above the log content.
+    const firstLogRow = CONTENT_TOP + 7;
     expect(text()).toContain('thinking');
     expect(attrAt(2, firstLogRow).char).toBe('t');
     expect(attrAt(2, firstLogRow).attr.color).toBe(8); // bright black (^K)
@@ -553,6 +579,43 @@ describe('Tui resize resilience', () => {
     // Re-layout on growing back restores the input and the chrome.
     expect(rows()[0]).toContain('[ Cat ]');
     expect(rows()[HEIGHT - 1]).toContain('Ctrl+C quit');
+  });
+
+  it('survives growing a scrolled, scrollbar-showing terminal without throwing an offset-out-of-range error', () => {
+    // Reproduces a real report: a roster pane long enough to need its
+    // vScrollBar, scrolled away from the top, then the terminal grown
+    // (not shrunk) through several sizes. `bufferWidth`/`bufferHeight` give
+    // the fake screen buffer backing outputDst plenty of headroom above
+    // every size resized to below, so this isolates the resize handler's
+    // own ordering bug from the unrelated "grew past the fake buffer's own
+    // fixed capacity" concern a real terminal never has.
+    const { tui, term, rows, pressKey } = makeTui({
+      width: 40,
+      height: 10,
+      bufferWidth: 120,
+      bufferHeight: 40,
+    });
+    tui.addRosterPane({
+      id: 'acme',
+      label: 'Acme',
+      slug: 'acme-corp',
+      roles: Array.from({ length: 30 }, (_, i) => ({
+        id: `r${i}`,
+        name: `Role ${i} with a fairly long name to force wrapping`,
+      })),
+    });
+    for (let i = 0; i < 20; i++) pressKey('DOWN');
+
+    for (const [w, h] of [
+      [45, 12],
+      [60, 14],
+      [80, 16],
+      [41, 11],
+      [100, 30],
+    ]) {
+      expect(() => resize(term, w, h)).not.toThrow();
+    }
+    expect(rows()[0]).toContain('[ Acme ]');
   });
 
   it('survives a company SSE task_changed update (updateRosterTasks) landing while the terminal is degenerate', () => {
@@ -858,7 +921,7 @@ describe('Tui company roster pane', () => {
       expect.objectContaining({ id: 't1' }),
     );
     expect(rows()[0]).toContain('[ t1 ]');
-    expect(rows()[CONTENT_TOP]).toContain('Id:     t1');
+    expect(rows()[CONTENT_TOP]).toContain('Task id:  t1');
   });
 });
 
@@ -901,33 +964,37 @@ describe('Tui task panel', () => {
     });
   }
 
-  it('renders the Id/Prompt heading and the Assignments list', () => {
+  it('renders the Task id/Status/Prompt heading and the Assignments list', () => {
     const { tui, rows } = makeTui();
     addTask(tui);
-    expect(rows()[CONTENT_TOP]).toContain('Id:     task-1');
-    expect(rows()[CONTENT_TOP + 1]).toContain('Prompt: "Write a report"');
-    expect(rows()[CONTENT_TOP + 3]).toContain('Assignments');
+    expect(rows()[CONTENT_TOP]).toContain('Task id:  task-1');
+    expect(rows()[CONTENT_TOP + 1]).toContain('Status:   in-progress');
+    expect(rows()[CONTENT_TOP + 2]).toContain('Prompt:   "Write a report"');
+    expect(rows()[CONTENT_TOP + 4]).toContain('Assignments');
   });
 
-  it('`>` skips not-yet-begun (ready) assignments', () => {
+  it('`>` skips not-yet-begun (ready) assignments, cycling within the selectable rows across both groups', () => {
     const { tui, text, pressKey } = makeTui();
     addTask(tui);
 
-    // The first selectable row is a1 (succeeded) — a3 (ready) is skipped
-    // entirely by Down/Up navigation.
-    expect(text()).toContain('> 1. Planner');
+    // The Incomplete group renders first: a2 (Implementer, in-progress) is
+    // its only selectable row (a3/QA is ready — never selectable). Complete
+    // (a1/Planner, succeeded) follows. Each keeps its plan index (array
+    // position, since these fixtures set no explicit planIndex) — 1 for
+    // Implementer, 0 for Planner — regardless of which group it's in.
+    expect(text()).toContain('> 1. Implementer');
 
     pressKey('DOWN');
-    expect(text()).toContain('> 2. Implementer');
+    expect(text()).toContain('> 0. Planner');
 
-    pressKey('DOWN'); // wraps back to a1 — a3 is never selectable
-    expect(text()).toContain('> 1. Planner');
+    pressKey('DOWN'); // wraps back to a2 — a3 is never selectable
+    expect(text()).toContain('> 1. Implementer');
   });
 
   it('colours each assignment status via terminal attributes', () => {
     const { tui, rows, attrAt } = makeTui();
     addTask(tui);
-    const succeededRow = rows().findIndex((r) => r.includes('1. Planner'));
+    const succeededRow = rows().findIndex((r) => r.includes('Planner'));
     const col = rows()[succeededRow].indexOf('succeeded');
     // Bright green foreground (terminal-kit's 16-colour "bright" palette:
     // base colour 2 + 8) for a succeeded assignment.
@@ -940,11 +1007,13 @@ describe('Tui task panel', () => {
     const onSelectAssignment = jest.fn();
     tui.onSelectAssignment(onSelectAssignment);
 
+    // The first selectable row is a2 (Implementer) — the Incomplete group
+    // renders before Complete, and a3 (ready) is never selectable.
     pressKey('ENTER');
 
     expect(onSelectAssignment).toHaveBeenCalledWith(
       'task-1',
-      expect.objectContaining({ id: 'a1', role: 'Planner' }),
+      expect.objectContaining({ id: 'a2', role: 'Implementer' }),
     );
   });
 
@@ -977,8 +1046,11 @@ describe('Tui task panel', () => {
       },
     ]);
 
-    expect(text()).toContain('3. QA');
-    expect(text()).not.toContain('2. Implementer in-progress');
+    // No explicit planIndex on these fixtures — falls back to array position
+    // (0-based), and QA (still incomplete) keeps its position even though
+    // Planner/Implementer moved to the Complete group above it.
+    expect(text()).toContain('2. QA');
+    expect(text()).not.toContain('1. Implementer (in-progress)');
   });
 
   it('shows the cancel shortcut only while the task is running, and fires onCancelTask', () => {
@@ -1183,7 +1255,7 @@ describe('Tui initiate-task panel', () => {
 
     expect(rows()[0].split('|').length).toBe(tabCountBefore);
     expect(rows()[0]).toContain('[ task-1 ]');
-    expect(rows()[CONTENT_TOP]).toContain('Id:     task-1');
+    expect(rows()[CONTENT_TOP]).toContain('Task id:  task-1');
   });
 });
 

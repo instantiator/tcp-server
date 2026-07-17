@@ -2,8 +2,9 @@
 // scrollback per tab, and an input box shown only for talkable (chat) panes.
 // Built directly on terminal-kit's Document/TextBox/InlineInput widgets (see
 // terminal-kit-document.d.ts). The pane content/rendering logic itself lives
-// in panes.ts (Pane/ChatPane/RosterPane/TextPane) — this file owns tabs, the
-// hint row, the input box, and key routing across whichever pane is active.
+// in panes.ts (Pane/AssignmentPane/RosterPane/TextPane) — this file owns
+// tabs, the hint row, the input box, and key routing across whichever pane
+// is active.
 //
 // One pane is special: the company roster (added via addRosterPane), listing
 // the company's roles with an up/down-moved highlight. It has no InlineInput,
@@ -21,8 +22,10 @@
 //   row 0                        — tab bar
 //   row 1                        — blank (TAB_GAP_ROWS)
 //   rows 2..                     — the active pane's scrollback (TextBox),
-//                                   itself opening with a "Name/Id" (or, on
-//                                   the roster, "Slug/Id" + prompt) heading
+//                                   itself opening with an assignment-pane
+//                                   heading (or, on the roster, "Slug/Id" +
+//                                   prompt, or on a task pane "Task id:" +
+//                                   "Status:" + "Prompt:")
 //   3 rows (talkable panes only) — input box ('> ' prompt; Alt+Enter grows it)
 //   last row                     — key hints
 //
@@ -62,7 +65,7 @@ import { Renderer } from '../core/render';
 import { SseEvent } from '../core/sse';
 import { escapeMarkup } from './tui-format';
 import {
-  ChatPane,
+  AssignmentPane,
   InitiateTaskPane,
   InitiateTaskSubmission,
   Pane,
@@ -299,22 +302,34 @@ export class Tui {
     // whatever positions our widgets were last set to. On a resize to a
     // small/degenerate terminal, that draw runs before we ever get a chance
     // to shrink/reposition our widgets for the new size, and can throw
-    // (ScreenBuffer offset out of range) — the crash this section fixes.
-    // Un-registering it and driving it ourselves, after our own resize
-    // handling (which repositions everything for the new, clamped size via
-    // refresh()/layout()), fixes the ordering half of the problem; but
-    // shrinking Document's own internal buffer down to a "no content room"
-    // size (see hasRoomForContent()) — even transiently — has been observed
-    // to corrupt it such that a *later* resize back up to a normal size then
-    // throws the same error. So: only forward the resize to Document at all
-    // when there's room for content; while there isn't, Document keeps
+    // (ScreenBuffer offset out of range) — one half of the crash this
+    // section fixes. Un-registering it and driving it ourselves lets us
+    // guard that call: only forward the resize to Document at all when
+    // there's room for content; while there isn't, Document keeps
     // compositing at its last good size (harmless — every content pane is
     // hidden during this window anyway, see refresh()), and picks up the
     // real size cleanly on the first resize event after the terminal grows
-    // back, with no broken intermediate state to recover from.
-    // Already bound to the Document instance in its own constructor — reuse
-    // that exact reference so `off` removes the listener terminal-kit
-    // registered, not a new (different) bound copy.
+    // back, with no broken intermediate state to recover from — shrinking
+    // Document's own internal buffer down to a "no content room" size (see
+    // hasRoomForContent()), even transiently, has been observed to corrupt
+    // it such that a *later* resize back up to a normal size then throws
+    // the same error.
+    //
+    // The other half: forwarding to Document's own onEventSourceResize
+    // (rather than just resizing its buffer) draws immediately, as part of
+    // that same call — before our own layout() below has repositioned any
+    // widget for the new size. Drawing those still-stale positions (a
+    // pane's TextBox, or its vScrollBar Slider) into a newly (larger)
+    // buffer can throw "offset out of range" from deep inside terminal-kit's
+    // blitter — this is what a growing resize hit (shrinking never did,
+    // since hasRoomForContent() already suppressed the forward-to-Document
+    // call in that direction). Document#resize (Container's, inherited —
+    // see terminal-kit-document.d.ts) only resizes the buffer and draws
+    // nothing; refresh() below repositions every widget for the new size
+    // and performs the first draw once everything agrees on it.
+    // documentOnResize is already bound to the Document instance in its own
+    // constructor — reuse that exact reference so `off` removes the
+    // listener terminal-kit registered, not a new (different) bound copy.
     const documentOnResize = this.document.onEventSourceResize;
     this.term.off('resize', documentOnResize);
     this.term.on('resize', () => {
@@ -323,10 +338,15 @@ export class Tui {
       // setSizeAndPosition would move the editable area but leave the '> '
       // prompt behind. refresh() recreates it at the new position.
       this.dropInput();
-      this.refresh();
       if (this.hasRoomForContent()) {
-        documentOnResize(this.term.width, this.term.height);
+        this.document.resize({
+          x: 0,
+          y: 0,
+          width: this.term.width,
+          height: this.term.height,
+        });
       }
+      this.refresh();
     });
   }
 
@@ -413,12 +433,13 @@ export class Tui {
     if (this.panes.has(spec.id)) return;
     this.manager.addPane(spec);
     const textBox = this.createContentTextBox();
-    const pane = new ChatPane(
+    const pane = new AssignmentPane(
       spec.id,
       spec.label,
       textBox,
       spec.talkable,
-      spec.roleId,
+      spec.roleSlug,
+      spec.assignment,
       this.hideReasoning,
     );
     this.panes.set(spec.id, pane);
@@ -638,7 +659,7 @@ export class Tui {
   /** Appends one SSE event to the named pane and redraws it if active. */
   appendEvent(paneId: string, event: SseEvent): void {
     const pane = this.panes.get(paneId);
-    if (!(pane instanceof ChatPane)) return;
+    if (!(pane instanceof AssignmentPane)) return;
     pane.appendEvent(event);
     if (this.manager.activePane?.id === paneId) this.redrawActivePane();
   }
@@ -646,7 +667,7 @@ export class Tui {
   /** Appends the user's own submitted message to the named pane and redraws it if active. */
   appendUserPrompt(paneId: string, text: string): void {
     const pane = this.panes.get(paneId);
-    if (!(pane instanceof ChatPane)) return;
+    if (!(pane instanceof AssignmentPane)) return;
     pane.appendUserPrompt(text);
     if (this.manager.activePane?.id === paneId) this.redrawActivePane();
   }
@@ -658,7 +679,7 @@ export class Tui {
    */
   setBusy(paneId: string, busy: boolean): void {
     const pane = this.panes.get(paneId);
-    if (!(pane instanceof ChatPane)) return;
+    if (!(pane instanceof AssignmentPane)) return;
     pane.busy = busy;
     if (this.manager.activePane?.id === paneId) {
       if (this.input) this.input.disabled = busy;
@@ -834,7 +855,7 @@ export class Tui {
     // PgUp/PgDn bindings never fire — page the log from here instead. On
     // spectator panes the TextBox is focused and pages itself natively.
     if (
-      activePane instanceof ChatPane &&
+      activePane instanceof AssignmentPane &&
       activePane.talkable &&
       (name === 'PAGE_UP' || name === 'PAGE_DOWN')
     ) {
@@ -972,7 +993,15 @@ export class Tui {
     // Bold bright cyan (^+^C) for the active tab, dim (^-) for the rest;
     // labels are escaped since they're role/company names, not our own text.
     const label = (p: PaneSpec) => {
-      const text = escapeMarkup(p.label);
+      // An assignment pane with a shortcode shows that instead of its role
+      // name — a task pane's own label is already `Task: ${shortcode}` (set
+      // by the caller — see wiring.ts), so this only ever fires for
+      // assignment panes.
+      const text = escapeMarkup(
+        p.assignment?.shortcode
+          ? `Assignment: ${p.assignment.shortcode}`
+          : p.label,
+      );
       return p.id === active?.id ? `^+^C[ ${text} ]^:` : `^-  ${text}  ^:`;
     };
     this.tabBar.setContent(
@@ -985,7 +1014,7 @@ export class Tui {
     const isHelp = activePane instanceof TextPane;
     const isTaskPane = activePane instanceof TaskPane;
     const isInitiateTask = activePane instanceof InitiateTaskPane;
-    const busy = activePane instanceof ChatPane && activePane.busy;
+    const busy = activePane instanceof AssignmentPane && activePane.busy;
     const closable = activePane !== undefined && !isRoster;
     // The help hint is only worth showing when help isn't already open.
     const helpHint = isHelp ? [] : ['F1/Ctrl+G help'];
@@ -1076,7 +1105,8 @@ export class Tui {
     if (!this.input) return;
     if (this.inputPaneId) {
       const prevPane = this.panes.get(this.inputPaneId);
-      if (prevPane instanceof ChatPane) prevPane.draft = this.input.getValue();
+      if (prevPane instanceof AssignmentPane)
+        prevPane.draft = this.input.getValue();
     }
     this.input.destroy();
     this.input = null;
@@ -1102,7 +1132,7 @@ export class Tui {
     if (this.input && this.inputPaneId === active?.id) return;
     this.dropInput();
     const pane = this.panes.get(active!.id);
-    if (!(pane instanceof ChatPane)) return; // inputEnabled implies a talkable ChatPane
+    if (!(pane instanceof AssignmentPane)) return; // inputEnabled implies a talkable AssignmentPane
     this.input = new InlineInput({
       parent: this.document,
       x: 0,

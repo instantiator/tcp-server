@@ -2,25 +2,32 @@
 // which tab is active, and whether the active tab may receive input. Kept
 // free of any terminal-kit dependency so it's testable without a live TTY.
 
+/** The backing assignment's identity/state, for an assignment pane's heading and tab label. */
+export interface PaneAssignmentInfo {
+  id: string;
+  /** Null for an assignment with no plan-derived shortcode (an orphan — plain chat/consultation). */
+  shortcode: string | null;
+  status: string;
+  prompt: string;
+}
+
 export interface PaneSpec {
   id: string;
   label: string;
   /** Whether the user can type to this agent (the root agent), vs. a
    * consultation-follower pane that is spectate-only. */
   talkable: boolean;
-  /**
-   * The role's own id, for the pane's "Name: … / Id: …" heading — distinct
-   * from `id` (the agent id) since a role can have many agents over time.
-   * Absent for consultation-follower panes (the SSE event that creates them
-   * carries a role name but no role id); the heading falls back to `id`.
-   */
-  roleId?: string;
+  /** The role's slug, for the pane's "Role name (and slug)" heading line. Absent for consultation-follower panes. */
+  roleSlug?: string;
+  /** The pane's backing assignment. Absent for consultation-follower panes (not fetched — see ChatSession.streamAgent). */
+  assignment?: PaneAssignmentInfo;
 }
 
 /** A role offered by the company roster pane's "initiate chat" list. */
 export interface RoleOption {
   id: string;
   name: string;
+  slug: string;
 }
 
 /** One assignment as shown in a task panel's Assignments list. */
@@ -28,8 +35,19 @@ export interface AssignmentInfo {
   id: string;
   /** The assignment's role, resolved to its display name (not just an id). */
   role: string;
+  /** The assignment's role's slug. */
+  roleSlug: string;
   status: string;
   prompt: string;
+  /** Null for an assignment with no plan-derived shortcode (shouldn't happen for a task's own assignments). */
+  shortcode: string | null;
+  /**
+   * This assignment's position in the task's plan — 0 for the planning
+   * assignment, an implement step's index (1-based), or (for qa) the
+   * implement step it reviews — parsed from `shortcode`'s middle segment.
+   * Null when `shortcode` is null (falls back to array position for display).
+   */
+  planIndex: number | null;
   /** The assignment's working agent, once dispatched — null before it begins. */
   agentId: string | null;
 }

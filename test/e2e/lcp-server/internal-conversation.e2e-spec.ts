@@ -253,6 +253,29 @@ describe('InternalController + ConversationController (e2e)', () => {
       expect(conv.status).toBe('awaiting_user');
     });
 
+    it('gives each conversation for the same role a distinct, incrementing slug', async () => {
+      const company = await createCompany();
+      const role = await createRole(company.id);
+      const pause = async () => {
+        const agent = await createRunningAgent(company.id, role.id);
+        const res = await request(app.getHttpServer())
+          .post('/internal/pause')
+          .set('X-Internal-Api-Key', INTERNAL_KEY)
+          .send({
+            type: 'user_input',
+            agentId: agent.id,
+            question: 'What should I do next?',
+          })
+          .expect(201);
+        return (res.body as { slug: string }).slug;
+      };
+      const first = await pause();
+      const second = await pause();
+      expect(second).not.toBe(first);
+      const suffix = (slug: string) => Number(slug.match(/-(\d+)$/)?.[1]);
+      expect(suffix(second)).toBe(suffix(first) + 1);
+    });
+
     it('returns 404 when the agent does not exist', async () => {
       await request(app.getHttpServer())
         .post('/internal/pause')
@@ -382,6 +405,7 @@ describe('InternalController + ConversationController (e2e)', () => {
         taskRepo.create({
           companyId: company.id,
           request: 'Write a report.',
+          shortcode: '000',
           materials: [],
           expected: [],
         }),

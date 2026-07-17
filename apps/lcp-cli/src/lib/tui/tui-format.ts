@@ -14,6 +14,7 @@ import { wrapText } from '../core/text-wrap';
 import {
   ListEntry,
   ListPosition,
+  PaneAssignmentInfo,
   RoleOption,
   SelectableList,
 } from './tui-state';
@@ -313,9 +314,9 @@ export function formatTaskState(summary: TaskChangeSummary): string {
 
 /**
  * Renders one company task-list entry: a single truncated line when not
- * highlighted (`yyyy-MM-dd HH:mm:ss (state) "request"`), or — highlighted —
- * the prompt expanded and word-wrapped up to `maxLines`, with a blank line
- * of spacing before and after.
+ * highlighted (`yyyy-MM-dd HH:mm:ss [shortcode] (state) "request"`), or —
+ * highlighted — the prompt expanded and word-wrapped up to `maxLines`, with
+ * a blank line of spacing before and after.
  */
 export function renderTaskListEntry(
   summary: TaskChangeSummary,
@@ -325,7 +326,7 @@ export function renderTaskListEntry(
 ): string[] {
   const w = Math.max(width, 1);
   const mark = marker(selected);
-  const meta = `${dateTimeSeconds(summary.createdAt)} (${formatTaskState(summary)})`;
+  const meta = `${dateTimeSeconds(summary.createdAt)} [${summary.shortcode}] (${formatTaskState(summary)})`;
   const body = `${meta} "${summary.request}"`;
 
   if (!selected) {
@@ -359,9 +360,59 @@ export function makeTaskEntry(
   };
 }
 
-/** Renders the identifying heading shown at the top of every chat pane. */
-export function renderPaneHeading(name: string, id: string): string[] {
-  return [`Name: ${escapeMarkup(name)}`, `Id: ${escapeMarkup(id)}`, ''];
+/** Left-hand label column width shared by every line of {@link renderAssignmentPaneHeading} (`'Role name (and slug):'`, the longest). */
+const ASSIGNMENT_HEADING_LABEL_WIDTH = 21;
+
+/** One field line of {@link renderAssignmentPaneHeading}, label padded to its column. */
+function headingField(label: string, value: string): string {
+  return `${label.padEnd(ASSIGNMENT_HEADING_LABEL_WIDTH)} ${value}`;
+}
+
+/**
+ * Renders the identifying heading shown at the top of every assignment
+ * (agent chat) pane: the agent id, the role's name and slug, and — when
+ * known — the backing assignment's id/shortcode/status (coloured via
+ * {@link statusColor}) and prompt (word-wrapped, continuation lines indented
+ * under the opening quote). `roleSlug`/`assignment` are absent for a
+ * consultation-follower pane (not fetched — see `ChatSession.streamAgent`);
+ * those fields render as `'—'` instead.
+ */
+export function renderAssignmentPaneHeading(
+  agentId: string,
+  roleName: string,
+  roleSlug: string | undefined,
+  assignment: PaneAssignmentInfo | undefined,
+  width: number,
+): string[] {
+  const roleLine = roleSlug
+    ? `${escapeMarkup(roleName)} (${escapeMarkup(roleSlug)})`
+    : escapeMarkup(roleName);
+  const statusLine = assignment
+    ? `${statusColor(assignment.status)}${escapeMarkup(assignment.status)}^:`
+    : '—';
+  const promptPrefix = headingField('Prompt:', '');
+  const wrapped = wrapText(
+    assignment?.prompt ?? '—',
+    Math.max(width - promptPrefix.length, 1),
+  );
+  const promptLines = wrapped.map((line, i) =>
+    i === 0
+      ? `${promptPrefix}"${escapeMarkup(line)}`
+      : `${' '.repeat(promptPrefix.length)}${escapeMarkup(line)}`,
+  );
+  promptLines[promptLines.length - 1] += '"';
+  return [
+    headingField('Agent id:', escapeMarkup(agentId)),
+    headingField('Role name (and slug):', roleLine),
+    headingField('Assignment id:', escapeMarkup(assignment?.id ?? '—')),
+    headingField(
+      'Assignment shortcode:',
+      escapeMarkup(assignment?.shortcode ?? '—'),
+    ),
+    headingField('Assignment status:', statusLine),
+    ...promptLines,
+    '',
+  ];
 }
 
 /**
@@ -389,7 +440,13 @@ export function statusColor(status: string): string {
 /** One row of the task panel's Assignments list. */
 export interface AssignmentRow {
   id: string;
-  /** 1-based position in the panel's Assignments list. */
+  /**
+   * This assignment's index in the task's plan — 0 for the planning
+   * assignment, an implement step's 1-based position, or (for qa) the step
+   * it reviews — retained even when the row is rendered out of plan order
+   * (e.g. grouped Incomplete/Complete). Falls back to array position when
+   * the assignment has no plan index (`AssignmentInfo.planIndex` null).
+   */
   index: number;
   role: string;
   status: string;
@@ -399,7 +456,7 @@ export interface AssignmentRow {
 }
 
 /**
- * Renders one task-panel assignment row: `n. <role> <status> "<prompt>"`,
+ * Renders one task-panel assignment row: `n. <role> (<status>) "<prompt>"`,
  * truncated with an ellipsis when not highlighted; word-wrapped up to
  * `maxLines` (with spacing) when highlighted — mirroring
  * {@link renderTaskListEntry}'s truncate/expand behaviour. The status word is
@@ -414,8 +471,8 @@ export function renderAssignmentListEntry(
 ): string[] {
   const w = Math.max(width, 1);
   const mark = marker(selected);
-  const plainMeta = `${row.index}. ${row.role} ${row.status}`;
-  const colouredMeta = `${row.index}. ${escapeMarkup(row.role)} ${statusColor(row.status)}${escapeMarkup(row.status)}^:`;
+  const plainMeta = `${row.index}. ${row.role} (${row.status})`;
+  const colouredMeta = `${row.index}. ${escapeMarkup(row.role)} (${statusColor(row.status)}${escapeMarkup(row.status)}^:)`;
   // Budget for the prompt text: total width minus the marker, the (plain,
   // uncoloured) meta, a separating space, and the two quote characters.
   const promptBudget = Math.max(w - mark.length - plainMeta.length - 3, 0);
@@ -453,19 +510,25 @@ export function makeAssignmentEntry(
   };
 }
 
+/** Left-hand label column width for {@link renderTaskPaneHeading} (`'Task id:'`/`'Status:'`/`'Prompt:'` padded to one past the longest). */
+const TASK_HEADING_LABEL_WIDTH = 9;
+
 /**
- * Renders the task panel's identifying heading: `Id:`/`Prompt:` (the prompt
- * word-wrapped, continuation lines indented under the opening quote), then a
- * blank line and the "Assignments" section label — everything before the
- * panel's Assignments {@link SelectableList}.
+ * Renders the task panel's identifying heading: `Task id:`/`Status:`
+ * (coloured via {@link statusColor})/`Prompt:` (the prompt word-wrapped,
+ * continuation lines indented under the opening quote), then a blank line
+ * and the "Assignments" section label — everything before the panel's
+ * Assignments {@link SelectableList}.
  */
 export function renderTaskPaneHeading(
   taskId: string,
+  status: string,
   prompt: string,
   width: number,
 ): string[] {
-  const idLine = `Id:     ${escapeMarkup(taskId)}`;
-  const promptPrefix = 'Prompt: ';
+  const idLine = `${'Task id:'.padEnd(TASK_HEADING_LABEL_WIDTH)} ${escapeMarkup(taskId)}`;
+  const statusLine = `${'Status:'.padEnd(TASK_HEADING_LABEL_WIDTH)} ${statusColor(status)}${escapeMarkup(status)}^:`;
+  const promptPrefix = `${'Prompt:'.padEnd(TASK_HEADING_LABEL_WIDTH)} `;
   const wrapped = wrapText(prompt, Math.max(width - promptPrefix.length, 1));
   const promptLines = wrapped.map((line, i) =>
     i === 0
@@ -473,5 +536,5 @@ export function renderTaskPaneHeading(
       : `${' '.repeat(promptPrefix.length)}${escapeMarkup(line)}`,
   );
   promptLines[promptLines.length - 1] += '"';
-  return [idLine, ...promptLines, ''];
+  return [idLine, statusLine, ...promptLines, ''];
 }

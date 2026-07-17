@@ -344,8 +344,10 @@ itself; see `chat` above and `tui` below for what each verb starts it with.
   scripted access by slug) and **Tasks** (the company's tasks, grouped
   **Active** — `ready`/`planning`/`in-progress`/`finalising` — and
   **Completed / failed** — `succeeded`/`failed`/`cancelled` — each most
-  recently updated first, live-updating from the company's SSE stream; a
-  highlighted task expands its full prompt, word-wrapped up to
+  recently updated first, live-updating from the company's SSE stream; each
+  row is `<datetime> [<shortcode>] (<state>) "<request>"` — `<shortcode>` is
+  the task's short per-company identifier (`000`, `001`, …, assigned at
+  creation); a highlighted task expands its full prompt, word-wrapped up to
   `--task-list-max-lines` lines). **Up/Down** moves one highlight across both
   lists, cycling top↔bottom; **[** / **]** jump straight to the previous/next
   list; the view scrolls to keep the highlight visible on a long list.
@@ -354,23 +356,37 @@ itself; see `chat` above and `tui` below for what each verb starts it with.
   the initiate-task form (below), regardless of which list is currently
   highlighted. It has no input box, so these keys are free for navigation
   rather than typing.
-- **The task panel** (Enter on a task) shows `Id:`/`Prompt:` (the prompt
-  word-wrapped, continuation lines indented under the opening quote), then an
-  **Assignments** list — one row per plan/implement/qa/finalise assignment,
-  ordered the same way `get-task` returns them, `n. <role> <status>
-"<prompt>"`, the status colour-coded (grey `ready`, cyan while active, green
+- **The task panel** (Enter on a task) is labelled `Task: <shortcode>` in the
+  tab bar, and opens with `Task id:`/`Status:` (colour-coded like the
+  assignment rows below)/`Prompt:` (the prompt word-wrapped, continuation
+  lines indented under the opening quote), then an **Assignments** list split
+  into two groups — **Incomplete** (`ready`/`in-progress`/`in-qa`) and
+  **Complete** (`succeeded`/`failed`/`cancelled`) — one row per
+  plan/implement/qa/finalise assignment, `n. <role> (<status>) "<prompt>"`,
+  the status colour-coded (grey `ready`, cyan while active, green
   `succeeded`, red `failed`, yellow `cancelled`), and word-wrapping the full
   prompt when highlighted (up to `--task-list-max-lines` lines), same as the
-  roster's own task list. Updates live from the task's SSE stream. **Up/Down**
-  moves the highlight, skipping assignments that haven't begun yet (nothing to
-  open); **Enter** opens the assignment chat panel (below) for a highlighted,
-  begun assignment; **c** cancels the task (shown/active only while it's
+  roster's own task list. `n` is the assignment's position in the task's
+  plan (`0` for the planning assignment, an implement step's 1-based
+  position, or — for a qa row — the step it reviews) and stays fixed even
+  once the row moves from Incomplete to Complete. Updates live from the
+  task's SSE stream. **Up/Down** moves the highlight, skipping assignments
+  that haven't begun yet (nothing to open) and cycling across both groups;
+  **Enter** opens the assignment panel (below) for a highlighted, begun
+  assignment; **c** cancels the task (shown/active only while it's
   `planning`/`in-progress`/`finalising`); **s** starts it (shown/active only
   while it's `ready`) — the panel updates from the SSE stream after either, no
   manual refresh needed.
-- **The assignment chat panel** (Enter on a begun assignment in a task panel)
-  is a read-only scrollback of that assignment's working agent — no input box.
-  A still-running assignment streams live, the same as any other tab; a
+- **The assignment panel** (Enter on a begun assignment in a task panel) is a
+  read-only scrollback of that assignment's working agent — no input box.
+  Labelled `Assignment: <shortcode>` in the tab bar when the assignment has
+  one (an orphan assignment — a plain chat or a consultation with no task —
+  falls back to the role name, same as any other tab). It opens with
+  `Agent id:` / `Role name (and slug):` / `Assignment id:` / `Assignment
+shortcode:` / `Assignment status:` (colour-coded the same way) / `Prompt:`
+  — the role slug and assignment fields render as `—` for a consultation
+  follower (not fetched, to keep following a live consultation cheap). A
+  still-running assignment streams live, the same as any other tab; a
   finished one renders its full recorded history instead (reconstructed from
   the audit log — every state change and the model's final response per turn,
   though not its token-by-token reasoning, which isn't persisted).
@@ -394,12 +410,12 @@ itself; see `chat` above and `tui` below for what each verb starts it with.
   closes the active tab (any tab except the roster, which is permanent) — for
   a talkable tab this also aborts its turn if one is in flight and deletes its
   agent; closing a spectator tab (a consultation follower or an assignment
-  chat panel) just stops watching it. Closing the last agent tab leaves you
-  back on the roster.
+  panel) just stops watching it. Closing the last agent tab leaves you back on
+  the roster.
 - **Independent scrollback per tab** — each agent's events accumulate in its
-  own pane, opening with a `Name: …` / `Id: …` heading identifying the role
-  and its id; switching tabs doesn't lose or interleave another agent's
-  output, unlike the plain renderer's single interleaved stream. Scroll with
+  own pane, opening with the assignment-panel heading described above;
+  switching tabs doesn't lose or interleave another agent's output, unlike
+  the plain renderer's single interleaved stream. Scroll with
   **PgUp/PgDn** (or the mouse wheel); scrolling up stops the view following
   new output, paging back to the bottom resumes it. On spectator tabs the
   arrow keys and Home/End scroll too. A blank row always separates the tab

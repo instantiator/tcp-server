@@ -15,5 +15,6 @@ export * from './LcpTask.model';
 export * from './PendingConsultation.model';
 export * from './LlmConfig.model';
 export * from './LcpRole.model';
+export * from './shortcode';
 export * from './task-status';
 export * from './WithLlmConfig';

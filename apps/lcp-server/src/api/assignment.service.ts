@@ -1,6 +1,7 @@
 import {
   AgentStatus,
   assignmentWorkingPrefix,
+  buildAssignmentShortcode,
   buildEnumValidationError,
   canonicaliseArtifacts,
   deriveTaskStatus,
@@ -263,6 +264,7 @@ export class AssignmentService {
         `Your assignment does not belong to task ${taskId}.`,
       );
     }
+    const task = await this.taskRepo.findOneByOrFail({ id: taskId });
 
     if (!Array.isArray(assignments) || assignments.length === 0) {
       throw new BadRequestException(
@@ -358,6 +360,11 @@ export class AssignmentService {
           companyId: caller.companyId,
           mode: 'implement',
           orderIndex: i,
+          shortcode: buildAssignmentShortcode(
+            task.shortcode,
+            'implement',
+            i + 1,
+          ),
           prompt: a.prompt,
           roleId: roleIds[i],
           status: 'ready',
@@ -378,8 +385,7 @@ export class AssignmentService {
       `Plan created: ${assignments.length} assignment(s).`,
     );
 
-    const task = await this.taskRepo.findOneBy({ id: taskId });
-    if (task) await this.dispatcher.taskPlanned(task);
+    await this.dispatcher.taskPlanned(task);
     this.logger.log(
       `Task ${taskId} planned by agent ${agentId}: ${assignments.length} assignment(s)`,
     );

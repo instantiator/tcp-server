@@ -133,7 +133,12 @@ describe('AssignmentService', () => {
     status: LcpTask['status'] = 'planning',
   ): Promise<LcpTask> {
     return taskRepo.save(
-      taskRepo.create({ companyId, request: 'do it', status }),
+      taskRepo.create({
+        companyId,
+        request: 'do it',
+        shortcode: '000',
+        status,
+      }),
     );
   }
   async function seedAssignment(
@@ -661,6 +666,7 @@ describe('AssignmentService', () => {
           taskRepo.create({
             companyId: company.id,
             request: 'do it',
+            shortcode: '000',
             status: 'finalising',
             expected: [{ type: 'task-completed-path', value: 'report.txt' }],
           }),

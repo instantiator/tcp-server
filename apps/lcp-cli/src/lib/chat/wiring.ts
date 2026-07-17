@@ -67,7 +67,7 @@ export async function runTuiInteractive(
 
   tui.onSelectRole((role) => {
     void session
-      .startAgentPane(role.id, role.name, true)
+      .startAssignmentPane(role.id, role.slug, role.name, true)
       .then((id) => tui.switchToPane(id))
       .catch((err) => session.reportPaneError(session.companyId, err));
   });
@@ -85,7 +85,7 @@ export async function runTuiInteractive(
       .then(({ task: detail, assignments }) => {
         tui.addTaskPane({
           id: detail.id,
-          label: detail.request,
+          label: `Task: ${detail.shortcode}`,
           prompt: detail.request,
           status: detail.status,
           assignments,
@@ -117,7 +117,7 @@ export async function runTuiInteractive(
       .then(({ task, assignments }) => {
         tui.replaceWithTaskPane(paneId, {
           id: task.id,
-          label: task.request,
+          label: `Task: ${task.shortcode}`,
           prompt: task.request,
           status: task.status,
           assignments,

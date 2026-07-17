@@ -1,6 +1,7 @@
 import {
   AuditEvent,
   buildTaskChangeSummary,
+  formatShortcodeIndex,
   LcpAssignment,
   LcpCompany,
   LcpRole,
@@ -16,7 +17,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
-import { In, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
 import { taskMaterialsKey } from '../storage/storage-keys';
 import { StorageService } from '../storage/storage.service';
@@ -51,6 +52,7 @@ export class TaskService {
     private readonly storage: StorageService,
     private readonly dispatcher: TaskDispatcher,
     private readonly audit: AuditService,
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
@@ -68,6 +70,7 @@ export class TaskService {
 
     const task = this.taskRepo.create({
       companyId: company.id,
+      shortcode: await this.nextTaskShortcode(company.id),
       request: dto.request,
       plannerRoleId: dto.plannerRoleId ?? null,
       materials: dto.materials ?? [],
@@ -104,6 +107,37 @@ export class TaskService {
       ...(dto.expected !== undefined && { expected: dto.expected }),
     });
     return this.getTaskOrThrow(taskId);
+  }
+
+  /**
+   * Atomically increments `company.nextTaskShortcodeIndex` and formats the
+   * pre-increment value as the new task's shortcode — mirrors
+   * `ConversationService.create`'s `queryIndex` increment (`UPDATE …
+   * RETURNING` on PostgreSQL; a non-atomic read/update fallback for SQLite,
+   * used only by e2e tests without a real PostgreSQL instance).
+   */
+  private async nextTaskShortcode(companyId: UUID): Promise<string> {
+    let index = 0;
+    if (this.dataSource.options.type === 'postgres') {
+      // A non-SELECT query on the postgres driver resolves to
+      // [rows, affectedRowCount], not just the rows — indexing straight into
+      // the top-level result (as if it were `rows[0]`) silently reads past
+      // the row array and always misses.
+      const [rows] = await this.dataSource.query<
+        [{ nextTaskShortcodeIndex: number }[], number]
+      >(
+        `UPDATE lcp_company SET "nextTaskShortcodeIndex" = "nextTaskShortcodeIndex" + 1 WHERE id = $1 RETURNING "nextTaskShortcodeIndex"`,
+        [companyId],
+      );
+      index = (rows[0]?.nextTaskShortcodeIndex ?? 1) - 1;
+    } else {
+      const company = await this.companyRepo.findOneBy({ id: companyId });
+      index = company?.nextTaskShortcodeIndex ?? 0;
+      await this.companyRepo.update(companyId, {
+        nextTaskShortcodeIndex: index + 1,
+      });
+    }
+    return formatShortcodeIndex(index);
   }
 
   /** @throws {@link NotFoundException} when `roleId` does not belong to `companyId`. */

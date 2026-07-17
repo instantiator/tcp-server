@@ -67,6 +67,20 @@ declare module 'terminal-kit' {
      * this relative to its own resize handling — see its constructor.
      */
     onEventSourceResize(this: void, width: number, height: number): void;
+    /**
+     * Container.prototype.resize (inherited) — resizes the Document's own
+     * internal compositing ScreenBuffer only (see the module note above); it
+     * does not draw and does not touch any child's own outputWidth/
+     * outputHeight/position. tui.ts calls this directly, ahead of its own
+     * refresh()/layout(), so every widget is repositioned for the new size
+     * before the buffer they draw into is ever drawn.
+     */
+    resize(options: {
+      x?: number;
+      y?: number;
+      width: number;
+      height: number;
+    }): void;
   }
 
   export interface TextBoxOptions extends ElementOptions {

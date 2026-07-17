@@ -139,8 +139,9 @@ export async function chatAction(
       // stays open after the query's answer arrives (see runOneShotQuery),
       // so the root pane needs its input box from the start, not just
       // after the first turn finishes.
-      rootAgentId = await session.startAgentPane(
+      rootAgentId = await session.startAssignmentPane(
         context.roleId,
+        context.roleSlug ?? context.roleId,
         context.roleName,
         true,
       );

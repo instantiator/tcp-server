@@ -347,7 +347,11 @@ describe('LcpTask entity', () => {
   it('creates a task with default status ready and empty array defaults', async () => {
     const company = await seedCompany();
     const task = await tasks.save(
-      tasks.create({ companyId: company.id, request: 'Write a report' }),
+      tasks.create({
+        companyId: company.id,
+        request: 'Write a report',
+        shortcode: '000',
+      }),
     );
     const found = await tasks.findOneByOrFail({ id: task.id });
     expect(found.status).toBe('ready');
@@ -363,6 +367,7 @@ describe('LcpTask entity', () => {
       tasks.create({
         companyId: company.id,
         request: 'Write a report',
+        shortcode: '000',
         materials: [{ type: 'inline-text', value: 'context notes' }],
         expected: [{ type: 'task-completed-path', value: 'report.md' }],
       }),
@@ -383,6 +388,7 @@ describe('LcpTask entity', () => {
       tasks.create({
         companyId: company.id,
         request: 'Write a report',
+        shortcode: '000',
         plannerRoleId: role.id,
       }),
     );
@@ -419,7 +425,11 @@ describe('LcpAssignment entity', () => {
     const company = await seedCompany();
     const role = await seedRole(company.id);
     const task = await tasks.save(
-      tasks.create({ companyId: company.id, request: 'Write a report' }),
+      tasks.create({
+        companyId: company.id,
+        request: 'Write a report',
+        shortcode: '000',
+      }),
     );
     const assignment = await assignments.save(
       assignments.create({
@@ -440,7 +450,11 @@ describe('LcpAssignment entity', () => {
     const company = await seedCompany();
     const role = await seedRole(company.id);
     const task = await tasks.save(
-      tasks.create({ companyId: company.id, request: 'Write a report' }),
+      tasks.create({
+        companyId: company.id,
+        request: 'Write a report',
+        shortcode: '000',
+      }),
     );
     const target = await assignments.save(
       assignments.create({
@@ -497,7 +511,11 @@ describe('LcpAssignment entity', () => {
     const company = await seedCompany();
     const role = await seedRole(company.id);
     const task = await tasks.save(
-      tasks.create({ companyId: company.id, request: 'Write a report' }),
+      tasks.create({
+        companyId: company.id,
+        request: 'Write a report',
+        shortcode: '000',
+      }),
     );
     const assignment = await assignments.save(
       assignments.create({

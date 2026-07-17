@@ -160,6 +160,7 @@ describe('TaskOrchestrationService', () => {
       taskRepo.create({
         companyId,
         request: 'do it',
+        shortcode: '000',
         status: 'planning',
         materials: [],
         expected: [],

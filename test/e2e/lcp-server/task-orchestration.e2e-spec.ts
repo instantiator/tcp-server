@@ -187,8 +187,13 @@ describe('Task orchestration lifecycle (e2e)', () => {
 
   it('runs the full lifecycle to a succeeded task with promoted files', async () => {
     const taskId = await createAndStart();
+    const shortcode = (await taskRepo.findOneByOrFail({ id: taskId }))
+      .shortcode;
     expect((await taskRepo.findOneByOrFail({ id: taskId })).status).toBe(
       'planning',
+    );
+    expect((await planAssignment(taskId)).shortcode).toBe(
+      `${shortcode}-000-plan`,
     );
 
     await submitPlan(taskId, 2);
@@ -197,10 +202,19 @@ describe('Task orchestration lifecycle (e2e)', () => {
       'in-progress',
     );
     expect((await step(taskId, 0)).status).toBe('in-progress');
+    expect((await step(taskId, 0)).shortcode).toBe(
+      `${shortcode}-001-implement`,
+    );
+    expect((await step(taskId, 1)).shortcode).toBe(
+      `${shortcode}-002-implement`,
+    );
 
     // Step 0: complete → in-qa → accept → succeeded, step 1 dispatched.
     const s0 = await completeStep(taskId, 0);
     expect((await step(taskId, 0)).status).toBe('in-qa');
+    expect((await qaAssignment(s0.assignmentId)).shortcode).toBe(
+      `${shortcode}-001-qa`,
+    );
     await assure(s0.assignmentId, 'accept');
     expect((await step(taskId, 0)).status).toBe('succeeded');
     expect((await step(taskId, 1)).status).toBe('in-progress');
@@ -271,6 +285,8 @@ describe('Task orchestration lifecycle (e2e)', () => {
       mode: 'finalise',
     });
     expect(finalise.status).toBe('in-progress');
+    // One implement step (plan index 1) → finalise takes the next index.
+    expect(finalise.shortcode).toBe(`${task.shortcode}-002-finalise`);
 
     // Drive the finalise agent's completion: out.md is present in completed/,
     // so the finalise gate passes and the task succeeds.
