@@ -114,7 +114,10 @@ describe('createRenderer', () => {
   });
 
   it('wraps a long discrete line to the terminal width instead of printing it unwrapped', () => {
-    const { renderer, errText } = setup();
+    // A fixed width, not the real process.stdout.columns — otherwise this
+    // test's outcome depends on the terminal the test happens to run in.
+    const width = 40;
+    const { renderer, errText } = setup({ width });
     const longStatus = Array.from({ length: 20 }, (_, i) => `word${i}`).join(
       ' ',
     );
@@ -125,7 +128,7 @@ describe('createRenderer', () => {
       // Strip ANSI colour codes before measuring visible width.
       // eslint-disable-next-line no-control-regex
       expect(line.replace(/\x1b\[[0-9;]*m/g, '').length).toBeLessThanOrEqual(
-        process.stdout.columns ?? 80,
+        width,
       );
     }
   });

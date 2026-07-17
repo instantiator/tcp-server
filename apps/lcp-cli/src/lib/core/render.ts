@@ -28,6 +28,8 @@ export interface RenderOptions {
   out: NodeJS.WritableStream;
   /** Stream for observability lines (state, reasoning, LLM activity). */
   err: NodeJS.WritableStream;
+  /** Wrap width for discrete lines. Defaults to `process.stdout.columns ?? 80`. */
+  width?: number;
 }
 
 export interface Renderer {
@@ -86,7 +88,7 @@ export function createRenderer(opts: RenderOptions): Renderer {
   ): void {
     closeBlock();
     if (hasOutput) stream.write('\n');
-    const width = process.stdout.columns ?? 80;
+    const width = opts.width ?? process.stdout.columns ?? 80;
     for (const line of wrapText(`${label}${text}`, width)) {
       stream.write(`${color}${line}${RESET}\n`);
     }
