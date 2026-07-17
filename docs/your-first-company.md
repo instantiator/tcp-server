@@ -254,32 +254,24 @@ The `chat` verb has several options:
 
 ### 2.2 Interactive mode (TUI)
 
-TUI mode is the easiest way to manually interact with agents.
+TUI mode is the easiest way to manually interact with the company and roles.
 
-Provide a role (`--role-id`, or `--role-slug` alongside `--company-slug`/`--company-id`) if you know which one you wish to talk to. Otherwise, provide a company (`--company-slug` or `--company-id`). In each case, your company tab provides a list of roles, and you can initiate a new agent for any role and talk to it.
-
-`--query` works here too: it's submitted automatically as the agent's first message, but the session stays open afterwards - the TUI doesn't exit once the answer arrives, so you can keep chatting. (Combine `--query` with `--no-tui` instead if you want a true one-shot: see 1.6.2.)
-
-In the example below, the TUI is launched with a company slug.
+In the example below, the TUI is launched with a company slug. This could have been provided with `--company` or `--company-slug` (to be explicit).
 
 ```bash
-./lcp-cli.sh --username test --password test chat --company-slug test-company
+./lcp-cli.sh --username test --password test tui --company test-company
 ```
 
 > [!TIP]
-> Type `quit` or `exit`, or press Ctrl+C at the prompt, to leave interactive mode.
+> Use `tab` and `shift`+`tab` to switch between tabs. Other keyboard shortcuts are described at the bottom of the interface.
 
-> [!TIP]
-> Use `tab` and `shift`+`tab` to switch between tabs.
+See [lcp-cli.md](lcp-cli.md#chat) for a full description of the TUI.
 
-> [!NOTE]
-> See [lcp-cli.md](lcp-cli.md#chat) for a full description of the TUI.
-
-| Screenshot                                                                                            | Description                                                                                                                |
-| ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| ![All roles in the test company](./screenshots/001.chat.tui.test-company.png)                         | The first tab shows the company, and lists all roles available. Use ⬆️ / ⬇️ / `enter` to select a role to talk to.         |
-| ![Asking a question of the chicken assistant](./screenshots/002.chat.tui.chicken-assistant-input.png) | Each new agent is given a tab. Switch between tabs with `tab`. Type your question or prompt for the agent and press enter. |
-| ![Chicken assistant response](./screenshots/003.chat.tui.chicken-assistant-response.png)              | The agent will respond to your request. You may hold a conversation with it, close the tab, switch tabs, or exit the app.  |
+| Screenshot                                                                                            | Description                                                                                                                                     |
+| ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| ![All roles in the test company](./screenshots/001.chat.tui.test-company.png)                         | The first tab shows the company, and lists all roles available. Use ⬆️ / ⬇️ / `enter` to select a role to talk to.                              |
+| ![Asking a question of the chicken assistant](./screenshots/002.chat.tui.chicken-assistant-input.png) | Each new agent is given an assignment on a new tab. Switch between tabs with `tab`. Type your question or prompt for the agent and press enter. |
+| ![Chicken assistant response](./screenshots/003.chat.tui.chicken-assistant-response.png)              | The agent will respond to your request. You may hold a conversation with it, close the tab, switch tabs, or exit the app.                       |
 
 ### 2.3 Non-TUI mode
 

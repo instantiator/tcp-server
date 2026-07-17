@@ -276,6 +276,17 @@ export class Tui {
       outputDst: opts.outputDst ?? this.term,
       eventSource: this.term,
     });
+    // Document's own constructor just grabbed input in 'motion' mouse mode
+    // (unconditionally, with no option to opt out — see terminal-kit's
+    // Container.js) — the terminal streams a mouse-report escape sequence on
+    // every pixel of cursor movement, not just clicks. Nothing here uses
+    // hover/drag; downgrading to 'button' (press/release only, still enough
+    // for click-to-focus and click-to-position-cursor in the input) cuts
+    // that traffic, which on some terminals/multiplexers has been observed
+    // to interleave with and corrupt a keypress sent shortly after a new
+    // pane's input gains focus (a real keystroke silently swallowed once,
+    // recovering after any subsequent mouse click resets the parser).
+    this.term.grabInput({ mouse: 'button' });
     // The Document's own Tab binding cycles focus across every element (tab
     // bar and hidden panes included) — disable it; Tab is a pane switch here.
     this.document.keyBindings = {};

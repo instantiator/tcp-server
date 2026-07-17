@@ -384,6 +384,31 @@ describe('Tui input box', () => {
     expect(text()).toContain('> hi there');
   });
 
+  it('focuses the input immediately when a talkable pane is added while another pane is active, then switched to (the roster "initiate chat" flow)', () => {
+    // Regression coverage for the roster's real onSelectRole flow: the
+    // roster is active when addPane() creates the new (not-yet-active)
+    // talkable pane, and switchToPane() only follows afterwards (once the
+    // pane's backing agent/assignment fetch resolves) — a gap where a
+    // still-old `this.input` reference or a missed giveFocusTo() could
+    // silently leave the roster (or nothing) focused instead.
+    const { tui, type, pressKey } = makeTui();
+    tui.addRosterPane({
+      id: 'acme',
+      label: 'Acme',
+      slug: 'acme-corp',
+      roles: [{ id: 'r1', name: 'Chicken assistant' }],
+    });
+    tui.addPane({ id: 'agent-1', label: 'Chicken assistant', talkable: true });
+    tui.switchToPane('agent-1');
+
+    const onSubmit = jest.fn();
+    tui.onSubmit(onSubmit);
+    type('Tell me about yourself.');
+    pressKey('ENTER');
+
+    expect(onSubmit).toHaveBeenCalledWith('Tell me about yourself.', 'agent-1');
+  });
+
   it('submits on Enter with the trimmed value and clears the input', () => {
     const { tui, text, type, pressKey } = makeTui();
     tui.addPane({ id: 'root', label: 'Cat', talkable: true });
