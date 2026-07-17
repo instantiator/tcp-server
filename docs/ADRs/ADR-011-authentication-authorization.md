@@ -38,6 +38,8 @@ A user can hold multiple permissions. Company creation grants the creator all pe
 
 The default IdP is **Keycloak**, provided as an optional Docker Compose service (`--profile auth`). Any OIDC-compliant IdP (Auth0, Okta, Azure AD, etc.) can be used by setting `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, and `OIDC_CLIENT_SECRET`.
 
+> This sub-decision is superseded by [ADR-017](ADR-017-oidc-provider-selection.md): the default IdP is changing from Keycloak to Zitadel. See that ADR and `docs/prompts/010.4.1` for the rationale and migration plan; the rest of this ADR (permission model, company-permissions design) is unaffected.
+
 lcp-server validates incoming requests by:
 
 1. Extracting the Bearer token from the `Authorization` header
