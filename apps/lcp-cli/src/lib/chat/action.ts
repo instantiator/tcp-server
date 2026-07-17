@@ -1,6 +1,10 @@
 import { EntityRefOpts } from '../core/entity-ref';
 import { GlobalOptions } from '../core/cli-options';
-import { resolveTaskListEntryMaxLines, Tui } from '../tui/tui';
+import {
+  installCrashSafetyNet,
+  resolveTaskListEntryMaxLines,
+  Tui,
+} from '../tui/tui';
 import { shouldUseTui, validateChatFlags } from './flags';
 import { ChatContext, resolveChatContext } from './context';
 import { ChatSession } from './session';
@@ -152,15 +156,20 @@ export async function chatAction(
     process.exit(1);
   }
 
-  if (cmdOpts.query) {
-    await runOneShotQuery(session, tui, rootAgentId!, cmdOpts.query);
-    return;
+  const uninstallCrashSafetyNet = tui ? installCrashSafetyNet(tui) : null;
+  try {
+    if (cmdOpts.query) {
+      await runOneShotQuery(session, tui, rootAgentId!, cmdOpts.query);
+      return;
+    }
+    if (tui) {
+      await runTuiInteractive(session, tui);
+      return;
+    }
+    await runReadlineInteractive(session, rootAgentId!);
+  } finally {
+    uninstallCrashSafetyNet?.();
   }
-  if (tui) {
-    await runTuiInteractive(session, tui);
-    return;
-  }
-  await runReadlineInteractive(session, rootAgentId!);
 }
 
 /**
@@ -204,5 +213,10 @@ export async function tuiAction(
     return;
   }
 
-  await runTuiInteractive(session, tui);
+  const uninstallCrashSafetyNet = installCrashSafetyNet(tui);
+  try {
+    await runTuiInteractive(session, tui);
+  } finally {
+    uninstallCrashSafetyNet();
+  }
 }

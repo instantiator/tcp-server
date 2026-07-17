@@ -1,12 +1,24 @@
 import { apiRequest } from '../core/api';
-import { resolveToken } from '../auth/token';
+import { resolveSession } from '../auth/token';
 import { eavesdropAction } from './eavesdrop.action';
 
 jest.mock('../core/api');
-jest.mock('../auth/token');
+// TokenManager is a thin, already-unit-tested wrapper (see token.spec.ts) —
+// stubbed here to a minimal stand-in so these tests only need to steer
+// resolveSession, not chase 401-retry/refresh-timer behaviour that isn't
+// what this file is about.
+jest.mock('../auth/token', () => ({
+  resolveSession: jest.fn(),
+  TokenManager: jest
+    .fn()
+    .mockImplementation((_baseUrl: string, tokens: { token: string }) => ({
+      current: tokens.token,
+      stop: jest.fn(),
+    })),
+}));
 
 const mockedApiRequest = apiRequest as jest.Mock;
-const mockedResolveToken = resolveToken as jest.Mock;
+const mockedResolveSession = resolveSession as jest.Mock;
 
 const opts = { lcpServer: 'http://localhost:3000' };
 
@@ -53,7 +65,7 @@ describe('eavesdropAction', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockedResolveToken.mockResolvedValue('token');
+    mockedResolveSession.mockResolvedValue({ token: 'token' });
     exitSpy = jest
       .spyOn(process, 'exit')
       .mockImplementation(() => undefined as never);

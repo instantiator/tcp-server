@@ -265,6 +265,59 @@ describe('TaskOrchestrationService', () => {
     });
   });
 
+  // --- assignmentReadyForQa --------------------------------------------------
+
+  describe('assignmentReadyForQa', () => {
+    it('resolves a path-type prepared artifact to its storage key in the QA prompt', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id);
+      const assignment = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        orderIndex: 0,
+        prepared: [{ type: 'assignment-working-path', value: 'guide.md' }],
+      });
+
+      await service.assignmentReadyForQa(assignment);
+
+      const qa = await assignmentRepo.findOneBy({
+        targetAssignmentId: assignment.id,
+        mode: 'qa',
+      });
+      expect(qa).not.toBeNull();
+      // Not the bare `{type}: {value}` label the model used to (wrongly)
+      // treat as a path — the actual, resolvable object key read_file needs.
+      expect(qa!.prompt).toContain(
+        `${company.slug}/tasks/${task.id}/assignments/0/working/guide.md`,
+      );
+      expect(agents.dispatchStartJob).toHaveBeenCalledTimes(1);
+    });
+
+    it('is idempotent — a second call while a QA assignment is live creates no duplicate', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id);
+      const assignment = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        orderIndex: 0,
+        prepared: [{ type: 'inline-text', value: 'done' }],
+      });
+
+      await service.assignmentReadyForQa(assignment);
+      await service.assignmentReadyForQa(assignment);
+
+      const qas = await assignmentRepo.findBy({
+        targetAssignmentId: assignment.id,
+        mode: 'qa',
+      });
+      expect(qas).toHaveLength(1);
+    });
+  });
+
   // --- taskPlanned / dispatchAssignment -------------------------------------
 
   describe('taskPlanned', () => {

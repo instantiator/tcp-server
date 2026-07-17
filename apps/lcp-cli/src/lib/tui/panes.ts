@@ -222,12 +222,17 @@ export class RosterPane extends Pane {
   }
 
   private rebuildLists(): void {
+    // String(...): a task's `updatedAt` is typed as a string, but that's not
+    // runtime-enforced end to end — a mismatched value here must not crash
+    // the whole TUI over a display-ordering comparator.
+    const byRecency = (a: TaskChangeSummary, b: TaskChangeSummary): number =>
+      String(b.updatedAt).localeCompare(String(a.updatedAt));
     const active = this.tasks
       .filter((t) => ACTIVE_TASK_STATUSES.has(t.status))
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+      .sort(byRecency);
     const done = this.tasks
       .filter((t) => !ACTIVE_TASK_STATUSES.has(t.status))
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+      .sort(byRecency);
     const taskEntry = (t: TaskChangeSummary) =>
       makeTaskEntry(t, this.taskListEntryMaxLines);
 

@@ -1,12 +1,11 @@
 import type { LcpAssignment, LcpTask, TaskChangeSummary } from '@lcp/shared';
 import type { UUID } from 'crypto';
-import { apiOptions, GlobalOptions } from '../core/cli-options';
-import { apiRequest, ApiOptions } from '../core/api';
+import { GlobalOptions } from '../core/cli-options';
 import {
   AuditRow,
   mapAuditHistoryToEvents,
 } from '../core/audit-to-agent-events';
-import { renewToken } from '../auth/token';
+import { TokenManager, TokenSession } from '../auth/token';
 import { createRenderer, Renderer } from '../core/render';
 import { parseSseBuffer, SseEvent } from '../core/sse';
 import { readSseStream } from '../core/sse-reader';
@@ -82,9 +81,9 @@ function delay(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 /**
- * Owns one chat session's mutable state — the resolved token (renewed on
- * 401), every agent created (for cleanup), and each pane's in-flight turn —
- * and the operations that act on it: starting agent panes, running a turn
+ * Owns one chat session's mutable state — its {@link TokenManager}, every
+ * agent created (for cleanup), and each pane's in-flight turn — and the
+ * operations that act on it: starting agent panes, running a turn
  * (post message → stream its events → resolve the outcome), and cleanup.
  *
  * Kept as a class (rather than closures, as before this file was split out)
@@ -95,8 +94,9 @@ export class ChatSession {
   private readonly agentIds = new Set<string>();
   /** In-flight turns keyed by pane (== agent) id; empty when idle. */
   private readonly abortControllers = new Map<string, AbortController>();
-  private token: string;
-  private readonly refreshToken?: string;
+  /** Owns the session's access token, refreshing it in the background so a
+   * long-running TUI/chat session doesn't hit a stale-token 401. */
+  private readonly tokenManager: TokenManager;
   /** The company's tasks, keyed by id — kept live by {@link watchCompanyEvents}. */
   private readonly tasksById = new Map<string, TaskChangeSummary>();
   private companyEventsAbort: AbortController | null = null;
@@ -110,14 +110,9 @@ export class ChatSession {
     readonly companyId: string,
     private readonly hideReasoning: boolean,
     private readonly tui: Tui | null,
-    tokens: { token: string; refreshToken?: string },
+    tokens: TokenSession,
   ) {
-    this.token = tokens.token;
-    this.refreshToken = tokens.refreshToken;
-  }
-
-  private apiOpts(signal?: AbortSignal): ApiOptions {
-    return apiOptions(this.opts, this.token, signal);
+    this.tokenManager = new TokenManager(this.opts.lcpServer, tokens);
   }
 
   /** Whether any pane has a turn in flight. */
@@ -142,8 +137,7 @@ export class ChatSession {
    * yet, so name is the best available stable sort key for now.
    */
   async fetchRoles(): Promise<RoleOption[]> {
-    const roles = await apiRequest<RoleOption[]>(
-      this.apiOpts(),
+    const roles = await this.tokenManager.request<RoleOption[]>(
       'GET',
       `/api/company/${this.companyId}/roles`,
     );
@@ -157,8 +151,7 @@ export class ChatSession {
    * the company SSE stream's priming `task_changed` events.
    */
   async fetchTasks(): Promise<TaskChangeSummary[]> {
-    const tasks = await apiRequest<TaskRecord[]>(
-      this.apiOpts(),
+    const tasks = await this.tokenManager.request<TaskRecord[]>(
       'GET',
       `/api/task?companyId=${this.companyId}`,
     );
@@ -167,8 +160,11 @@ export class ChatSession {
         id: task.id as UUID,
         status: task.status as TaskChangeSummary['status'],
         request: task.request,
-        createdAt: task.createdAt,
-        updatedAt: task.updatedAt,
+        // Same discipline as parseTaskChangeSummary below: don't trust the
+        // wire shape blindly — a non-string date field must not reach
+        // RosterPane's `.localeCompare` sort and crash the TUI.
+        createdAt: typeof task.createdAt === 'string' ? task.createdAt : '',
+        updatedAt: typeof task.updatedAt === 'string' ? task.updatedAt : '',
         completedSteps: 0,
         totalSteps: 0,
       });
@@ -187,7 +183,7 @@ export class ChatSession {
     const url = `${this.opts.lcpServer.replace(/\/$/, '')}/api/company/${this.companyId}/events`;
     void readSseStream(
       url,
-      this.token,
+      this.tokenManager.current,
       this.companyEventsAbort.signal,
       (event) => {
         if (event.kind !== 'task_changed') return;
@@ -228,13 +224,11 @@ export class ChatSession {
     taskId: string,
   ): Promise<{ task: LcpTask; assignments: AssignmentInfo[] }> {
     const [{ task, assignments }, roles] = await Promise.all([
-      apiRequest<{ task: LcpTask; assignments: LcpAssignment[] }>(
-        this.apiOpts(),
-        'GET',
-        `/api/task/${taskId}`,
-      ),
-      apiRequest<{ id: string; name: string }[]>(
-        this.apiOpts(),
+      this.tokenManager.request<{
+        task: LcpTask;
+        assignments: LcpAssignment[];
+      }>('GET', `/api/task/${taskId}`),
+      this.tokenManager.request<{ id: string; name: string }[]>(
         'GET',
         `/api/company/${this.companyId}/roles`,
       ),
@@ -254,11 +248,9 @@ export class ChatSession {
 
   /** Fetches the company's default planner role id (`LcpCompany.plannerRoleId`), if it has one. */
   async fetchCompanyDefaultPlannerRoleId(): Promise<string | undefined> {
-    const company = await apiRequest<{ plannerRoleId?: string | null }>(
-      this.apiOpts(),
-      'GET',
-      `/api/company/${this.companyId}`,
-    );
+    const company = await this.tokenManager.request<{
+      plannerRoleId?: string | null;
+    }>('GET', `/api/company/${this.companyId}`);
     return company.plannerRoleId ?? undefined;
   }
 
@@ -274,8 +266,7 @@ export class ChatSession {
       type: 'task-completed-path' as const,
       value: filename,
     }));
-    const created = await apiRequest<LcpTask>(
-      this.apiOpts(),
+    const created = await this.tokenManager.request<LcpTask>(
       'POST',
       '/api/task',
       {
@@ -286,7 +277,7 @@ export class ChatSession {
       },
     );
     if (submission.startImmediately) {
-      await apiRequest(this.apiOpts(), 'POST', `/api/task/${created.id}/start`);
+      await this.tokenManager.request('POST', `/api/task/${created.id}/start`);
     }
     return this.fetchTaskDetail(created.id);
   }
@@ -307,21 +298,26 @@ export class ChatSession {
     const abort = new AbortController();
     this.taskEventsAbort.set(taskId, abort);
     const url = `${this.opts.lcpServer.replace(/\/$/, '')}/api/task/${taskId}/events`;
-    void readSseStream(url, this.token, abort.signal, (event) => {
-      if (event.kind === 'task_changed') {
-        const status = eventStr(event, 'status');
-        if (status) this.tui?.updateTaskPaneStatus(taskId, status);
-        return;
-      }
-      if (event.kind !== 'assignment_changed') return;
-      void this.fetchTaskDetail(taskId)
-        .then(({ assignments }) => {
-          this.tui?.updateTaskPaneAssignments(taskId, assignments);
-        })
-        .catch(() => {
-          // best-effort live refresh — the panel keeps its last-known state
-        });
-    });
+    void readSseStream(
+      url,
+      this.tokenManager.current,
+      abort.signal,
+      (event) => {
+        if (event.kind === 'task_changed') {
+          const status = eventStr(event, 'status');
+          if (status) this.tui?.updateTaskPaneStatus(taskId, status);
+          return;
+        }
+        if (event.kind !== 'assignment_changed') return;
+        void this.fetchTaskDetail(taskId)
+          .then(({ assignments }) => {
+            this.tui?.updateTaskPaneAssignments(taskId, assignments);
+          })
+          .catch(() => {
+            // best-effort live refresh — the panel keeps its last-known state
+          });
+      },
+    );
   }
 
   /** Stops watching a task panel's events (e.g. Ctrl+W closed it). */
@@ -333,7 +329,7 @@ export class ChatSession {
   /** Cancels a task from its task panel (`POST /api/task/:id/cancel`). */
   async cancelTask(taskId: string): Promise<void> {
     try {
-      await apiRequest(this.apiOpts(), 'POST', `/api/task/${taskId}/cancel`);
+      await this.tokenManager.request('POST', `/api/task/${taskId}/cancel`);
     } catch (err) {
       this.reportPaneError(taskId, err);
     }
@@ -342,7 +338,7 @@ export class ChatSession {
   /** Starts a `ready` task from its task panel (`POST /api/task/:id/start`). */
   async startTask(taskId: string): Promise<void> {
     try {
-      await apiRequest(this.apiOpts(), 'POST', `/api/task/${taskId}/start`);
+      await this.tokenManager.request('POST', `/api/task/${taskId}/start`);
     } catch (err) {
       this.reportPaneError(taskId, err);
     }
@@ -359,8 +355,7 @@ export class ChatSession {
     label: string,
     talkable: boolean,
   ): Promise<string> {
-    const agent = await apiRequest<AgentRecord>(
-      this.apiOpts(),
+    const agent = await this.tokenManager.request<AgentRecord>(
       'POST',
       '/api/agent/chat/start',
       { companyId: this.companyId, roleId },
@@ -383,15 +378,13 @@ export class ChatSession {
       this.tui.switchToPane(agentId);
       return;
     }
-    const agent = await apiRequest<AgentRecord>(
-      this.apiOpts(),
+    const agent = await this.tokenManager.request<AgentRecord>(
       'GET',
       `/api/agent/${agentId}`,
     );
     this.tui?.addPane({ id: agentId, label: assignment.role, talkable: false });
     if (TERMINAL_AGENT_STATUSES.has(agent.status)) {
-      const rows = await apiRequest<AuditRow[]>(
-        this.apiOpts(),
+      const rows = await this.tokenManager.request<AuditRow[]>(
         'GET',
         `/api/agent/${agentId}/history`,
       );
@@ -402,9 +395,14 @@ export class ChatSession {
       const abort = new AbortController();
       this.agentPaneWatchAbort.set(agentId, abort);
       const url = `${this.opts.lcpServer.replace(/\/$/, '')}/api/agent/${agentId}/events`;
-      void readSseStream(url, this.token, abort.signal, (event) => {
-        this.tui?.appendEvent(agentId, event);
-      });
+      void readSseStream(
+        url,
+        this.tokenManager.current,
+        abort.signal,
+        (event) => {
+          this.tui?.appendEvent(agentId, event);
+        },
+      );
     }
     this.tui?.switchToPane(agentId);
   }
@@ -421,6 +419,7 @@ export class ChatSession {
       await this.deleteAgent(id);
     }
     this.agentIds.clear();
+    this.tokenManager.stop();
   }
 
   /**
@@ -449,7 +448,7 @@ export class ChatSession {
   /** DELETEs one agent (best-effort — failures are logged, not thrown). */
   private async deleteAgent(id: string): Promise<void> {
     try {
-      await apiRequest(this.apiOpts(), 'DELETE', `/api/agent/${id}`);
+      await this.tokenManager.request('DELETE', `/api/agent/${id}`);
       process.stderr.write(`\nAgent ${id} removed.\n`);
     } catch {
       // best-effort cleanup
@@ -578,7 +577,7 @@ export class ChatSession {
     let outcome: TurnOutcome | undefined;
     try {
       const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${this.token}` },
+        headers: { Authorization: `Bearer ${this.tokenManager.current}` },
         signal,
       });
       onConnected?.();
@@ -653,33 +652,18 @@ export class ChatSession {
     return outcome ?? { error: STREAM_ENDED };
   }
 
-  /** POSTs a message to `paneId`'s agent (expects 202), refreshing the token once on 401. */
+  /** POSTs a message to `paneId`'s agent (expects 202); {@link TokenManager.request} handles a 401 by refreshing and retrying. */
   private async postMessage(
     paneId: string,
     message: string,
     signal: AbortSignal,
   ): Promise<void> {
-    const doPost = () =>
-      apiRequest<{ accepted: boolean }>(
-        this.apiOpts(signal),
-        'POST',
-        `/api/agent/${paneId}/message`,
-        { message },
-      );
-    try {
-      await doPost();
-    } catch (err) {
-      if (
-        err instanceof Error &&
-        err.message.includes('HTTP 401') &&
-        this.refreshToken
-      ) {
-        this.token = await renewToken(this.opts.lcpServer, this.refreshToken);
-        await doPost();
-        return;
-      }
-      throw err;
-    }
+    await this.tokenManager.request<{ accepted: boolean }>(
+      'POST',
+      `/api/agent/${paneId}/message`,
+      { message },
+      signal,
+    );
   }
 
   /**
@@ -695,10 +679,10 @@ export class ChatSession {
       await delay(2000, signal);
       if (signal.aborted) break;
       try {
-        const agent = await apiRequest<{
+        const agent = await this.tokenManager.request<{
           status: string;
           output?: string;
-        }>(this.apiOpts(signal), 'GET', `/api/agent/${id}`);
+        }>('GET', `/api/agent/${id}`, undefined, signal);
         if (agent.status === 'completed' || agent.status === 'idle') {
           return { response: agent.output ?? '' };
         }

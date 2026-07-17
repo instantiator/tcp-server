@@ -14,7 +14,7 @@ import { parseSseBuffer } from '../core/sse';
 import { readSseStream } from '../core/sse-reader';
 import { wrapText } from '../core/text-wrap';
 import { runCommand } from '../core/run-command';
-import { resolveToken } from '../auth/token';
+import { resolveSession, TokenManager } from '../auth/token';
 
 export interface EavesdropCmdOpts {
   agentId?: string;
@@ -252,7 +252,7 @@ async function resolveTarget(
  */
 async function followAgent(
   lcpServer: string,
-  token: string,
+  tokenManager: TokenManager,
   ctx: AgentContext,
   tracker: LogHeadingTracker,
 ): Promise<void> {
@@ -267,8 +267,10 @@ async function followAgent(
     err: process.stderr,
   });
   try {
+    // Read the token at connection time, not when this follower was queued —
+    // a long `--tail` can outlive its original token (see TokenManager).
     const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${tokenManager.current}` },
     });
     if (!res.ok || !res.body) {
       process.stderr.write(
@@ -305,10 +307,14 @@ async function followAgent(
  * falls back to its own `fetchRole` round-trip.
  */
 async function resolveNewAssignmentAgent(
-  api: ApiOptions,
+  lcpServer: string,
+  tokenManager: TokenManager,
   assignmentId: string,
   roleById: Map<string, RoleInfo>,
 ): Promise<AgentContext | undefined> {
+  // Built fresh (not the caller's original ApiOptions) so a token refreshed
+  // since `--tail` started is used for this assignment, discovered mid-tail.
+  const api: ApiOptions = { baseUrl: lcpServer, token: tokenManager.current };
   const assignment = await apiRequest<LcpAssignment>(
     api,
     'GET',
@@ -343,13 +349,12 @@ async function resolveNewAssignmentAgent(
  */
 async function tailTarget(
   opts: GlobalOptions,
-  token: string,
-  api: ApiOptions,
+  tokenManager: TokenManager,
   target: Target,
   tracker: LogHeadingTracker,
 ): Promise<void> {
   const followers: Promise<void>[] = target.agents.map((ctx) =>
-    followAgent(opts.lcpServer, token, ctx, tracker),
+    followAgent(opts.lcpServer, tokenManager, ctx, tracker),
   );
 
   let watchAbort: AbortController | undefined;
@@ -361,7 +366,7 @@ async function tailTarget(
     const taskId = target.taskId;
     watchDone = readSseStream(
       `${opts.lcpServer.replace(/\/$/, '')}/api/task/${taskId}/events`,
-      token,
+      tokenManager.current,
       watchAbort.signal,
       (event) => {
         if (event.kind !== 'assignment_changed') return;
@@ -369,8 +374,15 @@ async function tailTarget(
         if (!assignmentId || known.has(assignmentId)) return;
         known.add(assignmentId);
         followers.push(
-          resolveNewAssignmentAgent(api, assignmentId, roleById).then((ctx) =>
-            ctx ? followAgent(opts.lcpServer, token, ctx, tracker) : undefined,
+          resolveNewAssignmentAgent(
+            opts.lcpServer,
+            tokenManager,
+            assignmentId,
+            roleById,
+          ).then((ctx) =>
+            ctx
+              ? followAgent(opts.lcpServer, tokenManager, ctx, tracker)
+              : undefined,
           ),
         );
       },
@@ -421,8 +433,9 @@ export function eavesdropAction(
       return;
     }
 
-    const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
-    const api = apiOptions(opts, token);
+    const session = await resolveSession({ ...opts, baseUrl: opts.lcpServer });
+    const tokenManager = new TokenManager(opts.lcpServer, session);
+    const api = apiOptions(opts, tokenManager.current);
     const target = await resolveTarget(api, cmdOpts);
     const agentsById = new Map(target.agents.map((a) => [a.agentId, a]));
     const tracker = new LogHeadingTracker();
@@ -445,7 +458,8 @@ export function eavesdropAction(
         process.exit(1);
         return;
       }
-      await tailTarget(opts, token, api, target, tracker);
+      await tailTarget(opts, tokenManager, target, tracker);
     }
+    tokenManager.stop();
   });
 }

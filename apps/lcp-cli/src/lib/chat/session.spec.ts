@@ -93,6 +93,7 @@ describe('ChatSession', () => {
         expect.anything(),
         'GET',
         '/api/company/company-1/roles',
+        undefined,
       );
     });
   });
@@ -207,6 +208,7 @@ describe('ChatSession', () => {
         expect.anything(),
         'POST',
         '/api/task/task-1/start',
+        undefined,
       );
       expect(task.status).toBe('planning');
     });
@@ -262,10 +264,9 @@ describe('ChatSession', () => {
         timestamp: 't',
         data: { id: 'a1', status: 'in-progress' },
       });
-      // fetchTaskDetail's promise chain needs a tick to resolve.
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
+      // fetchTaskDetail's promise chain (now one more hop deeper via
+      // TokenManager.request) needs a full microtask-queue flush to resolve.
+      await new Promise((resolve) => setImmediate(resolve));
 
       expect(tui.updateTaskPaneAssignments).toHaveBeenCalledWith('task-1', [
         {
@@ -303,6 +304,7 @@ describe('ChatSession', () => {
         expect.anything(),
         'POST',
         '/api/task/task-1/cancel',
+        undefined,
       );
     });
 
@@ -316,6 +318,7 @@ describe('ChatSession', () => {
         expect.anything(),
         'POST',
         '/api/task/task-1/start',
+        undefined,
       );
     });
 

@@ -1,5 +1,6 @@
 import {
   AgentStatus,
+  ArtifactResolutionContext,
   assignmentCompletedKey,
   assignmentCompletedPrefix,
   assignmentWorkingKey,
@@ -172,6 +173,19 @@ export class TaskOrchestrationService
     });
     if (live) return;
 
+    const resolutionContext: ArtifactResolutionContext = {
+      companySlug: await this.companySlug(assignment.companyId),
+      task: assignment.taskId ? { id: assignment.taskId } : null,
+      planAssignments: assignment.taskId
+        ? await this.planAssignments(assignment.taskId)
+        : undefined,
+      assignment: {
+        id: assignment.id,
+        taskId: assignment.taskId,
+        orderIndex: assignment.orderIndex,
+      },
+    };
+
     const qa = await this.assignmentRepo.save(
       this.assignmentRepo.create({
         taskId: assignment.taskId,
@@ -180,7 +194,7 @@ export class TaskOrchestrationService
         targetAssignmentId: assignment.id,
         roleId: assignment.roleId,
         status: 'in-progress',
-        prompt: renderQaPresentation(assignment),
+        prompt: renderQaPresentation(assignment, resolutionContext),
         materials: assignment.materials,
         expected: [],
       }),

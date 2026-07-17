@@ -29,6 +29,11 @@ export class MaskSecretsInterceptor implements NestInterceptor {
 
 /** Recursively walks a plain value and replaces any `apiKey` string with `'***'`. */
 function maskApiKeys(value: unknown): unknown {
+  // A Date has no own enumerable properties, so walking it via Object.entries
+  // below would silently collapse it to `{}` — it can't hold an apiKey, so
+  // just pass it through untouched (JSON.stringify still renders it as its
+  // ISO string later).
+  if (value instanceof Date) return value;
   if (Array.isArray(value)) return value.map(maskApiKeys);
   if (value !== null && typeof value === 'object') {
     return Object.fromEntries(
