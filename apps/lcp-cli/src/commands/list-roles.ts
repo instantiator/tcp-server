@@ -1,25 +1,23 @@
 import { Command } from 'commander';
 import { getGlobalOptions } from '../lib/core/cli-options';
+import { addCompanyOptions } from '../lib/core/entity-ref';
 import { listRolesAction } from '../lib/crud/role.action';
 
 /**
  * Lists roles grouped by company.
  *
- * Without --company-id: fetches all companies then their roles (N+1 calls).
- * With --company-id: fetches a single company and its roles.
+ * Without a company flag: fetches all companies then their roles (N+1 calls).
+ * With one: fetches a single company and its roles.
  *
  * stdout: `{ id, slug, name, description, roles: { id, slug, name, description, knowledgeDomains }[] }[]`
  */
 export function registerListRoles(program: Command): void {
-  program
+  const cmd = program
     .command('list-roles')
-    .description('List roles grouped by company')
-    .option('-c, --company-id <uuid>', 'Filter to a single company')
-    .option(
-      '--company-slug <slug>',
-      'Filter to a single company, by slug instead of ID',
-    )
-    .action((cmdOpts: { companyId?: string; companySlug?: string }) =>
+    .description('List roles grouped by company');
+  addCompanyOptions(cmd);
+  cmd.action(
+    (cmdOpts: { company?: string; companyId?: string; companySlug?: string }) =>
       listRolesAction(getGlobalOptions(program), cmdOpts),
-    );
+  );
 }

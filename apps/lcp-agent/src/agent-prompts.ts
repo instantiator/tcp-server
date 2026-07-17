@@ -16,6 +16,8 @@ export interface AgentPrompts {
   services_item_unknown: string;
   /** Reminder when required tool(s) were never invoked; `{{tools}}` is substituted. */
   required_tools_reminder: string;
+  /** Reminder when required tool(s) were never invoked but a `<tool_call>` block was described in text; `{{tools}}` and `{{describedCall}}` are substituted. */
+  required_tools_reminder_with_described_call: string;
   /** Reminder when required tool(s) were invoked but the call failed; `{{tools}}` is substituted. */
   required_tools_call_failed: string;
   /** Heading for the materials list in the assignment-presentation prompt part (part 4). */

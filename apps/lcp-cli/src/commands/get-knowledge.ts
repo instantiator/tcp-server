@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { getGlobalOptions } from '../lib/core/cli-options';
+import { addCompanyOptions, addRoleOptions } from '../lib/core/entity-ref';
 import { getKnowledgeAction } from '../lib/docs/get-knowledge.action';
 
 /**
@@ -7,19 +8,24 @@ import { getKnowledgeAction } from '../lib/docs/get-knowledge.action';
  * shared knowledge.
  */
 export function registerGetKnowledge(program: Command): void {
-  program
+  const cmd = program
     .command('get-knowledge')
     .description(
       'Get a knowledge-base document for a role or company (shared knowledge)',
-    )
-    .option('-r, --role <slug-or-id>', 'Role slug or UUID')
-    .option('-c, --company <slug-or-id>', 'Company slug or UUID')
+    );
+  addRoleOptions(cmd);
+  addCompanyOptions(cmd);
+  cmd
     .requiredOption('-f, --file <filename>', 'Filename to retrieve')
     .option('-o, --out <path>', 'Save to a local file instead of stdout')
     .action(
       (cmdOpts: {
         role?: string;
+        roleId?: string;
+        roleSlug?: string;
         company?: string;
+        companyId?: string;
+        companySlug?: string;
         file: string;
         out?: string;
       }) => getKnowledgeAction(getGlobalOptions(program), cmdOpts),

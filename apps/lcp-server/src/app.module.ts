@@ -50,6 +50,7 @@ import { AddLcpTask1784050000000 } from './migrations/1784050000000-AddLcpTask';
 import { AddLcpAssignment1784050000001 } from './migrations/1784050000001-AddLcpAssignment';
 import { AddCompanyPlannerRole1784050000002 } from './migrations/1784050000002-AddCompanyPlannerRole';
 import { AddAgentAssignment1784050000003 } from './migrations/1784050000003-AddAgentAssignment';
+import { AddAssignmentParentAndAuditAssignmentId1784200000000 } from './migrations/1784200000000-AddAssignmentParentAndAuditAssignmentId';
 import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
 
 /**
@@ -106,6 +107,7 @@ import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
         AddLcpAssignment1784050000001,
         AddCompanyPlannerRole1784050000002,
         AddAgentAssignment1784050000003,
+        AddAssignmentParentAndAuditAssignmentId1784200000000,
       ],
     ),
     ApiModule,

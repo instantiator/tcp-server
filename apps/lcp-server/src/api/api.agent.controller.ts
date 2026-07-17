@@ -1,4 +1,10 @@
-import { AgentEvent, AgentStatus, AuditEventType, LcpAgent } from '@lcp/shared';
+import {
+  AgentEvent,
+  AgentStatus,
+  AuditEvent,
+  AuditEventType,
+  LcpAgent,
+} from '@lcp/shared';
 import {
   BadRequestException,
   Body,
@@ -12,6 +18,7 @@ import {
   NotFoundException,
   Param,
   Post,
+  Query,
   Sse,
   UseGuards,
 } from '@nestjs/common';
@@ -168,6 +175,27 @@ export class AgentController {
     }
   }
 
+  /**
+   * Lists agents filtered by company, role, and/or assignment (at least one
+   * required), and optionally by status. Defaults to currently active agents
+   * (`idle`, `running`, `paused`) when `status` is omitted.
+   */
+  @ApiOperation({ summary: 'List agents' })
+  @Get()
+  async listAgents(
+    @Query('companyId') companyId?: UUID,
+    @Query('roleId') roleId?: UUID,
+    @Query('assignmentId') assignmentId?: UUID,
+    @Query('status') status?: AgentStatus,
+  ): Promise<LcpAgent[]> {
+    if (!companyId && !roleId && !assignmentId) {
+      throw new BadRequestException(
+        'Provide at least one of companyId, roleId, or assignmentId',
+      );
+    }
+    return this.db.listAgents({ companyId, roleId, assignmentId, status });
+  }
+
   /** Retrieves the current state of an agent by its UUID. */
   @ApiOperation({ summary: 'Get an agent by ID' })
   @Get(':id')
@@ -175,6 +203,19 @@ export class AgentController {
     const agent = await this.db.getAgent(id);
     if (!agent) throw new NotFoundException(`Agent ${id} not found`);
     return agent;
+  }
+
+  /**
+   * Retrieves an agent's full audit history, oldest first — every
+   * `llm_request`/`llm_response`/`tool_call`/`tool_result`/`decision`/
+   * `state_change`/`agent_loop_completion` row recorded for it.
+   */
+  @ApiOperation({ summary: "Get an agent's audit history" })
+  @Get(':id/history')
+  async getAgentHistory(@Param('id') id: UUID): Promise<AuditEvent[]> {
+    const agent = await this.db.getAgent(id);
+    if (!agent) throw new NotFoundException(`Agent ${id} not found`);
+    return this.audit.list(agent.companyId, [agent.id]);
   }
 
   @ApiOperation({ summary: 'Delete an agent' })

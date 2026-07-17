@@ -4,6 +4,8 @@ import {
   assignmentCompletedPrefix,
   assignmentWorkingKey,
   AuditEventType,
+  buildAssignmentChangeSummary,
+  buildTaskChangeSummary,
   DEFAULT_TASK_MAX_QA_ATTEMPTS,
   deriveTaskStatus,
   LcpAgent,
@@ -28,6 +30,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import type { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
+import { CompanyEventService } from '../events/company-event.service';
+import { TaskEventService } from '../events/task-event.service';
 import { StorageService } from '../storage/storage.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { claimStatus } from './claim-status';
@@ -74,6 +78,8 @@ export class TaskOrchestrationService
     private readonly storage: StorageService,
     private readonly audit: AuditService,
     private readonly config: ConfigService,
+    private readonly companyEvents: CompanyEventService,
+    private readonly taskEvents: TaskEventService,
   ) {
     super();
   }
@@ -107,6 +113,11 @@ export class TaskOrchestrationService
       mode: 'plan',
     });
     if (existing) return;
+
+    // TaskService.start already claimed ready → planning atomically before
+    // calling here; this is the one place that reaction is recorded/emitted
+    // (guarded by the same idempotency check as the rest of this method).
+    await this.recordTaskState(task, 'planning', 'task started');
 
     const company = await this.companyRepo.findOneByOrFail({
       id: task.companyId,
@@ -299,6 +310,10 @@ export class TaskOrchestrationService
     if (claimed === 0) return;
 
     await this.assignmentRepo.update(target.id, { approved });
+    // The claim above only updated the DB row — reflect it in-memory too, so
+    // recordAssignmentState's audit/SSE payloads report 'succeeded', not the
+    // stale 'in-qa' `target` was loaded with.
+    target.status = 'succeeded';
     await this.recordAssignmentState(
       target,
       'assignment succeeded (QA accepted)',
@@ -336,6 +351,8 @@ export class TaskOrchestrationService
         .execute();
       if ((claimed.affected ?? 0) === 0) return;
 
+      // Reflect the claimed DB update in-memory (see acceptAssignment's note).
+      target.status = 'failed';
       await this.recordAssignmentState(
         target,
         'assignment failed (QA exhausted)',
@@ -365,6 +382,8 @@ export class TaskOrchestrationService
       .execute();
     if ((claimed.affected ?? 0) === 0) return;
 
+    // Reflect the claimed DB update in-memory (see acceptAssignment's note).
+    target.status = 'in-progress';
     await this.recordAssignmentState(
       target,
       'assignment returned to implement (QA rejected)',
@@ -791,6 +810,57 @@ export class TaskOrchestrationService
     });
   }
 
+  /**
+   * Cascades a task cancellation (the task itself was already atomically
+   * moved to `cancelled` by {@link TaskService.cancel}) to its still-live
+   * assignments, then to their working agents — in that order, so an
+   * observer reading state mid-cascade never sees an agent stop before its
+   * assignment (or an assignment stop before the task) reflects it.
+   *
+   * Idempotent per assignment/agent: each uses its own atomic conditional
+   * UPDATE, so re-running (e.g. a duplicate call) only touches rows still in
+   * a non-terminal state.
+   */
+  async cancelTask(task: LcpTask): Promise<void> {
+    const assignments = await this.assignmentRepo.find({
+      where: { taskId: task.id },
+    });
+    const terminalAssignment: LcpAssignmentStatus[] = [
+      'succeeded',
+      'failed',
+      'cancelled',
+    ];
+    for (const assignment of assignments) {
+      if (terminalAssignment.includes(assignment.status)) continue;
+      const claimed = await claimStatus(
+        this.assignmentRepo,
+        assignment.id,
+        assignment.status,
+        'cancelled',
+      );
+      if (claimed === 0) continue;
+      assignment.status = 'cancelled';
+      await this.recordAssignmentState(assignment, 'task cancelled');
+
+      if (assignment.agentId) {
+        await this.agentRepo
+          .createQueryBuilder()
+          .update(LcpAgent)
+          .set({ status: AgentStatus.Cancelled })
+          .where('id = :id', { id: assignment.agentId })
+          .andWhere('status NOT IN (:...terminal)', {
+            terminal: [
+              AgentStatus.Completed,
+              AgentStatus.Failed,
+              AgentStatus.Cancelled,
+            ],
+          })
+          .execute();
+      }
+    }
+    await this.recordTaskState(task, 'cancelled', 'task cancelled');
+  }
+
   /** Fails a task: atomically claims a non-terminal status → `failed`, records the reason. */
   private async failTask(taskId: UUID, reason: string): Promise<void> {
     const claimed = await this.taskRepo
@@ -882,7 +952,13 @@ export class TaskOrchestrationService
     return company.slug;
   }
 
-  /** Records a task {@link AuditEventType.StateChange} event. */
+  /**
+   * Records a task {@link AuditEventType.StateChange} event, and emits its
+   * `task_changed` summary to both the task's own SSE stream and its
+   * company's — this is the single place a task's status change reaches
+   * `GET /api/task/:id/events` and `GET /api/company/:id/events` (see
+   * `docs/prompts/010.3.2` §2).
+   */
   private async recordTaskState(
     task: LcpTask,
     newStatus: LcpTaskStatus,
@@ -895,9 +971,30 @@ export class TaskOrchestrationService
       AuditEventType.StateChange,
       { taskId: task.id, newStatus, reason },
     );
+
+    const plan = await this.planAssignments(task.id);
+    const summary = buildTaskChangeSummary(
+      { ...task, status: newStatus },
+      plan,
+    );
+    const timestamp = new Date().toISOString();
+    this.taskEvents.emit(task.id, {
+      timestamp,
+      kind: 'task_changed',
+      data: summary,
+    });
+    this.companyEvents.emit(task.companyId, {
+      timestamp,
+      kind: 'task_changed',
+      data: summary,
+    });
   }
 
-  /** Records an assignment {@link AuditEventType.StateChange} event. */
+  /**
+   * Records an assignment {@link AuditEventType.StateChange} event, and — for
+   * a task-linked assignment — emits its `assignment_changed` summary to the
+   * task's SSE stream (orphan assignments have no task stream to reach).
+   */
   private async recordAssignmentState(
     assignment: LcpAssignment,
     reason: string,
@@ -916,5 +1013,13 @@ export class TaskOrchestrationService
         ...extra,
       },
     );
+
+    if (assignment.taskId) {
+      this.taskEvents.emit(assignment.taskId, {
+        timestamp: new Date().toISOString(),
+        kind: 'assignment_changed',
+        data: buildAssignmentChangeSummary(assignment),
+      });
+    }
   }
 }

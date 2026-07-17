@@ -156,6 +156,22 @@ export class LcpAssignment extends VersionedEntity {
   targetAssignmentId?: UUID | null;
 
   /**
+   * The assignment whose agent spawned this one (e.g. a consultation). Distinct
+   * from {@link targetAssignment} (what a QA assignment reviews) — this is "who
+   * created me", not "what am I evaluating".
+   */
+  @ManyToOne(() => LcpAssignment, { nullable: true, onDelete: 'SET NULL' })
+  parentAssignment?: LcpAssignment | null;
+
+  /**
+   * Foreign key for {@link parentAssignment}.
+   * @format uuid
+   */
+  @Column({ nullable: true })
+  @Index()
+  parentAssignmentId?: UUID | null;
+
+  /**
    * Materials supplied to the assignment.
    *
    * Uses `simple-json` (stored as TEXT) for cross-DB compatibility with SQLite unit tests.

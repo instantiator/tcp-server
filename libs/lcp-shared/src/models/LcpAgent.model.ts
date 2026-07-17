@@ -29,6 +29,9 @@ export enum AgentStatus {
 
   /** The loop encountered an unrecoverable error or exceeded resource limits. */
   Failed = 'failed',
+
+  /** The agent's task (or assignment) was cancelled; the loop stops on its next status check. */
+  Cancelled = 'cancelled',
 }
 
 /**

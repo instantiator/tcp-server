@@ -1,3 +1,5 @@
+import { extractContentText } from '@lcp/shared';
+
 /** Structured record of storage operations performed during an agent loop run. */
 export interface StorageChanges {
   created: string[];
@@ -14,6 +16,8 @@ export interface AgentLoopTracker {
   storage: StorageChanges;
   /** Base (unprefixed) names of every tool invoked during the run. */
   firedTools: Set<string>;
+  /** The model's most recent turn output text, overwritten on each `on_chat_model_end`. */
+  lastResponseText: string;
 }
 
 /** Creates an empty tracker for a new loop run. */
@@ -22,7 +26,26 @@ export function createTracker(): AgentLoopTracker {
     actions: [],
     storage: { created: [], modified: [], deleted: [], moved: [] },
     firedTools: new Set(),
+    lastResponseText: '',
   };
+}
+
+/** Extracts the plain-text content of a chat model's output message (`.content` as a string or content-block array). */
+export function extractChatModelText(output: unknown): string {
+  if (!output || typeof output !== 'object') return '';
+  return extractContentText((output as Record<string, unknown>)['content']);
+}
+
+/**
+ * Finds the first well-formed `<tool_call>...</tool_call>` block (case-
+ * insensitive tag) in `text` and returns the substring between the tags, or
+ * `null` if no complete pair is found. Some models write out a described tool
+ * call as plain text instead of actually invoking the tool; this is used to
+ * quote that description back to the model rather than a generic reminder.
+ */
+export function detectDescribedToolCall(text: string): string | null {
+  const match = /<tool_call>([\s\S]*?)<\/tool_call>/i.exec(text);
+  return match ? match[1] : null;
 }
 
 /** Strips the MCP server prefix from a tool name (e.g. `storage__append_working_file` → `append_working_file`). */

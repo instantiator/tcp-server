@@ -58,6 +58,15 @@ declare module 'terminal-kit' {
   export class Document extends Element {
     constructor(options?: DocumentOptions);
     giveFocusTo(element: Element): void;
+    /**
+     * terminal-kit's own `eventSource` 'resize' listener — already bound to
+     * the instance in the constructor (`this.onEventSourceResize =
+     * this.onEventSourceResize.bind(this)`), hence `this: void` here: it's
+     * safe to extract and call standalone. Resizes the Document's viewport
+     * to the raw (width, height) and redraws immediately. tui.ts reorders
+     * this relative to its own resize handling — see its constructor.
+     */
+    onEventSourceResize(this: void, width: number, height: number): void;
   }
 
   export interface TextBoxOptions extends ElementOptions {

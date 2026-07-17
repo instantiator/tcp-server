@@ -401,3 +401,52 @@ _2026-07-14._
   artifact-list column's `value`), so every write is sanitised at the DB layer
   with no per-call discipline; `AssignmentService` also strips the `qaFeedback`
   query-builder update path (where transformers don't apply).
+
+## Amendments as implemented (010.3.1)
+
+_2026-07-15._
+
+- **Task cancellation.** `POST /api/task/:id/cancel` (`TaskService.cancel`)
+  atomically claims any non-terminal task status → `cancelled` (409 if
+  already terminal), then calls the new `TaskDispatcher.cancelTask` hook
+  (`TaskOrchestrationService.cancelTask`), which cascades — in order, task →
+  assignments → agents — to every still-non-terminal assignment of the task
+  (`claimStatus` per row → `cancelled`) and each cancelled assignment's
+  working agent (a conditional `UPDATE ... WHERE status NOT IN (completed,
+failed, cancelled)`). Every transition is recorded via the existing
+  `recordTaskState`/`recordAssignmentState` audit hooks, so the cascade shows
+  up in `eavesdrop --show-history`/`--tail` like any other state change.
+- **New `AgentStatus.Cancelled`.** The lcp-agent loop's `checkTerminalStatus`
+  hook (`agent-loop.service.ts`) now also treats `Cancelled` as terminal: a
+  running agent notices on its next status poll (the same DB-read-per-loop-
+  iteration mechanism `Paused`/`Completed` already use) and stops cleanly —
+  no output write, no `notifyComplete`/`notifyFailed`. `// ponytail:` this
+  rides the existing poll rather than a new cross-process abort signal into
+  `AgentRegistryService`'s `AbortController`; the upgrade path if
+  near-instant interruption is ever needed is to wire a Redis-published abort
+  into that registry instead of waiting for the next poll.
+- **CLI**: `cancel-task --task-id <uuid>`.
+
+## Amendments as implemented (010.3.2)
+
+_2026-07-16._
+
+- **`LcpAssignment.parentAssignmentId`.** A nullable, indexed self-FK
+  (`ON DELETE SET NULL`) distinct from the existing `targetAssignmentId`
+  (what a QA assignment reviews) — this records which assignment's agent
+  spawned this one. Only `DbService.createAgent`'s orphan-assignment branch
+  needs it: when a caller supplies `LcpAgentTemplate.parentAssignmentId` (and
+  no `assignmentId`), the new orphan assignment inherits the parent
+  assignment's `taskId` directly and records `parentAssignmentId`, instead of
+  the previous hardcoded `taskId: null`. `PauseAndResumeService.pauseForConsultation`
+  is the one call site that needed it — it passes the calling agent's own
+  `assignmentId` as the new consultee assignment's `parentAssignmentId`. QA
+  and finalise assignments were never affected (they already set `taskId`
+  directly at creation); the standalone `chat` command and planner dispatch
+  stay parentless/taskless by omitting `parentAssignmentId`.
+- This closes the `eavesdrop --task-id` gap noted in 010.3.1: a consultation
+  spawned mid-task now appears in `GET /api/task/:id/history` and the task's
+  assignment list without any change to the query shape, because the
+  inheritance happens once, at creation, not per-query. See
+  [ADR-008's 010.3.2 amendment](./ADR-008-audit-logging.md) for the paired
+  `AuditEvent.assignmentId` denormalization.

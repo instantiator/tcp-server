@@ -1,11 +1,39 @@
+import type { TaskChangeSummary } from '@lcp/shared';
 import {
+  AssignmentRow,
+  dateTimeSeconds,
   escapeMarkup,
+  formatTaskState,
+  makeAssignmentEntry,
+  makeRoleEntry,
+  makeTaskEntry,
   PaneEntryLog,
+  renderAssignmentListEntry,
+  renderMultiListPanel,
   renderPaneHeading,
-  renderRoleList,
-  renderRosterPane,
+  renderRosterHeading,
+  renderTaskListEntry,
+  renderTaskPaneHeading,
+  statusColor,
+  truncateWithEllipsis,
   wrapText,
 } from './tui-format';
+import type { SelectableList } from './tui-state';
+
+function taskSummary(
+  overrides: Partial<TaskChangeSummary> = {},
+): TaskChangeSummary {
+  return {
+    id: 't1',
+    status: 'ready',
+    request: 'Write a short story about a cat.',
+    createdAt: '2026-07-03T10:00:00.000Z',
+    updatedAt: '2026-07-03T10:00:00.000Z',
+    completedSteps: 0,
+    totalSteps: 0,
+    ...overrides,
+  };
+}
 
 describe('escapeMarkup', () => {
   it('doubles a literal caret so terminal-kit displays it as-is', () => {
@@ -243,6 +271,45 @@ describe('PaneEntryLog', () => {
     ]);
   });
 
+  it('renders a user prompt with a distinct indicator/colour and standard spacing', () => {
+    const log = new PaneEntryLog(false);
+    log.append({
+      kind: 'agent_status',
+      timestamp: ts('01'),
+      data: { status: 'running' },
+    });
+    log.pushUserPrompt('hello there');
+    const lines = log.render(80);
+    expect(lines[0]).toBe(`${clock('01')} | agent_status | running`);
+    expect(lines[1]).toBe('');
+    expect(lines[2]).toMatch(/^\^G.* \| you \| hello there\^:$/);
+  });
+
+  it('renders a whitespace-only response as the blank marker', () => {
+    const log = new PaneEntryLog(false);
+    log.append({
+      kind: 'response',
+      timestamp: ts('01'),
+      data: { delta: '   ' },
+    });
+    expect(log.render(80)).toEqual([`${clock('01')} | response | (blank)`]);
+  });
+
+  it('renders agent_loop_completion with a fixed "assignment complete" header, not the payload text', () => {
+    const log = new PaneEntryLog(false);
+    log.append({
+      kind: 'agent_loop_completion',
+      timestamp: ts('01'),
+      data: {
+        summary: 'Task completed.\n\nActions taken (in order):\n- did a thing',
+      },
+    });
+    const lines = log.render(80);
+    expect(lines[0]).toBe(
+      `${clock('01')} | assignment complete | Task completed.`,
+    );
+  });
+
   it('ignores terminal and unknown event kinds', () => {
     const log = new PaneEntryLog(false);
     log.append({
@@ -279,52 +346,263 @@ describe('PaneEntryLog', () => {
   });
 });
 
-describe('renderRoleList', () => {
-  it('marks the selected row with an inverse ">" and leaves the rest unmarked', () => {
-    const roles = [
-      { id: 'r1', name: 'Cat assistant' },
-      { id: 'r2', name: 'Chicken assistant' },
-    ];
-    expect(renderRoleList(roles, 1)).toEqual([
-      '  Cat assistant',
-      '^!>^: Chicken assistant',
-    ]);
-  });
-
-  it('shows a placeholder when the company has no roles', () => {
-    expect(renderRoleList([], 0)).toEqual(['(no roles in this company)']);
-  });
-
-  it('escapes a literal caret in a role name', () => {
-    expect(renderRoleList([{ id: 'r1', name: 'x^2 assistant' }], 0)).toEqual([
-      '^!>^: x^^2 assistant',
-    ]);
-  });
-});
-
-describe('renderRosterPane', () => {
-  it('renders a Slug/Id heading, a prompt, a blank separator, then the role list', () => {
-    const { lines, listStartIndex } = renderRosterPane(
-      'acme-corp',
-      'company-1',
-      [{ id: 'r1', name: 'Cat assistant' }],
-      0,
-    );
-    expect(lines).toEqual([
+describe('renderRosterHeading', () => {
+  it('renders a Slug/Id heading, a prompt, and a blank separator', () => {
+    expect(renderRosterHeading('acme-corp', 'company-1')).toEqual([
       'Slug: acme-corp',
       'Id: company-1',
       '',
       'Please select a role to initiate a chat:',
       '',
-      '^!>^: Cat assistant',
     ]);
-    expect(listStartIndex).toBe(5);
   });
 
   it('escapes a literal caret in the company slug/id', () => {
-    const { lines } = renderRosterPane('a^b', 'c^d', [], 0);
+    const lines = renderRosterHeading('a^b', 'c^d');
     expect(lines[0]).toBe('Slug: a^^b');
     expect(lines[1]).toBe('Id: c^^d');
+  });
+});
+
+describe('makeRoleEntry', () => {
+  it('marks the selected row with an inverse ">" and leaves the rest unmarked', () => {
+    const entry = makeRoleEntry({ id: 'r1', name: 'Cat assistant' });
+    expect(entry.render(80, false)).toEqual(['  Cat assistant']);
+    expect(entry.render(80, true)).toEqual(['^!>^: Cat assistant']);
+  });
+
+  it('escapes a literal caret in a role name', () => {
+    const entry = makeRoleEntry({ id: 'r1', name: 'x^2 assistant' });
+    expect(entry.render(80, true)).toEqual(['^!>^: x^^2 assistant']);
+  });
+});
+
+describe('renderMultiListPanel', () => {
+  it('renders each list title, group titles, and entries, blank-line separated between lists', () => {
+    const lists: SelectableList[] = [
+      {
+        title: 'Roles',
+        groups: [{ entries: [makeRoleEntry({ id: 'r1', name: 'Cat' })] }],
+      },
+      {
+        title: 'Tasks',
+        groups: [
+          { title: 'Active', entries: [makeTaskEntry(taskSummary(), 4)] },
+          { title: 'Completed / failed', entries: [] },
+        ],
+      },
+    ];
+    const { lines } = renderMultiListPanel(lists, undefined, 80);
+    expect(lines).toEqual([
+      '^+Roles^:',
+      '  Cat',
+      '',
+      '^+Tasks^:',
+      'Active',
+      `  ${dateTimeSeconds(taskSummary().createdAt)} (ready) "${taskSummary().request}"`,
+      'Completed / failed',
+      '  (none)',
+    ]);
+  });
+
+  it('reports the selected line index for the caller to scroll into view', () => {
+    const lists: SelectableList[] = [
+      {
+        title: 'Roles',
+        groups: [
+          {
+            entries: [
+              makeRoleEntry({ id: 'r1', name: 'Cat' }),
+              makeRoleEntry({ id: 'r2', name: 'Dog' }),
+            ],
+          },
+        ],
+      },
+    ];
+    const { lines, selectedLine } = renderMultiListPanel(
+      lists,
+      {
+        listIndex: 0,
+        groupIndex: 0,
+        entryIndex: 1,
+        entry: lists[0].groups[0].entries[1],
+      },
+      80,
+    );
+    expect(selectedLine).toBe(2);
+    expect(lines[selectedLine]).toBe('^!>^: Dog');
+  });
+
+  it('returns selectedLine -1 when nothing is selected', () => {
+    const { selectedLine } = renderMultiListPanel([], undefined, 80);
+    expect(selectedLine).toBe(-1);
+  });
+});
+
+describe('dateTimeSeconds', () => {
+  it('formats an ISO timestamp as yyyy-MM-dd HH:mm:ss', () => {
+    expect(dateTimeSeconds('2026-07-03T10:05:09.000Z')).toMatch(
+      /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/,
+    );
+  });
+
+  it('falls back to the raw string for an invalid timestamp', () => {
+    expect(dateTimeSeconds('not-a-date')).toBe('not-a-date');
+  });
+});
+
+describe('truncateWithEllipsis', () => {
+  it('leaves text that already fits unchanged', () => {
+    expect(truncateWithEllipsis('short', 10)).toBe('short');
+  });
+
+  it('truncates and appends an ellipsis when text overflows', () => {
+    expect(truncateWithEllipsis('a fairly long piece of text', 10)).toBe(
+      'a fairly …',
+    );
+  });
+
+  it('clamps to width 1 minimum', () => {
+    expect(truncateWithEllipsis('hello', 0)).toBe('h');
+  });
+});
+
+describe('formatTaskState', () => {
+  it('shows a fraction for in-progress', () => {
+    expect(
+      formatTaskState(
+        taskSummary({
+          status: 'in-progress',
+          completedSteps: 2,
+          totalSteps: 3,
+        }),
+      ),
+    ).toBe('in progress: 2/3');
+  });
+
+  it.each([
+    'ready',
+    'planning',
+    'finalising',
+    'succeeded',
+    'failed',
+    'cancelled',
+  ])('shows the bare status for %s', (status) => {
+    expect(formatTaskState(taskSummary({ status: status as never }))).toBe(
+      status,
+    );
+  });
+});
+
+describe('renderTaskListEntry', () => {
+  it('renders one truncated line when not selected', () => {
+    const lines = renderTaskListEntry(taskSummary(), false, 30, 4);
+    expect(lines).toHaveLength(1);
+    expect(lines[0].length).toBeLessThanOrEqual(30);
+    expect(lines[0].startsWith('  ')).toBe(true);
+  });
+
+  it('expands to word-wrapped lines (capped at maxLines) with blank spacing when selected', () => {
+    const long = taskSummary({
+      request:
+        'A very long request that should word-wrap across several lines when the entry is highlighted and expanded for reading',
+    });
+    const lines = renderTaskListEntry(long, true, 20, 3);
+    expect(lines[0]).toBe('');
+    expect(lines[lines.length - 1]).toBe('');
+    const body = lines.slice(1, -1);
+    expect(body.length).toBeLessThanOrEqual(3);
+    expect(body[0].startsWith('^!>^: ')).toBe(true);
+  });
+});
+
+describe('statusColor', () => {
+  it('maps known statuses to their markup colour code', () => {
+    expect(statusColor('ready')).toBe('^K');
+    expect(statusColor('in-progress')).toBe('^C');
+    expect(statusColor('in-qa')).toBe('^C');
+    expect(statusColor('succeeded')).toBe('^G');
+    expect(statusColor('failed')).toBe('^R');
+    expect(statusColor('cancelled')).toBe('^Y');
+  });
+});
+
+describe('renderAssignmentListEntry', () => {
+  const row = (overrides: Partial<AssignmentRow> = {}): AssignmentRow => ({
+    id: 'a1',
+    index: 1,
+    role: 'Implementer',
+    status: 'in-progress',
+    prompt: 'Write the report',
+    agentId: 'agent-1',
+    ...overrides,
+  });
+
+  it('renders a single truncated line with the index, role, coloured status, and prompt when not selected', () => {
+    const lines = renderAssignmentListEntry(row(), false, 60, 4);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('1. Implementer');
+    expect(lines[0]).toContain('^Cin-progress^:');
+    expect(lines[0]).toContain('"Write the report"');
+  });
+
+  it('truncates a long prompt with an ellipsis when not selected', () => {
+    const lines = renderAssignmentListEntry(
+      row({ prompt: 'a'.repeat(200) }),
+      false,
+      40,
+      4,
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('…');
+  });
+
+  it('expands to word-wrapped lines (capped at maxLines) with blank spacing when selected', () => {
+    const lines = renderAssignmentListEntry(
+      row({
+        prompt:
+          'A very long prompt that should word-wrap across several lines when highlighted and expanded for reading',
+      }),
+      true,
+      30,
+      3,
+    );
+    expect(lines[0]).toBe('');
+    expect(lines[lines.length - 1]).toBe('');
+    const body = lines.slice(1, -1);
+    expect(body.length).toBeLessThanOrEqual(3);
+    expect(body[0]).toContain('^!>^: ');
+    expect(lines[lines.length - 2].endsWith('"')).toBe(true);
+  });
+
+  it('marks a not-yet-begun (ready) row non-selectable via makeAssignmentEntry', () => {
+    expect(makeAssignmentEntry(row({ status: 'ready' }), 4).selectable).toBe(
+      false,
+    );
+    expect(
+      makeAssignmentEntry(row({ status: 'in-progress' }), 4).selectable,
+    ).toBe(true);
+  });
+});
+
+describe('renderTaskPaneHeading', () => {
+  it('renders Id/Prompt lines followed by a blank separator', () => {
+    const lines = renderTaskPaneHeading('task-1', 'Write a report', 80);
+    expect(lines).toEqual(['Id:     task-1', 'Prompt: "Write a report"', '']);
+  });
+
+  it('word-wraps a long prompt, indenting continuation lines under the opening quote', () => {
+    const lines = renderTaskPaneHeading(
+      'task-1',
+      'A very long prompt that should word-wrap across several lines of the heading block',
+      30,
+    );
+    expect(lines[0]).toBe('Id:     task-1');
+    expect(lines.length).toBeGreaterThan(3);
+    expect(lines[1].startsWith('Prompt: "')).toBe(true);
+    expect(lines[2].startsWith('        ')).toBe(true);
+    expect(lines[lines.length - 2].endsWith('"')).toBe(true);
+    expect(lines[lines.length - 1]).toBe('');
   });
 });
 

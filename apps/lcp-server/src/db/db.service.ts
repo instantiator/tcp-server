@@ -16,7 +16,13 @@ import {
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
-import { DataSource, DeepPartial, Repository } from 'typeorm';
+import {
+  DataSource,
+  DeepPartial,
+  FindOptionsWhere,
+  In,
+  Repository,
+} from 'typeorm';
 import { SHARED_KNOWLEDGE_ROLE_SLUG } from '../storage/storage-keys';
 import { LcpAgentTemplate } from '../templates/LcpAgentTemplate';
 import { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
@@ -326,9 +332,13 @@ export class DbService {
   /**
    * Creates a new {@link LcpAgent} in the `idle` state, always with an
    * assignment. When `template.assignmentId` is given the agent attaches to
-   * that existing assignment; otherwise an orphan (`taskId: null`) assignment
-   * is created first — in `template.mode ?? 'implement'` mode, carrying the
-   * agent's `initialPrompt` — and the two are cross-linked. The agent's
+   * that existing assignment; otherwise an orphan assignment is created first
+   * — in `template.mode ?? 'implement'` mode, carrying the agent's
+   * `initialPrompt` — and the two are cross-linked. When `template.parentAssignmentId`
+   * is also given, the orphan inherits that parent's `taskId` and records the
+   * link (so e.g. a consultation traces back to the task that spawned it);
+   * otherwise the orphan is fully parentless/taskless (top-level agents — planner
+   * dispatch, the standalone `chat` command). The agent's
    * `initialPrompt`/`requiredToolCalls` are populated from the template
    * (010.1.2 copy semantics); `requiredToolCalls` defaults to the mode's
    * required tool ({@link requiredToolForMode}).
@@ -348,15 +358,19 @@ export class DbService {
       if (template.assignmentId !== undefined) {
         assignmentId = template.assignmentId;
       } else {
+        const parent = template.parentAssignmentId
+          ? await assignmentRepo.findOneBy({ id: template.parentAssignmentId })
+          : null;
         const assignment = await assignmentRepo.save(
           assignmentRepo.create({
-            taskId: null,
+            taskId: parent?.taskId ?? null,
             companyId: template.companyId,
             mode,
             prompt: template.initialPrompt,
             roleId: template.roleId,
             status: 'in-progress',
             agentId: null,
+            parentAssignmentId: template.parentAssignmentId ?? null,
             materials: [],
             expected: [],
           }),
@@ -387,6 +401,30 @@ export class DbService {
   /** Retrieves an agent by its UUID. Returns `null` if not found. */
   async getAgent(id: UUID): Promise<LcpAgent | null> {
     return this.agentRepo.findOneBy({ id });
+  }
+
+  /**
+   * Lists agents filtered by company, role, and/or assignment, and/or
+   * status; any combination may be given. `status` defaults to currently
+   * active agents (`idle`, `running`, `paused`) when omitted — a
+   * general-purpose observability listing wants live agents by default, not
+   * the (usually much larger) set of finished ones.
+   */
+  async listAgents(filter: {
+    companyId?: UUID;
+    roleId?: UUID;
+    assignmentId?: UUID;
+    status?: AgentStatus;
+  }): Promise<LcpAgent[]> {
+    const where: FindOptionsWhere<LcpAgent> = {
+      ...(filter.companyId ? { companyId: filter.companyId } : {}),
+      ...(filter.roleId ? { roleId: filter.roleId } : {}),
+      ...(filter.assignmentId ? { assignmentId: filter.assignmentId } : {}),
+      status:
+        filter.status ??
+        In([AgentStatus.Idle, AgentStatus.Running, AgentStatus.Paused]),
+    };
+    return this.agentRepo.find({ where, order: { createdAt: 'DESC' } });
   }
 
   /**

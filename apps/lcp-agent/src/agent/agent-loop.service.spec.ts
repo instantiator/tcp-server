@@ -58,6 +58,22 @@ function makeStubGraph(
   };
 }
 
+// Installs a StateGraph mock exposing the full builder chain used when tools
+// are present (addConditionalEdges is only called for tool graphs) — needed
+// whenever a test gives the agent a non-empty tool list, or the real
+// buildAgentGraph logic throws trying to call it on the plain mock.
+function mockToolGraphOnce(graph: { streamEvents: jest.Mock }) {
+  jest.mocked(StateGraph).mockImplementationOnce(
+    () =>
+      ({
+        addNode: jest.fn().mockReturnThis(),
+        addEdge: jest.fn().mockReturnThis(),
+        addConditionalEdges: jest.fn().mockReturnThis(),
+        compile: jest.fn().mockReturnValue(graph),
+      }) as unknown as InstanceType<typeof StateGraph>,
+  );
+}
+
 const SUCCESS_EVENTS = [
   {
     event: 'on_chat_model_start',
@@ -143,6 +159,8 @@ describe('AgentLoopService', () => {
   let notifyFailed: jest.Mock;
   let publishEvent: jest.Mock;
   let mcpClient: { loadTools: jest.Mock };
+  let ragProvider: { hasKnowledge: jest.Mock; retrieve: jest.Mock };
+  let configService: { get: jest.Mock; getOrThrow: jest.Mock };
   let prepareContext: jest.Mock;
   let checkBudget: jest.Mock;
 
@@ -223,6 +241,8 @@ describe('AgentLoopService', () => {
     roleRepo = testingModule.get(getRepositoryToken(LcpRole));
     companyRepo = testingModule.get(getRepositoryToken(LcpCompany));
     mcpClient = testingModule.get(McpClientService);
+    ragProvider = testingModule.get(AgentRagService);
+    configService = testingModule.get(ConfigService);
   });
 
   afterEach(async () => {
@@ -322,6 +342,41 @@ describe('AgentLoopService', () => {
     expect(updated.threadId).toBe(agent.id);
   });
 
+  it('stops the loop without writing output or notifying when the agent is cancelled mid-run', async () => {
+    const { agent } = await seedAgentAndRole();
+    // Simulates a concurrent task cancellation: the agent's status flips to
+    // Cancelled (as TaskOrchestrationService.cancelTask does) partway
+    // through the streamed turn, mirroring checkTerminalStatus's DB poll.
+    const stubGraph = {
+      streamEvents: jest.fn().mockImplementation(() => ({
+        [Symbol.asyncIterator]: async function* () {
+          for (const ev of SUCCESS_EVENTS) yield ev;
+          await agentRepo.update(agent.id, { status: AgentStatus.Cancelled });
+        },
+      })),
+      getState: jest
+        .fn()
+        .mockResolvedValue({ values: { messages: [] }, next: [] }),
+      updateState: jest.fn().mockResolvedValue({}),
+    };
+    jest.mocked(StateGraph).mockImplementation(
+      () =>
+        ({
+          addNode: jest.fn().mockReturnThis(),
+          addEdge: jest.fn().mockReturnThis(),
+          compile: jest.fn().mockReturnValue(stubGraph),
+        }) as unknown as InstanceType<typeof StateGraph>,
+    );
+
+    await service.run(agent.id, undefined, new AbortController());
+
+    const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+    expect(updated.status).toBe(AgentStatus.Cancelled);
+    expect(updated.output).toBeNull();
+    expect(notifyComplete).not.toHaveBeenCalled();
+    expect(notifyFailed).not.toHaveBeenCalled();
+  });
+
   it('checks context budget before running, using the resolved window size and loaded tools', async () => {
     const { agent } = await seedAgentAndRole();
 
@@ -413,6 +468,116 @@ describe('AgentLoopService', () => {
       expect.any(Object),
       { agentId: agent.id, companyId: agent.companyId },
     );
+  });
+
+  describe('mode-tool restriction and toolChoice wiring', () => {
+    const COMPLETE_ASSIGNMENT_TOOL = {
+      serverName: 'tasks',
+      toolName: 'tasks__complete_assignment',
+      tool: { name: 'tasks__complete_assignment' },
+    };
+
+    // The shared ConfigService mock returns undefined for every MCP env key
+    // by default (see beforeAll), so resolveMcpServerUrls always resolves an
+    // empty server list — fine for tests that don't care about server-name
+    // filtering, but these do, so all four MCP server URLs are configured
+    // for this block only.
+    const MCP_URLS: Record<string, string> = {
+      MCP_STORAGE_URL: 'http://storage:3010',
+      MCP_MEMORY_URL: 'http://memory:3011',
+      MCP_INTERACTIONS_URL: 'http://interactions:3012',
+      MCP_TASKS_URL: 'http://tasks:3013',
+    };
+    beforeEach(() => {
+      configService.get.mockImplementation((key: string) => MCP_URLS[key]);
+    });
+    afterEach(() => {
+      configService.get.mockReturnValue(undefined);
+    });
+
+    // seedAgentAndRole's default llmConfig only applies when called with no
+    // args at all (a plain default parameter) — passing any override object
+    // means llmConfig must be repeated explicitly, or the role ends up with
+    // none and the run fails before ever reaching MCP tool loading.
+    const TEST_LLM_CONFIG: LlmConfig = {
+      provider: 'lm-studio',
+      model: 'qwen3-5b',
+      apiKey: 'test-key',
+    };
+
+    it("excludes 'interactions' from the loaded MCP servers for a plan-mode run (serverNamesForMode wiring)", async () => {
+      const { agent } = await seedAgentAndRole({
+        mode: 'plan',
+        llmConfig: TEST_LLM_CONFIG,
+      });
+
+      await service.run(agent.id, undefined, new AbortController());
+
+      const [serverNames] = mcpClient.loadTools.mock.calls[0] as [string[]];
+      expect(serverNames).not.toContain('interactions');
+    });
+
+    it("keeps 'interactions' among the loaded MCP servers for an implement-mode run", async () => {
+      const { agent } = await seedAgentAndRole({
+        mode: 'implement',
+        llmConfig: TEST_LLM_CONFIG,
+      });
+
+      await service.run(agent.id, undefined, new AbortController());
+
+      const [serverNames] = mcpClient.loadTools.mock.calls[0] as [string[]];
+      expect(serverNames).toContain('interactions');
+    });
+
+    it.each(['plan', 'implement', 'qa'] as const)(
+      "binds tools with toolChoice: 'required' for %s-mode runs",
+      async (mode) => {
+        mcpClient.loadTools.mockResolvedValueOnce([COMPLETE_ASSIGNMENT_TOOL]);
+        mockToolGraphOnce(makeStubGraph(SUCCESS_EVENTS));
+        const bindTools = jest.fn().mockReturnValue({});
+        jest.spyOn(factory, 'buildChatModel').mockReturnValueOnce({
+          bindTools,
+        } as unknown as ReturnType<typeof factory.buildChatModel>);
+        const { agent } = await seedAgentAndRole({
+          mode,
+          llmConfig: TEST_LLM_CONFIG,
+        });
+
+        await service.run(agent.id, undefined, new AbortController());
+
+        expect(bindTools).toHaveBeenCalledWith(expect.any(Array), {
+          tool_choice: 'required',
+        });
+      },
+    );
+
+    it('binds tools with an undefined toolChoice for a chat-mode run', async () => {
+      mcpClient.loadTools.mockResolvedValueOnce([COMPLETE_ASSIGNMENT_TOOL]);
+      mockToolGraphOnce(makeStubGraph(SUCCESS_EVENTS));
+      const bindTools = jest.fn().mockReturnValue({});
+      jest.spyOn(factory, 'buildChatModel').mockReturnValueOnce({
+        bindTools,
+      } as unknown as ReturnType<typeof factory.buildChatModel>);
+      const { agent } = await seedAgentAndRole({
+        mode: 'chat',
+        llmConfig: TEST_LLM_CONFIG,
+      });
+
+      await service.run(agent.id, undefined, new AbortController());
+
+      expect(bindTools).toHaveBeenCalledWith(expect.any(Array), {});
+    });
+
+    it('drops memory from the loaded MCP servers and skips RAG retrieval when the role has no indexed knowledge', async () => {
+      ragProvider.hasKnowledge.mockResolvedValueOnce(false);
+      const { agent } = await seedAgentAndRole();
+
+      await service.run(agent.id, undefined, new AbortController());
+
+      const [serverNames] = mcpClient.loadTools.mock.calls[0] as [string[]];
+      expect(serverNames).not.toContain('memory');
+      expect(ragProvider.retrieve).not.toHaveBeenCalled();
+    });
   });
 
   it('writes an audit event for the LLM response', async () => {
@@ -654,20 +819,6 @@ describe('AgentLoopService', () => {
       ...SUCCESS_EVENTS,
     ];
 
-    // Installs a StateGraph mock exposing the full builder chain used when
-    // tools are present (addConditionalEdges is only called for tool graphs).
-    function mockToolGraphOnce(graph: { streamEvents: jest.Mock }) {
-      jest.mocked(StateGraph).mockImplementationOnce(
-        () =>
-          ({
-            addNode: jest.fn().mockReturnThis(),
-            addEdge: jest.fn().mockReturnThis(),
-            addConditionalEdges: jest.fn().mockReturnThis(),
-            compile: jest.fn().mockReturnValue(graph),
-          }) as unknown as InstanceType<typeof StateGraph>,
-      );
-    }
-
     it('reminds the agent and takes the completed path when complete_assignment fires after the nudge', async () => {
       mcpClient.loadTools.mockResolvedValueOnce([INTERACTIONS_TOOL]);
       const graph = makeSequentialStubGraph(SUCCESS_EVENTS, SUCCESS_EVENTS);
@@ -705,6 +856,56 @@ describe('AgentLoopService', () => {
         agent.id,
         AuditEventType.AgentLoopCompletion,
         expect.any(Object),
+      );
+    });
+
+    it('quotes a described tool_call block when the model wrote one out as text instead of invoking it', async () => {
+      mcpClient.loadTools.mockResolvedValueOnce([INTERACTIONS_TOOL]);
+      const DESCRIBED_CALL_EVENTS = [
+        {
+          event: 'on_chat_model_start',
+          name: 'ChatOpenAI',
+          data: { input: { messages: [] } },
+        },
+        {
+          event: 'on_chat_model_end',
+          name: 'agent',
+          data: {
+            output: new AIMessage(
+              'Calling it now:\n<tool_call>{"name":"complete_assignment"}</tool_call>',
+            ),
+          },
+        },
+      ];
+      const graph = makeSequentialStubGraph(
+        DESCRIBED_CALL_EVENTS,
+        SUCCESS_EVENTS,
+      );
+      mockToolGraphOnce(graph);
+
+      const { agent } = await seedAgentAndRole();
+      jest
+        .spyOn(agentRepo, 'findOneBy')
+        .mockResolvedValueOnce({ ...agent, status: AgentStatus.Running })
+        .mockResolvedValueOnce({
+          ...agent,
+          status: AgentStatus.Completed,
+          output: 'The real answer.',
+        });
+
+      await service.run(agent.id, undefined, new AbortController());
+
+      const [nudgeInput] = graph.streamEvents.mock.calls[1] as [
+        { messages: HumanMessage[] },
+      ];
+      expect(nudgeInput.messages[0].content).toBe(
+        renderTemplate(
+          agentPrompts.required_tools_reminder_with_described_call,
+          {
+            tools: 'tasks__complete_assignment',
+            describedCall: '{"name":"complete_assignment"}',
+          },
+        ),
       );
     });
 

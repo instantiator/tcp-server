@@ -51,6 +51,8 @@ import {
   applyStorageResult,
   baseToolName,
   createTracker,
+  detectDescribedToolCall,
+  extractChatModelText,
   generateActionString,
 } from './loop-tracker';
 
@@ -380,6 +382,12 @@ export class AgentLoopService {
         this.recordCompletionSummary(agent, tracker);
         return;
       }
+      if (result.terminalStatus === AgentStatus.Cancelled) {
+        // Task cancellation already set this status (and recorded the audit
+        // event) — just stop the loop, no further writes.
+        this.logger.log(`Agent ${agent.id} loop ending: task cancelled`);
+        return;
+      }
 
       // The stream ended without the agent reaching a terminal status. Agents
       // with required tool calls (default: complete_assignment) are reminded and
@@ -459,7 +467,8 @@ export class AgentLoopService {
         checkTerminalStatus: async () => {
           const fresh = await this.agentRepo.findOneBy({ id: ctx.agent.id });
           return fresh?.status === AgentStatus.Paused ||
-            fresh?.status === AgentStatus.Completed
+            fresh?.status === AgentStatus.Completed ||
+            fresh?.status === AgentStatus.Cancelled
             ? fresh.status
             : null;
         },
@@ -498,6 +507,10 @@ export class AgentLoopService {
       // reasoning/response token deltas). No-op when Redis is not configured.
       for (const observabilityEvent of mapStreamEvent(event)) {
         this.events.publish(agent.id, observabilityEvent);
+      }
+
+      if (event.event === 'on_chat_model_end') {
+        tracker.lastResponseText = extractChatModelText(event.data?.output);
       }
 
       if (event.event === 'on_tool_start') {
@@ -571,10 +584,19 @@ export class AgentLoopService {
       // Distinguish "never called" from "called but the call did not succeed"
       // (the tool fired yet the status never flipped, e.g. complete_assignment errored).
       const missing = requiredTools.filter((t) => !tracker.firedTools.has(t));
+      const describedCall = detectDescribedToolCall(tracker.lastResponseText);
       const nudge = missing.length
-        ? renderTemplate(agentPrompts.required_tools_reminder, {
-            tools: missing.map(callableName).join(', '),
-          })
+        ? describedCall
+          ? renderTemplate(
+              agentPrompts.required_tools_reminder_with_described_call,
+              {
+                tools: missing.map(callableName).join(', '),
+                describedCall,
+              },
+            )
+          : renderTemplate(agentPrompts.required_tools_reminder, {
+              tools: missing.map(callableName).join(', '),
+            })
         : renderTemplate(agentPrompts.required_tools_call_failed, {
             tools: requiredTools.map(callableName).join(', '),
           });
@@ -608,6 +630,12 @@ export class AgentLoopService {
           `Agent ${agent.id} completed after required-tool reminder ${attempt}`,
         );
         this.recordCompletionSummary(agent, tracker);
+        return;
+      }
+      if (result.terminalStatus === AgentStatus.Cancelled) {
+        this.logger.log(
+          `Agent ${agent.id} loop ending during required-tool reminder: task cancelled`,
+        );
         return;
       }
     }

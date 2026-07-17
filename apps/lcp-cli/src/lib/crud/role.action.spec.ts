@@ -80,4 +80,19 @@ describe('deleteRoleAction', () => {
     await deleteRoleAction(opts, { roleSlug: 'analyst' });
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
+
+  it('resolves via a combined --role UUID value', async () => {
+    const uuid = '11111111-2222-3333-4444-555555555555';
+    mockedApiRequest.mockResolvedValueOnce(role); // GET
+    mockedApiRequest.mockResolvedValueOnce(undefined); // DELETE
+
+    await deleteRoleAction(opts, { role: uuid, force: true });
+
+    expect(mockedApiRequest).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      'GET',
+      `/api/role/${uuid}`,
+    );
+  });
 });

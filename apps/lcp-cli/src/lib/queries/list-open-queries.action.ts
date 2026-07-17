@@ -1,6 +1,6 @@
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest } from '../core/api';
-import { resolveCompanyId } from '../core/resolve-identifiers';
+import { EntityRefOpts, resolveCompanyId } from '../core/entity-ref';
 import { runCommand } from '../core/run-command';
 import { resolveToken } from '../auth/token';
 
@@ -56,14 +56,14 @@ function formatCsv(rows: ConversationSummary[]): string {
  */
 export function listOpenQueriesAction(
   opts: GlobalOptions,
-  cmdOpts: { companyId?: string; companySlug?: string; format: string },
+  cmdOpts: EntityRefOpts & { format: string },
 ): Promise<void> {
   return runCommand(async () => {
     const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
     const api = apiOptions(opts, token);
 
     const qs = new URLSearchParams({ status: 'awaiting_user' });
-    if (cmdOpts.companyId || cmdOpts.companySlug) {
+    if (cmdOpts.companyId || cmdOpts.companySlug || cmdOpts.company) {
       qs.set('companyId', await resolveCompanyId(api, cmdOpts));
     }
 

@@ -12,15 +12,17 @@ import { resolveToken } from '../auth/token';
  */
 export function reindexKnowledgeAction(
   opts: GlobalOptions,
-  cmdOpts: { company: string },
+  cmdOpts: { company?: string; companyId?: string; companySlug?: string },
 ): Promise<void> {
   return runCommand(async () => {
     const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
     const api = apiOptions(opts, token);
+    const companyIdentifier =
+      cmdOpts.companyId ?? cmdOpts.companySlug ?? cmdOpts.company!;
     const result = await apiRequest<{ reindexing: true }>(
       api,
       'POST',
-      `/api/company/${cmdOpts.company}/knowledge/reindex`,
+      `/api/company/${companyIdentifier}/knowledge/reindex`,
     );
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
   });

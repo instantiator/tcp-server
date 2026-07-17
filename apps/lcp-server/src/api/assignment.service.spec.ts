@@ -301,6 +301,47 @@ describe('AssignmentService', () => {
       );
     });
 
+    it('scopes a plan assignment to its own working directory, read-only', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id);
+      const assignment = await seedAssignment({
+        companyId: company.id,
+        roleId: role.id,
+        taskId: task.id,
+        mode: 'plan',
+        orderIndex: 0,
+      });
+      const agent = await seedAgent(company.id, role.id, assignment.id);
+      db.getCompany.mockResolvedValue({ id: company.id, slug: 'acme' });
+
+      const scope = await service.resolveStorageScope(agent.id);
+      expect(scope.readOnly).toBe(true);
+      expect(scope.mode).toBe('plan');
+      expect(scope.workingPrefix).toBe(
+        `acme/tasks/${task.id}/assignments/0/working/`,
+      );
+    });
+
+    it("scopes a finalise assignment to the task's completed/ directory, read-write", async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id);
+      const assignment = await seedAssignment({
+        companyId: company.id,
+        roleId: role.id,
+        taskId: task.id,
+        mode: 'finalise',
+      });
+      const agent = await seedAgent(company.id, role.id, assignment.id);
+      db.getCompany.mockResolvedValue({ id: company.id, slug: 'acme' });
+
+      const scope = await service.resolveStorageScope(agent.id);
+      expect(scope.readOnly).toBe(false);
+      expect(scope.mode).toBe('finalise');
+      expect(scope.workingPrefix).toBe(`acme/tasks/${task.id}/completed/`);
+    });
+
     it('resolves inline-text materials to stable synthetic names', async () => {
       const company = await seedCompany();
       const role = await seedRole(company.id);

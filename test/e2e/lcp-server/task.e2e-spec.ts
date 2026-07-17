@@ -1,4 +1,11 @@
-import { LcpAssignment, LcpCompany, LcpRole, LcpTask } from '@lcp/shared';
+import {
+  AuditEvent,
+  LcpAgent,
+  LcpAssignment,
+  LcpCompany,
+  LcpRole,
+  LcpTask,
+} from '@lcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -14,6 +21,8 @@ describe('TaskController (e2e)', () => {
   let roleRepo: Repository<LcpRole>;
   let taskRepo: Repository<LcpTask>;
   let assignmentRepo: Repository<LcpAssignment>;
+  let agentRepo: Repository<LcpAgent>;
+  let auditRepo: Repository<AuditEvent>;
   let jwt: string;
 
   beforeAll(async () => {
@@ -26,6 +35,8 @@ describe('TaskController (e2e)', () => {
     roleRepo = moduleFixture.get(getRepositoryToken(LcpRole));
     taskRepo = moduleFixture.get(getRepositoryToken(LcpTask));
     assignmentRepo = moduleFixture.get(getRepositoryToken(LcpAssignment));
+    agentRepo = moduleFixture.get(getRepositoryToken(LcpAgent));
+    auditRepo = moduleFixture.get(getRepositoryToken(AuditEvent));
     jwt = makeTestJwt();
   });
 
@@ -47,6 +58,8 @@ describe('TaskController (e2e)', () => {
     });
 
     afterEach(async () => {
+      await auditRepo.createQueryBuilder().delete().execute();
+      await agentRepo.createQueryBuilder().delete().execute();
       await assignmentRepo.createQueryBuilder().delete().execute();
       await taskRepo.createQueryBuilder().delete().execute();
     });
@@ -87,6 +100,30 @@ describe('TaskController (e2e)', () => {
             request: 'Write a report',
           });
         expect(res.status).toBe(404);
+      });
+
+      it('returns 400 for a materials entry with a type outside the allowed @IsIn set', async () => {
+        const res = await request(app.getHttpServer())
+          .post('/api/task')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            companyId: company.id,
+            request: 'Write a report',
+            materials: [{ type: 'not-a-real-type', value: 'x' }],
+          });
+        expect(res.status).toBe(400);
+      });
+
+      it('returns 400 for an expected entry with a type outside the allowed @IsIn set', async () => {
+        const res = await request(app.getHttpServer())
+          .post('/api/task')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            companyId: company.id,
+            request: 'Write a report',
+            expected: [{ type: 'not-a-real-type', value: 'x' }],
+          });
+        expect(res.status).toBe(400);
       });
 
       it('returns 401 without a bearer token', async () => {
@@ -180,6 +217,21 @@ describe('TaskController (e2e)', () => {
               expect(res.status).toBe(404);
             });
 
+            it('returns 422 for invalid content and never appends the artifact', async () => {
+              const res = await request(app.getHttpServer())
+                .post(`/api/task/${task.id}/materials`)
+                .set('Authorization', `Bearer ${jwt}`)
+                .attach('file', Buffer.from('{not valid json'), 'bad.json');
+              expect(res.status).toBe(422);
+
+              const updated = await request(app.getHttpServer())
+                .get(`/api/task/${task.id}`)
+                .set('Authorization', `Bearer ${jwt}`);
+              expect(
+                (updated.body as { task: LcpTask }).task.materials,
+              ).toEqual([]);
+            });
+
             it('returns 409 once the task has left ready', async () => {
               await companyRepo.update(company.id, { plannerRoleId: role.id });
               await request(app.getHttpServer())
@@ -191,6 +243,102 @@ describe('TaskController (e2e)', () => {
                 .post(`/api/task/${task.id}/materials`)
                 .set('Authorization', `Bearer ${jwt}`)
                 .attach('file', Buffer.from('hello'), 'brief.txt');
+              expect(res.status).toBe(409);
+
+              await companyRepo.update(company.id, { plannerRoleId: null });
+            });
+          });
+
+          describe('PUT /api/task/:id', () => {
+            it('edits request, plannerRoleId, materials, and expected while ready', async () => {
+              const res = await request(app.getHttpServer())
+                .put(`/api/task/${task.id}`)
+                .set('Authorization', `Bearer ${jwt}`)
+                .send({
+                  request: 'Write a longer report',
+                  plannerRoleId: role.id,
+                  materials: [{ type: 'inline-text', value: 'context' }],
+                  expected: [{ type: 'inline-text', value: 'a summary' }],
+                });
+              expect(res.status).toBe(200);
+              expect(res.body).toMatchObject({
+                request: 'Write a longer report',
+                plannerRoleId: role.id,
+                materials: [{ type: 'inline-text', value: 'context' }],
+                expected: [{ type: 'inline-text', value: 'a summary' }],
+                status: 'ready',
+              });
+            });
+
+            it('changes only the given fields, leaving others unchanged', async () => {
+              const res = await request(app.getHttpServer())
+                .put(`/api/task/${task.id}`)
+                .set('Authorization', `Bearer ${jwt}`)
+                .send({ plannerRoleId: role.id });
+              expect(res.status).toBe(200);
+              expect((res.body as LcpTask).request).toBe(task.request);
+              expect((res.body as LcpTask).plannerRoleId).toBe(role.id);
+            });
+
+            it('returns 404 for an unknown task', async () => {
+              const res = await request(app.getHttpServer())
+                .put('/api/task/00000000-0000-0000-0000-000000000000')
+                .set('Authorization', `Bearer ${jwt}`)
+                .send({ request: 'x' });
+              expect(res.status).toBe(404);
+            });
+
+            it('returns 404 when plannerRoleId is an unknown role', async () => {
+              const res = await request(app.getHttpServer())
+                .put(`/api/task/${task.id}`)
+                .set('Authorization', `Bearer ${jwt}`)
+                .send({
+                  plannerRoleId: '00000000-0000-0000-0000-000000000000',
+                });
+              expect(res.status).toBe(404);
+            });
+
+            it('returns 404 when plannerRoleId belongs to a different company', async () => {
+              const otherCompany = await companyRepo.save(
+                companyRepo.create({
+                  slug: `task-co-other-${Date.now()}`,
+                  name: 'Other Co',
+                  description: 'test',
+                }),
+              );
+              const otherRole = await roleRepo.save(
+                roleRepo.create({
+                  companyId: otherCompany.id,
+                  company: otherCompany,
+                  slug: 'other-planner',
+                  name: 'Other Planner',
+                  description: 'Plans tasks',
+                  knowledgeDomains: [],
+                  mcpServerList: [],
+                }),
+              );
+
+              const res = await request(app.getHttpServer())
+                .put(`/api/task/${task.id}`)
+                .set('Authorization', `Bearer ${jwt}`)
+                .send({ plannerRoleId: otherRole.id });
+              expect(res.status).toBe(404);
+
+              await roleRepo.delete(otherRole.id);
+              await companyRepo.delete(otherCompany.id);
+            });
+
+            it('returns 409 once the task has left ready', async () => {
+              await companyRepo.update(company.id, { plannerRoleId: role.id });
+              await request(app.getHttpServer())
+                .post(`/api/task/${task.id}/start`)
+                .set('Authorization', `Bearer ${jwt}`)
+                .expect(202);
+
+              const res = await request(app.getHttpServer())
+                .put(`/api/task/${task.id}`)
+                .set('Authorization', `Bearer ${jwt}`)
+                .send({ request: 'too late' });
               expect(res.status).toBe(409);
 
               await companyRepo.update(company.id, { plannerRoleId: null });
@@ -255,6 +403,80 @@ describe('TaskController (e2e)', () => {
             });
           });
 
+          describe('POST /api/task/:id/cancel', () => {
+            it('returns 202 and transitions ready -> cancelled', async () => {
+              const res = await request(app.getHttpServer())
+                .post(`/api/task/${task.id}/cancel`)
+                .set('Authorization', `Bearer ${jwt}`);
+              expect(res.status).toBe(202);
+              expect((res.body as LcpTask).status).toBe('cancelled');
+            });
+
+            it("cascades to the task's non-terminal assignments", async () => {
+              const inProgress = await assignmentRepo.save(
+                assignmentRepo.create({
+                  companyId: company.id,
+                  company,
+                  taskId: task.id,
+                  task,
+                  mode: 'implement',
+                  orderIndex: 0,
+                  prompt: 'Step 0',
+                  roleId: role.id,
+                  role,
+                  status: 'in-progress',
+                }),
+              );
+              const alreadySucceeded = await assignmentRepo.save(
+                assignmentRepo.create({
+                  companyId: company.id,
+                  company,
+                  taskId: task.id,
+                  task,
+                  mode: 'implement',
+                  orderIndex: 1,
+                  prompt: 'Step 1',
+                  roleId: role.id,
+                  role,
+                  status: 'succeeded',
+                }),
+              );
+
+              const res = await request(app.getHttpServer())
+                .post(`/api/task/${task.id}/cancel`)
+                .set('Authorization', `Bearer ${jwt}`);
+              expect(res.status).toBe(202);
+
+              const reloadedInProgress = await assignmentRepo.findOneBy({
+                id: inProgress.id,
+              });
+              const reloadedSucceeded = await assignmentRepo.findOneBy({
+                id: alreadySucceeded.id,
+              });
+              expect(reloadedInProgress?.status).toBe('cancelled');
+              expect(reloadedSucceeded?.status).toBe('succeeded');
+            });
+
+            it('returns 404 for an unknown task', async () => {
+              const res = await request(app.getHttpServer())
+                .post('/api/task/00000000-0000-0000-0000-000000000000/cancel')
+                .set('Authorization', `Bearer ${jwt}`);
+              expect(res.status).toBe(404);
+            });
+
+            it('returns 409 when the task is already terminal (double cancel)', async () => {
+              await request(app.getHttpServer())
+                .post(`/api/task/${task.id}/cancel`)
+                .set('Authorization', `Bearer ${jwt}`)
+                .expect(202);
+
+              const res = await request(app.getHttpServer())
+                .post(`/api/task/${task.id}/cancel`)
+                .set('Authorization', `Bearer ${jwt}`);
+              expect(res.status).toBe(409);
+            });
+          });
+
           describe('GET /api/task/:id', () => {
             it('returns the task with its assignments, plan first ordered by orderIndex then the rest by createdAt', async () => {
               const orphanLike = await assignmentRepo.save(
@@ -315,6 +537,99 @@ describe('TaskController (e2e)', () => {
             it('returns 404 for an unknown task', async () => {
               const res = await request(app.getHttpServer())
                 .get('/api/task/00000000-0000-0000-0000-000000000000')
+                .set('Authorization', `Bearer ${jwt}`);
+              expect(res.status).toBe(404);
+            });
+          });
+
+          describe('GET /api/task/:id/history', () => {
+            it("returns the audit rows for the task's assignments' agents, oldest first", async () => {
+              const assignment = await assignmentRepo.save(
+                assignmentRepo.create({
+                  companyId: company.id,
+                  company,
+                  taskId: task.id,
+                  task,
+                  mode: 'plan',
+                  prompt: 'Plan it',
+                  roleId: role.id,
+                  role,
+                }),
+              );
+              const agent = await agentRepo.save(
+                agentRepo.create({
+                  companyId: company.id,
+                  roleId: role.id,
+                  assignmentId: assignment.id,
+                  initialPrompt: 'Plan it',
+                }),
+              );
+              await assignmentRepo.update(assignment.id, {
+                agentId: agent.id,
+              });
+              // An unrelated agent (not part of this task) whose events must not leak in.
+              const otherAssignment = await assignmentRepo.save(
+                assignmentRepo.create({
+                  companyId: company.id,
+                  company,
+                  taskId: null,
+                  mode: 'chat',
+                  prompt: 'chat',
+                  roleId: role.id,
+                  role,
+                }),
+              );
+              const otherAgent = await agentRepo.save(
+                agentRepo.create({
+                  companyId: company.id,
+                  roleId: role.id,
+                  assignmentId: otherAssignment.id,
+                  initialPrompt: 'chat',
+                }),
+              );
+
+              await auditRepo.save(
+                auditRepo.create({
+                  companyId: company.id,
+                  role: 'Planner',
+                  agentId: agent.id,
+                  eventType: 'state_change',
+                  payload: { newStatus: 'running' },
+                }),
+              );
+              await auditRepo.save(
+                auditRepo.create({
+                  companyId: company.id,
+                  role: 'Planner',
+                  agentId: agent.id,
+                  eventType: 'agent_loop_completion',
+                  payload: { summary: 'planned' },
+                }),
+              );
+              await auditRepo.save(
+                auditRepo.create({
+                  companyId: company.id,
+                  role: 'Other',
+                  agentId: otherAgent.id,
+                  eventType: 'state_change',
+                  payload: { newStatus: 'running' },
+                }),
+              );
+
+              const res = await request(app.getHttpServer())
+                .get(`/api/task/${task.id}/history`)
+                .set('Authorization', `Bearer ${jwt}`);
+              expect(res.status).toBe(200);
+              const rows = res.body as { eventType: string; agentId: string }[];
+              expect(rows).toHaveLength(2);
+              expect(rows.every((r) => r.agentId === agent.id)).toBe(true);
+              expect(rows[0].eventType).toBe('state_change');
+              expect(rows[1].eventType).toBe('agent_loop_completion');
+            });
+
+            it('returns 404 for an unknown task', async () => {
+              const res = await request(app.getHttpServer())
+                .get('/api/task/00000000-0000-0000-0000-000000000000/history')
                 .set('Authorization', `Bearer ${jwt}`);
               expect(res.status).toBe(404);
             });

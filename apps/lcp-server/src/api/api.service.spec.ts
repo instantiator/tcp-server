@@ -1,6 +1,7 @@
 import { LcpCompany } from '@lcp/shared';
 import { randomUUID } from 'crypto';
 import { DbService } from '../db/db.service';
+import { CompanyEventService } from '../events/company-event.service';
 import { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
 import { ApiService } from './api.service';
 
@@ -8,17 +9,28 @@ const makeDbService = (): jest.Mocked<
   Pick<DbService, 'createCompany' | 'setCompany' | 'getCompany'>
 > => ({
   createCompany: jest.fn().mockResolvedValue(undefined),
-  setCompany: jest.fn().mockResolvedValue(undefined),
+  setCompany: jest.fn().mockResolvedValue({ id: randomUUID() }),
   getCompany: jest.fn().mockResolvedValue(null),
+});
+
+const makeCompanyEvents = (): jest.Mocked<
+  Pick<CompanyEventService, 'emit'>
+> => ({
+  emit: jest.fn(),
 });
 
 describe('ApiService', () => {
   let db: ReturnType<typeof makeDbService>;
+  let companyEvents: ReturnType<typeof makeCompanyEvents>;
   let api: ApiService;
 
   beforeEach(() => {
     db = makeDbService();
-    api = new ApiService(db as unknown as DbService);
+    companyEvents = makeCompanyEvents();
+    api = new ApiService(
+      db as unknown as DbService,
+      companyEvents as unknown as CompanyEventService,
+    );
   });
 
   describe('createCompany', () => {
@@ -62,6 +74,7 @@ describe('ApiService', () => {
     it('resolves a UUID-shaped path identifier to identifiers.id', async () => {
       const id = randomUUID();
       const company = { slug: 'acme', name: 'Acme' };
+      db.setCompany.mockResolvedValue({ id } as LcpCompany);
       await api.setCompany(id, company);
       expect(db.setCompany).toHaveBeenCalledWith(company, { id });
     });
@@ -70,6 +83,19 @@ describe('ApiService', () => {
       const company = { name: 'Acme' };
       await api.setCompany('acme', company);
       expect(db.setCompany).toHaveBeenCalledWith(company, { slug: 'acme' });
+    });
+
+    it('emits a company_changed event for the updated company', async () => {
+      const id = randomUUID();
+      db.setCompany.mockResolvedValue({ id } as LcpCompany);
+      await api.setCompany(id, { name: 'Acme' });
+      expect(companyEvents.emit).toHaveBeenCalledWith(
+        id,
+        expect.objectContaining({
+          kind: 'company_changed',
+          data: { companyId: id },
+        }),
+      );
     });
   });
 

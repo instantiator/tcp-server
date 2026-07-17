@@ -83,6 +83,34 @@ describe('TasksToolsService', () => {
       expect(text).toContain('qa');
       expect(text).toContain('assure_assignment');
     });
+
+    it('names complete_assignment as the completion tool for a chat-mode caller', async () => {
+      mockAssignment(axiosGet, {
+        id: assignmentId,
+        mode: 'chat',
+        taskId: null,
+      });
+      const text = await callTool(service, 'describe_server', { agentId });
+      expect(text).toContain('chat');
+    });
+
+    it('names complete_assignment as the completion tool for a consultee-mode caller', async () => {
+      mockAssignment(axiosGet, {
+        id: assignmentId,
+        mode: 'consultee',
+        taskId: null,
+      });
+      const text = await callTool(service, 'describe_server', { agentId });
+      expect(text).toContain('consultee');
+      expect(text).toContain('complete_assignment');
+    });
+
+    it('names complete_assignment as the completion tool for a finalise-mode caller', async () => {
+      mockAssignment(axiosGet, { id: assignmentId, mode: 'finalise', taskId });
+      const text = await callTool(service, 'describe_server', { agentId });
+      expect(text).toContain('finalise');
+      expect(text).toContain('complete_assignment');
+    });
   });
 
   describe('create_plan', () => {
@@ -192,6 +220,52 @@ describe('TasksToolsService', () => {
       });
       expect(axiosPost).not.toHaveBeenCalled();
       expect(text).toContain('create_plan');
+    });
+
+    it('proxies to the complete endpoint for a consultee-mode caller', async () => {
+      mockAssignment(axiosGet, {
+        id: assignmentId,
+        mode: 'consultee',
+        taskId: null,
+      });
+      axiosPost.mockResolvedValue({ data: {} });
+
+      const text = await callTool(service, 'complete_assignment', {
+        agentId,
+        companyId,
+        summary: 'answered',
+        prepared: [],
+      });
+
+      expect(axiosPost).toHaveBeenCalledWith(
+        `http://lcp-server:3000/internal/assignment/${assignmentId}/complete`,
+        expect.objectContaining({ agentId, summary: 'answered' }),
+        expect.any(Object),
+      );
+      expect(text).toContain('submitted');
+    });
+
+    it('proxies to the complete endpoint for a finalise-mode caller', async () => {
+      mockAssignment(axiosGet, {
+        id: assignmentId,
+        mode: 'finalise',
+        taskId,
+      });
+      axiosPost.mockResolvedValue({ data: {} });
+
+      const text = await callTool(service, 'complete_assignment', {
+        agentId,
+        companyId,
+        summary: 'finalised',
+        prepared: [],
+      });
+
+      expect(axiosPost).toHaveBeenCalledWith(
+        `http://lcp-server:3000/internal/assignment/${assignmentId}/complete`,
+        expect.objectContaining({ agentId, summary: 'finalised' }),
+        expect.any(Object),
+      );
+      expect(text).toContain('submitted');
     });
   });
 

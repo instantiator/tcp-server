@@ -3,12 +3,12 @@ import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest, ApiOptions } from '../core/api';
 import { confirmAction } from '../core/confirm';
 import {
-  CompanyIdentifierOpts,
-  RoleIdentifierOpts,
+  EntityRefOpts,
   resolveCompanyId,
   resolveRoleId,
-} from '../core/resolve-identifiers';
-import { readStdin } from '../core/stdin';
+  UUID_RE,
+} from '../core/entity-ref';
+import { readJsonBody } from '../core/read-json-body';
 import { runCommand } from '../core/run-command';
 import { resolveToken } from '../auth/token';
 
@@ -45,7 +45,7 @@ interface CompanyWithRoles {
  */
 export function listRolesAction(
   opts: GlobalOptions,
-  cmdOpts: { companyId?: string; companySlug?: string },
+  cmdOpts: { companyId?: string; companySlug?: string; company?: string },
 ): Promise<void> {
   return runCommand(async () => {
     const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
@@ -53,7 +53,8 @@ export function listRolesAction(
 
     // `/api/company/:id` and `/api/company/:id/roles` both accept a UUID or
     // a slug directly, so the identifier is passed through as-is.
-    const identifier = cmdOpts.companyId ?? cmdOpts.companySlug;
+    const identifier =
+      cmdOpts.companyId ?? cmdOpts.companySlug ?? cmdOpts.company;
     const result = identifier
       ? [await fetchCompanyWithRoles(api, identifier)]
       : await fetchAllCompaniesWithRoles(api);
@@ -107,36 +108,35 @@ async function fetchAllCompaniesWithRoles(
 /** Creates or updates a role from JSON (`--input` or stdin). */
 export function setRoleAction(
   opts: GlobalOptions,
-  cmdOpts: CompanyIdentifierOpts & {
-    roleId?: string;
-    roleSlug?: string;
-    input?: string;
-  },
+  cmdOpts: EntityRefOpts & { input?: string },
 ): Promise<void> {
   return runCommand(async () => {
-    const raw = cmdOpts.input ?? (await readStdin());
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== 'object' || parsed === null) {
-      process.stderr.write('Error: input must be a JSON object\n');
-      process.exit(1);
-    }
-    const data = parsed as Record<string, unknown>;
+    const data = await readJsonBody(cmdOpts);
     const bodyId = typeof data['id'] === 'string' ? data['id'] : undefined;
 
     const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
     const api = apiOptions(opts, token);
 
-    // A --company-id/--company-slug flag overrides the body's companyId —
-    // needed on create, and to scope a --role-slug lookup (role slugs are
-    // unique only within a company).
+    const companyGiven = Boolean(
+      cmdOpts.companyId || cmdOpts.companySlug || cmdOpts.company,
+    );
+    // A company flag overrides the body's companyId — needed on create, and
+    // to scope a role-slug lookup (role slugs are unique only within a
+    // company).
     let companyId =
       typeof data['companyId'] === 'string' ? data['companyId'] : undefined;
-    if (cmdOpts.companyId || cmdOpts.companySlug) {
+    if (companyGiven) {
       companyId = await resolveCompanyId(api, cmdOpts);
       data['companyId'] = companyId;
     }
 
-    const roleId = cmdOpts.roleId ?? bodyId;
+    const roleSlugGiven =
+      cmdOpts.roleSlug ??
+      (cmdOpts.role && !UUID_RE.test(cmdOpts.role) ? cmdOpts.role : undefined);
+    const roleId =
+      cmdOpts.roleId ??
+      (cmdOpts.role && UUID_RE.test(cmdOpts.role) ? cmdOpts.role : undefined) ??
+      bodyId;
 
     let result: LcpRole;
     if (roleId) {
@@ -146,23 +146,23 @@ export function setRoleAction(
         `/api/role/${roleId}`,
         data,
       );
-    } else if (cmdOpts.roleSlug) {
+    } else if (roleSlugGiven) {
       if (!companyId) {
         process.stderr.write(
-          'Error: --role-slug requires --company-id or --company-slug\n',
+          'Error: a role slug requires --company, --company-id, or --company-slug\n',
         );
         process.exit(1);
       }
       result = await apiRequest<LcpRole>(
         api,
         'PUT',
-        `/api/company/${companyId}/roles/by-slug/${cmdOpts.roleSlug}`,
+        `/api/company/${companyId}/roles/by-slug/${roleSlugGiven}`,
         data,
       );
     } else {
       if (!companyId) {
         process.stderr.write(
-          'Error: --company-id or --company-slug is required when creating a new role\n',
+          'Error: --company, --company-id, or --company-slug is required when creating a new role\n',
         );
         process.exit(1);
       }
@@ -182,7 +182,7 @@ export function setRoleAction(
  */
 export function deleteRoleAction(
   opts: GlobalOptions,
-  cmdOpts: RoleIdentifierOpts & { force?: boolean },
+  cmdOpts: EntityRefOpts & { force?: boolean },
 ): Promise<void> {
   return runCommand(async () => {
     const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });

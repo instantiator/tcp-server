@@ -2,10 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiDownload } from '../core/api';
-import {
-  KnowledgeScopeOpts,
-  resolveKnowledgeScopePath,
-} from '../core/resolve-knowledge-scope';
+import { EntityRefOpts, resolveKnowledgeScopePath } from '../core/entity-ref';
 import { runCommand } from '../core/run-command';
 import { resolveToken } from '../auth/token';
 
@@ -18,7 +15,7 @@ import { resolveToken } from '../auth/token';
  */
 export function getKnowledgeAction(
   opts: GlobalOptions,
-  cmdOpts: KnowledgeScopeOpts & { file: string; out?: string },
+  cmdOpts: EntityRefOpts & { file: string; out?: string },
 ): Promise<void> {
   return runCommand(async () => {
     const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });

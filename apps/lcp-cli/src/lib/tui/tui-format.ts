@@ -3,8 +3,28 @@
 // indent/grey special case, and blank-line separation rules can be
 // unit-tested without a live terminal-kit screen.
 
+import type { TaskChangeSummary } from '@lcp/shared';
+import {
+  ASSIGNMENT_COMPLETE_LABEL,
+  isBlankText,
+  parseClockTime,
+} from '../core/agent-log-format';
 import { SseEvent } from '../core/sse';
-import { RoleOption } from './tui-state';
+import { wrapText } from '../core/text-wrap';
+import {
+  ListEntry,
+  ListPosition,
+  RoleOption,
+  SelectableList,
+} from './tui-state';
+
+// Re-exported for existing callers within this module and its spec — the
+// wrap function itself now lives in core/text-wrap.ts (no terminal-kit
+// dependency) so eavesdrop and render.ts can share it too.
+export { wrapText } from '../core/text-wrap';
+
+/** Placeholder shown in place of a whitespace-only or empty response — matches `render.ts`. */
+const BLANK_RESPONSE_MARKER = '(blank)';
 
 /** Reads a string field from an event's data payload, defaulting to ''. */
 function str(data: Record<string, unknown> | undefined, key: string): string {
@@ -14,9 +34,7 @@ function str(data: Record<string, unknown> | undefined, key: string): string {
 
 /** hh:mm:ss from an event's timestamp, or from now if absent/invalid. */
 function clockTime(timestamp: string | undefined): string {
-  const date = timestamp ? new Date(timestamp) : new Date();
-  const valid = !Number.isNaN(date.getTime()) ? date : new Date();
-  return valid.toTimeString().slice(0, 8);
+  return parseClockTime(timestamp) ?? new Date().toTimeString().slice(0, 8);
 }
 
 /**
@@ -33,38 +51,9 @@ export function escapeMarkup(text: string): string {
   return text.replace(/\^/g, '^^');
 }
 
-/**
- * Greedy word-wrap: splits on existing newlines (kept as hard breaks, with
- * trailing ones stripped), then packs words onto lines up to `width`.
- */
-export function wrapText(text: string, width: number): string[] {
-  const w = Math.max(width, 1);
-  const paragraphs = text.replace(/\n+$/, '').split('\n');
-  const lines: string[] = [];
-  for (const para of paragraphs) {
-    const words = para.split(/[ \t]+/).filter(Boolean);
-    if (words.length === 0) {
-      lines.push('');
-      continue;
-    }
-    let line = '';
-    for (const word of words) {
-      const candidate = line ? `${line} ${word}` : word;
-      if (candidate.length > w && line) {
-        lines.push(line);
-        line = word;
-      } else {
-        line = candidate;
-      }
-    }
-    if (line) lines.push(line);
-  }
-  return lines.length > 0 ? lines : [''];
-}
-
 /** One logical block of pane content — a discrete event or a streamed delta. */
 export interface PaneEntry {
-  style: 'discrete' | 'reasoning' | 'response';
+  style: 'discrete' | 'reasoning' | 'response' | 'user';
   time: string;
   /** Event kind/label shown in the middle column; unused for 'reasoning'. */
   label?: string;
@@ -118,6 +107,14 @@ export class PaneEntryLog {
         this.pushDiscrete(time, event.kind, this.formatCompaction(event));
         break;
       }
+      case 'agent_loop_completion': {
+        this.pushDiscrete(
+          time,
+          ASSIGNMENT_COMPLETE_LABEL,
+          str(data, 'summary'),
+        );
+        break;
+      }
       case 'reasoning': {
         if (this.hideReasoning) break;
         this.appendDelta('reasoning', time, undefined, str(data, 'delta'));
@@ -132,6 +129,11 @@ export class PaneEntryLog {
         // the caller (e.g. tearing down the pane), not rendered as an entry.
         break;
     }
+  }
+
+  /** Appends the user's own submitted message as a distinctly-styled entry. */
+  pushUserPrompt(text: string): void {
+    this.entries.push({ style: 'user', time: clockTime(undefined), text });
   }
 
   private formatCompaction(event: SseEvent): string {
@@ -183,67 +185,293 @@ export class PaneEntryLog {
         (line) => `^K  ${escapeMarkup(line)}^:`,
       );
     }
+    if (entry.style === 'user') {
+      // Bright green (^G), reset (^:) per line — a distinct indicator/colour
+      // for the user's own submitted message, same header shape as a
+      // discrete entry.
+      const header = `${entry.time} | you | `;
+      const wrapped = wrapText(entry.text, Math.max(width - header.length, 1));
+      return wrapped.map((line, i) =>
+        i === 0
+          ? `^G${header}${escapeMarkup(line)}^:`
+          : `^G${escapeMarkup(line)}^:`,
+      );
+    }
+    const bodyText =
+      entry.style === 'response' && isBlankText(entry.text)
+        ? BLANK_RESPONSE_MARKER
+        : entry.text;
     const header = `${entry.time} | ${entry.label} | `;
     // Continuation lines wrap at the same reduced width as the header line
     // rather than the full pane width — narrower than strictly necessary, but
     // keeps wrapping a single pass over the text instead of two.
-    const wrapped = wrapText(entry.text, Math.max(width - header.length, 1));
+    const wrapped = wrapText(bodyText, Math.max(width - header.length, 1));
     return wrapped.map((line, i) =>
       i === 0 ? header + escapeMarkup(line) : escapeMarkup(line),
     );
   }
 }
 
-/**
- * Renders a company's role roster, marking the highlighted row. The `>` on
- * the selected row is rendered in inverse video (`^!`/`^:`) rather than
- * relying on the terminal's own cursor, which terminal-kit never draws (or
- * hides) for a plain, non-editable TextBox like this one — see tui.ts's
- * cursor-visibility note.
- */
-export function renderRoleList(
-  roles: RoleOption[],
-  selectedIndex: number,
-): string[] {
-  if (roles.length === 0) return ['(no roles in this company)'];
-  return roles.map((role, i) =>
-    i === selectedIndex
-      ? `^!>^: ${escapeMarkup(role.name)}`
-      : `  ${escapeMarkup(role.name)}`,
-  );
+/** The `>` marker rendered for a selected row, in inverse video (`^!`/`^:`) — the
+ * terminal's own cursor is never drawn/hidden for a plain, non-editable
+ * TextBox (see tui.ts's cursor-visibility note), so every selectable list
+ * marks its own highlight this way instead. */
+export function marker(selected: boolean): string {
+  return selected ? '^!>^: ' : '  ';
 }
 
-/** One logical block of the company roster pane's rendered content. */
-export interface RosterRender {
-  lines: string[];
-  /** Index within `lines` where the role list begins — role `i`'s line is `listStartIndex + i`. */
-  listStartIndex: number;
+/** Builds one {@link ListEntry} for a role in the company roster's "Roles" list. */
+export function makeRoleEntry(role: RoleOption): ListEntry {
+  return {
+    id: role.id,
+    render: (_width: number, selected: boolean) => [
+      `${marker(selected)}${escapeMarkup(role.name)}`,
+    ],
+  };
 }
 
 /**
- * Renders the full company roster pane: an identifying heading (slug + id),
- * a prompt, a blank separator, then the role list. `listStartIndex` is
- * returned (rather than hardcoded elsewhere) so the caller's "keep the
- * selection in view" scrolling can never drift out of sync with this layout.
+ * Renders the company roster pane's identifying heading: slug + id, a
+ * prompt, and a blank separator — everything before the panel's
+ * {@link SelectableList}s (Roles, then Tasks).
  */
-export function renderRosterPane(
+export function renderRosterHeading(
   companySlug: string,
   companyId: string,
-  roles: RoleOption[],
-  selectedIndex: number,
-): RosterRender {
-  const heading = [
+): string[] {
+  return [
     `Slug: ${escapeMarkup(companySlug)}`,
     `Id: ${escapeMarkup(companyId)}`,
     '',
     'Please select a role to initiate a chat:',
     '',
   ];
-  const lines = [...heading, ...renderRoleList(roles, selectedIndex)];
-  return { lines, listStartIndex: heading.length };
+}
+
+/**
+ * Renders a panel's {@link SelectableList}s: each list's title, then per
+ * group an optional group title, then its entries — blank-line separated
+ * between lists. `selectedLine` is the line index (within the returned
+ * `lines`) of the current selection, so the caller can scroll it into view
+ * without hardcoding this layout a second time; `-1` if there is no
+ * selection (e.g. every list is empty).
+ */
+export function renderMultiListPanel(
+  lists: SelectableList[],
+  selected: ListPosition | undefined,
+  width: number,
+): { lines: string[]; selectedLine: number } {
+  const lines: string[] = [];
+  let selectedLine = -1;
+  lists.forEach((list, listIndex) => {
+    if (listIndex > 0) lines.push('');
+    lines.push(`^+${escapeMarkup(list.title)}^:`);
+    list.groups.forEach((group, groupIndex) => {
+      if (group.title) lines.push(escapeMarkup(group.title));
+      if (group.entries.length === 0 && group.title) {
+        lines.push('  (none)');
+      }
+      group.entries.forEach((entry, entryIndex) => {
+        const isSelected = Boolean(
+          selected &&
+          selected.listIndex === listIndex &&
+          selected.groupIndex === groupIndex &&
+          selected.entryIndex === entryIndex,
+        );
+        if (isSelected) selectedLine = lines.length;
+        lines.push(...entry.render(width, isSelected));
+      });
+    });
+  });
+  return { lines, selectedLine };
+}
+
+/** `yyyy-MM-dd HH:mm:ss` for a task-list entry's timestamp column. */
+export function dateTimeSeconds(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
+    `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+  );
+}
+
+/** Truncates `text` to `width` columns, replacing the last character with an ellipsis if it doesn't fit. */
+export function truncateWithEllipsis(text: string, width: number): string {
+  const w = Math.max(width, 1);
+  if (text.length <= w) return text;
+  return w === 1 ? text.slice(0, 1) : text.slice(0, w - 1) + '…';
+}
+
+/** The task-list state/completion indicator, e.g. `in progress: 2/3`, `succeeded`. */
+export function formatTaskState(summary: TaskChangeSummary): string {
+  return summary.status === 'in-progress'
+    ? `in progress: ${summary.completedSteps}/${summary.totalSteps}`
+    : summary.status;
+}
+
+/**
+ * Renders one company task-list entry: a single truncated line when not
+ * highlighted (`yyyy-MM-dd HH:mm:ss (state) "request"`), or — highlighted —
+ * the prompt expanded and word-wrapped up to `maxLines`, with a blank line
+ * of spacing before and after.
+ */
+export function renderTaskListEntry(
+  summary: TaskChangeSummary,
+  selected: boolean,
+  width: number,
+  maxLines: number,
+): string[] {
+  const w = Math.max(width, 1);
+  const mark = marker(selected);
+  const meta = `${dateTimeSeconds(summary.createdAt)} (${formatTaskState(summary)})`;
+  const body = `${meta} "${summary.request}"`;
+
+  if (!selected) {
+    return [
+      `${mark}${escapeMarkup(truncateWithEllipsis(body, w - mark.length))}`,
+    ];
+  }
+
+  const wrapped = wrapText(body, Math.max(w - mark.length, 1)).slice(
+    0,
+    Math.max(maxLines, 1),
+  );
+  return [
+    '',
+    ...wrapped.map((line, i) =>
+      i === 0 ? `${mark}${escapeMarkup(line)}` : `  ${escapeMarkup(line)}`,
+    ),
+    '',
+  ];
+}
+
+/** Builds one {@link ListEntry} for a task in the company roster's "Tasks" list. */
+export function makeTaskEntry(
+  summary: TaskChangeSummary,
+  maxLines: number,
+): ListEntry {
+  return {
+    id: summary.id,
+    render: (width: number, selected: boolean) =>
+      renderTaskListEntry(summary, selected, width, maxLines),
+  };
 }
 
 /** Renders the identifying heading shown at the top of every chat pane. */
 export function renderPaneHeading(name: string, id: string): string[] {
   return [`Name: ${escapeMarkup(name)}`, `Id: ${escapeMarkup(id)}`, ''];
+}
+
+/**
+ * Grey/cyan/green/red/yellow markup colour code for a task or assignment
+ * status — shared so the task panel's assignment list and (if it adopts the
+ * same convention later) the company task list's state indicator agree on
+ * one mapping instead of two.
+ */
+export function statusColor(status: string): string {
+  switch (status) {
+    case 'ready':
+      return '^K'; // waiting — grey
+    case 'succeeded':
+      return '^G';
+    case 'failed':
+      return '^R';
+    case 'cancelled':
+      return '^Y';
+    default:
+      // planning / in-progress / in-qa / finalising and anything else active
+      return '^C';
+  }
+}
+
+/** One row of the task panel's Assignments list. */
+export interface AssignmentRow {
+  id: string;
+  /** 1-based position in the panel's Assignments list. */
+  index: number;
+  role: string;
+  status: string;
+  prompt: string;
+  /** The assignment's working agent, once dispatched — null before it begins. */
+  agentId: string | null;
+}
+
+/**
+ * Renders one task-panel assignment row: `n. <role> <status> "<prompt>"`,
+ * truncated with an ellipsis when not highlighted; word-wrapped up to
+ * `maxLines` (with spacing) when highlighted — mirroring
+ * {@link renderTaskListEntry}'s truncate/expand behaviour. The status word is
+ * colourised via {@link statusColor} without perturbing the width budget (the
+ * budget is computed from the plain, uncoloured meta text).
+ */
+export function renderAssignmentListEntry(
+  row: AssignmentRow,
+  selected: boolean,
+  width: number,
+  maxLines: number,
+): string[] {
+  const w = Math.max(width, 1);
+  const mark = marker(selected);
+  const plainMeta = `${row.index}. ${row.role} ${row.status}`;
+  const colouredMeta = `${row.index}. ${escapeMarkup(row.role)} ${statusColor(row.status)}${escapeMarkup(row.status)}^:`;
+  // Budget for the prompt text: total width minus the marker, the (plain,
+  // uncoloured) meta, a separating space, and the two quote characters.
+  const promptBudget = Math.max(w - mark.length - plainMeta.length - 3, 0);
+
+  if (!selected) {
+    const promptText = truncateWithEllipsis(row.prompt, promptBudget);
+    return [`${mark}${colouredMeta} "${escapeMarkup(promptText)}"`];
+  }
+
+  const wrapped = wrapText(row.prompt, Math.max(promptBudget, 1)).slice(
+    0,
+    Math.max(maxLines, 1),
+  );
+  const lines = wrapped.map((line, i) =>
+    i === 0
+      ? `${mark}${colouredMeta} "${escapeMarkup(line)}`
+      : `  ${escapeMarkup(line)}`,
+  );
+  lines[lines.length - 1] += '"';
+  return ['', ...lines, ''];
+}
+
+/** Builds one {@link ListEntry} for an assignment in the task panel's Assignments list. */
+export function makeAssignmentEntry(
+  row: AssignmentRow,
+  maxLines: number,
+): ListEntry {
+  return {
+    id: row.id,
+    // Only assignments that have begun are selectable — an unstarted
+    // ('ready') assignment has no conversation to open.
+    selectable: row.status !== 'ready',
+    render: (width: number, selected: boolean) =>
+      renderAssignmentListEntry(row, selected, width, maxLines),
+  };
+}
+
+/**
+ * Renders the task panel's identifying heading: `Id:`/`Prompt:` (the prompt
+ * word-wrapped, continuation lines indented under the opening quote), then a
+ * blank line and the "Assignments" section label — everything before the
+ * panel's Assignments {@link SelectableList}.
+ */
+export function renderTaskPaneHeading(
+  taskId: string,
+  prompt: string,
+  width: number,
+): string[] {
+  const idLine = `Id:     ${escapeMarkup(taskId)}`;
+  const promptPrefix = 'Prompt: ';
+  const wrapped = wrapText(prompt, Math.max(width - promptPrefix.length, 1));
+  const promptLines = wrapped.map((line, i) =>
+    i === 0
+      ? `${promptPrefix}"${escapeMarkup(line)}`
+      : `${' '.repeat(promptPrefix.length)}${escapeMarkup(line)}`,
+  );
+  promptLines[promptLines.length - 1] += '"';
+  return [idLine, ...promptLines, ''];
 }

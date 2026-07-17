@@ -13,12 +13,19 @@ import { AuditService } from '../audit/audit.service';
 import { StorageModule } from '../storage/storage.module';
 import { StorageService } from '../storage/storage.service';
 import { AgentEventService } from '../events/agent-event.service';
+import { CompanyEventService } from '../events/company-event.service';
+import { TaskEventService } from '../events/task-event.service';
 
-/** Provides context-budget, compaction, and agent-event services to the API layer. */
+/**
+ * Provides context-budget, compaction, and the agent/company/task event
+ * buses to the API layer.
+ */
 @Module({
   imports: [AuditModule, StorageModule],
   providers: [
     AgentEventService,
+    CompanyEventService,
+    TaskEventService,
     ContextBudgetService,
     ContextCompactorService,
     { provide: OVERFLOW_STORE, useExisting: StorageService },
@@ -29,6 +36,8 @@ import { AgentEventService } from '../events/agent-event.service';
   ],
   exports: [
     AgentEventService,
+    CompanyEventService,
+    TaskEventService,
     ContextBudgetService,
     ContextCompactorService,
     IncomingDataGuardService,

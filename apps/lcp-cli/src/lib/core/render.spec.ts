@@ -113,11 +113,99 @@ describe('createRenderer', () => {
     expect(errText()).toContain('consulting Chicken assistant');
   });
 
+  it('wraps a long discrete line to the terminal width instead of printing it unwrapped', () => {
+    // A fixed width, not the real process.stdout.columns — otherwise this
+    // test's outcome depends on the terminal the test happens to run in.
+    const width = 40;
+    const { renderer, errText } = setup({ width });
+    const longStatus = Array.from({ length: 20 }, (_, i) => `word${i}`).join(
+      ' ',
+    );
+    renderer.render({ kind: 'agent_status', data: { status: longStatus } });
+    const lines = errText().split('\n').filter(Boolean);
+    expect(lines.length).toBeGreaterThan(1);
+    for (const line of lines) {
+      // Strip ANSI colour codes before measuring visible width.
+      // eslint-disable-next-line no-control-regex
+      expect(line.replace(/\x1b\[[0-9;]*m/g, '').length).toBeLessThanOrEqual(
+        width,
+      );
+    }
+  });
+
+  it('renders agent_loop_completion with a fixed header, not the payload text as the header', () => {
+    const { renderer, errText } = setup();
+    renderer.render({
+      kind: 'agent_loop_completion',
+      data: {
+        summary: 'Task completed.\n\nActions taken (in order):\n- did a thing',
+      },
+    });
+    expect(errText()).toContain('assignment complete: Task completed.');
+  });
+
   it('ignores terminal and unknown event kinds', () => {
     const { renderer, outText, errText } = setup();
     renderer.render({ kind: 'completed', data: { response: 'done' } });
     renderer.render({ kind: 'mystery', data: {} });
     expect(outText()).toBe('');
     expect(errText()).toBe('');
+  });
+
+  describe('renderUserPrompt', () => {
+    it('renders the message on its own coloured line to stderr', () => {
+      const { renderer, errText } = setup();
+      renderer.renderUserPrompt('What is the capital of France?');
+      expect(errText()).toContain('You: What is the capital of France?');
+    });
+
+    it('participates in blank-line block spacing with subsequent lines', () => {
+      const { renderer, errText } = setup();
+      renderer.renderUserPrompt('hi');
+      renderer.render({ kind: 'agent_status', data: { status: 'running' } });
+      expect(errText().indexOf('Agent state:')).toBeGreaterThan(
+        errText().indexOf('You: hi'),
+      );
+      // A blank-line separator was inserted between the two blocks.
+      const between = errText().slice(
+        errText().indexOf('You: hi'),
+        errText().indexOf('Agent state:'),
+      );
+      expect(between).toContain('\n');
+    });
+  });
+
+  describe('blank response marker', () => {
+    it('renders (blank) for a single empty-string response delta', () => {
+      const { renderer, outText } = setup();
+      renderer.render({ kind: 'response', data: { delta: '' } });
+      renderer.finish();
+      expect(outText()).toContain('(blank)');
+    });
+
+    it('renders (blank) when only whitespace deltas arrive', () => {
+      const { renderer, outText } = setup();
+      renderer.render({ kind: 'response', data: { delta: '   ' } });
+      renderer.render({ kind: 'response', data: { delta: '\n' } });
+      renderer.finish();
+      expect(outText()).toContain('(blank)');
+    });
+
+    it('does not render (blank) for a non-empty response', () => {
+      const { renderer, outText } = setup();
+      renderer.render({ kind: 'response', data: { delta: 'Hello' } });
+      renderer.finish();
+      expect(outText()).not.toContain('(blank)');
+    });
+
+    it('resets the blank check between successive response blocks', () => {
+      const { renderer, outText } = setup();
+      renderer.render({ kind: 'response', data: { delta: 'Hello' } });
+      renderer.render({ kind: 'agent_status', data: { status: 'running' } }); // closes the block
+      renderer.render({ kind: 'response', data: { delta: '' } });
+      renderer.finish();
+      const occurrences = outText().split('(blank)').length - 1;
+      expect(occurrences).toBe(1);
+    });
   });
 });

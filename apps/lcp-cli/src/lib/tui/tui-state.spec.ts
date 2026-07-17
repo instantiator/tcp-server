@@ -1,4 +1,13 @@
-import { PaneManager } from './tui-state';
+import {
+  ListEntry,
+  MultiListSelection,
+  PaneManager,
+  SelectableList,
+} from './tui-state';
+
+function entry(id: string, selectable = true): ListEntry {
+  return { id, selectable, render: () => [id] };
+}
 
 describe('PaneManager', () => {
   it('focuses the first pane added automatically', () => {
@@ -104,5 +113,115 @@ describe('PaneManager', () => {
     mgr.addPane({ id: 'a', label: 'a', talkable: true });
     expect(() => mgr.removePane('nope')).not.toThrow();
     expect(mgr.panesInOrder).toHaveLength(1);
+  });
+});
+
+describe('MultiListSelection', () => {
+  function twoLists(): SelectableList[] {
+    return [
+      {
+        title: 'Roles',
+        groups: [{ entries: [entry('r1'), entry('r2')] }],
+      },
+      {
+        title: 'Tasks',
+        groups: [
+          { title: 'Active', entries: [entry('t1'), entry('t2')] },
+          { title: 'Done', entries: [entry('t3')] },
+        ],
+      },
+    ];
+  }
+
+  it('starts at the first selectable row', () => {
+    const sel = new MultiListSelection();
+    sel.setLists(twoLists());
+    expect(sel.current?.entry.id).toBe('r1');
+  });
+
+  it('moveSelection walks forward across group and list boundaries', () => {
+    const sel = new MultiListSelection();
+    sel.setLists(twoLists());
+    sel.moveSelection(1);
+    expect(sel.current?.entry.id).toBe('r2');
+    sel.moveSelection(1);
+    expect(sel.current?.entry.id).toBe('t1');
+    sel.moveSelection(1);
+    expect(sel.current?.entry.id).toBe('t2');
+    sel.moveSelection(1);
+    expect(sel.current?.entry.id).toBe('t3');
+  });
+
+  it('moveSelection cycles top↔bottom over the whole concatenated set', () => {
+    const sel = new MultiListSelection();
+    sel.setLists(twoLists());
+    sel.moveSelection(-1);
+    expect(sel.current?.entry.id).toBe('t3');
+    sel.moveSelection(1);
+    expect(sel.current?.entry.id).toBe('r1');
+  });
+
+  it('skips non-selectable rows (e.g. a group heading rendered as an entry)', () => {
+    const lists: SelectableList[] = [
+      {
+        title: 'Tasks',
+        groups: [{ entries: [entry('heading', false), entry('t1')] }],
+      },
+    ];
+    const sel = new MultiListSelection();
+    sel.setLists(lists);
+    expect(sel.current?.entry.id).toBe('t1');
+  });
+
+  it('jumpToList moves to the first selectable entry of the next/previous list', () => {
+    const sel = new MultiListSelection();
+    sel.setLists(twoLists());
+    sel.jumpToList(1);
+    expect(sel.current?.entry.id).toBe('t1');
+    sel.jumpToList(1);
+    expect(sel.current?.entry.id).toBe('r1');
+    sel.jumpToList(-1);
+    expect(sel.current?.entry.id).toBe('t1');
+  });
+
+  it('jumpToList is a no-op with fewer than two lists', () => {
+    const sel = new MultiListSelection();
+    sel.setLists([twoLists()[0]]);
+    sel.jumpToList(1);
+    expect(sel.current?.entry.id).toBe('r1');
+  });
+
+  it('jumpToList skips a list with no selectable entries', () => {
+    const lists: SelectableList[] = [
+      { title: 'A', groups: [{ entries: [entry('a1')] }] },
+      { title: 'B', groups: [{ entries: [] }] },
+      { title: 'C', groups: [{ entries: [entry('c1')] }] },
+    ];
+    const sel = new MultiListSelection();
+    sel.setLists(lists);
+    sel.jumpToList(1);
+    expect(sel.current?.entry.id).toBe('c1');
+  });
+
+  it('clamps the index when the list shrinks', () => {
+    const sel = new MultiListSelection();
+    sel.setLists(twoLists());
+    sel.moveSelection(4); // -> t3 (last)
+    sel.setLists([twoLists()[0]]); // shrink to just Roles (2 entries)
+    expect(sel.current?.entry.id).toBe('r2');
+  });
+
+  it('current is undefined when there are no selectable rows at all', () => {
+    const sel = new MultiListSelection();
+    sel.setLists([{ title: 'Empty', groups: [{ entries: [] }] }]);
+    expect(sel.current).toBeUndefined();
+  });
+
+  it('moveSelection/jumpToList are no-ops with no selectable rows', () => {
+    const sel = new MultiListSelection();
+    sel.setLists([{ title: 'Empty', groups: [{ entries: [] }] }]);
+    expect(() => sel.moveSelection(1)).not.toThrow();
+    expect(() => sel.jumpToList(1)).not.toThrow();
+    expect(sel.current).toBeUndefined();
   });
 });

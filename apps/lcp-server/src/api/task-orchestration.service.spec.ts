@@ -13,6 +13,8 @@ import { ConfigService } from '@nestjs/config';
 import { type UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
+import { CompanyEventService } from '../events/company-event.service';
+import { TaskEventService } from '../events/task-event.service';
 import { StorageService } from '../storage/storage.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { PauseAndResumeService } from './pause-and-resume.service';
@@ -47,6 +49,8 @@ describe('TaskOrchestrationService', () => {
   let storage: { copyFile: jest.Mock; listFiles: jest.Mock };
   let audit: { record: jest.Mock };
   let config: { get: jest.Mock };
+  let companyEvents: { emit: jest.Mock };
+  let taskEvents: { emit: jest.Mock };
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -98,6 +102,8 @@ describe('TaskOrchestrationService', () => {
     };
     audit = { record: jest.fn().mockResolvedValue(undefined) };
     config = { get: jest.fn().mockReturnValue(undefined) };
+    companyEvents = { emit: jest.fn() };
+    taskEvents = { emit: jest.fn() };
 
     service = new TaskOrchestrationService(
       taskRepo,
@@ -110,6 +116,8 @@ describe('TaskOrchestrationService', () => {
       storage as unknown as StorageService,
       audit as unknown as AuditService,
       config as unknown as ConfigService,
+      companyEvents as unknown as CompanyEventService,
+      taskEvents as unknown as TaskEventService,
     );
   });
 
@@ -201,6 +209,29 @@ describe('TaskOrchestrationService', () => {
         expect.objectContaining({ requiredToolCalls: ['create_plan'] }),
       );
       expect(agents.dispatchStartJob).toHaveBeenCalledTimes(1);
+
+      // The ready→planning reaction is recorded/emitted here (see
+      // dispatchPlanner's docstring) — both the task's own SSE stream and
+      // its company's observe it.
+      const taskCall = taskEvents.emit.mock.calls[0] as [
+        string,
+        { kind: string; data: { id: string; status: string } },
+      ];
+      expect(taskCall[0]).toBe(task.id);
+      expect(taskCall[1]).toMatchObject({
+        kind: 'task_changed',
+        data: { id: task.id, status: 'planning' },
+      });
+
+      const companyCall = companyEvents.emit.mock.calls[0] as [
+        string,
+        { kind: string; data: { id: string; status: string } },
+      ];
+      expect(companyCall[0]).toBe(company.id);
+      expect(companyCall[1]).toMatchObject({
+        kind: 'task_changed',
+        data: { id: task.id, status: 'planning' },
+      });
     });
 
     it('falls back to the company planner role', async () => {
@@ -400,6 +431,19 @@ describe('TaskOrchestrationService', () => {
       const taskAfter = (await taskRepo.findOneBy({ id: task.id }))!;
       expect(taskAfter.status).toBe('succeeded');
       expect(taskAfter.completed).not.toBeNull();
+
+      // Regression: recordAssignmentState must report the *new* status
+      // ('succeeded'), not the stale in-memory 'in-qa' the atomic claim
+      // updated only in the DB.
+      const assignmentChangedCall = taskEvents.emit.mock.calls.find(
+        (call: unknown[]) =>
+          (call[1] as { kind: string }).kind === 'assignment_changed',
+      ) as [string, { kind: string; data: { id: string; status: string } }];
+      expect(assignmentChangedCall[0]).toBe(task.id);
+      expect(assignmentChangedCall[1].data).toMatchObject({
+        id: target.id,
+        status: 'succeeded',
+      });
     });
 
     it('is idempotent — a duplicate accept does not re-run side effects', async () => {
@@ -410,6 +454,48 @@ describe('TaskOrchestrationService', () => {
       // Second call: target is now succeeded, not in-qa → no-op.
       await service.assignmentAssured(target);
       expect(pauseResume.completeAgent).not.toHaveBeenCalled();
+    });
+
+    it('advance(): dispatches a finalise agent (not mechanical succeed) when task.expected is non-empty', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, {
+        status: 'in-progress',
+        plannerRoleId: role.id,
+        expected: [{ type: 'task-completed-path', value: 'report.txt' }],
+      });
+      const target = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        orderIndex: 0,
+        status: 'in-qa',
+        qaStatus: 'accepted',
+        summary: 'done',
+        prepared: [{ type: 'assignment-working-path', value: 'out.txt' }],
+      });
+      const agent = await agentRepo.save(
+        agentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          assignmentId: target.id,
+          initialPrompt: 'x',
+          status: AgentStatus.Paused,
+        }),
+      );
+      await assignmentRepo.update(target.id, { agentId: agent.id });
+
+      await service.assignmentAssured({ ...target, agentId: agent.id });
+
+      const taskAfter = (await taskRepo.findOneBy({ id: task.id }))!;
+      // Not mechanically succeeded — a finalise assignment is dispatched instead.
+      expect(taskAfter.status).toBe('finalising');
+      const finalise = await assignmentRepo.findOneBy({
+        taskId: task.id,
+        mode: 'finalise',
+      });
+      expect(finalise).not.toBeNull();
+      expect(finalise!.status).toBe('in-progress');
     });
   });
 
@@ -590,6 +676,167 @@ describe('TaskOrchestrationService', () => {
       ).resolves.toBeUndefined();
       expect((await assignmentRepo.findOneBy({ id: orphan.id }))!.status).toBe(
         'in-progress',
+      );
+    });
+
+    it('fails the target assignment and task when a QA agent fails', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, { status: 'in-progress' });
+      const target = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        orderIndex: 0,
+        status: 'in-qa',
+      });
+      const qa = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        mode: 'qa',
+        targetAssignmentId: target.id,
+        status: 'in-progress',
+      });
+      const agent = await agentRepo.save(
+        agentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          assignmentId: qa.id,
+          initialPrompt: 'x',
+        }),
+      );
+
+      await service.handleAgentFailed(agent.id, 'qa crashed');
+
+      expect((await assignmentRepo.findOneBy({ id: target.id }))!.status).toBe(
+        'failed',
+      );
+      expect((await taskRepo.findOneBy({ id: task.id }))!.status).toBe(
+        'failed',
+      );
+    });
+
+    it('is a no-op when the target assignment is no longer in-qa (lost the race to a concurrent QA accept)', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, { status: 'in-progress' });
+      const target = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        orderIndex: 0,
+        status: 'succeeded', // already resolved by a concurrent accept
+      });
+      const qa = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        mode: 'qa',
+        targetAssignmentId: target.id,
+        status: 'in-progress',
+      });
+      const agent = await agentRepo.save(
+        agentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          assignmentId: qa.id,
+          initialPrompt: 'x',
+        }),
+      );
+
+      await service.handleAgentFailed(agent.id, 'qa crashed late');
+
+      expect((await assignmentRepo.findOneBy({ id: target.id }))!.status).toBe(
+        'succeeded',
+      );
+      expect((await taskRepo.findOneBy({ id: task.id }))!.status).toBe(
+        'in-progress',
+      );
+    });
+  });
+
+  // --- cancelTask ------------------------------------------------------------
+
+  describe('cancelTask', () => {
+    it('cancels every non-terminal assignment and its agent, and the task itself', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, { status: 'in-progress' });
+      const step = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        orderIndex: 0,
+        status: 'in-progress',
+      });
+      const agent = await agentRepo.save(
+        agentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          assignmentId: step.id,
+          initialPrompt: 'x',
+        }),
+      );
+      await assignmentRepo.update(step.id, { agentId: agent.id });
+
+      await service.cancelTask(await taskRepo.findOneByOrFail({ id: task.id }));
+
+      expect(
+        (await assignmentRepo.findOneByOrFail({ id: step.id })).status,
+      ).toBe('cancelled');
+      expect((await agentRepo.findOneByOrFail({ id: agent.id })).status).toBe(
+        AgentStatus.Cancelled,
+      );
+      // cancelTask itself only cascades to assignments/agents and records the
+      // task's cancellation — the task row's own status is set by
+      // TaskService.cancel()'s atomic claim, one layer up, before this is
+      // ever called; that's exercised by the e2e/API-facing tests instead.
+      expect(audit.record).toHaveBeenCalledWith(
+        company.id,
+        'orchestrator',
+        null,
+        expect.anything(),
+        expect.objectContaining({ taskId: task.id, newStatus: 'cancelled' }),
+      );
+    });
+
+    it('does not cancel an assignment that completed concurrently — a stale in-memory snapshot loses the atomic claim', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, { status: 'in-progress' });
+      const step = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        orderIndex: 0,
+        status: 'in-progress',
+      });
+
+      // Simulates the exact race this atomic-claim mechanism guards against:
+      // cancelTask's own assignments fetch returns an in-progress snapshot,
+      // but by the time it tries to claim that assignment, a concurrent
+      // completion has already moved the real row on to 'succeeded'.
+      jest
+        .spyOn(assignmentRepo, 'find')
+        .mockResolvedValueOnce([{ ...step, status: 'in-progress' }]);
+      await assignmentRepo.update(step.id, { status: 'succeeded' });
+
+      await service.cancelTask(await taskRepo.findOneByOrFail({ id: task.id }));
+
+      // The claim (WHERE status = 'in-progress') affected 0 rows, so the
+      // concurrently-completed assignment is left exactly as it was.
+      expect(
+        (await assignmentRepo.findOneByOrFail({ id: step.id })).status,
+      ).toBe('succeeded');
+      // cancelTask still records the task's own cancellation regardless of
+      // how many of its assignments it actually claimed.
+      expect(audit.record).toHaveBeenCalledWith(
+        company.id,
+        'orchestrator',
+        null,
+        expect.anything(),
+        expect.objectContaining({ taskId: task.id, newStatus: 'cancelled' }),
       );
     });
   });
@@ -825,6 +1072,46 @@ describe('TaskOrchestrationService', () => {
       });
       expect(qa).not.toBeNull();
       expect(qa!.status).toBe('in-progress');
+    });
+
+    it('fails a finalising task whose finalise agent is dead', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, {
+        status: 'finalising',
+        expected: [{ type: 'task-completed-path', value: 'report.txt' }],
+      });
+      const finalise = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        mode: 'finalise',
+        status: 'in-progress',
+      });
+      const agent = await agentRepo.save(
+        agentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          assignmentId: finalise.id,
+          initialPrompt: 'x',
+          status: AgentStatus.Failed,
+        }),
+      );
+      await assignmentRepo.update(finalise.id, { agentId: agent.id });
+      storage.listFiles.mockResolvedValue([
+        { key: 'k/report.txt', name: 'report.txt', size: 1, lastModified: 'x' },
+      ]);
+
+      await service.reconcileTask(task);
+
+      const fresh = await taskRepo.findOneByOrFail({ id: task.id });
+      expect(fresh.status).toBe('failed');
+      expect(fresh.failureReason).toContain(
+        'finalise agent died before restart',
+      );
+      expect(fresh.completed).toEqual([
+        { type: 'task-completed-path', value: 'report.txt' },
+      ]);
     });
   });
 });

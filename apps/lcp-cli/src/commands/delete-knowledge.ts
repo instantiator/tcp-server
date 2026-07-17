@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { getGlobalOptions } from '../lib/core/cli-options';
+import { addCompanyOptions, addRoleOptions } from '../lib/core/entity-ref';
 import { deleteKnowledgeAction } from '../lib/docs/delete-knowledge.action';
 
 /**
@@ -7,15 +8,24 @@ import { deleteKnowledgeAction } from '../lib/docs/delete-knowledge.action';
  * base or a company's shared knowledge. Idempotent.
  */
 export function registerDeleteKnowledge(program: Command): void {
-  program
+  const cmd = program
     .command('delete-knowledge')
     .description(
       'Delete a knowledge-base document from a role or company (shared knowledge)',
-    )
-    .option('-r, --role <slug-or-id>', 'Role slug or UUID')
-    .option('-c, --company <slug-or-id>', 'Company slug or UUID')
+    );
+  addRoleOptions(cmd);
+  addCompanyOptions(cmd);
+  cmd
     .requiredOption('-f, --file <filename>', 'Filename to delete')
-    .action((cmdOpts: { role?: string; company?: string; file: string }) =>
-      deleteKnowledgeAction(getGlobalOptions(program), cmdOpts),
+    .action(
+      (cmdOpts: {
+        role?: string;
+        roleId?: string;
+        roleSlug?: string;
+        company?: string;
+        companyId?: string;
+        companySlug?: string;
+        file: string;
+      }) => deleteKnowledgeAction(getGlobalOptions(program), cmdOpts),
     );
 }

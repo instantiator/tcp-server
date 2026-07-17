@@ -5,15 +5,36 @@
 // (the company's role list, scrolling to keep the highlight in view), and
 // TextPane (fixed text — e.g. the help screen — with native scrolling).
 
+import type { TaskChangeSummary } from '@lcp/shared';
 import { TextBox } from 'terminal-kit';
 import { SseEvent } from '../core/sse';
 import {
+  escapeMarkup,
+  makeAssignmentEntry,
+  makeRoleEntry,
+  makeTaskEntry,
+  marker,
   PaneEntryLog,
+  renderMultiListPanel,
   renderPaneHeading,
-  renderRosterPane,
+  renderRosterHeading,
+  renderTaskPaneHeading,
   wrapText,
 } from './tui-format';
-import { RoleOption } from './tui-state';
+import {
+  AssignmentInfo,
+  MultiListSelection,
+  RoleOption,
+  SelectableList,
+} from './tui-state';
+
+/** Task statuses shown in the roster's "Active" task group, most-recently-updated first. */
+const ACTIVE_TASK_STATUSES = new Set([
+  'ready',
+  'planning',
+  'in-progress',
+  'finalising',
+]);
 
 /**
  * Common behaviour for every pane: identity, its backing TextBox, and the
@@ -101,6 +122,11 @@ export class ChatPane extends Pane {
     this.log.append(event);
   }
 
+  /** Appends the user's own submitted message as a distinctly-styled entry. */
+  appendUserPrompt(text: string): void {
+    this.log.pushUserPrompt(text);
+  }
+
   /**
    * Scrolls by a page; +1 = towards older content. Only relevant when this
    * pane's own TextBox isn't focused — on a talkable pane the InlineInput
@@ -132,15 +158,19 @@ export class ChatPane extends Pane {
 }
 
 /**
- * The company roster pane: lists the company's roles under a "Slug/Id" +
- * prompt heading, with an up/down-moved highlight. Never talkable — Up/Down/
- * Enter/r are handled by Tui.handleKey and routed into this pane's own
- * methods, since there's no InlineInput competing for those keys.
+ * The company roster pane: a "Slug/Id" + prompt heading, then two
+ * {@link SelectableList}s — Roles (the "initiate chat" list) and Tasks (the
+ * company's tasks, grouped Active/Completed-or-failed, live-updating from
+ * the company SSE stream) — with one flat `>` highlight moving across both.
+ * Never talkable — Up/Down/Enter/r/[/] are handled by Tui.handleKey and
+ * routed into this pane's own methods, since there's no InlineInput
+ * competing for those keys.
  */
 export class RosterPane extends Pane {
   readonly talkable = false;
-  selectedIndex = 0;
-  private listStartIndex = 0;
+  private readonly selection = new MultiListSelection();
+  private lists: SelectableList[] = [];
+  private selectedLine = -1;
 
   constructor(
     id: string,
@@ -148,45 +178,381 @@ export class RosterPane extends Pane {
     textBox: TextBox,
     public slug: string,
     public roles: RoleOption[],
+    private tasks: TaskChangeSummary[] = [],
+    private readonly taskListEntryMaxLines: number = 4,
   ) {
     super(id, label, textBox);
+    this.rebuildLists();
   }
 
+  /** The role at the current selection, or undefined when it's on the Tasks list (or nothing is selected). */
   get selectedRole(): RoleOption | undefined {
-    return this.roles[this.selectedIndex];
+    const pos = this.selection.current;
+    if (!pos || pos.listIndex !== 0) return undefined;
+    return this.roles.find((role) => role.id === pos.entry.id);
   }
 
-  /** Moves the highlight by `delta`, wrapping at the ends. */
+  /** The task at the current selection, or undefined when it's on the Roles list (or nothing is selected). */
+  get selectedTask(): TaskChangeSummary | undefined {
+    const pos = this.selection.current;
+    if (!pos || pos.listIndex !== 1) return undefined;
+    return this.tasks.find((task) => task.id === pos.entry.id);
+  }
+
+  /** Moves the flat highlight by `delta` rows, cycling top↔bottom across every list. */
   moveSelection(delta: number): void {
-    if (this.roles.length === 0) return;
-    const n = this.roles.length;
-    this.selectedIndex = (this.selectedIndex + delta + n) % n;
+    this.selection.moveSelection(delta);
+  }
+
+  /** Jumps the highlight to the first selectable row of the previous (`-1`) or next (`1`) list. */
+  jumpList(direction: 1 | -1): void {
+    this.selection.jumpToList(direction);
   }
 
   /** Replaces the role list (e.g. the 'r' refresh key), clamping the selection. */
   setRoles(roles: RoleOption[]): void {
     this.roles = roles;
-    this.selectedIndex = Math.min(
-      this.selectedIndex,
-      Math.max(roles.length - 1, 0),
-    );
+    this.rebuildLists();
   }
 
-  // Role names aren't wrapped, so the pane width isn't needed here.
-  protected render(): string[] {
-    const { lines, listStartIndex } = renderRosterPane(
-      this.slug,
-      this.id,
-      this.roles,
-      this.selectedIndex,
+  /** Replaces the task list (live updates from the company SSE stream). */
+  setTasks(tasks: TaskChangeSummary[]): void {
+    this.tasks = tasks;
+    this.rebuildLists();
+  }
+
+  private rebuildLists(): void {
+    const active = this.tasks
+      .filter((t) => ACTIVE_TASK_STATUSES.has(t.status))
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const done = this.tasks
+      .filter((t) => !ACTIVE_TASK_STATUSES.has(t.status))
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const taskEntry = (t: TaskChangeSummary) =>
+      makeTaskEntry(t, this.taskListEntryMaxLines);
+
+    this.lists = [
+      {
+        title: 'Roles',
+        groups: [{ entries: this.roles.map(makeRoleEntry) }],
+      },
+      {
+        title: 'Tasks',
+        groups: [
+          { title: 'Active', entries: active.map(taskEntry) },
+          { title: 'Completed / failed', entries: done.map(taskEntry) },
+        ],
+      },
+    ];
+    this.selection.setLists(this.lists);
+  }
+
+  protected render(width: number): string[] {
+    const heading = renderRosterHeading(this.slug, this.id);
+    const { lines, selectedLine } = renderMultiListPanel(
+      this.lists,
+      this.selection.current,
+      width,
     );
-    this.listStartIndex = listStartIndex;
-    return lines;
+    this.selectedLine = selectedLine < 0 ? -1 : heading.length + selectedLine;
+    return [...heading, ...lines];
   }
 
   protected afterRedraw(): void {
-    this.scrollLineIntoView(this.listStartIndex + this.selectedIndex);
+    if (this.selectedLine >= 0) this.scrollLineIntoView(this.selectedLine);
   }
+}
+
+/**
+ * A task's pane: an `Id:`/`Prompt:` heading, then a single-list
+ * {@link SelectableList} ("Assignments") — ordered exactly as
+ * `GET /api/task/:id` already returns them (plan-ordered implement steps,
+ * then everything else by creation time). Never talkable. Only assignments
+ * that have begun are selectable (see `makeAssignmentEntry`); selecting one
+ * opens the assignment chat panel.
+ */
+export class TaskPane extends Pane {
+  readonly talkable = false;
+  private readonly selection = new MultiListSelection();
+  private lists: SelectableList[] = [];
+  private selectedLine = -1;
+  private assignments: AssignmentInfo[] = [];
+
+  constructor(
+    id: string,
+    label: string,
+    textBox: TextBox,
+    private prompt: string,
+    /** The task's current status, gating the cancel/start hints and shortcuts. */
+    public status: string,
+    assignments: AssignmentInfo[],
+    private readonly assignmentListEntryMaxLines: number = 4,
+  ) {
+    super(id, label, textBox);
+    this.setAssignments(assignments);
+  }
+
+  /** Replaces the assignment list (initial fetch, or a task/assignment SSE update). */
+  setAssignments(assignments: AssignmentInfo[]): void {
+    this.assignments = assignments;
+    this.lists = [
+      {
+        title: 'Assignments',
+        groups: [
+          {
+            entries: assignments.map((a, i) =>
+              makeAssignmentEntry(
+                {
+                  id: a.id,
+                  index: i + 1,
+                  role: a.role,
+                  status: a.status,
+                  prompt: a.prompt,
+                  agentId: a.agentId,
+                },
+                this.assignmentListEntryMaxLines,
+              ),
+            ),
+          },
+        ],
+      },
+    ];
+    this.selection.setLists(this.lists);
+  }
+
+  /** Moves the highlight by `delta` rows, skipping not-yet-begun assignments. */
+  moveSelection(delta: number): void {
+    this.selection.moveSelection(delta);
+  }
+
+  /** The assignment at the current selection, or undefined if nothing is selected. */
+  get selectedAssignment(): AssignmentInfo | undefined {
+    const pos = this.selection.current;
+    if (!pos) return undefined;
+    return this.assignments.find((a) => a.id === pos.entry.id);
+  }
+
+  protected render(width: number): string[] {
+    const heading = renderTaskPaneHeading(this.id, this.prompt, width);
+    const { lines, selectedLine } = renderMultiListPanel(
+      this.lists,
+      this.selection.current,
+      width,
+    );
+    this.selectedLine = selectedLine < 0 ? -1 : heading.length + selectedLine;
+    return [...heading, ...lines];
+  }
+
+  protected afterRedraw(): void {
+    if (this.selectedLine >= 0) this.scrollLineIntoView(this.selectedLine);
+  }
+}
+
+/** One row of the initiate-task form, in display order. */
+type InitiateTaskRow =
+  | { kind: 'prompt' }
+  | { kind: 'role'; roleId: string; name: string }
+  | { kind: 'expected'; filename: string }
+  | { kind: 'add-expected' }
+  | { kind: 'start-toggle' }
+  | { kind: 'submit' };
+
+/**
+ * The initiate-task form: a fixed field list (prompt, planner role, add/
+ * remove expected-output filenames, a start-immediately toggle, submit) — no
+ * general form framework, just this panel's own rows. Never talkable;
+ * text entry for the two free-text rows (prompt, a new expected filename) is
+ * this panel's own minimal raw-key capture (see `Tui.handleKey`), not
+ * terminal-kit's `InlineInput` (which only ever attaches to a *talkable*
+ * pane, and — being single-purpose for "send a chat message" — has no notion
+ * of "which of several fields is being typed into").
+ *
+ * ponytail: the text fields are append/backspace only, no interior cursor
+ * movement — a real per-field cursor is the upgrade path if that's ever
+ * needed; for a prompt and a filename, appending is enough.
+ */
+export class InitiateTaskPane extends Pane {
+  readonly talkable = false;
+  private selectedRow = 0;
+  private prompt = '';
+  private selectedRoleId: string | undefined;
+  private expected: string[] = [];
+  private startImmediately = false;
+  private validationMessage: string | null = null;
+  /** Which field is being raw-captured, if any; the draft text lives in `draft`. */
+  editingField: 'prompt' | 'expected' | null = null;
+  private draft = '';
+
+  constructor(
+    id: string,
+    label: string,
+    textBox: TextBox,
+    readonly companyId: string,
+    private roles: RoleOption[],
+    defaultRoleId: string | undefined,
+  ) {
+    super(id, label, textBox);
+    this.selectedRoleId = defaultRoleId;
+  }
+
+  private rows(): InitiateTaskRow[] {
+    return [
+      { kind: 'prompt' },
+      ...this.roles.map(
+        (r): InitiateTaskRow => ({ kind: 'role', roleId: r.id, name: r.name }),
+      ),
+      ...this.expected.map(
+        (filename): InitiateTaskRow => ({ kind: 'expected', filename }),
+      ),
+      { kind: 'add-expected' },
+      { kind: 'start-toggle' },
+      { kind: 'submit' },
+    ];
+  }
+
+  /** Row count without building the row array — prompt/add-expected/start-toggle/submit are always present. */
+  private rowCount(): number {
+    return 4 + this.roles.length + this.expected.length;
+  }
+
+  /** Moves the row highlight by `delta`, cycling top↔bottom. Ignored while editing a field. */
+  moveSelection(delta: number): void {
+    if (this.editingField) return;
+    const count = this.rowCount();
+    this.selectedRow = (this.selectedRow + delta + count) % count;
+  }
+
+  /** The row currently highlighted (for Enter/'d' to act on). */
+  private currentRow(): InitiateTaskRow {
+    return this.rows()[this.selectedRow];
+  }
+
+  /**
+   * Enter on the highlighted row: starts editing the prompt or a new
+   * expected filename, toggles a role/the start-immediately checkbox, or
+   * validates and fires `onSubmit` (returning its result: `null` on
+   * validation failure, the built request otherwise — {@link Tui} does the
+   * actual API call and pane hand-off).
+   */
+  activateRow(): InitiateTaskSubmission | null | undefined {
+    const row = this.currentRow();
+    if (row.kind === 'prompt') {
+      this.editingField = 'prompt';
+      this.draft = this.prompt;
+      return undefined;
+    }
+    if (row.kind === 'add-expected') {
+      this.editingField = 'expected';
+      this.draft = '';
+      return undefined;
+    }
+    if (row.kind === 'role') {
+      this.selectedRoleId = row.roleId;
+      return undefined;
+    }
+    if (row.kind === 'start-toggle') {
+      this.startImmediately = !this.startImmediately;
+      return undefined;
+    }
+    // 'submit'
+    if (!this.prompt.trim()) {
+      this.validationMessage = 'Enter a prompt before submitting.';
+      return null;
+    }
+    if (!this.selectedRoleId) {
+      this.validationMessage = 'Select a planner role before submitting.';
+      return null;
+    }
+    this.validationMessage = null;
+    return {
+      companyId: this.companyId,
+      request: this.prompt.trim(),
+      plannerRoleId: this.selectedRoleId,
+      expected: [...this.expected],
+      startImmediately: this.startImmediately,
+    };
+  }
+
+  /** Removes the highlighted expected-output row ('d'), a no-op on any other row. */
+  removeCurrentExpected(): void {
+    const row = this.currentRow();
+    if (row.kind !== 'expected') return;
+    this.expected = this.expected.filter((f) => f !== row.filename);
+    this.selectedRow = Math.min(this.selectedRow, this.rowCount() - 1);
+  }
+
+  /** Appends one character to the field being edited. No-op unless editing. */
+  typeChar(ch: string): void {
+    if (this.editingField) this.draft += ch;
+  }
+
+  /** Removes the last character of the field being edited. No-op unless editing. */
+  backspace(): void {
+    if (this.editingField) this.draft = this.draft.slice(0, -1);
+  }
+
+  /** Commits the field being edited (Enter while editing). No-op unless editing. */
+  commitEdit(): void {
+    if (this.editingField === 'prompt') {
+      this.prompt = this.draft;
+    } else if (this.editingField === 'expected') {
+      const filename = this.draft.trim();
+      if (filename) this.expected.push(filename);
+    }
+    this.editingField = null;
+    this.draft = '';
+  }
+
+  protected render(width: number): string[] {
+    const rows = this.rows();
+    const lines: string[] = ['Initiate task', ''];
+    rows.forEach((row, i) => {
+      const mark = marker(i === this.selectedRow);
+      lines.push(`${mark}${this.renderRow(row, i === this.selectedRow)}`);
+    });
+    if (this.validationMessage) {
+      lines.push('', `^R${escapeMarkup(this.validationMessage)}^:`);
+    }
+    return lines.flatMap((line) => wrapText(line, width));
+  }
+
+  private renderRow(row: InitiateTaskRow, selected: boolean): string {
+    switch (row.kind) {
+      case 'prompt': {
+        const text =
+          selected && this.editingField === 'prompt'
+            ? `${this.draft}_`
+            : this.prompt || '(empty — Enter to type)';
+        return `Prompt: "${escapeMarkup(text)}"`;
+      }
+      case 'role': {
+        const chosen = row.roleId === this.selectedRoleId ? '(*)' : '( )';
+        return `${chosen} ${escapeMarkup(row.name)}`;
+      }
+      case 'expected':
+        return `- ${escapeMarkup(row.filename)} (d to remove)`;
+      case 'add-expected': {
+        const text =
+          selected && this.editingField === 'expected' ? `${this.draft}_` : '';
+        return text
+          ? `+ Add expected output: "${escapeMarkup(text)}"`
+          : '+ Add expected output';
+      }
+      case 'start-toggle':
+        return `[${this.startImmediately ? 'x' : ' '}] Start immediately`;
+      case 'submit':
+        return 'Submit';
+    }
+  }
+}
+
+/** The task-create request built by {@link InitiateTaskPane.activateRow} on a valid submit. */
+export interface InitiateTaskSubmission {
+  companyId: string;
+  request: string;
+  plannerRoleId: string;
+  expected: string[];
+  startImmediately: boolean;
 }
 
 /**

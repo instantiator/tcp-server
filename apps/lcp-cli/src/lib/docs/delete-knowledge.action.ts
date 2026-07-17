@@ -1,9 +1,6 @@
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest } from '../core/api';
-import {
-  KnowledgeScopeOpts,
-  resolveKnowledgeScopePath,
-} from '../core/resolve-knowledge-scope';
+import { EntityRefOpts, resolveKnowledgeScopePath } from '../core/entity-ref';
 import { runCommand } from '../core/run-command';
 import { resolveToken } from '../auth/token';
 
@@ -16,7 +13,7 @@ import { resolveToken } from '../auth/token';
  */
 export function deleteKnowledgeAction(
   opts: GlobalOptions,
-  cmdOpts: KnowledgeScopeOpts & { file: string },
+  cmdOpts: EntityRefOpts & { file: string },
 ): Promise<void> {
   return runCommand(async () => {
     const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });

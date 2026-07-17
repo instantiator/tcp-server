@@ -10,10 +10,32 @@
 // row 1 = blank gap, row 2.. = pane content (which itself opens with a
 // heading — "Name/Id" on chat panes, "Slug/Id" + prompt on the roster).
 
+import type { TaskChangeSummary } from '@lcp/shared';
 import { EventEmitter } from 'events';
 import { ScreenBuffer } from 'terminal-kit';
-import { interpretKey, Tui, tuiRenderer, TuiTerminal } from './tui';
+import {
+  interpretKey,
+  resolveTaskListEntryMaxLines,
+  Tui,
+  tuiRenderer,
+  TuiTerminal,
+} from './tui';
 import { SseEvent } from '../core/sse';
+
+function taskSummary(
+  overrides: Partial<TaskChangeSummary> = {},
+): TaskChangeSummary {
+  return {
+    id: 't1',
+    status: 'ready',
+    request: 'Write a report',
+    createdAt: '2026-07-03T10:00:00.000Z',
+    updatedAt: '2026-07-03T10:00:00.000Z',
+    completedSteps: 0,
+    totalSteps: 0,
+    ...overrides,
+  };
+}
 
 const WIDTH = 80;
 const HEIGHT = 16;
@@ -89,6 +111,47 @@ describe('interpretKey', () => {
     expect(interpretKey('a')).toBe('none');
     expect(interpretKey('ENTER')).toBe('none');
     expect(interpretKey('UP')).toBe('none');
+  });
+});
+
+describe('resolveTaskListEntryMaxLines', () => {
+  const ENV_VAR = 'LCP_TASK_LIST_ENTRY_MAX_LINES';
+  const originalEnv = process.env[ENV_VAR];
+
+  afterEach(() => {
+    if (originalEnv === undefined) delete process.env[ENV_VAR];
+    else process.env[ENV_VAR] = originalEnv;
+  });
+
+  it('defaults to 4 when neither a flag nor the env var is given', () => {
+    delete process.env[ENV_VAR];
+    expect(resolveTaskListEntryMaxLines(undefined)).toBe(4);
+  });
+
+  it('uses the env var when no flag is given', () => {
+    process.env[ENV_VAR] = '7';
+    expect(resolveTaskListEntryMaxLines(undefined)).toBe(7);
+  });
+
+  it('the flag takes precedence over the env var', () => {
+    process.env[ENV_VAR] = '7';
+    expect(resolveTaskListEntryMaxLines('2')).toBe(2);
+  });
+
+  it('falls back to the default for a non-integer flag value', () => {
+    delete process.env[ENV_VAR];
+    expect(resolveTaskListEntryMaxLines('abc')).toBe(4);
+  });
+
+  it('falls back to the default for a zero or negative value', () => {
+    delete process.env[ENV_VAR];
+    expect(resolveTaskListEntryMaxLines('0')).toBe(4);
+    expect(resolveTaskListEntryMaxLines('-3')).toBe(4);
+  });
+
+  it('falls back to the default for a non-integer env var value', () => {
+    process.env[ENV_VAR] = 'garbage';
+    expect(resolveTaskListEntryMaxLines(undefined)).toBe(4);
   });
 });
 
@@ -423,6 +486,98 @@ describe('Tui scrolling', () => {
   });
 });
 
+describe('Tui resize resilience', () => {
+  function resize(
+    term: { width: number; height: number },
+    w: number,
+    h: number,
+  ): void {
+    term.width = w;
+    term.height = h;
+    (term as unknown as EventEmitter).emit('resize', w, h);
+  }
+
+  it('survives a resize to a degenerate terminal (height ≤ 4) on a talkable pane, and recovers when it grows back', () => {
+    const { tui, term, rows } = makeTui();
+    tui.addPane({ id: 'root', label: 'Cat', talkable: true });
+
+    expect(() => resize(term, 2, 3)).not.toThrow();
+    // Sane render: no exception, and it's still safe to keep interacting
+    // with the pane while the terminal is this small.
+    expect(() =>
+      tui.appendEvent('root', statusEvent('still-alive')),
+    ).not.toThrow();
+
+    // Recovers fully once the terminal grows back — no lingering corruption
+    // from having passed through the degenerate size.
+    resize(term, WIDTH, HEIGHT);
+    expect(rows()[0]).toContain('[ Cat ]');
+  });
+
+  it('survives a resize to a degenerate terminal (width ≤ 2) on a non-talkable (roster) pane, and recovers when it grows back', () => {
+    const { tui, term, rows } = makeTui();
+    tui.addRosterPane({
+      id: 'acme',
+      label: 'Acme',
+      slug: 'acme-corp',
+      roles: [{ id: 'r1', name: 'Cat assistant' }],
+    });
+
+    expect(() => resize(term, 2, 4)).not.toThrow();
+
+    resize(term, WIDTH, HEIGHT);
+    expect(rows()[0]).toContain('[ Acme ]');
+    expect(rows().join('\n')).toContain('Cat assistant');
+  });
+
+  it('treats a terminal-kit 1×1 degenerate resize as "too small" without throwing, and recovers on the next real-size resize', () => {
+    const { tui, term, rows } = makeTui();
+    tui.addPane({ id: 'root', label: 'Cat', talkable: true });
+
+    expect(() => resize(term, 1, 1)).not.toThrow();
+    expect(() => resize(term, WIDTH, HEIGHT)).not.toThrow();
+    expect(rows()[0]).toContain('[ Cat ]');
+  });
+
+  it('drops the input box when shrunk too short to hold it, and restores it when grown back', () => {
+    const { tui, term, rows } = makeTui();
+    tui.addPane({ id: 'root', label: 'Cat', talkable: true });
+    expect(rows().some((r) => r.includes('>'))).toBe(true); // the input prompt
+
+    resize(term, WIDTH, 3);
+    // Too short for the input row above the hint bar — dropped, not placed
+    // at an invalid/overlapping position.
+    expect(rows()[0]).toContain('Cat');
+
+    resize(term, WIDTH, HEIGHT);
+    // Re-layout on growing back restores the input and the chrome.
+    expect(rows()[0]).toContain('[ Cat ]');
+    expect(rows()[HEIGHT - 1]).toContain('Ctrl+C quit');
+  });
+
+  it('survives a company SSE task_changed update (updateRosterTasks) landing while the terminal is degenerate', () => {
+    const { tui, term, rows } = makeTui();
+    tui.addRosterPane({
+      id: 'acme',
+      label: 'Acme',
+      slug: 'acme-corp',
+      roles: [{ id: 'r1', name: 'Cat assistant' }],
+    });
+
+    expect(() => resize(term, 2, 4)).not.toThrow();
+    // A task_changed-driven update landing while the pane is hidden/
+    // unpositioned (too small for content) must not throw.
+    expect(() =>
+      tui.updateRosterTasks('acme', [
+        taskSummary({ id: 't1', request: 'Mid-resize task' }),
+      ]),
+    ).not.toThrow();
+
+    resize(term, WIDTH, HEIGHT);
+    expect(rows().join('\n')).toContain('Mid-resize task');
+  });
+});
+
 describe('Tui company roster pane', () => {
   it('renders the role list with the first row highlighted by default', () => {
     const { tui, rows, text } = makeTui();
@@ -440,7 +595,7 @@ describe('Tui company roster pane', () => {
     expect(text()).toContain('  Chicken assistant');
   });
 
-  it('opens with a Slug/Id heading, a prompt, and a blank line before the list', () => {
+  it('opens with a Slug/Id heading, a prompt, a blank line, then the Roles list title before the list', () => {
     const { tui, rows } = makeTui();
     tui.addRosterPane({
       id: 'acme',
@@ -455,7 +610,8 @@ describe('Tui company roster pane', () => {
       'Please select a role to initiate a chat:',
     );
     expect(rows()[CONTENT_TOP + 4].trim()).toBe('');
-    expect(rows()[CONTENT_TOP + 5]).toContain('> Cat assistant');
+    expect(rows()[CONTENT_TOP + 5]).toContain('Roles');
+    expect(rows()[CONTENT_TOP + 6]).toContain('> Cat assistant');
   });
 
   it('inverts the colour of the ">" marker on the selected row only', () => {
@@ -469,7 +625,7 @@ describe('Tui company roster pane', () => {
         { id: 'r2', name: 'Chicken assistant' },
       ],
     });
-    const selectedRow = CONTENT_TOP + 5;
+    const selectedRow = CONTENT_TOP + 6;
     expect(attrAt(0, selectedRow).char).toBe('>');
     expect(attrAt(0, selectedRow).attr.inverse).toBe(true);
     expect(attrAt(0, selectedRow + 1).char).toBe(' ');
@@ -511,6 +667,83 @@ describe('Tui company roster pane', () => {
 
     pressKey('UP'); // wraps the other way, back to the last row
     expect(text()).toContain('> Chicken assistant');
+  });
+
+  it('shows the company Tasks list grouped Active/Completed-or-failed, and `>` navigation crosses from Roles into Tasks, cycling top↔bottom', () => {
+    const { tui, rows, text, pressKey } = makeTui();
+    tui.addRosterPane({
+      id: 'acme',
+      label: 'Acme Corp',
+      slug: 'acme-corp',
+      roles: [{ id: 'r1', name: 'Cat assistant' }],
+    });
+    tui.updateRosterTasks('acme', [
+      taskSummary({
+        id: 't1',
+        status: 'in-progress',
+        completedSteps: 1,
+        totalSteps: 2,
+        request: 'Active task',
+      }),
+      taskSummary({
+        id: 't2',
+        status: 'succeeded',
+        request: 'Done task',
+      }),
+    ]);
+
+    // A selected task entry expands and pads with blank lines (see
+    // renderTaskListEntry), shifting row numbers around it — so look up each
+    // row by its distinguishing text rather than a fixed offset.
+    const markerFor = (needle: string): string =>
+      rows().find((r) => r.includes(needle))![0];
+
+    expect(text()).toContain('Active');
+    expect(text()).toContain('Completed / failed');
+    expect(text()).toContain('in progress: 1/2');
+
+    expect(markerFor('Cat assistant')).toBe('>');
+
+    pressKey('DOWN');
+    expect(markerFor('Cat assistant')).toBe(' ');
+    expect(markerFor('Active task')).toBe('>');
+
+    pressKey('DOWN');
+    expect(markerFor('Active task')).toBe(' ');
+    expect(markerFor('Done task')).toBe('>');
+
+    // Cycles back to the top (the role) rather than stopping at the bottom.
+    pressKey('DOWN');
+    expect(markerFor('Done task')).toBe(' ');
+    expect(markerFor('Cat assistant')).toBe('>');
+  });
+
+  it('the [ / ] shortcut jumps the highlight to the first entry of the previous/next list', () => {
+    const { tui, rows, pressKey } = makeTui();
+    tui.addRosterPane({
+      id: 'acme',
+      label: 'Acme Corp',
+      slug: 'acme-corp',
+      roles: [
+        { id: 'r1', name: 'Cat assistant' },
+        { id: 'r2', name: 'Chicken assistant' },
+      ],
+    });
+    tui.updateRosterTasks('acme', [
+      taskSummary({ id: 't1', request: 'Active task' }),
+    ]);
+    const markerFor = (needle: string): string =>
+      rows().find((r) => r.includes(needle))![0];
+
+    pressKey(']');
+    expect(markerFor('Active task')).toBe('>');
+    expect(markerFor('Cat assistant')).toBe(' ');
+
+    pressKey(']'); // wraps back to Roles
+    expect(markerFor('Cat assistant')).toBe('>');
+
+    pressKey('['); // and back the other way
+    expect(markerFor('Active task')).toBe('>');
   });
 
   it('scrolls to keep the highlighted role in view as the selection moves past the visible window', () => {
@@ -593,6 +826,364 @@ describe('Tui company roster pane', () => {
 
     expect(rows()[0]).toContain('[ Cat assistant ]');
     expect(text()).toContain('> '); // input box now shown for the talkable pane
+  });
+
+  it('opens a task panel and switches to it on Enter over a task entry', () => {
+    const { tui, rows, pressKey } = makeTui();
+    tui.addRosterPane({
+      id: 'acme',
+      label: 'Acme Corp',
+      slug: 'acme-corp',
+      roles: [{ id: 'r1', name: 'Cat assistant' }],
+    });
+    tui.updateRosterTasks('acme', [
+      taskSummary({ id: 't1', request: 'Write a report' }),
+    ]);
+    const onSelectTask = jest.fn((task: TaskChangeSummary) => {
+      tui.addTaskPane({
+        id: task.id,
+        label: task.id,
+        prompt: task.request,
+        status: task.status,
+        assignments: [],
+      });
+      tui.switchToPane(task.id);
+    });
+    tui.onSelectTask(onSelectTask);
+
+    pressKey(']'); // jump from Roles to Tasks
+    pressKey('ENTER');
+
+    expect(onSelectTask).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 't1' }),
+    );
+    expect(rows()[0]).toContain('[ t1 ]');
+    expect(rows()[CONTENT_TOP]).toContain('Id:     t1');
+  });
+});
+
+describe('Tui task panel', () => {
+  function addTask(
+    tui: ReturnType<typeof makeTui>['tui'],
+    overrides: Partial<{
+      status: string;
+      assignments: Parameters<Tui['addTaskPane']>[0]['assignments'];
+    }> = {},
+  ) {
+    tui.addTaskPane({
+      id: 'task-1',
+      label: 'task-1',
+      prompt: 'Write a report',
+      status: overrides.status ?? 'in-progress',
+      assignments: overrides.assignments ?? [
+        {
+          id: 'a1',
+          role: 'Planner',
+          status: 'succeeded',
+          prompt: 'Draft the plan',
+          agentId: 'agent-1',
+        },
+        {
+          id: 'a2',
+          role: 'Implementer',
+          status: 'in-progress',
+          prompt: 'Write the report body',
+          agentId: 'agent-2',
+        },
+        {
+          id: 'a3',
+          role: 'QA',
+          status: 'ready',
+          prompt: 'Review the report',
+          agentId: null,
+        },
+      ],
+    });
+  }
+
+  it('renders the Id/Prompt heading and the Assignments list', () => {
+    const { tui, rows } = makeTui();
+    addTask(tui);
+    expect(rows()[CONTENT_TOP]).toContain('Id:     task-1');
+    expect(rows()[CONTENT_TOP + 1]).toContain('Prompt: "Write a report"');
+    expect(rows()[CONTENT_TOP + 3]).toContain('Assignments');
+  });
+
+  it('`>` skips not-yet-begun (ready) assignments', () => {
+    const { tui, text, pressKey } = makeTui();
+    addTask(tui);
+
+    // The first selectable row is a1 (succeeded) — a3 (ready) is skipped
+    // entirely by Down/Up navigation.
+    expect(text()).toContain('> 1. Planner');
+
+    pressKey('DOWN');
+    expect(text()).toContain('> 2. Implementer');
+
+    pressKey('DOWN'); // wraps back to a1 — a3 is never selectable
+    expect(text()).toContain('> 1. Planner');
+  });
+
+  it('colours each assignment status via terminal attributes', () => {
+    const { tui, rows, attrAt } = makeTui();
+    addTask(tui);
+    const succeededRow = rows().findIndex((r) => r.includes('1. Planner'));
+    const col = rows()[succeededRow].indexOf('succeeded');
+    // Bright green foreground (terminal-kit's 16-colour "bright" palette:
+    // base colour 2 + 8) for a succeeded assignment.
+    expect(attrAt(col, succeededRow).attr.color).toBe(10);
+  });
+
+  it('opens the assignment chat panel via onSelectAssignment on Enter over a begun assignment', () => {
+    const { tui, pressKey } = makeTui();
+    addTask(tui);
+    const onSelectAssignment = jest.fn();
+    tui.onSelectAssignment(onSelectAssignment);
+
+    pressKey('ENTER');
+
+    expect(onSelectAssignment).toHaveBeenCalledWith(
+      'task-1',
+      expect.objectContaining({ id: 'a1', role: 'Planner' }),
+    );
+  });
+
+  it('updates the assignment list live (e.g. an SSE assignment_changed update)', () => {
+    const { tui, text } = makeTui();
+    addTask(tui);
+    expect(text()).toContain('in-progress');
+
+    tui.updateTaskPaneAssignments('task-1', [
+      {
+        id: 'a1',
+        role: 'Planner',
+        status: 'succeeded',
+        prompt: 'Draft the plan',
+        agentId: 'agent-1',
+      },
+      {
+        id: 'a2',
+        role: 'Implementer',
+        status: 'succeeded',
+        prompt: 'Write the report body',
+        agentId: 'agent-2',
+      },
+      {
+        id: 'a3',
+        role: 'QA',
+        status: 'in-progress',
+        prompt: 'Review the report',
+        agentId: 'agent-3',
+      },
+    ]);
+
+    expect(text()).toContain('3. QA');
+    expect(text()).not.toContain('2. Implementer in-progress');
+  });
+
+  it('shows the cancel shortcut only while the task is running, and fires onCancelTask', () => {
+    const { tui, rows, term, pressKey } = makeTui();
+    addTask(tui, { status: 'in-progress' });
+    const onCancelTask = jest.fn();
+    tui.onCancelTask(onCancelTask);
+
+    expect(rows()[term.height - 1]).toContain('c cancel');
+    pressKey('c');
+    expect(onCancelTask).toHaveBeenCalledWith('task-1');
+  });
+
+  it('hides the cancel shortcut and ignores "c" once the task is no longer running', () => {
+    const { tui, rows, term, pressKey } = makeTui();
+    addTask(tui, { status: 'succeeded' });
+    const onCancelTask = jest.fn();
+    tui.onCancelTask(onCancelTask);
+
+    expect(rows()[term.height - 1]).not.toContain('c cancel');
+    pressKey('c');
+    expect(onCancelTask).not.toHaveBeenCalled();
+  });
+
+  it('shows the start shortcut only while the task is ready, and fires onStartTask', () => {
+    const { tui, rows, term, pressKey } = makeTui();
+    addTask(tui, { status: 'ready' });
+    const onStartTask = jest.fn();
+    tui.onStartTask(onStartTask);
+
+    expect(rows()[term.height - 1]).toContain('s start');
+    pressKey('s');
+    expect(onStartTask).toHaveBeenCalledWith('task-1');
+  });
+
+  it('hides the start shortcut and ignores "s" once the task is no longer ready', () => {
+    const { tui, rows, term, pressKey } = makeTui();
+    addTask(tui, { status: 'in-progress' });
+    const onStartTask = jest.fn();
+    tui.onStartTask(onStartTask);
+
+    expect(rows()[term.height - 1]).not.toContain('s start');
+    pressKey('s');
+    expect(onStartTask).not.toHaveBeenCalled();
+  });
+
+  it('updateTaskPaneStatus updates the hint bar without needing a full redraw of the list', () => {
+    const { tui, rows, term } = makeTui();
+    addTask(tui, { status: 'ready' });
+    expect(rows()[term.height - 1]).toContain('s start');
+
+    tui.updateTaskPaneStatus('task-1', 'in-progress');
+
+    expect(rows()[term.height - 1]).not.toContain('s start');
+    expect(rows()[term.height - 1]).toContain('c cancel');
+  });
+});
+
+describe('Tui initiate-task panel', () => {
+  function openFromRoster(tui: ReturnType<typeof makeTui>['tui']) {
+    tui.addRosterPane({
+      id: 'acme',
+      label: 'Acme Corp',
+      slug: 'acme-corp',
+      roles: [{ id: 'r1', name: 'Cat assistant' }],
+    });
+    tui.addInitiateTaskPane({
+      companyId: 'acme',
+      roles: [
+        { id: 'r1', name: 'Planner' },
+        { id: 'r2', name: 'Implementer' },
+      ],
+      defaultRoleId: 'r1',
+    });
+  }
+
+  it("opens via 'n' from the company roster", () => {
+    const { tui, rows, pressKey } = makeTui();
+    tui.addRosterPane({
+      id: 'acme',
+      label: 'Acme Corp',
+      slug: 'acme-corp',
+      roles: [{ id: 'r1', name: 'Cat assistant' }],
+    });
+    const onOpen = jest.fn(() => {
+      tui.addInitiateTaskPane({
+        companyId: 'acme',
+        roles: [],
+        defaultRoleId: undefined,
+      });
+    });
+    tui.onOpenInitiateTask(onOpen);
+
+    pressKey('n');
+
+    expect(onOpen).toHaveBeenCalled();
+    expect(rows()[0]).toContain('[ New task ]');
+  });
+
+  it('pre-selects the default planner role', () => {
+    const { tui, text } = makeTui();
+    openFromRoster(tui);
+    expect(text()).toContain('(*) Planner');
+    expect(text()).toContain('( ) Implementer');
+  });
+
+  it('types a prompt via Enter-to-edit, then commits on Enter', () => {
+    const { tui, text, pressKey, type } = makeTui();
+    openFromRoster(tui);
+
+    pressKey('ENTER'); // start editing the prompt (first row)
+    type('Write a report');
+    pressKey('ENTER'); // commit
+
+    expect(text()).toContain('Prompt: "Write a report"');
+  });
+
+  it('adds and removes an expected-output filename', () => {
+    const { tui, text, pressKey, type } = makeTui();
+    openFromRoster(tui);
+
+    // Navigate down to "+ Add expected output": prompt, 2 roles, then add-row.
+    pressKey('DOWN');
+    pressKey('DOWN');
+    pressKey('DOWN');
+    pressKey('ENTER'); // start editing the new filename
+    type('output.md');
+    pressKey('ENTER'); // commit
+
+    expect(text()).toContain('- output.md (d to remove)');
+
+    // The new row lands at the highlight's position (where "+ Add expected
+    // output" used to be), so it's already highlighted — no need to move.
+    pressKey('d');
+
+    expect(text()).not.toContain('output.md');
+  });
+
+  it('blocks submission with an inline message when the prompt is empty', () => {
+    const { tui, text, pressKey } = makeTui();
+    openFromRoster(tui);
+    const onSubmit = jest.fn();
+    tui.onSubmitInitiateTask(onSubmit);
+
+    // Navigate to the Submit row: prompt, 2 roles, add-row, start-toggle, submit.
+    for (let i = 0; i < 5; i++) pressKey('DOWN');
+    pressKey('ENTER');
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(text()).toContain('Enter a prompt before submitting.');
+  });
+
+  it('toggles Start immediately', () => {
+    const { tui, text, pressKey } = makeTui();
+    openFromRoster(tui);
+
+    // Navigate to the start-toggle row: prompt, 2 roles, add-row, start-toggle.
+    for (let i = 0; i < 4; i++) pressKey('DOWN');
+    expect(text()).toContain('[ ] Start immediately');
+
+    pressKey('ENTER');
+
+    expect(text()).toContain('[x] Start immediately');
+  });
+
+  it('submits with the built request once prompt and role are set', () => {
+    const { tui, pressKey, type } = makeTui();
+    openFromRoster(tui);
+    const onSubmit = jest.fn();
+    tui.onSubmitInitiateTask(onSubmit);
+
+    pressKey('ENTER');
+    type('Write a report');
+    pressKey('ENTER');
+    for (let i = 0; i < 5; i++) pressKey('DOWN'); // to the Submit row
+    pressKey('ENTER');
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      '__initiate_task__',
+      expect.objectContaining({
+        companyId: 'acme',
+        request: 'Write a report',
+        plannerRoleId: 'r1',
+        expected: [],
+        startImmediately: false,
+      }),
+    );
+  });
+
+  it('replaceWithTaskPane hands off to the task panel in the same tab slot', () => {
+    const { tui, rows } = makeTui();
+    openFromRoster(tui);
+    const tabCountBefore = rows()[0].split('|').length;
+
+    tui.replaceWithTaskPane('__initiate_task__', {
+      id: 'task-1',
+      label: 'task-1',
+      prompt: 'Write a report',
+      status: 'ready',
+      assignments: [],
+    });
+
+    expect(rows()[0].split('|').length).toBe(tabCountBefore);
+    expect(rows()[0]).toContain('[ task-1 ]');
+    expect(rows()[CONTENT_TOP]).toContain('Id:     task-1');
   });
 });
 

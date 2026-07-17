@@ -8,6 +8,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { IsNotUuid } from './is-not-uuid.validator';
 import { LlmConfigDto } from './llm-config.dto';
 
 export class CreateRoleDto {
@@ -16,6 +17,7 @@ export class CreateRoleDto {
 
   @IsString()
   @IsNotEmpty()
+  @IsNotUuid()
   slug!: string;
 
   @IsString()
@@ -52,6 +54,7 @@ export class UpdateRoleDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
+  @IsNotUuid()
   slug?: string;
 
   @IsOptional()
