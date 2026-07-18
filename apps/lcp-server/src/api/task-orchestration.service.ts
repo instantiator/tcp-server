@@ -629,13 +629,29 @@ export class TaskOrchestrationService
     if (!assignment?.taskId) return;
 
     if (assignment.mode === 'plan') {
+      const claimed = await this.transitionAssignment(
+        assignment,
+        'in-progress',
+        'failed',
+        'assignment failed (agent failed)',
+      );
+      if (!claimed) return;
       await this.failTask(assignment.taskId, `planner failed: ${reason}`);
       return;
     }
 
     // finalise-mode: the task fails, but the files it already promoted stay —
-    // record `completed` from the completed/ directory before failing.
+    // record `completed` from the completed/ directory before failing. The
+    // finalise assignment itself must transition `in-progress → failed` too,
+    // or it's left stuck `in-progress` while its task reads `failed`.
     if (assignment.mode === 'finalise') {
+      const claimed = await this.transitionAssignment(
+        assignment,
+        'in-progress',
+        'failed',
+        'assignment failed (agent failed)',
+      );
+      if (!claimed) return;
       const task = await this.taskRepo.findOneBy({ id: assignment.taskId });
       if (task) {
         const completed = await this.buildTaskCompleted(task);
@@ -660,7 +676,11 @@ export class TaskOrchestrationService
       return;
     }
 
-    // qa-mode: a failed QA agent fails the assignment it was reviewing.
+    // qa-mode: a failed QA agent fails the assignment it was reviewing, its
+    // own qa assignment, and the task. The target's `in-qa → failed` claim is
+    // the gate: if the target is no longer in-qa (a concurrent QA accept won
+    // the race), this is a no-op — nothing is failed, matching that the
+    // reviewed assignment already passed.
     // ponytail: no QA-retry — a failed QA agent fails the task; re-dispatching
     // QA once is the upgrade path if this proves noisy.
     if (assignment.mode === 'qa' && assignment.targetAssignmentId) {
@@ -671,6 +691,12 @@ export class TaskOrchestrationService
         'failed',
       );
       if (claimed === 0) return;
+      await this.transitionAssignment(
+        assignment,
+        'in-progress',
+        'failed',
+        'assignment failed (agent failed)',
+      );
       await this.failTask(
         assignment.taskId,
         `QA agent failed for assignment ${assignment.targetAssignmentId}`,
@@ -702,6 +728,17 @@ export class TaskOrchestrationService
 
     const plan = await this.planAssignments(assignment.taskId);
     if (plan.length === 0) {
+      // Producing a plan is the required outcome of plan mode, so a plan-less
+      // completion is a failed assignment — fail it alongside the task, not
+      // just the task. Forced (not a status-gated claim) because create_plan
+      // may have already marked it `succeeded` for an empty plan; either way
+      // it must read `failed`. Idempotent via the `planning` guard above.
+      await this.assignmentRepo.update(assignment.id, { status: 'failed' });
+      assignment.status = 'failed';
+      await this.recordAssignmentState(
+        assignment,
+        'assignment failed (planner produced no plan)',
+      );
       await this.failTask(
         assignment.taskId,
         'planner completed without producing a plan',
@@ -731,6 +768,17 @@ export class TaskOrchestrationService
         agent.status === AgentStatus.Failed ||
         (agent.status === AgentStatus.Completed && plan.length === 0);
       if (plannerDead) {
+        // Fail the plan assignment too (no-op if it isn't in-progress, e.g. a
+        // planner that completed without a plan), so it isn't left stuck
+        // `in-progress` while its task reads `failed`.
+        if (planner) {
+          await this.transitionAssignment(
+            planner,
+            'in-progress',
+            'failed',
+            'assignment failed (agent died before restart)',
+          );
+        }
         await this.failTask(task.id, 'planner did not produce a plan');
       }
       return;
@@ -747,6 +795,15 @@ export class TaskOrchestrationService
         ? await this.agentRepo.findOneBy({ id: finalise.agentId })
         : null;
       if (finalise && (!agent || DEAD_AGENT_STATES.includes(agent.status))) {
+        // Fail the finalise assignment too — otherwise it's left stuck
+        // `in-progress` while its task reads `failed` (same as the live
+        // handleAgentFailed path).
+        await this.transitionAssignment(
+          finalise,
+          'in-progress',
+          'failed',
+          'assignment failed (agent died before restart)',
+        );
         const completed = await this.buildTaskCompleted(task);
         await this.taskRepo.update(task.id, { completed });
         await this.failTask(task.id, 'finalise agent died before restart');

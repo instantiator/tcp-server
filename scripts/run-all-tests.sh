@@ -119,7 +119,11 @@ DEPLOYMENT_STARTED=true
 echo
 
 step "API tests"
-"$SCRIPTS/run-api-tests.sh" --base-url http://localhost:3000
+# Read the machine test user's credentials from the SAME env file the
+# deployment was bootstrapped with (start-deployment.sh wrote a fresh
+# TEST_CLIENT_ID/SECRET into it) — not run-api-tests.sh's default, which would
+# prefer a stale .env if one happens to be present in the repo root.
+"$SCRIPTS/run-api-tests.sh" --base-url http://localhost:3000 --env-file "$REPO_ROOT/.env.testing"
 echo
 
 step "Smoke tests"

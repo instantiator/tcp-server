@@ -50,6 +50,7 @@ describe('ChatSession', () => {
             {
               id: 'a1',
               roleId: 'role-1',
+              mode: 'plan',
               status: 'succeeded',
               prompt: 'Plan it',
               shortcode: '000-000-plan',
@@ -58,6 +59,7 @@ describe('ChatSession', () => {
             {
               id: 'a2',
               roleId: 'role-2',
+              mode: 'implement',
               status: 'ready',
               prompt: 'Do it',
               shortcode: '000-001-implement',
@@ -79,6 +81,7 @@ describe('ChatSession', () => {
           id: 'a1',
           role: 'Planner',
           roleSlug: 'planner',
+          mode: 'plan',
           status: 'succeeded',
           prompt: 'Plan it',
           shortcode: '000-000-plan',
@@ -89,6 +92,7 @@ describe('ChatSession', () => {
           id: 'a2',
           role: 'Implementer',
           roleSlug: 'implementer',
+          mode: 'implement',
           status: 'ready',
           prompt: 'Do it',
           shortcode: '000-001-implement',
@@ -254,6 +258,7 @@ describe('ChatSession', () => {
             {
               id: 'a1',
               roleId: 'role-1',
+              mode: 'implement',
               status: 'in-progress',
               prompt: 'x',
               shortcode: '000-000-implement',
@@ -284,6 +289,7 @@ describe('ChatSession', () => {
           id: 'a1',
           role: 'Implementer',
           roleSlug: 'implementer',
+          mode: 'implement',
           status: 'in-progress',
           prompt: 'x',
           shortcode: '000-000-implement',
@@ -386,6 +392,7 @@ describe('ChatSession', () => {
       id: 'a1',
       role: 'Implementer',
       roleSlug: 'implementer',
+      mode: 'implement',
       status: 'in-progress',
       prompt: 'Write the report',
       shortcode: '000-000-implement',
@@ -449,15 +456,41 @@ describe('ChatSession', () => {
       expect(mockedReadSseStream).not.toHaveBeenCalled();
     });
 
-    it('follows the live SSE stream for a still-running agent', async () => {
-      mockedApiRequest.mockResolvedValueOnce({
-        id: 'agent-1',
-        status: 'running',
-      });
+    it('renders history up to now, then follows the live SSE stream, for a still-running agent', async () => {
+      mockedApiRequest
+        .mockResolvedValueOnce({ id: 'agent-1', status: 'running' })
+        .mockResolvedValueOnce([
+          {
+            timestamp: 't0',
+            eventType: 'tool_result',
+            payload: {
+              output: { kwargs: { name: 'storage__read_working_file' } },
+            },
+          },
+        ]);
       const tui = fakeTui();
       const session = makeSession(tui);
 
       await session.openAssignmentChatPane(assignment);
+
+      // History was fetched and replayed before the live stream opened.
+      expect(mockedApiRequest).toHaveBeenNthCalledWith(
+        2,
+        expect.anything(),
+        'GET',
+        '/api/agent/agent-1/history',
+        undefined,
+      );
+      expect(tui.appendEvent).toHaveBeenCalledWith(
+        'agent-1',
+        expect.objectContaining({
+          kind: 'llm',
+          data: {
+            activity: 'tool_complete',
+            tool: 'storage__read_working_file',
+          },
+        }),
+      );
 
       expect(mockedReadSseStream).toHaveBeenCalledWith(
         'http://localhost:3000/api/agent/agent-1/events',

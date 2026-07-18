@@ -533,17 +533,18 @@ describe('renderAssignmentListEntry', () => {
     id: 'a1',
     index: 1,
     role: 'Implementer',
+    mode: 'implement',
     status: 'in-progress',
     prompt: 'Write the report',
     agentId: 'agent-1',
     ...overrides,
   });
 
-  it('renders a single truncated line with the index, role, coloured status, and prompt when not selected', () => {
-    const lines = renderAssignmentListEntry(row(), false, 60, 4);
+  it('renders a single truncated line with the index, role, mode, coloured status, and prompt when not selected', () => {
+    const lines = renderAssignmentListEntry(row(), false, 70, 4);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain('1. Implementer');
-    expect(lines[0]).toContain('^Cin-progress^:');
+    expect(lines[0]).toContain('(implement: ^Cin-progress^:)');
     expect(lines[0]).toContain('"Write the report"');
   });
 
@@ -551,7 +552,7 @@ describe('renderAssignmentListEntry', () => {
     const lines = renderAssignmentListEntry(
       row({ prompt: 'a'.repeat(200) }),
       false,
-      40,
+      60,
       4,
     );
     expect(lines).toHaveLength(1);

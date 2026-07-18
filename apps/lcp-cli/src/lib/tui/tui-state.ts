@@ -37,6 +37,8 @@ export interface AssignmentInfo {
   role: string;
   /** The assignment's role's slug. */
   roleSlug: string;
+  /** The kind of work — `plan`/`implement`/`qa`/`finalise` etc. — shown alongside status as `(mode: status)`. */
+  mode: string;
   status: string;
   prompt: string;
   /** Null for an assignment with no plan-derived shortcode (shouldn't happen for a task's own assignments). */

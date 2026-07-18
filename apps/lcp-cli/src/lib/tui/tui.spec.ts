@@ -967,6 +967,7 @@ describe('Tui task panel', () => {
         {
           id: 'a1',
           role: 'Planner',
+          mode: 'plan',
           status: 'succeeded',
           prompt: 'Draft the plan',
           agentId: 'agent-1',
@@ -974,6 +975,7 @@ describe('Tui task panel', () => {
         {
           id: 'a2',
           role: 'Implementer',
+          mode: 'implement',
           status: 'in-progress',
           prompt: 'Write the report body',
           agentId: 'agent-2',
@@ -981,6 +983,7 @@ describe('Tui task panel', () => {
         {
           id: 'a3',
           role: 'QA',
+          mode: 'qa',
           status: 'ready',
           prompt: 'Review the report',
           agentId: null,
@@ -1051,6 +1054,7 @@ describe('Tui task panel', () => {
       {
         id: 'a1',
         role: 'Planner',
+        mode: 'plan',
         status: 'succeeded',
         prompt: 'Draft the plan',
         agentId: 'agent-1',
@@ -1058,6 +1062,7 @@ describe('Tui task panel', () => {
       {
         id: 'a2',
         role: 'Implementer',
+        mode: 'implement',
         status: 'succeeded',
         prompt: 'Write the report body',
         agentId: 'agent-2',
@@ -1065,6 +1070,7 @@ describe('Tui task panel', () => {
       {
         id: 'a3',
         role: 'QA',
+        mode: 'qa',
         status: 'in-progress',
         prompt: 'Review the report',
         agentId: 'agent-3',

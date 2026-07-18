@@ -268,6 +268,7 @@ export class ChatSession {
           id: a.id,
           role: roleById.get(a.roleId)?.name ?? a.roleId,
           roleSlug: roleById.get(a.roleId)?.slug ?? a.roleId,
+          mode: a.mode,
           status: a.status,
           prompt: a.prompt,
           shortcode,
@@ -413,9 +414,10 @@ export class ChatSession {
 
   /**
    * Opens (or switches to, if already open) a read-only chat panel for a
-   * begun assignment's working agent: follows its live SSE stream while
-   * still running, or renders its full audit history (mapped into the same
-   * event shapes the live stream produces) once it has finished.
+   * begun assignment's working agent: first renders its audit history up to
+   * now (mapped into the same event shapes the live stream produces), then —
+   * if the agent is still running — follows its live SSE stream for whatever
+   * happens next. A finished agent shows history only; nothing is live.
    */
   async openAssignmentChatPane(assignment: AssignmentInfo): Promise<void> {
     const agentId = assignment.agentId;
@@ -440,15 +442,23 @@ export class ChatSession {
         prompt: assignment.prompt,
       },
     });
-    if (TERMINAL_AGENT_STATUSES.has(agent.status)) {
-      const rows = await this.tokenManager.request<AuditRow[]>(
-        'GET',
-        `/api/agent/${agentId}/history`,
-      );
-      for (const event of mapAuditHistoryToEvents(rows)) {
-        this.tui?.appendEvent(agentId, event);
-      }
-    } else {
+
+    // History up to now — for a running agent this is everything before the
+    // pane was opened, which the live stream (new events only) would otherwise
+    // miss.
+    const rows = await this.tokenManager.request<AuditRow[]>(
+      'GET',
+      `/api/agent/${agentId}/history`,
+    );
+    for (const event of mapAuditHistoryToEvents(rows)) {
+      this.tui?.appendEvent(agentId, event);
+    }
+
+    // ...then follow live if it's still going. ponytail: an event landing in
+    // the gap between the history fetch and this subscription can be missed;
+    // acceptable for a read-only observability pane. Tighten (subscribe-then-
+    // fetch-then-dedup) only if that boundary turn ever matters.
+    if (!TERMINAL_AGENT_STATUSES.has(agent.status)) {
       const abort = new AbortController();
       this.assignmentPaneWatchAbort.set(agentId, abort);
       const url = `${this.opts.lcpServer.replace(/\/$/, '')}/api/agent/${agentId}/events`;

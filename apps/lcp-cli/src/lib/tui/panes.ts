@@ -341,6 +341,7 @@ export class TaskPane extends Pane {
       id: a.id,
       index: a.planIndex ?? i,
       role: a.role,
+      mode: a.mode,
       status: a.status,
       prompt: a.prompt,
       agentId: a.agentId,

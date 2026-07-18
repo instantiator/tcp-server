@@ -57,6 +57,55 @@ describe('mapAuditHistoryToEvents', () => {
     expect(events).toEqual([]);
   });
 
+  it('maps an llm_response reasoning_content to a reasoning block before the response', () => {
+    const events = mapAuditHistoryToEvents([
+      {
+        timestamp: 't1',
+        eventType: 'llm_response',
+        payload: {
+          output: {
+            content: 'The answer.',
+            kwargs: {
+              additional_kwargs: { reasoning_content: 'Let me think...' },
+            },
+          },
+        },
+      },
+    ]);
+    expect(events).toEqual([
+      {
+        kind: 'reasoning',
+        timestamp: 't1',
+        data: { delta: 'Let me think...' },
+      },
+      { kind: 'response', timestamp: 't1', data: { delta: 'The answer.' } },
+    ]);
+  });
+
+  it('maps a tool-call turn (reasoning_content but empty content) to reasoning alone', () => {
+    const events = mapAuditHistoryToEvents([
+      {
+        timestamp: 't1',
+        eventType: 'llm_response',
+        payload: {
+          output: {
+            content: '',
+            kwargs: {
+              additional_kwargs: { reasoning_content: 'I should call a tool.' },
+            },
+          },
+        },
+      },
+    ]);
+    expect(events).toEqual([
+      {
+        kind: 'reasoning',
+        timestamp: 't1',
+        data: { delta: 'I should call a tool.' },
+      },
+    ]);
+  });
+
   it('passes agent_loop_completion through as-is', () => {
     const events = mapAuditHistoryToEvents([
       {
@@ -74,14 +123,39 @@ describe('mapAuditHistoryToEvents', () => {
     ]);
   });
 
-  it('skips llm_request/tool_call/tool_result/decision rows (no reconstructable content)', () => {
+  it('skips llm_request/tool_call/decision rows and content-less tool_result rows', () => {
     const events = mapAuditHistoryToEvents([
       { timestamp: 't1', eventType: 'llm_request', payload: {} },
-      { timestamp: 't2', eventType: 'tool_call', payload: {} },
+      // tool_call records only the input, not the tool name — nothing to show.
+      { timestamp: 't2', eventType: 'tool_call', payload: { input: {} } },
+      // tool_result with no name (malformed / missing output) is skipped too.
       { timestamp: 't3', eventType: 'tool_result', payload: {} },
       { timestamp: 't4', eventType: 'decision', payload: {} },
     ]);
     expect(events).toEqual([]);
+  });
+
+  it('maps a tool_result to an llm tool_complete activity, reading the name from output.kwargs.name', () => {
+    const events = mapAuditHistoryToEvents([
+      {
+        timestamp: 't1',
+        eventType: 'tool_result',
+        payload: {
+          input: { input: '{}' },
+          output: { kwargs: { name: 'storage__list_working_files' } },
+        },
+      },
+    ]);
+    expect(events).toEqual([
+      {
+        kind: 'llm',
+        timestamp: 't1',
+        data: {
+          activity: 'tool_complete',
+          tool: 'storage__list_working_files',
+        },
+      },
+    ]);
   });
 
   it('preserves row order', () => {

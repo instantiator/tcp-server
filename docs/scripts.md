@@ -65,7 +65,12 @@ All Zitadel credentials and the test users are read from the env file
 flags are accepted; change those values in the env file instead. See
 [docs/zitadel-setup.md](zitadel-setup.md) for the full bootstrap sequence.
 
-Safe to re-run — existing Zitadel resources are left untouched.
+Safe to re-run — existing Zitadel resources (project, app, users) are reused,
+not recreated. Their client secrets, however, are regenerated and rewritten
+into the env file on every run: a Zitadel secret can only be read at
+generation time, so regenerating each run is what keeps the env file and
+Zitadel from silently drifting apart (a stale secret otherwise fails auth
+with an opaque `invalid_client`).
 
 ```bash
 ./scripts/start-deployment.sh --project lcp-dev --env-file .env

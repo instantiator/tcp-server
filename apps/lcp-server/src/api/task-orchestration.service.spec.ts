@@ -675,6 +675,10 @@ describe('TaskOrchestrationService', () => {
       const taskAfter = (await taskRepo.findOneBy({ id: task.id }))!;
       expect(taskAfter.status).toBe('failed');
       expect(taskAfter.failureReason).toContain('planner failed');
+      // The plan assignment must not be left stuck in-progress.
+      expect((await assignmentRepo.findOneBy({ id: plan.id }))!.status).toBe(
+        'failed',
+      );
     });
 
     it('fails the assignment and task when an implement agent fails', async () => {
@@ -766,6 +770,10 @@ describe('TaskOrchestrationService', () => {
       expect((await assignmentRepo.findOneBy({ id: target.id }))!.status).toBe(
         'failed',
       );
+      // The qa assignment itself must fail too, not just the reviewed target.
+      expect((await assignmentRepo.findOneBy({ id: qa.id }))!.status).toBe(
+        'failed',
+      );
       expect((await taskRepo.findOneBy({ id: task.id }))!.status).toBe(
         'failed',
       );
@@ -803,6 +811,11 @@ describe('TaskOrchestrationService', () => {
 
       expect((await assignmentRepo.findOneBy({ id: target.id }))!.status).toBe(
         'succeeded',
+      );
+      // The reviewed assignment already passed, so nothing is failed — not the
+      // task, and not the qa assignment (its late failure is a no-op).
+      expect((await assignmentRepo.findOneBy({ id: qa.id }))!.status).toBe(
+        'in-progress',
       );
       expect((await taskRepo.findOneBy({ id: task.id }))!.status).toBe(
         'in-progress',
@@ -923,6 +936,43 @@ describe('TaskOrchestrationService', () => {
       const taskAfter = (await taskRepo.findOneBy({ id: task.id }))!;
       expect(taskAfter.status).toBe('failed');
       expect(taskAfter.failureReason).toContain('without producing a plan');
+      // The plan assignment itself must fail too, not just the task.
+      expect((await assignmentRepo.findOneBy({ id: plan.id }))!.status).toBe(
+        'failed',
+      );
+    });
+
+    it('forces the plan assignment to failed even when create_plan marked it succeeded (empty plan)', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, { status: 'planning' });
+      // create_plan fired with an empty plan: it marks its own assignment
+      // succeeded and completes the agent, leaving a `succeeded` assignment
+      // beside a task that will fail for having no plan.
+      const plan = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        mode: 'plan',
+        status: 'succeeded',
+      });
+      const agent = await agentRepo.save(
+        agentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          assignmentId: plan.id,
+          initialPrompt: 'x',
+        }),
+      );
+
+      await service.handleAgentCompleted(agent.id);
+
+      expect((await taskRepo.findOneBy({ id: task.id }))!.status).toBe(
+        'failed',
+      );
+      expect((await assignmentRepo.findOneBy({ id: plan.id }))!.status).toBe(
+        'failed',
+      );
     });
 
     it('is a no-op when the planner produced a plan (task already in-progress)', async () => {
@@ -1040,8 +1090,10 @@ describe('TaskOrchestrationService', () => {
       expect(pauseResume.completeAgent).toHaveBeenCalled();
     });
 
-    it('handleAgentFailed(finalise): fails the task but keeps files promoted', async () => {
-      const { task, agent } = await seedFinalising();
+    it('handleAgentFailed(finalise): fails the task and the finalise assignment, keeping files promoted', async () => {
+      const { task, finalise, agent } = await seedFinalising();
+      // A finalise agent fails while its assignment is still in flight.
+      await assignmentRepo.update(finalise.id, { status: 'in-progress' });
       storage.listFiles.mockResolvedValue([
         { key: 'k/report.txt', name: 'report.txt', size: 1, lastModified: 'x' },
       ]);
@@ -1055,6 +1107,11 @@ describe('TaskOrchestrationService', () => {
       expect(fresh.completed).toEqual([
         { type: 'task-completed-path', value: 'report.txt' },
       ]);
+      // The finalise assignment must not be left stuck in-progress.
+      const freshAssignment = await assignmentRepo.findOneByOrFail({
+        id: finalise.id,
+      });
+      expect(freshAssignment.status).toBe('failed');
     });
   });
 
@@ -1085,6 +1142,10 @@ describe('TaskOrchestrationService', () => {
 
       await service.reconcileTask(task);
       expect((await taskRepo.findOneBy({ id: task.id }))!.status).toBe(
+        'failed',
+      );
+      // The plan assignment must not be left stuck in-progress.
+      expect((await assignmentRepo.findOneBy({ id: plan.id }))!.status).toBe(
         'failed',
       );
     });
@@ -1166,6 +1227,11 @@ describe('TaskOrchestrationService', () => {
       expect(fresh.completed).toEqual([
         { type: 'task-completed-path', value: 'report.txt' },
       ]);
+      // The finalise assignment must not be left stuck in-progress.
+      const freshAssignment = await assignmentRepo.findOneByOrFail({
+        id: finalise.id,
+      });
+      expect(freshAssignment.status).toBe('failed');
     });
   });
 });

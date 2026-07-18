@@ -449,6 +449,8 @@ export interface AssignmentRow {
    */
   index: number;
   role: string;
+  /** The assignment's mode (`plan`/`implement`/`qa`/`finalise` etc.), shown before the status as `(mode: status)`. */
+  mode: string;
   status: string;
   prompt: string;
   /** The assignment's working agent, once dispatched — null before it begins. */
@@ -456,9 +458,9 @@ export interface AssignmentRow {
 }
 
 /**
- * Renders one task-panel assignment row: `n. <role> (<status>) "<prompt>"`,
- * truncated with an ellipsis when not highlighted; word-wrapped up to
- * `maxLines` (with spacing) when highlighted — mirroring
+ * Renders one task-panel assignment row: `n. <role> (<mode>: <status>)
+ * "<prompt>"`, truncated with an ellipsis when not highlighted; word-wrapped
+ * up to `maxLines` (with spacing) when highlighted — mirroring
  * {@link renderTaskListEntry}'s truncate/expand behaviour. The status word is
  * colourised via {@link statusColor} without perturbing the width budget (the
  * budget is computed from the plain, uncoloured meta text).
@@ -471,8 +473,8 @@ export function renderAssignmentListEntry(
 ): string[] {
   const w = Math.max(width, 1);
   const mark = marker(selected);
-  const plainMeta = `${row.index}. ${row.role} (${row.status})`;
-  const colouredMeta = `${row.index}. ${escapeMarkup(row.role)} (${statusColor(row.status)}${escapeMarkup(row.status)}^:)`;
+  const plainMeta = `${row.index}. ${row.role} (${row.mode}: ${row.status})`;
+  const colouredMeta = `${row.index}. ${escapeMarkup(row.role)} (${escapeMarkup(row.mode)}: ${statusColor(row.status)}${escapeMarkup(row.status)}^:)`;
   // Budget for the prompt text: total width minus the marker, the (plain,
   // uncoloured) meta, a separating space, and the two quote characters.
   const promptBudget = Math.max(w - mark.length - plainMeta.length - 3, 0);
