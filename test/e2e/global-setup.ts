@@ -5,7 +5,7 @@ import { startComposeTier } from '../support/testcontainers-env';
 /**
  * Jest global setup for the e2e tier. Starts the dependency containers
  * (Postgres, Redis, MinIO) once for the whole run via testcontainers and
- * exposes their connection details as env vars. Keycloak is not needed — auth
+ * exposes their connection details as env vars. Zitadel is not needed — auth
  * is mocked (jwks-rsa) — so no `auth` profile is started. Torn down by the
  * matching global-teardown.
  *

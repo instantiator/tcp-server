@@ -255,6 +255,6 @@ Do not include a leading `/`. Examples:
 
 | Item                    | Description                                                                                                      |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| MinIO OIDC SSO          | Keycloak console login for the MinIO UI — deferred                                                               |
+| MinIO OIDC SSO          | Zitadel console login for the MinIO UI — deferred                                                                |
 | MinIO bucket versioning | Would provide true versioning instead of the `_deleted/` soft-delete prefix; configurable per company when added |
 | Audit log JSONL export  | Archival export of audit events to MinIO JSONL files — deferred (see ADR-008)                                    |

@@ -14,12 +14,12 @@ const LCP_MCP_INTERACTIONS =
   process.env.LCP_MCP_INTERACTIONS_URL ?? 'http://localhost:3012';
 const LCP_MCP_TASKS = process.env.LCP_MCP_TASKS_URL ?? 'http://localhost:3013';
 /**
- * Full OIDC discovery URL. Defaults to Keycloak's master realm on localhost.
- * Override with OIDC_DISCOVERY_URL for non-Keycloak providers or remote deployments.
+ * Full OIDC discovery URL. Defaults to Zitadel on localhost.
+ * Override with OIDC_DISCOVERY_URL for remote deployments.
  */
 const OIDC_DISCOVERY =
   process.env.OIDC_DISCOVERY_URL ??
-  'http://localhost:8080/realms/master/.well-known/openid-configuration';
+  'http://localhost:8080/.well-known/openid-configuration';
 
 function get(url: string): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {

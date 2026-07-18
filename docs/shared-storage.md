@@ -35,7 +35,7 @@ Log in with the root credentials from your `.env` file:
 | Username | `MINIO_ROOT_USER`     | `minioadmin` |
 | Password | `MINIO_ROOT_PASSWORD` | `minioadmin` |
 
-> **OIDC SSO (optional):** MinIO supports federating console login through an OIDC provider. When Keycloak is running under the `auth` profile, it can be configured as the identity provider — users then log in via their Keycloak account instead of the root credentials. This requires additional Keycloak client setup and MinIO OIDC env vars; it is not enabled by default. See [ADR-007](ADRs/ADR-007-shared-company-storage.md) for the planned configuration.
+> **OIDC SSO (optional):** MinIO supports federating console login through an OIDC provider. When Zitadel is running under the `auth` profile, it can be configured as the identity provider — users then log in via their Zitadel account instead of the root credentials. This requires additional Zitadel application setup and MinIO OIDC env vars; it is not enabled by default. See [ADR-007](ADRs/ADR-007-shared-company-storage.md) for the planned configuration.
 
 ### Programmatic access (lcp-server, MCP storage server)
 

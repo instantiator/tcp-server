@@ -1,4 +1,3 @@
-import * as readline from 'readline';
 import { apiRequest, ApiOptions } from '../core/api';
 
 /** Options that control how a token is obtained. */
@@ -7,14 +6,32 @@ export interface AuthOptions {
   accessToken?: string;
   refreshToken?: string;
   accessTokenEnvVar?: string;
-  username?: string;
-  password?: string;
 }
 
-/** A resolved token pair. `refreshToken` is only present when obtained via username+password. */
+/** A resolved token pair. `refreshToken` is only present when obtained via device login. */
 export interface TokenSession {
   token: string;
   refreshToken?: string;
+}
+
+/** Env var `get-token`'s docs/examples conventionally capture the token into — checked as a fallback when neither `-t` nor `-E` is given. */
+const DEFAULT_TOKEN_ENV_VAR = 'LCP_TOKEN';
+
+/** Response shape of `POST /api/auth/device`. */
+interface DeviceAuthorizationResponse {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  verification_uri_complete?: string;
+  expires_in: number;
+  interval: number;
+}
+
+/** Response shape of `POST /api/auth/device/token`: pending, or a resolved token. */
+interface DeviceTokenPollResult {
+  status?: 'pending' | 'slow_down';
+  access_token?: string;
+  refresh_token?: string;
 }
 
 /** Resolves a bearer token and, when possible, a refresh token. */
@@ -23,7 +40,8 @@ export async function resolveSession(opts: AuthOptions): Promise<TokenSession> {
   if (opts.accessToken)
     return { token: opts.accessToken, refreshToken: opts.refreshToken };
 
-  // 2. Environment variable
+  // 2. Environment variable (explicit name) — unset is a hard error, since the
+  // caller asked for this var by name.
   if (opts.accessTokenEnvVar) {
     const val = process.env[opts.accessTokenEnvVar];
     if (!val) {
@@ -35,23 +53,62 @@ export async function resolveSession(opts: AuthOptions): Promise<TokenSession> {
     return { token: val, refreshToken: opts.refreshToken };
   }
 
-  // 3. Username + password grant via server
-  if (!opts.username) {
+  // 3. LCP_TOKEN fallback — unset just falls through to device login below,
+  // since nothing explicitly asked for it.
+  const fallback = process.env[DEFAULT_TOKEN_ENV_VAR];
+  if (fallback) return { token: fallback, refreshToken: opts.refreshToken };
+
+  // 4. OAuth 2.0 Device Authorization Grant (RFC 8628) — the OIDC provider
+  // doesn't support a password grant, so login happens in a browser.
+  return deviceLogin(opts.baseUrl);
+}
+
+/**
+ * Starts a device-authorization login via the server proxy, prints the
+ * verification URL and code for the user to complete in a browser, then
+ * polls until they do (or the code expires) — the same pattern `gh auth
+ * login` / `docker login` use.
+ */
+async function deviceLogin(baseUrl: string): Promise<TokenSession> {
+  const apiOpts: ApiOptions = { baseUrl };
+  const device = await apiRequest<DeviceAuthorizationResponse>(
+    apiOpts,
+    'POST',
+    '/api/auth/device',
+  );
+
+  process.stderr.write(
+    `To sign in, open ${device.verification_uri} and enter code: ${device.user_code}\n`,
+  );
+  if (device.verification_uri_complete) {
     process.stderr.write(
-      'Error: provide --access-token, --access-token-env-var, or --username\n',
+      `Or open directly: ${device.verification_uri_complete}\n`,
     );
-    process.exit(1);
   }
 
-  const password =
-    opts.password ?? (await promptPassword(`Password for ${opts.username}: `));
+  const deadline = Date.now() + device.expires_in * 1000;
+  let intervalMs = device.interval * 1000;
 
-  const apiOpts: ApiOptions = { baseUrl: opts.baseUrl };
-  const data = await apiRequest<{
-    access_token: string;
-    refresh_token?: string;
-  }>(apiOpts, 'POST', '/api/auth/token', { username: opts.username, password });
-  return { token: data.access_token, refreshToken: data.refresh_token };
+  while (Date.now() < deadline) {
+    await sleep(intervalMs);
+    const result = await apiRequest<DeviceTokenPollResult>(
+      apiOpts,
+      'POST',
+      '/api/auth/device/token',
+      { device_code: device.device_code },
+    );
+    if (result.access_token) {
+      return { token: result.access_token, refreshToken: result.refresh_token };
+    }
+    if (result.status === 'slow_down') intervalMs += 5_000;
+  }
+
+  process.stderr.write('Error: device login timed out — please try again\n');
+  process.exit(1);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /** Resolves a bearer token from the provided options, prompting if needed. */
@@ -209,31 +266,4 @@ export class TokenManager {
     this.timer = setTimeout(() => void this.forceRefresh(), delayMs);
     this.timer.unref();
   }
-}
-
-/** Prompts for a password, masking each character with `*`. */
-function promptPassword(prompt: string): Promise<string> {
-  return new Promise((resolve) => {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-      terminal: true,
-    });
-
-    // Mask typed characters
-    (rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput =
-      (s: string) => {
-        if (s === '\r\n' || s === '\n' || s === '\r') {
-          process.stdout.write('\n');
-        } else if (s.length > 0) {
-          process.stdout.write('*');
-        }
-      };
-
-    process.stdout.write(prompt);
-    rl.question('', (answer) => {
-      rl.close();
-      resolve(answer);
-    });
-  });
 }

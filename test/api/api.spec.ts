@@ -2,42 +2,42 @@
  * System tests for the API surface exercised by lcp-cli.
  *
  * These tests confirm the full round-trip that each CLI verb performs:
- * the server must reach Keycloak internally (catching the ECONNREFUSED
+ * the server must reach Zitadel internally (catching the ECONNREFUSED
  * regression), and all JWT-guarded endpoints must be reachable.
  *
  * Run via: ./scripts/run-api-tests.sh
- * Requires: docker compose --profile auth up, Keycloak lcp realm configured.
+ * Requires: docker compose --profile auth up, Zitadel lcp org configured.
  */
 
 import { randomUUID } from 'crypto';
 import { LcpCompany, LcpRole } from '../../libs/lcp-shared/src';
-import {
-  ApiHelper,
-  BASE,
-  ChatResponse,
-  PASSWORD,
-  RUN_ID,
-  USERNAME,
-} from './helpers/ApiHelper';
+import { ApiHelper, BASE, ChatResponse, RUN_ID } from './helpers/ApiHelper';
 
 describe('lcp-cli API flows', () => {
-  // get-token: the server must reach Keycloak internally to exchange credentials.
-  // Regression: ECONNREFUSED if Keycloak is not reachable or ready.
-  describe('get-token (POST /api/auth/token)', () => {
-    it('returns an access_token for valid credentials', async () => {
-      const token = await ApiHelper.postCredentialsForToken(
-        USERNAME,
-        PASSWORD,
-        200,
-      );
+  // device authorization: the server must reach Zitadel internally to start/poll the flow.
+  // Regression: ECONNREFUSED if Zitadel is not reachable or ready.
+  describe('device authorization (POST /api/auth/device, POST /api/auth/device/token)', () => {
+    it('starts a device authorization', async () => {
+      const device = await ApiHelper.startDeviceAuthorization();
+      expect(device.device_code).toBeDefined();
+      expect(device.user_code).toBeDefined();
+      expect(device.verification_uri).toContain('/device');
+    });
+    it('reports pending before login completes', async () => {
+      const device = await ApiHelper.startDeviceAuthorization();
+      const poll = await ApiHelper.pollDeviceToken(device.device_code);
+      expect(poll.status).toBe('pending');
+    });
+  });
+
+  describe('machine token (client_credentials)', () => {
+    it('returns an access_token for a valid client secret', async () => {
+      const token = await ApiHelper.getMachineToken();
       expect(token).toBeDefined();
     });
-    it('returns 401 for invalid credentials', async () => {
-      const token = await ApiHelper.postCredentialsForToken(
-        USERNAME,
-        'wrong-password',
-        401,
-      );
+    it('returns an error for an invalid client secret', async () => {
+      // Zitadel's token endpoint reports invalid_client as HTTP 400, not 401.
+      const token = await ApiHelper.getMachineToken('wrong-secret', 400);
       expect(token).toBeUndefined();
     });
   });
@@ -46,12 +46,8 @@ describe('lcp-cli API flows', () => {
     let api: ApiHelper;
 
     beforeAll(async () => {
-      const token = await ApiHelper.postCredentialsForToken(
-        USERNAME,
-        PASSWORD,
-        200,
-      );
-      api = new ApiHelper(token);
+      const token = await ApiHelper.getMachineToken();
+      api = new ApiHelper(token!);
     });
 
     describe('POST /api/company', () => {
@@ -252,7 +248,7 @@ describe('storage proxy', () => {
   let token: string;
 
   beforeAll(async () => {
-    token = await ApiHelper.postCredentialsForToken(USERNAME, PASSWORD, 200);
+    token = (await ApiHelper.getMachineToken())!;
   });
 
   const authHeaders = () => ({ Authorization: `Bearer ${token}` });

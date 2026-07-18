@@ -1,10 +1,14 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
-import { AuthTokenService, OidcTokenResponse } from './auth-token.service';
+import {
+  AuthTokenService,
+  DeviceAuthorizationResponse,
+  DeviceTokenPollResult,
+  OidcTokenResponse,
+} from './auth-token.service';
 
-/** Request body for {@link AuthTokenController.getToken}. */
-interface TokenRequest {
-  username: string;
-  password: string;
+/** Request body for {@link AuthTokenController.pollDeviceToken}. */
+interface DeviceTokenRequest {
+  device_code: string;
 }
 
 /** Request body for {@link AuthTokenController.refreshToken}. */
@@ -14,7 +18,7 @@ interface RefreshRequest {
 
 /**
  * Issues OIDC access tokens on behalf of callers.
- * This endpoint is intentionally not guarded — it produces tokens.
+ * These endpoints are intentionally not guarded — they produce tokens.
  *
  * The OIDC client secret is never exposed to callers; it is resolved
  * server-side from the `OIDC_CLIENT_SECRET` environment variable.
@@ -24,15 +28,28 @@ export class AuthTokenController {
   constructor(private readonly authTokenService: AuthTokenService) {}
 
   /**
-   * Exchanges a username and password for an OIDC access token using the
-   * Resource Owner Password Credentials grant.
-   *
-   * Intended for developer tooling (CLI) — not for production user-facing flows.
+   * Starts an OAuth 2.0 Device Authorization Grant (RFC 8628). Intended for
+   * developer tooling (`lcp-cli get-token`) — the caller presents the
+   * returned `verification_uri`/`user_code` to a human to complete login in
+   * a browser, then polls {@link pollDeviceToken}.
    */
-  @Post('token')
+  @Post('device')
   @HttpCode(HttpStatus.OK)
-  async getToken(@Body() body: TokenRequest): Promise<OidcTokenResponse> {
-    return this.authTokenService.getToken(body.username, body.password);
+  async startDeviceAuthorization(): Promise<DeviceAuthorizationResponse> {
+    return this.authTokenService.startDeviceAuthorization();
+  }
+
+  /**
+   * Polls once for the outcome of a device authorization started via
+   * {@link startDeviceAuthorization}. Returns `{ status: 'pending' | 'slow_down' }`
+   * until the human completes login, then the token response.
+   */
+  @Post('device/token')
+  @HttpCode(HttpStatus.OK)
+  async pollDeviceToken(
+    @Body() body: DeviceTokenRequest,
+  ): Promise<DeviceTokenPollResult> {
+    return this.authTokenService.pollDeviceToken(body.device_code);
   }
 
   /**

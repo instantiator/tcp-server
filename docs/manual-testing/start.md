@@ -61,7 +61,7 @@ Work through these in order.
 | lcp-mcp-interactions | 3012 | Interactions MCP server (stub)    |
 | MinIO API            | 9000 | S3-compatible object storage      |
 | MinIO console        | 9001 | Web UI for browsing stored files  |
-| Keycloak             | 8080 | OIDC provider (auth profile only) |
+| Zitadel              | 8080 | OIDC provider (auth profile only) |
 
 ---
 
@@ -71,7 +71,11 @@ You will use the CLI frequently. These aliases make the commands shorter:
 
 ```bash
 alias lcp="./lcp-cli.sh"
-export TOKEN=$(lcp --username test --password test get-token)
+# get-token opens a browser (device-flow login); sign in with the test user
+# credentials from your env file (TEST_USERNAME/TEST_PASSWORD). LCP_TOKEN is
+# picked up automatically by every subsequent lcp-cli command — no
+# --access-token-env-var flag needed.
+export LCP_TOKEN=$(lcp get-token)
 ```
 
 ---
@@ -79,6 +83,6 @@ export TOKEN=$(lcp --username test --password test get-token)
 ## If something goes wrong
 
 - **Service not starting**: check `docker compose logs <service-name>` for error detail.
-- **401 from lcp-server**: your token has expired — re-run `get-token` and update `$TOKEN`.
+- **401 from lcp-server**: your token has expired — re-run `get-token` and update `$LCP_TOKEN`.
 - **LLM errors**: confirm your LLM provider is running and the `baseUrl` in your company/role config is reachable.
 - **MinIO errors**: the lcp-mcp-storage server logs to `docker compose logs lcp-mcp-storage`.

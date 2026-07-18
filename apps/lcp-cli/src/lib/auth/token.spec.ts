@@ -46,20 +46,126 @@ describe('resolveSession', () => {
     expect(session).toEqual({ token: 'env-token', refreshToken: 'my-refresh' });
   });
 
-  it('returns server refresh_token from username+password grant', async () => {
-    mockApiRequest.mockResolvedValue({
-      access_token: 'server-token',
-      refresh_token: 'server-refresh',
+  describe('LCP_TOKEN fallback', () => {
+    afterEach(() => delete process.env['LCP_TOKEN']);
+
+    it('uses LCP_TOKEN when neither -t nor -E is given', async () => {
+      process.env['LCP_TOKEN'] = 'fallback-token';
+      const session = await resolveSession({
+        baseUrl: 'http://localhost:3000',
+      });
+      expect(session).toEqual({
+        token: 'fallback-token',
+        refreshToken: undefined,
+      });
+      expect(mockApiRequest).not.toHaveBeenCalled();
     });
-    const session = await resolveSession({
-      baseUrl: 'http://localhost:3000',
-      username: 'alice',
-      password: 'pass',
+
+    it('prefers an explicit --access-token over LCP_TOKEN', async () => {
+      process.env['LCP_TOKEN'] = 'fallback-token';
+      const session = await resolveSession({
+        baseUrl: 'http://localhost:3000',
+        accessToken: 'explicit-token',
+      });
+      expect(session.token).toBe('explicit-token');
     });
+
+    it('prefers an explicit --access-token-env-var over LCP_TOKEN', async () => {
+      process.env['LCP_TOKEN'] = 'fallback-token';
+      process.env['TEST_TOKEN_VAR'] = 'named-token';
+      const session = await resolveSession({
+        baseUrl: 'http://localhost:3000',
+        accessTokenEnvVar: 'TEST_TOKEN_VAR',
+      });
+      expect(session.token).toBe('named-token');
+    });
+
+    it('does not use LCP_TOKEN as a silent substitute for an explicitly-named, unset env var', async () => {
+      process.env['LCP_TOKEN'] = 'fallback-token';
+      const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('exit');
+      });
+      await expect(
+        resolveSession({
+          baseUrl: 'http://localhost:3000',
+          accessTokenEnvVar: 'UNSET_TOKEN_VAR',
+        }),
+      ).rejects.toThrow('exit');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      exitSpy.mockRestore();
+    });
+  });
+});
+
+describe('resolveSession — device login', () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+    jest.useRealTimers();
+  });
+
+  it('polls until the device flow completes and returns the token', async () => {
+    jest.useFakeTimers();
+    mockApiRequest
+      .mockResolvedValueOnce({
+        device_code: 'dc-1',
+        user_code: 'ABCD-EFGH',
+        verification_uri: 'http://localhost:3000/device',
+        expires_in: 300,
+        interval: 5,
+      })
+      .mockResolvedValueOnce({ status: 'pending' })
+      .mockResolvedValueOnce({
+        access_token: 'server-token',
+        refresh_token: 'server-refresh',
+      });
+
+    const promise = resolveSession({ baseUrl: 'http://localhost:3000' });
+    await jest.advanceTimersByTimeAsync(5_000);
+    await jest.advanceTimersByTimeAsync(5_000);
+    const session = await promise;
+
     expect(session).toEqual({
       token: 'server-token',
       refreshToken: 'server-refresh',
     });
+    expect(mockApiRequest).toHaveBeenNthCalledWith(
+      1,
+      { baseUrl: 'http://localhost:3000' },
+      'POST',
+      '/api/auth/device',
+    );
+    expect(mockApiRequest).toHaveBeenNthCalledWith(
+      3,
+      { baseUrl: 'http://localhost:3000' },
+      'POST',
+      '/api/auth/device/token',
+      { device_code: 'dc-1' },
+    );
+  });
+
+  it('exits with an error when the device code expires before login completes', async () => {
+    jest.useFakeTimers();
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('exit');
+    });
+    mockApiRequest
+      .mockResolvedValueOnce({
+        device_code: 'dc-1',
+        user_code: 'ABCD-EFGH',
+        verification_uri: 'http://localhost:3000/device',
+        expires_in: 5,
+        interval: 5,
+      })
+      .mockResolvedValue({ status: 'pending' });
+
+    const promise = resolveSession({ baseUrl: 'http://localhost:3000' }).catch(
+      () => undefined,
+    );
+    await jest.advanceTimersByTimeAsync(10_000);
+    await promise;
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    exitSpy.mockRestore();
   });
 });
 
@@ -259,21 +365,23 @@ describe('resolveToken', () => {
     expect(mockApiRequest).not.toHaveBeenCalled();
   });
 
-  it('exchanges username+password for a token via the API', async () => {
-    mockApiRequest.mockResolvedValue({ access_token: 'server-token' });
+  it('resolves via device login when no token is supplied', async () => {
+    jest.useFakeTimers();
+    mockApiRequest
+      .mockResolvedValueOnce({
+        device_code: 'dc-1',
+        user_code: 'ABCD-EFGH',
+        verification_uri: 'http://localhost:3000/device',
+        expires_in: 300,
+        interval: 5,
+      })
+      .mockResolvedValueOnce({ access_token: 'server-token' });
 
-    const token = await resolveToken({
-      baseUrl: 'http://localhost:3000',
-      username: 'alice',
-      password: 'pass',
-    });
+    const promise = resolveToken({ baseUrl: 'http://localhost:3000' });
+    await jest.advanceTimersByTimeAsync(5_000);
+    const token = await promise;
 
     expect(token).toBe('server-token');
-    expect(mockApiRequest).toHaveBeenCalledWith(
-      expect.objectContaining({ baseUrl: 'http://localhost:3000' }),
-      'POST',
-      '/api/auth/token',
-      { username: 'alice', password: 'pass' },
-    );
+    jest.useRealTimers();
   });
 });

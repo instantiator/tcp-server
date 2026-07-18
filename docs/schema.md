@@ -261,7 +261,7 @@ else { console.error(ajv.errorsText()); process.exit(1); }
 ajv validate -s schemas/schema.json --ref '#/definitions/LcpCompany' -d acme.json
 
 # Apply
-./lcp-cli.sh -u alice set-company -i "$(cat acme.json)"
+./lcp-cli.sh set-company -i "$(cat acme.json)"
 ```
 
 ## Example: minimal role JSON
@@ -280,7 +280,7 @@ ajv validate -s schemas/schema.json --ref '#/definitions/LcpCompany' -d acme.jso
 
 ```bash
 ajv validate -s schemas/schema.json --ref '#/definitions/LcpRole' -d analyst-role.json
-./lcp-cli.sh -u alice set-role -c 00000000-0000-0000-0000-000000000001 -i "$(cat analyst-role.json)"
+./lcp-cli.sh set-role -c 00000000-0000-0000-0000-000000000001 -i "$(cat analyst-role.json)"
 ```
 
 ---

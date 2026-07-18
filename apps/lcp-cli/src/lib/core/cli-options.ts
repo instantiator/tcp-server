@@ -7,8 +7,6 @@ export interface GlobalOptions {
   accessToken?: string;
   refreshToken?: string;
   accessTokenEnvVar?: string;
-  username?: string;
-  password?: string;
 }
 
 /** Reads the global options off the root Commander program. */

@@ -62,9 +62,7 @@ program
   .option(
     '-E, --access-token-env-var <var>',
     'Name of env var holding the token',
-  )
-  .option('-u, --username <user>', 'OIDC username')
-  .option('-p, --password <pass>', 'OIDC password (omit to be prompted)');
+  );
 
 registerGetToken(program);
 registerListCompanies(program);

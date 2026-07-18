@@ -107,22 +107,25 @@ If the bucket is missing, check `docker compose logs lcp-server` for the line `C
 
 ## 1.4 — Authenticate with the CLI
 
-The CLI uses OIDC to obtain a bearer token. In development, Keycloak runs under the `auth` profile:
+The CLI uses OIDC to obtain a bearer token. In development, Zitadel runs under the `auth` profile:
 
-**With Keycloak (auth profile):**
+**With Zitadel (auth profile):**
 
 ```bash
 docker compose --profile auth up -d
-./lcp-cli.sh --username test --password test get-token
+./lcp-cli.sh get-token
 ```
 
-**Without Keycloak (stub OIDC, no auth required):**
+`get-token` uses a device-flow login — it prints a `verification_uri`/code for you to
+complete sign-in (`test`/`test`) in a browser, then prints the token.
+
+**Without Zitadel (stub OIDC, no auth required):**
 
 ```bash
 ./lcp-cli.sh list-companies
 ```
 
-> Auth guards are wired but not yet applied to endpoints — unauthenticated requests are accepted in the current build. When Keycloak is running you still need a token for the `chat` command.
+> Auth guards are wired but not yet applied to endpoints — unauthenticated requests are accepted in the current build. When Zitadel is running you still need a token for the `chat` command.
 
 Expected output from `get-token`: a JWT string beginning with `eyJ`.
 

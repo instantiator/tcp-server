@@ -3,8 +3,12 @@ import { DeepPartial } from 'typeorm';
 import { LcpCompany, LcpRole } from '../../../libs/lcp-shared/src/models';
 
 export const BASE = process.env.LCP_SERVER_URL ?? 'http://localhost:3000';
-export const USERNAME = process.env.TEST_USERNAME ?? 'test';
-export const PASSWORD = process.env.TEST_PASSWORD ?? 'test';
+export const OIDC_DISCOVERY_URL =
+  process.env.OIDC_DISCOVERY_URL ??
+  'http://localhost:8080/.well-known/openid-configuration';
+/** Machine user (client_credentials) — see docker/zitadel-machinekey and start-deployment.sh. */
+export const TEST_CLIENT_ID = process.env.TEST_CLIENT_ID ?? '';
+export const TEST_CLIENT_SECRET = process.env.TEST_CLIENT_SECRET ?? '';
 
 /** Unique suffix so repeated runs don't collide on slug constraints. */
 export const RUN_ID = Date.now().toString(36);
@@ -17,14 +21,17 @@ export interface ApiInvocationParams<RequestType> {
   token?: string;
 }
 
-interface TokenRequest {
-  username: string;
-  password: string;
+interface DeviceAuthorizationResponse {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  expires_in: number;
+  interval: number;
 }
 
-interface TokenResponse {
-  access_token: string;
-  token_type: string;
+interface DeviceTokenPollResponse {
+  status?: string;
+  access_token?: string;
 }
 
 interface ChatRequest {
@@ -51,22 +58,67 @@ export class ApiHelper {
     this.token = token;
   }
 
-  static async postCredentialsForToken(
-    username: string,
-    password: string,
-    expectedStatus?: number,
-  ) {
-    const { status, data } = await this.invokeApi<TokenRequest, TokenResponse>({
+  /** Starts a device authorization (`POST /api/auth/device`) — no credentials required. */
+  static async startDeviceAuthorization() {
+    const { data } = await this.invokeApi<
+      undefined,
+      DeviceAuthorizationResponse
+    >({
       method: 'POST',
-      path: '/api/auth/token',
-      body: { username: username, password: password },
-      expectedStatus: expectedStatus ?? 200,
+      path: '/api/auth/device',
+      expectedStatus: 200,
     });
-    if (status === 200) {
-      expect(data?.access_token).toBeDefined();
-      expect(data!.access_token.length).toBeGreaterThan(0);
-    }
-    return data!.access_token;
+    return data!;
+  }
+
+  /** Polls once for the outcome of a device authorization (`POST /api/auth/device/token`). */
+  static async pollDeviceToken(deviceCode: string) {
+    const { data } = await this.invokeApi<
+      { device_code: string },
+      DeviceTokenPollResponse
+    >({
+      method: 'POST',
+      path: '/api/auth/device/token',
+      body: { device_code: deviceCode },
+      expectedStatus: 200,
+    });
+    return data!;
+  }
+
+  /**
+   * Obtains a token via the client_credentials grant against the OIDC
+   * provider directly, using the machine test user created by
+   * start-deployment.sh. Device-flow login requires a human in a browser, so
+   * this is what the api test tier uses instead — there's no client secret
+   * to protect here (it's a test-only credential), so no server-side proxy
+   * is needed the way the human login flow needs one.
+   */
+  static async getMachineToken(
+    clientSecret: string = TEST_CLIENT_SECRET,
+    expectedStatus = 200,
+  ): Promise<string | undefined> {
+    const discoveryRes = await fetch(OIDC_DISCOVERY_URL);
+    const { token_endpoint } = (await discoveryRes.json()) as {
+      token_endpoint: string;
+    };
+
+    const res = await fetch(token_endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: TEST_CLIENT_ID,
+        client_secret: clientSecret,
+        scope: 'openid profile',
+      }).toString(),
+    });
+    expect(res.status).toBe(expectedStatus);
+    if (res.status !== 200) return undefined;
+
+    const data = (await res.json()) as { access_token: string };
+    expect(data.access_token).toBeDefined();
+    expect(data.access_token.length).toBeGreaterThan(0);
+    return data.access_token;
   }
 
   async listCompanies() {

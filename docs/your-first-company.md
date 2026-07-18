@@ -41,23 +41,21 @@ Once you have prepared your deployment with the [setup checklist](setup-checklis
 
 ### 0.1 Launch a dev instance
 
-The dev instance is much like a production instance. It's launched with docker compose and has all services, including an OIDC provider (keycloak). This is configured to have an `admin` user for the `master`[^master] realm, and a test user for the `lcp` real.
-
-[^master]: I guess keycloak missed the memo around the time tech services moved away from master/slave terminology. Let's do better in future.
+The dev instance is much like a production instance. It's launched with docker compose and has all services, including an OIDC provider (Zitadel). This is configured to have an `admin` user for the org, and a test user in the `lcp` org.
 
 ```bash
 scripts/start-dev.sh
 ```
 
-The `lcp` realm is created with a default account, if not already available:
+The `lcp` org is created with a default account, if not already available:
 
-| Realm | Username | Password |
+| Org   | Username | Password |
 | ----- | -------- | -------- |
 | `lcp` | `test`   | `test`   |
 
-For more about working with keycloak, see:
+For more about working with Zitadel, see:
 
-- [Keycloak setup](./keycloak-setup.md)
+- [Zitadel setup](./zitadel-setup.md)
 
 ### 0.2 Service healthchecks
 
@@ -68,13 +66,21 @@ Check the `/health` pages for the lcp-server, and lcp-agent applications.
 
 ### 0.3 Check the `test` account
 
-A `test` account is created for the dev server, and stored in keycloak. You can confirm that it's working by retrieving an access token:
+A `test` account is created for the dev server, and stored in Zitadel. You can confirm that it's working by retrieving an access token — `get-token` uses a device-flow login, so it prints a browser link to sign in as:
 
 ```bash
-./lcp-cli.sh --rebuild get-token --username test --password test
+./lcp-cli.sh --rebuild get-token
 ```
 
-You should see a token returned - it _looks like_ a long string of random characters.
+Follow the printed `verification_uri`, sign in as `test` / `test`, and the CLI will pick up the token once login completes. You should see a token returned - it _looks like_ a long string of random characters.
+
+The rest of this walkthrough passes that token to `lcp-cli.sh` via
+`--access-token-env-var` rather than repeating the browser login on every
+command, so capture it once into an environment variable:
+
+```bash
+export LCP_TOKEN=$(./lcp-cli.sh get-token)
+```
 
 ### 0.4 Set up your environment config
 
@@ -124,7 +130,7 @@ LLM_API_KEY=<your API key goes here>
 Pipe it into `lcp-cli.sh` with the `set-company` verb:
 
 ```bash
-cat scripts/test-data/simple-company.json | lcp-cli.sh --username test --password test set-company
+cat scripts/test-data/simple-company.json | lcp-cli.sh set-company
 ```
 
 The response will be a full instance of the company, _including its `id`_ - indicating that it has been added to the database.
@@ -155,7 +161,7 @@ The response will be a full instance of the company, _including its `id`_ - indi
 List the companies available with the `list-companies` verb:
 
 ```bash
-lcp-cli.sh --username test --password test list-companies
+lcp-cli.sh list-companies
 ```
 
 You'll get a condensed list of companies:
@@ -176,11 +182,11 @@ You'll get a condensed list of companies:
 Create a role in the new company with the `set-role` verb. Provide your company's slug in the `--company-slug` field to let it know which company to associate the role with:
 
 ```bash
-cat scripts/test-data/chicken-assistant.json | lcp-cli.sh --username test --password test set-role --company-slug test-company
+cat scripts/test-data/chicken-assistant.json | lcp-cli.sh set-role --company-slug test-company
 ```
 
 ```bash
-cat scripts/test-data/cat-assistant.json | lcp-cli.sh --username test --password test set-role --company-slug test-company
+cat scripts/test-data/cat-assistant.json | lcp-cli.sh set-role --company-slug test-company
 ```
 
 > [!TIP]
@@ -191,13 +197,13 @@ cat scripts/test-data/cat-assistant.json | lcp-cli.sh --username test --password
 List the roles available with the `list-roles` verb:
 
 ```bash
-lcp-cli.sh --username test --password test list-roles
+lcp-cli.sh list-roles
 ```
 
 Or scope it to just your company:
 
 ```bash
-lcp-cli.sh --username test --password test list-roles --company-slug test-company
+lcp-cli.sh list-roles --company-slug test-company
 ```
 
 It'll give you a list of all roles in each company:
@@ -259,7 +265,7 @@ TUI mode is the easiest way to manually interact with the company and roles.
 In the example below, the TUI is launched with a company slug. This could have been provided with `--company` or `--company-slug` (to be explicit).
 
 ```bash
-./lcp-cli.sh --username test --password test tui --company test-company
+./lcp-cli.sh tui --company test-company
 ```
 
 > [!TIP]
@@ -281,7 +287,7 @@ See [lcp-cli.md](lcp-cli.md#chat) for a full description of the TUI.
 In the example below, `chat` is started without TUI, and the prompt is provided directly:
 
 ```bash
-./lcp-cli.sh --username test --password test chat --company-slug test-company --role-slug chicken-assistant --no-tui --query 'Tell me about yourself'
+./lcp-cli.sh chat --company-slug test-company --role-slug chicken-assistant --no-tui --query 'Tell me about yourself'
 ```
 
 The agent will be invoked to answer the query, and will then be closed.
@@ -453,7 +459,7 @@ The core functionality of LCP is built around planned tasks. You can give a task
 ### 3.1 Create a task
 
 ```bash
-./lcp-cli.sh -u test -p test create-task \
+./lcp-cli.sh create-task \
   -c test-company \
   -r "Create a very short report on what chickens like to eat" \
   --planner-role cat-assistant \
@@ -468,7 +474,7 @@ Note the task's id - so you can use it to monitor the task.
 ### 3.2 List all tasks
 
 ```bash
-./lcp-cli.sh -u test -p test list-tasks -c test-company
+./lcp-cli.sh list-tasks -c test-company
 ```
 
 This shows each task the company has.
@@ -476,7 +482,7 @@ This shows each task the company has.
 ### 3.3 Monitor the task
 
 ```bash
-./lcp-cli.sh -u test -p test get-task --task-id 'the-task-id'
+./lcp-cli.sh get-task --task-id 'the-task-id'
 ```
 
 This will show the current state of the task, and the assignments in its plan.
