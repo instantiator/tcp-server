@@ -6,11 +6,13 @@
 # asks the operator to confirm each response by eye. Halts immediately on any
 # failure (a failed API call, missing data, or a "n" answer to a check).
 #
-# Usage: ./scripts/manual-verify.sh -u <user> -p <pass> [OPTIONS]
+# Usage: ./scripts/manual-verify.sh [OPTIONS]
+#
+# Logs in once via `lcp-cli get-token`'s device-flow login (prints a
+# verification URL/code for you to complete in a browser) before running any
+# scenarios, then reuses that token for every call.
 #
 # Options:
-#   -u, --username <user>          OIDC username (required)
-#   -p, --password <pass>          OIDC password (required)
 #   -s, --lcp-server <url>         LCP server URL (default: http://localhost:3000)
 #   -r, --run-scenario <n>         Run only scenario n (1-indexed); may be repeated
 #   -f, --scenarios-file <f>       Scenarios JSON (default: scripts/test-data/manual-verify-scenarios.json)
@@ -21,7 +23,7 @@
 #   --lm-studio-logs-output <file> File to write LM Studio logs to (default: ./lcp-lmstudio-logs-<ts>.log)
 #
 # Prerequisites: a running LCP stack with default LLM config in its .env,
-# Keycloak running for auth, and `jq` on the PATH.
+# Zitadel running for auth, and `jq` on the PATH.
 
 set -euo pipefail
 
@@ -43,8 +45,6 @@ else
   RESET=""
 fi
 
-USERNAME=""
-PASSWORD=""
 LCP_SERVER="http://localhost:3000"
 SCENARIOS_FILE="$ROOT/scripts/test-data/manual-verify-scenarios.json"
 SCENARIO_FILTER=()
@@ -59,8 +59,6 @@ LM_STUDIO_LOG_PID=""
 # Parse flags — everything else is rejected rather than silently ignored.
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -u|--username) USERNAME="$2"; shift 2 ;;
-    -p|--password) PASSWORD="$2"; shift 2 ;;
     -s|--lcp-server) LCP_SERVER="$2"; shift 2 ;;
     -r|--run-scenario) SCENARIO_FILTER+=("$2"); shift 2 ;;
     -f|--scenarios-file) SCENARIOS_FILE="$2"; shift 2 ;;
@@ -73,10 +71,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Fail fast on missing required input rather than letting lcp-cli's own
-# error surface several steps downstream.
-[[ -n "$USERNAME" ]] || { echo "ERROR: --username is required" >&2; exit 1; }
-[[ -n "$PASSWORD" ]] || { echo "ERROR: --password is required" >&2; exit 1; }
 [[ -f "$SCENARIOS_FILE" ]] || { echo "ERROR: scenarios file not found: $SCENARIOS_FILE" >&2; exit 1; }
 command -v jq >/dev/null || { echo "ERROR: jq is required but not installed" >&2; exit 1; }
 
@@ -124,8 +118,7 @@ stop_lm_studio_capture() {
 cli() {
   "$ROOT/lcp-cli.sh" \
     --lcp-server "$LCP_SERVER" \
-    --username "$USERNAME" \
-    --password "$PASSWORD" \
+    --access-token "$ACCESS_TOKEN" \
     "$@"
 }
 
@@ -166,6 +159,13 @@ ask_yn() {
 }
 
 trap 'stop_docker_capture; stop_lm_studio_capture' EXIT
+
+# Log in once via device-flow (prints a verification URL/code to complete in
+# a browser) and reuse the resulting token for every cli() call below.
+echo "${BLUE}=== Signing in ===${RESET}" >&2
+ACCESS_TOKEN=$("$ROOT/lcp-cli.sh" --lcp-server "$LCP_SERVER" get-token) \
+  || fail "get-token failed"
+
 start_docker_capture
 start_lm_studio_capture
 

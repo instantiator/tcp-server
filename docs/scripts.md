@@ -36,7 +36,7 @@ therefore run alongside a dev stack (or each other) without conflict.
 
 | Script                                               | Purpose                                                              | Requires              |
 | ---------------------------------------------------- | -------------------------------------------------------------------- | --------------------- |
-| [start-deployment.sh](#start-deploymentsh)           | Start a named Docker Compose stack and configure Keycloak            | Docker                |
+| [start-deployment.sh](#start-deploymentsh)           | Start a named Docker Compose stack and bootstrap Zitadel             | Docker                |
 | [start-dev.sh](#start-devsh)                         | Start the local dev environment (delegates to `start-deployment.sh`) | Docker                |
 | [stop-dev.sh](#stop-devsh)                           | Stop the dev environment; optionally remove volumes                  | Docker                |
 | [lcp-cli.sh](#lcp-clish) (repo root)                 | Run the `lcp-cli` tool (builds automatically if needed)              | Built lcp-cli         |
@@ -50,16 +50,22 @@ therefore run alongside a dev stack (or each other) without conflict.
 
 ## start-deployment.sh
 
-The general-purpose stack launcher. Starts all Docker Compose services, waits
-for each to be healthy, and — when `KEYCLOAK_ADMIN_PASSWORD` is present in the
-env file — enables the `auth` profile and configures the Keycloak realm, client,
-and test user.
+The general-purpose stack launcher. Starts infra services (postgres, redis,
+minio, and — when the auth profile is active — zitadel) first, then, when
+`ZITADEL_ADMIN_PASSWORD` is present in the env file, bootstraps Zitadel via a
+machine-user Personal Access Token and the Zitadel REST API: a `lcp` project,
+an OIDC application, a human test user, and a machine test user. Only once
+that bootstrap has captured Zitadel's server-generated client secrets does it
+start the rest of the stack (lcp-server et al) — this ordering matters
+because lcp-server needs the real secret at boot, and Zitadel (unlike
+Keycloak) won't accept a caller-pre-chosen client secret.
 
-All Keycloak credentials and the test user are read from the env file
-(`KEYCLOAK_REALM`, `TEST_USERNAME`, `TEST_PASSWORD`). No credential flags are
-accepted; change those values in the env file instead.
+All Zitadel credentials and the test users are read from the env file
+(`ZITADEL_ADMIN_PASSWORD`, `TEST_USERNAME`, `TEST_PASSWORD`). No credential
+flags are accepted; change those values in the env file instead. See
+[docs/zitadel-setup.md](zitadel-setup.md) for the full bootstrap sequence.
 
-Safe to re-run — existing Keycloak resources are left untouched.
+Safe to re-run — existing Zitadel resources are left untouched.
 
 ```bash
 ./scripts/start-deployment.sh --project lcp-dev --env-file .env
@@ -93,16 +99,16 @@ Thin wrapper around `start-deployment.sh` that fixes the project name to
 | `-e`, `--env <path>` | Environment file | `.env` if present, else `.env.testing` |
 | `--rebuild`          | Rebuild images   | off                                    |
 
-Credentials for the Keycloak realm and test user are read from the env file
-(`KEYCLOAK_REALM`, `TEST_USERNAME`, `TEST_PASSWORD`).
+Credentials for the Zitadel org admin and test users are read from the env
+file (`ZITADEL_ADMIN_PASSWORD`, `TEST_USERNAME`, `TEST_PASSWORD`).
 
-See also: [docs/keycloak-setup.md](keycloak-setup.md) for manual Keycloak
+See also: [docs/zitadel-setup.md](zitadel-setup.md) for manual Zitadel
 configuration and external IdP setup.
 
 ## stop-dev.sh
 
 Stops all services started by `start-dev.sh`. Volumes are kept by default so
-data (databases, Keycloak configuration) persists across restarts. Pass
+data (databases, Zitadel configuration) persists across restarts. Pass
 `--volumes` to reset everything to a clean state.
 
 ```bash
@@ -128,7 +134,7 @@ a fresh build before running.
 ./lcp-cli.sh --help
 ./lcp-cli.sh list-companies
 ./lcp-cli.sh --rebuild list-companies
-./lcp-cli.sh -u alice get-token
+./lcp-cli.sh get-token
 ./lcp-cli.sh -r <roleId> chat
 ./lcp-cli.sh -r <roleId> -q "hello" chat
 ```
@@ -184,19 +190,16 @@ docker compose -p lcp-smoke --profile auth down -v
 # Remote deployment (no Docker needed)
 ./scripts/run-smoke-tests.sh --base-url http://your-host:3000
 ./scripts/run-smoke-tests.sh --base-url http://your-host:3000 \
-  --agent-url http://your-host:3001 \
-  --username alice --password s3cret
+  --agent-url http://your-host:3001
 ```
 
 **Options:**
 
-| Flag                       | Env var              | Description             | Default                 |
-| -------------------------- | -------------------- | ----------------------- | ----------------------- |
-| `--base-url URL`           | `LCP_SERVER_URL`     | lcp-server base URL     | `http://localhost:3000` |
-| `--agent-url URL`          | `LCP_AGENT_URL`      | lcp-agent URL           | `http://localhost:3001` |
-| `--oidc-discovery-url URL` | `OIDC_DISCOVERY_URL` | OIDC discovery endpoint | (Keycloak master realm) |
-| `--username NAME`          | `TEST_USERNAME`      | Test user username      | `test`                  |
-| `--password PASS`          | `TEST_PASSWORD`      | Test user password      | `test`                  |
+| Flag                       | Env var              | Description             | Default                                                  |
+| -------------------------- | -------------------- | ----------------------- | -------------------------------------------------------- |
+| `--base-url URL`           | `LCP_SERVER_URL`     | lcp-server base URL     | `http://localhost:3000`                                  |
+| `--agent-url URL`          | `LCP_AGENT_URL`      | lcp-agent URL           | `http://localhost:3001`                                  |
+| `--oidc-discovery-url URL` | `OIDC_DISCOVERY_URL` | OIDC discovery endpoint | `http://localhost:8080/.well-known/openid-configuration` |
 
 See also: [docs/testing.md](testing.md).
 
@@ -207,7 +210,7 @@ Pure test runner — requires a running deployment. Start services first with
 `http://localhost:3000` when `--base-url` is not given.
 
 API tests send authenticated HTTP requests to lcp-server using real
-Keycloak-issued JWTs and assert on response shapes and status codes.
+Zitadel-issued JWTs and assert on response shapes and status codes.
 
 ```bash
 # Local: start stack first, then test
@@ -218,20 +221,23 @@ docker compose -p lcp-api --profile auth down -v
 # Remote deployment (no Docker needed)
 ./scripts/run-api-tests.sh --base-url http://your-host:3000
 ./scripts/run-api-tests.sh --base-url http://your-host:3000 \
-  --keycloak-url http://your-keycloak:8080 \
-  --username alice --password s3cret
+  --client-id your-client-id --client-secret your-client-secret
 ```
 
 **Options:**
 
-| Flag                       | Env var              | Description             | Default                 |
-| -------------------------- | -------------------- | ----------------------- | ----------------------- |
-| `--base-url URL`           | `LCP_SERVER_URL`     | lcp-server base URL     | `http://localhost:3000` |
-| `--agent-url URL`          | `LCP_AGENT_URL`      | lcp-agent URL           | `http://localhost:3001` |
-| `--keycloak-url URL`       | `KEYCLOAK_URL`       | Keycloak base URL       | `http://localhost:8080` |
-| `--oidc-discovery-url URL` | `OIDC_DISCOVERY_URL` | OIDC discovery endpoint | (Keycloak master realm) |
-| `--username NAME`          | `TEST_USERNAME`      | Test user username      | `test`                  |
-| `--password PASS`          | `TEST_PASSWORD`      | Test user password      | `test`                  |
+| Flag                       | Env var              | Description                                        | Default                                                  |
+| -------------------------- | -------------------- | -------------------------------------------------- | -------------------------------------------------------- |
+| `--base-url URL`           | `LCP_SERVER_URL`     | lcp-server base URL                                | `http://localhost:3000`                                  |
+| `--agent-url URL`          | `LCP_AGENT_URL`      | lcp-agent URL                                      | `http://localhost:3001`                                  |
+| `--oidc-discovery-url URL` | `OIDC_DISCOVERY_URL` | OIDC discovery endpoint                            | `http://localhost:8080/.well-known/openid-configuration` |
+| `--client-id ID`           | `TEST_CLIENT_ID`     | Machine test user client ID (`client_credentials`) | —                                                        |
+| `--client-secret SECRET`   | `TEST_CLIENT_SECRET` | Machine test user client secret                    | —                                                        |
+
+`--keycloak-url`/`KEYCLOAK_URL` no longer exists — it's been removed, not
+renamed. `--client-id`/`--client-secret` (the machine test user's
+credentials, written to the env file by `start-deployment.sh`'s bootstrap)
+replace the old username/password ROPC flow for acquiring test tokens.
 
 See also: [docs/testing.md](testing.md).
 
@@ -240,7 +246,7 @@ See also: [docs/testing.md](testing.md).
 A thin wrapper around `npm run test:e2e`. PostgreSQL, Redis, and MinIO are
 started (on random host ports) and torn down by Jest's global setup via
 testcontainers. The E2E suite runs HTTP requests against a real NestJS
-application via `supertest`. Keycloak is not required — auth is mocked
+application via `supertest`. Zitadel is not required — auth is mocked
 (jwks-rsa).
 
 ```bash
@@ -271,18 +277,20 @@ appear in the output?" should be answered `n` on a healthy run.
 
 ```bash
 ./scripts/start-deployment.sh --project lcp-dev --env-file .env.testing
-./scripts/manual-verify.sh --username test --password test
-./scripts/manual-verify.sh --username test --password test \
+./scripts/manual-verify.sh
+./scripts/manual-verify.sh \
   --lcp-server http://your-host:3000 \
   --scenarios scripts/test-data/manual-verify-scenarios.json
 ```
+
+Logs in once via `lcp-cli get-token`'s device-flow login (prints a
+verification URL/code to complete in a browser) before running any
+scenarios, then reuses that token for every call.
 
 **Options:**
 
 | Flag                     | Description         | Default                                          |
 | ------------------------ | ------------------- | ------------------------------------------------ |
-| `-u, --username <user>`  | OIDC username       | (required)                                       |
-| `-p, --password <pass>`  | OIDC password       | (required)                                       |
 | `-s, --lcp-server <url>` | LCP server base URL | `http://localhost:3000`                          |
 | `--scenarios <file>`     | Scenarios JSON file | `scripts/test-data/manual-verify-scenarios.json` |
 

@@ -15,7 +15,7 @@ NestJS monorepo for the LCP system: `lcp-server` (REST API + orchestration state
 | ORM                   | TypeORM                                                                                              |
 | Database (production) | PostgreSQL 16 + pgvector                                                                             |
 | Database (unit tests) | better-sqlite3 (in-memory)                                                                           |
-| Auth                  | OAuth2/OIDC — Keycloak (default), any OIDC IdP supported                                             |
+| Auth                  | OAuth2/OIDC — Zitadel (default), any OIDC IdP supported                                              |
 | Object storage        | MinIO (Docker Compose)                                                                               |
 | Task queue            | Redis + BullMQ — `agent-jobs` (lcp-server → lcp-agent) and `knowledge-reindex` (lcp-server-internal) |
 | API docs              | `@nestjs/swagger` — `GET /swagger` + `GET /swagger-json` on all six server apps                      |
@@ -122,7 +122,7 @@ test/
 scripts/                       # Test runner scripts (mirror CI steps) + git hooks (npm run hooks:install)
 docs/
   ADRs/                        # Architectural Decision Records
-  keycloak-setup.md            # Keycloak setup guide
+  zitadel-setup.md             # Zitadel setup guide
   licenses.md                  # Auto-generated — do not edit by hand
 dev-environment/                # Git submodule — agent guidance, skills, and quality-gate scripts
 schemas/                        # Auto-generated JSON Schema — do not edit by hand
@@ -166,7 +166,7 @@ npm run test:cov              # Coverage report
 
 # Docker
 docker compose up             # Start all services
-docker compose --profile auth up  # Also start Keycloak
+docker compose --profile auth up  # Also start Zitadel
 docker compose down           # Stop services (keep volumes)
 docker compose down -v        # Stop and remove volumes
 
@@ -203,5 +203,5 @@ Beyond the database/Redis/MinIO/OIDC connection strings (see `.env.example`), a 
 - **Testing intentional error paths**: when a test deliberately triggers a service-level `Logger.warn`/`.error` call (e.g. `POST /internal/agent/:id/fail`), use `captureNestLogs()`/`expectLoggedError()` from `test/e2e/helpers/log-capture.ts` to silence and assert on it, instead of letting it print during a normal test run. HTTP-level errors (404/400/401/409 via `HttpException`) aren't logged by Nest's default filter, so most error-path tests don't need this — it's only for paths that call a `Logger` directly.
 - **Migrations**: use `synchronize: false` in production. Always create a migration when changing entity schema. Never use `synchronize: true` with PostgreSQL. New migration files must also be registered by hand in each app's `app.module.ts` migrations array.
 - **No secrets in code.** Use environment variables for all credentials. Required vars are validated by Joi on startup — the app will not start if any are missing.
-- **Keycloak** is optional for local dev. Run without it by setting stub OIDC env vars (see `.env.example`). `JwtAuthGuard` is applied to every user-facing controller across the API.
+- **Zitadel** is optional for local dev. Run without it by setting stub OIDC env vars (see `.env.example`). `JwtAuthGuard` is applied to every user-facing controller across the API.
 - **Soft data-quality warnings** (e.g. a role with no `knowledgeDomains`, a blank `companyContext`/`rolePrompt`) never fail the request — they're reported via the `X-Lcp-Warnings` response header (JSON array of strings) on `POST`/`PUT` company and role routes. See `apps/lcp-server/src/api/validation-warnings.ts`; `lcp-cli` prints these to stderr (see `docs/lcp-cli.md`).

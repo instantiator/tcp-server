@@ -109,7 +109,7 @@ step "Docker prune (post-e2e)"
 docker system prune -f
 echo
 
-# Start the full stack (including Keycloak) only now, for API and smoke tests.
+# Start the full stack (including Zitadel) only now, for API and smoke tests.
 step "Starting deployment for API + smoke tests"
 DEPLOYMENT_STARTED=true
 "$SCRIPTS/start-deployment.sh" \

@@ -7,14 +7,17 @@ Usage: $(basename "$0") --project <name> --env-file <path> [--rebuild] [-h|--hel
 
 Start the LCP Docker Compose stack and configure it for use.
 
-Reads all configuration — including Keycloak credentials and the first test
-user — from the env file. If KEYCLOAK_ADMIN_PASSWORD is set in the env file,
-the Keycloak auth profile is enabled and the realm, client, and test user are
-created automatically. If KEYCLOAK_ADMIN_PASSWORD is absent or empty, the
-auth profile is skipped.
+Reads all configuration — including Zitadel credentials and the first test
+users — from the env file. If ZITADEL_ADMIN_PASSWORD is set in the env file,
+the Zitadel auth profile is enabled and the project, application, and test
+users are created automatically. If ZITADEL_ADMIN_PASSWORD is absent or
+empty, the auth profile is skipped.
 
-Safe to re-run against an already-running stack: existing Keycloak resources
-are left untouched.
+Safe to re-run against an already-running stack: existing Zitadel resources
+are left untouched. Zitadel generates client secrets server-side (they can't
+be pre-set the way Keycloak's could), so on first bootstrap this script
+writes the generated OIDC_CLIENT_ID/SECRET and TEST_CLIENT_ID/SECRET back
+into the env file in place, before starting lcp-server and its dependents.
 
 Options:
   --project <name>    Docker Compose project name (required)
@@ -22,13 +25,10 @@ Options:
   --rebuild           Force a Docker image rebuild before starting
   -h, --help          Show this help message and exit
 
-Keycloak setup reads from the env file:
-  KEYCLOAK_ADMIN_PASSWORD   Keycloak admin password (presence enables auth profile)
-  KEYCLOAK_REALM            Realm to create/configure (default: lcp)
-  OIDC_CLIENT_ID            Client ID to create
-  OIDC_CLIENT_SECRET        Client secret
-  TEST_USERNAME             First user to create in the realm (default: test)
-  TEST_PASSWORD             That user's password (default: test)
+Zitadel setup reads from the env file:
+  ZITADEL_ADMIN_PASSWORD   Org admin (human) password (presence enables auth profile)
+  TEST_USERNAME            Human test user to create (default: test)
+  TEST_PASSWORD            That user's password (default: test)
 EOF
 }
 
@@ -53,6 +53,8 @@ done
 [[ -n "$PROJECT" ]]  || { echo "ERROR: --project is required" >&2; usage >&2; exit 1; }
 [[ -n "$ENV_FILE" ]] || { echo "ERROR: --env-file is required" >&2; usage >&2; exit 1; }
 [[ -f "$ENV_FILE" ]] || { echo "ERROR: env file not found: $ENV_FILE" >&2; exit 1; }
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 echo "Using: $ENV_FILE"
 set -a
@@ -81,9 +83,9 @@ if [[ ${#missing[@]} -gt 0 ]]; then
   exit 1
 fi
 
-# Auth profile: enabled when KEYCLOAK_ADMIN_PASSWORD is set and non-empty.
+# Auth profile: enabled when ZITADEL_ADMIN_PASSWORD is set and non-empty.
 AUTH_PROFILE=""
-if [[ -n "${KEYCLOAK_ADMIN_PASSWORD:-}" ]]; then
+if [[ -n "${ZITADEL_ADMIN_PASSWORD:-}" ]]; then
   AUTH_PROFILE="--profile auth"
 fi
 
@@ -104,23 +106,171 @@ wait_for() {
   echo "$name ready."
 }
 
-# Run kcadm inside the running keycloak container.
-kc() { $DC exec -T keycloak /opt/keycloak/bin/kcadm.sh "$@"; }
+# Replaces (or appends) a KEY=value line in an env file. Used to persist
+# Zitadel's server-generated client secrets back to disk so a later, separate
+# invocation of this script (or run-api-tests.sh) picks up the real value.
+set_env_var() {
+  local file="$1" key="$2" value="$3"
+  local tmp; tmp="$(mktemp)"
+  grep -v "^${key}=" "$file" > "$tmp" || true
+  printf '%s=%s\n' "$key" "$value" >> "$tmp"
+  mv "$tmp" "$file"
+}
 
 # Start services
 
 echo ""
-echo "Starting services (project: $PROJECT)..."
+echo "Starting infrastructure (project: $PROJECT)..."
+INFRA_SERVICES=(postgres redis minio)
+[[ -n "$AUTH_PROFILE" ]] && INFRA_SERVICES+=(zitadel)
+
+# Zitadel runs as a non-root user (uid 1000); a fresh named volume would be
+# root-owned, so it can't write its bootstrap PAT. This bind-mounted host
+# directory must be world-writable before the container starts.
+MACHINEKEY_DIR="$REPO_ROOT/docker/zitadel-machinekey"
+if [[ -n "$AUTH_PROFILE" ]]; then
+  mkdir -p "$MACHINEKEY_DIR"
+  chmod 777 "$MACHINEKEY_DIR"
+fi
+
+if [[ "$REBUILD" = "true" ]]; then
+  $DC up -d --build "${INFRA_SERVICES[@]}"
+else
+  $DC up -d "${INFRA_SERVICES[@]}"
+fi
+
+if [[ -n "$AUTH_PROFILE" ]]; then
+  wait_for zitadel "curl -sf http://localhost:8080/debug/healthz"
+fi
+
+# Zitadel bootstrap (skipped when auth profile is not active). Must happen
+# before lcp-server starts: Zitadel generates the OIDC client's secret
+# server-side, so lcp-server can only be started with the *correct* secret
+# once bootstrap has captured it.
+ORG_NAME="lcp"
+PROJECT_NAME="lcp"
+APP_NAME="lcp-server"
+TEST_MACHINE_USERNAME="test-machine"
+
+if [[ -n "$AUTH_PROFILE" ]]; then
+  echo ""
+  echo "Configuring Zitadel..."
+
+  PAT_FILE="$MACHINEKEY_DIR/pat.txt"
+  wait_for "Zitadel bootstrap PAT" "[[ -s '$PAT_FILE' ]]"
+  ZITADEL_PAT="$(cat "$PAT_FILE")"
+
+  # Wrapper around curl for authenticated Zitadel API calls.
+  zit() {
+    local method="$1" path="$2" body="${3:-}"
+    curl -sf -X "$method" "http://localhost:8080${path}" \
+      -H "Authorization: Bearer $ZITADEL_PAT" \
+      -H "Content-Type: application/json" \
+      ${body:+-d "$body"}
+  }
+
+  # The PAT file existing doesn't guarantee the machine user's permissions
+  # have propagated through Zitadel's eventually-consistent projections yet
+  # (observed as a transient auth failure on the very first call right after
+  # first boot) — retry briefly rather than letting a one-off race abort the
+  # whole script under set -e.
+  ORG_ID=""
+  for _ in $(seq 1 10); do
+    ORG_ID=$(zit GET "/auth/v1/users/me" 2>/dev/null | jq -r '.user.details.resourceOwner // empty') || true
+    [[ -n "$ORG_ID" ]] && break
+    sleep 2
+  done
+  [[ -n "$ORG_ID" ]] || { echo "ERROR: could not authenticate to the Zitadel API with the bootstrap PAT" >&2; exit 1; }
+
+  # Project — realm-equivalent grouping for the OIDC application.
+  PROJECT_ID=$(zit POST "/management/v1/projects/_search" \
+    "$(jq -n --arg n "$PROJECT_NAME" '{queries:[{nameQuery:{name:$n,method:"TEXT_QUERY_METHOD_EQUALS"}}]}')" \
+    | jq -r '.result[0].id // empty')
+  if [[ -z "$PROJECT_ID" ]]; then
+    PROJECT_ID=$(zit POST "/management/v1/projects" "$(jq -n --arg n "$PROJECT_NAME" '{name:$n}')" | jq -r '.id')
+    echo "  Created project: $PROJECT_NAME"
+  else
+    echo "  Project $PROJECT_NAME: already exists"
+  fi
+
+  # OIDC application — device-code + refresh-token grants (no ROPC support on
+  # Zitadel). accessTokenType must be explicitly JWT: Zitadel otherwise issues
+  # opaque/encrypted access tokens that lcp-server's JWKS-based verification
+  # cannot parse.
+  APP_LIST=$(zit POST "/management/v1/projects/$PROJECT_ID/apps/_search" '{}')
+  APP_CLIENT_ID=$(echo "$APP_LIST" | jq -r --arg n "$APP_NAME" '.result[]? | select(.name == $n) | .oidcConfig.clientId // empty')
+  if [[ -z "$APP_CLIENT_ID" ]]; then
+    APP=$(zit POST "/management/v1/projects/$PROJECT_ID/apps/oidc" "$(jq -n --arg name "$APP_NAME" '{
+      name: $name,
+      redirectUris: ["http://localhost:3000/auth/callback"],
+      responseTypes: ["OIDC_RESPONSE_TYPE_CODE"],
+      grantTypes: ["OIDC_GRANT_TYPE_DEVICE_CODE", "OIDC_GRANT_TYPE_REFRESH_TOKEN"],
+      appType: "OIDC_APP_TYPE_WEB",
+      authMethodType: "OIDC_AUTH_METHOD_TYPE_BASIC",
+      accessTokenType: "OIDC_TOKEN_TYPE_JWT"
+    }')")
+    APP_CLIENT_ID=$(echo "$APP" | jq -r '.clientId')
+    APP_CLIENT_SECRET=$(echo "$APP" | jq -r '.clientSecret')
+    set_env_var "$ENV_FILE" OIDC_CLIENT_ID "$APP_CLIENT_ID"
+    set_env_var "$ENV_FILE" OIDC_CLIENT_SECRET "$APP_CLIENT_SECRET"
+    export OIDC_CLIENT_ID="$APP_CLIENT_ID"
+    export OIDC_CLIENT_SECRET="$APP_CLIENT_SECRET"
+    echo "  Created application: $APP_NAME (client secret written to $ENV_FILE)"
+  else
+    echo "  Application $APP_NAME: already exists"
+  fi
+
+  # Human test user — for manually exercising `lcp-cli get-token`'s device-flow login.
+  TEST_USER="${TEST_USERNAME:-test}"
+  TEST_PASS="${TEST_PASSWORD:-test}"
+  EXISTING_USER=$(zit POST "/management/v1/users/_search" \
+    "$(jq -n --arg u "$TEST_USER" '{queries:[{userNameQuery:{userName:$u,method:"TEXT_QUERY_METHOD_EQUALS"}}]}')" \
+    | jq -r '.result[0].id // empty')
+  if [[ -z "$EXISTING_USER" ]]; then
+    zit POST "/v2/users/new" "$(jq -n --arg org "$ORG_ID" --arg u "$TEST_USER" --arg p "$TEST_PASS" '{
+      organizationId: $org,
+      username: $u,
+      human: {
+        profile: {givenName: "Test", familyName: "User"},
+        email: {email: ($u + "@lcp.local"), isVerified: true},
+        password: {password: $p}
+      }
+    }')" > /dev/null
+    echo "  Created user: $TEST_USER"
+  else
+    echo "  User $TEST_USER: already exists"
+  fi
+
+  # Machine test user (client_credentials) — used by the api test tier instead
+  # of a human login, since device-flow login requires a human in a browser.
+  EXISTING_MACHINE=$(zit POST "/management/v1/users/_search" \
+    "$(jq -n --arg u "$TEST_MACHINE_USERNAME" '{queries:[{userNameQuery:{userName:$u,method:"TEXT_QUERY_METHOD_EQUALS"}}]}')" \
+    | jq -r '.result[0].id // empty')
+  if [[ -z "$EXISTING_MACHINE" ]]; then
+    MACHINE_ID=$(zit POST "/v2/users/new" "$(jq -n --arg org "$ORG_ID" --arg u "$TEST_MACHINE_USERNAME" '{
+      organizationId: $org,
+      username: $u,
+      machine: {name: "LCP API Test Machine", accessTokenType: "ACCESS_TOKEN_TYPE_JWT"}
+    }')" | jq -r '.id')
+    SECRET=$(zit PUT "/management/v1/users/$MACHINE_ID/secret" '{}')
+    MACHINE_CLIENT_ID=$(echo "$SECRET" | jq -r '.clientId')
+    MACHINE_CLIENT_SECRET=$(echo "$SECRET" | jq -r '.clientSecret')
+    set_env_var "$ENV_FILE" TEST_CLIENT_ID "$MACHINE_CLIENT_ID"
+    set_env_var "$ENV_FILE" TEST_CLIENT_SECRET "$MACHINE_CLIENT_SECRET"
+    export TEST_CLIENT_ID="$MACHINE_CLIENT_ID"
+    export TEST_CLIENT_SECRET="$MACHINE_CLIENT_SECRET"
+    echo "  Created machine user: $TEST_MACHINE_USERNAME (client secret written to $ENV_FILE)"
+  else
+    echo "  Machine user $TEST_MACHINE_USERNAME: already exists"
+  fi
+fi
+
+echo ""
+echo "Starting application services (project: $PROJECT)..."
 if [[ "$REBUILD" = "true" ]]; then
   $DC up -d --build
 else
   $DC up -d
-fi
-
-# Keycloak: wait up to 5 minutes on first boot.
-if [[ -n "$AUTH_PROFILE" ]]; then
-  wait_for keycloak \
-    "curl -sf http://localhost:8080/realms/master/.well-known/openid-configuration" 300
 fi
 
 wait_for lcp-server           "curl -sf http://localhost:3000/health"
@@ -129,75 +279,6 @@ wait_for lcp-mcp-storage      "curl -sf http://localhost:3010/health"
 wait_for lcp-mcp-memory       "curl -sf http://localhost:3011/health"
 wait_for lcp-mcp-interactions "curl -sf http://localhost:3012/health"
 wait_for lcp-mcp-tasks        "curl -sf http://localhost:3013/health"
-
-# Keycloak setup (skipped when auth profile is not active)
-if [[ -n "$AUTH_PROFILE" ]]; then
-  ADMIN_PASS="${KEYCLOAK_ADMIN_PASSWORD}"
-  REALM="${KEYCLOAK_REALM:-lcp}"
-  CLIENT_ID="${OIDC_CLIENT_ID:-lcp-server}"
-  CLIENT_SECRET="${OIDC_CLIENT_SECRET:-test-stub}"
-  TEST_USER="${TEST_USERNAME:-test}"
-  TEST_PASS="${TEST_PASSWORD:-test}"
-
-  echo ""
-  echo "Configuring Keycloak..."
-
-  kc config credentials \
-    --server http://localhost:8080 \
-    --realm master \
-    --user admin \
-    --password "$ADMIN_PASS"
-
-  # Realm
-  if ! kc get "realms/$REALM" > /dev/null 2>&1; then
-    kc create realms -s "realm=$REALM" -s enabled=true
-    echo "  Created realm: $REALM"
-  else
-    echo "  Realm $REALM: already exists"
-  fi
-
-  # Client — confidential; serviceAccountsEnabled so lcp-server can call the
-  # Keycloak Admin API; directAccessGrantsEnabled for password-grant token tests.
-  CLIENT_INFO=$(kc get clients -r "$REALM" -q "clientId=$CLIENT_ID" 2>&1 || true)
-  if echo "$CLIENT_INFO" | grep -q '"id"'; then
-    echo "  Client $CLIENT_ID: already exists"
-  else
-    kc create clients -r "$REALM" \
-      -s "clientId=$CLIENT_ID" \
-      -s "secret=$CLIENT_SECRET" \
-      -s enabled=true \
-      -s clientAuthenticatorType=client-secret \
-      -s protocol=openid-connect \
-      -s serviceAccountsEnabled=true \
-      -s directAccessGrantsEnabled=true \
-      -s 'redirectUris=["http://localhost:3000/*"]'
-    # Grant realm-admin to the service account so lcp-server can manage users
-    # via the Keycloak Admin REST API.
-    kc add-roles -r "$REALM" \
-      --uusername "service-account-$CLIENT_ID" \
-      --cclientid realm-management \
-      --rolename realm-admin
-    echo "  Created client: $CLIENT_ID (service account granted realm-admin)"
-  fi
-
-  # Test user
-  USER_INFO=$(kc get users -r "$REALM" -q "username=$TEST_USER" 2>&1 || true)
-  if echo "$USER_INFO" | grep -q '"id"'; then
-    echo "  User $TEST_USER: already exists"
-  else
-    kc create users -r "$REALM" \
-      -s "username=$TEST_USER" \
-      -s "email=${TEST_USER}@lcp.local" \
-      -s emailVerified=true \
-      -s firstName=Test \
-      -s lastName=User \
-      -s enabled=true
-    kc set-password -r "$REALM" \
-      --username "$TEST_USER" \
-      --new-password "$TEST_PASS"
-    echo "  Created user: $TEST_USER"
-  fi
-fi
 
 # Summary
 
@@ -214,26 +295,18 @@ echo "  lcp-mcp-memory         →  http://localhost:3011"
 echo "  lcp-mcp-interactions   →  http://localhost:3012"
 echo "  lcp-mcp-tasks          →  http://localhost:3013"
 if [[ -n "$AUTH_PROFILE" ]]; then
-  echo "  Keycloak admin         →  http://localhost:8080  (admin / ${KEYCLOAK_ADMIN_PASSWORD})"
+  echo "  Zitadel console        →  http://localhost:8080/ui/console  (admin / ${ZITADEL_ADMIN_PASSWORD})"
 fi
 echo "  MinIO console          →  http://localhost:9001"
 echo ""
 if [[ -n "$AUTH_PROFILE" ]]; then
-  REALM="${KEYCLOAK_REALM:-lcp}"
-  CLIENT_ID="${OIDC_CLIENT_ID:-lcp-server}"
-  CLIENT_SECRET="${OIDC_CLIENT_SECRET:-test-stub}"
   TEST_USER="${TEST_USERNAME:-test}"
   TEST_PASS="${TEST_PASSWORD:-test}"
-  echo "Test user (realm: $REALM):"
+  echo "Test user (org: $ORG_NAME):"
   echo "  Username:  $TEST_USER"
   echo "  Password:  $TEST_PASS"
   echo ""
-  echo "Get a token:"
-  echo "  curl -s -X POST 'http://localhost:8080/realms/$REALM/protocol/openid-connect/token' \\"
-  echo "    -d grant_type=password \\"
-  echo "    -d 'client_id=$CLIENT_ID' \\"
-  echo "    -d 'client_secret=$CLIENT_SECRET' \\"
-  echo "    -d 'username=$TEST_USER' \\"
-  echo "    -d 'password=$TEST_PASS' | jq -r .access_token"
+  echo "Get a token (opens a browser for login):"
+  echo "  npx lcp-cli get-token"
   echo ""
 fi

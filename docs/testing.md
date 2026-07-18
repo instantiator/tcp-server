@@ -14,7 +14,7 @@ unit → integration → api (includes smoke) + e2e
 | ----------- | ------------------------------------------------------------------------------------ | ------------------------------- |
 | Unit        | Individual classes and functions behave correctly                                    | None — SQLite in-memory         |
 | Integration | The app can connect to and use each backing service                                  | Docker (postgres, redis, minio) |
-| API         | Health checks, and requests and responses through the lcp-server API with a real JWT | Docker + Keycloak               |
+| API         | Health checks, and requests and responses through the lcp-server API with a real JWT | Docker + Zitadel                |
 | E2E         | HTTP API workflows produce the right responses end-to-end                            | Docker (postgres, redis, minio) |
 
 **Unit tests** use `better-sqlite3` in-memory and `@nestjs/testing` to wire
@@ -22,7 +22,7 @@ modules without starting a real server. They run in milliseconds with no
 external dependencies.
 
 **Integration tests** start only the infrastructure services (no app images,
-no Keycloak) and verify that the application code can query PostgreSQL, ping
+no Zitadel) and verify that the application code can query PostgreSQL, ping
 Redis, and reach MinIO. A failure here points to a connectivity or schema
 problem, not an application logic problem. The infrastructure is started by
 [testcontainers](https://node.testcontainers.org/) from Jest's global setup,
@@ -30,7 +30,7 @@ using the project's own `docker-compose.yml` on **random host ports** (see
 [Test infrastructure](#test-infrastructure) below), so a run never collides
 with a dev stack.
 
-**API tests** require Keycloak and run the full, deployed stack. They first
+**API tests** require Zitadel and run the full, deployed stack. They first
 verify that every `GET /health` endpoint returns 200, then send authenticated
 HTTP requests directly to the lcp-server API (using real JWTs) and assert on
 response shapes and status codes. Both API and smoke tests are pure black-box
@@ -43,7 +43,7 @@ an infrastructure problem.
 **E2E tests** run HTTP requests against a real NestJS application (via
 `supertest`) backed by PostgreSQL, Redis, and MinIO — also started by
 testcontainers from Jest's global setup. They test full request/response cycles
-including middleware, guards, and TypeORM queries. Keycloak is not required —
+including middleware, guards, and TypeORM queries. Zitadel is not required —
 auth is mocked (jwks-rsa).
 
 ## Running the tests
@@ -87,12 +87,12 @@ Docker. See [scripts/run-integration-tests.sh](../scripts/run-integration-tests.
 
 ### API & smoke tests
 
-Both suites require a running LCP stack with Keycloak. Start one first with
+Both suites require a running LCP stack with Zitadel. Start one first with
 `start-deployment.sh`, then run either or both test scripts against it. In CI
 both run against the same stack in the `api-test` job.
 
 ```bash
-# Start stack (reads Keycloak credentials from env file)
+# Start stack (reads Zitadel credentials from env file)
 ./scripts/start-deployment.sh --project lcp-api --env-file .env.testing
 
 # Run API tests
@@ -111,8 +111,7 @@ target a remote deployment without Docker:
 
 ```bash
 ./scripts/run-api-tests.sh --base-url http://your-host:3000 \
-  --keycloak-url http://your-keycloak:8080 \
-  --username alice --password s3cret
+  --client-id your-client-id --client-secret your-client-secret
 
 ./scripts/run-smoke-tests.sh --base-url http://your-host:3000
 ```
@@ -156,7 +155,7 @@ raises an error that distinguishes a crash-looping container from a
 port-binding failure.
 
 The **api** and **smoke** tiers are unchanged: they use `docker-compose.yml` +
-`start-deployment.sh` (including the Keycloak realm bootstrap) and act purely as
+`start-deployment.sh` (including the Zitadel bootstrap) and act purely as
 clients against an already-running instance.
 
 ## Test file locations

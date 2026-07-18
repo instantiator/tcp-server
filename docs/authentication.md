@@ -1,17 +1,27 @@
 # Authentication
 
 lcp-server uses OIDC/OAuth 2.0 for authentication. Any standards-compliant OIDC provider
-is supported. Keycloak is included in the Docker Compose setup for local development; for
+is supported. Zitadel is included in the Docker Compose setup for local development; for
 production you can swap it out for Auth0, Okta, Azure AD, or any other provider.
 
 ## How it works
 
-1. Clients obtain an access token from the OIDC provider (directly, or via
-   `POST /api/auth/token` if the provider supports the Resource Owner Password Credentials grant).
+1. Clients obtain an access token from the OIDC provider — directly, or via lcp-server's
+   device-authorization proxy (`POST /api/auth/device` + `POST /api/auth/device/token`,
+   see [Getting tokens for development](#getting-tokens-for-development-lcp-cli-get-token)),
+   used by `lcp-cli get-token`.
 2. Clients include the token as a `Bearer` header on every request to a guarded endpoint.
 3. lcp-server validates the token by fetching the provider's public keys from its JWKS
    endpoint (discovered automatically from `OIDC_ISSUER_URL/.well-known/openid-configuration`
    at startup) and verifying the signature, expiry, and issuer claims.
+
+   **Zitadel issues opaque (JWE-encrypted), not JWT, access tokens by default.** A token
+   in that shape can't even be parsed by passport-jwt/JWKS verification — every OIDC
+   application and machine user must be created with `accessTokenType:
+OIDC_TOKEN_TYPE_JWT` (apps) or `ACCESS_TOKEN_TYPE_JWT` (machine users), or auth breaks
+   outright. `scripts/start-deployment.sh` sets this correctly for the resources it
+   creates; it's the single easiest thing to get wrong when hand-configuring Zitadel
+   yourself (see [docs/zitadel-setup.md](zitadel-setup.md)).
 
 ## Environment variables
 
@@ -19,14 +29,14 @@ production you can swap it out for Auth0, Okta, Azure AD, or any other provider.
 | -------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `OIDC_ISSUER_URL`          | **Yes**  | The provider's issuer URL. Must match the `iss` claim in tokens.                                                        |
 | `OIDC_CLIENT_ID`           | **Yes**  | Client ID registered with the provider.                                                                                 |
-| `OIDC_CLIENT_SECRET`       | **Yes**  | Client secret (used by the token proxy endpoint).                                                                       |
+| `OIDC_CLIENT_SECRET`       | **Yes**  | Client secret (used server-side by the device-authorization and refresh endpoints).                                     |
 | `OIDC_INTERNAL_ISSUER_URL` | No       | Alternative URL for server-side HTTP calls to the provider (see [Docker networking](#docker-networking)).               |
 | `OIDC_JWKS_URI`            | No       | Explicit JWKS URI override. If unset, discovered from the provider's discovery document.                                |
 | `OIDC_AUDIENCE`            | No       | Audience claim to validate. If unset, audience validation is skipped (see [Audience validation](#audience-validation)). |
 
-## Using the included Keycloak (local development)
+## Using the included Zitadel (local development)
 
-The Docker Compose file includes Keycloak under the `auth` profile. `start-dev.sh`
+The Docker Compose file includes Zitadel under the `auth` profile. `start-dev.sh`
 starts it and performs first-time configuration automatically.
 
 ```bash
@@ -35,14 +45,14 @@ starts it and performs first-time configuration automatically.
 
 This creates:
 
-- Realm: `lcp`
-- Client: `lcp-server` (direct access grants enabled)
+- Org: `lcp`
+- Application: `lcp-server` (OIDC, device authorization + refresh token grants)
 - Test user: `test` / `test`
 
-Keycloak is then accessible at `http://localhost:8080` (admin console) and lcp-server
-is configured to use it automatically via the defaults in `.env.example`.
+Zitadel is then accessible at `http://localhost:8080/ui/console` (admin console) and
+lcp-server is configured to use it automatically via the defaults in `.env.example`.
 
-See [docs/keycloak-setup.md](keycloak-setup.md) for manual configuration steps.
+See [docs/zitadel-setup.md](zitadel-setup.md) for manual configuration steps.
 
 ## Using an external OIDC provider
 
@@ -61,10 +71,10 @@ OIDC_AUDIENCE=https://your-api-identifier
 Set `OIDC_AUDIENCE` to the API identifier you configured in Auth0. Auth0 access tokens
 include this value in the `aud` claim.
 
-Note: Auth0's ROPC grant (`grant_type=password`) requires the "Password" grant type to
-be enabled on the application and is only available on certain plan tiers. If unavailable,
-the `lcp-cli get-token` verb will not work — obtain tokens via Auth0's standard flows and
-pass them with `--access-token`.
+Note: `lcp-cli get-token` uses the OAuth 2.0 Device Authorization Grant — enable the
+"Device Code" grant type on your Auth0 application if you want the CLI login flow to
+work. If unavailable, obtain tokens through Auth0's standard flows and pass them with
+`--access-token`.
 
 ### Okta
 
@@ -75,7 +85,8 @@ OIDC_CLIENT_SECRET=your-client-secret
 OIDC_AUDIENCE=api://default
 ```
 
-Okta supports ROPC when "Resource Owner Password" is enabled in the application settings.
+Okta supports the Device Authorization Grant — enable it in the application's grant
+type settings if you want `lcp-cli get-token` to work.
 
 ### Azure Active Directory (Microsoft Entra)
 
@@ -86,7 +97,8 @@ OIDC_CLIENT_SECRET=your-client-secret
 OIDC_AUDIENCE=api://{client-id}
 ```
 
-Azure AD supports ROPC for certain scenarios but it is not recommended for new applications.
+Azure AD supports the Device Authorization Grant — enable "Allow public client flows"
+under the application's Authentication settings if you want `lcp-cli get-token` to work.
 
 ### Generic OIDC provider
 
@@ -102,18 +114,29 @@ OIDC_JWKS_URI=https://your-provider.example.com/oauth2/keys
 
 ## Docker networking
 
-When lcp-server runs inside Docker Compose alongside a self-hosted provider (e.g. Keycloak),
-the provider's public URL (e.g. `http://localhost:8080`) is not reachable from inside the
-container. Use `OIDC_INTERNAL_ISSUER_URL` to provide the container-to-container URL:
+When lcp-server runs inside Docker Compose alongside a self-hosted provider (e.g.
+Zitadel), the provider's public URL (e.g. `http://localhost:8080`) is not reachable from
+inside the container. Use `OIDC_INTERNAL_ISSUER_URL` to provide the container-to-container
+URL:
 
 ```env
-OIDC_ISSUER_URL=http://localhost:8080/realms/lcp         # external — matches iss claim in tokens
-OIDC_INTERNAL_ISSUER_URL=http://keycloak:8080/realms/lcp # internal — used for HTTP calls
+OIDC_ISSUER_URL=http://localhost:8080          # external — matches iss claim in tokens
+OIDC_INTERNAL_ISSUER_URL=http://zitadel:8080   # internal — used for HTTP calls
 ```
 
 - `OIDC_ISSUER_URL` is used for JWT `iss` validation only (must match what the provider puts in tokens).
 - `OIDC_INTERNAL_ISSUER_URL` is used for all server-side HTTP calls to the provider
   (JWKS discovery, token endpoint discovery, token requests).
+
+Zitadel does strict Host-header-based instance routing: it returns 404 "Instance not
+found" for a request whose `Host` header doesn't match `ZITADEL_EXTERNALDOMAIN`, which is
+exactly what happens for an internal Docker-network request reached via
+`OIDC_INTERNAL_ISSUER_URL` (its `Host` is `zitadel:8080`, not the configured external
+domain). To work around this, `jwt.strategy.ts` and `auth-token.service.ts` forward an
+`X-Forwarded-Host: <external issuer host>` header on every internal request, so Zitadel
+can still resolve the right instance while the request travels over the internal network.
+This is harmless for providers that don't need it (internal and external host already
+match, or the provider ignores the header).
 
 For external providers (Auth0, Okta, etc.) accessed over the internet from inside Docker,
 this split is not needed — set only `OIDC_ISSUER_URL`.
@@ -121,38 +144,88 @@ this split is not needed — set only `OIDC_ISSUER_URL`.
 ## Audience validation
 
 The `aud` claim in access tokens identifies the intended recipient of the token. Behaviour
-varies by provider and grant type:
+varies by provider:
 
-| Provider / scenario                        | `aud` value                             |
-| ------------------------------------------ | --------------------------------------- |
-| Keycloak (ROPC, default client config)     | `account`                               |
-| Auth0 (with API configured)                | Your API identifier                     |
-| Okta                                       | `api://default` or your custom audience |
-| Keycloak (with audience mapper configured) | Your configured value                   |
+| Provider / scenario         | `aud` value                                                         |
+| --------------------------- | ------------------------------------------------------------------- |
+| Zitadel (default)           | The requesting client ID, as an array (e.g. `aud: ["<client_id>"]`) |
+| Auth0 (with API configured) | Your API identifier                                                 |
+| Okta                        | `api://default` or your custom audience                             |
 
 By default lcp-server does not validate `aud` (the issuer check is sufficient for
-single-tenant deployments). To enable it, set `OIDC_AUDIENCE` to the expected value.
+single-tenant deployments). To enable it, set `OIDC_AUDIENCE` to the expected value —
+for Zitadel, that's simply your `OIDC_CLIENT_ID`; no mapper or extra configuration is
+needed.
 
-For Keycloak, you can add an audience mapper to include a custom value in tokens:
-Keycloak admin → Client → your client → Client scopes → Add mapper → Audience.
+## Getting tokens for development (`lcp-cli get-token`)
 
-## The token proxy endpoint (`POST /api/auth/token`)
+lcp-server proxies the OAuth 2.0 Device Authorization Grant
+([RFC 8628](https://www.rfc-editor.org/rfc/rfc8628)) so the OIDC client secret never
+leaves the server. This is what `lcp-cli get-token` uses.
+
+### `POST /api/auth/device`
+
+Starts a device authorization flow. No request body.
 
 ```
-POST /api/auth/token
+POST /api/auth/device
+```
+
+Returns:
+
+```json
+{
+  "device_code": "...",
+  "user_code": "ABCD-EFGH",
+  "verification_uri": "http://localhost:8080/device",
+  "verification_uri_complete": "http://localhost:8080/device?user_code=ABCD-EFGH",
+  "expires_in": 300,
+  "interval": 5
+}
+```
+
+Present `verification_uri`/`user_code` (or open `verification_uri_complete` directly) to
+a human, who completes login in a browser.
+
+### `POST /api/auth/device/token`
+
+Polls for the outcome of a device authorization started above.
+
+```
+POST /api/auth/device/token
 Content-Type: application/json
 
-{ "username": "alice", "password": "s3cret" }
+{ "device_code": "..." }
 ```
 
-This endpoint proxies the OIDC Resource Owner Password Credentials (ROPC) grant
-so the OIDC client secret never leaves the server. It is used by `lcp-cli get-token`.
+Returns `{ "status": "pending" }` or `{ "status": "slow_down" }` while the human hasn't
+finished logging in yet, or the token response once they have:
 
-**Limitations:**
+```json
+{
+  "status": "complete",
+  "access_token": "...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "refresh_token": "..."
+}
+```
 
-- ROPC is deprecated in OAuth 2.1 and not supported by all providers.
-- It requires a confidential client (one with a `client_secret`).
-- Auth0 restricts ROPC to specific plan tiers; Azure AD discourages it for new apps.
+### `POST /api/auth/refresh`
 
-If ROPC is not available, obtain tokens through your provider's standard flows (browser
-redirect, device code, etc.) and pass them to lcp-cli with `--access-token <token>`.
+Exchanges a refresh token for a new access token — unchanged, still proxies the standard
+`refresh_token` grant.
+
+```
+POST /api/auth/refresh
+Content-Type: application/json
+
+{ "refresh_token": "..." }
+```
+
+**Note:** Zitadel does not support the Resource Owner Password Credentials (ROPC /
+password) grant under any configuration — it's dropped ahead of OAuth 2.1 for exposing
+user passwords directly to the client. That's why `lcp-cli get-token` uses the device
+flow above instead of a username/password prompt. If your external OIDC provider doesn't
+support the device authorization grant either, obtain tokens through its standard flows
+and pass them to lcp-cli with `--access-token <token>`.

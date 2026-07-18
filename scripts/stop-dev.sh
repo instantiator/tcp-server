@@ -9,9 +9,9 @@ Usage: $(basename "$0") [-h|--help] [-e|--env <path>] [-v|--volumes]
 
 Stop the local development environment started by start-dev.sh.
 
-Stops all Docker Compose services (including Keycloak). By default, volumes
+Stops all Docker Compose services (including Zitadel). By default, volumes
 are kept so data persists across restarts. Pass --volumes to remove them,
-which resets all databases and Keycloak configuration.
+which resets all databases and Zitadel configuration.
 
 Environment file precedence (first match wins):
   1. --env <path>      if provided

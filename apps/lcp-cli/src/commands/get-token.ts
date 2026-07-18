@@ -6,6 +6,8 @@ import { getTokenAction } from '../lib/auth/get-token.action';
 export function registerGetToken(program: Command): void {
   program
     .command('get-token')
-    .description('Exchange username + password for an OIDC access token')
+    .description(
+      'Sign in via the browser (device flow) and print an OIDC access token',
+    )
     .action(() => getTokenAction(getGlobalOptions(program)));
 }

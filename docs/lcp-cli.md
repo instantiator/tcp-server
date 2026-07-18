@@ -17,35 +17,47 @@ It lives in `apps/lcp-cli/` and is launched via `./lcp-cli.sh` at the repository
 
 These options apply to all verbs and must come before the verb name.
 
-| Flag                           | Alias | Default                 | Description                                         |
-| ------------------------------ | ----- | ----------------------- | --------------------------------------------------- |
-| `--lcp-server <url>`           | `-s`  | `http://localhost:3000` | LCP server base URL                                 |
-| `--access-token <token>`       | `-t`  | —                       | Bearer token (skips auth flow)                      |
-| `--refresh-token <token>`      | `-T`  | —                       | Refresh token (renews an expired access token)      |
-| `--access-token-env-var <var>` | `-e`  | —                       | Name of env var holding the token                   |
-| `--username <user>`            | `-u`  | —                       | OIDC username (triggers server-side token exchange) |
-| `--password <pass>`            | `-p`  | —                       | OIDC password (omit to be prompted interactively)   |
+| Flag                           | Alias | Default                 | Description                                    |
+| ------------------------------ | ----- | ----------------------- | ---------------------------------------------- |
+| `--lcp-server <url>`           | `-s`  | `http://localhost:3000` | LCP server base URL                            |
+| `--access-token <token>`       | `-t`  | —                       | Bearer token (skips auth flow)                 |
+| `--refresh-token <token>`      | `-T`  | —                       | Refresh token (renews an expired access token) |
+| `--access-token-env-var <var>` | `-E`  | —                       | Name of env var holding the token              |
 
-**Token resolution order**: `-t` → `-e` → username+password grant.
+**Token resolution order**: `-t` → `-E` → `LCP_TOKEN` env var (if set) → OAuth 2.0
+device-authorization login (opens a browser). The `LCP_TOKEN` fallback is silent when
+unset — it just falls through to the next step — but an explicit `-E <var>` whose var
+is unset is a hard error, since that was asked for by name.
 
-**Token renewal**: when `-t` or `-e` is used alongside `-T`, the refresh token is held in memory. Commands that run for a long time (e.g. `chat`) automatically exchange it for a new access token when the server returns `401 Unauthorized`, then retry the request transparently. When `-u` / `-p` is used instead, the server's own refresh token from the initial grant is used — no `-T` is needed.
+> [!NOTE]
+> The alias is capital `-E`, not `-e` — lowercase `-e` is already claimed by
+> `./lcp-cli.sh`'s own wrapper flag, `-e, --env <file>` (loads a different env
+> file before running). `-E` does not collide with it.
+
+**Token renewal**: when `-t` or `-E` is used alongside `-T`, the refresh token is held in memory. Commands that run for a long time (e.g. `chat`) automatically exchange it for a new access token when the server returns `401 Unauthorized`, then retry the request transparently. When device-flow login is used instead, the server's own refresh token from that login is used — no `-T` is needed.
 
 ## Authentication
 
 lcp-cli needs a valid OIDC access token for most operations.
-The server proxies the OIDC password grant so the client secret stays server-side.
+The OIDC provider (Zitadel) doesn't support a password grant, so login goes
+through the OAuth 2.0 Device Authorization Grant (RFC 8628) — the same
+pattern `gh auth login` / `docker login` use. `get-token` prints a
+verification URL and code; open it in a browser, complete login, and the CLI
+prints the resulting access token to stdout once you're done.
 
 ```bash
-# Interactive password prompt (characters masked)
-./lcp-cli.sh -u alice get-token
+# Prints a verification URL + code to stderr, then polls until you finish
+# logging in in a browser, then prints the access token to stdout
+./lcp-cli.sh get-token
 
-# Non-interactive
-./lcp-cli.sh -u alice -p secret get-token
-
-# Use a token from an env var
-export LCP_TOKEN=$(./lcp-cli.sh -u alice get-token)
-./lcp-cli.sh -e LCP_TOKEN list-companies
+# Capture it into LCP_TOKEN — every subsequent command picks it up
+# automatically, no --access-token-env-var needed
+export LCP_TOKEN=$(./lcp-cli.sh get-token)
+./lcp-cli.sh list-companies
 ```
+
+Use `--access-token-env-var <var>`/`-E` instead if you'd rather use a differently-named
+variable (e.g. to keep multiple tokens around for different servers).
 
 ## Validating JSON input
 
@@ -66,38 +78,38 @@ See [schema.md](schema.md) for the full field reference, VS Code integration, ex
 
 ## Verbs
 
-| Verb                                                    | Invocation                                                                                                          | Description                                                            |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| [`get-token`](#get-token)                               | `get-token`                                                                                                         | Exchange username + password for an OIDC access token                  |
-| [`list-companies`](#list-companies)                     | `list-companies`                                                                                                    | List all companies                                                     |
-| [`list-roles`](#list-roles)                             | `list-roles [-c <uuid>\|--company-slug <slug>]`                                                                     | List roles, optionally filtered to one company                         |
-| [`set-company`](#set-company)                           | `set-company [-c <uuid>\|--company-slug <slug>] [-i <json>]`                                                        | Create or update a company                                             |
-| [`set-role`](#set-role)                                 | `set-role [-c <uuid>\|--company-slug <slug>] [-r <uuid>\|--role-slug <slug>] [-i <json>]`                           | Create or update a role                                                |
-| [`delete-company`](#delete-company)                     | `delete-company (-c <uuid>\|--company-slug <slug>) [-f]`                                                            | Delete a company and everything in it                                  |
-| [`delete-role`](#delete-role)                           | `delete-role (-r <uuid>\|--role-slug <slug>) [-f]`                                                                  | Delete a role and everything tied to it                                |
-| [`chat`](#chat)                                         | `chat (-r <uuid>\|--role-slug <slug>) [-q <message>]`                                                               | Interactive or single-query chat with a role                           |
-| [`tui`](#tui)                                           | `tui (-c <uuid>\|--company-slug <slug>)`                                                                            | Open the full-screen TUI on a company's roster (no role required)      |
-| [`list-knowledge`](#list-knowledge)                     | `list-knowledge (--role <slug-or-id>\|--company <slug-or-id>)`                                                      | List knowledge-base documents for a role or company (shared knowledge) |
-| [`get-knowledge`](#get-knowledge)                       | `get-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename> [-o <path>]`                             | Get a knowledge-base document's content                                |
-| [`store-knowledge`](#store-knowledge)                   | `store-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -s <path> [-t <filename>]`                           | Upload an OKF Markdown document to a role or company knowledge base    |
-| [`delete-knowledge`](#delete-knowledge)                 | `delete-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename>`                                      | Delete a knowledge-base document by filename                           |
-| [`reindex-knowledge`](#reindex-knowledge)               | `reindex-knowledge --company <slug-or-id>`                                                                          | Force a full RAG rebuild of every knowledge scope of a company         |
-| [`open-document-store`](#open-document-store)           | `open-document-store [--no-open]`                                                                                   | Print (and open) the MinIO console URL                                 |
-| [`open-swagger`](#open-swagger)                         | `open-swagger --service <name> [--no-open]`                                                                         | Print (and open) a service's Swagger UI URL                            |
-| [`list-open-queries`](#list-open-queries)               | `list-open-queries [-c <uuid>\|--company-slug <slug>] [--format table\|json\|csv]`                                  | List open agent-to-human queries                                       |
-| [`read-query`](#read-query)                             | `read-query <slug>`                                                                                                 | Read a query's full question and conversation history                  |
-| [`respond`](#respond)                                   | `respond <slug> <message>`                                                                                          | Reply to a query and resume the waiting agent                          |
-| [`download-shared-document`](#download-shared-document) | `download-shared-document --source <path> [--target <path>]`                                                        | Download a file from shared company storage                            |
-| [`upload-shared-document`](#upload-shared-document)     | `upload-shared-document --source <path> --target <path>`                                                            | Upload a local file to shared company storage                          |
-| [`estimate-context-window`](#estimate-context-window)   | `estimate-context-window [-c <uuid>\|--company-slug <slug>] [-r <uuid>\|--role-slug <slug>]`                        | Estimate a role's worst-case prompt token footprint                    |
-| [`validate-shared-document`](#validate-shared-document) | `validate-shared-document --path <path\|glob> [--recursive]`                                                        | Re-validate document(s) already in shared storage                      |
-| [`create-task`](#create-task)                           | `create-task -c <slug-or-id> -r <text> [--planner-role <slug-or-id>] [-m <paths...>] [-e <filenames...>] [--start]` | Create a task, optionally uploading materials and starting it          |
-| [`list-tasks`](#list-tasks)                             | `list-tasks -c <slug-or-id>`                                                                                        | List a company's tasks                                                 |
-| [`get-task`](#get-task)                                 | `get-task --task-id <uuid>`                                                                                         | Get a task, including its assignment statuses and QA outcomes          |
-| [`cancel-task`](#cancel-task)                           | `cancel-task --task-id <uuid>`                                                                                      | Cancel a task and its still-non-terminal assignments/agents            |
-| [`list-agents`](#list-agents)                           | `list-agents (--role \| --company <slug-or-id>) [--filter k=v...]`                                                  | List agents for a role or company                                      |
-| [`list-assignments`](#list-assignments)                 | `list-assignments (--task-id <uuid> \| --company <slug-or-id>) [--filter k=v...]`                                   | List assignments for a task or company                                 |
-| [`eavesdrop`](#eavesdrop)                               | `eavesdrop (--agent-id \| --assignment-id \| --task-id <uuid>) [--show-history] [--tail]`                           | Replay and/or follow an agent's, assignment's, or task's activity      |
+| Verb                                                    | Invocation                                                                                                          | Description                                                                |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| [`get-token`](#get-token)                               | `get-token`                                                                                                         | Sign in via the browser (device-flow login) and print an OIDC access token |
+| [`list-companies`](#list-companies)                     | `list-companies`                                                                                                    | List all companies                                                         |
+| [`list-roles`](#list-roles)                             | `list-roles [-c <uuid>\|--company-slug <slug>]`                                                                     | List roles, optionally filtered to one company                             |
+| [`set-company`](#set-company)                           | `set-company [-c <uuid>\|--company-slug <slug>] [-i <json>]`                                                        | Create or update a company                                                 |
+| [`set-role`](#set-role)                                 | `set-role [-c <uuid>\|--company-slug <slug>] [-r <uuid>\|--role-slug <slug>] [-i <json>]`                           | Create or update a role                                                    |
+| [`delete-company`](#delete-company)                     | `delete-company (-c <uuid>\|--company-slug <slug>) [-f]`                                                            | Delete a company and everything in it                                      |
+| [`delete-role`](#delete-role)                           | `delete-role (-r <uuid>\|--role-slug <slug>) [-f]`                                                                  | Delete a role and everything tied to it                                    |
+| [`chat`](#chat)                                         | `chat (-r <uuid>\|--role-slug <slug>) [-q <message>]`                                                               | Interactive or single-query chat with a role                               |
+| [`tui`](#tui)                                           | `tui (-c <uuid>\|--company-slug <slug>)`                                                                            | Open the full-screen TUI on a company's roster (no role required)          |
+| [`list-knowledge`](#list-knowledge)                     | `list-knowledge (--role <slug-or-id>\|--company <slug-or-id>)`                                                      | List knowledge-base documents for a role or company (shared knowledge)     |
+| [`get-knowledge`](#get-knowledge)                       | `get-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename> [-o <path>]`                             | Get a knowledge-base document's content                                    |
+| [`store-knowledge`](#store-knowledge)                   | `store-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -s <path> [-t <filename>]`                           | Upload an OKF Markdown document to a role or company knowledge base        |
+| [`delete-knowledge`](#delete-knowledge)                 | `delete-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename>`                                      | Delete a knowledge-base document by filename                               |
+| [`reindex-knowledge`](#reindex-knowledge)               | `reindex-knowledge --company <slug-or-id>`                                                                          | Force a full RAG rebuild of every knowledge scope of a company             |
+| [`open-document-store`](#open-document-store)           | `open-document-store [--no-open]`                                                                                   | Print (and open) the MinIO console URL                                     |
+| [`open-swagger`](#open-swagger)                         | `open-swagger --service <name> [--no-open]`                                                                         | Print (and open) a service's Swagger UI URL                                |
+| [`list-open-queries`](#list-open-queries)               | `list-open-queries [-c <uuid>\|--company-slug <slug>] [--format table\|json\|csv]`                                  | List open agent-to-human queries                                           |
+| [`read-query`](#read-query)                             | `read-query <slug>`                                                                                                 | Read a query's full question and conversation history                      |
+| [`respond`](#respond)                                   | `respond <slug> <message>`                                                                                          | Reply to a query and resume the waiting agent                              |
+| [`download-shared-document`](#download-shared-document) | `download-shared-document --source <path> [--target <path>]`                                                        | Download a file from shared company storage                                |
+| [`upload-shared-document`](#upload-shared-document)     | `upload-shared-document --source <path> --target <path>`                                                            | Upload a local file to shared company storage                              |
+| [`estimate-context-window`](#estimate-context-window)   | `estimate-context-window [-c <uuid>\|--company-slug <slug>] [-r <uuid>\|--role-slug <slug>]`                        | Estimate a role's worst-case prompt token footprint                        |
+| [`validate-shared-document`](#validate-shared-document) | `validate-shared-document --path <path\|glob> [--recursive]`                                                        | Re-validate document(s) already in shared storage                          |
+| [`create-task`](#create-task)                           | `create-task -c <slug-or-id> -r <text> [--planner-role <slug-or-id>] [-m <paths...>] [-e <filenames...>] [--start]` | Create a task, optionally uploading materials and starting it              |
+| [`list-tasks`](#list-tasks)                             | `list-tasks -c <slug-or-id>`                                                                                        | List a company's tasks                                                     |
+| [`get-task`](#get-task)                                 | `get-task --task-id <uuid>`                                                                                         | Get a task, including its assignment statuses and QA outcomes              |
+| [`cancel-task`](#cancel-task)                           | `cancel-task --task-id <uuid>`                                                                                      | Cancel a task and its still-non-terminal assignments/agents                |
+| [`list-agents`](#list-agents)                           | `list-agents (--role \| --company <slug-or-id>) [--filter k=v...]`                                                  | List agents for a role or company                                          |
+| [`list-assignments`](#list-assignments)                 | `list-assignments (--task-id <uuid> \| --company <slug-or-id>) [--filter k=v...]`                                   | List assignments for a task or company                                     |
+| [`eavesdrop`](#eavesdrop)                               | `eavesdrop (--agent-id \| --assignment-id \| --task-id <uuid>) [--show-history] [--tail]`                           | Replay and/or follow an agent's, assignment's, or task's activity          |
 
 ### Entity identifiers: `--x`, `--x-id`, `--x-slug`
 
@@ -119,15 +131,13 @@ company flag is redundant (rejected on `chat`, harmlessly ignored elsewhere).
 
 ### `get-token`
 
-Exchange username + password for an OIDC access token.
+Sign in via the browser (device-flow login) and print an OIDC access token.
 
 - **stdout**: the raw access token string
-- **stderr**: warning on failure
-- **Requires**: `--username` (password prompted if `--password` omitted)
+- **stderr**: the verification URL/code to open in a browser
 
 ```bash
-./lcp-cli.sh -u alice get-token
-./lcp-cli.sh -u alice -p secret get-token
+./lcp-cli.sh get-token
 ```
 
 ### `list-companies`
@@ -710,10 +720,10 @@ List open agent-to-human queries (conversations with `status: awaiting_user`) th
 ./lcp-cli.sh list-open-queries
 
 # Filter to a company, JSON output
-./lcp-cli.sh -e LCP_TOKEN list-open-queries -c <companyId> --format json
+./lcp-cli.sh list-open-queries -c <companyId> --format json
 
 # Filter to a company by slug
-./lcp-cli.sh -e LCP_TOKEN list-open-queries --company-slug acme
+./lcp-cli.sh list-open-queries --company-slug acme
 ```
 
 The table columns are: slug, role name, and the first 120 characters of the question.
@@ -812,11 +822,6 @@ model.
 | `--start`                     |       | Start the task immediately after creation (and materials upload)  |
 
 > [!NOTE]
-> `--planner-role` has no short alias: `-p` collides with the global
-> `-p, --password` (Commander silently binds the subcommand's `-p` to the
-> root option instead — the password ends up overwritten by whatever `-p`
-> value follows the subcommand).
->
 > **Behaviour change:** `--expected` used to be a Commander _variadic_ option
 > (`--expected a.txt b.txt` in one occurrence). It is now _repeatable_ instead
 > — repeat the flag once per filename (`-e a.txt -e b.txt`). `./lcp-cli.sh`'s

@@ -1,6 +1,6 @@
 # Services
 
-All services are defined in `docker-compose.yml`. Keycloak is optional and only
+All services are defined in `docker-compose.yml`. Zitadel is optional and only
 starts when the `auth` profile is active (`docker compose --profile auth up`).
 
 ## Summary
@@ -15,14 +15,14 @@ starts when the `auth` profile is active (`docker compose --profile auth up`).
 | PostgreSQL           | `postgres`             | 5432                       | Primary relational store (pgvector extension enabled) |
 | Redis                | `redis`                | 6379                       | Task queue broker (BullMQ)                            |
 | MinIO                | `minio`                | 9000 (API), 9001 (console) | S3-compatible object storage                          |
-| Keycloak             | `keycloak`             | 8080                       | OIDC identity provider (profile: auth)                |
+| Zitadel              | `zitadel`              | 8080                       | OIDC identity provider (profile: auth)                |
 
 ## LCP services
 
 ### lcp-server
 
 NestJS REST API. Handles incoming HTTP requests, persists data to PostgreSQL,
-enqueues agent tasks via BullMQ, and validates JWT tokens issued by Keycloak.
+enqueues agent tasks via BullMQ, and validates JWT tokens issued by Zitadel.
 
 - **Health:** `GET http://localhost:3000/health` — checks PostgreSQL, MinIO, and OIDC reachability
 - **Depends on:** postgres, redis, minio (all must be healthy before startup)
@@ -72,7 +72,7 @@ vector similarity search, used for agent memory retrieval (see
 [ADR-006](ADRs/ADR-006-agent-memory-architecture.md)).
 
 On first startup an init script at `docker/postgres-init/create-databases.sh`
-creates a second database (`keycloak`) alongside the default `lcp` database.
+creates a second database (`zitadel`) alongside the default `lcp` database.
 
 - **Credentials:** `POSTGRES_USER=lcp`, password from `POSTGRES_PASSWORD` in `.env`
 - **Persistent volume:** `postgres_data`
@@ -97,23 +97,27 @@ contents during development.
 - **Credentials:** `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` from `.env`
 - **Persistent volume:** `minio_data`
 
-### Keycloak _(profile: auth)_
+### Zitadel _(profile: auth)_
 
-Image: `quay.io/keycloak/keycloak:latest`
+Image: `ghcr.io/zitadel/zitadel:v4.16.1` (pinned, not `:latest`)
 
 OIDC identity provider. Issues JWT tokens that lcp-server validates on
-guarded endpoints. Runs in `start-dev` mode (no TLS, single-node) — suitable
-for local development only.
+guarded endpoints. Runs its classic embedded login (no separate Login V2
+container or reverse proxy) — suitable for local development only.
 
-Keycloak stores its own configuration in the `keycloak` PostgreSQL database.
-The management port (9000) is used internally for health checks; it is not
-exposed to the host.
+Zitadel shares the `postgres` container, storing its own configuration in a
+`zitadel` logical database created by `docker/postgres-init/create-databases.sh`.
 
-- **Admin console:** `http://localhost:8080` — username `admin`, password from `KEYCLOAK_ADMIN_PASSWORD`
-- **Realm OIDC discovery:** `http://localhost:8080/realms/lcp/.well-known/openid-configuration`
+- **Admin console:** `http://localhost:8080/ui/console` — username `admin`, password from `ZITADEL_ADMIN_PASSWORD`
+- **OIDC discovery:** `http://localhost:8080/.well-known/openid-configuration`
 - **Depends on:** postgres (must be healthy)
-- **Setup:** see [docs/keycloak-setup.md](keycloak-setup.md)
+- **Setup:** see [docs/zitadel-setup.md](zitadel-setup.md)
 
-> **Note:** Keycloak 24+ serves `/health/ready` on the management port (9000),
-> not on the main port (8080). Scripts and health checks use the master realm
-> OIDC discovery URL on port 8080 instead, which is always available.
+> **Note:** the healthcheck runs `["CMD", "/app/zitadel", "ready"]`, not curl —
+> the image is a minimal single static Go binary with no shell or curl
+> installed. It also needs `ZITADEL_TLS_ENABLED: 'false'` set explicitly: this
+> is a separate env var from the `--tlsMode disabled` start flag, which only
+> applies to the main server process, not the separate `zitadel ready` CLI
+> invocation the healthcheck uses. Without it, `zitadel ready` defaults to
+> HTTPS and fails against the plain-HTTP server, leaving the container stuck
+> "unhealthy" forever.

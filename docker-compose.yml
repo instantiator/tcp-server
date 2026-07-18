@@ -63,35 +63,63 @@ services:
       timeout: 2s
       retries: 5
 
-  keycloak:
-    image: quay.io/keycloak/keycloak:latest
+  zitadel:
+    image: ghcr.io/zitadel/zitadel:v4.16.1
     restart: unless-stopped
     profiles: [auth]
-    command: start-dev
+    command: start-from-init --masterkeyFromEnv --tlsMode disabled
     environment:
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
-      KC_DB_USERNAME: lcp
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
-      KC_HOSTNAME: localhost
-      KC_BOOTSTRAP_ADMIN_USERNAME: admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_HOST: postgres
+      ZITADEL_DATABASE_POSTGRES_PORT: 5432
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: lcp
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ${POSTGRES_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: lcp
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${POSTGRES_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+      ZITADEL_MASTERKEY: ${ZITADEL_MASTERKEY}
+      ZITADEL_EXTERNALDOMAIN: localhost
+      ZITADEL_EXTERNALPORT: 8080
+      ZITADEL_EXTERNALSECURE: 'false'
+      # The `zitadel ready` healthcheck below is a separate process invocation
+      # that doesn't see the `--tlsMode disabled` start-from-init flag above —
+      # it reads this env var independently to decide HTTP vs HTTPS for its
+      # own self-check, and defaults to HTTPS (failing against our plain-HTTP
+      # server) without it.
+      ZITADEL_TLS_ENABLED: 'false'
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: 'false'
+      ZITADEL_FIRSTINSTANCE_ORG_NAME: lcp
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: admin
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${ZITADEL_ADMIN_PASSWORD}
+      # Bootstrap machine user: start-deployment.sh authenticates to the Zitadel
+      # API as this user (via the PAT written to /machinekey/pat.txt below) to
+      # script project/app/user creation, since Zitadel has no ROPC grant to
+      # obtain an admin session token the way kcadm.sh does for Keycloak.
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: lcp-bootstrap
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: LCP Bootstrap
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: '2100-01-01T00:00:00Z'
+      ZITADEL_FIRSTINSTANCE_PATPATH: /machinekey/pat.txt
+    volumes:
+      # Bind mount (not a named volume): the zitadel process runs as uid 1000
+      # and a fresh named volume is root-owned, so writing the PAT fails with
+      # "permission denied". start-deployment.sh chmods this host directory
+      # before bringing the stack up. Only written once, on first boot — the
+      # FIRSTINSTANCE steps are skipped on subsequent starts against existing data.
+      - ./docker/zitadel-machinekey:/machinekey
     depends_on:
       postgres:
         condition: service_healthy
     ports:
       - "8080:8080"
     healthcheck:
-      # Keycloak 24+ serves /health/ready on the management port (9000), not 8080.
-      test: ["CMD-SHELL", "curl -sf http://localhost:9000/health/ready || exit 1"]
-      interval: 30s
-      timeout: 10s
-      # start_period + retries*interval = 360s: generous headroom for Keycloak's
-      # boot under constrained resources (was 210s, too tight — lcp-server would
-      # start against a not-yet-ready Keycloak and its own health check would
-      # sometimes time out before Keycloak caught up).
+      # No shell or curl in this image (single static Go binary) — use the
+      # CLI's own readiness subcommand instead of a curl/wget healthcheck.
+      test: ["CMD", "/app/zitadel", "ready"]
+      interval: 10s
+      timeout: 5s
       retries: 10
-      start_period: 60s
+      start_period: 20s
 
   lcp-server:
     build:
@@ -106,8 +134,8 @@ services:
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      OIDC_ISSUER_URL: http://localhost:8080/realms/lcp
-      OIDC_INTERNAL_ISSUER_URL: http://keycloak:8080/realms/lcp
+      OIDC_ISSUER_URL: http://localhost:8080
+      OIDC_INTERNAL_ISSUER_URL: http://zitadel:8080
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
       MCP_STORAGE_URL: http://lcp-mcp-storage:3010
@@ -128,13 +156,13 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-      # Only present (profile: auth) when Keycloak is part of the deployment;
+      # Only present (profile: auth) when Zitadel is part of the deployment;
       # `required: false` lets Compose skip this dependency entirely when it
-      # isn't. When it is, wait for Keycloak's own healthcheck before starting
+      # isn't. When it is, wait for Zitadel's own healthcheck before starting
       # lcp-server, rather than racing it (was: lcp-server started immediately
-      # and polled a not-yet-listening Keycloak, sometimes for longer than its
+      # and polled a not-yet-listening provider, sometimes for longer than its
       # own health check's retry budget).
-      keycloak:
+      zitadel:
         condition: service_healthy
         required: false
     ports:

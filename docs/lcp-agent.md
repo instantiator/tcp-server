@@ -22,7 +22,7 @@ The `lcp-agent` service runs the LangGraph agent loop. It consumes jobs from the
 
 ## Authentication
 
-All `lcp-server` API endpoints (`/api/*`) require a Bearer token from your OIDC provider. Obtain one from Keycloak (see [keycloak-setup.md](keycloak-setup.md)) and pass it in every request:
+All `lcp-server` API endpoints (`/api/*`) require a Bearer token from your OIDC provider. Obtain one from Zitadel via `lcp-cli get-token` (device-flow login; see [zitadel-setup.md](zitadel-setup.md)) and pass it in every request:
 
 ```
 -H "Authorization: Bearer <token>"

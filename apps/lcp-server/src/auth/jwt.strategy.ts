@@ -10,9 +10,19 @@ interface OidcDiscovery {
   jwks_uri: string;
 }
 
-async function discoverJwksUri(internalIssuer: string): Promise<string> {
+async function discoverJwksUri(
+  internalIssuer: string,
+  forwardedHost: string,
+): Promise<string> {
   const discoveryUrl = `${internalIssuer}/.well-known/openid-configuration`;
-  const res = await fetch(discoveryUrl);
+  // Host-based instance routing (e.g. Zitadel) rejects requests reached via an
+  // internal Docker network address whose Host header doesn't match the
+  // provider's configured external domain — forward the real external host so
+  // it can still resolve the right instance. Harmless when internal and
+  // external already match, or the provider ignores it.
+  const res = await fetch(discoveryUrl, {
+    headers: { 'X-Forwarded-Host': forwardedHost },
+  });
   if (!res.ok) {
     throw new Error(
       `OIDC discovery failed (HTTP ${res.status}) from ${discoveryUrl}` +
@@ -22,7 +32,7 @@ async function discoverJwksUri(internalIssuer: string): Promise<string> {
   const doc = (await res.json()) as OidcDiscovery;
   // Rebase jwks_uri onto the internal issuer — needed when the provider
   // advertises its public hostname in the discovery doc even when fetched
-  // via an internal Docker network URL (e.g. Keycloak with KC_HOSTNAME set).
+  // via an internal Docker network URL.
   const advertisedBase = doc.issuer.replace(/\/$/, '');
   const internalBase = internalIssuer.replace(/\/$/, '');
   return doc.jwks_uri.startsWith(advertisedBase)
@@ -38,7 +48,7 @@ async function discoverJwksUri(internalIssuer: string): Promise<string> {
  * JWKS URI discovery is lazy: the provider's discovery document is fetched
  * on the first token validation attempt, not at startup. This means lcp-server
  * can boot before the OIDC provider is ready (common in Docker Compose where
- * Keycloak and lcp-server start simultaneously). If discovery fails, the
+ * the provider and lcp-server start simultaneously). If discovery fails, the
  * promise is cleared so the next request retries automatically.
  *
  * Compatible with any OIDC provider that publishes `jwks_uri` in its
@@ -51,6 +61,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const internalIssuer = (
       config.get<string>('OIDC_INTERNAL_ISSUER_URL') ?? issuerUrl
     ).replace(/\/$/, '');
+    const forwardedHost = new URL(issuerUrl).host;
     const explicitJwksUri = config.get<string>('OIDC_JWKS_URI');
     const audience = config.get<string>('OIDC_AUDIENCE');
 
@@ -63,7 +74,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         if (!jwksUriPromise) {
           jwksUriPromise = explicitJwksUri
             ? Promise.resolve(explicitJwksUri)
-            : discoverJwksUri(internalIssuer);
+            : discoverJwksUri(internalIssuer, forwardedHost);
         }
         try {
           const uri = await jwksUriPromise;
@@ -72,6 +83,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
             rateLimit: true,
             jwksRequestsPerMinute: 5,
             jwksUri: uri,
+            requestHeaders: { 'X-Forwarded-Host': forwardedHost },
           });
         } catch (e) {
           jwksUriPromise = null; // allow retry on next request
@@ -93,8 +105,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       },
       // Audience validation is opt-in: set OIDC_AUDIENCE if your provider
       // populates aud with a known value (e.g. an API identifier on Auth0/Okta).
-      // Keycloak ROPC tokens set aud=account by default; leave OIDC_AUDIENCE
-      // unset or configure a Keycloak audience mapper to add a custom audience.
+      // Zitadel includes the requesting client ID in aud by default, so this
+      // can be set unconditionally to OIDC_CLIENT_ID.
       ...(audience !== undefined ? { audience } : {}),
       issuer: issuerUrl,
     });

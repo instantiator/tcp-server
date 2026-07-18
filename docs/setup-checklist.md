@@ -50,12 +50,13 @@ cp .env.example .env
 Open `.env` and review each value. The defaults work out of the box for local
 development with Docker Compose. Values you may want to change:
 
-| Variable                                | Default        | When to change                          |
-| --------------------------------------- | -------------- | --------------------------------------- |
-| `POSTGRES_PASSWORD`                     | `dev-password` | Any shared or non-local environment     |
-| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | stub values    | Any shared or non-local environment     |
-| `OIDC_CLIENT_SECRET`                    | `change-me`    | Required when running Keycloak (step 7) |
-| `KEYCLOAK_ADMIN_PASSWORD`               | `admin`        | Required when running Keycloak (step 7) |
+| Variable                                | Default        | When to change                                |
+| --------------------------------------- | -------------- | --------------------------------------------- |
+| `POSTGRES_PASSWORD`                     | `dev-password` | Any shared or non-local environment           |
+| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | stub values    | Any shared or non-local environment           |
+| `OIDC_CLIENT_SECRET`                    | `change-me`    | Required when running Zitadel (step 7)        |
+| `ZITADEL_MASTERKEY`                     | (32-char key)  | Required — encrypts Zitadel's secrets at rest |
+| `ZITADEL_ADMIN_PASSWORD`                | `admin`        | Required when running Zitadel (step 7)        |
 
 The OIDC variables (`OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`)
 must be set but are not validated at startup unless a guarded endpoint is called.
@@ -91,7 +92,7 @@ and retry.
 | lcp-agent      | http://localhost:3001 |
 | MinIO console  | http://localhost:9001 |
 
-## 7. (Optional) Set up authentication with Keycloak
+## 7. (Optional) Set up authentication with Zitadel
 
 Skip this step for development work that doesn't require authenticated endpoints.
 
@@ -99,8 +100,8 @@ Skip this step for development work that doesn't require authenticated endpoints
 docker compose --profile auth up -d
 ```
 
-Then follow [docs/keycloak-setup.md](keycloak-setup.md) to create the realm,
-client, and initial users.
+Then follow [docs/zitadel-setup.md](zitadel-setup.md) to create the project,
+application, and initial users.
 
 ## 8. (Optional) Set up for local development without Docker apps
 
@@ -122,7 +123,7 @@ Confirm your environment is working correctly:
 ```bash
 ./scripts/run-unit-tests.sh         # no services required
 ./scripts/run-integration-tests.sh  # starts postgres, redis, minio
-./scripts/run-smoke-tests.sh        # starts full stack including Keycloak
+./scripts/run-smoke-tests.sh        # starts full stack including Zitadel
 ./scripts/run-e2e-tests.sh          # starts postgres, redis, minio
 ```
 

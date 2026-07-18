@@ -9,13 +9,13 @@ Usage: $(basename "$0") [-h|--help] [-e|--env <path>] [--rebuild]
 
 Start a full local development environment and configure it for first-time use.
 
-Starts all services via Docker Compose (including Keycloak when
-KEYCLOAK_ADMIN_PASSWORD is set), waits for each to be healthy, then creates
-the Keycloak realm, client, and test user. Safe to re-run — existing resources
-are left untouched.
+Starts all services via Docker Compose (including Zitadel when
+ZITADEL_ADMIN_PASSWORD is set), waits for each to be healthy, then creates
+the Zitadel project, application, and test users. Safe to re-run — existing
+resources are left untouched.
 
-Credentials for the Keycloak realm and test user are read from the env file
-(KEYCLOAK_REALM, TEST_USERNAME, TEST_PASSWORD). Add or override them there.
+Credentials for the Zitadel org and test users are read from the env file
+(TEST_USERNAME, TEST_PASSWORD). Add or override them there.
 
 Environment file precedence (first match wins):
   1. --env <path>      if provided
