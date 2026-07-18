@@ -212,14 +212,20 @@ Pure test runner — requires a running deployment. Start services first with
 API tests send authenticated HTTP requests to lcp-server using real
 Zitadel-issued JWTs and assert on response shapes and status codes.
 
+Zitadel generates the machine test user's client secret at bootstrap time
+(unlike the old fixed `test`/`test` credentials, there's no built-in default
+to fall back to), so if `--client-id`/`--client-secret` aren't given and
+`TEST_CLIENT_ID`/`TEST_CLIENT_SECRET` aren't already exported, this script
+reads them out of an env file: `--env-file` if given, else `.env` if present,
+else `.env.testing` — the same file `start-deployment.sh` wrote them into.
+
 ```bash
 # Local: start stack first, then test
 ./scripts/start-deployment.sh --project lcp-api --env-file .env.testing
-./scripts/run-api-tests.sh
+./scripts/run-api-tests.sh --env-file .env.testing
 docker compose -p lcp-api --profile auth down -v
 
 # Remote deployment (no Docker needed)
-./scripts/run-api-tests.sh --base-url http://your-host:3000
 ./scripts/run-api-tests.sh --base-url http://your-host:3000 \
   --client-id your-client-id --client-secret your-client-secret
 ```
@@ -231,8 +237,9 @@ docker compose -p lcp-api --profile auth down -v
 | `--base-url URL`           | `LCP_SERVER_URL`     | lcp-server base URL                                | `http://localhost:3000`                                  |
 | `--agent-url URL`          | `LCP_AGENT_URL`      | lcp-agent URL                                      | `http://localhost:3001`                                  |
 | `--oidc-discovery-url URL` | `OIDC_DISCOVERY_URL` | OIDC discovery endpoint                            | `http://localhost:8080/.well-known/openid-configuration` |
-| `--client-id ID`           | `TEST_CLIENT_ID`     | Machine test user client ID (`client_credentials`) | —                                                        |
-| `--client-secret SECRET`   | `TEST_CLIENT_SECRET` | Machine test user client secret                    | —                                                        |
+| `--client-id ID`           | `TEST_CLIENT_ID`     | Machine test user client ID (`client_credentials`) | read from env file                                       |
+| `--client-secret SECRET`   | `TEST_CLIENT_SECRET` | Machine test user client secret                    | read from env file                                       |
+| `--env-file PATH`          | —                    | Env file to read `TEST_CLIENT_ID`/`SECRET` from    | `.env`, else `.env.testing`                              |
 
 `--keycloak-url`/`KEYCLOAK_URL` no longer exists — it's been removed, not
 renamed. `--client-id`/`--client-secret` (the machine test user's
