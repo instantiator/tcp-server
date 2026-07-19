@@ -300,21 +300,17 @@ export class TaskService {
   }
 
   /**
-   * Retrieves a task's audit history: every event recorded for the agents
-   * that worked its own assignments (plan, implement, qa, finalise), oldest
-   * first. Consultations spawned mid-assignment inherit the task's `taskId`
-   * (see {@link LcpAssignment.parentAssignmentId}), so they are included
-   * automatically — no separate parent-chain walk needed.
+   * Retrieves a task's audit history: every row denormalised to this `taskId`,
+   * oldest first. This includes agent-less orchestrator rows (task/assignment
+   * state changes) that the old assignments→agents join missed, and
+   * consultations spawned mid-assignment (which inherit the task's `taskId`
+   * server-side — see {@link LcpAssignment.parentAssignmentId}).
    *
    * @throws {@link NotFoundException} for an unknown task.
    */
   async getHistory(taskId: UUID): Promise<AuditEvent[]> {
     const task = await this.getTaskOrThrow(taskId);
-    const assignments = await this.assignmentRepo.find({ where: { taskId } });
-    const agentIds = assignments
-      .map((a) => a.agentId)
-      .filter((id): id is UUID => Boolean(id));
-    return this.audit.list(task.companyId, agentIds);
+    return this.audit.listByTask(task.companyId, taskId);
   }
 
   /** Builds a single task's {@link TaskChangeSummary} — used to prime `GET /api/task/:id/events`. */

@@ -1,9 +1,10 @@
 import {
+  AuditEventType,
   buildAssignmentChangeSummary,
   type AuditEvent,
   type LcpAssignment,
   type LcpTask,
-  type TaskEvent,
+  type WireEvent,
 } from '@lcp/shared';
 import {
   BadRequestException,
@@ -165,18 +166,53 @@ export class TaskController {
     );
   }
 
-  /** Builds the priming events for {@link streamTaskEvents}: the task's current state, then each assignment's. */
-  private async primeTaskEvents(taskId: UUID): Promise<TaskEvent[]> {
+  /**
+   * Builds the priming {@link WireEvent}s for {@link streamTaskEvents}: the
+   * task's current state, then each assignment's — synthesized `state_change`
+   * rows (`reason:'replay'`, no persisted id) with the same summaries the live
+   * path publishes.
+   */
+  private async primeTaskEvents(taskId: UUID): Promise<WireEvent[]> {
     const timestamp = new Date().toISOString();
+    const { task, assignments } = await this.tasks.getWithAssignments(taskId);
     const summary = await this.tasks.getChangeSummary(taskId);
-    const { assignments } = await this.tasks.getWithAssignments(taskId);
     return [
-      { timestamp, kind: 'task_changed', data: summary },
-      ...assignments.map(
-        (assignment): TaskEvent => ({
+      {
+        type: 'audit',
+        event: {
           timestamp,
-          kind: 'assignment_changed',
-          data: buildAssignmentChangeSummary(assignment),
+          companyId: task.companyId,
+          role: 'orchestrator',
+          agentId: null,
+          assignmentId: null,
+          taskId,
+          eventType: AuditEventType.StateChange,
+          payload: {
+            entity: 'task',
+            newStatus: task.status,
+            reason: 'replay',
+            summary,
+          },
+        },
+      },
+      ...assignments.map(
+        (assignment): WireEvent => ({
+          type: 'audit',
+          event: {
+            timestamp,
+            companyId: assignment.companyId,
+            role: 'orchestrator',
+            agentId: null,
+            assignmentId: assignment.id,
+            taskId,
+            eventType: AuditEventType.StateChange,
+            payload: {
+              entity: 'assignment',
+              newStatus: assignment.status,
+              reason: 'replay',
+              summary: buildAssignmentChangeSummary(assignment),
+            },
+          },
         }),
       ),
     ];

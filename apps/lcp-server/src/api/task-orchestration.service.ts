@@ -32,8 +32,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import type { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
-import { CompanyEventService } from '../events/company-event.service';
-import { TaskEventService } from '../events/task-event.service';
 import { StorageService } from '../storage/storage.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { claimStatus } from './claim-status';
@@ -80,8 +78,6 @@ export class TaskOrchestrationService
     private readonly storage: StorageService,
     private readonly audit: AuditService,
     private readonly config: ConfigService,
-    private readonly companyEvents: CompanyEventService,
-    private readonly taskEvents: TaskEventService,
   ) {
     super();
   }
@@ -1062,30 +1058,22 @@ export class TaskOrchestrationService
     newStatus: LcpTaskStatus,
     reason: string,
   ): Promise<void> {
-    await this.audit.record(
-      task.companyId,
-      'orchestrator',
-      null,
-      AuditEventType.StateChange,
-      { taskId: task.id, newStatus, reason },
-    );
-
     const plan = await this.planAssignments(task.id);
     const summary = buildTaskChangeSummary(
       { ...task, status: newStatus },
       plan,
     );
-    const timestamp = new Date().toISOString();
-    this.taskEvents.emit(task.id, {
-      timestamp,
-      kind: 'task_changed',
-      data: summary,
-    });
-    this.companyEvents.emit(task.companyId, {
-      timestamp,
-      kind: 'task_changed',
-      data: summary,
-    });
+    // One write. The publisher routes an `entity:'task'` row to both the task
+    // and company channels (A.6), so no separate SSE emits are needed; the
+    // summary rides in the payload for the summary-level task/company views.
+    await this.audit.record(
+      task.companyId,
+      'orchestrator',
+      null,
+      AuditEventType.StateChange,
+      { entity: 'task', taskId: task.id, newStatus, reason, summary },
+      { taskId: task.id },
+    );
   }
 
   /**
@@ -1098,26 +1086,23 @@ export class TaskOrchestrationService
     reason: string,
     extra?: Record<string, unknown>,
   ): Promise<void> {
+    // One write. An `entity:'assignment'` row with a taskId reaches the task
+    // channel via the publisher (A.6); the summary rides in the payload.
     await this.audit.record(
       assignment.companyId,
       'orchestrator',
       assignment.agentId ?? null,
       AuditEventType.StateChange,
       {
+        entity: 'assignment',
         assignmentId: assignment.id,
         taskId: assignment.taskId ?? null,
         newStatus: assignment.status,
         reason,
+        summary: buildAssignmentChangeSummary(assignment),
         ...extra,
       },
+      { assignmentId: assignment.id, taskId: assignment.taskId ?? null },
     );
-
-    if (assignment.taskId) {
-      this.taskEvents.emit(assignment.taskId, {
-        timestamp: new Date().toISOString(),
-        kind: 'assignment_changed',
-        data: buildAssignmentChangeSummary(assignment),
-      });
-    }
   }
 }

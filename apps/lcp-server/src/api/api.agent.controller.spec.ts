@@ -1,4 +1,10 @@
-import { AgentEvent, AgentStatus, AuditEventType, LcpAgent } from '@lcp/shared';
+import {
+  AgentStatus,
+  AuditEventType,
+  LcpAgent,
+  StreamDelta,
+  WireEvent,
+} from '@lcp/shared';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { EMPTY, firstValueFrom, of, take, toArray } from 'rxjs';
@@ -207,42 +213,54 @@ describe('AgentController', () => {
 
       const first = (await firstValueFrom(
         controller.streamEvents(agent.id).pipe(take(1)),
-      )) as { data: AgentEvent };
+      )) as { data: WireEvent };
 
       expect(first.data).toMatchObject({
-        kind: 'completed',
-        data: { response: 'done' },
+        type: 'audit',
+        event: {
+          eventType: AuditEventType.StateChange,
+          payload: {
+            entity: 'agent',
+            newStatus: 'completed',
+            response: 'done',
+          },
+        },
       });
     });
 
-    it('replays a synthesized failed event when the agent has failed', async () => {
+    it('replays a synthesized failed state_change when the agent has failed', async () => {
       const agent = makeAgent({ status: AgentStatus.Failed });
       db.getAgent.mockResolvedValue(agent);
       agentEvents.observe.mockReturnValue(EMPTY);
 
       const first = (await firstValueFrom(
         controller.streamEvents(agent.id).pipe(take(1)),
-      )) as { data: AgentEvent };
+      )) as { data: WireEvent };
 
-      expect(first.data.kind).toBe('failed');
+      expect(first.data.type).toBe('audit');
+      if (first.data.type === 'audit') {
+        expect(first.data.event.payload.newStatus).toBe('failed');
+      }
     });
 
     it('does not replay a terminal event while the agent is still running', async () => {
       const agent = makeAgent({ status: AgentStatus.Running });
       db.getAgent.mockResolvedValue(agent);
-      const live: AgentEvent = {
-        kind: 'response',
+      const live: StreamDelta = {
+        type: 'stream',
+        agentId: agent.id,
+        channel: 'response',
+        delta: 'hi',
         timestamp: 't',
-        data: { delta: 'hi' },
       };
       agentEvents.observe.mockReturnValue(of(live));
 
       const events = (await firstValueFrom(
         controller.streamEvents(agent.id).pipe(toArray()),
-      )) as { data: AgentEvent }[];
+      )) as { data: WireEvent }[];
 
       expect(events).toHaveLength(1);
-      expect(events[0].data.kind).toBe('response');
+      expect(events[0].data.type).toBe('stream');
     });
   });
 });

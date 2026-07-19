@@ -187,9 +187,12 @@ export class AssignmentService {
 
   /**
    * Resolves an assignment's `materials` list to {@link ResolvedMaterial}s.
-   * Storage-backed materials that cannot yet be resolved (e.g. an
-   * `assignment-completed-path` no prior assignment has approved) are omitted
-   * rather than failing the whole scope lookup.
+   * A material that cannot be resolved (e.g. an `assignment-completed-path`
+   * no prior assignment has approved) fails the whole scope lookup — a
+   * silently incomplete materials list would leave the agent working from
+   * missing input with no indication why; `planTask`'s cross-reference check
+   * should keep this unreachable for a plan created normally, so this is a
+   * backstop, not the expected path.
    */
   private async resolveMaterials(
     slug: string,
@@ -225,16 +228,17 @@ export class AssignmentService {
         });
         continue;
       }
+      let key: string | null;
       try {
-        const key = resolveArtifactKey(m, ctx);
-        // ponytail: name = the artifact's filename; two path materials with
-        // the same basename would collide — acceptable until it bites.
-        if (key) materials.push({ name: m.value, key });
+        key = resolveArtifactKey(m, ctx);
       } catch (e) {
-        this.logger.warn(
-          `Skipping unresolvable material '${m.value}' (${m.type}): ${String(e)}`,
+        throw new UnprocessableEntityException(
+          `Cannot resolve material '${m.value}' (${m.type}): ${e instanceof Error ? e.message : String(e)}`,
         );
       }
+      // ponytail: name = the artifact's filename; two path materials with
+      // the same basename would collide — acceptable until it bites.
+      if (key) materials.push({ name: m.value, key });
     }
     return materials;
   }
@@ -333,6 +337,36 @@ export class AssignmentService {
         });
       }
     }
+
+    // Cross-reference check: an `assignment-completed-path` material names a
+    // prior step's approved output — which only ever exists if an EARLIER
+    // assignment in this same plan commits to producing that exact filename
+    // (its `expected` list, type `assignment-working-path`; `checkOutputGate`
+    // then mechanically enforces the implementer actually produces it). This
+    // is purely structural — no execution has to happen to check it — so a
+    // typo or a reference to a step that never promises that file is caught
+    // here, before anything is created, rather than crashing prompt assembly
+    // partway through the plan's execution (see `resolveArtifactKey`).
+    for (const [i, materials] of materialsByIndex.entries()) {
+      const producedByEarlier = expectedByIndex
+        .slice(0, i)
+        .flatMap((expected) =>
+          expected
+            .filter((e) => e.type === 'assignment-working-path')
+            .map((e) => e.value),
+        );
+      materials.forEach((m, mi) => {
+        if (m.type !== 'assignment-completed-path') return;
+        if (!producedByEarlier.includes(m.value)) {
+          invalid.push({
+            property: `assignment ${i} materials[${mi}] value`,
+            value: m.value,
+            validValues: producedByEarlier,
+          });
+        }
+      });
+    }
+
     if (invalid.length > 0) {
       throw new BadRequestException(
         buildEnumValidationError('create the plan', invalid),

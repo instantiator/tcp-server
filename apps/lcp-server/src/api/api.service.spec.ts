@@ -1,7 +1,7 @@
-import { LcpCompany } from '@lcp/shared';
+import { AuditEventType, LcpCompany } from '@lcp/shared';
 import { randomUUID } from 'crypto';
+import { AuditService } from '../audit/audit.service';
 import { DbService } from '../db/db.service';
-import { CompanyEventService } from '../events/company-event.service';
 import { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
 import { ApiService } from './api.service';
 
@@ -13,23 +13,21 @@ const makeDbService = (): jest.Mocked<
   getCompany: jest.fn().mockResolvedValue(null),
 });
 
-const makeCompanyEvents = (): jest.Mocked<
-  Pick<CompanyEventService, 'emit'>
-> => ({
-  emit: jest.fn(),
+const makeAudit = (): jest.Mocked<Pick<AuditService, 'record'>> => ({
+  record: jest.fn().mockResolvedValue(undefined),
 });
 
 describe('ApiService', () => {
   let db: ReturnType<typeof makeDbService>;
-  let companyEvents: ReturnType<typeof makeCompanyEvents>;
+  let audit: ReturnType<typeof makeAudit>;
   let api: ApiService;
 
   beforeEach(() => {
     db = makeDbService();
-    companyEvents = makeCompanyEvents();
+    audit = makeAudit();
     api = new ApiService(
       db as unknown as DbService,
-      companyEvents as unknown as CompanyEventService,
+      audit as unknown as AuditService,
     );
   });
 
@@ -85,16 +83,16 @@ describe('ApiService', () => {
       expect(db.setCompany).toHaveBeenCalledWith(company, { slug: 'acme' });
     });
 
-    it('emits a company_changed event for the updated company', async () => {
+    it('records a company state_change for the updated company', async () => {
       const id = randomUUID();
       db.setCompany.mockResolvedValue({ id } as LcpCompany);
       await api.setCompany(id, { name: 'Acme' });
-      expect(companyEvents.emit).toHaveBeenCalledWith(
+      expect(audit.record).toHaveBeenCalledWith(
         id,
-        expect.objectContaining({
-          kind: 'company_changed',
-          data: { companyId: id },
-        }),
+        'system',
+        null,
+        AuditEventType.StateChange,
+        expect.objectContaining({ entity: 'company' }),
       );
     });
   });

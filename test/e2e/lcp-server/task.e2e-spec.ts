@@ -558,7 +558,7 @@ describe('TaskController (e2e)', () => {
           });
 
           describe('GET /api/task/:id/history', () => {
-            it("returns the audit rows for the task's assignments' agents, oldest first", async () => {
+            it("returns every row denormalised to the task's id — agent rows and agent-less orchestrator rows — oldest first", async () => {
               const assignment = await assignmentRepo.save(
                 assignmentRepo.create({
                   companyId: company.id,
@@ -603,11 +603,25 @@ describe('TaskController (e2e)', () => {
                 }),
               );
 
+              // An orchestrator row (no agent) denormalised to the task — the
+              // assignments→agents join used to miss these; the taskId column
+              // now includes them.
+              await auditRepo.save(
+                auditRepo.create({
+                  companyId: company.id,
+                  role: 'orchestrator',
+                  agentId: null,
+                  taskId: task.id,
+                  eventType: 'state_change',
+                  payload: { entity: 'task', newStatus: 'planning' },
+                }),
+              );
               await auditRepo.save(
                 auditRepo.create({
                   companyId: company.id,
                   role: 'Planner',
                   agentId: agent.id,
+                  taskId: task.id,
                   eventType: 'state_change',
                   payload: { newStatus: 'running' },
                 }),
@@ -617,6 +631,7 @@ describe('TaskController (e2e)', () => {
                   companyId: company.id,
                   role: 'Planner',
                   agentId: agent.id,
+                  taskId: task.id,
                   eventType: 'agent_loop_completion',
                   payload: { summary: 'planned' },
                 }),
@@ -626,6 +641,7 @@ describe('TaskController (e2e)', () => {
                   companyId: company.id,
                   role: 'Other',
                   agentId: otherAgent.id,
+                  taskId: null,
                   eventType: 'state_change',
                   payload: { newStatus: 'running' },
                 }),
@@ -636,10 +652,12 @@ describe('TaskController (e2e)', () => {
                 .set('Authorization', `Bearer ${jwt}`);
               expect(res.status).toBe(200);
               const rows = res.body as { eventType: string; agentId: string }[];
-              expect(rows).toHaveLength(2);
-              expect(rows.every((r) => r.agentId === agent.id)).toBe(true);
+              expect(rows).toHaveLength(3);
               expect(rows[0].eventType).toBe('state_change');
-              expect(rows[1].eventType).toBe('agent_loop_completion');
+              expect(rows[0].agentId).toBeNull();
+              expect(rows[1].eventType).toBe('state_change');
+              expect(rows[1].agentId).toBe(agent.id);
+              expect(rows[2].eventType).toBe('agent_loop_completion');
             });
 
             it('returns 404 for an unknown task', async () => {

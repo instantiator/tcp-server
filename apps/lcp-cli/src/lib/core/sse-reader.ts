@@ -1,24 +1,24 @@
-import { parseSseBuffer, SseEvent } from './sse';
+import { WireEvent } from '@lcp/shared';
+import { parseWireEvents } from './sse';
 
-// ponytail: this is the minimal fetch+reader+parseSseBuffer loop shared by
-// consumers that just want a callback per event (currently: the company
-// events stream backing the TUI's live Tasks list). `ChatSession.streamAgent`
-// has its own copy with terminal-event/consultation-following logic that
-// doesn't fit this shape — not folded in here to avoid touching that
-// already-covered code for a marginal DRY gain. Promote this if a third
-// consumer needs the same bare-bones loop.
+// ponytail: the minimal fetch+reader+parseWireEvents loop shared by consumers
+// that just want a callback per event (the company/task events streams, and
+// eavesdrop's per-agent/task follows). `ChatSession.streamAgent` has its own
+// copy with terminal-event/consultation-following logic that doesn't fit this
+// shape — not folded in here to avoid touching that already-covered code for a
+// marginal DRY gain.
 
 /**
- * Opens an authenticated SSE GET request and invokes `onEvent` for each
- * parsed event until the stream ends or `signal` aborts. Resolves (does not
- * throw) on an aborted fetch; other failures are silently swallowed too,
+ * Opens an authenticated SSE GET request and invokes `onEvent` for each parsed
+ * {@link WireEvent} until the stream ends or `signal` aborts. Resolves (does
+ * not throw) on an aborted fetch; other failures are silently swallowed too,
  * since every current caller treats the stream as best-effort.
  */
-export async function readSseStream(
+export async function readWireStream(
   url: string,
   token: string,
   signal: AbortSignal,
-  onEvent: (event: SseEvent) => void,
+  onEvent: (event: WireEvent) => void,
 ): Promise<void> {
   try {
     const res = await fetch(url, {
@@ -33,7 +33,7 @@ export async function readSseStream(
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
-      const { events, rest } = parseSseBuffer(buffer);
+      const { events, rest } = parseWireEvents(buffer);
       buffer = rest;
       for (const event of events) onEvent(event);
     }

@@ -6,6 +6,8 @@ export interface AuthOptions {
   accessToken?: string;
   refreshToken?: string;
   accessTokenEnvVar?: string;
+  /** Skip the LCP_TOKEN cache and always trigger device login. */
+  force?: boolean;
 }
 
 /** A resolved token pair. `refreshToken` is only present when obtained via device login. */
@@ -53,10 +55,24 @@ export async function resolveSession(opts: AuthOptions): Promise<TokenSession> {
     return { token: val, refreshToken: opts.refreshToken };
   }
 
-  // 3. LCP_TOKEN fallback — unset just falls through to device login below,
-  // since nothing explicitly asked for it.
+  // 3. LCP_TOKEN fallback — skip when --force is set or the cached token is
+  // expired. An expired token would only cause a 401 on the first API call,
+  // so we save the round-trip by re-authenticating proactively.
   const fallback = process.env[DEFAULT_TOKEN_ENV_VAR];
-  if (fallback) return { token: fallback, refreshToken: opts.refreshToken };
+  if (fallback) {
+    if (opts.force) {
+      process.stderr.write(
+        'Ignoring cached token (--force): re-authenticating\n',
+      );
+    } else if (isExpired(fallback)) {
+      process.stderr.write('Cached token is expired — re-authenticating\n');
+    } else {
+      process.stderr.write(
+        'Using existing token from LCP_TOKEN. Run `get-token --force` to re-authenticate.\n',
+      );
+      return { token: fallback, refreshToken: opts.refreshToken };
+    }
+  }
 
   // 4. OAuth 2.0 Device Authorization Grant (RFC 8628) — the OIDC provider
   // doesn't support a password grant, so login happens in a browser.
@@ -135,6 +151,12 @@ export async function renewToken(
     token: data.access_token,
     refreshToken: data.refresh_token ?? refreshToken,
   };
+}
+
+/** Whether the token is a JWT whose `exp` claim is in the past. Returns `false` for non-JWT tokens (we can't tell). */
+function isExpired(token: string): boolean {
+  const expiryMs = decodeExpiryMs(token);
+  return expiryMs !== undefined && expiryMs < Date.now();
 }
 
 /** Seconds of headroom to refresh ahead of a token's `exp` claim. */

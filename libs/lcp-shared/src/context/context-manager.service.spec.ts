@@ -11,7 +11,6 @@ import { ContextBudgetService } from './context-budget.service';
 import { ContextCompactorService } from './context-compactor.service';
 import {
   ContextAuditSink,
-  ContextEventSink,
   ContextManagerService,
 } from './context-manager.service';
 import { IncomingDataGuardService } from './incoming-data-guard.service';
@@ -45,7 +44,6 @@ describe('ContextManagerService', () => {
   let budget: ContextBudgetService;
   let compactor: jest.Mocked<ContextCompactorService>;
   let guard: jest.Mocked<IncomingDataGuardService>;
-  let events: jest.Mocked<ContextEventSink>;
   let auditSink: jest.Mocked<ContextAuditSink>;
   let service: ContextManagerService;
 
@@ -67,15 +65,8 @@ describe('ContextManagerService', () => {
           Promise.resolve({ text, compacted: false, activity: null }),
         ),
     } as unknown as jest.Mocked<IncomingDataGuardService>;
-    events = { emit: jest.fn() };
     auditSink = { record: jest.fn().mockResolvedValue(undefined) };
-    service = new ContextManagerService(
-      budget,
-      compactor,
-      guard,
-      events,
-      auditSink,
-    );
+    service = new ContextManagerService(budget, compactor, guard, auditSink);
   });
 
   describe('prepare — first message', () => {
@@ -151,7 +142,7 @@ describe('ContextManagerService', () => {
       );
       expect(result.message).toBe('Short message');
       expect(compactor.trimHistory).not.toHaveBeenCalled();
-      expect(events.emit).not.toHaveBeenCalled();
+      expect(auditSink.record).not.toHaveBeenCalled();
     });
 
     it('counts bound-tools schema overhead toward the budget, triggering compaction a bound-tools-unaware check would miss', async () => {
@@ -185,15 +176,18 @@ describe('ContextManagerService', () => {
         tools,
       );
 
-      expect(events.emit).toHaveBeenCalledWith(
-        'agent-1',
-        expect.objectContaining({ kind: 'compaction_started' }),
+      expect(auditSink.record).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(String),
+        expect.any(String),
+        AuditEventType.Compaction,
+        expect.objectContaining({ phase: 'started' }),
       );
     });
   });
 
   describe('prepare — over budget, triggers Tier-1 compaction', () => {
-    it('emits compaction_started and compaction_complete SSE events', async () => {
+    it('records compaction started and complete audit events', async () => {
       // Checkpoint with enough messages to push tokens over 80% of WINDOW
       const bigMsg = new HumanMessage('x'.repeat(10000));
       const graph = makeGraph([bigMsg]);
@@ -216,17 +210,23 @@ describe('ContextManagerService', () => {
         makeRole(),
       );
 
-      expect(events.emit).toHaveBeenCalledWith(
-        'agent-1',
-        expect.objectContaining({ kind: 'compaction_started' }),
+      expect(auditSink.record).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(String),
+        expect.any(String),
+        AuditEventType.Compaction,
+        expect.objectContaining({ phase: 'started' }),
       );
-      expect(events.emit).toHaveBeenCalledWith(
-        'agent-1',
-        expect.objectContaining({ kind: 'compaction_complete' }),
+      expect(auditSink.record).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(String),
+        expect.any(String),
+        AuditEventType.Compaction,
+        expect.objectContaining({ phase: 'complete' }),
       );
     });
 
-    it('records a Decision audit event before compaction', async () => {
+    it('records a compaction started audit event before compaction', async () => {
       const bigMsg = new HumanMessage('x'.repeat(10000));
       const agent = makeAgent();
       const role = makeRole();
@@ -254,8 +254,8 @@ describe('ContextManagerService', () => {
         agent.companyId,
         role.name,
         agent.id,
-        AuditEventType.Decision,
-        expect.objectContaining({ event: 'compaction_triggered' }),
+        AuditEventType.Compaction,
+        expect.objectContaining({ phase: 'started' }),
       );
     });
 

@@ -1,5 +1,6 @@
+import type { WireEvent } from '@lcp/shared';
 import { apiRequest } from '../core/api';
-import { readSseStream } from '../core/sse-reader';
+import { readWireStream } from '../core/sse-reader';
 import { Tui } from '../tui/tui';
 import { ChatSession } from './session';
 
@@ -7,7 +8,27 @@ jest.mock('../core/api');
 jest.mock('../core/sse-reader');
 
 const mockedApiRequest = apiRequest as jest.Mock;
-const mockedReadSseStream = jest.mocked(readSseStream);
+const mockedReadWireStream = jest.mocked(readWireStream);
+
+/** A task/assignment `state_change` WireEvent carrying the given summary. */
+function stateChange(
+  entity: string,
+  payload: Record<string, unknown>,
+): WireEvent {
+  return {
+    type: 'audit',
+    event: {
+      timestamp: 't',
+      companyId: 'c',
+      role: 'r',
+      agentId: null,
+      assignmentId: null,
+      taskId: null,
+      eventType: 'state_change',
+      payload: { entity, ...payload },
+    },
+  };
+}
 
 const opts = { lcpServer: 'http://localhost:3000' };
 
@@ -15,6 +36,7 @@ const opts = { lcpServer: 'http://localhost:3000' };
 function fakeTui() {
   return {
     appendEvent: jest.fn(),
+    showPaneError: jest.fn(),
     addPane: jest.fn(),
     addTaskPane: jest.fn(),
     hasPane: jest.fn().mockReturnValue(false),
@@ -227,17 +249,13 @@ describe('ChatSession', () => {
   });
 
   describe('watchTaskEvents', () => {
-    it('updates the task pane status on task_changed', () => {
+    it('updates the task pane status on a task state_change', () => {
       const tui = fakeTui();
       const session = makeSession(tui);
       session.watchTaskEvents('task-1');
 
-      const onEvent = mockedReadSseStream.mock.calls[0][3];
-      onEvent({
-        kind: 'task_changed',
-        timestamp: 't',
-        data: { status: 'succeeded' },
-      });
+      const onEvent = mockedReadWireStream.mock.calls[0][3];
+      onEvent(stateChange('task', { newStatus: 'succeeded' }));
 
       expect(tui.updateTaskPaneStatus).toHaveBeenCalledWith(
         'task-1',
@@ -274,12 +292,13 @@ describe('ChatSession', () => {
       const session = makeSession(tui);
       session.watchTaskEvents('task-1');
 
-      const onEvent = mockedReadSseStream.mock.calls[0][3];
-      onEvent({
-        kind: 'assignment_changed',
-        timestamp: 't',
-        data: { id: 'a1', status: 'in-progress' },
-      });
+      const onEvent = mockedReadWireStream.mock.calls[0][3];
+      onEvent(
+        stateChange('assignment', {
+          assignmentId: 'a1',
+          summary: { id: 'a1', status: 'in-progress' },
+        }),
+      );
       // fetchTaskDetail's promise chain (now one more hop deeper via
       // TokenManager.request) needs a full microtask-queue flush to resolve.
       await new Promise((resolve) => setImmediate(resolve));
@@ -304,7 +323,7 @@ describe('ChatSession', () => {
     it('aborts the signal passed to readSseStream', () => {
       const session = makeSession();
       session.watchTaskEvents('task-1');
-      const signal = mockedReadSseStream.mock.calls[0][2];
+      const signal = mockedReadWireStream.mock.calls[0][2];
       expect(signal.aborted).toBe(false);
 
       session.stopWatchingTask('task-1');
@@ -352,8 +371,17 @@ describe('ChatSession', () => {
       expect(tui.appendEvent).toHaveBeenCalledWith(
         'task-1',
         expect.objectContaining({
-          kind: 'agent_status',
-          data: { status: 'failed', reason: 'boom' },
+          type: 'audit',
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          event: expect.objectContaining({
+            eventType: 'state_change',
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+            payload: expect.objectContaining({
+              entity: 'agent',
+              newStatus: 'failed',
+              reason: 'boom',
+            }),
+          }),
         }),
       );
       expect(process.stderr.write).toHaveBeenCalledWith(
@@ -366,7 +394,7 @@ describe('ChatSession', () => {
     it('stops watching a closed task panel', () => {
       const session = makeSession();
       session.watchTaskEvents('task-1');
-      const signal = mockedReadSseStream.mock.calls[0][2];
+      const signal = mockedReadWireStream.mock.calls[0][2];
 
       void session.closeTab('task-1');
 
@@ -379,7 +407,7 @@ describe('ChatSession', () => {
       const session = makeSession();
       session.watchTaskEvents('task-1');
       session.watchTaskEvents('task-2');
-      const signals = mockedReadSseStream.mock.calls.map((call) => call[2]);
+      const signals = mockedReadWireStream.mock.calls.map((call) => call[2]);
 
       await session.cleanup();
 
@@ -421,7 +449,7 @@ describe('ChatSession', () => {
       expect(tui.switchToPane).toHaveBeenCalledWith('agent-1');
     });
 
-    it('renders the mapped audit history for a completed agent', async () => {
+    it('feeds the audit history rows straight into the pane for a completed agent', async () => {
       mockedApiRequest
         .mockResolvedValueOnce({ id: 'agent-1', status: 'completed' })
         .mockResolvedValueOnce([
@@ -450,10 +478,14 @@ describe('ChatSession', () => {
       });
       expect(tui.appendEvent).toHaveBeenCalledWith(
         'agent-1',
-        expect.objectContaining({ kind: 'response' }),
+        expect.objectContaining({
+          type: 'audit',
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          event: expect.objectContaining({ eventType: 'llm_response' }),
+        }),
       );
       expect(tui.switchToPane).toHaveBeenCalledWith('agent-1');
-      expect(mockedReadSseStream).not.toHaveBeenCalled();
+      expect(mockedReadWireStream).not.toHaveBeenCalled();
     });
 
     it('renders history up to now, then follows the live SSE stream, for a still-running agent', async () => {
@@ -484,25 +516,30 @@ describe('ChatSession', () => {
       expect(tui.appendEvent).toHaveBeenCalledWith(
         'agent-1',
         expect.objectContaining({
-          kind: 'llm',
-          data: {
-            activity: 'tool_complete',
-            tool: 'storage__read_working_file',
-          },
+          type: 'audit',
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          event: expect.objectContaining({ eventType: 'tool_result' }),
         }),
       );
 
-      expect(mockedReadSseStream).toHaveBeenCalledWith(
+      expect(mockedReadWireStream).toHaveBeenCalledWith(
         'http://localhost:3000/api/agent/agent-1/events',
         'token',
         expect.anything(),
         expect.any(Function),
       );
-      const onEvent = mockedReadSseStream.mock.calls[0][3];
-      onEvent({ kind: 'response', timestamp: 't', data: { delta: 'hi' } });
+      const onEvent = mockedReadWireStream.mock.calls[0][3];
+      const live: WireEvent = {
+        type: 'stream',
+        agentId: 'agent-1',
+        channel: 'response',
+        delta: 'hi',
+        timestamp: 't',
+      };
+      onEvent(live);
       expect(tui.appendEvent).toHaveBeenCalledWith(
         'agent-1',
-        expect.objectContaining({ kind: 'response' }),
+        expect.objectContaining({ type: 'stream' }),
       );
     });
   });

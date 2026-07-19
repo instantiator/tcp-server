@@ -94,6 +94,78 @@ describe('resolveSession', () => {
       expect(exitSpy).toHaveBeenCalledWith(1);
       exitSpy.mockRestore();
     });
+
+    it('skips LCP_TOKEN and triggers device login when force is set', async () => {
+      process.env['LCP_TOKEN'] = 'fallback-token';
+      jest.useFakeTimers();
+      mockApiRequest
+        .mockResolvedValueOnce({
+          device_code: 'dc-1',
+          user_code: 'ABCD-EFGH',
+          verification_uri: 'http://localhost:3000/device',
+          expires_in: 300,
+          interval: 5,
+        })
+        .mockResolvedValueOnce({
+          access_token: 'fresh-token',
+          refresh_token: 'fresh-refresh',
+        });
+
+      const promise = resolveSession({
+        baseUrl: 'http://localhost:3000',
+        force: true,
+      });
+      await jest.advanceTimersByTimeAsync(5_000);
+      const session = await promise;
+
+      expect(session).toEqual({
+        token: 'fresh-token',
+        refreshToken: 'fresh-refresh',
+      });
+      expect(mockApiRequest).toHaveBeenCalledWith(
+        { baseUrl: 'http://localhost:3000' },
+        'POST',
+        '/api/auth/device',
+      );
+    });
+
+    it('skips expired LCP_TOKEN and triggers device login', async () => {
+      // Token expired 10 seconds ago
+      const expired = Math.floor(Date.now() / 1000) - 10;
+      const header = Buffer.from(JSON.stringify({ alg: 'none' })).toString(
+        'base64url',
+      );
+      const payload = Buffer.from(JSON.stringify({ exp: expired })).toString(
+        'base64url',
+      );
+      process.env['LCP_TOKEN'] = `${header}.${payload}.sig`;
+
+      jest.useFakeTimers();
+      mockApiRequest
+        .mockResolvedValueOnce({
+          device_code: 'dc-1',
+          user_code: 'ABCD-EFGH',
+          verification_uri: 'http://localhost:3000/device',
+          expires_in: 300,
+          interval: 5,
+        })
+        .mockResolvedValueOnce({
+          access_token: 'fresh-token',
+        });
+
+      const promise = resolveSession({
+        baseUrl: 'http://localhost:3000',
+      });
+      await jest.advanceTimersByTimeAsync(5_000);
+      const session = await promise;
+
+      expect(session.token).toBe('fresh-token');
+      expect(mockApiRequest).toHaveBeenCalledWith(
+        { baseUrl: 'http://localhost:3000' },
+        'POST',
+        '/api/auth/device',
+      );
+    });
   });
 });
 

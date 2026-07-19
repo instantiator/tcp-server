@@ -39,7 +39,7 @@ apps/
       config/              # Joi validation schema for env vars
       context/             # Context-budget/compaction wiring specific to lcp-server
       db/                  # DbService — TypeORM repository wrapper
-      events/              # AgentEventService — SSE relay for agent turns
+      events/              # AuditEventPublisher + three KeyedEventBus<WireEvent> (agent/task/company SSE)
       health/              # GET /health endpoint (@nestjs/terminus)
       mcp/                 # Internal MCP-facing endpoints (storage-scope, etc.)
       migrations/          # TypeORM migrations (run on startup vs postgres)
@@ -74,7 +74,8 @@ apps/
       main.ts               # commander entry point; global options
       commands/             # thin per-command registration (flags → lib/<domain> action)
       lib/
-        core/                # api.ts, cli-options.ts, run-command.ts, sse.ts, render.ts, ...
+        core/                # api.ts, cli-options.ts, run-command.ts, sse.ts (parseWireEvents), render.ts, ...
+        render/              # shared render library: EventLogBuffer, StreamPresenter, renderers, style backends
         auth/                # token.ts (resolution/renewal) + get-token action
         chat/                # chat command: flags, context, session, wiring, action
         tui/                 # full-screen TUI (terminal-kit widgets)
@@ -90,7 +91,7 @@ libs/
       config/                # defaults, run-config/llm-config/system-prompt-template resolution
       context/                # Context budget, compaction, and incoming-data-guard services
       db/                     # makeTypeOrmConfig factory + optimistic-retry helper
-      events/                 # Shared AgentEvent union (SSE)
+      events/                 # WireEvent (unified SSE/Redis shape) + channel/summary helpers
       llm/                    # buildChatModel factory, agent-graph builder, reasoning-content recovery
       mcp/                    # BaseMcpController, McpClientService, MCP_REGISTRY, resolve-mcp-server-list
       prompts/                # mode-prompts, mode-tools, prompt-assembly, qa-prompts — the single
@@ -199,6 +200,7 @@ Beyond the database/Redis/MinIO/OIDC connection strings (see `.env.example`), a 
 - **`schemas/schema.json`** and **`docs/licenses.md`** are generated artefacts — never edit them directly; regenerate via `npm run build`.
 - **Unit tests** (`.spec.ts`) use `better-sqlite3` in-memory; wire TypeORM directly in `Test.createTestingModule`, never through `AppModule`.
 - **Integration and e2e tests** boot against real PostgreSQL, Redis, and MinIO started by [testcontainers](https://node.testcontainers.org/) from Jest's global setup (`test/{integration,e2e}/global-setup.ts`), on random host ports. Connection env vars are provisioned there, so `require-env.ts` (not a silent skip) guards each spec. See [docs/testing.md](testing.md#test-infrastructure).
+- **Event architecture (audit-as-source-of-truth)**: audit events are the single source of truth for both history and live streaming (see [ADR-008](ADRs/ADR-008-audit-logging.md)). `AuditService.write` persists a row then hands it to `AuditEventPublisher`, which emits it as a `WireEvent` (`{ type: 'audit'; event }` or a live-only `{ type: 'stream'; … }` token delta — the sole non-audit wire shape) on the relevant agent/task/company SSE channel. All three CLI surfaces (`tui`, `chat`, `eavesdrop`) render through one shared library — `apps/lcp-cli/src/lib/render/` (`EventLogBuffer` accumulates events; `StreamPresenter` writes stdout/stderr incrementally; the renderer registry maps each audit event to display lines) — so history replay and the live stream produce identical output. Add new event kinds by extending the renderer registry, not by adding a parallel event family.
 - **Redis fail-fast**: services that depend on Redis (agent orchestration, the agent worker, the knowledge-reindex queue) probe reachability at startup via `assertRedisReachable` (`@lcp/shared`) and refuse to start with a clear error if it's unreachable, rather than letting BullMQ block forever. lcp-server and lcp-agent both call `app.enableShutdownHooks()` so their queue/worker/Redis connections close cleanly on `SIGTERM`.
 - **Testing intentional error paths**: when a test deliberately triggers a service-level `Logger.warn`/`.error` call (e.g. `POST /internal/agent/:id/fail`), use `captureNestLogs()`/`expectLoggedError()` from `test/e2e/helpers/log-capture.ts` to silence and assert on it, instead of letting it print during a normal test run. HTTP-level errors (404/400/401/409 via `HttpException`) aren't logged by Nest's default filter, so most error-path tests don't need this — it's only for paths that call a `Logger` directly.
 - **Migrations**: use `synchronize: false` in production. Always create a migration when changing entity schema. Never use `synchronize: true` with PostgreSQL. New migration files must also be registered by hand in each app's `app.module.ts` migrations array.

@@ -145,7 +145,7 @@ else
 fi
 
 if [[ -n "$AUTH_PROFILE" ]]; then
-  wait_for zitadel "curl -sf http://localhost:8080/debug/healthz"
+  wait_for zitadel "curl -sf -o /dev/null http://localhost:8080/debug/healthz"
 fi
 
 # Zitadel bootstrap (skipped when auth profile is not active). Must happen
@@ -189,7 +189,23 @@ if [[ -n "$AUTH_PROFILE" ]]; then
     [[ -n "$ORG_ID" ]] && break
     sleep 2
   done
-  [[ -n "$ORG_ID" ]] || { echo "ERROR: could not authenticate to the Zitadel API with the bootstrap PAT" >&2; exit 1; }
+  if [[ -z "$ORG_ID" ]]; then
+    cat >&2 <<EOF
+ERROR: could not authenticate to the Zitadel API with the bootstrap PAT.
+
+This almost always means '$PAT_FILE' is stale — it was written by an earlier
+Zitadel instance, but the current Zitadel database no longer recognises it
+(the PAT is only (re)written at first-instance init). Reset the two together:
+
+  $DC down -v
+  rm -f '$PAT_FILE'
+  $0 $*
+
+('down -v' wipes the shared Postgres volume — fine for a dev stack; the app DB
+is recreated on the next boot.)
+EOF
+    exit 1
+  fi
 
   # Project — realm-equivalent grouping for the OIDC application.
   PROJECT_ID=$(zit POST "/management/v1/projects/_search" \

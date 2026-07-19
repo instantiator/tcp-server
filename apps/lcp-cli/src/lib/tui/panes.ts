@@ -8,9 +8,10 @@
 // view), and TextPane (fixed text — e.g. the help screen — with native
 // scrolling).
 
-import type { TaskChangeSummary } from '@lcp/shared';
+import type { TaskChangeSummary, WireEvent } from '@lcp/shared';
 import { TextBox } from 'terminal-kit';
-import { SseEvent } from '../core/sse';
+import { EventLogBuffer } from '../render/event-log';
+import { markupStyle } from '../render/style';
 import {
   AssignmentRow,
   escapeMarkup,
@@ -18,7 +19,6 @@ import {
   makeRoleEntry,
   makeTaskEntry,
   marker,
-  PaneEntryLog,
   renderAssignmentPaneHeading,
   renderMultiListPanel,
   renderRosterHeading,
@@ -57,6 +57,11 @@ const COMPLETE_ASSIGNMENT_STATUSES = new Set([
 export abstract class Pane {
   /** Whether this pane shows an input box when active. Only ChatPane overrides this. */
   readonly talkable: boolean = false;
+  /** A transient action failure (e.g. a failed refresh/cancel/start), shown
+   * until the pane's next successful data update. Only meaningful for panes
+   * with no event log of their own — an AssignmentPane's errors go into its
+   * log instead (see Tui.appendEvent/showPaneError). */
+  errorMessage: string | null = null;
 
   constructor(
     readonly id: string,
@@ -73,6 +78,13 @@ export abstract class Pane {
 
   /** Produces this pane's content lines at the given column width. */
   protected abstract render(width: number): string[];
+
+  /** One red banner line (plus trailing blank) for `errorMessage`, or nothing when unset. */
+  protected renderErrorBanner(): string[] {
+    return this.errorMessage
+      ? [`^R${escapeMarkup(this.errorMessage)}^:`, '']
+      : [];
+  }
 
   /** Scroll (or other) adjustment made right after content is set. Default: none. */
   protected afterRedraw(): void {
@@ -108,7 +120,8 @@ export class AssignmentPane extends Pane {
    * pane (not fetched — see `ChatSession.streamAgent`); heading fields that
    * need it render as `'—'` instead. */
   private readonly assignment: PaneAssignmentInfo | undefined;
-  private readonly log: PaneEntryLog;
+  /** Single-scope, so no scope heading blocks — the pane renders its own richer heading. */
+  private readonly buffer: EventLogBuffer;
   /** Auto-scroll to the newest entry; cleared when the user scrolls up. */
   private follow = true;
   /** Whether this pane's agent has a turn in flight. */
@@ -129,7 +142,7 @@ export class AssignmentPane extends Pane {
     this.talkable = talkable;
     this.roleSlug = roleSlug;
     this.assignment = assignment;
-    this.log = new PaneEntryLog(hideReasoning);
+    this.buffer = new EventLogBuffer(() => ({}), hideReasoning, false);
     // Wheel/scrollbar/native-key scrolls land here: keep following the tail
     // only while the user is actually at the bottom.
     textBox.on('scroll', () => {
@@ -142,14 +155,10 @@ export class AssignmentPane extends Pane {
     return this.assignment?.shortcode;
   }
 
-  /** Appends one SSE event to this pane's log. */
-  appendEvent(event: SseEvent): void {
-    this.log.append(event);
-  }
-
-  /** Appends the user's own submitted message as a distinctly-styled entry. */
-  appendUserPrompt(text: string): void {
-    this.log.pushUserPrompt(text);
+  /** Appends one wire event (audit row or stream delta) to this pane's buffer. */
+  appendEvent(event: WireEvent): void {
+    if (event.type === 'stream') this.buffer.appendDelta(event);
+    else this.buffer.appendAudit(event.event);
   }
 
   /**
@@ -172,7 +181,7 @@ export class AssignmentPane extends Pane {
       this.assignment,
       width,
     );
-    return [...heading, ...this.log.render(width)];
+    return [...heading, ...this.buffer.render(width, markupStyle)];
   }
 
   protected afterRedraw(): void {
@@ -243,12 +252,14 @@ export class RosterPane extends Pane {
   /** Replaces the role list (e.g. the 'r' refresh key), clamping the selection. */
   setRoles(roles: RoleOption[]): void {
     this.roles = roles;
+    this.errorMessage = null;
     this.rebuildLists();
   }
 
-  /** Replaces the task list (live updates from the company SSE stream). */
+  /** Replaces the task list (e.g. the 'r' refresh key, or a live update from the company SSE stream). */
   setTasks(tasks: TaskChangeSummary[]): void {
     this.tasks = tasks;
+    this.errorMessage = null;
     this.rebuildLists();
   }
 
@@ -285,13 +296,15 @@ export class RosterPane extends Pane {
 
   protected render(width: number): string[] {
     const heading = renderRosterHeading(this.slug, this.id);
+    const banner = this.renderErrorBanner();
     const { lines, selectedLine } = renderMultiListPanel(
       this.lists,
       this.selection.current,
       width,
     );
-    this.selectedLine = selectedLine < 0 ? -1 : heading.length + selectedLine;
-    return [...heading, ...lines];
+    this.selectedLine =
+      selectedLine < 0 ? -1 : heading.length + banner.length + selectedLine;
+    return [...heading, ...banner, ...lines];
   }
 
   protected afterRedraw(): void {
@@ -337,6 +350,7 @@ export class TaskPane extends Pane {
    */
   setAssignments(assignments: AssignmentInfo[]): void {
     this.assignments = assignments;
+    this.errorMessage = null;
     const rows = assignments.map((a, i) => ({
       id: a.id,
       index: a.planIndex ?? i,
@@ -387,13 +401,15 @@ export class TaskPane extends Pane {
       this.prompt,
       width,
     );
+    const banner = this.renderErrorBanner();
     const { lines, selectedLine } = renderMultiListPanel(
       this.lists,
       this.selection.current,
       width,
     );
-    this.selectedLine = selectedLine < 0 ? -1 : heading.length + selectedLine;
-    return [...heading, ...lines];
+    this.selectedLine =
+      selectedLine < 0 ? -1 : heading.length + banner.length + selectedLine;
+    return [...heading, ...banner, ...lines];
   }
 
   protected afterRedraw(): void {
@@ -558,7 +574,7 @@ export class InitiateTaskPane extends Pane {
 
   protected render(width: number): string[] {
     const rows = this.rows();
-    const lines: string[] = ['Initiate task', ''];
+    const lines: string[] = ['Initiate task', '', ...this.renderErrorBanner()];
     rows.forEach((row, i) => {
       const mark = marker(i === this.selectedRow);
       lines.push(`${mark}${this.renderRow(row, i === this.selectedRow)}`);

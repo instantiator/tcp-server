@@ -73,9 +73,11 @@ export async function runTuiInteractive(
   });
 
   tui.onRefreshRoster(() => {
-    void session
-      .fetchRoles()
-      .then((roles) => tui.updateRosterRoles(session.companyId, roles))
+    void Promise.all([session.fetchRoles(), session.fetchTasks()])
+      .then(([roles, tasks]) => {
+        tui.updateRosterRoles(session.companyId, roles);
+        tui.updateRosterTasks(session.companyId, tasks);
+      })
       .catch((err) => session.reportPaneError(session.companyId, err));
   });
 

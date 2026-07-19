@@ -98,10 +98,9 @@ Follow the steps in **[Your first company](docs/your-first-company.md)** to popu
 > Prerequisites: Docker, Node.js 24
 
 > [!NOTE]
-> The `start-dev.sh` script builds and launches LCP with an instance of Keycloak to manage authorisation. This will be configured with an `lcp` realm, and a default user. It can take several minutes to launch.
+> The `start-dev.sh` script builds and launches LCP with an instance of Zitadel to manage authorisation. It configures an `lcp` org with a project, an API application, and the test users read from your env file. It can take several minutes to launch.
 >
-> - **Username:** `test`
-> - **Password:** `test`
+> - **Username / Password:** set via `TEST_USERNAME` / `TEST_PASSWORD` in your env file.
 
 ```bash
 git clone --recurse-submodules https://github.com/instantiator/lcp-server.git && cd lcp-server
@@ -123,16 +122,16 @@ See **[Developer setup checklist](docs/setup-checklist.md)** for a step-by-step 
 
 ## System architecture
 
-| Concern               | Technology                     |
-| --------------------- | ------------------------------ |
-| Framework             | NestJS 11                      |
-| ORM                   | TypeORM                        |
-| Database (production) | PostgreSQL 16 + pgvector       |
-| Database (unit tests) | better-sqlite3 (in-memory)     |
-| Auth                  | OAuth2/OIDC (Keycloak default) |
-| Object storage        | MinIO                          |
-| Task queue            | Redis (BullMQ)                 |
-| Schema export         | ts-json-schema-generator       |
+| Concern               | Technology                    |
+| --------------------- | ----------------------------- |
+| Framework             | NestJS 11                     |
+| ORM                   | TypeORM                       |
+| Database (production) | PostgreSQL 16 + pgvector      |
+| Database (unit tests) | better-sqlite3 (in-memory)    |
+| Auth                  | OAuth2/OIDC (Zitadel default) |
+| Object storage        | MinIO                         |
+| Task queue            | Redis (BullMQ)                |
+| Schema export         | ts-json-schema-generator      |
 
 See [docs/ADRs/](docs/ADRs/) for system design decisions.
 
@@ -146,7 +145,7 @@ flowchart TD
   LcpServer["lcp-server\n(NestJS)"]
   LcpAgent["lcp-agent\n(NestJS) :3001"]
   Redis[(Redis :6379)]
-  Keycloak["Keycloak :8080\n(optional --profile auth)"]
+  Zitadel["Zitadel :8080\n(optional --profile auth)"]
   Postgres[(PostgreSQL\n+ pgvector :5432)]
   MinIO[(MinIO :9000\nconsole :9001)]
   McpStorage["lcp-mcp-storage\n:3010"]
@@ -175,11 +174,11 @@ flowchart TD
   end
 
   subgraph ThirdParty["3rd-party services"]
-      MinIO ~~~ Keycloak
+      MinIO ~~~ Zitadel
   end
 
   User -->|REST API :3000| LcpServer
-  LcpServer -->|OIDC token\nvalidation| Keycloak
+  LcpServer -->|OIDC token\nvalidation| Zitadel
   LcpServer -->|S3 API| MinIO
   LcpServer -->|BullMQ jobs| Redis
   LcpAgent -->|BullMQ results| Redis
@@ -206,7 +205,7 @@ flowchart TD
 >   - **lcp-mcp-tasks** lets agents complete their assignment — plan a task, submit finished work, or assure another agent's work (mode-gated)
 > - **PostgreSQL** (with pgvector) stores entities, agent checkpoints, and knowledge embeddings
 > - **MinIO** stores knowledge documents, task files, and context-overflow data
-> - **Keycloak** is an optional auth service, which starts if the `auth` profile is specified (ie. with `--profile auth`)
+> - **Zitadel** is an optional auth service, which starts if the `auth` profile is specified (ie. with `--profile auth`)
 
 ### Agent loop
 
@@ -282,8 +281,8 @@ Quick reference:
 ./scripts/run-unit-tests.sh         # no services required
 ./scripts/run-integration-tests.sh  # starts postgres, redis, minio, stub-llm
 ./scripts/run-e2e-tests.sh          # starts postgres, redis, minio
-./scripts/run-api-tests.sh          # starts full stack including Keycloak
-./scripts/run-smoke-tests.sh        # starts full stack including Keycloak
+./scripts/run-api-tests.sh          # starts full stack including Zitadel
+./scripts/run-smoke-tests.sh        # starts full stack including Zitadel
 ./scripts/run-all-tests.sh          # all five tiers
 ```
 

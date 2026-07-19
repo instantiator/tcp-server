@@ -17,7 +17,8 @@ import {
   buildChatModel,
   buildRagMessage,
   buildServicesMessage,
-  mapStreamEvent,
+  enrichedAuditForEvent,
+  mapStreamDeltas,
   renderSystemPrompt,
   resolveEnvLlmConfig,
   resolveLlmConfig,
@@ -139,18 +140,22 @@ export class ChatService {
       status: AgentStatus.Running,
       ...(isFirstMessage && { threadId: agentId }),
     });
+    // The typed message renders from its `input` event as it arrives over SSE
+    // (no local echo — decision 1); the running transition is a state_change.
     await this.audit.record(
       agent.companyId,
       role.name,
       agent.id,
-      AuditEventType.LlmRequest,
-      { message },
+      AuditEventType.Input,
+      { text: message },
     );
-    this.agentEvents.emit(agentId, {
-      timestamp: new Date().toISOString(),
-      kind: 'agent_status',
-      data: { status: AgentStatus.Running },
-    });
+    await this.audit.record(
+      agent.companyId,
+      role.name,
+      agent.id,
+      AuditEventType.StateChange,
+      { entity: 'agent', newStatus: AgentStatus.Running },
+    );
 
     // Detached — runTurn owns the agent's status and emits all turn output on
     // the SSE stream. It never rejects (its catch handles failures), so the
@@ -230,8 +235,8 @@ export class ChatService {
       const runConfig = { configurable: { thread_id: agentId } };
 
       // Check context budget and compact if needed before invoking. Compaction
-      // emits its own SSE events; the running transition was already emitted by
-      // sendMessage.
+      // writes its own `compaction` audit rows (streamed live); the running
+      // transition was already recorded by sendMessage.
       const { message: preparedMessage } = await this.contextManager.prepare(
         agentId,
         message,
@@ -343,8 +348,20 @@ export class ChatService {
         hooks: {
           buildGraph,
           onEvent: (event) => {
-            for (const observabilityEvent of mapStreamEvent(event)) {
-              this.agentEvents.emit(agentId, observabilityEvent);
+            // Persist each lifecycle event (streamed live by the publisher),
+            // and publish token deltas directly to the agent channel.
+            const audit = enrichedAuditForEvent(event);
+            if (audit) {
+              void this.audit.record(
+                agent.companyId,
+                role.name,
+                agentId,
+                audit.eventType,
+                audit.payload,
+              );
+            }
+            for (const delta of mapStreamDeltas(event, agentId)) {
+              this.agentEvents.emit(agentId, delta);
             }
           },
           checkTerminalStatus: async () => {
@@ -362,10 +379,10 @@ export class ChatService {
       }
 
       // A consultation or user-input tool may have paused the agent mid-turn.
-      // Its resumed BullMQ run — plus PauseAndResumeService — will emit the
+      // Its resumed BullMQ run — plus PauseAndResumeService — will record the
       // remaining events (including the terminal one), so we stop here. If the
       // consultation cycle raced to Completed while the final LLM turn ran,
-      // emit the terminal event now from the persisted output.
+      // record the terminal state_change now from the persisted output.
       if (result.terminalStatus === AgentStatus.Paused) {
         await closeCheckpointer();
         return;
@@ -373,11 +390,18 @@ export class ChatService {
       if (result.terminalStatus === AgentStatus.Completed) {
         await closeCheckpointer();
         const freshAgent = await this.agentRepo.findOneBy({ id: agentId });
-        this.agentEvents.emit(agentId, {
-          timestamp: new Date().toISOString(),
-          kind: 'completed',
-          data: { response: freshAgent?.output ?? '' },
-        });
+        await this.audit.record(
+          agent.companyId,
+          role.name,
+          agent.id,
+          AuditEventType.StateChange,
+          {
+            entity: 'agent',
+            newStatus: AgentStatus.Completed,
+            reason: 'turn_complete',
+            response: freshAgent?.output ?? '',
+          },
+        );
         return;
       }
 
@@ -386,31 +410,27 @@ export class ChatService {
           ? result.lastAiMessage.content.trim()
           : '';
 
-      await this.audit.record(
-        agent.companyId,
-        role.name,
-        agent.id,
-        AuditEventType.LlmResponse,
-        { response: content },
-      );
-      // Persist output so a client that missed the SSE `completed` event can
-      // recover it via GET /api/agent/:id (the SSE replay path reads it too).
+      // The turn's llm_response row is written by onEvent (enriched); here we
+      // just persist the output and record the terminal transition to idle,
+      // which streams live and drives client-side terminal detection.
       await this.agentRepo.update(agentId, {
         status: AgentStatus.Idle,
         output: content,
       });
-      this.agentEvents.emit(agentId, {
-        timestamp: new Date().toISOString(),
-        kind: 'agent_status',
-        data: { status: AgentStatus.Idle },
-      });
-      this.agentEvents.emit(agentId, {
-        timestamp: new Date().toISOString(),
-        kind: 'completed',
-        data: { response: content },
-      });
+      await this.audit.record(
+        agent.companyId,
+        role.name,
+        agent.id,
+        AuditEventType.StateChange,
+        {
+          entity: 'agent',
+          newStatus: AgentStatus.Idle,
+          reason: 'turn_complete',
+          response: content,
+        },
+      );
     } catch (err) {
-      // The turn is detached — record the failure and emit a terminal event
+      // The turn is detached — record the failure as a terminal state_change
       // rather than rethrowing (there is no caller left to catch it).
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`Chat agent ${agentId} error: ${msg}`);
@@ -419,14 +439,9 @@ export class ChatService {
         role.name,
         agent.id,
         AuditEventType.StateChange,
-        { newStatus: 'failed', reason: msg },
+        { entity: 'agent', newStatus: 'failed', reason: msg },
       );
       await this.agentRepo.update(agentId, { status: AgentStatus.Failed });
-      this.agentEvents.emit(agentId, {
-        timestamp: new Date().toISOString(),
-        kind: 'failed',
-        data: { error: msg },
-      });
     } finally {
       await closeCheckpointer();
     }

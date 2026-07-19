@@ -10,7 +10,7 @@
 // row 1 = blank gap, row 2.. = pane content (which itself opens with a
 // heading — "Name/Id" on chat panes, "Slug/Id" + prompt on the roster).
 
-import type { TaskChangeSummary } from '@lcp/shared';
+import type { TaskChangeSummary, WireEvent } from '@lcp/shared';
 import { EventEmitter } from 'events';
 import { ScreenBuffer } from 'terminal-kit';
 import {
@@ -20,7 +20,6 @@ import {
   tuiRenderer,
   TuiTerminal,
 } from './tui';
-import { SseEvent } from '../core/sse';
 
 function taskSummary(
   overrides: Partial<TaskChangeSummary> = {},
@@ -101,11 +100,34 @@ function makeTui(
   return { tui, term, rows, text, attrAt, pressKey, type };
 }
 
-function statusEvent(status: string): SseEvent {
+/** An agent `state_change` WireEvent — the pane renders `state_change:agent | <status>`. */
+function statusEvent(status: string): WireEvent {
   return {
-    kind: 'agent_status',
+    type: 'audit',
+    event: {
+      timestamp: new Date().toISOString(),
+      companyId: 'c',
+      role: 'r',
+      agentId: 'ag',
+      assignmentId: null,
+      taskId: null,
+      eventType: 'state_change',
+      payload: { entity: 'agent', newStatus: status },
+    },
+  };
+}
+
+/** A reasoning/response stream-delta WireEvent. */
+function deltaEvent(
+  channel: 'reasoning' | 'response',
+  delta: string,
+): WireEvent {
+  return {
+    type: 'stream',
+    agentId: 'ag',
+    channel,
+    delta,
     timestamp: new Date().toISOString(),
-    data: { status },
   };
 }
 
@@ -209,18 +231,14 @@ describe('Tui rendering', () => {
     const { tui, text } = makeTui();
     tui.addPane({ id: 'root', label: 'Cat', talkable: true });
     tui.appendEvent('root', statusEvent('running'));
-    expect(text()).toMatch(/\d\d:\d\d:\d\d \| agent_status \| running/);
+    expect(text()).toMatch(/\d\d:\d\d:\d\d \| state_change:agent \| running/);
   });
 
   it('accumulates reasoning deltas as one indented block', () => {
     const { tui, text } = makeTui();
     tui.addPane({ id: 'root', label: 'Cat', talkable: true });
     for (const delta of ['thinking', ' about', ' kibble']) {
-      tui.appendEvent('root', {
-        kind: 'reasoning',
-        timestamp: new Date().toISOString(),
-        data: { delta },
-      });
+      tui.appendEvent('root', deltaEvent('reasoning', delta));
     }
     expect(text()).toContain('  thinking about kibble');
   });
@@ -273,27 +291,19 @@ describe('Tui colour markup', () => {
   it('renders reasoning text in a distinct (bright black/grey) colour', () => {
     const { tui, text, attrAt } = makeTui();
     tui.addPane({ id: 'root', label: 'Cat', talkable: true });
-    tui.appendEvent('root', {
-      kind: 'reasoning',
-      timestamp: new Date().toISOString(),
-      data: { delta: 'thinking' },
-    });
-    // Heading occupies 7 rows (Agent id, Role name, Assignment id/shortcode/
-    // status, Prompt, blank) above the log content.
-    const firstLogRow = CONTENT_TOP + 7;
+    tui.appendEvent('root', deltaEvent('reasoning', 'thinking'));
+    // Heading occupies 7 rows, then the reasoning block's own header + blank
+    // line, so the indented 'thinking' body sits two rows below that.
+    const bodyRow = CONTENT_TOP + 7 + 2;
     expect(text()).toContain('thinking');
-    expect(attrAt(2, firstLogRow).char).toBe('t');
-    expect(attrAt(2, firstLogRow).attr.color).toBe(8); // bright black (^K)
+    expect(attrAt(2, bodyRow).char).toBe('t');
+    expect(attrAt(2, bodyRow).attr.color).toBe(8); // bright black (^K)
   });
 
   it('does not render raw markup codes as visible text', () => {
     const { tui, text } = makeTui();
     tui.addPane({ id: 'root', label: 'Cat', talkable: true });
-    tui.appendEvent('root', {
-      kind: 'reasoning',
-      timestamp: new Date().toISOString(),
-      data: { delta: 'thinking' },
-    });
+    tui.appendEvent('root', deltaEvent('reasoning', 'thinking'));
     expect(text()).not.toContain('^K');
     expect(text()).not.toContain('^:');
   });
@@ -301,11 +311,7 @@ describe('Tui colour markup', () => {
   it('escapes a literal caret in model-provided text so it displays as one caret, not a corrupted colour', () => {
     const { tui, text } = makeTui();
     tui.addPane({ id: 'root', label: 'Cat', talkable: true });
-    tui.appendEvent('root', {
-      kind: 'response',
-      timestamp: new Date().toISOString(),
-      data: { delta: 'x^2 + y^2' },
-    });
+    tui.appendEvent('root', deltaEvent('response', 'x^2 + y^2'));
     expect(text()).toContain('x^2 + y^2');
   });
 
@@ -1525,11 +1531,7 @@ describe('tuiRenderer', () => {
 
     const renderer = tuiRenderer(tui, 'root');
     expect(renderer.responseSeen).toBe(false);
-    renderer.render({
-      kind: 'response',
-      timestamp: new Date().toISOString(),
-      data: { delta: 'hi' },
-    });
+    renderer.render(deltaEvent('response', 'hi'));
     expect(renderer.responseSeen).toBe(true);
     expect(() => renderer.finish()).not.toThrow();
   });

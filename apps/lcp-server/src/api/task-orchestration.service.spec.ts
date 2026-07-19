@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import {
   AgentStatus,
+  AuditEventType,
   LcpAgent,
   LcpAssignment,
   LcpCompany,
@@ -13,8 +14,6 @@ import { ConfigService } from '@nestjs/config';
 import { type UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
-import { CompanyEventService } from '../events/company-event.service';
-import { TaskEventService } from '../events/task-event.service';
 import { StorageService } from '../storage/storage.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { PauseAndResumeService } from './pause-and-resume.service';
@@ -49,8 +48,6 @@ describe('TaskOrchestrationService', () => {
   let storage: { copyFile: jest.Mock; listFiles: jest.Mock };
   let audit: { record: jest.Mock };
   let config: { get: jest.Mock };
-  let companyEvents: { emit: jest.Mock };
-  let taskEvents: { emit: jest.Mock };
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -102,8 +99,6 @@ describe('TaskOrchestrationService', () => {
     };
     audit = { record: jest.fn().mockResolvedValue(undefined) };
     config = { get: jest.fn().mockReturnValue(undefined) };
-    companyEvents = { emit: jest.fn() };
-    taskEvents = { emit: jest.fn() };
 
     service = new TaskOrchestrationService(
       taskRepo,
@@ -116,8 +111,6 @@ describe('TaskOrchestrationService', () => {
       storage as unknown as StorageService,
       audit as unknown as AuditService,
       config as unknown as ConfigService,
-      companyEvents as unknown as CompanyEventService,
-      taskEvents as unknown as TaskEventService,
     );
   });
 
@@ -211,27 +204,23 @@ describe('TaskOrchestrationService', () => {
       );
       expect(agents.dispatchStartJob).toHaveBeenCalledTimes(1);
 
-      // The ready→planning reaction is recorded/emitted here (see
-      // dispatchPlanner's docstring) — both the task's own SSE stream and
-      // its company's observe it.
-      const taskCall = taskEvents.emit.mock.calls[0] as [
-        string,
-        { kind: string; data: { id: string; status: string } },
-      ];
-      expect(taskCall[0]).toBe(task.id);
-      expect(taskCall[1]).toMatchObject({
-        kind: 'task_changed',
-        data: { id: task.id, status: 'planning' },
-      });
-
-      const companyCall = companyEvents.emit.mock.calls[0] as [
-        string,
-        { kind: string; data: { id: string; status: string } },
-      ];
-      expect(companyCall[0]).toBe(company.id);
-      expect(companyCall[1]).toMatchObject({
-        kind: 'task_changed',
-        data: { id: task.id, status: 'planning' },
+      // The ready→planning reaction is recorded as one entity:'task'
+      // state_change; the publisher routes it to both the task and company
+      // channels (see dispatchPlanner's docstring). The summary rides in the
+      // payload.
+      const taskStateCall = (audit.record.mock.calls as unknown[][]).find(
+        (c) =>
+          c[3] === AuditEventType.StateChange &&
+          (c[4] as { entity?: string }).entity === 'task',
+      );
+      expect(taskStateCall).toBeDefined();
+      expect(taskStateCall![0]).toBe(company.id);
+      expect(taskStateCall![4]).toMatchObject({
+        entity: 'task',
+        taskId: task.id,
+        newStatus: 'planning',
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        summary: expect.objectContaining({ id: task.id, status: 'planning' }),
       });
     });
 
@@ -488,15 +477,22 @@ describe('TaskOrchestrationService', () => {
 
       // Regression: recordAssignmentState must report the *new* status
       // ('succeeded'), not the stale in-memory 'in-qa' the atomic claim
-      // updated only in the DB.
-      const assignmentChangedCall = taskEvents.emit.mock.calls.find(
-        (call: unknown[]) =>
-          (call[1] as { kind: string }).kind === 'assignment_changed',
-      ) as [string, { kind: string; data: { id: string; status: string } }];
-      expect(assignmentChangedCall[0]).toBe(task.id);
-      expect(assignmentChangedCall[1].data).toMatchObject({
-        id: target.id,
-        status: 'succeeded',
+      // updated only in the DB. Now recorded as an entity:'assignment'
+      // state_change whose summary carries the status.
+      const assignmentStateCall = (audit.record.mock.calls as unknown[][]).find(
+        (c) =>
+          c[3] === AuditEventType.StateChange &&
+          (c[4] as { entity?: string }).entity === 'assignment' &&
+          (c[4] as { assignmentId?: string }).assignmentId === target.id &&
+          (c[4] as { newStatus?: string }).newStatus === 'succeeded',
+      );
+      expect(assignmentStateCall).toBeDefined();
+      expect(assignmentStateCall![4]).toMatchObject({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        summary: expect.objectContaining({
+          id: target.id,
+          status: 'succeeded',
+        }),
       });
     });
 
@@ -865,6 +861,7 @@ describe('TaskOrchestrationService', () => {
         null,
         expect.anything(),
         expect.objectContaining({ taskId: task.id, newStatus: 'cancelled' }),
+        expect.objectContaining({ taskId: task.id }),
       );
     });
 
@@ -904,6 +901,7 @@ describe('TaskOrchestrationService', () => {
         null,
         expect.anything(),
         expect.objectContaining({ taskId: task.id, newStatus: 'cancelled' }),
+        expect.objectContaining({ taskId: task.id }),
       );
     });
   });

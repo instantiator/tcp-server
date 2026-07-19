@@ -1,6 +1,7 @@
 import {
   AgentStatus,
   assertRedisReachable,
+  AuditEventType,
   Conversation,
   ConversationMessage,
   LcpAgent,
@@ -18,7 +19,7 @@ import { Queue } from 'bullmq';
 import { UUID } from 'crypto';
 import { In, MoreThanOrEqual, Repository } from 'typeorm';
 import { DbService } from '../db/db.service';
-import { AgentEventService } from '../events/agent-event.service';
+import { AuditService } from '../audit/audit.service';
 import { LcpAgentTemplate } from '../templates/LcpAgentTemplate';
 
 /** Payload dispatched to the `agent-jobs` BullMQ queue. */
@@ -54,7 +55,7 @@ export class AgentOrchestrationService
     private readonly convRepo: Repository<Conversation>,
     @InjectRepository(ConversationMessage)
     private readonly msgRepo: Repository<ConversationMessage>,
-    private readonly events: AgentEventService,
+    private readonly audit: AuditService,
   ) {}
 
   /** Connects to the Redis-backed BullMQ queue on startup. */
@@ -178,12 +179,15 @@ export class AgentOrchestrationService
       type: 'resume',
       replyContent: aggregated ?? replyContent,
     });
-    // Let any client observing the calling agent see it come back to life.
-    this.events.emit(agent.id, {
-      timestamp: new Date().toISOString(),
-      kind: 'agent_status',
-      data: { status: AgentStatus.Running, reason: 'resumed' },
-    });
+    // Let any client observing the calling agent see it come back to life —
+    // one state_change row, streamed live by the persist-then-publish path.
+    await this.audit.record(
+      agent.companyId,
+      agent.role?.name ?? 'agent',
+      agent.id,
+      AuditEventType.StateChange,
+      { entity: 'agent', newStatus: AgentStatus.Running, reason: 'resumed' },
+    );
     this.logger.log(`Dispatched resume job for agent ${agent.id}`);
     return agent;
   }

@@ -314,9 +314,9 @@ as colour-coded scrolling text (piped output, or `--no-tui`); see below.
 
 **Following consultations.** When your agent pauses to consult another role,
 the CLI automatically opens a second stream for the consulted agent and
-renders its activity too — as its own tab in the TUI, or inline prefixed with
-the consulted role's name (e.g. `[Cat assistant] Response: …`) in the plain
-renderer. Nested consultations are followed recursively either way.
+renders its activity too — as its own tab in the TUI, or interleaved into the
+plain renderer's output. Nested consultations are followed recursively either
+way.
 
 | Flag                        | Alias | Description                                                                                                           |
 | --------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------- |
@@ -437,10 +437,10 @@ shortcode:` / `Assignment status:` (colour-coded the same way) / `Prompt:`
   is present but disabled while the query's turn is in flight, the same as any
   busy talkable tab (see below). **Enter** sends; **Alt+Enter** inserts a line
   break (Shift+Enter can't — terminals send the same byte for Shift+Enter and
-  Enter); arrow keys, Home/End, and Backspace/Delete edit as usual. Sending
-  echoes your own message into the pane first (bright green, distinct from the
-  agent's own output), so a scrolled-back tab shows what was asked as well as
-  the answer. While a turn is in flight, that tab's input still accepts typing
+  Enter); arrow keys, Home/End, and Backspace/Delete edit as usual. Your sent
+  message renders into the pane as an `input` block when its audit event
+  arrives over the stream (not echoed locally), so a scrolled-back tab shows
+  what was asked as well as the answer. While a turn is in flight, that tab's input still accepts typing
   but won't submit until the response arrives (its hint row says `waiting for
 response…`) — other tabs are unaffected and can run turns concurrently. A
   mid-typed draft survives switching tabs, tracked independently per tab. The
@@ -488,21 +488,25 @@ answer to stdout and exit, unchanged — see the plain renderer section below.
 #### Plain renderer (piped output, or `--no-tui`)
 
 When stdout is piped/redirected, or `--no-tui` is passed, output stays as
-colour-coded, blank-line-separated scrolling text — this is also the only
-mode compatible with piping the final answer to another command:
+colour-coded, blank-line-separated scrolling text rendered through the same
+shared render library `eavesdrop` and the TUI panes use (so all three agree on
+formatting) — this is also the only mode compatible with piping the final
+answer to another command. Every line/block is prefixed `hh:mm:ss | <label> |`:
 
-- **You** (bright green, stderr) — the message you just sent, echoed before
-  the turn starts, so a scrolled-back transcript shows what was asked as well
-  as the answer.
-- **Agent state** (bright cyan) — lifecycle transitions: running, paused,
-  resumed, completed.
-- **LLM state** (bright magenta) — request start/finish and tool calls.
-- **Reasoning** (grey, indented) — the model's reasoning tokens as they arrive,
-  where the provider exposes them (e.g. LM Studio). Shown by default; suppress
-  with `--hide-reasoning`.
-- **Response** (white) — the answer content, streamed token by token. A
-  whitespace-only or empty response renders as `(blank)` rather than nothing,
-  so it's obvious the agent genuinely returned no content.
+- **`input`** — your typed message, rendered when its `input` audit event
+  arrives over the stream (the CLI no longer echoes it locally — one rendering
+  path, so eavesdroppers see the same thing).
+- **`state_change:agent`** — lifecycle transitions: running, paused, resumed,
+  idle/completed, failed.
+- **`llm_request` / `tool_call:<tool>` / `tool_result:<tool>`** — LLM/tool
+  activity; tool calls/results show pretty-printed `{ tool, input|output }`
+  JSON (request bodies are never dumped).
+- **`llm_response:reasoning`** (grey) — the model's reasoning tokens as they
+  arrive, where the provider exposes them (e.g. LM Studio). Shown by default;
+  suppress with `--hide-reasoning`.
+- **`llm_response:response`** — the answer content, streamed token by token; on
+  stdout so it stays pipeable. A whitespace-only or empty response renders as
+  `(blank)`.
 
 **Single-query mode** (`-q` provided, piped or `--no-tui`):
 
@@ -528,13 +532,17 @@ mode compatible with piping the final answer to another command:
 ./lcp-cli.sh -t $TOKEN chat -r <roleId> --no-tui
 # > Tell me about Q3 trends.
 #
-# You: Tell me about Q3 trends.
+# 14:03:20 | input | Tell me about Q3 trends.
 #
-# Agent state: running
+# 14:03:20 | state_change:agent | running
 #
-# Reasoning: the user wants a summary of…
+# 14:03:21 | llm_response:reasoning |
 #
-# Response: Q3 revenue rose 12% driven by…
+#   the user wants a summary of…
+#
+# 14:03:22 | llm_response:response |
+#
+#   Q3 revenue rose 12% driven by…
 #
 # Agent state: completed
 # > exit
@@ -992,25 +1000,35 @@ combined (history prints first, then the tail follows).
 | `--show-history`         | Reconstruct past events from the audit log and print them to stdout               |
 | `--tail`                 | Follow current events live, via the same SSE stream `chat` uses                   |
 
-- **stdout** (`--show-history`): a heading block (`Assignment id:`,
-  `Assignment role:`, `Agent id:`, `Agent role id:`, `Agent role slug:`)
-  whenever the active agent changes (a `--task-id` history spans several),
-  then each recorded audit event as one or more lines:
-  - `llm_request`/`llm_response` — a `hh:mm:ss | eventType` line, then the
-    payload pretty-printed (2-space indented) underneath; a request only
-    prints the messages appended since that agent's last request (it
-    otherwise re-sends the whole running history every turn), a response
-    prints in full every time (nothing to diff against)
-  - `tool_call`/`tool_result` — the same header line, then the full payload as
-    pretty, untruncated JSON, word-wrapped to the terminal width
-  - everything else — `hh:mm:ss | eventType | summary`, word-wrapped, with a
-    fixed `assignment complete` header for `agent_loop_completion` rows
-    (its deterministic text is one assignment's completion, not the whole
-    task's, even though the payload's own text starts "Task completed.")
-- **stdout/stderr** (`--tail`): rendered the same way `chat`'s plain renderer
-  renders its own agent's stream, prefixed `[<short id> (<role slug>)]`
-  instead of the full agent UUID, with the same per-agent heading block
-  printed whenever the active agent changes
+- **stdout**: history (`--show-history`) and the live tail (`--tail`) render
+  through **one shared pipeline** (the `apps/lcp-cli/src/lib/render/` library,
+  the same one `chat` and the `tui` panes use), so replayed history is
+  line-for-line identical to eavesdropping the same activity live. A scope
+  heading block is printed whenever the active `(task, assignment, agent)`
+  scope changes (a `--task-id` view spans several):
+
+  ```
+  Task id:              <id>
+  Task shortcode:       <shortcode>
+  Assignment id:        <id>
+  Assignment role:      <role name> (<role slug>)
+  Assignment role id:   <id>
+  Assignment mode:      <mode>
+  Assignment shortcode: <shortcode>
+  Agent id:             <id>
+  ```
+
+  (unknown fields render `—`; the task lines are omitted for a plain chat
+  scope). Each audit event then renders as either a **line** —
+  `hh:mm:ss | <eventType>[:<kind>] | <text>` (e.g. `state_change:agent`,
+  `compaction:started`, `decision`, bare `llm_request` — request bodies are
+  **never** dumped) — or a **content block**: the `hh:mm:ss | <label> |`
+  header, a blank line, then the content indented two spaces —
+  `tool_call:<tool>` / `tool_result:<tool>` as pretty-printed `{ tool, input|
+output }` JSON, and `llm_response` replayed as a reasoning block then a
+  response block. `agent_loop_completion` keeps its fixed `assignment complete`
+  label. Colour is applied only when stdout is a TTY.
+
 - `--tail` warns and exits non-zero if the target has already finished (or,
   for `--assignment-id`, hasn't started yet — nothing to follow)
 - `--tail --task-id` follows every assignment present when it starts, and
@@ -1036,15 +1054,13 @@ combined (history prints first, then the tail follows).
 ./lcp-cli.sh -t $TOKEN eavesdrop --agent-id <uuid> --show-history --tail
 ```
 
-> **2026-07-16 — implementation note:** `--show-history` formats audit rows
-> with its own row-shaped renderer (heading blocks, JSON deltas, per-eventType
-> summaries — see above) rather than mapping rows into `AgentEvent`s and
-> reusing `chat`'s `createRenderer`, since audit rows carry the raw
-> `llm_request`/`llm_response`/`tool_call`/`tool_result` payloads (full
-> LangGraph event data) rather than the pre-formatted deltas the live SSE
-> stream produces — summarising them generically through `createRenderer`
-> would have lost the JSON-delta/heading-block detail this section describes.
-> `--tail` (a live SSE follow) does reuse `createRenderer`, same as `chat`.
+> **2026-07-18 — implementation note (010.5.1):** history and tail now feed
+> the **same** `EventLogBuffer`/`StreamPresenter` from the shared render
+> library — audit rows (`--show-history`) and live `WireEvent`s (`--tail`) are
+> one pipeline, so the two can't drift. This replaced the earlier split where
+> `--show-history` had its own row-shaped renderer and `--tail` reused `chat`'s
+> renderer. Audit events are now the single source of truth for both (see
+> [ADR-008](ADRs/ADR-008-audit-logging.md)).
 
 ### `estimate-context-window`
 
