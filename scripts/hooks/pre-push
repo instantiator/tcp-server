@@ -87,7 +87,7 @@ fi
 
 # Quality gate: unit tests, then the service-backed tiers. Each wrapper starts
 # and tears down its own containers; api/smoke need the full stack incl.
-# Keycloak and belong in CI, not here.
+# Zitadel and belong in CI, not here.
 echo "→ pre-push: running unit tests..."
 bash "$TOP/scripts/run-unit-tests.sh"
 

@@ -2,7 +2,6 @@ import { FakeListChatModel } from '@langchain/core/utils/testing';
 import {
   AgentStatus,
   CONTEXT_AUDIT_SINK,
-  CONTEXT_EVENT_SINK,
   ContextBudgetService,
   ContextCompactorService,
   ContextManagerService,
@@ -111,14 +110,6 @@ describe('AgentWorkerService (integration)', () => {
         ContextBudgetService,
         ContextCompactorService,
         IncomingDataGuardService,
-        {
-          provide: CONTEXT_EVENT_SINK,
-          useFactory: (publisher: AgentEventPublisherService) => ({
-            emit: (agentId: string, event: unknown) =>
-              publisher.publish(agentId as never, event as never),
-          }),
-          inject: [AgentEventPublisherService],
-        },
         { provide: CONTEXT_AUDIT_SINK, useExisting: AuditClientService },
         ContextManagerService,
       ],

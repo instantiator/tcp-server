@@ -14,10 +14,15 @@ users are created automatically. If ZITADEL_ADMIN_PASSWORD is absent or
 empty, the auth profile is skipped.
 
 Safe to re-run against an already-running stack: existing Zitadel resources
-are left untouched. Zitadel generates client secrets server-side (they can't
-be pre-set the way Keycloak's could), so on first bootstrap this script
-writes the generated OIDC_CLIENT_ID/SECRET and TEST_CLIENT_ID/SECRET back
-into the env file in place, before starting lcp-server and its dependents.
+(project, application, users) are reused, not recreated. Zitadel generates
+client secrets server-side (they can't be pre-set the way Keycloak's could)
+and they can only be read at generation time, so on EVERY run this script
+(re)generates the OIDC_CLIENT_ID/SECRET and TEST_CLIENT_ID/SECRET and writes
+them back into the env file in place, before starting lcp-server and its
+dependents. Regenerating every run — rather than trusting the file — is what
+keeps the env file and Zitadel from silently drifting apart (a wiped-and-
+rebootstrapped Zitadel, or a swapped env file, otherwise leaves a stale
+secret that fails auth with an opaque 'invalid_client').
 
 Options:
   --project <name>    Docker Compose project name (required)
@@ -140,7 +145,7 @@ else
 fi
 
 if [[ -n "$AUTH_PROFILE" ]]; then
-  wait_for zitadel "curl -sf http://localhost:8080/debug/healthz"
+  wait_for zitadel "curl -sf -o /dev/null http://localhost:8080/debug/healthz"
 fi
 
 # Zitadel bootstrap (skipped when auth profile is not active). Must happen
@@ -158,7 +163,6 @@ if [[ -n "$AUTH_PROFILE" ]]; then
 
   PAT_FILE="$MACHINEKEY_DIR/pat.txt"
   wait_for "Zitadel bootstrap PAT" "[[ -s '$PAT_FILE' ]]"
-  ZITADEL_PAT="$(cat "$PAT_FILE")"
 
   # Wrapper around curl for authenticated Zitadel API calls.
   zit() {
@@ -169,18 +173,39 @@ if [[ -n "$AUTH_PROFILE" ]]; then
       ${body:+-d "$body"}
   }
 
-  # The PAT file existing doesn't guarantee the machine user's permissions
-  # have propagated through Zitadel's eventually-consistent projections yet
-  # (observed as a transient auth failure on the very first call right after
-  # first boot) — retry briefly rather than letting a one-off race abort the
-  # whole script under set -e.
+  # Re-read the PAT on each attempt, and gate on a real authenticated call:
+  #  - Zitadel rewrites pat.txt during first-instance setup (confirmed: a fresh
+  #    boot overwrites a prior instance's file), but /debug/healthz is liveness,
+  #    so it can pass in the brief window before the new PAT lands — an early
+  #    read would otherwise cache the previous instance's token.
+  #  - Even once the PAT is current, the machine user's permissions are
+  #    eventually-consistent (a transient auth failure on the very first call
+  #    right after first boot).
+  # Retrying a re-read call covers both without aborting the script under set -e.
   ORG_ID=""
-  for _ in $(seq 1 10); do
+  for _ in $(seq 1 15); do
+    ZITADEL_PAT="$(cat "$PAT_FILE")"
     ORG_ID=$(zit GET "/auth/v1/users/me" 2>/dev/null | jq -r '.user.details.resourceOwner // empty') || true
     [[ -n "$ORG_ID" ]] && break
     sleep 2
   done
-  [[ -n "$ORG_ID" ]] || { echo "ERROR: could not authenticate to the Zitadel API with the bootstrap PAT" >&2; exit 1; }
+  if [[ -z "$ORG_ID" ]]; then
+    cat >&2 <<EOF
+ERROR: could not authenticate to the Zitadel API with the bootstrap PAT.
+
+This almost always means '$PAT_FILE' is stale — it was written by an earlier
+Zitadel instance, but the current Zitadel database no longer recognises it
+(the PAT is only (re)written at first-instance init). Reset the two together:
+
+  $DC down -v
+  rm -f '$PAT_FILE'
+  $0 $*
+
+('down -v' wipes the shared Postgres volume — fine for a dev stack; the app DB
+is recreated on the next boot.)
+EOF
+    exit 1
+  fi
 
   # Project — realm-equivalent grouping for the OIDC application.
   PROJECT_ID=$(zit POST "/management/v1/projects/_search" \
@@ -197,9 +222,13 @@ if [[ -n "$AUTH_PROFILE" ]]; then
   # Zitadel). accessTokenType must be explicitly JWT: Zitadel otherwise issues
   # opaque/encrypted access tokens that lcp-server's JWKS-based verification
   # cannot parse.
+  # A client secret can only be read at generation time, so it can silently
+  # drift from the env file (a wiped-and-rebootstrapped Zitadel, or a swapped
+  # env file). Rather than trust the file, (re)generate the secret every run
+  # and write it back — the env file and Zitadel are then guaranteed to agree.
   APP_LIST=$(zit POST "/management/v1/projects/$PROJECT_ID/apps/_search" '{}')
-  APP_CLIENT_ID=$(echo "$APP_LIST" | jq -r --arg n "$APP_NAME" '.result[]? | select(.name == $n) | .oidcConfig.clientId // empty')
-  if [[ -z "$APP_CLIENT_ID" ]]; then
+  APP_ID=$(echo "$APP_LIST" | jq -r --arg n "$APP_NAME" '.result[]? | select(.name == $n) | .id // empty')
+  if [[ -z "$APP_ID" ]]; then
     APP=$(zit POST "/management/v1/projects/$PROJECT_ID/apps/oidc" "$(jq -n --arg name "$APP_NAME" '{
       name: $name,
       redirectUris: ["http://localhost:3000/auth/callback"],
@@ -211,14 +240,16 @@ if [[ -n "$AUTH_PROFILE" ]]; then
     }')")
     APP_CLIENT_ID=$(echo "$APP" | jq -r '.clientId')
     APP_CLIENT_SECRET=$(echo "$APP" | jq -r '.clientSecret')
-    set_env_var "$ENV_FILE" OIDC_CLIENT_ID "$APP_CLIENT_ID"
-    set_env_var "$ENV_FILE" OIDC_CLIENT_SECRET "$APP_CLIENT_SECRET"
-    export OIDC_CLIENT_ID="$APP_CLIENT_ID"
-    export OIDC_CLIENT_SECRET="$APP_CLIENT_SECRET"
     echo "  Created application: $APP_NAME (client secret written to $ENV_FILE)"
   else
-    echo "  Application $APP_NAME: already exists"
+    APP_CLIENT_ID=$(echo "$APP_LIST" | jq -r --arg n "$APP_NAME" '.result[]? | select(.name == $n) | .oidcConfig.clientId // empty')
+    APP_CLIENT_SECRET=$(zit POST "/management/v1/projects/$PROJECT_ID/apps/$APP_ID/oidc_config/_generate_client_secret" '{}' | jq -r '.clientSecret')
+    echo "  Application $APP_NAME: already exists (client secret regenerated → $ENV_FILE)"
   fi
+  set_env_var "$ENV_FILE" OIDC_CLIENT_ID "$APP_CLIENT_ID"
+  set_env_var "$ENV_FILE" OIDC_CLIENT_SECRET "$APP_CLIENT_SECRET"
+  export OIDC_CLIENT_ID="$APP_CLIENT_ID"
+  export OIDC_CLIENT_SECRET="$APP_CLIENT_SECRET"
 
   # Human test user — for manually exercising `lcp-cli get-token`'s device-flow login.
   TEST_USER="${TEST_USERNAME:-test}"
@@ -243,26 +274,28 @@ if [[ -n "$AUTH_PROFILE" ]]; then
 
   # Machine test user (client_credentials) — used by the api test tier instead
   # of a human login, since device-flow login requires a human in a browser.
-  EXISTING_MACHINE=$(zit POST "/management/v1/users/_search" \
+  # Same drift problem as the app secret above: (re)generate it every run and
+  # write it back, so the api tier's TEST_CLIENT_SECRET always matches Zitadel.
+  MACHINE_ID=$(zit POST "/management/v1/users/_search" \
     "$(jq -n --arg u "$TEST_MACHINE_USERNAME" '{queries:[{userNameQuery:{userName:$u,method:"TEXT_QUERY_METHOD_EQUALS"}}]}')" \
     | jq -r '.result[0].id // empty')
-  if [[ -z "$EXISTING_MACHINE" ]]; then
+  if [[ -z "$MACHINE_ID" ]]; then
     MACHINE_ID=$(zit POST "/v2/users/new" "$(jq -n --arg org "$ORG_ID" --arg u "$TEST_MACHINE_USERNAME" '{
       organizationId: $org,
       username: $u,
       machine: {name: "LCP API Test Machine", accessTokenType: "ACCESS_TOKEN_TYPE_JWT"}
     }')" | jq -r '.id')
-    SECRET=$(zit PUT "/management/v1/users/$MACHINE_ID/secret" '{}')
-    MACHINE_CLIENT_ID=$(echo "$SECRET" | jq -r '.clientId')
-    MACHINE_CLIENT_SECRET=$(echo "$SECRET" | jq -r '.clientSecret')
-    set_env_var "$ENV_FILE" TEST_CLIENT_ID "$MACHINE_CLIENT_ID"
-    set_env_var "$ENV_FILE" TEST_CLIENT_SECRET "$MACHINE_CLIENT_SECRET"
-    export TEST_CLIENT_ID="$MACHINE_CLIENT_ID"
-    export TEST_CLIENT_SECRET="$MACHINE_CLIENT_SECRET"
     echo "  Created machine user: $TEST_MACHINE_USERNAME (client secret written to $ENV_FILE)"
   else
-    echo "  Machine user $TEST_MACHINE_USERNAME: already exists"
+    echo "  Machine user $TEST_MACHINE_USERNAME: already exists (client secret regenerated → $ENV_FILE)"
   fi
+  SECRET=$(zit PUT "/management/v1/users/$MACHINE_ID/secret" '{}')
+  MACHINE_CLIENT_ID=$(echo "$SECRET" | jq -r '.clientId')
+  MACHINE_CLIENT_SECRET=$(echo "$SECRET" | jq -r '.clientSecret')
+  set_env_var "$ENV_FILE" TEST_CLIENT_ID "$MACHINE_CLIENT_ID"
+  set_env_var "$ENV_FILE" TEST_CLIENT_SECRET "$MACHINE_CLIENT_SECRET"
+  export TEST_CLIENT_ID="$MACHINE_CLIENT_ID"
+  export TEST_CLIENT_SECRET="$MACHINE_CLIENT_SECRET"
 fi
 
 echo ""

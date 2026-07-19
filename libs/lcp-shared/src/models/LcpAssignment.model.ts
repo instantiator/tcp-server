@@ -143,6 +143,10 @@ export class LcpAssignment extends VersionedEntity {
   @Column({ type: 'varchar', default: 'ready' })
   status!: LcpAssignmentStatus;
 
+  /** Why the assignment failed — QA exhaustion, agent run failure, etc. Null unless `status` is `failed`. */
+  @Column({ type: 'text', nullable: true })
+  failureReason!: string | null;
+
   /** The agent currently (or last) working this assignment. */
   @ManyToOne(() => LcpAgent, { nullable: true, onDelete: 'SET NULL' })
   agent?: LcpAgent | null;

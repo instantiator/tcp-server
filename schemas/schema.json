@@ -171,6 +171,18 @@
           "description": "The role name at the time of the event (denormalised for query convenience since the role may be updated after the run).",
           "type": "string"
         },
+        "taskId": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/UUID"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Denormalised task scope, derived server-side (from the producing agent's assignment, or supplied explicitly for agent-less orchestrator rows) so it never drifts. Backs `(companyId, taskId, timestamp)` task-history queries.",
+          "format": "uuid"
+        },
         "timestamp": {
           "description": "When this event was recorded. Defaults to the current time.",
           "format": "date-time",
@@ -186,6 +198,7 @@
         "agent",
         "agentId",
         "assignmentId",
+        "taskId",
         "eventType",
         "payload"
       ],
@@ -200,7 +213,9 @@
         "tool_result",
         "decision",
         "state_change",
-        "agent_loop_completion"
+        "agent_loop_completion",
+        "compaction",
+        "input"
       ],
       "type": "string"
     },
@@ -856,6 +871,13 @@
           },
           "type": "array"
         },
+        "failureReason": {
+          "description": "Why the assignment failed — QA exhaustion, agent run failure, etc. Null unless `status` is `failed`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "id": {
           "$ref": "#/definitions/UUID",
           "format": "uuid"
@@ -1015,6 +1037,7 @@
         "companyId",
         "createdAt",
         "expected",
+        "failureReason",
         "id",
         "materials",
         "mode",

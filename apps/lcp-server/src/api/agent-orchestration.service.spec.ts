@@ -1,5 +1,6 @@
 import {
   AgentStatus,
+  AuditEventType,
   Conversation,
   ConversationMessage,
   LcpAgent,
@@ -11,7 +12,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Queue } from 'bullmq';
 import { randomUUID } from 'crypto';
 import { DbService } from '../db/db.service';
-import { AgentEventService } from '../events/agent-event.service';
+import { AuditService } from '../audit/audit.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 
 // Prevent BullMQ from trying to open a real Redis connection
@@ -89,14 +90,14 @@ describe('AgentOrchestrationService', () => {
   let consultRepo: ReturnType<typeof makeRepo>;
   let convRepo: ReturnType<typeof makeRepo>;
   let msgRepo: ReturnType<typeof makeRepo>;
-  let emitEvent: jest.Mock;
+  let recordAudit: jest.Mock;
 
   beforeEach(async () => {
     mockDb = {
       createAgent: jest.fn(),
       getAgent: jest.fn(),
     };
-    emitEvent = jest.fn();
+    recordAudit = jest.fn().mockResolvedValue(undefined);
     agentRepo = makeRepo();
     consultRepo = makeRepo();
     convRepo = makeRepo();
@@ -122,7 +123,7 @@ describe('AgentOrchestrationService', () => {
           provide: getRepositoryToken(ConversationMessage),
           useValue: msgRepo,
         },
-        { provide: AgentEventService, useValue: { emit: emitEvent } },
+        { provide: AuditService, useValue: { record: recordAudit } },
       ],
     }).compile();
 
@@ -177,17 +178,21 @@ describe('AgentOrchestrationService', () => {
       });
     });
 
-    it('emits a running (resumed) status event after enqueueing', async () => {
+    it('records a running (resumed) state_change after enqueueing', async () => {
       const agent = makeAgent({ status: AgentStatus.Paused });
       mockDb.getAgent.mockResolvedValue(agent);
 
       await service.resumeAgent(agent.id);
 
-      expect(emitEvent).toHaveBeenCalledWith(
+      expect(recordAudit).toHaveBeenCalledWith(
+        agent.companyId,
+        expect.any(String),
         agent.id,
+        AuditEventType.StateChange,
         expect.objectContaining({
-          kind: 'agent_status',
-          data: { status: AgentStatus.Running, reason: 'resumed' },
+          entity: 'agent',
+          newStatus: AgentStatus.Running,
+          reason: 'resumed',
         }),
       );
     });
@@ -339,7 +344,7 @@ describe('AgentOrchestrationService', () => {
       const result = await service.resumeAgent(agent.id);
 
       expect(mockQueueInstance.add).not.toHaveBeenCalled();
-      expect(emitEvent).not.toHaveBeenCalled();
+      expect(recordAudit).not.toHaveBeenCalled();
       expect(result.id).toBe(agent.id);
     });
 

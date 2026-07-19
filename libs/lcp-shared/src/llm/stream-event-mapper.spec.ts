@@ -1,66 +1,33 @@
-import { AgentEvent } from '../events/agent-events';
-import { mapStreamEvent, StreamEventLike } from './stream-event-mapper';
+import { AIMessage } from '@langchain/core/messages';
+import { AuditEventType } from '../models/AuditEvent.model';
+import type { StreamDelta } from '../events/wire-events';
+import {
+  enrichedAuditForEvent,
+  mapStreamDeltas,
+  StreamEventLike,
+} from './stream-event-mapper';
 
-/** Strips the per-call timestamp so tests can assert on kind + data alone. */
+const AGENT = 'agent-1';
+
+/** Strips the per-call timestamp so tests can assert on channel + delta alone. */
 function withoutTimestamps(
-  events: AgentEvent[],
-): Omit<AgentEvent, 'timestamp'>[] {
-  return events.map((event) => {
-    const { timestamp, ...rest } = event;
+  deltas: StreamDelta[],
+): Omit<StreamDelta, 'timestamp'>[] {
+  return deltas.map((delta) => {
+    const { timestamp, ...rest } = delta;
     void timestamp;
     return rest;
   });
 }
 
-describe('mapStreamEvent', () => {
-  it('maps on_chat_model_start to an llm request_started event', () => {
-    expect(
-      withoutTimestamps(mapStreamEvent({ event: 'on_chat_model_start' })),
-    ).toEqual([{ kind: 'llm', data: { activity: 'request_started' } }]);
-  });
-
-  it('maps on_chat_model_end to an llm request_complete event', () => {
-    expect(
-      withoutTimestamps(mapStreamEvent({ event: 'on_chat_model_end' })),
-    ).toEqual([{ kind: 'llm', data: { activity: 'request_complete' } }]);
-  });
-
-  it('maps on_tool_start to an llm tool_started event carrying the tool name', () => {
-    expect(
-      withoutTimestamps(
-        mapStreamEvent({
-          event: 'on_tool_start',
-          name: 'request_agent_consultation',
-        }),
-      ),
-    ).toEqual([
-      {
-        kind: 'llm',
-        data: { activity: 'tool_started', tool: 'request_agent_consultation' },
-      },
-    ]);
-  });
-
-  it('maps on_tool_end to an llm tool_complete event carrying the tool name', () => {
-    expect(
-      withoutTimestamps(
-        mapStreamEvent({ event: 'on_tool_end', name: 'complete_task' }),
-      ),
-    ).toEqual([
-      {
-        kind: 'llm',
-        data: { activity: 'tool_complete', tool: 'complete_task' },
-      },
-    ]);
-  });
-
+describe('mapStreamDeltas', () => {
   it('maps a stream chunk with only response content to a single response delta', () => {
     const event: StreamEventLike = {
       event: 'on_chat_model_stream',
       data: { chunk: { content: 'Hello' } },
     };
-    expect(withoutTimestamps(mapStreamEvent(event))).toEqual([
-      { kind: 'response', data: { delta: 'Hello' } },
+    expect(withoutTimestamps(mapStreamDeltas(event, AGENT))).toEqual([
+      { type: 'stream', agentId: AGENT, channel: 'response', delta: 'Hello' },
     ]);
   });
 
@@ -74,8 +41,13 @@ describe('mapStreamEvent', () => {
         },
       },
     };
-    expect(withoutTimestamps(mapStreamEvent(event))).toEqual([
-      { kind: 'reasoning', data: { delta: 'thinking' } },
+    expect(withoutTimestamps(mapStreamDeltas(event, AGENT))).toEqual([
+      {
+        type: 'stream',
+        agentId: AGENT,
+        channel: 'reasoning',
+        delta: 'thinking',
+      },
     ]);
   });
 
@@ -89,18 +61,18 @@ describe('mapStreamEvent', () => {
         },
       },
     };
-    expect(withoutTimestamps(mapStreamEvent(event))).toEqual([
-      { kind: 'response', data: { delta: 'Hi' } },
-      { kind: 'reasoning', data: { delta: 'why' } },
+    expect(withoutTimestamps(mapStreamDeltas(event, AGENT))).toEqual([
+      { type: 'stream', agentId: AGENT, channel: 'response', delta: 'Hi' },
+      { type: 'stream', agentId: AGENT, channel: 'reasoning', delta: 'why' },
     ]);
   });
 
   it('yields nothing for an empty stream chunk', () => {
     expect(
-      mapStreamEvent({
-        event: 'on_chat_model_stream',
-        data: { chunk: { content: '' } },
-      }),
+      mapStreamDeltas(
+        { event: 'on_chat_model_stream', data: { chunk: { content: '' } } },
+        AGENT,
+      ),
     ).toEqual([]);
   });
 
@@ -109,15 +81,77 @@ describe('mapStreamEvent', () => {
       event: 'on_chat_model_stream',
       data: { chunk: { content: [{ type: 'text', text: 'x' }] } },
     };
-    expect(mapStreamEvent(event)).toEqual([]);
+    expect(mapStreamDeltas(event, AGENT)).toEqual([]);
   });
 
-  it('yields nothing for unmapped event kinds', () => {
-    expect(mapStreamEvent({ event: 'on_chain_start' })).toEqual([]);
+  it('yields nothing for lifecycle (non-stream) events', () => {
+    expect(mapStreamDeltas({ event: 'on_chat_model_start' }, AGENT)).toEqual(
+      [],
+    );
+    expect(mapStreamDeltas({ event: 'on_tool_start' }, AGENT)).toEqual([]);
   });
 
-  it('stamps every emitted event with an ISO timestamp', () => {
-    const [event] = mapStreamEvent({ event: 'on_chat_model_start' });
-    expect(event.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  it('stamps every delta with an ISO timestamp', () => {
+    const [delta] = mapStreamDeltas(
+      { event: 'on_chat_model_stream', data: { chunk: { content: 'x' } } },
+      AGENT,
+    );
+    expect(delta.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+});
+
+describe('enrichedAuditForEvent', () => {
+  it('maps on_chat_model_start to an llm_request row', () => {
+    expect(
+      enrichedAuditForEvent({ event: 'on_chat_model_start', data: {} }),
+    ).toEqual({ eventType: AuditEventType.LlmRequest, payload: {} });
+  });
+
+  it('maps on_tool_start to a tool_call row carrying the tool name and input', () => {
+    expect(
+      enrichedAuditForEvent({
+        event: 'on_tool_start',
+        name: 'web_search',
+        data: { input: { query: 'x' } },
+      }),
+    ).toEqual({
+      eventType: AuditEventType.ToolCall,
+      payload: { tool: 'web_search', input: { query: 'x' } },
+    });
+  });
+
+  it('maps on_tool_end to a tool_result row carrying the tool name and output', () => {
+    expect(
+      enrichedAuditForEvent({
+        event: 'on_tool_end',
+        name: 'web_search',
+        data: { output: 'results' },
+      }),
+    ).toEqual({
+      eventType: AuditEventType.ToolResult,
+      payload: { tool: 'web_search', output: 'results' },
+    });
+  });
+
+  it('maps on_chat_model_end to an llm_response row with normalized response/reasoning text', () => {
+    const output = new AIMessage({
+      content: 'the answer',
+      additional_kwargs: { reasoning_content: 'because' },
+    });
+    const result = enrichedAuditForEvent({
+      event: 'on_chat_model_end',
+      data: { output },
+    });
+    expect(result?.eventType).toBe(AuditEventType.LlmResponse);
+    expect(result?.payload).toMatchObject({
+      responseText: 'the answer',
+      reasoningText: 'because',
+    });
+    expect(result?.payload.output).toBe(output);
+  });
+
+  it('returns null for non-lifecycle events', () => {
+    expect(enrichedAuditForEvent({ event: 'on_chat_model_stream' })).toBeNull();
+    expect(enrichedAuditForEvent({ event: 'on_chain_start' })).toBeNull();
   });
 });

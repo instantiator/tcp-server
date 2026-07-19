@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import {
   AgentStatus,
+  AuditEventType,
   LcpAgent,
   LcpAssignment,
   LcpCompany,
@@ -13,8 +14,6 @@ import { ConfigService } from '@nestjs/config';
 import { type UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
-import { CompanyEventService } from '../events/company-event.service';
-import { TaskEventService } from '../events/task-event.service';
 import { StorageService } from '../storage/storage.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { PauseAndResumeService } from './pause-and-resume.service';
@@ -49,8 +48,6 @@ describe('TaskOrchestrationService', () => {
   let storage: { copyFile: jest.Mock; listFiles: jest.Mock };
   let audit: { record: jest.Mock };
   let config: { get: jest.Mock };
-  let companyEvents: { emit: jest.Mock };
-  let taskEvents: { emit: jest.Mock };
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -102,8 +99,6 @@ describe('TaskOrchestrationService', () => {
     };
     audit = { record: jest.fn().mockResolvedValue(undefined) };
     config = { get: jest.fn().mockReturnValue(undefined) };
-    companyEvents = { emit: jest.fn() };
-    taskEvents = { emit: jest.fn() };
 
     service = new TaskOrchestrationService(
       taskRepo,
@@ -116,8 +111,6 @@ describe('TaskOrchestrationService', () => {
       storage as unknown as StorageService,
       audit as unknown as AuditService,
       config as unknown as ConfigService,
-      companyEvents as unknown as CompanyEventService,
-      taskEvents as unknown as TaskEventService,
     );
   });
 
@@ -211,27 +204,23 @@ describe('TaskOrchestrationService', () => {
       );
       expect(agents.dispatchStartJob).toHaveBeenCalledTimes(1);
 
-      // The ready→planning reaction is recorded/emitted here (see
-      // dispatchPlanner's docstring) — both the task's own SSE stream and
-      // its company's observe it.
-      const taskCall = taskEvents.emit.mock.calls[0] as [
-        string,
-        { kind: string; data: { id: string; status: string } },
-      ];
-      expect(taskCall[0]).toBe(task.id);
-      expect(taskCall[1]).toMatchObject({
-        kind: 'task_changed',
-        data: { id: task.id, status: 'planning' },
-      });
-
-      const companyCall = companyEvents.emit.mock.calls[0] as [
-        string,
-        { kind: string; data: { id: string; status: string } },
-      ];
-      expect(companyCall[0]).toBe(company.id);
-      expect(companyCall[1]).toMatchObject({
-        kind: 'task_changed',
-        data: { id: task.id, status: 'planning' },
+      // The ready→planning reaction is recorded as one entity:'task'
+      // state_change; the publisher routes it to both the task and company
+      // channels (see dispatchPlanner's docstring). The summary rides in the
+      // payload.
+      const taskStateCall = (audit.record.mock.calls as unknown[][]).find(
+        (c) =>
+          c[3] === AuditEventType.StateChange &&
+          (c[4] as { entity?: string }).entity === 'task',
+      );
+      expect(taskStateCall).toBeDefined();
+      expect(taskStateCall![0]).toBe(company.id);
+      expect(taskStateCall![4]).toMatchObject({
+        entity: 'task',
+        taskId: task.id,
+        newStatus: 'planning',
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        summary: expect.objectContaining({ id: task.id, status: 'planning' }),
       });
     });
 
@@ -269,7 +258,7 @@ describe('TaskOrchestrationService', () => {
   // --- assignmentReadyForQa --------------------------------------------------
 
   describe('assignmentReadyForQa', () => {
-    it('resolves a path-type prepared artifact to its storage key in the QA prompt', async () => {
+    it('shows a path-type prepared artifact as its bare filename, never a resolved storage key', async () => {
       const company = await seedCompany();
       const role = await seedRole(company.id);
       const task = await seedTask(company.id);
@@ -288,9 +277,10 @@ describe('TaskOrchestrationService', () => {
         mode: 'qa',
       });
       expect(qa).not.toBeNull();
-      // Not the bare `{type}: {value}` label the model used to (wrongly)
-      // treat as a path — the actual, resolvable object key read_file needs.
-      expect(qa!.prompt).toContain(
+      expect(qa!.prompt).toContain('- guide.md');
+      // Never the resolved storage key — the QA agent reads it via the
+      // scoped `read_working_file(filename)` tool instead.
+      expect(qa!.prompt).not.toContain(
         `${company.slug}/tasks/${task.id}/assignments/0/working/guide.md`,
       );
       expect(agents.dispatchStartJob).toHaveBeenCalledTimes(1);
@@ -488,15 +478,22 @@ describe('TaskOrchestrationService', () => {
 
       // Regression: recordAssignmentState must report the *new* status
       // ('succeeded'), not the stale in-memory 'in-qa' the atomic claim
-      // updated only in the DB.
-      const assignmentChangedCall = taskEvents.emit.mock.calls.find(
-        (call: unknown[]) =>
-          (call[1] as { kind: string }).kind === 'assignment_changed',
-      ) as [string, { kind: string; data: { id: string; status: string } }];
-      expect(assignmentChangedCall[0]).toBe(task.id);
-      expect(assignmentChangedCall[1].data).toMatchObject({
-        id: target.id,
-        status: 'succeeded',
+      // updated only in the DB. Now recorded as an entity:'assignment'
+      // state_change whose summary carries the status.
+      const assignmentStateCall = (audit.record.mock.calls as unknown[][]).find(
+        (c) =>
+          c[3] === AuditEventType.StateChange &&
+          (c[4] as { entity?: string }).entity === 'assignment' &&
+          (c[4] as { assignmentId?: string }).assignmentId === target.id &&
+          (c[4] as { newStatus?: string }).newStatus === 'succeeded',
+      );
+      expect(assignmentStateCall).toBeDefined();
+      expect(assignmentStateCall![4]).toMatchObject({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        summary: expect.objectContaining({
+          id: target.id,
+          status: 'succeeded',
+        }),
       });
     });
 
@@ -612,6 +609,7 @@ describe('TaskOrchestrationService', () => {
       const after = (await assignmentRepo.findOneBy({ id: target.id }))!;
       expect(after.status).toBe('failed');
       expect(after.qaAttempts).toBe(3);
+      expect(after.failureReason).toBe('did not pass QA');
       expect(pauseResume.failAgent).toHaveBeenCalledWith(
         target.agentId,
         expect.stringContaining('QA'),
@@ -675,6 +673,10 @@ describe('TaskOrchestrationService', () => {
       const taskAfter = (await taskRepo.findOneBy({ id: task.id }))!;
       expect(taskAfter.status).toBe('failed');
       expect(taskAfter.failureReason).toContain('planner failed');
+      // The plan assignment must not be left stuck in-progress.
+      const planAfter = (await assignmentRepo.findOneBy({ id: plan.id }))!;
+      expect(planAfter.status).toBe('failed');
+      expect(planAfter.failureReason).toBe('boom');
     });
 
     it('fails the assignment and task when an implement agent fails', async () => {
@@ -699,9 +701,9 @@ describe('TaskOrchestrationService', () => {
 
       await service.handleAgentFailed(agent.id, 'crashed');
 
-      expect((await assignmentRepo.findOneBy({ id: step.id }))!.status).toBe(
-        'failed',
-      );
+      const stepAfter = (await assignmentRepo.findOneBy({ id: step.id }))!;
+      expect(stepAfter.status).toBe('failed');
+      expect(stepAfter.failureReason).toBe('crashed');
       expect((await taskRepo.findOneBy({ id: task.id }))!.status).toBe(
         'failed',
       );
@@ -763,9 +765,13 @@ describe('TaskOrchestrationService', () => {
 
       await service.handleAgentFailed(agent.id, 'qa crashed');
 
-      expect((await assignmentRepo.findOneBy({ id: target.id }))!.status).toBe(
-        'failed',
-      );
+      const targetAfter = (await assignmentRepo.findOneBy({ id: target.id }))!;
+      expect(targetAfter.status).toBe('failed');
+      expect(targetAfter.failureReason).toContain('qa crashed');
+      // The qa assignment itself must fail too, not just the reviewed target.
+      const qaAfter = (await assignmentRepo.findOneBy({ id: qa.id }))!;
+      expect(qaAfter.status).toBe('failed');
+      expect(qaAfter.failureReason).toBe('qa crashed');
       expect((await taskRepo.findOneBy({ id: task.id }))!.status).toBe(
         'failed',
       );
@@ -803,6 +809,11 @@ describe('TaskOrchestrationService', () => {
 
       expect((await assignmentRepo.findOneBy({ id: target.id }))!.status).toBe(
         'succeeded',
+      );
+      // The reviewed assignment already passed, so nothing is failed — not the
+      // task, and not the qa assignment (its late failure is a no-op).
+      expect((await assignmentRepo.findOneBy({ id: qa.id }))!.status).toBe(
+        'in-progress',
       );
       expect((await taskRepo.findOneBy({ id: task.id }))!.status).toBe(
         'in-progress',
@@ -852,6 +863,7 @@ describe('TaskOrchestrationService', () => {
         null,
         expect.anything(),
         expect.objectContaining({ taskId: task.id, newStatus: 'cancelled' }),
+        expect.objectContaining({ taskId: task.id }),
       );
     });
 
@@ -891,6 +903,7 @@ describe('TaskOrchestrationService', () => {
         null,
         expect.anything(),
         expect.objectContaining({ taskId: task.id, newStatus: 'cancelled' }),
+        expect.objectContaining({ taskId: task.id }),
       );
     });
   });
@@ -923,6 +936,43 @@ describe('TaskOrchestrationService', () => {
       const taskAfter = (await taskRepo.findOneBy({ id: task.id }))!;
       expect(taskAfter.status).toBe('failed');
       expect(taskAfter.failureReason).toContain('without producing a plan');
+      // The plan assignment itself must fail too, not just the task.
+      const planAfter = (await assignmentRepo.findOneBy({ id: plan.id }))!;
+      expect(planAfter.status).toBe('failed');
+      expect(planAfter.failureReason).toBe('created a plan with 0 assignments');
+    });
+
+    it('forces the plan assignment to failed even when create_plan marked it succeeded (empty plan)', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, { status: 'planning' });
+      // create_plan fired with an empty plan: it marks its own assignment
+      // succeeded and completes the agent, leaving a `succeeded` assignment
+      // beside a task that will fail for having no plan.
+      const plan = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        mode: 'plan',
+        status: 'succeeded',
+      });
+      const agent = await agentRepo.save(
+        agentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          assignmentId: plan.id,
+          initialPrompt: 'x',
+        }),
+      );
+
+      await service.handleAgentCompleted(agent.id);
+
+      expect((await taskRepo.findOneBy({ id: task.id }))!.status).toBe(
+        'failed',
+      );
+      expect((await assignmentRepo.findOneBy({ id: plan.id }))!.status).toBe(
+        'failed',
+      );
     });
 
     it('is a no-op when the planner produced a plan (task already in-progress)', async () => {
@@ -1040,8 +1090,10 @@ describe('TaskOrchestrationService', () => {
       expect(pauseResume.completeAgent).toHaveBeenCalled();
     });
 
-    it('handleAgentFailed(finalise): fails the task but keeps files promoted', async () => {
-      const { task, agent } = await seedFinalising();
+    it('handleAgentFailed(finalise): fails the task and the finalise assignment, keeping files promoted', async () => {
+      const { task, finalise, agent } = await seedFinalising();
+      // A finalise agent fails while its assignment is still in flight.
+      await assignmentRepo.update(finalise.id, { status: 'in-progress' });
       storage.listFiles.mockResolvedValue([
         { key: 'k/report.txt', name: 'report.txt', size: 1, lastModified: 'x' },
       ]);
@@ -1055,6 +1107,12 @@ describe('TaskOrchestrationService', () => {
       expect(fresh.completed).toEqual([
         { type: 'task-completed-path', value: 'report.txt' },
       ]);
+      // The finalise assignment must not be left stuck in-progress.
+      const freshAssignment = await assignmentRepo.findOneByOrFail({
+        id: finalise.id,
+      });
+      expect(freshAssignment.status).toBe('failed');
+      expect(freshAssignment.failureReason).toBe('boom');
     });
   });
 
@@ -1087,6 +1145,10 @@ describe('TaskOrchestrationService', () => {
       expect((await taskRepo.findOneBy({ id: task.id }))!.status).toBe(
         'failed',
       );
+      // The plan assignment must not be left stuck in-progress.
+      const planAfter = (await assignmentRepo.findOneBy({ id: plan.id }))!;
+      expect(planAfter.status).toBe('failed');
+      expect(planAfter.failureReason).toBe('agent died before restart');
     });
 
     it('dispatches the next ready assignment when nothing is running', async () => {
@@ -1166,6 +1228,12 @@ describe('TaskOrchestrationService', () => {
       expect(fresh.completed).toEqual([
         { type: 'task-completed-path', value: 'report.txt' },
       ]);
+      // The finalise assignment must not be left stuck in-progress.
+      const freshAssignment = await assignmentRepo.findOneByOrFail({
+        id: finalise.id,
+      });
+      expect(freshAssignment.status).toBe('failed');
+      expect(freshAssignment.failureReason).toBe('agent died before restart');
     });
   });
 });

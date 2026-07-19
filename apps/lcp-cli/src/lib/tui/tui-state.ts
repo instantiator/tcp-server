@@ -9,6 +9,8 @@ export interface PaneAssignmentInfo {
   shortcode: string | null;
   status: string;
   prompt: string;
+  /** Why the assignment failed — set only when `status` is `failed`. */
+  failureReason?: string | null;
 }
 
 export interface PaneSpec {
@@ -37,6 +39,8 @@ export interface AssignmentInfo {
   role: string;
   /** The assignment's role's slug. */
   roleSlug: string;
+  /** The kind of work — `plan`/`implement`/`qa`/`finalise` etc. — shown alongside status as `(mode: status)`. */
+  mode: string;
   status: string;
   prompt: string;
   /** Null for an assignment with no plan-derived shortcode (shouldn't happen for a task's own assignments). */
@@ -50,6 +54,8 @@ export interface AssignmentInfo {
   planIndex: number | null;
   /** The assignment's working agent, once dispatched — null before it begins. */
   agentId: string | null;
+  /** Why the assignment failed — set only when `status` is `failed`. */
+  failureReason: string | null;
 }
 
 /**

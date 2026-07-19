@@ -13,6 +13,7 @@ import {
   DEFAULT_LLM_CONTEXT_WINDOW,
   DEFAULT_REQUIRED_TOOL_RETRIES,
   LcpAgent,
+  LcpAssignment,
   LcpRole,
   LlmConfig,
   StreamEventLike,
@@ -22,8 +23,9 @@ import {
   buildAvailableRolesMessage,
   buildRagMessage,
   buildServicesMessage,
+  enrichedAuditForEvent,
   filterToolsForMode,
-  mapStreamEvent,
+  mapStreamDeltas,
   renderSystemPrompt,
   renderTemplate,
   requiredToolForMode,
@@ -66,13 +68,16 @@ const COMPLETION_TOOLS = new Set(
   (['plan', 'implement', 'qa', 'chat'] as const).flatMap(requiredToolForMode),
 );
 
-/** Maps LangGraph v2 event names to {@link AuditEventType} values. */
-const EVENT_TYPE_MAP: Record<string, AuditEventType> = {
-  on_chat_model_start: AuditEventType.LlmRequest,
-  on_chat_model_end: AuditEventType.LlmResponse,
-  on_tool_start: AuditEventType.ToolCall,
-  on_tool_end: AuditEventType.ToolResult,
-};
+/**
+ * Statuses whose terminal `state_change` is recorded by lcp-server (via
+ * notifyComplete/notifyFailed), so {@link AgentLoopService.updateStatus} must
+ * not record a duplicate for them.
+ */
+const TERMINAL_STATUSES = new Set<AgentStatus>([
+  AgentStatus.Completed,
+  AgentStatus.Failed,
+  AgentStatus.Cancelled,
+]);
 
 /**
  * Bundles the per-run values {@link AgentLoopService.runSupervised} needs,
@@ -95,6 +100,8 @@ interface SupervisedRunContext {
   windowSize: number;
   abortController: AbortController;
   maxIterations: number;
+  /** The run's wall-clock timeout — used to build a human-readable reason if it fires. */
+  timeoutMs: number;
   buildGraph: (
     tools: DynamicStructuredTool[],
   ) => ReturnType<typeof buildAgentGraph>;
@@ -140,6 +147,8 @@ export class AgentLoopService {
     private readonly agentRepo: Repository<LcpAgent>,
     @InjectRepository(LcpRole)
     private readonly roleRepo: Repository<LcpRole>,
+    @InjectRepository(LcpAssignment)
+    private readonly assignmentRepo: Repository<LcpAssignment>,
   ) {
     this.databaseUrl = this.config.getOrThrow<string>('DATABASE_URL');
   }
@@ -220,14 +229,17 @@ export class AgentLoopService {
         checkpointer,
         abortController,
         maxIterations,
+        timeoutMs,
         replyContent,
       );
     } catch (err) {
       // runLoop handles its own errors; this covers checkpointer.setup() and
       // anything else escaping, which would otherwise leave the agent stuck
       // Running (and any pending consultation unresolved forever).
-      const msg = err instanceof Error ? err.message : String(err);
-      await this.failRun(agent, msg);
+      await this.failRun(
+        agent,
+        this.describeRunFailure(err, abortController, timeoutMs),
+      );
     } finally {
       clearTimeout(timeoutId);
       await checkpointer.end();
@@ -250,6 +262,7 @@ export class AgentLoopService {
     checkpointer: PostgresSaver,
     abortController: AbortController,
     maxIterations: number,
+    timeoutMs: number,
     replyContent?: string,
   ): Promise<void> {
     const mode = agent.assignment?.mode ?? 'implement';
@@ -354,6 +367,7 @@ export class AgentLoopService {
       windowSize,
       abortController,
       maxIterations,
+      timeoutMs,
       buildGraph,
     };
 
@@ -364,7 +378,7 @@ export class AgentLoopService {
         await this.failRun(
           agent,
           result.failureReason ??
-            String(abortController.signal.reason ?? 'unknown'),
+            this.describeAbort(abortController, timeoutMs),
         );
         return;
       }
@@ -432,7 +446,7 @@ export class AgentLoopService {
       this.auditClient.notifyComplete(agent.id, content);
       await this.updateStatus(agent, AgentStatus.Completed);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = this.describeRunFailure(err, abortController, timeoutMs);
       this.logger.error(`Agent ${agent.id} loop error: ${msg}`);
       await this.failRun(agent, msg);
     }
@@ -492,21 +506,21 @@ export class AgentLoopService {
     const pendingToolInputs = new Map<string, Record<string, unknown>>();
 
     return (event: StreamEventLike) => {
-      const auditType = EVENT_TYPE_MAP[event.event];
-      if (auditType) {
+      // Persist each lifecycle event with an enriched payload (tool name/input/
+      // output, response/reasoning text) — the server streams it live. Token
+      // deltas are published directly to the agent's Redis channel.
+      const audit = enrichedAuditForEvent(event);
+      if (audit) {
         this.auditClient.record(
           agent.companyId,
           agent.role.name,
           agent.id,
-          auditType,
-          event.data ?? {},
+          audit.eventType,
+          audit.payload,
         );
       }
-
-      // Relay the same stream events to observing SSE clients (LLM activity,
-      // reasoning/response token deltas). No-op when Redis is not configured.
-      for (const observabilityEvent of mapStreamEvent(event)) {
-        this.events.publish(agent.id, observabilityEvent);
+      for (const delta of mapStreamDeltas(event, agent.id)) {
+        this.events.publish(delta);
       }
 
       if (event.event === 'on_chat_model_end') {
@@ -614,7 +628,7 @@ export class AgentLoopService {
         await this.failRun(
           agent,
           result.failureReason ??
-            String(ctx.abortController.signal.reason ?? 'unknown'),
+            this.describeAbort(ctx.abortController, ctx.timeoutMs),
         );
         return;
       }
@@ -647,6 +661,41 @@ export class AgentLoopService {
   }
 
   /**
+   * Builds a human-readable reason for an abort with no more specific
+   * `failureReason` from {@link runSupervisedGraph} (e.g. the wall-clock
+   * timeout firing, which aborts the signal directly rather than returning
+   * through the graph runner).
+   */
+  private describeAbort(
+    abortController: AbortController,
+    timeoutMs: number,
+  ): string {
+    if (abortController.signal.reason === 'timeout') {
+      return `timed out after ${Math.round(timeoutMs / 1000)} seconds`;
+    }
+    return String(abortController.signal.reason ?? 'unknown');
+  }
+
+  /**
+   * Builds a human-readable failure reason for an error escaping the run —
+   * a timed-out abort surfaces as a generic `AbortError` here rather than
+   * through {@link runSupervisedGraph}'s own result, so it's checked first;
+   * anything else falls back to the error's own message, or a generic
+   * "unexpected LLM failure" when the error carries no useful message.
+   */
+  private describeRunFailure(
+    err: unknown,
+    abortController: AbortController,
+    timeoutMs: number,
+  ): string {
+    if (abortController.signal.aborted) {
+      return this.describeAbort(abortController, timeoutMs);
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    return msg.trim() ? msg : 'unexpected LLM failure';
+  }
+
+  /**
    * Marks the run as failed: records the state change, sets the agent status,
    * and notifies lcp-server (which resolves any pending consultation as failed,
    * resumes the calling agent, and emits the terminal `failed` event to any SSE
@@ -664,7 +713,8 @@ export class AgentLoopService {
       return;
     }
     this.logger.error(`Agent ${agent.id} run failed: ${reason}`);
-    this.recordStateChange(agent, 'failed', reason);
+    // The terminal `failed` state_change (with reason) is recorded by
+    // lcp-server's failAgent via notifyFailed below — no local duplicate.
     await this.updateStatus(agent, AgentStatus.Failed);
     this.auditClient.notifyFailed(agent.id, reason);
   }
@@ -710,6 +760,18 @@ export class AgentLoopService {
       ? new HumanMessage(servicesText)
       : null;
 
+    // The task's implement-mode plan, needed to resolve any
+    // `assignment-completed-path` material/expected artifact (a prior step's
+    // approved output) — see `resolveArtifactKey`. Only fetched for a task
+    // assignment; an orphan (chat/consultation) assignment has no plan.
+    const planAssignments = assignment.taskId
+      ? (
+          await this.assignmentRepo.find({
+            where: { taskId: assignment.taskId, mode: 'implement' },
+          })
+        ).map((a) => ({ orderIndex: a.orderIndex, approved: a.approved }))
+      : undefined;
+
     // Prompt part 4: assignment presentation — the mode prompt plus the
     // assignment prompt (already context-prepared as `initialPrompt`) and any
     // materials/expected outputs. Replaces the old bare initial-prompt message.
@@ -723,6 +785,7 @@ export class AgentLoopService {
           resolutionContext: {
             companySlug: company.slug,
             task: assignment.task ?? null,
+            planAssignments,
             assignment: {
               id: assignment.id,
               taskId: assignment.taskId ?? null,
@@ -836,31 +899,19 @@ export class AgentLoopService {
       status,
       ...(threadId !== undefined && { threadId }),
     });
-    // Surface the worker's lifecycle transitions to observing SSE clients.
-    // Terminal `completed`/`failed` events (carrying the response/error) are
-    // emitted separately by lcp-server once notifyComplete/notifyFailed lands.
-    this.events.publish(agent.id, {
-      timestamp: new Date().toISOString(),
-      kind: 'agent_status',
-      data: { status },
-    });
-  }
-
-  /**
-   * Writes an {@link AuditEventType.StateChange} event capturing the reason for
-   * a status transition (e.g. timeout, max iterations, unhandled error).
-   */
-  private recordStateChange(
-    agent: LcpAgent,
-    newStatus: string,
-    reason: string,
-  ): void {
-    this.auditClient.record(
-      agent.companyId,
-      agent.role.name,
-      agent.id,
-      AuditEventType.StateChange,
-      { newStatus, reason },
-    );
+    // Record non-terminal transitions (e.g. running) as a state_change the
+    // server streams live. Terminal transitions (completed/failed/cancelled)
+    // are recorded by lcp-server's completeAgent/failAgent once
+    // notifyComplete/notifyFailed lands — carrying the response/reason — so we
+    // don't duplicate them here.
+    if (!TERMINAL_STATUSES.has(status)) {
+      this.auditClient.record(
+        agent.companyId,
+        agent.role.name,
+        agent.id,
+        AuditEventType.StateChange,
+        { entity: 'agent', newStatus: status },
+      );
+    }
   }
 }

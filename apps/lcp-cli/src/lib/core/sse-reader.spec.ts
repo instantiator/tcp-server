@@ -1,4 +1,4 @@
-import { readSseStream } from './sse-reader';
+import { readWireStream } from './sse-reader';
 
 function chunkedResponse(chunks: string[], ok = true) {
   const encoder = new TextEncoder();
@@ -18,7 +18,7 @@ function chunkedResponse(chunks: string[], ok = true) {
   };
 }
 
-describe('readSseStream', () => {
+describe('readWireStream', () => {
   const originalFetch = global.fetch;
 
   afterEach(() => {
@@ -26,22 +26,21 @@ describe('readSseStream', () => {
     jest.restoreAllMocks();
   });
 
-  it('invokes onEvent for each parsed SSE event, in order', async () => {
+  it('invokes onEvent for each parsed wire event, in order', async () => {
+    const wire = (delta: string) =>
+      JSON.stringify({ type: 'stream', channel: 'response', delta });
     global.fetch = jest
       .fn()
       .mockResolvedValue(
-        chunkedResponse([
-          `data: ${JSON.stringify({ kind: 'a', timestamp: 't1' })}\n\n`,
-          `data: ${JSON.stringify({ kind: 'b', timestamp: 't2' })}\n\n`,
-        ]),
+        chunkedResponse([`data: ${wire('a')}\n\n`, `data: ${wire('b')}\n\n`]),
       );
 
-    const received: string[] = [];
-    await readSseStream(
+    const received: unknown[] = [];
+    await readWireStream(
       'http://x/events',
       'tok',
       new AbortController().signal,
-      (e) => received.push(e.kind),
+      (e) => received.push(e.type === 'stream' ? e.delta : undefined),
     );
 
     expect(received).toEqual(['a', 'b']);
@@ -52,7 +51,7 @@ describe('readSseStream', () => {
     global.fetch = fetchMock;
     const controller = new AbortController();
 
-    await readSseStream(
+    await readWireStream(
       'http://x/events',
       'my-token',
       controller.signal,
@@ -69,7 +68,7 @@ describe('readSseStream', () => {
     global.fetch = jest.fn().mockResolvedValue(chunkedResponse([], false));
 
     const onEvent = jest.fn();
-    await readSseStream(
+    await readWireStream(
       'http://x/events',
       'tok',
       new AbortController().signal,
@@ -83,7 +82,7 @@ describe('readSseStream', () => {
     global.fetch = jest.fn().mockRejectedValue(new Error('network down'));
 
     await expect(
-      readSseStream(
+      readWireStream(
         'http://x/events',
         'tok',
         new AbortController().signal,

@@ -1,19 +1,19 @@
-import type { LcpAgent, LcpAssignment, LcpRole, LcpTask } from '@lcp/shared';
-import {
-  agentHeading,
-  ASSIGNMENT_COMPLETE_LABEL,
-  JsonDeltaFormatter,
-  LogHeadingTracker,
-  parseClockTime,
-  shortId,
-} from '../core/agent-log-format';
+import type {
+  AuditWireEvent,
+  LcpAgent,
+  LcpAssignment,
+  LcpRole,
+  LcpTask,
+} from '@lcp/shared';
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest, ApiOptions } from '../core/api';
-import { createRenderer } from '../core/render';
-import { parseSseBuffer } from '../core/sse';
-import { readSseStream } from '../core/sse-reader';
-import { wrapText } from '../core/text-wrap';
+import { parseWireEvents } from '../core/sse';
+import { readWireStream } from '../core/sse-reader';
 import { runCommand } from '../core/run-command';
+import { EventLogBuffer } from '../render/event-log';
+import { HeadingInfoProvider } from '../render/heading';
+import { StreamPresenter } from '../render/stream-presenter';
+import { ansiStyle, plainStyle } from '../render/style';
 import { resolveSession, TokenManager } from '../auth/token';
 
 export interface EavesdropCmdOpts {
@@ -26,19 +26,65 @@ export interface EavesdropCmdOpts {
 
 /** Minimal shape of an audit row, as returned by the `.../history` endpoints. */
 interface AuditRow {
+  id?: string;
   timestamp: string;
-  eventType: string;
+  companyId?: string;
+  role?: string;
   agentId?: string | null;
+  assignmentId?: string | null;
+  taskId?: string | null;
+  eventType: string;
   payload?: Record<string, unknown>;
 }
 
-/** Identifies the working agent behind one assignment, for the heading block and short-id prefix. */
+/** Converts a persisted history row to the {@link AuditWireEvent} the render buffer consumes. */
+function toWire(row: AuditRow): AuditWireEvent {
+  return {
+    id: row.id,
+    timestamp: row.timestamp,
+    companyId: row.companyId ?? '',
+    role: row.role ?? '',
+    agentId: row.agentId ?? null,
+    assignmentId: row.assignmentId ?? null,
+    taskId: row.taskId ?? null,
+    eventType: row.eventType as AuditWireEvent['eventType'],
+    payload: row.payload ?? {},
+  };
+}
+
+/** Identifies the working agent behind one assignment, for the heading block. */
 interface AgentContext {
   agentId: string;
   assignmentId: string;
   assignmentRole: string;
   roleId: string;
   roleSlug: string;
+}
+
+/** Builds a {@link HeadingInfoProvider} backed by the (mutable) resolved-agent map. */
+function headingProvider(
+  agentsById: Map<string, AgentContext>,
+): HeadingInfoProvider {
+  return (scope) => {
+    const ctx = scope.agentId ? agentsById.get(scope.agentId) : undefined;
+    return {
+      taskId: scope.taskId ?? undefined,
+      assignmentId: ctx?.assignmentId ?? scope.assignmentId ?? undefined,
+      assignmentRole: ctx?.assignmentRole,
+      assignmentRoleSlug: ctx?.roleSlug,
+      assignmentRoleId: ctx?.roleId,
+      agentId: scope.agentId ?? undefined,
+    };
+  };
+}
+
+/** True for a terminal agent `state_change` — the signal to stop following. */
+function isTerminalAgentEvent(e: AuditWireEvent): boolean {
+  return (
+    e.eventType === 'state_change' &&
+    e.payload['entity'] === 'agent' &&
+    TERMINAL_AGENT_STATUSES.has(String(e.payload['newStatus']))
+  );
 }
 
 /** A role's display name/slug — all `buildAgentContext`/`fetchRole` need. */
@@ -54,11 +100,6 @@ const TERMINAL_ASSIGNMENT_STATUSES = new Set([
   'cancelled',
 ]);
 const TERMINAL_TASK_STATUSES = new Set(['succeeded', 'failed', 'cancelled']);
-
-/** `hh:mm:ss` from an audit row's timestamp, or a placeholder if it doesn't parse. */
-function formatTimestamp(timestamp: string): string {
-  return parseClockTime(timestamp) ?? '--:--:--';
-}
 
 /** Fetches one role's name/slug (for the heading block and short-id prefix). */
 async function fetchRole(api: ApiOptions, roleId: string): Promise<RoleInfo> {
@@ -80,65 +121,6 @@ function buildAgentContext(
     roleId,
     roleSlug: role.slug,
   };
-}
-
-/**
- * Prints one audit row: a heading block when the active agent changes, then
- * the row's own formatted line(s) — `llm_request`/`llm_response` as a
- * pretty-printed JSON delta, `tool_call`/`tool_result` as pretty, untruncated,
- * wrapped JSON, and everything else as a single wrapped summary line.
- */
-function printAuditRow(
-  row: AuditRow,
-  agentsById: Map<string, AgentContext>,
-  tracker: LogHeadingTracker,
-  jsonFormatter: JsonDeltaFormatter,
-): void {
-  const ctx = row.agentId ? agentsById.get(row.agentId) : undefined;
-  if (ctx && tracker.shouldPrintHeading(ctx.agentId)) {
-    for (const line of agentHeading(ctx)) process.stdout.write(line + '\n');
-  }
-  const time = formatTimestamp(row.timestamp);
-  const width = process.stdout.columns ?? 80;
-  const payload = row.payload ?? {};
-
-  if (row.eventType === 'llm_request' || row.eventType === 'llm_response') {
-    process.stdout.write(`${time} | ${row.eventType}\n`);
-    const json = jsonFormatter.format(
-      row.eventType,
-      row.agentId ?? '',
-      payload,
-    );
-    for (const line of json.split('\n')) process.stdout.write(`  ${line}\n`);
-    return;
-  }
-  if (row.eventType === 'tool_call' || row.eventType === 'tool_result') {
-    process.stdout.write(`${time} | ${row.eventType}\n`);
-    for (const line of wrapText(JSON.stringify(payload), width)) {
-      process.stdout.write(`  ${line}\n`);
-    }
-    return;
-  }
-
-  const label =
-    row.eventType === 'agent_loop_completion'
-      ? ASSIGNMENT_COMPLETE_LABEL
-      : row.eventType;
-  const text =
-    row.eventType === 'state_change'
-      ? `${typeof payload.newStatus === 'string' ? payload.newStatus : ''}${
-          typeof payload.reason === 'string' ? ` (${payload.reason})` : ''
-        }`
-      : row.eventType === 'agent_loop_completion'
-        ? typeof payload.summary === 'string'
-          ? payload.summary
-          : ''
-        : JSON.stringify(payload);
-  const header = `${time} | ${label} | `;
-  const wrapped = wrapText(text, Math.max(width - header.length, 1));
-  wrapped.forEach((line, i) => {
-    process.stdout.write((i === 0 ? header : '  ') + line + '\n');
-  });
 }
 
 /**
@@ -245,58 +227,47 @@ async function resolveTarget(
 }
 
 /**
- * Follows one agent's live SSE stream (`GET /api/agent/:id/events`),
- * rendering every event with the same renderer `chat` uses, until a
- * terminal (`completed`/`failed`) event arrives or the stream closes. Prints
- * this agent's heading block first if the active agent changed.
+ * Follows one agent's live SSE stream (`GET /api/agent/:id/events`), feeding
+ * every {@link WireEvent} into the shared render buffer (which inserts a
+ * heading block when the active agent changes), until a terminal agent
+ * `state_change` arrives or the stream closes.
  */
 async function followAgent(
   lcpServer: string,
   tokenManager: TokenManager,
-  ctx: AgentContext,
-  tracker: LogHeadingTracker,
+  agentId: string,
+  buffer: EventLogBuffer,
 ): Promise<void> {
-  const url = `${lcpServer.replace(/\/$/, '')}/api/agent/${ctx.agentId}/events`;
-  if (tracker.shouldPrintHeading(ctx.agentId)) {
-    for (const line of agentHeading(ctx)) process.stdout.write(line + '\n');
-  }
-  const renderer = createRenderer({
-    hideReasoning: false,
-    rolePrefix: `${shortId(ctx.agentId)} (${ctx.roleSlug})`,
-    out: process.stdout,
-    err: process.stderr,
+  const url = `${lcpServer.replace(/\/$/, '')}/api/agent/${agentId}/events`;
+  // Read the token at connection time, not when this follower was queued —
+  // a long `--tail` can outlive its original token (see TokenManager).
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${tokenManager.current}` },
   });
-  try {
-    // Read the token at connection time, not when this follower was queued —
-    // a long `--tail` can outlive its original token (see TokenManager).
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${tokenManager.current}` },
-    });
-    if (!res.ok || !res.body) {
-      process.stderr.write(
-        `Error: events stream for agent ${ctx.agentId} failed with HTTP ${res.status}\n`,
-      );
-      return;
-    }
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let terminal = false;
-    while (!terminal) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const { events, rest } = parseSseBuffer(buffer);
-      buffer = rest;
-      for (const event of events) {
-        if (event.kind === 'completed' || event.kind === 'failed') {
-          terminal = true;
-        }
-        renderer.render(event);
+  if (!res.ok || !res.body) {
+    process.stderr.write(
+      `Error: events stream for agent ${agentId} failed with HTTP ${res.status}\n`,
+    );
+    return;
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  let terminal = false;
+  while (!terminal) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const { events, rest } = parseWireEvents(buf);
+    buf = rest;
+    for (const wire of events) {
+      if (wire.type === 'stream') {
+        buffer.appendDelta(wire);
+        continue;
       }
+      buffer.appendAudit(wire.event);
+      if (isTerminalAgentEvent(wire.event)) terminal = true;
     }
-  } finally {
-    renderer.finish();
   }
 }
 
@@ -351,10 +322,11 @@ async function tailTarget(
   opts: GlobalOptions,
   tokenManager: TokenManager,
   target: Target,
-  tracker: LogHeadingTracker,
+  buffer: EventLogBuffer,
+  agentsById: Map<string, AgentContext>,
 ): Promise<void> {
   const followers: Promise<void>[] = target.agents.map((ctx) =>
-    followAgent(opts.lcpServer, tokenManager, ctx, tracker),
+    followAgent(opts.lcpServer, tokenManager, ctx.agentId, buffer),
   );
 
   let watchAbort: AbortController | undefined;
@@ -364,13 +336,19 @@ async function tailTarget(
     const roleById = target.roleById ?? new Map<string, RoleInfo>();
     watchAbort = new AbortController();
     const taskId = target.taskId;
-    watchDone = readSseStream(
+    watchDone = readWireStream(
       `${opts.lcpServer.replace(/\/$/, '')}/api/task/${taskId}/events`,
       tokenManager.current,
       watchAbort.signal,
-      (event) => {
-        if (event.kind !== 'assignment_changed') return;
-        const assignmentId = (event.data as { id?: string } | undefined)?.id;
+      (wire) => {
+        if (
+          wire.type !== 'audit' ||
+          wire.event.eventType !== 'state_change' ||
+          wire.event.payload['entity'] !== 'assignment'
+        ) {
+          return;
+        }
+        const assignmentId = wire.event.assignmentId ?? undefined;
         if (!assignmentId || known.has(assignmentId)) return;
         known.add(assignmentId);
         followers.push(
@@ -379,11 +357,16 @@ async function tailTarget(
             tokenManager,
             assignmentId,
             roleById,
-          ).then((ctx) =>
-            ctx
-              ? followAgent(opts.lcpServer, tokenManager, ctx, tracker)
-              : undefined,
-          ),
+          ).then((ctx) => {
+            if (!ctx) return undefined;
+            agentsById.set(ctx.agentId, ctx);
+            return followAgent(
+              opts.lcpServer,
+              tokenManager,
+              ctx.agentId,
+              buffer,
+            );
+          }),
         );
       },
     );
@@ -438,16 +421,22 @@ export function eavesdropAction(
     const api = apiOptions(opts, tokenManager.current);
     const target = await resolveTarget(api, cmdOpts);
     const agentsById = new Map(target.agents.map((a) => [a.agentId, a]));
-    const tracker = new LogHeadingTracker();
+
+    // One buffer + presenter for the whole session: `--show-history` and
+    // `--tail` feed the same pipeline, so history and live are one stream.
+    // Everything goes to stdout (coloured only when it's a TTY).
+    const buffer = new EventLogBuffer(headingProvider(agentsById));
+    new StreamPresenter(buffer, {
+      out: process.stdout,
+      err: process.stdout,
+      style: process.stdout.isTTY ? ansiStyle : plainStyle,
+    });
 
     if (cmdOpts.showHistory) {
       const rows = target.historyPath
         ? await apiRequest<AuditRow[]>(api, 'GET', target.historyPath)
         : [];
-      const jsonFormatter = new JsonDeltaFormatter();
-      for (const row of rows) {
-        printAuditRow(row, agentsById, tracker, jsonFormatter);
-      }
+      for (const row of rows) buffer.appendAudit(toWire(row));
     }
 
     if (cmdOpts.tail) {
@@ -458,7 +447,7 @@ export function eavesdropAction(
         process.exit(1);
         return;
       }
-      await tailTarget(opts, tokenManager, target, tracker);
+      await tailTarget(opts, tokenManager, target, buffer, agentsById);
     }
     tokenManager.stop();
   });

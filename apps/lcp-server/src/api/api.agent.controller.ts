@@ -1,9 +1,9 @@
 import {
-  AgentEvent,
   AgentStatus,
   AuditEvent,
   AuditEventType,
   LcpAgent,
+  WireEvent,
 } from '@lcp/shared';
 import {
   BadRequestException,
@@ -126,7 +126,7 @@ export class AgentController {
   @Sse(':id/events')
   streamEvents(@Param('id') id: UUID): Observable<MessageEvent> {
     const replay$ = defer(() => from(this.replayTerminal(id))).pipe(
-      filter((event): event is AgentEvent => event !== null),
+      filter((event): event is WireEvent => event !== null),
     );
     return merge(replay$, this.agentEvents.observe(id)).pipe(
       map((event) => ({ data: event })),
@@ -134,29 +134,39 @@ export class AgentController {
   }
 
   /**
-   * Synthesizes a terminal {@link AgentEvent} for an agent already in a
-   * terminal state, or null when it is still running / not found. Used to
-   * recover the outcome for clients that subscribe after the turn ended.
+   * Synthesizes a terminal `state_change` {@link WireEvent} for an agent
+   * already in a terminal state, or null when it is still running / not found.
+   * Lets a client that subscribed after the turn ended still recover the
+   * outcome and terminate (`reason:'replay'`, no persisted row).
    */
-  private async replayTerminal(id: UUID): Promise<AgentEvent | null> {
+  private async replayTerminal(id: UUID): Promise<WireEvent | null> {
     const agent = await this.db.getAgent(id);
     if (!agent) return null;
-    const timestamp = new Date().toISOString();
-    if (agent.status === AgentStatus.Completed) {
-      return {
-        timestamp,
-        kind: 'completed',
-        data: { response: agent.output ?? '' },
-      };
-    }
-    if (agent.status === AgentStatus.Failed) {
-      return {
-        timestamp,
-        kind: 'failed',
-        data: { error: agent.output ?? 'Agent failed' },
-      };
-    }
-    return null;
+    const terminal: AgentStatus[] = [
+      AgentStatus.Completed,
+      AgentStatus.Failed,
+      AgentStatus.Cancelled,
+      AgentStatus.Idle,
+    ];
+    if (!terminal.includes(agent.status)) return null;
+    return {
+      type: 'audit',
+      event: {
+        timestamp: new Date().toISOString(),
+        companyId: agent.companyId,
+        role: '',
+        agentId: id,
+        assignmentId: agent.assignmentId ?? null,
+        taskId: null,
+        eventType: AuditEventType.StateChange,
+        payload: {
+          entity: 'agent',
+          newStatus: agent.status,
+          response: agent.output ?? '',
+          reason: 'replay',
+        },
+      },
+    };
   }
 
   /**

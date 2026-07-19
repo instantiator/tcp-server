@@ -6,25 +6,17 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { AuditEventType } from '../models/AuditEvent.model';
 import type { LcpAgent } from '../models/LcpAgent.model';
 import type { LcpRole } from '../models/LcpRole.model';
-import type { AgentEvent } from '../events/agent-events';
 import { ContextBudgetService } from './context-budget.service';
 import { ContextCompactorService } from './context-compactor.service';
 import { IncomingDataGuardService } from './incoming-data-guard.service';
 import type { CompactionReport, CompactionSnapshot } from './context.types';
 
 /**
- * Minimal event-emission dependency, satisfied structurally by lcp-server's
- * `AgentEventService.emit` and (via a thin adapter) lcp-agent's
- * `AgentEventPublisherService.publish`. Provide via {@link CONTEXT_EVENT_SINK}.
- */
-export interface ContextEventSink {
-  emit(agentId: string, event: AgentEvent): void;
-}
-
-/**
  * Minimal audit-recording dependency, satisfied structurally by lcp-server's
  * `AuditService.record` and lcp-agent's `AuditClientService.record`. Provide
- * via {@link CONTEXT_AUDIT_SINK}.
+ * via {@link CONTEXT_AUDIT_SINK}. Compaction rows written through this are
+ * streamed live by the server's persist-then-publish path — context
+ * management no longer emits SSE events itself.
  */
 export interface ContextAuditSink {
   record(
@@ -36,8 +28,6 @@ export interface ContextAuditSink {
   ): void | Promise<void>;
 }
 
-/** DI token for the {@link ContextEventSink}. */
-export const CONTEXT_EVENT_SINK = Symbol('CONTEXT_EVENT_SINK');
 /** DI token for the {@link ContextAuditSink}. */
 export const CONTEXT_AUDIT_SINK = Symbol('CONTEXT_AUDIT_SINK');
 
@@ -82,7 +72,8 @@ export interface PrepareResult {
  *    {@link ContextCompactorService} and writes the result back to the
  *    checkpoint using `graph.updateState()`.
  * 4. If still over budget, runs Tier-2 (LLM summarisation) on oversized messages.
- * 5. Emits {@link AgentEvent}s and writes audit rows before and after compaction.
+ * 5. Writes `compaction` audit rows before and after compaction (streamed
+ *    live by the server's persist-then-publish path).
  *
  * When no compaction is needed the method returns immediately with no side effects.
  */
@@ -94,7 +85,6 @@ export class ContextManagerService {
     private readonly budget: ContextBudgetService,
     private readonly compactor: ContextCompactorService,
     private readonly guard: IncomingDataGuardService,
-    @Inject(CONTEXT_EVENT_SINK) private readonly events: ContextEventSink,
     @Inject(CONTEXT_AUDIT_SINK) private readonly auditSink: ContextAuditSink,
   ) {}
 
@@ -191,23 +181,15 @@ export class ContextManagerService {
     this.logger.warn(
       `Agent ${agentId}: context at ${this.budget.pct(totalTokens, windowSize)}% (${totalTokens}/${windowSize}) — compacting`,
     );
-    this.events.emit(agentId, {
-      kind: 'compaction_started',
-      timestamp: new Date().toISOString(),
-      data: {
-        tokensBefore: totalTokens,
-        windowSize,
-        pct: this.budget.pct(totalTokens, windowSize),
-        strategies: [],
-      },
-    });
+    // One write, streamed live by the server's persist-then-publish path — no
+    // separate SSE emit (`docs/prompts/010.5.1` A.4).
     await this.auditSink.record(
       agent.companyId,
       role.name,
       agent.id,
-      AuditEventType.Decision,
+      AuditEventType.Compaction,
       {
-        event: 'compaction_triggered',
+        phase: 'started',
         tokensBefore: totalTokens,
         windowSize,
         pct: this.budget.pct(totalTokens, windowSize),
@@ -280,27 +262,18 @@ export class ContextManagerService {
       }
     }
 
-    this.events.emit(agentId, {
-      kind: 'compaction_complete',
-      timestamp: new Date().toISOString(),
-      data: {
-        tokensAfter,
-        windowSize,
-        pctAfter: this.budget.pct(tokensAfter, windowSize),
-        durationMs: Date.now() - startMs,
-        activities,
-      },
-    });
     await this.auditSink.record(
       agent.companyId,
       role.name,
       agent.id,
-      AuditEventType.Decision,
+      AuditEventType.Compaction,
       {
-        event: 'compaction_complete',
+        phase: 'complete',
+        strategies,
+        tokensBefore,
         tokensAfter,
         windowSize,
-        pctAfter: this.budget.pct(tokensAfter, windowSize),
+        pct: this.budget.pct(tokensAfter, windowSize),
         durationMs: Date.now() - startMs,
         activities,
       },

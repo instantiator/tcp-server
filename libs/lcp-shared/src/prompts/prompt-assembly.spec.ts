@@ -71,7 +71,7 @@ describe('buildAssignmentMessage', () => {
     expect(msg).toBe(MODE_PROMPTS.chat);
   });
 
-  it('lists materials — resolved storage key for paths, literal for inline-text', () => {
+  it('lists materials — bare filename for paths (never a resolved storage key), literal for inline-text', () => {
     const msg = buildAssignmentMessage(
       {
         mode: 'implement',
@@ -86,12 +86,13 @@ describe('buildAssignmentMessage', () => {
       strings,
     );
     expect(msg).toContain(strings.assignment_materials_header);
-    // Orphan working path resolves to {companySlug}/assignments/{id}/working/{file}.
-    expect(msg).toContain('- acme/assignments/assign-1/working/notes.md');
+    expect(msg).toContain('- notes.md');
     expect(msg).toContain('- remember the deadline');
+    // Never the resolved storage key — that's the bug this guards against.
+    expect(msg).not.toContain('acme/assignments/assign-1/working/notes.md');
   });
 
-  it('lists expected outputs', () => {
+  it('lists expected outputs as bare filenames', () => {
     const msg = buildAssignmentMessage(
       {
         mode: 'implement',
@@ -103,7 +104,8 @@ describe('buildAssignmentMessage', () => {
       strings,
     );
     expect(msg).toContain(strings.assignment_expected_header);
-    expect(msg).toContain('- acme/assignments/assign-1/working/report.md');
+    expect(msg).toContain('- report.md');
+    expect(msg).not.toContain('acme/assignments/assign-1/working/report.md');
   });
 
   it('omits both lists when there are no materials or expectations', () => {

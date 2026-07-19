@@ -1,9 +1,11 @@
+import { analyzeCsv } from './analyze-csv';
 import { analyzeFallback } from './analyze-fallback';
 import { analyzeJson } from './analyze-json';
 import { analyzeMarkdown } from './analyze-markdown';
 import { analyzeTypescript } from './analyze-typescript';
 import { analyzeYaml } from './analyze-yaml';
 
+export { analyzeCsv } from './analyze-csv';
 export { analyzeJson } from './analyze-json';
 export { analyzeMarkdown } from './analyze-markdown';
 export { analyzeYaml } from './analyze-yaml';
@@ -48,6 +50,7 @@ export function analyzeContent(
   if (ext === '.json' || ext === '.jsonc')
     return analyzeJson(base, content, ext);
   if (ext === '.md' || ext === '.mdx') return analyzeMarkdown(base, content);
+  if (ext === '.csv') return analyzeCsv(base, content);
   if (ext === '.yaml' || ext === '.yml') return analyzeYaml(base, content);
   if (ext === '.ts' || ext === '.js' || ext === '.mjs')
     return analyzeTypescript(base, content);

@@ -192,7 +192,7 @@ export async function runSupervisedGraph(
               lastAiMessage,
               terminalStatus: null,
               aborted: true,
-              failureReason: 'max_iterations',
+              failureReason: `exceeded ${hooks.maxIterations} iterations`,
             };
           }
         }

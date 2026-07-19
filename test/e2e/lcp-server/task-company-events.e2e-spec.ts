@@ -1,9 +1,4 @@
-import {
-  LcpCompany,
-  LcpTask,
-  type CompanyEvent,
-  type TaskEvent,
-} from '@lcp/shared';
+import { LcpCompany, LcpTask, type WireEvent } from '@lcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -82,13 +77,13 @@ describe('Company/Task SSE events (e2e)', () => {
     const task = await createTask(company.id);
     const authHeaders = { Authorization: `Bearer ${jwt}` };
 
-    const taskEvents$ = consumeSse<TaskEvent>(
+    const taskEvents$ = consumeSse<WireEvent>(
       app,
       `/api/task/${task.id}/events`,
       authHeaders,
       2,
     );
-    const companyEvents$ = consumeSse<CompanyEvent>(
+    const companyEvents$ = consumeSse<WireEvent>(
       app,
       `/api/company/${company.id}/events`,
       authHeaders,
@@ -110,31 +105,51 @@ describe('Company/Task SSE events (e2e)', () => {
     ]);
 
     // Task stream: primed with the task's current ('ready') state, then the
-    // live 'cancelled' transition.
+    // live 'cancelled' transition — both entity:'task' state_change WireEvents.
     expect(taskEvents).toHaveLength(2);
     expect(taskEvents[0]).toMatchObject({
-      kind: 'task_changed',
-      data: { id: task.id, status: 'ready' },
+      type: 'audit',
+      event: {
+        eventType: 'state_change',
+        payload: { entity: 'task', summary: { id: task.id, status: 'ready' } },
+      },
     });
     expect(taskEvents[1]).toMatchObject({
-      kind: 'task_changed',
-      data: { id: task.id, status: 'cancelled' },
+      type: 'audit',
+      event: {
+        eventType: 'state_change',
+        payload: {
+          entity: 'task',
+          newStatus: 'cancelled',
+          summary: { id: task.id, status: 'cancelled' },
+        },
+      },
     });
 
-    // Company stream: primed with a company_changed signal + the task's
-    // current state, then the live transition.
+    // Company stream: primed with a company signal + the task's current state,
+    // then the live transition — all state_change WireEvents.
     expect(companyEvents).toHaveLength(3);
     expect(companyEvents[0]).toMatchObject({
-      kind: 'company_changed',
-      data: { companyId: company.id },
+      type: 'audit',
+      event: { eventType: 'state_change', payload: { entity: 'company' } },
     });
     expect(companyEvents[1]).toMatchObject({
-      kind: 'task_changed',
-      data: { id: task.id, status: 'ready' },
+      type: 'audit',
+      event: {
+        eventType: 'state_change',
+        payload: { entity: 'task', summary: { id: task.id, status: 'ready' } },
+      },
     });
     expect(companyEvents[2]).toMatchObject({
-      kind: 'task_changed',
-      data: { id: task.id, status: 'cancelled' },
+      type: 'audit',
+      event: {
+        eventType: 'state_change',
+        payload: {
+          entity: 'task',
+          newStatus: 'cancelled',
+          summary: { id: task.id, status: 'cancelled' },
+        },
+      },
     });
   }, 15000);
 

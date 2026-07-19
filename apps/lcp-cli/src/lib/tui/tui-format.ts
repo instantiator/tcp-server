@@ -4,12 +4,6 @@
 // unit-tested without a live terminal-kit screen.
 
 import type { TaskChangeSummary } from '@lcp/shared';
-import {
-  ASSIGNMENT_COMPLETE_LABEL,
-  isBlankText,
-  parseClockTime,
-} from '../core/agent-log-format';
-import { SseEvent } from '../core/sse';
 import { wrapText } from '../core/text-wrap';
 import {
   ListEntry,
@@ -24,20 +18,6 @@ import {
 // dependency) so eavesdrop and render.ts can share it too.
 export { wrapText } from '../core/text-wrap';
 
-/** Placeholder shown in place of a whitespace-only or empty response — matches `render.ts`. */
-const BLANK_RESPONSE_MARKER = '(blank)';
-
-/** Reads a string field from an event's data payload, defaulting to ''. */
-function str(data: Record<string, unknown> | undefined, key: string): string {
-  const value = data?.[key];
-  return typeof value === 'string' ? value : '';
-}
-
-/** hh:mm:ss from an event's timestamp, or from now if absent/invalid. */
-function clockTime(timestamp: string | undefined): string {
-  return parseClockTime(timestamp) ?? new Date().toTimeString().slice(0, 8);
-}
-
 /**
  * Escapes a literal `^` so it survives markup-enabled rendering unchanged.
  * terminal-kit's caret markup (`^K` grey, `^+` bold, `^:` reset, etc. — see
@@ -50,167 +30,6 @@ function clockTime(timestamp: string | undefined): string {
  */
 export function escapeMarkup(text: string): string {
   return text.replace(/\^/g, '^^');
-}
-
-/** One logical block of pane content — a discrete event or a streamed delta. */
-export interface PaneEntry {
-  style: 'discrete' | 'reasoning' | 'response' | 'user';
-  time: string;
-  /** Event kind/label shown in the middle column; unused for 'reasoning'. */
-  label?: string;
-  /** Raw, unwrapped accumulated text. */
-  text: string;
-}
-
-/**
- * Accumulates {@link SseEvent}s into {@link PaneEntry} blocks for one pane and
- * renders them to fixed-width display lines on demand. Consecutive deltas of
- * the same kind (reasoning or response) extend the same entry; anything else
- * starts a new one — this is what makes rendering insert a blank line only
- * between entries, never within one, matching the discrete/reasoning/response
- * blank-line rules by construction.
- */
-export class PaneEntryLog {
-  private entries: PaneEntry[] = [];
-
-  constructor(private readonly hideReasoning: boolean) {}
-
-  /** Appends one event, creating or extending an entry as appropriate. */
-  append(event: SseEvent): void {
-    const time = clockTime(event.timestamp);
-    const data = event.data;
-    switch (event.kind) {
-      case 'agent_status': {
-        const status = str(data, 'status');
-        const reason = str(data, 'reason');
-        const text = reason ? `${status} (${reason})` : status;
-        this.pushDiscrete(time, 'agent_status', text);
-        break;
-      }
-      case 'consultation_started': {
-        const roleName = str(data, 'roleName');
-        this.pushDiscrete(
-          time,
-          'consultation_started',
-          `consulting ${roleName}`,
-        );
-        break;
-      }
-      case 'llm': {
-        const activity = str(data, 'activity');
-        const tool = str(data, 'tool');
-        const text = tool ? `${activity}: ${tool}` : activity;
-        this.pushDiscrete(time, 'llm', text);
-        break;
-      }
-      case 'compaction_started':
-      case 'compaction_complete': {
-        this.pushDiscrete(time, event.kind, this.formatCompaction(event));
-        break;
-      }
-      case 'agent_loop_completion': {
-        this.pushDiscrete(
-          time,
-          ASSIGNMENT_COMPLETE_LABEL,
-          str(data, 'summary'),
-        );
-        break;
-      }
-      case 'reasoning': {
-        if (this.hideReasoning) break;
-        this.appendDelta('reasoning', time, undefined, str(data, 'delta'));
-        break;
-      }
-      case 'response': {
-        this.appendDelta('response', time, 'response', str(data, 'delta'));
-        break;
-      }
-      default:
-        // Terminal kinds (completed/failed) and unknown kinds are handled by
-        // the caller (e.g. tearing down the pane), not rendered as an entry.
-        break;
-    }
-  }
-
-  /** Appends the user's own submitted message as a distinctly-styled entry. */
-  pushUserPrompt(text: string): void {
-    this.entries.push({ style: 'user', time: clockTime(undefined), text });
-  }
-
-  private formatCompaction(event: SseEvent): string {
-    const d = event.data ?? {};
-    const num = (v: unknown) => (typeof v === 'number' ? v : '?');
-    if (event.kind === 'compaction_started') {
-      const strats = Array.isArray(d.strategies)
-        ? (d.strategies as string[]).join(', ')
-        : '';
-      return `compacting: strategies=[${strats}], ${num(d.tokensBefore)}/${num(d.windowSize)} tokens (${num(d.pct)}%)`;
-    }
-    return `compacted: ${num(d.tokensAfter)}/${num(d.windowSize)} tokens (${num(d.pctAfter)}%)`;
-  }
-
-  private pushDiscrete(time: string, label: string, text: string): void {
-    this.entries.push({ style: 'discrete', time, label, text });
-  }
-
-  private appendDelta(
-    style: 'reasoning' | 'response',
-    time: string,
-    label: string | undefined,
-    delta: string,
-  ): void {
-    const last = this.entries[this.entries.length - 1];
-    if (last && last.style === style) {
-      last.text += delta;
-      return;
-    }
-    this.entries.push({ style, time, label, text: delta });
-  }
-
-  /** Renders all entries to display lines at the given column width. */
-  render(width: number): string[] {
-    const lines: string[] = [];
-    this.entries.forEach((entry, i) => {
-      if (i > 0) lines.push('');
-      lines.push(...this.renderEntry(entry, width));
-    });
-    return lines;
-  }
-
-  private renderEntry(entry: PaneEntry, width: number): string[] {
-    if (entry.style === 'reasoning') {
-      // Grey (^K), reset (^:) per line — independent per line rather than
-      // one span across the whole block, so colour can't leak past a line
-      // that gets dropped or reordered.
-      return wrapText(entry.text, Math.max(width - 2, 1)).map(
-        (line) => `^K  ${escapeMarkup(line)}^:`,
-      );
-    }
-    if (entry.style === 'user') {
-      // Bright green (^G), reset (^:) per line — a distinct indicator/colour
-      // for the user's own submitted message, same header shape as a
-      // discrete entry.
-      const header = `${entry.time} | you | `;
-      const wrapped = wrapText(entry.text, Math.max(width - header.length, 1));
-      return wrapped.map((line, i) =>
-        i === 0
-          ? `^G${header}${escapeMarkup(line)}^:`
-          : `^G${escapeMarkup(line)}^:`,
-      );
-    }
-    const bodyText =
-      entry.style === 'response' && isBlankText(entry.text)
-        ? BLANK_RESPONSE_MARKER
-        : entry.text;
-    const header = `${entry.time} | ${entry.label} | `;
-    // Continuation lines wrap at the same reduced width as the header line
-    // rather than the full pane width — narrower than strictly necessary, but
-    // keeps wrapping a single pass over the text instead of two.
-    const wrapped = wrapText(bodyText, Math.max(width - header.length, 1));
-    return wrapped.map((line, i) =>
-      i === 0 ? header + escapeMarkup(line) : escapeMarkup(line),
-    );
-  }
 }
 
 /** The `>` marker rendered for a selected row, in inverse video (`^!`/`^:`) — the
@@ -388,7 +207,11 @@ export function renderAssignmentPaneHeading(
     ? `${escapeMarkup(roleName)} (${escapeMarkup(roleSlug)})`
     : escapeMarkup(roleName);
   const statusLine = assignment
-    ? `${statusColor(assignment.status)}${escapeMarkup(assignment.status)}^:`
+    ? `${statusColor(assignment.status)}${escapeMarkup(assignment.status)}^:${
+        assignment.status === 'failed' && assignment.failureReason
+          ? ` (${escapeMarkup(assignment.failureReason)})`
+          : ''
+      }`
     : '—';
   const promptPrefix = headingField('Prompt:', '');
   const wrapped = wrapText(
@@ -449,16 +272,20 @@ export interface AssignmentRow {
    */
   index: number;
   role: string;
+  /** The assignment's mode (`plan`/`implement`/`qa`/`finalise` etc.), shown before the status as `(mode: status)`. */
+  mode: string;
   status: string;
   prompt: string;
   /** The assignment's working agent, once dispatched — null before it begins. */
   agentId: string | null;
+  /** Why the assignment failed — set only when `status` is `failed`. */
+  failureReason: string | null;
 }
 
 /**
- * Renders one task-panel assignment row: `n. <role> (<status>) "<prompt>"`,
- * truncated with an ellipsis when not highlighted; word-wrapped up to
- * `maxLines` (with spacing) when highlighted — mirroring
+ * Renders one task-panel assignment row: `n. <role> (<mode>: <status>)
+ * "<prompt>"`, truncated with an ellipsis when not highlighted; word-wrapped
+ * up to `maxLines` (with spacing) when highlighted — mirroring
  * {@link renderTaskListEntry}'s truncate/expand behaviour. The status word is
  * colourised via {@link statusColor} without perturbing the width budget (the
  * budget is computed from the plain, uncoloured meta text).
@@ -471,8 +298,12 @@ export function renderAssignmentListEntry(
 ): string[] {
   const w = Math.max(width, 1);
   const mark = marker(selected);
-  const plainMeta = `${row.index}. ${row.role} (${row.status})`;
-  const colouredMeta = `${row.index}. ${escapeMarkup(row.role)} (${statusColor(row.status)}${escapeMarkup(row.status)}^:)`;
+  const reasonSuffix =
+    row.status === 'failed' && row.failureReason
+      ? ` — ${row.failureReason}`
+      : '';
+  const plainMeta = `${row.index}. ${row.role} (${row.mode}: ${row.status}${reasonSuffix})`;
+  const colouredMeta = `${row.index}. ${escapeMarkup(row.role)} (${escapeMarkup(row.mode)}: ${statusColor(row.status)}${escapeMarkup(row.status)}^:${escapeMarkup(reasonSuffix)})`;
   // Budget for the prompt text: total width minus the marker, the (plain,
   // uncoloured) meta, a separating space, and the two quote characters.
   const promptBudget = Math.max(w - mark.length - plainMeta.length - 3, 0);

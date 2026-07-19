@@ -54,7 +54,7 @@
 // Ctrl+W closes the active tab (any pane except the roster, which is
 // permanent); see handleKey and onCloseTab.
 
-import type { TaskChangeSummary } from '@lcp/shared';
+import type { TaskChangeSummary, WireEvent } from '@lcp/shared';
 import {
   Document,
   InlineInput,
@@ -62,7 +62,6 @@ import {
   terminal as sharedTerminal,
 } from 'terminal-kit';
 import { Renderer } from '../core/render';
-import { SseEvent } from '../core/sse';
 import { escapeMarkup } from './tui-format';
 import {
   AssignmentPane,
@@ -667,19 +666,24 @@ export class Tui {
     this.refresh();
   }
 
-  /** Appends one SSE event to the named pane and redraws it if active. */
-  appendEvent(paneId: string, event: SseEvent): void {
+  /** Appends one wire event to the named pane and redraws it if active. */
+  appendEvent(paneId: string, event: WireEvent): void {
     const pane = this.panes.get(paneId);
     if (!(pane instanceof AssignmentPane)) return;
     pane.appendEvent(event);
     if (this.manager.activePane?.id === paneId) this.redrawActivePane();
   }
 
-  /** Appends the user's own submitted message to the named pane and redraws it if active. */
-  appendUserPrompt(paneId: string, text: string): void {
+  /**
+   * Shows a transient error banner on a pane with no event log of its own
+   * (roster/task/initiate-task) — redraws it if active. An AssignmentPane's
+   * errors go through {@link appendEvent} instead, into its own log, so this
+   * is a no-op there.
+   */
+  showPaneError(paneId: string, message: string): void {
     const pane = this.panes.get(paneId);
-    if (!(pane instanceof AssignmentPane)) return;
-    pane.appendUserPrompt(text);
+    if (!pane || pane instanceof AssignmentPane) return;
+    pane.errorMessage = message;
     if (this.manager.activePane?.id === paneId) this.redrawActivePane();
   }
 
@@ -1213,19 +1217,18 @@ export function installCrashSafetyNet(tui: Tui): () => void {
 export function tuiRenderer(tui: Tui, paneId: string): Renderer {
   let responseSeen = false;
   return {
-    render(event: SseEvent): void {
-      if (event.kind === 'response') responseSeen = true;
+    render(event: WireEvent): void {
+      if (event.type === 'stream' && event.channel === 'response') {
+        responseSeen = true;
+      }
       tui.appendEvent(paneId, event);
     },
     get responseSeen() {
       return responseSeen;
     },
     finish(): void {
-      // Panes have no open-block state to flush; SSE-driven redraws already
+      // Panes have no open-block state to flush; event-driven redraws already
       // reflect the latest content.
-    },
-    renderUserPrompt(text: string): void {
-      tui.appendUserPrompt(paneId, text);
     },
   };
 }

@@ -18,7 +18,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { UUID } from 'crypto';
 import type { Request, Response } from 'express';
-import { CompanyEvent, LcpCompany, LcpRole } from '@lcp/shared';
+import { AuditEventType, LcpCompany, LcpRole, WireEvent } from '@lcp/shared';
 import { defer, from, merge, mergeMap, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { DbService } from '../db/db.service';
@@ -228,22 +228,53 @@ export class CompanyController {
    * Resolves `id` once, then merges the priming events with the live
    * {@link CompanyEventService} observable for the resolved company UUID.
    */
-  private async buildCompanyStream(
-    id: string,
-  ): Promise<Observable<CompanyEvent>> {
+  private async buildCompanyStream(id: string): Promise<Observable<WireEvent>> {
     const company = await this.resolveCompanyOrThrow(id);
     const primed = await this.primeCompanyEvents(company.id);
     return merge(from(primed), this.companyEvents.observe(company.id));
   }
 
-  /** Builds the priming events for {@link buildCompanyStream}: the company signal, then each task's current summary. */
-  private async primeCompanyEvents(companyId: UUID): Promise<CompanyEvent[]> {
+  /**
+   * Builds the priming {@link WireEvent}s for {@link buildCompanyStream}: the
+   * company signal, then each task's current summary — synthesized
+   * `state_change` rows (`reason:'replay'`) matching the live path's shapes.
+   */
+  private async primeCompanyEvents(companyId: UUID): Promise<WireEvent[]> {
     const timestamp = new Date().toISOString();
     const taskSummaries = await this.tasks.listChangeSummaries(companyId);
     return [
-      { timestamp, kind: 'company_changed', data: { companyId } },
+      {
+        type: 'audit',
+        event: {
+          timestamp,
+          companyId,
+          role: 'system',
+          agentId: null,
+          assignmentId: null,
+          taskId: null,
+          eventType: AuditEventType.StateChange,
+          payload: { entity: 'company', reason: 'replay' },
+        },
+      },
       ...taskSummaries.map(
-        (data): CompanyEvent => ({ timestamp, kind: 'task_changed', data }),
+        (summary): WireEvent => ({
+          type: 'audit',
+          event: {
+            timestamp,
+            companyId,
+            role: 'orchestrator',
+            agentId: null,
+            assignmentId: null,
+            taskId: summary.id,
+            eventType: AuditEventType.StateChange,
+            payload: {
+              entity: 'task',
+              newStatus: summary.status,
+              reason: 'replay',
+              summary,
+            },
+          },
+        }),
       ),
     ];
   }

@@ -76,6 +76,9 @@ describe('eavesdropAction', () => {
       return true;
     });
     fetchSpy = jest.spyOn(global, 'fetch');
+    // Terminal shape (process.stdout.isTTY/.columns, which eavesdropAction
+    // reads to pick a style and wrap width) is forced to a fixed value for
+    // every test — see test/unit-test-setup.ts.
   });
 
   afterEach(() => {
@@ -151,9 +154,10 @@ describe('eavesdropAction', () => {
       expect(text).toContain('running (started)');
       // Fixed header label, not the payload's own leading line as the header.
       expect(text).toContain('assignment complete | Wrote the report');
-      // The heading block, printed once for the one agent in this history.
-      expect(text).toContain('Assignment id: assignment-1');
-      expect(text).toContain('Agent role slug: implementer');
+      // The scope heading block, printed once for the one agent in this history.
+      expect(text).toMatch(/Assignment id:\s+assignment-1/);
+      expect(text).toMatch(/Assignment role:\s+Implementer \(implementer\)/);
+      expect(text).toMatch(/Agent id:\s+agent-1/);
     });
 
     it('for --assignment-id with no dispatched agent, prints nothing (no history call)', async () => {
@@ -262,8 +266,8 @@ describe('eavesdropAction', () => {
         })
         .mockResolvedValueOnce(ROLE);
       const sse =
-        'data: {"kind":"response","data":{"delta":"Hello"},"timestamp":"t"}\n\n' +
-        'data: {"kind":"completed","data":{"response":"Hello"},"timestamp":"t"}\n\n';
+        'data: {"type":"stream","agentId":"agent-1","channel":"response","delta":"Hello","timestamp":"t"}\n\n' +
+        'data: {"type":"audit","event":{"agentId":"agent-1","eventType":"state_change","payload":{"entity":"agent","newStatus":"idle","response":"Hello"},"timestamp":"t"}}\n\n';
       fetchSpy.mockResolvedValue(fakeSseResponse(sse));
 
       await eavesdropAction(opts, { agentId: 'agent-1', tail: true });
@@ -274,8 +278,10 @@ describe('eavesdropAction', () => {
           headers: { Authorization: 'Bearer token' },
         }),
       );
-      // Short-id + role-slug prefix, not the full agent UUID.
-      expect(writes.join('')).toContain('agent-1 (implementer)');
+      const out = writes.join('');
+      // The streamed response, and the scope heading identifying the agent.
+      expect(out).toContain('Hello');
+      expect(out).toMatch(/Agent id:\s+agent-1/);
     });
 
     it('picks up a new assignment appearing on the task after an SSE assignment_changed event', async () => {
@@ -296,9 +302,9 @@ describe('eavesdropAction', () => {
         .mockResolvedValueOnce(ROLE);
 
       const agent2Sse =
-        'data: {"kind":"completed","data":{"response":"done"},"timestamp":"t"}\n\n';
+        'data: {"type":"audit","event":{"eventType":"state_change","payload":{"entity":"agent","newStatus":"idle","response":"done"},"timestamp":"t"}}\n\n';
       const taskEventsSse =
-        'data: {"kind":"assignment_changed","data":{"id":"assignment-2","status":"in-progress"},"timestamp":"t"}\n\n';
+        'data: {"type":"audit","event":{"assignmentId":"assignment-2","eventType":"state_change","payload":{"entity":"assignment","summary":{"id":"assignment-2","status":"in-progress"}},"timestamp":"t"}}\n\n';
 
       fetchSpy.mockImplementation((url: string) => {
         if (url.endsWith('/api/agent/agent-2/events')) {

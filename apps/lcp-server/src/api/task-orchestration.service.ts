@@ -1,6 +1,5 @@
 import {
   AgentStatus,
-  ArtifactResolutionContext,
   assignmentCompletedKey,
   assignmentCompletedPrefix,
   assignmentWorkingKey,
@@ -32,8 +31,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import type { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
-import { CompanyEventService } from '../events/company-event.service';
-import { TaskEventService } from '../events/task-event.service';
 import { StorageService } from '../storage/storage.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { claimStatus } from './claim-status';
@@ -80,8 +77,6 @@ export class TaskOrchestrationService
     private readonly storage: StorageService,
     private readonly audit: AuditService,
     private readonly config: ConfigService,
-    private readonly companyEvents: CompanyEventService,
-    private readonly taskEvents: TaskEventService,
   ) {
     super();
   }
@@ -175,19 +170,6 @@ export class TaskOrchestrationService
     });
     if (live) return;
 
-    const resolutionContext: ArtifactResolutionContext = {
-      companySlug: await this.companySlug(assignment.companyId),
-      task: assignment.taskId ? { id: assignment.taskId } : null,
-      planAssignments: assignment.taskId
-        ? await this.planAssignments(assignment.taskId)
-        : undefined,
-      assignment: {
-        id: assignment.id,
-        taskId: assignment.taskId,
-        orderIndex: assignment.orderIndex,
-      },
-    };
-
     const qa = await this.assignmentRepo.save(
       this.assignmentRepo.create({
         taskId: assignment.taskId,
@@ -197,7 +179,7 @@ export class TaskOrchestrationService
         targetAssignmentId: assignment.id,
         roleId: assignment.roleId,
         status: 'in-progress',
-        prompt: renderQaPresentation(assignment, resolutionContext),
+        prompt: renderQaPresentation(assignment),
         materials: assignment.materials,
         expected: [],
       }),
@@ -359,10 +341,11 @@ export class TaskOrchestrationService
     const max = await this.resolveMaxQaAttempts(target);
 
     if (nextAttempts >= max) {
+      const failureReason = 'did not pass QA';
       const claimed = await this.assignmentRepo
         .createQueryBuilder()
         .update(LcpAssignment)
-        .set({ status: 'failed', qaAttempts: nextAttempts })
+        .set({ status: 'failed', qaAttempts: nextAttempts, failureReason })
         .where('id = :id', { id: target.id })
         .andWhere('status = :inQa', { inQa: 'in-qa' })
         .execute();
@@ -370,6 +353,7 @@ export class TaskOrchestrationService
 
       // Reflect the claimed DB update in-memory (see acceptAssignment's note).
       target.status = 'failed';
+      target.failureReason = failureReason;
       await this.recordAssignmentState(
         target,
         'assignment failed (QA exhausted)',
@@ -629,13 +613,31 @@ export class TaskOrchestrationService
     if (!assignment?.taskId) return;
 
     if (assignment.mode === 'plan') {
+      const claimed = await this.transitionAssignment(
+        assignment,
+        'in-progress',
+        'failed',
+        'assignment failed (agent failed)',
+        reason,
+      );
+      if (!claimed) return;
       await this.failTask(assignment.taskId, `planner failed: ${reason}`);
       return;
     }
 
     // finalise-mode: the task fails, but the files it already promoted stay —
-    // record `completed` from the completed/ directory before failing.
+    // record `completed` from the completed/ directory before failing. The
+    // finalise assignment itself must transition `in-progress → failed` too,
+    // or it's left stuck `in-progress` while its task reads `failed`.
     if (assignment.mode === 'finalise') {
+      const claimed = await this.transitionAssignment(
+        assignment,
+        'in-progress',
+        'failed',
+        'assignment failed (agent failed)',
+        reason,
+      );
+      if (!claimed) return;
       const task = await this.taskRepo.findOneBy({ id: assignment.taskId });
       if (task) {
         const completed = await this.buildTaskCompleted(task);
@@ -651,6 +653,7 @@ export class TaskOrchestrationService
         'in-progress',
         'failed',
         'assignment failed (agent failed)',
+        reason,
       );
       if (!claimed) return;
       await this.failTask(
@@ -660,7 +663,11 @@ export class TaskOrchestrationService
       return;
     }
 
-    // qa-mode: a failed QA agent fails the assignment it was reviewing.
+    // qa-mode: a failed QA agent fails the assignment it was reviewing, its
+    // own qa assignment, and the task. The target's `in-qa → failed` claim is
+    // the gate: if the target is no longer in-qa (a concurrent QA accept won
+    // the race), this is a no-op — nothing is failed, matching that the
+    // reviewed assignment already passed.
     // ponytail: no QA-retry — a failed QA agent fails the task; re-dispatching
     // QA once is the upgrade path if this proves noisy.
     if (assignment.mode === 'qa' && assignment.targetAssignmentId) {
@@ -669,8 +676,18 @@ export class TaskOrchestrationService
         assignment.targetAssignmentId,
         'in-qa',
         'failed',
+        {
+          failureReason: `QA agent failed before completing review: ${reason}`,
+        },
       );
       if (claimed === 0) return;
+      await this.transitionAssignment(
+        assignment,
+        'in-progress',
+        'failed',
+        'assignment failed (agent failed)',
+        reason,
+      );
       await this.failTask(
         assignment.taskId,
         `QA agent failed for assignment ${assignment.targetAssignmentId}`,
@@ -702,6 +719,22 @@ export class TaskOrchestrationService
 
     const plan = await this.planAssignments(assignment.taskId);
     if (plan.length === 0) {
+      // Producing a plan is the required outcome of plan mode, so a plan-less
+      // completion is a failed assignment — fail it alongside the task, not
+      // just the task. Forced (not a status-gated claim) because create_plan
+      // may have already marked it `succeeded` for an empty plan; either way
+      // it must read `failed`. Idempotent via the `planning` guard above.
+      const failureReason = 'created a plan with 0 assignments';
+      await this.assignmentRepo.update(assignment.id, {
+        status: 'failed',
+        failureReason,
+      });
+      assignment.status = 'failed';
+      assignment.failureReason = failureReason;
+      await this.recordAssignmentState(
+        assignment,
+        'assignment failed (planner produced no plan)',
+      );
       await this.failTask(
         assignment.taskId,
         'planner completed without producing a plan',
@@ -731,6 +764,18 @@ export class TaskOrchestrationService
         agent.status === AgentStatus.Failed ||
         (agent.status === AgentStatus.Completed && plan.length === 0);
       if (plannerDead) {
+        // Fail the plan assignment too (no-op if it isn't in-progress, e.g. a
+        // planner that completed without a plan), so it isn't left stuck
+        // `in-progress` while its task reads `failed`.
+        if (planner) {
+          await this.transitionAssignment(
+            planner,
+            'in-progress',
+            'failed',
+            'assignment failed (agent died before restart)',
+            'agent died before restart',
+          );
+        }
         await this.failTask(task.id, 'planner did not produce a plan');
       }
       return;
@@ -747,6 +792,16 @@ export class TaskOrchestrationService
         ? await this.agentRepo.findOneBy({ id: finalise.agentId })
         : null;
       if (finalise && (!agent || DEAD_AGENT_STATES.includes(agent.status))) {
+        // Fail the finalise assignment too — otherwise it's left stuck
+        // `in-progress` while its task reads `failed` (same as the live
+        // handleAgentFailed path).
+        await this.transitionAssignment(
+          finalise,
+          'in-progress',
+          'failed',
+          'assignment failed (agent died before restart)',
+          'agent died before restart',
+        );
         const completed = await this.buildTaskCompleted(task);
         await this.taskRepo.update(task.id, { completed });
         await this.failTask(task.id, 'finalise agent died before restart');
@@ -941,13 +996,23 @@ export class TaskOrchestrationService
     from: LcpAssignmentStatus,
     to: LcpAssignmentStatus,
     reason: string,
+    failureReason?: string,
   ): Promise<boolean> {
+    const extra =
+      to === 'failed' && failureReason ? { failureReason } : undefined;
     if (
-      (await claimStatus(this.assignmentRepo, assignment.id, from, to)) === 0
+      (await claimStatus(
+        this.assignmentRepo,
+        assignment.id,
+        from,
+        to,
+        extra,
+      )) === 0
     ) {
       return false;
     }
     assignment.status = to;
+    if (extra) assignment.failureReason = extra.failureReason;
     await this.recordAssignmentState(assignment, reason);
     return true;
   }
@@ -1005,30 +1070,22 @@ export class TaskOrchestrationService
     newStatus: LcpTaskStatus,
     reason: string,
   ): Promise<void> {
-    await this.audit.record(
-      task.companyId,
-      'orchestrator',
-      null,
-      AuditEventType.StateChange,
-      { taskId: task.id, newStatus, reason },
-    );
-
     const plan = await this.planAssignments(task.id);
     const summary = buildTaskChangeSummary(
       { ...task, status: newStatus },
       plan,
     );
-    const timestamp = new Date().toISOString();
-    this.taskEvents.emit(task.id, {
-      timestamp,
-      kind: 'task_changed',
-      data: summary,
-    });
-    this.companyEvents.emit(task.companyId, {
-      timestamp,
-      kind: 'task_changed',
-      data: summary,
-    });
+    // One write. The publisher routes an `entity:'task'` row to both the task
+    // and company channels (A.6), so no separate SSE emits are needed; the
+    // summary rides in the payload for the summary-level task/company views.
+    await this.audit.record(
+      task.companyId,
+      'orchestrator',
+      null,
+      AuditEventType.StateChange,
+      { entity: 'task', taskId: task.id, newStatus, reason, summary },
+      { taskId: task.id },
+    );
   }
 
   /**
@@ -1041,26 +1098,23 @@ export class TaskOrchestrationService
     reason: string,
     extra?: Record<string, unknown>,
   ): Promise<void> {
+    // One write. An `entity:'assignment'` row with a taskId reaches the task
+    // channel via the publisher (A.6); the summary rides in the payload.
     await this.audit.record(
       assignment.companyId,
       'orchestrator',
       assignment.agentId ?? null,
       AuditEventType.StateChange,
       {
+        entity: 'assignment',
         assignmentId: assignment.id,
         taskId: assignment.taskId ?? null,
         newStatus: assignment.status,
         reason,
+        summary: buildAssignmentChangeSummary(assignment),
         ...extra,
       },
+      { assignmentId: assignment.id, taskId: assignment.taskId ?? null },
     );
-
-    if (assignment.taskId) {
-      this.taskEvents.emit(assignment.taskId, {
-        timestamp: new Date().toISOString(),
-        kind: 'assignment_changed',
-        data: buildAssignmentChangeSummary(assignment),
-      });
-    }
   }
 }

@@ -1,14 +1,16 @@
-import type { LcpAssignment, LcpTask, TaskChangeSummary } from '@lcp/shared';
+import type {
+  AuditWireEvent,
+  LcpAssignment,
+  LcpTask,
+  TaskChangeSummary,
+  WireEvent,
+} from '@lcp/shared';
 import type { UUID } from 'crypto';
 import { GlobalOptions } from '../core/cli-options';
-import {
-  AuditRow,
-  mapAuditHistoryToEvents,
-} from '../core/audit-to-agent-events';
 import { TokenManager, TokenSession } from '../auth/token';
 import { createRenderer, Renderer } from '../core/render';
-import { parseSseBuffer, SseEvent } from '../core/sse';
-import { readSseStream } from '../core/sse-reader';
+import { parseWireEvents } from '../core/sse';
+import { readWireStream } from '../core/sse-reader';
 import {
   AssignmentInfo,
   InitiateTaskSubmission,
@@ -16,6 +18,53 @@ import {
   Tui,
   tuiRenderer,
 } from '../tui/tui';
+
+/** Minimal shape of a history audit row (`GET /api/agent/:id/history`). */
+interface AuditRow {
+  id?: string;
+  timestamp: string;
+  companyId?: string;
+  role?: string;
+  agentId?: string | null;
+  assignmentId?: string | null;
+  taskId?: string | null;
+  eventType: string;
+  payload?: Record<string, unknown>;
+}
+
+/** Converts a persisted history row to the {@link AuditWireEvent} the render buffer consumes. */
+function toWire(row: AuditRow): AuditWireEvent {
+  return {
+    id: row.id,
+    timestamp: row.timestamp,
+    companyId: row.companyId ?? '',
+    role: row.role ?? '',
+    agentId: row.agentId ?? null,
+    assignmentId: row.assignmentId ?? null,
+    taskId: row.taskId ?? null,
+    eventType: row.eventType as AuditWireEvent['eventType'],
+    payload: row.payload ?? {},
+  };
+}
+
+/** Wraps a persisted/synthesized audit row as an `audit` {@link WireEvent}. */
+function auditWire(event: AuditWireEvent): WireEvent {
+  return { type: 'audit', event };
+}
+
+/** A synthetic terminal agent `state_change` (for locally-reported failures). */
+function failedWire(reason: string): WireEvent {
+  return auditWire({
+    timestamp: new Date().toISOString(),
+    companyId: '',
+    role: '',
+    agentId: null,
+    assignmentId: null,
+    taskId: null,
+    eventType: 'state_change',
+    payload: { entity: 'agent', newStatus: 'failed', reason },
+  });
+}
 
 interface AgentRecord {
   id: string;
@@ -50,9 +99,9 @@ type TurnOutcome = { response: string } | { error: string };
 /** Sentinel error signalling the SSE stream ended before a terminal event. */
 const STREAM_ENDED = 'stream ended before completion';
 
-/** Reads a string field from an SSE event's data payload. */
-function eventStr(event: SseEvent, key: string): string {
-  const value = event.data?.[key];
+/** Reads a string field from a record, defaulting to ''. */
+function str(obj: Record<string, unknown> | undefined, key: string): string {
+  const value = obj?.[key];
   return typeof value === 'string' ? value : '';
 }
 
@@ -69,9 +118,9 @@ function planIndexFromShortcode(shortcode: string | null): number | null {
 }
 
 /**
- * Validates and narrows a `task_changed` SSE event's payload into a
+ * Validates and narrows a task `state_change`'s `payload.summary` into a
  * {@link TaskChangeSummary}, rather than trusting/casting it directly —
- * `null` for a payload missing its required fields.
+ * `null` for a summary missing its required fields.
  */
 function parseTaskChangeSummary(
   data: Record<string, unknown> | undefined,
@@ -207,13 +256,17 @@ export class ChatSession {
   watchCompanyEvents(): void {
     this.companyEventsAbort = new AbortController();
     const url = `${this.opts.lcpServer.replace(/\/$/, '')}/api/company/${this.companyId}/events`;
-    void readSseStream(
+    void readWireStream(
       url,
       this.tokenManager.current,
       this.companyEventsAbort.signal,
-      (event) => {
-        if (event.kind !== 'task_changed') return;
-        const summary = parseTaskChangeSummary(event.data);
+      (wire) => {
+        if (wire.type !== 'audit' || wire.event.payload['entity'] !== 'task') {
+          return;
+        }
+        const summary = parseTaskChangeSummary(
+          wire.event.payload['summary'] as Record<string, unknown> | undefined,
+        );
         if (!summary) return;
         this.tasksById.set(summary.id, summary);
         this.tui?.updateRosterTasks(this.companyId, [
@@ -231,11 +284,8 @@ export class ChatSession {
    */
   reportPaneError(paneId: string, err: unknown): void {
     const message = String(err instanceof Error ? err.message : err);
-    this.tui?.appendEvent(paneId, {
-      kind: 'agent_status',
-      timestamp: new Date().toISOString(),
-      data: { status: 'failed', reason: message },
-    });
+    this.tui?.appendEvent(paneId, failedWire(message));
+    this.tui?.showPaneError(paneId, message);
     process.stderr.write(`\nError: ${message}\n`);
   }
 
@@ -268,11 +318,13 @@ export class ChatSession {
           id: a.id,
           role: roleById.get(a.roleId)?.name ?? a.roleId,
           roleSlug: roleById.get(a.roleId)?.slug ?? a.roleId,
+          mode: a.mode,
           status: a.status,
           prompt: a.prompt,
           shortcode,
           planIndex: planIndexFromShortcode(shortcode),
           agentId: a.agentId ?? null,
+          failureReason: a.failureReason ?? null,
         };
       }),
     };
@@ -330,17 +382,19 @@ export class ChatSession {
     const abort = new AbortController();
     this.taskEventsAbort.set(taskId, abort);
     const url = `${this.opts.lcpServer.replace(/\/$/, '')}/api/task/${taskId}/events`;
-    void readSseStream(
+    void readWireStream(
       url,
       this.tokenManager.current,
       abort.signal,
-      (event) => {
-        if (event.kind === 'task_changed') {
-          const status = eventStr(event, 'status');
+      (wire) => {
+        if (wire.type !== 'audit') return;
+        const entity = wire.event.payload['entity'];
+        if (entity === 'task') {
+          const status = str(wire.event.payload, 'newStatus');
           if (status) this.tui?.updateTaskPaneStatus(taskId, status);
           return;
         }
-        if (event.kind !== 'assignment_changed') return;
+        if (entity !== 'assignment') return;
         void this.fetchTaskDetail(taskId)
           .then(({ assignments }) => {
             this.tui?.updateTaskPaneAssignments(taskId, assignments);
@@ -413,9 +467,10 @@ export class ChatSession {
 
   /**
    * Opens (or switches to, if already open) a read-only chat panel for a
-   * begun assignment's working agent: follows its live SSE stream while
-   * still running, or renders its full audit history (mapped into the same
-   * event shapes the live stream produces) once it has finished.
+   * begun assignment's working agent: first renders its audit history up to
+   * now (mapped into the same event shapes the live stream produces), then —
+   * if the agent is still running — follows its live SSE stream for whatever
+   * happens next. A finished agent shows history only; nothing is live.
    */
   async openAssignmentChatPane(assignment: AssignmentInfo): Promise<void> {
     const agentId = assignment.agentId;
@@ -438,26 +493,35 @@ export class ChatSession {
         shortcode: assignment.shortcode,
         status: assignment.status,
         prompt: assignment.prompt,
+        failureReason: assignment.failureReason,
       },
     });
-    if (TERMINAL_AGENT_STATUSES.has(agent.status)) {
-      const rows = await this.tokenManager.request<AuditRow[]>(
-        'GET',
-        `/api/agent/${agentId}/history`,
-      );
-      for (const event of mapAuditHistoryToEvents(rows)) {
-        this.tui?.appendEvent(agentId, event);
-      }
-    } else {
+
+    // History up to now — for a running agent this is everything before the
+    // pane was opened, which the live stream (new events only) would otherwise
+    // miss.
+    const rows = await this.tokenManager.request<AuditRow[]>(
+      'GET',
+      `/api/agent/${agentId}/history`,
+    );
+    for (const row of rows) {
+      this.tui?.appendEvent(agentId, auditWire(toWire(row)));
+    }
+
+    // ...then follow live if it's still going. ponytail: an event landing in
+    // the gap between the history fetch and this subscription can be missed;
+    // acceptable for a read-only observability pane. Tighten (subscribe-then-
+    // fetch-then-dedup) only if that boundary turn ever matters.
+    if (!TERMINAL_AGENT_STATUSES.has(agent.status)) {
       const abort = new AbortController();
       this.assignmentPaneWatchAbort.set(agentId, abort);
       const url = `${this.opts.lcpServer.replace(/\/$/, '')}/api/agent/${agentId}/events`;
-      void readSseStream(
+      void readWireStream(
         url,
         this.tokenManager.current,
         abort.signal,
-        (event) => {
-          this.tui?.appendEvent(agentId, event);
+        (wire) => {
+          this.tui?.appendEvent(agentId, wire);
         },
       );
     }
@@ -556,7 +620,8 @@ export class ChatSession {
         markConnected,
       );
       await connected;
-      renderer.renderUserPrompt(message);
+      // No local echo — the typed message renders from its `input` audit event
+      // as it arrives over the stream (decision 1).
       await this.postMessage(paneId, message, signal);
 
       let outcome = await streamPromise;
@@ -578,9 +643,11 @@ export class ChatSession {
         } else if (!renderer.responseSeen) {
           if (this.tui) {
             this.tui.appendEvent(paneId, {
-              kind: 'response',
+              type: 'stream',
+              agentId: paneId,
+              channel: 'response',
+              delta: outcome.response,
               timestamp: new Date().toISOString(),
-              data: { delta: outcome.response },
             });
           } else {
             const text = outcome.response.trim() ? outcome.response : '(blank)';
@@ -589,11 +656,7 @@ export class ChatSession {
         }
       } else if (outcome.error !== STREAM_ENDED) {
         if (this.tui) {
-          this.tui.appendEvent(paneId, {
-            kind: 'agent_status',
-            timestamp: new Date().toISOString(),
-            data: { status: 'failed', reason: outcome.error },
-          });
+          this.tui.appendEvent(paneId, failedWire(outcome.error));
         } else {
           process.stderr.write(`\n[Error] ${outcome.error}\n`);
         }
@@ -601,11 +664,7 @@ export class ChatSession {
     } catch (err) {
       const message = String(err instanceof Error ? err.message : err);
       if (this.tui) {
-        this.tui.appendEvent(paneId, {
-          kind: 'agent_status',
-          timestamp: new Date().toISOString(),
-          data: { status: 'failed', reason: message },
-        });
+        this.tui.appendEvent(paneId, failedWire(message));
       } else {
         process.stderr.write(`\nError: ${message}\n`);
       }
@@ -648,49 +707,39 @@ export class ChatSession {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        const { events, rest } = parseSseBuffer(buffer);
+        const { events, rest } = parseWireEvents(buffer);
         buffer = rest;
-        for (const event of events) {
-          if (event.kind === 'completed') {
-            outcome = { response: eventStr(event, 'response') };
-            break;
-          }
-          if (event.kind === 'failed') {
-            outcome = { error: eventStr(event, 'error') };
-            break;
-          }
-          if (event.kind === 'consultation_started') {
-            const consultId = eventStr(event, 'agentId');
-            const consultRoleName = eventStr(event, 'roleName');
-            renderer.render(event);
-            if (consultId) {
-              let follower: Renderer;
-              if (this.tui) {
-                this.tui.addPane({
-                  id: consultId,
-                  label: consultRoleName,
-                  talkable: false,
-                });
-                follower = tuiRenderer(this.tui, consultId);
-              } else {
-                follower = createRenderer({
-                  hideReasoning: this.hideReasoning,
-                  rolePrefix: consultRoleName,
-                  out: process.stderr,
-                  err: process.stderr,
-                });
-              }
-              followers.push(
-                this.streamAgent(
-                  consultId,
-                  follower,
-                  followerAbort.signal,
-                ).catch(() => undefined),
+        for (const wire of events) {
+          const agentState =
+            wire.type === 'audit' &&
+            wire.event.eventType === 'state_change' &&
+            wire.event.payload['entity'] === 'agent'
+              ? wire.event.payload
+              : undefined;
+          if (agentState) {
+            const status = str(agentState, 'newStatus');
+            // A consultation pause: render the line, then follow the consulted
+            // agent (keyed on `consultedAgentId`) — not terminal.
+            if (agentState['reason'] === 'consultation') {
+              renderer.render(wire);
+              this.followConsultation(
+                str(agentState, 'consultedAgentId'),
+                str(agentState, 'consultedRoleName'),
+                followerAbort.signal,
+                followers,
               );
+              continue;
             }
-            continue;
+            if (status === 'completed' || status === 'idle') {
+              outcome = { response: str(agentState, 'response') };
+              break;
+            }
+            if (status === 'failed' || status === 'cancelled') {
+              outcome = { error: str(agentState, 'reason') };
+              break;
+            }
           }
-          renderer.render(event);
+          renderer.render(wire);
         }
       }
     } catch (err) {
@@ -707,6 +756,38 @@ export class ChatSession {
       await Promise.allSettled(followers);
     }
     return outcome ?? { error: STREAM_ENDED };
+  }
+
+  /**
+   * Spawns a follower stream for a consulted agent — a new pane (TUI) or a
+   * stderr renderer (piped) — and queues it in `followers`. No-op without a
+   * `consultId`.
+   */
+  private followConsultation(
+    consultId: string,
+    consultRoleName: string,
+    signal: AbortSignal,
+    followers: Promise<unknown>[],
+  ): void {
+    if (!consultId) return;
+    let follower: Renderer;
+    if (this.tui) {
+      this.tui.addPane({
+        id: consultId,
+        label: consultRoleName,
+        talkable: false,
+      });
+      follower = tuiRenderer(this.tui, consultId);
+    } else {
+      follower = createRenderer({
+        hideReasoning: this.hideReasoning,
+        out: process.stderr,
+        err: process.stderr,
+      });
+    }
+    followers.push(
+      this.streamAgent(consultId, follower, signal).catch(() => undefined),
+    );
   }
 
   /** POSTs a message to `paneId`'s agent (expects 202); {@link TokenManager.request} handles a 401 by refreshing and retrying. */

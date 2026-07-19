@@ -146,6 +146,9 @@
     "moduleNameMapper": {
       "@lcp/shared": "<rootDir>/libs/lcp-shared/src/index.ts"
     },
+    "setupFilesAfterEnv": [
+      "<rootDir>/test/unit-test-setup.ts"
+    ],
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],

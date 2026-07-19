@@ -177,6 +177,21 @@ export class KeyedEventBus<E> implements OnModuleDestroy {
     }
   }
 
+  /**
+   * Completes and removes the subject for `key`, and releases any Redis
+   * subscription. Call this when the keyed resource is deleted (e.g. an agent)
+   * to free memory and the channel subscription.
+   */
+  cleanup(key: string): void {
+    const subject = this.subjects.get(key);
+    if (subject) {
+      subject.complete();
+      this.subjects.delete(key);
+    }
+    this.refCounts.delete(key);
+    this.unsubscribeChannel(key);
+  }
+
   /** Completes all open subjects and closes the Redis connections on teardown. */
   async onModuleDestroy(): Promise<void> {
     for (const subject of this.subjects.values()) {

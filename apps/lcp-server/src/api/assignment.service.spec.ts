@@ -368,6 +368,26 @@ describe('AssignmentService', () => {
         { name: 'inline-2', key: null, inlineText: 'second note' },
       ]);
     });
+
+    it('fails the whole scope lookup on an unresolvable material, rather than silently omitting it', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id);
+      const assignment = await seedAssignment({
+        companyId: company.id,
+        roleId: role.id,
+        taskId: task.id,
+        orderIndex: 1,
+        materials: [{ type: 'assignment-completed-path', value: 'draft.md' }],
+      });
+      const agent = await seedAgent(company.id, role.id, assignment.id);
+      db.getCompany.mockResolvedValue({ id: company.id, slug: 'acme' });
+
+      // No earlier implement assignment ever approved 'draft.md'.
+      await expect(
+        service.resolveStorageScope(agent.id),
+      ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    });
   });
 
   // --- planTask -----------------------------------------------------------
@@ -518,6 +538,41 @@ describe('AssignmentService', () => {
       expect(message).toContain(
         'If you still intend to create the plan, try again with corrected values for',
       );
+    });
+
+    it('rejects an assignment-completed-path material naming a file no earlier step promises', async () => {
+      const { task, agent } = await setupPlanner();
+      await expect(
+        service.planTask(task.id, agent.id, [
+          { prompt: 'a', role: 'analyst', expected: [] },
+          {
+            prompt: 'b',
+            role: 'analyst',
+            materials: [
+              { type: 'assignment-completed-path', value: 'draft.md' },
+            ],
+            expected: [],
+          },
+        ]),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('accepts an assignment-completed-path material matching an earlier step’s expected output', async () => {
+      const { task, agent } = await setupPlanner();
+      const result = await service.planTask(task.id, agent.id, [
+        {
+          prompt: 'a',
+          role: 'analyst',
+          expected: [{ type: 'assignment-working-path', value: 'draft.md' }],
+        },
+        {
+          prompt: 'b',
+          role: 'analyst',
+          materials: [{ type: 'assignment-completed-path', value: 'draft.md' }],
+          expected: [],
+        },
+      ]);
+      expect(result.created).toBe(2);
     });
 
     it('409s a double plan (task no longer planning)', async () => {

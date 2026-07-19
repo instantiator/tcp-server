@@ -637,6 +637,19 @@ describe('MinioStorageAdapter', () => {
       expect(summary.keys).toEqual(['a']);
     });
 
+    it('returns format=csv with columns and rowCount for a CSV file', async () => {
+      send.mockImplementation((cmd: unknown) => {
+        if (cmd instanceof HeadObjectCommand)
+          return Promise.resolve({ ContentLength: 20 });
+        return Promise.resolve({ Body: makeReadable('name,age\nAlice,30\n') });
+      });
+      const svc = makeAdapter(makeConfig());
+      const summary = await svc.getFileSummary('acme/report.csv');
+      expect(summary.format).toBe('csv');
+      expect(summary.columns).toEqual(['name', 'age']);
+      expect(summary.rowCount).toBe(1);
+    });
+
     it('throws NotFoundException for a missing file', async () => {
       send.mockRejectedValue(
         Object.assign(new Error('nope'), { name: 'NoSuchKey' }),

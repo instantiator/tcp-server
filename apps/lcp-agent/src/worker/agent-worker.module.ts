@@ -1,19 +1,17 @@
 import {
-  AgentEvent,
   AuditClientService,
   CONTEXT_AUDIT_SINK,
-  CONTEXT_EVENT_SINK,
   ContextBudgetService,
   ContextCompactorService,
   ContextManagerService,
   IncomingDataGuardService,
   LcpAgent,
+  LcpAssignment,
   LcpCompany,
   LcpRole,
 } from '@lcp/shared';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import type { UUID } from 'crypto';
 import { AgentEventPublisherService } from '../agent/agent-event-publisher.service';
 import { AgentLoopService } from '../agent/agent-loop.service';
 import { McpClientModule } from '../mcp/mcp-client.module';
@@ -35,7 +33,7 @@ import { AgentWorkerService } from './agent-worker.service';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([LcpAgent, LcpRole, LcpCompany]),
+    TypeOrmModule.forFeature([LcpAgent, LcpRole, LcpCompany, LcpAssignment]),
     AgentRagModule,
     McpClientModule,
   ],
@@ -49,14 +47,6 @@ import { AgentWorkerService } from './agent-worker.service';
     ContextBudgetService,
     ContextCompactorService,
     IncomingDataGuardService,
-    {
-      provide: CONTEXT_EVENT_SINK,
-      useFactory: (publisher: AgentEventPublisherService) => ({
-        emit: (agentId: string, event: AgentEvent) =>
-          publisher.publish(agentId as UUID, event),
-      }),
-      inject: [AgentEventPublisherService],
-    },
     { provide: CONTEXT_AUDIT_SINK, useExisting: AuditClientService },
     ContextManagerService,
   ],

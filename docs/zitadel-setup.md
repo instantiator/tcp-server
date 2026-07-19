@@ -36,10 +36,14 @@ delegates to) using a machine-user Personal Access Token (PAT):
 ACCESS_TOKEN_TYPE_JWT`, used by the `api` test tier via the `client_credentials`
      grant
 3. Unlike Keycloak, Zitadel generates client secrets server-side — they can't be
-   pre-set. So on first bootstrap, the script writes the generated
-   `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` (for the `lcp-server` app) and
-   `TEST_CLIENT_ID`/`TEST_CLIENT_SECRET` (for the `test-machine` user) back into the env
-   file in place, before starting lcp-server and its dependents.
+   pre-set, and can only be read at generation time. So on **every** run the script
+   (re)generates the `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` (for the `lcp-server` app) and
+   `TEST_CLIENT_ID`/`TEST_CLIENT_SECRET` (for the `test-machine` user) and writes them back
+   into the env file in place, before starting lcp-server and its dependents.
+   Regenerating every run — rather than trusting whatever's in the file — is what keeps the
+   env file and Zitadel from silently drifting apart: a wiped-and-rebootstrapped Zitadel (or
+   an env file bootstrapped against a different instance) otherwise leaves a stale secret
+   that fails auth with an opaque `invalid_client`.
 
 Setting `accessTokenType` explicitly on both the app and the machine user matters:
 Zitadel issues opaque/JWE-encrypted access tokens by default, which lcp-server's

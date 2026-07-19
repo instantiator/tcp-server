@@ -2,8 +2,10 @@ import {
   AuditEvent,
   AuditEventType,
   LcpAgent,
+  LcpAssignment,
   LcpCompany,
   LcpRole,
+  LcpTask,
 } from '@lcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -23,11 +25,14 @@ describe('AuditController (e2e)', () => {
   let companyRepo: Repository<LcpCompany>;
   let roleRepo: Repository<LcpRole>;
   let agentRepo: Repository<LcpAgent>;
+  let assignmentRepo: Repository<LcpAssignment>;
+  let taskRepo: Repository<LcpTask>;
   let auditRepo: Repository<AuditEvent>;
   let auditService: AuditService;
   let jwt: string;
   let companyId: UUID;
   let agentId: UUID;
+  let roleId: UUID;
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -38,6 +43,8 @@ describe('AuditController (e2e)', () => {
     companyRepo = module.get(getRepositoryToken(LcpCompany));
     roleRepo = module.get(getRepositoryToken(LcpRole));
     agentRepo = module.get(getRepositoryToken(LcpAgent));
+    assignmentRepo = module.get(getRepositoryToken(LcpAssignment));
+    taskRepo = module.get(getRepositoryToken(LcpTask));
     auditRepo = module.get(getRepositoryToken(AuditEvent));
     auditService = module.get(AuditService);
     jwt = makeTestJwt();
@@ -62,6 +69,7 @@ describe('AuditController (e2e)', () => {
         companyId: company.id,
       }),
     );
+    roleId = role.id;
 
     agentId = (
       (
@@ -80,6 +88,8 @@ describe('AuditController (e2e)', () => {
 
   afterAll(async () => {
     await agentRepo.createQueryBuilder().delete().execute();
+    await assignmentRepo.createQueryBuilder().delete().execute();
+    await taskRepo.createQueryBuilder().delete().execute();
     await roleRepo.createQueryBuilder().delete().execute();
     await companyRepo.createQueryBuilder().delete().execute();
     await app.close();
@@ -159,6 +169,86 @@ describe('AuditController (e2e)', () => {
       });
       expect(events).toHaveLength(1);
       expect(events[0].agentId).toBeNull();
+    });
+
+    it('derives assignmentId and taskId server-side from the agent, ignoring caller-supplied ids', async () => {
+      const task = await taskRepo.save(
+        taskRepo.create({
+          companyId,
+          shortcode: '900',
+          request: 'do it',
+          materials: [],
+          expected: [],
+        }),
+      );
+      const assignment = await assignmentRepo.save(
+        assignmentRepo.create({
+          companyId,
+          taskId: task.id,
+          mode: 'plan',
+          prompt: 'plan it',
+          roleId,
+        }),
+      );
+      const agent = await agentRepo.save(
+        agentRepo.create({
+          companyId,
+          roleId,
+          assignmentId: assignment.id,
+          initialPrompt: 'plan it',
+        }),
+      );
+
+      await request(app.getHttpServer())
+        .post('/internal/audit')
+        .set('X-Internal-Api-Key', INTERNAL_KEY)
+        .send({
+          agentId: agent.id,
+          companyId,
+          role: 'Planner',
+          // Bogus ids a caller must never be able to override.
+          assignmentId: '00000000-0000-0000-0000-000000000000',
+          taskId: '00000000-0000-0000-0000-000000000000',
+          eventType: AuditEventType.StateChange,
+          payload: { entity: 'agent', newStatus: 'running' },
+        })
+        .expect(204);
+
+      const events = await auditRepo.find({ where: { agentId: agent.id } });
+      expect(events).toHaveLength(1);
+      expect(events[0].assignmentId).toBe(assignment.id);
+      expect(events[0].taskId).toBe(task.id);
+    });
+
+    it('accepts explicit assignmentId/taskId for an agent-less orchestrator row', async () => {
+      const task = await taskRepo.save(
+        taskRepo.create({
+          companyId,
+          shortcode: '901',
+          request: 'orchestrate',
+          materials: [],
+          expected: [],
+        }),
+      );
+
+      await request(app.getHttpServer())
+        .post('/internal/audit')
+        .set('X-Internal-Api-Key', INTERNAL_KEY)
+        .send({
+          companyId,
+          role: 'orchestrator',
+          taskId: task.id,
+          eventType: AuditEventType.StateChange,
+          payload: { entity: 'task', newStatus: 'planning' },
+        })
+        .expect(204);
+
+      const events = await auditRepo.find({
+        where: { companyId, role: 'orchestrator' },
+      });
+      expect(events).toHaveLength(1);
+      expect(events[0].agentId).toBeNull();
+      expect(events[0].taskId).toBe(task.id);
     });
 
     it('rejects a request missing required fields with a 400, not a 500', () =>

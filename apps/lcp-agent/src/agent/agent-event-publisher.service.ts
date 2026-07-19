@@ -1,14 +1,14 @@
-import { AgentEvent, agentEventsChannel } from '@lcp/shared';
+import { agentEventsChannel, StreamDelta } from '@lcp/shared';
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { UUID } from 'crypto';
 import Redis from 'ioredis';
 
 /**
- * Publishes agent observability events (LLM activity, reasoning/response
- * deltas, worker status transitions) to the per-agent Redis channel returned
- * by {@link agentEventsChannel}, where lcp-server's `AgentEventService` relays
- * them to connected SSE clients.
+ * Publishes live token {@link StreamDelta}s (reasoning/response) to the
+ * per-agent Redis channel returned by {@link agentEventsChannel}, where
+ * lcp-server's `AgentEventService` relays them to connected SSE clients. All
+ * other observability (LLM/tool lifecycle, status transitions) now flows as
+ * audit rows through the server's persist-then-publish path.
  *
  * A single connection is opened lazily on first publish and reused — unlike a
  * per-message transient connection, this suits the high frequency of token
@@ -48,17 +48,17 @@ export class AgentEventPublisherService implements OnModuleDestroy {
   }
 
   /**
-   * Fire-and-forget publish of one {@link AgentEvent} for `agentId`.
+   * Fire-and-forget publish of one live {@link StreamDelta}.
    * No-op when Redis is not configured.
    */
-  publish(agentId: UUID, event: AgentEvent): void {
+  publish(delta: StreamDelta): void {
     const connection = this.getConnection();
     if (!connection) return;
     void connection
-      .publish(agentEventsChannel(agentId), JSON.stringify(event))
+      .publish(agentEventsChannel(delta.agentId), JSON.stringify(delta))
       .catch((err: unknown) => {
         this.logger.warn(
-          `Failed to publish ${event.kind} for agent ${agentId}: ${err instanceof Error ? err.message : String(err)}`,
+          `Failed to publish ${delta.channel} delta for agent ${delta.agentId}: ${err instanceof Error ? err.message : String(err)}`,
         );
       });
   }

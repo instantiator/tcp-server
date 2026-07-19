@@ -1,4 +1,4 @@
-import { CompanyEvent } from '@lcp/shared';
+import { AuditEventType, WireEvent } from '@lcp/shared';
 import { NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { firstValueFrom, Subject, take, toArray } from 'rxjs';
@@ -63,7 +63,7 @@ const makeCompanyEventService = (): jest.Mocked<
   Pick<CompanyEventService, 'emit' | 'observe'>
 > => ({
   emit: jest.fn(),
-  observe: jest.fn().mockReturnValue(new Subject<CompanyEvent>()),
+  observe: jest.fn().mockReturnValue(new Subject<WireEvent>()),
 });
 
 describe('CompanyController', () => {
@@ -301,7 +301,7 @@ describe('CompanyController', () => {
         totalSteps: 0,
       };
       tasks.listChangeSummaries.mockResolvedValue([taskSummary]);
-      const live = new Subject<CompanyEvent>();
+      const live = new Subject<WireEvent>();
       companyEvents.observe.mockReturnValue(live);
 
       const resultPromise = firstValueFrom(
@@ -310,20 +310,29 @@ describe('CompanyController', () => {
       // Let the priming chain's awaits resolve before the live event arrives.
       await new Promise((resolve) => setTimeout(resolve, 10));
       live.next({
-        timestamp: new Date().toISOString(),
-        kind: 'company_changed',
-        data: { companyId },
+        type: 'audit',
+        event: {
+          timestamp: new Date().toISOString(),
+          companyId,
+          role: 'system',
+          agentId: null,
+          assignmentId: null,
+          taskId: null,
+          eventType: AuditEventType.StateChange,
+          payload: { entity: 'company', reason: 'updated' },
+        },
       });
 
       const results = await resultPromise;
       expect(db.getCompany).toHaveBeenCalledWith('acme-slug');
       expect(tasks.listChangeSummaries).toHaveBeenCalledWith(companyId);
       expect(companyEvents.observe).toHaveBeenCalledWith(companyId);
-      expect(results.map((r) => (r.data as CompanyEvent).kind)).toEqual([
-        'company_changed',
-        'task_changed',
-        'company_changed',
-      ]);
+      // Priming: company signal, then each task summary; then the live row.
+      const entities = results.map((r) => {
+        const wire = r.data as WireEvent;
+        return wire.type === 'audit' ? wire.event.payload.entity : wire.type;
+      });
+      expect(entities).toEqual(['company', 'task', 'company']);
     });
 
     it('throws NotFoundException when the company does not resolve', async () => {

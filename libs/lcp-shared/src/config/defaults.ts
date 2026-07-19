@@ -12,7 +12,7 @@
  * {@link AgentRunConfig.maxIterations} via {@link resolveRunConfig}.
  * Used in {@link AgentLoopService.run}.
  */
-export const DEFAULT_AGENT_ITERATIONS = 10;
+export const DEFAULT_AGENT_ITERATIONS = 40;
 
 /**
  * Default number of agent jobs the lcp-agent worker processes concurrently.

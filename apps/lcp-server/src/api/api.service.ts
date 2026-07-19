@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { LcpCompany } from '@lcp/shared';
+import { AuditEventType, LcpCompany } from '@lcp/shared';
 import type { UUID } from 'crypto';
 import type { DeepPartial } from 'typeorm';
+import { AuditService } from '../audit/audit.service';
 import { DbService } from '../db/db.service';
-import { CompanyEventService } from '../events/company-event.service';
 import { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
 import { isUUID } from '../utils/ObjectUtils';
 
@@ -12,7 +12,7 @@ import { isUUID } from '../utils/ObjectUtils';
 export class ApiService {
   constructor(
     private readonly dbService: DbService,
-    private readonly companyEvents: CompanyEventService,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -39,7 +39,8 @@ export class ApiService {
    * or slug (the path parameter is checked against UUID shape to tell them
    * apart). Throws {@link NotFoundException} (via {@link DbService.setCompany})
    * if no company matches — this never falls back to creating a new record.
-   * Emits a `company_changed` event to `GET /api/company/:id/events`.
+   * Records a `state_change` (`entity:'company'`) row, which the publisher
+   * routes to `GET /api/company/:id/events`.
    */
   async setCompany(
     pathIdentifier: string,
@@ -51,11 +52,13 @@ export class ApiService {
         ? { id: pathIdentifier }
         : { slug: pathIdentifier },
     );
-    this.companyEvents.emit(company.id, {
-      timestamp: new Date().toISOString(),
-      kind: 'company_changed',
-      data: { companyId: company.id },
-    });
+    await this.audit.record(
+      company.id,
+      'system',
+      null,
+      AuditEventType.StateChange,
+      { entity: 'company', reason: 'company updated' },
+    );
     return company;
   }
 

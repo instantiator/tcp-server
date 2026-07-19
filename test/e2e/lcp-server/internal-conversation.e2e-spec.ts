@@ -450,6 +450,10 @@ describe('InternalController + ConversationController (e2e)', () => {
           companyId: company.id,
           role: 'analyst',
           agentId: consultant.id,
+          // Denormalised task scope — the consultant's real rows derive this
+          // from its (task-inheriting) assignment; set it here since this row
+          // is saved directly, bypassing AuditService.
+          taskId: task.id,
           eventType: 'agent_loop_completion',
           payload: { summary: 'consulted' },
         }),
