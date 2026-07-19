@@ -76,6 +76,9 @@ describe('eavesdropAction', () => {
       return true;
     });
     fetchSpy = jest.spyOn(global, 'fetch');
+    // Terminal shape (process.stdout.isTTY/.columns, which eavesdropAction
+    // reads to pick a style and wrap width) is forced to a fixed value for
+    // every test — see test/unit-test-setup.ts.
   });
 
   afterEach(() => {
