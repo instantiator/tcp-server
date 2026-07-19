@@ -359,6 +359,7 @@ export class TaskPane extends Pane {
       status: a.status,
       prompt: a.prompt,
       agentId: a.agentId,
+      failureReason: a.failureReason,
     }));
     const byIndex = (a: { index: number }, b: { index: number }) =>
       a.index - b.index;

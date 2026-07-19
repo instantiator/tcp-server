@@ -13,7 +13,9 @@ export interface StorageToolDescriptions {
   get_file_summary: string;
   list_working_files: string;
   get_working_file_properties: string;
+  get_working_file_summary: string;
   read_working_file: string;
+  create_working_file: string;
   append_working_file: string;
   replace_in_working_file: string;
   delete_working_file: string;

@@ -686,6 +686,57 @@ describe('AgentLoopService', () => {
     );
   });
 
+  it('reports a human-readable reason when the run was aborted by the wall-clock timeout', async () => {
+    // Simulates what LangGraph throws once the signal is aborted — the stub
+    // graph itself doesn't consult the signal, so the abort is set directly.
+    jest.mocked(StateGraph).mockImplementationOnce(
+      () =>
+        ({
+          addNode: jest.fn().mockReturnThis(),
+          addEdge: jest.fn().mockReturnThis(),
+          compile: jest
+            .fn()
+            .mockReturnValue(
+              makeStubGraph([], new Error('The operation was aborted')),
+            ),
+        }) as unknown as InstanceType<typeof StateGraph>,
+    );
+
+    const { agent } = await seedAgentAndRole();
+    const abortController = new AbortController();
+    abortController.abort('timeout');
+
+    await service.run(agent.id, undefined, abortController);
+
+    const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+    expect(updated.status).toBe(AgentStatus.Failed);
+    expect(notifyFailed).toHaveBeenCalledWith(
+      agent.id,
+      expect.stringMatching(/^timed out after \d+ seconds$/),
+    );
+  });
+
+  it('falls back to a generic reason when the run throws an error with no message', async () => {
+    jest.mocked(StateGraph).mockImplementationOnce(
+      () =>
+        ({
+          addNode: jest.fn().mockReturnThis(),
+          addEdge: jest.fn().mockReturnThis(),
+          compile: jest.fn().mockReturnValue(makeStubGraph([], new Error(''))),
+        }) as unknown as InstanceType<typeof StateGraph>,
+    );
+
+    const { agent } = await seedAgentAndRole();
+    await service.run(agent.id, undefined, new AbortController());
+
+    const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+    expect(updated.status).toBe(AgentStatus.Failed);
+    expect(notifyFailed).toHaveBeenCalledWith(
+      agent.id,
+      'unexpected LLM failure',
+    );
+  });
+
   it('retries and uses the retried response when the first turn produces empty content', async () => {
     jest.mocked(StateGraph).mockImplementationOnce(
       () =>
@@ -775,7 +826,7 @@ describe('AgentLoopService', () => {
     expect(updated.status).toBe(AgentStatus.Completed);
   });
 
-  it('aborts with failed/max_iterations when more than 10 LLM calls are made', async () => {
+  it('aborts with a human-readable reason when more LLM calls are made than the configured maxIterations', async () => {
     const elevenModelStarts = Array.from({ length: 11 }, () => ({
       event: 'on_chat_model_start',
       name: 'ChatOpenAI',
@@ -790,7 +841,11 @@ describe('AgentLoopService', () => {
         }) as unknown as InstanceType<typeof StateGraph>,
     );
 
-    const { agent } = await seedAgentAndRole();
+    // Decoupled from DEFAULT_AGENT_ITERATIONS — an explicit role-level
+    // ceiling below the 11 calls the stub graph makes.
+    const { agent, role } = await seedAgentAndRole();
+    await roleRepo.update(role.id, { runConfig: { maxIterations: 10 } });
+
     await service.run(agent.id, undefined, new AbortController());
 
     const updated = await agentRepo.findOneByOrFail({ id: agent.id });
@@ -800,7 +855,7 @@ describe('AgentLoopService', () => {
     // server via notifyFailed, not locally.
     expect(notifyFailed).toHaveBeenCalledWith(
       agent.id,
-      expect.stringContaining('max_iterations'),
+      'exceeded 10 iterations',
     );
   });
 
@@ -1289,8 +1344,13 @@ describe('AgentLoopService', () => {
           m.content.includes('revise the draft'),
       );
       expect(assignmentMsg).toBeDefined();
-      expect((assignmentMsg as HumanMessage).content).toContain(
-        `assignments/0/completed/draft.md`,
+      // The material resolves without crashing prompt assembly (the bug this
+      // test guards against) and renders as the bare filename — never the
+      // resolved storage key, which would leak the wrong string back to the
+      // scoped storage tools.
+      expect((assignmentMsg as HumanMessage).content).toContain('- draft.md');
+      expect((assignmentMsg as HumanMessage).content).not.toContain(
+        'assignments/0/completed/draft.md',
       );
     });
 

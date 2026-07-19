@@ -100,6 +100,8 @@ interface SupervisedRunContext {
   windowSize: number;
   abortController: AbortController;
   maxIterations: number;
+  /** The run's wall-clock timeout — used to build a human-readable reason if it fires. */
+  timeoutMs: number;
   buildGraph: (
     tools: DynamicStructuredTool[],
   ) => ReturnType<typeof buildAgentGraph>;
@@ -227,14 +229,17 @@ export class AgentLoopService {
         checkpointer,
         abortController,
         maxIterations,
+        timeoutMs,
         replyContent,
       );
     } catch (err) {
       // runLoop handles its own errors; this covers checkpointer.setup() and
       // anything else escaping, which would otherwise leave the agent stuck
       // Running (and any pending consultation unresolved forever).
-      const msg = err instanceof Error ? err.message : String(err);
-      await this.failRun(agent, msg);
+      await this.failRun(
+        agent,
+        this.describeRunFailure(err, abortController, timeoutMs),
+      );
     } finally {
       clearTimeout(timeoutId);
       await checkpointer.end();
@@ -257,6 +262,7 @@ export class AgentLoopService {
     checkpointer: PostgresSaver,
     abortController: AbortController,
     maxIterations: number,
+    timeoutMs: number,
     replyContent?: string,
   ): Promise<void> {
     const mode = agent.assignment?.mode ?? 'implement';
@@ -361,6 +367,7 @@ export class AgentLoopService {
       windowSize,
       abortController,
       maxIterations,
+      timeoutMs,
       buildGraph,
     };
 
@@ -371,7 +378,7 @@ export class AgentLoopService {
         await this.failRun(
           agent,
           result.failureReason ??
-            String(abortController.signal.reason ?? 'unknown'),
+            this.describeAbort(abortController, timeoutMs),
         );
         return;
       }
@@ -439,7 +446,7 @@ export class AgentLoopService {
       this.auditClient.notifyComplete(agent.id, content);
       await this.updateStatus(agent, AgentStatus.Completed);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = this.describeRunFailure(err, abortController, timeoutMs);
       this.logger.error(`Agent ${agent.id} loop error: ${msg}`);
       await this.failRun(agent, msg);
     }
@@ -621,7 +628,7 @@ export class AgentLoopService {
         await this.failRun(
           agent,
           result.failureReason ??
-            String(ctx.abortController.signal.reason ?? 'unknown'),
+            this.describeAbort(ctx.abortController, ctx.timeoutMs),
         );
         return;
       }
@@ -651,6 +658,41 @@ export class AgentLoopService {
       agent,
       `Agent ended without successfully calling required tool(s): ${requiredTools.join(', ')} after ${retries} reminder(s)`,
     );
+  }
+
+  /**
+   * Builds a human-readable reason for an abort with no more specific
+   * `failureReason` from {@link runSupervisedGraph} (e.g. the wall-clock
+   * timeout firing, which aborts the signal directly rather than returning
+   * through the graph runner).
+   */
+  private describeAbort(
+    abortController: AbortController,
+    timeoutMs: number,
+  ): string {
+    if (abortController.signal.reason === 'timeout') {
+      return `timed out after ${Math.round(timeoutMs / 1000)} seconds`;
+    }
+    return String(abortController.signal.reason ?? 'unknown');
+  }
+
+  /**
+   * Builds a human-readable failure reason for an error escaping the run —
+   * a timed-out abort surfaces as a generic `AbortError` here rather than
+   * through {@link runSupervisedGraph}'s own result, so it's checked first;
+   * anything else falls back to the error's own message, or a generic
+   * "unexpected LLM failure" when the error carries no useful message.
+   */
+  private describeRunFailure(
+    err: unknown,
+    abortController: AbortController,
+    timeoutMs: number,
+  ): string {
+    if (abortController.signal.aborted) {
+      return this.describeAbort(abortController, timeoutMs);
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    return msg.trim() ? msg : 'unexpected LLM failure';
   }
 
   /**

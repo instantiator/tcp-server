@@ -1,6 +1,5 @@
 import {
   AgentStatus,
-  ArtifactResolutionContext,
   assignmentCompletedKey,
   assignmentCompletedPrefix,
   assignmentWorkingKey,
@@ -171,19 +170,6 @@ export class TaskOrchestrationService
     });
     if (live) return;
 
-    const resolutionContext: ArtifactResolutionContext = {
-      companySlug: await this.companySlug(assignment.companyId),
-      task: assignment.taskId ? { id: assignment.taskId } : null,
-      planAssignments: assignment.taskId
-        ? await this.planAssignments(assignment.taskId)
-        : undefined,
-      assignment: {
-        id: assignment.id,
-        taskId: assignment.taskId,
-        orderIndex: assignment.orderIndex,
-      },
-    };
-
     const qa = await this.assignmentRepo.save(
       this.assignmentRepo.create({
         taskId: assignment.taskId,
@@ -193,7 +179,7 @@ export class TaskOrchestrationService
         targetAssignmentId: assignment.id,
         roleId: assignment.roleId,
         status: 'in-progress',
-        prompt: renderQaPresentation(assignment, resolutionContext),
+        prompt: renderQaPresentation(assignment),
         materials: assignment.materials,
         expected: [],
       }),
@@ -355,10 +341,11 @@ export class TaskOrchestrationService
     const max = await this.resolveMaxQaAttempts(target);
 
     if (nextAttempts >= max) {
+      const failureReason = 'did not pass QA';
       const claimed = await this.assignmentRepo
         .createQueryBuilder()
         .update(LcpAssignment)
-        .set({ status: 'failed', qaAttempts: nextAttempts })
+        .set({ status: 'failed', qaAttempts: nextAttempts, failureReason })
         .where('id = :id', { id: target.id })
         .andWhere('status = :inQa', { inQa: 'in-qa' })
         .execute();
@@ -366,6 +353,7 @@ export class TaskOrchestrationService
 
       // Reflect the claimed DB update in-memory (see acceptAssignment's note).
       target.status = 'failed';
+      target.failureReason = failureReason;
       await this.recordAssignmentState(
         target,
         'assignment failed (QA exhausted)',
@@ -630,6 +618,7 @@ export class TaskOrchestrationService
         'in-progress',
         'failed',
         'assignment failed (agent failed)',
+        reason,
       );
       if (!claimed) return;
       await this.failTask(assignment.taskId, `planner failed: ${reason}`);
@@ -646,6 +635,7 @@ export class TaskOrchestrationService
         'in-progress',
         'failed',
         'assignment failed (agent failed)',
+        reason,
       );
       if (!claimed) return;
       const task = await this.taskRepo.findOneBy({ id: assignment.taskId });
@@ -663,6 +653,7 @@ export class TaskOrchestrationService
         'in-progress',
         'failed',
         'assignment failed (agent failed)',
+        reason,
       );
       if (!claimed) return;
       await this.failTask(
@@ -685,6 +676,9 @@ export class TaskOrchestrationService
         assignment.targetAssignmentId,
         'in-qa',
         'failed',
+        {
+          failureReason: `QA agent failed before completing review: ${reason}`,
+        },
       );
       if (claimed === 0) return;
       await this.transitionAssignment(
@@ -692,6 +686,7 @@ export class TaskOrchestrationService
         'in-progress',
         'failed',
         'assignment failed (agent failed)',
+        reason,
       );
       await this.failTask(
         assignment.taskId,
@@ -729,8 +724,13 @@ export class TaskOrchestrationService
       // just the task. Forced (not a status-gated claim) because create_plan
       // may have already marked it `succeeded` for an empty plan; either way
       // it must read `failed`. Idempotent via the `planning` guard above.
-      await this.assignmentRepo.update(assignment.id, { status: 'failed' });
+      const failureReason = 'created a plan with 0 assignments';
+      await this.assignmentRepo.update(assignment.id, {
+        status: 'failed',
+        failureReason,
+      });
       assignment.status = 'failed';
+      assignment.failureReason = failureReason;
       await this.recordAssignmentState(
         assignment,
         'assignment failed (planner produced no plan)',
@@ -773,6 +773,7 @@ export class TaskOrchestrationService
             'in-progress',
             'failed',
             'assignment failed (agent died before restart)',
+            'agent died before restart',
           );
         }
         await this.failTask(task.id, 'planner did not produce a plan');
@@ -799,6 +800,7 @@ export class TaskOrchestrationService
           'in-progress',
           'failed',
           'assignment failed (agent died before restart)',
+          'agent died before restart',
         );
         const completed = await this.buildTaskCompleted(task);
         await this.taskRepo.update(task.id, { completed });
@@ -994,13 +996,23 @@ export class TaskOrchestrationService
     from: LcpAssignmentStatus,
     to: LcpAssignmentStatus,
     reason: string,
+    failureReason?: string,
   ): Promise<boolean> {
+    const extra =
+      to === 'failed' && failureReason ? { failureReason } : undefined;
     if (
-      (await claimStatus(this.assignmentRepo, assignment.id, from, to)) === 0
+      (await claimStatus(
+        this.assignmentRepo,
+        assignment.id,
+        from,
+        to,
+        extra,
+      )) === 0
     ) {
       return false;
     }
     assignment.status = to;
+    if (extra) assignment.failureReason = extra.failureReason;
     await this.recordAssignmentState(assignment, reason);
     return true;
   }

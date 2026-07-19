@@ -55,6 +55,7 @@ implemented by `TaskOrchestrationService`
 | `qaStatus`           | `'accepted' \| 'rejected' \| null` | Cleared (with `qaFeedback`) whenever the assignment (re-)enters `in-progress`                                                                                                                                                                                                      |
 | `qaFeedback`         | text, nullable                     |                                                                                                                                                                                                                                                                                    |
 | `qaAttempts`         | int                                | Never reset                                                                                                                                                                                                                                                                        |
+| `failureReason`      | text, nullable                     | Why the assignment failed — QA exhaustion, agent run failure, etc. Null unless `status` is `failed`                                                                                                                                                                                |
 
 `orderIndex` is a linear-plan implementation detail — a future DAG-shaped
 plan (branch/join) would replace it with an edge list; `selectNextAssignments`

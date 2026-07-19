@@ -7,6 +7,7 @@ import {
   ContextManagerService,
   DEFAULT_LLM_CONTEXT_WINDOW,
   LcpAgent,
+  LcpAssignment,
   LcpCompany,
   LcpRole,
   LlmConfig,
@@ -34,6 +35,7 @@ import { Repository } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
 import { AgentEventService } from '../events/agent-event.service';
 import { RagRetrievalService } from '../rag/rag-retrieval.service';
+import { claimStatus } from './claim-status';
 
 /**
  * Prompt part 8 — appended as the last message on the initial turn only.
@@ -59,8 +61,10 @@ const CHAT_PROMPT_STRINGS: PromptAssemblyStrings = {
   rag_intro:
     'The following excerpts from your knowledge base are relevant to your current task. Draw on them as needed:',
   rag_source_header: '### Source: {{documentPath}}',
-  assignment_materials_header: '## Materials',
-  assignment_expected_header: '## Expected outputs',
+  assignment_materials_header:
+    '## Materials (each name below is read via `read_material_file`, not a storage path)',
+  assignment_expected_header:
+    "## Expected outputs (each filename below is what you pass to `append_working_file`/`create_working_file` and to `complete_assignment`'s `prepared` — not a storage path)",
 };
 
 /** Resolved context for one detached chat turn, passed to {@link ChatService.runTurn}. */
@@ -87,6 +91,8 @@ export class ChatService {
     private readonly mcp: McpClientService,
     @InjectRepository(LcpAgent)
     private readonly agentRepo: Repository<LcpAgent>,
+    @InjectRepository(LcpAssignment)
+    private readonly assignmentRepo: Repository<LcpAssignment>,
     @InjectRepository(LcpRole)
     private readonly roleRepo: Repository<LcpRole>,
     @InjectRepository(LcpCompany)
@@ -432,7 +438,10 @@ export class ChatService {
     } catch (err) {
       // The turn is detached — record the failure as a terminal state_change
       // rather than rethrowing (there is no caller left to catch it).
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg =
+        err instanceof Error && err.message.trim()
+          ? err.message
+          : 'unexpected LLM failure';
       this.logger.error(`Chat agent ${agentId} error: ${msg}`);
       await this.audit.record(
         agent.companyId,
@@ -442,6 +451,15 @@ export class ChatService {
         { entity: 'agent', newStatus: 'failed', reason: msg },
       );
       await this.agentRepo.update(agentId, { status: AgentStatus.Failed });
+      if (agent.assignmentId) {
+        await claimStatus(
+          this.assignmentRepo,
+          agent.assignmentId,
+          'in-progress',
+          'failed',
+          { failureReason: msg },
+        );
+      }
     } finally {
       await closeCheckpointer();
     }

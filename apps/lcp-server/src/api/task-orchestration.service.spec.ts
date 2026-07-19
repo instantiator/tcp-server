@@ -258,7 +258,7 @@ describe('TaskOrchestrationService', () => {
   // --- assignmentReadyForQa --------------------------------------------------
 
   describe('assignmentReadyForQa', () => {
-    it('resolves a path-type prepared artifact to its storage key in the QA prompt', async () => {
+    it('shows a path-type prepared artifact as its bare filename, never a resolved storage key', async () => {
       const company = await seedCompany();
       const role = await seedRole(company.id);
       const task = await seedTask(company.id);
@@ -277,9 +277,10 @@ describe('TaskOrchestrationService', () => {
         mode: 'qa',
       });
       expect(qa).not.toBeNull();
-      // Not the bare `{type}: {value}` label the model used to (wrongly)
-      // treat as a path — the actual, resolvable object key read_file needs.
-      expect(qa!.prompt).toContain(
+      expect(qa!.prompt).toContain('- guide.md');
+      // Never the resolved storage key — the QA agent reads it via the
+      // scoped `read_working_file(filename)` tool instead.
+      expect(qa!.prompt).not.toContain(
         `${company.slug}/tasks/${task.id}/assignments/0/working/guide.md`,
       );
       expect(agents.dispatchStartJob).toHaveBeenCalledTimes(1);
@@ -608,6 +609,7 @@ describe('TaskOrchestrationService', () => {
       const after = (await assignmentRepo.findOneBy({ id: target.id }))!;
       expect(after.status).toBe('failed');
       expect(after.qaAttempts).toBe(3);
+      expect(after.failureReason).toBe('did not pass QA');
       expect(pauseResume.failAgent).toHaveBeenCalledWith(
         target.agentId,
         expect.stringContaining('QA'),
@@ -672,9 +674,9 @@ describe('TaskOrchestrationService', () => {
       expect(taskAfter.status).toBe('failed');
       expect(taskAfter.failureReason).toContain('planner failed');
       // The plan assignment must not be left stuck in-progress.
-      expect((await assignmentRepo.findOneBy({ id: plan.id }))!.status).toBe(
-        'failed',
-      );
+      const planAfter = (await assignmentRepo.findOneBy({ id: plan.id }))!;
+      expect(planAfter.status).toBe('failed');
+      expect(planAfter.failureReason).toBe('boom');
     });
 
     it('fails the assignment and task when an implement agent fails', async () => {
@@ -699,9 +701,9 @@ describe('TaskOrchestrationService', () => {
 
       await service.handleAgentFailed(agent.id, 'crashed');
 
-      expect((await assignmentRepo.findOneBy({ id: step.id }))!.status).toBe(
-        'failed',
-      );
+      const stepAfter = (await assignmentRepo.findOneBy({ id: step.id }))!;
+      expect(stepAfter.status).toBe('failed');
+      expect(stepAfter.failureReason).toBe('crashed');
       expect((await taskRepo.findOneBy({ id: task.id }))!.status).toBe(
         'failed',
       );
@@ -763,13 +765,13 @@ describe('TaskOrchestrationService', () => {
 
       await service.handleAgentFailed(agent.id, 'qa crashed');
 
-      expect((await assignmentRepo.findOneBy({ id: target.id }))!.status).toBe(
-        'failed',
-      );
+      const targetAfter = (await assignmentRepo.findOneBy({ id: target.id }))!;
+      expect(targetAfter.status).toBe('failed');
+      expect(targetAfter.failureReason).toContain('qa crashed');
       // The qa assignment itself must fail too, not just the reviewed target.
-      expect((await assignmentRepo.findOneBy({ id: qa.id }))!.status).toBe(
-        'failed',
-      );
+      const qaAfter = (await assignmentRepo.findOneBy({ id: qa.id }))!;
+      expect(qaAfter.status).toBe('failed');
+      expect(qaAfter.failureReason).toBe('qa crashed');
       expect((await taskRepo.findOneBy({ id: task.id }))!.status).toBe(
         'failed',
       );
@@ -935,9 +937,9 @@ describe('TaskOrchestrationService', () => {
       expect(taskAfter.status).toBe('failed');
       expect(taskAfter.failureReason).toContain('without producing a plan');
       // The plan assignment itself must fail too, not just the task.
-      expect((await assignmentRepo.findOneBy({ id: plan.id }))!.status).toBe(
-        'failed',
-      );
+      const planAfter = (await assignmentRepo.findOneBy({ id: plan.id }))!;
+      expect(planAfter.status).toBe('failed');
+      expect(planAfter.failureReason).toBe('created a plan with 0 assignments');
     });
 
     it('forces the plan assignment to failed even when create_plan marked it succeeded (empty plan)', async () => {
@@ -1110,6 +1112,7 @@ describe('TaskOrchestrationService', () => {
         id: finalise.id,
       });
       expect(freshAssignment.status).toBe('failed');
+      expect(freshAssignment.failureReason).toBe('boom');
     });
   });
 
@@ -1143,9 +1146,9 @@ describe('TaskOrchestrationService', () => {
         'failed',
       );
       // The plan assignment must not be left stuck in-progress.
-      expect((await assignmentRepo.findOneBy({ id: plan.id }))!.status).toBe(
-        'failed',
-      );
+      const planAfter = (await assignmentRepo.findOneBy({ id: plan.id }))!;
+      expect(planAfter.status).toBe('failed');
+      expect(planAfter.failureReason).toBe('agent died before restart');
     });
 
     it('dispatches the next ready assignment when nothing is running', async () => {
@@ -1230,6 +1233,7 @@ describe('TaskOrchestrationService', () => {
         id: finalise.id,
       });
       expect(freshAssignment.status).toBe('failed');
+      expect(freshAssignment.failureReason).toBe('agent died before restart');
     });
   });
 });

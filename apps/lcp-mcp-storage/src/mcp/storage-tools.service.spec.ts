@@ -229,6 +229,82 @@ describe('StorageToolsService', () => {
     });
   });
 
+  describe('createWorkingFile', () => {
+    it('creates a new file when none exists', async () => {
+      mockScope({});
+      mockedAxios.post.mockImplementation((url: string) => {
+        if (url.endsWith('/properties'))
+          return Promise.resolve({ data: { exists: false } });
+        return Promise.resolve({
+          data: { key: 'acme/tasks/t1/assignments/0/working/out.md', size: 4 },
+        });
+      });
+      const result = await makeService().createWorkingFile(
+        'agent-1',
+        'out.md',
+        '# hi',
+      );
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        'http://lcp-server:3000/internal/storage/write',
+        {
+          path: 'acme/tasks/t1/assignments/0/working/out.md',
+          content: '# hi',
+          overwrite: true,
+          originators: { agent: 'agent-1' },
+        },
+        { headers: { 'X-Internal-Api-Key': 'secret-key' } },
+      );
+      expect(result.content[0].text).toBe('Created working file: out.md');
+    });
+
+    it('replaces the whole file when it exists and overwrite is true', async () => {
+      mockScope({});
+      mockedAxios.post.mockImplementation((url: string) => {
+        if (url.endsWith('/properties'))
+          return Promise.resolve({ data: { exists: true } });
+        return Promise.resolve({
+          data: { key: 'acme/tasks/t1/assignments/0/working/out.md', size: 4 },
+        });
+      });
+      const result = await makeService().createWorkingFile(
+        'agent-1',
+        'out.md',
+        'new content',
+        true,
+      );
+      expect(result.content[0].text).toBe('Replaced working file: out.md');
+    });
+
+    it('fails with a corrective warning when the file exists and overwrite is not set', async () => {
+      mockScope({});
+      mockedAxios.post.mockImplementation((url: string) => {
+        if (url.endsWith('/properties'))
+          return Promise.resolve({ data: { exists: true } });
+        throw new Error('write should not be called');
+      });
+      const result = await makeService().createWorkingFile(
+        'agent-1',
+        'out.md',
+        'new content',
+      );
+      expect(result.content[0].text).toContain("'out.md' already exists");
+      expect(result.content[0].text).toContain('overwrite: true');
+      expect(result.content[0].text).toContain('append_working_file');
+    });
+
+    it('is refused in a read-only scope', async () => {
+      mockScope({ mode: 'qa', readOnly: true });
+      const result = await makeService().createWorkingFile(
+        'agent-1',
+        'out.md',
+        'x',
+      );
+      expect(result.content[0].text).toContain('create_working_file');
+      expect(result.content[0].text).toContain('read-only');
+      expect(mockedAxios.post).not.toHaveBeenCalled();
+    });
+  });
+
   describe('replaceInWorkingFile', () => {
     it('reports the replacement count', async () => {
       mockScope({});
@@ -351,6 +427,29 @@ describe('StorageToolsService', () => {
     });
   });
 
+  describe('getWorkingFileSummary', () => {
+    it('fetches a structural summary via POST /internal/storage/summary, even in a read-only scope', async () => {
+      mockScope({ mode: 'qa', readOnly: true });
+      mockedAxios.post.mockResolvedValue({
+        data: { format: 'csv', columns: ['name', 'age'], rowCount: 2 },
+      });
+      const result = await makeService().getWorkingFileSummary(
+        'agent-1',
+        'report.csv',
+      );
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        'http://lcp-server:3000/internal/storage/summary',
+        { path: 'acme/tasks/t1/assignments/0/working/report.csv' },
+        { headers: { 'X-Internal-Api-Key': 'secret-key' } },
+      );
+      expect(JSON.parse(result.content[0].text)).toEqual({
+        format: 'csv',
+        columns: ['name', 'age'],
+        rowCount: 2,
+      });
+    });
+  });
+
   describe('filename safety', () => {
     it('rejects a parent-traversal filename and never calls the append endpoint', async () => {
       mockScope({});
@@ -372,10 +471,46 @@ describe('StorageToolsService', () => {
       expect(result.content[0].text).toContain('relative');
       expect(mockedAxios.post).not.toHaveBeenCalled();
     });
+
+    it('rejects a filename shaped like a resolved storage key instead of silently double-nesting it', async () => {
+      mockScope({ workingPrefix: 'acme/tasks/t1/assignments/2/working/' });
+      const result = await makeService().readWorkingFile(
+        'agent-1',
+        'test-company/tasks/t1/assignments/2/working/report.md',
+      );
+      expect(result.content[0].text).toContain('resolved storage path');
+      expect(mockedAxios.post).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      'tasks/x.md',
+      'materials/x.md',
+      'completed/x.md',
+      'assignments/x.md',
+    ])(
+      "rejects a filename with a reserved segment ('%s')",
+      async (filename) => {
+        mockScope({});
+        const result = await makeService().readWorkingFile('agent-1', filename);
+        expect(result.content[0].text).toContain('resolved storage path');
+        expect(mockedAxios.post).not.toHaveBeenCalled();
+      },
+    );
+
+    it('still allows a genuine subdirectory filename with no reserved segment', async () => {
+      mockScope({});
+      mockedAxios.post.mockResolvedValue({ data: { content: 'x' } });
+      const result = await makeService().readWorkingFile(
+        'agent-1',
+        'notes/plan.md',
+      );
+      expect(result.content[0].text).toBe('x');
+    });
   });
 
   describe('read-only scope refuses mutating tools', () => {
     it.each([
+      ['createWorkingFile', 'create_working_file', ['agent-1', 'f.md', 'x']],
       ['appendWorkingFile', 'append_working_file', ['agent-1', 'f.md', 'x']],
       [
         'replaceInWorkingFile',
@@ -407,6 +542,7 @@ describe('StorageToolsService', () => {
     // only ever exercised qa; mirror it for plan since the rejection path is
     // driven purely by scope.readOnly, not the mode value itself.
     it.each([
+      ['createWorkingFile', 'create_working_file', ['agent-1', 'f.md', 'x']],
       ['appendWorkingFile', 'append_working_file', ['agent-1', 'f.md', 'x']],
       [
         'replaceInWorkingFile',

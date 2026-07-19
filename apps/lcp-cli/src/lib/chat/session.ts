@@ -324,6 +324,7 @@ export class ChatSession {
           shortcode,
           planIndex: planIndexFromShortcode(shortcode),
           agentId: a.agentId ?? null,
+          failureReason: a.failureReason ?? null,
         };
       }),
     };
@@ -492,6 +493,7 @@ export class ChatSession {
         shortcode: assignment.shortcode,
         status: assignment.status,
         prompt: assignment.prompt,
+        failureReason: assignment.failureReason,
       },
     });
 

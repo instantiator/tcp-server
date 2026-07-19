@@ -871,6 +871,13 @@
           },
           "type": "array"
         },
+        "failureReason": {
+          "description": "Why the assignment failed — QA exhaustion, agent run failure, etc. Null unless `status` is `failed`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "id": {
           "$ref": "#/definitions/UUID",
           "format": "uuid"
@@ -1030,6 +1037,7 @@
         "companyId",
         "createdAt",
         "expected",
+        "failureReason",
         "id",
         "materials",
         "mode",

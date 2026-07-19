@@ -9,6 +9,8 @@ export interface PaneAssignmentInfo {
   shortcode: string | null;
   status: string;
   prompt: string;
+  /** Why the assignment failed — set only when `status` is `failed`. */
+  failureReason?: string | null;
 }
 
 export interface PaneSpec {
@@ -52,6 +54,8 @@ export interface AssignmentInfo {
   planIndex: number | null;
   /** The assignment's working agent, once dispatched — null before it begins. */
   agentId: string | null;
+  /** Why the assignment failed — set only when `status` is `failed`. */
+  failureReason: string | null;
 }
 
 /**

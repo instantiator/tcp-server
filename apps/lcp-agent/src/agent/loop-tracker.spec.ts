@@ -87,6 +87,14 @@ describe('generateActionString', () => {
     ).toBe('Appended to working file: foo/bar.md');
   });
 
+  it('handles create_working_file', () => {
+    expect(
+      generateActionString('storage__create_working_file', {
+        filename: 'doc.md',
+      }),
+    ).toBe('Created working file: doc.md');
+  });
+
   it('handles append_working_file', () => {
     expect(
       generateActionString('append_working_file', { filename: 'doc.md' }),
@@ -211,6 +219,44 @@ describe('applyStorageResult', () => {
       modified: [],
       deleted: [],
       moved: [],
+    });
+  });
+
+  describe('create_working_file', () => {
+    it('adds to created when the file was created', () => {
+      applyStorageResult(
+        'storage__create_working_file',
+        { filename: 'new.md' },
+        { content: 'Created working file: new.md' },
+        tracker,
+      );
+      expect(tracker.storage.created).toEqual(['new.md']);
+      expect(tracker.storage.modified).toEqual([]);
+    });
+
+    it('adds to modified when the file was replaced', () => {
+      applyStorageResult(
+        'storage__create_working_file',
+        { filename: 'existing.md' },
+        { content: 'Replaced working file: existing.md' },
+        tracker,
+      );
+      expect(tracker.storage.modified).toEqual(['existing.md']);
+      expect(tracker.storage.created).toEqual([]);
+    });
+
+    it('ignores create_working_file on an error result', () => {
+      applyStorageResult(
+        'storage__create_working_file',
+        { filename: 'bad.md' },
+        {
+          content:
+            "'bad.md' already exists. Set overwrite: true to replace it.",
+        },
+        tracker,
+      );
+      expect(tracker.storage.created).toEqual([]);
+      expect(tracker.storage.modified).toEqual([]);
     });
   });
 

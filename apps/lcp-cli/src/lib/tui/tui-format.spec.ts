@@ -270,6 +270,7 @@ describe('renderAssignmentListEntry', () => {
     status: 'in-progress',
     prompt: 'Write the report',
     agentId: 'agent-1',
+    failureReason: null,
     ...overrides,
   });
 
@@ -317,6 +318,26 @@ describe('renderAssignmentListEntry', () => {
     expect(
       makeAssignmentEntry(row({ status: 'in-progress' }), 4).selectable,
     ).toBe(true);
+  });
+
+  it('appends the failure reason after a failed status', () => {
+    const lines = renderAssignmentListEntry(
+      row({ status: 'failed', failureReason: 'did not pass QA' }),
+      false,
+      70,
+      4,
+    );
+    expect(lines[0]).toContain('^Rfailed^: — did not pass QA');
+  });
+
+  it('omits the failure reason suffix for a non-failed status even if set', () => {
+    const lines = renderAssignmentListEntry(
+      row({ status: 'in-progress', failureReason: 'did not pass QA' }),
+      false,
+      70,
+      4,
+    );
+    expect(lines[0]).not.toContain('did not pass QA');
   });
 });
 
@@ -411,5 +432,39 @@ describe('renderAssignmentPaneHeading', () => {
     );
     expect(lines[0]).toBe('Agent id:             a^^1');
     expect(lines[1]).toBe('Role name (and slug): x^^2 (s^^3)');
+  });
+
+  it('appends the failure reason after a failed status', () => {
+    const lines = renderAssignmentPaneHeading(
+      'agent-1',
+      'Cat assistant',
+      'cat-assistant',
+      {
+        id: 'a1',
+        shortcode: '000-001-implement',
+        status: 'failed',
+        prompt: 'Write a report',
+        failureReason: 'did not pass QA',
+      },
+      80,
+    );
+    expect(lines[4]).toBe('Assignment status:    ^Rfailed^: (did not pass QA)');
+  });
+
+  it('omits the failure reason suffix when the status is not failed', () => {
+    const lines = renderAssignmentPaneHeading(
+      'agent-1',
+      'Cat assistant',
+      'cat-assistant',
+      {
+        id: 'a1',
+        shortcode: '000-001-implement',
+        status: 'in-progress',
+        prompt: 'Write a report',
+        failureReason: 'did not pass QA',
+      },
+      80,
+    );
+    expect(lines[4]).toBe('Assignment status:    ^Cin-progress^:');
   });
 });

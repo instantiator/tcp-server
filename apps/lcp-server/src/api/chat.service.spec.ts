@@ -189,6 +189,14 @@ describe('ChatService', () => {
     findOneBy: jest.Mock;
     update: jest.Mock;
   };
+  let assignmentRepo: { createQueryBuilder: jest.Mock };
+  let assignmentUpdateQueryBuilder: {
+    update: jest.Mock;
+    set: jest.Mock;
+    where: jest.Mock;
+    andWhere: jest.Mock;
+    execute: jest.Mock;
+  };
   let roleRepo: { findOneBy: jest.Mock };
   let companyRepo: { findOneBy: jest.Mock };
   let auditService: { write: jest.Mock; record: jest.Mock };
@@ -217,6 +225,18 @@ describe('ChatService', () => {
       findOne: findAgent,
       findOneBy: findAgent,
       update: jest.fn().mockResolvedValue(undefined),
+    };
+    assignmentUpdateQueryBuilder = {
+      update: jest.fn().mockReturnThis(),
+      set: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      execute: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+    assignmentRepo = {
+      createQueryBuilder: jest
+        .fn()
+        .mockReturnValue(assignmentUpdateQueryBuilder),
     };
     roleRepo = { findOneBy: jest.fn() };
     companyRepo = { findOneBy: jest.fn() };
@@ -307,6 +327,7 @@ describe('ChatService', () => {
       auditService as unknown as AuditService,
       mcpClient as never,
       agentRepo as never,
+      assignmentRepo as never,
       roleRepo as never,
       companyRepo as never,
     );
@@ -512,6 +533,14 @@ describe('ChatService', () => {
     await new Promise((r) => setImmediate(r));
     // PostgresSaver.end() must always be called to release the connection
     expect(mockCheckpointer.end).toHaveBeenCalled();
+    // The chat-mode orphan assignment behind the agent gets the same
+    // human-readable failureReason — it's never covered by
+    // TaskOrchestrationService.handleAgentFailed (that only fires for
+    // task-linked assignments), so ChatService must set it itself.
+    expect(assignmentRepo.createQueryBuilder).toHaveBeenCalled();
+    expect(assignmentUpdateQueryBuilder.set).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'failed', failureReason: 'LLM down' }),
+    );
   });
 
   it('returns early without a terminal event when a tool paused the agent mid-turn', async () => {

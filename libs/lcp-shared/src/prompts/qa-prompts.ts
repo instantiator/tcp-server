@@ -1,9 +1,5 @@
 import type { LcpArtifact } from '../models/LcpArtifact';
 import type { LcpAssignment } from '../models/LcpAssignment.model';
-import {
-  ArtifactResolutionContext,
-  resolveArtifactKey,
-} from '../storage/artifact-keys';
 
 /**
  * Presentation strings `TaskOrchestrationService` feeds to the agents it
@@ -14,39 +10,24 @@ import {
  */
 
 /**
- * Renders an artifact list, one line per entry: a path-type artifact as its
- * resolved storage key plus how to read it (`read_file` takes a full object
- * key, not the artifact's bare `type` label — showing just `{type}: {value}`,
- * as this used to, left the model to guess a path like
- * `assignment-working-path/guide.md`, which doesn't exist and cannot be
- * corrected from the error alone); `inline-text` shows its literal value,
- * since there's nothing to read.
+ * Renders an artifact list, one line per entry, as its bare name/filename
+ * (`a.value`) — the same string `read_working_file` takes. A QA caller's
+ * storage scope already points its working directory at the *target*
+ * assignment's working area (read-only), so a path-type artifact needs no
+ * further resolution here; `inline-text` shows its literal value directly.
  */
-function renderArtifacts(
-  artifacts: LcpArtifact[],
-  ctx: ArtifactResolutionContext,
-): string {
+function renderArtifacts(artifacts: LcpArtifact[]): string {
   if (artifacts.length === 0) return '  (none)';
-  return artifacts
-    .map((a) => {
-      const key = resolveArtifactKey(a, ctx);
-      return key
-        ? `  - ${a.value} — read via the storage service's read_file tool, path: "${key}"`
-        : `  - ${a.value}`;
-    })
-    .join('\n');
+  return artifacts.map((a) => `  - ${a.value}`).join('\n');
 }
 
 /**
  * The prompt given to a QA agent: the assignment it is reviewing, the outputs
  * that assignment was expected to produce, and the artifacts the implementing
- * agent actually prepared. `resolutionContext` resolves each path-type
- * artifact to the storage key `read_file` actually needs (see
- * {@link resolveArtifactKey}).
+ * agent actually prepared.
  */
 export function renderQaPresentation(
   target: Pick<LcpAssignment, 'prompt' | 'expected' | 'prepared'>,
-  resolutionContext: ArtifactResolutionContext,
 ): string {
   return [
     'You are reviewing another agent’s completed assignment.',
@@ -55,12 +36,12 @@ export function renderQaPresentation(
     target.prompt,
     '',
     'Expected outputs:',
-    renderArtifacts(target.expected, resolutionContext),
+    renderArtifacts(target.expected),
     '',
     'Artifacts the agent prepared:',
-    renderArtifacts(target.prepared, resolutionContext),
+    renderArtifacts(target.prepared),
     '',
-    'Read each prepared artifact (via read_file, using the path given above where one is shown) and decide whether it meets the assignment’s needs.',
+    'Read each prepared artifact by name via `read_working_file` and decide whether it meets the assignment’s needs.',
   ].join('\n');
 }
 

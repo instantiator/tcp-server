@@ -207,7 +207,11 @@ export function renderAssignmentPaneHeading(
     ? `${escapeMarkup(roleName)} (${escapeMarkup(roleSlug)})`
     : escapeMarkup(roleName);
   const statusLine = assignment
-    ? `${statusColor(assignment.status)}${escapeMarkup(assignment.status)}^:`
+    ? `${statusColor(assignment.status)}${escapeMarkup(assignment.status)}^:${
+        assignment.status === 'failed' && assignment.failureReason
+          ? ` (${escapeMarkup(assignment.failureReason)})`
+          : ''
+      }`
     : '—';
   const promptPrefix = headingField('Prompt:', '');
   const wrapped = wrapText(
@@ -274,6 +278,8 @@ export interface AssignmentRow {
   prompt: string;
   /** The assignment's working agent, once dispatched — null before it begins. */
   agentId: string | null;
+  /** Why the assignment failed — set only when `status` is `failed`. */
+  failureReason: string | null;
 }
 
 /**
@@ -292,8 +298,12 @@ export function renderAssignmentListEntry(
 ): string[] {
   const w = Math.max(width, 1);
   const mark = marker(selected);
-  const plainMeta = `${row.index}. ${row.role} (${row.mode}: ${row.status})`;
-  const colouredMeta = `${row.index}. ${escapeMarkup(row.role)} (${escapeMarkup(row.mode)}: ${statusColor(row.status)}${escapeMarkup(row.status)}^:)`;
+  const reasonSuffix =
+    row.status === 'failed' && row.failureReason
+      ? ` — ${row.failureReason}`
+      : '';
+  const plainMeta = `${row.index}. ${row.role} (${row.mode}: ${row.status}${reasonSuffix})`;
+  const colouredMeta = `${row.index}. ${escapeMarkup(row.role)} (${escapeMarkup(row.mode)}: ${statusColor(row.status)}${escapeMarkup(row.status)}^:${escapeMarkup(reasonSuffix)})`;
   // Budget for the prompt text: total width minus the marker, the (plain,
   // uncoloured) meta, a separating space, and the two quote characters.
   const promptBudget = Math.max(w - mark.length - plainMeta.length - 3, 0);

@@ -77,6 +77,8 @@ export function generateActionString(
       return `Listed files`;
     case 'search_files':
       return `Searched files`;
+    case 'create_working_file':
+      return `Created working file: ${s(input.filename)}`;
     case 'append_working_file':
       return `Appended to working file: ${s(input.filename)}`;
     case 'replace_in_working_file':
@@ -118,6 +120,7 @@ export function generateActionString(
 
 /** Tool names (base, without server prefix) whose successful results affect storage. */
 const STORAGE_MUTATION_TOOLS = new Set([
+  'create_working_file',
   'append_working_file',
   'replace_in_working_file',
   'delete_working_file',
@@ -169,7 +172,12 @@ export function applyStorageResult(
 
   const filename = s(input.filename);
 
-  if (base === 'append_working_file') {
+  if (base === 'create_working_file') {
+    // The result text distinguishes a first-time create from a replace.
+    if (text.startsWith('Created')) tracker.storage.created.push(filename);
+    else if (text.startsWith('Replaced'))
+      tracker.storage.modified.push(filename);
+  } else if (base === 'append_working_file') {
     // The result text distinguishes a first-time create from an append.
     if (text.startsWith('Created')) tracker.storage.created.push(filename);
     else if (text.startsWith('Appended'))

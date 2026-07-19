@@ -11,6 +11,7 @@ export type McpServerName = (typeof MCP_REGISTRY)[number]['name'];
  * storage service builds by inverting this set.
  */
 export const STORAGE_WRITE_TOOLS: readonly string[] = [
+  'create_working_file',
   'append_working_file',
   'replace_in_working_file',
   'rename_working_file',

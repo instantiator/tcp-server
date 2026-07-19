@@ -109,6 +109,7 @@ describe('ChatSession', () => {
           shortcode: '000-000-plan',
           planIndex: 0,
           agentId: 'agent-1',
+          failureReason: null,
         },
         {
           id: 'a2',
@@ -120,6 +121,7 @@ describe('ChatSession', () => {
           shortcode: '000-001-implement',
           planIndex: 1,
           agentId: null,
+          failureReason: null,
         },
       ]);
       expect(mockedApiRequest).toHaveBeenNthCalledWith(
@@ -314,6 +316,7 @@ describe('ChatSession', () => {
           shortcode: '000-000-implement',
           planIndex: 0,
           agentId: 'agent-1',
+          failureReason: null,
         },
       ]);
     });
@@ -426,6 +429,7 @@ describe('ChatSession', () => {
       shortcode: '000-000-implement',
       planIndex: 0,
       agentId: 'agent-1',
+      failureReason: null,
     };
 
     it('does nothing for an assignment with no dispatched agent yet', async () => {
@@ -474,6 +478,7 @@ describe('ChatSession', () => {
           shortcode: '000-000-implement',
           status: 'in-progress',
           prompt: 'Write the report',
+          failureReason: null,
         },
       });
       expect(tui.appendEvent).toHaveBeenCalledWith(

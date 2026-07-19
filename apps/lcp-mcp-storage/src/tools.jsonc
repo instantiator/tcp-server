@@ -14,7 +14,9 @@
   // allowed); it is placed in your own assignment's working directory.
   "list_working_files": "Lists the files in your assignment's working directory.",
   "get_working_file_properties": "Returns metadata (size, content type, last modified, existence) for a file in your working directory.",
+  "get_working_file_summary": "Returns a structural summary of a file in your working directory without reading its full content: headings, top-level keys, or (for CSV) column names and row count, depending on format. Cheaper than read_working_file for checking a large or unfamiliar file's shape first.",
   "read_working_file": "Reads a file from your working directory by filename.",
+  "create_working_file": "Creates a new file with the given content, or replaces one entirely when overwrite: true. Use this for a brand-new file or to rewrite a file from scratch; use append_working_file to add to a file and replace_in_working_file for a small in-place edit. Fails if the file exists and overwrite is not set.",
   "append_working_file": "Appends text to a file in your working directory, creating it if it does not exist. The resulting document is validated.",
   "replace_in_working_file": "Replaces every occurrence of a literal string in a working-directory file and reports the replacement count. Errors if the file is missing or the string is not found.",
   "delete_working_file": "Soft-deletes a file in your working directory. Reverse with restore_working_file.",
