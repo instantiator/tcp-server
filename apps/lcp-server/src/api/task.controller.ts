@@ -195,26 +195,24 @@ export class TaskController {
           },
         },
       },
-      ...assignments.map(
-        (assignment): WireEvent => ({
-          type: 'audit',
-          event: {
-            timestamp,
-            companyId: assignment.companyId,
-            role: 'orchestrator',
-            agentId: null,
-            assignmentId: assignment.id,
-            taskId,
-            eventType: AuditEventType.StateChange,
-            payload: {
-              entity: 'assignment',
-              newStatus: assignment.status,
-              reason: 'replay',
-              summary: buildAssignmentChangeSummary(assignment),
-            },
+      ...assignments.map((assignment): WireEvent => ({
+        type: 'audit',
+        event: {
+          timestamp,
+          companyId: assignment.companyId,
+          role: 'orchestrator',
+          agentId: null,
+          assignmentId: assignment.id,
+          taskId,
+          eventType: AuditEventType.StateChange,
+          payload: {
+            entity: 'assignment',
+            newStatus: assignment.status,
+            reason: 'replay',
+            summary: buildAssignmentChangeSummary(assignment),
           },
-        }),
-      ),
+        },
+      })),
     ];
   }
 }

@@ -36,6 +36,7 @@ export async function assertMinioReachable(
     throw new Error(
       `MinIO is not reachable at ${endpoint}: ${reason}. ` +
         'Check MINIO_ENDPOINT/MINIO_ACCESS_KEY/MINIO_SECRET_KEY and that MinIO is running before starting this service.',
+      { cause: err },
     );
   } finally {
     client.destroy();

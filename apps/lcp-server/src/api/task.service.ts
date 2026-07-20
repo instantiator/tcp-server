@@ -117,7 +117,7 @@ export class TaskService {
    * used only by e2e tests without a real PostgreSQL instance).
    */
   private async nextTaskShortcode(companyId: UUID): Promise<string> {
-    let index = 0;
+    let index: number;
     if (this.dataSource.options.type === 'postgres') {
       // A non-SELECT query on the postgres driver resolves to
       // [rows, affectedRowCount], not just the rows — indexing straight into

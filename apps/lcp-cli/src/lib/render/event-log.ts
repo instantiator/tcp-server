@@ -22,8 +22,7 @@ export type AppendEvent =
   | { kind: 'delta'; channel: 'reasoning' | 'response'; delta: string };
 
 type Item =
-  | { type: 'heading'; info: HeadingInfo }
-  | { type: 'entry'; entry: LogEntry };
+  { type: 'heading'; info: HeadingInfo } | { type: 'entry'; entry: LogEntry };
 
 /** hh:mm:ss from a delta's timestamp, or now. */
 function clock(timestamp: string): string {

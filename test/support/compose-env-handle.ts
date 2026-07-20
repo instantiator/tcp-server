@@ -19,9 +19,7 @@ export function rememberComposeEnv(
 
 /** Retrieves the environment recorded by setup, or undefined if none. */
 export function recallComposeEnv():
-  | StartedDockerComposeEnvironment
-  | undefined {
+  StartedDockerComposeEnvironment | undefined {
   return (globalThis as Record<string, unknown>)[HANDLE_KEY] as
-    | StartedDockerComposeEnvironment
-    | undefined;
+    StartedDockerComposeEnvironment | undefined;
 }

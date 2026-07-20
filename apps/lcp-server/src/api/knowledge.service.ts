@@ -26,8 +26,7 @@ export interface DocumentSummary {
 
 /** Identifies which knowledge scope a {@link KnowledgeService} call targets. */
 export type KnowledgeScopeRef =
-  | { kind: 'role'; roleId: UUID }
-  | { kind: 'company'; companyId: string };
+  { kind: 'role'; roleId: UUID } | { kind: 'company'; companyId: string };
 
 /** A resolved knowledge scope, with the entities needed to address storage and RAG chunks. */
 interface ResolvedScope {
