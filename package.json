@@ -72,7 +72,7 @@
     "passport-jwt": "^4.0.1",
     "pg": "^8.22.0",
     "pgvector": "^0.3.0",
-    "redis": "^5.12.1",
+    "redis": "^6.1.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "swagger-ui-express": "^5.0.1",
@@ -118,7 +118,13 @@
     "typescript-eslint": "^8.20.0"
   },
   "overrides": {
-    "multer": "^2.2.0"
+    "multer": "^2.2.0",
+    "@nestjs/swagger": {
+      "js-yaml": "4.2.0"
+    },
+    "@istanbuljs/load-nyc-config": {
+      "js-yaml": "3.15.0"
+    }
   },
   "jest": {
     "verbose": true,
