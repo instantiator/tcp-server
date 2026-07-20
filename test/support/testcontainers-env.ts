@@ -272,7 +272,9 @@ export async function startComposeTier(
     } catch {
       // Ryuk reaps anything left behind on process exit.
     }
-    throw new Error(describeStartupFailure(projectName, cause, logDir));
+    throw new Error(describeStartupFailure(projectName, cause, logDir), {
+      cause,
+    });
   }
 
   const env = deriveConnectionEnv(environment, options.services);

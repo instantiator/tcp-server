@@ -468,21 +468,17 @@ export class TaskOrchestrationService
     );
     const plan = await this.planAssignments(task.id);
     return [
-      ...files.map(
-        (f): LcpTaskCompletedArtifact => ({
-          type: 'task-completed-path',
-          value: f.name,
-        }),
-      ),
+      ...files.map((f): LcpTaskCompletedArtifact => ({
+        type: 'task-completed-path',
+        value: f.name,
+      })),
       ...plan.flatMap((a) =>
         a.approved
           .filter((art) => art.type === 'inline-text')
-          .map(
-            (art): LcpTaskCompletedArtifact => ({
-              type: 'inline-text',
-              value: art.value,
-            }),
-          ),
+          .map((art): LcpTaskCompletedArtifact => ({
+            type: 'inline-text',
+            value: art.value,
+          })),
       ),
     ];
   }
@@ -870,12 +866,10 @@ export class TaskOrchestrationService
       ...priors.flatMap((a) =>
         a.approved
           .filter((art) => art.type === 'assignment-completed-path')
-          .map(
-            (art): LcpMaterialArtifact => ({
-              type: 'assignment-completed-path',
-              value: art.value,
-            }),
-          ),
+          .map((art): LcpMaterialArtifact => ({
+            type: 'assignment-completed-path',
+            value: art.value,
+          })),
       ),
       ...assignment.materials,
     ];

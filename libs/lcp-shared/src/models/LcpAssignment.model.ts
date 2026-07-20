@@ -36,12 +36,7 @@ import { VersionedEntity } from './VersionedEntity';
  *   (`complete_assignment`), the task-level check after all steps + QA.
  */
 export type LcpAssignmentMode =
-  | 'plan'
-  | 'implement'
-  | 'qa'
-  | 'chat'
-  | 'consultee'
-  | 'finalise';
+  'plan' | 'implement' | 'qa' | 'chat' | 'consultee' | 'finalise';
 
 /**
  * Lifecycle states for a {@link LcpAssignment}. A QA rejection returns the
@@ -49,12 +44,7 @@ export type LcpAssignmentMode =
  * cleared on that re-entry; `qaAttempts` is never reset).
  */
 export type LcpAssignmentStatus =
-  | 'ready'
-  | 'in-progress'
-  | 'in-qa'
-  | 'succeeded'
-  | 'failed'
-  | 'cancelled';
+  'ready' | 'in-progress' | 'in-qa' | 'succeeded' | 'failed' | 'cancelled';
 
 /** Outcome of a QA review — set by `assure_assignment`; null while not under (or before) review. */
 export type LcpAssignmentQaStatus = 'accepted' | 'rejected' | null;
