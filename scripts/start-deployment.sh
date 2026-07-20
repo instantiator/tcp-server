@@ -133,9 +133,30 @@ INFRA_SERVICES=(postgres redis minio)
 # root-owned, so it can't write its bootstrap PAT. This bind-mounted host
 # directory must be world-writable before the container starts.
 MACHINEKEY_DIR="$REPO_ROOT/docker/zitadel-machinekey"
+PAT_FILE="$MACHINEKEY_DIR/pat.txt"
 if [[ -n "$AUTH_PROFILE" ]]; then
   mkdir -p "$MACHINEKEY_DIR"
   chmod 777 "$MACHINEKEY_DIR"
+fi
+
+# Zitadel only (re)writes pat.txt during first-instance bootstrap, which only
+# runs against a genuinely empty DB. Detect that case up front, via the named
+# Postgres volume's existence, so the PAT readiness check below knows whether
+# to expect a fresh file or trust the one already on disk: on a reused DB,
+# bootstrap is skipped and pat.txt is never touched, so requiring a newer
+# mtime there would wait forever.
+ZITADEL_FRESH_BOOT=false
+if [[ -n "$AUTH_PROFILE" ]] && ! docker volume inspect "${PROJECT}_postgres_data" >/dev/null 2>&1; then
+  ZITADEL_FRESH_BOOT=true
+fi
+
+# On a fresh boot, snapshot any pre-existing PAT's mtime: a file left over
+# from an earlier instance would otherwise satisfy a plain "non-empty"
+# readiness check immediately, racing against the new instance's own
+# (slower) write.
+PAT_MTIME_BEFORE=0
+if [[ "$ZITADEL_FRESH_BOOT" = true && -f "$PAT_FILE" ]]; then
+  PAT_MTIME_BEFORE=$(stat -f %m "$PAT_FILE" 2>/dev/null || stat -c %Y "$PAT_FILE" 2>/dev/null || echo 0)
 fi
 
 if [[ "$REBUILD" = "true" ]]; then
@@ -161,8 +182,19 @@ if [[ -n "$AUTH_PROFILE" ]]; then
   echo ""
   echo "Configuring Zitadel..."
 
-  PAT_FILE="$MACHINEKEY_DIR/pat.txt"
-  wait_for "Zitadel bootstrap PAT" "[[ -s '$PAT_FILE' ]]"
+  if [[ "$ZITADEL_FRESH_BOOT" = true ]]; then
+    # Fresh DB: wait for a PAT newer than any pre-existing one, not just a
+    # non-empty file (see ZITADEL_FRESH_BOOT / PAT_MTIME_BEFORE above).
+    # Generous timeout: first-instance bootstrap can be slow on a cold image
+    # pull or a busy machine.
+    wait_for "Zitadel bootstrap PAT" \
+      "[[ -s '$PAT_FILE' ]] && (( \$(stat -f %m '$PAT_FILE' 2>/dev/null || stat -c %Y '$PAT_FILE' 2>/dev/null || echo 0) > $PAT_MTIME_BEFORE ))" \
+      180
+  else
+    # Existing DB: Zitadel skips first-instance bootstrap and never touches
+    # pat.txt, so the file already on disk is the one to trust.
+    wait_for "Zitadel bootstrap PAT" "[[ -s '$PAT_FILE' ]]"
+  fi
 
   # Wrapper around curl for authenticated Zitadel API calls.
   zit() {
