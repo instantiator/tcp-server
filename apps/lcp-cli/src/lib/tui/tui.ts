@@ -256,14 +256,13 @@ export class Tui {
   private closeTabHandler: ((paneId: string) => void) | null = null;
   private selectTaskHandler: ((task: TaskChangeSummary) => void) | null = null;
   private selectAssignmentHandler:
-    | ((taskId: string, assignment: AssignmentInfo) => void)
-    | null = null;
+    ((taskId: string, assignment: AssignmentInfo) => void) | null = null;
   private cancelTaskHandler: ((taskId: string) => void) | null = null;
   private startTaskHandler: ((taskId: string) => void) | null = null;
   private openInitiateTaskHandler: (() => void) | null = null;
   private submitInitiateTaskHandler:
-    | ((paneId: string, submission: InitiateTaskSubmission) => void)
-    | null = null;
+    ((paneId: string, submission: InitiateTaskSubmission) => void) | null =
+    null;
 
   constructor(opts: TuiOptions = {}) {
     this.term = opts.term ?? sharedTerminal;

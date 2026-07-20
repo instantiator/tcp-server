@@ -256,26 +256,24 @@ export class CompanyController {
           payload: { entity: 'company', reason: 'replay' },
         },
       },
-      ...taskSummaries.map(
-        (summary): WireEvent => ({
-          type: 'audit',
-          event: {
-            timestamp,
-            companyId,
-            role: 'orchestrator',
-            agentId: null,
-            assignmentId: null,
-            taskId: summary.id,
-            eventType: AuditEventType.StateChange,
-            payload: {
-              entity: 'task',
-              newStatus: summary.status,
-              reason: 'replay',
-              summary,
-            },
+      ...taskSummaries.map((summary): WireEvent => ({
+        type: 'audit',
+        event: {
+          timestamp,
+          companyId,
+          role: 'orchestrator',
+          agentId: null,
+          assignmentId: null,
+          taskId: summary.id,
+          eventType: AuditEventType.StateChange,
+          payload: {
+            entity: 'task',
+            newStatus: summary.status,
+            reason: 'replay',
+            summary,
           },
-        }),
-      ),
+        },
+      })),
     ];
   }
 

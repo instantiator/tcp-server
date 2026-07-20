@@ -536,8 +536,7 @@ export class StorageToolsService {
   private extractErrorMessage(error: unknown): string {
     if (axios.isAxiosError(error)) {
       const data = error.response?.data as
-        | { message?: string; errors?: { llmHint: string }[] }
-        | undefined;
+        { message?: string; errors?: { llmHint: string }[] } | undefined;
       if (data?.errors?.length) {
         return data.errors.map((e) => e.llmHint).join(' ');
       }
