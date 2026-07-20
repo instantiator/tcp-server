@@ -1,0 +1,16 @@
+{
+  "company": {
+    "name": "Agent Loop Flow Co",
+    "description": "Fixture company for agent-loop-interactions.e2e-spec.ts"
+  },
+  "role": {
+    "slug": "worker",
+    "name": "worker",
+    "description": "Does the plan/implement/QA/finalise work for this fixture",
+    "systemPromptTemplate": "You are {{name}}, a diligent worker."
+  },
+  "task": {
+    "request": "TASK-MARKER-successful-flow: produce a short two-part report",
+    "expected": [{ "type": "task-completed-path", "value": "out.md" }]
+  }
+}

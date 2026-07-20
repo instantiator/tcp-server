@@ -29,7 +29,7 @@ describe('KnowledgeController (e2e)', () => {
     auditRepo = module.get(getRepositoryToken(AuditEvent));
     const company = await companyRepo.save(
       companyRepo.create({
-        slug: 'knowledge-co',
+        slug: `knowledge-co-${Date.now()}`,
         name: 'KnowledgeCo',
         description: 'Test',
       }),
@@ -250,6 +250,14 @@ describe('KnowledgeController (e2e)', () => {
         .get(`/api/company/${companyId}/knowledge`)
         .expect(401));
 
+    // Seen fail intermittently (~1/5 full e2e runs, 2026-07-20): expected 401,
+    // got 404. Not reproducible in isolation or in a targeted rerun alongside
+    // agent-loop-interactions.e2e-spec.ts (the newest e2e spec at the time,
+    // and the only one to bind a real port / start a real BullMQ worker) — so
+    // ruled out as caused by that spec. No code-level link found to any
+    // other change either. Likely host/Docker resource-contention flake, not
+    // a logic bug. If it recurs, worth checking Postgres connection-pool
+    // pressure across the full e2e run rather than re-guessing from here.
     it('GET /api/company/:companyId/knowledge/:filename returns 401 without a token', () =>
       request(app.getHttpServer())
         .get(`/api/company/${companyId}/knowledge/policy.md`)
