@@ -151,7 +151,7 @@
       ]
     },
     "transformIgnorePatterns": [
-      "node_modules/(?!(pgvector)/)"
+      "node_modules/(?!(pgvector|commander)/)"
     ],
     "moduleNameMapper": {
       "@lcp/shared": "<rootDir>/libs/lcp-shared/src/index.ts"

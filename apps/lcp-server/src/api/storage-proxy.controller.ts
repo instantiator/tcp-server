@@ -26,7 +26,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { StorageService } from '../storage/storage.service';
 
 /** Maximum upload size accepted by {@link StorageProxyController.upload}. */
-// eslint-disable-next-line no-useless-assignment -- read inside a parameter decorator's argument, which this rule's flow analysis doesn't see as a use.
+
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB
 
 /**
