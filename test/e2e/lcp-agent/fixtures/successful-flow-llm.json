@@ -1,0 +1,115 @@
+{
+  "prompts": [
+    {
+      "match": "The task's expected outputs",
+      "mode": "loop",
+      "responses": [
+        {
+          "text": "The expected deliverable is already in place — marking the task finalised.",
+          "tools": [
+            {
+              "tool": "tasks__complete_assignment",
+              "data": { "summary": "Finalised the report.", "prepared": [] }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "match": "reviewing another agent[\\s\\S]*STEP-A-MARKER",
+      "mode": "loop",
+      "responses": [
+        {
+          "text": "Step A's output looks correct — accepting.",
+          "tools": [
+            { "tool": "tasks__assure_assignment", "data": { "qa": "accept" } }
+          ]
+        }
+      ]
+    },
+    {
+      "match": "reviewing another agent[\\s\\S]*STEP-B-MARKER",
+      "mode": "loop",
+      "responses": [
+        {
+          "text": "Step B's output looks correct — accepting.",
+          "tools": [
+            { "tool": "tasks__assure_assignment", "data": { "qa": "accept" } }
+          ]
+        }
+      ]
+    },
+    {
+      "match": "STEP-A-MARKER",
+      "mode": "loop",
+      "responses": [
+        {
+          "text": "Drafting the introduction section now.",
+          "tools": [
+            {
+              "tool": "tasks__complete_assignment",
+              "data": {
+                "summary": "Drafted the introduction section.",
+                "prepared": [
+                  { "type": "assignment-working-path", "value": "out.md" }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "match": "STEP-B-MARKER",
+      "mode": "loop",
+      "responses": [
+        {
+          "text": "Drafting the conclusion section now.",
+          "tools": [
+            {
+              "tool": "tasks__complete_assignment",
+              "data": {
+                "summary": "Drafted the conclusion section.",
+                "prepared": [
+                  { "type": "assignment-working-path", "value": "out.md" }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "match": "TASK-MARKER-successful-flow",
+      "mode": "loop",
+      "responses": [
+        {
+          "text": "Planning a two-step report: introduction, then conclusion.",
+          "tools": [
+            {
+              "tool": "tasks__create_plan",
+              "data": {
+                "assignments": [
+                  {
+                    "prompt": "STEP-A-MARKER: draft the introduction section",
+                    "role": "worker",
+                    "expected": [
+                      { "type": "assignment-working-path", "value": "out.md" }
+                    ]
+                  },
+                  {
+                    "prompt": "STEP-B-MARKER: draft the conclusion section",
+                    "role": "worker",
+                    "expected": [
+                      { "type": "assignment-working-path", "value": "out.md" }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

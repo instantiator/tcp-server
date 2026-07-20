@@ -3,6 +3,9 @@
 /node_modules
 /build
 
+# lcp-stub-llm is a standalone package with its own node_modules
+/apps/lcp-stub-llm/node_modules
+
 # Logs
 logs
 *.log

@@ -47,6 +47,7 @@ therefore run alongside a dev stack (or each other) without conflict.
 | [run-api-tests.sh](#run-api-testssh)                 | API tests — requires a running deployment                            | Running stack         |
 | [run-e2e-tests.sh](#run-e2e-testssh)                 | E2E tests — HTTP API workflows                                       | Docker                |
 | [manual-verify.sh](#manual-verifysh)                 | Interactive scenario walkthrough with human checks                   | Running stack         |
+| [run-stub-llm.sh](#run-stub-llmsh)                   | Run `lcp-stub-llm` from source, for manual testing                   | Node                  |
 
 ## start-deployment.sh
 
@@ -308,6 +309,25 @@ scenarios, then reuses that token for every call.
 
 **Requires:** a running stack with default LLM config in its `.env`,
 `MCP_INTERACTIONS_URL` reachable (the consultation scenario needs it), `jq`.
+
+## run-stub-llm.sh
+
+Runs `apps/lcp-stub-llm` directly from source (no build step — it's plain
+TypeScript, run by Node's native type-stripping), for manual testing. See
+[lcp-stub-llm](stub-llm.md) for the config format and endpoints.
+
+```bash
+./scripts/run-stub-llm.sh --config path/to/config.json --port 3002
+```
+
+**Options:**
+
+| Flag              | Description                    | Default |
+| ----------------- | ------------------------------ | ------- |
+| `--config <path>` | Config file to load on startup | none    |
+| `--port <n>`      | Port to listen on              | `3002`  |
+
+**Requires:** Node.
 
 ## run-all-tests.sh
 

@@ -11,6 +11,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import request from 'supertest';
 import { App } from 'supertest/types';
+import type { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { AppModule } from '../../../apps/lcp-server/src/app.module';
 import { makeTestJwt } from '../helpers/test-jwt';
@@ -368,7 +369,7 @@ describe('TaskController (e2e)', () => {
               expect(res.status).toBe(422);
             });
 
-            it('returns 202 and transitions ready -> planning using the task plannerRoleId', async () => {
+            it('returns 202, transitions ready -> planning, and dispatches a plan-mode assignment + agent', async () => {
               const created = await request(app.getHttpServer())
                 .post('/api/task')
                 .set('Authorization', `Bearer ${jwt}`)
@@ -384,6 +385,24 @@ describe('TaskController (e2e)', () => {
                 .set('Authorization', `Bearer ${jwt}`);
               expect(res.status).toBe(202);
               expect((res.body as LcpTask).status).toBe('planning');
+
+              const planAssignment = await assignmentRepo.findOneBy({
+                taskId: startable.id,
+                mode: 'plan',
+              });
+              if (!planAssignment)
+                throw new Error('plan assignment was not created');
+              expect(planAssignment.status).toBe('in-progress');
+              expect(planAssignment.roleId).toBe(role.id);
+              expect(planAssignment.prompt).toBe('Write a report');
+              expect(planAssignment.agentId).not.toBeNull();
+
+              const plannerAgent = await agentRepo.findOneBy({
+                id: planAssignment.agentId as UUID,
+              });
+              expect(plannerAgent).not.toBeNull();
+              expect(plannerAgent?.roleId).toBe(role.id);
+              expect(plannerAgent?.assignmentId).toBe(planAssignment.id);
             });
 
             it('returns 202 and falls back to the company default planner role', async () => {

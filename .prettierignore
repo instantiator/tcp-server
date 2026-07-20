@@ -1,0 +1,3 @@
+# lcp-stub-llm is a standalone app with its own .prettierrc — format it via
+# its own `npm run format`, not the root one.
+apps/lcp-stub-llm

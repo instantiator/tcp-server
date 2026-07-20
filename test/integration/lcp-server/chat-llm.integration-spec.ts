@@ -46,11 +46,18 @@ function isTerminalAgentEvent(e: WireEvent): boolean {
 const STUB_LLM_URL = requireEnv('STUB_LLM_URL');
 const DATABASE_URL = requireEnv('DATABASE_URL');
 
+/**
+ * Configures the stub to answer every prompt with `response`. `loop` mode
+ * (rather than the default `sequence`) means repeated calls within one test
+ * keep returning the same text rather than erroring once "exhausted".
+ */
 async function setStubResponse(response: string): Promise<void> {
   await fetch(`${STUB_LLM_URL.replace('/v1', '')}/stub/config`, {
-    method: 'POST',
+    method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ response }),
+    body: JSON.stringify({
+      defaults: { mode: 'loop', responses: [{ text: response, tools: [] }] },
+    }),
   });
 }
 
