@@ -54,6 +54,7 @@ export async function assertRedisReachable(
     throw new Error(
       `Redis is not reachable at ${redactRedisUrl(url)}: ${reason}. ` +
         'Check REDIS_URL and that Redis is running before starting this service.',
+      { cause: err },
     );
   } finally {
     try {
