@@ -115,8 +115,7 @@ export class McpClientService {
     // for tools that don't take an agentId/companyId are simply unused.
     const properties =
       (mcpTool.inputSchema['properties'] as
-        | Record<string, unknown>
-        | undefined) ?? {};
+        Record<string, unknown> | undefined) ?? {};
     const fixedArgs: Record<string, string> = {};
     for (const key of Object.keys(context) as (keyof McpToolContext)[]) {
       const value = context[key];

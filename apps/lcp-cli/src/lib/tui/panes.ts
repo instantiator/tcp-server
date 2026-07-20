@@ -468,12 +468,15 @@ export class InitiateTaskPane extends Pane {
   private rows(): InitiateTaskRow[] {
     return [
       { kind: 'prompt' },
-      ...this.roles.map(
-        (r): InitiateTaskRow => ({ kind: 'role', roleId: r.id, name: r.name }),
-      ),
-      ...this.expected.map(
-        (filename): InitiateTaskRow => ({ kind: 'expected', filename }),
-      ),
+      ...this.roles.map((r): InitiateTaskRow => ({
+        kind: 'role',
+        roleId: r.id,
+        name: r.name,
+      })),
+      ...this.expected.map((filename): InitiateTaskRow => ({
+        kind: 'expected',
+        filename,
+      })),
       { kind: 'add-expected' },
       { kind: 'start-toggle' },
       { kind: 'submit' },

@@ -35,6 +35,11 @@ updates:
           - "minor"
 
   - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
     directory: "/apps/lcp-server"
     schedule:
       interval: weekly

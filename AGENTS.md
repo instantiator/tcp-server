@@ -43,4 +43,5 @@ Match the task against a trigger below, then follow that SKILL.md literally.
 - [prereqs](dev-environment/skills/prereqs/SKILL.md) — Check and install the tools a project needs. Use on a fresh machine, at onboarding, or when a required tool is missing.
 - [essential-behaviours](dev-environment/skills/essential-behaviours/SKILL.md) — Install the enforcement that makes key behaviours automatic. Use at project onboarding, or when asked to make sure something always happens.
 - [adr](dev-environment/skills/adr/SKILL.md) — Think through and record an architectural decision. Use when making architecture, infrastructure, or significant design choices.
+
 <!-- dev-environment:skills:end -->
