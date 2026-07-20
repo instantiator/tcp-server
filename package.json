@@ -132,6 +132,10 @@
       "<rootDir>/libs"
     ],
     "testRegex": ".*\\.spec\\.ts$",
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "<rootDir>/apps/lcp-stub-llm/"
+    ],
     "transform": {
       "^.+\\.(t|j)s$": [
         "ts-jest",

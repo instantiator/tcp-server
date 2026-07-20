@@ -12,6 +12,7 @@ Day-to-day guides for running and maintaining the system.
 | 📄 [Scripts](scripts.md)                     | All scripts in `scripts/` — purpose, options, and usage examples   |
 | 📄 [Testing](testing.md)                     | Testing strategy, four-tier overview, and how to run each suite    |
 | 📄 [Manual Testing](manual-testing/start.md) | Structured manual test guide — infrastructure through MCP servers  |
+| 📄 [lcp-stub-llm](stub-llm.md)               | Configurable stub LLM server for tests — config format, endpoints  |
 | 📄 [Services](services.md)                   | All Docker Compose services — ports, dependencies, and purpose     |
 | 📄 [Shared Storage](shared-storage.md)       | MinIO authentication, folder structure, and document management    |
 | 📄 [Database Migrations](db-migrations.md)   | How to create, register, and run TypeORM migrations                |

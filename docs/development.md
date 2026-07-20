@@ -69,6 +69,8 @@ apps/
                            # Each MCP app follows the same shape: src/{health,mcp}/, a
                            # tools.jsonc + prompts.jsonc pair, and a thin HTTP-proxy
                            # *-tools.service.ts calling lcp-server's /internal/* endpoints.
+  lcp-stub-llm/           # Configurable stub LLM server for tests (port 3002) — see docs/stub-llm.md.
+                           # Standalone: own package.json/tsconfig/lint config, no NestJS, no @lcp/shared.
   lcp-cli/
     src/
       main.ts               # commander entry point; global options

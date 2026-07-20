@@ -1,3 +1,4 @@
+import { assertMinioReachable } from '../../libs/lcp-shared/src/storage/minio-reachability';
 import { assertRedisReachable } from '../../libs/lcp-shared/src/redis/redis-reachability';
 import { rememberComposeEnv } from '../support/compose-env-handle';
 import { startComposeTier } from '../support/testcontainers-env';
@@ -9,9 +10,9 @@ import { startComposeTier } from '../support/testcontainers-env';
  * is mocked (jwks-rsa) — so no `auth` profile is started. Torn down by the
  * matching global-teardown.
  *
- * `assertRedisReachable` is imported by relative path rather than from
- * `@lcp/shared` because Jest's moduleNameMapper is not reliably applied to
- * globalSetup modules.
+ * `assertRedisReachable`/`assertMinioReachable` are imported by relative path
+ * rather than from `@lcp/shared` because Jest's moduleNameMapper is not
+ * reliably applied to globalSetup modules.
  */
 export default async function globalSetup(): Promise<void> {
   const { environment, env } = await startComposeTier({
@@ -24,6 +25,16 @@ export default async function globalSetup(): Promise<void> {
   // confirm Redis really answers before any spec loads. This is what makes the
   // old "running e2e directly HANGS on an unreachable Redis" footgun impossible.
   await assertRedisReachable(env.REDIS_URL);
+  // Same defence for MinIO: its container healthcheck can pass slightly
+  // before the S3 API actually serves requests, and MinioStorageAdapter only
+  // warns (not throws) when it can't verify its bucket at startup — without
+  // this, the first storage write in a spec fails with a raw, unhandled 500
+  // instead of a clear "MinIO is not reachable" error here.
+  await assertMinioReachable(
+    env.MINIO_ENDPOINT,
+    process.env.MINIO_ACCESS_KEY ?? '',
+    process.env.MINIO_SECRET_KEY ?? '',
+  );
 
   rememberComposeEnv(environment);
 }

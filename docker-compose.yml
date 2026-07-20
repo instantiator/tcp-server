@@ -51,7 +51,7 @@ services:
 
   stub-llm:
     build:
-      context: ./docker/stub-llm
+      context: ./apps/lcp-stub-llm
       dockerfile: Dockerfile
     restart: unless-stopped
     profiles: [integration]

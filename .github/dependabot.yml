@@ -6,6 +6,13 @@ updates:
       interval: weekly
     open-pull-requests-limit: 10
 
+  # lcp-stub-llm has its own package.json — it shares no dependencies with
+  # the rest of this monorepo.
+  - package-ecosystem: npm
+    directory: "/apps/lcp-stub-llm"
+    schedule:
+      interval: weekly
+
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
@@ -43,6 +50,6 @@ updates:
       interval: weekly
 
   - package-ecosystem: docker
-    directory: "/docker/stub-llm"
+    directory: "/apps/lcp-stub-llm"
     schedule:
       interval: weekly
