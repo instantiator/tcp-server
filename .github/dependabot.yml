@@ -5,6 +5,11 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    groups:
+      patch-and-minor:
+        update-types:
+          - "patch"
+          - "minor"
 
   # lcp-stub-llm has its own package.json — it shares no dependencies with
   # the rest of this monorepo.
@@ -12,12 +17,22 @@ updates:
     directory: "/apps/lcp-stub-llm"
     schedule:
       interval: weekly
+    groups:
+      patch-and-minor:
+        update-types:
+          - "patch"
+          - "minor"
 
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      patch-and-minor:
+        update-types:
+          - "patch"
+          - "minor"
 
   - package-ecosystem: docker
     directory: "/apps/lcp-server"
