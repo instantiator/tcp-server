@@ -49,12 +49,31 @@ const READ_ONLY_WORKING_TOOLS = [
   'read_working_file',
   'list_working_files',
   'get_working_file_properties',
+  'get_working_file_summary',
 ];
 
 /**
+ * Path segment names reserved by the ADR-007 storage hierarchy
+ * (`{company_slug}/tasks/{taskId}/assignments/{orderIndex}/working/...`).
+ * A model-supplied filename containing one of these as a whole segment is
+ * almost certainly a fully (or partially) resolved storage key echoed back
+ * from a prompt, not a genuine subdirectory name — rejected below rather
+ * than silently concatenated onto the working prefix, which would otherwise
+ * write to a doubly-nested, wrong location.
+ */
+const RESERVED_PATH_SEGMENTS = new Set([
+  'tasks',
+  'assignments',
+  'materials',
+  'completed',
+  'working',
+]);
+
+/**
  * Validates a model-supplied filename and joins it under a working prefix.
- * Rejects absolute paths and any `..` segment so a resolved key can never
- * escape the working directory.
+ * Rejects absolute paths, any `..` segment, and any segment that looks like
+ * a resolved storage-hierarchy path component, so a resolved key can never
+ * escape the working directory — or land in an unintended nested one.
  *
  * @throws {Error} with a corrective message the tool relays to the model.
  */
@@ -66,9 +85,16 @@ function resolveScopedKey(prefix: string, filename: string): string {
   if (norm.startsWith('/')) {
     throw new Error(`Filename must be relative, not absolute: '${filename}'.`);
   }
-  if (norm.split('/').some((segment) => segment === '..')) {
+  const segments = norm.split('/');
+  if (segments.some((segment) => segment === '..')) {
     throw new Error(
       `Filename must not contain '..' path segments: '${filename}'.`,
+    );
+  }
+  if (segments.some((segment) => RESERVED_PATH_SEGMENTS.has(segment))) {
+    throw new Error(
+      `'${filename}' looks like a resolved storage path, not a bare filename. ` +
+        `Pass just the filename shown in Materials/Expected outputs (e.g. 'report.md'), not a full storage key.`,
     );
   }
   return `${prefix}${norm}`;
@@ -119,7 +145,9 @@ export class StorageToolsService {
     // Assignment-scoped working files.
     this.registerListWorkingFiles(server);
     this.registerGetWorkingFileProperties(server);
+    this.registerGetWorkingFileSummary(server);
     this.registerReadWorkingFile(server);
+    this.registerCreateWorkingFile(server);
     this.registerAppendWorkingFile(server);
     this.registerReplaceInWorkingFile(server);
     this.registerDeleteWorkingFile(server);
@@ -212,6 +240,22 @@ export class StorageToolsService {
     }
   }
 
+  async getWorkingFileSummary(
+    agentId: string,
+    filename: string,
+  ): Promise<ToolResult> {
+    try {
+      const scope = await this.fetchScope(agentId);
+      const key = resolveScopedKey(scope.workingPrefix, filename);
+      const summary = await this.post<Record<string, unknown>>('summary', {
+        path: key,
+      });
+      return this.textResult(JSON.stringify(summary, null, 2));
+    } catch (e) {
+      return this.textResult(this.extractErrorMessage(e));
+    }
+  }
+
   async readWorkingFile(
     agentId: string,
     filename: string,
@@ -223,6 +267,41 @@ export class StorageToolsService {
         path: key,
       });
       return this.textResult(content);
+    } catch (e) {
+      return this.textResult(this.extractErrorMessage(e));
+    }
+  }
+
+  async createWorkingFile(
+    agentId: string,
+    filename: string,
+    content: string,
+    overwrite?: boolean,
+  ): Promise<ToolResult> {
+    try {
+      const scope = await this.fetchScope(agentId);
+      if (scope.readOnly)
+        return this.textResult(
+          getReadOnlyMessage('create_working_file', READ_ONLY_WORKING_TOOLS),
+        );
+      const key = resolveScopedKey(scope.workingPrefix, filename);
+      const props = await this.post<FileProperties>('properties', {
+        path: key,
+      });
+      if (props.exists && !overwrite) {
+        return this.textResult(
+          `Working file '${filename}' already exists. Set overwrite: true to replace it, or use append_working_file to add to it.`,
+        );
+      }
+      await this.post('write', {
+        path: key,
+        content,
+        overwrite: true,
+        originators: { agent: agentId },
+      });
+      return this.textResult(
+        `${props.exists ? 'Replaced' : 'Created'} working file: ${filename}`,
+      );
     } catch (e) {
       return this.textResult(this.extractErrorMessage(e));
     }
@@ -418,25 +497,6 @@ export class StorageToolsService {
     }
   }
 
-  /**
-   * Proxies to `GET /internal/storage/exists` — used by the `files/exists`
-   * internal endpoint (see `StorageCheckController`).
-   *
-   * Builds the query string manually (`path=a&path=b`) rather than passing
-   * an array via axios's `params` option — axios's default array
-   * serialisation uses bracket notation (`path[]=a&path[]=b`), which Nest's
-   * `@Query('path')` does not recognise as the same key.
-   */
-  async checkMissingFiles(paths: string[]): Promise<string[]> {
-    const query = new URLSearchParams();
-    for (const p of paths) query.append('path', p);
-    const res = await axios.get<{ missing: string[] }>(
-      `${this.serverUrl}/internal/storage/exists?${query.toString()}`,
-      { headers: this.headers() },
-    );
-    return res.data.missing;
-  }
-
   // Private helpers
 
   /** Resolves the caller's storage scope for the current tool call. */
@@ -521,20 +581,18 @@ export class StorageToolsService {
   private describeFolder(p: string): string {
     if (p.includes('/tasks/') && p.includes('/materials'))
       return storagePrompts.describe_folder_task_materials;
-    if (p.includes('/tasks/') && p.includes('/output'))
-      return storagePrompts.describe_folder_task_output;
+    if (
+      p.includes('/tasks/') &&
+      p.includes('/completed') &&
+      !p.includes('/assignments/')
+    )
+      return storagePrompts.describe_folder_task_completed;
+    if (p.includes('/working'))
+      return storagePrompts.describe_folder_assignment_working;
+    if (p.includes('/assignments/') && p.includes('/completed'))
+      return storagePrompts.describe_folder_assignment_completed;
     if (p.includes('/knowledge/') || p.endsWith('/knowledge'))
       return storagePrompts.describe_folder_knowledge;
-    if (p.includes('/finished/reports'))
-      return storagePrompts.describe_folder_finished_reports;
-    if (p.includes('/finished/specifications'))
-      return storagePrompts.describe_folder_finished_specifications;
-    if (p.includes('/finished/designs'))
-      return storagePrompts.describe_folder_finished_designs;
-    if (p.includes('/finished/code'))
-      return storagePrompts.describe_folder_finished_code;
-    if (p.includes('/finished/other'))
-      return storagePrompts.describe_folder_finished_other;
     if (p.includes('/audit/') || p.endsWith('/audit'))
       return storagePrompts.describe_folder_audit;
     return storagePrompts.describe_folder_fallback;
@@ -648,6 +706,22 @@ export class StorageToolsService {
     );
   }
 
+  private registerGetWorkingFileSummary(server: McpServer): void {
+    server.registerTool(
+      'get_working_file_summary',
+      {
+        description: storageToolDescriptions.get_working_file_summary,
+        inputSchema: {
+          agentId: z.uuid().describe('The calling agent UUID.'),
+          filename: z
+            .string()
+            .describe('Filename relative to your working directory.'),
+        },
+      },
+      ({ agentId, filename }) => this.getWorkingFileSummary(agentId, filename),
+    );
+  }
+
   private registerReadWorkingFile(server: McpServer): void {
     server.registerTool(
       'read_working_file',
@@ -661,6 +735,28 @@ export class StorageToolsService {
         },
       },
       ({ agentId, filename }) => this.readWorkingFile(agentId, filename),
+    );
+  }
+
+  private registerCreateWorkingFile(server: McpServer): void {
+    server.registerTool(
+      'create_working_file',
+      {
+        description: storageToolDescriptions.create_working_file,
+        inputSchema: {
+          agentId: z.uuid().describe('The calling agent UUID.'),
+          filename: z
+            .string()
+            .describe('Filename relative to your working directory.'),
+          content: z.string().describe('The full content of the file.'),
+          overwrite: z
+            .boolean()
+            .optional()
+            .describe('Set true to replace an existing file entirely.'),
+        },
+      },
+      ({ agentId, filename, content, overwrite }) =>
+        this.createWorkingFile(agentId, filename, content, overwrite),
     );
   }
 

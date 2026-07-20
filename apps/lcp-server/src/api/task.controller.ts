@@ -1,13 +1,23 @@
-import type { LcpAssignment, LcpTask } from '@lcp/shared';
+import {
+  AuditEventType,
+  buildAssignmentChangeSummary,
+  type AuditEvent,
+  type LcpAssignment,
+  type LcpTask,
+  type WireEvent,
+} from '@lcp/shared';
 import {
   BadRequestException,
   Body,
   Controller,
   Get,
   HttpCode,
+  MessageEvent,
   Param,
   Post,
+  Put,
   Query,
+  Sse,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -20,8 +30,11 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import type { UUID } from 'crypto';
+import { defer, from, merge, mergeMap, Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { CreateTaskDto } from './dto/task.dto';
+import { TaskEventService } from '../events/task-event.service';
+import { CreateTaskDto, UpdateTaskDto } from './dto/task.dto';
 import { TaskMaterialSummary, TaskService } from './task.service';
 
 /** Subset of the multer file object relevant to a materials upload. */
@@ -37,13 +50,30 @@ interface UploadedFileBuffer {
 @UseGuards(JwtAuthGuard)
 @Controller({ path: 'api/task' })
 export class TaskController {
-  constructor(private readonly tasks: TaskService) {}
+  constructor(
+    private readonly tasks: TaskService,
+    private readonly taskEvents: TaskEventService,
+  ) {}
 
   /** Creates a task in the `ready` state. No plan is generated until `POST /api/task/:id/start`. */
   @ApiOperation({ summary: 'Create a task' })
   @Post()
   async createTask(@Body() body: CreateTaskDto): Promise<LcpTask> {
     return this.tasks.create(body);
+  }
+
+  /**
+   * Edits an unstarted task's `request`/`plannerRoleId`/`materials`/`expected`.
+   * `id`, `companyId`, `status`, `completed`, and `failureReason` are not
+   * editable.
+   */
+  @ApiOperation({ summary: 'Partially update an unstarted task' })
+  @Put(':id')
+  async updateTask(
+    @Param('id') id: UUID,
+    @Body() body: UpdateTaskDto,
+  ): Promise<LcpTask> {
+    return this.tasks.update(id, body);
   }
 
   /**
@@ -77,6 +107,17 @@ export class TaskController {
     return this.tasks.start(id);
   }
 
+  /**
+   * Cancels a task: transitions any non-terminal status → `cancelled` and
+   * cascades to its still-non-terminal assignments and their working agents.
+   */
+  @ApiOperation({ summary: 'Cancel a task' })
+  @Post(':id/cancel')
+  @HttpCode(202)
+  async cancelTask(@Param('id') id: UUID): Promise<LcpTask> {
+    return this.tasks.cancel(id);
+  }
+
   /** Lists a company's tasks. */
   @ApiOperation({ summary: 'List tasks for a company' })
   @Get()
@@ -94,5 +135,86 @@ export class TaskController {
     @Param('id') id: UUID,
   ): Promise<{ task: LcpTask; assignments: LcpAssignment[] }> {
     return this.tasks.getWithAssignments(id);
+  }
+
+  /**
+   * Retrieves a task's audit history — every event recorded for the agents
+   * that worked its own plan/implement/qa/finalise assignments (including
+   * consultations spawned mid-assignment), oldest first — see
+   * {@link TaskService.getHistory}.
+   */
+  @ApiOperation({ summary: "Get a task's audit history" })
+  @Get(':id/history')
+  async getTaskHistory(@Param('id') id: UUID): Promise<AuditEvent[]> {
+    return this.tasks.getHistory(id);
+  }
+
+  /**
+   * SSE stream of `task_changed`/`assignment_changed` events for this task
+   * and its assignments. Primed with the task's current state (and each of
+   * its assignments') so a client that subscribes late renders immediately,
+   * then live updates via {@link TaskEventService}.
+   */
+  @ApiOperation({ summary: "Stream a task's and its assignments' events" })
+  @Sse(':id/events')
+  streamTaskEvents(@Param('id') id: UUID): Observable<MessageEvent> {
+    const replay$ = defer(() => from(this.primeTaskEvents(id))).pipe(
+      mergeMap((events) => from(events)),
+    );
+    return merge(replay$, this.taskEvents.observe(id)).pipe(
+      map((event) => ({ data: event })),
+    );
+  }
+
+  /**
+   * Builds the priming {@link WireEvent}s for {@link streamTaskEvents}: the
+   * task's current state, then each assignment's — synthesized `state_change`
+   * rows (`reason:'replay'`, no persisted id) with the same summaries the live
+   * path publishes.
+   */
+  private async primeTaskEvents(taskId: UUID): Promise<WireEvent[]> {
+    const timestamp = new Date().toISOString();
+    const { task, assignments } = await this.tasks.getWithAssignments(taskId);
+    const summary = await this.tasks.getChangeSummary(taskId);
+    return [
+      {
+        type: 'audit',
+        event: {
+          timestamp,
+          companyId: task.companyId,
+          role: 'orchestrator',
+          agentId: null,
+          assignmentId: null,
+          taskId,
+          eventType: AuditEventType.StateChange,
+          payload: {
+            entity: 'task',
+            newStatus: task.status,
+            reason: 'replay',
+            summary,
+          },
+        },
+      },
+      ...assignments.map(
+        (assignment): WireEvent => ({
+          type: 'audit',
+          event: {
+            timestamp,
+            companyId: assignment.companyId,
+            role: 'orchestrator',
+            agentId: null,
+            assignmentId: assignment.id,
+            taskId,
+            eventType: AuditEventType.StateChange,
+            payload: {
+              entity: 'assignment',
+              newStatus: assignment.status,
+              reason: 'replay',
+              summary: buildAssignmentChangeSummary(assignment),
+            },
+          },
+        }),
+      ),
+    ];
   }
 }

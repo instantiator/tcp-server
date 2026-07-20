@@ -118,6 +118,16 @@ export class LcpAssignment extends VersionedEntity {
   @Column({ type: 'text', transformer: sanitiseTextColumn })
   prompt!: string;
 
+  /**
+   * Short identifier derived from the owning task's shortcode, this
+   * assignment's position in the task's plan, and its mode — e.g.
+   * `000-000-plan`, `000-001-implement`, `000-001-qa` (see
+   * `buildAssignmentShortcode`). Null for orphan assignments (`taskId`
+   * null — plain conversations and consultations spawned from one).
+   */
+  @Column({ type: 'varchar', nullable: true })
+  shortcode?: string | null;
+
   /** The role this assignment must be worked by. */
   @ManyToOne(() => LcpRole, { nullable: false, onDelete: 'CASCADE' })
   role!: LcpRole;
@@ -132,6 +142,10 @@ export class LcpAssignment extends VersionedEntity {
   /** Current lifecycle state of this assignment. */
   @Column({ type: 'varchar', default: 'ready' })
   status!: LcpAssignmentStatus;
+
+  /** Why the assignment failed — QA exhaustion, agent run failure, etc. Null unless `status` is `failed`. */
+  @Column({ type: 'text', nullable: true })
+  failureReason!: string | null;
 
   /** The agent currently (or last) working this assignment. */
   @ManyToOne(() => LcpAgent, { nullable: true, onDelete: 'SET NULL' })
@@ -154,6 +168,22 @@ export class LcpAssignment extends VersionedEntity {
    */
   @Column({ nullable: true })
   targetAssignmentId?: UUID | null;
+
+  /**
+   * The assignment whose agent spawned this one (e.g. a consultation). Distinct
+   * from {@link targetAssignment} (what a QA assignment reviews) — this is "who
+   * created me", not "what am I evaluating".
+   */
+  @ManyToOne(() => LcpAssignment, { nullable: true, onDelete: 'SET NULL' })
+  parentAssignment?: LcpAssignment | null;
+
+  /**
+   * Foreign key for {@link parentAssignment}.
+   * @format uuid
+   */
+  @Column({ nullable: true })
+  @Index()
+  parentAssignmentId?: UUID | null;
 
   /**
    * Materials supplied to the assignment.

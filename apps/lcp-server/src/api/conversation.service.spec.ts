@@ -36,9 +36,10 @@ const makeDataSource = (overrides?: {
   transaction: jest.Mock;
 } => ({
   options: { type: 'postgres' },
+  // The postgres driver resolves a non-SELECT query to [rows, affectedRowCount].
   query: jest
     .fn()
-    .mockResolvedValue(overrides?.queryResult ?? [{ queryIndex: 1 }]),
+    .mockResolvedValue(overrides?.queryResult ?? [[{ queryIndex: 1 }], 1]),
   transaction: jest
     .fn()
     .mockImplementation((fn: (em: EntityManager) => Promise<unknown>) => {
@@ -138,7 +139,7 @@ describe('ConversationService', () => {
 
   describe('create', () => {
     it('generates slug from roleName and incremented queryIndex', async () => {
-      dataSource.query.mockResolvedValue([{ queryIndex: 3 }]);
+      dataSource.query.mockResolvedValue([[{ queryIndex: 3 }], 1]);
       userRepo.findBy.mockResolvedValue([]);
 
       await service.create(

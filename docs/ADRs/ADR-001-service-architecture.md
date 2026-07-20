@@ -1,6 +1,6 @@
 # ADR-001: Service Architecture
 
-Status: Proposed
+Status: Partially Implemented (amended — see [Amendment](#amendment-as-implemented-01029) at the end)
 
 ## Context
 
@@ -69,3 +69,11 @@ The `LcpCompany` entity will be extended to include:
 
 - Monorepo structure (npm workspaces or NX) vs. separate repositories — defer until lcp-agent scaffolding begins
 - Whether the BullMQ queue needs a dead-letter queue for failed agent jobs — note for ADR-010
+
+## Amendment as implemented (010.2.9)
+
+The decision above ("Two services") undersold what was actually built. As implemented:
+
+- **A third tier of services exists.** Each MCP server — `lcp-mcp-storage`, `lcp-mcp-memory`, `lcp-mcp-interactions`, and (since 010.2.5) `lcp-mcp-tasks` — is its own NestJS app and its own Docker Compose service, not folded into `lcp-server` or `lcp-agent`. This is closer to the rejected "Many microservices" option than to "Two services," but adopted only for the agent-tool surface (where MCP's HTTP-server-per-tool-provider shape made a dedicated app the natural fit), not as a general decomposition — `lcp-server` still owns all REST API and orchestration state, and `lcp-agent` still owns the agent loop. See [ADR-009](./ADR-009-containerization-strategy.md) for the containerization side of this.
+- **"No auth between services" is no longer true.** `INTERNAL_API_KEY` (`X-Internal-Api-Key` header) is required on every internal service-to-service call, enforced by `InternalApiKeyGuard` (`@lcp/shared`). Trust within the Docker network is still assumed (the key is a shared secret, not per-service identity), but it's not the "no auth" originally decided.
+- **The `Task` entity and task lifecycle are no longer outstanding.** `LcpTask`/`LcpAssignment` entities, a full REST API, CLI verbs, and a sequential orchestration state machine (`TaskOrchestrationService`) are implemented — see [ADR-010](./ADR-010-orchestration-design.md).

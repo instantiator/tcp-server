@@ -1,4 +1,5 @@
 import { LcpAgent, LcpAssignmentMode } from '@lcp/shared';
+import type { UUID } from 'crypto';
 
 /**
  * Fields required to create a new {@link LcpAgent}.
@@ -17,4 +18,13 @@ export type LcpAgentTemplate = Pick<
      * not supplied. Defaults to `implement`.
      */
     mode?: LcpAssignmentMode;
+
+    /**
+     * The assignment whose agent is spawning this one (e.g. a consultation),
+     * used only when {@link assignmentId} is not supplied. `DbService.createAgent`
+     * inherits the parent's `taskId` onto the new orphan assignment and records
+     * `parentAssignmentId`, so the new assignment traces back to the task it
+     * was spawned for.
+     */
+    parentAssignmentId?: UUID;
   };

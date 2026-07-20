@@ -2,49 +2,87 @@
 
 Once you have prepared your deployment with the [setup checklist](setup-checklist.md), you can create and test your first company.
 
-## 0. Test your set up
+## 0. Prepare your system
 
-### 0.0 Launch a dev instance
+### 0.0 Prerequisites
 
-The dev instance is much like a production instance. It's launched with docker compose and has all services, including an OIDC provider (keycloak). This is configured to have an `admin` user for the `master`[^master] realm, and a test user for the `lcp` real.
+> [!NOTE]
+> These are the bare minimum pre-requisites. Developers should follow steps at: [Developer setup checklist](./setup-checklist.md)
 
-[^master]: I guess keycloak missed the memo around the time tech services moved away from master/slave terminology, over to `main` or `trunk`. My personal take: The intention is more important than the words, but I appreciate it's not ideal because even good intentions can evoke bad times. Let's do better in future.
+> [!TIP]
+> The scripts in this repository use the `bash` shell by default. Run on a system with `bash` available - ie. Mac OS or Linux.
+
+1. [Install Docker](https://docs.docker.com/get-started/get-docker/)
+
+   ```bash
+   # If you prefer to use Homebrew, here's the invocation
+   brew install --cask docker-desktop
+   ```
+
+2. [Install NodeJS](https://nodejs.org/en/download)
+
+   ```bash
+   # If you prefer to use Homebrew, here's the invocation
+   brew install node
+   ```
+
+3. Clone this repository
+
+   ```bash
+   git clone https://github.com/instantiator/lcp-server.git
+   ```
+
+4. Install packages
+
+   ```bash
+   cd lcp-server
+   npm install
+   ```
+
+### 0.1 Launch a dev instance
+
+The dev instance is much like a production instance. It's launched with docker compose and has all services, including an OIDC provider (Zitadel). This is configured to have an `admin` user for the org, and a test user in the `lcp` org.
 
 ```bash
 scripts/start-dev.sh
 ```
 
-The `lcp` realm is created, and a couple of accounts are available by default:
+The `lcp` org is created with a default account, if not already available:
 
-| Realm    | Username | Default password |
-| -------- | -------- | ---------------- |
-| `master` | `admin`  | `admin`          |
-| `lcp`    | `test`   | `test`           |
+| Org   | Username | Password |
+| ----- | -------- | -------- |
+| `lcp` | `test`   | `test`   |
 
-For more about working with keycloak, see:
+For more about working with Zitadel, see:
 
-- [Keycloak setup](./keycloak-setup.md)
+- [Zitadel setup](./zitadel-setup.md)
 
-### 0.1 Service healthchecks
+### 0.2 Service healthchecks
 
 Check the `/health` pages for the lcp-server, and lcp-agent applications.
 
 - http://localhost:3000/health
 - http://localhost:3001/health
 
-### 0.2 Check the `test` account
+### 0.3 Check the `test` account
 
-A `test` account is created for the dev server, and stored in keycloak. You can confirm that it's working by retrieving an access token:
+A `test` account is created for the dev server, and stored in Zitadel. You can confirm that it's working by retrieving an access token — `get-token` uses a device-flow login, so it prints a browser link to sign in as:
 
 ```bash
-./lcp-cli.sh --rebuild get-token --username test --password test
+./lcp-cli.sh --rebuild get-token
 ```
 
-You should see a token returned - it _looks like_ a long string of random characters.
+Follow the printed `verification_uri`, sign in as `test` / `test`, and the CLI will pick up the token once login completes. You should see a token returned - it _looks like_ a long string of random characters.
 
-## 1. Create a company
+The rest of this walkthrough passes that token to `lcp-cli.sh` via
+`--access-token-env-var` rather than repeating the browser login on every
+command, so capture it once into an environment variable:
 
-### 1.0 Set up your environment config
+```bash
+export LCP_TOKEN=$(./lcp-cli.sh get-token)
+```
+
+### 0.4 Set up your environment config
 
 Create a `.env` file for your setup. The easiest way to do this is to copy `.env.testing`
 
@@ -54,7 +92,7 @@ cp .env.testing .env
 
 You can use this to modify default configuration - most of it is sufficient for a dev or testing environment.
 
-### 1.1 Set LLM configuration
+### 0.5 Set LLM configuration
 
 The LLM used for each role is determined by checking, in order:
 
@@ -64,9 +102,9 @@ The LLM used for each role is determined by checking, in order:
 
 _The first found is used._ This allows you to individualise the configuration for your agents (eg. coding agents might need a more powerful, coding-capable model, and others may be able to work with lighter, simpler models).
 
-For the simplest configuration, set the `LLM_*` variables in your `.env` file, and leave `$.llmConfig` off both the company and the role.
+For the simplest configuration, set the `LLM_*` variables in your `.env` file.
 
-See `.env.example` for all available environment variables.
+See `.env.example` for the available environment variables.
 
 <details>
 <summary><b>LM Studio example...</b></summary>
@@ -83,14 +121,16 @@ LLM_API_KEY=<your API key goes here>
 
 </details>
 
-### 1.2 Create a new company
+## 1. Create a company
+
+### 1.1 Create the company
 
 `scripts/test-data/simple-company.json` is a minimal company definition with no LLM config — it relies on the environment-level fallback.
 
 Pipe it into `lcp-cli.sh` with the `set-company` verb:
 
 ```bash
-cat scripts/test-data/simple-company.json | lcp-cli.sh --username test --password test set-company
+cat scripts/test-data/simple-company.json | lcp-cli.sh set-company
 ```
 
 The response will be a full instance of the company, _including its `id`_ - indicating that it has been added to the database.
@@ -108,19 +148,20 @@ The response will be a full instance of the company, _including its `id`_ - indi
   "plannerRoleId": null,
   "id": "3fb3528a-3520-4489-b5bd-83247a631d87",
   "slug": "test-company",
-  "runConfig": null
+  "runConfig": null,
+  "nextTaskShortcodeIndex": 0
 }
 ```
 
 > [!TIP]
 > You can modify a company by passing in only the fields you want to change with the `set-company` verb. Target it with `--company-slug test-company` (or `--company-id`/a body `id`) — you don't need to look up its id first.
 
-### 1.3 List all companies
+### 1.2 List all companies
 
 List the companies available with the `list-companies` verb:
 
 ```bash
-lcp-cli.sh --username test --password test list-companies
+lcp-cli.sh list-companies
 ```
 
 You'll get a condensed list of companies:
@@ -136,33 +177,33 @@ You'll get a condensed list of companies:
 ]
 ```
 
-### 1.4 Create some roles
+### 1.3 Create some roles
 
 Create a role in the new company with the `set-role` verb. Provide your company's slug in the `--company-slug` field to let it know which company to associate the role with:
 
 ```bash
-cat scripts/test-data/chicken-assistant.json | lcp-cli.sh --username test --password test set-role --company-slug test-company
+cat scripts/test-data/chicken-assistant.json | lcp-cli.sh set-role --company-slug test-company
 ```
 
 ```bash
-cat scripts/test-data/cat-assistant.json | lcp-cli.sh --username test --password test set-role --company-slug test-company
+cat scripts/test-data/cat-assistant.json | lcp-cli.sh set-role --company-slug test-company
 ```
 
 > [!TIP]
 > You can modify a role by passing in only the fields you want to change - either piped in, or with the `--input` parameter (provide your input as a JSON object). Target it with `--company-slug test-company --role-slug chicken-assistant` (or a body `id`) — you do not need to look up its id first.
 
-### 1.5 List all roles
+### 1.4 List all roles
 
 List the roles available with the `list-roles` verb:
 
 ```bash
-lcp-cli.sh --username test --password test list-roles
+lcp-cli.sh list-roles
 ```
 
 Or scope it to just your company:
 
 ```bash
-lcp-cli.sh --username test --password test list-roles --company-slug test-company
+lcp-cli.sh list-roles --company-slug test-company
 ```
 
 It'll give you a list of all roles in each company:
@@ -200,11 +241,11 @@ It'll give you a list of all roles in each company:
 ]
 ```
 
-### 1.6 Talk to an agent
+## 2. Talk to an agent
 
-Using the `chat` verb allows you create an **agent** from a defined **role** and talk to it.
+Using the `chat` verb allows you create an **agent** from a defined **role** and talk to it. It'll enter chat mode, where you can ask it about itself, other agents, and shared resources.
 
-### 1.6.0 Options
+### 2.1 Options
 
 The `chat` verb has several options:
 
@@ -217,36 +258,28 @@ The `chat` verb has several options:
 > [!NOTE]
 > When neither the role nor the company carries an explicit LLM config, the CLI will display `LLM: (using server environment default)`. The actual provider and model are determined by the `LLM_PROVIDER` / `LLM_MODEL` env vars on the server.
 
-### 1.6.1 Interactive mode (TUI)
+### 2.2 Interactive mode (TUI)
 
-TUI mode is the easiest way to manually interact with agents.
+TUI mode is the easiest way to manually interact with the company and roles.
 
-Provide a role (`--role-id`, or `--role-slug` alongside `--company-slug`/`--company-id`) if you know which one you wish to talk to. Otherwise, provide a company (`--company-slug` or `--company-id`). In each case, your company tab provides a list of roles, and you can initiate a new agent for any role and talk to it.
-
-`--query` works here too: it's submitted automatically as the agent's first message, but the session stays open afterwards - the TUI doesn't exit once the answer arrives, so you can keep chatting. (Combine `--query` with `--no-tui` instead if you want a true one-shot: see 1.6.2.)
-
-In the example below, the TUI is launched with a company slug.
+In the example below, the TUI is launched with a company slug. This could have been provided with `--company` or `--company-slug` (to be explicit).
 
 ```bash
-./lcp-cli.sh --username test --password test chat --company-slug test-company
+./lcp-cli.sh tui --company test-company
 ```
 
 > [!TIP]
-> Type `quit` or `exit`, or press Ctrl+C at the prompt, to leave interactive mode.
+> Use `tab` and `shift`+`tab` to switch between tabs. Other keyboard shortcuts are described at the bottom of the interface.
 
-> [!TIP]
-> Use `tab` and `shift`+`tab` to switch between tabs.
+See [lcp-cli.md](lcp-cli.md#chat) for a full description of the TUI.
 
-> [!NOTE]
-> See [lcp-cli.md](lcp-cli.md#chat) for a full description of the TUI.
+| Screenshot                                                                                            | Description                                                                                                                                     |
+| ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| ![All roles in the test company](./screenshots/001.chat.tui.test-company.png)                         | The first tab shows the company, and lists all roles available. Use ⬆️ / ⬇️ / `enter` to select a role to talk to.                              |
+| ![Asking a question of the chicken assistant](./screenshots/002.chat.tui.chicken-assistant-input.png) | Each new agent is given an assignment on a new tab. Switch between tabs with `tab`. Type your question or prompt for the agent and press enter. |
+| ![Chicken assistant response](./screenshots/003.chat.tui.chicken-assistant-response.png)              | The agent will respond to your request. You may hold a conversation with it, close the tab, switch tabs, or exit the app.                       |
 
-| Screenshot                                                                                            | Description                                                                                                                |
-| ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| ![All roles in the test company](./screenshots/001.chat.tui.test-company.png)                         | The first tab shows the company, and lists all roles available. Use ⬆️ / ⬇️ / `enter` to select a role to talk to.         |
-| ![Asking a question of the chicken assistant](./screenshots/002.chat.tui.chicken-assistant-input.png) | Each new agent is given a tab. Switch between tabs with `tab`. Type your question or prompt for the agent and press enter. |
-| ![Chicken assistant response](./screenshots/003.chat.tui.chicken-assistant-response.png)              | The agent will respond to your request. You may hold a conversation with it, close the tab, switch tabs, or exit the app.  |
-
-### 1.6.2 Non-TUI mode
+### 2.3 Non-TUI mode
 
 > [!TIP]
 > Using `chat --no-tui --query <query>` means your agents' answers are easily read by other tools. You can include it in pipes, or redirect the answer into a file for analysis later.
@@ -254,7 +287,7 @@ In the example below, the TUI is launched with a company slug.
 In the example below, `chat` is started without TUI, and the prompt is provided directly:
 
 ```bash
-./lcp-cli.sh --username test --password test chat --company-slug test-company --role-slug chicken-assistant --no-tui --query 'Tell me about yourself'
+./lcp-cli.sh chat --company-slug test-company --role-slug chicken-assistant --no-tui --query 'Tell me about yourself'
 ```
 
 The agent will be invoked to answer the query, and will then be closed.
@@ -394,7 +427,7 @@ But tell you what—if this company isn't going to be testing for grubs or roost
 
 </details>
 
-### 1.7 Agents that consult each other
+### 2.4 Agents that consult each other
 
 If necessary, an agent may choose to pause mid-chat, and consult another role.
 
@@ -413,8 +446,43 @@ If the consultation fails (eg. the consulted agent errors, times out, or never s
 > [!NOTE]
 > See [cross-agent-consultations.md](cross-agent-consultations.md) for more information about consultations and user queries.
 
-### 1.8 User queries
+### 2.5 User queries
 
 Agents may also choose to initiate a user query. These are asynchronous messages sent to users known to the system.
 
 A user may view all outstanding queries, and may choose to respond to one. On receipt of a response, the agent will resume and use the information from that response.
+
+## 3. Give the company a task
+
+The core functionality of LCP is built around planned tasks. You can give a task to the company, and a planner agent will create a plan, with assignments for different agents.
+
+### 3.1 Create a task
+
+```bash
+./lcp-cli.sh create-task \
+  -c test-company \
+  -r "Create a very short report on what chickens like to eat" \
+  --planner-role cat-assistant \
+  --expected "chicken-food.txt" \
+  --start
+```
+
+On successful creation of a task, `lcp-cli` will respond with a full JSON description of the task.
+
+Note the task's id - so you can use it to monitor the task.
+
+### 3.2 List all tasks
+
+```bash
+./lcp-cli.sh list-tasks -c test-company
+```
+
+This shows each task the company has.
+
+### 3.3 Monitor the task
+
+```bash
+./lcp-cli.sh get-task --task-id 'the-task-id'
+```
+
+This will show the current state of the task, and the assignments in its plan.

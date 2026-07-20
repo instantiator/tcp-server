@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { getGlobalOptions } from '../lib/core/cli-options';
+import { addCompanyOptions } from '../lib/core/entity-ref';
 import { reindexKnowledgeAction } from '../lib/docs/reindex-knowledge.action';
 
 /**
@@ -8,13 +9,14 @@ import { reindexKnowledgeAction } from '../lib/docs/reindex-knowledge.action';
  * store, before the reconciliation poller would catch them.
  */
 export function registerReindexKnowledge(program: Command): void {
-  program
+  const cmd = program
     .command('reindex-knowledge')
     .description(
       "Rebuild the RAG index for all of a company's knowledge (shared + every role)",
-    )
-    .requiredOption('-c, --company <slug-or-id>', 'Company slug or UUID')
-    .action((cmdOpts: { company: string }) =>
-      reindexKnowledgeAction(getGlobalOptions(program), cmdOpts),
     );
+  addCompanyOptions(cmd, { required: true });
+  cmd.action(
+    (cmdOpts: { company?: string; companyId?: string; companySlug?: string }) =>
+      reindexKnowledgeAction(getGlobalOptions(program), cmdOpts),
+  );
 }

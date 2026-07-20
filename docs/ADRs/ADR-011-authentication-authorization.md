@@ -38,6 +38,8 @@ A user can hold multiple permissions. Company creation grants the creator all pe
 
 The default IdP is **Keycloak**, provided as an optional Docker Compose service (`--profile auth`). Any OIDC-compliant IdP (Auth0, Okta, Azure AD, etc.) can be used by setting `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, and `OIDC_CLIENT_SECRET`.
 
+> This sub-decision is superseded by [ADR-017](ADR-017-oidc-provider-selection.md): the default IdP is changing from Keycloak to Zitadel. See that ADR and `docs/prompts/010.4.1` for the rationale and migration plan; the rest of this ADR (permission model, company-permissions design) is unaffected.
+
 lcp-server validates incoming requests by:
 
 1. Extracting the Bearer token from the `Authorization` header
@@ -71,12 +73,12 @@ lcp-server ↔ lcp-agent communication over BullMQ is internal to Docker Compose
 
 ### What changed from the original plan
 
-The `CompanyMembership` entity described here was simplified. The implemented entity is **`CompanyUser`**, which captures identity and routing information without the five discrete permission flags. The permission flags are preserved as an intervention point — a `@RequirePermission()` no-op decorator is wired into each endpoint with the relevant flag annotated in a comment. Enabling real enforcement is a one-line change per endpoint.
+The `CompanyMembership` entity described here was simplified. The implemented entity is **`CompanyUser`**, which captures identity and routing information without the five discrete permission flags. The `@RequirePermission()` decorator described below was never built — no such decorator exists in the codebase, and no permission-flag comments are attached to endpoints. `JwtAuthGuard` (authentication only, not fine-grained authorization) is applied to every user-facing controller instead; see Implemented/Deferred below.
 
 ### Implemented
 
 - `passport-jwt` + `jwks-rsa` + `@nestjs/passport` installed; `JwtStrategy` fetches JWKS on first use (cached)
-- `AuthModule` wired into lcp-server's `AppModule`; `JwtAuthGuard` available for any controller
+- `AuthModule` wired into lcp-server's `AppModule`; `@UseGuards(JwtAuthGuard)` applied to every user-facing controller (company, role, agent, task, conversation, storage proxy, knowledge, model, company-user); internal-only endpoints use the separate `InternalApiKeyGuard` instead (`X-Internal-Api-Key`, see [ADR-001 Amendment](ADR-001-service-architecture.md#amendment-as-implemented-01029))
 - **`CompanyUser` entity** in `libs/lcp-shared/src/models/`: `(id, companyId, identifier, name, memberType, roles[], knowledgeDomains[], createdAt)`. Used for query routing in the conversation flow.
 - Since 009.2: `POST /api/company` auto-creates a `CompanyUser` with `memberType: 'creator'` for the requesting user (from the JWT `sub`/`email` claims), skipped if one already exists for that `(companyId, identifier)` pair.
 - `GET /api/company/:companyId/users`, `POST /api/company/:companyId/users`, `PATCH /api/company/:companyId/users/:userId`, `DELETE /api/company/:companyId/users/:userId` — full CRUD
@@ -85,15 +87,14 @@ The `CompanyMembership` entity described here was simplified. The implemented en
 
 ### Deferred
 
-- Full `CompanyMembership` permission flag system (`create_tasks`, `initiate_conversations`, etc.) — deferred; `@RequirePermission()` decorator is a no-op placeholder
-- Guards applied to API endpoints — `JwtAuthGuard` exists but is not yet applied to any endpoint
+- Full `CompanyMembership` permission flag system (`create_tasks`, `initiate_conversations`, etc.) — no decorator or per-endpoint enforcement exists yet; `JwtAuthGuard` only proves _who_ the caller is, not what they're allowed to do
 - `POST /users` and `PATCH /users/:id/status` Keycloak proxy endpoints — deferred
 
 ## Consequences
 
-- `JwtAuthGuard` available for any controller; not yet applied to any endpoint
+- `JwtAuthGuard` is applied to every user-facing controller (see Implemented above)
 - `CompanyUser` entity is used for conversation routing (matching user `knowledgeDomains` and `roles` to query content)
-- Per-endpoint permission annotations (`// permission: create_tasks`) mark where guards will be applied when the permission system is enabled
+- Fine-grained authorization (permission flags per endpoint) remains a gap — any authenticated user can currently call any user-facing endpoint their token is valid for, with no per-action permission check
 
 ## Open Questions / Assumptions
 

@@ -1,3 +1,5 @@
+import { extractContentText } from '@lcp/shared';
+
 /** Structured record of storage operations performed during an agent loop run. */
 export interface StorageChanges {
   created: string[];
@@ -14,6 +16,8 @@ export interface AgentLoopTracker {
   storage: StorageChanges;
   /** Base (unprefixed) names of every tool invoked during the run. */
   firedTools: Set<string>;
+  /** The model's most recent turn output text, overwritten on each `on_chat_model_end`. */
+  lastResponseText: string;
 }
 
 /** Creates an empty tracker for a new loop run. */
@@ -22,7 +26,26 @@ export function createTracker(): AgentLoopTracker {
     actions: [],
     storage: { created: [], modified: [], deleted: [], moved: [] },
     firedTools: new Set(),
+    lastResponseText: '',
   };
+}
+
+/** Extracts the plain-text content of a chat model's output message (`.content` as a string or content-block array). */
+export function extractChatModelText(output: unknown): string {
+  if (!output || typeof output !== 'object') return '';
+  return extractContentText((output as Record<string, unknown>)['content']);
+}
+
+/**
+ * Finds the first well-formed `<tool_call>...</tool_call>` block (case-
+ * insensitive tag) in `text` and returns the substring between the tags, or
+ * `null` if no complete pair is found. Some models write out a described tool
+ * call as plain text instead of actually invoking the tool; this is used to
+ * quote that description back to the model rather than a generic reminder.
+ */
+export function detectDescribedToolCall(text: string): string | null {
+  const match = /<tool_call>([\s\S]*?)<\/tool_call>/i.exec(text);
+  return match ? match[1] : null;
 }
 
 /** Strips the MCP server prefix from a tool name (e.g. `storage__append_working_file` → `append_working_file`). */
@@ -54,6 +77,8 @@ export function generateActionString(
       return `Listed files`;
     case 'search_files':
       return `Searched files`;
+    case 'create_working_file':
+      return `Created working file: ${s(input.filename)}`;
     case 'append_working_file':
       return `Appended to working file: ${s(input.filename)}`;
     case 'replace_in_working_file':
@@ -95,6 +120,7 @@ export function generateActionString(
 
 /** Tool names (base, without server prefix) whose successful results affect storage. */
 const STORAGE_MUTATION_TOOLS = new Set([
+  'create_working_file',
   'append_working_file',
   'replace_in_working_file',
   'delete_working_file',
@@ -146,7 +172,12 @@ export function applyStorageResult(
 
   const filename = s(input.filename);
 
-  if (base === 'append_working_file') {
+  if (base === 'create_working_file') {
+    // The result text distinguishes a first-time create from a replace.
+    if (text.startsWith('Created')) tracker.storage.created.push(filename);
+    else if (text.startsWith('Replaced'))
+      tracker.storage.modified.push(filename);
+  } else if (base === 'append_working_file') {
     // The result text distinguishes a first-time create from an append.
     if (text.startsWith('Created')) tracker.storage.created.push(filename);
     else if (text.startsWith('Appended'))

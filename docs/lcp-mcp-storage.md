@@ -32,15 +32,17 @@ Read-only exploration:
 
 Assignment-scoped working files (filename-only; write tools are read-only in qa mode):
 
-| Tool                          | Signature                                          | Description                         |
-| ----------------------------- | -------------------------------------------------- | ----------------------------------- |
-| `list_working_files`          | `list_working_files()`                             | List your working directory         |
-| `get_working_file_properties` | `get_working_file_properties(filename)`            | Metadata for a working file         |
-| `read_working_file`           | `read_working_file(filename)`                      | Read a working file                 |
-| `append_working_file`         | `append_working_file(filename, content)`           | Append (creates the file if absent) |
-| `replace_in_working_file`     | `replace_in_working_file(filename, find, replace)` | Replace every occurrence of `find`  |
-| `delete_working_file`         | `delete_working_file(filename)`                    | Soft-delete a working file          |
-| `restore_working_file`        | `restore_working_file(filename)`                   | Restore a soft-deleted working file |
+| Tool                          | Signature                                            | Description                                                       |
+| ----------------------------- | ---------------------------------------------------- | ----------------------------------------------------------------- |
+| `list_working_files`          | `list_working_files()`                               | List your working directory                                       |
+| `get_working_file_properties` | `get_working_file_properties(filename)`              | Metadata for a working file                                       |
+| `get_working_file_summary`    | `get_working_file_summary(filename)`                 | Structural summary of a working file (headings/keys/CSV columns)  |
+| `read_working_file`           | `read_working_file(filename)`                        | Read a working file                                               |
+| `create_working_file`         | `create_working_file(filename, content, overwrite?)` | Create a new file, or replace one entirely with `overwrite: true` |
+| `append_working_file`         | `append_working_file(filename, content)`             | Append (creates the file if absent)                               |
+| `replace_in_working_file`     | `replace_in_working_file(filename, find, replace)`   | Replace every occurrence of `find`                                |
+| `delete_working_file`         | `delete_working_file(filename)`                      | Soft-delete a working file                                        |
+| `restore_working_file`        | `restore_working_file(filename)`                     | Restore a soft-deleted working file                               |
 
 Assignment-scoped materials (read-only):
 
@@ -62,7 +64,7 @@ Returns a markdown overview of the storage service: available tools and path con
 
 **Usage pattern:** Agents should call this first when they discover the storage server is available. Prompt part 3 directs agents to do this automatically.
 
-**Tool-schema gating:** all other tools in this table are only bound to the model after `describe_server` has been called, and stay bound for a small number of iterations before being hidden again (see [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-0086)). Calling any other tool before `describe_server` will fail because the LLM was never given that tool's schema in the first place.
+**Tool-schema gating:** removed in 010.2.8.2 — all tools in this table are bound to the model from turn 1 (subject to mode filtering; see [Agent Services → Enabling MCP tools](agent-services.md#enabling-mcp-tools-for-a-role) and [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-010282)), not gated behind a `describe_server` call.
 
 ---
 
@@ -140,16 +142,18 @@ Reads the full text content of a single file.
 
 ## Assignment-scoped working files
 
-These tools operate on the caller's own working directory (or, in qa mode, the assignment under review — read-only). The agent supplies only a **filename** relative to that directory (subdirectories allowed); `agentId` is injected by `McpClientService`. The prefix is resolved via `GET /internal/agent/:agentId/storage-scope`. A filename that is absolute or contains a `..` segment is rejected before any HTTP call, so a resolved key can never escape the working prefix.
+These tools operate on the caller's own working directory (or, in qa mode, the assignment under review — read-only). The agent supplies only a **filename** relative to that directory (subdirectories allowed); `agentId` is injected by `McpClientService`. The prefix is resolved via `GET /internal/agent/:agentId/storage-scope`. A filename that is absolute, contains a `..` segment, or contains a segment that looks like a resolved storage-hierarchy path component (`tasks`, `assignments`, `materials`, `completed`, `working`) is rejected before any HTTP call — the latter guards against a model echoing back a resolved storage key instead of the bare filename it was shown, which would otherwise silently double-nest under the working prefix.
 
 - **`list_working_files()`** — lists the working directory (same entry shape as `list_files`).
 - **`get_working_file_properties(filename)`** — metadata for a working file.
+- **`get_working_file_summary(filename)`** — structural summary without reading the whole file: headings, top-level keys, or (for CSV) column names and row count, depending on format. Cheaper than `read_working_file` for a large or unfamiliar file.
 - **`read_working_file(filename)`** — reads a working file; friendly error if missing.
+- **`create_working_file(filename, content, overwrite?)`** — creates a new file with `content`, or replaces one entirely when `overwrite: true`. Fails with a corrective warning (naming `overwrite: true` and `append_working_file`) if the file exists and `overwrite` isn't set. The whole-file counterpart to `append_working_file` (add to a file) and `replace_in_working_file` (small in-place edit) — use it for a brand-new file or a full rewrite.
 - **`append_working_file(filename, content)`** — appends `content`, **creating the file if absent**. The resulting document is validated (same rules as a direct write); returns `"Created working file: {filename}"` or `"Appended to working file: {filename}"`. In qa mode: `"Not available in qa mode…"`.
 - **`replace_in_working_file(filename, find, replace)`** — replaces **all** occurrences of the literal string `find`, validates the result, and returns `"Replaced {N} occurrence(s) in working file: {filename}"`. Errors if the file is missing or `find` occurs zero times.
 - **`delete_working_file(filename)`** / **`restore_working_file(filename)`** — soft-delete and restore, using the same `_deleted/` mechanism as the internal `delete`/`restore` endpoints.
 
-Backed by `POST /internal/storage/append` (returns `created`) and `POST /internal/storage/replace` (returns `count`), plus the existing `list`/`read`/`properties`/`delete`/`restore` endpoints.
+Backed by `POST /internal/storage/write` (`create_working_file`, returns `key`/`size`), `POST /internal/storage/append` (returns `created`) and `POST /internal/storage/replace` (returns `count`), plus the existing `list`/`read`/`properties`/`delete`/`restore` endpoints.
 
 ---
 
@@ -218,12 +222,13 @@ Returns a structural analysis of a file's content without requiring LLM processi
 
 **Returns:** JSON object whose structure depends on the detected format:
 
-| Format             | Detected by       | Extracted                                                    |
-| ------------------ | ----------------- | ------------------------------------------------------------ |
-| JSON object        | `.json`, `.jsonc` | `format`, `keys` (top-level property names), `valueTypes`    |
-| JSON array         | `.json`, `.jsonc` | `format: "json-array"`, `length`                             |
-| Markdown           | `.md`             | `format: "markdown"`, `headings` (text + level), `wordCount` |
-| Plain text / other | anything else     | `format: "text"`, `lineCount`, `wordCount`, `firstLine`      |
+| Format             | Detected by       | Extracted                                                                             |
+| ------------------ | ----------------- | ------------------------------------------------------------------------------------- |
+| JSON object        | `.json`, `.jsonc` | `format`, `keys` (top-level property names), `valueTypes`                             |
+| JSON array         | `.json`, `.jsonc` | `format: "json-array"`, `length`                                                      |
+| Markdown           | `.md`             | `format: "markdown"`, `headings` (text + level), `wordCount`                          |
+| CSV                | `.csv`            | `format: "csv"`, `columns` (header row), `rowCount` (data rows, excluding the header) |
+| Plain text / other | anything else     | `format: "text"`, `lineCount`, `wordCount`, `firstLine`                               |
 
 Returns `"File not found: {path}"` if the key does not exist.
 
@@ -255,6 +260,6 @@ Do not include a leading `/`. Examples:
 
 | Item                    | Description                                                                                                      |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| MinIO OIDC SSO          | Keycloak console login for the MinIO UI — deferred                                                               |
+| MinIO OIDC SSO          | Zitadel console login for the MinIO UI — deferred                                                                |
 | MinIO bucket versioning | Would provide true versioning instead of the `_deleted/` soft-delete prefix; configurable per company when added |
 | Audit log JSONL export  | Archival export of audit events to MinIO JSONL files — deferred (see ADR-008)                                    |

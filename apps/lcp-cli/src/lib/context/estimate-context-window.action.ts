@@ -15,7 +15,7 @@ import { resolveToken } from '../auth/token';
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest } from '../core/api';
 import { runCommand } from '../core/run-command';
-import { RoleIdentifierOpts } from '../core/resolve-identifiers';
+import { EntityRefOpts, UUID_RE } from '../core/entity-ref';
 
 // Mirrors the server's RAG worst-case sizing: `rag-retrieval.service.ts`'s
 // default `topK` (5 chunks) and `rag-index.service.ts`'s `MAX_CHUNK_CHARS`
@@ -28,7 +28,7 @@ const DEFAULT_QUERY_TOKENS = 200;
 const DEFAULT_TURN_TOKENS = 300;
 const DEFAULT_TURNS = 20;
 
-export interface EstimateContextWindowOpts extends RoleIdentifierOpts {
+export interface EstimateContextWindowOpts extends EntityRefOpts {
   fromFile?: string;
   query?: string;
   queryTokens?: number;
@@ -66,10 +66,11 @@ async function loadFromFile(path: string): Promise<FileFixture> {
 /** Loads `company`/`role` from the API when identifiers are given; either may be omitted. */
 async function loadFromApi(
   api: Parameters<typeof apiRequest>[0],
-  opts: RoleIdentifierOpts,
+  opts: EntityRefOpts,
 ): Promise<FileFixture> {
-  const companyIdentifier = opts.companyId ?? opts.companySlug;
-  if (!companyIdentifier && !opts.roleId && !opts.roleSlug) return {};
+  const companyIdentifier = opts.companyId ?? opts.companySlug ?? opts.company;
+  const roleGiven = Boolean(opts.roleId || opts.roleSlug || opts.role);
+  if (!companyIdentifier && !roleGiven) return {};
 
   const company = companyIdentifier
     ? await apiRequest<LcpCompany>(
@@ -79,14 +80,23 @@ async function loadFromApi(
       )
     : undefined;
 
+  // A combined --role is an id when it looks like one, otherwise a slug
+  // (scoped to the company resolved above, same as everywhere else).
+  const roleId =
+    opts.roleId ??
+    (opts.role && UUID_RE.test(opts.role) ? opts.role : undefined);
+  const roleSlug =
+    opts.roleSlug ??
+    (opts.role && !UUID_RE.test(opts.role) ? opts.role : undefined);
+
   let role: LcpRole | undefined;
-  if (opts.roleId) {
-    role = await apiRequest<LcpRole>(api, 'GET', `/api/role/${opts.roleId}`);
-  } else if (opts.roleSlug && company) {
+  if (roleId) {
+    role = await apiRequest<LcpRole>(api, 'GET', `/api/role/${roleId}`);
+  } else if (roleSlug && company) {
     role = await apiRequest<LcpRole>(
       api,
       'GET',
-      `/api/company/${company.id}/roles/by-slug/${opts.roleSlug}`,
+      `/api/company/${company.id}/roles/by-slug/${roleSlug}`,
     );
   }
 

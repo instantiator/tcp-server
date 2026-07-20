@@ -68,4 +68,13 @@ describe('MaskSecretsInterceptor', () => {
     const result = asRecord(await intercept(true, { llmConfig: null }));
     expect(result['llmConfig']).toBeNull();
   });
+
+  it('leaves Date values intact instead of collapsing them to {}', async () => {
+    const createdAt = new Date('2026-07-17T15:25:38.000Z');
+    const result = asRecord(await intercept(true, { createdAt }));
+    expect(result['createdAt']).toBe(createdAt);
+    expect(JSON.stringify(result)).toBe(
+      JSON.stringify({ createdAt: '2026-07-17T15:25:38.000Z' }),
+    );
+  });
 });

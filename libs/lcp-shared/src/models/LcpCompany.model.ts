@@ -121,4 +121,13 @@ export class LcpCompany implements WithLlmConfig {
    */
   @Column({ nullable: true })
   plannerRoleId?: UUID | null;
+
+  /**
+   * Monotonically incrementing counter used to generate each new
+   * {@link LcpTask.shortcode} (`nextTaskShortcodeIndex` at generation time,
+   * then incremented). Incremented atomically (raw SQL `UPDATE … RETURNING`
+   * on PostgreSQL) — see `TaskService.create`.
+   */
+  @Column({ type: 'int', default: 0 })
+  nextTaskShortcodeIndex!: number;
 }

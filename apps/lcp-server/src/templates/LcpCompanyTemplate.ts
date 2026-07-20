@@ -1,3 +1,7 @@
 import { LcpCompany } from '@lcp/shared';
 
-export type LcpCompanyTemplate = Omit<LcpCompany, 'id' | 'slug'>;
+/** `nextTaskShortcodeIndex` is server-managed and excluded — see `LcpCompany.nextTaskShortcodeIndex`. */
+export type LcpCompanyTemplate = Omit<
+  LcpCompany,
+  'id' | 'slug' | 'nextTaskShortcodeIndex'
+>;

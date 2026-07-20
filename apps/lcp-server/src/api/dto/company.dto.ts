@@ -8,11 +8,13 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { IsNotUuid } from './is-not-uuid.validator';
 import { LlmConfigDto } from './llm-config.dto';
 
 export class CreateCompanyDto {
   @IsString()
   @IsNotEmpty()
+  @IsNotUuid()
   slug!: string;
 
   @IsString()

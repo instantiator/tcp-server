@@ -1,5 +1,6 @@
 import {
   AgentStatus,
+  AuditEventType,
   LcpAgent,
   LcpRole,
   PendingConsultation,
@@ -7,7 +8,7 @@ import {
 import { NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import type { FindOneOptions, Repository } from 'typeorm';
-import { AgentEventService } from '../events/agent-event.service';
+import { AuditService } from '../audit/audit.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { ConversationService } from './conversation.service';
 import { PauseAndResumeService } from './pause-and-resume.service';
@@ -60,7 +61,7 @@ describe('PauseAndResumeService', () => {
     dispatchStartJob: jest.Mock;
     resumeAgent: jest.Mock;
   };
-  let emitEvent: jest.Mock;
+  let recordAudit: jest.Mock;
   let service: PauseAndResumeService;
 
   beforeEach(() => {
@@ -74,7 +75,7 @@ describe('PauseAndResumeService', () => {
       dispatchStartJob: jest.fn().mockResolvedValue(undefined),
       resumeAgent: jest.fn().mockResolvedValue(undefined),
     };
-    emitEvent = jest.fn();
+    recordAudit = jest.fn().mockResolvedValue(undefined);
 
     service = new PauseAndResumeService(
       agentRepo as unknown as Repository<LcpAgent>,
@@ -82,7 +83,7 @@ describe('PauseAndResumeService', () => {
       consultRepo as unknown as Repository<PendingConsultation>,
       convService as unknown as ConversationService,
       orchestration as unknown as AgentOrchestrationService,
-      { emit: emitEvent } as unknown as AgentEventService,
+      { record: recordAudit } as unknown as AuditService,
     );
   });
 
@@ -121,15 +122,16 @@ describe('PauseAndResumeService', () => {
         undefined,
       );
       expect(result.slug).toBe('analyst-1');
-      expect(emitEvent).toHaveBeenCalledWith(
+      expect(recordAudit).toHaveBeenCalledWith(
+        agent.companyId,
+        'analyst',
         agent.id,
+        AuditEventType.StateChange,
         expect.objectContaining({
-          kind: 'agent_status',
-          data: {
-            status: AgentStatus.Paused,
-            reason: 'user_input',
-            conversationSlug: 'analyst-1',
-          },
+          entity: 'agent',
+          newStatus: AgentStatus.Paused,
+          reason: 'user_input',
+          conversationSlug: 'analyst-1',
         }),
       );
     });
@@ -324,24 +326,26 @@ describe('PauseAndResumeService', () => {
         expect.objectContaining({
           companyId: caller.companyId,
           roleId: consultRole.id,
+          mode: 'consultee',
           requiredToolCalls: ['complete_assignment'],
+          parentAssignmentId: caller.assignmentId,
         }),
       );
       expect(consultRepo.save).toHaveBeenCalled();
       expect(result.roleName).toBe('analyst');
-      // The calling agent's watcher is told it paused and which agent to follow.
-      expect(emitEvent).toHaveBeenCalledWith(
+      // One state_change tells the calling agent's watcher it paused to consult
+      // and which agent to follow (keyed on consultedAgentId).
+      expect(recordAudit).toHaveBeenCalledWith(
+        caller.companyId,
+        expect.any(String),
         caller.id,
+        AuditEventType.StateChange,
         expect.objectContaining({
-          kind: 'agent_status',
-          data: { status: AgentStatus.Paused, reason: 'consultation' },
-        }),
-      );
-      expect(emitEvent).toHaveBeenCalledWith(
-        caller.id,
-        expect.objectContaining({
-          kind: 'consultation_started',
-          data: { agentId: consultAgent.id, roleName: 'analyst' },
+          entity: 'agent',
+          newStatus: AgentStatus.Paused,
+          reason: 'consultation',
+          consultedAgentId: consultAgent.id,
+          consultedRoleName: 'analyst',
         }),
       );
     });
@@ -378,25 +382,30 @@ describe('PauseAndResumeService', () => {
       });
     });
 
-    it('emits a completed event carrying the resolved output', async () => {
+    it('records a terminal completed state_change carrying the resolved output', async () => {
       const agent = makeAgent({ status: AgentStatus.Running });
       agentRepo.findOneBy.mockResolvedValue(agent);
       consultRepo.findOne.mockResolvedValue(null);
 
       await service.completeAgent(agent.id, 'final answer');
 
-      expect(emitEvent).toHaveBeenCalledWith(
+      expect(recordAudit).toHaveBeenCalledWith(
+        agent.companyId,
+        expect.any(String),
         agent.id,
+        AuditEventType.StateChange,
         expect.objectContaining({
-          kind: 'completed',
-          data: { response: 'final answer' },
+          entity: 'agent',
+          newStatus: AgentStatus.Completed,
+          reason: 'turn_complete',
+          response: 'final answer',
         }),
       );
     });
 
-    it('emits a completed event even when the agent was already Completed', async () => {
+    it('records the terminal state_change even when the agent was already Completed', async () => {
       // The worker's fallback path sets Completed before notifyComplete lands;
-      // observers must still receive the terminal event.
+      // observers must still receive the terminal state_change.
       const agent = makeAgent({
         status: AgentStatus.Completed,
         output: 'done',
@@ -406,11 +415,15 @@ describe('PauseAndResumeService', () => {
 
       await service.completeAgent(agent.id, '');
 
-      expect(emitEvent).toHaveBeenCalledWith(
+      expect(recordAudit).toHaveBeenCalledWith(
+        agent.companyId,
+        expect.any(String),
         agent.id,
+        AuditEventType.StateChange,
         expect.objectContaining({
-          kind: 'completed',
-          data: { response: 'done' },
+          entity: 'agent',
+          newStatus: AgentStatus.Completed,
+          response: 'done',
         }),
       );
     });
@@ -501,18 +514,22 @@ describe('PauseAndResumeService', () => {
       expect(orchestration.resumeAgent).not.toHaveBeenCalled();
     });
 
-    it('emits a failed event carrying the reason', async () => {
+    it('records a terminal failed state_change carrying the reason', async () => {
       const agent = makeAgent({ status: AgentStatus.Running });
       agentRepo.findOneBy.mockResolvedValue(agent);
       consultRepo.findOne.mockResolvedValue(null);
 
       await service.failAgent(agent.id, 'LLM exploded');
 
-      expect(emitEvent).toHaveBeenCalledWith(
+      expect(recordAudit).toHaveBeenCalledWith(
+        agent.companyId,
+        expect.any(String),
         agent.id,
+        AuditEventType.StateChange,
         expect.objectContaining({
-          kind: 'failed',
-          data: { error: 'LLM exploded' },
+          entity: 'agent',
+          newStatus: AgentStatus.Failed,
+          reason: 'LLM exploded',
         }),
       );
     });

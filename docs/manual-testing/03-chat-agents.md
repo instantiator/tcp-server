@@ -158,7 +158,7 @@ Run an interactive session in a real terminal (not piped) to exercise the
 full-screen TUI, the default rendering mode since 008.6.
 
 ```bash
-./lcp-cli.sh --username test --password test chat --role-id "$ROLE_ID"
+./lcp-cli.sh chat --role-id "$ROLE_ID"
 ```
 
 **What to check (TUI mode — default on a real terminal):**
@@ -213,7 +213,7 @@ full-screen TUI, the default rendering mode since 008.6.
 **What to check (plain renderer — pipe the command, or pass `--no-tui`):**
 
 ```bash
-./lcp-cli.sh --username test --password test chat --role-id "$ROLE_ID" --no-tui
+./lcp-cli.sh chat --role-id "$ROLE_ID" --no-tui
 ```
 
 - Colour-coded, blank-line-separated blocks appear: **Agent state** (cyan),
@@ -231,7 +231,7 @@ full-screen TUI, the default rendering mode since 008.6.
 **What to check (`--company-id`, no role given):**
 
 ```bash
-./lcp-cli.sh --username test --password test chat --company-id "$COMPANY_ID"
+./lcp-cli.sh chat --company-id "$COMPANY_ID"
 ```
 
 - Opens straight onto the company roster — no agent tab exists yet, no agent

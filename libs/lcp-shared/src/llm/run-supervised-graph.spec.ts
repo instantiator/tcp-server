@@ -280,7 +280,7 @@ describe('runSupervisedGraph', () => {
     });
 
     expect(result.aborted).toBe(true);
-    expect(result.failureReason).toBe('max_iterations');
+    expect(result.failureReason).toBe('exceeded 2 iterations');
     expect(abortController.signal.aborted).toBe(true);
   });
 

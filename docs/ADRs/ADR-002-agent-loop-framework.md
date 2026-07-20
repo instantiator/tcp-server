@@ -1,6 +1,6 @@
 # ADR-002: Agent Loop Framework
 
-Status: Proposed
+Status: Partially Implemented (amended — see [Amendment](#amendment-as-implemented-01029) at the end)
 
 ## Context
 
@@ -45,3 +45,12 @@ LangGraph models agent execution as a state graph where nodes are actions (call 
 
 - LangGraph.js is actively maintained by LangChain Inc. as of 2026. Verify dependency health before first use (per `dev-environment/pre-coding-activities.md`).
 - A role's graph definition (which tools it has, which nodes are in its loop) is likely static per role type — but the inputs (prompts, context, MCP servers) vary per task step.
+
+## Amendment as implemented (010.2.9)
+
+Two pieces of the Decision above didn't end up matching the built system:
+
+- **`interrupt()` is not used.** Human-in-the-loop pause/resume (agent-initiated user conversations and consultations) is implemented as a BullMQ-based pause/resume — the job simply exits and is re-dispatched later — not LangGraph's native `interrupt()`. See [ADR-012](./ADR-012-human-in-the-loop.md).
+- **Multi-agent coordination is implemented, but not as a LangGraph subgraph.** Planner-then-workers coordination (the capability this ADR flagged as future work) is now real: `lcp-server`'s `TaskOrchestrationService` dispatches a planner assignment, then each plan step's implement assignment, then QA, then finalisation, as a plain state machine over `LcpTask`/`LcpAssignment` status columns — not a LangGraph parallel-subgraph construction. Each individual assignment still runs its own single-agent LangGraph loop; the coordination between assignments lives outside LangGraph. See [ADR-010](./ADR-010-orchestration-design.md).
+
+Everything else in the Decision holds: `StateGraph` with the PostgreSQL checkpoint store, parallel subgraph-free concurrent BullMQ jobs, and the pluggable `BaseChatModel` provider interface are all as decided.

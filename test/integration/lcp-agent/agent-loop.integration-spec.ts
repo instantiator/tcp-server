@@ -3,7 +3,6 @@ import {
   AgentStatus,
   AuditEventType,
   CONTEXT_AUDIT_SINK,
-  CONTEXT_EVENT_SINK,
   ContextBudgetService,
   ContextCompactorService,
   ContextManagerService,
@@ -95,14 +94,6 @@ describe('AgentLoopService (integration)', () => {
         ContextBudgetService,
         ContextCompactorService,
         IncomingDataGuardService,
-        {
-          provide: CONTEXT_EVENT_SINK,
-          useFactory: (publisher: AgentEventPublisherService) => ({
-            emit: (agentId: string, event: unknown) =>
-              publisher.publish(agentId as never, event as never),
-          }),
-          inject: [AgentEventPublisherService],
-        },
         { provide: CONTEXT_AUDIT_SINK, useExisting: AuditClientService },
         ContextManagerService,
       ],
@@ -279,15 +270,15 @@ describe('AgentLoopService (integration)', () => {
       company.id,
       role.name,
       agent.id,
-      AuditEventType.Decision,
-      expect.objectContaining({ event: 'compaction_triggered' }),
+      AuditEventType.Compaction,
+      expect.objectContaining({ phase: 'started' }),
     );
     expect(auditRecord).toHaveBeenCalledWith(
       company.id,
       role.name,
       agent.id,
-      AuditEventType.Decision,
-      expect.objectContaining({ event: 'compaction_complete' }),
+      AuditEventType.Compaction,
+      expect.objectContaining({ phase: 'complete' }),
     );
   }, 30_000);
 

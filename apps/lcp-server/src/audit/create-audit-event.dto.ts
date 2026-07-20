@@ -32,6 +32,22 @@ export class CreateAuditEventDto {
   @IsUUID()
   agentId?: UUID;
 
+  /**
+   * Assignment scope for agent-less orchestrator/company rows. Ignored when
+   * `agentId` is set — the server derives it from the agent so it never drifts.
+   */
+  @IsOptional()
+  @IsUUID()
+  assignmentId?: UUID;
+
+  /**
+   * Task scope for agent-less orchestrator/company rows. Ignored when
+   * `agentId` is set — the server derives it from the agent's assignment.
+   */
+  @IsOptional()
+  @IsUUID()
+  taskId?: UUID;
+
   @IsIn(AUDIT_EVENT_TYPES)
   eventType!: AuditEventType;
 

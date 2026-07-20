@@ -1,41 +1,78 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { AuthTokenController } from './auth-token.controller';
-import { AuthTokenService, OidcTokenResponse } from './auth-token.service';
+import {
+  AuthTokenService,
+  DeviceAuthorizationResponse,
+  OidcTokenResponse,
+} from './auth-token.service';
 
 describe('AuthTokenController', () => {
-  let service: jest.Mocked<Pick<AuthTokenService, 'getToken' | 'refreshToken'>>;
+  let service: jest.Mocked<
+    Pick<
+      AuthTokenService,
+      'startDeviceAuthorization' | 'pollDeviceToken' | 'refreshToken'
+    >
+  >;
   let controller: AuthTokenController;
 
   beforeEach(() => {
-    service = { getToken: jest.fn(), refreshToken: jest.fn() };
+    service = {
+      startDeviceAuthorization: jest.fn(),
+      pollDeviceToken: jest.fn(),
+      refreshToken: jest.fn(),
+    };
     controller = new AuthTokenController(
       service as unknown as AuthTokenService,
     );
   });
 
-  it('returns the token response on success', async () => {
-    const tokenResponse: OidcTokenResponse = {
-      access_token: 'tok123',
-      token_type: 'Bearer',
-      expires_in: 300,
-    };
-    service.getToken.mockResolvedValue(tokenResponse);
+  describe('startDeviceAuthorization', () => {
+    it('returns the device authorization response', async () => {
+      const response: DeviceAuthorizationResponse = {
+        device_code: 'dc-1',
+        user_code: 'ABCD-EFGH',
+        verification_uri: 'http://localhost:8080/device',
+        expires_in: 300,
+        interval: 5,
+      };
+      service.startDeviceAuthorization.mockResolvedValue(response);
 
-    const result = await controller.getToken({
-      username: 'alice',
-      password: 'secret',
+      const result = await controller.startDeviceAuthorization();
+      expect(result).toEqual(response);
     });
-    expect(result.access_token).toBe('tok123');
-    expect(service.getToken).toHaveBeenCalledWith('alice', 'secret');
   });
 
-  it('propagates UnauthorizedException from the service', async () => {
-    service.getToken.mockRejectedValue(
-      new UnauthorizedException('Invalid credentials or OIDC error'),
-    );
-    await expect(
-      controller.getToken({ username: 'alice', password: 'wrong' }),
-    ).rejects.toThrow(UnauthorizedException);
+  describe('pollDeviceToken', () => {
+    it('returns pending while the flow is incomplete', async () => {
+      service.pollDeviceToken.mockResolvedValue({ status: 'pending' });
+
+      const result = await controller.pollDeviceToken({ device_code: 'dc-1' });
+      expect(result).toEqual({ status: 'pending' });
+      expect(service.pollDeviceToken).toHaveBeenCalledWith('dc-1');
+    });
+
+    it('returns the token once complete', async () => {
+      service.pollDeviceToken.mockResolvedValue({
+        status: 'complete',
+        access_token: 'tok123',
+        token_type: 'Bearer',
+        expires_in: 300,
+      });
+
+      const result = await controller.pollDeviceToken({ device_code: 'dc-1' });
+      expect(result).toEqual(
+        expect.objectContaining({ status: 'complete', access_token: 'tok123' }),
+      );
+    });
+
+    it('propagates UnauthorizedException from the service', async () => {
+      service.pollDeviceToken.mockRejectedValue(
+        new UnauthorizedException('expired_token'),
+      );
+      await expect(
+        controller.pollDeviceToken({ device_code: 'dc-1' }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
   });
 
   describe('refreshToken', () => {

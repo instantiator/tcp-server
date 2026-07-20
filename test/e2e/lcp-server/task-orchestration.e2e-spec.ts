@@ -187,8 +187,13 @@ describe('Task orchestration lifecycle (e2e)', () => {
 
   it('runs the full lifecycle to a succeeded task with promoted files', async () => {
     const taskId = await createAndStart();
+    const shortcode = (await taskRepo.findOneByOrFail({ id: taskId }))
+      .shortcode;
     expect((await taskRepo.findOneByOrFail({ id: taskId })).status).toBe(
       'planning',
+    );
+    expect((await planAssignment(taskId)).shortcode).toBe(
+      `${shortcode}-000-plan`,
     );
 
     await submitPlan(taskId, 2);
@@ -197,10 +202,19 @@ describe('Task orchestration lifecycle (e2e)', () => {
       'in-progress',
     );
     expect((await step(taskId, 0)).status).toBe('in-progress');
+    expect((await step(taskId, 0)).shortcode).toBe(
+      `${shortcode}-001-implement`,
+    );
+    expect((await step(taskId, 1)).shortcode).toBe(
+      `${shortcode}-002-implement`,
+    );
 
     // Step 0: complete → in-qa → accept → succeeded, step 1 dispatched.
     const s0 = await completeStep(taskId, 0);
     expect((await step(taskId, 0)).status).toBe('in-qa');
+    expect((await qaAssignment(s0.assignmentId)).shortcode).toBe(
+      `${shortcode}-001-qa`,
+    );
     await assure(s0.assignmentId, 'accept');
     expect((await step(taskId, 0)).status).toBe('succeeded');
     expect((await step(taskId, 1)).status).toBe('in-progress');
@@ -220,6 +234,24 @@ describe('Task orchestration lifecycle (e2e)', () => {
       taskCompletedPrefix(company.slug, taskId),
     );
     expect(completedFiles.map((f) => f.name)).toContain('out.md');
+  });
+
+  it('fails a still-planning task when the planner completes without ever submitting a plan', async () => {
+    const taskId = await createAndStart();
+    const planAgentId = await agentIdFor((await planAssignment(taskId)).id);
+
+    // Simulates the live bug (010.2.8.1): the planner's run ends (e.g.
+    // narrated/short-circuited) without ever calling create_plan, so
+    // POST /internal/task/:id/plan is skipped entirely here.
+    await request(app.getHttpServer())
+      .post(`/internal/agent/${planAgentId}/complete`)
+      .set('X-Internal-Api-Key', INTERNAL_KEY)
+      .send({ output: 'I think we are done.' })
+      .expect(204);
+
+    const task = await taskRepo.findOneByOrFail({ id: taskId });
+    expect(task.status).toBe('failed');
+    expect(task.failureReason).toContain('without producing a plan');
   });
 
   it('runs a finalise agent when the task states expected outputs, then succeeds', async () => {
@@ -253,6 +285,8 @@ describe('Task orchestration lifecycle (e2e)', () => {
       mode: 'finalise',
     });
     expect(finalise.status).toBe('in-progress');
+    // One implement step (plan index 1) → finalise takes the next index.
+    expect(finalise.shortcode).toBe(`${task.shortcode}-002-finalise`);
 
     // Drive the finalise agent's completion: out.md is present in completed/,
     // so the finalise gate passes and the task succeeds.
@@ -270,6 +304,73 @@ describe('Task orchestration lifecycle (e2e)', () => {
         { type: 'task-completed-path', value: 'out.md' },
       ]),
     );
+  });
+
+  it('fails the task when the finalise agent gives up after a gate failure, keeping promoted files', async () => {
+    // Expects a file the implement step never produces, so the finalise gate
+    // always fails no matter what the finalise agent submits.
+    const created = await request(app.getHttpServer())
+      .post('/api/task')
+      .set('Authorization', `Bearer ${jwt}`)
+      .send({
+        companyId: company.id,
+        request: 'Produce a report',
+        plannerRoleId: role.id,
+        expected: [{ type: 'task-completed-path', value: 'summary.md' }],
+      })
+      .expect(201);
+    const taskId = (created.body as LcpTask).id;
+    await request(app.getHttpServer())
+      .post(`/api/task/${taskId}/start`)
+      .set('Authorization', `Bearer ${jwt}`)
+      .expect(202);
+
+    await submitPlan(taskId, 1);
+    const s0 = await completeStep(taskId, 0);
+    await assure(s0.assignmentId, 'accept');
+
+    // out.md (not summary.md) is already promoted to completed/ before the
+    // finalise agent even runs — the gate-failure retry never risks losing it.
+    const beforeRetry = await storage.listFiles(
+      taskCompletedPrefix(company.slug, taskId),
+    );
+    expect(beforeRetry.map((f) => f.name)).toContain('out.md');
+
+    const finalise = await assignmentRepo.findOneByOrFail({
+      taskId,
+      mode: 'finalise',
+    });
+    const finaliseAgentId = await agentIdFor(finalise.id);
+
+    // Simulates the real agent retrying against the gate a few times.
+    for (let i = 0; i < 3; i++) {
+      await request(app.getHttpServer())
+        .post(`/internal/assignment/${finalise.id}/complete`)
+        .set('X-Internal-Api-Key', INTERNAL_KEY)
+        .send({
+          agentId: finaliseAgentId,
+          summary: `attempt ${i}`,
+          prepared: [],
+        })
+        .expect(422);
+    }
+
+    // The agent gives up after exhausting its retries.
+    await request(app.getHttpServer())
+      .post(`/internal/agent/${finaliseAgentId}/fail`)
+      .set('X-Internal-Api-Key', INTERNAL_KEY)
+      .send({ reason: 'gate never satisfied after retries' })
+      .expect(204);
+
+    const failed = await taskRepo.findOneByOrFail({ id: taskId });
+    expect(failed.status).toBe('failed');
+    expect(failed.failureReason).toContain('finalise failed');
+
+    // Files promoted before the failure remain — "fail but still promote".
+    const afterFailure = await storage.listFiles(
+      taskCompletedPrefix(company.slug, taskId),
+    );
+    expect(afterFailure.map((f) => f.name)).toContain('out.md');
   });
 
   it('returns a rejected assignment to the agent, then accepts the retry', async () => {

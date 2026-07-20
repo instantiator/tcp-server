@@ -1,6 +1,6 @@
 # ADR-014: API Documentation (Swagger / OpenAPI)
 
-**Status:** Implemented
+**Status:** Implemented (amended — see [Amendment](#amendment-as-implemented-01025) at the end)
 
 ## Context
 
@@ -33,3 +33,7 @@ A new `lcp-cli open-swagger --service <name>` command mirrors `open-document-sto
 - `swagger-ui-express` is a production dependency. Its bundle (~10 MB) is included in all server images. This is acceptable given the development and operator value.
 - `lcp-cli open-swagger --service <name>` prints the Swagger UI URL and (by default) opens it in the system browser. `--no-open` suppresses the browser launch.
 - Smoke tests verify that `GET /swagger` returns 200 on each service.
+
+## Amendment as implemented (010.2.5)
+
+`lcp-mcp-tasks`, added after this ADR as the sixth server app, was wired up the same way from the start — `SwaggerModule` in its `main.ts`, `@nestjs/swagger` in `nest-cli.json`'s plugin list, and a smoke-test assertion — so it was never a gap to fix, just a service this ADR's "five" wording predates. `lcp-cli open-swagger --service lcp-mcp-tasks` and all other consequences above apply to it unchanged.

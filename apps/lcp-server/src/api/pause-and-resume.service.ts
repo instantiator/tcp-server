@@ -1,5 +1,6 @@
 import {
   AgentStatus,
+  AuditEventType,
   LcpAgent,
   LcpRole,
   PendingConsultation,
@@ -8,7 +9,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { UUID } from 'crypto';
 import { Repository } from 'typeorm';
-import { AgentEventService } from '../events/agent-event.service';
+import { AuditService } from '../audit/audit.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { ConversationService } from './conversation.service';
 
@@ -38,20 +39,29 @@ export class PauseAndResumeService {
     private readonly consultRepo: Repository<PendingConsultation>,
     private readonly convService: ConversationService,
     private readonly orchestration: AgentOrchestrationService,
-    private readonly events: AgentEventService,
+    private readonly audit: AuditService,
   ) {}
 
-  /** Emits an `agent_status` transition to any SSE clients observing `agentId`. */
-  private emitStatus(
+  /**
+   * Records an agent `state_change` capturing a lifecycle transition — the
+   * single source for both history and the live `GET /api/agent/:id/events`
+   * stream (the publisher routes it). Callers pass the denormalised company
+   * and role they already hold.
+   */
+  private async recordStatus(
     agentId: UUID,
+    companyId: UUID,
+    roleName: string,
     status: AgentStatus,
-    extra?: { reason?: string; conversationSlug?: string },
-  ): void {
-    this.events.emit(agentId, {
-      timestamp: new Date().toISOString(),
-      kind: 'agent_status',
-      data: { status, ...extra },
-    });
+    extra?: Record<string, unknown>,
+  ): Promise<void> {
+    await this.audit.record(
+      companyId,
+      roleName,
+      agentId,
+      AuditEventType.StateChange,
+      { entity: 'agent', newStatus: status, ...extra },
+    );
   }
 
   /**
@@ -88,10 +98,13 @@ export class PauseAndResumeService {
       userIds,
     );
 
-    this.emitStatus(agentId, AgentStatus.Paused, {
-      reason: 'user_input',
-      conversationSlug: conv.slug,
-    });
+    await this.recordStatus(
+      agentId,
+      agent.companyId,
+      role?.name ?? 'agent',
+      AgentStatus.Paused,
+      { reason: 'user_input', conversationSlug: conv.slug },
+    );
     this.logger.log(
       `Agent ${agentId} paused for user input — conversation ${conv.slug}`,
     );
@@ -158,6 +171,9 @@ export class PauseAndResumeService {
       // the call. The consulting agent's orphan assignment is consultee-mode.
       mode: 'consultee',
       requiredToolCalls: ['complete_assignment'],
+      // Links the new consultation assignment back to the task it was spawned
+      // for (via the calling agent's own assignment) — see LcpAssignment.parentAssignmentId.
+      parentAssignmentId: callingAgent.assignmentId,
     });
 
     // Record the link between the paused caller and the new consulting agent.
@@ -175,15 +191,18 @@ export class PauseAndResumeService {
     await this.orchestration.dispatchStartJob(consultAgent.id);
 
     // Tell any client watching the calling agent that it paused to consult, and
-    // which agent to follow for the consultation's own activity.
-    this.emitStatus(callingAgentId, AgentStatus.Paused, {
-      reason: 'consultation',
-    });
-    this.events.emit(callingAgentId, {
-      timestamp: new Date().toISOString(),
-      kind: 'consultation_started',
-      data: { agentId: consultAgent.id, roleName: role.name },
-    });
+    // which agent to follow — CLI follower spawning keys on `consultedAgentId`.
+    await this.recordStatus(
+      callingAgentId,
+      callingAgent.companyId,
+      callingRole?.name ?? 'agent',
+      AgentStatus.Paused,
+      {
+        reason: 'consultation',
+        consultedAgentId: consultAgent.id,
+        consultedRoleName: role.name,
+      },
+    );
 
     this.logger.log(
       `Agent ${callingAgentId} (${callingRole?.name ?? '?'}) paused for consultation — consulting agent ${consultAgent.id} (${role.name}), consultation ${consultation.id}`,
@@ -218,17 +237,19 @@ export class PauseAndResumeService {
     // Completed — the lcp-agent fallback path sets status synchronously
     // before this HTTP call arrives, leaving the consultation pending.
     const resolvedOutput = output || agent.output || '';
+    const role = await this.roleRepo.findOneBy({ id: agent.roleId });
 
-    // Terminal event for any client observing this agent (a chat agent resumed
-    // in the worker, or a consultation agent being followed). Emitted here —
-    // before the consultation early-return below — so every worker completion
-    // reaches its watchers, regardless of the idempotency guard above.
-    this.events.emit(agentId, {
-      timestamp: new Date().toISOString(),
-      kind: 'completed',
-      data: { response: resolvedOutput },
-    });
-    this.emitStatus(agentId, AgentStatus.Completed);
+    // Terminal state_change for any client observing this agent (a chat agent
+    // resumed in the worker, or a consultation agent being followed). Recorded
+    // here — before the consultation early-return below — so every worker
+    // completion reaches its watchers, regardless of the idempotency guard.
+    await this.recordStatus(
+      agentId,
+      agent.companyId,
+      role?.name ?? 'agent',
+      AgentStatus.Completed,
+      { reason: 'turn_complete', response: resolvedOutput },
+    );
 
     const consultation = await this.consultRepo.findOne({
       where: { consultationAgentId: agentId, status: 'pending' },
@@ -281,14 +302,16 @@ export class PauseAndResumeService {
       this.logger.warn(`Agent ${agentId} failed: ${reason}`);
     }
 
-    // Terminal event for observers — emitted before the consultation
+    // Terminal state_change for observers — recorded before the consultation
     // early-return so every worker failure reaches its watchers.
-    this.events.emit(agentId, {
-      timestamp: new Date().toISOString(),
-      kind: 'failed',
-      data: { error: reason },
-    });
-    this.emitStatus(agentId, AgentStatus.Failed);
+    const role = await this.roleRepo.findOneBy({ id: agent.roleId });
+    await this.recordStatus(
+      agentId,
+      agent.companyId,
+      role?.name ?? 'agent',
+      AgentStatus.Failed,
+      { reason },
+    );
 
     const consultation = await this.consultRepo.findOne({
       where: { consultationAgentId: agentId, status: 'pending' },

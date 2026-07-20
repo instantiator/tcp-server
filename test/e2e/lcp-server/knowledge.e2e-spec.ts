@@ -29,7 +29,7 @@ describe('KnowledgeController (e2e)', () => {
     auditRepo = module.get(getRepositoryToken(AuditEvent));
     const company = await companyRepo.save(
       companyRepo.create({
-        slug: 'knowledge-co',
+        slug: `knowledge-co-${Date.now()}`,
         name: 'KnowledgeCo',
         description: 'Test',
       }),
@@ -61,8 +61,166 @@ describe('KnowledgeController (e2e)', () => {
     await app.close();
   });
 
-  // Knowledge endpoints require MinIO for storage — only auth gating is tested here.
-  // Full document round-trips are covered by integration tests (scripts/run-integration-tests.sh).
+  describe('role scope round-trip', () => {
+    it('stores, lists, gets, and deletes a document (delete is idempotent)', async () => {
+      const jwt = makeTestJwt();
+      const content = '---\ntitle: Report\n---\n\nBody.';
+
+      const storeRes = await request(app.getHttpServer())
+        .post(`/api/role/${roleId}/knowledge`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .attach('file', Buffer.from(content), 'report.md');
+      expect(storeRes.status).toBe(201);
+
+      const listRes = await request(app.getHttpServer())
+        .get(`/api/role/${roleId}/knowledge`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(200);
+      expect(
+        (listRes.body as { name: string }[]).some(
+          (d) => d.name === 'report.md',
+        ),
+      ).toBe(true);
+
+      const getRes = await request(app.getHttpServer())
+        .get(`/api/role/${roleId}/knowledge/report.md`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(200);
+      expect(getRes.text).toBe(content);
+
+      await request(app.getHttpServer())
+        .delete(`/api/role/${roleId}/knowledge/report.md`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(204);
+
+      await request(app.getHttpServer())
+        .get(`/api/role/${roleId}/knowledge/report.md`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(404);
+
+      // Deleting an already-deleted (or never-existing) file is a no-op, not an error.
+      await request(app.getHttpServer())
+        .delete(`/api/role/${roleId}/knowledge/report.md`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(204);
+    });
+
+    it('overwrites a document stored twice under the same filename', async () => {
+      const jwt = makeTestJwt();
+      await request(app.getHttpServer())
+        .post(`/api/role/${roleId}/knowledge`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .attach(
+          'file',
+          Buffer.from('---\ntitle: v1\n---\n\nFirst.'),
+          'versioned.md',
+        )
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post(`/api/role/${roleId}/knowledge`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .attach(
+          'file',
+          Buffer.from('---\ntitle: v2\n---\n\nSecond.'),
+          'versioned.md',
+        )
+        .expect(201);
+
+      const getRes = await request(app.getHttpServer())
+        .get(`/api/role/${roleId}/knowledge/versioned.md`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(200);
+      expect(getRes.text).toBe('---\ntitle: v2\n---\n\nSecond.');
+
+      await request(app.getHttpServer())
+        .delete(`/api/role/${roleId}/knowledge/versioned.md`)
+        .set('Authorization', `Bearer ${jwt}`);
+    });
+
+    it('stores an upload under the body `filename` override, not the multipart filename', async () => {
+      const jwt = makeTestJwt();
+      const content = '---\ntitle: Overridden\n---\n\nBody.';
+
+      await request(app.getHttpServer())
+        .post(`/api/role/${roleId}/knowledge`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .field('filename', 'y.md')
+        .attach('file', Buffer.from(content), 'x.md')
+        .expect(201);
+
+      const getRes = await request(app.getHttpServer())
+        .get(`/api/role/${roleId}/knowledge/y.md`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(200);
+      expect(getRes.text).toBe(content);
+
+      await request(app.getHttpServer())
+        .get(`/api/role/${roleId}/knowledge/x.md`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(404);
+
+      await request(app.getHttpServer())
+        .delete(`/api/role/${roleId}/knowledge/y.md`)
+        .set('Authorization', `Bearer ${jwt}`);
+    });
+
+    it('404s getting an unknown file, and 404s on an unknown role entirely', async () => {
+      const jwt = makeTestJwt();
+      await request(app.getHttpServer())
+        .get(`/api/role/${roleId}/knowledge/does-not-exist.md`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(404);
+
+      const unknownRoleId = '00000000-0000-0000-0000-000000000000';
+      await request(app.getHttpServer())
+        .get(`/api/role/${unknownRoleId}/knowledge`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(404);
+    });
+  });
+
+  describe('company scope round-trip', () => {
+    it('stores, lists, gets, and deletes a shared document', async () => {
+      const jwt = makeTestJwt();
+      const content = '---\ntitle: Policy\n---\n\nBe excellent.';
+
+      await request(app.getHttpServer())
+        .post(`/api/company/${companyId}/knowledge`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .attach('file', Buffer.from(content), 'policy.md')
+        .expect(201);
+
+      const listRes = await request(app.getHttpServer())
+        .get(`/api/company/${companyId}/knowledge`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(200);
+      expect(
+        (listRes.body as { name: string }[]).some(
+          (d) => d.name === 'policy.md',
+        ),
+      ).toBe(true);
+
+      const getRes = await request(app.getHttpServer())
+        .get(`/api/company/${companyId}/knowledge/policy.md`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(200);
+      expect(getRes.text).toBe(content);
+
+      await request(app.getHttpServer())
+        .delete(`/api/company/${companyId}/knowledge/policy.md`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(204);
+    });
+
+    it('404s for an unknown company', async () => {
+      const jwt = makeTestJwt();
+      await request(app.getHttpServer())
+        .get(`/api/company/no-such-company/knowledge`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(404);
+    });
+  });
 
   describe('role scope', () => {
     it('GET /api/role/:roleId/knowledge returns 401 without a token', () =>
@@ -92,6 +250,14 @@ describe('KnowledgeController (e2e)', () => {
         .get(`/api/company/${companyId}/knowledge`)
         .expect(401));
 
+    // Seen fail intermittently (~1/5 full e2e runs, 2026-07-20): expected 401,
+    // got 404. Not reproducible in isolation or in a targeted rerun alongside
+    // agent-loop-interactions.e2e-spec.ts (the newest e2e spec at the time,
+    // and the only one to bind a real port / start a real BullMQ worker) — so
+    // ruled out as caused by that spec. No code-level link found to any
+    // other change either. Likely host/Docker resource-contention flake, not
+    // a logic bug. If it recurs, worth checking Postgres connection-pool
+    // pressure across the full e2e run rather than re-guessing from here.
     it('GET /api/company/:companyId/knowledge/:filename returns 401 without a token', () =>
       request(app.getHttpServer())
         .get(`/api/company/${companyId}/knowledge/policy.md`)

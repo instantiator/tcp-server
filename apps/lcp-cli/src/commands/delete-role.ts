@@ -1,26 +1,25 @@
 import { Command } from 'commander';
 import { getGlobalOptions } from '../lib/core/cli-options';
+import { addCompanyOptions, addRoleOptions } from '../lib/core/entity-ref';
 import { deleteRoleAction } from '../lib/crud/role.action';
 
 /** Registers the `delete-role` command. */
 export function registerDeleteRole(program: Command): void {
-  program
+  const cmd = program
     .command('delete-role')
     .description(
       'Delete a role and everything tied to it (agents, knowledge, conversations, ...)',
-    )
-    .option('-r, --role-id <uuid>', 'Role UUID to delete')
-    .option(
-      '--role-slug <slug>',
-      'Role slug to delete instead of --role-id (requires --company-id or --company-slug)',
-    )
-    .option('-c, --company-id <uuid>', 'Company UUID (for --role-slug)')
-    .option('--company-slug <slug>', 'Company slug (for --role-slug)')
+    );
+  addRoleOptions(cmd);
+  addCompanyOptions(cmd);
+  cmd
     .option('-f, --force', 'Skip the y/n confirmation prompt')
     .action(
       (cmdOpts: {
+        role?: string;
         roleId?: string;
         roleSlug?: string;
+        company?: string;
         companyId?: string;
         companySlug?: string;
         force?: boolean;

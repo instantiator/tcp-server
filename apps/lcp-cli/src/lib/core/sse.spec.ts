@@ -1,63 +1,48 @@
-import { formatCompactionEvent, parseSseBuffer } from './sse';
+import { parseWireEvents } from './sse';
 
-describe('parseSseBuffer', () => {
+/** A response-delta WireEvent, serialized as it crosses the SSE `data:` line. */
+const delta = (d: string) =>
+  JSON.stringify({ type: 'stream', channel: 'response', delta: d });
+
+describe('parseWireEvents', () => {
   it('parses complete events and keeps the trailing partial in rest', () => {
     const buffer =
-      'data: {"kind":"a"}\n\n' + 'data: {"kind":"b"}\n\n' + 'data: {"kind":"c';
-    const { events, rest } = parseSseBuffer(buffer);
-    expect(events.map((e) => e.kind)).toEqual(['a', 'b']);
-    expect(rest).toBe('data: {"kind":"c');
+      `data: ${delta('a')}\n\n` +
+      `data: ${delta('b')}\n\n` +
+      'data: {"type":"stream","channel":"response","delta":"c';
+    const { events, rest } = parseWireEvents(buffer);
+    expect(
+      events.map((e) => (e.type === 'stream' ? e.delta : undefined)),
+    ).toEqual(['a', 'b']);
+    expect(rest).toBe('data: {"type":"stream","channel":"response","delta":"c');
+  });
+
+  it('parses an audit WireEvent', () => {
+    const wire = JSON.stringify({
+      type: 'audit',
+      event: { eventType: 'state_change', payload: { entity: 'agent' } },
+    });
+    const { events } = parseWireEvents(`data: ${wire}\n\n`);
+    expect(events[0].type).toBe('audit');
   });
 
   it('skips events without a data line', () => {
-    const { events } = parseSseBuffer('event: ping\n\ndata: {"kind":"x"}\n\n');
-    expect(events.map((e) => e.kind)).toEqual(['x']);
+    const { events } = parseWireEvents(
+      `event: ping\n\ndata: ${delta('x')}\n\n`,
+    );
+    expect(events).toHaveLength(1);
   });
 
   it('ignores malformed JSON rather than throwing', () => {
-    const { events } = parseSseBuffer(
-      'data: not json\n\ndata: {"kind":"ok"}\n\n',
+    const { events } = parseWireEvents(
+      `data: not json\n\ndata: ${delta('ok')}\n\n`,
     );
-    expect(events.map((e) => e.kind)).toEqual(['ok']);
+    expect(events).toHaveLength(1);
   });
 
   it('returns no events and buffers everything when no boundary is present', () => {
-    const { events, rest } = parseSseBuffer('data: {"kind":"partial"}');
+    const { events, rest } = parseWireEvents(`data: ${delta('partial')}`);
     expect(events).toEqual([]);
-    expect(rest).toBe('data: {"kind":"partial"}');
-  });
-});
-
-describe('formatCompactionEvent', () => {
-  it('formats a compaction_started event', () => {
-    const line = formatCompactionEvent({
-      kind: 'compaction_started',
-      data: {
-        strategies: ['trim', 'summarise'],
-        tokensBefore: 900,
-        windowSize: 1000,
-        pct: 90,
-      },
-    });
-    expect(line).toBe(
-      '[Context compacting: strategies=[trim, summarise], 900/1000 tokens (90%)]',
-    );
-  });
-
-  it('formats a compaction_complete event', () => {
-    const line = formatCompactionEvent({
-      kind: 'compaction_complete',
-      data: { tokensAfter: 400, windowSize: 1000, pctAfter: 40 },
-    });
-    expect(line).toBe('[Context compacted: 400/1000 tokens (40%)]');
-  });
-
-  it('substitutes ? for missing numeric fields', () => {
-    const line = formatCompactionEvent({ kind: 'compaction_started' });
-    expect(line).toBe('[Context compacting: strategies=[], ?/? tokens (?%)]');
-  });
-
-  it('returns null for unrelated event kinds', () => {
-    expect(formatCompactionEvent({ kind: 'processing_started' })).toBeNull();
+    expect(rest).toBe(`data: ${delta('partial')}`);
   });
 });

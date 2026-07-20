@@ -13,7 +13,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken, TypeOrmModule } from '@nestjs/typeorm';
 import { randomUUID, UUID } from 'crypto';
-import { QueryFailedError, Repository } from 'typeorm';
+import { EntityManager, QueryFailedError, Repository } from 'typeorm';
 import { DbService } from './db.service';
 
 const ALL_ENTITIES = [
@@ -32,6 +32,7 @@ describe('DbService', () => {
   let roleRepo: Repository<LcpRole>;
   let agentRepo: Repository<LcpAgent>;
   let assignmentRepo: Repository<LcpAssignment>;
+  let taskRepo: Repository<LcpTask>;
   let auditRepo: Repository<AuditEvent>;
   let companyUserRepo: Repository<CompanyUser>;
 
@@ -54,6 +55,7 @@ describe('DbService', () => {
     roleRepo = testingModule.get(getRepositoryToken(LcpRole));
     agentRepo = testingModule.get(getRepositoryToken(LcpAgent));
     assignmentRepo = testingModule.get(getRepositoryToken(LcpAssignment));
+    taskRepo = testingModule.get(getRepositoryToken(LcpTask));
     auditRepo = testingModule.get(getRepositoryToken(AuditEvent));
     companyUserRepo = testingModule.get(getRepositoryToken(CompanyUser));
   });
@@ -63,6 +65,7 @@ describe('DbService', () => {
     // Agents before assignments (agent.assignmentId FK), assignments before roles.
     await agentRepo.clear();
     await assignmentRepo.clear();
+    await taskRepo.clear();
     await roleRepo.clear();
     await companyUserRepo.clear();
     await companyRepo.clear();
@@ -89,6 +92,18 @@ describe('DbService', () => {
         description: 'Analyses data.',
         llmConfig: { provider: 'lm-studio', model: 'qwen3-5b' },
         systemPromptTemplate: 'You are {{name}}.',
+      }),
+    );
+  }
+
+  async function seedTask(companyId: UUID) {
+    return taskRepo.save(
+      taskRepo.create({
+        companyId,
+        request: 'Do the thing.',
+        shortcode: '000',
+        materials: [],
+        expected: [],
       }),
     );
   }
@@ -883,6 +898,93 @@ describe('DbService', () => {
       expect(agent.assignmentId).toBe(existing.id);
       // No extra assignment created.
       expect(await assignmentRepo.count()).toBe(1);
+    });
+
+    it('inherits taskId and records parentAssignmentId from a task-linked parent', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id);
+      const parent = await assignmentRepo.save(
+        assignmentRepo.create({
+          taskId: task.id,
+          companyId: company.id,
+          roleId: role.id,
+          mode: 'implement',
+          orderIndex: 0,
+          prompt: 'Write it.',
+          status: 'in-progress',
+        }),
+      );
+
+      const agent = await dbService.createAgent({
+        companyId: company.id,
+        roleId: role.id,
+        initialPrompt: 'Consult on this.',
+        mode: 'consultee',
+        parentAssignmentId: parent.id,
+      });
+
+      const assignment = await assignmentRepo.findOneByOrFail({
+        id: agent.assignmentId,
+      });
+      expect(assignment.taskId).toBe(task.id);
+      expect(assignment.parentAssignmentId).toBe(parent.id);
+      expect(assignment.mode).toBe('consultee');
+    });
+
+    it('leaves taskId null and parentAssignmentId unset when no parent is given', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+
+      const agent = await dbService.createAgent({
+        companyId: company.id,
+        roleId: role.id,
+        initialPrompt: 'Just chat.',
+        mode: 'chat',
+      });
+
+      const assignment = await assignmentRepo.findOneByOrFail({
+        id: agent.assignmentId,
+      });
+      expect(assignment.taskId).toBeNull();
+      expect(assignment.parentAssignmentId).toBeNull();
+    });
+
+    it('rolls back the orphan assignment insert when the agent insert fails (transactional guarantee)', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+
+      const originalGetRepository = EntityManager.prototype.getRepository;
+      const spy = jest
+        .spyOn(EntityManager.prototype, 'getRepository')
+        .mockImplementation(function (
+          this: EntityManager,
+          target: Parameters<typeof originalGetRepository>[0],
+        ) {
+          const repo = originalGetRepository.call(this, target);
+          if (target === LcpAgent) {
+            jest
+              .spyOn(repo, 'save')
+              .mockRejectedValueOnce(new Error('forced agent insert failure'));
+          }
+          return repo;
+        });
+
+      try {
+        await expect(
+          dbService.createAgent({
+            companyId: company.id,
+            roleId: role.id,
+            initialPrompt: 'Summarise.',
+          }),
+        ).rejects.toThrow('forced agent insert failure');
+      } finally {
+        spy.mockRestore();
+      }
+
+      // The orphan assignment created earlier in the same transaction must
+      // not survive — it was never committed.
+      expect(await assignmentRepo.count()).toBe(0);
     });
 
     it('getAgent returns null for unknown id', async () => {

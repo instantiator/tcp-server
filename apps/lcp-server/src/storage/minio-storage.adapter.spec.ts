@@ -606,6 +606,22 @@ describe('MinioStorageAdapter', () => {
       expect(send).toHaveBeenCalledWith(expect.any(CopyObjectCommand));
       expect(send).toHaveBeenCalledWith(expect.any(DeleteObjectCommand));
     });
+
+    it('rejects a ".." destination and never calls send', async () => {
+      const svc = makeAdapter(makeConfig());
+      await expect(
+        svc.moveFile('acme/a.txt', '../escaped.txt'),
+      ).rejects.toThrow('must not contain ".."');
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it('rejects a ".." source and never calls send', async () => {
+      const svc = makeAdapter(makeConfig());
+      await expect(
+        svc.moveFile('../escaped.txt', 'acme/b.txt'),
+      ).rejects.toThrow('must not contain ".."');
+      expect(send).not.toHaveBeenCalled();
+    });
   });
 
   describe('getFileSummary', () => {
@@ -619,6 +635,19 @@ describe('MinioStorageAdapter', () => {
       const summary = await svc.getFileSummary('acme/config.json');
       expect(summary.format).toBe('json-object');
       expect(summary.keys).toEqual(['a']);
+    });
+
+    it('returns format=csv with columns and rowCount for a CSV file', async () => {
+      send.mockImplementation((cmd: unknown) => {
+        if (cmd instanceof HeadObjectCommand)
+          return Promise.resolve({ ContentLength: 20 });
+        return Promise.resolve({ Body: makeReadable('name,age\nAlice,30\n') });
+      });
+      const svc = makeAdapter(makeConfig());
+      const summary = await svc.getFileSummary('acme/report.csv');
+      expect(summary.format).toBe('csv');
+      expect(summary.columns).toEqual(['name', 'age']);
+      expect(summary.rowCount).toBe(1);
     });
 
     it('throws NotFoundException for a missing file', async () => {

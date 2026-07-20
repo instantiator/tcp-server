@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { LcpCompany } from '@lcp/shared';
+import { AuditEventType, LcpCompany } from '@lcp/shared';
 import type { UUID } from 'crypto';
 import type { DeepPartial } from 'typeorm';
+import { AuditService } from '../audit/audit.service';
 import { DbService } from '../db/db.service';
 import { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
 import { isUUID } from '../utils/ObjectUtils';
@@ -9,7 +10,10 @@ import { isUUID } from '../utils/ObjectUtils';
 /** Orchestrates company operations, delegating persistence to {@link DbService}. */
 @Injectable()
 export class ApiService {
-  constructor(private readonly dbService: DbService) {}
+  constructor(
+    private readonly dbService: DbService,
+    private readonly audit: AuditService,
+  ) {}
 
   /**
    * Creates a new {@link LcpCompany} from the given template and slug,
@@ -35,17 +39,27 @@ export class ApiService {
    * or slug (the path parameter is checked against UUID shape to tell them
    * apart). Throws {@link NotFoundException} (via {@link DbService.setCompany})
    * if no company matches — this never falls back to creating a new record.
+   * Records a `state_change` (`entity:'company'`) row, which the publisher
+   * routes to `GET /api/company/:id/events`.
    */
   async setCompany(
     pathIdentifier: string,
     partial: DeepPartial<Omit<LcpCompany, 'id'>>,
   ): Promise<LcpCompany> {
-    return await this.dbService.setCompany(
+    const company = await this.dbService.setCompany(
       partial,
       isUUID(pathIdentifier)
         ? { id: pathIdentifier }
         : { slug: pathIdentifier },
     );
+    await this.audit.record(
+      company.id,
+      'system',
+      null,
+      AuditEventType.StateChange,
+      { entity: 'company', reason: 'company updated' },
+    );
+    return company;
   }
 
   /**

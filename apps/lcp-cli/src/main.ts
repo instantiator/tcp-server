@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import { Agent, setGlobalDispatcher } from 'undici';
+import { registerCancelTask } from './commands/cancel-task';
 import { registerChat } from './commands/chat';
 import { registerCreateTask } from './commands/create-task';
 import { registerDeleteCompany } from './commands/delete-company';
@@ -8,10 +9,13 @@ import { registerDeleteKnowledge } from './commands/delete-knowledge';
 import { registerReindexKnowledge } from './commands/reindex-knowledge';
 import { registerDeleteRole } from './commands/delete-role';
 import { registerDownloadSharedDocument } from './commands/download-shared-document';
+import { registerEavesdrop } from './commands/eavesdrop';
 import { registerEstimateContextWindow } from './commands/estimate-context-window';
 import { registerGetKnowledge } from './commands/get-knowledge';
 import { registerGetTask } from './commands/get-task';
 import { registerGetToken } from './commands/get-token';
+import { registerListAgents } from './commands/list-agents';
+import { registerListAssignments } from './commands/list-assignments';
 import { registerListCompanies } from './commands/list-companies';
 import { registerListKnowledge } from './commands/list-knowledge';
 import { registerListOpenQueries } from './commands/list-open-queries';
@@ -22,8 +26,12 @@ import { registerOpenSwagger } from './commands/open-swagger';
 import { registerReadQuery } from './commands/read-query';
 import { registerRespond } from './commands/respond';
 import { registerSetCompany } from './commands/set-company';
+import { registerSetPlanner } from './commands/set-planner';
 import { registerSetRole } from './commands/set-role';
+import { registerSetTask } from './commands/set-task';
+import { registerStartTask } from './commands/start-task';
 import { registerStoreKnowledge } from './commands/store-knowledge';
+import { registerTui } from './commands/tui';
 import { registerUploadSharedDocument } from './commands/upload-shared-document';
 import { registerValidateSharedDocument } from './commands/validate-shared-document';
 
@@ -54,9 +62,7 @@ program
   .option(
     '-E, --access-token-env-var <var>',
     'Name of env var holding the token',
-  )
-  .option('-u, --username <user>', 'OIDC username')
-  .option('-p, --password <pass>', 'OIDC password (omit to be prompted)');
+  );
 
 registerGetToken(program);
 registerListCompanies(program);
@@ -73,6 +79,7 @@ registerSetRole(program);
 registerDeleteCompany(program);
 registerDeleteRole(program);
 registerChat(program);
+registerTui(program);
 registerListOpenQueries(program);
 registerReadQuery(program);
 registerRespond(program);
@@ -83,5 +90,12 @@ registerValidateSharedDocument(program);
 registerCreateTask(program);
 registerListTasks(program);
 registerGetTask(program);
+registerSetTask(program);
+registerSetPlanner(program);
+registerStartTask(program);
+registerCancelTask(program);
+registerListAgents(program);
+registerListAssignments(program);
+registerEavesdrop(program);
 
 program.parse(process.argv);

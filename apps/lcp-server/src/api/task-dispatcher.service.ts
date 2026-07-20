@@ -27,4 +27,11 @@ export abstract class TaskDispatcher {
    * `succeeded`.
    */
   abstract assignmentFinalised(assignment: LcpAssignment): Promise<void>;
+
+  /**
+   * Called after a task is atomically moved to `cancelled` — cascades the
+   * cancellation to the task's still-non-terminal assignments and their
+   * working agents.
+   */
+  abstract cancelTask(task: LcpTask): Promise<void>;
 }

@@ -35,7 +35,7 @@ Log in with the root credentials from your `.env` file:
 | Username | `MINIO_ROOT_USER`     | `minioadmin` |
 | Password | `MINIO_ROOT_PASSWORD` | `minioadmin` |
 
-> **OIDC SSO (optional):** MinIO supports federating console login through an OIDC provider. When Keycloak is running under the `auth` profile, it can be configured as the identity provider — users then log in via their Keycloak account instead of the root credentials. This requires additional Keycloak client setup and MinIO OIDC env vars; it is not enabled by default. See [ADR-007](ADRs/ADR-007-shared-company-storage.md) for the planned configuration.
+> **OIDC SSO (optional):** MinIO supports federating console login through an OIDC provider. When Zitadel is running under the `auth` profile, it can be configured as the identity provider — users then log in via their Zitadel account instead of the root credentials. This requires additional Zitadel application setup and MinIO OIDC env vars; it is not enabled by default. See [ADR-007](ADRs/ADR-007-shared-company-storage.md) for the planned configuration.
 
 ### Programmatic access (lcp-server, MCP storage server)
 
@@ -176,7 +176,7 @@ Both commands write a JSON result to stdout and progress messages to stderr. See
 Agents interact with storage through the [lcp-mcp-storage](lcp-mcp-storage.md) MCP server rather than directly via the S3 API. Since `docs/prompts/010.2.6` the tools fall into three tiers:
 
 - **Read-only exploration** — `describe_server`, `describe_folder`, `list_files`, `read_file`, `search_files`, `get_file_properties`, `get_file_summary`. Agents may browse and read anything in the shared company folder by full object key.
-- **Assignment-scoped working files** — `list_working_files`, `get_working_file_properties`, `read_working_file`, `append_working_file`, `replace_in_working_file`, `delete_working_file`, `restore_working_file`. The agent supplies **only a filename** (subdirectories allowed); the working-directory prefix is derived server-side from the caller's assignment (see below), so an agent can only write inside its own working area. In **qa mode** these are read-only and target the assignment under review — the mutating variants return a "not available in qa mode" message.
+- **Assignment-scoped working files** — `list_working_files`, `get_working_file_properties`, `get_working_file_summary`, `read_working_file`, `create_working_file`, `append_working_file`, `replace_in_working_file`, `delete_working_file`, `restore_working_file`, `rename_working_file`. The agent supplies **only a filename** (subdirectories allowed); the working-directory prefix is derived server-side from the caller's assignment (see below), so an agent can only write inside its own working area. `create_working_file` creates a new file (or replaces one entirely with `overwrite: true`) — the whole-file counterpart to `append_working_file` (add to a file) and `replace_in_working_file` (small in-place edit). In **qa mode** these are read-only and target the assignment under review — the mutating variants return a "not available in qa mode" message.
 - **Assignment-scoped materials** — `list_material_files`, `get_material_file_properties`, `read_material_file`. Exposes the caller's assignment's `materials`, resolved to concrete keys (`resolveArtifactKey`); `inline-text` materials are keyed by a synthetic `inline-N` name and read back as their literal content.
 
 The permissive general **write** tools (`write_file`, `delete_file`, `restore_file`, `copy_file`, `move_file`) are no longer exposed to agents — the internal endpoints behind them remain for the knowledge API, storage proxy, and orchestration. See [lcp-mcp-storage.md](lcp-mcp-storage.md) for the full tool reference.
@@ -188,7 +188,7 @@ The scoped tools resolve their working prefix and materials via `GET /internal/a
 - `implement`/`plan` callers get their **own** assignment's working directory (`tasks/{taskId}/assignments/{orderIndex}/working/`, or `assignments/{assignmentId}/working/` for orphans), read/write.
 - `qa` callers get the **target assignment**'s working directory, read-only, and the target's materials view.
 
-Filenames are normalised and rejected if absolute or containing a `..` segment, so a resolved key can never escape the working prefix.
+Filenames are normalised and rejected if absolute, containing a `..` segment, or containing a segment that looks like a resolved storage-hierarchy path component (`tasks`, `assignments`, `materials`, `completed`, `working`) — so a resolved key can never escape the working prefix, and a full (or partial) storage key echoed back by the model is refused with a corrective error rather than silently concatenated onto the prefix. The assignment-presentation prompt itself always shows materials/expected outputs as their bare name/filename, never the resolved key, so the model has no reason to pass anything else.
 
 ## Internal storage-action endpoints
 

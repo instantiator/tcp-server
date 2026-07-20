@@ -15,7 +15,7 @@ collide on ports with a dev stack — but a running lcp-* stack still competes
 for the same Docker daemon/CPU, so one must not already be running (checked
 at startup).
 
-No Keycloak required — auth is mocked (jwks-rsa). Mirrors the 'e2e-test' CI job.
+No Zitadel required — auth is mocked (jwks-rsa). Mirrors the 'e2e-test' CI job.
 
 Any extra arguments are passed through to Jest, for example:
   $(basename "$0") -- --testNamePattern="company"

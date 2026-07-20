@@ -1,4 +1,4 @@
-import { agentEventsChannel, AgentEvent } from '@lcp/shared';
+import { agentEventsChannel, StreamDelta } from '@lcp/shared';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID, UUID } from 'crypto';
@@ -28,38 +28,40 @@ function configWith(redisUrl: string | undefined): ConfigService {
   } as unknown as ConfigService;
 }
 
-const sampleEvent: AgentEvent = {
-  timestamp: '2026-07-02T00:00:00.000Z',
-  kind: 'response',
-  data: { delta: 'hello' },
-};
-
 describe('AgentEventPublisherService', () => {
   let agentId: UUID;
+  let sampleDelta: StreamDelta;
 
   beforeEach(() => {
     jest.clearAllMocks();
     jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     agentId = randomUUID();
+    sampleDelta = {
+      type: 'stream',
+      agentId,
+      channel: 'response',
+      delta: 'hello',
+      timestamp: '2026-07-02T00:00:00.000Z',
+    };
   });
 
-  it('publishes the JSON-encoded event to the agent channel', () => {
+  it('publishes the JSON-encoded delta to the agent channel', () => {
     const service = new AgentEventPublisherService(
       configWith('redis://localhost:6379'),
     );
 
-    service.publish(agentId, sampleEvent);
+    service.publish(sampleDelta);
 
     expect(mockPublish).toHaveBeenCalledWith(
       agentEventsChannel(agentId),
-      JSON.stringify(sampleEvent),
+      JSON.stringify(sampleDelta),
     );
   });
 
   it('is a no-op when REDIS_URL is not configured', () => {
     const service = new AgentEventPublisherService(configWith(undefined));
 
-    service.publish(agentId, sampleEvent);
+    service.publish(sampleDelta);
 
     expect(mockRedisCtor).not.toHaveBeenCalled();
     expect(mockPublish).not.toHaveBeenCalled();
@@ -70,8 +72,8 @@ describe('AgentEventPublisherService', () => {
       configWith('redis://localhost:6379'),
     );
 
-    service.publish(agentId, sampleEvent);
-    service.publish(agentId, sampleEvent);
+    service.publish(sampleDelta);
+    service.publish(sampleDelta);
 
     expect(mockRedisCtor).toHaveBeenCalledTimes(1);
     expect(mockPublish).toHaveBeenCalledTimes(2);
@@ -82,7 +84,7 @@ describe('AgentEventPublisherService', () => {
       configWith('redis://localhost:6379'),
     );
 
-    service.publish(agentId, sampleEvent);
+    service.publish(sampleDelta);
 
     expect(mockOn).toHaveBeenCalledWith('error', expect.any(Function));
   });
@@ -93,7 +95,7 @@ describe('AgentEventPublisherService', () => {
       configWith('redis://localhost:6379'),
     );
 
-    expect(() => service.publish(agentId, sampleEvent)).not.toThrow();
+    expect(() => service.publish(sampleDelta)).not.toThrow();
     // Let the swallowed rejection settle.
     await Promise.resolve();
   });
@@ -102,7 +104,7 @@ describe('AgentEventPublisherService', () => {
     const service = new AgentEventPublisherService(
       configWith('redis://localhost:6379'),
     );
-    service.publish(agentId, sampleEvent);
+    service.publish(sampleDelta);
 
     await service.onModuleDestroy();
 

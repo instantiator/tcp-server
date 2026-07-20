@@ -35,25 +35,27 @@ implemented by `TaskOrchestrationService`
 
 ### `LcpAssignment`
 
-| Field                | Type                               | Notes                                                                                                        |
-| -------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `taskId`             | uuid, nullable                     | Null = orphan assignment                                                                                     |
-| `companyId`          | uuid                               | Needed directly for orphans                                                                                  |
-| `mode`               | `LcpAssignmentMode`                | `plan \| implement \| qa` — the agent's mode IS its assignment's mode; there is no mode column on `LcpAgent` |
-| `orderIndex`         | int, nullable                      | Position in the task plan. Set only for implement-mode assignments belonging to a task                       |
-| `prompt`             | text                               | Instructions given to the assigned agent                                                                     |
-| `roleId`             | uuid                               | The role this assignment must be worked by                                                                   |
-| `status`             | `LcpAssignmentStatus`              | See [Assignment status](#assignment-status)                                                                  |
-| `agentId`            | uuid, nullable                     | The agent currently/last working this assignment (`ON DELETE SET NULL`)                                      |
-| `targetAssignmentId` | uuid, nullable                     | qa-mode only: the assignment under review                                                                    |
-| `materials`          | `LcpMaterialArtifact[]`            | Materials supplied to the assignment                                                                         |
-| `expected`           | `LcpAssignmentWorkingArtifact[]`   | Artifacts the assignment is expected to produce                                                              |
-| `prepared`           | `LcpAssignmentWorkingArtifact[]`   | Set by `complete_assignment` (part 5)                                                                        |
-| `approved`           | `LcpAssignmentCompletedArtifact[]` | Set when QA accepts (part 7)                                                                                 |
-| `summary`            | text, nullable                     | The completing agent's final answer; becomes the agent's `output` when QA accepts                            |
-| `qaStatus`           | `'accepted' \| 'rejected' \| null` | Cleared (with `qaFeedback`) whenever the assignment (re-)enters `in-progress`                                |
-| `qaFeedback`         | text, nullable                     |                                                                                                              |
-| `qaAttempts`         | int                                | Never reset                                                                                                  |
+| Field                | Type                               | Notes                                                                                                                                                                                                                                                                              |
+| -------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `taskId`             | uuid, nullable                     | Null = orphan assignment                                                                                                                                                                                                                                                           |
+| `companyId`          | uuid                               | Needed directly for orphans                                                                                                                                                                                                                                                        |
+| `mode`               | `LcpAssignmentMode`                | `plan \| implement \| qa` — the agent's mode IS its assignment's mode; there is no mode column on `LcpAgent`                                                                                                                                                                       |
+| `orderIndex`         | int, nullable                      | Position in the task plan. Set only for implement-mode assignments belonging to a task                                                                                                                                                                                             |
+| `prompt`             | text                               | Instructions given to the assigned agent                                                                                                                                                                                                                                           |
+| `roleId`             | uuid                               | The role this assignment must be worked by                                                                                                                                                                                                                                         |
+| `status`             | `LcpAssignmentStatus`              | See [Assignment status](#assignment-status)                                                                                                                                                                                                                                        |
+| `agentId`            | uuid, nullable                     | The agent currently/last working this assignment (`ON DELETE SET NULL`)                                                                                                                                                                                                            |
+| `targetAssignmentId` | uuid, nullable                     | qa-mode only: the assignment under review                                                                                                                                                                                                                                          |
+| `parentAssignmentId` | uuid, nullable                     | The assignment whose agent spawned this one (e.g. a consultation, `ON DELETE SET NULL`) — distinct from `targetAssignmentId` ("who created me", not "what am I evaluating"); when set at creation, `taskId` is inherited from the parent so consultations trace back to their task |
+| `materials`          | `LcpMaterialArtifact[]`            | Materials supplied to the assignment                                                                                                                                                                                                                                               |
+| `expected`           | `LcpAssignmentWorkingArtifact[]`   | Artifacts the assignment is expected to produce                                                                                                                                                                                                                                    |
+| `prepared`           | `LcpAssignmentWorkingArtifact[]`   | Set by `complete_assignment` (part 5)                                                                                                                                                                                                                                              |
+| `approved`           | `LcpAssignmentCompletedArtifact[]` | Set when QA accepts (part 7)                                                                                                                                                                                                                                                       |
+| `summary`            | text, nullable                     | The completing agent's final answer; becomes the agent's `output` when QA accepts                                                                                                                                                                                                  |
+| `qaStatus`           | `'accepted' \| 'rejected' \| null` | Cleared (with `qaFeedback`) whenever the assignment (re-)enters `in-progress`                                                                                                                                                                                                      |
+| `qaFeedback`         | text, nullable                     |                                                                                                                                                                                                                                                                                    |
+| `qaAttempts`         | int                                | Never reset                                                                                                                                                                                                                                                                        |
+| `failureReason`      | text, nullable                     | Why the assignment failed — QA exhaustion, agent run failure, etc. Null unless `status` is `failed`                                                                                                                                                                                |
 
 `orderIndex` is a linear-plan implementation detail — a future DAG-shaped
 plan (branch/join) would replace it with an edge list; `selectNextAssignments`
@@ -148,17 +150,29 @@ storage tree, including the orphan-assignment working directory.
 All routes are JWT-guarded. See the Swagger UI (`GET /swagger`) for full
 request/response schemas.
 
-| Method & path                  | Purpose                                                                                                                                                                                      |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/task`               | Create a task (`ready` state)                                                                                                                                                                |
-| `POST /api/task/:id/materials` | Upload a material file (`multipart/form-data`, field `file`); rejected once the task has left `ready` (`409`)                                                                                |
-| `POST /api/task/:id/start`     | Resolve a planner role (task's own, falling back to the company default — `422` if neither), atomically transition `ready → planning` (`409` if not `ready`), and dispatch the planner agent |
-| `GET /api/task?companyId=`     | List a company's tasks                                                                                                                                                                       |
-| `GET /api/task/:id`            | Get a task with its assignments — plan assignments ordered by `orderIndex`, then the rest by creation time                                                                                   |
+| Method & path                                             | Purpose                                                                                                                                                                                      |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/task`                                          | Create a task (`ready` state)                                                                                                                                                                |
+| `PUT /api/task/:id`                                       | Edit `request`/`plannerRoleId`/`materials`/`expected` on an unstarted task (`409` once left `ready`; `404` if `plannerRoleId` doesn't belong to the task's company)                          |
+| `POST /api/task/:id/materials`                            | Upload a material file (`multipart/form-data`, field `file`); rejected once the task has left `ready` (`409`)                                                                                |
+| `POST /api/task/:id/start`                                | Resolve a planner role (task's own, falling back to the company default — `422` if neither), atomically transition `ready → planning` (`409` if not `ready`), and dispatch the planner agent |
+| `POST /api/task/:id/cancel`                               | Transition any non-terminal status → `cancelled` (`409` if already terminal) and cascade to the task's still-non-terminal assignments and their working agents                               |
+| `GET /api/task?companyId=`                                | List a company's tasks                                                                                                                                                                       |
+| `GET /api/task/:id`                                       | Get a task with its assignments — plan assignments ordered by `orderIndex`, then the rest by creation time                                                                                   |
+| `GET /api/task/:id/history`                               | Get the task's audit history — its own assignments' agents, including consultations spawned mid-assignment (see [ADR-008](ADRs/ADR-008-audit-logging.md))                                    |
+| `GET /api/task/:id/events`                                | SSE stream of `task_changed`/`assignment_changed` events, primed with current state (see [ADR-015](ADRs/ADR-015-agent-completion-sse.md))                                                    |
+| `GET /api/company/:id/events`                             | SSE stream of `company_changed`/`task_changed` events for a company and its tasks, primed with current state (see [ADR-015](ADRs/ADR-015-agent-completion-sse.md))                           |
+| `GET /api/agent?companyId=&roleId=&assignmentId=&status=` | List agents (default: currently active) — at least one of `companyId`/`roleId`/`assignmentId` required                                                                                       |
+| `GET /api/agent/:id/history`                              | Get an agent's audit history                                                                                                                                                                 |
+| `GET /api/assignment?companyId=&taskId=&roleId=&status=`  | List assignments (`taskId=null` for orphans) — at least one of `companyId`/`taskId` required                                                                                                 |
+| `GET /api/assignment/:id`                                 | Get a single assignment                                                                                                                                                                      |
 
 The `start` transition uses an atomic conditional `UPDATE ... WHERE status =
 'ready'` (the same pattern as `AgentOrchestrationService.resumeAgent`'s
 `pausedAt` claim), so a double `POST /start` can't dispatch the planner twice.
+`cancel` uses the equivalent `UPDATE ... WHERE status NOT IN (succeeded,
+failed, cancelled)` form, since any non-terminal status is a valid start
+point.
 
 ## Orchestration flow
 
@@ -264,6 +278,20 @@ their recovery).
 
 # Get a task and its assignments
 ./lcp-cli.sh get-task --task-id <uuid>
+
+# Set a planner role (on a company default, or an unstarted task), edit an
+# unstarted task, then start it
+./lcp-cli.sh set-planner --company-slug acme --role-slug planner
+./lcp-cli.sh set-task --task-id <uuid> -i '{"request":"Write a longer report"}'
+./lcp-cli.sh start-task --task-id <uuid>
+
+# Cancel a task (and its still-running assignments/agents)
+./lcp-cli.sh cancel-task --task-id <uuid>
+
+# See what's going on: agents, assignments (including orphans), and history
+./lcp-cli.sh list-agents --company acme
+./lcp-cli.sh list-assignments --company acme --filter task=null
+./lcp-cli.sh eavesdrop --task-id <uuid> --show-history --tail
 ```
 
 See [lcp-cli.md](lcp-cli.md#create-task) for the full flag reference.

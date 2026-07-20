@@ -7,7 +7,11 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['eslint.config.mjs'],
+    // lcp-stub-llm is a standalone app with its own package.json, tsconfig,
+    // and eslint config — it shares no code or tooling with the rest of this
+    // monorepo, so the root config (and root `npm run lint`) must not sweep
+    // it in even though it sits under apps/.
+    ignores: ['eslint.config.mjs', 'apps/lcp-stub-llm/**'],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,

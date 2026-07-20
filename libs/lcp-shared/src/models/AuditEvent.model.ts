@@ -33,6 +33,10 @@ export const AuditEventType = {
   Decision: 'decision',
   StateChange: 'state_change',
   AgentLoopCompletion: 'agent_loop_completion',
+  /** Context-window compaction lifecycle; payload `{ phase, ...metrics }`. */
+  Compaction: 'compaction',
+  /** User-submitted text (chat message, conversation answer); payload `{ text }`. */
+  Input: 'input',
 } as const;
 
 export type AuditEventType =
@@ -46,6 +50,8 @@ export type AuditEventType =
  */
 @Entity()
 @Index(['companyId', 'agentId', 'timestamp'])
+@Index(['companyId', 'assignmentId', 'timestamp'])
+@Index(['companyId', 'taskId', 'timestamp'])
 export class AuditEvent {
   /**
    * Auto-generated primary key.
@@ -86,6 +92,25 @@ export class AuditEvent {
    */
   @Column({ nullable: true, type: 'varchar' })
   agentId!: UUID | null;
+
+  /**
+   * Denormalised copy of the producing agent's assignment at write time (see
+   * {@link LcpAssignment.parentAssignmentId} for why assignments now always
+   * carry a task-traceable lineage). No relation object — like `agentId`,
+   * this is a plain column so hot-path writes never risk an accidental join.
+   * @format uuid
+   */
+  @Column({ nullable: true, type: 'varchar' })
+  assignmentId!: UUID | null;
+
+  /**
+   * Denormalised task scope, derived server-side (from the producing agent's
+   * assignment, or supplied explicitly for agent-less orchestrator rows) so it
+   * never drifts. Backs `(companyId, taskId, timestamp)` task-history queries.
+   * @format uuid
+   */
+  @Column({ nullable: true, type: 'varchar' })
+  taskId!: UUID | null;
 
   /** The category of event. */
   @Column({ type: 'varchar' })

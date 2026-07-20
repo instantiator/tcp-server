@@ -50,6 +50,20 @@ describe('deleteCompanyAction', () => {
     );
   });
 
+  it('resolves via a combined --company value', async () => {
+    mockedApiRequest.mockResolvedValueOnce(company); // GET
+    mockedApiRequest.mockResolvedValueOnce(undefined); // DELETE
+
+    await deleteCompanyAction(opts, { company: 'acme', force: true });
+
+    expect(mockedApiRequest).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      'GET',
+      '/api/company/acme',
+    );
+  });
+
   it('deletes without prompting when --force is given', async () => {
     mockedApiRequest.mockResolvedValueOnce(company); // GET
     mockedApiRequest.mockResolvedValueOnce(undefined); // DELETE

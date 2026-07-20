@@ -35,11 +35,6 @@ export class HealthController {
       this.config.get<string>('OIDC_INTERNAL_ISSUER_URL') ??
       this.config.get<string>('OIDC_ISSUER_URL') ??
       '';
-    // Check the master realm discovery URL: it's always present on a fresh
-    // Keycloak (unlike a custom realm), is served on the main port 8080, and
-    // confirms OIDC is actually serving requests. Keycloak 24+ moved /health/ready
-    // to a separate management port (9000) that we don't expose.
-    const oidcBaseUrl = new URL(oidcIssuer).origin;
     return this.health.check([
       () => this.db.pingCheck('database'),
       () => this.pingRedis(),
@@ -47,7 +42,18 @@ export class HealthController {
       () =>
         this.http.pingCheck(
           'oidc',
-          `${oidcBaseUrl}/realms/master/.well-known/openid-configuration`,
+          `${oidcIssuer.replace(/\/$/, '')}/.well-known/openid-configuration`,
+          // Host-based instance routing (e.g. Zitadel) rejects requests reached
+          // via an internal Docker network address whose Host header doesn't
+          // match the provider's configured external domain — forward the real
+          // external host so it can still resolve the right instance.
+          {
+            headers: {
+              'X-Forwarded-Host': new URL(
+                this.config.getOrThrow<string>('OIDC_ISSUER_URL'),
+              ).host,
+            },
+          },
         ),
     ]);
   }

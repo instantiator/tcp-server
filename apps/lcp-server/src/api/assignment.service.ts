@@ -1,6 +1,7 @@
 import {
   AgentStatus,
   assignmentWorkingPrefix,
+  buildAssignmentShortcode,
   buildEnumValidationError,
   canonicaliseArtifacts,
   deriveTaskStatus,
@@ -10,7 +11,6 @@ import {
   LcpArtifact,
   LcpAssignment,
   LcpAssignmentMode,
-  LcpAssignmentStatus,
   LcpAssignmentWorkingArtifact,
   LcpMaterialArtifact,
   LcpTask,
@@ -33,6 +33,7 @@ import type { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { DbService } from '../db/db.service';
 import { StorageService } from '../storage/storage.service';
+import { claimStatus } from './claim-status';
 import { PauseAndResumeService } from './pause-and-resume.service';
 import { TaskDispatcher } from './task-dispatcher.service';
 import type { PlanAssignmentInput } from './dto/internal-task.dto';
@@ -186,9 +187,12 @@ export class AssignmentService {
 
   /**
    * Resolves an assignment's `materials` list to {@link ResolvedMaterial}s.
-   * Storage-backed materials that cannot yet be resolved (e.g. an
-   * `assignment-completed-path` no prior assignment has approved) are omitted
-   * rather than failing the whole scope lookup.
+   * A material that cannot be resolved (e.g. an `assignment-completed-path`
+   * no prior assignment has approved) fails the whole scope lookup — a
+   * silently incomplete materials list would leave the agent working from
+   * missing input with no indication why; `planTask`'s cross-reference check
+   * should keep this unreachable for a plan created normally, so this is a
+   * backstop, not the expected path.
    */
   private async resolveMaterials(
     slug: string,
@@ -224,16 +228,17 @@ export class AssignmentService {
         });
         continue;
       }
+      let key: string | null;
       try {
-        const key = resolveArtifactKey(m, ctx);
-        // ponytail: name = the artifact's filename; two path materials with
-        // the same basename would collide — acceptable until it bites.
-        if (key) materials.push({ name: m.value, key });
+        key = resolveArtifactKey(m, ctx);
       } catch (e) {
-        this.logger.warn(
-          `Skipping unresolvable material '${m.value}' (${m.type}): ${String(e)}`,
+        throw new UnprocessableEntityException(
+          `Cannot resolve material '${m.value}' (${m.type}): ${e instanceof Error ? e.message : String(e)}`,
         );
       }
+      // ponytail: name = the artifact's filename; two path materials with
+      // the same basename would collide — acceptable until it bites.
+      if (key) materials.push({ name: m.value, key });
     }
     return materials;
   }
@@ -263,6 +268,7 @@ export class AssignmentService {
         `Your assignment does not belong to task ${taskId}.`,
       );
     }
+    const task = await this.taskRepo.findOneByOrFail({ id: taskId });
 
     if (!Array.isArray(assignments) || assignments.length === 0) {
       throw new BadRequestException(
@@ -331,6 +337,36 @@ export class AssignmentService {
         });
       }
     }
+
+    // Cross-reference check: an `assignment-completed-path` material names a
+    // prior step's approved output — which only ever exists if an EARLIER
+    // assignment in this same plan commits to producing that exact filename
+    // (its `expected` list, type `assignment-working-path`; `checkOutputGate`
+    // then mechanically enforces the implementer actually produces it). This
+    // is purely structural — no execution has to happen to check it — so a
+    // typo or a reference to a step that never promises that file is caught
+    // here, before anything is created, rather than crashing prompt assembly
+    // partway through the plan's execution (see `resolveArtifactKey`).
+    for (const [i, materials] of materialsByIndex.entries()) {
+      const producedByEarlier = expectedByIndex
+        .slice(0, i)
+        .flatMap((expected) =>
+          expected
+            .filter((e) => e.type === 'assignment-working-path')
+            .map((e) => e.value),
+        );
+      materials.forEach((m, mi) => {
+        if (m.type !== 'assignment-completed-path') return;
+        if (!producedByEarlier.includes(m.value)) {
+          invalid.push({
+            property: `assignment ${i} materials[${mi}] value`,
+            value: m.value,
+            validValues: producedByEarlier,
+          });
+        }
+      });
+    }
+
     if (invalid.length > 0) {
       throw new BadRequestException(
         buildEnumValidationError('create the plan', invalid),
@@ -339,14 +375,13 @@ export class AssignmentService {
 
     // Atomic claim: only the caller that flips planning → in-progress creates
     // the plan, so a double create_plan can't produce two sets of rows.
-    const claim = await this.taskRepo
-      .createQueryBuilder()
-      .update(LcpTask)
-      .set({ status: 'in-progress' })
-      .where('id = :id', { id: taskId })
-      .andWhere('status = :planning', { planning: 'planning' })
-      .execute();
-    if (claim.affected === 0) {
+    const claim = await claimStatus(
+      this.taskRepo,
+      taskId,
+      'planning',
+      'in-progress',
+    );
+    if (claim === 0) {
       throw new ConflictException(
         `Task ${taskId} is not awaiting a plan (already planned, or in a terminal state).`,
       );
@@ -359,6 +394,11 @@ export class AssignmentService {
           companyId: caller.companyId,
           mode: 'implement',
           orderIndex: i,
+          shortcode: buildAssignmentShortcode(
+            task.shortcode,
+            'implement',
+            i + 1,
+          ),
           prompt: a.prompt,
           roleId: roleIds[i],
           status: 'ready',
@@ -379,8 +419,7 @@ export class AssignmentService {
       `Plan created: ${assignments.length} assignment(s).`,
     );
 
-    const task = await this.taskRepo.findOneBy({ id: taskId });
-    if (task) await this.dispatcher.taskPlanned(task);
+    await this.dispatcher.taskPlanned(task);
     this.logger.log(
       `Task ${taskId} planned by agent ${agentId}: ${assignments.length} assignment(s)`,
     );
@@ -466,7 +505,8 @@ export class AssignmentService {
       if (problems.length > 0) {
         throw new UnprocessableEntityException(this.buildGateMessage(problems));
       }
-      const claim = await this.claimStatus(
+      const claim = await claimStatus(
+        this.assignmentRepo,
         assignmentId,
         'in-progress',
         'succeeded',
@@ -491,7 +531,8 @@ export class AssignmentService {
 
     if (assignment.taskId === null || assignment.taskId === undefined) {
       // Orphan: the prepared work is immediately final (there is no QA cycle).
-      const claim = await this.claimStatus(
+      const claim = await claimStatus(
+        this.assignmentRepo,
         assignmentId,
         'in-progress',
         'succeeded',
@@ -514,7 +555,12 @@ export class AssignmentService {
 
     // Task assignment: hand off to QA. Record prepared/summary, pause the
     // agent so part 7 can resume it with the QA verdict.
-    const claim = await this.claimStatus(assignmentId, 'in-progress', 'in-qa');
+    const claim = await claimStatus(
+      this.assignmentRepo,
+      assignmentId,
+      'in-progress',
+      'in-qa',
+    );
     if (claim === 0) {
       throw new ConflictException(
         `Assignment ${assignmentId} was already handed to QA.`,
@@ -744,22 +790,6 @@ export class AssignmentService {
     if (next !== task.status) {
       await this.taskRepo.update(taskId, { status: next });
     }
-  }
-
-  /** Atomic status claim; returns the number of rows affected (0 = lost the race). */
-  private async claimStatus(
-    id: UUID,
-    from: LcpAssignmentStatus,
-    to: LcpAssignmentStatus,
-  ): Promise<number> {
-    const result = await this.assignmentRepo
-      .createQueryBuilder()
-      .update(LcpAssignment)
-      .set({ status: to })
-      .where('id = :id', { id })
-      .andWhere('status = :from', { from })
-      .execute();
-    return result.affected ?? 0;
   }
 
   private async loadAssignment(id: UUID): Promise<LcpAssignment> {

@@ -91,8 +91,14 @@ export class ConversationService {
     let queryIndex = 0;
     if (roleId) {
       if (this.dataSource.options.type === 'postgres') {
-        // Atomic increment on PostgreSQL via RETURNING
-        const rows = await this.dataSource.query<{ queryIndex: number }[]>(
+        // Atomic increment on PostgreSQL via RETURNING. A non-SELECT query
+        // resolves to [rows, affectedRowCount] on the postgres driver, not
+        // just the rows — indexing straight into the top-level result (as
+        // if it were `rows[0]`) silently reads past the row array and
+        // always misses, so every queryIndex would come out 0.
+        const [rows] = await this.dataSource.query<
+          [{ queryIndex: number }[], number]
+        >(
           `UPDATE lcp_role SET "queryIndex" = "queryIndex" + 1 WHERE id = $1 RETURNING "queryIndex"`,
           [roleId],
         );

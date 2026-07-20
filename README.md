@@ -6,14 +6,78 @@ LCP manages one or more companies of AI agents that collaborate to complete task
 
 ## Key concepts
 
-| Entity     | Definition                                                                      |
-| ---------- | ------------------------------------------------------------------------------- |
-| Company    | A collection roles, with shared resources, that can be tasked.                  |
-| Role       | A dataset giving an agent a set of expertise to draw from.                      |
-| Agent      | An instance of an LLM, given a role, and an assignment.                         |
-| Task       | A high level task for a company to achieve.                                     |
-| Plan       | A series of assignments designed to complete a task.                            |
-| Assignment | A smaller piece of a task, given to an agent with a specified role to complete. |
+| Entity     | Definition                                                                     |
+| ---------- | ------------------------------------------------------------------------------ |
+| Company    | A collection Roles, with shared resources, that can be tasked.                 |
+| Role       | A dataset giving an Agent a set of expertise to draw from.                     |
+| Agent      | An instance of an LLM, given a Role, and an Assignment.                        |
+| Task       | A high level task for a company to achieve.                                    |
+| Plan       | A series of Assignments designed to complete a task.                           |
+| Assignment | A smaller piece of a Task, given to an Agent with a specific Role to complete. |
+
+### Common usage
+
+A task for the Company is initiated by the user. This is handed to a planner Agent, which creates a Plan - with Assignments for specific Agents.
+
+Each Assignment is handed to its Agent, which completes the Assignment. A QA Agent reviews the Assignment outputs. If approved, the Assignment is completed, and the next Assignment begins.
+
+When all Assignments in the Plan are complete, a finalisation Agent runs - checking and preparing the final Task outputs.
+
+### Simplified architecture
+
+```mermaid
+flowchart LR
+  User(["User"])
+  CLI["lcp-cli"]
+
+  subgraph LCP["LCP"]
+    subgraph Server["LCP Server"]
+      API["API"]
+      subgraph DB["Database"]
+        Company["Company"]
+        Role["Role"]
+        Assignment["Assignment"]
+        Agent["Agent"]
+        Task["Task"]
+        Company -.->|belongs to| Role
+        Role -.->|has| Assignment
+        Task -.->|belongs to| Assignment
+        Assignment -.->|has| Agent
+      end
+      API --> Orchestration
+      Orchestration --> DB
+    end
+
+    subgraph AgentSvc["LCP Agent"]
+      AgentLoop["Agent loop"]
+    end
+
+    subgraph Services["MCP Services"]
+      direction TB
+      Storage[("Storage")]
+      Memory[("Memory")]
+      Tasks["Tasks"]
+      Interactions["Interactions"]
+      Storage ~~~ Memory ~~~ Tasks ~~~ Interactions
+    end
+
+    AgentLoop --> Services
+      Agent --> Queue[("Queue")]
+  end
+
+  User --> CLI
+  CLI -->|request| API
+  Queue --> AgentLoop
+```
+
+> ### Simplified summary
+>
+> - A user talks to LCP using **LCP CLI**, which calls **LCP Server**'s API.
+> - Companies, Roles, Agents, Tasks, and Assignments are persisted in the database.
+> - An agent is a running instance combining a role and assignment, executing in **LCP Agent**.
+> - Agents have access to **MCP Services** administering shared storage, individual knowledge, tasks and assignments.
+
+### Applications
 
 | Application          | Purpose                                                                                           |
 | -------------------- | ------------------------------------------------------------------------------------------------- |
@@ -25,80 +89,51 @@ LCP manages one or more companies of AI agents that collaborate to complete task
 | lcp-mcp-memory       | MCP tools allowing agents to retrieve memory from their stored expertise.                         |
 | lcp-mcp-storage      | MCP tools allowing agents interact with shared storage.                                           |
 
-```mermaid
-flowchart LR
-  User(["User"])
-  CLI["lcp-cli"]
-
-  subgraph LCP["LCP"]
-    subgraph Server["lcp-server"]
-      API["API"]
-      subgraph DB["Database"]
-        Company["Company"]
-        Role1["Role"]
-        Role2["Role"]
-        Company --- Role1
-        Company --- Role2
-      end
-      API --> DB
-    end
-
-    subgraph AgentSvc["lcp-agent"]
-      Agent["Agent"]
-    end
-
-    Storage[("Shared storage")]
-
-    Server --- Storage
-    AgentSvc --- Storage
-  end
-
-  User --> CLI
-  CLI -->|request| API
-  Role1 -.->|runs as| Agent
-```
-
-> A user talks to LCP through `lcp-cli`, which calls lcp-server's API. Companies and their roles are persisted in the database; an agent is a running instance of one role, executing in lcp-agent.
-
 ## Getting started
 
-See **[Setup checklist](docs/setup-checklist.md)** for a step-by-step first-time setup guide.
+Follow the steps in **[Your first company](docs/your-first-company.md)** to populate and interact with a simple agent in a company.
 
-**Quick start** (prerequisites: Docker, Node.js 24):
+### Quick start (very)
+
+> Prerequisites: Docker, Node.js 24
 
 > [!NOTE]
-> The `start-dev.sh` script builds and launches LCP with an instance of Keycloak to manage authorisation. This will be configured with an `lcp` realm, and a default user. It can take several minutes to launch.
+> The `start-dev.sh` script builds and launches LCP with an instance of Zitadel to manage authorisation. It configures an `lcp` org with a project, an API application, and the test users read from your env file. It can take several minutes to launch.
 >
-> - **Username:** `test`
-> - **Password:** `test`
+> - **Username / Password:** set via `TEST_USERNAME` / `TEST_PASSWORD` in your env file.
 
 ```bash
 git clone --recurse-submodules https://github.com/instantiator/lcp-server.git && cd lcp-server
 cp .env.example .env
+```
+
+You will need an LLM service to provide inference. Once you've settled on one, update `.env` with the service details.
+
+```bash
 npm install
 scripts/run-dev.sh
 ```
 
-### Tutorial
-
-Follow the steps in **[Your first company](docs/your-first-company.md)** to populate and interact with a simple agent in a company.
-
 ---
+
+# Developer notes
+
+See **[Developer setup checklist](docs/setup-checklist.md)** for a step-by-step first-time setup guide.
 
 ## System architecture
 
-| Concern               | Technology                     |
-| --------------------- | ------------------------------ |
-| Framework             | NestJS 11                      |
-| ORM                   | TypeORM                        |
-| Database (production) | PostgreSQL 16 + pgvector       |
-| Database (unit tests) | better-sqlite3 (in-memory)     |
-| Auth                  | OAuth2/OIDC (Keycloak default) |
-| Object storage        | MinIO                          |
-| Task queue            | Redis (BullMQ)                 |
-| Schema export         | ts-json-schema-generator       |
+| Concern               | Technology                    |
+| --------------------- | ----------------------------- |
+| Framework             | NestJS 11                     |
+| ORM                   | TypeORM                       |
+| Database (production) | PostgreSQL 16 + pgvector      |
+| Database (unit tests) | better-sqlite3 (in-memory)    |
+| Auth                  | OAuth2/OIDC (Zitadel default) |
+| Object storage        | MinIO                         |
+| Task queue            | Redis (BullMQ)                |
+| Schema export         | ts-json-schema-generator      |
 
-See [docs/ADRs/](docs/ADRs/) for decisions on upcoming components (agent runner, memory, orchestration).
+See [docs/ADRs/](docs/ADRs/) for system design decisions.
 
 ### Main service
 
@@ -110,11 +145,11 @@ flowchart TD
   LcpServer["lcp-server\n(NestJS)"]
   LcpAgent["lcp-agent\n(NestJS) :3001"]
   Redis[(Redis :6379)]
-  Keycloak["Keycloak :8080\n(optional --profile auth)"]
+  Zitadel["Zitadel :8080\n(optional --profile auth)"]
   Postgres[(PostgreSQL\n+ pgvector :5432)]
   MinIO[(MinIO :9000\nconsole :9001)]
   McpStorage["lcp-mcp-storage\n:3010"]
-  McpMemory["lcp-mcp-memory\n:3011\n(stub)"]
+  McpMemory["lcp-mcp-memory\n:3011"]
   McpInteract["lcp-mcp-interactions\n:3012"]
   McpTasks["lcp-mcp-tasks\n:3013"]
 
@@ -139,11 +174,11 @@ flowchart TD
   end
 
   subgraph ThirdParty["3rd-party services"]
-      MinIO ~~~ Keycloak
+      MinIO ~~~ Zitadel
   end
 
   User -->|REST API :3000| LcpServer
-  LcpServer -->|OIDC token\nvalidation| Keycloak
+  LcpServer -->|OIDC token\nvalidation| Zitadel
   LcpServer -->|S3 API| MinIO
   LcpServer -->|BullMQ jobs| Redis
   LcpAgent -->|BullMQ results| Redis
@@ -157,7 +192,7 @@ flowchart TD
   McpTasks -->|HTTP /internal/*\nX-Internal-Api-Key| LcpServer
 ```
 
-> ### Service overview
+> #### Service overview
 >
 > - **lcp-server** is the REST API and orchestration layer
 > - **lcp-server** communicates directly with the authorisation service, and storage service
@@ -170,7 +205,7 @@ flowchart TD
 >   - **lcp-mcp-tasks** lets agents complete their assignment — plan a task, submit finished work, or assure another agent's work (mode-gated)
 > - **PostgreSQL** (with pgvector) stores entities, agent checkpoints, and knowledge embeddings
 > - **MinIO** stores knowledge documents, task files, and context-overflow data
-> - **Keycloak** is an optional auth service, which starts if the `auth` profile is specified (ie. with `--profile auth`)
+> - **Zitadel** is an optional auth service, which starts if the `auth` profile is specified (ie. with `--profile auth`)
 
 ### Agent loop
 
@@ -235,8 +270,6 @@ Key architectural decisions are documented as ADRs in [docs/ADRs/](docs/ADRs/).
 
 See [docs/index.md](docs/index.md) for the full list with implementation status.
 
----
-
 ## Testing
 
 See **[Testing](docs/testing.md)** for the testing strategy and full tier descriptions.
@@ -246,27 +279,30 @@ Quick reference:
 
 ```bash
 ./scripts/run-unit-tests.sh         # no services required
-./scripts/run-integration-tests.sh  # starts postgres, redis, minio
-./scripts/run-smoke-tests.sh        # starts full stack including Keycloak
+./scripts/run-integration-tests.sh  # starts postgres, redis, minio, stub-llm
 ./scripts/run-e2e-tests.sh          # starts postgres, redis, minio
+./scripts/run-api-tests.sh          # starts full stack including Zitadel
+./scripts/run-smoke-tests.sh        # starts full stack including Zitadel
+./scripts/run-all-tests.sh          # all five tiers
 ```
 
 ## Commands reference
 
-| Command                      | Purpose                                                |
-| ---------------------------- | ------------------------------------------------------ |
-| `npm run build`              | Compile both apps to `dist/`                           |
-| `npm run build lcp-server`   | Compile lcp-server only                                |
-| `npm run build lcp-agent`    | Compile lcp-agent only                                 |
-| `npm run start:dev`          | Start lcp-server with hot reload                       |
-| `npm run lint`               | ESLint with auto-fix                                   |
-| `npm run format`             | Prettier over `apps/`, `libs/`, and `docs/`            |
-| `npm test`                   | Unit tests                                             |
-| `npm run test:e2e`           | E2E tests                                              |
-| `npm run test:integration`   | Integration tests (needs Docker)                       |
-| `npm run test:smoke`         | Smoke tests (needs `docker compose up --profile auth`) |
-| `npm run schema:generate`    | Regenerate [schemas/schema.json](schemas/schema.json)  |
-| `npm run licenses:generate`  | Regenerate [docs/licenses.md](docs/licenses.md)        |
-| `npm run migration:generate` | Generate a new TypeORM migration                       |
-| `npm run migration:run`      | Run pending migrations                                 |
-| `npm run migration:revert`   | Revert the last migration                              |
+| Command                      | Purpose                                                                    |
+| ---------------------------- | -------------------------------------------------------------------------- |
+| `npm run build`              | Compile all apps to `dist/`, then regenerate the schema and license report |
+| `npm run build lcp-server`   | Compile lcp-server only                                                    |
+| `npm run build lcp-agent`    | Compile lcp-agent only                                                     |
+| `npm run start:dev`          | Start lcp-server with hot reload                                           |
+| `npm run lint`               | ESLint with auto-fix                                                       |
+| `npm run format`             | Prettier over `apps/`, `libs/`, `test/`, and `docs/`                       |
+| `npm test`                   | Unit tests                                                                 |
+| `npm run test:e2e`           | E2E tests                                                                  |
+| `npm run test:integration`   | Integration tests (needs Docker)                                           |
+| `npm run test:api`           | API contract tests (needs `docker compose up --profile auth`)              |
+| `npm run test:smoke`         | Smoke tests (needs `docker compose up --profile auth`)                     |
+| `npm run schema:generate`    | Regenerate [schemas/schema.json](schemas/schema.json)                      |
+| `npm run licenses:generate`  | Regenerate [docs/licenses.md](docs/licenses.md)                            |
+| `npm run migration:generate` | Generate a new TypeORM migration                                           |
+| `npm run migration:run`      | Run pending migrations                                                     |
+| `npm run migration:revert`   | Revert the last migration                                                  |

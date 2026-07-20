@@ -1,4 +1,5 @@
-import { AgentEvent } from '../events/agent-events';
+import { AuditEventType } from '../models/AuditEvent.model';
+import type { StreamDelta } from '../events/wire-events';
 
 /**
  * The subset of a LangGraph `streamEvents(..., { version: 'v2' })` event that
@@ -27,67 +28,131 @@ function asText(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
+/** Extracts a content block's `.text` field, or `''` if it isn't shaped that way. */
+function blockText(block: unknown): string {
+  if (!block || typeof block !== 'object') return '';
+  const text = (block as Record<string, unknown>)['text'];
+  return typeof text === 'string' ? text : '';
+}
+
 /**
- * Translates one LangGraph stream event into zero or more {@link AgentEvent}s
- * for the observability stream. Pure: the only impurity is the timestamp,
- * taken once per call.
- *
- * - `on_chat_model_start` / `on_chat_model_end` → `llm` request lifecycle
- * - `on_tool_start` / `on_tool_end` → `llm` tool lifecycle (with tool name)
- * - `on_chat_model_stream` → `response` and/or `reasoning` deltas
- *
- * A stream chunk with neither response content nor reasoning content yields
- * no events. `reasoning_content` is only present for providers that expose it
- * (e.g. LM Studio); its absence degrades gracefully to response-only.
+ * Extracts plain text from a chat message's `content` field: a plain string,
+ * or an array of content blocks (each with a `.text` field), joined. Shared
+ * by lcp-agent (reading a turn's final output text) and lcp-cli (mapping an
+ * agent's audit history back into displayable text) — both need to read a
+ * chat model message's content from the same shape.
  */
-export function mapStreamEvent(event: StreamEventLike): AgentEvent[] {
-  const timestamp = new Date().toISOString();
+export function extractContentText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) return content.map(blockText).join('');
+  return '';
+}
+
+/**
+ * Translates one LangGraph `on_chat_model_stream` event into zero or more
+ * live {@link StreamDelta}s (response and/or reasoning). Pure but for the
+ * timestamp, taken once per call. Lifecycle events (start/end/tool) are no
+ * longer mapped here — they are captured as audit rows and streamed live by
+ * the server's persist-then-publish path (`docs/prompts/010.5.1` A.5).
+ *
+ * A stream chunk with neither response nor reasoning content yields nothing.
+ * `reasoning_content` is only present for providers that expose it (e.g. LM
+ * Studio); its absence degrades gracefully to response-only.
+ */
+/** LangGraph v2 lifecycle event names that map to an {@link AuditEventType}. */
+const EVENT_AUDIT_TYPE: Record<string, AuditEventType> = {
+  on_chat_model_start: AuditEventType.LlmRequest,
+  on_chat_model_end: AuditEventType.LlmResponse,
+  on_tool_start: AuditEventType.ToolCall,
+  on_tool_end: AuditEventType.ToolResult,
+};
+
+/** An audit row derived from one LangGraph lifecycle stream event. */
+export interface EnrichedAuditEvent {
+  eventType: AuditEventType;
+  payload: Record<string, unknown>;
+}
+
+/** Reads a nested field of an unknown object without a type escape. */
+function field(obj: unknown, key: string): unknown {
+  return obj && typeof obj === 'object'
+    ? (obj as Record<string, unknown>)[key]
+    : undefined;
+}
+
+/**
+ * Derives the audit row (type + enriched payload) for one LangGraph lifecycle
+ * stream event, or `null` for non-lifecycle events (deltas). Shared by both
+ * agent-loop and chat turns so the persisted payload — and therefore the
+ * live-streamed and replayed rendering — is identical (`docs/prompts/010.5.1`
+ * A.4): `tool_call`/`tool_result` carry the tool name; `llm_response` carries
+ * normalized `responseText`/`reasoningText` alongside the raw `output`.
+ */
+export function enrichedAuditForEvent(
+  event: StreamEventLike,
+): EnrichedAuditEvent | null {
+  const eventType = EVENT_AUDIT_TYPE[event.event];
+  if (!eventType) return null;
 
   switch (event.event) {
-    case 'on_chat_model_start':
-      return [
-        { timestamp, kind: 'llm', data: { activity: 'request_started' } },
-      ];
-    case 'on_chat_model_end':
-      return [
-        { timestamp, kind: 'llm', data: { activity: 'request_complete' } },
-      ];
     case 'on_tool_start':
-      return [
-        {
-          timestamp,
-          kind: 'llm',
-          data: { activity: 'tool_started', tool: event.name },
-        },
-      ];
+      return {
+        eventType,
+        payload: { tool: event.name, input: event.data?.input ?? {} },
+      };
     case 'on_tool_end':
-      return [
-        {
-          timestamp,
-          kind: 'llm',
-          data: { activity: 'tool_complete', tool: event.name },
+      return {
+        eventType,
+        payload: { tool: event.name, output: event.data?.output },
+      };
+    case 'on_chat_model_end': {
+      const output = event.data?.output;
+      return {
+        eventType,
+        payload: {
+          output,
+          responseText: extractContentText(field(output, 'content')),
+          reasoningText: asText(
+            field(field(output, 'additional_kwargs'), 'reasoning_content'),
+          ),
         },
-      ];
-    case 'on_chat_model_stream': {
-      const chunk = event.data?.chunk;
-      const events: AgentEvent[] = [];
-      // ponytail: only string content handled; array content-block deltas
-      // (some providers) are skipped — LM Studio/OpenAI send strings.
-      const response = asText(chunk?.content);
-      if (response) {
-        events.push({ timestamp, kind: 'response', data: { delta: response } });
-      }
-      const reasoning = asText(chunk?.additional_kwargs?.reasoning_content);
-      if (reasoning) {
-        events.push({
-          timestamp,
-          kind: 'reasoning',
-          data: { delta: reasoning },
-        });
-      }
-      return events;
+      };
     }
     default:
-      return [];
+      return { eventType, payload: event.data ?? {} };
   }
+}
+
+export function mapStreamDeltas(
+  event: StreamEventLike,
+  agentId: string,
+): StreamDelta[] {
+  if (event.event !== 'on_chat_model_stream') return [];
+
+  const timestamp = new Date().toISOString();
+  const chunk = event.data?.chunk;
+  const deltas: StreamDelta[] = [];
+  // ponytail: only string content handled; array content-block deltas
+  // (some providers) are skipped — LM Studio/OpenAI send strings.
+  const response = asText(chunk?.content);
+  if (response) {
+    deltas.push({
+      type: 'stream',
+      agentId,
+      channel: 'response',
+      delta: response,
+      timestamp,
+    });
+  }
+  const reasoning = asText(chunk?.additional_kwargs?.reasoning_content);
+  if (reasoning) {
+    deltas.push({
+      type: 'stream',
+      agentId,
+      channel: 'reasoning',
+      delta: reasoning,
+      timestamp,
+    });
+  }
+  return deltas;
 }

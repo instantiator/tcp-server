@@ -4,10 +4,7 @@ import type { LcpAssignment } from '../models/LcpAssignment.model';
 import type { LcpCompany } from '../models/LcpCompany.model';
 import type { LcpRole } from '../models/LcpRole.model';
 import { MCP_REGISTRY } from '../mcp/mcp-registry';
-import {
-  ArtifactResolutionContext,
-  resolveArtifactKey,
-} from '../storage/artifact-keys';
+import { ArtifactResolutionContext } from '../storage/artifact-keys';
 import { DEFAULT_SYSTEM_PROMPT_TEMPLATE } from '../llm/default-system-prompt-template';
 import { resolveSystemPromptTemplate } from '../config/resolve-system-prompt-template';
 import { renderTemplate } from '../llm/render-template';
@@ -156,7 +153,11 @@ export function buildAssignmentMessage(
   params: AssignmentMessageParams,
   strings: PromptAssemblyStrings,
 ): string {
-  const { mode, prompt, materials, expected, resolutionContext } = params;
+  // resolutionContext is accepted (not destructured) — the assignment
+  // presentation no longer needs it for display, but callers still build one
+  // for other purposes (e.g. `planTask`'s cross-reference validation), so the
+  // param stays part of the public contract.
+  const { mode, prompt, materials, expected } = params;
   const blocks: string[] = [MODE_PROMPTS[mode]];
 
   if (prompt.trim()) {
@@ -165,35 +166,25 @@ export function buildAssignmentMessage(
 
   if (materials.length > 0) {
     blocks.push(
-      renderArtifactList(
-        strings.assignment_materials_header,
-        materials,
-        resolutionContext,
-      ),
+      renderArtifactList(strings.assignment_materials_header, materials),
     );
   }
 
   if (expected.length > 0) {
     blocks.push(
-      renderArtifactList(
-        strings.assignment_expected_header,
-        expected,
-        resolutionContext,
-      ),
+      renderArtifactList(strings.assignment_expected_header, expected),
     );
   }
 
   return blocks.join('\n\n');
 }
 
-/** Renders a heading followed by one bullet per artifact (resolved key, or inline value). */
-function renderArtifactList(
-  header: string,
-  artifacts: LcpArtifact[],
-  ctx: ArtifactResolutionContext,
-): string {
-  const items = artifacts.map(
-    (a) => `- ${resolveArtifactKey(a, ctx) ?? a.value}`,
-  );
+/**
+ * Renders a heading followed by one bullet per artifact — its bare
+ * name/filename (`a.value`), the same string the scoped MCP tools take,
+ * never the fully resolved storage key.
+ */
+function renderArtifactList(header: string, artifacts: LcpArtifact[]): string {
+  const items = artifacts.map((a) => `- ${a.value}`);
   return [header, ...items].join('\n');
 }

@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { getGlobalOptions } from '../lib/core/cli-options';
+import { addCompanyOptions, addRoleOptions } from '../lib/core/entity-ref';
 import { listKnowledgeAction } from '../lib/docs/list-knowledge.action';
 
 /**
@@ -7,14 +8,21 @@ import { listKnowledgeAction } from '../lib/docs/list-knowledge.action';
  * shared knowledge.
  */
 export function registerListKnowledge(program: Command): void {
-  program
+  const cmd = program
     .command('list-knowledge')
     .description(
       'List knowledge-base documents for a role or company (shared knowledge)',
-    )
-    .option('-r, --role <slug-or-id>', 'Role slug or UUID')
-    .option('-c, --company <slug-or-id>', 'Company slug or UUID')
-    .action((cmdOpts: { role?: string; company?: string }) =>
-      listKnowledgeAction(getGlobalOptions(program), cmdOpts),
     );
+  addRoleOptions(cmd);
+  addCompanyOptions(cmd);
+  cmd.action(
+    (cmdOpts: {
+      role?: string;
+      roleId?: string;
+      roleSlug?: string;
+      company?: string;
+      companyId?: string;
+      companySlug?: string;
+    }) => listKnowledgeAction(getGlobalOptions(program), cmdOpts),
+  );
 }

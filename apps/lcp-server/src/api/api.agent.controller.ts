@@ -1,4 +1,10 @@
-import { AgentEvent, AgentStatus, AuditEventType, LcpAgent } from '@lcp/shared';
+import {
+  AgentStatus,
+  AuditEvent,
+  AuditEventType,
+  LcpAgent,
+  WireEvent,
+} from '@lcp/shared';
 import {
   BadRequestException,
   Body,
@@ -12,6 +18,7 @@ import {
   NotFoundException,
   Param,
   Post,
+  Query,
   Sse,
   UseGuards,
 } from '@nestjs/common';
@@ -119,7 +126,7 @@ export class AgentController {
   @Sse(':id/events')
   streamEvents(@Param('id') id: UUID): Observable<MessageEvent> {
     const replay$ = defer(() => from(this.replayTerminal(id))).pipe(
-      filter((event): event is AgentEvent => event !== null),
+      filter((event): event is WireEvent => event !== null),
     );
     return merge(replay$, this.agentEvents.observe(id)).pipe(
       map((event) => ({ data: event })),
@@ -127,29 +134,39 @@ export class AgentController {
   }
 
   /**
-   * Synthesizes a terminal {@link AgentEvent} for an agent already in a
-   * terminal state, or null when it is still running / not found. Used to
-   * recover the outcome for clients that subscribe after the turn ended.
+   * Synthesizes a terminal `state_change` {@link WireEvent} for an agent
+   * already in a terminal state, or null when it is still running / not found.
+   * Lets a client that subscribed after the turn ended still recover the
+   * outcome and terminate (`reason:'replay'`, no persisted row).
    */
-  private async replayTerminal(id: UUID): Promise<AgentEvent | null> {
+  private async replayTerminal(id: UUID): Promise<WireEvent | null> {
     const agent = await this.db.getAgent(id);
     if (!agent) return null;
-    const timestamp = new Date().toISOString();
-    if (agent.status === AgentStatus.Completed) {
-      return {
-        timestamp,
-        kind: 'completed',
-        data: { response: agent.output ?? '' },
-      };
-    }
-    if (agent.status === AgentStatus.Failed) {
-      return {
-        timestamp,
-        kind: 'failed',
-        data: { error: agent.output ?? 'Agent failed' },
-      };
-    }
-    return null;
+    const terminal: AgentStatus[] = [
+      AgentStatus.Completed,
+      AgentStatus.Failed,
+      AgentStatus.Cancelled,
+      AgentStatus.Idle,
+    ];
+    if (!terminal.includes(agent.status)) return null;
+    return {
+      type: 'audit',
+      event: {
+        timestamp: new Date().toISOString(),
+        companyId: agent.companyId,
+        role: '',
+        agentId: id,
+        assignmentId: agent.assignmentId ?? null,
+        taskId: null,
+        eventType: AuditEventType.StateChange,
+        payload: {
+          entity: 'agent',
+          newStatus: agent.status,
+          response: agent.output ?? '',
+          reason: 'replay',
+        },
+      },
+    };
   }
 
   /**
@@ -168,6 +185,27 @@ export class AgentController {
     }
   }
 
+  /**
+   * Lists agents filtered by company, role, and/or assignment (at least one
+   * required), and optionally by status. Defaults to currently active agents
+   * (`idle`, `running`, `paused`) when `status` is omitted.
+   */
+  @ApiOperation({ summary: 'List agents' })
+  @Get()
+  async listAgents(
+    @Query('companyId') companyId?: UUID,
+    @Query('roleId') roleId?: UUID,
+    @Query('assignmentId') assignmentId?: UUID,
+    @Query('status') status?: AgentStatus,
+  ): Promise<LcpAgent[]> {
+    if (!companyId && !roleId && !assignmentId) {
+      throw new BadRequestException(
+        'Provide at least one of companyId, roleId, or assignmentId',
+      );
+    }
+    return this.db.listAgents({ companyId, roleId, assignmentId, status });
+  }
+
   /** Retrieves the current state of an agent by its UUID. */
   @ApiOperation({ summary: 'Get an agent by ID' })
   @Get(':id')
@@ -175,6 +213,19 @@ export class AgentController {
     const agent = await this.db.getAgent(id);
     if (!agent) throw new NotFoundException(`Agent ${id} not found`);
     return agent;
+  }
+
+  /**
+   * Retrieves an agent's full audit history, oldest first — every
+   * `llm_request`/`llm_response`/`tool_call`/`tool_result`/`decision`/
+   * `state_change`/`agent_loop_completion` row recorded for it.
+   */
+  @ApiOperation({ summary: "Get an agent's audit history" })
+  @Get(':id/history')
+  async getAgentHistory(@Param('id') id: UUID): Promise<AuditEvent[]> {
+    const agent = await this.db.getAgent(id);
+    if (!agent) throw new NotFoundException(`Agent ${id} not found`);
+    return this.audit.list(agent.companyId, [agent.id]);
   }
 
   @ApiOperation({ summary: 'Delete an agent' })

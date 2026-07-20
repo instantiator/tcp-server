@@ -1,5 +1,4 @@
 import {
-  AgentEvent,
   AgentStatus,
   AuditEvent,
   AuditEventType,
@@ -10,6 +9,7 @@ import {
   LcpTask,
   McpClientService,
   MODE_PROMPTS,
+  WireEvent,
 } from '@lcp/shared';
 import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
@@ -17,11 +17,23 @@ import { getRepositoryToken, TypeOrmModule } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
 import { DataSource, Repository } from 'typeorm';
 import { ChatService } from '../../../apps/lcp-server/src/api/chat.service';
-import { AuditService } from '../../../apps/lcp-server/src/audit/audit.service';
+import { AuditModule } from '../../../apps/lcp-server/src/audit/audit.module';
 import { ContextModule } from '../../../apps/lcp-server/src/context/context.module';
 import { AgentEventService } from '../../../apps/lcp-server/src/events/agent-event.service';
 import { RagRetrievalService } from '../../../apps/lcp-server/src/rag/rag-retrieval.service';
 import { requireEnv } from '../../support/require-env';
+
+const TERMINAL_STATUSES = ['completed', 'failed', 'idle', 'cancelled'];
+
+/** True for a terminal agent `state_change` WireEvent. */
+function isTerminalAgentEvent(e: WireEvent): boolean {
+  return (
+    e.type === 'audit' &&
+    e.event.eventType === AuditEventType.StateChange &&
+    e.event.payload.entity === 'agent' &&
+    TERMINAL_STATUSES.includes(String(e.event.payload.newStatus))
+  );
+}
 
 /**
  * Integration tests for {@link ChatService} against a live PostgreSQL instance
@@ -34,11 +46,18 @@ import { requireEnv } from '../../support/require-env';
 const STUB_LLM_URL = requireEnv('STUB_LLM_URL');
 const DATABASE_URL = requireEnv('DATABASE_URL');
 
+/**
+ * Configures the stub to answer every prompt with `response`. `loop` mode
+ * (rather than the default `sequence`) means repeated calls within one test
+ * keep returning the same text rather than erroring once "exhausted".
+ */
 async function setStubResponse(response: string): Promise<void> {
   await fetch(`${STUB_LLM_URL.replace('/v1', '')}/stub/config`, {
-    method: 'POST',
+    method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ response }),
+    body: JSON.stringify({
+      defaults: { mode: 'loop', responses: [{ text: response, tools: [] }] },
+    }),
   });
 }
 
@@ -58,14 +77,14 @@ describe('ChatService integration (stub LLM)', () => {
    * Resolves with the agent's terminal event. The turn now runs detached and
    * delivers its outcome over the event stream rather than a return value.
    */
-  function waitForTerminal(agentId: UUID): Promise<AgentEvent> {
+  function waitForTerminal(agentId: UUID): Promise<WireEvent> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(
         () => reject(new Error('timed out waiting for terminal event')),
         30_000,
       );
       const sub = agentEvents.observe(agentId).subscribe((event) => {
-        if (event.kind === 'completed' || event.kind === 'failed') {
+        if (isTerminalAgentEvent(event)) {
           clearTimeout(timer);
           sub.unsubscribe();
           resolve(event);
@@ -126,13 +145,14 @@ describe('ChatService integration (stub LLM)', () => {
           AuditEvent,
         ]),
         ContextModule,
+        AuditModule,
       ],
       providers: [
         ChatService,
-        AuditService,
-        // AgentEventService comes from ContextModule (imported + exported) so
-        // ChatService and this test share one instance — the event stream is
-        // how the detached turn reports completion.
+        // AuditService + AgentEventService + AuditEventPublisher come from
+        // AuditModule (which re-exports EventsModule), so ChatService, the
+        // persist-then-publish path, and this test all share one wiring — the
+        // event stream is how the detached turn reports completion.
         {
           provide: RagRetrievalService,
           useValue: { retrieve: jest.fn().mockResolvedValue([]) },
@@ -211,9 +231,10 @@ describe('ChatService integration (stub LLM)', () => {
       await service.sendMessage(agent.id, 'Hi there');
       const event = await terminal;
 
-      expect(event.kind).toBe('completed');
-      if (event.kind === 'completed') {
-        expect(event.data.response).toBe('Hello from stub LLM!');
+      expect(event.type).toBe('audit');
+      if (event.type === 'audit') {
+        expect(event.event.payload.newStatus).toBe(AgentStatus.Idle);
+        expect(event.event.payload.response).toBe('Hello from stub LLM!');
       }
 
       // The response is also persisted for the recovery/replay path.

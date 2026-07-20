@@ -1,8 +1,8 @@
 import { NotFoundException } from '@nestjs/common';
 import { randomUUID, UUID } from 'crypto';
 import {
-  AgentEvent,
   AgentStatus,
+  AuditEvent,
   AuditEventType,
   ContextBudgetService,
   ContextCompactorService,
@@ -11,9 +11,13 @@ import {
   LcpAgent,
   LcpRole,
   MODE_PROMPTS,
+  WireEvent,
 } from '@lcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { AuditService } from '../audit/audit.service';
+import { AuditEventPublisher } from '../events/audit-event-publisher.service';
+import { CompanyEventService } from '../events/company-event.service';
+import { TaskEventService } from '../events/task-event.service';
 
 // Mock heavy LangGraph + LLM deps before importing ChatService
 jest.mock('@langchain/langgraph', () => ({
@@ -149,10 +153,34 @@ function responseStream(text: string): AsyncIterable<Record<string, unknown>> {
   ]);
 }
 
-/** Extracts the response text from a `completed` event, if present. */
-function completedResponse(events: AgentEvent[]): string | undefined {
-  const event = events.find((e) => e.kind === 'completed');
-  return event && event.kind === 'completed' ? event.data.response : undefined;
+const TERMINAL_STATUSES = ['completed', 'failed', 'idle', 'cancelled'];
+
+/** True for a terminal agent `state_change` WireEvent (drives turn-end detection). */
+function isTerminal(e: WireEvent): boolean {
+  return (
+    e.type === 'audit' &&
+    e.event.eventType === AuditEventType.StateChange &&
+    e.event.payload.entity === 'agent' &&
+    TERMINAL_STATUSES.includes(String(e.event.payload.newStatus))
+  );
+}
+
+/** True for a failed agent `state_change` WireEvent. */
+function isFailed(e: WireEvent): boolean {
+  return (
+    e.type === 'audit' &&
+    e.event.eventType === AuditEventType.StateChange &&
+    e.event.payload.entity === 'agent' &&
+    e.event.payload.newStatus === 'failed'
+  );
+}
+
+/** Extracts the response text from the terminal `state_change`, if present. */
+function completedResponse(events: WireEvent[]): string | undefined {
+  const event = events.find(isTerminal);
+  return event && event.type === 'audit'
+    ? (event.event.payload.response as string | undefined)
+    : undefined;
 }
 
 describe('ChatService', () => {
@@ -160,6 +188,14 @@ describe('ChatService', () => {
     findOne: jest.Mock;
     findOneBy: jest.Mock;
     update: jest.Mock;
+  };
+  let assignmentRepo: { createQueryBuilder: jest.Mock };
+  let assignmentUpdateQueryBuilder: {
+    update: jest.Mock;
+    set: jest.Mock;
+    where: jest.Mock;
+    andWhere: jest.Mock;
+    execute: jest.Mock;
   };
   let roleRepo: { findOneBy: jest.Mock };
   let companyRepo: { findOneBy: jest.Mock };
@@ -189,6 +225,18 @@ describe('ChatService', () => {
       findOne: findAgent,
       findOneBy: findAgent,
       update: jest.fn().mockResolvedValue(undefined),
+    };
+    assignmentUpdateQueryBuilder = {
+      update: jest.fn().mockReturnThis(),
+      set: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      execute: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+    assignmentRepo = {
+      createQueryBuilder: jest
+        .fn()
+        .mockReturnValue(assignmentUpdateQueryBuilder),
     };
     roleRepo = { findOneBy: jest.fn() };
     companyRepo = { findOneBy: jest.fn() };
@@ -232,11 +280,39 @@ describe('ChatService', () => {
     const compactor = new ContextCompactorService(budget);
     const guard = new IncomingDataGuardService(budget, compactor);
     agentEvents = new AgentEventService(config);
+    // Wire the audit mock through the real publisher so recorded rows reach the
+    // observed agent stream, exactly as persist-then-publish does in production.
+    const publisher = new AuditEventPublisher(
+      agentEvents,
+      { emit: jest.fn() } as unknown as TaskEventService,
+      { emit: jest.fn() } as unknown as CompanyEventService,
+    );
+    auditService.record.mockImplementation(
+      (
+        companyId: string,
+        role: string,
+        agentId: string | null,
+        eventType: AuditEventType,
+        payload: Record<string, unknown>,
+      ) => {
+        publisher.publish({
+          id: randomUUID(),
+          timestamp: new Date(),
+          companyId,
+          role,
+          agentId: agentId ?? null,
+          assignmentId: null,
+          taskId: null,
+          eventType,
+          payload,
+        } as AuditEvent);
+        return Promise.resolve();
+      },
+    );
     contextManager = new ContextManagerService(
       budget,
       compactor,
       guard,
-      agentEvents,
       auditService,
     );
 
@@ -251,6 +327,7 @@ describe('ChatService', () => {
       auditService as unknown as AuditService,
       mcpClient as never,
       agentRepo as never,
+      assignmentRepo as never,
       roleRepo as never,
       companyRepo as never,
     );
@@ -268,12 +345,12 @@ describe('ChatService', () => {
   async function sendAndCollect(
     agentId: UUID,
     message: string,
-  ): Promise<AgentEvent[]> {
-    const events: AgentEvent[] = [];
+  ): Promise<WireEvent[]> {
+    const events: WireEvent[] = [];
     const done = new Promise<void>((resolve) => {
       const sub = agentEvents.observe(agentId).subscribe((event) => {
         events.push(event);
-        if (event.kind === 'completed' || event.kind === 'failed') {
+        if (isTerminal(event)) {
           sub.unsubscribe();
           resolve();
         }
@@ -439,7 +516,7 @@ describe('ChatService', () => {
 
     const events = await sendAndCollect(agent.id, 'Hello');
 
-    expect(events.some((e) => e.kind === 'failed')).toBe(true);
+    expect(events.some(isFailed)).toBe(true);
     expect(agentRepo.update).toHaveBeenCalledWith(
       agent.id,
       expect.objectContaining({ status: AgentStatus.Failed }),
@@ -451,8 +528,19 @@ describe('ChatService', () => {
       AuditEventType.StateChange,
       expect.any(Object),
     );
+    // sendAndCollect resolves on the terminal state_change, which is recorded
+    // before the finally-block cleanup runs — let that microtask settle.
+    await new Promise((r) => setImmediate(r));
     // PostgresSaver.end() must always be called to release the connection
     expect(mockCheckpointer.end).toHaveBeenCalled();
+    // The chat-mode orphan assignment behind the agent gets the same
+    // human-readable failureReason — it's never covered by
+    // TaskOrchestrationService.handleAgentFailed (that only fires for
+    // task-linked assignments), so ChatService must set it itself.
+    expect(assignmentRepo.createQueryBuilder).toHaveBeenCalled();
+    expect(assignmentUpdateQueryBuilder.set).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'failed', failureReason: 'LLM down' }),
+    );
   });
 
   it('returns early without a terminal event when a tool paused the agent mid-turn', async () => {
@@ -470,17 +558,16 @@ describe('ChatService', () => {
       .mockResolvedValue({ ...agent, status: AgentStatus.Paused });
     roleRepo.findOneBy.mockResolvedValue(role);
 
-    const emitted: AgentEvent[] = [];
+    const emitted: WireEvent[] = [];
     agentEvents.observe(agent.id).subscribe((e) => emitted.push(e));
     await service.sendMessage(agent.id, 'Ask the analyst');
     // Let the detached turn run to its early return.
     await new Promise((r) => setImmediate(r));
     await new Promise((r) => setImmediate(r));
 
-    // The pause path emits no terminal event here — PauseAndResumeService owns
-    // the completion once the consultation resolves.
-    expect(emitted.some((e) => e.kind === 'completed')).toBe(false);
-    expect(emitted.some((e) => e.kind === 'failed')).toBe(false);
+    // The pause path records no terminal state_change here —
+    // PauseAndResumeService owns the completion once the consultation resolves.
+    expect(emitted.some(isTerminal)).toBe(false);
     expect(mockCheckpointer.end).toHaveBeenCalled();
   });
 

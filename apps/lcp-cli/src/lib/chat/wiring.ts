@@ -67,16 +67,80 @@ export async function runTuiInteractive(
 
   tui.onSelectRole((role) => {
     void session
-      .startAgentPane(role.id, role.name, true)
+      .startAssignmentPane(role.id, role.slug, role.name, true)
       .then((id) => tui.switchToPane(id))
-      .catch((err) => session.reportRosterError(err));
+      .catch((err) => session.reportPaneError(session.companyId, err));
   });
 
   tui.onRefreshRoster(() => {
+    void Promise.all([session.fetchRoles(), session.fetchTasks()])
+      .then(([roles, tasks]) => {
+        tui.updateRosterRoles(session.companyId, roles);
+        tui.updateRosterTasks(session.companyId, tasks);
+      })
+      .catch((err) => session.reportPaneError(session.companyId, err));
+  });
+
+  tui.onSelectTask((task) => {
     void session
-      .fetchRoles()
-      .then((roles) => tui.updateRosterRoles(session.companyId, roles))
-      .catch((err) => session.reportRosterError(err));
+      .fetchTaskDetail(task.id)
+      .then(({ task: detail, assignments }) => {
+        tui.addTaskPane({
+          id: detail.id,
+          label: `Task: ${detail.shortcode}`,
+          prompt: detail.request,
+          status: detail.status,
+          assignments,
+        });
+        tui.switchToPane(detail.id);
+        session.watchTaskEvents(detail.id);
+      })
+      .catch((err) => session.reportPaneError(session.companyId, err));
+  });
+
+  tui.onOpenInitiateTask(() => {
+    void Promise.all([
+      session.fetchRoles(),
+      session.fetchCompanyDefaultPlannerRoleId(),
+    ])
+      .then(([roles, defaultRoleId]) => {
+        tui.addInitiateTaskPane({
+          companyId: session.companyId,
+          roles,
+          defaultRoleId,
+        });
+      })
+      .catch((err) => session.reportPaneError(session.companyId, err));
+  });
+
+  tui.onSubmitInitiateTask((paneId, submission) => {
+    void session
+      .createTask(submission)
+      .then(({ task, assignments }) => {
+        tui.replaceWithTaskPane(paneId, {
+          id: task.id,
+          label: `Task: ${task.shortcode}`,
+          prompt: task.request,
+          status: task.status,
+          assignments,
+        });
+        session.watchTaskEvents(task.id);
+      })
+      .catch((err) => session.reportPaneError(paneId, err));
+  });
+
+  tui.onSelectAssignment((_taskId, assignment) => {
+    void session
+      .openAssignmentChatPane(assignment)
+      .catch((err) => session.reportPaneError(session.companyId, err));
+  });
+
+  tui.onCancelTask((taskId) => {
+    void session.cancelTask(taskId);
+  });
+
+  tui.onStartTask((taskId) => {
+    void session.startTask(taskId);
   });
 
   tui.onCloseTab((paneId) => {

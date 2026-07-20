@@ -1,8 +1,14 @@
-import { AuditEvent, AuditEventType } from '@lcp/shared';
+import {
+  AuditEvent,
+  AuditEventType,
+  LcpAgent,
+  LcpAssignment,
+} from '@lcp/shared';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { UUID } from 'crypto';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, In, Repository } from 'typeorm';
+import { AuditEventPublisher } from '../events/audit-event-publisher.service';
 import { CreateAuditEventDto } from './create-audit-event.dto';
 
 /**
@@ -17,17 +23,45 @@ export class AuditService {
   constructor(
     @InjectRepository(AuditEvent)
     private readonly repo: Repository<AuditEvent>,
+    @InjectRepository(LcpAgent)
+    private readonly agentRepo: Repository<LcpAgent>,
+    @InjectRepository(LcpAssignment)
+    private readonly assignmentRepo: Repository<LcpAssignment>,
+    private readonly publisher: AuditEventPublisher,
   ) {}
 
-  /** Persists a single audit event row. */
+  /**
+   * Persists a single audit event row. When the row has an `agentId`, its
+   * `assignmentId`/`taskId` are derived from the agent's current assignment
+   * (caller-supplied ids are ignored) so they can never drift from the source
+   * of truth. Agent-less orchestrator/company rows take the DTO's explicit
+   * `assignmentId`/`taskId`.
+   */
   async write(dto: CreateAuditEventDto): Promise<void> {
     const event = this.repo.create();
     event.companyId = dto.companyId;
     event.role = dto.role;
     event.agentId = dto.agentId ?? null;
+
+    if (dto.agentId) {
+      const assignmentId =
+        (await this.agentRepo.findOneBy({ id: dto.agentId }))?.assignmentId ??
+        null;
+      event.assignmentId = assignmentId;
+      event.taskId = assignmentId
+        ? ((await this.assignmentRepo.findOneBy({ id: assignmentId }))
+            ?.taskId ?? null)
+        : null;
+    } else {
+      event.assignmentId = dto.assignmentId ?? null;
+      event.taskId = dto.taskId ?? null;
+    }
+
     event.eventType = dto.eventType;
     event.payload = dto.payload;
-    await this.repo.save(event);
+    const saved = await this.repo.save(event);
+    // Persist-then-publish: the same row that history reads is streamed live.
+    this.publisher.publish(saved);
   }
 
   async record(
@@ -36,6 +70,7 @@ export class AuditService {
     agentId: UUID | null,
     eventType: AuditEventType,
     payload: Record<string, unknown>,
+    ids?: { assignmentId?: UUID | null; taskId?: UUID | null },
   ): Promise<void> {
     await this.write({
       companyId,
@@ -43,6 +78,44 @@ export class AuditService {
       agentId: agentId ?? undefined,
       eventType,
       payload,
+      assignmentId: ids?.assignmentId ?? undefined,
+      taskId: ids?.taskId ?? undefined,
+    });
+  }
+
+  /**
+   * Lists a company's audit events, oldest first — optionally scoped to a
+   * given set of agent ids (e.g. the assignments belonging to a task).
+   * Backs history reconstruction for `lcp-cli eavesdrop --show-history`.
+   */
+  async list(companyId: UUID, agentIds?: UUID[]): Promise<AuditEvent[]> {
+    const where: FindOptionsWhere<AuditEvent> = {
+      companyId,
+      ...(agentIds && agentIds.length > 0 ? { agentId: In(agentIds) } : {}),
+    };
+    return this.repo.find({ where, order: { timestamp: 'ASC' } });
+  }
+
+  /** Lists a company's audit events scoped to a given set of assignment ids. */
+  async listByAssignments(
+    companyId: UUID,
+    assignmentIds: UUID[],
+  ): Promise<AuditEvent[]> {
+    return this.repo.find({
+      where: { companyId, assignmentId: In(assignmentIds) },
+      order: { timestamp: 'ASC' },
+    });
+  }
+
+  /**
+   * Lists a task's audit events, oldest first — every row denormalised to that
+   * `taskId`, including agent-less orchestrator rows the assignments→agents
+   * join used to miss. Backs {@link TaskService.getHistory}.
+   */
+  async listByTask(companyId: UUID, taskId: UUID): Promise<AuditEvent[]> {
+    return this.repo.find({
+      where: { companyId, taskId },
+      order: { timestamp: 'ASC' },
     });
   }
 }

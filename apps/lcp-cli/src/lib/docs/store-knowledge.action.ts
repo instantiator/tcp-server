@@ -3,10 +3,7 @@ import * as path from 'path';
 import { validateOkf } from '@lcp/shared';
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiUpload } from '../core/api';
-import {
-  KnowledgeScopeOpts,
-  resolveKnowledgeScopePath,
-} from '../core/resolve-knowledge-scope';
+import { EntityRefOpts, resolveKnowledgeScopePath } from '../core/entity-ref';
 import { runCommand } from '../core/run-command';
 import { resolveToken } from '../auth/token';
 
@@ -54,7 +51,7 @@ export function validateOkfDocument(
  */
 export function storeKnowledgeAction(
   opts: GlobalOptions,
-  cmdOpts: KnowledgeScopeOpts & { source: string; target?: string },
+  cmdOpts: EntityRefOpts & { source: string; target?: string },
 ): Promise<void> {
   return runCommand(async () => {
     const resolved = path.resolve(cmdOpts.source);

@@ -1,5 +1,6 @@
-import { LcpCompany } from '@lcp/shared';
+import { AuditEventType, LcpCompany } from '@lcp/shared';
 import { randomUUID } from 'crypto';
+import { AuditService } from '../audit/audit.service';
 import { DbService } from '../db/db.service';
 import { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
 import { ApiService } from './api.service';
@@ -8,17 +9,26 @@ const makeDbService = (): jest.Mocked<
   Pick<DbService, 'createCompany' | 'setCompany' | 'getCompany'>
 > => ({
   createCompany: jest.fn().mockResolvedValue(undefined),
-  setCompany: jest.fn().mockResolvedValue(undefined),
+  setCompany: jest.fn().mockResolvedValue({ id: randomUUID() }),
   getCompany: jest.fn().mockResolvedValue(null),
+});
+
+const makeAudit = (): jest.Mocked<Pick<AuditService, 'record'>> => ({
+  record: jest.fn().mockResolvedValue(undefined),
 });
 
 describe('ApiService', () => {
   let db: ReturnType<typeof makeDbService>;
+  let audit: ReturnType<typeof makeAudit>;
   let api: ApiService;
 
   beforeEach(() => {
     db = makeDbService();
-    api = new ApiService(db as unknown as DbService);
+    audit = makeAudit();
+    api = new ApiService(
+      db as unknown as DbService,
+      audit as unknown as AuditService,
+    );
   });
 
   describe('createCompany', () => {
@@ -62,6 +72,7 @@ describe('ApiService', () => {
     it('resolves a UUID-shaped path identifier to identifiers.id', async () => {
       const id = randomUUID();
       const company = { slug: 'acme', name: 'Acme' };
+      db.setCompany.mockResolvedValue({ id } as LcpCompany);
       await api.setCompany(id, company);
       expect(db.setCompany).toHaveBeenCalledWith(company, { id });
     });
@@ -70,6 +81,19 @@ describe('ApiService', () => {
       const company = { name: 'Acme' };
       await api.setCompany('acme', company);
       expect(db.setCompany).toHaveBeenCalledWith(company, { slug: 'acme' });
+    });
+
+    it('records a company state_change for the updated company', async () => {
+      const id = randomUUID();
+      db.setCompany.mockResolvedValue({ id } as LcpCompany);
+      await api.setCompany(id, { name: 'Acme' });
+      expect(audit.record).toHaveBeenCalledWith(
+        id,
+        'system',
+        null,
+        AuditEventType.StateChange,
+        expect.objectContaining({ entity: 'company' }),
+      );
     });
   });
 
@@ -88,6 +112,7 @@ describe('ApiService', () => {
         name: 'Acme',
         description: 'A Company That Makes Everything',
         mcpServerList: [],
+        nextTaskShortcodeIndex: 0,
       };
       db.getCompany.mockResolvedValue(fakeCompany);
 

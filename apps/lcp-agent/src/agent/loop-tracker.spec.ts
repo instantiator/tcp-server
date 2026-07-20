@@ -3,6 +3,8 @@ import {
   applyStorageResult,
   baseToolName,
   createTracker,
+  detectDescribedToolCall,
+  extractChatModelText,
   generateActionString,
 } from './loop-tracker';
 
@@ -15,6 +17,50 @@ describe('createTracker', () => {
     expect(t.storage.deleted).toEqual([]);
     expect(t.storage.moved).toEqual([]);
     expect(t.firedTools.size).toBe(0);
+    expect(t.lastResponseText).toBe('');
+  });
+});
+
+describe('extractChatModelText', () => {
+  it('reads string content', () => {
+    expect(extractChatModelText({ content: 'hello' })).toBe('hello');
+  });
+
+  it('reads content-block array text', () => {
+    expect(
+      extractChatModelText({
+        content: [{ type: 'text', text: 'block one' }],
+      }),
+    ).toBe('block one');
+  });
+
+  it('returns empty string for non-object output', () => {
+    expect(extractChatModelText(undefined)).toBe('');
+    expect(extractChatModelText('plain string')).toBe('');
+  });
+
+  it('returns empty string when content is missing', () => {
+    expect(extractChatModelText({})).toBe('');
+  });
+});
+
+describe('detectDescribedToolCall', () => {
+  it('finds a well-formed tool_call block', () => {
+    const text =
+      'Sure, here it is:\n<tool_call>{"name":"foo"}</tool_call>\ndone';
+    expect(detectDescribedToolCall(text)).toBe('{"name":"foo"}');
+  });
+
+  it('is case-insensitive on the tag', () => {
+    expect(detectDescribedToolCall('<TOOL_CALL>abc</TOOL_CALL>')).toBe('abc');
+  });
+
+  it('returns null when no tool_call tag is present', () => {
+    expect(detectDescribedToolCall('just narration, no tags')).toBeNull();
+  });
+
+  it('returns null for an unclosed tag', () => {
+    expect(detectDescribedToolCall('<tool_call>{"name":"foo"}')).toBeNull();
   });
 });
 
@@ -39,6 +85,14 @@ describe('generateActionString', () => {
         filename: 'foo/bar.md',
       }),
     ).toBe('Appended to working file: foo/bar.md');
+  });
+
+  it('handles create_working_file', () => {
+    expect(
+      generateActionString('storage__create_working_file', {
+        filename: 'doc.md',
+      }),
+    ).toBe('Created working file: doc.md');
   });
 
   it('handles append_working_file', () => {
@@ -165,6 +219,44 @@ describe('applyStorageResult', () => {
       modified: [],
       deleted: [],
       moved: [],
+    });
+  });
+
+  describe('create_working_file', () => {
+    it('adds to created when the file was created', () => {
+      applyStorageResult(
+        'storage__create_working_file',
+        { filename: 'new.md' },
+        { content: 'Created working file: new.md' },
+        tracker,
+      );
+      expect(tracker.storage.created).toEqual(['new.md']);
+      expect(tracker.storage.modified).toEqual([]);
+    });
+
+    it('adds to modified when the file was replaced', () => {
+      applyStorageResult(
+        'storage__create_working_file',
+        { filename: 'existing.md' },
+        { content: 'Replaced working file: existing.md' },
+        tracker,
+      );
+      expect(tracker.storage.modified).toEqual(['existing.md']);
+      expect(tracker.storage.created).toEqual([]);
+    });
+
+    it('ignores create_working_file on an error result', () => {
+      applyStorageResult(
+        'storage__create_working_file',
+        { filename: 'bad.md' },
+        {
+          content:
+            "'bad.md' already exists. Set overwrite: true to replace it.",
+        },
+        tracker,
+      );
+      expect(tracker.storage.created).toEqual([]);
+      expect(tracker.storage.modified).toEqual([]);
     });
   });
 
