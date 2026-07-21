@@ -23,7 +23,7 @@ flowchart LR
     VEC -->|cosine similarity top-k| PROMPT[Prompt part 5]
 ```
 
-1. Knowledge documents (Markdown, OKF format) are uploaded per role, or to a company's shared knowledge, via `lcp-cli store-knowledge`.
+1. Knowledge documents (`.md`, `.txt`, `.html`, `.pdf`, `.docx`, `.csv`, `.json`, `.yaml`) are uploaded per role, or to a company's shared knowledge, via `lcp-cli store-knowledge` — the server converts non-`.md` formats to OKF Markdown before storing (see [lcp-cli.md → store-knowledge](lcp-cli.md#store-knowledge)).
 2. Each document is split into ~800-token chunks, embedded via the company's `embeddingConfig` model, and stored in the `knowledge_chunk` PostgreSQL table (pgvector column) — `roleId` is `null` for company-shared chunks. Indexing is asynchronous and kept in sync with storage automatically (write hook + reconciliation poller); see [shared-storage.md → Automatic RAG sync](shared-storage.md#automatic-rag-sync-01022).
 3. When an agent runs, the initial prompt is embedded and the top-k most similar chunks above a 0.7 cosine threshold are retrieved. Retrieval is scoped to the agent's **role plus its company's shared** chunks (`("roleId" = role) OR ("roleId" IS NULL AND "companyId" = company)`), and never another company's.
 4. Retrieved chunks are injected as prompt part 5. If the RAG text exceeds the context budget, it is compacted or stored to MinIO (context overflow) before injection.
@@ -47,17 +47,17 @@ Add an `embeddingConfig` to the company:
 
 ### CLI commands
 
-| Command                                                         | Description                       |
-| --------------------------------------------------------------- | --------------------------------- |
-| `store-knowledge (--role <id>\|--company <id>) --source <path>` | Upload and index a `.md` document |
-| `list-knowledge (--role <id>\|--company <id>)`                  | List indexed documents            |
-| `get-knowledge (--role <id>\|--company <id>) --file <name>`     | Get a document's content          |
-| `delete-knowledge (--role <id>\|--company <id>) --file <name>`  | Remove a document and its chunks  |
-| `open-document-store`                                           | Print/open the MinIO console URL  |
+| Command                                                         | Description                                                         |
+| --------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `store-knowledge (--role <id>\|--company <id>) --source <path>` | Upload and index a document (converted to OKF Markdown server-side) |
+| `list-knowledge (--role <id>\|--company <id>)`                  | List indexed documents                                              |
+| `get-knowledge (--role <id>\|--company <id>) --file <name>`     | Get a document's content                                            |
+| `delete-knowledge (--role <id>\|--company <id>) --file <name>`  | Remove a document and its chunks                                    |
+| `open-document-store`                                           | Print/open the MinIO console URL                                    |
 
 ### OKF document format
 
-Documents must be Markdown files with YAML front-matter containing at least a `title` field:
+Stored documents are Markdown files with YAML front-matter containing at least a `title` field:
 
 ```markdown
 ---
@@ -70,7 +70,7 @@ author: Alice
 ...content...
 ```
 
-Documents failing this validation are rejected at upload time.
+`.md` uploads must already be in this format and are rejected at upload time if not. Other supported formats are converted to it server-side — the title comes from the source (an HTML `<title>`, a DOCX heading), falling back to the first Markdown heading in the converted body, then the filename.
 
 ## MCP Servers
 

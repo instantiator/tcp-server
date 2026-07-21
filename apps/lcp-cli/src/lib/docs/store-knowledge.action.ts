@@ -1,6 +1,5 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { validateOkf } from '@lcp/shared';
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiUpload } from '../core/api';
 import { EntityRefOpts, resolveKnowledgeScopePath } from '../core/entity-ref';
@@ -14,38 +13,40 @@ interface DocumentSummary {
   lastModified: string;
 }
 
+/** Extensions the server converts to OKF Markdown — kept in sync with `knowledge-conversion.ts`'s `SUPPORTED_EXTENSIONS`. */
+const SUPPORTED_EXTENSIONS = [
+  '.md',
+  '.txt',
+  '.html',
+  '.pdf',
+  '.docx',
+  '.csv',
+  '.json',
+  '.yaml',
+];
+
 /**
- * Validates that a file is an OKF document:
- * - Must have a `.md` extension.
- * - Must have valid YAML front-matter with a non-empty `title` field
- *   (delegates to the shared `validateOkf` — see `libs/lcp-shared/src/storage/validation`).
+ * Checks that a file's extension is one the server can convert.
  *
- * This is a fast, offline pre-check so an obviously-invalid file fails before
- * any network call; the server enforces the same rule authoritatively on
- * write, since a user could also write to storage without going through the CLI.
+ * This is a fast, offline pre-check so an obviously-unsupported file fails
+ * before any network call; the server performs the real conversion and OKF
+ * validation authoritatively on write.
  *
- * Returns a validation error string, or null when valid.
+ * Returns a validation error string, or null when the extension is supported.
  */
-export function validateOkfDocument(
-  filename: string,
-  content: string,
-): string | null {
-  if (path.extname(filename).toLowerCase() !== '.md') {
-    return `${filename}: must be a Markdown (.md) file`;
-  }
-  const result = validateOkf(content);
-  if (!result.valid) {
-    return `${filename}: ${result.errors[0].llmHint}`;
+export function validateSupportedFileType(filename: string): string | null {
+  const ext = path.extname(filename).toLowerCase();
+  if (!SUPPORTED_EXTENSIONS.includes(ext)) {
+    return `${filename}: unsupported file type — must be one of ${SUPPORTED_EXTENSIONS.join(', ')}`;
   }
   return null;
 }
 
 /**
- * Uploads (or overwrites) a single OKF Markdown document into a role's
- * knowledge base, or a company's shared knowledge.
- *
- * The file is validated before upload (`.md` extension + front-matter with
- * `title`); the server re-indexes its RAG chunks on success.
+ * Uploads (or overwrites) a single document into a role's knowledge base, or
+ * a company's shared knowledge. Accepts any of `SUPPORTED_EXTENSIONS`; the
+ * server converts it to OKF Markdown and re-indexes its RAG chunks on
+ * success.
  *
  * stdout: JSON `{ key, name, size, lastModified }` for the stored document.
  */
@@ -62,7 +63,7 @@ export function storeKnowledgeAction(
     const content = fs.readFileSync(resolved);
     const filename = cmdOpts.target ?? path.basename(resolved);
 
-    const error = validateOkfDocument(filename, content.toString('utf-8'));
+    const error = validateSupportedFileType(filename);
     if (error) {
       process.stderr.write(
         `Validation failed — file was not uploaded:\n  ${error}\n`,

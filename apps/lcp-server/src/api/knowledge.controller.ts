@@ -1,5 +1,7 @@
+import * as path from 'path';
 import {
   Body,
+  ConflictException,
   Controller,
   Delete,
   Get,
@@ -23,7 +25,16 @@ import type { UUID } from 'crypto';
 import type { Request, Response } from 'express';
 import { getCurrentUserId } from '../auth/current-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { DocumentSummary, KnowledgeService } from './knowledge.service';
+import { Originators } from '../storage/storage.service';
+import {
+  ensureOkfFrontMatter,
+  convertToMarkdown,
+} from './knowledge-conversion';
+import {
+  DocumentSummary,
+  KnowledgeScopeRef,
+  KnowledgeService,
+} from './knowledge.service';
 
 /** Subset of the multer file object relevant to document upload. */
 interface UploadedFileBuffer {
@@ -75,12 +86,14 @@ export class KnowledgeController {
   }
 
   /**
-   * Uploads and indexes an OKF document for the role. Accepts a
-   * `multipart/form-data` request with a single `file` field. The server
-   * replaces any existing document with the same filename and re-indexes
-   * its RAG chunks.
+   * Uploads and indexes a document for the role. Accepts a
+   * `multipart/form-data` request with a single `file` field, in any of
+   * `SUPPORTED_EXTENSIONS` (see `knowledge-conversion.ts`) — the server
+   * converts it to OKF Markdown before storing (see
+   * {@link storeConverted}). The server replaces any existing document with
+   * the same filename and re-indexes its RAG chunks.
    */
-  @ApiOperation({ summary: 'Upload an OKF document for a role' })
+  @ApiOperation({ summary: 'Upload a document for a role' })
   @ApiConsumes('multipart/form-data')
   @Post('role/:roleId/knowledge')
   @UseInterceptors(FileInterceptor('file'))
@@ -90,12 +103,11 @@ export class KnowledgeController {
     @Body() body: StoreKnowledgeBody,
     @Req() req: Request,
   ): Promise<DocumentSummary> {
-    return this.knowledge.store(
-      { kind: 'role', roleId },
-      body.filename ?? file.originalname,
-      file.buffer,
-      { user: getCurrentUserId(req), agent: null, task: null },
-    );
+    return this.storeConverted({ kind: 'role', roleId }, file, body.filename, {
+      user: getCurrentUserId(req),
+      agent: null,
+      task: null,
+    });
   }
 
   /** Deletes a role knowledge document and its RAG chunks. Idempotent. */
@@ -139,8 +151,12 @@ export class KnowledgeController {
     return content;
   }
 
-  /** Uploads and indexes an OKF document into the company's shared knowledge. */
-  @ApiOperation({ summary: 'Upload a company-shared OKF document' })
+  /**
+   * Uploads and indexes a document into the company's shared knowledge —
+   * see {@link storeRoleKnowledgeFile} for the accepted formats and
+   * conversion behaviour.
+   */
+  @ApiOperation({ summary: 'Upload a company-shared document' })
   @ApiConsumes('multipart/form-data')
   @Post('company/:companyId/knowledge')
   @UseInterceptors(FileInterceptor('file'))
@@ -150,10 +166,10 @@ export class KnowledgeController {
     @Body() body: StoreKnowledgeBody,
     @Req() req: Request,
   ): Promise<DocumentSummary> {
-    return this.knowledge.store(
+    return this.storeConverted(
       { kind: 'company', companyId },
-      body.filename ?? file.originalname,
-      file.buffer,
+      file,
+      body.filename,
       { user: getCurrentUserId(req), agent: null, task: null },
     );
   }
@@ -187,5 +203,65 @@ export class KnowledgeController {
       agent: null,
       task: null,
     });
+  }
+
+  /**
+   * Converts an uploaded file to OKF Markdown and stores it. The target
+   * filename is `overrideFilename` if given (preserving today's explicit
+   * overwrite behaviour); otherwise it's the source basename with a `.md`
+   * extension, regardless of the source's own extension (e.g. `report.pdf`
+   * → `report.md`).
+   *
+   * When no override is given and the source wasn't already `.md` (i.e. a
+   * real conversion happened), a same-named existing document is treated as
+   * an accidental collision rather than an update — it throws
+   * {@link ConflictException} rather than silently overwriting a
+   * differently-sourced file. Re-uploading the same source again still
+   * overwrites, as does passing an explicit `filename`.
+   *
+   * `KnowledgeService.store` → `StorageService.putKnowledgeFile` already
+   * runs the authoritative `validateOkf` check (via the shared validation
+   * registry) before writing, so no separate validation call is needed here.
+   */
+  private async storeConverted(
+    ref: KnowledgeScopeRef,
+    file: UploadedFileBuffer,
+    overrideFilename: string | undefined,
+    originators: Originators,
+  ): Promise<DocumentSummary> {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const converted = await convertToMarkdown(file.originalname, file.buffer);
+    // .md sources pass through unchanged (see convertToMarkdown) and keep
+    // today's strict behaviour: KnowledgeService.store's validateOkf gate
+    // rejects a missing/invalid title rather than heuristically inventing
+    // one. Front-matter generation only applies to genuinely converted
+    // formats, which have no native front-matter concept of their own.
+    const content =
+      ext === '.md'
+        ? converted.body
+        : ensureOkfFrontMatter(file.originalname, converted);
+
+    const targetFilename =
+      overrideFilename ??
+      (ext === '.md'
+        ? file.originalname
+        : `${path.basename(file.originalname, ext)}.md`);
+
+    if (!overrideFilename && ext !== '.md') {
+      const existing = await this.knowledge.list(ref);
+      if (existing.some((doc) => doc.name === targetFilename)) {
+        throw new ConflictException(
+          `A document named '${targetFilename}' already exists. Delete it ` +
+            `first, or pass an explicit filename to overwrite intentionally.`,
+        );
+      }
+    }
+
+    return this.knowledge.store(
+      ref,
+      targetFilename,
+      Buffer.from(content, 'utf-8'),
+      originators,
+    );
   }
 }
