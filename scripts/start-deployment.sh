@@ -154,9 +154,18 @@ fi
 # from an earlier instance would otherwise satisfy a plain "non-empty"
 # readiness check immediately, racing against the new instance's own
 # (slower) write.
+#
+# GNU stat first, BSD stat as fallback — NOT the other way round. GNU stat's
+# `-f` means "filesystem status" (a different mode entirely, not BSD's
+# `-f format`); given a file argument it still exits non-zero, but only after
+# printing filesystem info to stdout, which the outer `$(...)` would capture
+# ahead of the real fallback's output. Swapping the order broke CI (Linux)
+# while working fine in local dev (macOS) — the mismatched output silently
+# fed multi-line garbage into the `(( ... > ... ))` arithmetic check that
+# guards this, aborting the script under `set -e`.
 PAT_MTIME_BEFORE=0
 if [[ "$ZITADEL_FRESH_BOOT" = true && -f "$PAT_FILE" ]]; then
-  PAT_MTIME_BEFORE=$(stat -f %m "$PAT_FILE" 2>/dev/null || stat -c %Y "$PAT_FILE" 2>/dev/null || echo 0)
+  PAT_MTIME_BEFORE=$(stat -c %Y "$PAT_FILE" 2>/dev/null || stat -f %m "$PAT_FILE" 2>/dev/null || echo 0)
 fi
 
 if [[ "$REBUILD" = "true" ]]; then
@@ -188,7 +197,7 @@ if [[ -n "$AUTH_PROFILE" ]]; then
     # Generous timeout: first-instance bootstrap can be slow on a cold image
     # pull or a busy machine.
     wait_for "Zitadel bootstrap PAT" \
-      "[[ -s '$PAT_FILE' ]] && (( \$(stat -f %m '$PAT_FILE' 2>/dev/null || stat -c %Y '$PAT_FILE' 2>/dev/null || echo 0) > $PAT_MTIME_BEFORE ))" \
+      "[[ -s '$PAT_FILE' ]] && (( \$(stat -c %Y '$PAT_FILE' 2>/dev/null || stat -f %m '$PAT_FILE' 2>/dev/null || echo 0) > $PAT_MTIME_BEFORE ))" \
       180
   else
     # Existing DB: Zitadel skips first-instance bootstrap and never touches
