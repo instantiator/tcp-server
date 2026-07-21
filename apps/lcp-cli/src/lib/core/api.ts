@@ -111,6 +111,11 @@ export async function apiDownload(
 /**
  * Uploads a single file to the given path using `multipart/form-data`.
  * The file is sent in a field named `file`.
+ *
+ * A document-validation failure (422) carries `errors[].llmHint` —
+ * remediation text such as a minimal front-matter template — which is
+ * appended to the thrown error's message so it reaches the CLI user, not
+ * just `message` (see `DocumentValidationException` in lcp-server).
  */
 export async function apiUpload<T>(
   opts: ApiOptions,
@@ -135,8 +140,15 @@ export async function apiUpload<T>(
   if (!res.ok) {
     let detail = '';
     try {
-      const err = (await res.json()) as { message?: string };
+      const err = (await res.json()) as {
+        message?: string;
+        errors?: { llmHint?: string }[];
+      };
       detail = err.message ? `: ${err.message}` : '';
+      const hints = (err.errors ?? [])
+        .map((e) => e.llmHint)
+        .filter((hint): hint is string => Boolean(hint));
+      if (hints.length > 0) detail += `\n${hints.join('\n')}`;
     } catch {
       /* ignore */
     }

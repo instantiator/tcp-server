@@ -1,4 +1,4 @@
-import { apiRequest } from './api';
+import { apiRequest, apiUpload } from './api';
 
 describe('apiRequest', () => {
   let fetchSpy: jest.SpyInstance;
@@ -145,5 +145,78 @@ describe('apiRequest', () => {
 
     const [url] = fetchSpy.mock.calls[0] as [string, ...unknown[]];
     expect(url).toBe('http://localhost:3000/api/company');
+  });
+});
+
+describe('apiUpload', () => {
+  let fetchSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    fetchSpy = jest.spyOn(globalThis, 'fetch');
+  });
+
+  afterEach(() => fetchSpy.mockRestore());
+
+  it('returns the parsed response on success', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: () => Promise.resolve({ key: 'a/knowledge/b/c.md' }),
+    });
+
+    const result = await apiUpload(
+      { baseUrl: 'http://localhost:3000', token: 'tok' },
+      '/api/role/1/knowledge',
+      'notes.md',
+      Buffer.from('content'),
+    );
+
+    expect(result).toEqual({ key: 'a/knowledge/b/c.md' });
+  });
+
+  it('appends errors[].llmHint to the thrown message, so a validation-failure template reaches the user', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: false,
+      status: 422,
+      json: () =>
+        Promise.resolve({
+          message: 'Document failed validation',
+          errors: [
+            {
+              message: 'Missing or unparsable YAML front-matter',
+              llmHint:
+                "OKF documents require YAML front-matter with at least a 'title' field, e.g.:\n---\ntitle: My Document\n---",
+            },
+          ],
+        }),
+    });
+
+    await expect(
+      apiUpload(
+        { baseUrl: 'http://localhost:3000' },
+        '/api/role/1/knowledge',
+        'bad.md',
+        Buffer.from('# no front-matter'),
+      ),
+    ).rejects.toThrow(
+      "HTTP 422: Document failed validation\nOKF documents require YAML front-matter with at least a 'title' field, e.g.:\n---\ntitle: My Document\n---",
+    );
+  });
+
+  it('falls back to just the message when there are no errors[].llmHint entries', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: () => Promise.resolve({ message: 'Bad request' }),
+    });
+
+    await expect(
+      apiUpload(
+        { baseUrl: 'http://localhost:3000' },
+        '/api/role/1/knowledge',
+        'archive.zip',
+        Buffer.from(''),
+      ),
+    ).rejects.toThrow('HTTP 400: Bad request');
   });
 });
