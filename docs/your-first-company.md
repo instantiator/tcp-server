@@ -69,18 +69,23 @@ Check the `/health` pages for the lcp-server, and lcp-agent applications.
 A `test` account is created for the dev server, and stored in Zitadel. You can confirm that it's working by retrieving an access token — `get-token` uses a device-flow login, so it prints a browser link to sign in as:
 
 ```bash
-./lcp-cli.sh --rebuild get-token
+./lcp-cli.sh get-token
 ```
 
 Follow the printed `verification_uri`, sign in as `test` / `test`, and the CLI will pick up the token once login completes. You should see a token returned - it _looks like_ a long string of random characters.
 
 The rest of this walkthrough passes that token to `lcp-cli.sh` via
-`--access-token-env-var` rather than repeating the browser login on every
-command, so capture it once into an environment variable:
+the `LCP_TOKEN` environment variable, rather than repeating the browser login on every command, so capture it once into an environment variable:
 
 ```bash
 export LCP_TOKEN=$(./lcp-cli.sh get-token)
 ```
+
+> [!TIP]
+> The `LCP_TOKEN` environment variable is the default assumption for lcp-cli, so placing a token there means it will be automatically picked up.
+
+> [!NOTE]
+> If you need to use a different variable, pass the `--access-token-env-var` option to lcp-cli.
 
 ### 0.4 Set up your environment config
 
@@ -133,7 +138,8 @@ Pipe it into `lcp-cli.sh` with the `set-company` verb:
 cat scripts/test-data/simple-company.json | lcp-cli.sh set-company
 ```
 
-The response will be a full instance of the company, _including its `id`_ - indicating that it has been added to the database.
+> [!NOTE]
+> The response will be a full instance of the company, _including its `id`_ - indicating that it has been added to the database.
 
 ```json
 {

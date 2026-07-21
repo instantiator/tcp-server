@@ -51,6 +51,7 @@ describe('KnowledgeService', () => {
     deleteKnowledgeFile: jest.Mock;
   };
   let reindex: { bumpCompany: jest.Mock; isRebuilding: jest.Mock };
+  let ragRetrieval: { retrieve: jest.Mock };
   let roleRepo: { findOneBy: jest.Mock; findBy: jest.Mock };
   let companyRepo: { findOneBy: jest.Mock };
   let chunkRepo: { count: jest.Mock };
@@ -72,6 +73,7 @@ describe('KnowledgeService', () => {
       bumpCompany: jest.fn().mockResolvedValue(undefined),
       isRebuilding: jest.fn().mockResolvedValue(false),
     };
+    ragRetrieval = { retrieve: jest.fn().mockResolvedValue([]) };
     roleRepo = {
       findOneBy: jest.fn().mockResolvedValue(role),
       findBy: jest.fn().mockResolvedValue([role]),
@@ -83,6 +85,7 @@ describe('KnowledgeService', () => {
     service = new KnowledgeService(
       storage as unknown as StorageService,
       reindex as unknown as KnowledgeReindexService,
+      ragRetrieval as never,
       roleRepo as never,
       companyRepo as never,
       chunkRepo as never,
@@ -264,6 +267,53 @@ describe('KnowledgeService', () => {
         NotFoundException,
       );
       expect(reindex.bumpCompany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('queryRag', () => {
+    it('resolves the role/company and delegates to RagRetrievalService.retrieve', async () => {
+      const chunks = [
+        {
+          id: randomUUID(),
+          documentPath: 'acme/knowledge/analyst/report.md',
+          chunkIndex: 0,
+          content: 'Some chunk text.',
+          similarity: 0.92,
+        },
+      ];
+      ragRetrieval.retrieve.mockResolvedValue(chunks);
+
+      const result = await service.queryRag(role.id, 'query text', 3, 0.5);
+
+      expect(result).toBe(chunks);
+      expect(ragRetrieval.retrieve).toHaveBeenCalledWith(
+        role.id,
+        company.id,
+        'query text',
+        company.embeddingConfig,
+        3,
+        0.5,
+      );
+    });
+
+    it('passes topK/threshold through as undefined when not given', async () => {
+      await service.queryRag(role.id, 'query text');
+      expect(ragRetrieval.retrieve).toHaveBeenCalledWith(
+        role.id,
+        company.id,
+        'query text',
+        company.embeddingConfig,
+        undefined,
+        undefined,
+      );
+    });
+
+    it('throws NotFoundException when the role does not exist', async () => {
+      roleRepo.findOneBy.mockResolvedValue(null);
+      await expect(
+        service.queryRag(randomUUID(), 'query text'),
+      ).rejects.toThrow(NotFoundException);
+      expect(ragRetrieval.retrieve).not.toHaveBeenCalled();
     });
   });
 

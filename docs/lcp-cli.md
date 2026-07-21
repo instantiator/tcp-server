@@ -95,6 +95,7 @@ See [schema.md](schema.md) for the full field reference, VS Code integration, ex
 | [`delete-knowledge`](#delete-knowledge)                     | `delete-knowledge (--role <slug-or-id>\|--company <slug-or-id>) -f <filename>`                                      | Delete a knowledge-base document by filename                                                  |
 | [`reindex-knowledge`](#reindex-knowledge)                   | `reindex-knowledge --company <slug-or-id>`                                                                          | Force a full RAG rebuild of every knowledge scope of a company                                |
 | [`get-knowledge-index-status`](#get-knowledge-index-status) | `get-knowledge-index-status (--role <slug-or-id>\|--company <slug-or-id>)`                                          | Report knowledge-index status for a role, or a company's shared scope plus every role         |
+| [`query-knowledge`](#query-knowledge)                       | `query-knowledge --role <slug-or-id> -q <text> [--top-k <n>] [--threshold <n>]`                                     | Query the RAG index for a role, without invoking any LLM call                                 |
 | [`open-document-store`](#open-document-store)               | `open-document-store [--no-open]`                                                                                   | Print (and open) the MinIO console URL                                                        |
 | [`open-swagger`](#open-swagger)                             | `open-swagger --service <name> [--no-open]`                                                                         | Print (and open) a service's Swagger UI URL                                                   |
 | [`list-open-queries`](#list-open-queries)                   | `list-open-queries [-c <uuid>\|--company-slug <slug>] [--format table\|json\|csv]`                                  | List open agent-to-human queries                                                              |
@@ -140,6 +141,15 @@ Sign in via the browser (device-flow login) and print an OIDC access token.
 ```bash
 ./lcp-cli.sh get-token
 ```
+
+A common usage is to place the token into `LCP_TOKEN` for future work:
+
+```bash
+export LCP_TOKEN=$(./lcp-cli.sh get-token)
+```
+
+> [!NOTE]
+> A user sign in will be required only if the token has expired or not present. An existing and in-date token will be used. To force regeneration, use the `--force` option.
 
 ### `list-companies`
 
@@ -681,6 +691,24 @@ Report the RAG-indexing status of a role's knowledge scope, or of a company's sh
 ```bash
 ./lcp-cli.sh -t $TOKEN get-knowledge-index-status -r <roleId>
 ./lcp-cli.sh -t $TOKEN get-knowledge-index-status -c acme
+```
+
+### `query-knowledge`
+
+Runs a RAG similarity search for a role and prints the raw chunks that would be injected into a prompt — the same data RAG injection would provide, without invoking any chat/LLM call. Searches the role's own chunks plus its company's shared chunks in one call, so there's no separate company-only variant.
+
+- **stdout**: JSON `{ id, documentPath, chunkIndex, content, similarity }[]`, ranked by similarity descending
+
+| Flag                  | Alias | Description                                               |
+| --------------------- | ----- | --------------------------------------------------------- |
+| `--role <slug-or-id>` | `-r`  | **(Required)** Role slug or UUID                          |
+| `--query <text>`      | `-q`  | **(Required)** Query text                                 |
+| `--top-k <n>`         |       | Maximum chunks to return (default 5, matching the server) |
+| `--threshold <n>`     |       | Minimum cosine similarity to include (default 0.7)        |
+
+```bash
+./lcp-cli.sh -t $TOKEN query-knowledge -r <roleId> -q "remote work policy"
+./lcp-cli.sh -t $TOKEN query-knowledge -r <roleId> -q "remote work policy" --top-k 3 --threshold 0.5
 ```
 
 ### `open-document-store`

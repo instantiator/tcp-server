@@ -1,5 +1,6 @@
 import * as path from 'path';
 import {
+  BadRequestException,
   Body,
   ConflictException,
   Controller,
@@ -8,6 +9,7 @@ import {
   HttpCode,
   Param,
   Post,
+  Query,
   Req,
   Res,
   UploadedFile,
@@ -25,6 +27,7 @@ import type { UUID } from 'crypto';
 import type { Request, Response } from 'express';
 import { getCurrentUserId } from '../auth/current-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RagChunk } from '../rag/rag-retrieval.service';
 import { Originators } from '../storage/storage.service';
 import {
   ensureOkfFrontMatter,
@@ -83,6 +86,37 @@ export class KnowledgeController {
     @Param('roleId') roleId: UUID,
   ): Promise<KnowledgeStatus> {
     return this.knowledge.status({ kind: 'role', roleId });
+  }
+
+  /**
+   * Runs a RAG similarity search for the role and returns the raw chunks —
+   * the same data prompt assembly would inject, without invoking any
+   * chat/LLM call. Searches the role's own chunks plus its company's shared
+   * chunks (see {@link RagRetrievalService.retrieve}), so this one route
+   * covers both "what would this role see" and "what's in the shared pool";
+   * a separate company-shared-only route would be redundant.
+   *
+   * Registered before the `:filename` route below so `query` is never
+   * mistaken for a filename.
+   *
+   * @throws {@link BadRequestException} when `q` is missing.
+   * @throws {@link NotFoundException} when the role does not exist.
+   */
+  @ApiOperation({ summary: 'Query the RAG index for a role' })
+  @Get('role/:roleId/knowledge/query')
+  async queryRoleKnowledge(
+    @Param('roleId') roleId: UUID,
+    @Query('q') q?: string,
+    @Query('topK') topK?: string,
+    @Query('threshold') threshold?: string,
+  ): Promise<RagChunk[]> {
+    if (!q) throw new BadRequestException('Query parameter `q` is required');
+    return this.knowledge.queryRag(
+      roleId,
+      q,
+      topK !== undefined ? Number(topK) : undefined,
+      threshold !== undefined ? Number(threshold) : undefined,
+    );
   }
 
   /** Returns a role knowledge document's content. */

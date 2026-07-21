@@ -7,7 +7,11 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { Repository } from 'typeorm';
 import { AppModule } from '../../../apps/lcp-server/src/app.module';
+import { RagIndexService } from '../../../apps/lcp-server/src/rag/rag-index.service';
 import { makeTestJwt } from '../helpers/test-jwt';
+import { requireEnv } from '../../support/require-env';
+
+const STUB_LLM_URL = requireEnv('STUB_LLM_URL');
 
 describe('KnowledgeController (e2e)', () => {
   let app: INestApplication<App>;
@@ -15,6 +19,7 @@ describe('KnowledgeController (e2e)', () => {
   let roleRepo: Repository<LcpRole>;
   let agentRepo: Repository<LcpAgent>;
   let auditRepo: Repository<AuditEvent>;
+  let ragIndex: RagIndexService;
   let roleId: UUID;
   let companyId: UUID;
 
@@ -28,6 +33,7 @@ describe('KnowledgeController (e2e)', () => {
     roleRepo = module.get(getRepositoryToken(LcpRole));
     agentRepo = module.get(getRepositoryToken(LcpAgent));
     auditRepo = module.get(getRepositoryToken(AuditEvent));
+    ragIndex = module.get(RagIndexService);
     const company = await companyRepo.save(
       companyRepo.create({
         slug: `knowledge-co-${Date.now()}`,
@@ -377,6 +383,104 @@ describe('KnowledgeController (e2e)', () => {
     it('GET /api/company/:companyId/knowledge/status returns 401 without a token', () =>
       request(app.getHttpServer())
         .get(`/api/company/${companyId}/knowledge/status`)
+        .expect(401));
+  });
+
+  describe('query', () => {
+    // Own company (with an embeddingConfig pointed at the stub-llm) + role,
+    // seeded with real chunks via RagIndexService — the outer company has no
+    // embeddingConfig, so `retrieve` would silently return [] for it.
+    const embeddingConfig = {
+      provider: 'openai' as const,
+      model: 'stub-embed',
+      baseUrl: STUB_LLM_URL,
+      apiKey: 'test',
+    };
+    let queryRoleId: UUID;
+
+    beforeAll(async () => {
+      const company = await companyRepo.save(
+        companyRepo.create({
+          slug: `knowledge-query-co-${Date.now()}`,
+          name: 'KnowledgeQueryCo',
+          description: 'Test',
+          embeddingConfig,
+        }),
+      );
+      const role = await roleRepo.save(
+        roleRepo.create({
+          slug: 'query-writer',
+          name: 'Query Writer',
+          description: 'Test role',
+          systemPromptTemplate: 'Write.',
+          knowledgeDomains: [],
+          mcpServerList: [],
+          company,
+          companyId: company.id,
+        }),
+      );
+      queryRoleId = role.id;
+
+      await ragIndex.ingestDocument(
+        company.id,
+        role.id,
+        `${company.slug}/knowledge/${role.slug}/remote-work.md`,
+        'Employees may work remotely up to three days per week.',
+        embeddingConfig,
+      );
+      await ragIndex.ingestDocument(
+        company.id,
+        null,
+        `${company.slug}/knowledge/shared/handbook.md`,
+        'All customer data must be encrypted at rest and in transit.',
+        embeddingConfig,
+      );
+    }, 30_000);
+
+    it('GET /api/role/:roleId/knowledge/query returns the role chunk and the shared chunk', () =>
+      request(app.getHttpServer())
+        .get(`/api/role/${queryRoleId}/knowledge/query`)
+        // stub-llm embeddings are deterministic-but-not-semantic (see
+        // apps/lcp-stub-llm/src/embeddings.ts), so similarity to an unrelated
+        // query string is unpredictable — threshold -1 (the cosine floor)
+        // proves scoping/plumbing, not ranking quality.
+        .query({ q: 'remote work policy', threshold: -1 })
+        .set('Authorization', `Bearer ${makeTestJwt()}`)
+        .expect(200)
+        .expect((res) => {
+          const chunks = res.body as { documentPath: string }[];
+          const paths = chunks.map((c) => c.documentPath);
+          expect(paths.some((p) => p.endsWith('remote-work.md'))).toBe(true);
+          expect(paths.some((p) => p.endsWith('handbook.md'))).toBe(true);
+        }));
+
+    it('returns 400 when q is missing', () =>
+      request(app.getHttpServer())
+        .get(`/api/role/${queryRoleId}/knowledge/query`)
+        .set('Authorization', `Bearer ${makeTestJwt()}`)
+        .expect(400));
+
+    it('returns 404 for an unknown role', () =>
+      request(app.getHttpServer())
+        .get(`/api/role/00000000-0000-0000-0000-000000000000/knowledge/query`)
+        .query({ q: 'remote work policy' })
+        .set('Authorization', `Bearer ${makeTestJwt()}`)
+        .expect(404));
+
+    it('returns an empty array (not an error) when the company has no embeddingConfig', () =>
+      request(app.getHttpServer())
+        .get(`/api/role/${roleId}/knowledge/query`)
+        .query({ q: 'remote work policy' })
+        .set('Authorization', `Bearer ${makeTestJwt()}`)
+        .expect(200)
+        .expect((res) => {
+          expect(res.body).toEqual([]);
+        }));
+
+    it('returns 401 without a token', () =>
+      request(app.getHttpServer())
+        .get(`/api/role/${queryRoleId}/knowledge/query`)
+        .query({ q: 'remote work policy' })
         .expect(401));
   });
 });

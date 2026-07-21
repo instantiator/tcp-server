@@ -1,4 +1,8 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import type { Request } from 'express';
 import { DocumentSummary, KnowledgeService } from './knowledge.service';
@@ -21,7 +25,9 @@ function makeSummary(
 }
 
 describe('KnowledgeController', () => {
-  let knowledge: jest.Mocked<Pick<KnowledgeService, 'store' | 'list'>>;
+  let knowledge: jest.Mocked<
+    Pick<KnowledgeService, 'store' | 'list' | 'queryRag'>
+  >;
   let controller: KnowledgeController;
   const roleId = randomUUID();
 
@@ -29,6 +35,7 @@ describe('KnowledgeController', () => {
     knowledge = {
       store: jest.fn().mockResolvedValue(makeSummary()),
       list: jest.fn().mockResolvedValue([]),
+      queryRag: jest.fn().mockResolvedValue([]),
     };
     controller = new KnowledgeController(
       knowledge as unknown as KnowledgeService,
@@ -125,6 +132,75 @@ describe('KnowledgeController', () => {
         ),
       ).rejects.toThrow(BadRequestException);
       expect(knowledge.store).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('queryRoleKnowledge', () => {
+    it('delegates to knowledge.queryRag with parsed topK/threshold', async () => {
+      const chunks = [
+        {
+          id: randomUUID(),
+          documentPath: 'acme/knowledge/analyst/report.md',
+          chunkIndex: 0,
+          content: 'Some chunk text.',
+          similarity: 0.92,
+        },
+      ];
+      knowledge.queryRag.mockResolvedValue(chunks);
+
+      const result = await controller.queryRoleKnowledge(
+        roleId,
+        'remote work policy',
+        '3',
+        '0.5',
+      );
+
+      expect(result).toBe(chunks);
+      expect(knowledge.queryRag).toHaveBeenCalledWith(
+        roleId,
+        'remote work policy',
+        3,
+        0.5,
+      );
+    });
+
+    it('omits topK/threshold when not given, leaving service defaults in effect', async () => {
+      await controller.queryRoleKnowledge(roleId, 'remote work policy');
+      expect(knowledge.queryRag).toHaveBeenCalledWith(
+        roleId,
+        'remote work policy',
+        undefined,
+        undefined,
+      );
+    });
+
+    it('rejects a missing q with a 400', async () => {
+      await expect(
+        controller.queryRoleKnowledge(roleId, undefined),
+      ).rejects.toThrow(BadRequestException);
+      expect(knowledge.queryRag).not.toHaveBeenCalled();
+    });
+
+    it('rejects an empty q with a 400', async () => {
+      await expect(controller.queryRoleKnowledge(roleId, '')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(knowledge.queryRag).not.toHaveBeenCalled();
+    });
+
+    it('propagates a 404 for an unknown role', async () => {
+      knowledge.queryRag.mockRejectedValue(
+        new NotFoundException(`Role ${roleId} not found`),
+      );
+      await expect(
+        controller.queryRoleKnowledge(roleId, 'query'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('returns an empty array (not an error) when the company has no embeddingConfig', async () => {
+      knowledge.queryRag.mockResolvedValue([]);
+      const result = await controller.queryRoleKnowledge(roleId, 'query');
+      expect(result).toEqual([]);
     });
   });
 

@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
 import { IsNull, Repository } from 'typeorm';
 import { KnowledgeReindexService } from '../rag/knowledge-reindex.service';
+import { RagChunk, RagRetrievalService } from '../rag/rag-retrieval.service';
 import { KnowledgeScope } from '../storage/storage-keys';
 import {
   Originators,
@@ -78,6 +79,7 @@ export class KnowledgeService {
   constructor(
     private readonly storage: StorageService,
     private readonly reindex: KnowledgeReindexService,
+    private readonly ragRetrieval: RagRetrievalService,
     @InjectRepository(LcpRole)
     private readonly roleRepo: Repository<LcpRole>,
     @InjectRepository(LcpCompany)
@@ -180,6 +182,30 @@ export class KnowledgeService {
   async reindexCompany(companyId: string): Promise<void> {
     const { company } = await this.resolveScope({ kind: 'company', companyId });
     await this.reindex.bumpCompany(company);
+  }
+
+  /**
+   * Runs a RAG similarity search for a role, exactly as prompt assembly
+   * would, without invoking any chat/LLM call — see
+   * {@link RagRetrievalService.retrieve} for the scoping and threshold rules.
+   *
+   * @throws {@link NotFoundException} when the role does not exist.
+   */
+  async queryRag(
+    roleId: UUID,
+    query: string,
+    topK?: number,
+    threshold?: number,
+  ): Promise<RagChunk[]> {
+    const { company } = await this.resolveScope({ kind: 'role', roleId });
+    return this.ragRetrieval.retrieve(
+      roleId,
+      company.id,
+      query,
+      company.embeddingConfig,
+      topK,
+      threshold,
+    );
   }
 
   /**
