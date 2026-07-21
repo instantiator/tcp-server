@@ -2,6 +2,8 @@ import {
   CompanyUser,
   Conversation,
   ConversationMessage,
+  KnowledgeChunk,
+  KnowledgeIndexState,
   LcpAgent,
   LcpAssignment,
   LcpCompany,
@@ -63,6 +65,8 @@ import { TaskService } from './task.service';
       Conversation,
       ConversationMessage,
       PendingConsultation,
+      KnowledgeChunk,
+      KnowledgeIndexState,
     ]),
   ],
   controllers: [

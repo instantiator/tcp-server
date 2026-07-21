@@ -267,6 +267,14 @@ export class KnowledgeReindexService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  /** True if a rebuild job for this scope is currently active, waiting, or delayed. */
+  async isRebuilding(companyId: UUID, roleId: UUID | null): Promise<boolean> {
+    const jobs = await this.queue.getJobs(['active', 'waiting', 'delayed']);
+    return jobs.some(
+      (job) => job.data.companyId === companyId && job.data.roleId === roleId,
+    );
+  }
+
   /**
    * One reconciliation cycle: for every company with an embeddingConfig,
    * fingerprint each scope's storage listing and bump any scope that drifted

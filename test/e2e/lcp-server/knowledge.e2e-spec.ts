@@ -2,6 +2,7 @@ import { AuditEvent, LcpAgent, LcpCompany, LcpRole } from '@lcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import type { UUID } from 'crypto';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { Repository } from 'typeorm';
@@ -14,8 +15,8 @@ describe('KnowledgeController (e2e)', () => {
   let roleRepo: Repository<LcpRole>;
   let agentRepo: Repository<LcpAgent>;
   let auditRepo: Repository<AuditEvent>;
-  let roleId: string;
-  let companyId: string;
+  let roleId: UUID;
+  let companyId: UUID;
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -294,5 +295,88 @@ describe('KnowledgeController (e2e)', () => {
         .post(`/api/company/no-such-company/knowledge/reindex`)
         .set('Authorization', `Bearer ${makeTestJwt()}`)
         .expect(404));
+  });
+
+  describe('status', () => {
+    // A fresh role, scoped to this block: the outer `roleId`'s knowledge
+    // scope has already been bumped repeatedly by earlier describe blocks'
+    // writes, so its generation/counts aren't deterministic here.
+    let statusRoleId: string;
+
+    beforeAll(async () => {
+      const company = await companyRepo.findOneByOrFail({ id: companyId });
+      const role = await roleRepo.save(
+        roleRepo.create({
+          slug: 'status-checker',
+          name: 'Status Checker',
+          description: 'Test role for status checks',
+          systemPromptTemplate: 'Check.',
+          knowledgeDomains: [],
+          mcpServerList: [],
+          company,
+          companyId: company.id,
+        }),
+      );
+      statusRoleId = role.id;
+    });
+
+    it('GET /api/role/:roleId/knowledge/status returns counts for an empty scope', () =>
+      request(app.getHttpServer())
+        .get(`/api/role/${statusRoleId}/knowledge/status`)
+        .set('Authorization', `Bearer ${makeTestJwt()}`)
+        .expect(200)
+        .expect((res) => {
+          expect(res.body).toEqual({
+            documentCount: 0,
+            totalBytes: 0,
+            chunkCount: 0,
+            generation: 0,
+            lastIndexedAt: null,
+            indexing: false,
+          });
+        }));
+
+    it('GET /api/company/:companyId/knowledge/status returns shared + every role', () =>
+      request(app.getHttpServer())
+        .get(`/api/company/${companyId}/knowledge/status`)
+        .set('Authorization', `Bearer ${makeTestJwt()}`)
+        .expect(200)
+        .expect((res) => {
+          const body = res.body as {
+            shared: { documentCount: number };
+            roles: { roleId: string; roleSlug: string }[];
+          };
+          expect(body.shared).toMatchObject({ documentCount: 0 });
+          expect(body.roles).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                roleId: statusRoleId,
+                roleSlug: 'status-checker',
+              }),
+            ]),
+          );
+        }));
+
+    it('GET /api/role/:roleId/knowledge/status returns 404 for an unknown role', () =>
+      request(app.getHttpServer())
+        .get(`/api/role/00000000-0000-0000-0000-000000000000/knowledge/status`)
+        .set('Authorization', `Bearer ${makeTestJwt()}`)
+        .expect(404));
+
+    it('GET /api/company/:companyId/knowledge/status returns 404 for an unknown company', () =>
+      request(app.getHttpServer())
+        .get(`/api/company/no-such-company/knowledge/status`)
+        .set('Authorization', `Bearer ${makeTestJwt()}`)
+        .expect(404));
+
+    it('GET /api/role/:roleId/knowledge/status returns 401 without a token', () =>
+      request(app.getHttpServer())
+        .get(`/api/role/${roleId}/knowledge/status`)
+        .expect(401));
+
+    it('GET /api/company/:companyId/knowledge/status returns 401 without a token', () =>
+      request(app.getHttpServer())
+        .get(`/api/company/${companyId}/knowledge/status`)
+        .expect(401));
   });
 });

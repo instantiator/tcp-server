@@ -82,7 +82,10 @@ function makeService() {
     roleRepo as never,
     dataSource,
   );
-  const queue = { add: jest.fn().mockResolvedValue(undefined) };
+  const queue = {
+    add: jest.fn().mockResolvedValue(undefined),
+    getJobs: jest.fn().mockResolvedValue([]),
+  };
   (service as unknown as { queue: typeof queue }).queue = queue;
 
   return {
@@ -234,6 +237,35 @@ describe('KnowledgeReindexService.rebuild', () => {
       expect.any(Object),
     );
     expect(t.stateRepo.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('KnowledgeReindexService.isRebuilding', () => {
+  it('is false when no matching job is queued', async () => {
+    const t = makeService();
+    t.queue.getJobs.mockResolvedValue([]);
+    expect(await t.service.isRebuilding(COMPANY_ID, null)).toBe(false);
+  });
+
+  it('is true when an active/waiting/delayed job matches the scope', async () => {
+    const t = makeService();
+    t.queue.getJobs.mockResolvedValue([
+      { data: { companyId: COMPANY_ID, roleId: ROLE_ID, generation: 1 } },
+    ]);
+    expect(await t.service.isRebuilding(COMPANY_ID, ROLE_ID)).toBe(true);
+    expect(t.queue.getJobs).toHaveBeenCalledWith([
+      'active',
+      'waiting',
+      'delayed',
+    ]);
+  });
+
+  it('ignores jobs for a different role within the same company', async () => {
+    const t = makeService();
+    t.queue.getJobs.mockResolvedValue([
+      { data: { companyId: COMPANY_ID, roleId: ROLE_ID, generation: 1 } },
+    ]);
+    expect(await t.service.isRebuilding(COMPANY_ID, null)).toBe(false);
   });
 });
 

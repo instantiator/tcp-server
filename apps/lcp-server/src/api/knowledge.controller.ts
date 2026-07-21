@@ -31,9 +31,11 @@ import {
   convertToMarkdown,
 } from './knowledge-conversion';
 import {
+  CompanyKnowledgeStatus,
   DocumentSummary,
   KnowledgeScopeRef,
   KnowledgeService,
+  KnowledgeStatus,
 } from './knowledge.service';
 
 /** Subset of the multer file object relevant to document upload. */
@@ -67,6 +69,20 @@ export class KnowledgeController {
     @Param('roleId') roleId: UUID,
   ): Promise<DocumentSummary[]> {
     return this.knowledge.list({ kind: 'role', roleId });
+  }
+
+  /**
+   * Reports knowledge-index status for a role: document/chunk counts, size,
+   * generation, last successful rebuild, and whether one is in progress.
+   * Registered before the `:filename` route below so `status` is never
+   * mistaken for a filename.
+   */
+  @ApiOperation({ summary: 'Get knowledge index status for a role' })
+  @Get('role/:roleId/knowledge/status')
+  async getRoleKnowledgeStatus(
+    @Param('roleId') roleId: UUID,
+  ): Promise<KnowledgeStatus> {
+    return this.knowledge.status({ kind: 'role', roleId });
   }
 
   /** Returns a role knowledge document's content. */
@@ -133,6 +149,21 @@ export class KnowledgeController {
     @Param('companyId') companyId: string,
   ): Promise<DocumentSummary[]> {
     return this.knowledge.list({ kind: 'company', companyId });
+  }
+
+  /**
+   * Reports knowledge-index status for the company's shared scope plus
+   * every role. Registered before the `:filename` route below so `status`
+   * is never mistaken for a filename.
+   */
+  @ApiOperation({
+    summary: 'Get knowledge index status for a company (shared + every role)',
+  })
+  @Get('company/:companyId/knowledge/status')
+  async getCompanyKnowledgeStatus(
+    @Param('companyId') companyId: string,
+  ): Promise<CompanyKnowledgeStatus> {
+    return this.knowledge.statusForCompany(companyId);
   }
 
   /** Returns a company-shared knowledge document's content. */

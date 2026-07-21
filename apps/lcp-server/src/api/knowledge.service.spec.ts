@@ -50,9 +50,11 @@ describe('KnowledgeService', () => {
     getKnowledgeFile: jest.Mock;
     deleteKnowledgeFile: jest.Mock;
   };
-  let reindex: { bumpCompany: jest.Mock };
+  let reindex: { bumpCompany: jest.Mock; isRebuilding: jest.Mock };
   let roleRepo: { findOneBy: jest.Mock; findBy: jest.Mock };
   let companyRepo: { findOneBy: jest.Mock };
+  let chunkRepo: { count: jest.Mock };
+  let stateRepo: { findOne: jest.Mock };
 
   const role = makeRole();
   const company = makeCompany({ id: role.companyId });
@@ -66,18 +68,25 @@ describe('KnowledgeService', () => {
       getKnowledgeFile: jest.fn().mockResolvedValue(null),
       deleteKnowledgeFile: jest.fn().mockResolvedValue(undefined),
     };
-    reindex = { bumpCompany: jest.fn().mockResolvedValue(undefined) };
+    reindex = {
+      bumpCompany: jest.fn().mockResolvedValue(undefined),
+      isRebuilding: jest.fn().mockResolvedValue(false),
+    };
     roleRepo = {
       findOneBy: jest.fn().mockResolvedValue(role),
       findBy: jest.fn().mockResolvedValue([role]),
     };
     companyRepo = { findOneBy: jest.fn().mockResolvedValue(company) };
+    chunkRepo = { count: jest.fn().mockResolvedValue(0) };
+    stateRepo = { findOne: jest.fn().mockResolvedValue(null) };
 
     service = new KnowledgeService(
       storage as unknown as StorageService,
       reindex as unknown as KnowledgeReindexService,
       roleRepo as never,
       companyRepo as never,
+      chunkRepo as never,
+      stateRepo as never,
     );
   });
 
@@ -255,6 +264,85 @@ describe('KnowledgeService', () => {
         NotFoundException,
       );
       expect(reindex.bumpCompany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('status (role scope)', () => {
+    it('assembles counts, size, generation, lastIndexedAt, and indexing state', async () => {
+      storage.listKnowledgeFiles.mockResolvedValue([
+        makeStorageObject('report.md'),
+        makeStorageObject('handbook.md'),
+      ]);
+      chunkRepo.count.mockResolvedValue(7);
+      stateRepo.findOne.mockResolvedValue({
+        generation: 3,
+        fingerprint: 'abc',
+        updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      });
+      reindex.isRebuilding.mockResolvedValue(true);
+
+      const status = await service.status({ kind: 'role', roleId: role.id });
+
+      expect(status).toEqual({
+        documentCount: 2,
+        totalBytes: 200,
+        chunkCount: 7,
+        generation: 3,
+        lastIndexedAt: '2026-01-01T00:00:00.000Z',
+        indexing: true,
+      });
+      expect(chunkRepo.count).toHaveBeenCalledWith({
+        where: { companyId: company.id, roleId: role.id },
+      });
+      expect(reindex.isRebuilding).toHaveBeenCalledWith(company.id, role.id);
+    });
+
+    it('reports lastIndexedAt as null when never successfully rebuilt (no fingerprint)', async () => {
+      stateRepo.findOne.mockResolvedValue({
+        generation: 1,
+        fingerprint: null,
+        updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      });
+      const status = await service.status({ kind: 'role', roleId: role.id });
+      expect(status.lastIndexedAt).toBeNull();
+      expect(status.generation).toBe(1);
+    });
+
+    it('defaults generation to 0 and lastIndexedAt to null when the scope has never been bumped', async () => {
+      stateRepo.findOne.mockResolvedValue(null);
+      const status = await service.status({ kind: 'role', roleId: role.id });
+      expect(status.generation).toBe(0);
+      expect(status.lastIndexedAt).toBeNull();
+    });
+
+    it('throws NotFoundException when the role does not exist', async () => {
+      roleRepo.findOneBy.mockResolvedValue(null);
+      await expect(
+        service.status({ kind: 'role', roleId: randomUUID() }),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('statusForCompany', () => {
+    it('returns shared status plus a status entry for every role', async () => {
+      storage.listKnowledgeFiles.mockResolvedValue([]);
+      const status = await service.statusForCompany(company.id);
+
+      expect(status.shared).toBeDefined();
+      expect(status.roles).toHaveLength(1);
+      expect(status.roles[0].roleId).toBe(role.id);
+      expect(status.roles[0].roleSlug).toBe(role.slug);
+      expect(status.roles[0].status.documentCount).toBe(0);
+      // shared scope queried with a null roleId, role scope with the role's id
+      expect(reindex.isRebuilding).toHaveBeenCalledWith(company.id, null);
+      expect(reindex.isRebuilding).toHaveBeenCalledWith(company.id, role.id);
+    });
+
+    it('throws NotFoundException when the company does not exist', async () => {
+      companyRepo.findOneBy.mockResolvedValue(null);
+      await expect(service.statusForCompany('no-such-co')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

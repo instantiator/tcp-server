@@ -128,6 +128,16 @@ To force a rebuild of every scope of a company immediately (rather than waiting 
 # → POST /api/company/:companyId/knowledge/reindex (202 Accepted)
 ```
 
+To check a scope's indexing status (document/chunk counts, size, generation, last successful rebuild, and whether one is in progress), use:
+
+```bash
+./lcp-cli.sh get-knowledge-index-status -r <roleId>
+# → GET /api/role/:roleId/knowledge/status
+
+./lcp-cli.sh get-knowledge-index-status -c <company-slug-or-id>
+# → GET /api/company/:companyId/knowledge/status (shared scope + every role)
+```
+
 ```bash
 # Upload a document to a role's knowledge base
 ./lcp-cli.sh store-knowledge -r <roleId> -s policy.md

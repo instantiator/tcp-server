@@ -12,6 +12,7 @@ import { registerDownloadSharedDocument } from './commands/download-shared-docum
 import { registerEavesdrop } from './commands/eavesdrop';
 import { registerEstimateContextWindow } from './commands/estimate-context-window';
 import { registerGetKnowledge } from './commands/get-knowledge';
+import { registerGetKnowledgeIndexStatus } from './commands/get-knowledge-index-status';
 import { registerGetTask } from './commands/get-task';
 import { registerGetToken } from './commands/get-token';
 import { registerListAgents } from './commands/list-agents';
@@ -72,6 +73,7 @@ registerGetKnowledge(program);
 registerStoreKnowledge(program);
 registerDeleteKnowledge(program);
 registerReindexKnowledge(program);
+registerGetKnowledgeIndexStatus(program);
 registerOpenDocumentStore(program);
 registerOpenSwagger(program);
 registerSetCompany(program);
