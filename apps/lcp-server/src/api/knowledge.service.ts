@@ -3,8 +3,11 @@ import {
   KnowledgeIndexState,
   LcpCompany,
   LcpRole,
+  resolveEmbeddingConfig,
+  resolveEnvEmbeddingConfig,
 } from '@lcp/shared';
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
 import { IsNull, Repository } from 'typeorm';
@@ -17,6 +20,7 @@ import {
   StorageService,
 } from '../storage/storage.service';
 import { isUUID } from '../utils/ObjectUtils';
+import { computeEmbeddingConfigWarning } from './validation-warnings';
 
 /** Summary returned by {@link KnowledgeService.list}. */
 export interface DocumentSummary {
@@ -48,6 +52,10 @@ export interface KnowledgeStatus {
   lastIndexedAt: string | null;
   /** True if a rebuild job for the scope is currently queued or running. */
   indexing: boolean;
+  /** Error message from the most recent failed rebuild, or `null` if the last rebuild succeeded (or none has run). */
+  lastError: string | null;
+  /** ISO 8601 timestamp {@link lastError} was recorded, or `null` if unset. */
+  lastErrorAt: string | null;
 }
 
 /** Indexing status for a whole company: its shared scope plus every role. */
@@ -80,6 +88,7 @@ export class KnowledgeService {
     private readonly storage: StorageService,
     private readonly reindex: KnowledgeReindexService,
     private readonly ragRetrieval: RagRetrievalService,
+    private readonly config: ConfigService,
     @InjectRepository(LcpRole)
     private readonly roleRepo: Repository<LcpRole>,
     @InjectRepository(LcpCompany)
@@ -202,7 +211,7 @@ export class KnowledgeService {
       roleId,
       company.id,
       query,
-      company.embeddingConfig,
+      resolveEmbeddingConfig(company, resolveEnvEmbeddingConfig(this.config)),
       topK,
       threshold,
     );
@@ -217,6 +226,38 @@ export class KnowledgeService {
   async status(ref: KnowledgeScopeRef): Promise<KnowledgeStatus> {
     const { company, role } = await this.resolveScope(ref);
     return this.computeStatus(company, role);
+  }
+
+  /**
+   * Warnings for the `X-Lcp-Warnings` header on any knowledge endpoint
+   * touching this scope: whether RAG indexing is configured at all (company
+   * `embeddingConfig`, or the `EMBEDDING_*` env fallback), and whether the
+   * most recent rebuild failed (e.g. the embedding endpoint was
+   * unreachable) — both are otherwise invisible failure modes (see
+   * {@link KnowledgeReindexService.rebuild}).
+   *
+   * For a company-scoped ref, only the shared scope's own error is checked
+   * — an individual role's error is visible by scoping into that role, or
+   * via {@link statusForCompany}'s per-role breakdown.
+   *
+   * @throws {@link NotFoundException} when the role/company does not exist.
+   */
+  async embeddingWarnings(ref: KnowledgeScopeRef): Promise<string[]> {
+    const { company, role } = await this.resolveScope(ref);
+    const warnings = computeEmbeddingConfigWarning(
+      company,
+      resolveEnvEmbeddingConfig(this.config),
+    );
+    const state = await this.stateRepo.findOne({
+      where: { companyId: company.id, roleId: role?.id ?? IsNull() },
+    });
+    if (state?.lastError) {
+      const when = state.lastErrorAt
+        ? ` (${state.lastErrorAt.toISOString()})`
+        : '';
+      warnings.push(`Last reindex failed: ${state.lastError}${when}`);
+    }
+    return warnings;
   }
 
   /**
@@ -262,6 +303,8 @@ export class KnowledgeService {
       generation: state?.generation ?? 0,
       lastIndexedAt: state?.fingerprint ? state.updatedAt.toISOString() : null,
       indexing,
+      lastError: state?.lastError ?? null,
+      lastErrorAt: state?.lastErrorAt?.toISOString() ?? null,
     };
   }
 

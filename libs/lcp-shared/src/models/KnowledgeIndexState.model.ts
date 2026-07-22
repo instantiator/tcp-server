@@ -69,6 +69,14 @@ export class KnowledgeIndexState {
   @Column({ type: 'text', nullable: true })
   fingerprint!: string | null;
 
+  /** Error message from the most recent failed rebuild, or `null` if the last rebuild succeeded (or none has run). */
+  @Column({ type: 'text', nullable: true })
+  lastError!: string | null;
+
+  /** When {@link lastError} was recorded — absent if it is unset. */
+  @Column({ nullable: true })
+  lastErrorAt?: Date;
+
   /** When this scope's state last changed. */
   @UpdateDateColumn()
   updatedAt!: Date;

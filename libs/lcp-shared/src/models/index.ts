@@ -18,3 +18,4 @@ export * from './LcpRole.model';
 export * from './shortcode';
 export * from './task-status';
 export * from './WithLlmConfig';
+export * from './WithEmbeddingConfig';

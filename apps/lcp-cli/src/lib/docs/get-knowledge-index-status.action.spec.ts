@@ -32,6 +32,8 @@ describe('getKnowledgeIndexStatusAction', () => {
       generation: 3,
       lastIndexedAt: '2026-01-01T00:00:00.000Z',
       indexing: false,
+      lastError: null,
+      lastErrorAt: null,
     };
     mockedApiRequest.mockResolvedValueOnce(status);
 
@@ -47,6 +49,26 @@ describe('getKnowledgeIndexStatusAction', () => {
     );
   });
 
+  it('passes through a populated lastError (e.g. the embedding endpoint was unreachable)', async () => {
+    const status = {
+      documentCount: 1,
+      totalBytes: 100,
+      chunkCount: 0,
+      generation: 4,
+      lastIndexedAt: null,
+      indexing: false,
+      lastError: 'connect ECONNREFUSED 127.0.0.1:1234',
+      lastErrorAt: '2026-01-01T00:00:00.000Z',
+    };
+    mockedApiRequest.mockResolvedValueOnce(status);
+
+    await getKnowledgeIndexStatusAction(opts, { roleId });
+
+    expect(stdoutSpy).toHaveBeenCalledWith(
+      JSON.stringify(status, null, 2) + '\n',
+    );
+  });
+
   it('reports status for a --company-id scope (shared + roles)', async () => {
     const status = {
       shared: {
@@ -56,6 +78,8 @@ describe('getKnowledgeIndexStatusAction', () => {
         generation: 0,
         lastIndexedAt: null,
         indexing: false,
+        lastError: null,
+        lastErrorAt: null,
       },
       roles: [],
     };

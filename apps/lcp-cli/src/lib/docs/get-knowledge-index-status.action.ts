@@ -12,6 +12,8 @@ interface KnowledgeStatus {
   generation: number;
   lastIndexedAt: string | null;
   indexing: boolean;
+  lastError: string | null;
+  lastErrorAt: string | null;
 }
 
 /** Indexing status for a whole company: its shared scope plus every role. */

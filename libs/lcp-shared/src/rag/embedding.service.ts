@@ -26,6 +26,17 @@ export class EmbeddingService {
       model: config.model,
       apiKey: config.apiKey ?? 'lcp',
       configuration: config.baseUrl ? { baseURL: config.baseUrl } : undefined,
+      // The underlying `openai` SDK defaults to requesting `base64` encoding
+      // (client-side, for transport efficiency) when this isn't set. Real
+      // OpenAI honours that; many OpenAI-compatible local servers (LM Studio
+      // included, at least as of this writing) silently ignore the
+      // `encoding_format` request param and always return plain JSON floats
+      // — but the SDK still *assumes* base64 came back and misinterprets the
+      // response, reinterpreting every 4 floats as a byte-encoded one
+      // (yielding vectors a quarter of the real length, silently corrupt,
+      // no error). `'float'` is equally valid against real OpenAI, so this
+      // is safe to set unconditionally rather than only for local providers.
+      encodingFormat: 'float',
     });
   }
 }

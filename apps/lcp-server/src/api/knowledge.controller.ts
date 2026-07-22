@@ -40,6 +40,7 @@ import {
   KnowledgeService,
   KnowledgeStatus,
 } from './knowledge.service';
+import { setWarningsHeader } from './validation-warnings';
 
 /** Subset of the multer file object relevant to document upload. */
 interface UploadedFileBuffer {
@@ -70,8 +71,12 @@ export class KnowledgeController {
   @Get('role/:roleId/knowledge')
   async listRoleKnowledge(
     @Param('roleId') roleId: UUID,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<DocumentSummary[]> {
-    return this.knowledge.list({ kind: 'role', roleId });
+    const ref: KnowledgeScopeRef = { kind: 'role', roleId };
+    const result = await this.knowledge.list(ref);
+    await this.reportEmbeddingWarnings(ref, res);
+    return result;
   }
 
   /**
@@ -84,8 +89,12 @@ export class KnowledgeController {
   @Get('role/:roleId/knowledge/status')
   async getRoleKnowledgeStatus(
     @Param('roleId') roleId: UUID,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<KnowledgeStatus> {
-    return this.knowledge.status({ kind: 'role', roleId });
+    const ref: KnowledgeScopeRef = { kind: 'role', roleId };
+    const result = await this.knowledge.status(ref);
+    await this.reportEmbeddingWarnings(ref, res);
+    return result;
   }
 
   /**
@@ -106,17 +115,20 @@ export class KnowledgeController {
   @Get('role/:roleId/knowledge/query')
   async queryRoleKnowledge(
     @Param('roleId') roleId: UUID,
+    @Res({ passthrough: true }) res: Response,
     @Query('q') q?: string,
     @Query('topK') topK?: string,
     @Query('threshold') threshold?: string,
   ): Promise<RagChunk[]> {
     if (!q) throw new BadRequestException('Query parameter `q` is required');
-    return this.knowledge.queryRag(
+    const result = await this.knowledge.queryRag(
       roleId,
       q,
       topK !== undefined ? Number(topK) : undefined,
       threshold !== undefined ? Number(threshold) : undefined,
     );
+    await this.reportEmbeddingWarnings({ kind: 'role', roleId }, res);
+    return result;
   }
 
   /** Returns a role knowledge document's content. */
@@ -127,11 +139,10 @@ export class KnowledgeController {
     @Param('filename') filename: string,
     @Res({ passthrough: true }) res: Response,
   ): Promise<string> {
-    const content = await this.knowledge.get(
-      { kind: 'role', roleId },
-      filename,
-    );
+    const ref: KnowledgeScopeRef = { kind: 'role', roleId };
+    const content = await this.knowledge.get(ref, filename);
     res.setHeader('Content-Type', 'text/markdown');
+    await this.reportEmbeddingWarnings(ref, res);
     return content;
   }
 
@@ -152,12 +163,15 @@ export class KnowledgeController {
     @UploadedFile() file: UploadedFileBuffer,
     @Body() body: StoreKnowledgeBody,
     @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<DocumentSummary> {
-    return this.storeConverted({ kind: 'role', roleId }, file, body.filename, {
-      user: getCurrentUserId(req),
-      agent: null,
-      task: null,
-    });
+    return this.storeConverted(
+      { kind: 'role', roleId },
+      file,
+      body.filename,
+      { user: getCurrentUserId(req), agent: null, task: null },
+      res,
+    );
   }
 
   /** Deletes a role knowledge document and its RAG chunks. Idempotent. */
@@ -168,12 +182,15 @@ export class KnowledgeController {
     @Param('roleId') roleId: UUID,
     @Param('filename') filename: string,
     @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
-    await this.knowledge.delete({ kind: 'role', roleId }, filename, {
+    const ref: KnowledgeScopeRef = { kind: 'role', roleId };
+    await this.knowledge.delete(ref, filename, {
       user: getCurrentUserId(req),
       agent: null,
       task: null,
     });
+    await this.reportEmbeddingWarnings(ref, res);
   }
 
   /** Lists all OKF documents stored in the company's shared knowledge. */
@@ -181,8 +198,12 @@ export class KnowledgeController {
   @Get('company/:companyId/knowledge')
   async listCompanyKnowledge(
     @Param('companyId') companyId: string,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<DocumentSummary[]> {
-    return this.knowledge.list({ kind: 'company', companyId });
+    const ref: KnowledgeScopeRef = { kind: 'company', companyId };
+    const result = await this.knowledge.list(ref);
+    await this.reportEmbeddingWarnings(ref, res);
+    return result;
   }
 
   /**
@@ -196,8 +217,11 @@ export class KnowledgeController {
   @Get('company/:companyId/knowledge/status')
   async getCompanyKnowledgeStatus(
     @Param('companyId') companyId: string,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<CompanyKnowledgeStatus> {
-    return this.knowledge.statusForCompany(companyId);
+    const result = await this.knowledge.statusForCompany(companyId);
+    await this.reportEmbeddingWarnings({ kind: 'company', companyId }, res);
+    return result;
   }
 
   /** Returns a company-shared knowledge document's content. */
@@ -208,11 +232,10 @@ export class KnowledgeController {
     @Param('filename') filename: string,
     @Res({ passthrough: true }) res: Response,
   ): Promise<string> {
-    const content = await this.knowledge.get(
-      { kind: 'company', companyId },
-      filename,
-    );
+    const ref: KnowledgeScopeRef = { kind: 'company', companyId };
+    const content = await this.knowledge.get(ref, filename);
     res.setHeader('Content-Type', 'text/markdown');
+    await this.reportEmbeddingWarnings(ref, res);
     return content;
   }
 
@@ -230,12 +253,14 @@ export class KnowledgeController {
     @UploadedFile() file: UploadedFileBuffer,
     @Body() body: StoreKnowledgeBody,
     @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<DocumentSummary> {
     return this.storeConverted(
       { kind: 'company', companyId },
       file,
       body.filename,
       { user: getCurrentUserId(req), agent: null, task: null },
+      res,
     );
   }
 
@@ -249,8 +274,10 @@ export class KnowledgeController {
   @HttpCode(202)
   async reindexCompanyKnowledge(
     @Param('companyId') companyId: string,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<{ reindexing: true }> {
     await this.knowledge.reindexCompany(companyId);
+    await this.reportEmbeddingWarnings({ kind: 'company', companyId }, res);
     return { reindexing: true };
   }
 
@@ -262,12 +289,15 @@ export class KnowledgeController {
     @Param('companyId') companyId: string,
     @Param('filename') filename: string,
     @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
-    await this.knowledge.delete({ kind: 'company', companyId }, filename, {
+    const ref: KnowledgeScopeRef = { kind: 'company', companyId };
+    await this.knowledge.delete(ref, filename, {
       user: getCurrentUserId(req),
       agent: null,
       task: null,
     });
+    await this.reportEmbeddingWarnings(ref, res);
   }
 
   /**
@@ -293,6 +323,7 @@ export class KnowledgeController {
     file: UploadedFileBuffer,
     overrideFilename: string | undefined,
     originators: Originators,
+    res: Response,
   ): Promise<DocumentSummary> {
     const ext = path.extname(file.originalname).toLowerCase();
     const converted = await convertToMarkdown(file.originalname, file.buffer);
@@ -322,11 +353,27 @@ export class KnowledgeController {
       }
     }
 
-    return this.knowledge.store(
+    const summary = await this.knowledge.store(
       ref,
       targetFilename,
       Buffer.from(content, 'utf-8'),
       originators,
     );
+    await this.reportEmbeddingWarnings(ref, res);
+    return summary;
+  }
+
+  /**
+   * Sets `X-Lcp-Warnings` for this scope — whether RAG indexing is
+   * configured at all, and whether the most recent rebuild failed (e.g. the
+   * embedding endpoint was unreachable). Called by every knowledge endpoint
+   * so these otherwise-invisible failure modes are always visible, not just
+   * from the status endpoint (see {@link KnowledgeService.embeddingWarnings}).
+   */
+  private async reportEmbeddingWarnings(
+    ref: KnowledgeScopeRef,
+    res: Response,
+  ): Promise<void> {
+    setWarningsHeader(res, await this.knowledge.embeddingWarnings(ref));
   }
 }

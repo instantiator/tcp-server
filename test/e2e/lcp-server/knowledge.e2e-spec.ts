@@ -339,6 +339,8 @@ describe('KnowledgeController (e2e)', () => {
             generation: 0,
             lastIndexedAt: null,
             indexing: false,
+            lastError: null,
+            lastErrorAt: null,
           });
         }));
 

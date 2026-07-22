@@ -130,12 +130,12 @@ LLM_API_KEY=<your API key goes here>
 
 ### 1.1 Create the company
 
-`scripts/test-data/simple-company.json` is a minimal company definition with no LLM config — it relies on the environment-level fallback.
+`scripts/test-data/companies/simple-company.json` is a minimal company definition with no LLM config — it relies on the environment-level fallback.
 
 Pipe it into `lcp-cli.sh` with the `set-company` verb:
 
 ```bash
-cat scripts/test-data/simple-company.json | lcp-cli.sh set-company
+cat scripts/companies/test-data/companies/simple-company.json | lcp-cli.sh set-company
 ```
 
 > [!NOTE]
@@ -188,11 +188,11 @@ You'll get a condensed list of companies:
 Create a role in the new company with the `set-role` verb. Provide your company's slug in the `--company-slug` field to let it know which company to associate the role with:
 
 ```bash
-cat scripts/test-data/chicken-assistant.json | lcp-cli.sh set-role --company-slug test-company
+cat scripts/test-data/roles/chicken-assistant.json | lcp-cli.sh set-role --company-slug test-company
 ```
 
 ```bash
-cat scripts/test-data/cat-assistant.json | lcp-cli.sh set-role --company-slug test-company
+cat scripts/test-data/roles/cat-assistant.json | lcp-cli.sh set-role --company-slug test-company
 ```
 
 > [!TIP]

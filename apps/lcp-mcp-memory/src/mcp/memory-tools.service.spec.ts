@@ -1,4 +1,5 @@
 import { EmbeddingService, LcpCompany } from '@lcp/shared';
+import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { DataSource, Repository } from 'typeorm';
 import { AuditClientService } from '@lcp/shared';
@@ -40,13 +41,29 @@ function makeDataSource(rows: unknown[] = []): jest.Mocked<DataSource> {
   } as unknown as jest.Mocked<DataSource>;
 }
 
+// No EMBEDDING_* env vars set — every test relies on the company's own
+// embeddingConfig (via makeCompanyRepo), matching production's precedence
+// (company wins over the env fallback).
+function makeConfig(): jest.Mocked<ConfigService> {
+  return {
+    get: jest.fn().mockReturnValue(undefined),
+  } as unknown as jest.Mocked<ConfigService>;
+}
+
 function makeService({
   embedding = makeEmbedding(),
   audit = makeAudit(),
+  config = makeConfig(),
   companyRepo = makeCompanyRepo(),
   dataSource = makeDataSource(),
 } = {}) {
-  return new MemoryToolsService(embedding, audit, companyRepo, dataSource);
+  return new MemoryToolsService(
+    embedding,
+    audit,
+    config,
+    companyRepo,
+    dataSource,
+  );
 }
 
 async function callTool(
@@ -81,6 +98,38 @@ describe('MemoryToolsService', () => {
       const svc = makeService({ companyRepo: makeCompanyRepo(null) });
       const text = await svc.hybridSearch(COMPANY_ID, ROLE_ID, 'query', 5);
       expect(text).toBe(memoryPrompts.no_embedding_config);
+    });
+
+    it('falls through to the EMBEDDING_* env fallback when the company has no embedding config', async () => {
+      const envConfig = {
+        get: jest.fn(
+          (key: string) =>
+            ({
+              EMBEDDING_PROVIDER: 'lm-studio',
+              EMBEDDING_MODEL: 'nomic-embed-text',
+              EMBEDDING_BASE_URL: 'http://localhost:1234/v1',
+            })[key],
+        ),
+      } as unknown as jest.Mocked<ConfigService>;
+      const embedding = makeEmbedding();
+      const svc = makeService({
+        embedding,
+        config: envConfig,
+        companyRepo: makeCompanyRepo(null),
+        dataSource: makeDataSource([]),
+      });
+
+      await svc.hybridSearch(COMPANY_ID, ROLE_ID, 'query', 5);
+
+      expect(embedding.embedQuery).toHaveBeenCalledWith(
+        {
+          provider: 'lm-studio',
+          model: 'nomic-embed-text',
+          baseUrl: 'http://localhost:1234/v1',
+          apiKey: undefined,
+        },
+        'query',
+      );
     });
 
     it('embeds the query and runs a UNION SQL search', async () => {

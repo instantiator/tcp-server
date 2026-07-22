@@ -3,8 +3,11 @@ import {
   EmbeddingService,
   LcpCompany,
   AuditClientService,
+  resolveEmbeddingConfig,
+  resolveEnvEmbeddingConfig,
 } from '@lcp/shared';
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { UUID } from 'crypto';
@@ -47,6 +50,7 @@ export class MemoryToolsService {
   constructor(
     private readonly embedding: EmbeddingService,
     private readonly audit: AuditClientService,
+    private readonly config: ConfigService,
     @InjectRepository(LcpCompany)
     private readonly companyRepo: Repository<LcpCompany>,
     @InjectDataSource()
@@ -287,7 +291,10 @@ export class MemoryToolsService {
     const company = await this.companyRepo.findOne({
       where: { id: companyId as UUID },
     });
-    return company?.embeddingConfig ?? null;
+    return (
+      resolveEmbeddingConfig(company, resolveEnvEmbeddingConfig(this.config)) ??
+      null
+    );
   }
 
   private formatResults(rows: MemoryRow[]): string {

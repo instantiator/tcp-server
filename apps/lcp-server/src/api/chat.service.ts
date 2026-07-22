@@ -21,6 +21,8 @@ import {
   enrichedAuditForEvent,
   mapStreamDeltas,
   renderSystemPrompt,
+  resolveEmbeddingConfig,
+  resolveEnvEmbeddingConfig,
   resolveEnvLlmConfig,
   resolveLlmConfig,
   resolveMcpServerList,
@@ -262,7 +264,10 @@ export class ChatService {
           role.id,
           role.companyId,
           preparedMessage,
-          company?.embeddingConfig,
+          resolveEmbeddingConfig(
+            company,
+            resolveEnvEmbeddingConfig(this.config),
+          ),
         );
         if (ragChunks.length) {
           const rawRagText = buildRagMessage(ragChunks, CHAT_PROMPT_STRINGS);

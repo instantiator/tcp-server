@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # init test-company
-./lcp-cli.sh -u test -p test set-company < scripts/test-data/simple-company.json
-./lcp-cli.sh -u test -p test set-role -c test-company < scripts/test-data/chicken-assistant.json
-./lcp-cli.sh -u test -p test set-role -c test-company < scripts/test-data/cat-assistant.json
+./lcp-cli.sh -u test -p test set-company < scripts/test-data/companies/simple-company.json
+./lcp-cli.sh -u test -p test set-role -c test-company < scripts/test-data/roles/chicken-assistant.json
+./lcp-cli.sh -u test -p test set-role -c test-company < scripts/test-data/roles/cat-assistant.json
 
 # set the planner role
 ./lcp-cli.sh -u test -p test set-planner -c test-company -r cat-assistant

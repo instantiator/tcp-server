@@ -1,7 +1,11 @@
-import type { LcpCompany, LcpRole } from '@lcp/shared';
+import type { LcpCompany, LcpRole, LlmConfig } from '@lcp/shared';
+import type { Response } from 'express';
 import {
+  WARNINGS_HEADER,
   computeCompanyWarnings,
+  computeEmbeddingConfigWarning,
   computeRoleWarnings,
+  setWarningsHeader,
 } from './validation-warnings';
 
 const baseRole = {
@@ -72,5 +76,82 @@ describe('computeCompanyWarnings', () => {
     expect(warnings).toEqual(
       expect.arrayContaining([expect.stringContaining('companyContext')]),
     );
+  });
+});
+
+describe('computeEmbeddingConfigWarning', () => {
+  const embeddingConfig: LlmConfig = { provider: 'lm-studio', model: 'embed' };
+
+  it('returns no warnings when the company has its own embeddingConfig', () => {
+    expect(
+      computeEmbeddingConfigWarning({ embeddingConfig } as LcpCompany, null),
+    ).toEqual([]);
+  });
+
+  it('returns no warnings when the company has none but an env fallback is set', () => {
+    expect(
+      computeEmbeddingConfigWarning(
+        { embeddingConfig: null } as LcpCompany,
+        embeddingConfig,
+      ),
+    ).toEqual([]);
+  });
+
+  it('warns when neither the company nor an env fallback resolves', () => {
+    const warnings = computeEmbeddingConfigWarning(
+      { embeddingConfig: null } as LcpCompany,
+      null,
+    );
+    expect(warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('No embedding config resolved'),
+      ]),
+    );
+  });
+});
+
+describe('setWarningsHeader', () => {
+  function fakeRes(): jest.Mocked<Pick<Response, 'setHeader'>> {
+    return { setHeader: jest.fn() };
+  }
+
+  it('sets the header as a JSON array of percent-encoded warnings', () => {
+    const res = fakeRes();
+    setWarningsHeader(res as unknown as Response, ['a warning']);
+    expect(res.setHeader).toHaveBeenCalledWith(
+      WARNINGS_HEADER,
+      JSON.stringify([encodeURIComponent('a warning')]),
+    );
+  });
+
+  it("percent-encodes non-Latin1 content so it never reaches Node's header validation unescaped (e.g. an em dash, or an arbitrary third-party error message from KnowledgeService.embeddingWarnings)", () => {
+    const res = fakeRes();
+    setWarningsHeader(res as unknown as Response, [
+      'Last reindex failed: connect refused — 例え話',
+    ]);
+    const [, value] = res.setHeader.mock.calls[0] as [string, string];
+    // The whole point: every character actually sent is printable ASCII.
+    expect(/^[\x20-\x7e]*$/.test(value)).toBe(true);
+    expect(JSON.parse(value)).toEqual([
+      encodeURIComponent('Last reindex failed: connect refused — 例え話'),
+    ]);
+  });
+
+  it('omits the header entirely when there are no warnings', () => {
+    const res = fakeRes();
+    setWarningsHeader(res as unknown as Response, []);
+    expect(res.setHeader).not.toHaveBeenCalled();
+  });
+
+  it('swallows a header-set failure rather than throwing, as a backstop', () => {
+    const res = fakeRes();
+    res.setHeader.mockImplementation(() => {
+      throw new TypeError(
+        'Invalid character in header content ["X-Lcp-Warnings"]',
+      );
+    });
+    expect(() =>
+      setWarningsHeader(res as unknown as Response, ['a warning']),
+    ).not.toThrow();
   });
 });

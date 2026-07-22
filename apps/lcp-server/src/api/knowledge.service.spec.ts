@@ -52,6 +52,7 @@ describe('KnowledgeService', () => {
   };
   let reindex: { bumpCompany: jest.Mock; isRebuilding: jest.Mock };
   let ragRetrieval: { retrieve: jest.Mock };
+  let config: { get: jest.Mock };
   let roleRepo: { findOneBy: jest.Mock; findBy: jest.Mock };
   let companyRepo: { findOneBy: jest.Mock };
   let chunkRepo: { count: jest.Mock };
@@ -74,6 +75,7 @@ describe('KnowledgeService', () => {
       isRebuilding: jest.fn().mockResolvedValue(false),
     };
     ragRetrieval = { retrieve: jest.fn().mockResolvedValue([]) };
+    config = { get: jest.fn().mockReturnValue(undefined) };
     roleRepo = {
       findOneBy: jest.fn().mockResolvedValue(role),
       findBy: jest.fn().mockResolvedValue([role]),
@@ -86,6 +88,7 @@ describe('KnowledgeService', () => {
       storage as unknown as StorageService,
       reindex as unknown as KnowledgeReindexService,
       ragRetrieval as never,
+      config as never,
       roleRepo as never,
       companyRepo as never,
       chunkRepo as never,
@@ -340,6 +343,8 @@ describe('KnowledgeService', () => {
         generation: 3,
         lastIndexedAt: '2026-01-01T00:00:00.000Z',
         indexing: true,
+        lastError: null,
+        lastErrorAt: null,
       });
       expect(chunkRepo.count).toHaveBeenCalledWith({
         where: { companyId: company.id, roleId: role.id },
@@ -393,6 +398,85 @@ describe('KnowledgeService', () => {
       await expect(service.statusForCompany('no-such-co')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('embeddingWarnings', () => {
+    it('warns when the company has no embeddingConfig and no env fallback', async () => {
+      companyRepo.findOneBy.mockResolvedValue(
+        makeCompany({ id: company.id, embeddingConfig: null }),
+      );
+      const warnings = await service.embeddingWarnings({
+        kind: 'role',
+        roleId: role.id,
+      });
+      expect(warnings).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining('No embedding config resolved'),
+        ]),
+      );
+    });
+
+    it('is silent when the company has its own embeddingConfig', async () => {
+      companyRepo.findOneBy.mockResolvedValue(
+        makeCompany({
+          id: company.id,
+          embeddingConfig: { provider: 'lm-studio', model: 'embed' },
+        }),
+      );
+      const warnings = await service.embeddingWarnings({
+        kind: 'role',
+        roleId: role.id,
+      });
+      expect(warnings).toEqual([]);
+    });
+
+    it("checks the role scope's own state row for a role ref", async () => {
+      stateRepo.findOne.mockResolvedValue({
+        lastError: 'connect ECONNREFUSED 127.0.0.1:1234',
+        lastErrorAt: new Date('2026-01-01T00:00:00.000Z'),
+      });
+      const warnings = await service.embeddingWarnings({
+        kind: 'role',
+        roleId: role.id,
+      });
+      expect(stateRepo.findOne).toHaveBeenCalledWith({
+        where: { companyId: company.id, roleId: role.id },
+      });
+      expect(warnings).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining(
+            'Last reindex failed: connect ECONNREFUSED 127.0.0.1:1234',
+          ),
+        ]),
+      );
+    });
+
+    it("checks the shared scope's state row for a company ref", async () => {
+      stateRepo.findOne.mockResolvedValue({ lastError: null });
+      await service.embeddingWarnings({
+        kind: 'company',
+        companyId: company.id,
+      });
+      const [{ where }] = stateRepo.findOne.mock.calls[0] as [
+        { where: { companyId: string } },
+      ];
+      expect(where.companyId).toBe(company.id);
+    });
+
+    it('is silent when the last rebuild succeeded (no lastError)', async () => {
+      companyRepo.findOneBy.mockResolvedValue(
+        makeCompany({
+          id: company.id,
+          embeddingConfig: { provider: 'lm-studio', model: 'embed' },
+        }),
+      );
+      stateRepo.findOne.mockResolvedValue({ lastError: null });
+      const warnings = await service.embeddingWarnings({
+        kind: 'role',
+        roleId: role.id,
+      });
+      expect(warnings).toEqual([]);
     });
   });
 });

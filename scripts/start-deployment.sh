@@ -132,7 +132,16 @@ INFRA_SERVICES=(postgres redis minio)
 # Zitadel runs as a non-root user (uid 1000); a fresh named volume would be
 # root-owned, so it can't write its bootstrap PAT. This bind-mounted host
 # directory must be world-writable before the container starts.
-MACHINEKEY_DIR="$REPO_ROOT/docker/zitadel-machinekey"
+#
+# Scoped by $PROJECT to match docker-compose.yml's zitadel volume mount
+# (./docker/zitadel-machinekey/${COMPOSE_PROJECT_NAME}): each Compose project
+# has its own independently-bootstrapped Zitadel instance tied to its own
+# Postgres volume, so its PAT file must be scoped the same way — otherwise
+# two projects (e.g. a `lcp-dev` stack and a `lcp-api`/`lcp-all` test run)
+# sharing one unscoped pat.txt would silently overwrite each other's PAT,
+# leaving whichever project didn't bootstrap most recently with a PAT that
+# authenticates fine but against the wrong Zitadel instance's admin API.
+MACHINEKEY_DIR="$REPO_ROOT/docker/zitadel-machinekey/$PROJECT"
 PAT_FILE="$MACHINEKEY_DIR/pat.txt"
 if [[ -n "$AUTH_PROFILE" ]]; then
   mkdir -p "$MACHINEKEY_DIR"

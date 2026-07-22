@@ -1,4 +1,4 @@
-import { apiRequest, apiUpload } from './api';
+import { apiDownload, apiRequest, apiUpload } from './api';
 
 describe('apiRequest', () => {
   let fetchSpy: jest.SpyInstance;
@@ -111,6 +111,51 @@ describe('apiRequest', () => {
     stderrSpy.mockRestore();
   });
 
+  it('decodes a percent-encoded X-Lcp-Warnings entry before printing (matches setWarningsHeader server-side)', async () => {
+    const stderrSpy = jest.spyOn(process.stderr, 'write').mockReturnValue(true);
+    const message = 'Last reindex failed: connect refused — 例え話';
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({
+        'X-Lcp-Warnings': JSON.stringify([encodeURIComponent(message)]),
+      }),
+      json: () => Promise.resolve({ id: '1' }),
+    });
+
+    await apiRequest(
+      { baseUrl: 'http://localhost:3000' },
+      'GET',
+      '/api/role/1/knowledge/status',
+    );
+
+    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining(message));
+    stderrSpy.mockRestore();
+  });
+
+  it('falls back to the raw entry when it is not validly percent-encoded, rather than dropping it', async () => {
+    const stderrSpy = jest.spyOn(process.stderr, 'write').mockReturnValue(true);
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({
+        'X-Lcp-Warnings': JSON.stringify(['not%valid%encoding']),
+      }),
+      json: () => Promise.resolve({ id: '1' }),
+    });
+
+    await apiRequest(
+      { baseUrl: 'http://localhost:3000' },
+      'GET',
+      '/api/role/1/knowledge/status',
+    );
+
+    expect(stderrSpy).toHaveBeenCalledWith(
+      expect.stringContaining('not%valid%encoding'),
+    );
+    stderrSpy.mockRestore();
+  });
+
   it('does not write to stderr when there are no warnings', async () => {
     const stderrSpy = jest.spyOn(process.stderr, 'write').mockReturnValue(true);
     fetchSpy.mockResolvedValue({
@@ -218,5 +263,102 @@ describe('apiUpload', () => {
         Buffer.from(''),
       ),
     ).rejects.toThrow('HTTP 400: Bad request');
+  });
+
+  it('prints X-Lcp-Warnings on a successful upload', async () => {
+    const stderrSpy = jest.spyOn(process.stderr, 'write').mockReturnValue(true);
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      status: 201,
+      headers: new Headers({
+        'X-Lcp-Warnings': JSON.stringify([
+          'No embedding config resolved for this company.',
+        ]),
+      }),
+      json: () => Promise.resolve({ key: 'a/knowledge/b/c.md' }),
+    });
+
+    await apiUpload(
+      { baseUrl: 'http://localhost:3000' },
+      '/api/role/1/knowledge',
+      'notes.md',
+      Buffer.from('content'),
+    );
+
+    expect(stderrSpy).toHaveBeenCalledWith(
+      expect.stringContaining('No embedding config resolved for this company.'),
+    );
+    stderrSpy.mockRestore();
+  });
+});
+
+describe('apiDownload', () => {
+  let fetchSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    fetchSpy = jest.spyOn(globalThis, 'fetch');
+  });
+
+  afterEach(() => fetchSpy.mockRestore());
+
+  it('returns the file data, content type, and filename from Content-Disposition', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({
+        'content-type': 'text/markdown',
+        'content-disposition': 'attachment; filename="report.md"',
+      }),
+      arrayBuffer: () =>
+        Promise.resolve(new TextEncoder().encode('content').buffer),
+    });
+
+    const result = await apiDownload(
+      { baseUrl: 'http://localhost:3000' },
+      '/api/role/1/knowledge/report.md',
+    );
+
+    expect(result.data.toString('utf-8')).toBe('content');
+    expect(result.contentType).toBe('text/markdown');
+    expect(result.filename).toBe('report.md');
+  });
+
+  it('throws an Error on non-OK responses', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: () => Promise.resolve({ message: 'Not found' }),
+    });
+
+    await expect(
+      apiDownload(
+        { baseUrl: 'http://localhost:3000' },
+        '/api/role/1/knowledge/missing.md',
+      ),
+    ).rejects.toThrow('HTTP 404');
+  });
+
+  it('prints X-Lcp-Warnings on a successful download', async () => {
+    const stderrSpy = jest.spyOn(process.stderr, 'write').mockReturnValue(true);
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({
+        'X-Lcp-Warnings': JSON.stringify([
+          'No embedding config resolved for this company.',
+        ]),
+      }),
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+    });
+
+    await apiDownload(
+      { baseUrl: 'http://localhost:3000' },
+      '/api/role/1/knowledge/report.md',
+    );
+
+    expect(stderrSpy).toHaveBeenCalledWith(
+      expect.stringContaining('No embedding config resolved for this company.'),
+    );
+    stderrSpy.mockRestore();
   });
 });

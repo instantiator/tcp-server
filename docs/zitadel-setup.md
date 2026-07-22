@@ -20,9 +20,13 @@ delegates to) using a machine-user Personal Access Token (PAT):
 
 1. On first boot, Zitadel's `ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME` and
    `ZITADEL_FIRSTINSTANCE_PATPATH` env vars (set in `docker-compose.yml`) create a
-   bootstrap machine user and write its PAT to `docker/zitadel-machinekey/pat.txt` — a
-   bind-mounted, gitignored host directory. This only happens once, on first boot against
-   fresh data; subsequent starts skip it.
+   bootstrap machine user and write its PAT to
+   `docker/zitadel-machinekey/${COMPOSE_PROJECT_NAME}/pat.txt` — a bind-mounted,
+   gitignored host directory, scoped per Compose project (`lcp-dev`, `lcp-api`,
+   `lcp-all`, ...) so that two projects — each with their own independently
+   bootstrapped Zitadel instance, tied to their own Postgres volume — never share
+   (and silently overwrite) the same PAT file. This only happens once per project, on
+   first boot against fresh data; subsequent starts skip it.
 2. `start-deployment.sh` waits for that PAT file to appear, then uses it to authenticate
    directly against Zitadel's REST API (no ROPC grant is needed for this, unlike the old
    `kcadm.sh`-based Keycloak bootstrap) and creates, idempotently:

@@ -9,6 +9,9 @@ import { McpModule } from './mcp/mcp.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      // Prevents NestJS's own dotenv loading from independently reading the
+      // real .env — see apps/lcp-server/src/app.module.ts for why.
+      ignoreEnvFile: true,
       validationSchema: configSchema,
       validationOptions: { abortEarly: true },
     }),

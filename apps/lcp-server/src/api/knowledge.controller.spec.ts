@@ -4,12 +4,17 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { DocumentSummary, KnowledgeService } from './knowledge.service';
 import { KnowledgeController } from './knowledge.controller';
 
 function fakeRequest(sub: string | null = 'user-1'): Request {
   return { user: sub ? { sub } : undefined } as unknown as Request;
+}
+
+/** Minimal fake of the passthrough `Response` object the controller sets headers on. */
+function fakeRes(): jest.Mocked<Pick<Response, 'setHeader'>> {
+  return { setHeader: jest.fn() };
 }
 
 function makeSummary(
@@ -26,7 +31,7 @@ function makeSummary(
 
 describe('KnowledgeController', () => {
   let knowledge: jest.Mocked<
-    Pick<KnowledgeService, 'store' | 'list' | 'queryRag'>
+    Pick<KnowledgeService, 'store' | 'list' | 'queryRag' | 'embeddingWarnings'>
   >;
   let controller: KnowledgeController;
   const roleId = randomUUID();
@@ -36,6 +41,7 @@ describe('KnowledgeController', () => {
       store: jest.fn().mockResolvedValue(makeSummary()),
       list: jest.fn().mockResolvedValue([]),
       queryRag: jest.fn().mockResolvedValue([]),
+      embeddingWarnings: jest.fn().mockResolvedValue([]),
     };
     controller = new KnowledgeController(
       knowledge as unknown as KnowledgeService,
@@ -49,6 +55,7 @@ describe('KnowledgeController', () => {
         { originalname: 'notes.txt', buffer: Buffer.from('Just notes.') },
         {},
         fakeRequest(),
+        fakeRes() as unknown as Response,
       );
 
       expect(knowledge.store).toHaveBeenCalledTimes(1);
@@ -70,6 +77,7 @@ describe('KnowledgeController', () => {
         },
         {},
         fakeRequest(),
+        fakeRes() as unknown as Response,
       );
 
       const [, filename] = knowledge.store.mock.calls[0];
@@ -84,6 +92,7 @@ describe('KnowledgeController', () => {
         { originalname: 'notes.txt', buffer: Buffer.from('Notes.') },
         { filename: 'custom.md' },
         fakeRequest(),
+        fakeRes() as unknown as Response,
       );
 
       expect(knowledge.list).not.toHaveBeenCalled();
@@ -100,6 +109,7 @@ describe('KnowledgeController', () => {
           { originalname: 'notes.txt', buffer: Buffer.from('Notes.') },
           {},
           fakeRequest(),
+          fakeRes() as unknown as Response,
         ),
       ).rejects.toThrow(ConflictException);
       expect(knowledge.store).not.toHaveBeenCalled();
@@ -116,6 +126,7 @@ describe('KnowledgeController', () => {
         },
         {},
         fakeRequest(),
+        fakeRes() as unknown as Response,
       );
 
       expect(knowledge.list).not.toHaveBeenCalled();
@@ -129,9 +140,35 @@ describe('KnowledgeController', () => {
           { originalname: 'archive.zip', buffer: Buffer.from('') },
           {},
           fakeRequest(),
+          fakeRes() as unknown as Response,
         ),
       ).rejects.toThrow(BadRequestException);
       expect(knowledge.store).not.toHaveBeenCalled();
+    });
+
+    it('sets X-Lcp-Warnings from KnowledgeService.embeddingWarnings after a successful store', async () => {
+      knowledge.embeddingWarnings.mockResolvedValue(['No embedding config.']);
+      const res = fakeRes();
+
+      await controller.storeRoleKnowledgeFile(
+        roleId,
+        {
+          originalname: 'report.md',
+          buffer: Buffer.from('---\ntitle: R\n---\n\nB.'),
+        },
+        {},
+        fakeRequest(),
+        res as unknown as Response,
+      );
+
+      expect(knowledge.embeddingWarnings).toHaveBeenCalledWith({
+        kind: 'role',
+        roleId,
+      });
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'X-Lcp-Warnings',
+        JSON.stringify([encodeURIComponent('No embedding config.')]),
+      );
     });
   });
 
@@ -150,6 +187,7 @@ describe('KnowledgeController', () => {
 
       const result = await controller.queryRoleKnowledge(
         roleId,
+        fakeRes() as unknown as Response,
         'remote work policy',
         '3',
         '0.5',
@@ -165,7 +203,11 @@ describe('KnowledgeController', () => {
     });
 
     it('omits topK/threshold when not given, leaving service defaults in effect', async () => {
-      await controller.queryRoleKnowledge(roleId, 'remote work policy');
+      await controller.queryRoleKnowledge(
+        roleId,
+        fakeRes() as unknown as Response,
+        'remote work policy',
+      );
       expect(knowledge.queryRag).toHaveBeenCalledWith(
         roleId,
         'remote work policy',
@@ -176,15 +218,23 @@ describe('KnowledgeController', () => {
 
     it('rejects a missing q with a 400', async () => {
       await expect(
-        controller.queryRoleKnowledge(roleId, undefined),
+        controller.queryRoleKnowledge(
+          roleId,
+          fakeRes() as unknown as Response,
+          undefined,
+        ),
       ).rejects.toThrow(BadRequestException);
       expect(knowledge.queryRag).not.toHaveBeenCalled();
     });
 
     it('rejects an empty q with a 400', async () => {
-      await expect(controller.queryRoleKnowledge(roleId, '')).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        controller.queryRoleKnowledge(
+          roleId,
+          fakeRes() as unknown as Response,
+          '',
+        ),
+      ).rejects.toThrow(BadRequestException);
       expect(knowledge.queryRag).not.toHaveBeenCalled();
     });
 
@@ -193,14 +243,42 @@ describe('KnowledgeController', () => {
         new NotFoundException(`Role ${roleId} not found`),
       );
       await expect(
-        controller.queryRoleKnowledge(roleId, 'query'),
+        controller.queryRoleKnowledge(
+          roleId,
+          fakeRes() as unknown as Response,
+          'query',
+        ),
       ).rejects.toThrow(NotFoundException);
     });
 
     it('returns an empty array (not an error) when the company has no embeddingConfig', async () => {
       knowledge.queryRag.mockResolvedValue([]);
-      const result = await controller.queryRoleKnowledge(roleId, 'query');
+      const result = await controller.queryRoleKnowledge(
+        roleId,
+        fakeRes() as unknown as Response,
+        'query',
+      );
       expect(result).toEqual([]);
+    });
+
+    it('sets X-Lcp-Warnings from KnowledgeService.embeddingWarnings', async () => {
+      knowledge.embeddingWarnings.mockResolvedValue(['No embedding config.']);
+      const res = fakeRes();
+
+      await controller.queryRoleKnowledge(
+        roleId,
+        res as unknown as Response,
+        'query',
+      );
+
+      expect(knowledge.embeddingWarnings).toHaveBeenCalledWith({
+        kind: 'role',
+        roleId,
+      });
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'X-Lcp-Warnings',
+        JSON.stringify([encodeURIComponent('No embedding config.')]),
+      );
     });
   });
 
@@ -211,6 +289,7 @@ describe('KnowledgeController', () => {
         { originalname: 'handbook.csv', buffer: Buffer.from('a,b\n1,2\n') },
         {},
         fakeRequest(),
+        fakeRes() as unknown as Response,
       );
 
       const [ref, filename, content] = knowledge.store.mock.calls[0];
