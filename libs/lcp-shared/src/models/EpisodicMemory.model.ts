@@ -9,7 +9,7 @@ import {
 
 /**
  * A single agent-authored memory entry stored for later recall.
- * The embedding vector is stored in a `vector(1536)` column managed via raw SQL
+ * The embedding vector is stored in a `vector(768)` column managed via raw SQL
  * (pgvector extension) — not mapped by TypeORM.
  */
 @Entity()
@@ -55,6 +55,6 @@ export class EpisodicMemory {
   @CreateDateColumn()
   createdAt!: Date;
 
-  // NOTE: The `embedding vector(1536)` column exists in the database (added by migration
+  // NOTE: The `embedding vector(768)` column exists in the database (added by migration
   // AddEpisodicMemory) but is intentionally absent here — all vector operations use raw SQL.
 }

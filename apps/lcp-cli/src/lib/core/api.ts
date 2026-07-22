@@ -62,13 +62,28 @@ export async function apiRequest<T>(
   return res.json() as Promise<T>;
 }
 
-/** Prints any `X-Lcp-Warnings` reported by the server (see {@link WARNINGS_HEADER}). */
-function reportWarnings(res: Response): void {
+/**
+ * Prints any `X-Lcp-Warnings` reported by the server (see {@link WARNINGS_HEADER}).
+ *
+ * Each entry is percent-encoded server-side (see `setWarningsHeader` in
+ * lcp-server's `validation-warnings.ts`) so warning content carrying
+ * non-Latin1 characters — e.g. an arbitrary third-party error message —
+ * never gets lost to HTTP header validation. Decode each entry back before
+ * printing; a single undecodable entry (malformed percent-escape) falls
+ * back to its raw, still-encoded form rather than dropping the whole batch.
+ */
+export function reportWarnings(res: Response): void {
   const raw = res.headers?.get(WARNINGS_HEADER);
   if (!raw) return;
   try {
     const warnings = JSON.parse(raw) as string[];
-    warnings.forEach(printWarning);
+    warnings.forEach((w) => {
+      try {
+        printWarning(decodeURIComponent(w));
+      } catch {
+        printWarning(w);
+      }
+    });
   } catch {
     // ignore malformed header — not worth failing the command over
   }
@@ -99,6 +114,8 @@ export async function apiDownload(
     throw new Error(`GET ${path} failed with HTTP ${res.status}${detail}`);
   }
 
+  reportWarnings(res);
+
   const disposition = res.headers.get('content-disposition') ?? '';
   const match = /filename="([^"]+)"/.exec(disposition);
   const filename = match?.[1] ?? 'download';
@@ -111,6 +128,11 @@ export async function apiDownload(
 /**
  * Uploads a single file to the given path using `multipart/form-data`.
  * The file is sent in a field named `file`.
+ *
+ * A document-validation failure (422) carries `errors[].llmHint` —
+ * remediation text such as a minimal front-matter template — which is
+ * appended to the thrown error's message so it reaches the CLI user, not
+ * just `message` (see `DocumentValidationException` in lcp-server).
  */
 export async function apiUpload<T>(
   opts: ApiOptions,
@@ -135,13 +157,22 @@ export async function apiUpload<T>(
   if (!res.ok) {
     let detail = '';
     try {
-      const err = (await res.json()) as { message?: string };
+      const err = (await res.json()) as {
+        message?: string;
+        errors?: { llmHint?: string }[];
+      };
       detail = err.message ? `: ${err.message}` : '';
+      const hints = (err.errors ?? [])
+        .map((e) => e.llmHint)
+        .filter((hint): hint is string => Boolean(hint));
+      if (hints.length > 0) detail += `\n${hints.join('\n')}`;
     } catch {
       /* ignore */
     }
     throw new Error(`POST ${path} failed with HTTP ${res.status}${detail}`);
   }
+
+  reportWarnings(res);
 
   return res.json() as Promise<T>;
 }

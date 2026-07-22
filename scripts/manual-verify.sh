@@ -172,7 +172,7 @@ start_lm_studio_capture
 # Step 1: create the test company from fixture JSON, then confirm it round-trips
 # through list-companies before trusting its id for the steps that follow.
 echo "${BLUE}=== 1. Creating test company ===${RESET}"
-COMPANY_JSON=$(cat "$ROOT/scripts/test-data/simple-company.json" | cli set-company) \
+COMPANY_JSON=$(cat "$ROOT/scripts/test-data/companies/simple-company.json" | cli set-company) \
   || fail "set-company failed"
 COMPANY_ID=$(jq -r '.id' <<< "$COMPANY_JSON")
 [[ -n "$COMPANY_ID" && "$COMPANY_ID" != "null" ]] || fail "set-company response had no id: $COMPANY_JSON"
@@ -186,7 +186,7 @@ cli list-companies | jq -e --arg id "$COMPANY_ID" \
 # create-then-verify pattern as step 1.
 echo ""
 echo "${BLUE}=== 2. Creating chicken assistant role ===${RESET}"
-CHICKEN_JSON=$(cat "$ROOT/scripts/test-data/chicken-assistant.json" \
+CHICKEN_JSON=$(cat "$ROOT/scripts/test-data/roles/chicken-assistant.json" \
   | cli set-role --company-id "$COMPANY_ID") || fail "set-role (chicken) failed"
 CHICKEN_ROLE_ID=$(jq -r '.id' <<< "$CHICKEN_JSON")
 [[ -n "$CHICKEN_ROLE_ID" && "$CHICKEN_ROLE_ID" != "null" ]] || fail "set-role (chicken) response had no id: $CHICKEN_JSON"
@@ -201,7 +201,7 @@ cli list-roles --company-id "$COMPANY_ID" | jq -e --arg id "$CHICKEN_ROLE_ID" \
 # to actually consult in the scenarios below.
 echo ""
 echo "${BLUE}=== 3. Creating cat assistant role ===${RESET}"
-CAT_JSON=$(cat "$ROOT/scripts/test-data/cat-assistant.json" \
+CAT_JSON=$(cat "$ROOT/scripts/test-data/roles/cat-assistant.json" \
   | cli set-role --company-id "$COMPANY_ID") || fail "set-role (cat) failed"
 CAT_ROLE_ID=$(jq -r '.id' <<< "$CAT_JSON")
 [[ -n "$CAT_ROLE_ID" && "$CAT_ROLE_ID" != "null" ]] || fail "set-role (cat) response had no id: $CAT_JSON"

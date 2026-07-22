@@ -128,6 +128,24 @@ To force a rebuild of every scope of a company immediately (rather than waiting 
 # → POST /api/company/:companyId/knowledge/reindex (202 Accepted)
 ```
 
+To check a scope's indexing status (document/chunk counts, size, generation, last successful rebuild, and whether one is in progress), use:
+
+```bash
+./lcp-cli.sh get-knowledge-index-status -r <roleId>
+# → GET /api/role/:roleId/knowledge/status
+
+./lcp-cli.sh get-knowledge-index-status -c <company-slug-or-id>
+# → GET /api/company/:companyId/knowledge/status (shared scope + every role)
+```
+
+To see the raw chunks a role's next prompt would retrieve — without spending
+an LLM call — query the RAG index directly:
+
+```bash
+./lcp-cli.sh query-knowledge -r <roleId> -q "remote work policy"
+# → GET /api/role/:roleId/knowledge/query?q=... (role chunks + company shared chunks)
+```
+
 ```bash
 # Upload a document to a role's knowledge base
 ./lcp-cli.sh store-knowledge -r <roleId> -s policy.md

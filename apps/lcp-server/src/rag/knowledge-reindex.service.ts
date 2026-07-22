@@ -5,6 +5,8 @@ import {
   KnowledgeIndexState,
   LcpCompany,
   LcpRole,
+  resolveEmbeddingConfig,
+  resolveEnvEmbeddingConfig,
 } from '@lcp/shared';
 import {
   Inject,
@@ -204,11 +206,16 @@ export class KnowledgeReindexService implements OnModuleInit, OnModuleDestroy {
 
     const company = await this.companyRepo.findOneBy({ id: companyId });
     if (!company) return;
-    if (!company.embeddingConfig) {
+    const embeddingConfig = resolveEmbeddingConfig(
+      company,
+      resolveEnvEmbeddingConfig(this.config),
+    );
+    if (!embeddingConfig) {
       if (!this.loggedNoConfig.has(companyId)) {
         this.loggedNoConfig.add(companyId);
         this.logger.log(
-          `Company ${companyId} has no embeddingConfig — skipping knowledge reindex`,
+          `Company ${companyId} has no embeddingConfig, and no EMBEDDING_* env ` +
+            'fallback is configured — skipping knowledge reindex',
         );
       }
       return;
@@ -227,55 +234,93 @@ export class KnowledgeReindexService implements OnModuleInit, OnModuleDestroy {
     const files = await this.storage.listKnowledgeFiles(scope);
     const listedKeys = new Set<string>();
 
-    for (const file of files) {
-      // Re-read the generation between documents so a write landing mid-rebuild
-      // aborts this run and a fresh one re-processes everything.
-      const current = await this.currentGeneration(companyId, roleId);
-      if (current !== generation) {
-        this.logger.log(
-          `Generation changed ${generation}→${current} mid-rebuild for company=${companyId} role=${roleId ?? 'shared'} — re-enqueuing`,
+    try {
+      for (const file of files) {
+        // Re-read the generation between documents so a write landing mid-rebuild
+        // aborts this run and a fresh one re-processes everything.
+        const current = await this.currentGeneration(companyId, roleId);
+        if (current !== generation) {
+          this.logger.log(
+            `Generation changed ${generation}→${current} mid-rebuild for company=${companyId} role=${roleId ?? 'shared'} — re-enqueuing`,
+          );
+          await this.queue.add(
+            'rebuild',
+            { companyId, roleId, generation: current },
+            { removeOnComplete: true, removeOnFail: 100 },
+          );
+          return;
+        }
+        const content = await this.storage.readFile(file.key);
+        if (content === null) continue;
+        await this.ragIndex.ingestDocument(
+          companyId,
+          roleId,
+          file.key,
+          content,
+          embeddingConfig,
         );
-        await this.queue.add(
-          'rebuild',
-          { companyId, roleId, generation: current },
-          { removeOnComplete: true, removeOnFail: 100 },
-        );
-        return;
+        listedKeys.add(file.key);
       }
-      const content = await this.storage.readFile(file.key);
-      if (content === null) continue;
-      await this.ragIndex.ingestDocument(
-        companyId,
-        roleId,
-        file.key,
-        content,
-        company.embeddingConfig,
+
+      await this.removeStaleChunks(companyId, roleId, listedKeys);
+
+      // Guard on generation so a concurrent bump's fingerprint is not clobbered
+      // by this (now superseded) run. Clears any stale lastError recorded by
+      // an earlier failed attempt at this scope.
+      await this.stateRepo.update(
+        { companyId, roleId: roleId ?? IsNull(), generation },
+        {
+          fingerprint: fingerprintListing(files),
+          lastError: null,
+          // lastErrorAt is Date | undefined (not | null) — see
+          // KnowledgeIndexState — so clearing needs a raw SQL literal rather
+          // than assigning null directly (matches LcpAgent.pausedAt's clear
+          // pattern in AgentOrchestrationService).
+          lastErrorAt: () => 'NULL',
+        },
       );
-      listedKeys.add(file.key);
+      this.logger.log(
+        `Reindexed ${listedKeys.size} document(s) for company=${companyId} role=${roleId ?? 'shared'} (gen ${generation})`,
+      );
+    } catch (err) {
+      // Most commonly the embedding endpoint being unreachable/misconfigured
+      // (see EmbeddingService) — record it so get-knowledge-index-status and
+      // the other knowledge endpoints' X-Lcp-Warnings (see
+      // KnowledgeService.embeddingWarnings) can surface it; a silent BullMQ
+      // job failure would otherwise leave the index stuck at zero chunks
+      // with no visible explanation. Guarded on generation for the same
+      // reason as the success path — don't clobber a newer run's state.
+      const message = err instanceof Error ? err.message : String(err);
+      await this.stateRepo.update(
+        { companyId, roleId: roleId ?? IsNull(), generation },
+        { lastError: message, lastErrorAt: new Date() },
+      );
+      this.logger.error(
+        `Reindex failed for company=${companyId} role=${roleId ?? 'shared'} (gen ${generation}): ${message}`,
+      );
+      throw err;
     }
+  }
 
-    await this.removeStaleChunks(companyId, roleId, listedKeys);
-
-    // Guard on generation so a concurrent bump's fingerprint is not clobbered
-    // by this (now superseded) run.
-    await this.stateRepo.update(
-      { companyId, roleId: roleId ?? IsNull(), generation },
-      { fingerprint: fingerprintListing(files) },
-    );
-    this.logger.log(
-      `Reindexed ${listedKeys.size} document(s) for company=${companyId} role=${roleId ?? 'shared'} (gen ${generation})`,
+  /** True if a rebuild job for this scope is currently active, waiting, or delayed. */
+  async isRebuilding(companyId: UUID, roleId: UUID | null): Promise<boolean> {
+    const jobs = await this.queue.getJobs(['active', 'waiting', 'delayed']);
+    return jobs.some(
+      (job) => job.data.companyId === companyId && job.data.roleId === roleId,
     );
   }
 
   /**
-   * One reconciliation cycle: for every company with an embeddingConfig,
-   * fingerprint each scope's storage listing and bump any scope that drifted
-   * from its last indexed fingerprint.
+   * One reconciliation cycle: for every company with a resolvable embedding
+   * config (its own, or the environment fallback), fingerprint each scope's
+   * storage listing and bump any scope that drifted from its last indexed
+   * fingerprint.
    */
   async poll(): Promise<void> {
+    const envEmbeddingConfig = resolveEnvEmbeddingConfig(this.config);
     const companies = await this.companyRepo.find();
     for (const company of companies) {
-      if (!company.embeddingConfig) continue;
+      if (!resolveEmbeddingConfig(company, envEmbeddingConfig)) continue;
       const roles = await this.roleRepo.findBy({ companyId: company.id });
       const scopes: (LcpRole | null)[] = [null, ...roles];
       for (const role of scopes) {

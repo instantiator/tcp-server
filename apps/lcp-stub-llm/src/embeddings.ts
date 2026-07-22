@@ -1,5 +1,5 @@
 /** Dimension of the pgvector `embedding` column this suite's RAG pipeline expects. */
-export const EMBEDDING_DIM = 1536;
+export const EMBEDDING_DIM = 768;
 
 function fnv1aHash(text: string): number {
   let h = 2166136261;

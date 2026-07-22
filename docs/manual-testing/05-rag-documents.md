@@ -86,7 +86,23 @@ You can also verify the file is in MinIO by checking the console at [http://loca
 
 ---
 
-## 5.4 — Verify RAG retrieval in an agent
+## 5.4 — Query the RAG index directly (lighter-weight alternative)
+
+Before spinning up a full agent turn (5.5 below), you can see the raw chunks
+a role's next prompt would retrieve directly, with no LLM call involved:
+
+```bash
+./lcp-cli.sh query-knowledge --role "$ROLE_ID" --query "What is the company policy on remote work?"
+```
+
+Expected: a JSON array of `{ id, documentPath, chunkIndex, content, similarity }`,
+including a chunk of `test-knowledge.md`'s "Remote Work" section, ranked by
+similarity. An empty array means either nothing scored above the default
+threshold (0.7) or the company has no `embeddingConfig` — not an error.
+
+---
+
+## 5.5 — Verify RAG retrieval in an agent
 
 Create an agent with a prompt that should trigger retrieval of the document content:
 
@@ -113,7 +129,7 @@ Expected: the agent's response mentions the remote work policy (three days per w
 
 ---
 
-## 5.5 — Check that injection shows in the audit log
+## 5.6 — Check that injection shows in the audit log
 
 The RAG injection is not directly audited but you can infer it from lcp-agent logs:
 
@@ -129,7 +145,7 @@ docker compose logs lcp-server | grep -i "rag\|chunk\|retriev"
 
 ---
 
-## 5.6 — Remove a document
+## 5.7 — Remove a document
 
 ```bash
 ./lcp-cli.sh delete-knowledge \
@@ -141,7 +157,7 @@ Expected: success message. The document is removed from MinIO and all associated
 
 ---
 
-## 5.7 — Open the document store (optional)
+## 5.8 — Open the document store (optional)
 
 The `open-document-store` command prints and opens the MinIO console URL:
 

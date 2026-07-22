@@ -10,8 +10,13 @@
  */
 
 import { randomUUID } from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
 import { LcpCompany, LcpRole } from '../../libs/lcp-shared/src';
 import { ApiHelper, BASE, ChatResponse, RUN_ID } from './helpers/ApiHelper';
+
+const fixture = (name: string) =>
+  fs.readFileSync(path.join(__dirname, 'fixtures', name));
 
 describe('lcp-cli API flows', () => {
   // device authorization: the server must reach Zitadel internally to start/poll the flow.
@@ -180,6 +185,156 @@ describe('lcp-cli API flows', () => {
               );
             });
 
+            describe('wider format support (010.7.1)', () => {
+              it('converts a .txt upload, falling back to the filename stem as title', async () => {
+                const stored = await api.storeKnowledge(
+                  scopePath(),
+                  'notes.txt',
+                  'Plain text notes.',
+                );
+                expect(stored?.name).toBe('notes.md');
+
+                const content = await api.getKnowledgeText(
+                  scopePath(),
+                  'notes.md',
+                );
+                expect(content).toMatch(/^---\ntitle: notes\n---/);
+                expect(content).toContain('Plain text notes.');
+              });
+
+              it('converts a .html upload, using the <title> tag and GFM tables', async () => {
+                const html =
+                  '<html><head><title>HTML Doc</title></head><body>' +
+                  '<h1>Heading</h1><p>Body text.</p>' +
+                  '<table><tr><th>A</th></tr><tr><td>1</td></tr></table></body></html>';
+                const stored = await api.storeKnowledge(
+                  scopePath(),
+                  'page.html',
+                  html,
+                );
+                expect(stored?.name).toBe('page.md');
+
+                const content = await api.getKnowledgeText(
+                  scopePath(),
+                  'page.md',
+                );
+                expect(content).toMatch(/title: HTML Doc/);
+                expect(content).toContain('# Heading');
+                expect(content).toContain('Body text.');
+                expect(content).toContain('| A |');
+              });
+
+              it('wraps a .csv upload in a fenced code block', async () => {
+                const stored = await api.storeKnowledge(
+                  scopePath(),
+                  'sales.csv',
+                  'a,b\n1,2\n',
+                );
+                expect(stored?.name).toBe('sales.md');
+
+                const content = await api.getKnowledgeText(
+                  scopePath(),
+                  'sales.md',
+                );
+                expect(content).toMatch(/title: sales/);
+                expect(content).toContain('```csv\na,b\n1,2\n\n```');
+              });
+
+              it('wraps a .json upload in a fenced code block', async () => {
+                const stored = await api.storeKnowledge(
+                  scopePath(),
+                  'settings.json',
+                  '{"a":1}',
+                );
+                expect(stored?.name).toBe('settings.md');
+
+                const content = await api.getKnowledgeText(
+                  scopePath(),
+                  'settings.md',
+                );
+                expect(content).toContain('```json\n{"a":1}\n```');
+              });
+
+              it('wraps a .yaml upload in a fenced code block', async () => {
+                const stored = await api.storeKnowledge(
+                  scopePath(),
+                  'config.yaml',
+                  'a: 1\n',
+                );
+                expect(stored?.name).toBe('config.md');
+
+                const content = await api.getKnowledgeText(
+                  scopePath(),
+                  'config.md',
+                );
+                expect(content).toContain('```yaml\na: 1\n\n```');
+              });
+
+              it('rejects malformed JSON with a 400', async () => {
+                await api.storeKnowledge(
+                  scopePath(),
+                  'broken.json',
+                  '{not json',
+                  400,
+                );
+              });
+
+              it('converts a .pdf upload, extracting its text', async () => {
+                const stored = await api.storeKnowledge(
+                  scopePath(),
+                  'report.pdf',
+                  fixture('sample.pdf'),
+                );
+                expect(stored?.name).toBe('report.md');
+
+                const content = await api.getKnowledgeText(
+                  scopePath(),
+                  'report.md',
+                );
+                expect(content).toMatch(/title: report/);
+                expect(content).toContain('Sample PDF content');
+              });
+
+              it('converts a .docx upload, using its first heading as title', async () => {
+                const stored = await api.storeKnowledge(
+                  scopePath(),
+                  'manual.docx',
+                  fixture('sample.docx'),
+                );
+                expect(stored?.name).toBe('manual.md');
+
+                const content = await api.getKnowledgeText(
+                  scopePath(),
+                  'manual.md',
+                );
+                expect(content).toMatch(/title: Sample Heading/);
+                expect(content).toContain('Sample docx content.');
+              });
+
+              it('rejects an unsupported extension with a 400', async () => {
+                await api.storeKnowledge(
+                  scopePath(),
+                  'archive.zip',
+                  'irrelevant',
+                  400,
+                );
+              });
+
+              it('rejects a converted filename that collides with an existing document', async () => {
+                await api.storeKnowledge(
+                  scopePath(),
+                  'collide.txt',
+                  'First upload.',
+                );
+                await api.storeKnowledge(
+                  scopePath(),
+                  'collide.json',
+                  '{"second":true}',
+                  409,
+                );
+              });
+            });
+
             it('DELETE :filename removes the document', async () => {
               await api.deleteKnowledge(scopePath(), 'role-doc.md');
               const docs = await api.listKnowledge(scopePath());
@@ -233,6 +388,24 @@ describe('lcp-cli API flows', () => {
           await api.deleteKnowledge(scopePath(), 'shared-doc.md');
           const docs = await api.listKnowledge(scopePath());
           expect(docs.some((d) => d.name === 'shared-doc.md')).toBe(false);
+        });
+
+        it('converts a non-.md upload under the shared scope too (010.7.1)', async () => {
+          const html =
+            '<html><head><title>Shared HTML</title></head><body><p>Text.</p></body></html>';
+          const stored = await api.storeKnowledge(
+            scopePath(),
+            'shared-page.html',
+            html,
+          );
+          expect(stored?.name).toBe('shared-page.md');
+
+          const content = await api.getKnowledgeText(
+            scopePath(),
+            'shared-page.md',
+          );
+          expect(content).toMatch(/title: Shared HTML/);
+          expect(content).toContain('Text.');
         });
 
         it('resolves the company by slug as well as by id', async () => {

@@ -17,10 +17,10 @@ flowchart LR
 
 ## 2.1 — Create a company
 
-A sample company definition is provided in `scripts/test-data/simple-company.json`. Review it first:
+A sample company definition is provided in `scripts/test-data/companies/simple-company.json`. Review it first:
 
 ```bash
-cat scripts/test-data/simple-company.json
+cat scripts/test-data/companies/simple-company.json
 ```
 
 The key fields are:
@@ -37,7 +37,7 @@ The key fields are:
 Update the `baseUrl` and `model` to match your LLM provider, then create the company:
 
 ```bash
-cat scripts/test-data/simple-company.json \
+cat scripts/test-data/companies/simple-company.json \
   | ./lcp-cli.sh set-company
 ```
 

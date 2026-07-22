@@ -7,6 +7,6 @@
       "@lcp/shared/*": ["../libs/lcp-shared/src/*"]
     }
   },
-  "include": ["**/*.ts"],
+  "include": ["**/*.ts", "../apps/lcp-server/src/api/turndown-plugin-gfm.d.ts"],
   "exclude": ["node_modules"]
 }

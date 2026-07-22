@@ -106,7 +106,22 @@ services:
       # "permission denied". start-deployment.sh chmods this host directory
       # before bringing the stack up. Only written once, on first boot — the
       # FIRSTINSTANCE steps are skipped on subsequent starts against existing data.
-      - ./docker/zitadel-machinekey:/machinekey
+      #
+      # Scoped by ${COMPOSE_PROJECT_NAME} (Compose auto-populates this from
+      # `-p`/`--project-name`, even when set via a flag rather than the env
+      # var of the same name): every Compose project using this file gets its
+      # own Postgres volume, and therefore its own independently-bootstrapped
+      # Zitadel instance, but a single unscoped path here would still point
+      # every project at the same host file. Whichever project bootstrapped
+      # most recently would silently overwrite it with its own PAT, breaking
+      # every *other* already-running project's auth against a still-valid
+      # local Zitadel — the PAT would authenticate fine, just against the
+      # wrong instance's admin API. Scoping this by project makes each
+      # project's PAT file track only its own Zitadel instance's lifecycle,
+      # restoring the 1:1 relationship start-deployment.sh's freshness check
+      # (ZITADEL_FRESH_BOOT, keyed on that same project's Postgres volume)
+      # already assumes.
+      - ./docker/zitadel-machinekey/${COMPOSE_PROJECT_NAME}:/machinekey
     depends_on:
       postgres:
         condition: service_healthy
@@ -148,6 +163,10 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_CONTEXT_WINDOW: ${LLM_CONTEXT_WINDOW:-}
       LLM_TIMEOUT_MS: ${LLM_TIMEOUT_MS:-}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
     depends_on:
       postgres:
@@ -198,6 +217,10 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_CONTEXT_WINDOW: ${LLM_CONTEXT_WINDOW:-}
       LLM_TIMEOUT_MS: ${LLM_TIMEOUT_MS:-}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
     depends_on:
       postgres:
@@ -244,6 +267,10 @@ services:
       DATABASE_URL: postgres://lcp:${POSTGRES_PASSWORD}@postgres:5432/lcp
       LCP_SERVER_URL: http://lcp-server:3000
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
     ports:
       - "3011:3011"
     depends_on:

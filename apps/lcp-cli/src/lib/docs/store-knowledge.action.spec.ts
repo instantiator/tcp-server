@@ -1,48 +1,32 @@
-import { validateOkfDocument } from './store-knowledge.action';
+import { validateSupportedFileType } from './store-knowledge.action';
 
-describe('validateOkfDocument', () => {
-  const validContent = `---
-title: Report
-author: Alice
----
-
-# Report
-
-Content here.
-`;
-
-  it('accepts a valid OKF document', () => {
-    expect(validateOkfDocument('report.md', validContent)).toBeNull();
+describe('validateSupportedFileType', () => {
+  it.each([
+    'report.md',
+    'notes.txt',
+    'page.html',
+    'sheet.pdf',
+    'doc.docx',
+    'data.csv',
+    'data.json',
+    'data.yaml',
+  ])('accepts %s', (filename) => {
+    expect(validateSupportedFileType(filename)).toBeNull();
   });
 
-  it('rejects non-Markdown files', () => {
-    expect(validateOkfDocument('report.txt', validContent)).toMatch(
-      /must be a Markdown/,
+  it('is case-insensitive for the extension', () => {
+    expect(validateSupportedFileType('report.MD')).toBeNull();
+  });
+
+  it('rejects unsupported extensions', () => {
+    expect(validateSupportedFileType('archive.zip')).toMatch(
+      /unsupported file type/,
     );
   });
 
-  it('rejects files without front-matter', () => {
-    expect(validateOkfDocument('report.md', '# No front matter')).toMatch(
-      /title/,
+  it('rejects files with no extension', () => {
+    expect(validateSupportedFileType('README')).toMatch(
+      /unsupported file type/,
     );
-  });
-
-  it('rejects files with front-matter missing the title field', () => {
-    const noTitle = `---\nauthor: Bob\n---\ncontent`;
-    expect(validateOkfDocument('report.md', noTitle)).toMatch(/title/);
-  });
-
-  it('rejects files with an empty title', () => {
-    const emptyTitle = `---\ntitle: ""\n---\ncontent`;
-    expect(validateOkfDocument('report.md', emptyTitle)).toMatch(/title/);
-  });
-
-  it('rejects files with whitespace-only title', () => {
-    const spaceTitle = `---\ntitle: "   "\n---\ncontent`;
-    expect(validateOkfDocument('report.md', spaceTitle)).toMatch(/title/);
-  });
-
-  it('is case-insensitive for the .md extension', () => {
-    expect(validateOkfDocument('report.MD', validContent)).toBeNull();
   });
 });

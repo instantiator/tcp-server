@@ -259,18 +259,23 @@ export class ApiHelper {
 
   /**
    * Uploads a knowledge document via `multipart/form-data`. Not routed
-   * through {@link invokeApi} since that only sends JSON bodies.
+   * through {@link invokeApi} since that only sends JSON bodies. `content`
+   * may be a `Buffer` for binary formats (`.pdf`/`.docx`); the multipart
+   * content-type is always `application/octet-stream` since the server
+   * dispatches conversion by filename extension, not this header.
    */
   async storeKnowledge(
     scopePath: string,
     filename: string,
-    content: string,
+    content: string | Buffer,
     expectedStatus = 201,
   ) {
     const form = new FormData();
     form.append(
       'file',
-      new Blob([content], { type: 'text/markdown' }),
+      new Blob([new Uint8Array(Buffer.from(content))], {
+        type: 'application/octet-stream',
+      }),
       filename,
     );
     const res = await fetch(`${BASE}/api/${scopePath}/knowledge`, {

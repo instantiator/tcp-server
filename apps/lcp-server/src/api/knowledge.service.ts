@@ -1,9 +1,18 @@
-import { LcpCompany, LcpRole } from '@lcp/shared';
+import {
+  KnowledgeChunk,
+  KnowledgeIndexState,
+  LcpCompany,
+  LcpRole,
+  resolveEmbeddingConfig,
+  resolveEnvEmbeddingConfig,
+} from '@lcp/shared';
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { KnowledgeReindexService } from '../rag/knowledge-reindex.service';
+import { RagChunk, RagRetrievalService } from '../rag/rag-retrieval.service';
 import { KnowledgeScope } from '../storage/storage-keys';
 import {
   Originators,
@@ -11,6 +20,7 @@ import {
   StorageService,
 } from '../storage/storage.service';
 import { isUUID } from '../utils/ObjectUtils';
+import { computeEmbeddingConfigWarning } from './validation-warnings';
 
 /** Summary returned by {@link KnowledgeService.list}. */
 export interface DocumentSummary {
@@ -27,6 +37,34 @@ export interface DocumentSummary {
 /** Identifies which knowledge scope a {@link KnowledgeService} call targets. */
 export type KnowledgeScopeRef =
   { kind: 'role'; roleId: UUID } | { kind: 'company'; companyId: string };
+
+/** Indexing status of a single knowledge scope, returned by {@link KnowledgeService.status}. */
+export interface KnowledgeStatus {
+  /** Number of documents currently stored in the scope. */
+  documentCount: number;
+  /** Combined size in bytes of all documents in the scope. */
+  totalBytes: number;
+  /** Number of RAG chunks currently indexed for the scope. */
+  chunkCount: number;
+  /** Current {@link KnowledgeIndexState.generation} for the scope (0 if never bumped). */
+  generation: number;
+  /** ISO 8601 timestamp of the last *successful* rebuild, or `null` if none has completed. */
+  lastIndexedAt: string | null;
+  /** True if a rebuild job for the scope is currently queued or running. */
+  indexing: boolean;
+  /** Error message from the most recent failed rebuild, or `null` if the last rebuild succeeded (or none has run). */
+  lastError: string | null;
+  /** ISO 8601 timestamp {@link lastError} was recorded, or `null` if unset. */
+  lastErrorAt: string | null;
+}
+
+/** Indexing status for a whole company: its shared scope plus every role. */
+export interface CompanyKnowledgeStatus {
+  /** Status of the company's shared (`knowledge/shared/`) scope. */
+  shared: KnowledgeStatus;
+  /** Status of each role's scope. */
+  roles: { roleId: UUID; roleSlug: string; status: KnowledgeStatus }[];
+}
 
 /** A resolved knowledge scope, with the entities needed to address storage and RAG chunks. */
 interface ResolvedScope {
@@ -49,10 +87,16 @@ export class KnowledgeService {
   constructor(
     private readonly storage: StorageService,
     private readonly reindex: KnowledgeReindexService,
+    private readonly ragRetrieval: RagRetrievalService,
+    private readonly config: ConfigService,
     @InjectRepository(LcpRole)
     private readonly roleRepo: Repository<LcpRole>,
     @InjectRepository(LcpCompany)
     private readonly companyRepo: Repository<LcpCompany>,
+    @InjectRepository(KnowledgeChunk)
+    private readonly chunkRepo: Repository<KnowledgeChunk>,
+    @InjectRepository(KnowledgeIndexState)
+    private readonly stateRepo: Repository<KnowledgeIndexState>,
   ) {}
 
   /**
@@ -147,6 +191,121 @@ export class KnowledgeService {
   async reindexCompany(companyId: string): Promise<void> {
     const { company } = await this.resolveScope({ kind: 'company', companyId });
     await this.reindex.bumpCompany(company);
+  }
+
+  /**
+   * Runs a RAG similarity search for a role, exactly as prompt assembly
+   * would, without invoking any chat/LLM call — see
+   * {@link RagRetrievalService.retrieve} for the scoping and threshold rules.
+   *
+   * @throws {@link NotFoundException} when the role does not exist.
+   */
+  async queryRag(
+    roleId: UUID,
+    query: string,
+    topK?: number,
+    threshold?: number,
+  ): Promise<RagChunk[]> {
+    const { company } = await this.resolveScope({ kind: 'role', roleId });
+    return this.ragRetrieval.retrieve(
+      roleId,
+      company.id,
+      query,
+      resolveEmbeddingConfig(company, resolveEnvEmbeddingConfig(this.config)),
+      topK,
+      threshold,
+    );
+  }
+
+  /**
+   * Reports indexing status (document/chunk counts, size, generation, and
+   * whether a rebuild is in progress) for a single scope.
+   *
+   * @throws {@link NotFoundException} when the role/company does not exist.
+   */
+  async status(ref: KnowledgeScopeRef): Promise<KnowledgeStatus> {
+    const { company, role } = await this.resolveScope(ref);
+    return this.computeStatus(company, role);
+  }
+
+  /**
+   * Warnings for the `X-Lcp-Warnings` header on any knowledge endpoint
+   * touching this scope: whether RAG indexing is configured at all (company
+   * `embeddingConfig`, or the `EMBEDDING_*` env fallback), and whether the
+   * most recent rebuild failed (e.g. the embedding endpoint was
+   * unreachable) — both are otherwise invisible failure modes (see
+   * {@link KnowledgeReindexService.rebuild}).
+   *
+   * For a company-scoped ref, only the shared scope's own error is checked
+   * — an individual role's error is visible by scoping into that role, or
+   * via {@link statusForCompany}'s per-role breakdown.
+   *
+   * @throws {@link NotFoundException} when the role/company does not exist.
+   */
+  async embeddingWarnings(ref: KnowledgeScopeRef): Promise<string[]> {
+    const { company, role } = await this.resolveScope(ref);
+    const warnings = computeEmbeddingConfigWarning(
+      company,
+      resolveEnvEmbeddingConfig(this.config),
+    );
+    const state = await this.stateRepo.findOne({
+      where: { companyId: company.id, roleId: role?.id ?? IsNull() },
+    });
+    if (state?.lastError) {
+      const when = state.lastErrorAt
+        ? ` (${state.lastErrorAt.toISOString()})`
+        : '';
+      warnings.push(`Last reindex failed: ${state.lastError}${when}`);
+    }
+    return warnings;
+  }
+
+  /**
+   * Reports indexing status for every scope of a company: its shared scope
+   * plus each role.
+   *
+   * @throws {@link NotFoundException} when the company does not exist.
+   */
+  async statusForCompany(companyId: string): Promise<CompanyKnowledgeStatus> {
+    const { company } = await this.resolveScope({ kind: 'company', companyId });
+    const roles = await this.roleRepo.findBy({ companyId: company.id });
+    const shared = await this.computeStatus(company, null);
+    const roleStatuses = await Promise.all(
+      roles.map(async (role) => ({
+        roleId: role.id,
+        roleSlug: role.slug,
+        status: await this.computeStatus(company, role),
+      })),
+    );
+    return { shared, roles: roleStatuses };
+  }
+
+  /** Computes a {@link KnowledgeStatus} for an already-resolved company/role scope. */
+  private async computeStatus(
+    company: LcpCompany,
+    role: LcpRole | null,
+  ): Promise<KnowledgeStatus> {
+    const roleId = role?.id ?? null;
+    const [objects, chunkCount, state, indexing] = await Promise.all([
+      this.storage.listKnowledgeFiles(toStorageScope(company, role)),
+      this.chunkRepo.count({
+        where: { companyId: company.id, roleId: roleId ?? IsNull() },
+      }),
+      this.stateRepo.findOne({
+        where: { companyId: company.id, roleId: roleId ?? IsNull() },
+      }),
+      this.reindex.isRebuilding(company.id, roleId),
+    ]);
+    return {
+      documentCount: objects.length,
+      totalBytes: objects.reduce((sum, obj) => sum + obj.size, 0),
+      chunkCount,
+      generation: state?.generation ?? 0,
+      lastIndexedAt: state?.fingerprint ? state.updatedAt.toISOString() : null,
+      indexing,
+      lastError: state?.lastError ?? null,
+      lastErrorAt: state?.lastErrorAt?.toISOString() ?? null,
+    };
   }
 
   /** Resolves a {@link KnowledgeScopeRef} to its owning role (if any) and company. */

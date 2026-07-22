@@ -10,7 +10,7 @@ import {
 /**
  * A single chunk of text extracted from an OKF knowledge-base document and
  * stored for RAG retrieval. The corresponding embedding vector is stored
- * directly in PostgreSQL as a `vector(1536)` column (pgvector extension)
+ * directly in PostgreSQL as a `vector(768)` column (pgvector extension)
  * and is not mapped by TypeORM — all vector reads and writes use raw SQL.
  *
  * Chunks are scoped to a {@link LcpCompany}, and optionally to a
@@ -68,7 +68,7 @@ export class KnowledgeChunk {
   @CreateDateColumn()
   createdAt!: Date;
 
-  // NOTE: The `embedding vector(1536)` column exists in the database (added by migration
+  // NOTE: The `embedding vector(768)` column exists in the database (added by migration
   // AddKnowledgeChunkEmbedding) but is intentionally absent here. All vector operations
   // use DataSource.query() with explicit SQL so the pgvector type never touches the ORM.
 }

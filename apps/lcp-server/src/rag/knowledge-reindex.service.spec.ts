@@ -43,9 +43,18 @@ function makeObject(
 
 /** Builds a service with fully faked dependencies and a fake enqueue queue. */
 function makeService() {
+  // Key-aware (not a blanket mockReturnValue): resolveEnvEmbeddingConfig reads
+  // EMBEDDING_PROVIDER/EMBEDDING_MODEL via this same `get`, and a value truthy
+  // for every key would wrongly activate the env fallback in tests asserting
+  // "no embeddingConfig configured anywhere" behaviour. Kept as its own
+  // reference (rather than only reachable via the cast-to-ConfigService
+  // object below) so individual tests can override its behaviour.
+  const configGet = jest.fn((key: string): unknown =>
+    key === 'KNOWLEDGE_POLL_INTERVAL_MS' ? 60000 : undefined,
+  );
   const config = {
     getOrThrow: jest.fn().mockReturnValue('redis://localhost'),
-    get: jest.fn().mockReturnValue(60000),
+    get: configGet,
   } as unknown as ConfigService;
   const storage = {
     listKnowledgeFiles: jest.fn().mockResolvedValue([]),
@@ -82,7 +91,10 @@ function makeService() {
     roleRepo as never,
     dataSource,
   );
-  const queue = { add: jest.fn().mockResolvedValue(undefined) };
+  const queue = {
+    add: jest.fn().mockResolvedValue(undefined),
+    getJobs: jest.fn().mockResolvedValue([]),
+  };
   (service as unknown as { queue: typeof queue }).queue = queue;
 
   return {
@@ -95,6 +107,7 @@ function makeService() {
     roleRepo,
     dataSource,
     queue,
+    configGet,
   };
 }
 
@@ -180,6 +193,22 @@ describe('KnowledgeReindexService.rebuild', () => {
     expect(t.storage.listKnowledgeFiles).not.toHaveBeenCalled();
   });
 
+  it('falls through to the EMBEDDING_* env fallback when the company has no embeddingConfig', async () => {
+    const t = makeService();
+    t.companyRepo.findOneBy.mockResolvedValue(
+      makeCompany({ embeddingConfig: null }),
+    );
+    t.configGet.mockImplementation(
+      (key: string) =>
+        ({
+          EMBEDDING_PROVIDER: 'lm-studio',
+          EMBEDDING_MODEL: 'nomic-embed-text',
+        })[key],
+    );
+    await t.service.rebuild(job(1));
+    expect(t.storage.listKnowledgeFiles).toHaveBeenCalled();
+  });
+
   it('skips a stale job whose generation is behind the current one', async () => {
     const t = makeService();
     t.stateRepo.findOne.mockResolvedValue({ generation: 5 });
@@ -206,10 +235,52 @@ describe('KnowledgeReindexService.rebuild', () => {
       null,
       'acme/knowledge/shared/gone.md',
     );
-    expect(t.stateRepo.update).toHaveBeenCalledWith(
-      expect.objectContaining({ generation: 1 }),
-      { fingerprint: fingerprintListing(files) },
-    );
+    const [where, update] = t.stateRepo.update.mock.calls[0] as [
+      { generation: number },
+      {
+        fingerprint: string;
+        lastError: string | null;
+        lastErrorAt: () => string;
+      },
+    ];
+    expect(where.generation).toBe(1);
+    expect(update.fingerprint).toBe(fingerprintListing(files));
+    expect(update.lastError).toBeNull();
+    expect(update.lastErrorAt()).toBe('NULL');
+  });
+
+  it('records lastError and rethrows when embedding a file fails (e.g. embedding endpoint unreachable)', async () => {
+    const t = makeService();
+    t.storage.listKnowledgeFiles.mockResolvedValue([
+      makeObject('acme/knowledge/shared/a.md'),
+    ]);
+    const failure = new Error('connect ECONNREFUSED 127.0.0.1:1234');
+    t.ragIndex.ingestDocument.mockRejectedValue(failure);
+
+    await expect(t.service.rebuild(job(1))).rejects.toThrow(failure);
+
+    const [, update] = t.stateRepo.update.mock.calls[0] as [
+      unknown,
+      { lastError: string; lastErrorAt: Date },
+    ];
+    expect(update.lastError).toBe('connect ECONNREFUSED 127.0.0.1:1234');
+    expect(update.lastErrorAt).toBeInstanceOf(Date);
+  });
+
+  it('clears a previously recorded lastError on the next successful rebuild', async () => {
+    const t = makeService();
+    t.storage.listKnowledgeFiles.mockResolvedValue([]);
+
+    await t.service.rebuild(job(1));
+
+    const [, update] = t.stateRepo.update.mock.calls[0] as [
+      unknown,
+      { lastError: string | null; lastErrorAt: () => string },
+    ];
+    expect(update.lastError).toBeNull();
+    // Cleared via a raw SQL literal, not a literal `null` — see rebuild()'s
+    // comment on why (KnowledgeIndexState.lastErrorAt is Date | undefined).
+    expect(update.lastErrorAt()).toBe('NULL');
   });
 
   it('aborts and re-enqueues when the generation changes mid-rebuild', async () => {
@@ -234,6 +305,35 @@ describe('KnowledgeReindexService.rebuild', () => {
       expect.any(Object),
     );
     expect(t.stateRepo.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('KnowledgeReindexService.isRebuilding', () => {
+  it('is false when no matching job is queued', async () => {
+    const t = makeService();
+    t.queue.getJobs.mockResolvedValue([]);
+    expect(await t.service.isRebuilding(COMPANY_ID, null)).toBe(false);
+  });
+
+  it('is true when an active/waiting/delayed job matches the scope', async () => {
+    const t = makeService();
+    t.queue.getJobs.mockResolvedValue([
+      { data: { companyId: COMPANY_ID, roleId: ROLE_ID, generation: 1 } },
+    ]);
+    expect(await t.service.isRebuilding(COMPANY_ID, ROLE_ID)).toBe(true);
+    expect(t.queue.getJobs).toHaveBeenCalledWith([
+      'active',
+      'waiting',
+      'delayed',
+    ]);
+  });
+
+  it('ignores jobs for a different role within the same company', async () => {
+    const t = makeService();
+    t.queue.getJobs.mockResolvedValue([
+      { data: { companyId: COMPANY_ID, roleId: ROLE_ID, generation: 1 } },
+    ]);
+    expect(await t.service.isRebuilding(COMPANY_ID, null)).toBe(false);
   });
 });
 
@@ -281,5 +381,22 @@ describe('KnowledgeReindexService.poll', () => {
     ]);
     await t.service.poll();
     expect(t.storage.listKnowledgeFiles).not.toHaveBeenCalled();
+  });
+
+  it('does not skip a company with no embeddingConfig when the EMBEDDING_* env fallback is set', async () => {
+    const t = makeService();
+    t.companyRepo.find.mockResolvedValue([
+      makeCompany({ embeddingConfig: null }),
+    ]);
+    t.roleRepo.findBy.mockResolvedValue([]);
+    t.configGet.mockImplementation(
+      (key: string) =>
+        ({
+          EMBEDDING_PROVIDER: 'lm-studio',
+          EMBEDDING_MODEL: 'nomic-embed-text',
+        })[key],
+    );
+    await t.service.poll();
+    expect(t.storage.listKnowledgeFiles).toHaveBeenCalled();
   });
 });

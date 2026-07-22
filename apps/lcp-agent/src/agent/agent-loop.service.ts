@@ -29,6 +29,8 @@ import {
   renderSystemPrompt,
   renderTemplate,
   requiredToolForMode,
+  resolveEmbeddingConfig,
+  resolveEnvEmbeddingConfig,
   resolveEnvLlmConfig,
   resolveLlmConfig,
   resolveMcpServerList,
@@ -743,7 +745,10 @@ export class AgentLoopService {
           role.id,
           company.id,
           initialPrompt,
-          company.embeddingConfig,
+          resolveEmbeddingConfig(
+            company,
+            resolveEnvEmbeddingConfig(this.config),
+          ),
         )
       : [];
     const ragMessage = ragChunks.length

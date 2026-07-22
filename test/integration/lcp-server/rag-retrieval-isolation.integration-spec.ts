@@ -54,7 +54,7 @@ describe('RagRetrievalService scoped-retrieval isolation (integration)', () => {
     await ds.initialize();
     await ds.query(`CREATE EXTENSION IF NOT EXISTS vector`);
     await ds.query(
-      `ALTER TABLE "knowledge_chunk" ADD COLUMN IF NOT EXISTS embedding vector(1536)`,
+      `ALTER TABLE "knowledge_chunk" ADD COLUMN IF NOT EXISTS embedding vector(768)`,
     );
 
     companyRepo = ds.getRepository(LcpCompany);
@@ -140,14 +140,21 @@ describe('RagRetrievalService scoped-retrieval isolation (integration)', () => {
   }, 30_000);
 
   it("returns role A's own chunks and company A's shared chunks, never company B's", async () => {
-    // threshold 0 — this proves scoping, not similarity ranking.
+    // stub-llm embeddings are deterministic-but-not-semantic (see
+    // apps/lcp-stub-llm/src/embeddings.ts), so cosine similarity between two
+    // genuinely different strings is essentially random noise centred on 0
+    // — a threshold of 0 is a coin flip, not a floor. -1 (the true cosine
+    // floor) is what actually guarantees every scoped-in chunk passes,
+    // proving scoping, not similarity ranking (matches the convention
+    // already used in knowledge-rag-roundtrip.e2e-spec.ts and
+    // knowledge.e2e-spec.ts's query tests).
     const results = await retrieval.retrieve(
       roleA.id,
       companyA.id,
       'isolation test',
       embeddingConfig,
       10,
-      0,
+      -1,
     );
 
     const paths = results.map((r) => r.documentPath);
@@ -161,13 +168,14 @@ describe('RagRetrievalService scoped-retrieval isolation (integration)', () => {
   });
 
   it("never returns role A's or company A's chunks when scoped to role B", async () => {
+    // -1 (the true cosine floor) — see the previous test's comment.
     const results = await retrieval.retrieve(
       roleB.id,
       companyB.id,
       'isolation test',
       embeddingConfig,
       10,
-      0,
+      -1,
     );
 
     const paths = results.map((r) => r.documentPath);

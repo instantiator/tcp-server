@@ -42,4 +42,10 @@ export const configSchema = Joi.object({
   LLM_CONTEXT_WINDOW: Joi.number().integer().positive().empty('').optional(),
   /** Overrides {@link DEFAULT_LLM_TIMEOUT_MS} when set. */
   LLM_TIMEOUT_MS: Joi.number().integer().positive().empty('').optional(),
+  // Environment-level embedding fallback — used when a company has no embeddingConfig.
+  // Both EMBEDDING_PROVIDER and EMBEDDING_MODEL must be present to activate the fallback.
+  EMBEDDING_PROVIDER: Joi.string().empty('').optional(),
+  EMBEDDING_MODEL: Joi.string().empty('').optional(),
+  EMBEDDING_BASE_URL: Joi.string().uri().empty('').optional(),
+  EMBEDDING_API_KEY: Joi.string().empty('').optional(),
 });
