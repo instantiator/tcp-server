@@ -81,14 +81,14 @@ services:
       ZITADEL_MASTERKEY: ${ZITADEL_MASTERKEY}
       ZITADEL_EXTERNALDOMAIN: localhost
       ZITADEL_EXTERNALPORT: 8080
-      ZITADEL_EXTERNALSECURE: 'false'
+      ZITADEL_EXTERNALSECURE: "false"
       # The `zitadel ready` healthcheck below is a separate process invocation
       # that doesn't see the `--tlsMode disabled` start-from-init flag above —
       # it reads this env var independently to decide HTTP vs HTTPS for its
       # own self-check, and defaults to HTTPS (failing against our plain-HTTP
       # server) without it.
-      ZITADEL_TLS_ENABLED: 'false'
-      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: 'false'
+      ZITADEL_TLS_ENABLED: "false"
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "false"
       ZITADEL_FIRSTINSTANCE_ORG_NAME: lcp
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: admin
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${ZITADEL_ADMIN_PASSWORD}
@@ -98,7 +98,7 @@ services:
       # obtain an admin session token the way kcadm.sh does for Keycloak.
       ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: lcp-bootstrap
       ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: LCP Bootstrap
-      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: '2100-01-01T00:00:00Z'
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2100-01-01T00:00:00Z"
       ZITADEL_FIRSTINSTANCE_PATPATH: /machinekey/pat.txt
     volumes:
       # Bind mount (not a named volume): the zitadel process runs as uid 1000
@@ -147,16 +147,16 @@ services:
       DATABASE_URL: postgres://lcp:${POSTGRES_PASSWORD}@postgres:5432/lcp
       REDIS_URL: redis://redis:6379
       MINIO_ENDPOINT: http://minio:9000
+      MCP_STORAGE_URL: http://lcp-mcp-storage:3010
+      MCP_MEMORY_URL: http://lcp-mcp-memory:3011
+      MCP_INTERACTIONS_URL: http://lcp-mcp-interactions:3012
+      MCP_TASKS_URL: http://lcp-mcp-tasks:3013
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       OIDC_ISSUER_URL: http://localhost:8080
       OIDC_INTERNAL_ISSUER_URL: http://zitadel:8080
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
-      MCP_STORAGE_URL: http://lcp-mcp-storage:3010
-      MCP_MEMORY_URL: http://lcp-mcp-memory:3011
-      MCP_INTERACTIONS_URL: http://lcp-mcp-interactions:3012
-      MCP_TASKS_URL: http://lcp-mcp-tasks:3013
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
@@ -204,13 +204,13 @@ services:
       DATABASE_URL: postgres://lcp:${POSTGRES_PASSWORD}@postgres:5432/lcp
       REDIS_URL: redis://redis:6379
       MINIO_ENDPOINT: http://minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MCP_STORAGE_URL: http://lcp-mcp-storage:3010
       MCP_MEMORY_URL: http://lcp-mcp-memory:3011
       MCP_INTERACTIONS_URL: http://lcp-mcp-interactions:3012
       MCP_TASKS_URL: http://lcp-mcp-tasks:3013
       LCP_SERVER_URL: http://lcp-server:3000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}

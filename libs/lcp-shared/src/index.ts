@@ -15,6 +15,7 @@ export * from './config/resolve-run-config';
 export * from './config/precedence-resolver';
 export * from './config/resolve-llm-config';
 export * from './config/resolve-embedding-config';
+export * from './config/resolve-embedding-dimension';
 export * from './config/resolve-system-prompt-template';
 export * from './events/wire-events';
 export * from './models';

@@ -5,6 +5,9 @@ rules:
   # false positives. Kept as a warning (not off) so genuinely hallucinated
   # imports remain visible.
   ai-slop/hallucinated-import: warning
+  # The setup wizard generates local dev env files with well-known placeholder
+  # credentials (dev-password, etc.) — these are not real secrets.
+  security/hardcoded-secret: warning
 
 ci:
   # Current score is 55; ratchet this up as the remaining warnings

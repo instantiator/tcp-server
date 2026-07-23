@@ -33,7 +33,9 @@
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d apps/lcp-server/src/data-source.ts",
     "migration:run": "typeorm-ts-node-commonjs migration:run -d apps/lcp-server/src/data-source.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d apps/lcp-server/src/data-source.ts",
-    "hooks:install": "cp scripts/hooks/pre-commit scripts/hooks/pre-push .git/hooks/ && chmod +x .git/hooks/pre-commit .git/hooks/pre-push && echo 'Git hooks installed.'"
+    "hooks:install": "cp scripts/hooks/pre-commit scripts/hooks/pre-push .git/hooks/ && chmod +x .git/hooks/pre-commit .git/hooks/pre-push && echo 'Git hooks installed.'",
+    "setup": "tsx scripts/setup-wizard/index.ts",
+    "setup:build": "tsc -p scripts/setup-wizard/tsconfig.json"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1090.0",
@@ -63,6 +65,7 @@
     "commander": "^15.0.0",
     "csv-parse": "^7.0.1",
     "fast-xml-parser": "^5.10.1",
+    "inquirer": "^14.0.2",
     "ioredis": "^5.11.1",
     "joi": "^18.2.3",
     "js-tiktoken": "^1.0.21",
@@ -94,6 +97,7 @@
     "@nestjs/testing": "^11.1.28",
     "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.0",
+    "@types/inquirer": "^9.0.10",
     "@types/jest": "^30.0.0",
     "@types/multer": "^2.2.0",
     "@types/node": "^26.1.1",
