@@ -48,4 +48,6 @@ export const configSchema = Joi.object({
   EMBEDDING_MODEL: Joi.string().empty('').optional(),
   EMBEDDING_BASE_URL: Joi.string().uri().empty('').optional(),
   EMBEDDING_API_KEY: Joi.string().empty('').optional(),
+  // Vector column width for embeddings. Changing this requires a database migration.
+  EMBEDDING_DIMENSION: Joi.number().integer().min(1).default(768),
 });

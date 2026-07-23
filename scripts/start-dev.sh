@@ -19,8 +19,11 @@ Credentials for the Zitadel org and test users are read from the env file
 
 Environment file precedence (first match wins):
   1. --env <path>      if provided
-  2. .env              if present in the repo root
+  2. .env.dev          if present in the repo root
   3. .env.testing      fallback (always present, safe test credentials)
+
+.env.defaults is always loaded as a fallback after the primary env file,
+providing default values for optional environment variables.
 
 Options:
   -e, --env <path>   Environment file to use
@@ -43,18 +46,25 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Resolve env file (cascade: .env → .env.testing)
-if [[ -z "$ENV_FILE" ]]; then
-  if [[ -f "$REPO_ROOT/.env" ]]; then
-    ENV_FILE="$REPO_ROOT/.env"
-  else
-    ENV_FILE="$REPO_ROOT/.env.testing"
-  fi
+# Resolve env file (cascade: .env.dev → .env.testing)
+PRIMARY_ENV=""
+if [[ -n "$ENV_FILE" ]]; then
+  PRIMARY_ENV="$ENV_FILE"
+elif [[ -f "$REPO_ROOT/.env.dev" ]]; then
+  PRIMARY_ENV="$REPO_ROOT/.env.dev"
+else
+  PRIMARY_ENV="$REPO_ROOT/.env.testing"
 fi
 
-[[ -f "$ENV_FILE" ]] || { echo "ERROR: env file not found: $ENV_FILE" >&2; exit 1; }
+[[ -f "$PRIMARY_ENV" ]] || { echo "ERROR: env file not found: $PRIMARY_ENV" >&2; exit 1; }
 
-ARGS=(--project lcp-dev --env-file "$ENV_FILE")
+# Build env file list with defaults as fallback
+ENV_FILE_LIST="$PRIMARY_ENV"
+if [[ -f "$REPO_ROOT/.env.defaults" ]]; then
+  ENV_FILE_LIST="$PRIMARY_ENV,$REPO_ROOT/.env.defaults"
+fi
+
+ARGS=(--project lcp-dev --env-files "$ENV_FILE_LIST")
 [[ "$REBUILD" == true ]] && ARGS+=(--rebuild)
 
 exec "$REPO_ROOT/scripts/start-deployment.sh" "${ARGS[@]}"

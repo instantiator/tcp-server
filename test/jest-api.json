@@ -1,6 +1,9 @@
 {
   "verbose": true,
   "rootDir": "..",
+  "setupFiles": [
+    "<rootDir>/test/api/api-setup.ts"
+  ],
   "testMatch": [
     "<rootDir>/test/api/*.spec.ts"
   ],

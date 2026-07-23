@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") --project <name> --env-file <path> [--rebuild] [-h|--help]
+Usage: $(basename "$0") --project <name> (--env-file <path> | --env-files <f1,f2,...>) [--rebuild] [-h|--help]
 
 Start the LCP Docker Compose stack and configure it for use.
 
@@ -25,10 +25,15 @@ rebootstrapped Zitadel, or a swapped env file, otherwise leaves a stale
 secret that fails auth with an opaque 'invalid_client').
 
 Options:
-  --project <name>    Docker Compose project name (required)
-  --env-file <path>   Path to the env file (required)
-  --rebuild           Force a Docker image rebuild before starting
-  -h, --help          Show this help message and exit
+  --project <name>        Docker Compose project name (required)
+  --env-file <path>       Path to the env file (required, single file)
+  --env-files <f1,f2,...> Comma-separated env files in precedence order (first wins)
+  --rebuild               Force a Docker image rebuild before starting
+  -h, --help              Show this help message and exit
+
+Env file precedence (when using --env-files):
+  Files are loaded in order; first value wins. Example:
+    --env-files .env.dev,.env.defaults
 
 Zitadel setup reads from the env file:
   ZITADEL_ADMIN_PASSWORD   Org admin (human) password (presence enables auth profile)
@@ -39,6 +44,7 @@ EOF
 
 PROJECT=""
 ENV_FILE=""
+ENV_FILES=""
 REBUILD=false
 
 while [[ $# -gt 0 ]]; do
@@ -49,6 +55,9 @@ while [[ $# -gt 0 ]]; do
     --env-file)
       [[ -n "${2:-}" ]] || { echo "ERROR: --env-file requires a path" >&2; exit 1; }
       ENV_FILE="$2"; shift 2 ;;
+    --env-files)
+      [[ -n "${2:-}" ]] || { echo "ERROR: --env-files requires a comma-separated list" >&2; exit 1; }
+      ENV_FILES="$2"; shift 2 ;;
     --rebuild) REBUILD=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
@@ -56,16 +65,34 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$PROJECT" ]]  || { echo "ERROR: --project is required" >&2; usage >&2; exit 1; }
-[[ -n "$ENV_FILE" ]] || { echo "ERROR: --env-file is required" >&2; usage >&2; exit 1; }
-[[ -f "$ENV_FILE" ]] || { echo "ERROR: env file not found: $ENV_FILE" >&2; exit 1; }
+[[ -n "$ENV_FILE" || -n "$ENV_FILES" ]] || { echo "ERROR: --env-file or --env-files is required" >&2; usage >&2; exit 1; }
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-echo "Using: $ENV_FILE"
-set -a
-# shellcheck disable=SC1090 # env file path is only known at runtime
-source "$ENV_FILE"
-set +a
+# shellcheck source=scripts/lib/load-env.sh
+# shellcheck disable=SC1091 # source path resolved at runtime
+source "$REPO_ROOT/scripts/lib/load-env.sh"
+
+if [[ -n "$ENV_FILES" ]]; then
+  # Convert comma-separated list to array, validate files exist
+  IFS=',' read -ra ENV_FILES_ARRAY <<< "$ENV_FILES"
+  for f in "${ENV_FILES_ARRAY[@]}"; do
+    [[ -f "$f" ]] || { echo "ERROR: env file not found: $f" >&2; exit 1; }
+  done
+  echo "Loading env files (precedence order): ${ENV_FILES_ARRAY[*]}"
+  set -a
+  load_env_files "${ENV_FILES_ARRAY[@]}"
+  set +a
+  # Use the first file for Zitadel setup writes
+  ENV_FILE="${ENV_FILES_ARRAY[0]}"
+else
+  [[ -f "$ENV_FILE" ]] || { echo "ERROR: env file not found: $ENV_FILE" >&2; exit 1; }
+  echo "Using: $ENV_FILE"
+  set -a
+  # shellcheck disable=SC1090 # env file path is only known at runtime
+  source "$ENV_FILE"
+  set +a
+fi
 
 # Pre-flight: verify all required variables are non-empty.
 REQUIRED_VARS=(
