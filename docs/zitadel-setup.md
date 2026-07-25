@@ -42,12 +42,14 @@ ACCESS_TOKEN_TYPE_JWT`, used by the `api` test tier via the `client_credentials`
 3. Unlike Keycloak, Zitadel generates client secrets server-side — they can't be
    pre-set, and can only be read at generation time. So on **every** run the script
    (re)generates the `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` (for the `lcp-server` app) and
-   `TEST_CLIENT_ID`/`TEST_CLIENT_SECRET` (for the `test-machine` user) and writes them back
-   into the env file in place, before starting lcp-server and its dependents.
-   Regenerating every run — rather than trusting whatever's in the file — is what keeps the
-   env file and Zitadel from silently drifting apart: a wiped-and-rebootstrapped Zitadel (or
-   an env file bootstrapped against a different instance) otherwise leaves a stale secret
-   that fails auth with an opaque `invalid_client`.
+   `TEST_CLIENT_ID`/`TEST_CLIENT_SECRET` (for the `test-machine` user) and writes them to the
+   gitignored `<env-file>.local` override (e.g. `.env.testing.local`) — never the committed
+   base file — before starting lcp-server and its dependents. Regenerating every run —
+   rather than trusting whatever's in the file — is what keeps the credentials and Zitadel
+   from silently drifting apart: a wiped-and-rebootstrapped Zitadel (or an env file
+   bootstrapped against a different instance) otherwise leaves a stale secret that fails auth
+   with an opaque `invalid_client`. See [ADR-018 §7](ADRs/ADR-018-system-configuration-setup-wizard.md)
+   for the committed-vs-`.local` split.
 
 Setting `accessTokenType` explicitly on both the app and the machine user matters:
 Zitadel issues opaque/JWE-encrypted access tokens by default, which lcp-server's
@@ -78,13 +80,21 @@ this.
 
 ## Connecting an external IdP
 
-To replace Zitadel with Auth0, Okta, or another OIDC provider, set these env vars:
+To replace Zitadel with Auth0, Okta, or another OIDC provider, set the issuer URL
+in your committed env file and put the provider-issued client credentials in the
+gitignored `<env-file>.local` override (do not commit them):
 
-```
+```bash
+# .env.<instance>            (committed)
 OIDC_ISSUER_URL=https://your-idp.example.com/
+
+# .env.<instance>.local      (gitignored)
 OIDC_CLIENT_ID=lcp-server
 OIDC_CLIENT_SECRET=<your-client-secret>
 ```
+
+Run without `ZITADEL_ADMIN_PASSWORD` set so no local Zitadel is bootstrapped; the
+deployment then requires `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` to be present.
 
 lcp-server discovers the JWKS endpoint via the provider's discovery document
 (`{OIDC_ISSUER_URL}/.well-known/openid-configuration`), reading its `jwks_uri` field —

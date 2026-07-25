@@ -89,13 +89,25 @@ export LCP_TOKEN=$(./lcp-cli.sh get-token)
 
 ### 0.4 Set up your environment config
 
-Create a `.env` file for your setup. The easiest way to do this is to copy `.env.testing`
+The easiest way is the setup wizard, which writes a `.env.<instance>` file (and a
+gitignored `.env.<instance>.local` for secrets) with commented guidance:
 
 ```bash
-cp .env.testing .env
+npm run setup
 ```
 
-You can use this to modify default configuration - most of it is sufficient for a dev or testing environment.
+Or, for a quick start, copy the committed test config to the dev env file that
+`start-dev.sh` uses:
+
+```bash
+cp .env.testing .env.dev
+```
+
+Most of the defaults are sufficient for a dev or testing environment. You don't
+set the OIDC/test client credentials by hand: when you start the stack,
+`start-dev.sh` bootstraps Zitadel and writes the generated
+`OIDC_CLIENT_ID/SECRET` and `TEST_CLIENT_ID/SECRET` to the gitignored
+`<env-file>.local` override (e.g. `.env.dev.local`) — never the committed file.
 
 ### 0.5 Set LLM configuration
 

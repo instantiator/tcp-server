@@ -1,4 +1,5 @@
 import * as Joi from 'joi';
+import { DEFAULT_EMBEDDING_DIMENSION } from '@lcp/shared/config/defaults';
 
 /**
  * Joi validation schema for lcp-agent environment variables.
@@ -41,4 +42,9 @@ export const configSchema = Joi.object({
   EMBEDDING_MODEL: Joi.string().empty('').optional(),
   EMBEDDING_BASE_URL: Joi.string().uri().empty('').optional(),
   EMBEDDING_API_KEY: Joi.string().empty('').optional(),
+  // Vector column width for embeddings. Changing this requires a database migration.
+  EMBEDDING_DIMENSION: Joi.number()
+    .integer()
+    .min(1)
+    .default(DEFAULT_EMBEDDING_DIMENSION),
 });

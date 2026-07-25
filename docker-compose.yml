@@ -1,18 +1,31 @@
+# ── Shared environment blocks (YAML anchors) ────────────────────────────────
+# Internal URLs are Docker-network only — never exposed to the host.
+x-internal-urls: &internal-urls
+  DATABASE_URL: postgres://${DB_USER:-lcp}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-lcp}
+  REDIS_URL: redis://redis:6379
+  MINIO_ENDPOINT: http://minio:9000
+  MCP_STORAGE_URL: http://lcp-mcp-storage:3010
+  MCP_MEMORY_URL: http://lcp-mcp-memory:3011
+  MCP_INTERACTIONS_URL: http://lcp-mcp-interactions:3012
+  MCP_TASKS_URL: http://lcp-mcp-tasks:3013
+  LCP_SERVER_URL: http://lcp-server:3000
+  OIDC_INTERNAL_ISSUER_URL: http://zitadel:8080
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
-      POSTGRES_USER: lcp
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: lcp
+      POSTGRES_USER: ${DB_USER:-lcp}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-lcp}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
     ports:
-      - "5432:5432"
+      - "${EXPOSE_PORT_DB:-5432}:5432"
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "lcp"]
+      test: ["CMD", "pg_isready", "-U", "${DB_USER:-lcp}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -23,8 +36,7 @@ services:
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
-    ports:
-      - "6379:6379"
+    # Redis is internal-only — not exposed to the host.
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -34,15 +46,15 @@ services:
   minio:
     image: minio/minio:latest
     restart: unless-stopped
-    command: server /data --console-address ":9001"
+    command: server /data --console-address ":${EXPOSE_PORT_MINIO_CONSOLE:-9001}"
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
     volumes:
       - minio_data:/data
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${EXPOSE_PORT_MINIO:-9000}:9000"
+      - "${EXPOSE_PORT_MINIO_CONSOLE:-9001}:9001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
@@ -55,8 +67,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     profiles: [integration]
-    ports:
-      - "3002:3002"
+    # Internal-only by default (see docker-compose.dev-ports.yml to publish).
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3002/health || exit 1"]
       interval: 5s
@@ -73,22 +84,22 @@ services:
       ZITADEL_DATABASE_POSTGRES_PORT: 5432
       ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
       ZITADEL_DATABASE_POSTGRES_USER_USERNAME: lcp
-      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ${POSTGRES_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ${DB_PASSWORD}
       ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
-      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: lcp
-      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${POSTGRES_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: ${DB_USER:-lcp}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${DB_PASSWORD}
       ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
       ZITADEL_MASTERKEY: ${ZITADEL_MASTERKEY}
       ZITADEL_EXTERNALDOMAIN: localhost
       ZITADEL_EXTERNALPORT: 8080
-      ZITADEL_EXTERNALSECURE: 'false'
+      ZITADEL_EXTERNALSECURE: "false"
       # The `zitadel ready` healthcheck below is a separate process invocation
       # that doesn't see the `--tlsMode disabled` start-from-init flag above —
       # it reads this env var independently to decide HTTP vs HTTPS for its
       # own self-check, and defaults to HTTPS (failing against our plain-HTTP
       # server) without it.
-      ZITADEL_TLS_ENABLED: 'false'
-      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: 'false'
+      ZITADEL_TLS_ENABLED: "false"
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "false"
       ZITADEL_FIRSTINSTANCE_ORG_NAME: lcp
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: admin
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${ZITADEL_ADMIN_PASSWORD}
@@ -98,7 +109,7 @@ services:
       # obtain an admin session token the way kcadm.sh does for Keycloak.
       ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: lcp-bootstrap
       ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: LCP Bootstrap
-      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: '2100-01-01T00:00:00Z'
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2100-01-01T00:00:00Z"
       ZITADEL_FIRSTINSTANCE_PATPATH: /machinekey/pat.txt
     volumes:
       # Bind mount (not a named volume): the zitadel process runs as uid 1000
@@ -126,7 +137,7 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "8080:8080"
+      - "${EXPOSE_PORT_ZITADEL:-8080}:8080"
     healthcheck:
       # No shell or curl in this image (single static Go binary) — use the
       # CLI's own readiness subcommand instead of a curl/wget healthcheck.
@@ -144,19 +155,14 @@ services:
     image: lcp-server:latest
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://lcp:${POSTGRES_PASSWORD}@postgres:5432/lcp
-      REDIS_URL: redis://redis:6379
-      MINIO_ENDPOINT: http://minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      OIDC_ISSUER_URL: http://localhost:8080
-      OIDC_INTERNAL_ISSUER_URL: http://zitadel:8080
+      <<: *internal-urls
+      # External-facing issuer (the `iss` claim tokens carry, validated literally);
+      # OIDC_INTERNAL_ISSUER_URL (from *internal-urls) is used for the in-cluster
+      # JWKS fetch. Explicit value wins, else derive from the Zitadel host port —
+      # mirrors scripts/lib/derive-urls.sh.
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-http://localhost:${EXPOSE_PORT_ZITADEL:-8080}}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
-      MCP_STORAGE_URL: http://lcp-mcp-storage:3010
-      MCP_MEMORY_URL: http://lcp-mcp-memory:3011
-      MCP_INTERACTIONS_URL: http://lcp-mcp-interactions:3012
-      MCP_TASKS_URL: http://lcp-mcp-tasks:3013
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
@@ -167,6 +173,8 @@ services:
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
       EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
     depends_on:
       postgres:
@@ -185,7 +193,7 @@ services:
         condition: service_healthy
         required: false
     ports:
-      - "3000:3000"
+      - "${EXPOSE_PORT_API:-3000}:3000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       start_period: 120s
@@ -201,16 +209,11 @@ services:
     image: lcp-agent:latest
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://lcp:${POSTGRES_PASSWORD}@postgres:5432/lcp
-      REDIS_URL: redis://redis:6379
-      MINIO_ENDPOINT: http://minio:9000
+      <<: *internal-urls
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MCP_STORAGE_URL: http://lcp-mcp-storage:3010
-      MCP_MEMORY_URL: http://lcp-mcp-memory:3011
-      MCP_INTERACTIONS_URL: http://lcp-mcp-interactions:3012
-      MCP_TASKS_URL: http://lcp-mcp-tasks:3013
-      LCP_SERVER_URL: http://lcp-server:3000
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
@@ -227,8 +230,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    ports:
-      - "3001:3001"
+    # lcp-agent is a worker — internal-only, not exposed to the host. Its health
+    # endpoint is reached container-internally by the healthcheck below. (A host
+    # publish here would also collide with lcp-server whenever EXPOSE_PORT_API is
+    # set to 3001, as the testing env does.)
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
       interval: 15s
@@ -243,13 +248,12 @@ services:
     image: lcp-mcp-storage:latest
     restart: unless-stopped
     environment:
-      LCP_SERVER_URL: http://lcp-server:3000
+      <<: *internal-urls
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
     depends_on:
       lcp-server:
         condition: service_healthy
-    ports:
-      - "3010:3010"
+    # Internal-only by default (see docker-compose.dev-ports.yml to publish).
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3010/health"]
       interval: 15s
@@ -264,18 +268,16 @@ services:
     image: lcp-mcp-memory:latest
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://lcp:${POSTGRES_PASSWORD}@postgres:5432/lcp
-      LCP_SERVER_URL: http://lcp-server:3000
-      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      <<: *internal-urls
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
       EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
-    ports:
-      - "3011:3011"
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy
+    # Internal-only by default (see docker-compose.dev-ports.yml to publish).
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3011/health"]
       interval: 15s
@@ -290,13 +292,12 @@ services:
     image: lcp-mcp-interactions:latest
     restart: unless-stopped
     environment:
-      LCP_SERVER_URL: http://lcp-server:3000
+      <<: *internal-urls
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
     depends_on:
       lcp-server:
         condition: service_healthy
-    ports:
-      - "3012:3012"
+    # Internal-only by default (see docker-compose.dev-ports.yml to publish).
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3012/health"]
       interval: 15s
@@ -311,13 +312,12 @@ services:
     image: lcp-mcp-tasks:latest
     restart: unless-stopped
     environment:
-      LCP_SERVER_URL: http://lcp-server:3000
+      <<: *internal-urls
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
     depends_on:
       lcp-server:
         condition: service_healthy
-    ports:
-      - "3013:3013"
+    # Internal-only by default (see docker-compose.dev-ports.yml to publish).
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3013/health"]
       interval: 15s

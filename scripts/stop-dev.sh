@@ -15,7 +15,7 @@ which resets all databases and Zitadel configuration.
 
 Environment file precedence (first match wins):
   1. --env <path>      if provided
-  2. .env              if present in the repo root
+  2. .env.dev          if present in the repo root
   3. .env.testing      fallback (always present, safe test credentials)
 
 Options:
@@ -44,8 +44,8 @@ done
 # Resolve env file
 
 if [[ -z "$ENV_FILE" ]]; then
-  if [[ -f "$REPO_ROOT/.env" ]]; then
-    ENV_FILE="$REPO_ROOT/.env"
+  if [[ -f "$REPO_ROOT/.env.dev" ]]; then
+    ENV_FILE="$REPO_ROOT/.env.dev"
   else
     ENV_FILE="$REPO_ROOT/.env.testing"
   fi

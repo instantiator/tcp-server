@@ -52,7 +52,11 @@ describe('lcp-cli API flows', () => {
 
     beforeAll(async () => {
       const token = await ApiHelper.getMachineToken();
+      expect(token).not.toBeUndefined();
+      expect(token).not.toBeNull();
+      expect(token).not.toHaveLength(0);
       api = new ApiHelper(token!);
+      expect(api).not.toBeUndefined();
     });
 
     describe('POST /api/company', () => {

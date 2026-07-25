@@ -333,8 +333,17 @@ export class ApiHelper {
     });
     const data =
       res.status === 204 ? null : ((await res.json()) as ResponseType);
-    if (expectedStatus) {
-      expect(res.status).toBe(expectedStatus);
+
+    if (expectedStatus && res.status !== expectedStatus) {
+      const text = await res.text();
+      const headers = res.headers.entries
+        ? Array.from(res.headers.entries())
+            .map(([k, v]) => `${k}: ${v}`)
+            .join('\n')
+        : undefined;
+      const status = `Expected: ${expectedStatus}, Received: ${res.status} (${res.statusText})`;
+      const parts = [status, headers, text].filter(Boolean);
+      throw new Error(parts.join('\n\n'));
     }
     return { status: res.status, data };
   }

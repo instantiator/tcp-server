@@ -37,8 +37,9 @@ source "$SCRIPTS/lib/check-no-lcp-running.sh"
 
 # Pre-flight: bail if any lcp-* containers are already running. Beyond the
 # resource contention the sourced check itself guards against, the api/smoke
-# step below starts the full deployment on fixed host ports (3000, 8080, ...)
-# that a running lcp-dev would collide with outright.
+# step below starts the full deployment on the .env.testing host ports
+# (EXPOSE_PORT_API defaults to 3001, plus 8080, ...) that a running lcp-dev
+# would collide with outright.
 check_no_lcp_containers_running || exit 1
 
 DEPLOYMENT_PROJECT=lcp-all
@@ -109,13 +110,22 @@ step "Docker prune (post-e2e)"
 docker system prune -f
 echo
 
+# The deployment publishes lcp-server on EXPOSE_PORT_API from .env.testing
+# (testing defaults to 3001 to avoid colliding with a dev stack on 3000). The
+# api and smoke tiers must target that same host port, not a hardcoded one.
+EXPOSE_PORT_API="$(grep -E '^EXPOSE_PORT_API=' "$REPO_ROOT/.env.testing" | tail -1 | cut -d= -f2)"
+API_BASE_URL="http://localhost:${EXPOSE_PORT_API:-3000}"
+
 # Start the full stack (including Zitadel) only now, for API and smoke tests.
 step "Starting deployment for API + smoke tests"
 DEPLOYMENT_STARTED=true
+# --dev-ports: the smoke tier (test/smoke/smoke.spec.ts) hits the MCP servers
+# directly on their host ports, so they must be published for this run.
 "$SCRIPTS/start-deployment.sh" \
   --project "$DEPLOYMENT_PROJECT" \
   --env-file "$REPO_ROOT/.env.testing" \
-  --rebuild
+  --rebuild \
+  --dev-ports
 echo
 
 step "API tests"
@@ -123,11 +133,11 @@ step "API tests"
 # deployment was bootstrapped with (start-deployment.sh wrote a fresh
 # TEST_CLIENT_ID/SECRET into it) — not run-api-tests.sh's default, which would
 # prefer a stale .env if one happens to be present in the repo root.
-"$SCRIPTS/run-api-tests.sh" --base-url http://localhost:3000 --env-file "$REPO_ROOT/.env.testing"
+"$SCRIPTS/run-api-tests.sh" --base-url "$API_BASE_URL" --env-file "$REPO_ROOT/.env.testing"
 echo
 
 step "Smoke tests"
-"$SCRIPTS/run-smoke-tests.sh" --base-url http://localhost:3000
+"$SCRIPTS/run-smoke-tests.sh" --base-url "$API_BASE_URL"
 echo
 
 echo "All steps passed."

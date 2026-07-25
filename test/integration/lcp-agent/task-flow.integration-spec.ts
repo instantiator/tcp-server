@@ -15,7 +15,7 @@ import { INestApplication } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import axios from 'axios';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { z } from 'zod';
 import { AgentLoopService } from '../../../apps/lcp-agent/src/agent/agent-loop.service';
 import { AppModule as LcpAgentAppModule } from '../../../apps/lcp-agent/src/app.module';
@@ -53,6 +53,17 @@ describe('Task/assignment flow via the agent loop (stub LLM)', () => {
 
   let companyId: UUID;
   let roleId: UUID;
+
+  // This is the only integration spec that boots lcp-server's real AppModule,
+  // which runs migrations on startup (migrationsRun: true). The other specs
+  // build their schema with `synchronize: true` on the shared tier database,
+  // producing TypeORM's auto-generated constraint names rather than the
+  // hand-named ones the migrations expect — so running migrations against that
+  // shared, synchronize-built schema fails (e.g. dropping a constraint the
+  // migration expects but synchronize never created). To stay order-independent
+  // of those specs, this spec migrates its own throwaway database instead.
+  let originalDatabaseUrl: string;
+  let isolatedDbName: string;
 
   /** Polls `check` until it returns a truthy value, or throws after `timeoutMs`. */
   async function waitFor<T>(
@@ -131,10 +142,46 @@ describe('Task/assignment flow via the agent loop (stub LLM)', () => {
     });
   }
 
+  /**
+   * Runs `sql` against the tier's shared database (the one in the ambient
+   * `DATABASE_URL`), used to create and drop this spec's throwaway database —
+   * `CREATE`/`DROP DATABASE` cannot run inside the target database itself.
+   */
+  async function withAdminConnection(
+    databaseUrl: string,
+    sql: string,
+  ): Promise<void> {
+    const admin = new DataSource({ type: 'postgres', url: databaseUrl });
+    await admin.initialize();
+    try {
+      await admin.query(sql);
+    } finally {
+      await admin.destroy();
+    }
+  }
+
   beforeAll(async () => {
     const port = await getFreePort();
     lcpServerUrl = `http://127.0.0.1:${port}`;
     process.env.LCP_SERVER_URL = lcpServerUrl;
+
+    // Point both AppModules at a freshly-created, empty database so lcp-server's
+    // startup migrations run against a clean schema (see the note by
+    // `isolatedDbName` above). Set DATABASE_URL before either module compiles —
+    // @nestjs/config snapshots it once at ConfigModule.forRoot() time.
+    originalDatabaseUrl = requireEnv('DATABASE_URL');
+    isolatedDbName = `task_flow_${process.pid}`;
+    await withAdminConnection(
+      originalDatabaseUrl,
+      `DROP DATABASE IF EXISTS "${isolatedDbName}" WITH (FORCE)`,
+    );
+    await withAdminConnection(
+      originalDatabaseUrl,
+      `CREATE DATABASE "${isolatedDbName}"`,
+    );
+    const isolatedUrl = new URL(originalDatabaseUrl);
+    isolatedUrl.pathname = `/${isolatedDbName}`;
+    process.env.DATABASE_URL = isolatedUrl.toString();
 
     // Boot lcp-server for real, listening on the port reserved above — the
     // fake MCP tool (and lcp-agent's own fire-and-forget audit/notify
@@ -222,6 +269,14 @@ describe('Task/assignment flow via the agent loop (stub LLM)', () => {
     // serverApp leaves lcp-agent's side open, which stalls Jest's exit.
     await agentModuleRef.close();
     await serverApp.close();
+
+    // Restore the shared DATABASE_URL for any later spec in this worker, then
+    // drop this spec's throwaway database now that both apps have released it.
+    process.env.DATABASE_URL = originalDatabaseUrl;
+    await withAdminConnection(
+      originalDatabaseUrl,
+      `DROP DATABASE IF EXISTS "${isolatedDbName}" WITH (FORCE)`,
+    );
   });
 
   it('completes an orphan implement assignment when the agent calls complete_assignment', async () => {

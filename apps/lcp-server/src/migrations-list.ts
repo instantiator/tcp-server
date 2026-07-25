@@ -31,6 +31,7 @@ import { AddAuditTaskId1784400000000 } from './migrations/1784400000000-AddAudit
 import { AddAssignmentFailureReason1784500000000 } from './migrations/1784500000000-AddAssignmentFailureReason';
 import { ChangeEmbeddingDimension1784600000000 } from './migrations/1784600000000-ChangeEmbeddingDimension';
 import { AddKnowledgeIndexStateLastError1784700000000 } from './migrations/1784700000000-AddKnowledgeIndexStateLastError';
+import { DynamicEmbeddingDimension1784800000000 } from './migrations/1784800000000-DynamicEmbeddingDimension';
 
 /**
  * lcp-server's full, ordered migration list — the single source of truth for
@@ -77,4 +78,5 @@ export const MIGRATIONS: (new () => MigrationInterface)[] = [
   AddAssignmentFailureReason1784500000000,
   ChangeEmbeddingDimension1784600000000,
   AddKnowledgeIndexStateLastError1784700000000,
+  DynamicEmbeddingDimension1784800000000,
 ];

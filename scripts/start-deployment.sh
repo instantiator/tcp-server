@@ -3,9 +3,14 @@ set -euo pipefail
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") --project <name> --env-file <path> [--rebuild] [-h|--help]
+Usage: $(basename "$0") --project <name> (--env-file <path> | --env-files <f1,f2,...>) [--rebuild] [--dev-ports] [-h|--help]
 
 Start the LCP Docker Compose stack and configure it for use.
+
+By default, the MCP servers and stub-llm are internal-only (not reachable from
+the host) — the production-safe posture. Pass --dev-ports to additionally
+publish their ports (docker-compose.dev-ports.yml) for direct host access,
+e.g. manual debugging or the smoke-test tier.
 
 Reads all configuration — including Zitadel credentials and the first test
 users — from the env file. If ZITADEL_ADMIN_PASSWORD is set in the env file,
@@ -18,17 +23,24 @@ Safe to re-run against an already-running stack: existing Zitadel resources
 client secrets server-side (they can't be pre-set the way Keycloak's could)
 and they can only be read at generation time, so on EVERY run this script
 (re)generates the OIDC_CLIENT_ID/SECRET and TEST_CLIENT_ID/SECRET and writes
-them back into the env file in place, before starting lcp-server and its
-dependents. Regenerating every run — rather than trusting the file — is what
-keeps the env file and Zitadel from silently drifting apart (a wiped-and-
-rebootstrapped Zitadel, or a swapped env file, otherwise leaves a stale
-secret that fails auth with an opaque 'invalid_client').
+them to the gitignored '<env-file>.local' override (never the committed base
+file), before starting lcp-server and its dependents. Regenerating every run —
+rather than trusting the file — is what keeps the credentials and Zitadel from
+silently drifting apart (a wiped-and-rebootstrapped Zitadel, or a swapped env
+file, otherwise leaves a stale secret that fails auth with an opaque
+'invalid_client').
 
 Options:
-  --project <name>    Docker Compose project name (required)
-  --env-file <path>   Path to the env file (required)
-  --rebuild           Force a Docker image rebuild before starting
-  -h, --help          Show this help message and exit
+  --project <name>        Docker Compose project name (required)
+  --env-file <path>       Path to the env file (required, single file)
+  --env-files <f1,f2,...> Comma-separated env files in precedence order (first wins)
+  --rebuild               Force a Docker image rebuild before starting
+  --dev-ports             Publish MCP server / stub-llm ports to the host (non-production)
+  -h, --help              Show this help message and exit
+
+Env file precedence (when using --env-files):
+  Files are loaded in order; first value wins. Example:
+    --env-files .env.dev
 
 Zitadel setup reads from the env file:
   ZITADEL_ADMIN_PASSWORD   Org admin (human) password (presence enables auth profile)
@@ -39,7 +51,9 @@ EOF
 
 PROJECT=""
 ENV_FILE=""
+ENV_FILES=""
 REBUILD=false
+DEV_PORTS=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -49,52 +63,108 @@ while [[ $# -gt 0 ]]; do
     --env-file)
       [[ -n "${2:-}" ]] || { echo "ERROR: --env-file requires a path" >&2; exit 1; }
       ENV_FILE="$2"; shift 2 ;;
+    --env-files)
+      [[ -n "${2:-}" ]] || { echo "ERROR: --env-files requires a comma-separated list" >&2; exit 1; }
+      ENV_FILES="$2"; shift 2 ;;
     --rebuild) REBUILD=true; shift ;;
+    --dev-ports) DEV_PORTS=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
   esac
 done
 
 [[ -n "$PROJECT" ]]  || { echo "ERROR: --project is required" >&2; usage >&2; exit 1; }
-[[ -n "$ENV_FILE" ]] || { echo "ERROR: --env-file is required" >&2; usage >&2; exit 1; }
-[[ -f "$ENV_FILE" ]] || { echo "ERROR: env file not found: $ENV_FILE" >&2; exit 1; }
+[[ -n "$ENV_FILE" || -n "$ENV_FILES" ]] || { echo "ERROR: --env-file or --env-files is required" >&2; usage >&2; exit 1; }
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-echo "Using: $ENV_FILE"
+# shellcheck source=scripts/lib/load-env.sh
+# shellcheck disable=SC1091 # source path resolved at runtime
+source "$REPO_ROOT/scripts/lib/load-env.sh"
+
+if [[ -n "$ENV_FILES" ]]; then
+  # Convert comma-separated list to array, validate files exist
+  IFS=',' read -ra ENV_FILES_ARRAY <<< "$ENV_FILES"
+  for f in "${ENV_FILES_ARRAY[@]}"; do
+    [[ -f "$f" ]] || { echo "ERROR: env file not found: $f" >&2; exit 1; }
+  done
+  echo "Loading env files (precedence order): ${ENV_FILES_ARRAY[*]}"
+  set -a
+  load_env_files "${ENV_FILES_ARRAY[@]}"
+  set +a
+  # Use the first file for Zitadel setup writes
+  ENV_FILE="${ENV_FILES_ARRAY[0]}"
+else
+  [[ -f "$ENV_FILE" ]] || { echo "ERROR: env file not found: $ENV_FILE" >&2; exit 1; }
+  echo "Using: $ENV_FILE"
+  set -a
+  # shellcheck disable=SC1090 # env file path is only known at runtime
+  source "$ENV_FILE"
+  set +a
+fi
+
+# Gitignored per-instance override holding generated/provider-issued secrets
+# (OIDC_CLIENT_ID/SECRET, TEST_CLIENT_ID/SECRET — the LOCAL_ONLY_ENV_KEYS from
+# libs/lcp-shared/src/config/local-env-keys.ts). Layered on top of the committed
+# base file (local wins) and where this script writes Zitadel's bootstrap
+# output. Created empty here so it always exists for the docker compose
+# `--env-file` below and for the later writes.
+LOCAL_ENV_FILE="${ENV_FILE}.local"
+touch "$LOCAL_ENV_FILE"
 set -a
 # shellcheck disable=SC1090 # env file path is only known at runtime
-source "$ENV_FILE"
+source "$LOCAL_ENV_FILE"
 set +a
 
+# Derive host-facing URLs from EXPOSE_PORT_* and DB_* variables.
+# shellcheck source=scripts/lib/derive-urls.sh
+# shellcheck disable=SC1091 # source path resolved at runtime
+source "$REPO_ROOT/scripts/lib/derive-urls.sh"
+derive_host_urls
+
+# Auth profile: enabled when ZITADEL_ADMIN_PASSWORD is set and non-empty. When
+# active, this script bootstraps a local Zitadel and GENERATES the OIDC client
+# credentials, so they need not be present up front; without it (external OIDC
+# provider) they must already be supplied in the base file or its .local override.
+AUTH_PROFILE=""
+if [[ -n "${ZITADEL_ADMIN_PASSWORD:-}" ]]; then
+  AUTH_PROFILE="--profile auth"
+fi
+
 # Pre-flight: verify all required variables are non-empty.
+# DATABASE_URL, MINIO_ENDPOINT, OIDC_ISSUER_URL, and LCP_SERVER_URL are
+# derived above from EXPOSE_PORT_* and DB_* — they don't need to be in the env file.
 REQUIRED_VARS=(
-  DATABASE_URL REDIS_URL
-  MINIO_ENDPOINT MINIO_ACCESS_KEY MINIO_SECRET_KEY
-  OIDC_ISSUER_URL OIDC_CLIENT_ID OIDC_CLIENT_SECRET
-  INTERNAL_API_KEY LCP_SERVER_URL
+  DB_PASSWORD MINIO_ACCESS_KEY MINIO_SECRET_KEY
+  INTERNAL_API_KEY
 )
+# OIDC client creds are generated by the Zitadel bootstrap when the auth profile
+# is active; require them up front only for an external provider.
+if [[ -z "$AUTH_PROFILE" ]]; then
+  REQUIRED_VARS+=(OIDC_CLIENT_ID OIDC_CLIENT_SECRET)
+fi
 missing=()
 for var in "${REQUIRED_VARS[@]}"; do
   [[ -n "${!var:-}" ]] || missing+=("$var")
 done
 if [[ ${#missing[@]} -gt 0 ]]; then
   echo "" >&2
-  echo "ERROR: the following required variables are missing or empty in $ENV_FILE:" >&2
+  echo "ERROR: the following required variables are missing or empty:" >&2
   for var in "${missing[@]}"; do echo "  $var" >&2; done
   echo "" >&2
-  echo "Add them to $ENV_FILE and retry. See .env.example for reference values." >&2
+  echo "Add them to $ENV_FILE (or its $LOCAL_ENV_FILE override). See .env.example for reference values." >&2
   echo "" >&2
   exit 1
 fi
 
-# Auth profile: enabled when ZITADEL_ADMIN_PASSWORD is set and non-empty.
-AUTH_PROFILE=""
-if [[ -n "${ZITADEL_ADMIN_PASSWORD:-}" ]]; then
-  AUTH_PROFILE="--profile auth"
+COMPOSE_FILES="-f $REPO_ROOT/docker-compose.yml"
+if [[ "$DEV_PORTS" = "true" ]]; then
+  COMPOSE_FILES="$COMPOSE_FILES -f $REPO_ROOT/docker-compose.dev-ports.yml"
 fi
 
-DC="docker compose -p $PROJECT $AUTH_PROFILE --env-file $ENV_FILE"
+# Both env files feed Compose interpolation; the .local override is passed last
+# so its generated OIDC_CLIENT_* win over any base-file placeholder.
+DC="docker compose -p $PROJECT $COMPOSE_FILES $AUTH_PROFILE --env-file $ENV_FILE --env-file $LOCAL_ENV_FILE"
 
 wait_for() {
   local name="$1" cmd="$2" max="${3:-120}"
@@ -177,6 +247,12 @@ if [[ "$ZITADEL_FRESH_BOOT" = true && -f "$PAT_FILE" ]]; then
   PAT_MTIME_BEFORE=$(stat -c %Y "$PAT_FILE" 2>/dev/null || stat -f %m "$PAT_FILE" 2>/dev/null || echo 0)
 fi
 
+# Verify exposed ports are available before starting services.
+# shellcheck source=scripts/lib/check-ports.sh
+# shellcheck disable=SC1091 # source path resolved at runtime
+source "$REPO_ROOT/scripts/lib/check-ports.sh"
+check_exposed_ports
+
 if [[ "$REBUILD" = "true" ]]; then
   $DC up -d --build "${INFRA_SERVICES[@]}"
 else
@@ -184,7 +260,7 @@ else
 fi
 
 if [[ -n "$AUTH_PROFILE" ]]; then
-  wait_for zitadel "curl -sf -o /dev/null http://localhost:8080/debug/healthz"
+  wait_for zitadel "curl -sf -o /dev/null http://localhost:${EXPOSE_PORT_ZITADEL:-8080}/debug/healthz"
 fi
 
 # Zitadel bootstrap (skipped when auth profile is not active). Must happen
@@ -279,9 +355,9 @@ EOF
   APP_LIST=$(zit POST "/management/v1/projects/$PROJECT_ID/apps/_search" '{}')
   APP_ID=$(echo "$APP_LIST" | jq -r --arg n "$APP_NAME" '.result[]? | select(.name == $n) | .id // empty')
   if [[ -z "$APP_ID" ]]; then
-    APP=$(zit POST "/management/v1/projects/$PROJECT_ID/apps/oidc" "$(jq -n --arg name "$APP_NAME" '{
+    APP=$(zit POST "/management/v1/projects/$PROJECT_ID/apps/oidc" "$(jq -n --arg name "$APP_NAME" --arg cb "http://localhost:${EXPOSE_PORT_API:-3000}/auth/callback" '{
       name: $name,
-      redirectUris: ["http://localhost:3000/auth/callback"],
+      redirectUris: [$cb],
       responseTypes: ["OIDC_RESPONSE_TYPE_CODE"],
       grantTypes: ["OIDC_GRANT_TYPE_DEVICE_CODE", "OIDC_GRANT_TYPE_REFRESH_TOKEN"],
       appType: "OIDC_APP_TYPE_WEB",
@@ -290,14 +366,14 @@ EOF
     }')")
     APP_CLIENT_ID=$(echo "$APP" | jq -r '.clientId')
     APP_CLIENT_SECRET=$(echo "$APP" | jq -r '.clientSecret')
-    echo "  Created application: $APP_NAME (client secret written to $ENV_FILE)"
+    echo "  Created application: $APP_NAME (client secret written to $LOCAL_ENV_FILE)"
   else
     APP_CLIENT_ID=$(echo "$APP_LIST" | jq -r --arg n "$APP_NAME" '.result[]? | select(.name == $n) | .oidcConfig.clientId // empty')
     APP_CLIENT_SECRET=$(zit POST "/management/v1/projects/$PROJECT_ID/apps/$APP_ID/oidc_config/_generate_client_secret" '{}' | jq -r '.clientSecret')
-    echo "  Application $APP_NAME: already exists (client secret regenerated → $ENV_FILE)"
+    echo "  Application $APP_NAME: already exists (client secret regenerated → $LOCAL_ENV_FILE)"
   fi
-  set_env_var "$ENV_FILE" OIDC_CLIENT_ID "$APP_CLIENT_ID"
-  set_env_var "$ENV_FILE" OIDC_CLIENT_SECRET "$APP_CLIENT_SECRET"
+  set_env_var "$LOCAL_ENV_FILE" OIDC_CLIENT_ID "$APP_CLIENT_ID"
+  set_env_var "$LOCAL_ENV_FILE" OIDC_CLIENT_SECRET "$APP_CLIENT_SECRET"
   export OIDC_CLIENT_ID="$APP_CLIENT_ID"
   export OIDC_CLIENT_SECRET="$APP_CLIENT_SECRET"
 
@@ -335,15 +411,15 @@ EOF
       username: $u,
       machine: {name: "LCP API Test Machine", accessTokenType: "ACCESS_TOKEN_TYPE_JWT"}
     }')" | jq -r '.id')
-    echo "  Created machine user: $TEST_MACHINE_USERNAME (client secret written to $ENV_FILE)"
+    echo "  Created machine user: $TEST_MACHINE_USERNAME (client secret written to $LOCAL_ENV_FILE)"
   else
-    echo "  Machine user $TEST_MACHINE_USERNAME: already exists (client secret regenerated → $ENV_FILE)"
+    echo "  Machine user $TEST_MACHINE_USERNAME: already exists (client secret regenerated → $LOCAL_ENV_FILE)"
   fi
   SECRET=$(zit PUT "/management/v1/users/$MACHINE_ID/secret" '{}')
   MACHINE_CLIENT_ID=$(echo "$SECRET" | jq -r '.clientId')
   MACHINE_CLIENT_SECRET=$(echo "$SECRET" | jq -r '.clientSecret')
-  set_env_var "$ENV_FILE" TEST_CLIENT_ID "$MACHINE_CLIENT_ID"
-  set_env_var "$ENV_FILE" TEST_CLIENT_SECRET "$MACHINE_CLIENT_SECRET"
+  set_env_var "$LOCAL_ENV_FILE" TEST_CLIENT_ID "$MACHINE_CLIENT_ID"
+  set_env_var "$LOCAL_ENV_FILE" TEST_CLIENT_SECRET "$MACHINE_CLIENT_SECRET"
   export TEST_CLIENT_ID="$MACHINE_CLIENT_ID"
   export TEST_CLIENT_SECRET="$MACHINE_CLIENT_SECRET"
 fi
@@ -356,12 +432,14 @@ else
   $DC up -d
 fi
 
-wait_for lcp-server           "curl -sf http://localhost:3000/health"
-wait_for lcp-agent            "curl -sf http://localhost:3001/health"
-wait_for lcp-mcp-storage      "curl -sf http://localhost:3010/health"
-wait_for lcp-mcp-memory       "curl -sf http://localhost:3011/health"
-wait_for lcp-mcp-interactions "curl -sf http://localhost:3012/health"
-wait_for lcp-mcp-tasks        "curl -sf http://localhost:3013/health"
+wait_for lcp-server           "curl -sf http://localhost:${EXPOSE_PORT_API:-3000}/health"
+# lcp-agent and the MCP servers are internal-only by default (no published
+# host port unless --dev-ports) — poll via `exec` into the container instead
+# of the host, so this works the same whether or not the port is published.
+wait_for lcp-mcp-storage      "$DC exec -T lcp-mcp-storage curl -sf http://localhost:3010/health"
+wait_for lcp-mcp-memory       "$DC exec -T lcp-mcp-memory curl -sf http://localhost:3011/health"
+wait_for lcp-mcp-interactions "$DC exec -T lcp-mcp-interactions curl -sf http://localhost:3012/health"
+wait_for lcp-mcp-tasks        "$DC exec -T lcp-mcp-tasks curl -sf http://localhost:3013/health"
 
 # Summary
 
@@ -371,12 +449,15 @@ echo "  Deployment ready (project: $PROJECT)"
 echo "=================================================="
 echo ""
 echo "Services:"
-echo "  lcp-server API         →  http://localhost:3000"
-echo "  lcp-agent              →  http://localhost:3001"
-echo "  lcp-mcp-storage        →  http://localhost:3010"
-echo "  lcp-mcp-memory         →  http://localhost:3011"
-echo "  lcp-mcp-interactions   →  http://localhost:3012"
-echo "  lcp-mcp-tasks          →  http://localhost:3013"
+echo "  lcp-server API         →  http://localhost:${EXPOSE_PORT_API:-3000}"
+if [[ "$DEV_PORTS" = "true" ]]; then
+  echo "  lcp-mcp-storage        →  http://localhost:3010"
+  echo "  lcp-mcp-memory         →  http://localhost:3011"
+  echo "  lcp-mcp-interactions   →  http://localhost:3012"
+  echo "  lcp-mcp-tasks          →  http://localhost:3013"
+else
+  echo "  lcp-mcp-*              →  internal only (rerun with --dev-ports to publish)"
+fi
 if [[ -n "$AUTH_PROFILE" ]]; then
   echo "  Zitadel console        →  http://localhost:8080/ui/console  (admin / ${ZITADEL_ADMIN_PASSWORD})"
 fi

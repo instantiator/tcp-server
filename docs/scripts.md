@@ -67,11 +67,15 @@ flags are accepted; change those values in the env file instead. See
 [docs/zitadel-setup.md](zitadel-setup.md) for the full bootstrap sequence.
 
 Safe to re-run — existing Zitadel resources (project, app, users) are reused,
-not recreated. Their client secrets, however, are regenerated and rewritten
-into the env file on every run: a Zitadel secret can only be read at
-generation time, so regenerating each run is what keeps the env file and
-Zitadel from silently drifting apart (a stale secret otherwise fails auth
-with an opaque `invalid_client`).
+not recreated. Their client secrets, however, are regenerated on every run and
+written to the gitignored `<env-file>.local` override (e.g. `.env.testing.local`),
+never the committed base file: a Zitadel secret can only be read at generation
+time, so regenerating each run is what keeps the credentials and Zitadel from
+silently drifting apart (a stale secret otherwise fails auth with an opaque
+`invalid_client`). See [ADR-018 §7](ADRs/ADR-018-system-configuration-setup-wizard.md).
+
+By default the MCP servers and stub-llm are internal-only (not published to the
+host); pass `--dev-ports` to publish them for direct access or the smoke tier.
 
 ```bash
 ./scripts/start-deployment.sh --project lcp-dev --env-file .env
@@ -81,11 +85,12 @@ with an opaque `invalid_client`).
 
 **Options:**
 
-| Flag                | Description                    | Required |
-| ------------------- | ------------------------------ | -------- |
-| `--project <name>`  | Docker Compose project name    | Yes      |
-| `--env-file <path>` | Path to env file               | Yes      |
-| `--rebuild`         | Rebuild images before starting | No       |
+| Flag                | Description                                      | Required |
+| ------------------- | ------------------------------------------------ | -------- |
+| `--project <name>`  | Docker Compose project name                      | Yes      |
+| `--env-file <path>` | Path to env file                                 | Yes      |
+| `--rebuild`         | Rebuild images before starting                   | No       |
+| `--dev-ports`       | Publish MCP/stub-llm host ports (non-production) | No       |
 
 ## start-dev.sh
 
@@ -222,8 +227,9 @@ Zitadel generates the machine test user's client secret at bootstrap time
 (unlike the old fixed `test`/`test` credentials, there's no built-in default
 to fall back to), so if `--client-id`/`--client-secret` aren't given and
 `TEST_CLIENT_ID`/`TEST_CLIENT_SECRET` aren't already exported, this script
-reads them out of an env file: `--env-file` if given, else `.env` if present,
-else `.env.testing` — the same file `start-deployment.sh` wrote them into.
+reads them from an env file: `--env-file` if given, else `.env` if present,
+else `.env.testing` — checking that file's gitignored `<env-file>.local`
+override first, since that's where `start-deployment.sh` writes them.
 
 ```bash
 # Local: start stack first, then test

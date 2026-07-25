@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
   DockerComposeEnvironment,
   StartedDockerComposeEnvironment,
 } from 'testcontainers';
+import { loadEnvFileWithLocal } from './env-file-parser';
 
 /**
  * Starts the dependency containers an integration/e2e test run needs, driving
@@ -65,28 +66,6 @@ export interface ComposeTierResult {
    * spec files and the apps they boot pick them up.
    */
   env: Record<string, string>;
-}
-
-/**
- * Loads the static test credentials/config from `.env.testing` into
- * {@link process.env}. `.env.testing` is a simple `KEY=value` file (no quoting
- * or multi-line values), so a minimal parser avoids a dependency. Dynamic
- * connection vars are overwritten afterwards from the running containers.
- */
-function loadTestEnv(): void {
-  const content = readFileSync(join(REPO_ROOT, ENV_FILE), 'utf8');
-  for (const rawLine of content.split('\n')) {
-    const line = rawLine.trim();
-    if (line.length === 0 || line.startsWith('#')) {
-      continue;
-    }
-    const separator = line.indexOf('=');
-    if (separator === -1) {
-      continue;
-    }
-    const key = line.slice(0, separator).trim();
-    process.env[key] = line.slice(separator + 1).trim();
-  }
 }
 
 /** The compose CLI flags identifying a specific started environment. */
@@ -214,14 +193,14 @@ function deriveConnectionEnv(
     const { host, port } = mappedUrl('postgres');
     // Password comes from .env.testing (loaded by loadTestEnv above), never a
     // hardcoded literal.
-    const password = process.env.POSTGRES_PASSWORD;
+    const password = process.env.DB_PASSWORD;
     if (!password) {
-      throw new Error(
-        'POSTGRES_PASSWORD is not set — expected it in .env.testing.',
-      );
+      throw new Error('DB_PASSWORD is not set — expected it in .env.testing.');
     }
-    const credentials = `lcp:${password}`;
-    env.DATABASE_URL = `postgres://${credentials}@${host}:${port}/lcp`;
+    const user = process.env.DB_USER ?? 'lcp';
+    const dbName = process.env.DB_NAME ?? 'lcp';
+    const credentials = `${user}:${password}`;
+    env.DATABASE_URL = `postgres://${credentials}@${host}:${port}/${dbName}`;
   }
   if (services.includes('redis')) {
     const { host, port } = mappedUrl('redis');
@@ -247,7 +226,7 @@ function deriveConnectionEnv(
 export async function startComposeTier(
   options: ComposeTierOptions,
 ): Promise<ComposeTierResult> {
-  loadTestEnv();
+  loadEnvFileWithLocal(join(REPO_ROOT, ENV_FILE));
 
   const projectName = `lcp-${options.tier}-${process.pid}`;
   let composeEnv = new DockerComposeEnvironment(REPO_ROOT, COMPOSE_FILES)

@@ -43,10 +43,13 @@ lerna-debug.log*
 
 # dotenv environment variable files
 .env
-.env.development.local
-.env.test.local
-.env.production.local
-.env.local
+.env.dev
+# Per-instance secret overrides (generated Zitadel creds, external OIDC creds):
+# every committed <env-file> has a gitignored <env-file>.local sibling applied
+# on top of it. See docs/prompts/010.8.4 - config resolution plan.md.
+.env*.local
+# Temp env file written by run-api-tests.sh (trap-cleaned, but ignore for safety).
+.env.run
 
 # temp directory
 .temp

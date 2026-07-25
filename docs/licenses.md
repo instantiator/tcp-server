@@ -27,6 +27,7 @@
 | commander                                | MIT          | git+https://github.com/tj/commander.js.git                     | TJ Holowaychuk <tj@vision-media.ca>                                    | 15.0.0    | ^15.0.0   |
 | csv-parse                                | MIT          | git+https://github.com/adaltas/node-csv.git                    | David Worms <david@adaltas.com> (https://www.adaltas.com)              | 7.0.1     | ^7.0.1    |
 | fast-xml-parser                          | MIT          | git+https://github.com/NaturalIntelligence/fast-xml-parser.git | Amit Gupta (https://solothought.com)                                   | 5.10.1    | ^5.10.1   |
+| inquirer                                 | MIT          | git+https://github.com/SBoudrias/Inquirer.js.git               | Simon Boudrias <admin@simonboudrias.com>                               | 14.0.2    | ^14.0.2   |
 | ioredis                                  | MIT          | git://github.com/luin/ioredis.git                              | Zihua Li <i@zihua.li> (http://zihua.li)                                | 5.11.1    | ^5.11.1   |
 | joi                                      | BSD-3-Clause | git://github.com/hapijs/joi.git                                | n/a                                                                    | 18.2.3    | ^18.2.3   |
 | js-tiktoken                              | MIT          | git+https://github.com/dqbd/tiktoken.git                       | n/a                                                                    | 1.0.21    | ^1.0.21   |

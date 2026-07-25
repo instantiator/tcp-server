@@ -25,6 +25,7 @@ import { AuthModule } from './auth/auth.module';
 import { configSchema } from './config/config.schema';
 import { HealthModule } from './health/health.module';
 import { MIGRATIONS } from './migrations-list';
+import { EmbeddingDimensionCheck } from './embedding-dimension-check';
 import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
 
 /**
@@ -73,6 +74,7 @@ import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
   controllers: [AuthTokenController],
   providers: [
     AuthTokenService,
+    EmbeddingDimensionCheck,
     { provide: APP_INTERCEPTOR, useClass: MaskSecretsInterceptor },
     {
       provide: APP_PIPE,

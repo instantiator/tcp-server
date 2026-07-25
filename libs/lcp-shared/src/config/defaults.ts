@@ -6,6 +6,71 @@
  * this file).
  */
 
+// ── Database ─────────────────────────────────────────────────────────────────
+
+/** Default Postgres user. Overridden by `DB_USER` env var. */
+export const DEFAULT_DB_USER = 'lcp';
+
+/** Default Postgres password. Overridden by `DB_PASSWORD` env var. */
+export const DEFAULT_DB_PASSWORD = 'dev-password';
+
+/** Default Postgres database name. Overridden by `DB_NAME` env var. */
+export const DEFAULT_DB_NAME = 'lcp';
+
+// ── MinIO ────────────────────────────────────────────────────────────────────
+
+/** Default MinIO access key. Overridden by `MINIO_ACCESS_KEY` env var. */
+export const DEFAULT_MINIO_ACCESS_KEY = 'lcp-access-key';
+
+/** Default MinIO secret key. Overridden by `MINIO_SECRET_KEY` env var. */
+export const DEFAULT_MINIO_SECRET_KEY = 'lcp-secret-key';
+
+/** Default MinIO bucket prefix. Overridden by `MINIO_BUCKET_PREFIX` env var. */
+export const DEFAULT_MINIO_BUCKET_PREFIX = 'lcp';
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+
+/** Default internal API key for service-to-service auth. Overridden by `INTERNAL_API_KEY` env var. */
+export const DEFAULT_INTERNAL_API_KEY = 'change-me-in-production';
+
+// ── Masking ──────────────────────────────────────────────────────────────────
+
+/** Whether to mask API keys in logs/output. Overridden by `LCP_MASK_API_KEYS` env var. */
+export const DEFAULT_LCP_MASK_API_KEYS = true;
+
+// ── Polling ──────────────────────────────────────────────────────────────────
+
+/** Knowledge RAG reindex reconciliation poller interval in ms. Overridden by `KNOWLEDGE_POLL_INTERVAL_MS` env var. */
+export const DEFAULT_KNOWLEDGE_POLL_INTERVAL_MS = 60_000;
+
+// ── Exposed Ports ────────────────────────────────────────────────────────────
+
+/**
+ * Default API port on the host.
+ * Other `EXPOSE_PORT_*` values are derived using offsets when not set:
+ * DB = API + 2432, MinIO = API + 6000, Zitadel = API + 5080.
+ */
+export const DEFAULT_EXPOSE_PORT_API = 3000;
+
+/** Default Postgres port on the host (API + 2432). Overridden by `EXPOSE_PORT_DB` env var. */
+export const DEFAULT_EXPOSE_PORT_DB = 5432;
+
+/** Default MinIO port on the host (API + 6000). Overridden by `EXPOSE_PORT_MINIO` env var. */
+export const DEFAULT_EXPOSE_PORT_MINIO = 9000;
+
+/** Default Zitadel port on the host (API + 5080). Overridden by `EXPOSE_PORT_ZITADEL` env var. */
+export const DEFAULT_EXPOSE_PORT_ZITADEL = 8080;
+
+// ── Embedding ────────────────────────────────────────────────────────────────
+
+/**
+ * Default embedding dimension when `EMBEDDING_DIMENSION` env var is not set.
+ * Must match the default in the Joi config schemas.
+ */
+export const DEFAULT_EMBEDDING_DIMENSION = 768;
+
+// ── Agent ────────────────────────────────────────────────────────────────────
+
 /**
  * Default maximum LLM invocations per agent run.
  * Overridden by `AGENT_ITERATIONS` (lcp-agent env), then by
@@ -17,11 +82,11 @@ export const DEFAULT_AGENT_ITERATIONS = 40;
 /**
  * Default number of agent jobs the lcp-agent worker processes concurrently.
  * Overridden by `AGENT_WORKER_CONCURRENCY` (lcp-agent env). Used in
- * {@link AgentWorkerService}. Lower it to `1` when agents share a single
- * capacity-limited model endpoint (e.g. one local LLM), so parallel runs don't
- * starve each other of model time.
+ * {@link AgentWorkerService}. Set to 1 so agents sharing a single
+ * capacity-limited model endpoint (e.g. one local LLM) don't starve each
+ * other of model time.
  */
-export const DEFAULT_AGENT_WORKER_CONCURRENCY = 5;
+export const DEFAULT_AGENT_WORKER_CONCURRENCY = 1;
 
 /**
  * Default wall-clock timeout in milliseconds for an entire agent run.
