@@ -11,6 +11,7 @@ export * from './mcp/base-mcp.controller';
 export * from './mcp/mcp-client.service';
 export * from './mcp/mcp-registry';
 export * from './config/defaults';
+export * from './config/local-env-keys';
 export * from './config/resolve-run-config';
 export * from './config/precedence-resolver';
 export * from './config/resolve-llm-config';

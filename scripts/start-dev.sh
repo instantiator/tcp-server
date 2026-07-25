@@ -22,9 +22,6 @@ Environment file precedence (first match wins):
   2. .env.dev          if present in the repo root
   3. .env.testing      fallback (always present, safe test credentials)
 
-.env.defaults is always loaded as a fallback after the primary env file,
-providing default values for optional environment variables.
-
 Options:
   -e, --env <path>   Environment file to use
   --rebuild          Force a Docker image rebuild (passes --build to docker compose up)
@@ -58,13 +55,7 @@ fi
 
 [[ -f "$PRIMARY_ENV" ]] || { echo "ERROR: env file not found: $PRIMARY_ENV" >&2; exit 1; }
 
-# Build env file list with defaults as fallback
-ENV_FILE_LIST="$PRIMARY_ENV"
-if [[ -f "$REPO_ROOT/.env.defaults" ]]; then
-  ENV_FILE_LIST="$PRIMARY_ENV,$REPO_ROOT/.env.defaults"
-fi
-
-ARGS=(--project lcp-dev --env-files "$ENV_FILE_LIST")
+ARGS=(--project lcp-dev --env-files "$PRIMARY_ENV" --dev-ports)
 [[ "$REBUILD" == true ]] && ARGS+=(--rebuild)
 
 exec "$REPO_ROOT/scripts/start-deployment.sh" "${ARGS[@]}"

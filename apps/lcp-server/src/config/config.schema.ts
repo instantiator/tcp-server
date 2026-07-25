@@ -1,19 +1,29 @@
 import * as Joi from 'joi';
+import {
+  DEFAULT_EXPOSE_PORT_API,
+  DEFAULT_MINIO_BUCKET_PREFIX,
+  DEFAULT_KNOWLEDGE_POLL_INTERVAL_MS,
+  DEFAULT_LCP_MASK_API_KEYS,
+  DEFAULT_EMBEDDING_DIMENSION,
+} from '@lcp/shared/config/defaults';
 
 /**
  * Joi validation schema for lcp-server environment variables.
  * The application will refuse to start if any required variable is absent or invalid.
  */
 export const configSchema = Joi.object({
-  PORT: Joi.number().default(3000),
+  PORT: Joi.number().default(DEFAULT_EXPOSE_PORT_API),
   DATABASE_URL: Joi.string().required(),
   REDIS_URL: Joi.string().required(),
   MINIO_ENDPOINT: Joi.string().required(),
   MINIO_ACCESS_KEY: Joi.string().required(),
   MINIO_SECRET_KEY: Joi.string().required(),
-  MINIO_BUCKET_PREFIX: Joi.string().default('lcp'),
+  MINIO_BUCKET_PREFIX: Joi.string().default(DEFAULT_MINIO_BUCKET_PREFIX),
   /** Interval (ms) between knowledge-reindex reconciliation poll cycles. */
-  KNOWLEDGE_POLL_INTERVAL_MS: Joi.number().integer().positive().default(60000),
+  KNOWLEDGE_POLL_INTERVAL_MS: Joi.number()
+    .integer()
+    .positive()
+    .default(DEFAULT_KNOWLEDGE_POLL_INTERVAL_MS),
   OIDC_ISSUER_URL: Joi.string().uri().required(),
   // Override for container-to-container calls; OIDC_ISSUER_URL is still used for iss validation.
   OIDC_INTERNAL_ISSUER_URL: Joi.string().uri().optional(),
@@ -24,7 +34,7 @@ export const configSchema = Joi.object({
   OIDC_CLIENT_ID: Joi.string().required(),
   OIDC_CLIENT_SECRET: Joi.string().required(),
   // When true, apiKey values in LlmConfig are replaced with '***' in API responses.
-  LCP_MASK_API_KEYS: Joi.boolean().default(true),
+  LCP_MASK_API_KEYS: Joi.boolean().default(DEFAULT_LCP_MASK_API_KEYS),
   // Shared secret used to authenticate internal service-to-service calls (lcp-agent, MCP servers).
   INTERNAL_API_KEY: Joi.string().required(),
   // Environment-level LLM fallback — used when neither a role's llmConfig nor a company's llmConfig is set.
@@ -49,5 +59,8 @@ export const configSchema = Joi.object({
   EMBEDDING_BASE_URL: Joi.string().uri().empty('').optional(),
   EMBEDDING_API_KEY: Joi.string().empty('').optional(),
   // Vector column width for embeddings. Changing this requires a database migration.
-  EMBEDDING_DIMENSION: Joi.number().integer().min(1).default(768),
+  EMBEDDING_DIMENSION: Joi.number()
+    .integer()
+    .min(1)
+    .default(DEFAULT_EMBEDDING_DIMENSION),
 });

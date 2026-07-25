@@ -37,6 +37,11 @@ set -a
 source "$ENV_FILE"
 set +a
 
+# shellcheck source=scripts/lib/derive-urls.sh
+# shellcheck disable=SC1091 # source path resolved at runtime
+source "$REPO_ROOT/scripts/lib/derive-urls.sh"
+derive_host_urls
+
 DC=(docker compose -p "$PROJECT" --env-file "$ENV_FILE")
 GEN_DIR="$(mktemp -d)"
 # shellcheck disable=SC2329 # invoked indirectly via the EXIT trap below
@@ -60,8 +65,6 @@ if ! "${DC[@]}" exec -T postgres pg_isready -U lcp >/dev/null 2>&1; then
   "${DC[@]}" logs --tail=20 postgres >&2
   exit 1
 fi
-
-export DATABASE_URL="postgres://lcp:${POSTGRES_PASSWORD}@localhost:5432/lcp"
 
 echo "→ check-migrations: applying committed migrations..."
 npm run --silent migration:run >/dev/null

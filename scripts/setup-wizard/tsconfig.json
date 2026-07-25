@@ -1,7 +1,7 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "rootDir": ".",
+    "rootDir": "../..",
     "outDir": "../../dist/scripts/setup-wizard",
     "paths": {
       "@lcp/shared": ["../../libs/lcp-shared/src/index.ts"],

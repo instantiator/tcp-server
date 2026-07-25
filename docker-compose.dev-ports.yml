@@ -1,0 +1,25 @@
+# Dev-only overlay: publishes host ports for services that docker-compose.yml
+# keeps internal-only in production (the MCP servers and stub-llm), so they
+# can be reached directly from outside the Docker network for manual
+# debugging or the smoke-test tier.
+#
+# Additive, like test/support/docker-compose.dynamic-ports.yml: the root
+# docker-compose.yml is never modified, so it stays production-safe on its
+# own. Enable via scripts/start-deployment.sh --dev-ports (start-dev.sh and
+# run-all-tests.sh's api/smoke deployment step always pass it).
+services:
+  stub-llm:
+    ports:
+      - "3002:3002"
+  lcp-mcp-storage:
+    ports:
+      - "3010:3010"
+  lcp-mcp-memory:
+    ports:
+      - "3011:3011"
+  lcp-mcp-interactions:
+    ports:
+      - "3012:3012"
+  lcp-mcp-tasks:
+    ports:
+      - "3013:3013"

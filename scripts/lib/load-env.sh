@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# lib/load-env.sh — Load env files with precedence (first value wins).
+# lib/load-env.sh — Load env files in order; later files override earlier.
 
 # Usage: load_env_files <file1> [file2] [file3] ...
-# Later files provide fallbacks; earlier files take precedence.
+# Files are sourced in the order given, so a variable set in a later file
+# overrides the same variable from an earlier one (last value wins). Pass the
+# committed base file first and its `.local` override last.
 load_env_files() {
   local loaded=()
   for file in "$@"; do

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 /**
  * Reads a simple `KEY=value` env file and returns a record of all variables.
@@ -43,4 +43,26 @@ export function loadEnvFile(
     }
   }
   return parsed;
+}
+
+/**
+ * Loads a committed env file layered with its gitignored `<file>.local`
+ * override, mirroring how the deployment scripts layer config. Precedence:
+ * values already in `process.env` (an explicit caller export) win, then the
+ * `.local` file, then the committed base. The `.local` sibling holds
+ * generated/provider-issued secrets (`LOCAL_ONLY_ENV_KEYS` — e.g.
+ * `TEST_CLIENT_ID/SECRET`) that must not be committed; a missing `.local` is a
+ * no-op. Returns the merged file values (before the process.env guard).
+ */
+export function loadEnvFileWithLocal(filePath: string): Record<string, string> {
+  const base = parseEnvFile(filePath);
+  const localPath = `${filePath}.local`;
+  const local = existsSync(localPath) ? parseEnvFile(localPath) : {};
+  const merged = { ...base, ...local };
+  for (const [key, value] of Object.entries(merged)) {
+    if (process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
+  return merged;
 }

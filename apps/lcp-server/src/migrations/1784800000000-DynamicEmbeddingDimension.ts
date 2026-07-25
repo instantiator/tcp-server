@@ -1,5 +1,10 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
-import { DEFAULT_EMBEDDING_DIMENSION } from '@lcp/shared/config/resolve-embedding-dimension';
+// Imported by relative path, not the `@lcp/shared` alias: this migration is
+// loaded by the e2e tier's Jest globalSetup (via migrations-list.ts), where
+// neither Jest's moduleNameMapper nor tsconfig `paths` are applied, so the
+// alias would fail to resolve. See test/e2e/global-setup.ts for the same
+// constraint.
+import { DEFAULT_EMBEDDING_DIMENSION } from '../../../../libs/lcp-shared/src/config/defaults';
 
 /**
  * Dynamic embedding-dimension migration — reads `EMBEDDING_DIMENSION` from the

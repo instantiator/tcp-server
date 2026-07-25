@@ -91,23 +91,29 @@ Both suites require a running LCP stack with Zitadel. Start one first with
 `start-deployment.sh`, then run either or both test scripts against it. In CI
 both run against the same stack in the `api-test` job.
 
-```bash
-# Start stack (reads Zitadel credentials from env file)
-./scripts/start-deployment.sh --project lcp-api --env-file .env.testing
+`.env.testing` sets `EXPOSE_PORT_API=3001` (so a test stack can coexist with a
+dev stack on 3000), and the smoke tier reaches the MCP servers on their host
+ports — so start with `--dev-ports` and target port 3001:
 
-# Run API tests
-./scripts/run-api-tests.sh
-./scripts/run-api-tests.sh -- --testNamePattern="company"
+```bash
+# Start stack (reads Zitadel credentials from env file; writes generated
+# client creds to .env.testing.local). --dev-ports publishes the MCP ports.
+./scripts/start-deployment.sh --project lcp-api --env-file .env.testing --dev-ports
+
+# Run API tests (TEST_CLIENT_* read from .env.testing.local)
+./scripts/run-api-tests.sh --base-url http://localhost:3001 --env-file .env.testing
+./scripts/run-api-tests.sh --base-url http://localhost:3001 --env-file .env.testing -- --testNamePattern="company"
 
 # Run smoke tests against the same stack
-./scripts/run-smoke-tests.sh
+./scripts/run-smoke-tests.sh --base-url http://localhost:3001
 
 # Tear down
 docker compose -p lcp-api --profile auth down -v
 ```
 
-Both scripts default to `http://localhost:3000` and accept `--base-url` to
-target a remote deployment without Docker:
+The scripts default to `http://localhost:3000`; pass `--base-url` to target a
+different port (like the 3001 test stack above) or a remote deployment without
+Docker:
 
 ```bash
 ./scripts/run-api-tests.sh --base-url http://your-host:3000 \

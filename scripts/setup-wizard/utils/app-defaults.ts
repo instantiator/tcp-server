@@ -1,0 +1,24 @@
+/**
+ * Re-exports defaults from the shared config module for use in the setup wizard.
+ * The wizard runs outside the NestJS app and imports these directly.
+ */
+export {
+  DEFAULT_DB_USER,
+  DEFAULT_DB_PASSWORD,
+  DEFAULT_DB_NAME,
+  DEFAULT_MINIO_ACCESS_KEY,
+  DEFAULT_MINIO_SECRET_KEY,
+  DEFAULT_MINIO_BUCKET_PREFIX,
+  DEFAULT_INTERNAL_API_KEY,
+  DEFAULT_EMBEDDING_DIMENSION,
+  DEFAULT_AGENT_ITERATIONS,
+  DEFAULT_AGENT_WORKER_CONCURRENCY,
+  DEFAULT_EXPOSE_PORT_API,
+  DEFAULT_EXPOSE_PORT_DB,
+  DEFAULT_EXPOSE_PORT_MINIO,
+  DEFAULT_EXPOSE_PORT_ZITADEL,
+  DEFAULT_LCP_MASK_API_KEYS,
+  DEFAULT_KNOWLEDGE_POLL_INTERVAL_MS,
+} from '@lcp/shared/config/defaults';
+
+export { LOCAL_ONLY_ENV_KEYS } from '@lcp/shared/config/local-env-keys';

@@ -1,4 +1,15 @@
 /**
+ * Exposed port configuration — each port is independently configurable.
+ */
+export interface PortConfig {
+  api: number;
+  db: number;
+  minio: number;
+  minioConsole: number;
+  zitadel: number;
+}
+
+/**
  * LLM provider configuration collected by the setup wizard.
  */
 export interface LlmProviderConfig {
@@ -38,6 +49,7 @@ export interface DockerConfig {
 export interface WizardConfig {
   instanceName: string;
   envFileName: string;
+  ports: PortConfig;
   embeddingModel?: LlmProviderConfig;
   inferenceModel?: LlmProviderConfig;
   oidc?: OidcConfig;

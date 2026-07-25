@@ -5,7 +5,7 @@ import {
   DockerComposeEnvironment,
   StartedDockerComposeEnvironment,
 } from 'testcontainers';
-import { loadEnvFile } from './env-file-parser';
+import { loadEnvFileWithLocal } from './env-file-parser';
 
 /**
  * Starts the dependency containers an integration/e2e test run needs, driving
@@ -193,14 +193,14 @@ function deriveConnectionEnv(
     const { host, port } = mappedUrl('postgres');
     // Password comes from .env.testing (loaded by loadTestEnv above), never a
     // hardcoded literal.
-    const password = process.env.POSTGRES_PASSWORD;
+    const password = process.env.DB_PASSWORD;
     if (!password) {
-      throw new Error(
-        'POSTGRES_PASSWORD is not set — expected it in .env.testing.',
-      );
+      throw new Error('DB_PASSWORD is not set — expected it in .env.testing.');
     }
-    const credentials = `lcp:${password}`;
-    env.DATABASE_URL = `postgres://${credentials}@${host}:${port}/lcp`;
+    const user = process.env.DB_USER ?? 'lcp';
+    const dbName = process.env.DB_NAME ?? 'lcp';
+    const credentials = `${user}:${password}`;
+    env.DATABASE_URL = `postgres://${credentials}@${host}:${port}/${dbName}`;
   }
   if (services.includes('redis')) {
     const { host, port } = mappedUrl('redis');
@@ -226,7 +226,7 @@ function deriveConnectionEnv(
 export async function startComposeTier(
   options: ComposeTierOptions,
 ): Promise<ComposeTierResult> {
-  loadEnvFile(join(REPO_ROOT, ENV_FILE));
+  loadEnvFileWithLocal(join(REPO_ROOT, ENV_FILE));
 
   const projectName = `lcp-${options.tier}-${process.pid}`;
   let composeEnv = new DockerComposeEnvironment(REPO_ROOT, COMPOSE_FILES)

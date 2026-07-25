@@ -1,10 +1,7 @@
 import { DataSource } from 'typeorm';
+import { DEFAULT_EMBEDDING_DIMENSION } from './defaults';
 
-/**
- * Default embedding dimension used when EMBEDDING_DIMENSION env var is not set.
- * Must match the default in the Joi config schemas.
- */
-export const DEFAULT_EMBEDDING_DIMENSION = 768;
+export { DEFAULT_EMBEDDING_DIMENSION } from './defaults';
 
 /**
  * Result of checking whether an embedding dimension migration is needed.

@@ -52,15 +52,17 @@ development with Docker Compose. Values you may want to change:
 
 | Variable                                | Default        | When to change                                |
 | --------------------------------------- | -------------- | --------------------------------------------- |
-| `POSTGRES_PASSWORD`                     | `dev-password` | Any shared or non-local environment           |
+| `DB_PASSWORD`                           | `dev-password` | Any shared or non-local environment           |
 | `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | stub values    | Any shared or non-local environment           |
-| `OIDC_CLIENT_SECRET`                    | `change-me`    | Required when running Zitadel (step 7)        |
 | `ZITADEL_MASTERKEY`                     | (32-char key)  | Required — encrypts Zitadel's secrets at rest |
 | `ZITADEL_ADMIN_PASSWORD`                | `admin`        | Required when running Zitadel (step 7)        |
 
-The OIDC variables (`OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`)
-must be set but are not validated at startup unless a guarded endpoint is called.
-The defaults from `.env.example` are safe to leave for development without auth.
+`OIDC_ISSUER_URL` defaults to the bundled Zitadel and rarely needs changing for
+local development. You do **not** set `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` (or
+`TEST_CLIENT_ID`/`TEST_CLIENT_SECRET`) by hand: the Zitadel bootstrap in
+`start-dev.sh` generates them and writes them to the gitignored
+`<env-file>.local` override. For an external OIDC provider, put its fixed client
+id/secret in that same `.local` file. See [ADR-018 §7](ADRs/ADR-018-system-configuration-setup-wizard.md).
 
 ## 5. Start all services
 

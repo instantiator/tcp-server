@@ -25,14 +25,14 @@ OIDC_TOKEN_TYPE_JWT` (apps) or `ACCESS_TOKEN_TYPE_JWT` (machine users), or auth 
 
 ## Environment variables
 
-| Variable                   | Required | Description                                                                                                             |
-| -------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `OIDC_ISSUER_URL`          | **Yes**  | The provider's issuer URL. Must match the `iss` claim in tokens.                                                        |
-| `OIDC_CLIENT_ID`           | **Yes**  | Client ID registered with the provider.                                                                                 |
-| `OIDC_CLIENT_SECRET`       | **Yes**  | Client secret (used server-side by the device-authorization and refresh endpoints).                                     |
-| `OIDC_INTERNAL_ISSUER_URL` | No       | Alternative URL for server-side HTTP calls to the provider (see [Docker networking](#docker-networking)).               |
-| `OIDC_JWKS_URI`            | No       | Explicit JWKS URI override. If unset, discovered from the provider's discovery document.                                |
-| `OIDC_AUDIENCE`            | No       | Audience claim to validate. If unset, audience validation is skipped (see [Audience validation](#audience-validation)). |
+| Variable                   | Required | Description                                                                                                                   |
+| -------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `OIDC_ISSUER_URL`          | **Yes**  | The provider's issuer URL. Must match the `iss` claim in tokens. Committed.                                                   |
+| `OIDC_CLIENT_ID`           | **Yes**  | Client ID. Generated (bundled Zitadel) or provider-issued (external) — lives in the gitignored `<env>.local`, not committed.  |
+| `OIDC_CLIENT_SECRET`       | **Yes**  | Client secret (used server-side by the device-authorization and refresh endpoints). Same `.local` placement as the client ID. |
+| `OIDC_INTERNAL_ISSUER_URL` | No       | Alternative URL for server-side HTTP calls to the provider (see [Docker networking](#docker-networking)).                     |
+| `OIDC_JWKS_URI`            | No       | Explicit JWKS URI override. If unset, discovered from the provider's discovery document.                                      |
+| `OIDC_AUDIENCE`            | No       | Audience claim to validate. If unset, audience validation is skipped (see [Audience validation](#audience-validation)).       |
 
 ## Using the included Zitadel (local development)
 
@@ -49,15 +49,19 @@ This creates:
 - Application: `lcp-server` (OIDC, device authorization + refresh token grants)
 - Test user: `test` / `test`
 
-Zitadel is then accessible at `http://localhost:8080/ui/console` (admin console) and
-lcp-server is configured to use it automatically via the defaults in `.env.example`.
+Zitadel is then accessible at `http://localhost:8080/ui/console` (admin console). The
+bootstrap generates the OIDC client credentials and writes them to the gitignored
+`<env-file>.local` override (e.g. `.env.dev.local`); lcp-server reads them from there —
+nothing to configure by hand.
 
 See [docs/zitadel-setup.md](zitadel-setup.md) for manual configuration steps.
 
 ## Using an external OIDC provider
 
-Set the three required variables in your environment or `.env` file and start lcp-server
-normally. `OIDC_INTERNAL_ISSUER_URL` is not needed for external providers.
+Set `OIDC_ISSUER_URL` in your committed env file, and put the provider-issued
+`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` in the gitignored `<env-file>.local` override (the
+`.env` snippets below show the combined effect). `OIDC_INTERNAL_ISSUER_URL` is not needed
+for external providers.
 
 ### Auth0
 

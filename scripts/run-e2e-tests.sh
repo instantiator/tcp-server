@@ -31,8 +31,25 @@ EOF
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=scripts/lib/check-no-lcp-running.sh
 source "$SCRIPT_DIR/lib/check-no-lcp-running.sh"
+
+# Derive host-facing URLs (notably LCP_SERVER_URL, which lcp-agent and the MCP
+# apps' config schemas require at boot) from .env.testing and export them so
+# Jest inherits them. DATABASE_URL/REDIS_URL/MINIO_ENDPOINT are re-derived
+# per-run from the testcontainers' random host ports (global-setup) and
+# overwrite these placeholders before any spec boots an app.
+if [[ -f "$REPO_ROOT/.env.testing" ]]; then
+  set -a
+  # shellcheck disable=SC1091 # env file, not shell source
+  source "$REPO_ROOT/.env.testing"
+  set +a
+fi
+# shellcheck source=scripts/lib/derive-urls.sh
+# shellcheck disable=SC1091 # source path resolved at runtime
+source "$SCRIPT_DIR/lib/derive-urls.sh"
+derive_host_urls
 
 PASSTHROUGH=()
 for arg in "$@"; do
