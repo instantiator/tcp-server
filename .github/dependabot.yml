@@ -4,12 +4,7 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
-    open-pull-requests-limit: 10
-    groups:
-      patch-and-minor:
-        update-types:
-          - "patch"
-          - "minor"
+    open-pull-requests-limit: 0
 
   # lcp-stub-llm has its own package.json — it shares no dependencies with
   # the rest of this monorepo.
@@ -17,59 +12,58 @@ updates:
     directory: "/apps/lcp-stub-llm"
     schedule:
       interval: weekly
-    groups:
-      patch-and-minor:
-        update-types:
-          - "patch"
-          - "minor"
+    open-pull-requests-limit: 0
 
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
-    groups:
-      patch-and-minor:
-        update-types:
-          - "patch"
-          - "minor"
+    open-pull-requests-limit: 0
 
   - package-ecosystem: docker
     directory: "/"
     schedule:
       interval: weekly
+    open-pull-requests-limit: 0
 
   - package-ecosystem: docker
     directory: "/apps/lcp-server"
     schedule:
       interval: weekly
+    open-pull-requests-limit: 0
 
   - package-ecosystem: docker
     directory: "/apps/lcp-agent"
     schedule:
       interval: weekly
+    open-pull-requests-limit: 0
 
   - package-ecosystem: docker
     directory: "/apps/lcp-mcp-interactions"
     schedule:
       interval: weekly
+    open-pull-requests-limit: 0
 
   - package-ecosystem: docker
     directory: "/apps/lcp-mcp-tasks"
     schedule:
       interval: weekly
+    open-pull-requests-limit: 0
 
   - package-ecosystem: docker
     directory: "/apps/lcp-mcp-memory"
     schedule:
       interval: weekly
+    open-pull-requests-limit: 0
 
   - package-ecosystem: docker
     directory: "/apps/lcp-mcp-storage"
     schedule:
       interval: weekly
+    open-pull-requests-limit: 0
 
   - package-ecosystem: docker
     directory: "/apps/lcp-stub-llm"
     schedule:
       interval: weekly
+    open-pull-requests-limit: 0
