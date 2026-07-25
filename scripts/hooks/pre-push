@@ -33,7 +33,7 @@ echo "→ pre-push: build..."
 npm run build:apps --silent
 
 echo "→ pre-push: aislop scan..."
-npx --no-install aislop ci
+npx --yes aislop@latest ci
 
 # Migration drift check, scoped to the commits being pushed (no database needed).
 # A full `migration:generate` drift check is not viable here: the models

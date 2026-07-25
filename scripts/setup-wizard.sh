@@ -13,9 +13,9 @@ if ! command -v node >/dev/null 2>&1; then
 fi
 
 # Check for tsx (used to run TypeScript directly)
-if ! npx --no-install tsx --version >/dev/null 2>&1; then
+if ! npx --yes tsx --version >/dev/null 2>&1; then
   echo "Installing tsx..." >&2
   npm install --no-save tsx 2>/dev/null
 fi
 
-exec npx tsx "$REPO_ROOT/scripts/setup-wizard/index.ts" "$@"
+exec npx --yes tsx "$REPO_ROOT/scripts/setup-wizard/index.ts" "$@"
