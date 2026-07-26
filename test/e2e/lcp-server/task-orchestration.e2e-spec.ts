@@ -393,6 +393,23 @@ describe('Task orchestration lifecycle (e2e)', () => {
     );
   });
 
+  it('accepts a case/whitespace-varied qa verdict (e.g. " Accept ") without a retry', async () => {
+    const taskId = await createAndStart();
+    await submitPlan(taskId, 1);
+    const s0 = await completeStep(taskId, 0);
+    const qaAgentId = await agentIdFor(
+      (await qaAssignment(s0.assignmentId)).id,
+    );
+
+    await request(app.getHttpServer())
+      .post(`/internal/assignment/${s0.assignmentId}/assure`)
+      .set('X-Internal-Api-Key', INTERNAL_KEY)
+      .send({ agentId: qaAgentId, qa: ' Accept ' })
+      .expect(200);
+
+    expect((await step(taskId, 0)).status).toBe('succeeded');
+  });
+
   it('fails the task when QA rejects up to the attempt cap', async () => {
     // Cap the company at 1 QA attempt so a single rejection exhausts it.
     await companyRepo.update(company.id, { runConfig: { maxQaAttempts: 1 } });

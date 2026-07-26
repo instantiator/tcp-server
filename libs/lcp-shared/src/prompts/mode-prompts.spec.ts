@@ -81,7 +81,7 @@ describe('MODE_PROMPTS', () => {
   it('tells implement mode to right-size output (no file for a short answer)', () => {
     const implement = MODE_PROMPTS.implement.toLowerCase();
     expect(implement).toContain('summary');
-    expect(implement).toContain('inline-text');
+    expect(implement).toContain('text');
     expect(implement).toContain('do not need to create a file');
   });
 

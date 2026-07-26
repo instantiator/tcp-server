@@ -158,8 +158,12 @@ export class McpClientService {
 
 /**
  * Converts an MCP JSON Schema object into a Zod schema for use with
- * {@link DynamicStructuredTool}. Handles string, number, boolean, and object
- * types. Unrecognised types fall back to `z.unknown()`.
+ * {@link DynamicStructuredTool}. Handles string, number, boolean, array, and
+ * object types, preserving each field's `enum` (as a Zod enum) and
+ * `description` — both are load-bearing for the LLM: they're the only place
+ * it ever sees a field's allowed values and purpose, since the model binds to
+ * this rebuilt schema, not the MCP server's original one. Unrecognised types
+ * fall back to `z.unknown()`.
  *
  * @param omitKeys properties to exclude entirely — used to hide
  *   identity fields (`agentId`, `companyId`) that are injected server-side
@@ -184,9 +188,24 @@ function buildZodSchema(
 }
 
 function jsonSchemaFieldToZod(field: Record<string, unknown>): z.ZodType {
+  const base = jsonSchemaFieldToZodBase(field);
+  const description = field['description'];
+  return typeof description === 'string' ? base.describe(description) : base;
+}
+
+function jsonSchemaFieldToZodBase(field: Record<string, unknown>): z.ZodType {
   switch (field['type']) {
-    case 'string':
+    case 'string': {
+      const values = field['enum'];
+      if (
+        Array.isArray(values) &&
+        values.length > 0 &&
+        values.every((v) => typeof v === 'string')
+      ) {
+        return z.enum(values as [string, ...string[]]);
+      }
       return z.string();
+    }
     case 'number':
     case 'integer':
       return z.number();

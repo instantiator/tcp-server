@@ -1679,6 +1679,24 @@
       },
       "type": "object"
     },
+    "artifactTypeDisplayName": {
+      "$comment": "(type: string) => string",
+      "properties": {
+        "namedArgs": {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "assignment": {
       "$comment": "(\n  status: LcpAssignment['status']) => Pick<LcpAssignment, 'status'>",
       "properties": {

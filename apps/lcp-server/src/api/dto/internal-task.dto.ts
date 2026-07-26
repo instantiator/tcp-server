@@ -1,4 +1,5 @@
 import type { UUID } from 'crypto';
+import { Transform } from 'class-transformer';
 import {
   IsArray,
   IsIn,
@@ -54,6 +55,10 @@ export class AssureAssignmentDto {
   @IsUUID()
   agentId!: UUID;
 
+  /** Case/whitespace-folded before validation — an LLM's `Accept`/`REJECT` shouldn't need a retry. */
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
   @IsIn(['accept', 'reject'])
   qa!: 'accept' | 'reject';
 

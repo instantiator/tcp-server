@@ -119,6 +119,23 @@ describe('InteractionsToolsService', () => {
       expect(text).toContain('Error');
     });
 
+    it('folds case and whitespace on kind (e.g. "Users") before deciding which collections to fetch', async () => {
+      const users = [{ id: randomUUID(), identifier: 'alice' }];
+      axiosGet.mockResolvedValue({ data: users });
+
+      const text = await callTool(service, 'list_available_contacts', {
+        companyId,
+        kind: ' Users ',
+      });
+
+      expect(axiosGet).toHaveBeenCalledTimes(1);
+      expect(axiosGet).toHaveBeenCalledWith(
+        `http://lcp-server:3000/internal/company/${companyId}/users`,
+        { headers: { 'X-Internal-Api-Key': 'test-key' } },
+      );
+      expect(text).toContain('alice');
+    });
+
     it('defaults to both when kind is omitted, fetching users and roles in one call', async () => {
       const users = [{ id: randomUUID(), identifier: 'alice' }];
       const roles = [{ id: randomUUID(), name: 'analyst' }];

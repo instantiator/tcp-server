@@ -467,6 +467,35 @@ describe('AssignmentService', () => {
       expect(created.expected[0].type).toBe('inline-text');
     });
 
+    it('accepts the short `file` artifact type alias and stores it canonicalised', async () => {
+      const { task, agent } = await setupPlanner();
+      await service.planTask(task.id, agent.id, [
+        {
+          prompt: 'a',
+          role: 'analyst',
+          expected: [{ type: 'file', value: 'out.md' }] as never,
+        },
+      ]);
+      const created = await assignmentRepo.findOneByOrFail({
+        taskId: task.id,
+        mode: 'implement',
+      });
+      expect(created.expected[0].type).toBe('assignment-working-path');
+    });
+
+    it('reports the short display name (not the internal type) for an invalid artifact type', async () => {
+      const { task, agent } = await setupPlanner();
+      await expect(
+        service.planTask(task.id, agent.id, [
+          {
+            prompt: 'a',
+            role: 'analyst',
+            expected: [{ type: 'bogus-type', value: 'out.md' }] as never,
+          },
+        ]),
+      ).rejects.toThrow(/file, text/);
+    });
+
     it('rejects a non-plan-mode caller', async () => {
       const company = await seedCompany();
       const role = await seedRole(company.id);

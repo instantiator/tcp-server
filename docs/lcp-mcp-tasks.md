@@ -51,7 +51,7 @@ Returns a markdown overview of the tasks service tailored to the caller's mode. 
 | ------------- | ----- | -------- | ----------------------------------------------------------------- |
 | `assignments` | array | yes      | Ordered `{ prompt, role, expected[], materials? }` — at least one |
 
-Each `expected`/`materials` entry is an `{ type, value }` artifact. `expected` accepts `assignment-working-path` or `inline-text`; `materials` accepts `task-materials-path`, `assignment-completed-path`, or `inline-text`.
+Each `expected`/`materials` entry is an `{ type, value }` artifact. Internally, `expected` accepts `assignment-working-path` or `inline-text`; `materials` accepts `task-materials-path`, `assignment-completed-path`, or `inline-text`. The MCP tool schema advertises the shorter LLM-facing names `file`/`text` (`expected`) and `material-file`/`completed-file`/`text` (`materials`), and `canonicalArtifactType` (`libs/lcp-shared/src/models/LcpArtifact.ts`) accepts several near-miss synonyms (`working-file`, `path`, `filename`, `inline`, `string`, …) for all of them, normalising to the internal type before validation.
 
 **Backing endpoint:** `POST /internal/task/:taskId/plan`. Validation (each failure → 4xx with a message the tool relays verbatim): the caller is a `plan`-mode agent whose assignment belongs to `:taskId`; the task is in `planning` (atomically claimed `planning → in-progress`); ≥ 1 assignment; every `role` resolves (id or slug) within the company; artifact types are within the allowed unions. On success it creates the implement-mode `LcpAssignment` rows (`orderIndex` 0…n−1, status `ready`) and calls `TaskDispatcher.taskPlanned` (no-op until part 7).
 
@@ -85,12 +85,12 @@ A duplicate/concurrent completion loses the atomic claim and gets **409**.
 
 **QA mode only.** Records a QA verdict on the assignment under review.
 
-| Parameter  | Type                   | Required          | Description                       |
-| ---------- | ---------------------- | ----------------- | --------------------------------- |
-| `qa`       | `'accept' \| 'reject'` | yes               | The verdict                       |
-| `feedback` | string                 | when `qa==reject` | Actionable feedback for the agent |
+| Parameter  | Type                   | Required          | Description                                                                                       |
+| ---------- | ---------------------- | ----------------- | ------------------------------------------------------------------------------------------------- |
+| `qa`       | `'accept' \| 'reject'` | yes               | The verdict (case/whitespace-insensitive — `Accept`, `reject`, etc. are folded before validation) |
+| `feedback` | string                 | when `qa==reject` | Actionable feedback for the agent                                                                 |
 
-**Backing endpoint:** `POST /internal/assignment/:id/assure`. The caller must be a `qa`-mode agent whose assignment's `targetAssignmentId` is `:id`, and the target must be `in-qa` (atomically claimed via `qaStatus`). It sets `qaStatus`/`qaFeedback`, calls `TaskDispatcher.assignmentAssured` (no-op — part 7 owns the accept/reject consequences), then completes the QA agent (its own assignment → `succeeded`, output = the verdict). A duplicate verdict gets **409**.
+**Backing endpoint:** `POST /internal/assignment/:id/assure`. The caller must be a `qa`-mode agent whose assignment's `targetAssignmentId` is `:id`, and the target must be `in-qa` (atomically claimed via `qaStatus`). `qa` is lower-cased/trimmed by `AssureAssignmentDto` (`@Transform` + `@IsIn`) before validation — the MCP tool layer folds it too, so the local response and audit record match what's stored. It sets `qaStatus`/`qaFeedback`, calls `TaskDispatcher.assignmentAssured` (no-op — part 7 owns the accept/reject consequences), then completes the QA agent (its own assignment → `succeeded`, output = the verdict). A duplicate verdict gets **409**.
 
 ---
 

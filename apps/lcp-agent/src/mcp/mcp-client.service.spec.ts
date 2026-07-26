@@ -1,5 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { z } from 'zod';
 import { McpClientService } from './mcp-client.service';
 
 jest.mock('@modelcontextprotocol/sdk/client/index.js');
@@ -155,6 +156,66 @@ describe('McpClientService', () => {
         query: 'test query',
       });
       expect(output).toBe('result text');
+    });
+
+    it('preserves a string field enum as a Zod enum and keeps its description', async () => {
+      const clientInstance = makeClientInstance([
+        {
+          name: 'assure_assignment',
+          description: 'Record a QA verdict',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              qa: {
+                type: 'string',
+                enum: ['accept', 'reject'],
+                description: 'Your verdict on the assignment under review.',
+              },
+            },
+            required: ['qa'],
+          },
+        },
+      ]);
+      MockClient.mockImplementation(() => clientInstance as unknown as Client);
+
+      const [mcpTool] = await service.loadTools(['tasks'], {
+        tasks: 'http://localhost:3013',
+      });
+      const shape = (
+        mcpTool.tool.schema as { shape: Record<string, z.ZodType> }
+      ).shape;
+
+      expect(shape.qa.description).toBe(
+        'Your verdict on the assignment under review.',
+      );
+      expect(shape.qa.safeParse('accept').success).toBe(true);
+      expect(shape.qa.safeParse('Accept').success).toBe(false);
+    });
+
+    it('preserves a plain string field description', async () => {
+      const clientInstance = makeClientInstance([
+        {
+          name: 'read_working_file',
+          description: 'Read a file',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              path: { type: 'string', description: 'The object key to read.' },
+            },
+            required: ['path'],
+          },
+        },
+      ]);
+      MockClient.mockImplementation(() => clientInstance as unknown as Client);
+
+      const [mcpTool] = await service.loadTools(['storage'], {
+        storage: 'http://localhost:3010',
+      });
+      const shape = (
+        mcpTool.tool.schema as { shape: Record<string, z.ZodType> }
+      ).shape;
+
+      expect(shape.path.description).toBe('The object key to read.');
     });
 
     it('returns empty string when callTool produces no text content', async () => {

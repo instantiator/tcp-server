@@ -294,6 +294,29 @@ describe('TasksToolsService', () => {
       expect(text).toContain('rejected');
     });
 
+    it('folds case and whitespace on the qa verdict before proxying and replying', async () => {
+      mockAssignment(axiosGet, {
+        id: assignmentId,
+        mode: 'qa',
+        taskId: null,
+        targetAssignmentId: targetId,
+      });
+      axiosPost.mockResolvedValue({ data: {} });
+
+      const text = await callTool(service, 'assure_assignment', {
+        agentId,
+        companyId,
+        qa: ' Accept ',
+      });
+
+      expect(axiosPost).toHaveBeenCalledWith(
+        `http://lcp-server:3000/internal/assignment/${targetId}/assure`,
+        expect.objectContaining({ agentId, qa: 'accept' }),
+        expect.any(Object),
+      );
+      expect(text).toContain('accepted');
+    });
+
     it('refuses a non-qa-mode caller', async () => {
       mockAssignment(axiosGet, {
         id: assignmentId,
