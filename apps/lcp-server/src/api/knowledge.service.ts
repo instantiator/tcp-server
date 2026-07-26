@@ -1,10 +1,12 @@
 import {
+  DEFAULT_RAG_THRESHOLD,
   KnowledgeChunk,
   KnowledgeIndexState,
   LcpCompany,
   LcpRole,
   resolveEmbeddingConfig,
   resolveEnvEmbeddingConfig,
+  resolveRunConfig,
 } from '@lcp/shared';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -206,14 +208,24 @@ export class KnowledgeService {
     topK?: number,
     threshold?: number,
   ): Promise<RagChunk[]> {
-    const { company } = await this.resolveScope({ kind: 'role', roleId });
+    const { company, role } = await this.resolveScope({ kind: 'role', roleId });
     return this.ragRetrieval.retrieve(
       roleId,
       company.id,
       query,
       resolveEmbeddingConfig(company, resolveEnvEmbeddingConfig(this.config)),
       topK,
-      threshold,
+      // An explicit `threshold` (the CLI's --threshold) wins, so operators can
+      // probe raw scores; otherwise resolve the same cascade prompt assembly
+      // uses, so this route reports what the role would really retrieve.
+      threshold ??
+        resolveRunConfig(
+          'ragThreshold',
+          role ?? null,
+          company,
+          this.config.get<number>('RAG_THRESHOLD'),
+          DEFAULT_RAG_THRESHOLD,
+        ),
     );
   }
 

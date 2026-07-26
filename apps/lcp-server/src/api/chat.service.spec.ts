@@ -472,6 +472,50 @@ describe('ChatService', () => {
     );
   });
 
+  it('waits for a slow llm_response audit write before emitting the terminal event, so a client reading the stream in order never sees the terminal event first', async () => {
+    const agent = makeAgent({ threadId: null });
+    const role = makeRole();
+    agentRepo.findOneBy.mockResolvedValue(agent);
+    roleRepo.findOneBy.mockResolvedValue(role);
+    compiledGraph.streamEvents.mockReturnValue(responseStream('Hi there!'));
+
+    // Simulate the llm_response row's persist-then-publish taking a moment —
+    // exactly the ordering gap that let a fire-and-forget write be overtaken
+    // by the (awaited) terminal state_change record.
+    type RecordArgs = [
+      string,
+      string,
+      string | null,
+      AuditEventType,
+      Record<string, unknown>,
+    ];
+    const originalImpl = auditService.record.getMockImplementation() as (
+      ...args: RecordArgs
+    ) => Promise<void>;
+    auditService.record.mockImplementation((...args: RecordArgs) => {
+      const [, , , eventType] = args;
+      if (eventType !== AuditEventType.LlmResponse) {
+        return originalImpl(...args);
+      }
+      return new Promise<void>((resolve) =>
+        setTimeout(() => {
+          void originalImpl(...args);
+          resolve();
+        }, 20),
+      );
+    });
+
+    const events = await sendAndCollect(agent.id, 'Hello');
+
+    const responseIndex = events.findIndex(
+      (e) =>
+        e.type === 'audit' && e.event.eventType === AuditEventType.LlmResponse,
+    );
+    const terminalIndex = events.findIndex(isTerminal);
+    expect(responseIndex).toBeGreaterThanOrEqual(0);
+    expect(responseIndex).toBeLessThan(terminalIndex);
+  });
+
   it('passes the real agentId/companyId as MCP tool context, not LLM-suppliable values', async () => {
     const agent = makeAgent({ threadId: null });
     const role = makeRole();

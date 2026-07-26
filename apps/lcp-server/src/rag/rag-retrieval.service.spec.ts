@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { LlmConfig } from '@lcp/shared';
+import { DEFAULT_RAG_THRESHOLD, LlmConfig } from '@lcp/shared';
 import { EmbeddingService } from './embedding.service';
 import { RagRetrievalService } from './rag-retrieval.service';
 
@@ -50,6 +50,22 @@ describe('RagRetrievalService', () => {
       ),
       expect.arrayContaining([roleId, companyId, 0.8, 5]),
     );
+  });
+
+  it('applies DEFAULT_RAG_THRESHOLD when the caller passes no threshold', async () => {
+    const ds = makeDataSource([]);
+    const svc = new RagRetrievalService(makeEmbedding(), ds as never);
+
+    await svc.retrieve(randomUUID(), randomUUID(), 'query', config);
+
+    // Guards the failure mode this default was calibrated against: a
+    // threshold above the embedding model's real score range filters out
+    // every chunk, so retrieval silently returns nothing at all.
+    expect(ds.query).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.arrayContaining([DEFAULT_RAG_THRESHOLD]),
+    );
+    expect(DEFAULT_RAG_THRESHOLD).toBeLessThan(0.7);
   });
 
   it('returns mapped rows from the database', async () => {

@@ -147,4 +147,39 @@ describe('AgentWorkerService', () => {
 
     expect(sawRegisteredDuringRun).toBe(true);
   });
+
+  describe('onModuleDestroy', () => {
+    it('resolves when startup never created a worker, so teardown cannot mask the startup error', async () => {
+      // `.compile()` without `.init()` — onModuleInit never ran, exactly as
+      // when the Redis probe throws before the worker is assigned.
+      const uninitialised = await Test.createTestingModule({
+        providers: [
+          AgentWorkerService,
+          AgentRegistryService,
+          { provide: AgentLoopService, useValue: { run: jest.fn() } },
+          {
+            provide: ConfigService,
+            useValue: {
+              getOrThrow: () => 'redis://localhost:6379',
+              get: () => undefined,
+            },
+          },
+        ],
+      }).compile();
+
+      await expect(
+        uninitialised.get(AgentWorkerService).onModuleDestroy(),
+      ).resolves.toBeUndefined();
+    });
+
+    it('swallows a close that rejects against a dead connection', async () => {
+      const { Worker } = jest.requireMock<{ Worker: jest.Mock }>('bullmq');
+      const instance = Worker.mock.results[0].value as { close: jest.Mock };
+      instance.close.mockRejectedValueOnce(new Error('Connection is closed'));
+
+      await expect(
+        module.get(AgentWorkerService).onModuleDestroy(),
+      ).resolves.toBeUndefined();
+    });
+  });
 });

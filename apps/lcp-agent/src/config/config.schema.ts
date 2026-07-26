@@ -47,4 +47,11 @@ export const configSchema = Joi.object({
     .integer()
     .min(1)
     .default(DEFAULT_EMBEDDING_DIMENSION),
+
+  /**
+   * Overrides {@link DEFAULT_RAG_THRESHOLD} when set. Per-role and
+   * per-company `runConfig.ragThreshold` take precedence. Calibrate to the
+   * embedding model in use — cosine scores don't compare across models.
+   */
+  RAG_THRESHOLD: Joi.number().min(0).max(1).empty('').optional(),
 });

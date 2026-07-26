@@ -11,6 +11,7 @@ import {
   DEFAULT_AGENT_ITERATIONS,
   DEFAULT_AGENT_LOOP_TIMEOUT_MS,
   DEFAULT_LLM_CONTEXT_WINDOW,
+  DEFAULT_RAG_THRESHOLD,
   DEFAULT_REQUIRED_TOOL_RETRIES,
   LcpAgent,
   LcpAssignment,
@@ -748,6 +749,14 @@ export class AgentLoopService {
           resolveEmbeddingConfig(
             company,
             resolveEnvEmbeddingConfig(this.config),
+          ),
+          undefined,
+          resolveRunConfig(
+            'ragThreshold',
+            role,
+            company,
+            this.config.get<number>('RAG_THRESHOLD'),
+            DEFAULT_RAG_THRESHOLD,
           ),
         )
       : [];

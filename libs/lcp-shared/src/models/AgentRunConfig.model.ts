@@ -1,5 +1,6 @@
 /**
- * Optional per-role or per-company overrides for agent loop resource limits.
+ * Optional per-role or per-company overrides for agent run limits and
+ * retrieval tuning.
  *
  * Values are applied in precedence order: {@link LcpRole.runConfig} →
  * {@link LcpCompany.runConfig} → environment variables → code defaults.
@@ -12,4 +13,11 @@ export interface AgentRunConfig {
   timeoutMs?: number;
   /** Maximum QA rejections a task assignment may accrue before it fails. */
   maxQaAttempts?: number;
+  /**
+   * Minimum cosine similarity (0–1) a knowledge chunk must score to be
+   * retrieved. Set per role/company when an embedding model's score
+   * distribution differs from the default's — see
+   * {@link DEFAULT_RAG_THRESHOLD}.
+   */
+  ragThreshold?: number;
 }

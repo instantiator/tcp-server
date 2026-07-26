@@ -548,4 +548,113 @@ describe('ChatSession', () => {
       );
     });
   });
+
+  describe('runTurn', () => {
+    /** Builds a fake `fetch` Response streaming the given wire events as SSE. */
+    function sseResponse(events: WireEvent[]): Response {
+      const body = events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('');
+      const bytes = new TextEncoder().encode(body);
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(bytes);
+          controller.close();
+        },
+      });
+      return {
+        ok: true,
+        body: stream,
+      } as unknown as Response;
+    }
+
+    /** The server's synthesized event for a late subscriber to an
+     * already-idle agent — `runTurn` connects *before* posting the new
+     * message, so the agent is always still idle from its previous turn (or
+     * never having run) at that moment, making this the very first event on
+     * every fresh connection, not a signal about the turn about to start. */
+    const replayEvent: WireEvent = {
+      type: 'audit',
+      event: {
+        timestamp: 't0',
+        companyId: 'c',
+        role: '',
+        agentId: 'agent-1',
+        assignmentId: null,
+        taskId: null,
+        eventType: 'state_change',
+        payload: {
+          entity: 'agent',
+          newStatus: 'idle',
+          response: '',
+          reason: 'replay',
+        },
+      },
+    };
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('ignores the replay-reason idle event instead of treating it as this turn already finished blank', async () => {
+      const inputEvent: WireEvent = {
+        type: 'audit',
+        event: {
+          timestamp: 't1',
+          companyId: 'c',
+          role: 'r',
+          agentId: 'agent-1',
+          assignmentId: null,
+          taskId: null,
+          eventType: 'input',
+          payload: { text: 'hello' },
+        },
+      };
+      const terminalEvent: WireEvent = {
+        type: 'audit',
+        event: {
+          timestamp: 't2',
+          companyId: 'c',
+          role: 'r',
+          agentId: 'agent-1',
+          assignmentId: null,
+          taskId: null,
+          eventType: 'state_change',
+          payload: {
+            entity: 'agent',
+            newStatus: 'idle',
+            response: 'the real answer',
+            reason: 'turn_complete',
+          },
+        },
+      };
+      jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue(
+          sseResponse([replayEvent, inputEvent, terminalEvent]),
+        );
+      mockedApiRequest.mockResolvedValueOnce({ accepted: true });
+      const tui = fakeTui();
+      const session = makeSession(tui);
+
+      await session.runTurn('agent-1', 'hello', true);
+
+      // The replay event must never surface as a premature empty completion.
+      expect(tui.appendEvent).not.toHaveBeenCalledWith(
+        'agent-1',
+        expect.objectContaining({
+          type: 'stream',
+          channel: 'response',
+          delta: '',
+        }),
+      );
+      // The real input/terminal events were rendered/used instead.
+      expect(tui.appendEvent).toHaveBeenCalledWith(
+        'agent-1',
+        expect.objectContaining({
+          type: 'audit',
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          event: expect.objectContaining({ eventType: 'input' }),
+        }),
+      );
+    });
+  });
 });

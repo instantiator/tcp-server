@@ -192,7 +192,30 @@ Beyond the database/Redis/MinIO/OIDC connection strings (see `.env.example`), a 
 | `INTERNAL_API_KEY`           | all apps              | Shared secret for internal service-to-service calls (`X-Internal-Api-Key`)        |
 | `KNOWLEDGE_POLL_INTERVAL_MS` | lcp-server            | Reconciliation-poll interval for the `knowledge-reindex` sync (default `60000`)   |
 | `TASK_MAX_QA_ATTEMPTS`       | lcp-server            | Env-level fallback for `runConfig.maxQaAttempts` (role/company override it first) |
+| `RAG_THRESHOLD`              | lcp-server, lcp-agent | Env-level fallback for `runConfig.ragThreshold` (role/company override it first)  |
 | `LCP_MASK_API_KEYS`          | lcp-server            | Masks `LlmConfig.apiKey` in API responses (default `true`)                        |
+
+### Tuning RAG retrieval
+
+Knowledge chunks are returned only when their cosine similarity to the query
+meets `runConfig.ragThreshold` (role → company → `RAG_THRESHOLD` →
+`DEFAULT_RAG_THRESHOLD`, currently `0.35`).
+
+**Cosine scores are not comparable across embedding models** — each has its own
+score distribution, so this is a per-model calibration rather than a universal
+"relevance" figure. Set it too high and retrieval silently returns nothing at
+all, with no error to explain the empty prompt.
+
+To calibrate after changing embedding model, query with `--threshold 0` to see
+raw scores, using queries you know should and shouldn't match:
+
+```bash
+./lcp-cli.sh query-knowledge -c <company> -r <role> -q "a question the docs answer" --threshold 0
+./lcp-cli.sh query-knowledge -c <company> -r <role> -q "something wholly unrelated" --threshold 0
+```
+
+Pick a value in the gap between the two. With no `--threshold`, the command
+reports exactly what that role would retrieve in a real prompt.
 
 ## Key conventions
 

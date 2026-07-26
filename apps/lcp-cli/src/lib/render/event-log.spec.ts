@@ -50,8 +50,13 @@ describe('EventLogBuffer', () => {
     // The response block from the delta, then a line-only llm_response — its
     // text is not re-printed as a block.
     expect(lines).toContain(`${HH} | llm_response:response |`);
-    expect(lines).toContain(`${HH} | llm_response |`);
+    expect(lines).toContain(`${HH} | llm_response | `);
     expect(lines.filter((l) => l.includes('answer'))).toEqual(['  answer']);
+    // Regression: the dedupe line must never render as an empty content
+    // block — that shows the "(blank)" placeholder meant for a genuinely
+    // empty response, which is misleading once the real text already
+    // streamed live above it.
+    expect(lines.join('\n')).not.toContain('(blank)');
   });
 
   it('replays history (no deltas) as full response blocks', () => {
@@ -80,6 +85,24 @@ describe('EventLogBuffer', () => {
     );
     // a1 (first), then a2 (change) — not a1's second event.
     expect(headings.map((h) => h.agentId)).toEqual(['a1', 'a2']);
+  });
+
+  it('a whitespace-only leading delta does not arm the dedupe collapse — the real llm_response still renders in full', () => {
+    const buf = new EventLogBuffer(noHeadingInfo);
+    buf.appendAudit(audit('llm_request', {}));
+    // A single framing/whitespace-only chunk, then nothing else streams —
+    // e.g. a provider that emits one leading token before falling back to a
+    // non-streaming completion for the rest of the turn.
+    buf.appendDelta(delta('response', ' '));
+    buf.appendAudit(
+      audit('llm_response', {
+        reasoningText: 'thinking it through',
+        responseText: 'the real answer',
+      }),
+    );
+    const lines = buf.render(80, plainStyle);
+    expect(lines).toContain('  thinking it through');
+    expect(lines).toContain('  the real answer');
   });
 
   it('drops reasoning when hideReasoning is set', () => {

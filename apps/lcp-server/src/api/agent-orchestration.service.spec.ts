@@ -92,17 +92,11 @@ describe('AgentOrchestrationService', () => {
   let msgRepo: ReturnType<typeof makeRepo>;
   let recordAudit: jest.Mock;
 
-  beforeEach(async () => {
-    mockDb = {
-      createAgent: jest.fn(),
-      getAgent: jest.fn(),
-    };
-    recordAudit = jest.fn().mockResolvedValue(undefined);
-    agentRepo = makeRepo();
-    consultRepo = makeRepo();
-    convRepo = makeRepo();
-    msgRepo = makeRepo();
-
+  /**
+   * Builds the service against the mocks assigned in `beforeEach`, *without*
+   * running `onModuleInit` — so a spec can exercise the pre-connection state.
+   */
+  async function compileService(): Promise<AgentOrchestrationService> {
     const testingModule: TestingModule = await Test.createTestingModule({
       providers: [
         AgentOrchestrationService,
@@ -127,7 +121,21 @@ describe('AgentOrchestrationService', () => {
       ],
     }).compile();
 
-    service = testingModule.get(AgentOrchestrationService);
+    return testingModule.get(AgentOrchestrationService);
+  }
+
+  beforeEach(async () => {
+    mockDb = {
+      createAgent: jest.fn(),
+      getAgent: jest.fn(),
+    };
+    recordAudit = jest.fn().mockResolvedValue(undefined);
+    agentRepo = makeRepo();
+    consultRepo = makeRepo();
+    convRepo = makeRepo();
+    msgRepo = makeRepo();
+
+    service = await compileService();
     await service.onModuleInit();
     // mock.results[0].value is the object returned by `new Queue(...)`, which
     // has our jest.fn() add/close methods
@@ -139,6 +147,25 @@ describe('AgentOrchestrationService', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+  });
+
+  describe('onModuleDestroy', () => {
+    it('closes the queue when one was opened', async () => {
+      await service.onModuleDestroy();
+      expect(mockQueueInstance.close).toHaveBeenCalled();
+    });
+
+    it('resolves when startup never opened a queue, so teardown cannot mask the startup error', async () => {
+      const neverStarted = await compileService();
+      await expect(neverStarted.onModuleDestroy()).resolves.toBeUndefined();
+    });
+
+    it('swallows a close that rejects against a dead connection', async () => {
+      mockQueueInstance.close.mockRejectedValue(
+        new Error('Connection is closed'),
+      );
+      await expect(service.onModuleDestroy()).resolves.toBeUndefined();
+    });
   });
 
   describe('startAgent', () => {

@@ -69,6 +69,26 @@ export const DEFAULT_EXPOSE_PORT_ZITADEL = 8080;
  */
 export const DEFAULT_EMBEDDING_DIMENSION = 768;
 
+// ── RAG retrieval ────────────────────────────────────────────────────────────
+
+/**
+ * Default minimum cosine similarity a knowledge chunk must score to be
+ * retrieved. Overridden by `RAG_THRESHOLD` (env), then by
+ * {@link AgentRunConfig.ragThreshold} via {@link resolveRunConfig}.
+ * Used in {@link RagRetrievalService.retrieve}.
+ *
+ * Cosine scores are **not** comparable across embedding models — each has its
+ * own score distribution, so this is a per-model calibration, not a universal
+ * "relevance" figure. Measured against `nomic-embed-text-v2-moe` over a real
+ * corpus, on-topic queries scored 0.39–0.64 while off-topic ones stayed below
+ * 0.29; 0.35 sits in that gap. An earlier 0.7 default was above anything that
+ * model ever returns, so retrieval silently matched nothing at all — prefer a
+ * default that under-filters (a stray chunk the LLM can ignore) over one that
+ * disables RAG without a word. Point `RAG_THRESHOLD` elsewhere when swapping
+ * to a model whose scores sit on a different scale.
+ */
+export const DEFAULT_RAG_THRESHOLD = 0.35;
+
 // ── Agent ────────────────────────────────────────────────────────────────────
 
 /**

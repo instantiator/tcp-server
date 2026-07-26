@@ -39,6 +39,8 @@ declare module 'terminal-kit' {
     outputHeight: number;
     hidden: boolean;
     disabled: boolean;
+    /** Whether the Document currently routes key events to this element. */
+    hasFocus: boolean;
     /** Key-name → user-action map; assigning on an instance shadows the prototype's bindings. */
     keyBindings: Record<string, string>;
     show(noDraw?: boolean): void;

@@ -218,6 +218,90 @@ describe('McpClientService', () => {
       expect(shape.path.description).toBe('The object key to read.');
     });
 
+    // The two specs above cover top-level fields. These cover the recursive
+    // branches — array items and nested objects — where the same enum/
+    // description preservation is easiest to drop silently, since the model
+    // still receives a structurally valid schema either way.
+    it('preserves an array item field enum and description', async () => {
+      const clientInstance = makeClientInstance([
+        {
+          name: 'complete_assignment',
+          description: 'Submit finished work',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              prepared: {
+                type: 'array',
+                items: {
+                  type: 'string',
+                  enum: ['file', 'text'],
+                  description: 'How to interpret each prepared artifact.',
+                },
+              },
+            },
+            required: ['prepared'],
+          },
+        },
+      ]);
+      MockClient.mockImplementation(() => clientInstance as unknown as Client);
+
+      const [mcpTool] = await service.loadTools(['tasks'], {
+        tasks: 'http://localhost:3013',
+      });
+      const shape = (
+        mcpTool.tool.schema as { shape: Record<string, z.ZodType> }
+      ).shape;
+      const element = (shape.prepared as unknown as { element: z.ZodType })
+        .element;
+
+      expect(element.description).toBe(
+        'How to interpret each prepared artifact.',
+      );
+      expect(element.safeParse('file').success).toBe(true);
+      expect(element.safeParse('directory').success).toBe(false);
+    });
+
+    it('preserves a nested object property enum and description', async () => {
+      const clientInstance = makeClientInstance([
+        {
+          name: 'create_plan',
+          description: 'Plan a task',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              artifact: {
+                type: 'object',
+                properties: {
+                  type: {
+                    type: 'string',
+                    enum: ['file', 'text'],
+                    description: 'Artifact kind.',
+                  },
+                },
+                required: ['type'],
+              },
+            },
+            required: ['artifact'],
+          },
+        },
+      ]);
+      MockClient.mockImplementation(() => clientInstance as unknown as Client);
+
+      const [mcpTool] = await service.loadTools(['tasks'], {
+        tasks: 'http://localhost:3013',
+      });
+      const shape = (
+        mcpTool.tool.schema as { shape: Record<string, z.ZodType> }
+      ).shape;
+      const inner = (
+        shape.artifact as unknown as { shape: Record<string, z.ZodType> }
+      ).shape;
+
+      expect(inner.type.description).toBe('Artifact kind.');
+      expect(inner.type.safeParse('text').success).toBe(true);
+      expect(inner.type.safeParse('paragraph').success).toBe(false);
+    });
+
     it('returns empty string when callTool produces no text content', async () => {
       const clientInstance = makeClientInstance([
         {

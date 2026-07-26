@@ -79,9 +79,13 @@ class TextContentAuditEventRenderer implements AuditEventRenderer {
         { style: 'llm', time, label: ASSIGNMENT_COMPLETE_LABEL, text: summary },
       ];
     }
-    // llm_response
+    // llm_response — its content already streamed live as deltas, so this
+    // collapses to a line-only marker instead of a content block: `response`
+    // is a block style, and an empty block renders the "(blank)" placeholder
+    // meant for a genuinely empty final answer, which is misleading here —
+    // the real text is already on screen a few lines up.
     if (state.deltasSeen) {
-      return [{ style: 'response', time, label: 'llm_response', text: '' }];
+      return [{ style: 'llm', time, label: 'llm_response', text: '' }];
     }
     const entries: LogEntry[] = [];
     const reasoning = reasoningText(e.payload);
