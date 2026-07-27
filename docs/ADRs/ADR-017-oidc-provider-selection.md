@@ -141,8 +141,6 @@ classic login is actually removed upstream.
 - No Keycloak Admin-API migration cost: ADR-011's `POST /users` /
   `PATCH /users/:id/status` Keycloak-admin-API proxy endpoints were deferred
   and never built, so there's nothing to port there.
-- See `docs/prompts/010.4.1` for the concrete migration plan (not yet
-  executed).
 
 ## Alternatives considered
 

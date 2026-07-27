@@ -88,7 +88,7 @@ await withOptimisticRetry(async () => {
 
 Audit events are INSERT-only. No locking needed.
 
-Since `docs/prompts/009.4 - doc type validations.md`, storage-tool audit events nest an `originators: { user: string | null; agent: string | null; task: string | null }` object inside `payload`, tracking who requested the action — `user` for direct JWT-authenticated calls (`POST /api/storage`, role document uploads), `agent` for MCP-tool-initiated calls, `task` reserved for a future task concept (always `null` today). No schema change: `payload` is already `jsonb`.
+Storage-tool audit events nest an `originators: { user: string | null; agent: string | null; task: string | null }` object inside `payload`, tracking who requested the action — `user` for direct JWT-authenticated calls (`POST /api/storage`, role document uploads), `agent` for MCP-tool-initiated calls, `task` reserved for a future task concept (always `null` today). No schema change: `payload` is already `jsonb`.
 
 ### LangGraph checkpoint store
 
@@ -96,7 +96,7 @@ LangGraph's `PostgresSaver` manages its own internal tables. Concurrent `updateS
 
 ## Health checks and cross-service communication
 
-Each service's `/health` endpoint checks only its own direct infrastructure dependencies (DB, Redis, MinIO). No service probes another service's health endpoint — doing so would create circular dependency chains. A service with no direct infrastructure dependency of its own (`lcp-mcp-interactions`; `lcp-mcp-storage` since `docs/prompts/009.4` moved its storage access behind `lcp-server`'s API) returns a static `{status:'ok'}` instead, relying entirely on Docker Compose's `depends_on` ordering below.
+Each service's `/health` endpoint checks only its own direct infrastructure dependencies (DB, Redis, MinIO). No service probes another service's health endpoint — doing so would create circular dependency chains. A service with no direct infrastructure dependency of its own (`lcp-mcp-interactions`; `lcp-mcp-storage`, whose storage access moved behind `lcp-server`'s API) returns a static `{status:'ok'}` instead, relying entirely on Docker Compose's `depends_on` ordering below.
 
 Cross-service startup ordering is handled by Docker Compose `depends_on: condition: service_healthy`. Cross-service communication health is validated end-to-end by the smoke test suite (`./scripts/run-smoke-tests.sh`).
 

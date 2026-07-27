@@ -108,32 +108,24 @@ When a user teaches a role during a conversation (see [ADR-012](./ADR-012-human-
 - Embedding dimension must match across memory writes and queries. Changing the embedding model later requires re-embedding all existing memories — plan for a re-index migration script.
 - Topic-tagging strategy for scrubbing: tags are free-form strings. A taxonomy may be useful later but is not enforced now.
 
-## Amendments as implemented (010.2.1)
-
-Since `docs/prompts/010.2.1 - task orchestration: knowledge folders and knowledge API.md`:
+## Amendments as implemented (010.2.1) — knowledge folders and knowledge API
 
 - **Knowledge is now role-or-shared scoped, not role-only**: a role's knowledge base (`knowledge_base.storage_path` in the schema above) lives at `knowledge/{role_slug}/`; a new company-wide scope lives at `knowledge/shared/` and is queried by all of a company's roles. `KnowledgeChunk.roleId` is nullable — `null` marks a shared-scope chunk — rather than every chunk necessarily belonging to exactly one role.
 - **`search_knowledge`/`recall` are not yet shared-aware**: this pass only extended the ingest/remove path (`RagIndexService.ingestDocument`/`removeDocument` now accept `roleId: UUID | null`) to cover the shared scope; retrieval still queries a single `roleId` and does not yet also pull in `knowledge/shared/` chunks. That's deferred to the next piece of work (embedding-sync/scoped-retrieval).
 
-## Amendments as implemented (010.2.2)
-
-Since `docs/prompts/010.2.2 - task orchestration: embedding sync and scoped retrieval.md`:
+## Amendments as implemented (010.2.2) — embedding sync and scoped retrieval
 
 - **Retrieval now searches role + shared scopes.** All three retrieval paths — `RagRetrievalService.retrieve` (lcp-server), `AgentRagService.retrieve` (lcp-agent), and lcp-mcp-memory's `search_knowledge`/`recall` — changed their chunk predicate from `roleId = $x` to `(("roleId" = $x) OR ("roleId" IS NULL AND "companyId" = $y))`, so a role sees its own chunks plus its company's shared chunks and never another company's. The lcp-server/lcp-agent `retrieve` signatures gained a `companyId` parameter to carry the second scope.
 - **Embeddings are kept in sync with storage automatically.** A new `KnowledgeReindexService` (lcp-server) owns a BullMQ `knowledge-reindex` queue + worker fed by two triggers: a `StorageService` write hook (fast path) and a periodic in-process reconciliation poller (`KNOWLEDGE_POLL_INTERVAL_MS`, default 60s) that catches out-of-band edits via a per-scope listing fingerprint. (The poller is a plain `unref`'d interval rather than a BullMQ repeatable job, so a short-lived test app can't leave a scheduled job firing under a later app in a shared-Redis test run.) Restart-on-change is enforced by a per-scope generation counter on the new `KnowledgeIndexState` entity/table (`knowledge_index_state`): the worker skips stale jobs and aborts + re-enqueues if the generation changes mid-rebuild. `KnowledgeService.store`/`delete` no longer index synchronously — the write hook is now the single path by which embeddings are (re)built.
 - **Manual reindex trigger.** `POST /api/company/:companyId/knowledge/reindex` (JWT-guarded, 202) and the `reindex-knowledge --company <slug-or-id>` CLI verb bump every scope of a company.
 
-## Amendments as implemented (010.7.1)
-
-Since `docs/prompts/010.7.1 - memory and knowledge: wider ingestion and OKF generation.md`:
+## Amendments as implemented (010.7.1) — wider knowledge ingestion and OKF generation
 
 - **`store-knowledge` accepts a wider set of source formats**, converted to OKF Markdown server-side (`apps/lcp-server/src/api/knowledge-conversion.ts`): `.md` (passed through unchanged), `.txt`, `.html` (via `turndown` + `turndown-plugin-gfm`, title from `<title>`), `.pdf` (via `pdf-parse`, plain text), `.docx` (via `mammoth`'s `convertToHtml` + the same turndown pipeline as `.html` — its shipped types omit `convertToMarkdown`), and `.csv`/`.json`/`.yaml` (wrapped in a fenced code block after a well-formedness check). `lcp-cli`'s client-side pre-check now only verifies the extension is supported; the server performs the real conversion and OKF validation.
 - **Heuristic title generation, not an LLM.** For genuinely converted (non-`.md`) formats, `ensureOkfFrontMatter` picks a title in order: a title discovered during conversion (HTML `<title>`, DOCX's first heading) → the first `#`/`##` heading in the converted body → the filename stem. `.md` sources are deliberately excluded from this — they keep today's strict `validateOkf` gate (missing/invalid front-matter is rejected with 422, not papered over with a guessed title), since `.md` is already OKF's native format and a user uploading one is expected to supply real front-matter.
 - **Non-`.md` uploads are stored under a derived `.md` filename** (source basename + `.md`), unless the caller passes an explicit `filename` override. A derived name colliding with an existing document is rejected with 409 (not silently overwritten) unless an explicit `filename` is given — re-uploading the same source again still overwrites, since re-deriving the same name is intentional.
 - **`pdf-parse`'s worker setup cannot run inside Jest's default (non-ESM) test environment.** `pdfjs-dist` (which `pdf-parse` v2 wraps) sets up its text-extraction "fake worker" via a dynamic `import()`, which Jest rejects without `--experimental-vm-modules` — a Jest sandboxing limitation, not a real runtime issue (confirmed working under plain Node, and under the real server process exercised by `test/api/api.spec.ts`). `apps/lcp-server/src/api/knowledge-conversion.spec.ts` mocks `pdf-parse` accordingly; real end-to-end `.pdf` extraction is only covered by `test/api/api.spec.ts` (a separate server process), not by any `*.e2e-spec.ts` (which run the app in-process via Jest's `TestingModule` and would hit the same limitation).
 
-## Amendments as implemented (010.7.2)
-
-Since `docs/prompts/010.7.2 - memory and knowledge: index status verb.md`:
+## Amendments as implemented (010.7.2) — knowledge-index status verb
 
 - **Knowledge-index status is queryable.** `GET /api/role/:roleId/knowledge/status` and `GET /api/company/:companyId/knowledge/status` (both JWT-guarded), plus the `get-knowledge-index-status (--role <slug-or-id>|--company <slug-or-id>)` CLI verb, report `{ documentCount, totalBytes, chunkCount, generation, lastIndexedAt, indexing }` for a scope — the company route returns the shared scope's status plus one entry per role (`{ shared, roles: [{ roleId, roleSlug, status }] }`). No new columns were added: document count/size come from `StorageService.listKnowledgeFiles`, chunk count from a `knowledge_chunk` count query, generation/`lastIndexedAt` from `KnowledgeIndexState` (`lastIndexedAt` is `null` until a fingerprint — written only on a completed rebuild — exists), and `indexing` from a new `KnowledgeReindexService.isRebuilding` check against the BullMQ queue's active/waiting/delayed jobs.
