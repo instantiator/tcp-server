@@ -1,16 +1,16 @@
-# lcp-cli — Developer CLI Reference
+# tcp-cli — Developer CLI Reference
 
-`lcp-cli` is a TypeScript command-line tool for interacting with an LCP server.
-It lives in `apps/lcp-cli/` and is launched via `./lcp-cli.sh` at the repository root.
+`tcp-cli` is a TypeScript command-line tool for interacting with an TCP server.
+It lives in `apps/tcp-cli/` and is launched via `./tcp-cli.sh` at the repository root.
 
 ## Quick start
 
 ```bash
 # Build and run (auto-builds on first call)
-./lcp-cli.sh --help
+./tcp-cli.sh --help
 
 # Force rebuild before running
-./lcp-cli.sh --rebuild list-companies
+./tcp-cli.sh --rebuild list-companies
 ```
 
 ## Global options
@@ -19,26 +19,26 @@ These options apply to all verbs and must come before the verb name.
 
 | Flag                           | Alias | Default                 | Description                                    |
 | ------------------------------ | ----- | ----------------------- | ---------------------------------------------- |
-| `--lcp-server <url>`           | `-s`  | `http://localhost:3000` | LCP server base URL                            |
+| `--tcp-server <url>`           | `-s`  | `http://localhost:3000` | TCP server base URL                            |
 | `--access-token <token>`       | `-t`  | —                       | Bearer token (skips auth flow)                 |
 | `--refresh-token <token>`      | `-T`  | —                       | Refresh token (renews an expired access token) |
 | `--access-token-env-var <var>` | `-E`  | —                       | Name of env var holding the token              |
 
-**Token resolution order**: `-t` → `-E` → `LCP_TOKEN` env var (if set) → OAuth 2.0
-device-authorization login (opens a browser). The `LCP_TOKEN` fallback is silent when
+**Token resolution order**: `-t` → `-E` → `TCP_TOKEN` env var (if set) → OAuth 2.0
+device-authorization login (opens a browser). The `TCP_TOKEN` fallback is silent when
 unset — it just falls through to the next step — but an explicit `-E <var>` whose var
 is unset is a hard error, since that was asked for by name.
 
 > [!NOTE]
 > The alias is capital `-E`, not `-e` — lowercase `-e` is already claimed by
-> `./lcp-cli.sh`'s own wrapper flag, `-e, --env <file>` (loads a different env
+> `./tcp-cli.sh`'s own wrapper flag, `-e, --env <file>` (loads a different env
 > file before running). `-E` does not collide with it.
 
 **Token renewal**: when `-t` or `-E` is used alongside `-T`, the refresh token is held in memory. Commands that run for a long time (e.g. `chat`) automatically exchange it for a new access token when the server returns `401 Unauthorized`, then retry the request transparently. When device-flow login is used instead, the server's own refresh token from that login is used — no `-T` is needed.
 
 ## Authentication
 
-lcp-cli needs a valid OIDC access token for most operations.
+tcp-cli needs a valid OIDC access token for most operations.
 The OIDC provider (Zitadel) doesn't support a password grant, so login goes
 through the OAuth 2.0 Device Authorization Grant (RFC 8628) — the same
 pattern `gh auth login` / `docker login` use. `get-token` prints a
@@ -48,12 +48,12 @@ prints the resulting access token to stdout once you're done.
 ```bash
 # Prints a verification URL + code to stderr, then polls until you finish
 # logging in in a browser, then prints the access token to stdout
-./lcp-cli.sh get-token
+./tcp-cli.sh get-token
 
-# Capture it into LCP_TOKEN — every subsequent command picks it up
+# Capture it into TCP_TOKEN — every subsequent command picks it up
 # automatically, no --access-token-env-var needed
-export LCP_TOKEN=$(./lcp-cli.sh get-token)
-./lcp-cli.sh list-companies
+export TCP_TOKEN=$(./tcp-cli.sh get-token)
+./tcp-cli.sh list-companies
 ```
 
 Use `--access-token-env-var <var>`/`-E` instead if you'd rather use a differently-named
@@ -68,10 +68,10 @@ variable (e.g. to keep multiple tokens around for different servers).
 npm install -g ajv-cli
 
 # Validate a company file
-ajv validate -s schemas/schema.json --ref '#/definitions/LcpCompany' -d my-company.json
+ajv validate -s schemas/schema.json --ref '#/definitions/TcpCompany' -d my-company.json
 
 # Validate a role file
-ajv validate -s schemas/schema.json --ref '#/definitions/LcpRole' -d my-role.json
+ajv validate -s schemas/schema.json --ref '#/definitions/TcpRole' -d my-role.json
 ```
 
 See [schema.md](schema.md) for the full field reference, VS Code integration, example JSON, and an inline Node.js validation option that needs no extra install.
@@ -139,13 +139,13 @@ Sign in via the browser (device-flow login) and print an OIDC access token.
 - **stderr**: the verification URL/code to open in a browser
 
 ```bash
-./lcp-cli.sh get-token
+./tcp-cli.sh get-token
 ```
 
-A common usage is to place the token into `LCP_TOKEN` for future work:
+A common usage is to place the token into `TCP_TOKEN` for future work:
 
 ```bash
-export LCP_TOKEN=$(./lcp-cli.sh get-token)
+export TCP_TOKEN=$(./tcp-cli.sh get-token)
 ```
 
 > [!NOTE]
@@ -158,7 +158,7 @@ List all companies.
 - **stdout**: `{ id, slug, name, description }[]` as JSON
 
 ```bash
-./lcp-cli.sh -t $TOKEN list-companies
+./tcp-cli.sh -t $TOKEN list-companies
 ```
 
 ### `list-roles`
@@ -174,9 +174,9 @@ List roles grouped by company.
 | `--company-slug <slug>` |       | Filter to a single company, instead of ID |
 
 ```bash
-./lcp-cli.sh -t $TOKEN list-roles
-./lcp-cli.sh -t $TOKEN list-roles -c <companyId>
-./lcp-cli.sh -t $TOKEN list-roles --company-slug acme
+./tcp-cli.sh -t $TOKEN list-roles
+./tcp-cli.sh -t $TOKEN list-roles -c <companyId>
+./tcp-cli.sh -t $TOKEN list-roles --company-slug acme
 ```
 
 ### `set-company`
@@ -191,17 +191,17 @@ Create or update a company. Reads JSON from `--input` or stdin.
 | ----------------------- | ----- | --------------------------------------------------- |
 | `--company-id <uuid>`   | `-c`  | Company UUID to update (overrides `id` in the JSON) |
 | `--company-slug <slug>` |       | Company slug to update instead of `--company-id`    |
-| `--input <json>`        | `-i`  | JSON body (`DeepPartial<LcpCompany>`)               |
+| `--input <json>`        | `-i`  | JSON body (`DeepPartial<TcpCompany>`)               |
 
 ```bash
 # Create
-echo '{"slug":"acme","name":"Acme Corp"}' | ./lcp-cli.sh -t $TOKEN set-company
+echo '{"slug":"acme","name":"Acme Corp"}' | ./tcp-cli.sh -t $TOKEN set-company
 
 # Update (id present → PUT)
-./lcp-cli.sh -t $TOKEN set-company -i '{"id":"<uuid>","name":"Acme Renamed"}'
+./tcp-cli.sh -t $TOKEN set-company -i '{"id":"<uuid>","name":"Acme Renamed"}'
 
 # Update by slug, without needing to know the id
-./lcp-cli.sh -t $TOKEN set-company --company-slug acme -i '{"name":"Acme Renamed"}'
+./tcp-cli.sh -t $TOKEN set-company --company-slug acme -i '{"name":"Acme Renamed"}'
 ```
 
 ### `set-role`
@@ -219,19 +219,19 @@ Create or update a role. Reads JSON from `--input` or stdin.
 | `--company-slug <slug>` |       | Company slug, instead of `--company-id`                              |
 | `--role-id <uuid>`      | `-r`  | Role UUID to update (overrides `id` in the JSON)                     |
 | `--role-slug <slug>`    |       | Role slug to update instead of `--role-id`                           |
-| `--input <json>`        | `-i`  | JSON body (`DeepPartial<LcpRole>`)                                   |
+| `--input <json>`        | `-i`  | JSON body (`DeepPartial<TcpRole>`)                                   |
 
 ```bash
 # Create
-./lcp-cli.sh -t $TOKEN set-role -c <companyId> \
+./tcp-cli.sh -t $TOKEN set-role -c <companyId> \
   -i '{"slug":"analyst","name":"analyst","description":"...","systemPromptTemplate":"You are {{name}}."}'
 
 # Update by slug, without needing to know the id
-./lcp-cli.sh -t $TOKEN set-role --company-slug acme --role-slug analyst \
+./tcp-cli.sh -t $TOKEN set-role --company-slug acme --role-slug analyst \
   -i '{"description":"Updated description."}'
 
 # Update
-./lcp-cli.sh -t $TOKEN set-role -i '{"id":"<uuid>","name":"senior-analyst"}'
+./tcp-cli.sh -t $TOKEN set-role -i '{"id":"<uuid>","name":"senior-analyst"}'
 ```
 
 #### Data-quality warnings
@@ -239,12 +239,12 @@ Create or update a role. Reads JSON from `--input` or stdin.
 `set-company` and `set-role` (and their equivalent server routes) still
 succeed when data is technically valid but inadvisable — e.g. a role with no
 `knowledgeDomains`, or a blank `companyContext`/`rolePrompt`. The server
-reports these via the `X-Lcp-Warnings` response header (a JSON array of
+reports these via the `X-Tcp-Warnings` response header (a JSON array of
 strings); the CLI prints each one to **stderr in yellow, prefixed with a
 warning emoji**, so piping stdout elsewhere is unaffected:
 
 ```bash
-$ ./lcp-cli.sh -t $TOKEN set-role -c <companyId> -i '{"slug":"analyst","name":"analyst","description":"..."}'
+$ ./tcp-cli.sh -t $TOKEN set-role -c <companyId> -i '{"slug":"analyst","name":"analyst","description":"..."}'
 ⚠️  Role has no knowledgeDomains set.
 ⚠️  Role has a blank or missing rolePrompt.
 {"id":"...","slug":"analyst", ...}
@@ -269,8 +269,8 @@ confirmation before deleting.
 | `--force`               | `-f`  | Skip the y/n confirmation prompt         |
 
 ```bash
-./lcp-cli.sh -t $TOKEN delete-company --company-slug acme
-./lcp-cli.sh -t $TOKEN delete-company -c <companyId> --force
+./tcp-cli.sh -t $TOKEN delete-company --company-slug acme
+./tcp-cli.sh -t $TOKEN delete-company -c <companyId> --force
 ```
 
 ### `delete-role`
@@ -294,8 +294,8 @@ confirmation before deleting. `--role-slug` requires `--company-id`/
 | `--force`               | `-f`  | Skip the y/n confirmation prompt                        |
 
 ```bash
-./lcp-cli.sh -t $TOKEN delete-role --company-slug acme --role-slug analyst
-./lcp-cli.sh -t $TOKEN delete-role -r <roleId> --force
+./tcp-cli.sh -t $TOKEN delete-role --company-slug acme --role-slug analyst
+./tcp-cli.sh -t $TOKEN delete-role -r <roleId> --force
 ```
 
 ### `chat`
@@ -338,7 +338,7 @@ way.
 | `--query <message>`         | `-q`  | Single question, auto-submitted on startup                                                                            |
 | `--hide-reasoning`          |       | Suppress the reasoning stream                                                                                         |
 | `--no-tui`                  |       | Force the plain scrolling renderer, even on a TTY                                                                     |
-| `--task-list-max-lines <n>` |       | Max lines a highlighted company task-list entry expands to (TUI only; default 4, env `LCP_TASK_LIST_ENTRY_MAX_LINES`) |
+| `--task-list-max-lines <n>` |       | Max lines a highlighted company task-list entry expands to (TUI only; default 4, env `TCP_TASK_LIST_ENTRY_MAX_LINES`) |
 
 A role is required — `--role-id`, or `--role-slug` scoped to a company (role
 slugs are unique only within a company, not globally, so `--role-slug` needs
@@ -347,7 +347,7 @@ can't be combined with either). A bare company with no role is rejected —
 that's [`tui`](#tui)'s job.
 
 ```bash
-./lcp-cli.sh -t $TOKEN chat --company-slug acme --role-slug chicken-assistant --no-tui -q 'Tell me about yourself'
+./tcp-cli.sh -t $TOKEN chat --company-slug acme --role-slug chicken-assistant --no-tui -q 'Tell me about yourself'
 ```
 
 #### Full-screen TUI (default on a TTY)
@@ -491,7 +491,7 @@ output (or `--no-tui`) keeps the original one-shot behaviour: print the final
 answer to stdout and exit, unchanged — see the plain renderer section below.
 
 ```bash
-./lcp-cli.sh -t $TOKEN chat -r <roleId>
+./tcp-cli.sh -t $TOKEN chat -r <roleId>
 # (full-screen TUI opens; type at the bottom input line, Tab/Shift+Tab to
 # switch tabs if a consultation is in progress, Ctrl+C or 'exit' to leave)
 ```
@@ -526,7 +526,7 @@ answer to another command. Every line/block is prefixed `hh:mm:ss | <label> |`:
 - Creates agent → sends message → streams the turn → prints the answer → deletes agent → exits
 
 ```bash
-./lcp-cli.sh -t $TOKEN chat -r <roleId> -q "What is your role?" | tee answer.txt
+./tcp-cli.sh -t $TOKEN chat -r <roleId> -q "What is your role?" | tee answer.txt
 ```
 
 **Interactive mode** (no `-q`, piped or `--no-tui`):
@@ -540,7 +540,7 @@ answer to another command. Every line/block is prefixed `hh:mm:ss | <label> |`:
 - The agent is always cleaned up on a clean exit.
 
 ```bash
-./lcp-cli.sh -t $TOKEN chat -r <roleId> --no-tui
+./tcp-cli.sh -t $TOKEN chat -r <roleId> --no-tui
 # > Tell me about Q3 trends.
 #
 # 14:03:20 | input | Tell me about Q3 trends.
@@ -574,13 +574,13 @@ always requires one.
 | `--company-id <uuid>`       | `-c`  | Company UUID                                                                                                                           |
 | `--company-slug <slug>`     |       | Company slug instead of `--company-id`                                                                                                 |
 | `--hide-reasoning`          |       | Suppress the reasoning stream                                                                                                          |
-| `--task-list-max-lines <n>` |       | Max lines a highlighted company task-list entry (or task-panel assignment) expands to (default 4, env `LCP_TASK_LIST_ENTRY_MAX_LINES`) |
+| `--task-list-max-lines <n>` |       | Max lines a highlighted company task-list entry (or task-panel assignment) expands to (default 4, env `TCP_TASK_LIST_ENTRY_MAX_LINES`) |
 
 Requires a TTY — there is no piped/plain-renderer fallback, since the whole
 point of this verb is the interactive roster.
 
 ```bash
-./lcp-cli.sh -t $TOKEN tui --company-slug acme
+./tcp-cli.sh -t $TOKEN tui --company-slug acme
 # (opens straight onto the company's roster — no agent yet; Up/Down to pick a
 # role or a task, Enter to open it, 'n' to initiate a new task)
 ```
@@ -597,9 +597,9 @@ List the knowledge-base documents currently stored for a role, or for a company'
 | `--company <slug-or-id>` | `-c`  | Company slug or UUID (shared knowledge scope) |
 
 ```bash
-./lcp-cli.sh -t $TOKEN list-knowledge -r <roleId>
-./lcp-cli.sh -t $TOKEN list-knowledge --company acme --role analyst
-./lcp-cli.sh -t $TOKEN list-knowledge -c acme
+./tcp-cli.sh -t $TOKEN list-knowledge -r <roleId>
+./tcp-cli.sh -t $TOKEN list-knowledge --company acme --role analyst
+./tcp-cli.sh -t $TOKEN list-knowledge -c acme
 ```
 
 ### `get-knowledge`
@@ -616,8 +616,8 @@ Retrieve a single knowledge-base document's content, for a role or a company's s
 | `--out <path>`           | `-o`  | Save to a local file instead of printing to stdout |
 
 ```bash
-./lcp-cli.sh -t $TOKEN get-knowledge -r <roleId> -f policy.md
-./lcp-cli.sh -t $TOKEN get-knowledge -c acme -f handbook.md -o ./handbook.md
+./tcp-cli.sh -t $TOKEN get-knowledge -r <roleId> -f policy.md
+./tcp-cli.sh -t $TOKEN get-knowledge -c acme -f handbook.md -o ./handbook.md
 ```
 
 ### `store-knowledge`
@@ -637,10 +637,10 @@ Accepts `.md`, `.txt`, `.html`, `.pdf`, `.docx`, `.csv`, `.json`, and `.yaml`. T
 | `--target <filename>`    | `-t`  | Filename to store as (defaults to the source basename, `.md`-extensioned for converted formats) |
 
 ```bash
-./lcp-cli.sh -t $TOKEN store-knowledge -r <roleId> -s policy.md
-./lcp-cli.sh -t $TOKEN store-knowledge --company acme --role analyst -s policy.md
-./lcp-cli.sh -t $TOKEN store-knowledge -c acme -s ./handbook.md -t company-handbook.md
-./lcp-cli.sh -t $TOKEN store-knowledge -c acme -s ./report.pdf
+./tcp-cli.sh -t $TOKEN store-knowledge -r <roleId> -s policy.md
+./tcp-cli.sh -t $TOKEN store-knowledge --company acme --role analyst -s policy.md
+./tcp-cli.sh -t $TOKEN store-knowledge -c acme -s ./handbook.md -t company-handbook.md
+./tcp-cli.sh -t $TOKEN store-knowledge -c acme -s ./report.pdf
 ```
 
 Documents are stored in MinIO under `{company_slug}/knowledge/{role_slug}/` (or `{company_slug}/knowledge/shared/` for company scope) and automatically indexed for RAG retrieval. See [shared-storage.md](shared-storage.md) for the storage layout.
@@ -658,8 +658,8 @@ Delete a single knowledge-base document by filename, from a role's knowledge bas
 | `--file <filename>`      | `-f`  | **(Required)** Filename to delete             |
 
 ```bash
-./lcp-cli.sh -t $TOKEN delete-knowledge -r <roleId> -f policy.md
-./lcp-cli.sh -t $TOKEN delete-knowledge -c acme -f handbook.md
+./tcp-cli.sh -t $TOKEN delete-knowledge -r <roleId> -f policy.md
+./tcp-cli.sh -t $TOKEN delete-knowledge -c acme -f handbook.md
 ```
 
 ### `reindex-knowledge`
@@ -673,7 +673,7 @@ Force a full RAG rebuild of every knowledge scope of a company (shared plus ever
 | `--company <slug-or-id>` | `-c`  | **(Required)** Company slug or UUID |
 
 ```bash
-./lcp-cli.sh -t $TOKEN reindex-knowledge -c acme
+./tcp-cli.sh -t $TOKEN reindex-knowledge -c acme
 ```
 
 ### `get-knowledge-index-status`
@@ -689,8 +689,8 @@ Report the RAG-indexing status of a role's knowledge scope, or of a company's sh
 | `--company <slug-or-id>` | `-c`  | Company slug or UUID (shared knowledge scope + every role) |
 
 ```bash
-./lcp-cli.sh -t $TOKEN get-knowledge-index-status -r <roleId>
-./lcp-cli.sh -t $TOKEN get-knowledge-index-status -c acme
+./tcp-cli.sh -t $TOKEN get-knowledge-index-status -r <roleId>
+./tcp-cli.sh -t $TOKEN get-knowledge-index-status -c acme
 ```
 
 ### `query-knowledge`
@@ -707,11 +707,11 @@ Runs a RAG similarity search for a role and prints the raw chunks that would be 
 | `--threshold <n>`     |       | Minimum cosine similarity to include. Defaults to the value the role itself would use (`runConfig.ragThreshold` → `RAG_THRESHOLD` → built-in), so the output matches what a real prompt would receive |
 
 ```bash
-./lcp-cli.sh -t $TOKEN query-knowledge -r <roleId> -q "remote work policy"
-./lcp-cli.sh -t $TOKEN query-knowledge -r <roleId> -q "remote work policy" --top-k 3 --threshold 0.5
+./tcp-cli.sh -t $TOKEN query-knowledge -r <roleId> -q "remote work policy"
+./tcp-cli.sh -t $TOKEN query-knowledge -r <roleId> -q "remote work policy" --top-k 3 --threshold 0.5
 # Calibration: --threshold 0 shows every chunk with its raw score, including
 # ones the role's own threshold would filter out.
-./lcp-cli.sh -t $TOKEN query-knowledge -r <roleId> -q "remote work policy" --threshold 0
+./tcp-cli.sh -t $TOKEN query-knowledge -r <roleId> -q "remote work policy" --threshold 0
 ```
 
 Queries are embedded and matched by meaning, not keywords: a natural-language
@@ -733,10 +733,10 @@ Print the MinIO console URL and open it in the default browser. Useful for brows
 
 ```bash
 # Open in browser
-./lcp-cli.sh open-document-store
+./tcp-cli.sh open-document-store
 
 # Print URL only
-./lcp-cli.sh open-document-store --no-open
+./tcp-cli.sh open-document-store --no-open
 ```
 
 No authentication required — the MinIO console has its own login (see [shared-storage.md → Authentication](shared-storage.md#authentication)).
@@ -748,18 +748,18 @@ No authentication required — the MinIO console has its own login (see [shared-
 Print the Swagger UI URL for one of the six server apps and open it in the default browser.
 
 - **stdout**: the Swagger UI URL (`{base}/swagger`)
-- Base URLs come from `LCP_<SERVICE>_BROWSER_URL` env vars (Docker-internal `LCP_*_URL` values aren't reachable from the host browser), defaulting to `http://localhost:<port>`
+- Base URLs come from `TCP_<SERVICE>_BROWSER_URL` env vars (Docker-internal `TCP_*_URL` values aren't reachable from the host browser), defaulting to `http://localhost:<port>`
 
 | Flag               | Description                                                                                                            |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| `--service <name>` | **(Required)** `lcp-server \| lcp-agent \| lcp-mcp-storage \| lcp-mcp-memory \| lcp-mcp-interactions \| lcp-mcp-tasks` |
+| `--service <name>` | **(Required)** `tcp-server \| tcp-agent \| tcp-mcp-storage \| tcp-mcp-memory \| tcp-mcp-interactions \| tcp-mcp-tasks` |
 | `--no-open`        | Print the URL without opening it                                                                                       |
 
 ```bash
-./lcp-cli.sh open-swagger --service lcp-server
+./tcp-cli.sh open-swagger --service tcp-server
 
 # Print URL only
-./lcp-cli.sh open-swagger --service lcp-mcp-tasks --no-open
+./tcp-cli.sh open-swagger --service tcp-mcp-tasks --no-open
 ```
 
 No authentication required to print/open the URL — the Swagger UI itself has no separate login.
@@ -781,13 +781,13 @@ List open agent-to-human queries (conversations with `status: awaiting_user`) th
 
 ```bash
 # Default table output
-./lcp-cli.sh list-open-queries
+./tcp-cli.sh list-open-queries
 
 # Filter to a company, JSON output
-./lcp-cli.sh list-open-queries -c <companyId> --format json
+./tcp-cli.sh list-open-queries -c <companyId> --format json
 
 # Filter to a company by slug
-./lcp-cli.sh list-open-queries --company-slug acme
+./tcp-cli.sh list-open-queries --company-slug acme
 ```
 
 The table columns are: slug, role name, and the first 120 characters of the question.
@@ -805,7 +805,7 @@ Read the full question, context, and reply history for a single query by its slu
   in the system locale's default timezone
 
 ```bash
-./lcp-cli.sh read-query analyst-3
+./tcp-cli.sh read-query analyst-3
 ```
 
 ---
@@ -818,7 +818,7 @@ Reply to an open query. Once submitted, the waiting agent is automatically re-en
 - **stderr**: progress messages (`"Sending response..."`, `"Agent resumed."`)
 
 ```bash
-./lcp-cli.sh respond analyst-3 "The budget is $50,000 for Q3."
+./tcp-cli.sh respond analyst-3 "The budget is $50,000 for Q3."
 ```
 
 The message argument is a plain string. Quotes are handled by your shell in the usual way.
@@ -839,10 +839,10 @@ Download a file from shared company storage to the local filesystem.
 
 ```bash
 # Download to current directory
-./lcp-cli.sh download-shared-document --source acme/tasks/xyz/output/report.md
+./tcp-cli.sh download-shared-document --source acme/tasks/xyz/output/report.md
 
 # Download to a specific path
-./lcp-cli.sh download-shared-document --source acme/tasks/xyz/output/report.md --target ~/Desktop/report.md
+./tcp-cli.sh download-shared-document --source acme/tasks/xyz/output/report.md --target ~/Desktop/report.md
 ```
 
 ---
@@ -860,7 +860,7 @@ Upload a local file to shared company storage.
 | `--target <path>` | Required. Object key destination in MinIO (e.g. `acme/knowledge/analyst/guide.md`) |
 
 ```bash
-./lcp-cli.sh upload-shared-document --source ./architecture.md --target acme/knowledge/architect/architecture.md
+./tcp-cli.sh upload-shared-document --source ./architecture.md --target acme/knowledge/architect/architecture.md
 ```
 
 MIME type is inferred from the file extension. Supported formats include `.md`, `.txt`, `.json`, `.pdf`, `.png`, `.jpg`, and `.jpeg`.
@@ -888,18 +888,18 @@ model.
 > [!NOTE]
 > **Behaviour change:** `--expected` used to be a Commander _variadic_ option
 > (`--expected a.txt b.txt` in one occurrence). It is now _repeatable_ instead
-> — repeat the flag once per filename (`-e a.txt -e b.txt`). `./lcp-cli.sh`'s
+> — repeat the flag once per filename (`-e a.txt -e b.txt`). `./tcp-cli.sh`'s
 > own `-e`/`--env` wrapper flag only intercepts `-e` up to the first
 > non-wrapper argument (the verb) — `create-task -e report.md` is unambiguous
 > since `-e` follows the verb.
 
 ```bash
-./lcp-cli.sh -t $TOKEN create-task -c acme -r "Write a market analysis report" -e report.md
+./tcp-cli.sh -t $TOKEN create-task -c acme -r "Write a market analysis report" -e report.md
 
-./lcp-cli.sh -t $TOKEN create-task -c acme -r "Write a market analysis report" \
+./tcp-cli.sh -t $TOKEN create-task -c acme -r "Write a market analysis report" \
   -e report.md -e summary.md
 
-./lcp-cli.sh -t $TOKEN create-task -c acme -r "Summarise the attached brief" \
+./tcp-cli.sh -t $TOKEN create-task -c acme -r "Summarise the attached brief" \
   -m ./brief.pdf --planner-role planner --start
 ```
 
@@ -907,10 +907,10 @@ model.
 
 Lists a company's tasks.
 
-- **stdout**: `LcpTask[]` as JSON
+- **stdout**: `TcpTask[]` as JSON
 
 ```bash
-./lcp-cli.sh -t $TOKEN list-tasks -c acme
+./tcp-cli.sh -t $TOKEN list-tasks -c acme
 ```
 
 ### `get-task`
@@ -922,7 +922,7 @@ outcomes.
 - **stdout**: `{ task, assignments }` as JSON
 
 ```bash
-./lcp-cli.sh -t $TOKEN get-task --task-id <uuid>
+./tcp-cli.sh -t $TOKEN get-task --task-id <uuid>
 ```
 
 ### `set-task`
@@ -941,11 +941,11 @@ Reads JSON from `--input` or stdin — a deep-partial, like `set-company`/
 | Flag               | Alias | Description                        |
 | ------------------ | ----- | ---------------------------------- |
 | `--task-id <uuid>` |       | Required. Task UUID                |
-| `--input <json>`   | `-i`  | JSON body (`DeepPartial<LcpTask>`) |
+| `--input <json>`   | `-i`  | JSON body (`DeepPartial<TcpTask>`) |
 
 ```bash
-./lcp-cli.sh -t $TOKEN set-task --task-id <uuid> -i '{"request":"Write a longer report"}'
-echo '{"expected":[{"type":"inline-text","value":"a summary"}]}' | ./lcp-cli.sh -t $TOKEN set-task --task-id <uuid>
+./tcp-cli.sh -t $TOKEN set-task --task-id <uuid> -i '{"request":"Write a longer report"}'
+echo '{"expected":[{"type":"inline-text","value":"a summary"}]}' | ./tcp-cli.sh -t $TOKEN set-task --task-id <uuid>
 ```
 
 ### `set-planner`
@@ -954,17 +954,17 @@ Sets a company's or an unstarted task's planner role. Exactly one of a
 company target (`--company`/`--company-id`/`--company-slug`) or `--task-id`
 must be given; `--role`/`--role-id`/`--role-slug` is always required.
 
-- A company target updates `LcpCompany.plannerRoleId` (`PUT /api/company/:id`)
+- A company target updates `TcpCompany.plannerRoleId` (`PUT /api/company/:id`)
   — the fallback used by any task in that company with no planner of its own.
-- A task target updates `LcpTask.plannerRoleId` (`PUT /api/task/:id`),
+- A task target updates `TcpTask.plannerRoleId` (`PUT /api/task/:id`),
   inheriting that endpoint's "unstarted only" guard (`409` once started). A
   `--role-slug` is scoped to the task's own company (resolved via `GET
 /api/task/:id` first), even though only a task was named.
 - **stdout**: the updated company or task as JSON
 
 ```bash
-./lcp-cli.sh -t $TOKEN set-planner --company-slug acme --role-slug planner
-./lcp-cli.sh -t $TOKEN set-planner --task-id <uuid> --role-slug planner
+./tcp-cli.sh -t $TOKEN set-planner --company-slug acme --role-slug planner
+./tcp-cli.sh -t $TOKEN set-planner --task-id <uuid> --role-slug planner
 ```
 
 ### `start-task`
@@ -979,7 +979,7 @@ Starts a task that hasn't been started yet — the standalone equivalent of
 - Returns `409` on a double start
 
 ```bash
-./lcp-cli.sh -t $TOKEN start-task --task-id <uuid>
+./tcp-cli.sh -t $TOKEN start-task --task-id <uuid>
 ```
 
 ### `cancel-task`
@@ -996,7 +996,7 @@ within one iteration) and stops without writing further output.
   call just fails with 409 rather than repeating the cascade
 
 ```bash
-./lcp-cli.sh -t $TOKEN cancel-task --task-id <uuid>
+./tcp-cli.sh -t $TOKEN cancel-task --task-id <uuid>
 ```
 
 ### `list-agents`
@@ -1004,7 +1004,7 @@ within one iteration) and stops without writing further output.
 Lists agents for a role or a company, defaulting to currently active agents
 (`idle`, `running`, `paused`) unless `--filter status=` overrides it.
 
-- **stdout**: `LcpAgent[]` as JSON
+- **stdout**: `TcpAgent[]` as JSON
 
 | Flag                               | Description                                                |
 | ---------------------------------- | ---------------------------------------------------------- |
@@ -1015,15 +1015,15 @@ Lists agents for a role or a company, defaulting to currently active agents
 | `--filter assignment=<id>`         | Repeatable. Filter to agents working a specific assignment |
 
 ```bash
-./lcp-cli.sh -t $TOKEN list-agents --company acme
-./lcp-cli.sh -t $TOKEN list-agents --role analyst --company acme --filter status=paused
+./tcp-cli.sh -t $TOKEN list-agents --company acme
+./tcp-cli.sh -t $TOKEN list-agents --role analyst --company acme --filter status=paused
 ```
 
 ### `list-assignments`
 
 Lists assignments for a task or a company.
 
-- **stdout**: `LcpAssignment[]` as JSON
+- **stdout**: `TcpAssignment[]` as JSON
 
 | Flag                         | Description                                                               |
 | ---------------------------- | ------------------------------------------------------------------------- |
@@ -1035,8 +1035,8 @@ Lists assignments for a task or a company.
 | `--filter role=<slug-or-id>` | Repeatable                                                                |
 
 ```bash
-./lcp-cli.sh -t $TOKEN list-assignments --task-id <uuid>
-./lcp-cli.sh -t $TOKEN list-assignments --company acme --filter task=null
+./tcp-cli.sh -t $TOKEN list-assignments --task-id <uuid>
+./tcp-cli.sh -t $TOKEN list-assignments --company acme --filter task=null
 ```
 
 ### `eavesdrop`
@@ -1057,7 +1057,7 @@ combined (history prints first, then the tail follows).
 | `--tail`                 | Follow current events live, via the same SSE stream `chat` uses                   |
 
 - **stdout**: history (`--show-history`) and the live tail (`--tail`) render
-  through **one shared pipeline** (the `apps/lcp-cli/src/lib/render/` library,
+  through **one shared pipeline** (the `apps/tcp-cli/src/lib/render/` library,
   the same one `chat` and the `tui` panes use), so replayed history is
   line-for-line identical to eavesdropping the same activity live. A scope
   heading block is printed whenever the active `(task, assignment, agent)`
@@ -1101,13 +1101,13 @@ output }` JSON, and `llm_response` replayed as a reasoning block then a
 
 ```bash
 # Replay everything that happened on a task so far
-./lcp-cli.sh -t $TOKEN eavesdrop --task-id <uuid> --show-history
+./tcp-cli.sh -t $TOKEN eavesdrop --task-id <uuid> --show-history
 
 # Watch a still-running assignment live
-./lcp-cli.sh -t $TOKEN eavesdrop --assignment-id <uuid> --tail
+./tcp-cli.sh -t $TOKEN eavesdrop --assignment-id <uuid> --tail
 
 # Both: catch up, then keep watching
-./lcp-cli.sh -t $TOKEN eavesdrop --agent-id <uuid> --show-history --tail
+./tcp-cli.sh -t $TOKEN eavesdrop --agent-id <uuid> --show-history --tail
 ```
 
 > **2026-07-18 — implementation note (010.5.1):** history and tail now feed
@@ -1150,19 +1150,19 @@ baked-in default system prompt template and the registered MCP services.
 
 ```bash
 # Quick total for a specific role
-./lcp-cli.sh estimate-context-window --company-slug acme --role-slug analyst
+./tcp-cli.sh estimate-context-window --company-slug acme --role-slug analyst
 
 # Full breakdown, without hitting a live server
-./lcp-cli.sh estimate-context-window --from-file ./role-fixture.json --json
+./tcp-cli.sh estimate-context-window --from-file ./role-fixture.json --json
 ```
 
 ### `validate-shared-document`
 
 Re-validates document(s) already in shared storage against the same rules
-enforced when lcp-server writes a document (JSON/YAML/OKF Markdown/plain
+enforced when tcp-server writes a document (JSON/YAML/OKF Markdown/plain
 Markdown/XML/CSV — see [shared-storage.md](shared-storage.md#write-validation)).
 Exists because a user could write directly to the backing object store,
-bypassing lcp-server's write-time validation gate entirely — this gives an
+bypassing tcp-server's write-time validation gate entirely — this gives an
 independent way to check what's actually there.
 
 `--path` accepts a specific object key or a glob (`*`, `?`), matched against
@@ -1179,10 +1179,10 @@ prefix; by default only immediate children are checked.
 
 ```bash
 # Validate a single document
-./lcp-cli.sh validate-shared-document --path acme/knowledge/analyst/report.md
+./tcp-cli.sh validate-shared-document --path acme/knowledge/analyst/report.md
 
 # Validate every document under a role's knowledge base, including subfolders
-./lcp-cli.sh validate-shared-document --path "acme/knowledge/analyst/*" --recursive
+./tcp-cli.sh validate-shared-document --path "acme/knowledge/analyst/*" --recursive
 ```
 
 ---

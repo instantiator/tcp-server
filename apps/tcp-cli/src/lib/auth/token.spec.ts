@@ -46,11 +46,11 @@ describe('resolveSession', () => {
     expect(session).toEqual({ token: 'env-token', refreshToken: 'my-refresh' });
   });
 
-  describe('LCP_TOKEN fallback', () => {
-    afterEach(() => delete process.env['LCP_TOKEN']);
+  describe('TCP_TOKEN fallback', () => {
+    afterEach(() => delete process.env['TCP_TOKEN']);
 
-    it('uses LCP_TOKEN when neither -t nor -E is given', async () => {
-      process.env['LCP_TOKEN'] = 'fallback-token';
+    it('uses TCP_TOKEN when neither -t nor -E is given', async () => {
+      process.env['TCP_TOKEN'] = 'fallback-token';
       const session = await resolveSession({
         baseUrl: 'http://localhost:3000',
       });
@@ -61,8 +61,8 @@ describe('resolveSession', () => {
       expect(mockApiRequest).not.toHaveBeenCalled();
     });
 
-    it('prefers an explicit --access-token over LCP_TOKEN', async () => {
-      process.env['LCP_TOKEN'] = 'fallback-token';
+    it('prefers an explicit --access-token over TCP_TOKEN', async () => {
+      process.env['TCP_TOKEN'] = 'fallback-token';
       const session = await resolveSession({
         baseUrl: 'http://localhost:3000',
         accessToken: 'explicit-token',
@@ -70,8 +70,8 @@ describe('resolveSession', () => {
       expect(session.token).toBe('explicit-token');
     });
 
-    it('prefers an explicit --access-token-env-var over LCP_TOKEN', async () => {
-      process.env['LCP_TOKEN'] = 'fallback-token';
+    it('prefers an explicit --access-token-env-var over TCP_TOKEN', async () => {
+      process.env['TCP_TOKEN'] = 'fallback-token';
       process.env['TEST_TOKEN_VAR'] = 'named-token';
       const session = await resolveSession({
         baseUrl: 'http://localhost:3000',
@@ -80,8 +80,8 @@ describe('resolveSession', () => {
       expect(session.token).toBe('named-token');
     });
 
-    it('does not use LCP_TOKEN as a silent substitute for an explicitly-named, unset env var', async () => {
-      process.env['LCP_TOKEN'] = 'fallback-token';
+    it('does not use TCP_TOKEN as a silent substitute for an explicitly-named, unset env var', async () => {
+      process.env['TCP_TOKEN'] = 'fallback-token';
       const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {
         throw new Error('exit');
       });
@@ -95,8 +95,8 @@ describe('resolveSession', () => {
       exitSpy.mockRestore();
     });
 
-    it('skips LCP_TOKEN and triggers device login when force is set', async () => {
-      process.env['LCP_TOKEN'] = 'fallback-token';
+    it('skips TCP_TOKEN and triggers device login when force is set', async () => {
+      process.env['TCP_TOKEN'] = 'fallback-token';
       jest.useFakeTimers();
       mockApiRequest
         .mockResolvedValueOnce({
@@ -129,7 +129,7 @@ describe('resolveSession', () => {
       );
     });
 
-    it('skips expired LCP_TOKEN and triggers device login', async () => {
+    it('skips expired TCP_TOKEN and triggers device login', async () => {
       // Token expired 10 seconds ago
       const expired = Math.floor(Date.now() / 1000) - 10;
       const header = Buffer.from(JSON.stringify({ alg: 'none' })).toString(
@@ -138,7 +138,7 @@ describe('resolveSession', () => {
       const payload = Buffer.from(JSON.stringify({ exp: expired })).toString(
         'base64url',
       );
-      process.env['LCP_TOKEN'] = `${header}.${payload}.sig`;
+      process.env['TCP_TOKEN'] = `${header}.${payload}.sig`;
 
       jest.useFakeTimers();
       mockApiRequest

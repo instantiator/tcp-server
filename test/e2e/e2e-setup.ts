@@ -6,4 +6,4 @@
 // are set here. Running the suite directly (bare jest) now provisions infra
 // via global setup too, so it no longer hangs on an unreachable Redis.
 process.env.OIDC_JWKS_URI ||= 'http://localhost:8080/stub-jwks';
-process.env.LCP_STORAGE_URL ||= 'http://localhost:3010';
+process.env.TCP_STORAGE_URL ||= 'http://localhost:3010';

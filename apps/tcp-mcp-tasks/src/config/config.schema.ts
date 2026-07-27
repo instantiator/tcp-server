@@ -7,6 +7,6 @@ import * as Joi from 'joi';
  */
 export const configSchema = Joi.object({
   PORT: Joi.number().default(3013),
-  LCP_SERVER_URL: Joi.string().uri().required(),
+  TCP_SERVER_URL: Joi.string().uri().required(),
   INTERNAL_API_KEY: Joi.string().required(),
 });

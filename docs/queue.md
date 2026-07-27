@@ -2,14 +2,14 @@
 
 ## Overview
 
-LCP uses a single BullMQ queue named **`agent-jobs`** backed by Redis. All
-agent execution is asynchronous: lcp-server enqueues jobs, lcp-agent workers
+TCP uses a single BullMQ queue named **`agent-jobs`** backed by Redis. All
+agent execution is asynchronous: tcp-server enqueues jobs, tcp-agent workers
 consume them.
 
 | Role     | Service    | Component                   |
 | -------- | ---------- | --------------------------- |
-| Producer | lcp-server | `AgentOrchestrationService` |
-| Consumer | lcp-agent  | `AgentWorkerService`        |
+| Producer | tcp-server | `AgentOrchestrationService` |
+| Consumer | tcp-agent  | `AgentWorkerService`        |
 
 ## Job types
 
@@ -26,14 +26,14 @@ result and user reply received since the agent paused (see
 
 ### 1. Standard agent task
 
-The common path: lcp-server enqueues a `start` job, lcp-agent runs the loop
+The common path: tcp-server enqueues a `start` job, tcp-agent runs the loop
 to completion, and records the output.
 
 ```mermaid
 sequenceDiagram
-    participant S as lcp-server
+    participant S as tcp-server
     participant Q as BullMQ (agent-jobs)
-    participant A as lcp-agent
+    participant A as tcp-agent
 
     S->>Q: add job {type: start, agentId}
     Q->>A: deliver job
@@ -50,15 +50,15 @@ sequenceDiagram
 ### 2. Agent-to-agent consultation
 
 The calling agent pauses while the called agent runs as a separate job. When
-the called agent completes, lcp-server gates the resume on outstanding
+the called agent completes, tcp-server gates the resume on outstanding
 requests before re-enqueuing the calling agent.
 
 ```mermaid
 sequenceDiagram
-    participant S as lcp-server
+    participant S as tcp-server
     participant Q as BullMQ (agent-jobs)
-    participant Cat as lcp-agent (cat)
-    participant Chkn as lcp-agent (chicken)
+    participant Cat as tcp-agent (cat)
+    participant Chkn as tcp-agent (chicken)
 
     S->>Q: add job {type: start, agentId: cat}
     Q->>Cat: deliver job
@@ -89,11 +89,11 @@ sequenceDiagram
 ### 3. Chat session with consultation
 
 A chat session (triggered by `POST /api/agent/:id/message`) runs LangGraph
-**inline** in lcp-server — no BullMQ job for the calling agent's first turn.
+**inline** in tcp-server — no BullMQ job for the calling agent's first turn.
 The POST returns `202` immediately and the turn streams over SSE; when a
-consultation tool is called, lcp-server dispatches a BullMQ job for the called
+consultation tool is called, tcp-server dispatches a BullMQ job for the called
 agent as normal. Once that job's chain completes, the calling agent's resumed
-run finishes and lcp-server emits the terminal `completed` event to the client's
+run finishes and tcp-server emits the terminal `completed` event to the client's
 SSE stream.
 
 > **Note:** the sequence diagram below predates [ADR-015](ADRs/ADR-015-agent-completion-sse.md)
@@ -103,12 +103,12 @@ SSE stream.
 
 ```mermaid
 sequenceDiagram
-    participant CLI as Client (lcp-cli)
-    participant CS as chat.service (lcp-server)
+    participant CLI as Client (tcp-cli)
+    participant CS as chat.service (tcp-server)
     participant R as Redis
     participant Q as BullMQ (agent-jobs)
-    participant Chkn as lcp-agent (chicken)
-    participant Cat2 as lcp-agent (cat resume)
+    participant Chkn as tcp-agent (chicken)
+    participant Cat2 as tcp-agent (cat resume)
 
     CLI->>CS: POST /api/agent/:id/message
     CS->>CS: graph.invoke() — cat LangGraph runs inline
@@ -141,15 +141,15 @@ sequenceDiagram
 ### 4. User-input pause and resume
 
 An agent can pause to ask a human a question. The human replies via the CLI
-or API; lcp-server gates the resume on all outstanding requests (same path as
+or API; tcp-server gates the resume on all outstanding requests (same path as
 consultation).
 
 ```mermaid
 sequenceDiagram
-    participant User as User (lcp-cli respond)
-    participant S as lcp-server
+    participant User as User (tcp-cli respond)
+    participant S as tcp-server
     participant Q as BullMQ (agent-jobs)
-    participant A as lcp-agent
+    participant A as tcp-agent
 
     S->>Q: add job {type: start, agentId}
     Q->>A: deliver job
@@ -186,7 +186,7 @@ In addition to job routing, Redis carries a lightweight completion signal:
 
 | Channel                     | Published by                   | Consumed by                |
 | --------------------------- | ------------------------------ | -------------------------- |
-| `agent:completed:{agentId}` | `AgentLoopService` (lcp-agent) | `ChatService` (lcp-server) |
+| `agent:completed:{agentId}` | `AgentLoopService` (tcp-agent) | `ChatService` (tcp-server) |
 
 This channel is only relevant for **chat sessions** (use case 3). Standard
 BullMQ agent runs (use cases 1, 2, 4) do not depend on it — if no one

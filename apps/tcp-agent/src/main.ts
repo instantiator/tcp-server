@@ -24,8 +24,8 @@ async function bootstrap() {
   app.enableShutdownHooks();
 
   const config = new DocumentBuilder()
-    .setTitle('LCP Agent')
-    .setDescription('Health and status endpoints for the LCP agent worker')
+    .setTitle('TCP Agent')
+    .setDescription('Health and status endpoints for the TCP agent worker')
     .setVersion('1.0')
     .build();
   SwaggerModule.setup(

@@ -154,7 +154,7 @@ describe('interpretKey', () => {
 });
 
 describe('resolveTaskListEntryMaxLines', () => {
-  const ENV_VAR = 'LCP_TASK_LIST_ENTRY_MAX_LINES';
+  const ENV_VAR = 'TCP_TASK_LIST_ENTRY_MAX_LINES';
   const originalEnv = process.env[ENV_VAR];
 
   afterEach(() => {

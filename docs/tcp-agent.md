@@ -1,15 +1,15 @@
-# lcp-agent
+# tcp-agent
 
-The `lcp-agent` service runs the LangGraph agent loop. It consumes jobs from the `agent-jobs` BullMQ queue and executes or resumes an agent run for each job.
+The `tcp-agent` service runs the LangGraph agent loop. It consumes jobs from the `agent-jobs` BullMQ queue and executes or resumes an agent run for each job.
 
 ---
 
 ## How it works
 
-1. **lcp-server** creates an `LcpAgent` record and enqueues a job: `{ agentId, type: 'start' | 'resume' }`.
-2. **lcp-agent's** `AgentWorkerService` picks up the job and calls `AgentLoopService.run(agentId)`.
+1. **tcp-server** creates an `TcpAgent` record and enqueues a job: `{ agentId, type: 'start' | 'resume' }`.
+2. **tcp-agent's** `AgentWorkerService` picks up the job and calls `AgentLoopService.run(agentId)`.
 3. `AgentLoopService`:
-   - Loads the `LcpAgent` and its `LcpRole` from the shared PostgreSQL database.
+   - Loads the `TcpAgent` and its `TcpRole` from the shared PostgreSQL database.
    - Sets the agent status to `running`.
    - Opens a `PostgresSaver` checkpoint store (LangGraph resumability).
    - Builds a `StateGraph` with a single `agent` node that invokes the configured LLM.
@@ -22,7 +22,7 @@ The `lcp-agent` service runs the LangGraph agent loop. It consumes jobs from the
 
 ## Authentication
 
-All `lcp-server` API endpoints (`/api/*`) require a Bearer token from your OIDC provider. Obtain one from Zitadel via `lcp-cli get-token` (device-flow login; see [zitadel-setup.md](zitadel-setup.md)) and pass it in every request:
+All `tcp-server` API endpoints (`/api/*`) require a Bearer token from your OIDC provider. Obtain one from Zitadel via `tcp-cli get-token` (device-flow login; see [zitadel-setup.md](zitadel-setup.md)) and pass it in every request:
 
 ```
 -H "Authorization: Bearer <token>"
@@ -52,7 +52,7 @@ curl -X POST http://localhost:3000/api/company \
   }'
 ```
 
-**Fallback rules** (see `LlmConfigResolver` in `@lcp/shared`):
+**Fallback rules** (see `LlmConfigResolver` in `@tcp/shared`):
 
 1. If the role has its own `llmConfig`, that is used.
 2. Otherwise the company's `llmConfig` is used.
@@ -85,7 +85,7 @@ curl -X POST http://localhost:3000/api/role \
   }'
 ```
 
-`apiKey` holds the API key for the provider. It is stored in the database as part of the JSONB config block and masked (`***`) in API responses by default. Set `LCP_MASK_API_KEYS=false` in the environment to expose raw keys during local debugging.
+`apiKey` holds the API key for the provider. It is stored in the database as part of the JSONB config block and masked (`***`) in API responses by default. Set `TCP_MASK_API_KEYS=false` in the environment to expose raw keys during local debugging.
 
 `systemPromptTemplate` is optional — a blank or omitted value resolves via `SystemPromptTemplateResolver`: the role's own template, then the company's, then a baked-in default (`DEFAULT_SYSTEM_PROMPT_TEMPLATE`).
 
@@ -93,14 +93,14 @@ curl -X POST http://localhost:3000/api/role \
 
 | Placeholder         | Value                                                                         |
 | ------------------- | ----------------------------------------------------------------------------- |
-| `{{name}}`          | `LcpRole.name`                                                                |
-| `{{description}}`   | `LcpRole.description`                                                         |
+| `{{name}}`          | `TcpRole.name`                                                                |
+| `{{description}}`   | `TcpRole.description`                                                         |
 | `{{date}}`          | Current UTC date, `YYYY-MM-DD` (kept for older templates)                     |
 | `{{datetime}}`      | Current UTC date and time, explicitly labeled — the LLM's authoritative "now" |
 | `{{timezone}}`      | The company's IANA timezone name, or `UTC` when unset                         |
 | `{{localDatetime}}` | `{{datetime}}` localized to `{{timezone}}`; equals `{{datetime}}` when unset  |
-| `{{companyId}}`     | `LcpAgent.companyId` — for tool calls that require it                         |
-| `{{roleId}}`        | `LcpRole.id` — for tool calls that require it                                 |
+| `{{companyId}}`     | `TcpAgent.companyId` — for tool calls that require it                         |
+| `{{roleId}}`        | `TcpRole.id` — for tool calls that require it                                 |
 
 ---
 
@@ -117,7 +117,7 @@ curl -X POST http://localhost:3000/api/agent/start \
   }'
 ```
 
-Returns the `LcpAgent` record. Poll `GET /api/agent/:id` to track status.
+Returns the `TcpAgent` record. Poll `GET /api/agent/:id` to track status.
 
 ---
 
@@ -163,11 +163,11 @@ Returns `{ provider, model, supportsTools, supportsStructuredOutput, compatible,
 | Max LLM calls | 10    | Hard-coded in `AgentLoopService` |
 | Timeout       | 60 s  | Hard-coded in `AgentLoopService` |
 
-Both are candidates for `LcpRole.runConfig` JSONB once per-role tuning is needed.
+Both are candidates for `TcpRole.runConfig` JSONB once per-role tuning is needed.
 
 To estimate a role's worst-case initial-prompt token footprint against its
-LLM's context window before running it, see `lcp-cli`'s
-[`estimate-context-window`](lcp-cli.md#estimate-context-window) — it reuses
+LLM's context window before running it, see `tcp-cli`'s
+[`estimate-context-window`](tcp-cli.md#estimate-context-window) — it reuses
 the same `ContextBudgetService` used at runtime to decide when to compact context.
 
 ---
@@ -180,9 +180,9 @@ MCP server URLs are resolved from environment variables:
 
 | Variable               | Server                                                                                     |
 | ---------------------- | ------------------------------------------------------------------------------------------ |
-| `MCP_STORAGE_URL`      | [lcp-mcp-storage](lcp-mcp-storage.md) — MinIO file operations                              |
-| `MCP_MEMORY_URL`       | [lcp-mcp-memory](lcp-mcp-memory.md) — episodic memory and knowledge search (stub)          |
-| `MCP_INTERACTIONS_URL` | [lcp-mcp-interactions](lcp-mcp-interactions.md) — user input and agent consultation (stub) |
+| `MCP_STORAGE_URL`      | [tcp-mcp-storage](tcp-mcp-storage.md) — MinIO file operations                              |
+| `MCP_MEMORY_URL`       | [tcp-mcp-memory](tcp-mcp-memory.md) — episodic memory and knowledge search (stub)          |
+| `MCP_INTERACTIONS_URL` | [tcp-mcp-interactions](tcp-mcp-interactions.md) — user input and agent consultation (stub) |
 
 See [agent-services.md → MCP Servers](agent-services.md#mcp-servers) for configuration details.
 
@@ -196,7 +196,7 @@ While the agent loop runs, `AgentLoopService` maintains an in-memory tracker tha
 
 **Storage changes** — structured record of MinIO mutations: `created`, `modified`, `deleted`, and `moved` file paths. Populated on `on_tool_end` events by inspecting the tool result text (e.g. `"Written:"`, `"Deleted:"`, `"Moved:"`).
 
-After each storage `on_tool_end`, the tracker is persisted to `LcpAgent.storageChanges` via a fire-and-forget `PATCH /internal/agent/:id/storage` to lcp-server. This makes the data available to lcp-mcp-interactions for `complete_task` file validation error messages without in-process coupling.
+After each storage `on_tool_end`, the tracker is persisted to `TcpAgent.storageChanges` via a fire-and-forget `PATCH /internal/agent/:id/storage` to tcp-server. This makes the data available to tcp-mcp-interactions for `complete_task` file validation error messages without in-process coupling.
 
 ---
 
@@ -242,6 +242,6 @@ Query: `SELECT * FROM audit_event WHERE agent_id = $1 ORDER BY timestamp`.
 
 `GET http://localhost:3001/health` — checks PostgreSQL connectivity and Redis connectivity. Returns HTTP 200 when both are up, 503 when either is down.
 
-The Redis check uses the shared bounded `assertRedisReachable` probe, so it cannot hang. lcp-agent also fails fast at **startup** if Redis is unreachable (`AgentWorkerService.onModuleInit`): rather than letting the BullMQ worker block indefinitely against a downed broker, it throws a clear error. `main.ts` calls `app.enableShutdownHooks()` so the worker and its Redis connection close cleanly on `SIGTERM`.
+The Redis check uses the shared bounded `assertRedisReachable` probe, so it cannot hang. tcp-agent also fails fast at **startup** if Redis is unreachable (`AgentWorkerService.onModuleInit`): rather than letting the BullMQ worker block indefinitely against a downed broker, it throws a clear error. `main.ts` calls `app.enableShutdownHooks()` so the worker and its Redis connection close cleanly on `SIGTERM`.
 
-> **Known gap (non-blocking):** `config/config.schema.ts` still requires `MINIO_ENDPOINT`/`MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` at startup, but lcp-agent never constructs an S3 client anywhere — storage access across the whole monorepo goes through `lcp-server`'s `StorageService`/`/internal/storage/*` endpoints instead. Likely leftover from an earlier design. Not removed in this pass; flagged here as a follow-up cleanup opportunity.
+> **Known gap (non-blocking):** `config/config.schema.ts` still requires `MINIO_ENDPOINT`/`MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` at startup, but tcp-agent never constructs an S3 client anywhere — storage access across the whole monorepo goes through `tcp-server`'s `StorageService`/`/internal/storage/*` endpoints instead. Likely leftover from an earlier design. Not removed in this pass; flagged here as a follow-up cleanup opportunity.

@@ -1,14 +1,14 @@
-# lcp-mcp-interactions
+# tcp-mcp-interactions
 
 **Status:** Implemented
 **Port:** 3012
 **Transport:** MCP Streamable HTTP — stateless, one session per request
 
-`lcp-mcp-interactions` is a NestJS MCP server that lets agents pause and coordinate — either requesting input from a human user or dispatching a question to another agent role. It lives in `apps/lcp-mcp-interactions/` and runs as a Docker Compose service.
+`tcp-mcp-interactions` is a NestJS MCP server that lets agents pause and coordinate — either requesting input from a human user or dispatching a question to another agent role. It lives in `apps/tcp-mcp-interactions/` and runs as a Docker Compose service.
 
-When an agent calls `request_user_input` or `request_agent_consultation`, lcp-agent detects the pause signal on the next iteration of its event loop and exits the stream cleanly, freeing resources. The BullMQ job is considered complete. The agent resumes automatically once a reply arrives.
+When an agent calls `request_user_input` or `request_agent_consultation`, tcp-agent detects the pause signal on the next iteration of its event loop and exits the stream cleanly, freeing resources. The BullMQ job is considered complete. The agent resumes automatically once a reply arrives.
 
-Each tool call writes `tool_call` and `tool_result` audit events to lcp-server via the internal audit endpoint.
+Each tool call writes `tool_call` and `tool_result` audit events to tcp-server via the internal audit endpoint.
 
 See [agent-services.md → MCP Servers](agent-services.md#mcp-servers) for how agents connect. See [ADR-012](ADRs/ADR-012-human-in-the-loop.md) for the full design, [user-input-conversations.md](user-input-conversations.md) for the agent-to-human flow, and [cross-agent-consultations.md](cross-agent-consultations.md) for the agent-to-agent flow.
 
@@ -25,7 +25,7 @@ See [agent-services.md → MCP Servers](agent-services.md#mcp-servers) for how a
 | [`request_user_input`](#request_user_input)                 | `request_user_input(agentId, companyId, question, context?, userIds?)`                  | Pause and submit a question to human users                   |
 | [`request_agent_consultation`](#request_agent_consultation) | `request_agent_consultation(agentId, companyId, roleId, question, context?, roleName?)` | Consult another agent role                                   |
 
-Assignment completion moved to [lcp-mcp-tasks](lcp-mcp-tasks.md) (`complete_assignment`) in task-orchestration part 5 — this server no longer owns a `complete_task` tool.
+Assignment completion moved to [tcp-mcp-tasks](tcp-mcp-tasks.md) (`complete_assignment`) in task-orchestration part 5 — this server no longer owns a `complete_task` tool.
 
 ---
 
@@ -91,10 +91,10 @@ Pauses the current agent and submits a question to the relevant human users in t
 
 **What happens internally:**
 
-1. `POST /internal/pause` on lcp-server — creates a `Conversation` record (status `awaiting_user`), sets `LcpAgent.status = paused`, routes the query to `userIds` directly if given, otherwise based on matching `knowledgeDomains`/`roles`
+1. `POST /internal/pause` on tcp-server — creates a `Conversation` record (status `awaiting_user`), sets `TcpAgent.status = paused`, routes the query to `userIds` directly if given, otherwise based on matching `knowledgeDomains`/`roles`
 2. Returns the conversation slug to the agent
-3. lcp-agent detects the `paused` status on its next loop iteration and exits the event stream cleanly
-4. When a user responds (`respond <slug> "message"`), lcp-server attempts to resume the agent — see [Resume conditions](cross-agent-consultations.md#resume-conditions)
+3. tcp-agent detects the `paused` status on its next loop iteration and exits the event stream cleanly
+4. When a user responds (`respond <slug> "message"`), tcp-server attempts to resume the agent — see [Resume conditions](cross-agent-consultations.md#resume-conditions)
 
 **Query routing:** See [user-input-conversations.md](user-input-conversations.md#data-model) for the full routing rules.
 
@@ -102,7 +102,7 @@ Pauses the current agent and submits a question to the relevant human users in t
 
 ## `request_agent_consultation`
 
-Pauses the current agent and dispatches a consultation job to another agent role. The calling agent is automatically resumed with the consulting agent's response once it calls `complete_assignment` (on the [tasks](lcp-mcp-tasks.md) service).
+Pauses the current agent and dispatches a consultation job to another agent role. The calling agent is automatically resumed with the consulting agent's response once it calls `complete_assignment` (on the [tasks](tcp-mcp-tasks.md) service).
 
 **Arguments:**
 
@@ -119,8 +119,8 @@ Pauses the current agent and dispatches a consultation job to another agent role
 
 **What happens internally:**
 
-1. `POST /internal/pause` on lcp-server — looks up the role by `roleId` (scoped to `companyId`), creates a `PendingConsultation` record, sets the calling agent to `paused`, starts a new agent job for the target role with a supplementary context prompt: `"This is a consultation from {callingRoleName}. Give a complete, concise answer in a single response."`
-2. When the consulting agent calls `complete_assignment`, lcp-server attempts to resume the calling agent with the consultation result — see [Resume conditions](cross-agent-consultations.md#resume-conditions)
+1. `POST /internal/pause` on tcp-server — looks up the role by `roleId` (scoped to `companyId`), creates a `PendingConsultation` record, sets the calling agent to `paused`, starts a new agent job for the target role with a supplementary context prompt: `"This is a consultation from {callingRoleName}. Give a complete, concise answer in a single response."`
+2. When the consulting agent calls `complete_assignment`, tcp-server attempts to resume the calling agent with the consultation result — see [Resume conditions](cross-agent-consultations.md#resume-conditions)
 3. Consulting agents are created with `requiredToolCalls: ['complete_assignment']`. If the consultation fails (error, timeout, or the required call never fires despite reminders), the calling agent is resumed with a `Consultation FAILED: <reason>` message instead of staying paused — see [Consultation failure](cross-agent-consultations.md#consultation-failure)
 
 ---
@@ -129,17 +129,17 @@ Pauses the current agent and dispatches a consultation job to another agent role
 
 ```
 Agent calls request_user_input / request_agent_consultation
-  → lcp-agent POSTs /internal/pause
-  → lcp-server creates Conversation or PendingConsultation record
-  → lcp-server sets LcpAgent.status = paused, pausedAt = now()
-  → lcp-agent detects paused status on next loop tick
-  → lcp-agent exits stream, BullMQ job completes normally
+  → tcp-agent POSTs /internal/pause
+  → tcp-server creates Conversation or PendingConsultation record
+  → tcp-server sets TcpAgent.status = paused, pausedAt = now()
+  → tcp-agent detects paused status on next loop tick
+  → tcp-agent exits stream, BullMQ job completes normally
 
 [User replies via CLI respond / API, or a consultation agent completes]
-  → lcp-server calls AgentOrchestrationService.resumeAgent(agentId)
+  → tcp-server calls AgentOrchestrationService.resumeAgent(agentId)
   → stays paused if other requests are still outstanding (see Resume conditions)
   → otherwise re-enqueues the agent job with every response since pausedAt aggregated
-  → lcp-agent resumes from checkpoint with HumanMessage containing the aggregated reply
+  → tcp-agent resumes from checkpoint with HumanMessage containing the aggregated reply
 ```
 
 See [user-input-conversations.md](user-input-conversations.md) for the agent-to-human sequence diagram and [cross-agent-consultations.md](cross-agent-consultations.md) for the agent-to-agent one, including [resume conditions](cross-agent-consultations.md#resume-conditions).

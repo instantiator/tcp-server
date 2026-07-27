@@ -1,40 +1,40 @@
 # Glossary
 
-Core terminology for discussing how the LCP system works.
+Core terminology for discussing how the TCP system works.
 
 ## Services
 
-**lcp-server**
+**tcp-server**
 The NestJS REST API service. Hosts all HTTP endpoints, manages entity lifecycle (companies, roles, agents, conversations), enqueues jobs onto BullMQ, and will eventually house the orchestrator.
 
-**lcp-agent**
+**tcp-agent**
 The agent loop runner service. Consumes jobs from the `agent-jobs` BullMQ queue and executes the LangGraph agent loop for each job.
 
-**lcp-mcp-interactions**
-MCP server (port 3012) that lets agents pause for human input (`request_user_input`) or consult another agent by role (`request_agent_consultation`). Assignment completion moved to the [lcp-mcp-tasks](lcp-mcp-tasks.md) server (`complete_assignment`) in 010.2.5.
+**tcp-mcp-interactions**
+MCP server (port 3012) that lets agents pause for human input (`request_user_input`) or consult another agent by role (`request_agent_consultation`). Assignment completion moved to the [tcp-mcp-tasks](tcp-mcp-tasks.md) server (`complete_assignment`) in 010.2.5.
 
-**lcp-mcp-memory**
+**tcp-mcp-memory**
 MCP server (port 3011) that provides agents with access to episodic memory and role knowledge via `recall`, `remember`, and `search_knowledge`.
 
-**lcp-mcp-storage**
+**tcp-mcp-storage**
 MCP server (port 3010) that provides agents with read/write access to the shared MinIO object store (12 tools: list, read, write, delete, restore, search, copy, move, etc.).
 
-**lcp-cli**
+**tcp-cli**
 Developer CLI tool for interacting with the system: obtaining OIDC tokens, managing companies and roles, starting agents, and responding to open queries.
 
 ## Domain entities
 
-**Company (`LcpCompany`)**
+**Company (`TcpCompany`)**
 A tenant organisation. Owns roles, agents, and a MinIO storage bucket. Carries a `llmConfig` config used by roles that do not specify their own, an optional company-wide `systemPromptTemplate` default, an additive `mcpServerList`, and a display-only `timezone` (IANA name) used for CLI/UI timestamp presentation and prompt localization — never for storage.
 
-**Role (`LcpRole`)**
+**Role (`TcpRole`)**
 A named persona within a company (e.g., "Analyst", "Senior Developer"). Defines the (optional) system prompt template, LLM config, MCP servers the role can use, and knowledge domains for query routing.
 
-**Agent (`LcpAgent`)**
+**Agent (`TcpAgent`)**
 The canonical unit of work. One agent record is created per run and tracks the full lifecycle from initial prompt to a terminal status (`completed` or `failed`). Carries `status`, `threadId` (for LangGraph checkpoint resumability), and `output`. Informally called a **run** — the two terms are interchangeable.
 
 **Run**
-Informal shorthand for an `LcpAgent` record and its full execution lifecycle — everything the agent does from receiving an initial prompt until it reaches a terminal status. A single run may span multiple BullMQ jobs if the agent pauses and resumes.
+Informal shorthand for an `TcpAgent` record and its full execution lifecycle — everything the agent does from receiving an initial prompt until it reaches a terminal status. A single run may span multiple BullMQ jobs if the agent pauses and resumes.
 
 **Conversation (`Conversation`)**
 A pause/reply thread created when an agent calls `request_user_input`. Has a human-readable **slug** (e.g., `analyst-3`) and routes the question to the appropriate company users. Closed when the user replies, which triggers agent resume.
@@ -48,19 +48,19 @@ A human user associated with a company. Used for query routing: their `knowledge
 ## Execution concepts
 
 **Agent loop**
-The core execution cycle inside lcp-agent: assemble prompt → invoke LLM → invoke tool(s) → repeat until the agent signals completion. Implemented as a LangGraph `StateGraph`.
+The core execution cycle inside tcp-agent: assemble prompt → invoke LLM → invoke tool(s) → repeat until the agent signals completion. Implemented as a LangGraph `StateGraph`.
 
 **BullMQ job**
-A queued unit of work dispatched by lcp-server to lcp-agent. Each job carries `{ agentId, type: 'start' | 'resume' }`. A single agent run may be served by multiple jobs if it pauses and resumes.
+A queued unit of work dispatched by tcp-server to tcp-agent. Each job carries `{ agentId, type: 'start' | 'resume' }`. A single agent run may be served by multiple jobs if it pauses and resumes.
 
 **Checkpoint**
 The persisted LangGraph graph state written to PostgreSQL after each step. Enables the agent loop to resume from exactly where it left off after a pause or restart.
 
 **Thread ID (`threadId`)**
-LangGraph's identifier for a checkpoint state thread. Stored on the `LcpAgent` record; used to restore the agent's full conversation history when resuming.
+LangGraph's identifier for a checkpoint state thread. Stored on the `TcpAgent` record; used to restore the agent's full conversation history when resuming.
 
 **Pause / Resume**
-When an agent calls `request_user_input` or `request_agent_consultation`, its status is set to `paused` (with `pausedAt` recorded) and the BullMQ job completes cleanly (no CPU consumed while waiting). The agent only resumes once it has no other outstanding requests; lcp-server then re-enqueues the job (`type: 'resume'`) with every response received since `pausedAt` aggregated into one message. See [cross-agent-consultations.md](cross-agent-consultations.md#resume-conditions).
+When an agent calls `request_user_input` or `request_agent_consultation`, its status is set to `paused` (with `pausedAt` recorded) and the BullMQ job completes cleanly (no CPU consumed while waiting). The agent only resumes once it has no other outstanding requests; tcp-server then re-enqueues the job (`type: 'resume'`) with every response received since `pausedAt` aggregated into one message. See [cross-agent-consultations.md](cross-agent-consultations.md#resume-conditions).
 
 **Task (future)**
 A higher-level unit of work managed by the orchestrator, broken into ordered `TaskStep` objects each assigned to a role. Not yet fully implemented; see [ADR-010](ADRs/ADR-010-orchestration-design.md).
@@ -71,7 +71,7 @@ A special role designated per company to generate structured task plans from a t
 ## Prompt and context
 
 **System prompt template**
-The base system message rendered for prompt part 0. Resolved with role → company → baked-in default precedence (`SystemPromptTemplateResolver`; a blank template counts as unset). Supports `{{name}}`, `{{description}}`, `{{date}}`, `{{datetime}}`, `{{timezone}}`, `{{localDatetime}}`, `{{companyId}}`, and `{{roleId}}` placeholders — see [`buildPromptDateVars`](../libs/lcp-shared/src/llm/prompt-vars.ts).
+The base system message rendered for prompt part 0. Resolved with role → company → baked-in default precedence (`SystemPromptTemplateResolver`; a blank template counts as unset). Supports `{{name}}`, `{{description}}`, `{{date}}`, `{{datetime}}`, `{{timezone}}`, `{{localDatetime}}`, `{{companyId}}`, and `{{roleId}}` placeholders — see [`buildPromptDateVars`](../libs/tcp-shared/src/llm/prompt-vars.ts).
 
 **Prompt parts**
 The prompt assembled for each LLM call is composed of up to 8 numbered sections (parts 0–8): system intro, role description, company environment, MCP server list, supplementary context, RAG knowledge, MCP pre-fetched responses, and output instructions. See [ADR-013](ADRs/ADR-013-prompt-assembly-context-management.md).
@@ -132,7 +132,7 @@ The agent's working area at `tasks/{task_id}/output/`. Files written here during
 **Audit event (`AuditEvent`)**
 An append-only record of system activity. Types include `llm_request`, `llm_response`, `tool_call`, `tool_result`, `state_change`, and `task_completion_summary`.
 
-**Task completion summary (`LcpTaskCompletionSummary`)**
+**Task completion summary (`TcpTaskCompletionSummary`)**
 A structured audit event emitted at the end of a successful run: a brief overall narrative plus tracked lists of actions taken and storage changes (created, modified, deleted, moved files). See [006.5](prompts/006.5%20-%20task%20completion%20planning.md).
 
 ## Agent status values

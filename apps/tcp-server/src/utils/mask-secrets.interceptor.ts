@@ -10,15 +10,15 @@ import { map } from 'rxjs/operators';
 
 /**
  * Recursively replaces `apiKey` values in the response body with `'***'`
- * when the `LCP_MASK_API_KEYS` environment variable is `true` (the default).
- * Set `LCP_MASK_API_KEYS=false` to expose raw keys, e.g. during local debugging.
+ * when the `TCP_MASK_API_KEYS` environment variable is `true` (the default).
+ * Set `TCP_MASK_API_KEYS=false` to expose raw keys, e.g. during local debugging.
  */
 @Injectable()
 export class MaskSecretsInterceptor implements NestInterceptor {
   private readonly mask: boolean;
 
   constructor(config: ConfigService) {
-    this.mask = config.get<boolean>('LCP_MASK_API_KEYS') ?? true;
+    this.mask = config.get<boolean>('TCP_MASK_API_KEYS') ?? true;
   }
 
   intercept(_ctx: ExecutionContext, next: CallHandler): Observable<unknown> {

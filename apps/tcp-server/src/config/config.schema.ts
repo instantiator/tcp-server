@@ -3,7 +3,7 @@ import {
   DEFAULT_EXPOSE_PORT_API,
   DEFAULT_MINIO_BUCKET_PREFIX,
   DEFAULT_KNOWLEDGE_POLL_INTERVAL_MS,
-  DEFAULT_LCP_MASK_API_KEYS,
+  DEFAULT_TCP_MASK_API_KEYS,
   DEFAULT_EMBEDDING_DIMENSION,
 } from '@tcp/shared/config/defaults';
 
@@ -34,7 +34,7 @@ export const configSchema = Joi.object({
   OIDC_CLIENT_ID: Joi.string().required(),
   OIDC_CLIENT_SECRET: Joi.string().required(),
   // When true, apiKey values in LlmConfig are replaced with '***' in API responses.
-  LCP_MASK_API_KEYS: Joi.boolean().default(DEFAULT_LCP_MASK_API_KEYS),
+  TCP_MASK_API_KEYS: Joi.boolean().default(DEFAULT_TCP_MASK_API_KEYS),
   // Shared secret used to authenticate internal service-to-service calls (tcp-agent, MCP servers).
   INTERNAL_API_KEY: Joi.string().required(),
   // Environment-level LLM fallback — used when neither a role's llmConfig nor a company's llmConfig is set.

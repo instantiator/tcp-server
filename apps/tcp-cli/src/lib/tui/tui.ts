@@ -160,12 +160,12 @@ const MIN_CONTENT_WIDTH = 3;
 const TASK_LIST_ENTRY_MAX_LINES = 4;
 
 /**
- * Resolves `--task-list-max-lines` (precedence: CLI flag → `LCP_TASK_LIST_ENTRY_MAX_LINES`
+ * Resolves `--task-list-max-lines` (precedence: CLI flag → `TCP_TASK_LIST_ENTRY_MAX_LINES`
  * env var → {@link TASK_LIST_ENTRY_MAX_LINES}), falling back to the default
  * for anything that isn't a positive integer.
  */
 export function resolveTaskListEntryMaxLines(flagValue?: string): number {
-  const raw = flagValue ?? process.env['LCP_TASK_LIST_ENTRY_MAX_LINES'];
+  const raw = flagValue ?? process.env['TCP_TASK_LIST_ENTRY_MAX_LINES'];
   const n = raw !== undefined ? Number(raw) : NaN;
   return Number.isInteger(n) && n > 0 ? n : TASK_LIST_ENTRY_MAX_LINES;
 }

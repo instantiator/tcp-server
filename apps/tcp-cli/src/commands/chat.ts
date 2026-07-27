@@ -20,7 +20,7 @@ export function registerChat(program: Command): void {
     .option(
       '--task-list-max-lines <n>',
       'Max lines a highlighted company task-list entry expands to ' +
-        '(default 4; env LCP_TASK_LIST_ENTRY_MAX_LINES)',
+        '(default 4; env TCP_TASK_LIST_ENTRY_MAX_LINES)',
     )
     .action((cmdOpts: ChatCmdOpts) =>
       chatAction(getGlobalOptions(program), cmdOpts),

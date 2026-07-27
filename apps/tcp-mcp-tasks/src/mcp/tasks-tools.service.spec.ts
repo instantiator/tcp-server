@@ -60,7 +60,7 @@ describe('TasksToolsService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     const config = makeConfig({
-      LCP_SERVER_URL: 'http://tcp-server:3000',
+      TCP_SERVER_URL: 'http://tcp-server:3000',
       INTERNAL_API_KEY: 'test-key',
     });
     service = new TasksToolsService(makeAudit(), config);

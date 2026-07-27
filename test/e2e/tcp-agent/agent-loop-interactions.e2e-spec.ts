@@ -101,7 +101,7 @@ describe('Agent loop interactions (e2e)', () => {
   }
 
   /**
-   * Grabs a free port synchronously so `LCP_SERVER_URL` can be set correctly
+   * Grabs a free port synchronously so `TCP_SERVER_URL` can be set correctly
    * *before* any Nest module compiles — see the identical helper (and its
    * doc comment explaining why) in `test/integration/tcp-agent/task-flow.integration-spec.ts`.
    */
@@ -315,7 +315,7 @@ describe('Agent loop interactions (e2e)', () => {
   beforeAll(async () => {
     const port = await getFreePort();
     tcpServerUrl = `http://127.0.0.1:${port}`;
-    process.env.LCP_SERVER_URL = tcpServerUrl;
+    process.env.TCP_SERVER_URL = tcpServerUrl;
 
     const serverModuleRef = await Test.createTestingModule({
       imports: [TcpServerAppModule],

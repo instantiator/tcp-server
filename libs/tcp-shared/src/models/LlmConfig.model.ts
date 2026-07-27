@@ -22,7 +22,7 @@ export interface LlmConfig {
   /**
    * API key for this provider.
    * Stored in the database as part of the JSONB config block.
-   * Masked in API responses when `LCP_MASK_API_KEYS=true` (the default).
+   * Masked in API responses when `TCP_MASK_API_KEYS=true` (the default).
    */
   apiKey?: string;
 

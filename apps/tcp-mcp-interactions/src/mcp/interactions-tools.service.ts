@@ -61,7 +61,7 @@ export class InteractionsToolsService {
   private readonly apiKey: string;
 
   constructor(config: ConfigService) {
-    this.serverUrl = config.getOrThrow<string>('LCP_SERVER_URL');
+    this.serverUrl = config.getOrThrow<string>('TCP_SERVER_URL');
     this.apiKey = config.getOrThrow<string>('INTERNAL_API_KEY');
   }
 

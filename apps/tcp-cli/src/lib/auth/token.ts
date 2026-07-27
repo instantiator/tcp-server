@@ -6,7 +6,7 @@ export interface AuthOptions {
   accessToken?: string;
   refreshToken?: string;
   accessTokenEnvVar?: string;
-  /** Skip the LCP_TOKEN cache and always trigger device login. */
+  /** Skip the TCP_TOKEN cache and always trigger device login. */
   force?: boolean;
 }
 
@@ -17,7 +17,7 @@ export interface TokenSession {
 }
 
 /** Env var `get-token`'s docs/examples conventionally capture the token into — checked as a fallback when neither `-t` nor `-E` is given. */
-const DEFAULT_TOKEN_ENV_VAR = 'LCP_TOKEN';
+const DEFAULT_TOKEN_ENV_VAR = 'TCP_TOKEN';
 
 /** Response shape of `POST /api/auth/device`. */
 interface DeviceAuthorizationResponse {
@@ -55,7 +55,7 @@ export async function resolveSession(opts: AuthOptions): Promise<TokenSession> {
     return { token: val, refreshToken: opts.refreshToken };
   }
 
-  // 3. LCP_TOKEN fallback — skip when --force is set or the cached token is
+  // 3. TCP_TOKEN fallback — skip when --force is set or the cached token is
   // expired. An expired token would only cause a 401 on the first API call,
   // so we save the round-trip by re-authenticating proactively.
   const fallback = process.env[DEFAULT_TOKEN_ENV_VAR];
@@ -68,7 +68,7 @@ export async function resolveSession(opts: AuthOptions): Promise<TokenSession> {
       process.stderr.write('Cached token is expired — re-authenticating\n');
     } else {
       process.stderr.write(
-        'Using existing token from LCP_TOKEN. Run `get-token --force` to re-authenticate.\n',
+        'Using existing token from TCP_TOKEN. Run `get-token --force` to re-authenticate.\n',
       );
       return { token: fallback, refreshToken: opts.refreshToken };
     }

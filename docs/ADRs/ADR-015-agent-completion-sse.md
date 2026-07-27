@@ -36,17 +36,17 @@ Replace the long-poll with an SSE-based completion flow:
 
 2. **`GET /api/agent/:id/events` (already exists) emits a `completed` event**
    carrying `{ response: string }` when the agent's resumed run finishes.
-   `AgentEventService` in lcp-server subscribes to `agent:completed:{agentId}`
+   `AgentEventService` in tcp-server subscribes to `agent:completed:{agentId}`
    on Redis (the channel already published to by `AgentLoopService`) and
    forwards the payload to any connected SSE clients.
 
-3. **`lcp-cli chat` waits on the SSE stream after a `202` response.** The
+3. **`tcp-cli chat` waits on the SSE stream after a `202` response.** The
    existing `observeEvents` helper already opens the event stream; it is
    extended to watch for `completed` and print the response text. The user
    sees no change in the interface — the response appears in the terminal when
    it arrives, exactly as today, just without a dedicated HTTP connection.
 
-4. **`LcpAgent.completionMessage` column added.** The final response text is
+4. **`TcpAgent.completionMessage` column added.** The final response text is
    persisted on the agent record before publishing to Redis. A client that
    missed the SSE event (reconnected late, network blip) can recover by
    polling `GET /api/agent/:id` and reading `completionMessage` directly.
@@ -55,7 +55,7 @@ Replace the long-poll with an SSE-based completion flow:
    delivers the answer.
 
 The internal Redis pub/sub channel (`agent:completed:{agentId}`) is unchanged
-— it remains the bridge between lcp-agent and lcp-server. What changes is the
+— it remains the bridge between tcp-agent and tcp-server. What changes is the
 external surface: a non-blocking `202` plus SSE rather than a blocked `200`.
 
 ## Alternatives considered
@@ -80,8 +80,8 @@ external surface: a non-blocking `202` plus SSE rather than a blocked `200`.
   don't trigger a consultation or user-input pause.
 - `GET /api/agent/:id/events` emits a new `completed` event type. Existing
   consumers (compaction progress reporting) are unaffected.
-- `LcpAgent` gains a `completionMessage` column — requires a migration.
-- `lcp-cli chat` is updated to handle `202` responses and wait on the SSE
+- `TcpAgent` gains a `completionMessage` column — requires a migration.
+- `tcp-cli chat` is updated to handle `202` responses and wait on the SSE
   stream. The 35-minute client-side timeout on the SSE stream replaces the
   same timeout currently on the long-polled POST.
 - `AgentEventService` gains a Redis subscriber for the
@@ -105,30 +105,30 @@ The proposal above was implemented with the following changes, driven by the
    over `GET /api/agent/:id/events`. There is no synchronous `200` body; the
    long-poll is gone entirely.
 
-2. **No `completionMessage` column.** The existing `LcpAgent.output` column
+2. **No `completionMessage` column.** The existing `TcpAgent.output` column
    (already written before completion is signalled) plus `status` is the
    recovery source. A client that missed the SSE `completed` event recovers via
    `GET /api/agent/:id`; the SSE endpoint additionally **synthesises** a
    terminal event from `output`+`status` for clients that subscribe after the
    turn has already finished (`AgentController.replayTerminal`). No migration.
 
-3. **Event vocabulary is shared** in `@lcp/shared` (`events/agent-events.ts`) as
-   a single `AgentEvent` union used by lcp-server, lcp-agent, and lcp-cli:
+3. **Event vocabulary is shared** in `@tcp/shared` (`events/agent-events.ts`) as
+   a single `AgentEvent` union used by tcp-server, tcp-agent, and tcp-cli:
    `agent_status`, `llm`, `reasoning`, `response`, `consultation_started`,
    `completed`, `failed`, and the existing `compaction_*` kinds.
 
-4. **The `agent:completed:{agentId}` Redis channel is retired.** lcp-agent now
+4. **The `agent:completed:{agentId}` Redis channel is retired.** tcp-agent now
    publishes observability events (LLM/tool activity, reasoning/response deltas,
    worker status transitions) to `agent:events:{agentId}` via a persistent
    publisher connection; `AgentEventService` lazily subscribes (reference-counted
    per agent over one shared connection) and relays them onto the in-memory
-   Subject. **Terminal `completed`/`failed` events originate in lcp-server**
+   Subject. **Terminal `completed`/`failed` events originate in tcp-server**
    (`PauseAndResumeService.completeAgent`/`failAgent` for worker-run agents;
    `ChatService.runTurn` for in-process chat turns), so `publishCompletion` is
    deleted.
 
 5. **Consultation follow.** When an agent pauses to consult another, the caller's
-   stream emits `consultation_started { agentId, roleName }`; `lcp-cli chat`
+   stream emits `consultation_started { agentId, roleName }`; `tcp-cli chat`
    opens an additional (recursively nested) event stream for the consulted agent
    and renders its lines prefixed with the consulted role's name.
 
@@ -148,7 +148,7 @@ task list and task/assignment panels can live-update without polling:
 - **`GET /api/task/:id/events`** (`TaskController.streamTaskEvents`) —
   `TaskEvent` union (`task_changed`, `assignment_changed`), on the
   `task:events:{taskId}` channel.
-- Both event unions and channel helpers live in `libs/lcp-shared/src/events/`
+- Both event unions and channel helpers live in `libs/tcp-shared/src/events/`
   (`company-events.ts`, `task-events.ts`), alongside the existing
   `agent-events.ts`. A shared `TaskChangeSummary` (id, status, request,
   timestamps, `completedSteps`/`totalSteps` from the implement-mode plan) is
@@ -160,12 +160,12 @@ task list and task/assignment panels can live-update without polling:
   every current task's `task_changed`; the task stream primes with its own
   `task_changed` + every current assignment's `assignment_changed`.
 - **One architectural difference from the agent bus**: every producer of
-  company/task events runs in-process within lcp-server (task/assignment
+  company/task events runs in-process within tcp-server (task/assignment
   state changes always funnel through `TaskOrchestrationService`, itself
-  triggered by an HTTP call even when lcp-agent is the ultimate cause) — there
-  is no separate out-of-process publisher analogous to lcp-agent's
+  triggered by an HTTP call even when tcp-agent is the ultimate cause) — there
+  is no separate out-of-process publisher analogous to tcp-agent's
   `AgentEventPublisherService`. So the new `KeyedEventBus` (generic base
-  shared by `CompanyEventService`/`TaskEventService`, `apps/lcp-server/src/
+  shared by `CompanyEventService`/`TaskEventService`, `apps/tcp-server/src/
 events/keyed-event-bus.ts`) folds emit and relay into one class: `emit`
   publishes to Redis and lets the channel subscription deliver the event back
   to local observers (rather than pushing to the local `Subject` directly),

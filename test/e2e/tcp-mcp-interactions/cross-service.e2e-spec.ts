@@ -75,7 +75,7 @@ describe('tcp-mcp-interactions -> tcp-server (cross-service e2e)', () => {
 
     const config = {
       getOrThrow: (key: string) => {
-        if (key === 'LCP_SERVER_URL') return baseUrl;
+        if (key === 'TCP_SERVER_URL') return baseUrl;
         if (key === 'INTERNAL_API_KEY') return INTERNAL_KEY;
         throw new Error(`Unexpected config key requested: ${key}`);
       },

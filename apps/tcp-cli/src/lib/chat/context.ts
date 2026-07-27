@@ -115,7 +115,7 @@ function printBanner(
   llmConfig: LlmConfig | null | undefined,
   useTui: boolean,
 ): void {
-  process.stderr.write(`LCP API: ${opts.tcpServer}\n`);
+  process.stderr.write(`TCP API: ${opts.tcpServer}\n`);
   if (roleName) {
     if (llmConfig) {
       process.stderr.write(

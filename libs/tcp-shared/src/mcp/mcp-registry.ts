@@ -1,7 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 
 /**
- * Canonical registry of MCP services known to the LCP platform.
+ * Canonical registry of MCP services known to the TCP platform.
  *
  * Each entry maps the service's short name to the environment variable that
  * carries its base URL, plus a one-line `usage` description of when an agent

@@ -1,14 +1,14 @@
-# lcp-mcp-memory
+# tcp-mcp-memory
 
 **Status:** Implemented
 **Port:** 3011
 **Transport:** MCP Streamable HTTP — stateless, one session per request
 
-`lcp-mcp-memory` is a NestJS MCP server that gives agents semantic search over episodic memory and the role's knowledge base, and lets them store new episodic memories mid-task. It lives in `apps/lcp-mcp-memory/` and runs as a Docker Compose service with a direct PostgreSQL connection (pgvector).
+`tcp-mcp-memory` is a NestJS MCP server that gives agents semantic search over episodic memory and the role's knowledge base, and lets them store new episodic memories mid-task. It lives in `apps/tcp-mcp-memory/` and runs as a Docker Compose service with a direct PostgreSQL connection (pgvector).
 
 Each tool call creates a fresh MCP session so no state is shared across requests. The server exposes `GET /health` (checks PostgreSQL connectivity) and `POST /mcp`.
 
-Every tool call writes `tool_call` and `tool_result` audit events to lcp-server via the internal audit endpoint.
+Every tool call writes `tool_call` and `tool_result` audit events to tcp-server via the internal audit endpoint.
 
 See [agent-services.md → MCP Servers](agent-services.md#mcp-servers) for how agents connect, and [ADR-006](ADRs/ADR-006-agent-memory-architecture.md) for the full memory architecture design.
 
@@ -116,4 +116,4 @@ Searches the role's knowledge base only (RAG source documents in `knowledge_chun
 
 ## Database dependency
 
-lcp-mcp-memory requires a direct PostgreSQL connection (with pgvector) to run similarity queries. The `DATABASE_URL` environment variable must be set. The Docker Compose service has a `depends_on: postgres` constraint and a `/health` endpoint that checks the connection before the service is considered ready.
+tcp-mcp-memory requires a direct PostgreSQL connection (with pgvector) to run similarity queries. The `DATABASE_URL` environment variable must be set. The Docker Compose service has a `depends_on: postgres` constraint and a `/health` endpoint that checks the connection before the service is considered ready.

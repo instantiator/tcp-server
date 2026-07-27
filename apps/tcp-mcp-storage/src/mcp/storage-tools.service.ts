@@ -125,7 +125,7 @@ export class StorageToolsService {
   private readonly apiKey: string;
 
   constructor(private readonly config: ConfigService) {
-    this.serverUrl = this.config.getOrThrow<string>('LCP_SERVER_URL');
+    this.serverUrl = this.config.getOrThrow<string>('TCP_SERVER_URL');
     this.apiKey = this.config.getOrThrow<string>('INTERNAL_API_KEY');
   }
 

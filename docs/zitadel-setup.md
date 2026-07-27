@@ -1,10 +1,10 @@
 # Zitadel Setup Guide
 
-LCP uses an OIDC-compatible IdP for authentication. Zitadel is the default, provided as an optional Docker Compose service.
+TCP uses an OIDC-compatible IdP for authentication. Zitadel is the default, provided as an optional Docker Compose service.
 
 ## Automated local setup
 
-For local development, `scripts/start-dev.sh` handles everything below automatically — it starts all services, bootstraps the `lcp` org, project, and OIDC application, and creates a human and a machine test user:
+For local development, `scripts/start-dev.sh` handles everything below automatically — it starts all services, bootstraps the `tcp` org, project, and OIDC application, and creates a human and a machine test user:
 
 ```bash
 ./scripts/start-dev.sh                          # uses .env or .env.testing
@@ -22,16 +22,16 @@ delegates to) using a machine-user Personal Access Token (PAT):
    `ZITADEL_FIRSTINSTANCE_PATPATH` env vars (set in `docker-compose.yml`) create a
    bootstrap machine user and write its PAT to
    `docker/zitadel-machinekey/${COMPOSE_PROJECT_NAME}/pat.txt` — a bind-mounted,
-   gitignored host directory, scoped per Compose project (`lcp-dev`, `lcp-api`,
-   `lcp-all`, ...) so that two projects — each with their own independently
+   gitignored host directory, scoped per Compose project (`tcp-dev`, `tcp-api`,
+   `tcp-all`, ...) so that two projects — each with their own independently
    bootstrapped Zitadel instance, tied to their own Postgres volume — never share
    (and silently overwrite) the same PAT file. This only happens once per project, on
    first boot against fresh data; subsequent starts skip it.
 2. `start-deployment.sh` waits for that PAT file to appear, then uses it to authenticate
    directly against Zitadel's REST API (no ROPC grant is needed for this, unlike the old
    `kcadm.sh`-based Keycloak bootstrap) and creates, idempotently:
-   - a project named `lcp`
-   - an OIDC "web" application named `lcp-server`, with grant types
+   - a project named `tcp`
+   - an OIDC "web" application named `tcp-server`, with grant types
      `OIDC_GRANT_TYPE_DEVICE_CODE` and `OIDC_GRANT_TYPE_REFRESH_TOKEN`, and
      `accessTokenType: OIDC_TOKEN_TYPE_JWT`
    - a human test user, from `TEST_USERNAME`/`TEST_PASSWORD` in the env file
@@ -41,10 +41,10 @@ ACCESS_TOKEN_TYPE_JWT`, used by the `api` test tier via the `client_credentials`
      grant
 3. Unlike Keycloak, Zitadel generates client secrets server-side — they can't be
    pre-set, and can only be read at generation time. So on **every** run the script
-   (re)generates the `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` (for the `lcp-server` app) and
+   (re)generates the `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` (for the `tcp-server` app) and
    `TEST_CLIENT_ID`/`TEST_CLIENT_SECRET` (for the `test-machine` user) and writes them to the
    gitignored `<env-file>.local` override (e.g. `.env.testing.local`) — never the committed
-   base file — before starting lcp-server and its dependents. Regenerating every run —
+   base file — before starting tcp-server and its dependents. Regenerating every run —
    rather than trusting whatever's in the file — is what keeps the credentials and Zitadel
    from silently drifting apart: a wiped-and-rebootstrapped Zitadel (or an env file
    bootstrapped against a different instance) otherwise leaves a stale secret that fails auth
@@ -52,7 +52,7 @@ ACCESS_TOKEN_TYPE_JWT`, used by the `api` test tier via the `client_credentials`
    for the committed-vs-`.local` split.
 
 Setting `accessTokenType` explicitly on both the app and the machine user matters:
-Zitadel issues opaque/JWE-encrypted access tokens by default, which lcp-server's
+Zitadel issues opaque/JWE-encrypted access tokens by default, which tcp-server's
 JWKS-based verification can't parse at all. See
 [docs/authentication.md](authentication.md#how-it-works) for more on this.
 
@@ -67,15 +67,15 @@ http://localhost:8080/ui/console
 ```
 
 Log in as the org admin human user — username `admin`, password from
-`ZITADEL_ADMIN_PASSWORD` in your env file. From there you can inspect the `lcp` org, the
-`lcp` project, the `lcp-server` application, and the test users created by bootstrap.
+`ZITADEL_ADMIN_PASSWORD` in your env file. From there you can inspect the `tcp` org, the
+`tcp` project, the `tcp-server` application, and the test users created by bootstrap.
 
 ## Creating users
 
 Additional human users can be created in the admin console (org → **Users** → **Add
 human user**) or via the same Zitadel REST API `start-deployment.sh` uses (see
-`/v2/users/new` in `scripts/start-deployment.sh` for a working example). lcp-server does
-not proxy user creation to the IdP itself — there is no `/users` API on lcp-server for
+`/v2/users/new` in `scripts/start-deployment.sh` for a working example). tcp-server does
+not proxy user creation to the IdP itself — there is no `/users` API on tcp-server for
 this.
 
 ## Connecting an external IdP
@@ -89,14 +89,14 @@ gitignored `<env-file>.local` override (do not commit them):
 OIDC_ISSUER_URL=https://your-idp.example.com/
 
 # .env.<instance>.local      (gitignored)
-OIDC_CLIENT_ID=lcp-server
+OIDC_CLIENT_ID=tcp-server
 OIDC_CLIENT_SECRET=<your-client-secret>
 ```
 
 Run without `ZITADEL_ADMIN_PASSWORD` set so no local Zitadel is bootstrapped; the
 deployment then requires `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` to be present.
 
-lcp-server discovers the JWKS endpoint via the provider's discovery document
+tcp-server discovers the JWKS endpoint via the provider's discovery document
 (`{OIDC_ISSUER_URL}/.well-known/openid-configuration`), reading its `jwks_uri` field —
 for Zitadel that resolves to `/oauth/v2/keys`. Any OIDC-compliant IdP that publishes a
 standards-compliant discovery document works without further configuration.

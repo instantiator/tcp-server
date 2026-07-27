@@ -49,11 +49,11 @@ const program = new Command();
 
 program
   .name('tcp-cli')
-  .description('Developer CLI for the LCP server')
+  .description('Developer CLI for the TCP server')
   .version('0.0.1')
   .option(
     '-s, --tcp-server <url>',
-    'LCP server base URL',
+    'TCP server base URL',
     'http://localhost:3000',
   )
   .option('-t, --access-token <token>', 'Bearer token (skips auth flow)')

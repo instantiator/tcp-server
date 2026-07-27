@@ -15,7 +15,7 @@ function makeService(
     getOrThrow: jest
       .fn()
       .mockImplementation((key: string) =>
-        key === 'LCP_SERVER_URL' ? serverUrl : apiKey,
+        key === 'TCP_SERVER_URL' ? serverUrl : apiKey,
       ),
   } as unknown as ConfigService;
   return new AuditClientService(config);

@@ -7,7 +7,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   const config = new DocumentBuilder()
-    .setTitle('LCP MCP Interactions')
+    .setTitle('TCP MCP Interactions')
     .setDescription(
       'MCP server for human-in-the-loop interactions, consultations, and task completion',
     )

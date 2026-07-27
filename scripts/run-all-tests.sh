@@ -9,7 +9,7 @@ Build the project, lint, and run every test suite in order:
   unit → integration → e2e → api → smoke
 
 Unit, integration, and e2e suites manage their own Docker infrastructure.
-The api and smoke suites require the full LCP stack — this script starts it
+The api and smoke suites require the full TCP stack — this script starts it
 automatically using .env.testing and tears it down on exit.
 
 Prerequisites:

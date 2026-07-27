@@ -8,15 +8,15 @@ You are testing the three MCP (Model Context Protocol) servers. Each exposes an 
 
 The three servers are:
 
-- **lcp-mcp-storage** (port 3010) — real S3/MinIO integration; agents use this to read and write files.
-- **lcp-mcp-memory** (port 3011) — stub; returns informative "not yet implemented" responses.
-- **lcp-mcp-interactions** (port 3012) — stub; same pattern as memory.
+- **tcp-mcp-storage** (port 3010) — real S3/MinIO integration; agents use this to read and write files.
+- **tcp-mcp-memory** (port 3011) — stub; returns informative "not yet implemented" responses.
+- **tcp-mcp-interactions** (port 3012) — stub; same pattern as memory.
 
 ```mermaid
 sequenceDiagram
-    participant A as lcp-agent
+    participant A as tcp-agent
     participant C as McpClientService
-    participant S as lcp-mcp-storage :3010
+    participant S as tcp-mcp-storage :3010
 
     A->>C: loadTools(["storage"], urls)
     C->>S: POST /mcp (initialize + listTools)
@@ -53,7 +53,7 @@ Expected response for each (status 200):
 
 ## 6.2 — List tools on the storage server
 
-Send an MCP `initialize + tools/list` request to the storage server. This is what lcp-agent does when loading tools for a role that includes `"storage"` in its `mcpServerList`.
+Send an MCP `initialize + tools/list` request to the storage server. This is what tcp-agent does when loading tools for a role that includes `"storage"` in its `mcpServerList`.
 
 ```bash
 curl -s -X POST http://localhost:3010/mcp \
@@ -74,7 +74,7 @@ Expected:
 
 | Field     | Expected            |
 | --------- | ------------------- |
-| `name`    | `"lcp-mcp-storage"` |
+| `name`    | `"tcp-mcp-storage"` |
 | `version` | `"1.0.0"`           |
 
 Then list tools:

@@ -4,12 +4,12 @@
 
 > **Requires:** Section 2 complete — `$COMPANY_ID` and `$ROLE_ID` set.
 
-You are testing the interactive chat flow. A chat agent is a persistent conversation thread backed by LangGraph: each message is appended to the checkpoint and the model sees the full history. The lcp-server handles the LLM call directly (not via lcp-agent).
+You are testing the interactive chat flow. A chat agent is a persistent conversation thread backed by LangGraph: each message is appended to the checkpoint and the model sees the full history. The tcp-server handles the LLM call directly (not via tcp-agent).
 
 ```mermaid
 sequenceDiagram
     participant U as User (CLI / curl)
-    participant S as lcp-server
+    participant S as tcp-server
     participant LLM as LLM Provider
     participant DB as PostgreSQL
 
@@ -75,7 +75,7 @@ Expected output:
 
 The response content will depend on your `rolePrompt`. If you used the sample data, expect the agent to describe itself using the persona defined there.
 
-> **Via the CLI (recommended):** `lcp-cli chat` no longer blocks on this call.
+> **Via the CLI (recommended):** `tcp-cli chat` no longer blocks on this call.
 > `POST /api/agent/:id/message` returns `202 Accepted` immediately and the turn
 > streams over `GET /api/agent/:id/events` (SSE). The curl above is a low-level
 > illustration; for the streamed experience use section 3.7.
@@ -158,7 +158,7 @@ Run an interactive session in a real terminal (not piped) to exercise the
 full-screen TUI, the default rendering mode since 008.6.
 
 ```bash
-./lcp-cli.sh chat --role-id "$ROLE_ID"
+./tcp-cli.sh chat --role-id "$ROLE_ID"
 ```
 
 **What to check (TUI mode — default on a real terminal):**
@@ -213,7 +213,7 @@ full-screen TUI, the default rendering mode since 008.6.
 **What to check (plain renderer — pipe the command, or pass `--no-tui`):**
 
 ```bash
-./lcp-cli.sh chat --role-id "$ROLE_ID" --no-tui
+./tcp-cli.sh chat --role-id "$ROLE_ID" --no-tui
 ```
 
 - Colour-coded, blank-line-separated blocks appear: **Agent state** (cyan),
@@ -231,7 +231,7 @@ full-screen TUI, the default rendering mode since 008.6.
 **What to check (`--company-id`, no role given):**
 
 ```bash
-./lcp-cli.sh chat --company-id "$COMPANY_ID"
+./tcp-cli.sh chat --company-id "$COMPANY_ID"
 ```
 
 - Opens straight onto the company roster — no agent tab exists yet, no agent

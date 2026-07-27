@@ -3,7 +3,7 @@
 This document covers two related but distinct topics:
 
 - **`schemas/schema.json`** — generated from the TypeORM entity models; describes database/response shapes; used for CLI pre-flight validation and VS Code schema inference.
-- **DTO classes** — TypeScript classes in `apps/lcp-server/src/api/dto/`; define the exact fields accepted by each REST endpoint; validated at runtime by the server's `ValidationPipe`.
+- **DTO classes** — TypeScript classes in `apps/tcp-server/src/api/dto/`; define the exact fields accepted by each REST endpoint; validated at runtime by the server's `ValidationPipe`.
 
 ---
 
@@ -15,13 +15,13 @@ Every endpoint that accepts a request body uses a dedicated DTO (Data Transfer O
 
 | File                                              | DTOs                                              |
 | ------------------------------------------------- | ------------------------------------------------- |
-| `apps/lcp-server/src/api/dto/llm-config.dto.ts`   | `LlmConfigDto`                                    |
-| `apps/lcp-server/src/api/dto/company.dto.ts`      | `CreateCompanyDto`, `UpdateCompanyDto`            |
-| `apps/lcp-server/src/api/dto/role.dto.ts`         | `CreateRoleDto`, `UpdateRoleDto`                  |
-| `apps/lcp-server/src/api/dto/company-user.dto.ts` | `CreateCompanyUserDto`, `UpdateCompanyUserDto`    |
-| `apps/lcp-server/src/api/dto/agent.dto.ts`        | `StartAgentDto`, `StartChatDto`, `SendMessageDto` |
-| `apps/lcp-server/src/api/dto/conversation.dto.ts` | `ConversationReplyDto`                            |
-| `apps/lcp-server/src/api/dto/internal.dto.ts`     | `PauseDto`, `CompleteDto`                         |
+| `apps/tcp-server/src/api/dto/llm-config.dto.ts`   | `LlmConfigDto`                                    |
+| `apps/tcp-server/src/api/dto/company.dto.ts`      | `CreateCompanyDto`, `UpdateCompanyDto`            |
+| `apps/tcp-server/src/api/dto/role.dto.ts`         | `CreateRoleDto`, `UpdateRoleDto`                  |
+| `apps/tcp-server/src/api/dto/company-user.dto.ts` | `CreateCompanyUserDto`, `UpdateCompanyUserDto`    |
+| `apps/tcp-server/src/api/dto/agent.dto.ts`        | `StartAgentDto`, `StartChatDto`, `SendMessageDto` |
+| `apps/tcp-server/src/api/dto/conversation.dto.ts` | `ConversationReplyDto`                            |
+| `apps/tcp-server/src/api/dto/internal.dto.ts`     | `PauseDto`, `CompleteDto`                         |
 
 ### DTO field reference
 
@@ -103,7 +103,7 @@ For static tooling (e.g. Postman schemas, OpenAPI), the DTO tables above cover t
 npm run schema:generate
 ```
 
-This runs `ts-json-schema-generator` over every `*.model.ts` in `libs/lcp-shared/src/models/` and writes the result to `schemas/schema.json`. The schema is also regenerated as part of `npm run build`.
+This runs `ts-json-schema-generator` over every `*.model.ts` in `libs/tcp-shared/src/models/` and writes the result to `schemas/schema.json`. The schema is also regenerated as part of `npm run build`.
 
 The schema is a **generated artefact** — do not edit it by hand. If it is out of date, run `npm run schema:generate` and commit the updated file.
 
@@ -113,7 +113,7 @@ The schema is a **generated artefact** — do not edit it by hand. If it is out 
 
 These are the definitions you are most likely to reference when preparing CLI input.
 
-### `LcpCompany`
+### `TcpCompany`
 
 Represents a company (tenant). Used by `set-company`.
 
@@ -129,7 +129,7 @@ Represents a company (tenant). Used by `set-company`.
 | `mcpServerList`        | `string[]`                | No       | Additive extra servers, unioned with the system registry and each role's own list                                                          |
 | `timezone`             | `string`                  | No       | IANA name (e.g. `Europe/London`); CLI/UI display and prompt localization only — storage and the LLM's `{{datetime}}` anchor are always UTC |
 
-### `LcpRole`
+### `TcpRole`
 
 Represents an agent role within a company. Used by `set-role`.
 
@@ -187,12 +187,12 @@ Add to `.vscode/settings.json`:
     {
       "fileMatch": ["**/companies/*.json"],
       "url": "./schemas/schema.json",
-      "schema": { "$ref": "#/definitions/LcpCompany" }
+      "schema": { "$ref": "#/definitions/TcpCompany" }
     },
     {
       "fileMatch": ["**/roles/*.json"],
       "url": "./schemas/schema.json",
-      "schema": { "$ref": "#/definitions/LcpRole" }
+      "schema": { "$ref": "#/definitions/TcpRole" }
     }
   ]
 }
@@ -209,13 +209,13 @@ npm install -g ajv-cli ajv-formats
 # Validate a company file
 ajv validate \
   -s schemas/schema.json \
-  --ref '#/definitions/LcpCompany' \
+  --ref '#/definitions/TcpCompany' \
   -d my-company.json
 
 # Validate a role file
 ajv validate \
   -s schemas/schema.json \
-  --ref '#/definitions/LcpRole' \
+  --ref '#/definitions/TcpRole' \
   -d my-role.json
 ```
 
@@ -230,12 +230,12 @@ node -e "
 const Ajv = require('ajv');
 const schema = require('./schemas/schema.json');
 const data = require('./' + process.argv[1]);
-const typeName = process.argv[2] ?? 'LcpCompany';
+const typeName = process.argv[2] ?? 'TcpCompany';
 const ajv = new Ajv({ strict: false });
 const valid = ajv.validate(schema.definitions[typeName], data);
 if (valid) { console.log('Valid'); process.exit(0); }
 else { console.error(ajv.errorsText()); process.exit(1); }
-" my-company.json LcpCompany
+" my-company.json TcpCompany
 ```
 
 ---
@@ -258,10 +258,10 @@ else { console.error(ajv.errorsText()); process.exit(1); }
 
 ```bash
 # Validate
-ajv validate -s schemas/schema.json --ref '#/definitions/LcpCompany' -d acme.json
+ajv validate -s schemas/schema.json --ref '#/definitions/TcpCompany' -d acme.json
 
 # Apply
-./lcp-cli.sh set-company -i "$(cat acme.json)"
+./tcp-cli.sh set-company -i "$(cat acme.json)"
 ```
 
 ## Example: minimal role JSON
@@ -274,13 +274,13 @@ ajv validate -s schemas/schema.json --ref '#/definitions/LcpCompany' -d acme.jso
   "description": "Performs financial analysis and produces written reports.",
   "systemPromptTemplate": "You are {{name}}, a financial analyst at {{companyName}}.",
   "knowledgeDomains": ["finance", "reporting"],
-  "mcpServerList": ["lcp-mcp-storage", "lcp-mcp-memory"]
+  "mcpServerList": ["tcp-mcp-storage", "tcp-mcp-memory"]
 }
 ```
 
 ```bash
-ajv validate -s schemas/schema.json --ref '#/definitions/LcpRole' -d analyst-role.json
-./lcp-cli.sh set-role -c 00000000-0000-0000-0000-000000000001 -i "$(cat analyst-role.json)"
+ajv validate -s schemas/schema.json --ref '#/definitions/TcpRole' -d analyst-role.json
+./tcp-cli.sh set-role -c 00000000-0000-0000-0000-000000000001 -i "$(cat analyst-role.json)"
 ```
 
 ---
@@ -293,4 +293,4 @@ The pre-commit git hook regenerates the schema automatically on every commit and
 npm run schema:generate
 ```
 
-If you add or change a field on any entity in `libs/lcp-shared/src/models/`, regenerate the schema and commit the updated `schemas/schema.json` alongside the entity change (pre-commit does this for you automatically if the hooks are installed).
+If you add or change a field on any entity in `libs/tcp-shared/src/models/`, regenerate the schema and commit the updated `schemas/schema.json` alongside the entity change (pre-commit does this for you automatically if the hooks are installed).

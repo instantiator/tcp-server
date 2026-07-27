@@ -4,12 +4,12 @@ Status: Proposed
 
 ## Context
 
-The orchestration layer is the long-running service (within lcp-server) that manages the full lifecycle of a task: from the initial user prompt, through plan generation and agent dispatch, to completion. It is the "delivery manager" of LCP.
+The orchestration layer is the long-running service (within tcp-server) that manages the full lifecycle of a task: from the initial user prompt, through plan generation and agent dispatch, to completion. It is the "delivery manager" of TCP.
 
 Key requirements:
 
 - Generate a task plan using a configurable "planner role" agent
-- Dispatch task steps to lcp-agent one at a time (or in parallel where the plan allows)
+- Dispatch task steps to tcp-agent one at a time (or in parallel where the plan allows)
 - Support agent-to-agent consultation mid-step
 - Allow agents and users to revise the plan
 - Resume incomplete tasks on service restart
@@ -76,7 +76,7 @@ interface RoleDefinition {
 Each company config specifies a `planner_role` — the role that generates task plans. A typical choice is a "product owner" or "delivery manager" role. When a task enters `planning`:
 
 1. The orchestrator constructs a prompt from the task description and supporting materials
-2. It dispatches a single-step plan-generation job to lcp-agent using the planner role's config
+2. It dispatches a single-step plan-generation job to tcp-agent using the planner role's config
 3. The planner agent produces a structured task plan (list of `TaskStep` objects)
 4. The orchestrator validates and stores the plan, then transitions the task to `in_progress`
 
@@ -88,14 +88,14 @@ Supporting materials (uploaded by the user at task creation) are accessible to t
 
 | Queue           | Direction              | Description                               |
 | --------------- | ---------------------- | ----------------------------------------- |
-| `agent-jobs`    | lcp-server → lcp-agent | Dispatches a task step for execution      |
-| `agent-results` | lcp-agent → lcp-server | Reports step completion, progress, events |
+| `agent-jobs`    | tcp-server → tcp-agent | Dispatches a task step for execution      |
+| `agent-results` | tcp-agent → tcp-server | Reports step completion, progress, events |
 
 BullMQ's retry and priority features are used: failed steps are retried up to a configurable limit; high-priority tasks can preempt lower-priority ones.
 
 > **Note (008.6):** `AgentWorkerService`'s duplicate-job guard (`AgentRegistryService.isRunning`) had a TOCTOU race — it checked `isRunning` before `AgentLoopService.run` registered the agent, with an `await` (a DB fetch) in between. A stalled-job retry (BullMQ re-dispatching a job whose lock renewal failed — the default 30s lock duration is far shorter than a single turn can take with a slow local model) could slip through that gap and start a second concurrent execution against the same LangGraph checkpoint thread, producing repeated `complete_task` calls, stray extra model turns, and incorrect "task not complete" reminders even though the task had genuinely completed. Fixed by moving registration into the worker's job processor itself, synchronously with the `isRunning` check (no `await` in between), and raising the BullMQ lock duration to 5 minutes as a second line of defence. See `agent-worker.service.ts` and `agent-worker.service.spec.ts`'s atomicity regression test.
 
-### Orchestrator loop (lcp-server)
+### Orchestrator loop (tcp-server)
 
 The orchestrator is a NestJS service that:
 
@@ -112,7 +112,7 @@ When an agent needs to consult another role (e.g., the developer asks the securi
 
 1. Agent emits a `consult` event with: target role name, question, relevant context
 2. Orchestrator records the consultation request, pauses the current step
-3. Dispatches a consultation job to lcp-agent (short-lived agent run for the consultant role)
+3. Dispatches a consultation job to tcp-agent (short-lived agent run for the consultant role)
 4. On completion, orchestrator injects the consultant's response into the original step's context and resumes it
 
 ## Plan revision
@@ -139,16 +139,16 @@ completed
 
 ## Restore on restart
 
-On lcp-server startup:
+On tcp-server startup:
 
 1. Query all tasks with status `planning` or `in_progress`
 2. For each incomplete step with no active BullMQ job: re-dispatch
-3. LangGraph checkpoints ensure lcp-agent resumes from the last safe state (see [ADR-005](./ADR-005-agent-state-persistence.md))
+3. LangGraph checkpoints ensure tcp-agent resumes from the last safe state (see [ADR-005](./ADR-005-agent-state-persistence.md))
 
 ## Consequences
 
-- The orchestrator is a NestJS service within lcp-server — no new deployable
-- BullMQ workers run within lcp-agent; the queue is the only coupling between lcp-server and lcp-agent
+- The orchestrator is a NestJS service within tcp-server — no new deployable
+- BullMQ workers run within tcp-agent; the queue is the only coupling between tcp-server and tcp-agent
 - All task and plan state lives in PostgreSQL; Redis is ephemeral (queue transport only)
 - ~~**MCP tool loading (since 008.6):** `McpClientService`'s per-agent-run tool loading (see [agent-services.md](../agent-services.md#enabling-mcp-tools-for-a-role)) is layered with a tool-schema visibility gate — only each server's `describe_server` tool is bound to the model until it's called~~ — **superseded 010.2.8.2**: the gate is removed; all mode-filtered tools are bound from turn 1. The auto-inject/strip-identity behaviour `McpClientService` provides is unaffected. See [ADR-013 Amendments](ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-010282).
 
@@ -164,24 +164,24 @@ by two entities and a small set of REST/CLI surfaces. No orchestration
 behaviour (planner dispatch, plan execution, QA) is implemented yet — this
 amendment covers the data layer only. Full details: [tasks.md](../tasks.md).
 
-- **`LcpTask`** (replaces the `created → planning → in_progress → reviewing →
+- **`TcpTask`** (replaces the `created → planning → in_progress → reviewing →
 completed` lifecycle sketch): `status` is
   `ready | planning | in-progress | succeeded | failed | cancelled`, derived
   from its assignments by `deriveTaskStatus` except `planning` (set
   explicitly on dispatch) and the terminal states.
-- **`LcpAssignment`** (replaces `TaskStep`): `taskId` nullable (null = an
+- **`TcpAssignment`** (replaces `TaskStep`): `taskId` nullable (null = an
   "orphan" assignment — a plain conversation/consultation outside any task);
   `mode` (`plan | implement | qa`) is the agent's mode — there is no `mode`
-  column on `LcpAgent`, it derives its mode via its assignment (added in
+  column on `TcpAgent`, it derives its mode via its assignment (added in
   part 4). A task's plan is its implement-mode assignments ordered by
   `orderIndex`; there is no separate plan entity.
 - **Artifact model**: no artifact table — `{ type, value }` pairs in
   `simple-json` columns, constrained by four TypeScript union types
-  (`LcpMaterialArtifact`, `LcpAssignmentWorkingArtifact`,
-  `LcpAssignmentCompletedArtifact`, `LcpTaskCompletedArtifact`). Storage keys
+  (`TcpMaterialArtifact`, `TcpAssignmentWorkingArtifact`,
+  `TcpAssignmentCompletedArtifact`, `TcpTaskCompletedArtifact`). Storage keys
   extend the ADR-007 layout with `tasks/{id}/assignments/{orderIndex}/{working,completed}/`
   and an orphan `assignments/{id}/working/` directory.
-- **`LcpCompany.plannerRoleId`**: company-wide default planner role, used
+- **`TcpCompany.plannerRoleId`**: company-wide default planner role, used
   when a task doesn't specify its own.
 - **REST/CLI**: `POST /api/task` (create), `POST /api/task/:id/materials`
   (upload), `POST /api/task/:id/start` (atomic `ready → planning` + a logged
@@ -194,16 +194,16 @@ remaining `010.2.x` sub-plans.
 
 ## Amendments as implemented (010.2.4)
 
-- **Every `LcpAgent` now carries an assignment** (`assignmentId`, non-nullable
+- **Every `TcpAgent` now carries an assignment** (`assignmentId`, non-nullable
   FK, `ON DELETE CASCADE`). Task work uses the task's assignment; plain
   conversations, API-started agents (`/api/agent/start`, `/api/agent/chat/start`),
   and consultations get an auto-created **orphan** implement-mode assignment
   (`taskId: null`, `status: in-progress`, prompt copied from the agent's
   `initialPrompt`). `DbService.createAgent` creates the orphan and cross-links
   it (agent → assignment, assignment.agentId → agent) in one transaction. The
-  agent's mode is its assignment's mode; there is no mode column on `LcpAgent`.
+  agent's mode is its assignment's mode; there is no mode column on `TcpAgent`.
   The destructive `AddAgentAssignment` migration deletes all existing
-  `lcp_agent` rows (a non-nullable FK cannot be backfilled). See the
+  `tcp_agent` rows (a non-nullable FK cannot be backfilled). See the
   [ADR-013 010.2.4 amendment](ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-01024)
   for how the assignment drives prompt part 4.
 - `plan`/`qa` modes exist but nothing dispatches them yet (parts 5/7).
@@ -212,17 +212,17 @@ remaining `010.2.x` sub-plans.
 
 - **Plan creation is now a tool**, not a drafted internal call. A `plan`-mode
   agent turns its task into a plan via `create_plan` on the new
-  [lcp-mcp-tasks](../lcp-mcp-tasks.md) MCP server (port 3013), which proxies
+  [tcp-mcp-tasks](../tcp-mcp-tasks.md) MCP server (port 3013), which proxies
   `POST /internal/task/:taskId/plan`. The endpoint validates the caller
   (plan mode, assignment belongs to the task), atomically claims the task
   `planning → in-progress`, and creates the ordered implement-mode
-  `LcpAssignment` rows (`orderIndex` 0…n−1, status `ready`). The reaction that
+  `TcpAssignment` rows (`orderIndex` 0…n−1, status `ready`). The reaction that
   actually dispatches the first assignment is part 7 — here `TaskDispatcher`
   exposes `taskPlanned`/`assignmentReadyForQa`/`assignmentAssured` hooks that are
   logged no-ops.
 - **The state transitions backing the three mode tools** (`create_plan`,
   `complete_assignment`, `assure_assignment`) live in `AssignmentService` on
-  lcp-server, guarded by `InternalApiKeyGuard`. Each uses an atomic conditional
+  tcp-server, guarded by `InternalApiKeyGuard`. Each uses an atomic conditional
   `UPDATE` (the `pausedAt` claim pattern) so double/concurrent calls resolve to
   one winner; the loser gets a `409`. The MCP server holds no state — it
   resolves the caller's assignment (`GET /internal/agent/:id/assignment`),
@@ -231,7 +231,7 @@ remaining `010.2.x` sub-plans.
 ## Amendments as implemented (010.2.7)
 
 The sequential orchestration flow is now fully wired.
-`TaskOrchestrationService` (`apps/lcp-server/src/api/task-orchestration.service.ts`)
+`TaskOrchestrationService` (`apps/tcp-server/src/api/task-orchestration.service.ts`)
 is the real `TaskDispatcher` — the abstract `TaskDispatcher` class is now the DI
 token, bound to the single `TaskOrchestrationService` instance via `useExisting`.
 See [tasks.md § Orchestration flow](../tasks.md#orchestration-flow) for the
@@ -243,7 +243,7 @@ behavioural walk-through; the design record:
   with feedback → next assignment → finalisation (assignment `completed/` files
   copied into the task `completed/`, highest `orderIndex` wins on collision;
   `task.completed` set) → task `succeeded`. Which assignment(s) run next is the
-  pure `selectNextAssignments` (`libs/lcp-shared/src/models/task-status.ts`),
+  pure `selectNextAssignments` (`libs/tcp-shared/src/models/task-status.ts`),
   documented as the DAG extension point — it returns a set the orchestrator
   dispatches, so a future branch/join plan changes only that function.
 - **Idempotency & races.** Every handler re-reads state and advances it with an
@@ -268,7 +268,7 @@ behavioural walk-through; the design record:
 - **Coverage.** Unit tests over a real in-memory SQLite DB
   (`task-orchestration.service.spec.ts`) plus a no-LLM lifecycle e2e driving the
   internal endpoints against real Postgres/Redis/MinIO
-  (`test/e2e/lcp-server/task-orchestration.e2e-spec.ts`). A stub-LLM e2e through
+  (`test/e2e/tcp-server/task-orchestration.e2e-spec.ts`). A stub-LLM e2e through
   the real agent loop was deferred — there is no scriptable LLM stub able to
   emit a deterministic multi-agent tool-call sequence (see the plan file's
   implementation notes).
@@ -279,7 +279,7 @@ behavioural walk-through; the design record:
 
 _2026-07-13._
 
-- **`chat` added to the assignment mode set.** `LcpAssignmentMode` is now
+- **`chat` added to the assignment mode set.** `TcpAssignmentMode` is now
   `plan | implement | qa | chat` (a TypeScript union widening only — `mode` is a
   `varchar` column, no migration). `/api/agent/chat/start` creates the agent's
   orphan assignment in `chat` mode (empty prompt); `/api/agent/start` and
@@ -292,7 +292,7 @@ _2026-07-13._
   in the role prompt.
 - **Toward one agent-operation core.** Creation already consolidated onto
   `DbService.createAgent` (010.2.4); this part consolidates prompt assembly onto
-  the shared `@lcp/shared` builders across both the chat and worker paths (see
+  the shared `@tcp/shared` builders across both the chat and worker paths (see
   [ADR-013 010.2.8 amendment](ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-01028)).
   What remains genuinely per-caller (not duplication to remove): the request
   lifecycle vs. the BullMQ job lifecycle/dispatch; idle-between-turns terminal
@@ -310,7 +310,7 @@ _2026-07-13._
   planner therefore had the consultation and file-write tools and could
   short-circuit into consulting another role instead of producing a plan,
   wedging the task in `planning`. New `MODE_DENIED_SERVERS`/`MODE_DENIED_TOOLS`
-  (`@lcp/shared` `mode-tools.ts`, only `plan` populated) with `serverNamesForMode`
+  (`@tcp/shared` `mode-tools.ts`, only `plan` populated) with `serverNamesForMode`
   / `filterToolsForMode`, applied in `AgentLoopService.runLoop`: a `plan` agent
   is denied the `interactions` server (no agent consultation, no user queries)
   and the mutating storage tools, keeping storage reads, memory, and
@@ -328,7 +328,7 @@ _2026-07-13._
   The consultation prompt suffix is reframed toward a concise inline answer. See
   `010.2.8.2 - task orchestration fixes.md`.
 - **Enumerable-value validation feedback.** A shared
-  `buildEnumValidationError(purposeOfTool, invalid[])` (`@lcp/shared`) reports
+  `buildEnumValidationError(purposeOfTool, invalid[])` (`@tcp/shared`) reports
   every invalid enumerable value at once, names the valid values in English, and
   closes with a corrective retry instruction. Applied to `create_plan` (roles +
   artifact types), `complete_assignment` (prepared types), and
@@ -355,8 +355,8 @@ _2026-07-13._
   let the model "forget" a tool after a few iterations; all mode-filtered tools
   are now bound from turn 1 (compact schemas). Supersedes the 008.6 gating in
   [ADR-013](ADR-013-prompt-assembly-context-management.md) and its inline docs
-  (agent-services / context-management / lcp-agent-special-cases /
-  lcp-mcp-tasks|interactions — full sweep deferred to 010.2.9).
+  (agent-services / context-management / tcp-agent-special-cases /
+  tcp-mcp-tasks|interactions — full sweep deferred to 010.2.9).
 - **No knowledge service for empty-KB roles.** `AgentRagService.hasKnowledge`
   (a cheap `EXISTS` check, no embedding) drops the `memory` server and skips RAG
   retrieval for a role with no indexed chunks.
@@ -382,7 +382,7 @@ _2026-07-14._
   (`MODE_PROMPTS.consultee`) instead of the old `implement` + prompt-suffix hack;
   `pause-and-resume` creates the consultee agent with `mode: 'consultee'`. Same
   completion (`complete_assignment`, orphan assignment).
-- **`MODE_TOOLS` (positive) replaces `MODE_DENIED_*`.** `@lcp/shared`
+- **`MODE_TOOLS` (positive) replaces `MODE_DENIED_*`.** `@tcp/shared`
   `mode-tools.ts` now states, per mode, the servers offered and a storage access
   level (`read-write | read-only`) — the single source of truth for both the
   client-side tool filter and the server-side `resolveStorageScope` read-only
@@ -391,12 +391,12 @@ _2026-07-14._
   `StorageService.moveFile`); a read-only-scope refusal is now
   `getReadOnlyMessage(tool, readTools)` (in `storage-prompts.ts`), which names
   the refused tool and the read tools — no mode/dir.
-- **Control-char sanitisation (automatic).** `stripControlChars` (`@lcp/shared`)
+- **Control-char sanitisation (automatic).** `stripControlChars` (`@tcp/shared`)
   removes stray C0 control chars (keeping `\t\n\r`) from model-produced text so
   task/assignment JSON stays valid for strict parsers and terminal-escape
   sequences never reach an operator's console. Applied automatically via TypeORM
   column transformers (`sanitiseTextColumn` / `sanitiseArtifactsColumn`) on the
-  model-text columns of `LcpTask`/`LcpAssignment`/`LcpAgent` (`request`,
+  model-text columns of `TcpTask`/`TcpAssignment`/`TcpAgent` (`request`,
   `prompt`, `summary`, `qaFeedback`, agent `output`/`initialPrompt`, and every
   artifact-list column's `value`), so every write is sanitised at the DB layer
   with no per-call discipline; `AssignmentService` also strips the `qaFeedback`
@@ -416,7 +416,7 @@ _2026-07-15._
 failed, cancelled)`). Every transition is recorded via the existing
   `recordTaskState`/`recordAssignmentState` audit hooks, so the cascade shows
   up in `eavesdrop --show-history`/`--tail` like any other state change.
-- **New `AgentStatus.Cancelled`.** The lcp-agent loop's `checkTerminalStatus`
+- **New `AgentStatus.Cancelled`.** The tcp-agent loop's `checkTerminalStatus`
   hook (`agent-loop.service.ts`) now also treats `Cancelled` as terminal: a
   running agent notices on its next status poll (the same DB-read-per-loop-
   iteration mechanism `Paused`/`Completed` already use) and stops cleanly —
@@ -431,11 +431,11 @@ failed, cancelled)`). Every transition is recorded via the existing
 
 _2026-07-16._
 
-- **`LcpAssignment.parentAssignmentId`.** A nullable, indexed self-FK
+- **`TcpAssignment.parentAssignmentId`.** A nullable, indexed self-FK
   (`ON DELETE SET NULL`) distinct from the existing `targetAssignmentId`
   (what a QA assignment reviews) — this records which assignment's agent
   spawned this one. Only `DbService.createAgent`'s orphan-assignment branch
-  needs it: when a caller supplies `LcpAgentTemplate.parentAssignmentId` (and
+  needs it: when a caller supplies `TcpAgentTemplate.parentAssignmentId` (and
   no `assignmentId`), the new orphan assignment inherits the parent
   assignment's `taskId` directly and records `parentAssignmentId`, instead of
   the previous hardcoded `taskId: null`. `PauseAndResumeService.pauseForConsultation`

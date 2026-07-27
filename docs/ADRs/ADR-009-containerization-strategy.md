@@ -4,7 +4,7 @@ Status: Partially Implemented
 
 ## Context
 
-LCP must be deployable on any server. Docker Compose is the natural deployment unit. The question is what the containerization _boundary_ should be — how finely to split services across containers, particularly for agents.
+TCP must be deployable on any server. Docker Compose is the natural deployment unit. The question is what the containerization _boundary_ should be — how finely to split services across containers, particularly for agents.
 
 ## Options
 
@@ -18,7 +18,7 @@ LCP must be deployable on any server. Docker Compose is the natural deployment u
 
 **Single Docker Compose stack with logical per-company isolation.**
 
-All companies share the same PostgreSQL, MinIO, Redis, lcp-server, and lcp-agent instances. Per-company isolation is enforced logically:
+All companies share the same PostgreSQL, MinIO, Redis, tcp-server, and tcp-agent instances. Per-company isolation is enforced logically:
 
 - Every DB query is scoped by `company_id`
 - Each company has its own MinIO bucket (see [ADR-007](./ADR-007-shared-company-storage.md))
@@ -28,12 +28,12 @@ All companies share the same PostgreSQL, MinIO, Redis, lcp-server, and lcp-agent
 
 ```
 services:
-  lcp-server:             NestJS API + orchestration
-  lcp-agent:              LangGraph agent loop runner
-  lcp-mcp-storage:        Storage MCP server (MinIO tools) — port 3010
-  lcp-mcp-memory:         Memory/RAG MCP server — port 3011
-  lcp-mcp-interactions:   Interactions MCP server — port 3012
-  lcp-mcp-tasks:          Tasks MCP server (added 010.2.5) — port 3013
+  tcp-server:             NestJS API + orchestration
+  tcp-agent:              LangGraph agent loop runner
+  tcp-mcp-storage:        Storage MCP server (MinIO tools) — port 3010
+  tcp-mcp-memory:         Memory/RAG MCP server — port 3011
+  tcp-mcp-interactions:   Interactions MCP server — port 3012
+  tcp-mcp-tasks:          Tasks MCP server (added 010.2.5) — port 3013
   postgres:               PostgreSQL 16 + pgvector (pgvector/pgvector image)
   minio:                  MinIO object storage (minio/minio image)
   redis:                  Redis 7 (BullMQ queue backend)
@@ -48,9 +48,9 @@ MCP servers run as **permanent Docker Compose services**, not as child processes
 - Faster agent startup (no process spawn per task)
 - Easier debugging via `docker compose logs`
 
-lcp-agent connects to MCP servers over HTTP using the MCP Streamable HTTP transport. The `McpClientService` resolves server URLs from `MCP_{NAME}_URL` environment variables set in Docker Compose. Tool loading is per-agent-run, scoped to the server names listed in `role.mcpServerList`.
+tcp-agent connects to MCP servers over HTTP using the MCP Streamable HTTP transport. The `McpClientService` resolves server URLs from `MCP_{NAME}_URL` environment variables set in Docker Compose. Tool loading is per-agent-run, scoped to the server names listed in `role.mcpServerList`.
 
-The three standard LCP MCP servers (storage, memory, interactions) are NestJS applications in `apps/lcp-mcp-*/` using `@modelcontextprotocol/sdk`. Additional per-company MCP servers are a future extension.
+The three standard TCP MCP servers (storage, memory, interactions) are NestJS applications in `apps/tcp-mcp-*/` using `@modelcontextprotocol/sdk`. Additional per-company MCP servers are a future extension.
 
 ### Revisit trigger
 
@@ -62,11 +62,11 @@ Move to per-company stacks when any of the following occurs:
 
 ## Consequences
 
-- A single `docker-compose.yml` (plus a `.env` for secrets) is all that's needed to run LCP
+- A single `docker-compose.yml` (plus a `.env` for secrets) is all that's needed to run TCP
 - Adding a new company does not require infrastructure changes — only a new DB row and MinIO bucket
 - MCP servers with long startup times (e.g., ones that load large models) may benefit from being long-lived per-company; this is an optimisation to consider on a case-by-case basis
 
 ## Open Questions / Assumptions
 
-- lcp-agent's concurrency is controlled by BullMQ worker concurrency config — set conservatively to avoid overloading the LLM provider API or local LM Studio instance
+- tcp-agent's concurrency is controlled by BullMQ worker concurrency config — set conservatively to avoid overloading the LLM provider API or local LM Studio instance
 - Health checks and restart policies for all services should be defined in the Compose file

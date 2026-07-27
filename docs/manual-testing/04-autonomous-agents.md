@@ -4,14 +4,14 @@
 
 > **Requires:** Section 2 complete — `$COMPANY_ID` and `$ROLE_ID` set.
 
-You are testing the autonomous agent pipeline. Unlike chat agents, autonomous agents run as background jobs: lcp-server enqueues a task on Redis (BullMQ), and lcp-agent picks it up, runs the LangGraph loop, and persists the result. The agent works without user interaction after the initial prompt.
+You are testing the autonomous agent pipeline. Unlike chat agents, autonomous agents run as background jobs: tcp-server enqueues a task on Redis (BullMQ), and tcp-agent picks it up, runs the LangGraph loop, and persists the result. The agent works without user interaction after the initial prompt.
 
 ```mermaid
 sequenceDiagram
     participant U as User (curl)
-    participant S as lcp-server
+    participant S as tcp-server
     participant Q as Redis (BullMQ)
-    participant A as lcp-agent
+    participant A as tcp-agent
     participant LLM as LLM Provider
     participant DB as PostgreSQL
 
@@ -113,12 +113,12 @@ Expected sequence of event types:
 
 ---
 
-## 4.5 — Verify lcp-agent processed the job
+## 4.5 — Verify tcp-agent processed the job
 
-Check that lcp-agent received and ran the job:
+Check that tcp-agent received and ran the job:
 
 ```bash
-docker compose logs lcp-agent --tail 20
+docker compose logs tcp-agent --tail 20
 ```
 
 Expected log lines (approximate):
@@ -133,12 +133,12 @@ Expected log lines (approximate):
 
 ## 4.6 — Test MCP tool loading (if role has mcpServerList)
 
-If your role's `mcpServerList` includes `"storage"`, `"memory"`, or `"interactions"`, lcp-agent will attempt to connect to those MCP servers and load their tools before running the agent loop.
+If your role's `mcpServerList` includes `"storage"`, `"memory"`, or `"interactions"`, tcp-agent will attempt to connect to those MCP servers and load their tools before running the agent loop.
 
 To verify:
 
 ```bash
-docker compose logs lcp-agent | grep -i "mcp\|tool"
+docker compose logs tcp-agent | grep -i "mcp\|tool"
 ```
 
 Expected lines:

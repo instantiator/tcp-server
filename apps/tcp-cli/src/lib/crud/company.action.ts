@@ -14,7 +14,7 @@ interface CompanySummary {
   description: string;
 }
 
-/** Lists all companies from the LCP server and writes them to stdout as JSON. */
+/** Lists all companies from the TCP server and writes them to stdout as JSON. */
 export function listCompaniesAction(opts: GlobalOptions): Promise<void> {
   return runCommand(async () => {
     const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });

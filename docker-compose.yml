@@ -8,7 +8,7 @@ x-internal-urls: &internal-urls
   MCP_MEMORY_URL: http://tcp-mcp-memory:3011
   MCP_INTERACTIONS_URL: http://tcp-mcp-interactions:3012
   MCP_TASKS_URL: http://tcp-mcp-tasks:3013
-  LCP_SERVER_URL: http://tcp-server:3000
+  TCP_SERVER_URL: http://tcp-server:3000
   OIDC_INTERNAL_ISSUER_URL: http://zitadel:8080
 
 services:
@@ -108,7 +108,7 @@ services:
       # script project/app/user creation, since Zitadel has no ROPC grant to
       # obtain an admin session token the way kcadm.sh does for Keycloak.
       ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: tcp-bootstrap
-      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: LCP Bootstrap
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: TCP Bootstrap
       ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2100-01-01T00:00:00Z"
       ZITADEL_FIRSTINSTANCE_PATPATH: /machinekey/pat.txt
     volumes:

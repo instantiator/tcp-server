@@ -15,42 +15,42 @@ assignment, and QA review assignments). See ADR-010 for the design record.
 The full lifecycle — planner dispatch, plan execution, QA review, file
 promotion, finalisation, failure propagation, and startup recovery — is
 implemented by `TaskOrchestrationService`
-(`apps/lcp-server/src/api/task-orchestration.service.ts`). See
+(`apps/tcp-server/src/api/task-orchestration.service.ts`). See
 [Orchestration flow](#orchestration-flow) below.
 
 ## Entities
 
-### `LcpTask`
+### `TcpTask`
 
 | Field           | Type                                   | Notes                                                                    |
 | --------------- | -------------------------------------- | ------------------------------------------------------------------------ |
 | `companyId`     | uuid                                   | Owning company                                                           |
 | `request`       | text                                   | The user's statement of the work                                         |
-| `plannerRoleId` | uuid, nullable                         | Explicit planner; falls back to `LcpCompany.plannerRoleId` at start time |
-| `status`        | `LcpTaskStatus`                        | See [Task status](#task-status)                                          |
-| `materials`     | `LcpMaterialArtifact[]`                | Task materials — `task-materials-path` or `inline-text` only             |
-| `expected`      | `LcpTaskCompletedArtifact[]`           | Artifacts the task should produce                                        |
-| `completed`     | `LcpTaskCompletedArtifact[]`, nullable | Set at finalisation (part 7)                                             |
+| `plannerRoleId` | uuid, nullable                         | Explicit planner; falls back to `TcpCompany.plannerRoleId` at start time |
+| `status`        | `TcpTaskStatus`                        | See [Task status](#task-status)                                          |
+| `materials`     | `TcpMaterialArtifact[]`                | Task materials — `task-materials-path` or `inline-text` only             |
+| `expected`      | `TcpTaskCompletedArtifact[]`           | Artifacts the task should produce                                        |
+| `completed`     | `TcpTaskCompletedArtifact[]`, nullable | Set at finalisation (part 7)                                             |
 | `failureReason` | text, nullable                         | Why the task failed — planner failure, QA exhaustion, etc.               |
 
-### `LcpAssignment`
+### `TcpAssignment`
 
 | Field                | Type                               | Notes                                                                                                                                                                                                                                                                              |
 | -------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `taskId`             | uuid, nullable                     | Null = orphan assignment                                                                                                                                                                                                                                                           |
 | `companyId`          | uuid                               | Needed directly for orphans                                                                                                                                                                                                                                                        |
-| `mode`               | `LcpAssignmentMode`                | `plan \| implement \| qa` — the agent's mode IS its assignment's mode; there is no mode column on `LcpAgent`                                                                                                                                                                       |
+| `mode`               | `TcpAssignmentMode`                | `plan \| implement \| qa` — the agent's mode IS its assignment's mode; there is no mode column on `TcpAgent`                                                                                                                                                                       |
 | `orderIndex`         | int, nullable                      | Position in the task plan. Set only for implement-mode assignments belonging to a task                                                                                                                                                                                             |
 | `prompt`             | text                               | Instructions given to the assigned agent                                                                                                                                                                                                                                           |
 | `roleId`             | uuid                               | The role this assignment must be worked by                                                                                                                                                                                                                                         |
-| `status`             | `LcpAssignmentStatus`              | See [Assignment status](#assignment-status)                                                                                                                                                                                                                                        |
+| `status`             | `TcpAssignmentStatus`              | See [Assignment status](#assignment-status)                                                                                                                                                                                                                                        |
 | `agentId`            | uuid, nullable                     | The agent currently/last working this assignment (`ON DELETE SET NULL`)                                                                                                                                                                                                            |
 | `targetAssignmentId` | uuid, nullable                     | qa-mode only: the assignment under review                                                                                                                                                                                                                                          |
 | `parentAssignmentId` | uuid, nullable                     | The assignment whose agent spawned this one (e.g. a consultation, `ON DELETE SET NULL`) — distinct from `targetAssignmentId` ("who created me", not "what am I evaluating"); when set at creation, `taskId` is inherited from the parent so consultations trace back to their task |
-| `materials`          | `LcpMaterialArtifact[]`            | Materials supplied to the assignment                                                                                                                                                                                                                                               |
-| `expected`           | `LcpAssignmentWorkingArtifact[]`   | Artifacts the assignment is expected to produce                                                                                                                                                                                                                                    |
-| `prepared`           | `LcpAssignmentWorkingArtifact[]`   | Set by `complete_assignment` (part 5)                                                                                                                                                                                                                                              |
-| `approved`           | `LcpAssignmentCompletedArtifact[]` | Set when QA accepts (part 7)                                                                                                                                                                                                                                                       |
+| `materials`          | `TcpMaterialArtifact[]`            | Materials supplied to the assignment                                                                                                                                                                                                                                               |
+| `expected`           | `TcpAssignmentWorkingArtifact[]`   | Artifacts the assignment is expected to produce                                                                                                                                                                                                                                    |
+| `prepared`           | `TcpAssignmentWorkingArtifact[]`   | Set by `complete_assignment` (part 5)                                                                                                                                                                                                                                              |
+| `approved`           | `TcpAssignmentCompletedArtifact[]` | Set when QA accepts (part 7)                                                                                                                                                                                                                                                       |
 | `summary`            | text, nullable                     | The completing agent's final answer; becomes the agent's `output` when QA accepts                                                                                                                                                                                                  |
 | `qaStatus`           | `'accepted' \| 'rejected' \| null` | Cleared (with `qaFeedback`) whenever the assignment (re-)enters `in-progress`                                                                                                                                                                                                      |
 | `qaFeedback`         | text, nullable                     |                                                                                                                                                                                                                                                                                    |
@@ -61,15 +61,15 @@ implemented by `TaskOrchestrationService`
 plan (branch/join) would replace it with an edge list; `selectNextAssignments`
 (not yet implemented) is the intended extension point.
 
-### `LcpCompany.plannerRoleId`
+### `TcpCompany.plannerRoleId`
 
-Nullable FK to `LcpRole` (`ON DELETE SET NULL`) — the company-wide default
+Nullable FK to `TcpRole` (`ON DELETE SET NULL`) — the company-wide default
 planner role, used when a task does not specify its own `plannerRoleId`.
 Must belong to the company it's set on; the API returns `400` otherwise.
 
 ## Task status
 
-`LcpTaskStatus`: `ready | planning | in-progress | finalising | succeeded | failed | cancelled`.
+`TcpTaskStatus`: `ready | planning | in-progress | finalising | succeeded | failed | cancelled`.
 
 `planning` is set explicitly when the planner agent is dispatched (`POST
 /api/task/:id/start`) and left when `create_plan` lands (`in-progress`) or the
@@ -79,7 +79,7 @@ bring the deliverables up to them (see [Orchestration flow](#orchestration-flow)
 it is left only by the finalise reaction (`succeeded`, or `failed` when finalise
 can't meet the expectations — files still promoted). Every other transition is
 derived from the task's implement-mode assignments by `deriveTaskStatus`
-(`libs/lcp-shared/src/models/task-status.ts`):
+(`libs/tcp-shared/src/models/task-status.ts`):
 
 1. A terminal `status` (`succeeded | failed | cancelled`) always sticks.
 2. `status === 'finalising'` sticks — only the finalise reaction moves it.
@@ -92,7 +92,7 @@ derived from the task's implement-mode assignments by `deriveTaskStatus`
 
 ## Assignment status
 
-`LcpAssignmentStatus`: `ready | in-progress | in-qa | succeeded | failed | cancelled`.
+`TcpAssignmentStatus`: `ready | in-progress | in-qa | succeeded | failed | cancelled`.
 
 A QA rejection returns the assignment from `in-qa` to `in-progress`
 (`qaStatus`/`qaFeedback` cleared on that re-entry; `qaAttempts` is never
@@ -100,10 +100,10 @@ reset), up to the QA-attempt cap (see [Orchestration flow](#orchestration-flow))
 
 ## Agent modes
 
-`LcpAssignmentMode`: `plan | implement | qa | chat | consultee | finalise`. An
+`TcpAssignmentMode`: `plan | implement | qa | chat | consultee | finalise`. An
 agent's mode **is** its assignment's mode; it drives the prompt
 (`MODE_PROMPTS`), the required completion tool (`requiredToolForMode`), and the
-tools offered (`MODE_TOOLS` in `@lcp/shared`). `MODE_TOOLS` is the single source
+tools offered (`MODE_TOOLS` in `@tcp/shared`). `MODE_TOOLS` is the single source
 of truth for both the client-side tool filter and the server-side storage
 read-only scope.
 
@@ -123,7 +123,7 @@ server (no consultation/user-query — so a planning run always terminates).
 ## Artifact model
 
 Artifacts are `{ type, value }` pairs stored in `simple-json` columns —
-there is no artifact table. `LcpArtifactType` constrains where an artifact
+there is no artifact table. `TcpArtifactType` constrains where an artifact
 lives:
 
 | Type                        | Resolves to (via `resolveArtifactKey`)                                                                                                                                  |
@@ -135,12 +135,12 @@ lives:
 | `inline-text`               | Not a storage pointer — literal text. As an expectation, an empty `value` matches any text, otherwise `value` is a regex the text must match                            |
 
 Four union types constrain which artifact types are valid in which field —
-see `libs/lcp-shared/src/models/LcpArtifact.ts`:
+see `libs/tcp-shared/src/models/TcpArtifact.ts`:
 
-- `LcpMaterialArtifact` (`LcpTask.materials`, `LcpAssignment.materials`): `task-materials-path | assignment-completed-path | inline-text`
-- `LcpAssignmentWorkingArtifact` (`LcpAssignment.expected`, `.prepared`): `assignment-working-path | inline-text`
-- `LcpAssignmentCompletedArtifact` (`LcpAssignment.approved`): `assignment-completed-path | inline-text`
-- `LcpTaskCompletedArtifact` (`LcpTask.expected`, `.completed`): `task-completed-path | inline-text`
+- `TcpMaterialArtifact` (`TcpTask.materials`, `TcpAssignment.materials`): `task-materials-path | assignment-completed-path | inline-text`
+- `TcpAssignmentWorkingArtifact` (`TcpAssignment.expected`, `.prepared`): `assignment-working-path | inline-text`
+- `TcpAssignmentCompletedArtifact` (`TcpAssignment.approved`): `assignment-completed-path | inline-text`
+- `TcpTaskCompletedArtifact` (`TcpTask.expected`, `.completed`): `task-completed-path | inline-text`
 
 See [Shared Storage](shared-storage.md#folder-structure) for the full
 storage tree, including the orphan-assignment working directory.
@@ -218,7 +218,7 @@ assignment is atomically claimed `ready → in-progress` and an agent required t
 call `complete_assignment` is dispatched.
 
 **Which assignment runs next** is chosen by the pure function
-`selectNextAssignments` (`libs/lcp-shared/src/models/task-status.ts`): nothing
+`selectNextAssignments` (`libs/tcp-shared/src/models/task-status.ts`): nothing
 while any assignment is `in-progress`/`in-qa`, else the single lowest-`orderIndex`
 `ready` assignment. This is the **DAG extension point** — a future branch/join
 plan replaces the linear `orderIndex` selection here and may return several
@@ -267,31 +267,31 @@ their recovery).
 
 ```bash
 # Create a task, optionally with expected output filenames
-./lcp-cli.sh create-task -c acme -r "Write a market analysis report" --expected report.md
+./tcp-cli.sh create-task -c acme -r "Write a market analysis report" --expected report.md
 
 # Create, attach materials, and start in one call
-./lcp-cli.sh create-task -c acme -r "Summarise the attached brief" \
+./tcp-cli.sh create-task -c acme -r "Summarise the attached brief" \
   -m ./brief.pdf --planner-role planner --start
 
 # List a company's tasks
-./lcp-cli.sh list-tasks -c acme
+./tcp-cli.sh list-tasks -c acme
 
 # Get a task and its assignments
-./lcp-cli.sh get-task --task-id <uuid>
+./tcp-cli.sh get-task --task-id <uuid>
 
 # Set a planner role (on a company default, or an unstarted task), edit an
 # unstarted task, then start it
-./lcp-cli.sh set-planner --company-slug acme --role-slug planner
-./lcp-cli.sh set-task --task-id <uuid> -i '{"request":"Write a longer report"}'
-./lcp-cli.sh start-task --task-id <uuid>
+./tcp-cli.sh set-planner --company-slug acme --role-slug planner
+./tcp-cli.sh set-task --task-id <uuid> -i '{"request":"Write a longer report"}'
+./tcp-cli.sh start-task --task-id <uuid>
 
 # Cancel a task (and its still-running assignments/agents)
-./lcp-cli.sh cancel-task --task-id <uuid>
+./tcp-cli.sh cancel-task --task-id <uuid>
 
 # See what's going on: agents, assignments (including orphans), and history
-./lcp-cli.sh list-agents --company acme
-./lcp-cli.sh list-assignments --company acme --filter task=null
-./lcp-cli.sh eavesdrop --task-id <uuid> --show-history --tail
+./tcp-cli.sh list-agents --company acme
+./tcp-cli.sh list-assignments --company acme --filter task=null
+./tcp-cli.sh eavesdrop --task-id <uuid> --show-history --tail
 ```
 
-See [lcp-cli.md](lcp-cli.md#create-task) for the full flag reference.
+See [tcp-cli.md](tcp-cli.md#create-task) for the full flag reference.

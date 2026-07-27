@@ -4,7 +4,7 @@ Status: Partially Implemented
 
 ## Context
 
-lcp-server exposes a REST API. Access to companies and their resources (tasks, conversations, agent roles, shared storage) must be controlled. A company has a list of users, each with a set of permissions.
+tcp-server exposes a REST API. Access to companies and their resources (tasks, conversations, agent roles, shared storage) must be controlled. A company has a list of users, each with a set of permissions.
 
 Agents are **not** auth subjects — they run as trusted internal processes inheriting the company context. Auth applies only to human (or external service) callers of the REST API.
 
@@ -40,7 +40,7 @@ The default IdP is **Keycloak**, provided as an optional Docker Compose service 
 
 > This sub-decision is superseded by [ADR-017](ADR-017-oidc-provider-selection.md): the default IdP is changing from Keycloak to Zitadel. See that ADR for the rationale and migration plan; the rest of this ADR (permission model, company-permissions design) is unaffected.
 
-lcp-server validates incoming requests by:
+tcp-server validates incoming requests by:
 
 1. Extracting the Bearer token from the `Authorization` header
 2. Fetching the IdP's JWKS from `{OIDC_ISSUER_URL}/.well-known/jwks.json` (cached)
@@ -48,7 +48,7 @@ lcp-server validates incoming requests by:
 
 ### Company permissions
 
-Identity (who you are) is handled by the IdP. Authorisation (what you can do in a given company) is handled by lcp-server:
+Identity (who you are) is handled by the IdP. Authorisation (what you can do in a given company) is handled by tcp-server:
 
 - `CompanyMembership` entity in PostgreSQL: `(user_id, company_id, permissions[])`
 - Permissions are checked by a `@RequirePermission()` decorator on each endpoint
@@ -56,18 +56,18 @@ Identity (who you are) is handled by the IdP. Authorisation (what you can do in 
 
 ### User account management
 
-lcp-server provides thin wrappers around the Keycloak Admin REST API for common operations, so developers only need to interact with the lcp-server API for the day-to-day cases:
+tcp-server provides thin wrappers around the Keycloak Admin REST API for common operations, so developers only need to interact with the tcp-server API for the day-to-day cases:
 
-| lcp-server endpoint       | Proxied Keycloak operation       |
+| tcp-server endpoint       | Proxied Keycloak operation       |
 | ------------------------- | -------------------------------- |
-| `POST /users`             | Create user in the `lcp` realm   |
+| `POST /users`             | Create user in the `tcp` realm   |
 | `PATCH /users/:id/status` | Enable or disable a user account |
 
 For advanced IdP features (MFA, password policy, social login, federation), use the Keycloak admin UI directly at `http://localhost:8080`.
 
 ### Internal service trust
 
-lcp-server ↔ lcp-agent communication over BullMQ is internal to Docker Compose. No auth is applied between these services — network-level trust is sufficient within the Compose network. **Do not expose the Redis port outside the Docker network.**
+tcp-server ↔ tcp-agent communication over BullMQ is internal to Docker Compose. No auth is applied between these services — network-level trust is sufficient within the Compose network. **Do not expose the Redis port outside the Docker network.**
 
 ## Implementation status
 
@@ -78,8 +78,8 @@ The `CompanyMembership` entity described here was simplified. The implemented en
 ### Implemented
 
 - `passport-jwt` + `jwks-rsa` + `@nestjs/passport` installed; `JwtStrategy` fetches JWKS on first use (cached)
-- `AuthModule` wired into lcp-server's `AppModule`; `@UseGuards(JwtAuthGuard)` applied to every user-facing controller (company, role, agent, task, conversation, storage proxy, knowledge, model, company-user); internal-only endpoints use the separate `InternalApiKeyGuard` instead (`X-Internal-Api-Key`, see [ADR-001 Amendment](ADR-001-service-architecture.md#amendment-as-implemented-01029))
-- **`CompanyUser` entity** in `libs/lcp-shared/src/models/`: `(id, companyId, identifier, name, memberType, roles[], knowledgeDomains[], createdAt)`. Used for query routing in the conversation flow.
+- `AuthModule` wired into tcp-server's `AppModule`; `@UseGuards(JwtAuthGuard)` applied to every user-facing controller (company, role, agent, task, conversation, storage proxy, knowledge, model, company-user); internal-only endpoints use the separate `InternalApiKeyGuard` instead (`X-Internal-Api-Key`, see [ADR-001 Amendment](ADR-001-service-architecture.md#amendment-as-implemented-01029))
+- **`CompanyUser` entity** in `libs/tcp-shared/src/models/`: `(id, companyId, identifier, name, memberType, roles[], knowledgeDomains[], createdAt)`. Used for query routing in the conversation flow.
 - Since 009.2: `POST /api/company` auto-creates a `CompanyUser` with `memberType: 'creator'` for the requesting user (from the JWT `sub`/`email` claims), skipped if one already exists for that `(companyId, identifier)` pair.
 - `GET /api/company/:companyId/users`, `POST /api/company/:companyId/users`, `PATCH /api/company/:companyId/users/:userId`, `DELETE /api/company/:companyId/users/:userId` — full CRUD
 - Keycloak setup documented in `docs/keycloak-setup.md`
@@ -98,6 +98,6 @@ The `CompanyMembership` entity described here was simplified. The implemented en
 
 ## Open Questions / Assumptions
 
-- Password storage: handled entirely by the IdP — lcp-server never touches passwords
-- Token refresh: the IdP issues refresh tokens; the client (browser/CLI) handles the refresh flow. lcp-server only validates access tokens.
+- Password storage: handled entirely by the IdP — tcp-server never touches passwords
+- Token refresh: the IdP issues refresh tokens; the client (browser/CLI) handles the refresh flow. tcp-server only validates access tokens.
 - The `modify_company` and `define_agent_roles` permissions effectively give full control — consider a dedicated admin role at larger scale

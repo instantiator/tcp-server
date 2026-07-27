@@ -5,7 +5,7 @@ usage() {
   cat <<EOF
 Usage: $(basename "$0") [-h|--help] [--base-url URL] [-- <jest options>]
 
-Run the API endpoint test suite against a running LCP deployment.
+Run the API endpoint test suite against a running TCP deployment.
 
 Defaults to http://localhost:3000 when --base-url is not given, which is
 where start-deployment.sh starts the stack. Start services first:
@@ -40,7 +40,7 @@ Options:
   -h, --help                Show this help message and exit
 
 Each option can also be supplied as an environment variable:
-  LCP_SERVER_URL, LCP_AGENT_URL, OIDC_DISCOVERY_URL,
+  TCP_SERVER_URL, TCP_AGENT_URL, OIDC_DISCOVERY_URL,
   TEST_CLIENT_ID, TEST_CLIENT_SECRET
 CLI flags take precedence over environment variables, which take precedence
 over the env file.
@@ -49,7 +49,7 @@ EOF
 
 # Prevent inheriting stale values from a previous run's exports. Values are
 # resolved from CLI flags or the env file — never from the parent shell.
-unset LCP_SERVER_URL LCP_AGENT_URL OIDC_DISCOVERY_URL TEST_CLIENT_ID TEST_CLIENT_SECRET
+unset TCP_SERVER_URL TCP_AGENT_URL OIDC_DISCOVERY_URL TEST_CLIENT_ID TEST_CLIENT_SECRET
 
 BASE_URL="http://localhost:3000"
 AGENT_URL=""
@@ -102,8 +102,8 @@ trap 'rm -f "$ENV_RUN"' EXIT
 {
   # Only write non-empty values — empty vars would overwrite code-level defaults
   # in helpers like ApiHelper.ts (which uses ?? '' for optional vars).
-  [[ -n "$BASE_URL" ]]        && echo "LCP_SERVER_URL=$BASE_URL"
-  [[ -n "$AGENT_URL" ]]       && echo "LCP_AGENT_URL=$AGENT_URL"
+  [[ -n "$BASE_URL" ]]        && echo "TCP_SERVER_URL=$BASE_URL"
+  [[ -n "$AGENT_URL" ]]       && echo "TCP_AGENT_URL=$AGENT_URL"
   [[ -n "$OIDC_URL" ]]        && echo "OIDC_DISCOVERY_URL=$OIDC_URL"
   [[ -n "$CLIENT_ID" ]]       && echo "TEST_CLIENT_ID=$CLIENT_ID"
   [[ -n "$CLIENT_SECRET" ]]   && echo "TEST_CLIENT_SECRET=$CLIENT_SECRET"

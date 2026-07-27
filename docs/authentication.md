@@ -1,17 +1,17 @@
 # Authentication
 
-lcp-server uses OIDC/OAuth 2.0 for authentication. Any standards-compliant OIDC provider
+tcp-server uses OIDC/OAuth 2.0 for authentication. Any standards-compliant OIDC provider
 is supported. Zitadel is included in the Docker Compose setup for local development; for
 production you can swap it out for Auth0, Okta, Azure AD, or any other provider.
 
 ## How it works
 
-1. Clients obtain an access token from the OIDC provider — directly, or via lcp-server's
+1. Clients obtain an access token from the OIDC provider — directly, or via tcp-server's
    device-authorization proxy (`POST /api/auth/device` + `POST /api/auth/device/token`,
-   see [Getting tokens for development](#getting-tokens-for-development-lcp-cli-get-token)),
-   used by `lcp-cli get-token`.
+   see [Getting tokens for development](#getting-tokens-for-development-tcp-cli-get-token)),
+   used by `tcp-cli get-token`.
 2. Clients include the token as a `Bearer` header on every request to a guarded endpoint.
-3. lcp-server validates the token by fetching the provider's public keys from its JWKS
+3. tcp-server validates the token by fetching the provider's public keys from its JWKS
    endpoint (discovered automatically from `OIDC_ISSUER_URL/.well-known/openid-configuration`
    at startup) and verifying the signature, expiry, and issuer claims.
 
@@ -45,13 +45,13 @@ starts it and performs first-time configuration automatically.
 
 This creates:
 
-- Org: `lcp`
-- Application: `lcp-server` (OIDC, device authorization + refresh token grants)
+- Org: `tcp`
+- Application: `tcp-server` (OIDC, device authorization + refresh token grants)
 - Test user: `test` / `test`
 
 Zitadel is then accessible at `http://localhost:8080/ui/console` (admin console). The
 bootstrap generates the OIDC client credentials and writes them to the gitignored
-`<env-file>.local` override (e.g. `.env.dev.local`); lcp-server reads them from there —
+`<env-file>.local` override (e.g. `.env.dev.local`); tcp-server reads them from there —
 nothing to configure by hand.
 
 See [docs/zitadel-setup.md](zitadel-setup.md) for manual configuration steps.
@@ -75,7 +75,7 @@ OIDC_AUDIENCE=https://your-api-identifier
 Set `OIDC_AUDIENCE` to the API identifier you configured in Auth0. Auth0 access tokens
 include this value in the `aud` claim.
 
-Note: `lcp-cli get-token` uses the OAuth 2.0 Device Authorization Grant — enable the
+Note: `tcp-cli get-token` uses the OAuth 2.0 Device Authorization Grant — enable the
 "Device Code" grant type on your Auth0 application if you want the CLI login flow to
 work. If unavailable, obtain tokens through Auth0's standard flows and pass them with
 `--access-token`.
@@ -90,7 +90,7 @@ OIDC_AUDIENCE=api://default
 ```
 
 Okta supports the Device Authorization Grant — enable it in the application's grant
-type settings if you want `lcp-cli get-token` to work.
+type settings if you want `tcp-cli get-token` to work.
 
 ### Azure Active Directory (Microsoft Entra)
 
@@ -102,7 +102,7 @@ OIDC_AUDIENCE=api://{client-id}
 ```
 
 Azure AD supports the Device Authorization Grant — enable "Allow public client flows"
-under the application's Authentication settings if you want `lcp-cli get-token` to work.
+under the application's Authentication settings if you want `tcp-cli get-token` to work.
 
 ### Generic OIDC provider
 
@@ -118,7 +118,7 @@ OIDC_JWKS_URI=https://your-provider.example.com/oauth2/keys
 
 ## Docker networking
 
-When lcp-server runs inside Docker Compose alongside a self-hosted provider (e.g.
+When tcp-server runs inside Docker Compose alongside a self-hosted provider (e.g.
 Zitadel), the provider's public URL (e.g. `http://localhost:8080`) is not reachable from
 inside the container. Use `OIDC_INTERNAL_ISSUER_URL` to provide the container-to-container
 URL:
@@ -156,16 +156,16 @@ varies by provider:
 | Auth0 (with API configured) | Your API identifier                                                 |
 | Okta                        | `api://default` or your custom audience                             |
 
-By default lcp-server does not validate `aud` (the issuer check is sufficient for
+By default tcp-server does not validate `aud` (the issuer check is sufficient for
 single-tenant deployments). To enable it, set `OIDC_AUDIENCE` to the expected value —
 for Zitadel, that's simply your `OIDC_CLIENT_ID`; no mapper or extra configuration is
 needed.
 
-## Getting tokens for development (`lcp-cli get-token`)
+## Getting tokens for development (`tcp-cli get-token`)
 
-lcp-server proxies the OAuth 2.0 Device Authorization Grant
+tcp-server proxies the OAuth 2.0 Device Authorization Grant
 ([RFC 8628](https://www.rfc-editor.org/rfc/rfc8628)) so the OIDC client secret never
-leaves the server. This is what `lcp-cli get-token` uses.
+leaves the server. This is what `tcp-cli get-token` uses.
 
 ### `POST /api/auth/device`
 
@@ -229,7 +229,7 @@ Content-Type: application/json
 
 **Note:** Zitadel does not support the Resource Owner Password Credentials (ROPC /
 password) grant under any configuration — it's dropped ahead of OAuth 2.1 for exposing
-user passwords directly to the client. That's why `lcp-cli get-token` uses the device
+user passwords directly to the client. That's why `tcp-cli get-token` uses the device
 flow above instead of a username/password prompt. If your external OIDC provider doesn't
 support the device authorization grant either, obtain tokens through its standard flows
-and pass them to lcp-cli with `--access-token <token>`.
+and pass them to tcp-cli with `--access-token <token>`.

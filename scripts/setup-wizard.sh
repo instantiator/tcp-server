@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup-wizard.sh — Launch the LCP Server setup wizard.
+# setup-wizard.sh — Launch the TCP Server setup wizard.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

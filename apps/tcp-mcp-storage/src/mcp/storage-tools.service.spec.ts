@@ -16,7 +16,7 @@ interface Scope {
 
 function makeConfig(): ConfigService {
   const vals: Record<string, string> = {
-    LCP_SERVER_URL: 'http://tcp-server:3000',
+    TCP_SERVER_URL: 'http://tcp-server:3000',
     INTERNAL_API_KEY: 'secret-key',
   };
   return {

@@ -642,7 +642,7 @@
       "description": "Configuration for a specific LLM provider and model. The API key is stored directly in this config object and persisted in the database. Ensure the database has encryption at rest to protect stored keys.",
       "properties": {
         "apiKey": {
-          "description": "API key for this provider. Stored in the database as part of the JSONB config block. Masked in API responses when `LCP_MASK_API_KEYS=true` (the default).",
+          "description": "API key for this provider. Stored in the database as part of the JSONB config block. Masked in API responses when `TCP_MASK_API_KEYS=true` (the default).",
           "type": "string"
         },
         "baseUrl": {
@@ -1246,7 +1246,7 @@
     },
     "TcpCompany": {
       "additionalProperties": false,
-      "description": "Represents a company (tenant) within the LCP simulation. Each company has its own isolated set of agents, memory, and resources.",
+      "description": "Represents a company (tenant) within the TCP simulation. Each company has its own isolated set of agents, memory, and resources.",
       "properties": {
         "companyContext": {
           "description": "Optional company context injected as prompt part 2 at agent start. Describes the company environment: agent roster, shared storage layout, company name and description, and any company-wide behavioural guidelines.\n\nWhen null, part 2 is omitted from the agent prompt.",

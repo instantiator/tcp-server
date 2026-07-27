@@ -2,7 +2,7 @@
 # manual-verify.sh — interactive manual verification script.
 #
 # Spins up a test company and two roles (chicken/cat assistant) against a
-# running LCP server, runs a short scenario of chat prompts through them, and
+# running TCP server, runs a short scenario of chat prompts through them, and
 # asks the operator to confirm each response by eye. Halts immediately on any
 # failure (a failed API call, missing data, or a "n" answer to a check).
 #
@@ -13,7 +13,7 @@
 # scenarios, then reuses that token for every call.
 #
 # Options:
-#   -s, --tcp-server <url>         LCP server URL (default: http://localhost:3000)
+#   -s, --tcp-server <url>         TCP server URL (default: http://localhost:3000)
 #   -r, --run-scenario <n>         Run only scenario n (1-indexed); may be repeated
 #   -f, --scenarios-file <f>       Scenarios JSON (default: scripts/test-data/manual-verify-scenarios.json)
 #   --capture-docker-logs          Tail tcp-server and tcp-agent container logs during the run
@@ -22,7 +22,7 @@
 #   --capture-lm-studio-logs       Stream LM Studio server logs via `lms log stream`
 #   --lm-studio-logs-output <file> File to write LM Studio logs to (default: ./tcp-lmstudio-logs-<ts>.log)
 #
-# Prerequisites: a running LCP stack with default LLM config in its .env,
+# Prerequisites: a running TCP stack with default LLM config in its .env,
 # Zitadel running for auth, and `jq` on the PATH.
 
 set -euo pipefail
@@ -45,7 +45,7 @@ else
   RESET=""
 fi
 
-LCP_SERVER="http://localhost:3000"
+TCP_SERVER="http://localhost:3000"
 SCENARIOS_FILE="$ROOT/scripts/test-data/manual-verify-scenarios.json"
 SCENARIO_FILTER=()
 CAPTURE_DOCKER_LOGS=false
@@ -59,7 +59,7 @@ LM_STUDIO_LOG_PID=""
 # Parse flags — everything else is rejected rather than silently ignored.
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -s|--tcp-server) LCP_SERVER="$2"; shift 2 ;;
+    -s|--tcp-server) TCP_SERVER="$2"; shift 2 ;;
     -r|--run-scenario) SCENARIO_FILTER+=("$2"); shift 2 ;;
     -f|--scenarios-file) SCENARIOS_FILE="$2"; shift 2 ;;
     --capture-docker-logs) CAPTURE_DOCKER_LOGS=true; shift ;;
@@ -117,7 +117,7 @@ stop_lm_studio_capture() {
 # only needs to specify the verb and its own flags.
 cli() {
   "$ROOT/tcp-cli.sh" \
-    --tcp-server "$LCP_SERVER" \
+    --tcp-server "$TCP_SERVER" \
     --access-token "$ACCESS_TOKEN" \
     "$@"
 }
@@ -163,7 +163,7 @@ trap 'stop_docker_capture; stop_lm_studio_capture' EXIT
 # Log in once via device-flow (prints a verification URL/code to complete in
 # a browser) and reuse the resulting token for every cli() call below.
 echo "${BLUE}=== Signing in ===${RESET}" >&2
-ACCESS_TOKEN=$("$ROOT/tcp-cli.sh" --tcp-server "$LCP_SERVER" get-token) \
+ACCESS_TOKEN=$("$ROOT/tcp-cli.sh" --tcp-server "$TCP_SERVER" get-token) \
   || fail "get-token failed"
 
 start_docker_capture

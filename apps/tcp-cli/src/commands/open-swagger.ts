@@ -9,7 +9,7 @@ export function registerOpenSwagger(program: Command): void {
   program
     .command('open-swagger')
     .description(
-      'Print (and optionally open) the Swagger UI for an LCP service',
+      'Print (and optionally open) the Swagger UI for an TCP service',
     )
     .requiredOption(
       '--service <name>',

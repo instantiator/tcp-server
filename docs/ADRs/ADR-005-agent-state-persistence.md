@@ -35,19 +35,19 @@ Each task step row in the database has a `status` column. The agent loop checks 
 graph node → poll status → if CANCELLED: call interrupt() → exit
 ```
 
-lcp-server sets `status = 'cancelled'` via the REST API or orchestrator. The next time the agent loop polls (before the next LLM call), it sees the flag and calls `interrupt()`, which suspends the LangGraph run cleanly without mid-message corruption.
+tcp-server sets `status = 'cancelled'` via the REST API or orchestrator. The next time the agent loop polls (before the next LLM call), it sees the flag and calls `interrupt()`, which suspends the LangGraph run cleanly without mid-message corruption.
 
 ### Resume
 
-On lcp-agent restart (or after a cancellation is cleared):
+On tcp-agent restart (or after a cancellation is cleared):
 
-1. lcp-server looks up incomplete task steps in the database
+1. tcp-server looks up incomplete task steps in the database
 2. It dispatches a BullMQ job with the `thread_id` of the interrupted run
-3. lcp-agent re-initialises the LangGraph graph with the same `thread_id` and calls `graph.stream(null, { configurable: { thread_id } })` — LangGraph loads the last checkpoint and continues from where it left off
+3. tcp-agent re-initialises the LangGraph graph with the same `thread_id` and calls `graph.stream(null, { configurable: { thread_id } })` — LangGraph loads the last checkpoint and continues from where it left off
 
 ### Stuck-loop detection
 
-Each task step has a configurable `timeout_seconds` and `max_iterations` value (defaulting to company-level settings). lcp-agent enforces these:
+Each task step has a configurable `timeout_seconds` and `max_iterations` value (defaulting to company-level settings). tcp-agent enforces these:
 
 - `max_iterations`: incremented at each graph node; `interrupt()` called if exceeded
 - `timeout_seconds`: a timeout wraps the `graph.stream()` call; on expiry, the step is marked `timed_out` and a BullMQ retry is optionally scheduled

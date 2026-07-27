@@ -123,7 +123,7 @@ describe('Task/assignment flow via the agent loop (stub LLM)', () => {
 
   /**
    * Grabs a free port synchronously (bind port 0, read it back, release it)
-   * so `LCP_SERVER_URL` can be set correctly *before* any Nest module compiles.
+   * so `TCP_SERVER_URL` can be set correctly *before* any Nest module compiles.
    * `@nestjs/config`'s `ConfigService` resolves `.get()` from a Joi-validated
    * snapshot taken once at `ConfigModule.forRoot()` time, in preference to a
    * live `process.env` read — so overriding the env var only after tcp-server
@@ -163,7 +163,7 @@ describe('Task/assignment flow via the agent loop (stub LLM)', () => {
   beforeAll(async () => {
     const port = await getFreePort();
     tcpServerUrl = `http://127.0.0.1:${port}`;
-    process.env.LCP_SERVER_URL = tcpServerUrl;
+    process.env.TCP_SERVER_URL = tcpServerUrl;
 
     // Point both AppModules at a freshly-created, empty database so tcp-server's
     // startup migrations run against a clean schema (see the note by
@@ -203,7 +203,7 @@ describe('Task/assignment flow via the agent loop (stub LLM)', () => {
     // agent loop itself) — only McpClientService is swapped for a mock, so
     // the "MCP round trip" is a direct call into the fake tool above instead
     // of a live MCP-server container. AuditClientService is also swapped: it
-    // reads LCP_SERVER_URL from a Joi-validated env snapshot @nestjs/config
+    // reads TCP_SERVER_URL from a Joi-validated env snapshot @nestjs/config
     // takes once at ConfigModule.forRoot() time, which doesn't reliably pick
     // up a same-process env override made after an earlier module (here,
     // tcp-server's own) already triggered that validation — so its

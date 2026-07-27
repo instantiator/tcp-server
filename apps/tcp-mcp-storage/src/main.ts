@@ -7,7 +7,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   const config = new DocumentBuilder()
-    .setTitle('LCP MCP Storage')
+    .setTitle('TCP MCP Storage')
     .setDescription(
       'MCP server exposing shared company document storage via MinIO',
     )

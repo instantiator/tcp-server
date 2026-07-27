@@ -10,8 +10,8 @@ async function bootstrap() {
   app.enableShutdownHooks();
 
   const config = new DocumentBuilder()
-    .setTitle('LCP Server')
-    .setDescription('REST API for the LCP server')
+    .setTitle('TCP Server')
+    .setDescription('REST API for the TCP server')
     .setVersion('1.0')
     .addBearerAuth()
     .addApiKey(

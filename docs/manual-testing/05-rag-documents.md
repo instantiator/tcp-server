@@ -11,7 +11,7 @@ You are testing the RAG (Retrieval-Augmented Generation) pipeline. Knowledge doc
 ```mermaid
 flowchart TD
     subgraph Upload
-        CLI[lcp-cli store-knowledge] -->|POST /api/role/:id/knowledge| API[lcp-server]
+        CLI[tcp-cli store-knowledge] -->|POST /api/role/:id/knowledge| API[tcp-server]
         API -->|store| MIO[MinIO :9000]
         API -->|chunk + embed| EMBED[Embedding Model]
         EMBED -->|vectors| PG[(pgvector)]
@@ -58,7 +58,7 @@ EOF
 ## 5.2 — Upload the document
 
 ```bash
-./lcp-cli.sh store-knowledge \
+./tcp-cli.sh store-knowledge \
   --role "$ROLE_ID" \
   --source /tmp/test-knowledge.md
 ```
@@ -77,7 +77,7 @@ If validation fails (e.g. missing `title`), the CLI reports the error and upload
 ## 5.3 — List stored documents
 
 ```bash
-./lcp-cli.sh list-knowledge --role "$ROLE_ID"
+./tcp-cli.sh list-knowledge --role "$ROLE_ID"
 ```
 
 Expected: a table showing `test-knowledge.md` with its size and last-modified date.
@@ -92,7 +92,7 @@ Before spinning up a full agent turn (5.5 below), you can see the raw chunks
 a role's next prompt would retrieve directly, with no LLM call involved:
 
 ```bash
-./lcp-cli.sh query-knowledge --role "$ROLE_ID" --query "What is the company policy on remote work?"
+./tcp-cli.sh query-knowledge --role "$ROLE_ID" --query "What is the company policy on remote work?"
 ```
 
 Expected: a JSON array of `{ id, documentPath, chunkIndex, content, similarity }`,
@@ -131,16 +131,16 @@ Expected: the agent's response mentions the remote work policy (three days per w
 
 ## 5.6 — Check that injection shows in the audit log
 
-The RAG injection is not directly audited but you can infer it from lcp-agent logs:
+The RAG injection is not directly audited but you can infer it from tcp-agent logs:
 
 ```bash
-docker compose logs lcp-agent | grep -i "rag\|chunk\|retriev"
+docker compose logs tcp-agent | grep -i "rag\|chunk\|retriev"
 ```
 
-For lcp-server chat agents, check:
+For tcp-server chat agents, check:
 
 ```bash
-docker compose logs lcp-server | grep -i "rag\|chunk\|retriev"
+docker compose logs tcp-server | grep -i "rag\|chunk\|retriev"
 ```
 
 ---
@@ -148,7 +148,7 @@ docker compose logs lcp-server | grep -i "rag\|chunk\|retriev"
 ## 5.7 — Remove a document
 
 ```bash
-./lcp-cli.sh delete-knowledge \
+./tcp-cli.sh delete-knowledge \
   --role "$ROLE_ID" \
   --file "test-knowledge.md"
 ```
@@ -162,7 +162,7 @@ Expected: success message. The document is removed from MinIO and all associated
 The `open-document-store` command prints and opens the MinIO console URL:
 
 ```bash
-./lcp-cli.sh open-document-store
+./tcp-cli.sh open-document-store
 ```
 
 Expected: URL printed to stdout; browser opens to the MinIO console.

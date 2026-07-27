@@ -5,7 +5,7 @@ usage() {
   cat <<EOF
 Usage: $(basename "$0") [-h|--help] [--base-url URL] [-- <jest options>]
 
-Run the smoke test suite against a running LCP deployment.
+Run the smoke test suite against a running TCP deployment.
 
 Defaults to http://localhost:3000 when --base-url is not given, which is
 where start-deployment.sh starts the stack. Start services first:
@@ -28,20 +28,20 @@ Options:
   -h, --help                Show this help message and exit
 
 Each option can also be supplied as an environment variable:
-  LCP_SERVER_URL, LCP_AGENT_URL, OIDC_DISCOVERY_URL
+  TCP_SERVER_URL, TCP_AGENT_URL, OIDC_DISCOVERY_URL
 CLI flags take precedence over environment variables.
 EOF
 }
 
-BASE_URL="${LCP_SERVER_URL:-http://localhost:3000}"
-LCP_AGENT_URL="${LCP_AGENT_URL:-}"
+BASE_URL="${TCP_SERVER_URL:-http://localhost:3000}"
+TCP_AGENT_URL="${TCP_AGENT_URL:-}"
 OIDC_DISCOVERY_URL="${OIDC_DISCOVERY_URL:-}"
 PASSTHROUGH=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --base-url)            BASE_URL="$2";            shift 2 ;;
-    --agent-url)           LCP_AGENT_URL="$2";       shift 2 ;;
+    --agent-url)           TCP_AGENT_URL="$2";       shift 2 ;;
     --oidc-discovery-url)  OIDC_DISCOVERY_URL="$2";  shift 2 ;;
     --) shift; PASSTHROUGH+=("$@"); break ;;
     -h|--help) usage; exit 0 ;;
@@ -51,8 +51,8 @@ done
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-export LCP_SERVER_URL="$BASE_URL"
-[[ -n "$LCP_AGENT_URL" ]]       && export LCP_AGENT_URL
+export TCP_SERVER_URL="$BASE_URL"
+[[ -n "$TCP_AGENT_URL" ]]       && export TCP_AGENT_URL
 [[ -n "$OIDC_DISCOVERY_URL" ]]  && export OIDC_DISCOVERY_URL
 
 npm --prefix "$REPO_ROOT" run test:smoke -- ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}

@@ -5,7 +5,7 @@ usage() {
   cat <<EOF
 Usage: $(basename "$0") --project <name> (--env-file <path> | --env-files <f1,f2,...>) [--rebuild] [--dev-ports] [-h|--help]
 
-Start the LCP Docker Compose stack and configure it for use.
+Start the TCP Docker Compose stack and configure it for use.
 
 By default, the MCP servers and stub-llm are internal-only (not reachable from
 the host) — the production-safe posture. Pass --dev-ports to additionally
@@ -132,7 +132,7 @@ if [[ -n "${ZITADEL_ADMIN_PASSWORD:-}" ]]; then
 fi
 
 # Pre-flight: verify all required variables are non-empty.
-# DATABASE_URL, MINIO_ENDPOINT, OIDC_ISSUER_URL, and LCP_SERVER_URL are
+# DATABASE_URL, MINIO_ENDPOINT, OIDC_ISSUER_URL, and TCP_SERVER_URL are
 # derived above from EXPOSE_PORT_* and DB_* — they don't need to be in the env file.
 REQUIRED_VARS=(
   DB_PASSWORD MINIO_ACCESS_KEY MINIO_SECRET_KEY
@@ -409,7 +409,7 @@ EOF
     MACHINE_ID=$(zit POST "/v2/users/new" "$(jq -n --arg org "$ORG_ID" --arg u "$TEST_MACHINE_USERNAME" '{
       organizationId: $org,
       username: $u,
-      machine: {name: "LCP API Test Machine", accessTokenType: "ACCESS_TOKEN_TYPE_JWT"}
+      machine: {name: "TCP API Test Machine", accessTokenType: "ACCESS_TOKEN_TYPE_JWT"}
     }')" | jq -r '.id')
     echo "  Created machine user: $TEST_MACHINE_USERNAME (client secret written to $LOCAL_ENV_FILE)"
   else

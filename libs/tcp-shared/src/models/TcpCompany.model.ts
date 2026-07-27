@@ -6,7 +6,7 @@ import type { LlmConfig } from './LlmConfig.model';
 import type { WithLlmConfig } from './WithLlmConfig';
 
 /**
- * Represents a company (tenant) within the LCP simulation.
+ * Represents a company (tenant) within the TCP simulation.
  * Each company has its own isolated set of agents, memory, and resources.
  */
 @Entity()

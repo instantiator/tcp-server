@@ -4,13 +4,13 @@ Status: Proposed
 
 ## Context
 
-`lcp-server` currently uses `better-sqlite3` in-memory via TypeORM, which is adequate for development and unit testing but unsuitable for production. The full system needs a database that supports:
+`tcp-server` currently uses `better-sqlite3` in-memory via TypeORM, which is adequate for development and unit testing but unsuitable for production. The full system needs a database that supports:
 
 1. **Relational data** — companies, users, roles, tasks, task steps, agent runs
 2. **Vector embeddings** — role memories and RAG knowledge base retrieval (see [ADR-006](./ADR-006-agent-memory-architecture.md))
 3. **LangGraph checkpoint store** — key-value persistence for agent state (see [ADR-005](./ADR-005-agent-state-persistence.md))
 4. **Audit log storage** — structured, queryable event rows (see [ADR-008](./ADR-008-audit-logging.md))
-5. **Multi-writer access** — lcp-server and lcp-agent both write concurrently (see [ADR-001](./ADR-001-service-architecture.md))
+5. **Multi-writer access** — tcp-server and tcp-agent both write concurrently (see [ADR-001](./ADR-001-service-architecture.md))
 
 ## Options
 
@@ -37,7 +37,7 @@ One service covers all four requirements. The `@langchain/langgraph-checkpoint-p
 
 | Variable        | Usage                                                                                      |
 | --------------- | ------------------------------------------------------------------------------------------ |
-| `DATABASE_URL`  | PostgreSQL connection string (`postgres://user:pass@host:5432/lcp`)                        |
+| `DATABASE_URL`  | PostgreSQL connection string (`postgres://user:pass@host:5432/tcp`)                        |
 | `DATABASE_TYPE` | `postgres` (production) or `better-sqlite3` (test) — defaults to `better-sqlite3` if unset |
 
 ## Consequences
@@ -54,7 +54,7 @@ One service covers all four requirements. The `@langchain/langgraph-checkpoint-p
 
 ## Amendment as implemented (009.2)
 
-**Timestamp storage convention**: `Date`-typed entity columns (e.g. `LcpAgent.createdAt`) are deliberately left **untyped** (no explicit `type: 'timestamptz'`/`'datetime'`) so the same entities work against both `better-sqlite3` (tests) and PostgreSQL (production) — an explicit type string breaks one driver or the other. A hand-written, PostgreSQL-only migration (`TimestamptzConsistency`) converts the underlying columns to `TIMESTAMPTZ` directly in schema DDL (assuming a UTC Postgres session timezone), without touching entity metadata. `npm run migration:generate` will report this as permanent "drift" against the untyped entities — expected, and already covered by the project's existing drift-is-diagnostic-only convention (see `docs/database.md#timestamp-storage-convention`), not something to "fix" by adding explicit types back.
+**Timestamp storage convention**: `Date`-typed entity columns (e.g. `TcpAgent.createdAt`) are deliberately left **untyped** (no explicit `type: 'timestamptz'`/`'datetime'`) so the same entities work against both `better-sqlite3` (tests) and PostgreSQL (production) — an explicit type string breaks one driver or the other. A hand-written, PostgreSQL-only migration (`TimestamptzConsistency`) converts the underlying columns to `TIMESTAMPTZ` directly in schema DDL (assuming a UTC Postgres session timezone), without touching entity metadata. `npm run migration:generate` will report this as permanent "drift" against the untyped entities — expected, and already covered by the project's existing drift-is-diagnostic-only convention (see `docs/database.md#timestamp-storage-convention`), not something to "fix" by adding explicit types back.
 
 ## Amendment as implemented (010.7)
 

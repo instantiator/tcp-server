@@ -1,18 +1,18 @@
 # Agent Loop Special Cases
 
-Both `lcp-server` (interactive chat — `ChatService`) and `lcp-agent` (autonomous queue runs — `AgentLoopService`) drive a LangGraph agent loop around a chat model. Real LLM providers occasionally misbehave in ways that aren't really bugs in this codebase but still need handling somewhere. This document catalogues those cases and where the workaround lives.
+Both `tcp-server` (interactive chat — `ChatService`) and `tcp-agent` (autonomous queue runs — `AgentLoopService`) drive a LangGraph agent loop around a chat model. Real LLM providers occasionally misbehave in ways that aren't really bugs in this codebase but still need handling somewhere. This document catalogues those cases and where the workaround lives.
 
-The goal is to keep the workarounds out of the main loop logic in `ChatService`/`AgentLoopService`, so the loop itself stays readable and a future quirk is easy to find: look here first, then in `libs/lcp-shared/src/llm/`.
+The goal is to keep the workarounds out of the main loop logic in `ChatService`/`AgentLoopService`, so the loop itself stays readable and a future quirk is easy to find: look here first, then in `libs/tcp-shared/src/llm/`.
 
 ---
 
 ## Shared graph builder as the intervention point
 
-Both services compile their LangGraph `StateGraph` through one shared function, [`buildAgentGraph`](../libs/lcp-shared/src/llm/build-agent-graph.ts). It wires the `agent` node (the LLM invoke) and, when tools are present, a `tools` node with the standard `toolsCondition` routing.
+Both services compile their LangGraph `StateGraph` through one shared function, [`buildAgentGraph`](../libs/tcp-shared/src/llm/build-agent-graph.ts). It wires the `agent` node (the LLM invoke) and, when tools are present, a `tools` node with the standard `toolsCondition` routing.
 
 The `agent` node is where each special case below hooks in — it's the one place every model response from either service passes through before it's written to LangGraph's checkpointed conversation history. A fix applied there:
 
-- covers both `lcp-server` chat sessions and `lcp-agent` queue runs in one place
+- covers both `tcp-server` chat sessions and `tcp-agent` queue runs in one place
 - is reflected in the persisted conversation history, so a later turn in the same thread doesn't see the broken pre-fix message
 
 ---
@@ -28,7 +28,7 @@ The `agent` node is where each special case below hooks in — it's the one plac
 
 Earlier this was treated as "the model finished, and the answer is in `reasoning_content`" — but both production examples above show that's not a safe assumption: the model genuinely wasn't done. Taking `reasoning_content` as a final answer immediately would have shown the user (or the agent loop) a truncated, incomplete response.
 
-**Fix:** [`ReasoningContentRecovery`](../libs/lcp-shared/src/llm/reasoning-content-recovery.ts), called from `buildAgentGraph`'s `agent` node immediately after every model invoke:
+**Fix:** [`ReasoningContentRecovery`](../libs/tcp-shared/src/llm/reasoning-content-recovery.ts), called from `buildAgentGraph`'s `agent` node immediately after every model invoke:
 
 - If the response has real `content` or actually populated `tool_calls`, it passes through unchanged — this is the normal case.
 - Otherwise the model is presumed not finished. It's re-invoked **once** with the prior (unusable) response plus a corrective nudge appended to the conversation:
@@ -47,9 +47,9 @@ The nudge round-trip (the original unusable message, and the nudge itself) isn't
 
 **Tests:**
 
-- [`reasoning-content-recovery.spec.ts`](../libs/lcp-shared/src/llm/reasoning-content-recovery.spec.ts) — unit tests for the recovery/nudge/fallback logic, including which nudge wording is chosen.
-- [`build-agent-graph.spec.ts`](../libs/lcp-shared/src/llm/build-agent-graph.spec.ts) — confirms the nudge-and-retry actually fires inside a real (non-mocked) LangGraph node and the model is invoked exactly twice.
-- [`chat.service.spec.ts`](../apps/lcp-server/src/api/chat.service.spec.ts) — regression test reproducing the original production scenario (`lcp-cli chat` against a Qwen model via LM Studio).
+- [`reasoning-content-recovery.spec.ts`](../libs/tcp-shared/src/llm/reasoning-content-recovery.spec.ts) — unit tests for the recovery/nudge/fallback logic, including which nudge wording is chosen.
+- [`build-agent-graph.spec.ts`](../libs/tcp-shared/src/llm/build-agent-graph.spec.ts) — confirms the nudge-and-retry actually fires inside a real (non-mocked) LangGraph node and the model is invoked exactly twice.
+- [`chat.service.spec.ts`](../apps/tcp-server/src/api/chat.service.spec.ts) — regression test reproducing the original production scenario (`tcp-cli chat` against a Qwen model via LM Studio).
 
 ---
 

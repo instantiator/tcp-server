@@ -14,7 +14,7 @@ unit → integration → api (includes smoke) + e2e
 | ----------- | ------------------------------------------------------------------------------------ | ------------------------------- |
 | Unit        | Individual classes and functions behave correctly                                    | None — SQLite in-memory         |
 | Integration | The app can connect to and use each backing service                                  | Docker (postgres, redis, minio) |
-| API         | Health checks, and requests and responses through the lcp-server API with a real JWT | Docker + Zitadel                |
+| API         | Health checks, and requests and responses through the tcp-server API with a real JWT | Docker + Zitadel                |
 | E2E         | HTTP API workflows produce the right responses end-to-end                            | Docker (postgres, redis, minio) |
 
 **Unit tests** use `better-sqlite3` in-memory and `@nestjs/testing` to wire
@@ -32,7 +32,7 @@ with a dev stack.
 
 **API tests** require Zitadel and run the full, deployed stack. They first
 verify that every `GET /health` endpoint returns 200, then send authenticated
-HTTP requests directly to the lcp-server API (using real JWTs) and assert on
+HTTP requests directly to the tcp-server API (using real JWTs) and assert on
 response shapes and status codes. Both API and smoke tests are pure black-box
 clients: they run against _any_ already-running instance via `--base-url` and
 never start, stop, or otherwise manage that instance — so they can target a
@@ -87,7 +87,7 @@ Docker. See [scripts/run-integration-tests.sh](../scripts/run-integration-tests.
 
 ### API & smoke tests
 
-Both suites require a running LCP stack with Zitadel. Start one first with
+Both suites require a running TCP stack with Zitadel. Start one first with
 `start-deployment.sh`, then run either or both test scripts against it. In CI
 both run against the same stack in the `api-test` job.
 
@@ -98,7 +98,7 @@ ports — so start with `--dev-ports` and target port 3001:
 ```bash
 # Start stack (reads Zitadel credentials from env file; writes generated
 # client creds to .env.testing.local). --dev-ports publishes the MCP ports.
-./scripts/start-deployment.sh --project lcp-api --env-file .env.testing --dev-ports
+./scripts/start-deployment.sh --project tcp-api --env-file .env.testing --dev-ports
 
 # Run API tests (TEST_CLIENT_* read from .env.testing.local)
 ./scripts/run-api-tests.sh --base-url http://localhost:3001 --env-file .env.testing
@@ -108,7 +108,7 @@ ports — so start with `--dev-ports` and target port 3001:
 ./scripts/run-smoke-tests.sh --base-url http://localhost:3001
 
 # Tear down
-docker compose -p lcp-api --profile auth down -v
+docker compose -p tcp-api --profile auth down -v
 ```
 
 The scripts default to `http://localhost:3000`; pass `--base-url` to target a

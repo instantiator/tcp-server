@@ -7,7 +7,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   const config = new DocumentBuilder()
-    .setTitle('LCP MCP Memory')
+    .setTitle('TCP MCP Memory')
     .setDescription(
       'MCP server for agent episodic memory retrieval and storage via pgvector',
     )

@@ -35,7 +35,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=scripts/lib/check-no-tcp-running.sh
 source "$SCRIPT_DIR/lib/check-no-tcp-running.sh"
 
-# Derive host-facing URLs (notably LCP_SERVER_URL, which tcp-agent and the MCP
+# Derive host-facing URLs (notably TCP_SERVER_URL, which tcp-agent and the MCP
 # apps' config schemas require at boot) from .env.testing and export them so
 # Jest inherits them. DATABASE_URL/REDIS_URL/MINIO_ENDPOINT are re-derived
 # per-run from the testcontainers' random host ports (global-setup) and

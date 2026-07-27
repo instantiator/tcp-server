@@ -14,7 +14,7 @@ the relevant documentation where more detail is available.
 
 ```bash
 git clone --recurse-submodules <repo-url>
-cd lcp-server
+cd tcp-server
 ```
 
 The `--recurse-submodules` flag is required to pull in the `dev-environment`
@@ -70,7 +70,7 @@ id/secret in that same `.local` file. See [ADR-018 §7](ADRs/ADR-018-system-conf
 docker compose up -d
 ```
 
-This starts PostgreSQL, Redis, and MinIO. lcp-server and lcp-agent are built
+This starts PostgreSQL, Redis, and MinIO. tcp-server and tcp-agent are built
 and started from the Docker images.
 
 On first boot, Docker pulls the base images and npm installs inside the build —
@@ -79,19 +79,19 @@ expect this to take several minutes.
 ## 6. Verify services are healthy
 
 ```bash
-curl http://localhost:3000/health   # lcp-server: database + MinIO + OIDC
-curl http://localhost:3001/health   # lcp-agent
+curl http://localhost:3000/health   # tcp-server: database + MinIO + OIDC
+curl http://localhost:3001/health   # tcp-agent
 ```
 
-Both should return HTTP 200. If lcp-server returns 503, check
-`docker compose logs lcp-server` — the most common cause is a dependency
+Both should return HTTP 200. If tcp-server returns 503, check
+`docker compose logs tcp-server` — the most common cause is a dependency
 (PostgreSQL or MinIO) that hasn't finished starting yet. Wait 10–20 seconds
 and retry.
 
 | Service        | URL                   |
 | -------------- | --------------------- |
-| lcp-server API | http://localhost:3000 |
-| lcp-agent      | http://localhost:3001 |
+| tcp-server API | http://localhost:3000 |
+| tcp-agent      | http://localhost:3001 |
 | MinIO console  | http://localhost:9001 |
 
 ## 7. (Optional) Set up authentication with Zitadel
@@ -107,7 +107,7 @@ application, and initial users.
 
 ## 8. (Optional) Set up for local development without Docker apps
 
-If you want to run lcp-server outside Docker (e.g. for hot reload during
+If you want to run tcp-server outside Docker (e.g. for hot reload during
 development), start only the infrastructure services:
 
 ```bash
@@ -115,7 +115,7 @@ docker compose up -d postgres redis minio
 npm run start:dev
 ```
 
-lcp-server falls back to in-memory SQLite when `DATABASE_URL` is absent or
+tcp-server falls back to in-memory SQLite when `DATABASE_URL` is absent or
 not a postgres URL — useful for quick iteration without any Docker services.
 
 ## 9. Run the tests

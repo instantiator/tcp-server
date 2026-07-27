@@ -35,8 +35,8 @@ export const DEFAULT_INTERNAL_API_KEY = 'change-me-in-production';
 
 // ── Masking ──────────────────────────────────────────────────────────────────
 
-/** Whether to mask API keys in logs/output. Overridden by `LCP_MASK_API_KEYS` env var. */
-export const DEFAULT_LCP_MASK_API_KEYS = true;
+/** Whether to mask API keys in logs/output. Overridden by `TCP_MASK_API_KEYS` env var. */
+export const DEFAULT_TCP_MASK_API_KEYS = true;
 
 // ── Polling ──────────────────────────────────────────────────────────────────
 
