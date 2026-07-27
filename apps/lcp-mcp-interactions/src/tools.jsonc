@@ -1,7 +1,0 @@
-{
-  // Tool descriptions for lcp-mcp-interactions
-  "describe_server": "Returns an overview of the interactions service and its tools.",
-  "list_available_contacts": "Lists the human users and/or agent roles available in the company — users can be asked questions, roles can be consulted. Set kind to 'users', 'roles', or 'both' (default) to control which are returned.",
-  "request_user_input": "Pauses the current agent and submits a question to human users in the company. The agent will be automatically resumed once a user replies. Use this when you need information or a decision that only a human can provide. Pass userIds (from list_available_contacts) to target specific users, or omit to auto-route based on the question.",
-  "request_agent_consultation": "Pauses the current agent and dispatches a consultation request to another agent role. The agent will be automatically resumed with the consulting agent's response once it completes. Use this when another role has specialist knowledge needed to proceed. Call list_available_contacts first and pass the role's id as roleId — role names are not unique within a company, so the id is required to target the right one."
-}

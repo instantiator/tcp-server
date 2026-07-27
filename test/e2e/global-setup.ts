@@ -1,5 +1,5 @@
 import { DataSource } from 'typeorm';
-import { MIGRATIONS } from '../../apps/lcp-server/src/migrations-list';
+import { MIGRATIONS } from '../../apps/tcp-server/src/migrations-list';
 import {
   AuditEvent,
   CompanyUser,
@@ -14,9 +14,9 @@ import {
   TcpRole,
   TcpTask,
   PendingConsultation,
-} from '../../libs/lcp-shared/src/models';
-import { assertMinioReachable } from '../../libs/lcp-shared/src/storage/minio-reachability';
-import { assertRedisReachable } from '../../libs/lcp-shared/src/redis/redis-reachability';
+} from '../../libs/tcp-shared/src/models';
+import { assertMinioReachable } from '../../libs/tcp-shared/src/storage/minio-reachability';
+import { assertRedisReachable } from '../../libs/tcp-shared/src/redis/redis-reachability';
 import { rememberComposeEnv } from '../support/compose-env-handle';
 import { startComposeTier } from '../support/testcontainers-env';
 
@@ -29,7 +29,7 @@ import { startComposeTier } from '../support/testcontainers-env';
  * global-teardown.
  *
  * stub-llm is provisioned tier-wide (not per-spec) so specs that need a real
- * agent-loop run against it (e.g. `lcp-agent/agent-loop-interactions.e2e-spec.ts`)
+ * agent-loop run against it (e.g. `tcp-agent/agent-loop-interactions.e2e-spec.ts`)
  * can just read `STUB_LLM_URL` — the container is started once regardless of
  * how many specs use it, same as the integration tier already does.
  *
@@ -63,12 +63,12 @@ export default async function globalSetup(): Promise<void> {
   rememberComposeEnv(environment);
 
   // Every e2e spec in the tier needs a migrated schema, but only specs that
-  // boot lcp-server's own AppModule get one as an incidental side effect of
+  // boot tcp-server's own AppModule get one as an incidental side effect of
   // that app's startup (migrationsRun: true, see makeTypeOrmConfig). Specs
   // that only ever boot another app's AppModule — e.g.
-  // test/e2e/lcp-mcp-memory/*.e2e-spec.ts — never trigger that, and per the
-  // single-migration-owner design (see apps/lcp-server/src/migrations-list.ts)
-  // never should. Running lcp-server's migrations once here, against the
+  // test/e2e/tcp-mcp-memory/*.e2e-spec.ts — never trigger that, and per the
+  // single-migration-owner design (see apps/tcp-server/src/migrations-list.ts)
+  // never should. Running tcp-server's migrations once here, against the
   // shared Postgres container, gives every spec a real schema regardless of
   // which app it boots or what order specs run in.
   //

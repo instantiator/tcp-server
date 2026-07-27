@@ -1,8 +1,0 @@
-{
-  // Tool descriptions for lcp-mcp-tasks. Each tool is mode-gated — call the
-  // one matching your assignment's mode. Call describe_server first for details.
-  "describe_server": "Returns an overview of the tasks service and the tool you must use to complete your assignment, tailored to your current mode.",
-  "create_plan": "PLAN MODE ONLY. Submits the plan for your task: an ordered list of assignments, each with a prompt, a role to carry it out, its expected outputs, and optional materials. You MUST call this as your final action — a narrated plan is not accepted. Call describe_server first for the exact shape of each assignment.",
-  "complete_assignment": "IMPLEMENT MODE ONLY. Submits your finished assignment: a concise summary plus the artifacts you prepared, each `{ type, value }` with type `file` (a filename in your working directory) or `text` (literal text). Your prepared artifacts must satisfy the assignment's expected outputs — files are verified to exist. You MUST call this as your final action after the work is done.",
-  "assure_assignment": "QA MODE ONLY. Records your QA verdict on the assignment under review: qa must be exactly `accept` or `reject` (case-insensitive) — reject requires actionable feedback for the implementing agent. You MUST call this as your final action."
-}

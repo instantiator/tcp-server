@@ -10,19 +10,19 @@ Run the smoke test suite against a running LCP deployment.
 Defaults to http://localhost:3000 when --base-url is not given, which is
 where start-deployment.sh starts the stack. Start services first:
 
-  ./scripts/start-deployment.sh --project lcp-smoke --env-file .env.testing
+  ./scripts/start-deployment.sh --project tcp-smoke --env-file .env.testing
   $(basename "$0")                            # targets localhost:3000
-  docker compose -p lcp-smoke --profile auth down -v
+  docker compose -p tcp-smoke --profile auth down -v
 
-Smoke tests verify end-to-end health across the full stack: lcp-server,
-lcp-agent, all three MCP services, PostgreSQL, MinIO, Redis, and Zitadel.
+Smoke tests verify end-to-end health across the full stack: tcp-server,
+tcp-agent, all three MCP services, PostgreSQL, MinIO, Redis, and Zitadel.
 
 Any extra arguments after -- are passed through to Jest, for example:
   $(basename "$0") -- --testNamePattern="oidc"
 
 Options:
-  --base-url URL            lcp-server base URL (default: http://localhost:3000)
-  --agent-url URL           lcp-agent URL (default: http://localhost:3001)
+  --base-url URL            tcp-server base URL (default: http://localhost:3000)
+  --agent-url URL           tcp-agent URL (default: http://localhost:3001)
   --oidc-discovery-url URL  Full OIDC discovery URL
                             (default: http://localhost:8080/.well-known/openid-configuration)
   -h, --help                Show this help message and exit

@@ -11,15 +11,15 @@ services:
   stub-llm:
     ports:
       - "3002:3002"
-  lcp-mcp-storage:
+  tcp-mcp-storage:
     ports:
       - "3010:3010"
-  lcp-mcp-memory:
+  tcp-mcp-memory:
     ports:
       - "3011:3011"
-  lcp-mcp-interactions:
+  tcp-mcp-interactions:
     ports:
       - "3012:3012"
-  lcp-mcp-tasks:
+  tcp-mcp-tasks:
     ports:
       - "3013:3013"

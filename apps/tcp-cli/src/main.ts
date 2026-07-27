@@ -1,0 +1,105 @@
+#!/usr/bin/env node
+import { Command } from 'commander';
+import { Agent, setGlobalDispatcher } from 'undici';
+import { registerCancelTask } from './commands/cancel-task';
+import { registerChat } from './commands/chat';
+import { registerCreateTask } from './commands/create-task';
+import { registerDeleteCompany } from './commands/delete-company';
+import { registerDeleteKnowledge } from './commands/delete-knowledge';
+import { registerReindexKnowledge } from './commands/reindex-knowledge';
+import { registerDeleteRole } from './commands/delete-role';
+import { registerDownloadSharedDocument } from './commands/download-shared-document';
+import { registerEavesdrop } from './commands/eavesdrop';
+import { registerEstimateContextWindow } from './commands/estimate-context-window';
+import { registerGetKnowledge } from './commands/get-knowledge';
+import { registerGetKnowledgeIndexStatus } from './commands/get-knowledge-index-status';
+import { registerGetTask } from './commands/get-task';
+import { registerGetToken } from './commands/get-token';
+import { registerListAgents } from './commands/list-agents';
+import { registerListAssignments } from './commands/list-assignments';
+import { registerListCompanies } from './commands/list-companies';
+import { registerListKnowledge } from './commands/list-knowledge';
+import { registerListOpenQueries } from './commands/list-open-queries';
+import { registerListRoles } from './commands/list-roles';
+import { registerListTasks } from './commands/list-tasks';
+import { registerOpenDocumentStore } from './commands/open-document-store';
+import { registerOpenSwagger } from './commands/open-swagger';
+import { registerQueryKnowledge } from './commands/query-knowledge';
+import { registerReadQuery } from './commands/read-query';
+import { registerRespond } from './commands/respond';
+import { registerSetCompany } from './commands/set-company';
+import { registerSetPlanner } from './commands/set-planner';
+import { registerSetRole } from './commands/set-role';
+import { registerSetTask } from './commands/set-task';
+import { registerStartTask } from './commands/start-task';
+import { registerStoreKnowledge } from './commands/store-knowledge';
+import { registerTui } from './commands/tui';
+import { registerUploadSharedDocument } from './commands/upload-shared-document';
+import { registerValidateSharedDocument } from './commands/validate-shared-document';
+
+// Node.js 18+ built-in fetch uses undici with a 5-minute headersTimeout by
+// default. The chat SSE event stream stays open for the whole turn (which can
+// exceed 5 minutes across a consultation cycle), so raise the dispatcher's
+// timeouts to match the CLI's own 35-minute abort ceiling.
+setGlobalDispatcher(
+  new Agent({ headersTimeout: 35 * 60 * 1000, bodyTimeout: 35 * 60 * 1000 }),
+);
+
+const program = new Command();
+
+program
+  .name('tcp-cli')
+  .description('Developer CLI for the LCP server')
+  .version('0.0.1')
+  .option(
+    '-s, --tcp-server <url>',
+    'LCP server base URL',
+    'http://localhost:3000',
+  )
+  .option('-t, --access-token <token>', 'Bearer token (skips auth flow)')
+  .option(
+    '-T, --refresh-token <token>',
+    'Refresh token (renews an expired access token)',
+  )
+  .option(
+    '-E, --access-token-env-var <var>',
+    'Name of env var holding the token',
+  );
+
+registerGetToken(program);
+registerListCompanies(program);
+registerListRoles(program);
+registerListKnowledge(program);
+registerGetKnowledge(program);
+registerStoreKnowledge(program);
+registerDeleteKnowledge(program);
+registerReindexKnowledge(program);
+registerGetKnowledgeIndexStatus(program);
+registerQueryKnowledge(program);
+registerOpenDocumentStore(program);
+registerOpenSwagger(program);
+registerSetCompany(program);
+registerSetRole(program);
+registerDeleteCompany(program);
+registerDeleteRole(program);
+registerChat(program);
+registerTui(program);
+registerListOpenQueries(program);
+registerReadQuery(program);
+registerRespond(program);
+registerDownloadSharedDocument(program);
+registerUploadSharedDocument(program);
+registerEstimateContextWindow(program);
+registerValidateSharedDocument(program);
+registerCreateTask(program);
+registerListTasks(program);
+registerGetTask(program);
+registerSetTask(program);
+registerSetPlanner(program);
+registerStartTask(program);
+registerCancelTask(program);
+registerListAgents(program);
+registerListAssignments(program);
+registerEavesdrop(program);
+
+program.parse(process.argv);

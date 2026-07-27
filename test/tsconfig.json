@@ -3,10 +3,10 @@
   "compilerOptions": {
     "rootDir": "..",
     "paths": {
-      "@tcp/shared": ["../libs/lcp-shared/src/index.ts"],
-      "@tcp/shared/*": ["../libs/lcp-shared/src/*"]
+      "@tcp/shared": ["../libs/tcp-shared/src/index.ts"],
+      "@tcp/shared/*": ["../libs/tcp-shared/src/*"]
     }
   },
-  "include": ["**/*.ts", "../apps/lcp-server/src/api/turndown-plugin-gfm.d.ts"],
+  "include": ["**/*.ts", "../apps/tcp-server/src/api/turndown-plugin-gfm.d.ts"],
   "exclude": ["node_modules"]
 }

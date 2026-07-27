@@ -1,6 +1,6 @@
 import { randomUUID, UUID } from 'crypto';
 import { DeepPartial } from 'typeorm';
-import { TcpCompany, TcpRole } from '../../../libs/lcp-shared/src/models';
+import { TcpCompany, TcpRole } from '../../../libs/tcp-shared/src/models';
 
 export const BASE = process.env.LCP_SERVER_URL ?? 'http://localhost:3000';
 export const OIDC_DISCOVERY_URL =

@@ -55,7 +55,7 @@ fi
 
 [[ -f "$PRIMARY_ENV" ]] || { echo "ERROR: env file not found: $PRIMARY_ENV" >&2; exit 1; }
 
-ARGS=(--project lcp-dev --env-files "$PRIMARY_ENV" --dev-ports)
+ARGS=(--project tcp-dev --env-files "$PRIMARY_ENV" --dev-ports)
 [[ "$REBUILD" == true ]] && ARGS+=(--rebuild)
 
 exec "$REPO_ROOT/scripts/start-deployment.sh" "${ARGS[@]}"

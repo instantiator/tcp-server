@@ -15,7 +15,7 @@ automatically using .env.testing and tears it down on exit.
 Prerequisites:
   - Docker and Docker Compose
   - .env.testing present in the repo root (see .env.example)
-  - No lcp-* containers running (checked at startup to avoid port and queue conflicts)
+  - No tcp-* containers running (checked at startup to avoid port and queue conflicts)
 
 Options:
   -h, --help    Show this help message and exit
@@ -32,17 +32,17 @@ done
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPTS="$REPO_ROOT/scripts"
 
-# shellcheck source=scripts/lib/check-no-lcp-running.sh
-source "$SCRIPTS/lib/check-no-lcp-running.sh"
+# shellcheck source=scripts/lib/check-no-tcp-running.sh
+source "$SCRIPTS/lib/check-no-tcp-running.sh"
 
-# Pre-flight: bail if any lcp-* containers are already running. Beyond the
+# Pre-flight: bail if any tcp-* containers are already running. Beyond the
 # resource contention the sourced check itself guards against, the api/smoke
 # step below starts the full deployment on the .env.testing host ports
-# (EXPOSE_PORT_API defaults to 3001, plus 8080, ...) that a running lcp-dev
+# (EXPOSE_PORT_API defaults to 3001, plus 8080, ...) that a running tcp-dev
 # would collide with outright.
 check_no_tcp_containers_running || exit 1
 
-DEPLOYMENT_PROJECT=lcp-all
+DEPLOYMENT_PROJECT=tcp-all
 DEPLOYMENT_STARTED=false
 
 cleanup() {
@@ -92,7 +92,7 @@ echo
 
 # Integration and e2e suites start their own ephemeral infrastructure
 # (postgres, redis, minio, stub-llm) via testcontainers, on random host ports.
-# The full lcp-all stack must NOT be running here — its lcp-agent worker would
+# The full tcp-all stack must NOT be running here — its tcp-agent worker would
 # compete with the integration test's in-process BullMQ worker for queue jobs.
 step "Integration tests"
 "$SCRIPTS/run-integration-tests.sh"
@@ -110,7 +110,7 @@ step "Docker prune (post-e2e)"
 docker system prune -f
 echo
 
-# The deployment publishes lcp-server on EXPOSE_PORT_API from .env.testing
+# The deployment publishes tcp-server on EXPOSE_PORT_API from .env.testing
 # (testing defaults to 3001 to avoid colliding with a dev stack on 3000). The
 # api and smoke tiers must target that same host port, not a hardcoded one.
 EXPOSE_PORT_API="$(grep -E '^EXPOSE_PORT_API=' "$REPO_ROOT/.env.testing" | tail -1 | cut -d= -f2)"

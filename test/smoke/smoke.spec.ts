@@ -47,7 +47,7 @@ describe('Smoke', () => {
     });
   });
 
-  describe('lcp-server', () => {
+  describe('tcp-server', () => {
     it('/health returns 200 with status ok', async () => {
       const res = await get(`${LCP_SERVER}/health`);
       expect(res.status).toBe(200);
@@ -60,7 +60,7 @@ describe('Smoke', () => {
     });
   });
 
-  describe('lcp-agent', () => {
+  describe('tcp-agent', () => {
     it('/health returns 200 with status ok', async () => {
       const res = await get(`${LCP_AGENT}/health`);
       expect(res.status).toBe(200);
@@ -73,7 +73,7 @@ describe('Smoke', () => {
     });
   });
 
-  describe('lcp-mcp-storage', () => {
+  describe('tcp-mcp-storage', () => {
     it('/health returns 200 with status ok', async () => {
       const res = await get(`${LCP_MCP_STORAGE}/health`);
       expect(res.status).toBe(200);
@@ -86,7 +86,7 @@ describe('Smoke', () => {
     });
   });
 
-  describe('lcp-mcp-memory', () => {
+  describe('tcp-mcp-memory', () => {
     it('/health returns 200 with status ok (PostgreSQL reachable)', async () => {
       const res = await get(`${LCP_MCP_MEMORY}/health`);
       expect(res.status).toBe(200);
@@ -99,7 +99,7 @@ describe('Smoke', () => {
     });
   });
 
-  describe('lcp-mcp-interactions', () => {
+  describe('tcp-mcp-interactions', () => {
     it('/health returns 200 with status ok', async () => {
       const res = await get(`${LCP_MCP_INTERACTIONS}/health`);
       expect(res.status).toBe(200);
@@ -112,7 +112,7 @@ describe('Smoke', () => {
     });
   });
 
-  describe('lcp-mcp-tasks', () => {
+  describe('tcp-mcp-tasks', () => {
     it('/health returns 200 with status ok', async () => {
       const res = await get(`${LCP_MCP_TASKS}/health`);
       expect(res.status).toBe(200);

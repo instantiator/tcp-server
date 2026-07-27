@@ -21,7 +21,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 ENV_FILE="$REPO_ROOT/.env.testing"
-PROJECT=lcp-migcheck
+PROJECT=tcp-migcheck
 
 if ! docker info >/dev/null 2>&1; then
   echo "✗ check-migrations: Docker is not running." >&2
@@ -57,10 +57,10 @@ echo "→ check-migrations: starting throwaway Postgres..."
 
 echo "→ check-migrations: waiting for Postgres..."
 for _ in $(seq 1 30); do
-  "${DC[@]}" exec -T postgres pg_isready -U lcp >/dev/null 2>&1 && break
+  "${DC[@]}" exec -T postgres pg_isready -U tcp >/dev/null 2>&1 && break
   sleep 1
 done
-if ! "${DC[@]}" exec -T postgres pg_isready -U lcp >/dev/null 2>&1; then
+if ! "${DC[@]}" exec -T postgres pg_isready -U tcp >/dev/null 2>&1; then
   echo "✗ check-migrations: Postgres did not become ready." >&2
   "${DC[@]}" logs --tail=20 postgres >&2
   exit 1

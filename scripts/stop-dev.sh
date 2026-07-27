@@ -55,7 +55,7 @@ fi
 
 # Stop services
 
-DC="docker compose -p lcp-dev --profile auth --env-file $ENV_FILE"
+DC="docker compose -p tcp-dev --profile auth --env-file $ENV_FILE"
 
 if [[ "$REMOVE_VOLUMES" == true ]]; then
   echo "Stopping services and removing volumes..."

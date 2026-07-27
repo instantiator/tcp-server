@@ -111,7 +111,7 @@
     },
     "AuditEvent": {
       "additionalProperties": false,
-      "description": "A single entry in the audit log for an agent run. Rows are written by lcp-agent as it processes LangGraph events. The composite index on `(companyId, agentId, timestamp)` supports efficient time-ordered queries and live-stream reads per ADR-008.",
+      "description": "A single entry in the audit log for an agent run. Rows are written by tcp-agent as it processes LangGraph events. The composite index on `(companyId, agentId, timestamp)` supports efficient time-ordered queries and live-stream reads per ADR-008.",
       "properties": {
         "agent": {
           "anyOf": [
@@ -573,7 +573,7 @@
     },
     "KnowledgeIndexState": {
       "additionalProperties": false,
-      "description": "Tracks the RAG-indexing state of a single knowledge *scope* — either a role's `knowledge/{role_slug}/` folder or a company's `knowledge/shared/` folder (when `roleId` is `null`).\n\nUsed to keep embeddings in sync with storage (see `apps/lcp-server/src/rag/knowledge-reindex.service.ts`):\n\n- `generation` is a monotonically increasing counter bumped on every change   to the scope. A rebuild job carries the generation it was enqueued with;   the worker skips a job whose generation is older than the current one, and   aborts/re-enqueues if the generation changes mid-rebuild. This gives   restart-on-change semantics without half-indexed state.\n- `fingerprint` is a hash of the scope's storage listing recorded at the end   of the last successful rebuild. The reconciliation poller compares it   against a freshly computed fingerprint to detect out-of-band edits (e.g. a   user editing directly in the MinIO console) and trigger a rebuild.\n\nUniqueness is enforced per scope via two partial unique indexes because a plain `UNIQUE(companyId, roleId)` treats `NULL` role ids as distinct in Postgres, which would allow duplicate shared rows.",
+      "description": "Tracks the RAG-indexing state of a single knowledge *scope* — either a role's `knowledge/{role_slug}/` folder or a company's `knowledge/shared/` folder (when `roleId` is `null`).\n\nUsed to keep embeddings in sync with storage (see `apps/tcp-server/src/rag/knowledge-reindex.service.ts`):\n\n- `generation` is a monotonically increasing counter bumped on every change   to the scope. A rebuild job carries the generation it was enqueued with;   the worker skips a job whose generation is older than the current one, and   aborts/re-enqueues if the generation changes mid-rebuild. This gives   restart-on-change semantics without half-indexed state.\n- `fingerprint` is a hash of the scope's storage listing recorded at the end   of the last successful rebuild. The reconciliation poller compares it   against a freshly computed fingerprint to detect out-of-band edits (e.g. a   user editing directly in the MinIO console) and trigger a rebuild.\n\nUniqueness is enforced per scope via two partial unique indexes because a plain `UNIQUE(companyId, roleId)` treats `NULL` role ids as distinct in Postgres, which would allow duplicate shared rows.",
       "properties": {
         "companyId": {
           "$ref": "#/definitions/UUID",
@@ -870,7 +870,7 @@
               "type": "null"
             }
           ],
-          "description": "Storage changes accumulated by the agent loop during the current (or last) run. Updated incrementally by lcp-agent as storage MCP tool calls complete. Used to include context in completion/output-gate error messages.\n\nUses `simple-json` (stored as TEXT) for cross-DB compatibility with SQLite unit tests."
+          "description": "Storage changes accumulated by the agent loop during the current (or last) run. Updated incrementally by tcp-agent as storage MCP tool calls complete. Used to include context in completion/output-gate error messages.\n\nUses `simple-json` (stored as TEXT) for cross-DB compatibility with SQLite unit tests."
         },
         "threadId": {
           "description": "LangGraph checkpoint thread_id. Set to the agent's own UUID on first run. Null until the first BullMQ job is dispatched.",
@@ -1460,7 +1460,7 @@
           "description": "Optional agent-loop resource overrides for agents running in this role. Takes precedence over  {@link  TcpCompany.runConfig }  and environment variables. See  {@link  AgentRunConfig }  for available fields."
         },
         "slug": {
-          "description": "URL-safe identifier used to address this role without its UUID (e.g. in `lcp-cli` or agent-to-agent consultation). Unique **within the owning company** only — unlike  {@link  TcpCompany.slug } , which is unique globally, the same role slug may be reused across different companies.",
+          "description": "URL-safe identifier used to address this role without its UUID (e.g. in `tcp-cli` or agent-to-agent consultation). Unique **within the owning company** only — unlike  {@link  TcpCompany.slug } , which is unique globally, the same role slug may be reused across different companies.",
           "minLength": 1,
           "type": "string"
         },

@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
     "paths": {
-      "@tcp/shared": ["./libs/lcp-shared/src/index.ts"],
-      "@tcp/shared/*": ["./libs/lcp-shared/src/*"]
+      "@tcp/shared": ["./libs/tcp-shared/src/index.ts"],
+      "@tcp/shared/*": ["./libs/tcp-shared/src/*"]
     },
     "module": "nodenext",
     "moduleResolution": "nodenext",

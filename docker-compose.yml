@@ -1,14 +1,14 @@
 # ── Shared environment blocks (YAML anchors) ────────────────────────────────
 # Internal URLs are Docker-network only — never exposed to the host.
 x-internal-urls: &internal-urls
-  DATABASE_URL: postgres://${DB_USER:-lcp}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-lcp}
+  DATABASE_URL: postgres://${DB_USER:-tcp}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-tcp}
   REDIS_URL: redis://redis:6379
   MINIO_ENDPOINT: http://minio:9000
-  MCP_STORAGE_URL: http://lcp-mcp-storage:3010
-  MCP_MEMORY_URL: http://lcp-mcp-memory:3011
-  MCP_INTERACTIONS_URL: http://lcp-mcp-interactions:3012
-  MCP_TASKS_URL: http://lcp-mcp-tasks:3013
-  LCP_SERVER_URL: http://lcp-server:3000
+  MCP_STORAGE_URL: http://tcp-mcp-storage:3010
+  MCP_MEMORY_URL: http://tcp-mcp-memory:3011
+  MCP_INTERACTIONS_URL: http://tcp-mcp-interactions:3012
+  MCP_TASKS_URL: http://tcp-mcp-tasks:3013
+  LCP_SERVER_URL: http://tcp-server:3000
   OIDC_INTERNAL_ISSUER_URL: http://zitadel:8080
 
 services:
@@ -16,16 +16,16 @@ services:
     image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${DB_USER:-lcp}
+      POSTGRES_USER: ${DB_USER:-tcp}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME:-lcp}
+      POSTGRES_DB: ${DB_NAME:-tcp}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
     ports:
       - "${EXPOSE_PORT_DB:-5432}:5432"
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${DB_USER:-lcp}"]
+      test: ["CMD", "pg_isready", "-U", "${DB_USER:-tcp}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -63,7 +63,7 @@ services:
 
   stub-llm:
     build:
-      context: ./apps/lcp-stub-llm
+      context: ./apps/tcp-stub-llm
       dockerfile: Dockerfile
     restart: unless-stopped
     profiles: [integration]
@@ -83,10 +83,10 @@ services:
       ZITADEL_DATABASE_POSTGRES_HOST: postgres
       ZITADEL_DATABASE_POSTGRES_PORT: 5432
       ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
-      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: lcp
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: tcp
       ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ${DB_PASSWORD}
       ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
-      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: ${DB_USER:-lcp}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: ${DB_USER:-tcp}
       ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${DB_PASSWORD}
       ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
       ZITADEL_MASTERKEY: ${ZITADEL_MASTERKEY}
@@ -100,14 +100,14 @@ services:
       # server) without it.
       ZITADEL_TLS_ENABLED: "false"
       ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "false"
-      ZITADEL_FIRSTINSTANCE_ORG_NAME: lcp
+      ZITADEL_FIRSTINSTANCE_ORG_NAME: tcp
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: admin
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${ZITADEL_ADMIN_PASSWORD}
       # Bootstrap machine user: start-deployment.sh authenticates to the Zitadel
       # API as this user (via the PAT written to /machinekey/pat.txt below) to
       # script project/app/user creation, since Zitadel has no ROPC grant to
       # obtain an admin session token the way kcadm.sh does for Keycloak.
-      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: lcp-bootstrap
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: tcp-bootstrap
       ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: LCP Bootstrap
       ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2100-01-01T00:00:00Z"
       ZITADEL_FIRSTINSTANCE_PATPATH: /machinekey/pat.txt
@@ -147,12 +147,12 @@ services:
       retries: 10
       start_period: 20s
 
-  lcp-server:
+  tcp-server:
     build:
       context: .
       dockerfile: Dockerfile
-      target: lcp-server
-    image: lcp-server:latest
+      target: tcp-server
+    image: tcp-server:latest
     restart: unless-stopped
     environment:
       <<: *internal-urls
@@ -186,7 +186,7 @@ services:
       # Only present (profile: auth) when Zitadel is part of the deployment;
       # `required: false` lets Compose skip this dependency entirely when it
       # isn't. When it is, wait for Zitadel's own healthcheck before starting
-      # lcp-server, rather than racing it (was: lcp-server started immediately
+      # tcp-server, rather than racing it (was: tcp-server started immediately
       # and polled a not-yet-listening provider, sometimes for longer than its
       # own health check's retry budget).
       zitadel:
@@ -201,12 +201,12 @@ services:
       timeout: 5s
       retries: 10
 
-  lcp-agent:
+  tcp-agent:
     build:
       context: .
       dockerfile: Dockerfile
-      target: lcp-agent
-    image: lcp-agent:latest
+      target: tcp-agent
+    image: tcp-agent:latest
     restart: unless-stopped
     environment:
       <<: *internal-urls
@@ -230,9 +230,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    # lcp-agent is a worker — internal-only, not exposed to the host. Its health
+    # tcp-agent is a worker — internal-only, not exposed to the host. Its health
     # endpoint is reached container-internally by the healthcheck below. (A host
-    # publish here would also collide with lcp-server whenever EXPOSE_PORT_API is
+    # publish here would also collide with tcp-server whenever EXPOSE_PORT_API is
     # set to 3001, as the testing env does.)
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
@@ -240,18 +240,18 @@ services:
       timeout: 5s
       retries: 5
 
-  lcp-mcp-storage:
+  tcp-mcp-storage:
     build:
       context: .
       dockerfile: Dockerfile
-      target: lcp-mcp-storage
-    image: lcp-mcp-storage:latest
+      target: tcp-mcp-storage
+    image: tcp-mcp-storage:latest
     restart: unless-stopped
     environment:
       <<: *internal-urls
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
     depends_on:
-      lcp-server:
+      tcp-server:
         condition: service_healthy
     # Internal-only by default (see docker-compose.dev-ports.yml to publish).
     healthcheck:
@@ -260,12 +260,12 @@ services:
       timeout: 5s
       retries: 5
 
-  lcp-mcp-memory:
+  tcp-mcp-memory:
     build:
       context: .
       dockerfile: Dockerfile
-      target: lcp-mcp-memory
-    image: lcp-mcp-memory:latest
+      target: tcp-mcp-memory
+    image: tcp-mcp-memory:latest
     restart: unless-stopped
     environment:
       <<: *internal-urls
@@ -284,18 +284,18 @@ services:
       timeout: 5s
       retries: 5
 
-  lcp-mcp-interactions:
+  tcp-mcp-interactions:
     build:
       context: .
       dockerfile: Dockerfile
-      target: lcp-mcp-interactions
-    image: lcp-mcp-interactions:latest
+      target: tcp-mcp-interactions
+    image: tcp-mcp-interactions:latest
     restart: unless-stopped
     environment:
       <<: *internal-urls
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
     depends_on:
-      lcp-server:
+      tcp-server:
         condition: service_healthy
     # Internal-only by default (see docker-compose.dev-ports.yml to publish).
     healthcheck:
@@ -304,18 +304,18 @@ services:
       timeout: 5s
       retries: 5
 
-  lcp-mcp-tasks:
+  tcp-mcp-tasks:
     build:
       context: .
       dockerfile: Dockerfile
-      target: lcp-mcp-tasks
-    image: lcp-mcp-tasks:latest
+      target: tcp-mcp-tasks
+    image: tcp-mcp-tasks:latest
     restart: unless-stopped
     environment:
       <<: *internal-urls
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
     depends_on:
-      lcp-server:
+      tcp-server:
         condition: service_healthy
     # Internal-only by default (see docker-compose.dev-ports.yml to publish).
     healthcheck:

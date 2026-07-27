@@ -1,5 +1,5 @@
-import { assertMinioReachable } from '../../libs/lcp-shared/src/storage/minio-reachability';
-import { assertRedisReachable } from '../../libs/lcp-shared/src/redis/redis-reachability';
+import { assertMinioReachable } from '../../libs/tcp-shared/src/storage/minio-reachability';
+import { assertRedisReachable } from '../../libs/tcp-shared/src/redis/redis-reachability';
 import { rememberComposeEnv } from '../support/compose-env-handle';
 import { startComposeTier } from '../support/testcontainers-env';
 

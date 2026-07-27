@@ -10,8 +10,8 @@
 # `dist/` and prod-only `node_modules`.
 #
 # Each service's compose entry selects its final stage via `target:` (e.g.
-# `target: lcp-server`). Build a single service directly with:
-#   docker build --target lcp-mcp-storage -t lcp-mcp-storage:latest .
+# `target: tcp-server`). Build a single service directly with:
+#   docker build --target tcp-mcp-storage -t tcp-mcp-storage:latest .
 
 # ---- Shared builder: install once, build every app once --------------------
 FROM node:26-alpine AS builder
@@ -32,50 +32,50 @@ RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev
 # Webpack bundles each app into dist/apps/<app>/main.js; after the COPY it sits
 # at ./dist/main.js. curl is present for the compose healthchecks.
 
-FROM node:26-alpine AS lcp-server
+FROM node:26-alpine AS tcp-server
 WORKDIR /app
 RUN apk add --no-cache curl
 COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=builder /app/dist/apps/lcp-server ./dist
+COPY --from=builder /app/dist/apps/tcp-server ./dist
 EXPOSE 3000
 CMD ["node", "dist/main.js"]
 
-FROM node:26-alpine AS lcp-agent
+FROM node:26-alpine AS tcp-agent
 WORKDIR /app
 RUN apk add --no-cache curl
 COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=builder /app/dist/apps/lcp-agent ./dist
+COPY --from=builder /app/dist/apps/tcp-agent ./dist
 EXPOSE 3001
 CMD ["node", "dist/main.js"]
 
-FROM node:26-alpine AS lcp-mcp-storage
+FROM node:26-alpine AS tcp-mcp-storage
 WORKDIR /app
 RUN apk add --no-cache curl
 COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=builder /app/dist/apps/lcp-mcp-storage ./dist
+COPY --from=builder /app/dist/apps/tcp-mcp-storage ./dist
 EXPOSE 3010
 CMD ["node", "dist/main.js"]
 
-FROM node:26-alpine AS lcp-mcp-memory
+FROM node:26-alpine AS tcp-mcp-memory
 WORKDIR /app
 RUN apk add --no-cache curl
 COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=builder /app/dist/apps/lcp-mcp-memory ./dist
+COPY --from=builder /app/dist/apps/tcp-mcp-memory ./dist
 EXPOSE 3011
 CMD ["node", "dist/main.js"]
 
-FROM node:26-alpine AS lcp-mcp-interactions
+FROM node:26-alpine AS tcp-mcp-interactions
 WORKDIR /app
 RUN apk add --no-cache curl
 COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=builder /app/dist/apps/lcp-mcp-interactions ./dist
+COPY --from=builder /app/dist/apps/tcp-mcp-interactions ./dist
 EXPOSE 3012
 CMD ["node", "dist/main.js"]
 
-FROM node:26-alpine AS lcp-mcp-tasks
+FROM node:26-alpine AS tcp-mcp-tasks
 WORKDIR /app
 RUN apk add --no-cache curl
 COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=builder /app/dist/apps/lcp-mcp-tasks ./dist
+COPY --from=builder /app/dist/apps/tcp-mcp-tasks ./dist
 EXPOSE 3013
 CMD ["node", "dist/main.js"]
