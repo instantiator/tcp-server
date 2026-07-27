@@ -4,7 +4,7 @@ import {
   TcpAgent,
   StreamDelta,
   WireEvent,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { EMPTY, firstValueFrom, of, take, toArray } from 'rxjs';

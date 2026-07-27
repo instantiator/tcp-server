@@ -1,7 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import type { Response } from 'express';
-import { TcpRole } from '@lcp/shared';
+import { TcpRole } from '@tcp/shared';
 import { RoleController } from './api.role.controller';
 import { DbService } from '../db/db.service';
 

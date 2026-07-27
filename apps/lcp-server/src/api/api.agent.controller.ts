@@ -4,7 +4,7 @@ import {
   AuditEventType,
   TcpAgent,
   WireEvent,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import {
   BadRequestException,
   Body,

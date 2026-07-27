@@ -1,4 +1,4 @@
-import { ContextBudgetService, TcpCompany, TcpRole } from '@lcp/shared';
+import { ContextBudgetService, TcpCompany, TcpRole } from '@tcp/shared';
 import { computeBreakdown } from './estimate-context-window.action';
 
 describe('computeBreakdown', () => {

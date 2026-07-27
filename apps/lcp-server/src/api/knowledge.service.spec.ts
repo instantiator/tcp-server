@@ -1,6 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { DEFAULT_RAG_THRESHOLD, TcpCompany, TcpRole } from '@lcp/shared';
+import { DEFAULT_RAG_THRESHOLD, TcpCompany, TcpRole } from '@tcp/shared';
 import { KnowledgeReindexService } from '../rag/knowledge-reindex.service';
 import { StorageObject, StorageService } from '../storage/storage.service';
 import { KnowledgeService } from './knowledge.service';

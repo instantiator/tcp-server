@@ -6,7 +6,7 @@ import {
   ConversationMessage,
   TcpAgent,
   PendingConsultation,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import {
   Injectable,
   Logger,

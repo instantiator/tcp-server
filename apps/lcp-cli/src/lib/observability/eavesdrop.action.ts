@@ -4,7 +4,7 @@ import type {
   TcpAssignment,
   TcpRole,
   TcpTask,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest, ApiOptions } from '../core/api';
 import { parseWireEvents } from '../core/sse';

@@ -1,4 +1,4 @@
-import { CompanyUser } from '@lcp/shared';
+import { CompanyUser } from '@tcp/shared';
 import {
   Body,
   Controller,

@@ -1,4 +1,4 @@
-import type { TcpAssignment, TcpTask } from '@lcp/shared';
+import type { TcpAssignment, TcpTask } from '@tcp/shared';
 
 /**
  * Orchestration reaction hooks for the task lifecycle, invoked by

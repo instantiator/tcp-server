@@ -38,7 +38,7 @@ import {
   resolveRunConfig,
   runSupervisedGraph,
   serverNamesForMode,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';

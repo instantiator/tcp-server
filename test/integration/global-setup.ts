@@ -10,7 +10,7 @@ import { startComposeTier } from '../support/testcontainers-env';
  * spec files. Torn down by the matching global-teardown.
  *
  * `assertRedisReachable`/`assertMinioReachable` are imported by relative path
- * rather than from `@lcp/shared` because Jest's moduleNameMapper is not
+ * rather than from `@tcp/shared` because Jest's moduleNameMapper is not
  * reliably applied to globalSetup modules.
  */
 export default async function globalSetup(): Promise<void> {

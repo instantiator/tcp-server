@@ -10,7 +10,7 @@ import {
   McpClientService,
   MODE_PROMPTS,
   WireEvent,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken, TypeOrmModule } from '@nestjs/typeorm';

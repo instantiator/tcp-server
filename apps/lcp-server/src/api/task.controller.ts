@@ -5,7 +5,7 @@ import {
   type TcpAssignment,
   type TcpTask,
   type WireEvent,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import {
   BadRequestException,
   Body,

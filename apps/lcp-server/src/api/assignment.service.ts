@@ -19,7 +19,7 @@ import {
   resolveArtifactKey,
   stripControlChars,
   taskCompletedPrefix,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import {
   BadRequestException,
   ConflictException,

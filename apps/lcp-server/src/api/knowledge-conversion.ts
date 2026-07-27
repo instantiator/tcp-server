@@ -1,6 +1,6 @@
 import * as path from 'path';
 import { BadRequestException } from '@nestjs/common';
-import { parseFrontMatter } from '@lcp/shared';
+import { parseFrontMatter } from '@tcp/shared';
 import { load as loadYaml, dump as dumpYaml } from 'js-yaml';
 import { parse as parseCsv } from 'csv-parse/sync';
 import * as cheerio from 'cheerio';

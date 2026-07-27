@@ -1,4 +1,4 @@
-import { extractContentText } from '@lcp/shared';
+import { extractContentText } from '@tcp/shared';
 
 /** Structured record of storage operations performed during an agent loop run. */
 export interface StorageChanges {

@@ -7,7 +7,7 @@ import {
   TcpRole,
   resolveEmbeddingConfig,
   resolveEnvEmbeddingConfig,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import {
   Inject,
   Injectable,

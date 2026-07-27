@@ -1,4 +1,4 @@
-import type { TcpCompany } from '@lcp/shared';
+import type { TcpCompany } from '@tcp/shared';
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest } from '../core/api';
 import { confirmAction } from '../core/confirm';

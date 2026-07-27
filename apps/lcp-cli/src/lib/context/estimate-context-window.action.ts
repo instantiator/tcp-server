@@ -10,7 +10,7 @@ import {
   renderTemplate,
   resolveLlmConfig,
   resolveSystemPromptTemplate,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { resolveToken } from '../auth/token';
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest } from '../core/api';

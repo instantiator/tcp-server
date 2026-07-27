@@ -8,7 +8,7 @@ import {
   TcpCompany,
   TcpRole,
   TcpTask,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken, TypeOrmModule } from '@nestjs/typeorm';

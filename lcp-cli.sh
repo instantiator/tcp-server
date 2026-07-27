@@ -70,7 +70,7 @@ DIST="$ROOT/dist/apps/lcp-cli/main.js"
 
 if [ "$REBUILD" = "true" ] || [ ! -f "$DIST" ]; then
   echo "[lcp-cli] Building lcp-cli..." >&2
-  npm --prefix "$ROOT" run build:lcp-cli
+  npm --prefix "$ROOT" run build:tcp-cli
 fi
 
 exec node "$DIST" "${NODE_ARGS[@]+"${NODE_ARGS[@]}"}"

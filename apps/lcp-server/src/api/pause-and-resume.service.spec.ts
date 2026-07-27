@@ -4,7 +4,7 @@ import {
   TcpAgent,
   TcpRole,
   PendingConsultation,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import type { FindOneOptions, Repository } from 'typeorm';

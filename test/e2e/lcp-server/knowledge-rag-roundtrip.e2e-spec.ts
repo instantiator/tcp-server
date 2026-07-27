@@ -1,4 +1,4 @@
-import { TcpCompany, TcpRole } from '@lcp/shared';
+import { TcpCompany, TcpRole } from '@tcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';

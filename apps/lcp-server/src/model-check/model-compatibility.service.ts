@@ -1,4 +1,4 @@
-import { LlmConfig } from '@lcp/shared';
+import { LlmConfig } from '@tcp/shared';
 import { Injectable, Logger } from '@nestjs/common';
 import { z } from 'zod';
 import { buildChatModel } from './llm-factory';

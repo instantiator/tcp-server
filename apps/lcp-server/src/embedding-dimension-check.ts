@@ -1,6 +1,6 @@
 import { Logger, OnModuleInit } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { checkEmbeddingDimension } from '@lcp/shared';
+import { checkEmbeddingDimension } from '@tcp/shared';
 
 /**
  * Logs a warning on startup if the actual embedding dimension in the database

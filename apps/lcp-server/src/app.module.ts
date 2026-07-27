@@ -13,7 +13,7 @@ import {
   TcpTask,
   PendingConsultation,
   makeTypeOrmConfig,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { Module, ValidationPipe } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';

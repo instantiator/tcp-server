@@ -4,7 +4,7 @@ import {
   ConversationMessage,
   TcpCompany,
   TcpRole,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import {
   BadRequestException,
   ConflictException,

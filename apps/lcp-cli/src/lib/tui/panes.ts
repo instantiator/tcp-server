@@ -8,7 +8,7 @@
 // view), and TextPane (fixed text — e.g. the help screen — with native
 // scrolling).
 
-import type { TaskChangeSummary, WireEvent } from '@lcp/shared';
+import type { TaskChangeSummary, WireEvent } from '@tcp/shared';
 import { TextBox } from 'terminal-kit';
 import { EventLogBuffer } from '../render/event-log';
 import { markupStyle } from '../render/style';

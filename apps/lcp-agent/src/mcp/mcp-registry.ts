@@ -1,1 +1,1 @@
-export { MCP_REGISTRY, resolveMcpServerUrls } from '@lcp/shared';
+export { MCP_REGISTRY, resolveMcpServerUrls } from '@tcp/shared';

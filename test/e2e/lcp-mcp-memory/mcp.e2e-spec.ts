@@ -1,6 +1,6 @@
 // lcp-mcp-memory requires a real Postgres connection, provisioned by the e2e
 // global setup — DATABASE_URL is always a real postgres URL.
-import { TcpCompany, TcpRole } from '@lcp/shared';
+import { TcpCompany, TcpRole } from '@tcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';

@@ -1,4 +1,4 @@
-import { TcpAgent, TcpAssignmentMode } from '@lcp/shared';
+import { TcpAgent, TcpAssignmentMode } from '@tcp/shared';
 import type { UUID } from 'crypto';
 
 /**

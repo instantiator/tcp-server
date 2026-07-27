@@ -12,7 +12,7 @@ import type {
   TcpArtifact,
   TcpAssignmentWorkingArtifact,
   TcpMaterialArtifact,
-} from '@lcp/shared';
+} from '@tcp/shared';
 
 /**
  * One assignment in a plan submitted via `POST /internal/task/:taskId/plan`.

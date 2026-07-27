@@ -1,4 +1,4 @@
-import { agentEventsChannel, WireEvent } from '@lcp/shared';
+import { agentEventsChannel, WireEvent } from '@tcp/shared';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Observable } from 'rxjs';

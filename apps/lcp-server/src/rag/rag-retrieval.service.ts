@@ -1,4 +1,4 @@
-import { DEFAULT_RAG_THRESHOLD, LlmConfig } from '@lcp/shared';
+import { DEFAULT_RAG_THRESHOLD, LlmConfig } from '@tcp/shared';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { UUID } from 'crypto';

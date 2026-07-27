@@ -1,4 +1,4 @@
-import { KnowledgeChunk } from '@lcp/shared';
+import { KnowledgeChunk } from '@tcp/shared';
 import { randomUUID } from 'crypto';
 import { DataSource, IsNull, Repository } from 'typeorm';
 import { EmbeddingService } from './embedding.service';

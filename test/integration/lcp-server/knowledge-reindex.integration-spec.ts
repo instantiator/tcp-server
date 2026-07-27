@@ -12,7 +12,7 @@ import {
   KnowledgeIndexState,
   TcpCompany,
   TcpRole,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { DataSource, Repository } from 'typeorm';
 import { AuditService } from '../../../apps/lcp-server/src/audit/audit.service';

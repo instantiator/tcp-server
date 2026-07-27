@@ -14,7 +14,7 @@ import {
   TcpCompany,
   TcpRole,
   TcpTask,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { randomUUID, type UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { DbService } from '../db/db.service';

@@ -17,7 +17,7 @@ import {
   LlmConfig,
   MODE_PROMPTS,
   renderTemplate,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';

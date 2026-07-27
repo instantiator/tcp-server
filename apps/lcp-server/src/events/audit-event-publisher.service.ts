@@ -1,4 +1,4 @@
-import { AuditEvent, AuditWireEvent } from '@lcp/shared';
+import { AuditEvent, AuditWireEvent } from '@tcp/shared';
 import { Injectable } from '@nestjs/common';
 import { AgentEventService } from './agent-event.service';
 import { CompanyEventService } from './company-event.service';

@@ -1,6 +1,6 @@
 {
   // Framing shown at the top of describe_server, before the per-mode instructions
-  // (which are embedded live from @lcp/shared's MODE_PROMPTS so they can't drift).
+  // (which are embedded live from @tcp/shared's MODE_PROMPTS so they can't drift).
   "describe_header": "## Tasks Service\n\nThe tasks service is how you complete your assignment. Which tool you call depends on your mode:\n- plan mode → `create_plan`\n- implement mode → `complete_assignment`\n- qa mode → `assure_assignment`\n\nYou may only call the tool that matches your current mode; the others will return an error explaining this. Call your mode's tool exactly once, as your final action, after the work is done.",
 
   // Prepended to the per-mode blocks when the caller's mode is known.

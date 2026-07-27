@@ -1,4 +1,4 @@
-import { AuditWireEvent, StreamDelta, WireEvent } from '@lcp/shared';
+import { AuditWireEvent, StreamDelta, WireEvent } from '@tcp/shared';
 import { createRenderer, RenderOptions } from './render';
 
 /** A minimal in-memory writable that records everything written to it. */

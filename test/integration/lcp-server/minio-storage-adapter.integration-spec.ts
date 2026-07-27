@@ -5,7 +5,7 @@ import {
   ListObjectsV2Command,
   S3Client,
 } from '@aws-sdk/client-s3';
-import { TcpCompany, TcpRole } from '@lcp/shared';
+import { TcpCompany, TcpRole } from '@tcp/shared';
 import {
   BadRequestException,
   ConflictException,

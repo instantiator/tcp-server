@@ -1,4 +1,4 @@
-import { taskEventsChannel, WireEvent } from '@lcp/shared';
+import { taskEventsChannel, WireEvent } from '@tcp/shared';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Observable } from 'rxjs';

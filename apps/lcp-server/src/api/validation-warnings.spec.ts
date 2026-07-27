@@ -1,4 +1,4 @@
-import type { TcpCompany, TcpRole, LlmConfig } from '@lcp/shared';
+import type { TcpCompany, TcpRole, LlmConfig } from '@tcp/shared';
 import type { Response } from 'express';
 import {
   WARNINGS_HEADER,

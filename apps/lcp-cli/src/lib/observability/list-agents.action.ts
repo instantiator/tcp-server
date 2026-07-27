@@ -1,4 +1,4 @@
-import type { TcpAgent } from '@lcp/shared';
+import type { TcpAgent } from '@tcp/shared';
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest } from '../core/api';
 import {

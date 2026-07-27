@@ -3,7 +3,7 @@
 // (render) and streaming surfaces observe incrementally (onAppend). This
 // replaces the per-surface PaneEntryLog / responseSeen / mapAuditHistoryToEvents.
 
-import { AuditWireEvent, StreamDelta } from '@lcp/shared';
+import { AuditWireEvent, StreamDelta } from '@tcp/shared';
 import { isBlankText, parseClockTime } from '../core/agent-log-format';
 import { renderAuditEvent, TurnState } from './audit-renderers';
 import { LogEntry, renderEntry } from './entries';

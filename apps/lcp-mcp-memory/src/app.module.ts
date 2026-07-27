@@ -1,4 +1,4 @@
-import { EpisodicMemory, TcpCompany, TcpRole } from '@lcp/shared';
+import { EpisodicMemory, TcpCompany, TcpRole } from '@tcp/shared';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';

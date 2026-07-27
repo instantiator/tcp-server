@@ -87,7 +87,7 @@ export function parseKnowledgePath(key: string): KnowledgeScope | null {
 
 /**
  * Task / assignment storage-tree key helpers and {@link resolveArtifactKey}
- * now live in `@lcp/shared` (`storage/artifact-keys.ts`) so lcp-agent can
+ * now live in `@tcp/shared` (`storage/artifact-keys.ts`) so lcp-agent can
  * resolve assignment artifact keys too. Re-exported here so existing
  * lcp-server imports of `./storage-keys` keep working unchanged.
  */
@@ -103,5 +103,5 @@ export {
   orphanWorkingKey,
   orphanWorkingPrefix,
   resolveArtifactKey,
-} from '@lcp/shared';
-export type { ArtifactResolutionContext } from '@lcp/shared';
+} from '@tcp/shared';
+export type { ArtifactResolutionContext } from '@tcp/shared';

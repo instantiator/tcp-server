@@ -1,2 +1,2 @@
-// Re-export from @lcp/shared so existing local imports within lcp-server continue to resolve.
-export { EmbeddingService } from '@lcp/shared';
+// Re-export from @tcp/shared so existing local imports within lcp-server continue to resolve.
+export { EmbeddingService } from '@tcp/shared';

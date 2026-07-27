@@ -5,7 +5,7 @@ import {
   ConversationMessage,
   TcpAgent,
   PendingConsultation,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -26,8 +26,8 @@ jest.mock('bullmq', () => ({
 
 // The startup Redis reachability probe would otherwise open a real connection;
 // unit tests have no Redis, so stub it to resolve.
-jest.mock('@lcp/shared', () => ({
-  ...jest.requireActual<typeof import('@lcp/shared')>('@lcp/shared'),
+jest.mock('@tcp/shared', () => ({
+  ...jest.requireActual<typeof import('@tcp/shared')>('@tcp/shared'),
   assertRedisReachable: jest.fn().mockResolvedValue(undefined),
 }));
 

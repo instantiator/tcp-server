@@ -1,4 +1,4 @@
-import { EmbeddingService } from '@lcp/shared';
+import { EmbeddingService } from '@tcp/shared';
 import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { AgentRagService } from './agent-rag.service';

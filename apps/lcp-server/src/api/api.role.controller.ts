@@ -1,4 +1,4 @@
-import { TcpRole } from '@lcp/shared';
+import { TcpRole } from '@tcp/shared';
 import {
   Body,
   Controller,

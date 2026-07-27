@@ -9,7 +9,7 @@ import {
   TcpRole,
   TcpTask,
   type TcpMaterialArtifact,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { type UUID } from 'crypto';
 import { Repository } from 'typeorm';

@@ -1,4 +1,4 @@
-import { LlmConfig } from '@lcp/shared';
+import { LlmConfig } from '@tcp/shared';
 
 jest.mock('@langchain/openai', () => ({
   OpenAIEmbeddings: jest.fn().mockImplementation(() => ({

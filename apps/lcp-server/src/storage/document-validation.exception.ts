@@ -1,4 +1,4 @@
-import type { ValidationError } from '@lcp/shared';
+import type { ValidationError } from '@tcp/shared';
 import { UnprocessableEntityException } from '@nestjs/common';
 
 /**

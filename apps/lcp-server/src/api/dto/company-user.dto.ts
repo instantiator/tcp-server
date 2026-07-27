@@ -5,7 +5,7 @@ import {
   IsOptional,
   IsString,
 } from 'class-validator';
-import type { MemberType } from '@lcp/shared';
+import type { MemberType } from '@tcp/shared';
 
 const MEMBER_TYPES = ['creator', 'owner', 'member'] as const;
 

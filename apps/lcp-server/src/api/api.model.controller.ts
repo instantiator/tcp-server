@@ -1,4 +1,4 @@
-import { LlmConfig } from '@lcp/shared';
+import { LlmConfig } from '@tcp/shared';
 import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {

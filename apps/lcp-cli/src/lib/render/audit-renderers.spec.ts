@@ -1,4 +1,4 @@
-import { AuditWireEvent } from '@lcp/shared';
+import { AuditWireEvent } from '@tcp/shared';
 import { renderAuditEvent, TurnState } from './audit-renderers';
 
 function ev(

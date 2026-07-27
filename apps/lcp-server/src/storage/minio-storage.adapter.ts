@@ -15,7 +15,7 @@ import {
   registerDefaultValidators,
   streamToBuffer,
   validateDocument,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import {
   ConflictException,
   Inject,

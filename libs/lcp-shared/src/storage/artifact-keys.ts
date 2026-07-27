@@ -3,7 +3,7 @@ import type { TcpArtifact } from '../models/TcpArtifact';
 /**
  * Object-key structure helpers for the task/assignment storage tree, plus
  * {@link resolveArtifactKey} which maps an {@link TcpArtifact} to its full
- * storage key. Kept in `@lcp/shared` so both lcp-server (storage/task
+ * storage key. Kept in `@tcp/shared` so both lcp-server (storage/task
  * services) and lcp-agent (assignment prompt assembly) can resolve keys the
  * same way. lcp-server re-exports these from its `storage/storage-keys.ts`
  * alongside the knowledge-store helpers.

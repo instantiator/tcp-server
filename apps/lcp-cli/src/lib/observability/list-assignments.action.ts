@@ -1,4 +1,4 @@
-import type { TcpAssignment } from '@lcp/shared';
+import type { TcpAssignment } from '@tcp/shared';
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest } from '../core/api';
 import {

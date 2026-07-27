@@ -1,4 +1,4 @@
-import { TcpCompany } from '@lcp/shared';
+import { TcpCompany } from '@tcp/shared';
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditModule } from '../audit/audit.module';

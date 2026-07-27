@@ -3,7 +3,7 @@ import {
   AuditEventType,
   TcpAgent,
   TcpAssignment,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { UUID } from 'crypto';

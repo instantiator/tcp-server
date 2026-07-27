@@ -1,7 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import type { DeleteResult, Repository } from 'typeorm';
-import { CompanyUser } from '@lcp/shared';
+import { CompanyUser } from '@tcp/shared';
 import { CompanyUserController } from './company-user.controller';
 
 const makeRepo = (): jest.Mocked<

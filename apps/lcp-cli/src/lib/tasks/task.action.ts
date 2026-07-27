@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type { TcpAssignment, TcpCompany, TcpTask } from '@lcp/shared';
+import type { TcpAssignment, TcpCompany, TcpTask } from '@tcp/shared';
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest, apiUpload } from '../core/api';
 import {

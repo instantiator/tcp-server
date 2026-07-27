@@ -5,7 +5,7 @@ import {
   ContextManagerService,
   IncomingDataGuardService,
   OVERFLOW_STORE,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
 import { AuditService } from '../audit/audit.service';

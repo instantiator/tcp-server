@@ -1,4 +1,4 @@
-import { TcpCompany, TcpTask, type WireEvent } from '@lcp/shared';
+import { TcpCompany, TcpTask, type WireEvent } from '@tcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';

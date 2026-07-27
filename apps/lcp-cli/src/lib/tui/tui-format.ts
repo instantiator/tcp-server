@@ -3,7 +3,7 @@
 // indent/grey special case, and blank-line separation rules can be
 // unit-tested without a live terminal-kit screen.
 
-import type { TaskChangeSummary } from '@lcp/shared';
+import type { TaskChangeSummary } from '@tcp/shared';
 import { wrapText } from '../core/text-wrap';
 import {
   ListEntry,

@@ -1,5 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
-// Imported by relative path, not the `@lcp/shared` alias: this migration is
+// Imported by relative path, not the `@tcp/shared` alias: this migration is
 // loaded by the e2e tier's Jest globalSetup (via migrations-list.ts), where
 // neither Jest's moduleNameMapper nor tsconfig `paths` are applied, so the
 // alias would fail to resolve. See test/e2e/global-setup.ts for the same

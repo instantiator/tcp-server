@@ -18,7 +18,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { UUID } from 'crypto';
 import type { Request, Response } from 'express';
-import { AuditEventType, TcpCompany, TcpRole, WireEvent } from '@lcp/shared';
+import { AuditEventType, TcpCompany, TcpRole, WireEvent } from '@tcp/shared';
 import { defer, from, merge, mergeMap, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { DbService } from '../db/db.service';

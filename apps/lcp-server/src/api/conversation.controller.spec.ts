@@ -1,4 +1,4 @@
-import { Conversation, ConversationMessage } from '@lcp/shared';
+import { Conversation, ConversationMessage } from '@tcp/shared';
 import { randomUUID } from 'crypto';
 import type { AgentOrchestrationService } from './agent-orchestration.service';
 import type { ConversationService } from './conversation.service';

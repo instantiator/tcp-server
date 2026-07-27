@@ -1,4 +1,4 @@
-import { AuditWireEvent, StreamDelta } from '@lcp/shared';
+import { AuditWireEvent, StreamDelta } from '@tcp/shared';
 import { EventLogBuffer } from './event-log';
 import { plainStyle } from './style';
 import { StreamPresenter } from './stream-presenter';

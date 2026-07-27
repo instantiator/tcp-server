@@ -9,7 +9,7 @@ import {
   TcpAssignment,
   TcpCompany,
   TcpRole,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AgentEventPublisherService } from '../agent/agent-event-publisher.service';

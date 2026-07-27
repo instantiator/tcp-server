@@ -1,5 +1,5 @@
-import { TcpAssignment } from '@lcp/shared';
-import type { TcpAssignmentStatus } from '@lcp/shared';
+import { TcpAssignment } from '@tcp/shared';
+import type { TcpAssignmentStatus } from '@tcp/shared';
 import {
   BadRequestException,
   Controller,

@@ -1,4 +1,4 @@
-import { InternalApiKeyGuard } from '@lcp/shared';
+import { InternalApiKeyGuard } from '@tcp/shared';
 import {
   BadRequestException,
   Body,

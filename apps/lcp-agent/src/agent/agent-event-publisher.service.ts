@@ -1,4 +1,4 @@
-import { agentEventsChannel, StreamDelta } from '@lcp/shared';
+import { agentEventsChannel, StreamDelta } from '@tcp/shared';
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';

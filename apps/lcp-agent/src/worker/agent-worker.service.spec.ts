@@ -1,4 +1,4 @@
-import { DEFAULT_AGENT_WORKER_CONCURRENCY } from '@lcp/shared';
+import { DEFAULT_AGENT_WORKER_CONCURRENCY } from '@tcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AgentLoopService } from '../agent/agent-loop.service';
@@ -15,8 +15,8 @@ jest.mock('bullmq', () => ({
 
 // The startup Redis reachability probe would otherwise open a real connection;
 // unit tests have no Redis, so stub it to resolve.
-jest.mock('@lcp/shared', () => ({
-  ...jest.requireActual<typeof import('@lcp/shared')>('@lcp/shared'),
+jest.mock('@tcp/shared', () => ({
+  ...jest.requireActual<typeof import('@tcp/shared')>('@tcp/shared'),
   assertRedisReachable: jest.fn().mockResolvedValue(undefined),
 }));
 

@@ -7,7 +7,7 @@ import {
   TcpRole,
   TcpTask,
   makeTypeOrmConfig,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { configSchema } from './config/config.schema';

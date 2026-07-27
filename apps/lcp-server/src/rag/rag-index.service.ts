@@ -1,4 +1,4 @@
-import { KnowledgeChunk, LlmConfig } from '@lcp/shared';
+import { KnowledgeChunk, LlmConfig } from '@tcp/shared';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';

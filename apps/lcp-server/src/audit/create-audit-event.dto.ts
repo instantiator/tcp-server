@@ -1,4 +1,4 @@
-import { AuditEventType } from '@lcp/shared';
+import { AuditEventType } from '@tcp/shared';
 import type { UUID } from 'crypto';
 import {
   IsIn,

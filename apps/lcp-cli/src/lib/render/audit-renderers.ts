@@ -2,7 +2,7 @@
 // renderers (first `canRender` wins) replaces the three near-duplicate switch
 // blocks the tui/eavesdrop/chat surfaces each carried.
 
-import { AuditWireEvent } from '@lcp/shared';
+import { AuditWireEvent } from '@tcp/shared';
 import {
   ASSIGNMENT_COMPLETE_LABEL,
   parseClockTime,

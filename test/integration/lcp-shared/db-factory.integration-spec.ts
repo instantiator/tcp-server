@@ -1,8 +1,8 @@
-import { TcpCompany, TcpRole } from '@lcp/shared';
+import { TcpCompany, TcpRole } from '@tcp/shared';
 import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
-import { makeTypeOrmConfig } from '@lcp/shared';
+import { makeTypeOrmConfig } from '@tcp/shared';
 import type { Repository } from 'typeorm';
 import { requireEnv } from '../../support/require-env';
 

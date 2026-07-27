@@ -8,7 +8,7 @@ import {
   TcpTask,
   TaskChangeSummary,
   type TcpMaterialArtifact,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import {
   ConflictException,
   Injectable,

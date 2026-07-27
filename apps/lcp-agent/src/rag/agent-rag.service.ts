@@ -1,4 +1,4 @@
-import { EmbeddingService, LlmConfig } from '@lcp/shared';
+import { EmbeddingService, LlmConfig } from '@tcp/shared';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { UUID } from 'crypto';

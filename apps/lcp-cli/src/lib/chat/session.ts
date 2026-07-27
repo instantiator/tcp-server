@@ -4,7 +4,7 @@ import type {
   TcpTask,
   TaskChangeSummary,
   WireEvent,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import type { UUID } from 'crypto';
 import { GlobalOptions } from '../core/cli-options';
 import { TokenManager, TokenSession } from '../auth/token';

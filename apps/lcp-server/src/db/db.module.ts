@@ -4,7 +4,7 @@ import {
   TcpAgent,
   TcpCompany,
   TcpRole,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DbService } from './db.service';

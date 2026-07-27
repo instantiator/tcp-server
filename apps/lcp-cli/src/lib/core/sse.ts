@@ -2,7 +2,7 @@
 // separate from the surfaces so the parsing logic can be unit-tested without
 // wiring up a live HTTP stream.
 
-import { WireEvent } from '@lcp/shared';
+import { WireEvent } from '@tcp/shared';
 
 /**
  * Splits accumulated SSE text on event boundaries (`\n\n`) and parses each

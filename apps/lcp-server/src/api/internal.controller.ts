@@ -17,7 +17,7 @@ import {
   InternalApiKeyGuard,
   TcpAgent,
   TcpRole,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import type { UUID } from 'crypto';

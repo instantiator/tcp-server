@@ -11,7 +11,7 @@ import {
   TcpTask,
   McpClientService,
   assignmentWorkingKey,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { INestApplication } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';

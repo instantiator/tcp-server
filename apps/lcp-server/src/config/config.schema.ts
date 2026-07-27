@@ -5,7 +5,7 @@ import {
   DEFAULT_KNOWLEDGE_POLL_INTERVAL_MS,
   DEFAULT_LCP_MASK_API_KEYS,
   DEFAULT_EMBEDDING_DIMENSION,
-} from '@lcp/shared/config/defaults';
+} from '@tcp/shared/config/defaults';
 
 /**
  * Joi validation schema for lcp-server environment variables.

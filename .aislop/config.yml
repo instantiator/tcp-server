@@ -1,6 +1,6 @@
 # aislop configuration — see https://github.com/scanaislop/aislop
 rules:
-  # @lcp/shared is this monorepo's tsconfig path alias, not an npm dependency;
+  # @tcp/shared is this monorepo's tsconfig path alias, not an npm dependency;
   # the rule cannot resolve workspace aliases, so its 13 findings here are
   # false positives. Kept as a warning (not off) so genuinely hallucinated
   # imports remain visible.

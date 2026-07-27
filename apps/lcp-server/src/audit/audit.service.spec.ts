@@ -3,7 +3,7 @@ import {
   AuditEventType,
   TcpAgent,
   TcpAssignment,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { randomUUID } from 'crypto';
 import { AuditService } from './audit.service';
 

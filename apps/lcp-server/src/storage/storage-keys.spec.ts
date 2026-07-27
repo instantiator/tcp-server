@@ -1,4 +1,4 @@
-import type { TcpArtifact, TcpAssignment } from '@lcp/shared';
+import type { TcpArtifact, TcpAssignment } from '@tcp/shared';
 import {
   assignmentCompletedKey,
   assignmentCompletedPrefix,

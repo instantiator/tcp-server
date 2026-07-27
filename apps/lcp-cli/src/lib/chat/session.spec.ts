@@ -1,4 +1,4 @@
-import type { WireEvent } from '@lcp/shared';
+import type { WireEvent } from '@tcp/shared';
 import { apiRequest } from '../core/api';
 import { readWireStream } from '../core/sse-reader';
 import { Tui } from '../tui/tui';

@@ -1,5 +1,5 @@
 import * as Joi from 'joi';
-import { DEFAULT_EMBEDDING_DIMENSION } from '@lcp/shared/config/defaults';
+import { DEFAULT_EMBEDDING_DIMENSION } from '@tcp/shared/config/defaults';
 
 /**
  * Joi validation schema for lcp-agent environment variables.

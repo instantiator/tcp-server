@@ -1,4 +1,4 @@
-import { InternalApiKeyGuard } from '@lcp/shared';
+import { InternalApiKeyGuard } from '@tcp/shared';
 import { Body, Controller, HttpCode, Post, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { AuditService } from './audit.service';

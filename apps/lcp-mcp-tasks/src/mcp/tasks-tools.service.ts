@@ -8,7 +8,7 @@ import {
   TcpAssignmentMode,
   MODE_PROMPTS,
   requiredToolForMode,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { taskPrompts } from '../tasks-prompts';
 import { taskToolDescriptions } from '../tasks-tool-descriptions';
 

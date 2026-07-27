@@ -10,7 +10,7 @@ import {
   TcpRole,
   TcpTask,
   PendingConsultation,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditModule } from '../audit/audit.module';

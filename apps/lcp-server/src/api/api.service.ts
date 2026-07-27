@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { AuditEventType, TcpCompany } from '@lcp/shared';
+import { AuditEventType, TcpCompany } from '@tcp/shared';
 import type { UUID } from 'crypto';
 import type { DeepPartial } from 'typeorm';
 import { AuditService } from '../audit/audit.service';

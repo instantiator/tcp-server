@@ -7,7 +7,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
-import type { TcpCompany } from '@lcp/shared';
+import type { TcpCompany } from '@tcp/shared';
 import {
   BadRequestException,
   ConflictException,

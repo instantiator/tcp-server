@@ -10,7 +10,7 @@
 // row 1 = blank gap, row 2.. = pane content (which itself opens with a
 // heading — "Name/Id" on chat panes, "Slug/Id" + prompt on the roster).
 
-import type { TaskChangeSummary, WireEvent } from '@lcp/shared';
+import type { TaskChangeSummary, WireEvent } from '@tcp/shared';
 import { EventEmitter } from 'events';
 import { ScreenBuffer } from 'terminal-kit';
 import {

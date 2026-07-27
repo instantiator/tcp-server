@@ -1,4 +1,4 @@
-import { agentEventsChannel, StreamDelta } from '@lcp/shared';
+import { agentEventsChannel, StreamDelta } from '@tcp/shared';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID, UUID } from 'crypto';

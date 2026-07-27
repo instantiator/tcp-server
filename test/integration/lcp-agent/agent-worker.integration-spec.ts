@@ -11,7 +11,7 @@ import {
   TcpCompany,
   TcpRole,
   TcpTask,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
@@ -20,7 +20,7 @@ import { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { AgentEventPublisherService } from '../../../apps/lcp-agent/src/agent/agent-event-publisher.service';
 import { AgentLoopService } from '../../../apps/lcp-agent/src/agent/agent-loop.service';
-import { AuditClientService } from '@lcp/shared';
+import { AuditClientService } from '@tcp/shared';
 import * as factory from '../../../apps/lcp-agent/src/llm/llm-factory';
 import { McpClientService } from '../../../apps/lcp-agent/src/mcp/mcp-client.service';
 import { AgentRagService } from '../../../apps/lcp-agent/src/rag/agent-rag.service';

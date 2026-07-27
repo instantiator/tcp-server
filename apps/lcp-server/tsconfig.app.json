@@ -4,8 +4,8 @@
     "declaration": false,
     "outDir": "../../dist/apps/lcp-server",
     "paths": {
-      "@lcp/shared": ["../../libs/lcp-shared/src/index.ts"],
-      "@lcp/shared/*": ["../../libs/lcp-shared/src/*"]
+      "@tcp/shared": ["../../libs/lcp-shared/src/index.ts"],
+      "@tcp/shared/*": ["../../libs/lcp-shared/src/*"]
     }
   },
   "include": ["src/**/*"],

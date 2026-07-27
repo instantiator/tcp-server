@@ -1,5 +1,5 @@
 {
-  "name": "lcp-server",
+  "name": "tcp-server",
   "version": "0.0.1",
   "description": "",
   "author": "",
@@ -8,8 +8,8 @@
   "scripts": {
     "build": "npm run build:apps && npm run schema:generate && npm run licenses:generate",
     "build:apps": "nest build lcp-server && nest build lcp-agent && nest build lcp-mcp-storage && nest build lcp-mcp-memory && nest build lcp-mcp-interactions && nest build lcp-mcp-tasks && nest build lcp-cli",
-    "build:lcp-cli": "nest build lcp-cli",
-    "start:lcp-cli": "node dist/apps/lcp-cli/main",
+    "build:tcp-cli": "nest build lcp-cli",
+    "start:tcp-cli": "node dist/apps/lcp-cli/main",
     "format": "prettier --write --list-different \"apps/**/*.ts\" \"libs/**/*.ts\" \"test/**/*.ts\" \"docs/**/*.md\" \"*.md\" \"apps/**/*.jsonc\"",
     "start": "nest start lcp-server",
     "start:dev": "nest start lcp-server --watch",
@@ -167,7 +167,7 @@
       "node_modules/(?!(pgvector|commander)/)"
     ],
     "moduleNameMapper": {
-      "@lcp/shared": "<rootDir>/libs/lcp-shared/src/index.ts"
+      "@tcp/shared": "<rootDir>/libs/lcp-shared/src/index.ts"
     },
     "setupFilesAfterEnv": [
       "<rootDir>/test/unit-test-setup.ts"

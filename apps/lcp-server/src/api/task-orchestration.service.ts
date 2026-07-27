@@ -24,7 +24,7 @@ import {
   selectNextAssignments,
   taskCompletedKey,
   taskCompletedPrefix,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';

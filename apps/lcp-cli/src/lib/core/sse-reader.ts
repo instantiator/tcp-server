@@ -1,4 +1,4 @@
-import { WireEvent } from '@lcp/shared';
+import { WireEvent } from '@tcp/shared';
 import { parseWireEvents } from './sse';
 
 // ponytail: the minimal fetch+reader+parseWireEvents loop shared by consumers

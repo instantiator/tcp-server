@@ -3,7 +3,7 @@ import {
   KnowledgeIndexState,
   TcpCompany,
   TcpRole,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { StorageModule } from '../storage/storage.module';

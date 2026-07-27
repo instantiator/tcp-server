@@ -9,7 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
-import { InternalApiKeyGuard, TcpAssignment, TcpTask } from '@lcp/shared';
+import { InternalApiKeyGuard, TcpAssignment, TcpTask } from '@tcp/shared';
 import type { UUID } from 'crypto';
 import { AssignmentService, StorageScope } from './assignment.service';
 import {

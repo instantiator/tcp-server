@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { DEFAULT_RAG_THRESHOLD, LlmConfig } from '@lcp/shared';
+import { DEFAULT_RAG_THRESHOLD, LlmConfig } from '@tcp/shared';
 import { EmbeddingService } from './embedding.service';
 import { RagRetrievalService } from './rag-retrieval.service';
 

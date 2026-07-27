@@ -1,7 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
-import { CompanyUser, TcpAgent, TcpRole } from '@lcp/shared';
+import { CompanyUser, TcpAgent, TcpRole } from '@tcp/shared';
 import { DbService } from '../db/db.service';
 import { InternalController } from './internal.controller';
 import { PauseAndResumeService } from './pause-and-resume.service';

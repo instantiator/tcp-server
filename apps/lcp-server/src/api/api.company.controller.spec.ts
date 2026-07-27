@@ -1,4 +1,4 @@
-import { AuditEventType, WireEvent } from '@lcp/shared';
+import { AuditEventType, WireEvent } from '@tcp/shared';
 import { NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { firstValueFrom, Subject, take, toArray } from 'rxjs';

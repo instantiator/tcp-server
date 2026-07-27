@@ -1,5 +1,5 @@
 import { randomUUID, UUID } from 'crypto';
-import { TcpCompany, TcpRole } from '@lcp/shared';
+import { TcpCompany, TcpRole } from '@tcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
 import { RagIndexService } from './rag-index.service';

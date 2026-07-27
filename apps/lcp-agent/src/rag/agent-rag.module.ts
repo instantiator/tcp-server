@@ -1,4 +1,4 @@
-import { EmbeddingService } from '@lcp/shared';
+import { EmbeddingService } from '@tcp/shared';
 import { Module } from '@nestjs/common';
 import { AgentRagService } from './agent-rag.service';
 

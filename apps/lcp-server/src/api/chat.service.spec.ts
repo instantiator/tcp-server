@@ -12,7 +12,7 @@ import {
   TcpRole,
   MODE_PROMPTS,
   WireEvent,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { AuditService } from '../audit/audit.service';
 import { AuditEventPublisher } from '../events/audit-event-publisher.service';
@@ -47,9 +47,9 @@ jest.mock('@langchain/langgraph-checkpoint-postgres', () => ({
   },
 }));
 
-jest.mock('@lcp/shared', () => {
+jest.mock('@tcp/shared', () => {
   const actual =
-    jest.requireActual<typeof import('@lcp/shared')>('@lcp/shared');
+    jest.requireActual<typeof import('@tcp/shared')>('@tcp/shared');
   return {
     ...actual,
     buildChatModel: jest.fn().mockReturnValue({

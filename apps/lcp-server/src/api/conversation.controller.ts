@@ -1,4 +1,4 @@
-import type { Conversation, ConversationMessage } from '@lcp/shared';
+import type { Conversation, ConversationMessage } from '@tcp/shared';
 import {
   Body,
   Controller,

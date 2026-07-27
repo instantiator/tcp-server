@@ -1,4 +1,4 @@
-import { BaseMcpController } from '@lcp/shared';
+import { BaseMcpController } from '@tcp/shared';
 import { Controller } from '@nestjs/common';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StorageToolsService } from './storage-tools.service';

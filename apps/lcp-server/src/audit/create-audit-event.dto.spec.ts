@@ -1,4 +1,4 @@
-import { AuditEventType } from '@lcp/shared';
+import { AuditEventType } from '@tcp/shared';
 import { ValidationPipe } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { CreateAuditEventDto } from './create-audit-event.dto';

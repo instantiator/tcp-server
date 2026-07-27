@@ -1,4 +1,4 @@
-import { TcpCompany } from '@lcp/shared';
+import { TcpCompany } from '@tcp/shared';
 
 /** `nextTaskShortcodeIndex` is server-managed and excluded — see `TcpCompany.nextTaskShortcodeIndex`. */
 export type TcpCompanyTemplate = Omit<

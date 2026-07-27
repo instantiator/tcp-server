@@ -30,7 +30,7 @@ import {
   resolveMcpServerUrls,
   resolveRunConfig,
   runSupervisedGraph,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';

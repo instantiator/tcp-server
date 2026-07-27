@@ -7,7 +7,7 @@ import {
   resolveEmbeddingConfig,
   resolveEnvEmbeddingConfig,
   resolveRunConfig,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';

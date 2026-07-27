@@ -10,7 +10,7 @@
   },
   "transformIgnorePatterns": ["node_modules/(?!(pgvector)/)"],
   "moduleNameMapper": {
-    "@lcp/shared": "<rootDir>/libs/lcp-shared/src/index.ts"
+    "@tcp/shared": "<rootDir>/libs/lcp-shared/src/index.ts"
   },
   "globalSetup": "<rootDir>/test/integration/global-setup.ts",
   "globalTeardown": "<rootDir>/test/integration/global-teardown.ts",

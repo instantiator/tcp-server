@@ -3,7 +3,7 @@ import {
   KnowledgeChunk,
   TcpCompany,
   TcpRole,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import { DataSource, Repository } from 'typeorm';
 import { RagIndexService } from '../../../apps/lcp-server/src/rag/rag-index.service';
 import { RagRetrievalService } from '../../../apps/lcp-server/src/rag/rag-retrieval.service';

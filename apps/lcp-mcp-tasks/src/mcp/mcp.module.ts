@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { AuditClientService } from '@lcp/shared';
+import { AuditClientService } from '@tcp/shared';
 import { McpController } from './mcp.controller';
 import { TasksToolsService } from './tasks-tools.service';
 

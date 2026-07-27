@@ -8,7 +8,7 @@ import {
   TcpCompany,
   TcpRole,
   requiredToolForMode,
-} from '@lcp/shared';
+} from '@tcp/shared';
 import {
   BadRequestException,
   Injectable,

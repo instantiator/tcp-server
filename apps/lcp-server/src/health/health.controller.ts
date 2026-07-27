@@ -1,4 +1,4 @@
-import { assertRedisReachable } from '@lcp/shared';
+import { assertRedisReachable } from '@tcp/shared';
 import { Controller, Get } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {

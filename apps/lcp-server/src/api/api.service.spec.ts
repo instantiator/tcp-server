@@ -1,4 +1,4 @@
-import { AuditEventType, TcpCompany } from '@lcp/shared';
+import { AuditEventType, TcpCompany } from '@tcp/shared';
 import { randomUUID } from 'crypto';
 import { AuditService } from '../audit/audit.service';
 import { DbService } from '../db/db.service';

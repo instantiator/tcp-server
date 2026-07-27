@@ -1,8 +1,8 @@
-import { EmbeddingService, TcpCompany } from '@lcp/shared';
+import { EmbeddingService, TcpCompany } from '@tcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { DataSource, Repository } from 'typeorm';
-import { AuditClientService } from '@lcp/shared';
+import { AuditClientService } from '@tcp/shared';
 import { memoryPrompts } from '../memory-prompts';
 import { MemoryToolsService } from './memory-tools.service';
 

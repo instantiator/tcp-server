@@ -54,7 +54,7 @@
 // Ctrl+W closes the active tab (any pane except the roster, which is
 // permanent); see handleKey and onCloseTab.
 
-import type { TaskChangeSummary, WireEvent } from '@lcp/shared';
+import type { TaskChangeSummary, WireEvent } from '@tcp/shared';
 import {
   Document,
   InlineInput,

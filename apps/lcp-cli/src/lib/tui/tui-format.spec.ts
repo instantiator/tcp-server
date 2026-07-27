@@ -1,4 +1,4 @@
-import type { TaskChangeSummary } from '@lcp/shared';
+import type { TaskChangeSummary } from '@tcp/shared';
 import {
   AssignmentRow,
   dateTimeSeconds,

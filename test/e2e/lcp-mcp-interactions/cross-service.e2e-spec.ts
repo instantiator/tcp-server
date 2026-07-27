@@ -1,4 +1,4 @@
-import { CompanyUser, TcpCompany, TcpRole } from '@lcp/shared';
+import { CompanyUser, TcpCompany, TcpRole } from '@tcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
