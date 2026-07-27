@@ -4,7 +4,7 @@ import {
   AuditEventType,
   Conversation,
   ConversationMessage,
-  LcpAgent,
+  TcpAgent,
   PendingConsultation,
 } from '@lcp/shared';
 import {
@@ -20,7 +20,7 @@ import { UUID } from 'crypto';
 import { In, MoreThanOrEqual, Repository } from 'typeorm';
 import { DbService } from '../db/db.service';
 import { AuditService } from '../audit/audit.service';
-import { LcpAgentTemplate } from '../templates/LcpAgentTemplate';
+import { TcpAgentTemplate } from '../templates/TcpAgentTemplate';
 
 /** Payload dispatched to the `agent-jobs` BullMQ queue. */
 interface AgentJob {
@@ -47,8 +47,8 @@ export class AgentOrchestrationService
   constructor(
     private readonly db: DbService,
     private readonly config: ConfigService,
-    @InjectRepository(LcpAgent)
-    private readonly agentRepo: Repository<LcpAgent>,
+    @InjectRepository(TcpAgent)
+    private readonly agentRepo: Repository<TcpAgent>,
     @InjectRepository(PendingConsultation)
     private readonly consultRepo: Repository<PendingConsultation>,
     @InjectRepository(Conversation)
@@ -97,23 +97,23 @@ export class AgentOrchestrationService
   }
 
   /**
-   * Creates a new {@link LcpAgent} record and dispatches a `start` job
+   * Creates a new {@link TcpAgent} record and dispatches a `start` job
    * to lcp-agent via the BullMQ queue.
    */
-  async startAgent(template: LcpAgentTemplate): Promise<LcpAgent> {
+  async startAgent(template: TcpAgentTemplate): Promise<TcpAgent> {
     const agent = await this.db.createAgent(template);
     await this.dispatchStartJob(agent.id);
     return agent;
   }
 
   /**
-   * Creates a new {@link LcpAgent} record WITHOUT dispatching a job yet.
+   * Creates a new {@link TcpAgent} record WITHOUT dispatching a job yet.
    * Use together with {@link dispatchStartJob} when other records (e.g. a
    * {@link PendingConsultation}) must be committed before the worker can
    * pick up the job — otherwise the worker may complete and call back
    * before those records exist.
    */
-  async createAgent(template: LcpAgentTemplate): Promise<LcpAgent> {
+  async createAgent(template: TcpAgentTemplate): Promise<TcpAgent> {
     return this.db.createAgent(template);
   }
 
@@ -135,7 +135,7 @@ export class AgentOrchestrationService
    *   received since the agent paused instead.
    * @throws if the agent does not exist or is not in a resumable state
    */
-  async resumeAgent(agentId: UUID, replyContent?: string): Promise<LcpAgent> {
+  async resumeAgent(agentId: UUID, replyContent?: string): Promise<TcpAgent> {
     const agent = await this.db.getAgent(agentId);
     if (!agent) {
       throw new Error(`Agent ${agentId} not found`);
@@ -175,7 +175,7 @@ export class AgentOrchestrationService
       // the same aggregated reply — injecting it into the agent twice.
       const claim = await this.agentRepo
         .createQueryBuilder()
-        .update(LcpAgent)
+        .update(TcpAgent)
         .set({ pausedAt: () => 'NULL' })
         .where('id = :agentId', { agentId })
         .andWhere('pausedAt = :pausedAt', { pausedAt: agent.pausedAt })

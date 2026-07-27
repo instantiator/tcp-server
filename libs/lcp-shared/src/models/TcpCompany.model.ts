@@ -1,7 +1,7 @@
 import type { UUID } from 'crypto';
 import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import type { AgentRunConfig } from './AgentRunConfig.model';
-import { LcpRole } from './LcpRole.model';
+import { TcpRole } from './TcpRole.model';
 import type { LlmConfig } from './LlmConfig.model';
 import type { WithLlmConfig } from './WithLlmConfig';
 
@@ -10,7 +10,7 @@ import type { WithLlmConfig } from './WithLlmConfig';
  * Each company has its own isolated set of agents, memory, and resources.
  */
 @Entity()
-export class LcpCompany implements WithLlmConfig {
+export class TcpCompany implements WithLlmConfig {
   /**
    * Auto-generated primary key for this company.
    * @format uuid
@@ -42,7 +42,7 @@ export class LcpCompany implements WithLlmConfig {
 
   /**
    * Optional company-wide default LLM configuration. Roles that do not specify
-   * their own {@link LcpRole.llmConfig} fall back to this value at run time,
+   * their own {@link TcpRole.llmConfig} fall back to this value at run time,
    * then to the environment-configured LLM fallback (`LLM_PROVIDER` / `LLM_MODEL`),
    * before failing. Resolved via {@link LlmConfigResolver}.
    */
@@ -51,7 +51,7 @@ export class LcpCompany implements WithLlmConfig {
 
   /**
    * Optional company-wide default `systemPromptTemplate`. Used when a role
-   * does not specify its own {@link LcpRole.systemPromptTemplate}; falls back
+   * does not specify its own {@link TcpRole.systemPromptTemplate}; falls back
    * to `DEFAULT_SYSTEM_PROMPT_TEMPLATE` when neither is set. Resolved via
    * {@link SystemPromptTemplateResolver}.
    */
@@ -101,19 +101,19 @@ export class LcpCompany implements WithLlmConfig {
 
   /**
    * Optional company-wide agent-loop resource overrides.
-   * Applied when the running role has no {@link LcpRole.runConfig} set.
+   * Applied when the running role has no {@link TcpRole.runConfig} set.
    * See {@link AgentRunConfig} for available fields.
    */
   @Column({ type: 'jsonb', nullable: true })
   runConfig?: AgentRunConfig | null;
 
   /**
-   * Company-default planner role, used by {@link LcpTask.plannerRole} when a
+   * Company-default planner role, used by {@link TcpTask.plannerRole} when a
    * task does not specify its own. Must belong to this company — enforced at
    * write time by `DbService`/`ApiService`, not by the FK alone.
    */
-  @ManyToOne(() => LcpRole, { nullable: true, onDelete: 'SET NULL' })
-  plannerRole?: LcpRole | null;
+  @ManyToOne(() => TcpRole, { nullable: true, onDelete: 'SET NULL' })
+  plannerRole?: TcpRole | null;
 
   /**
    * Foreign key for {@link plannerRole}.
@@ -124,7 +124,7 @@ export class LcpCompany implements WithLlmConfig {
 
   /**
    * Monotonically incrementing counter used to generate each new
-   * {@link LcpTask.shortcode} (`nextTaskShortcodeIndex` at generation time,
+   * {@link TcpTask.shortcode} (`nextTaskShortcodeIndex` at generation time,
    * then incremented). Incremented atomically (raw SQL `UPDATE … RETURNING`
    * on PostgreSQL) — see `TaskService.create`.
    */

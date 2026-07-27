@@ -1,5 +1,5 @@
 import { randomUUID, UUID } from 'crypto';
-import { LcpCompany, LcpRole } from '@lcp/shared';
+import { TcpCompany, TcpRole } from '@lcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
 import { RagIndexService } from './rag-index.service';
@@ -14,7 +14,7 @@ const ROLE_ID = randomUUID();
 
 const EMBEDDING_CONFIG = { provider: 'lm-studio' as const, model: 'embed' };
 
-function makeCompany(overrides: Partial<LcpCompany> = {}): LcpCompany {
+function makeCompany(overrides: Partial<TcpCompany> = {}): TcpCompany {
   return {
     id: COMPANY_ID,
     slug: 'acme',
@@ -170,8 +170,8 @@ describe('KnowledgeReindexService.bumpCompany', () => {
   it('bumps the shared scope and every role', async () => {
     const t = makeService();
     t.roleRepo.findBy.mockResolvedValue([
-      { id: ROLE_ID } as LcpRole,
-      { id: randomUUID() } as LcpRole,
+      { id: ROLE_ID } as TcpRole,
+      { id: randomUUID() } as TcpRole,
     ]);
     await t.service.bumpCompany(makeCompany());
     // shared + 2 roles

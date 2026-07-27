@@ -1,5 +1,5 @@
-import type { LcpAssignment } from './LcpAssignment.model';
-import type { LcpTaskStatus } from './LcpTask.model';
+import type { TcpAssignment } from './TcpAssignment.model';
+import type { TcpTaskStatus } from './TcpTask.model';
 
 /**
  * Derives a task's status from its current value and its implement-mode
@@ -18,9 +18,9 @@ import type { LcpTaskStatus } from './LcpTask.model';
  * 6. Otherwise → `ready`.
  */
 export function deriveTaskStatus(
-  current: LcpTaskStatus,
-  planAssignments: Pick<LcpAssignment, 'status'>[],
-): LcpTaskStatus {
+  current: TcpTaskStatus,
+  planAssignments: Pick<TcpAssignment, 'status'>[],
+): TcpTaskStatus {
   if (
     current === 'succeeded' ||
     current === 'failed' ||
@@ -70,7 +70,7 @@ export function deriveTaskStatus(
  * iterate the returned set, so they need no change.
  */
 export function selectNextAssignments<
-  T extends Pick<LcpAssignment, 'status' | 'orderIndex'>,
+  T extends Pick<TcpAssignment, 'status' | 'orderIndex'>,
 >(planAssignments: T[]): T[] {
   const running = planAssignments.some(
     (a) => a.status === 'in-progress' || a.status === 'in-qa',

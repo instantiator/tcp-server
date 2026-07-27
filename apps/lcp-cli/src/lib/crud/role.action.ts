@@ -1,4 +1,4 @@
-import type { LcpRole } from '@lcp/shared';
+import type { TcpRole } from '@lcp/shared';
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest, ApiOptions } from '../core/api';
 import { confirmAction } from '../core/confirm';
@@ -48,7 +48,7 @@ export function listRolesAction(
   cmdOpts: { companyId?: string; companySlug?: string; company?: string },
 ): Promise<void> {
   return runCommand(async () => {
-    const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+    const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
 
     // `/api/company/:id` and `/api/company/:id/roles` both accept a UUID or
@@ -114,7 +114,7 @@ export function setRoleAction(
     const data = await readJsonBody(cmdOpts);
     const bodyId = typeof data['id'] === 'string' ? data['id'] : undefined;
 
-    const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+    const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
 
     const companyGiven = Boolean(
@@ -138,9 +138,9 @@ export function setRoleAction(
       (cmdOpts.role && UUID_RE.test(cmdOpts.role) ? cmdOpts.role : undefined) ??
       bodyId;
 
-    let result: LcpRole;
+    let result: TcpRole;
     if (roleId) {
-      result = await apiRequest<LcpRole>(
+      result = await apiRequest<TcpRole>(
         api,
         'PUT',
         `/api/role/${roleId}`,
@@ -153,7 +153,7 @@ export function setRoleAction(
         );
         process.exit(1);
       }
-      result = await apiRequest<LcpRole>(
+      result = await apiRequest<TcpRole>(
         api,
         'PUT',
         `/api/company/${companyId}/roles/by-slug/${roleSlugGiven}`,
@@ -166,7 +166,7 @@ export function setRoleAction(
         );
         process.exit(1);
       }
-      result = await apiRequest<LcpRole>(api, 'POST', '/api/role', data);
+      result = await apiRequest<TcpRole>(api, 'POST', '/api/role', data);
     }
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
   });
@@ -185,12 +185,12 @@ export function deleteRoleAction(
   cmdOpts: EntityRefOpts & { force?: boolean },
 ): Promise<void> {
   return runCommand(async () => {
-    const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+    const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
 
     const roleId = await resolveRoleId(api, cmdOpts);
     // GET /api/role/:id throws a 404 (surfaced by runCommand) if it doesn't exist.
-    const role = await apiRequest<LcpRole>(api, 'GET', `/api/role/${roleId}`);
+    const role = await apiRequest<TcpRole>(api, 'GET', `/api/role/${roleId}`);
 
     if (!cmdOpts.force) {
       const confirmed = await confirmAction(

@@ -146,7 +146,7 @@ describe('KnowledgeController', () => {
       expect(knowledge.store).not.toHaveBeenCalled();
     });
 
-    it('sets X-Lcp-Warnings from KnowledgeService.embeddingWarnings after a successful store', async () => {
+    it('sets X-Tcp-Warnings from KnowledgeService.embeddingWarnings after a successful store', async () => {
       knowledge.embeddingWarnings.mockResolvedValue(['No embedding config.']);
       const res = fakeRes();
 
@@ -166,7 +166,7 @@ describe('KnowledgeController', () => {
         roleId,
       });
       expect(res.setHeader).toHaveBeenCalledWith(
-        'X-Lcp-Warnings',
+        'X-Tcp-Warnings',
         JSON.stringify([encodeURIComponent('No embedding config.')]),
       );
     });
@@ -261,7 +261,7 @@ describe('KnowledgeController', () => {
       expect(result).toEqual([]);
     });
 
-    it('sets X-Lcp-Warnings from KnowledgeService.embeddingWarnings', async () => {
+    it('sets X-Tcp-Warnings from KnowledgeService.embeddingWarnings', async () => {
       knowledge.embeddingWarnings.mockResolvedValue(['No embedding config.']);
       const res = fakeRes();
 
@@ -276,7 +276,7 @@ describe('KnowledgeController', () => {
         roleId,
       });
       expect(res.setHeader).toHaveBeenCalledWith(
-        'X-Lcp-Warnings',
+        'X-Tcp-Warnings',
         JSON.stringify([encodeURIComponent('No embedding config.')]),
       );
     });

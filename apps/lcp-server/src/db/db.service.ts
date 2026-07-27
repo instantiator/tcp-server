@@ -3,10 +3,10 @@ import {
   AuditEvent,
   AuditEventType,
   CompanyUser,
-  LcpAgent,
-  LcpAssignment,
-  LcpCompany,
-  LcpRole,
+  TcpAgent,
+  TcpAssignment,
+  TcpCompany,
+  TcpRole,
   requiredToolForMode,
 } from '@lcp/shared';
 import {
@@ -24,8 +24,8 @@ import {
   Repository,
 } from 'typeorm';
 import { SHARED_KNOWLEDGE_ROLE_SLUG } from '../storage/storage-keys';
-import { LcpAgentTemplate } from '../templates/LcpAgentTemplate';
-import { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
+import { TcpAgentTemplate } from '../templates/TcpAgentTemplate';
+import { TcpCompanyTemplate } from '../templates/TcpCompanyTemplate';
 import { isUUID } from '../utils/ObjectUtils';
 
 /**
@@ -35,12 +35,12 @@ import { isUUID } from '../utils/ObjectUtils';
 @Injectable()
 export class DbService {
   constructor(
-    @InjectRepository(LcpCompany)
-    private readonly companyRepo: Repository<LcpCompany>,
-    @InjectRepository(LcpRole)
-    private readonly roleRepo: Repository<LcpRole>,
-    @InjectRepository(LcpAgent)
-    private readonly agentRepo: Repository<LcpAgent>,
+    @InjectRepository(TcpCompany)
+    private readonly companyRepo: Repository<TcpCompany>,
+    @InjectRepository(TcpRole)
+    private readonly roleRepo: Repository<TcpRole>,
+    @InjectRepository(TcpAgent)
+    private readonly agentRepo: Repository<TcpAgent>,
     @InjectRepository(AuditEvent)
     private readonly auditRepo: Repository<AuditEvent>,
     @InjectRepository(CompanyUser)
@@ -52,17 +52,17 @@ export class DbService {
   // Company
 
   /**
-   * Creates a new {@link LcpCompany} from template, replacing any existing
+   * Creates a new {@link TcpCompany} from template, replacing any existing
    * record with the same slug, and adds `creatorIdentifier` as a
    * {@link CompanyUser} with `memberType: 'creator'` (skipped if one already
    * exists for this company+identifier).
    */
   async createCompany(
-    template: LcpCompanyTemplate,
+    template: TcpCompanyTemplate,
     slug: string,
     creatorIdentifier: string,
     creatorName?: string | null,
-  ): Promise<LcpCompany> {
+  ): Promise<TcpCompany> {
     await this.companyRepo.delete({ slug });
     const company = await this.companyRepo.save({
       ...template,
@@ -105,7 +105,7 @@ export class DbService {
   }
 
   /**
-   * Either creates or updates an {@link LcpCompany}.
+   * Either creates or updates an {@link TcpCompany}.
    * Accepts a deep-partial shape so callers can patch nested JSONB fields without
    * providing a complete object.
    *
@@ -121,9 +121,9 @@ export class DbService {
    * @param identifiers optional `id`/`slug` used to resolve an existing record to update
    */
   async setCompany(
-    company: DeepPartial<LcpCompany>,
+    company: DeepPartial<TcpCompany>,
     identifiers: { id?: UUID; slug?: string } = {},
-  ): Promise<LcpCompany> {
+  ): Promise<TcpCompany> {
     // An identifier being *given* (even one that resolves to nothing) always
     // means "update" — only the total absence of id/slug means "create".
     // Without this distinction, a slug that doesn't exist would silently
@@ -188,13 +188,13 @@ export class DbService {
     }
   }
 
-  /** Returns all {@link LcpCompany} records. */
-  async listCompanies(): Promise<LcpCompany[]> {
+  /** Returns all {@link TcpCompany} records. */
+  async listCompanies(): Promise<TcpCompany[]> {
     return this.companyRepo.find();
   }
 
   /** Retrieves a company by its UUID or slug. Returns `null` if not found. */
-  async getCompany(identifier: string): Promise<LcpCompany | null> {
+  async getCompany(identifier: string): Promise<TcpCompany | null> {
     return isUUID(identifier)
       ? this.companyRepo.findOneBy({ id: identifier })
       : this.companyRepo.findOneBy({ slug: identifier });
@@ -214,7 +214,7 @@ export class DbService {
   // Role
 
   /**
-   * Either creates or updates an {@link LcpRole}.
+   * Either creates or updates an {@link TcpRole}.
    * Accepts a deep-partial shape so callers can patch nested JSONB fields
    * without providing a complete object.
    *
@@ -230,9 +230,9 @@ export class DbService {
    * @param identifiers optional `id`/`slug` used to resolve an existing record to update
    */
   async setRole(
-    role: DeepPartial<LcpRole>,
+    role: DeepPartial<TcpRole>,
     identifiers: { id?: UUID; slug?: string } = {},
-  ): Promise<LcpRole> {
+  ): Promise<TcpRole> {
     // "shared" is reserved for the company-wide knowledge folder
     // (`knowledge/shared/`) — no role may claim it as its own slug.
     if (role.slug === SHARED_KNOWLEDGE_ROLE_SLUG) {
@@ -293,7 +293,7 @@ export class DbService {
   }
 
   /** Retrieves a role by its UUID. Returns `null` if not found. */
-  async getRole(id: UUID): Promise<LcpRole | null> {
+  async getRole(id: UUID): Promise<TcpRole | null> {
     return this.roleRepo.findOneBy({ id });
   }
 
@@ -305,14 +305,14 @@ export class DbService {
   async findRoleByIdOrSlug(
     companyId: UUID,
     identifier: string,
-  ): Promise<LcpRole | null> {
+  ): Promise<TcpRole | null> {
     return isUUID(identifier)
       ? this.roleRepo.findOneBy({ id: identifier, companyId })
       : this.roleRepo.findOneBy({ slug: identifier, companyId });
   }
 
   /** Returns all roles for a given company. */
-  async listRoles(companyId: UUID): Promise<LcpRole[]> {
+  async listRoles(companyId: UUID): Promise<TcpRole[]> {
     return this.roleRepo.findBy({ companyId });
   }
 
@@ -330,7 +330,7 @@ export class DbService {
   // Agent
 
   /**
-   * Creates a new {@link LcpAgent} in the `idle` state, always with an
+   * Creates a new {@link TcpAgent} in the `idle` state, always with an
    * assignment. When `template.assignmentId` is given the agent attaches to
    * that existing assignment; otherwise an orphan assignment is created first
    * — in `template.mode ?? 'implement'` mode, carrying the agent's
@@ -346,11 +346,11 @@ export class DbService {
    * Wrapped in a transaction so an agent never persists without its
    * assignment (nor an orphan assignment without its back-linked agent).
    */
-  async createAgent(template: LcpAgentTemplate): Promise<LcpAgent> {
+  async createAgent(template: TcpAgentTemplate): Promise<TcpAgent> {
     const mode = template.mode ?? 'implement';
     return this.dataSource.transaction(async (em) => {
-      const assignmentRepo = em.getRepository(LcpAssignment);
-      const agentRepo = em.getRepository(LcpAgent);
+      const assignmentRepo = em.getRepository(TcpAssignment);
+      const agentRepo = em.getRepository(TcpAgent);
 
       // Orphan assignment first (agentId back-filled after the agent exists).
       const isOrphan = template.assignmentId === undefined;
@@ -399,7 +399,7 @@ export class DbService {
   }
 
   /** Retrieves an agent by its UUID. Returns `null` if not found. */
-  async getAgent(id: UUID): Promise<LcpAgent | null> {
+  async getAgent(id: UUID): Promise<TcpAgent | null> {
     return this.agentRepo.findOneBy({ id });
   }
 
@@ -415,8 +415,8 @@ export class DbService {
     roleId?: UUID;
     assignmentId?: UUID;
     status?: AgentStatus;
-  }): Promise<LcpAgent[]> {
-    const where: FindOptionsWhere<LcpAgent> = {
+  }): Promise<TcpAgent[]> {
+    const where: FindOptionsWhere<TcpAgent> = {
       ...(filter.companyId ? { companyId: filter.companyId } : {}),
       ...(filter.roleId ? { roleId: filter.roleId } : {}),
       ...(filter.assignmentId ? { assignmentId: filter.assignmentId } : {}),
@@ -428,7 +428,7 @@ export class DbService {
   }
 
   /**
-   * Physically deletes an {@link LcpAgent} and its associated {@link AuditEvent} rows.
+   * Physically deletes an {@link TcpAgent} and its associated {@link AuditEvent} rows.
    * Returns `true` if a record was deleted, `false` if no agent with that id exists.
    */
   async deleteAgent(id: UUID): Promise<boolean> {
@@ -437,7 +437,7 @@ export class DbService {
   }
 
   /**
-   * Updates the status of an {@link LcpAgent}, and optionally sets its
+   * Updates the status of an {@link TcpAgent}, and optionally sets its
    * LangGraph `threadId` on first dispatch.
    */
   async updateAgentStatus(

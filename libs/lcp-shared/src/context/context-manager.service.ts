@@ -4,8 +4,8 @@ import type { DynamicStructuredTool } from '@langchain/core/tools';
 import type { RunnableConfig } from '@langchain/core/runnables';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { AuditEventType } from '../models/AuditEvent.model';
-import type { LcpAgent } from '../models/LcpAgent.model';
-import type { LcpRole } from '../models/LcpRole.model';
+import type { TcpAgent } from '../models/TcpAgent.model';
+import type { TcpRole } from '../models/TcpRole.model';
 import { ContextBudgetService } from './context-budget.service';
 import { ContextCompactorService } from './context-compactor.service';
 import { IncomingDataGuardService } from './incoming-data-guard.service';
@@ -115,8 +115,8 @@ export class ContextManagerService {
     graph: CheckpointableGraph,
     config: RunnableConfig,
     isFirstMessage: boolean,
-    agent: LcpAgent,
-    role: LcpRole,
+    agent: TcpAgent,
+    role: TcpRole,
     tools: DynamicStructuredTool[] = [],
   ): Promise<PrepareResult> {
     const startMs = Date.now();
@@ -317,8 +317,8 @@ export class ContextManagerService {
     windowSize: number,
     graph: CheckpointableGraph,
     config: RunnableConfig,
-    agent: LcpAgent,
-    role: LcpRole,
+    agent: TcpAgent,
+    role: TcpRole,
     tools: DynamicStructuredTool[] = [],
   ): Promise<{ report: CompactionReport | null; stillOverBudget: boolean }> {
     const { report } = await this.prepare(

@@ -3,7 +3,7 @@ import { ApiOptions } from './api';
 
 /** Global options registered on the root program, available to every command. */
 export interface GlobalOptions {
-  lcpServer: string;
+  tcpServer: string;
   accessToken?: string;
   refreshToken?: string;
   accessTokenEnvVar?: string;
@@ -20,5 +20,5 @@ export function apiOptions(
   token: string,
   signal?: AbortSignal,
 ): ApiOptions {
-  return { baseUrl: global.lcpServer, token, signal };
+  return { baseUrl: global.tcpServer, token, signal };
 }

@@ -30,7 +30,7 @@ function stateChange(
   };
 }
 
-const opts = { lcpServer: 'http://localhost:3000' };
+const opts = { tcpServer: 'http://localhost:3000' };
 
 /** A minimal Tui stand-in exposing only the methods ChatSession calls. */
 function fakeTui() {

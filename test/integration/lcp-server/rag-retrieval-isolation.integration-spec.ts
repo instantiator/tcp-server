@@ -1,8 +1,8 @@
 import {
   EmbeddingService,
   KnowledgeChunk,
-  LcpCompany,
-  LcpRole,
+  TcpCompany,
+  TcpRole,
 } from '@lcp/shared';
 import { DataSource, Repository } from 'typeorm';
 import { RagIndexService } from '../../../apps/lcp-server/src/rag/rag-index.service';
@@ -26,16 +26,16 @@ const STUB_LLM_URL = requireEnv('STUB_LLM_URL');
  */
 describe('RagRetrievalService scoped-retrieval isolation (integration)', () => {
   let ds: DataSource;
-  let companyRepo: Repository<LcpCompany>;
-  let roleRepo: Repository<LcpRole>;
+  let companyRepo: Repository<TcpCompany>;
+  let roleRepo: Repository<TcpRole>;
   let chunkRepo: Repository<KnowledgeChunk>;
   let index: RagIndexService;
   let retrieval: RagRetrievalService;
 
-  let companyA: LcpCompany;
-  let roleA: LcpRole;
-  let companyB: LcpCompany;
-  let roleB: LcpRole;
+  let companyA: TcpCompany;
+  let roleA: TcpRole;
+  let companyB: TcpCompany;
+  let roleB: TcpRole;
 
   const embeddingConfig = {
     provider: 'openai' as const,
@@ -48,7 +48,7 @@ describe('RagRetrievalService scoped-retrieval isolation (integration)', () => {
     ds = new DataSource({
       type: 'postgres',
       url: DATABASE_URL,
-      entities: [LcpCompany, LcpRole, KnowledgeChunk],
+      entities: [TcpCompany, TcpRole, KnowledgeChunk],
       synchronize: true,
     });
     await ds.initialize();
@@ -57,8 +57,8 @@ describe('RagRetrievalService scoped-retrieval isolation (integration)', () => {
       `ALTER TABLE "knowledge_chunk" ADD COLUMN IF NOT EXISTS embedding vector(768)`,
     );
 
-    companyRepo = ds.getRepository(LcpCompany);
-    roleRepo = ds.getRepository(LcpRole);
+    companyRepo = ds.getRepository(TcpCompany);
+    roleRepo = ds.getRepository(TcpRole);
     chunkRepo = ds.getRepository(KnowledgeChunk);
 
     const embedding = new EmbeddingService();

@@ -1,7 +1,7 @@
 import {
   AgentStatus,
   AuditEventType,
-  LcpAgent,
+  TcpAgent,
   StreamDelta,
   WireEvent,
 } from '@lcp/shared';
@@ -14,7 +14,7 @@ import { AgentOrchestrationService } from './agent-orchestration.service';
 import { AgentController } from './api.agent.controller';
 import { ChatService } from './chat.service';
 
-function makeAgent(overrides: Partial<LcpAgent> = {}): LcpAgent {
+function makeAgent(overrides: Partial<TcpAgent> = {}): TcpAgent {
   return {
     id: randomUUID(),
     companyId: randomUUID(),

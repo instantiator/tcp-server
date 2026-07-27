@@ -43,7 +43,7 @@ export class McpClientService {
 
   /**
    * Loads tools from all named servers. The `serverUrls` map associates each
-   * server name (as stored in {@link LcpRole.mcpServerList}) with its HTTP URL.
+   * server name (as stored in {@link TcpRole.mcpServerList}) with its HTTP URL.
    *
    * Servers that fail to connect are logged and skipped — the agent will still
    * run with whichever servers did respond.

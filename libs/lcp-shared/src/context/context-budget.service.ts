@@ -12,7 +12,7 @@ import { DEFAULT_LLM_CONTEXT_WINDOW } from '../config/defaults';
  * Token counts use the `cl100k_base` tiktoken encoding (GPT-4 / Claude compatible),
  * which is a close enough approximation for all currently supported providers.
  *
- * ponytail: move TRIGGER_PCT/TARGET_PCT to LcpRole.runConfig JSONB when per-role
+ * ponytail: move TRIGGER_PCT/TARGET_PCT to TcpRole.runConfig JSONB when per-role
  * tuning is needed.
  */
 @Injectable()

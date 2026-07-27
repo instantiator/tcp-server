@@ -2,7 +2,7 @@ import {
   AgentStatus,
   AuditEvent,
   AuditEventType,
-  LcpAgent,
+  TcpAgent,
   WireEvent,
 } from '@lcp/shared';
 import {
@@ -34,7 +34,7 @@ import { AgentOrchestrationService } from './agent-orchestration.service';
 import { ChatService } from './chat.service';
 import { SendMessageDto, StartAgentDto, StartChatDto } from './dto/agent.dto';
 
-/** REST controller for starting, resuming, chatting with, and inspecting {@link LcpAgent} instances. */
+/** REST controller for starting, resuming, chatting with, and inspecting {@link TcpAgent} instances. */
 @ApiTags('agents')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -54,7 +54,7 @@ export class AgentController {
    */
   @ApiOperation({ summary: 'Start a new agent' })
   @Post('start')
-  async startAgent(@Body() body: StartAgentDto): Promise<LcpAgent> {
+  async startAgent(@Body() body: StartAgentDto): Promise<TcpAgent> {
     return this.orchestration.startAgent(body);
   }
 
@@ -65,7 +65,7 @@ export class AgentController {
    */
   @ApiOperation({ summary: 'Start a chat-mode agent' })
   @Post('chat/start')
-  async startChat(@Body() body: StartChatDto): Promise<LcpAgent> {
+  async startChat(@Body() body: StartChatDto): Promise<TcpAgent> {
     const agent = await this.db.createAgent({
       companyId: body.companyId,
       roleId: body.roleId,
@@ -175,7 +175,7 @@ export class AgentController {
    */
   @ApiOperation({ summary: 'Resume a paused or idle agent' })
   @Post('resume/:id')
-  async resumeAgent(@Param('id') id: UUID): Promise<LcpAgent> {
+  async resumeAgent(@Param('id') id: UUID): Promise<TcpAgent> {
     try {
       return await this.orchestration.resumeAgent(id);
     } catch (err) {
@@ -197,7 +197,7 @@ export class AgentController {
     @Query('roleId') roleId?: UUID,
     @Query('assignmentId') assignmentId?: UUID,
     @Query('status') status?: AgentStatus,
-  ): Promise<LcpAgent[]> {
+  ): Promise<TcpAgent[]> {
     if (!companyId && !roleId && !assignmentId) {
       throw new BadRequestException(
         'Provide at least one of companyId, roleId, or assignmentId',
@@ -209,7 +209,7 @@ export class AgentController {
   /** Retrieves the current state of an agent by its UUID. */
   @ApiOperation({ summary: 'Get an agent by ID' })
   @Get(':id')
-  async getAgent(@Param('id') id: UUID): Promise<LcpAgent> {
+  async getAgent(@Param('id') id: UUID): Promise<TcpAgent> {
     const agent = await this.db.getAgent(id);
     if (!agent) throw new NotFoundException(`Agent ${id} not found`);
     return agent;

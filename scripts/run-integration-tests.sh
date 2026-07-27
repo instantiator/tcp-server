@@ -60,6 +60,6 @@ for arg in "$@"; do
   esac
 done
 
-check_no_lcp_containers_running || exit 1
+check_no_tcp_containers_running || exit 1
 
 npm run test:integration -- ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}

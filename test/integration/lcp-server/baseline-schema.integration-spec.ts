@@ -83,28 +83,28 @@ describe('Baseline schema (migration verification)', () => {
       'episodic_memory',
       'knowledge_chunk',
       'knowledge_index_state',
-      'lcp_agent',
-      'lcp_assignment',
-      'lcp_company',
-      'lcp_role',
-      'lcp_task',
       'pending_consultation',
+      'tcp_agent',
+      'tcp_assignment',
+      'tcp_company',
+      'tcp_role',
+      'tcp_task',
     ]);
   });
 
-  it('lcp_agent has an output column of type text', async () => {
-    expect((await columns('lcp_agent')).get('output')?.dataType).toBe('text');
+  it('tcp_agent has an output column of type text', async () => {
+    expect((await columns('tcp_agent')).get('output')?.dataType).toBe('text');
   });
 
-  it('lcp_agent has a nullable requiredToolCalls column of type text', async () => {
-    expect((await columns('lcp_agent')).get('requiredToolCalls')).toEqual({
+  it('tcp_agent has a nullable requiredToolCalls column of type text', async () => {
+    expect((await columns('tcp_agent')).get('requiredToolCalls')).toEqual({
       dataType: 'text',
       isNullable: 'YES',
     });
   });
 
-  it('lcp_agent has a nullable pausedAt column', async () => {
-    expect((await columns('lcp_agent')).get('pausedAt')?.isNullable).toBe(
+  it('tcp_agent has a nullable pausedAt column', async () => {
+    expect((await columns('tcp_agent')).get('pausedAt')?.isNullable).toBe(
       'YES',
     );
   });

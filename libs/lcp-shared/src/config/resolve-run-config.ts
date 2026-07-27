@@ -1,6 +1,6 @@
 import type { AgentRunConfig } from '../models/AgentRunConfig.model';
-import type { LcpCompany } from '../models/LcpCompany.model';
-import type { LcpRole } from '../models/LcpRole.model';
+import type { TcpCompany } from '../models/TcpCompany.model';
+import type { TcpRole } from '../models/TcpRole.model';
 
 /**
  * Resolves a numeric {@link AgentRunConfig} value using the standard precedence
@@ -17,8 +17,8 @@ import type { LcpRole } from '../models/LcpRole.model';
  */
 export function resolveRunConfig(
   key: keyof AgentRunConfig,
-  role: LcpRole | null,
-  company: LcpCompany | null,
+  role: TcpRole | null,
+  company: TcpCompany | null,
   envValue: number | undefined,
   defaultValue: number,
 ): number {

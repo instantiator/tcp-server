@@ -9,23 +9,23 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import type {
-  LcpAssignmentCompletedArtifact,
-  LcpAssignmentWorkingArtifact,
-  LcpMaterialArtifact,
-} from './LcpArtifact';
+  TcpAssignmentCompletedArtifact,
+  TcpAssignmentWorkingArtifact,
+  TcpMaterialArtifact,
+} from './TcpArtifact';
 import {
   sanitiseArtifactsColumn,
   sanitiseTextColumn,
 } from '../validation/sanitize';
-import { LcpAgent } from './LcpAgent.model';
-import { LcpCompany } from './LcpCompany.model';
-import { LcpRole } from './LcpRole.model';
-import { LcpTask } from './LcpTask.model';
+import { TcpAgent } from './TcpAgent.model';
+import { TcpCompany } from './TcpCompany.model';
+import { TcpRole } from './TcpRole.model';
+import { TcpTask } from './TcpTask.model';
 import { VersionedEntity } from './VersionedEntity';
 
 /**
  * The kind of work an assignment represents. The agent's mode IS its
- * assignment's mode — there is no separate mode column on {@link LcpAgent}.
+ * assignment's mode — there is no separate mode column on {@link TcpAgent}.
  *
  * - `plan` — design a task's plan (`create_plan`).
  * - `implement` — carry out one plan step (`complete_assignment`).
@@ -35,19 +35,19 @@ import { VersionedEntity } from './VersionedEntity';
  * - `finalise` — make a task's deliverables meet its expected outputs
  *   (`complete_assignment`), the task-level check after all steps + QA.
  */
-export type LcpAssignmentMode =
+export type TcpAssignmentMode =
   'plan' | 'implement' | 'qa' | 'chat' | 'consultee' | 'finalise';
 
 /**
- * Lifecycle states for a {@link LcpAssignment}. A QA rejection returns the
+ * Lifecycle states for a {@link TcpAssignment}. A QA rejection returns the
  * assignment from `in-qa` to `in-progress` (`qaStatus`/`qaFeedback` are
  * cleared on that re-entry; `qaAttempts` is never reset).
  */
-export type LcpAssignmentStatus =
+export type TcpAssignmentStatus =
   'ready' | 'in-progress' | 'in-qa' | 'succeeded' | 'failed' | 'cancelled';
 
 /** Outcome of a QA review — set by `assure_assignment`; null while not under (or before) review. */
-export type LcpAssignmentQaStatus = 'accepted' | 'rejected' | null;
+export type TcpAssignmentQaStatus = 'accepted' | 'rejected' | null;
 
 /**
  * A unit of work performed by a single agent. Implement-mode assignments
@@ -61,14 +61,14 @@ export type LcpAssignmentQaStatus = 'accepted' | 'rejected' | null;
 @Index(['taskId', 'orderIndex'])
 @Index(['companyId'])
 @Index(['agentId'])
-export class LcpAssignment extends VersionedEntity {
+export class TcpAssignment extends VersionedEntity {
   /** @format uuid */
   @PrimaryGeneratedColumn('uuid')
   id!: UUID;
 
   /** The task this assignment belongs to. Null for orphan assignments. */
-  @ManyToOne(() => LcpTask, { nullable: true, onDelete: 'CASCADE' })
-  task?: LcpTask | null;
+  @ManyToOne(() => TcpTask, { nullable: true, onDelete: 'CASCADE' })
+  task?: TcpTask | null;
 
   /**
    * Foreign key for {@link task}. Null for orphan assignments.
@@ -78,11 +78,11 @@ export class LcpAssignment extends VersionedEntity {
   taskId?: UUID | null;
 
   /** The company this assignment belongs to — needed directly for orphans. */
-  @ManyToOne(() => LcpCompany, { nullable: false, onDelete: 'CASCADE' })
-  company!: LcpCompany;
+  @ManyToOne(() => TcpCompany, { nullable: false, onDelete: 'CASCADE' })
+  company!: TcpCompany;
 
   /**
-   * Foreign key for the owning {@link LcpCompany}.
+   * Foreign key for the owning {@link TcpCompany}.
    * @format uuid
    */
   @Column()
@@ -90,7 +90,7 @@ export class LcpAssignment extends VersionedEntity {
 
   /** The kind of work this assignment represents. */
   @Column({ type: 'varchar', default: 'implement' })
-  mode!: LcpAssignmentMode;
+  mode!: TcpAssignmentMode;
 
   /**
    * Position in the task plan. Set only for implement-mode assignments
@@ -119,8 +119,8 @@ export class LcpAssignment extends VersionedEntity {
   shortcode?: string | null;
 
   /** The role this assignment must be worked by. */
-  @ManyToOne(() => LcpRole, { nullable: false, onDelete: 'CASCADE' })
-  role!: LcpRole;
+  @ManyToOne(() => TcpRole, { nullable: false, onDelete: 'CASCADE' })
+  role!: TcpRole;
 
   /**
    * Foreign key for {@link role}.
@@ -131,15 +131,15 @@ export class LcpAssignment extends VersionedEntity {
 
   /** Current lifecycle state of this assignment. */
   @Column({ type: 'varchar', default: 'ready' })
-  status!: LcpAssignmentStatus;
+  status!: TcpAssignmentStatus;
 
   /** Why the assignment failed — QA exhaustion, agent run failure, etc. Null unless `status` is `failed`. */
   @Column({ type: 'text', nullable: true })
   failureReason!: string | null;
 
   /** The agent currently (or last) working this assignment. */
-  @ManyToOne(() => LcpAgent, { nullable: true, onDelete: 'SET NULL' })
-  agent?: LcpAgent | null;
+  @ManyToOne(() => TcpAgent, { nullable: true, onDelete: 'SET NULL' })
+  agent?: TcpAgent | null;
 
   /**
    * Foreign key for {@link agent}.
@@ -149,8 +149,8 @@ export class LcpAssignment extends VersionedEntity {
   agentId?: UUID | null;
 
   /** qa-mode only: the assignment under review. */
-  @ManyToOne(() => LcpAssignment, { nullable: true, onDelete: 'CASCADE' })
-  targetAssignment?: LcpAssignment | null;
+  @ManyToOne(() => TcpAssignment, { nullable: true, onDelete: 'CASCADE' })
+  targetAssignment?: TcpAssignment | null;
 
   /**
    * Foreign key for {@link targetAssignment}.
@@ -164,8 +164,8 @@ export class LcpAssignment extends VersionedEntity {
    * from {@link targetAssignment} (what a QA assignment reviews) — this is "who
    * created me", not "what am I evaluating".
    */
-  @ManyToOne(() => LcpAssignment, { nullable: true, onDelete: 'SET NULL' })
-  parentAssignment?: LcpAssignment | null;
+  @ManyToOne(() => TcpAssignment, { nullable: true, onDelete: 'SET NULL' })
+  parentAssignment?: TcpAssignment | null;
 
   /**
    * Foreign key for {@link parentAssignment}.
@@ -185,7 +185,7 @@ export class LcpAssignment extends VersionedEntity {
     default: '[]',
     transformer: sanitiseArtifactsColumn,
   })
-  materials!: LcpMaterialArtifact[];
+  materials!: TcpMaterialArtifact[];
 
   /** Artifacts the assignment is expected to produce. */
   @Column({
@@ -193,7 +193,7 @@ export class LcpAssignment extends VersionedEntity {
     default: '[]',
     transformer: sanitiseArtifactsColumn,
   })
-  expected!: LcpAssignmentWorkingArtifact[];
+  expected!: TcpAssignmentWorkingArtifact[];
 
   /** Set by `complete_assignment`: the artifacts the agent prepared for review. */
   @Column({
@@ -201,7 +201,7 @@ export class LcpAssignment extends VersionedEntity {
     default: '[]',
     transformer: sanitiseArtifactsColumn,
   })
-  prepared!: LcpAssignmentWorkingArtifact[];
+  prepared!: TcpAssignmentWorkingArtifact[];
 
   /** Set when QA accepts: the artifacts promoted into the assignment's completed directory. */
   @Column({
@@ -209,7 +209,7 @@ export class LcpAssignment extends VersionedEntity {
     default: '[]',
     transformer: sanitiseArtifactsColumn,
   })
-  approved!: LcpAssignmentCompletedArtifact[];
+  approved!: TcpAssignmentCompletedArtifact[];
 
   /**
    * The completing agent's final answer, recorded by `complete_assignment`.
@@ -220,7 +220,7 @@ export class LcpAssignment extends VersionedEntity {
 
   /** Outcome of the current/last QA review. Cleared (with {@link qaFeedback}) whenever the assignment (re-)enters `in-progress`. */
   @Column({ type: 'varchar', nullable: true })
-  qaStatus!: LcpAssignmentQaStatus;
+  qaStatus!: TcpAssignmentQaStatus;
 
   /** QA reviewer's feedback. Cleared alongside {@link qaStatus}. */
   @Column({ type: 'text', nullable: true, transformer: sanitiseTextColumn })

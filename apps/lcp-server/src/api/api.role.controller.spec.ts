@@ -1,14 +1,14 @@
 import { NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import type { Response } from 'express';
-import { LcpRole } from '@lcp/shared';
+import { TcpRole } from '@lcp/shared';
 import { RoleController } from './api.role.controller';
 import { DbService } from '../db/db.service';
 
 const fakeRes = (): Response =>
   ({ setHeader: jest.fn() }) as unknown as Response;
 
-function makeRole(overrides: Partial<LcpRole> = {}): LcpRole {
+function makeRole(overrides: Partial<TcpRole> = {}): TcpRole {
   return {
     id: randomUUID(),
     companyId: randomUUID(),

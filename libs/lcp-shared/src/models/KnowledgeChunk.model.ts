@@ -13,8 +13,8 @@ import {
  * directly in PostgreSQL as a `vector(768)` column (pgvector extension)
  * and is not mapped by TypeORM — all vector reads and writes use raw SQL.
  *
- * Chunks are scoped to a {@link LcpCompany}, and optionally to a
- * {@link LcpRole} within it — `roleId` is `null` for chunks from the
+ * Chunks are scoped to a {@link TcpCompany}, and optionally to a
+ * {@link TcpRole} within it — `roleId` is `null` for chunks from the
  * company-wide `knowledge/shared/` folder (see storage-keys.ts).
  * All chunks for a given `documentPath` are replaced atomically on re-index.
  */

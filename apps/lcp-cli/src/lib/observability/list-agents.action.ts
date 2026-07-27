@@ -1,4 +1,4 @@
-import type { LcpAgent } from '@lcp/shared';
+import type { TcpAgent } from '@lcp/shared';
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest } from '../core/api';
 import {
@@ -23,14 +23,14 @@ export interface ListAgentsCmdOpts extends EntityRefOpts {
  * `DbService.listAgents`), `--filter role=<slug-or-id>` (overrides the
  * top-level role scope), or `--filter assignment=<assignment-id>`.
  *
- * stdout: `LcpAgent[]` as JSON.
+ * stdout: `TcpAgent[]` as JSON.
  */
 export function listAgentsAction(
   opts: GlobalOptions,
   cmdOpts: ListAgentsCmdOpts,
 ): Promise<void> {
   return runCommand(async () => {
-    const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+    const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
     const filters = parseFilters(cmdOpts.filter);
 
@@ -69,7 +69,7 @@ export function listAgentsAction(
       return;
     }
 
-    const agents = await apiRequest<LcpAgent[]>(
+    const agents = await apiRequest<TcpAgent[]>(
       api,
       'GET',
       `/api/agent?${qs.toString()}`,

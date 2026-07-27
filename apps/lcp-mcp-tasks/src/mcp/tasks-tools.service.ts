@@ -5,7 +5,7 @@ import axios, { AxiosError } from 'axios';
 import { z } from 'zod';
 import {
   AuditClientService,
-  LcpAssignmentMode,
+  TcpAssignmentMode,
   MODE_PROMPTS,
   requiredToolForMode,
 } from '@lcp/shared';
@@ -37,7 +37,7 @@ function err(text: string): ToolResult {
 /** The subset of an assignment the tool handlers need for mode-gating and proxying. */
 interface CallerAssignment {
   id: string;
-  mode: LcpAssignmentMode;
+  mode: TcpAssignmentMode;
   taskId: string | null;
   targetAssignmentId: string | null;
 }
@@ -142,7 +142,7 @@ export class TasksToolsService {
    * {@link MODE_PROMPTS} for each mode (embedded so the tool description and
    * the agent prompt can never drift), tailored to the caller's mode when known.
    */
-  private buildDescription(mode: LcpAssignmentMode | undefined): string {
+  private buildDescription(mode: TcpAssignmentMode | undefined): string {
     const modeNote = mode
       ? interpolate(taskPrompts.current_mode, {
           mode,
@@ -349,7 +349,7 @@ export class TasksToolsService {
   }
 
   /** The mode-mismatch error, naming the tool the caller should use instead. */
-  private wrongMode(mode: LcpAssignmentMode): ToolResult {
+  private wrongMode(mode: TcpAssignmentMode): ToolResult {
     return err(
       interpolate(taskPrompts.error_wrong_mode, {
         mode,

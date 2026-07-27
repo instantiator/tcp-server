@@ -1,11 +1,11 @@
 import {
   AuditEvent,
   KnowledgeChunk,
-  LcpAgent,
-  LcpAssignment,
-  LcpCompany,
-  LcpRole,
-  LcpTask,
+  TcpAgent,
+  TcpAssignment,
+  TcpCompany,
+  TcpRole,
+  TcpTask,
   makeTypeOrmConfig,
 } from '@lcp/shared';
 import { Module } from '@nestjs/common';
@@ -30,13 +30,13 @@ import { AgentWorkerModule } from './worker/agent-worker.module';
       validationOptions: { abortEarly: true },
     }),
     makeTypeOrmConfig([
-      LcpCompany,
-      LcpRole,
-      LcpAgent,
-      // LcpAgent's mandatory assignment FK (and the assignment's task relation
+      TcpCompany,
+      TcpRole,
+      TcpAgent,
+      // TcpAgent's mandatory assignment FK (and the assignment's task relation
       // loaded in AgentLoopService.run) require these registered too.
-      LcpTask,
-      LcpAssignment,
+      TcpTask,
+      TcpAssignment,
       AuditEvent,
       KnowledgeChunk,
     ]),

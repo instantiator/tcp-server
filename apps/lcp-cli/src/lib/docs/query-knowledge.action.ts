@@ -25,7 +25,7 @@ export function queryKnowledgeAction(
   cmdOpts: EntityRefOpts & { query: string; topK?: string; threshold?: string },
 ): Promise<void> {
   return runCommand(async () => {
-    const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+    const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
     const roleId = await resolveRoleId(api, cmdOpts);
 

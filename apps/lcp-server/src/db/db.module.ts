@@ -1,9 +1,9 @@
 import {
   AuditEvent,
   CompanyUser,
-  LcpAgent,
-  LcpCompany,
-  LcpRole,
+  TcpAgent,
+  TcpCompany,
+  TcpRole,
 } from '@lcp/shared';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -16,9 +16,9 @@ import { DbService } from './db.service';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      LcpCompany,
-      LcpRole,
-      LcpAgent,
+      TcpCompany,
+      TcpRole,
+      TcpAgent,
       AuditEvent,
       CompanyUser,
     ]),

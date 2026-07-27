@@ -107,7 +107,7 @@ export abstract class Pane {
  * assignment identifying heading — see {@link renderAssignmentPaneHeading}),
  * auto-scrolling to the newest entry unless the user has scrolled up to read
  * back through it. Named for its *backing assignment* (every agent works
- * exactly one — see `LcpAssignment`), not the chat UI, since that's what a
+ * exactly one — see `TcpAssignment`), not the chat UI, since that's what a
  * task's plan actually schedules and what the heading/tab now key off.
  */
 export class AssignmentPane extends Pane {

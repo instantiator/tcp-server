@@ -8,13 +8,13 @@ import {
   deriveTaskStatus,
   isStorageReadOnly,
   InvalidEnumValue,
-  LcpAgent,
-  LcpArtifact,
-  LcpAssignment,
-  LcpAssignmentMode,
-  LcpAssignmentWorkingArtifact,
-  LcpMaterialArtifact,
-  LcpTask,
+  TcpAgent,
+  TcpArtifact,
+  TcpAssignment,
+  TcpAssignmentMode,
+  TcpAssignmentWorkingArtifact,
+  TcpMaterialArtifact,
+  TcpTask,
   orphanWorkingPrefix,
   resolveArtifactKey,
   stripControlChars,
@@ -55,7 +55,7 @@ export interface ResolvedMaterial {
  * qa-mode caller the scope is the *target* assignment's (read-only).
  */
 export interface StorageScope {
-  mode: LcpAssignmentMode;
+  mode: TcpAssignmentMode;
   /** True for qa-mode callers — the working tools may only read. */
   readOnly: boolean;
   /** Object-key prefix (ending in `/`) of the scoped working directory. */
@@ -96,12 +96,12 @@ export class AssignmentService {
   private readonly logger = new Logger(AssignmentService.name);
 
   constructor(
-    @InjectRepository(LcpAgent)
-    private readonly agentRepo: Repository<LcpAgent>,
-    @InjectRepository(LcpAssignment)
-    private readonly assignmentRepo: Repository<LcpAssignment>,
-    @InjectRepository(LcpTask)
-    private readonly taskRepo: Repository<LcpTask>,
+    @InjectRepository(TcpAgent)
+    private readonly agentRepo: Repository<TcpAgent>,
+    @InjectRepository(TcpAssignment)
+    private readonly assignmentRepo: Repository<TcpAssignment>,
+    @InjectRepository(TcpTask)
+    private readonly taskRepo: Repository<TcpTask>,
     private readonly db: DbService,
     private readonly storage: StorageService,
     private readonly dispatcher: TaskDispatcher,
@@ -117,7 +117,7 @@ export class AssignmentService {
    */
   async getAgentAssignment(
     agentId: UUID,
-  ): Promise<{ assignment: LcpAssignment; task: LcpTask | null }> {
+  ): Promise<{ assignment: TcpAssignment; task: TcpTask | null }> {
     const agent = await this.agentRepo.findOneBy({ id: agentId });
     if (!agent) throw new NotFoundException(`Agent ${agentId} not found`);
     const assignment = await this.assignmentRepo.findOneBy({
@@ -176,8 +176,8 @@ export class AssignmentService {
 
   /** Loads the assignment a qa-mode caller is reviewing. */
   private async loadTargetAssignment(
-    caller: LcpAssignment,
-  ): Promise<LcpAssignment> {
+    caller: TcpAssignment,
+  ): Promise<TcpAssignment> {
     if (!caller.targetAssignmentId) {
       throw new BadRequestException(
         `Your qa assignment has no target assignment to review.`,
@@ -197,7 +197,7 @@ export class AssignmentService {
    */
   private async resolveMaterials(
     slug: string,
-    target: LcpAssignment,
+    target: TcpAssignment,
   ): Promise<ResolvedMaterial[]> {
     const planAssignments = target.taskId
       ? (
@@ -296,8 +296,8 @@ export class AssignmentService {
     const roleIds: UUID[] = [];
     // Canonical (alias-normalised) artifact lists, kept per assignment so the
     // stored rows use canonical types (e.g. `text` → `inline-text`).
-    const expectedByIndex: LcpAssignmentWorkingArtifact[][] = [];
-    const materialsByIndex: LcpMaterialArtifact[][] = [];
+    const expectedByIndex: TcpAssignmentWorkingArtifact[][] = [];
+    const materialsByIndex: TcpMaterialArtifact[][] = [];
     for (const [i, a] of assignments.entries()) {
       const role = a.role?.trim()
         ? await this.db.findRoleByIdOrSlug(caller.companyId, a.role)
@@ -448,7 +448,7 @@ export class AssignmentService {
     assignmentId: UUID,
     agentId: UUID,
     summary: string,
-    prepared: LcpAssignmentWorkingArtifact[],
+    prepared: TcpAssignmentWorkingArtifact[],
   ): Promise<void> {
     const assignment = await this.loadAssignment(assignmentId);
     if (assignment.agentId !== agentId) {
@@ -622,7 +622,7 @@ export class AssignmentService {
     // verdict yet wins; a duplicate gets a 409.
     const claim = await this.assignmentRepo
       .createQueryBuilder()
-      .update(LcpAssignment)
+      .update(TcpAssignment)
       .set({ qaStatus, qaFeedback: cleanFeedback })
       .where('id = :id', { id: targetAssignmentId })
       .andWhere('status = :inQa', { inQa: 'in-qa' })
@@ -665,8 +665,8 @@ export class AssignmentService {
    * - each prepared `assignment-working-path` must exist in storage.
    */
   private async checkOutputGate(
-    assignment: LcpAssignment,
-    prepared: LcpAssignmentWorkingArtifact[],
+    assignment: TcpAssignment,
+    prepared: TcpAssignmentWorkingArtifact[],
   ): Promise<string[]> {
     const problems: string[] = [];
     const company = await this.db.getCompany(assignment.companyId);
@@ -747,8 +747,8 @@ export class AssignmentService {
    * artifact in `prepared`. Returns the list of unmet requirements.
    */
   private async checkTaskExpectations(
-    finalise: LcpAssignment,
-    prepared: LcpAssignmentWorkingArtifact[],
+    finalise: TcpAssignment,
+    prepared: TcpAssignmentWorkingArtifact[],
   ): Promise<string[]> {
     const problems: string[] = [];
     const company = await this.db.getCompany(finalise.companyId);
@@ -793,7 +793,7 @@ export class AssignmentService {
     }
   }
 
-  private async loadAssignment(id: UUID): Promise<LcpAssignment> {
+  private async loadAssignment(id: UUID): Promise<TcpAssignment> {
     const assignment = await this.assignmentRepo.findOneBy({ id });
     if (!assignment) {
       throw new NotFoundException(`Assignment ${id} not found`);
@@ -804,7 +804,7 @@ export class AssignmentService {
   /** Rejects any artifact whose `type` falls outside the allowed union. */
   /** Returns the distinct artifact `type` values in `artifacts` not in `allowed`. */
   private invalidArtifactTypes(
-    artifacts: LcpArtifact[],
+    artifacts: TcpArtifact[],
     allowed: Set<string>,
   ): string[] {
     return [

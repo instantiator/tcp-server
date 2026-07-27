@@ -3,11 +3,11 @@ import {
   AuditEvent,
   AuditEventType,
   CompanyUser,
-  LcpAgent,
-  LcpAssignment,
-  LcpCompany,
-  LcpRole,
-  LcpTask,
+  TcpAgent,
+  TcpAssignment,
+  TcpCompany,
+  TcpRole,
+  TcpTask,
 } from '@lcp/shared';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -17,22 +17,22 @@ import { EntityManager, QueryFailedError, Repository } from 'typeorm';
 import { DbService } from './db.service';
 
 const ALL_ENTITIES = [
-  LcpCompany,
-  LcpRole,
-  LcpAgent,
-  LcpTask,
-  LcpAssignment,
+  TcpCompany,
+  TcpRole,
+  TcpAgent,
+  TcpTask,
+  TcpAssignment,
   AuditEvent,
   CompanyUser,
 ];
 
 describe('DbService', () => {
   let dbService: DbService;
-  let companyRepo: Repository<LcpCompany>;
-  let roleRepo: Repository<LcpRole>;
-  let agentRepo: Repository<LcpAgent>;
-  let assignmentRepo: Repository<LcpAssignment>;
-  let taskRepo: Repository<LcpTask>;
+  let companyRepo: Repository<TcpCompany>;
+  let roleRepo: Repository<TcpRole>;
+  let agentRepo: Repository<TcpAgent>;
+  let assignmentRepo: Repository<TcpAssignment>;
+  let taskRepo: Repository<TcpTask>;
   let auditRepo: Repository<AuditEvent>;
   let companyUserRepo: Repository<CompanyUser>;
 
@@ -51,11 +51,11 @@ describe('DbService', () => {
     }).compile();
 
     dbService = testingModule.get(DbService);
-    companyRepo = testingModule.get(getRepositoryToken(LcpCompany));
-    roleRepo = testingModule.get(getRepositoryToken(LcpRole));
-    agentRepo = testingModule.get(getRepositoryToken(LcpAgent));
-    assignmentRepo = testingModule.get(getRepositoryToken(LcpAssignment));
-    taskRepo = testingModule.get(getRepositoryToken(LcpTask));
+    companyRepo = testingModule.get(getRepositoryToken(TcpCompany));
+    roleRepo = testingModule.get(getRepositoryToken(TcpRole));
+    agentRepo = testingModule.get(getRepositoryToken(TcpAgent));
+    assignmentRepo = testingModule.get(getRepositoryToken(TcpAssignment));
+    taskRepo = testingModule.get(getRepositoryToken(TcpTask));
     auditRepo = testingModule.get(getRepositoryToken(AuditEvent));
     companyUserRepo = testingModule.get(getRepositoryToken(CompanyUser));
   });
@@ -962,7 +962,7 @@ describe('DbService', () => {
           target: Parameters<typeof originalGetRepository>[0],
         ) {
           const repo = originalGetRepository.call(this, target);
-          if (target === LcpAgent) {
+          if (target === TcpAgent) {
             jest
               .spyOn(repo, 'save')
               .mockRejectedValueOnce(new Error('forced agent insert failure'));

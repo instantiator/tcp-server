@@ -18,7 +18,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { UUID } from 'crypto';
 import type { Request, Response } from 'express';
-import { AuditEventType, LcpCompany, LcpRole, WireEvent } from '@lcp/shared';
+import { AuditEventType, TcpCompany, TcpRole, WireEvent } from '@lcp/shared';
 import { defer, from, merge, mergeMap, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { DbService } from '../db/db.service';
@@ -48,15 +48,15 @@ export class CompanyController {
     private readonly companyEvents: CompanyEventService,
   ) {}
 
-  /** Returns all {@link LcpCompany} records. */
+  /** Returns all {@link TcpCompany} records. */
   @ApiOperation({ summary: 'List all companies' })
   @Get()
-  async listCompanies(): Promise<LcpCompany[]> {
+  async listCompanies(): Promise<TcpCompany[]> {
     return this.db.listCompanies();
   }
 
   /**
-   * Creates or replaces a {@link LcpCompany}.
+   * Creates or replaces a {@link TcpCompany}.
    * If a company with the same slug already exists it is replaced.
    * The requesting user (from the bearer token's `sub` claim) is added as a
    * {@link CompanyUser} with `memberType: 'creator'`.
@@ -67,7 +67,7 @@ export class CompanyController {
     @Body() body: CreateCompanyDto,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<LcpCompany> {
+  ): Promise<TcpCompany> {
     const { slug, ...template } = body;
     const user = req.user as Record<string, unknown> | undefined;
     const creatorIdentifier =
@@ -90,12 +90,12 @@ export class CompanyController {
   }
 
   /**
-   * Partially updates the fields of an existing {@link LcpCompany} identified
+   * Partially updates the fields of an existing {@link TcpCompany} identified
    * by UUID or slug. Accepts a partial body so nested fields such as
    * `llmConfig.model` can be patched without overwriting the whole object.
    * The `id` field is immutable and must not be included in the request body.
    * Soft data-quality warnings (e.g. blank `companyContext`) are reported via
-   * the `X-Lcp-Warnings` response header — the update still succeeds.
+   * the `X-Tcp-Warnings` response header — the update still succeeds.
    */
   @ApiOperation({ summary: 'Partially update a company by ID or slug' })
   @Put(':id')
@@ -103,19 +103,19 @@ export class CompanyController {
     @Param('id') id: string,
     @Body() partial: UpdateCompanyDto,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<LcpCompany> {
+  ): Promise<TcpCompany> {
     const company = await this.api.setCompany(id, partial);
     setWarningsHeader(res, computeCompanyWarnings(company));
     return company;
   }
 
   /**
-   * Retrieves a {@link LcpCompany} by its UUID or slug.
+   * Retrieves a {@link TcpCompany} by its UUID or slug.
    * Returns `null` (serialised as an empty body) when no company matches.
    */
   @ApiOperation({ summary: 'Get a company by ID or slug' })
   @Get(':id')
-  async getCompany(@Param('id') id: UUID): Promise<LcpCompany | null> {
+  async getCompany(@Param('id') id: UUID): Promise<TcpCompany | null> {
     return await this.api.getCompany(id);
   }
 
@@ -133,12 +133,12 @@ export class CompanyController {
   }
 
   /**
-   * Returns all {@link LcpRole} records belonging to the given company,
+   * Returns all {@link TcpRole} records belonging to the given company,
    * identified by UUID or slug.
    */
   @ApiOperation({ summary: 'List roles for a company by ID or slug' })
   @Get(':id/roles')
-  async listRoles(@Param('id') id: string): Promise<LcpRole[]> {
+  async listRoles(@Param('id') id: string): Promise<TcpRole[]> {
     const company = await this.resolveCompanyOrThrow(id);
     return this.db.listRoles(company.id);
   }
@@ -154,7 +154,7 @@ export class CompanyController {
   async getRoleBySlug(
     @Param('companyId') companyId: string,
     @Param('slug') slug: string,
-  ): Promise<LcpRole> {
+  ): Promise<TcpRole> {
     const company = await this.resolveCompanyOrThrow(companyId);
     const role = await this.db.findRoleByIdOrSlug(company.id, slug);
     if (!role) {
@@ -168,7 +168,7 @@ export class CompanyController {
   /**
    * Partially updates a role within this company, identified by UUID or
    * slug. See {@link getRoleBySlug} for why the company must be known. See
-   * {@link RoleController.createRole} for the `X-Lcp-Warnings` header.
+   * {@link RoleController.createRole} for the `X-Tcp-Warnings` header.
    */
   @ApiOperation({ summary: 'Update a role by slug (or ID) within a company' })
   @Put(':companyId/roles/by-slug/:slug')
@@ -177,7 +177,7 @@ export class CompanyController {
     @Param('slug') slug: string,
     @Body() partial: UpdateRoleDto,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<LcpRole> {
+  ): Promise<TcpRole> {
     const company = await this.resolveCompanyOrThrow(companyId);
     const role = await this.db.setRole(
       { ...partial, companyId: company.id },
@@ -278,7 +278,7 @@ export class CompanyController {
   }
 
   /** Resolves a company by UUID or slug, throwing 404 if no match. */
-  private async resolveCompanyOrThrow(identifier: string): Promise<LcpCompany> {
+  private async resolveCompanyOrThrow(identifier: string): Promise<TcpCompany> {
     const company = await this.db.getCompany(identifier);
     if (!company) {
       throw new NotFoundException(`Company ${identifier} not found`);

@@ -1,7 +1,7 @@
 import {
   AuditEventType,
   EmbeddingService,
-  LcpCompany,
+  TcpCompany,
   AuditClientService,
   resolveEmbeddingConfig,
   resolveEnvEmbeddingConfig,
@@ -74,8 +74,8 @@ export class MemoryToolsService {
     private readonly embedding: EmbeddingService,
     private readonly audit: AuditClientService,
     private readonly config: ConfigService,
-    @InjectRepository(LcpCompany)
-    private readonly companyRepo: Repository<LcpCompany>,
+    @InjectRepository(TcpCompany)
+    private readonly companyRepo: Repository<TcpCompany>,
     @InjectDataSource()
     private readonly dataSource: DataSource,
   ) {}

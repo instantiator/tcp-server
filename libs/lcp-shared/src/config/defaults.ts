@@ -122,7 +122,7 @@ export const DEFAULT_AGENT_LOOP_TIMEOUT_MS = 30 * 60 * 1000; // 30m
 
 /**
  * Default number of reminder retries when an agent run ends without all of its
- * required tool calls (see {@link LcpAgent.requiredToolCalls}) having fired.
+ * required tool calls (see {@link TcpAgent.requiredToolCalls}) having fired.
  * Overridden by `AGENT_REQUIRED_TOOL_RETRIES` (lcp-agent env).
  * Used in {@link AgentLoopService}.
  */

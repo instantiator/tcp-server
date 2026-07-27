@@ -71,7 +71,7 @@ export function storeKnowledgeAction(
       process.exit(1);
     }
 
-    const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+    const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
     const scopePath = await resolveKnowledgeScopePath(api, cmdOpts);
 

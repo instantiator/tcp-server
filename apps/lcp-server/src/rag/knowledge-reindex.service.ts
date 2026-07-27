@@ -3,8 +3,8 @@ import {
   assertRedisReachable,
   KnowledgeChunk,
   KnowledgeIndexState,
-  LcpCompany,
-  LcpRole,
+  TcpCompany,
+  TcpRole,
   resolveEmbeddingConfig,
   resolveEnvEmbeddingConfig,
 } from '@lcp/shared';
@@ -73,10 +73,10 @@ export class KnowledgeReindexService implements OnModuleInit, OnModuleDestroy {
     private readonly stateRepo: Repository<KnowledgeIndexState>,
     @InjectRepository(KnowledgeChunk)
     private readonly chunkRepo: Repository<KnowledgeChunk>,
-    @InjectRepository(LcpCompany)
-    private readonly companyRepo: Repository<LcpCompany>,
-    @InjectRepository(LcpRole)
-    private readonly roleRepo: Repository<LcpRole>,
+    @InjectRepository(TcpCompany)
+    private readonly companyRepo: Repository<TcpCompany>,
+    @InjectRepository(TcpRole)
+    private readonly roleRepo: Repository<TcpRole>,
     @InjectDataSource()
     private readonly dataSource: DataSource,
   ) {}
@@ -185,7 +185,7 @@ export class KnowledgeReindexService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Bumps every scope of a company (shared + each role) — backs the manual reindex trigger. */
-  async bumpCompany(company: LcpCompany): Promise<void> {
+  async bumpCompany(company: TcpCompany): Promise<void> {
     await this.bump(company.id, null);
     const roles = await this.roleRepo.findBy({ companyId: company.id });
     for (const role of roles) {
@@ -274,7 +274,7 @@ export class KnowledgeReindexService implements OnModuleInit, OnModuleDestroy {
           lastError: null,
           // lastErrorAt is Date | undefined (not | null) — see
           // KnowledgeIndexState — so clearing needs a raw SQL literal rather
-          // than assigning null directly (matches LcpAgent.pausedAt's clear
+          // than assigning null directly (matches TcpAgent.pausedAt's clear
           // pattern in AgentOrchestrationService).
           lastErrorAt: () => 'NULL',
         },
@@ -285,7 +285,7 @@ export class KnowledgeReindexService implements OnModuleInit, OnModuleDestroy {
     } catch (err) {
       // Most commonly the embedding endpoint being unreachable/misconfigured
       // (see EmbeddingService) — record it so get-knowledge-index-status and
-      // the other knowledge endpoints' X-Lcp-Warnings (see
+      // the other knowledge endpoints' X-Tcp-Warnings (see
       // KnowledgeService.embeddingWarnings) can surface it; a silent BullMQ
       // job failure would otherwise leave the index stuck at zero chunks
       // with no visible explanation. Guarded on generation for the same
@@ -322,7 +322,7 @@ export class KnowledgeReindexService implements OnModuleInit, OnModuleDestroy {
     for (const company of companies) {
       if (!resolveEmbeddingConfig(company, envEmbeddingConfig)) continue;
       const roles = await this.roleRepo.findBy({ companyId: company.id });
-      const scopes: (LcpRole | null)[] = [null, ...roles];
+      const scopes: (TcpRole | null)[] = [null, ...roles];
       for (const role of scopes) {
         const roleId = role?.id ?? null;
         try {
@@ -339,8 +339,8 @@ export class KnowledgeReindexService implements OnModuleInit, OnModuleDestroy {
 
   /** Bumps a single scope if its live storage listing has drifted from the recorded fingerprint. */
   private async reconcileScope(
-    company: LcpCompany,
-    role: LcpRole | null,
+    company: TcpCompany,
+    role: TcpRole | null,
     roleId: UUID | null,
   ): Promise<void> {
     const scope: KnowledgeScope = {
@@ -419,7 +419,7 @@ export class KnowledgeReindexService implements OnModuleInit, OnModuleDestroy {
 
   /** Builds the storage {@link KnowledgeScope} for a rebuild, resolving the role slug when needed. */
   private async resolveScope(
-    company: LcpCompany,
+    company: TcpCompany,
     roleId: UUID | null,
   ): Promise<KnowledgeScope | null> {
     if (roleId === null) {

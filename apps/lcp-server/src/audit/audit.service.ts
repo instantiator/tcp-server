@@ -1,8 +1,8 @@
 import {
   AuditEvent,
   AuditEventType,
-  LcpAgent,
-  LcpAssignment,
+  TcpAgent,
+  TcpAssignment,
 } from '@lcp/shared';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -23,10 +23,10 @@ export class AuditService {
   constructor(
     @InjectRepository(AuditEvent)
     private readonly repo: Repository<AuditEvent>,
-    @InjectRepository(LcpAgent)
-    private readonly agentRepo: Repository<LcpAgent>,
-    @InjectRepository(LcpAssignment)
-    private readonly assignmentRepo: Repository<LcpAssignment>,
+    @InjectRepository(TcpAgent)
+    private readonly agentRepo: Repository<TcpAgent>,
+    @InjectRepository(TcpAssignment)
+    private readonly assignmentRepo: Repository<TcpAssignment>,
     private readonly publisher: AuditEventPublisher,
   ) {}
 

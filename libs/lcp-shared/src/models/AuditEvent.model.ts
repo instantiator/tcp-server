@@ -7,8 +7,8 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { LcpAgent } from './LcpAgent.model';
-import { LcpCompany } from './LcpCompany.model';
+import { TcpAgent } from './TcpAgent.model';
+import { TcpCompany } from './TcpCompany.model';
 
 // Declared as a type alias, not an interface, so it stays assignable to the
 // `Record<string, unknown>` audit payload without a cast.
@@ -65,11 +65,11 @@ export class AuditEvent {
   timestamp!: Date;
 
   /** The company context for this event. */
-  @ManyToOne(() => LcpCompany, { nullable: false, onDelete: 'CASCADE' })
-  company!: LcpCompany;
+  @ManyToOne(() => TcpCompany, { nullable: false, onDelete: 'CASCADE' })
+  company!: TcpCompany;
 
   /**
-   * Foreign key for the owning {@link LcpCompany}.
+   * Foreign key for the owning {@link TcpCompany}.
    * @format uuid
    */
   @Column()
@@ -83,11 +83,11 @@ export class AuditEvent {
   role!: string;
 
   /** The agent that produced this event. Nullable for system-level events. */
-  @ManyToOne(() => LcpAgent, { nullable: true, onDelete: 'SET NULL' })
-  agent!: LcpAgent | null;
+  @ManyToOne(() => TcpAgent, { nullable: true, onDelete: 'SET NULL' })
+  agent!: TcpAgent | null;
 
   /**
-   * Foreign key for the {@link LcpAgent} that produced this event.
+   * Foreign key for the {@link TcpAgent} that produced this event.
    * @format uuid
    */
   @Column({ nullable: true, type: 'varchar' })
@@ -95,7 +95,7 @@ export class AuditEvent {
 
   /**
    * Denormalised copy of the producing agent's assignment at write time (see
-   * {@link LcpAssignment.parentAssignmentId} for why assignments now always
+   * {@link TcpAssignment.parentAssignmentId} for why assignments now always
    * carry a task-traceable lineage). No relation object — like `agentId`,
    * this is a plain column so hot-path writes never risk an accidental join.
    * @format uuid

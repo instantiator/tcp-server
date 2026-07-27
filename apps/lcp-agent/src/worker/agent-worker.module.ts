@@ -5,10 +5,10 @@ import {
   ContextCompactorService,
   ContextManagerService,
   IncomingDataGuardService,
-  LcpAgent,
-  LcpAssignment,
-  LcpCompany,
-  LcpRole,
+  TcpAgent,
+  TcpAssignment,
+  TcpCompany,
+  TcpRole,
 } from '@lcp/shared';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -33,7 +33,7 @@ import { AgentWorkerService } from './agent-worker.service';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([LcpAgent, LcpRole, LcpCompany, LcpAssignment]),
+    TypeOrmModule.forFeature([TcpAgent, TcpRole, TcpCompany, TcpAssignment]),
     AgentRagModule,
     McpClientModule,
   ],

@@ -5,7 +5,7 @@ import {
   ListObjectsV2Command,
   S3Client,
 } from '@aws-sdk/client-s3';
-import { LcpCompany, LcpRole } from '@lcp/shared';
+import { TcpCompany, TcpRole } from '@lcp/shared';
 import {
   BadRequestException,
   ConflictException,
@@ -51,7 +51,7 @@ async function purgeTestBucket(s3: S3Client): Promise<void> {
 describe('MinioStorageAdapter (integration)', () => {
   let module: TestingModule;
   let adapter: MinioStorageAdapter;
-  let companyRepo: Repository<LcpCompany>;
+  let companyRepo: Repository<TcpCompany>;
   let s3: S3Client;
 
   beforeAll(async () => {
@@ -76,12 +76,12 @@ describe('MinioStorageAdapter (integration)', () => {
         TypeOrmModule.forRoot({
           type: 'postgres',
           url: DATABASE_URL,
-          // LcpRole is registered but never queried here — required so
-          // TypeORM can resolve LcpCompany.plannerRole's relation target.
-          entities: [LcpCompany, LcpRole],
+          // TcpRole is registered but never queried here — required so
+          // TypeORM can resolve TcpCompany.plannerRole's relation target.
+          entities: [TcpCompany, TcpRole],
           synchronize: true,
         }),
-        TypeOrmModule.forFeature([LcpCompany]),
+        TypeOrmModule.forFeature([TcpCompany]),
       ],
       providers: [
         MinioStorageAdapter,
@@ -109,7 +109,7 @@ describe('MinioStorageAdapter (integration)', () => {
     }).compile();
 
     adapter = module.get(MinioStorageAdapter);
-    companyRepo = module.get(getRepositoryToken(LcpCompany));
+    companyRepo = module.get(getRepositoryToken(TcpCompany));
     await companyRepo.save(
       companyRepo.create({
         slug: COMPANY_SLUG,

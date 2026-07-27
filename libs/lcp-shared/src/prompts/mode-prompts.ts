@@ -1,4 +1,4 @@
-import type { LcpAssignmentMode } from '../models/LcpAssignment.model';
+import type { TcpAssignmentMode } from '../models/TcpAssignment.model';
 
 /**
  * Mode-specific instruction prepended to an agent's assignment-presentation
@@ -11,7 +11,7 @@ import type { LcpAssignmentMode } from '../models/LcpAssignment.model';
  * `assure_assignment` on the same service. The `chat` mode has no completion
  * tool — a conversational turn ends with narrated text.
  */
-export const MODE_PROMPTS: Record<LcpAssignmentMode, string> = {
+export const MODE_PROMPTS: Record<TcpAssignmentMode, string> = {
   implement: [
     'You are working an IMPLEMENT assignment. Carry out the assignment prompt below and produce the work it asks for.',
     'Any highlighted materials are listed under "Materials"; they are your starting point, but you may also explore the shared storage service read-only for other material relevant to the work.',
@@ -86,11 +86,11 @@ export function buildAvailableRolesMessage(roles: RoleSummary[]): string {
 
 /**
  * The tool calls an agent in the given mode must make before its run may end
- * (fed into {@link LcpAgent.requiredToolCalls} at creation). A `chat`-mode
+ * (fed into {@link TcpAgent.requiredToolCalls} at creation). A `chat`-mode
  * agent has no required tool — its turn ends with narrated text — so it
  * returns an empty list.
  */
-export function requiredToolForMode(mode: LcpAssignmentMode): string[] {
+export function requiredToolForMode(mode: TcpAssignmentMode): string[] {
   switch (mode) {
     case 'plan':
       return ['create_plan'];

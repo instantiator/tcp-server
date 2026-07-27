@@ -1,4 +1,4 @@
-import type { LcpAssignmentMode } from './LcpAssignment.model';
+import type { TcpAssignmentMode } from './TcpAssignment.model';
 
 /** Zero-pads `index` to (at least) 3 digits — `0` → `'000'`, `1234` → `'1234'`. */
 export function formatShortcodeIndex(index: number): string {
@@ -15,7 +15,7 @@ export function formatShortcodeIndex(index: number): string {
  */
 export function buildAssignmentShortcode(
   taskShortcode: string,
-  mode: LcpAssignmentMode,
+  mode: TcpAssignmentMode,
   planIndex: number,
 ): string {
   return `${taskShortcode}-${formatShortcodeIndex(planIndex)}-${mode}`;

@@ -7,10 +7,10 @@ import {
   ContextManagerService,
   DEFAULT_LLM_CONTEXT_WINDOW,
   DEFAULT_RAG_THRESHOLD,
-  LcpAgent,
-  LcpAssignment,
-  LcpCompany,
-  LcpRole,
+  TcpAgent,
+  TcpAssignment,
+  TcpCompany,
+  TcpRole,
   LlmConfig,
   McpClientService,
   PromptAssemblyStrings,
@@ -73,9 +73,9 @@ const CHAT_PROMPT_STRINGS: PromptAssemblyStrings = {
 
 /** Resolved context for one detached chat turn, passed to {@link ChatService.runTurn}. */
 interface TurnContext {
-  agent: LcpAgent;
-  role: LcpRole;
-  company: LcpCompany | null;
+  agent: TcpAgent;
+  role: TcpRole;
+  company: TcpCompany | null;
   llmConfig: LlmConfig;
   windowSize: number;
   isFirstMessage: boolean;
@@ -93,14 +93,14 @@ export class ChatService {
     private readonly ragRetrieval: RagRetrievalService,
     private readonly audit: AuditService,
     private readonly mcp: McpClientService,
-    @InjectRepository(LcpAgent)
-    private readonly agentRepo: Repository<LcpAgent>,
-    @InjectRepository(LcpAssignment)
-    private readonly assignmentRepo: Repository<LcpAssignment>,
-    @InjectRepository(LcpRole)
-    private readonly roleRepo: Repository<LcpRole>,
-    @InjectRepository(LcpCompany)
-    private readonly companyRepo: Repository<LcpCompany>,
+    @InjectRepository(TcpAgent)
+    private readonly agentRepo: Repository<TcpAgent>,
+    @InjectRepository(TcpAssignment)
+    private readonly assignmentRepo: Repository<TcpAssignment>,
+    @InjectRepository(TcpRole)
+    private readonly roleRepo: Repository<TcpRole>,
+    @InjectRepository(TcpCompany)
+    private readonly companyRepo: Repository<TcpCompany>,
   ) {}
 
   /**

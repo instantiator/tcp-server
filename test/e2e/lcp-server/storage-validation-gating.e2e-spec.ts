@@ -1,4 +1,4 @@
-import { LcpCompany, LcpRole } from '@lcp/shared';
+import { TcpCompany, TcpRole } from '@lcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -22,11 +22,11 @@ import { makeTestJwt } from '../helpers/test-jwt';
  */
 describe('Storage write-time validation gating (e2e)', () => {
   let app: INestApplication<App>;
-  let companyRepo: Repository<LcpCompany>;
-  let roleRepo: Repository<LcpRole>;
+  let companyRepo: Repository<TcpCompany>;
+  let roleRepo: Repository<TcpRole>;
   let jwt: string;
-  let company: LcpCompany;
-  let role: LcpRole;
+  let company: TcpCompany;
+  let role: TcpRole;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -34,8 +34,8 @@ describe('Storage write-time validation gating (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     await app.init();
-    companyRepo = moduleFixture.get(getRepositoryToken(LcpCompany));
-    roleRepo = moduleFixture.get(getRepositoryToken(LcpRole));
+    companyRepo = moduleFixture.get(getRepositoryToken(TcpCompany));
+    roleRepo = moduleFixture.get(getRepositoryToken(TcpRole));
     jwt = makeTestJwt();
 
     company = await companyRepo.save(

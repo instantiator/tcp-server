@@ -1,4 +1,4 @@
-import type { LcpAssignment } from '@lcp/shared';
+import type { TcpAssignment } from '@lcp/shared';
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest } from '../core/api';
 import {
@@ -23,14 +23,14 @@ export interface ListAssignmentsCmdOpts extends EntityRefOpts {
  * `--task-id`), `--filter task=null` (orphan assignments), or
  * `--filter role=<slug-or-id>`.
  *
- * stdout: `LcpAssignment[]` as JSON.
+ * stdout: `TcpAssignment[]` as JSON.
  */
 export function listAssignmentsAction(
   opts: GlobalOptions,
   cmdOpts: ListAssignmentsCmdOpts,
 ): Promise<void> {
   return runCommand(async () => {
-    const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+    const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
     const filters = parseFilters(cmdOpts.filter);
 
@@ -66,7 +66,7 @@ export function listAssignmentsAction(
       return;
     }
 
-    const assignments = await apiRequest<LcpAssignment[]>(
+    const assignments = await apiRequest<TcpAssignment[]>(
       api,
       'GET',
       `/api/assignment?${qs.toString()}`,

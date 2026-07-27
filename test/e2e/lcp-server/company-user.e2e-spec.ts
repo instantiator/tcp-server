@@ -1,4 +1,4 @@
-import { AuditEvent, LcpAgent, LcpCompany, LcpRole } from '@lcp/shared';
+import { AuditEvent, TcpAgent, TcpCompany, TcpRole } from '@lcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -10,9 +10,9 @@ import { makeTestJwt } from '../helpers/test-jwt';
 
 describe('CompanyUserController (e2e)', () => {
   let app: INestApplication<App>;
-  let companyRepo: Repository<LcpCompany>;
-  let roleRepo: Repository<LcpRole>;
-  let agentRepo: Repository<LcpAgent>;
+  let companyRepo: Repository<TcpCompany>;
+  let roleRepo: Repository<TcpRole>;
+  let agentRepo: Repository<TcpAgent>;
   let auditRepo: Repository<AuditEvent>;
   let jwt: string;
   let companyId: string;
@@ -23,9 +23,9 @@ describe('CompanyUserController (e2e)', () => {
     }).compile();
     app = module.createNestApplication();
     await app.init();
-    companyRepo = module.get(getRepositoryToken(LcpCompany));
-    roleRepo = module.get(getRepositoryToken(LcpRole));
-    agentRepo = module.get(getRepositoryToken(LcpAgent));
+    companyRepo = module.get(getRepositoryToken(TcpCompany));
+    roleRepo = module.get(getRepositoryToken(TcpRole));
+    agentRepo = module.get(getRepositoryToken(TcpAgent));
     auditRepo = module.get(getRepositoryToken(AuditEvent));
     jwt = makeTestJwt();
 

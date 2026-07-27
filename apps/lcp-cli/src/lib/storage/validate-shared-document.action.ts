@@ -34,7 +34,7 @@ export function validateSharedDocumentAction(
   cmdOpts: { path: string; recursive?: boolean },
 ): Promise<void> {
   return runCommand(async () => {
-    const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+    const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const result = await apiRequest<ValidateSharedDocumentResponse>(
       apiOptions(opts, token),
       'POST',

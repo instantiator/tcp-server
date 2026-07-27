@@ -1,10 +1,10 @@
 import {
   AuditEvent,
-  LcpAgent,
-  LcpAssignment,
-  LcpCompany,
-  LcpRole,
-  LcpTask,
+  TcpAgent,
+  TcpAssignment,
+  TcpCompany,
+  TcpRole,
+  TcpTask,
 } from '@lcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -18,11 +18,11 @@ import { makeTestJwt } from '../helpers/test-jwt';
 
 describe('TaskController (e2e)', () => {
   let app: INestApplication<App>;
-  let companyRepo: Repository<LcpCompany>;
-  let roleRepo: Repository<LcpRole>;
-  let taskRepo: Repository<LcpTask>;
-  let assignmentRepo: Repository<LcpAssignment>;
-  let agentRepo: Repository<LcpAgent>;
+  let companyRepo: Repository<TcpCompany>;
+  let roleRepo: Repository<TcpRole>;
+  let taskRepo: Repository<TcpTask>;
+  let assignmentRepo: Repository<TcpAssignment>;
+  let agentRepo: Repository<TcpAgent>;
   let auditRepo: Repository<AuditEvent>;
   let jwt: string;
 
@@ -32,11 +32,11 @@ describe('TaskController (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     await app.init();
-    companyRepo = moduleFixture.get(getRepositoryToken(LcpCompany));
-    roleRepo = moduleFixture.get(getRepositoryToken(LcpRole));
-    taskRepo = moduleFixture.get(getRepositoryToken(LcpTask));
-    assignmentRepo = moduleFixture.get(getRepositoryToken(LcpAssignment));
-    agentRepo = moduleFixture.get(getRepositoryToken(LcpAgent));
+    companyRepo = moduleFixture.get(getRepositoryToken(TcpCompany));
+    roleRepo = moduleFixture.get(getRepositoryToken(TcpRole));
+    taskRepo = moduleFixture.get(getRepositoryToken(TcpTask));
+    assignmentRepo = moduleFixture.get(getRepositoryToken(TcpAssignment));
+    agentRepo = moduleFixture.get(getRepositoryToken(TcpAgent));
     auditRepo = moduleFixture.get(getRepositoryToken(AuditEvent));
     jwt = makeTestJwt();
   });
@@ -46,7 +46,7 @@ describe('TaskController (e2e)', () => {
   });
 
   describe('with a company', () => {
-    let company: LcpCompany;
+    let company: TcpCompany;
 
     beforeAll(async () => {
       company = await companyRepo.save(
@@ -91,7 +91,7 @@ describe('TaskController (e2e)', () => {
             .post('/api/task')
             .set('Authorization', `Bearer ${jwt}`)
             .send({ companyId: company.id, request: 'Write a report' });
-          return (res.body as LcpTask).shortcode;
+          return (res.body as TcpTask).shortcode;
         };
         const first = await create();
         const second = await create();
@@ -150,7 +150,7 @@ describe('TaskController (e2e)', () => {
       });
 
       describe('with a role', () => {
-        let role: LcpRole;
+        let role: TcpRole;
 
         beforeAll(async () => {
           role = await roleRepo.save(
@@ -192,18 +192,18 @@ describe('TaskController (e2e)', () => {
               plannerRoleId: role.id,
             });
           expect(res.status).toBe(201);
-          expect((res.body as LcpTask).plannerRoleId).toBe(role.id);
+          expect((res.body as TcpTask).plannerRoleId).toBe(role.id);
         });
 
         describe('with a task', () => {
-          let task: LcpTask;
+          let task: TcpTask;
 
           beforeEach(async () => {
             const res = await request(app.getHttpServer())
               .post('/api/task')
               .set('Authorization', `Bearer ${jwt}`)
               .send({ companyId: company.id, request: 'Write a report' });
-            task = res.body as LcpTask;
+            task = res.body as TcpTask;
           });
 
           describe('POST /api/task/:id/materials', () => {
@@ -219,7 +219,7 @@ describe('TaskController (e2e)', () => {
                 .get(`/api/task/${task.id}`)
                 .set('Authorization', `Bearer ${jwt}`);
               expect(
-                (updated.body as { task: LcpTask }).task.materials,
+                (updated.body as { task: TcpTask }).task.materials,
               ).toEqual([{ type: 'task-materials-path', value: 'brief.txt' }]);
             });
 
@@ -244,7 +244,7 @@ describe('TaskController (e2e)', () => {
                 .get(`/api/task/${task.id}`)
                 .set('Authorization', `Bearer ${jwt}`);
               expect(
-                (updated.body as { task: LcpTask }).task.materials,
+                (updated.body as { task: TcpTask }).task.materials,
               ).toEqual([]);
             });
 
@@ -292,8 +292,8 @@ describe('TaskController (e2e)', () => {
                 .set('Authorization', `Bearer ${jwt}`)
                 .send({ plannerRoleId: role.id });
               expect(res.status).toBe(200);
-              expect((res.body as LcpTask).request).toBe(task.request);
-              expect((res.body as LcpTask).plannerRoleId).toBe(role.id);
+              expect((res.body as TcpTask).request).toBe(task.request);
+              expect((res.body as TcpTask).plannerRoleId).toBe(role.id);
             });
 
             it('returns 404 for an unknown task', async () => {
@@ -378,13 +378,13 @@ describe('TaskController (e2e)', () => {
                   request: 'Write a report',
                   plannerRoleId: role.id,
                 });
-              const startable = created.body as LcpTask;
+              const startable = created.body as TcpTask;
 
               const res = await request(app.getHttpServer())
                 .post(`/api/task/${startable.id}/start`)
                 .set('Authorization', `Bearer ${jwt}`);
               expect(res.status).toBe(202);
-              expect((res.body as LcpTask).status).toBe('planning');
+              expect((res.body as TcpTask).status).toBe('planning');
 
               const planAssignment = await assignmentRepo.findOneBy({
                 taskId: startable.id,
@@ -411,7 +411,7 @@ describe('TaskController (e2e)', () => {
                 .post(`/api/task/${task.id}/start`)
                 .set('Authorization', `Bearer ${jwt}`);
               expect(res.status).toBe(202);
-              expect((res.body as LcpTask).status).toBe('planning');
+              expect((res.body as TcpTask).status).toBe('planning');
               await companyRepo.update(company.id, { plannerRoleId: null });
             });
 
@@ -443,7 +443,7 @@ describe('TaskController (e2e)', () => {
                 .post(`/api/task/${task.id}/cancel`)
                 .set('Authorization', `Bearer ${jwt}`);
               expect(res.status).toBe(202);
-              expect((res.body as LcpTask).status).toBe('cancelled');
+              expect((res.body as TcpTask).status).toBe('cancelled');
             });
 
             it("cascades to the task's non-terminal assignments", async () => {
@@ -557,8 +557,8 @@ describe('TaskController (e2e)', () => {
                 .set('Authorization', `Bearer ${jwt}`);
               expect(res.status).toBe(200);
               const body = res.body as {
-                task: LcpTask;
-                assignments: LcpAssignment[];
+                task: TcpTask;
+                assignments: TcpAssignment[];
               };
               expect(body.task.id).toBe(task.id);
               expect(body.assignments.map((a) => a.id)).toEqual([
@@ -716,7 +716,7 @@ describe('TaskController (e2e)', () => {
           .set('Authorization', `Bearer ${jwt}`);
         expect(res.status).toBe(200);
         expect(Array.isArray(res.body)).toBe(true);
-        expect((res.body as LcpTask[]).length).toBeGreaterThan(0);
+        expect((res.body as TcpTask[]).length).toBeGreaterThan(0);
       });
     });
   });

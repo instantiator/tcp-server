@@ -12,7 +12,7 @@
 import { randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-import { LcpCompany, LcpRole } from '../../libs/lcp-shared/src';
+import { TcpCompany, TcpRole } from '../../libs/lcp-shared/src';
 import { ApiHelper, BASE, ChatResponse, RUN_ID } from './helpers/ApiHelper';
 
 const fixture = (name: string) =>
@@ -71,7 +71,7 @@ describe('lcp-cli API flows', () => {
     });
 
     describe('with a company', () => {
-      let company: LcpCompany;
+      let company: TcpCompany;
 
       // Create a company for use with the remaining tests
       beforeAll(async () => {
@@ -104,7 +104,7 @@ describe('lcp-cli API flows', () => {
         });
 
         describe('with role', () => {
-          let role: LcpRole;
+          let role: TcpRole;
 
           beforeAll(async () => {
             role = await api.createTestRole(`test-role-${RUN_ID}`, company.id);

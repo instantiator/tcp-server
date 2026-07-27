@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { AuditEventType, LcpCompany } from '@lcp/shared';
+import { AuditEventType, TcpCompany } from '@lcp/shared';
 import type { UUID } from 'crypto';
 import type { DeepPartial } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
 import { DbService } from '../db/db.service';
-import { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
+import { TcpCompanyTemplate } from '../templates/TcpCompanyTemplate';
 import { isUUID } from '../utils/ObjectUtils';
 
 /** Orchestrates company operations, delegating persistence to {@link DbService}. */
@@ -16,16 +16,16 @@ export class ApiService {
   ) {}
 
   /**
-   * Creates a new {@link LcpCompany} from the given template and slug,
+   * Creates a new {@link TcpCompany} from the given template and slug,
    * replacing any existing record with the same slug. Adds `creatorIdentifier`
    * as a {@link CompanyUser} with `memberType: 'creator'`.
    */
   async createCompany(
-    template: LcpCompanyTemplate,
+    template: TcpCompanyTemplate,
     slug: string,
     creatorIdentifier: string,
     creatorName?: string | null,
-  ): Promise<LcpCompany> {
+  ): Promise<TcpCompany> {
     return await this.dbService.createCompany(
       template,
       slug,
@@ -35,7 +35,7 @@ export class ApiService {
   }
 
   /**
-   * Updates the fields of an existing {@link LcpCompany} identified by UUID
+   * Updates the fields of an existing {@link TcpCompany} identified by UUID
    * or slug (the path parameter is checked against UUID shape to tell them
    * apart). Throws {@link NotFoundException} (via {@link DbService.setCompany})
    * if no company matches — this never falls back to creating a new record.
@@ -44,8 +44,8 @@ export class ApiService {
    */
   async setCompany(
     pathIdentifier: string,
-    partial: DeepPartial<Omit<LcpCompany, 'id'>>,
-  ): Promise<LcpCompany> {
+    partial: DeepPartial<Omit<TcpCompany, 'id'>>,
+  ): Promise<TcpCompany> {
     const company = await this.dbService.setCompany(
       partial,
       isUUID(pathIdentifier)
@@ -63,10 +63,10 @@ export class ApiService {
   }
 
   /**
-   * Retrieves a {@link LcpCompany} by its UUID or slug.
+   * Retrieves a {@link TcpCompany} by its UUID or slug.
    * Returns `null` when no match is found.
    */
-  async getCompany(id: UUID): Promise<LcpCompany | null> {
+  async getCompany(id: UUID): Promise<TcpCompany | null> {
     return await this.dbService.getCompany(id);
   }
 }

@@ -1,4 +1,4 @@
-import { LcpCompany, LcpRole } from '@lcp/shared';
+import { TcpCompany, TcpRole } from '@lcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -38,8 +38,8 @@ async function waitFor<T>(
  */
 describe('knowledge RAG round trip (e2e)', () => {
   let app: INestApplication<App>;
-  let companyRepo: Repository<LcpCompany>;
-  let roleRepo: Repository<LcpRole>;
+  let companyRepo: Repository<TcpCompany>;
+  let roleRepo: Repository<TcpRole>;
   let roleId: UUID;
 
   const embeddingConfig = {
@@ -55,8 +55,8 @@ describe('knowledge RAG round trip (e2e)', () => {
     }).compile();
     app = module.createNestApplication();
     await app.init();
-    companyRepo = module.get(getRepositoryToken(LcpCompany));
-    roleRepo = module.get(getRepositoryToken(LcpRole));
+    companyRepo = module.get(getRepositoryToken(TcpCompany));
+    roleRepo = module.get(getRepositoryToken(TcpRole));
 
     const company = await companyRepo.save(
       companyRepo.create({

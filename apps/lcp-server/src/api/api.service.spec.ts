@@ -1,8 +1,8 @@
-import { AuditEventType, LcpCompany } from '@lcp/shared';
+import { AuditEventType, TcpCompany } from '@lcp/shared';
 import { randomUUID } from 'crypto';
 import { AuditService } from '../audit/audit.service';
 import { DbService } from '../db/db.service';
-import { LcpCompanyTemplate } from '../templates/LcpCompanyTemplate';
+import { TcpCompanyTemplate } from '../templates/TcpCompanyTemplate';
 import { ApiService } from './api.service';
 
 const makeDbService = (): jest.Mocked<
@@ -33,7 +33,7 @@ describe('ApiService', () => {
 
   describe('createCompany', () => {
     it('calls dbService.createCompany with the template, slug, and creator identity', async () => {
-      const template: LcpCompanyTemplate = {
+      const template: TcpCompanyTemplate = {
         name: 'Acme Corp',
         description: 'A Company That Makes Everything',
         mcpServerList: [],
@@ -53,7 +53,7 @@ describe('ApiService', () => {
         id: randomUUID(),
         slug: 'acme',
         name: 'Acme Corp',
-      } as LcpCompany;
+      } as TcpCompany;
       db.createCompany.mockResolvedValue(fakeCompany);
       const result = await api.createCompany(
         {
@@ -72,7 +72,7 @@ describe('ApiService', () => {
     it('resolves a UUID-shaped path identifier to identifiers.id', async () => {
       const id = randomUUID();
       const company = { slug: 'acme', name: 'Acme' };
-      db.setCompany.mockResolvedValue({ id } as LcpCompany);
+      db.setCompany.mockResolvedValue({ id } as TcpCompany);
       await api.setCompany(id, company);
       expect(db.setCompany).toHaveBeenCalledWith(company, { id });
     });
@@ -85,7 +85,7 @@ describe('ApiService', () => {
 
     it('records a company state_change for the updated company', async () => {
       const id = randomUUID();
-      db.setCompany.mockResolvedValue({ id } as LcpCompany);
+      db.setCompany.mockResolvedValue({ id } as TcpCompany);
       await api.setCompany(id, { name: 'Acme' });
       expect(audit.record).toHaveBeenCalledWith(
         id,

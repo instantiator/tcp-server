@@ -7,11 +7,11 @@ import {
   ContextCompactorService,
   ContextManagerService,
   IncomingDataGuardService,
-  LcpAgent,
-  LcpAssignment,
-  LcpCompany,
-  LcpRole,
-  LcpTask,
+  TcpAgent,
+  TcpAssignment,
+  TcpCompany,
+  TcpRole,
+  TcpTask,
 } from '@lcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -30,17 +30,17 @@ import { requireEnv } from '../../support/require-env';
 // PostgreSQL is provisioned by the integration global setup; DATABASE_URL is
 // always present. Run via: ./scripts/run-integration-tests.sh
 
-const ALL_ENTITIES = [LcpCompany, LcpRole, LcpAgent, LcpTask, LcpAssignment];
+const ALL_ENTITIES = [TcpCompany, TcpRole, TcpAgent, TcpTask, TcpAssignment];
 
 const DATABASE_URL = requireEnv('DATABASE_URL');
 
 describe('AgentLoopService (integration)', () => {
   let module: TestingModule;
   let service: AgentLoopService;
-  let companyRepo: Repository<LcpCompany>;
-  let roleRepo: Repository<LcpRole>;
-  let agentRepo: Repository<LcpAgent>;
-  let assignmentRepo: Repository<LcpAssignment>;
+  let companyRepo: Repository<TcpCompany>;
+  let roleRepo: Repository<TcpRole>;
+  let agentRepo: Repository<TcpAgent>;
+  let assignmentRepo: Repository<TcpAssignment>;
   let auditRecord: jest.Mock;
 
   beforeAll(async () => {
@@ -106,10 +106,10 @@ describe('AgentLoopService (integration)', () => {
     );
 
     service = module.get(AgentLoopService);
-    companyRepo = module.get(getRepositoryToken(LcpCompany));
-    roleRepo = module.get(getRepositoryToken(LcpRole));
-    agentRepo = module.get(getRepositoryToken(LcpAgent));
-    assignmentRepo = module.get(getRepositoryToken(LcpAssignment));
+    companyRepo = module.get(getRepositoryToken(TcpCompany));
+    roleRepo = module.get(getRepositoryToken(TcpRole));
+    agentRepo = module.get(getRepositoryToken(TcpAgent));
+    assignmentRepo = module.get(getRepositoryToken(TcpAssignment));
   });
 
   afterAll(async () => {

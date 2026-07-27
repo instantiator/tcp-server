@@ -3,8 +3,8 @@ import {
   Conversation,
   ConversationMessage,
   ConversationStatus,
-  LcpCompany,
-  LcpRole,
+  TcpCompany,
+  TcpRole,
 } from '@lcp/shared';
 import {
   BadRequestException,
@@ -32,10 +32,10 @@ export class ConversationService {
     private readonly msgRepo: Repository<ConversationMessage>,
     @InjectRepository(CompanyUser)
     private readonly userRepo: Repository<CompanyUser>,
-    @InjectRepository(LcpRole)
-    private readonly roleRepo: Repository<LcpRole>,
-    @InjectRepository(LcpCompany)
-    private readonly companyRepo: Repository<LcpCompany>,
+    @InjectRepository(TcpRole)
+    private readonly roleRepo: Repository<TcpRole>,
+    @InjectRepository(TcpCompany)
+    private readonly companyRepo: Repository<TcpCompany>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -99,7 +99,7 @@ export class ConversationService {
         const [rows] = await this.dataSource.query<
           [{ queryIndex: number }[], number]
         >(
-          `UPDATE lcp_role SET "queryIndex" = "queryIndex" + 1 WHERE id = $1 RETURNING "queryIndex"`,
+          `UPDATE tcp_role SET "queryIndex" = "queryIndex" + 1 WHERE id = $1 RETURNING "queryIndex"`,
           [roleId],
         );
         queryIndex = rows[0]?.queryIndex ?? 0;

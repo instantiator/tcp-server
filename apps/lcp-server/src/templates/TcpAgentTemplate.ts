@@ -1,23 +1,23 @@
-import { LcpAgent, LcpAssignmentMode } from '@lcp/shared';
+import { TcpAgent, TcpAssignmentMode } from '@lcp/shared';
 import type { UUID } from 'crypto';
 
 /**
- * Fields required to create a new {@link LcpAgent}.
+ * Fields required to create a new {@link TcpAgent}.
  *
  * Every agent is created with an assignment. Supply {@link assignmentId} to
  * attach an existing one; omit it and `DbService.createAgent` auto-creates an
  * orphan implement-mode assignment (whose {@link mode} may be overridden here).
  */
-export type LcpAgentTemplate = Pick<
-  LcpAgent,
+export type TcpAgentTemplate = Pick<
+  TcpAgent,
   'companyId' | 'roleId' | 'initialPrompt'
 > &
-  Partial<Pick<LcpAgent, 'requiredToolCalls' | 'assignmentId'>> & {
+  Partial<Pick<TcpAgent, 'requiredToolCalls' | 'assignmentId'>> & {
     /**
      * Mode for the auto-created orphan assignment when {@link assignmentId} is
      * not supplied. Defaults to `implement`.
      */
-    mode?: LcpAssignmentMode;
+    mode?: TcpAssignmentMode;
 
     /**
      * The assignment whose agent is spawning this one (e.g. a consultation),

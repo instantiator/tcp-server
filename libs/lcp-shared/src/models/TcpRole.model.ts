@@ -1,16 +1,16 @@
 import type { UUID } from 'crypto';
 import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import type { AgentRunConfig } from './AgentRunConfig.model';
-import { LcpCompany } from './LcpCompany.model';
+import { TcpCompany } from './TcpCompany.model';
 import type { LlmConfig } from './LlmConfig.model';
 import type { WithLlmConfig } from './WithLlmConfig';
 
 /**
  * A role template that defines the behaviour and LLM configuration for an agent.
- * Multiple {@link LcpAgent} instances can run from the same role within a company.
+ * Multiple {@link TcpAgent} instances can run from the same role within a company.
  */
 @Entity()
-export class LcpRole implements WithLlmConfig {
+export class TcpRole implements WithLlmConfig {
   /**
    * Auto-generated primary key for this role.
    * @format uuid
@@ -19,11 +19,11 @@ export class LcpRole implements WithLlmConfig {
   id!: UUID;
 
   /** The company this role belongs to. */
-  @ManyToOne(() => LcpCompany, { nullable: false, onDelete: 'CASCADE' })
-  company!: LcpCompany;
+  @ManyToOne(() => TcpCompany, { nullable: false, onDelete: 'CASCADE' })
+  company!: TcpCompany;
 
   /**
-   * Foreign key column for the owning {@link LcpCompany}.
+   * Foreign key column for the owning {@link TcpCompany}.
    * @format uuid
    */
   @Column()
@@ -32,7 +32,7 @@ export class LcpRole implements WithLlmConfig {
   /**
    * URL-safe identifier used to address this role without its UUID (e.g. in
    * `lcp-cli` or agent-to-agent consultation). Unique **within the owning
-   * company** only — unlike {@link LcpCompany.slug}, which is unique
+   * company** only — unlike {@link TcpCompany.slug}, which is unique
    * globally, the same role slug may be reused across different companies.
    * @minLength 1
    */
@@ -56,7 +56,7 @@ export class LcpRole implements WithLlmConfig {
   /**
    * LLM provider and model configuration for agents running in this role.
    * Stored as JSONB. When absent, resolved via {@link LlmConfigResolver}
-   * against {@link LcpCompany.llmConfig}, then the environment fallback.
+   * against {@link TcpCompany.llmConfig}, then the environment fallback.
    */
   @Column({ type: 'jsonb', nullable: true })
   llmConfig?: LlmConfig | null;
@@ -64,7 +64,7 @@ export class LcpRole implements WithLlmConfig {
   /**
    * Handlebars-style prompt template injected as the system message at agent start.
    * Optional — when blank, resolved via {@link SystemPromptTemplateResolver}
-   * against {@link LcpCompany.systemPromptTemplate}, then
+   * against {@link TcpCompany.systemPromptTemplate}, then
    * `DEFAULT_SYSTEM_PROMPT_TEMPLATE`.
    *
    * Available variables: `{{name}}`, `{{description}}`, `{{date}}`,
@@ -104,7 +104,7 @@ export class LcpRole implements WithLlmConfig {
 
   /**
    * Optional agent-loop resource overrides for agents running in this role.
-   * Takes precedence over {@link LcpCompany.runConfig} and environment variables.
+   * Takes precedence over {@link TcpCompany.runConfig} and environment variables.
    * See {@link AgentRunConfig} for available fields.
    */
   @Column({ type: 'jsonb', nullable: true })

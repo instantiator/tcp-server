@@ -1,5 +1,5 @@
-import { LcpAssignment } from '@lcp/shared';
-import type { LcpAssignmentStatus } from '@lcp/shared';
+import { TcpAssignment } from '@lcp/shared';
+import type { TcpAssignmentStatus } from '@lcp/shared';
 import {
   BadRequestException,
   Controller,
@@ -20,15 +20,15 @@ import type { UUID } from 'crypto';
 import { FindOptionsWhere, IsNull, Repository } from 'typeorm';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
-/** REST controller for observability listing of {@link LcpAssignment} records. */
+/** REST controller for observability listing of {@link TcpAssignment} records. */
 @ApiTags('assignments')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller({ path: 'api/assignment' })
 export class AssignmentController {
   constructor(
-    @InjectRepository(LcpAssignment)
-    private readonly assignmentRepo: Repository<LcpAssignment>,
+    @InjectRepository(TcpAssignment)
+    private readonly assignmentRepo: Repository<TcpAssignment>,
   ) {}
 
   /**
@@ -49,14 +49,14 @@ export class AssignmentController {
     @Query('companyId') companyId?: UUID,
     @Query('taskId') taskId?: string,
     @Query('roleId') roleId?: UUID,
-    @Query('status') status?: LcpAssignmentStatus,
-  ): Promise<LcpAssignment[]> {
+    @Query('status') status?: TcpAssignmentStatus,
+  ): Promise<TcpAssignment[]> {
     if (!companyId && !taskId) {
       throw new BadRequestException(
         'Provide at least one of companyId or taskId',
       );
     }
-    const where: FindOptionsWhere<LcpAssignment> = {
+    const where: FindOptionsWhere<TcpAssignment> = {
       ...(companyId ? { companyId } : {}),
       ...(roleId ? { roleId } : {}),
       ...(status ? { status } : {}),
@@ -72,7 +72,7 @@ export class AssignmentController {
   /** Retrieves a single assignment by UUID. */
   @ApiOperation({ summary: 'Get an assignment by ID' })
   @Get(':id')
-  async get(@Param('id') id: UUID): Promise<LcpAssignment> {
+  async get(@Param('id') id: UUID): Promise<TcpAssignment> {
     const assignment = await this.assignmentRepo.findOneBy({ id });
     if (!assignment) throw new NotFoundException(`Assignment ${id} not found`);
     return assignment;

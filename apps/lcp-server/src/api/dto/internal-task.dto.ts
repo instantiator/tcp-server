@@ -9,9 +9,9 @@ import {
   IsUUID,
 } from 'class-validator';
 import type {
-  LcpArtifact,
-  LcpAssignmentWorkingArtifact,
-  LcpMaterialArtifact,
+  TcpArtifact,
+  TcpAssignmentWorkingArtifact,
+  TcpMaterialArtifact,
 } from '@lcp/shared';
 
 /**
@@ -24,8 +24,8 @@ export interface PlanAssignmentInput {
   prompt: string;
   /** Role id or slug, resolved within the caller's company. */
   role: string;
-  expected: LcpAssignmentWorkingArtifact[];
-  materials?: LcpMaterialArtifact[];
+  expected: TcpAssignmentWorkingArtifact[];
+  materials?: TcpMaterialArtifact[];
 }
 
 /** Body for `POST /internal/task/:taskId/plan`. */
@@ -47,7 +47,7 @@ export class CompleteAssignmentDto {
   summary!: string;
 
   @IsArray()
-  prepared!: LcpAssignmentWorkingArtifact[];
+  prepared!: TcpAssignmentWorkingArtifact[];
 }
 
 /** Body for `POST /internal/assignment/:id/assure`. */
@@ -69,4 +69,4 @@ export class AssureAssignmentDto {
 }
 
 /** Re-exported for the service's manual artifact validation. */
-export type { LcpArtifact };
+export type { TcpArtifact };

@@ -1,9 +1,9 @@
 import {
   AuditEvent,
   CompanyUser,
-  LcpAgent,
-  LcpCompany,
-  LcpRole,
+  TcpAgent,
+  TcpCompany,
+  TcpRole,
 } from '@lcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -16,9 +16,9 @@ import { makeTestJwt } from '../helpers/test-jwt';
 
 describe('CompanyController (e2e)', () => {
   let app: INestApplication<App>;
-  let companyRepo: Repository<LcpCompany>;
-  let roleRepo: Repository<LcpRole>;
-  let agentRepo: Repository<LcpAgent>;
+  let companyRepo: Repository<TcpCompany>;
+  let roleRepo: Repository<TcpRole>;
+  let agentRepo: Repository<TcpAgent>;
   let auditRepo: Repository<AuditEvent>;
   let companyUserRepo: Repository<CompanyUser>;
   let jwt: string;
@@ -30,9 +30,9 @@ describe('CompanyController (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     await app.init();
-    companyRepo = moduleFixture.get(getRepositoryToken(LcpCompany));
-    roleRepo = moduleFixture.get(getRepositoryToken(LcpRole));
-    agentRepo = moduleFixture.get(getRepositoryToken(LcpAgent));
+    companyRepo = moduleFixture.get(getRepositoryToken(TcpCompany));
+    roleRepo = moduleFixture.get(getRepositoryToken(TcpRole));
+    agentRepo = moduleFixture.get(getRepositoryToken(TcpAgent));
     auditRepo = moduleFixture.get(getRepositoryToken(AuditEvent));
     companyUserRepo = moduleFixture.get(getRepositoryToken(CompanyUser));
     jwt = makeTestJwt();
@@ -85,7 +85,7 @@ describe('CompanyController (e2e)', () => {
           description: 'A company that makes everything',
         })
         .expect(201);
-      const company = res.body as LcpCompany;
+      const company = res.body as TcpCompany;
 
       const creator = await companyUserRepo.findOneBy({
         companyId: company.id,
@@ -95,7 +95,7 @@ describe('CompanyController (e2e)', () => {
       expect(creator!.memberType).toBe('creator');
     });
 
-    it('reports X-Lcp-Warnings when companyContext is blank', async () => {
+    it('reports X-Tcp-Warnings when companyContext is blank', async () => {
       const res = await request(app.getHttpServer())
         .post('/api/company')
         .set('Authorization', `Bearer ${jwt}`)
@@ -106,13 +106,13 @@ describe('CompanyController (e2e)', () => {
         })
         .expect(201);
 
-      const warnings = JSON.parse(res.headers['x-lcp-warnings']) as string[];
+      const warnings = JSON.parse(res.headers['x-tcp-warnings']) as string[];
       expect(warnings).toEqual(
         expect.arrayContaining([expect.stringContaining('companyContext')]),
       );
     });
 
-    it('omits X-Lcp-Warnings when companyContext is set', async () => {
+    it('omits X-Tcp-Warnings when companyContext is set', async () => {
       const res = await request(app.getHttpServer())
         .post('/api/company')
         .set('Authorization', `Bearer ${jwt}`)
@@ -124,7 +124,7 @@ describe('CompanyController (e2e)', () => {
         })
         .expect(201);
 
-      expect(res.headers['x-lcp-warnings']).toBeUndefined();
+      expect(res.headers['x-tcp-warnings']).toBeUndefined();
     });
 
     it('returns 400 when slug looks like a UUID (would confuse id-vs-slug resolution)', async () => {
@@ -168,7 +168,7 @@ describe('CompanyController (e2e)', () => {
   });
 
   describe('with a company', () => {
-    let company: LcpCompany;
+    let company: TcpCompany;
 
     // beforeEach (not beforeAll) because the outer afterEach deletes all records
     // after every it, so each test needs a fresh fixture.
@@ -275,7 +275,7 @@ describe('CompanyController (e2e)', () => {
   });
 
   describe('with a company that has llmConfig', () => {
-    let company: LcpCompany;
+    let company: TcpCompany;
 
     beforeEach(async () => {
       await request(app.getHttpServer())
@@ -323,9 +323,9 @@ describe('CompanyController (e2e)', () => {
 
 describe('RoleController (e2e)', () => {
   let app: INestApplication<App>;
-  let companyRepo: Repository<LcpCompany>;
-  let roleRepo: Repository<LcpRole>;
-  let agentRepo: Repository<LcpAgent>;
+  let companyRepo: Repository<TcpCompany>;
+  let roleRepo: Repository<TcpRole>;
+  let agentRepo: Repository<TcpAgent>;
   let auditRepo: Repository<AuditEvent>;
   let jwt: string;
 
@@ -336,9 +336,9 @@ describe('RoleController (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     await app.init();
-    companyRepo = moduleFixture.get(getRepositoryToken(LcpCompany));
-    roleRepo = moduleFixture.get(getRepositoryToken(LcpRole));
-    agentRepo = moduleFixture.get(getRepositoryToken(LcpAgent));
+    companyRepo = moduleFixture.get(getRepositoryToken(TcpCompany));
+    roleRepo = moduleFixture.get(getRepositoryToken(TcpRole));
+    agentRepo = moduleFixture.get(getRepositoryToken(TcpAgent));
     auditRepo = moduleFixture.get(getRepositoryToken(AuditEvent));
     jwt = makeTestJwt();
   });
@@ -391,7 +391,7 @@ describe('RoleController (e2e)', () => {
   });
 
   describe('with a company', () => {
-    let company: LcpCompany;
+    let company: TcpCompany;
 
     beforeEach(async () => {
       await request(app.getHttpServer())
@@ -441,7 +441,7 @@ describe('RoleController (e2e)', () => {
           .expect(201);
       });
 
-      it('reports X-Lcp-Warnings when knowledgeDomains is empty and rolePrompt is blank', async () => {
+      it('reports X-Tcp-Warnings when knowledgeDomains is empty and rolePrompt is blank', async () => {
         const res = await request(app.getHttpServer())
           .post('/api/role')
           .set('Authorization', `Bearer ${jwt}`)
@@ -456,7 +456,7 @@ describe('RoleController (e2e)', () => {
           })
           .expect(201);
 
-        const warnings = JSON.parse(res.headers['x-lcp-warnings']) as string[];
+        const warnings = JSON.parse(res.headers['x-tcp-warnings']) as string[];
         expect(warnings).toEqual(
           expect.arrayContaining([
             expect.stringContaining('knowledgeDomains'),
@@ -497,7 +497,7 @@ describe('RoleController (e2e)', () => {
             mcpServerList: [],
           })
           .expect(201);
-        const role = created.body as LcpRole;
+        const role = created.body as TcpRole;
 
         await request(app.getHttpServer())
           .delete(`/api/role/${role.id}`)
@@ -551,7 +551,7 @@ describe('RoleController (e2e)', () => {
   });
 
   describe('with a company that has llmConfig', () => {
-    let company: LcpCompany;
+    let company: TcpCompany;
 
     beforeEach(async () => {
       await request(app.getHttpServer())

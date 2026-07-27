@@ -1,8 +1,8 @@
-import type { LcpAgent } from '../models/LcpAgent.model';
-import type { LcpArtifact } from '../models/LcpArtifact';
-import type { LcpAssignment } from '../models/LcpAssignment.model';
-import type { LcpCompany } from '../models/LcpCompany.model';
-import type { LcpRole } from '../models/LcpRole.model';
+import type { TcpAgent } from '../models/TcpAgent.model';
+import type { TcpArtifact } from '../models/TcpArtifact';
+import type { TcpAssignment } from '../models/TcpAssignment.model';
+import type { TcpCompany } from '../models/TcpCompany.model';
+import type { TcpRole } from '../models/TcpRole.model';
 import { MCP_REGISTRY } from '../mcp/mcp-registry';
 import { ArtifactResolutionContext } from '../storage/artifact-keys';
 import { DEFAULT_SYSTEM_PROMPT_TEMPLATE } from '../llm/default-system-prompt-template';
@@ -52,9 +52,9 @@ export interface PromptAssemblyStrings {
  * or default) system-prompt template with the agent's identity/date vars.
  */
 export function renderSystemPrompt(
-  agent: LcpAgent,
-  role: LcpRole,
-  company: LcpCompany | null,
+  agent: TcpAgent,
+  role: TcpRole,
+  company: TcpCompany | null,
 ): string {
   const systemPromptTemplate = resolveSystemPromptTemplate(
     role,
@@ -124,7 +124,7 @@ export function buildRagMessage(
 /** Inputs for {@link buildAssignmentMessage} — prompt part 4. */
 export interface AssignmentMessageParams {
   /** The assignment's mode — selects the {@link MODE_PROMPTS} preamble. */
-  mode: LcpAssignment['mode'];
+  mode: TcpAssignment['mode'];
   /**
    * The assignment/task prompt. Already passed through
    * {@link ContextManagerService.prepare} by the caller. Empty (chat-start)
@@ -132,9 +132,9 @@ export interface AssignmentMessageParams {
    */
   prompt: string;
   /** Highlighted materials for the assignment (empty for orphans). */
-  materials: LcpArtifact[];
+  materials: TcpArtifact[];
   /** Expected outputs the completed work must satisfy (empty for orphans). */
-  expected: LcpArtifact[];
+  expected: TcpArtifact[];
   /** Context for resolving material/expected artifact keys. */
   resolutionContext: ArtifactResolutionContext;
 }
@@ -184,7 +184,7 @@ export function buildAssignmentMessage(
  * name/filename (`a.value`), the same string the scoped MCP tools take,
  * never the fully resolved storage key.
  */
-function renderArtifactList(header: string, artifacts: LcpArtifact[]): string {
+function renderArtifactList(header: string, artifacts: TcpArtifact[]): string {
   const items = artifacts.map((a) => `- ${a.value}`);
   return [header, ...items].join('\n');
 }

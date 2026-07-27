@@ -6,7 +6,7 @@
 
 /**
  * Role slug reserved for company-wide knowledge (the `knowledge/shared/`
- * folder). No {@link LcpRole} may claim this slug — enforced in
+ * folder). No {@link TcpRole} may claim this slug — enforced in
  * `DbService.setRole`.
  */
 export const SHARED_KNOWLEDGE_ROLE_SLUG = 'shared';

@@ -1,4 +1,4 @@
-import { EmbeddingService, LcpCompany } from '@lcp/shared';
+import { EmbeddingService, TcpCompany } from '@lcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { DataSource, Repository } from 'typeorm';
@@ -27,12 +27,12 @@ function makeAudit(): jest.Mocked<AuditClientService> {
 
 function makeCompanyRepo(
   embeddingConfig: object | null = EMBEDDING_CONFIG,
-): jest.Mocked<Repository<LcpCompany>> {
+): jest.Mocked<Repository<TcpCompany>> {
   return {
     findOne: jest
       .fn()
       .mockResolvedValue(embeddingConfig ? { embeddingConfig } : null),
-  } as unknown as jest.Mocked<Repository<LcpCompany>>;
+  } as unknown as jest.Mocked<Repository<TcpCompany>>;
 }
 
 function makeDataSource(rows: unknown[] = []): jest.Mocked<DataSource> {

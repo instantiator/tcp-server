@@ -13,9 +13,9 @@ import {
   DEFAULT_LLM_CONTEXT_WINDOW,
   DEFAULT_RAG_THRESHOLD,
   DEFAULT_REQUIRED_TOOL_RETRIES,
-  LcpAgent,
-  LcpAssignment,
-  LcpRole,
+  TcpAgent,
+  TcpAssignment,
+  TcpRole,
   LlmConfig,
   StreamEventLike,
   SupervisedGraphResult,
@@ -88,7 +88,7 @@ const TERMINAL_STATUSES = new Set<AgentStatus>([
  * required-tool reminder in {@link AgentLoopService.enforceRequiredTools}.
  */
 interface SupervisedRunContext {
-  agent: LcpAgent;
+  agent: TcpAgent;
   model: ReturnType<typeof buildChatModel>;
   allTools: DynamicStructuredTool[];
   /**
@@ -111,14 +111,14 @@ interface SupervisedRunContext {
 }
 
 /**
- * Executes and manages the LangGraph agent loop for a single {@link LcpAgent} run.
+ * Executes and manages the LangGraph agent loop for a single {@link TcpAgent} run.
  *
  * Each call to {@link AgentLoopService.run} corresponds to one BullMQ job.
  * State is persisted to PostgreSQL via the LangGraph checkpoint store so that
  * the agent can be resumed after an interruption.
  *
  * Resource limits — resolved at run-time in precedence order:
- * 1. `LcpRole.runConfig` → 2. `LcpCompany.runConfig` → 3. env vars
+ * 1. `TcpRole.runConfig` → 2. `TcpCompany.runConfig` → 3. env vars
  *    (`AGENT_ITERATIONS`, `AGENT_LOOP_TIMEOUT_MS`) → 4. code defaults
  *    ({@link DEFAULT_AGENT_ITERATIONS}, {@link DEFAULT_AGENT_LOOP_TIMEOUT_MS})
  *
@@ -146,12 +146,12 @@ export class AgentLoopService {
     private readonly storageTracking: StorageTrackingClientService,
     private readonly events: AgentEventPublisherService,
     private readonly contextManager: ContextManagerService,
-    @InjectRepository(LcpAgent)
-    private readonly agentRepo: Repository<LcpAgent>,
-    @InjectRepository(LcpRole)
-    private readonly roleRepo: Repository<LcpRole>,
-    @InjectRepository(LcpAssignment)
-    private readonly assignmentRepo: Repository<LcpAssignment>,
+    @InjectRepository(TcpAgent)
+    private readonly agentRepo: Repository<TcpAgent>,
+    @InjectRepository(TcpRole)
+    private readonly roleRepo: Repository<TcpRole>,
+    @InjectRepository(TcpAssignment)
+    private readonly assignmentRepo: Repository<TcpAssignment>,
   ) {
     this.databaseUrl = this.config.getOrThrow<string>('DATABASE_URL');
   }
@@ -260,7 +260,7 @@ export class AgentLoopService {
    * fallback completion when the loop ends without an explicit tool call.
    */
   private async runLoop(
-    agent: LcpAgent,
+    agent: TcpAgent,
     llmConfig: LlmConfig,
     checkpointer: PostgresSaver,
     abortController: AbortController,
@@ -502,7 +502,7 @@ export class AgentLoopService {
    * call, matching the previous per-call `streamAndAudit` scoping.
    */
   private buildOnEvent(
-    agent: LcpAgent,
+    agent: TcpAgent,
     tracker: AgentLoopTracker,
   ): (event: StreamEventLike) => void {
     // ponytail: actions include failed tool calls; on_tool_start used for simplicity
@@ -557,7 +557,7 @@ export class AgentLoopService {
    * every run inevitably.
    */
   private resolveRequiredTools(
-    agent: LcpAgent,
+    agent: TcpAgent,
     tools: { name: string }[],
   ): string[] {
     const required = agent.requiredToolCalls ?? ['complete_assignment'];
@@ -707,7 +707,7 @@ export class AgentLoopService {
    * No-op if the agent has already reached Completed — `complete_assignment` may
    * have won the race against a late failure (e.g. a summary error).
    */
-  private async failRun(agent: LcpAgent, reason: string): Promise<void> {
+  private async failRun(agent: TcpAgent, reason: string): Promise<void> {
     const fresh = await this.agentRepo.findOneBy({ id: agent.id });
     if (fresh?.status === AgentStatus.Completed) {
       this.logger.warn(
@@ -730,7 +730,7 @@ export class AgentLoopService {
    *   `agent.initialPrompt` if the incoming-data guard compacted it).
    */
   private async buildInitialState(
-    agent: LcpAgent,
+    agent: TcpAgent,
     mcpTools: Awaited<ReturnType<McpClientService['loadTools']>>,
     mcpServerUrls: Record<string, string>,
     initialPrompt: string,
@@ -860,7 +860,7 @@ export class AgentLoopService {
    * on every completed run.
    */
   private recordCompletionSummary(
-    agent: LcpAgent,
+    agent: TcpAgent,
     tracker: AgentLoopTracker,
   ): void {
     const { actions, storage } = tracker;
@@ -905,7 +905,7 @@ export class AgentLoopService {
    * bind the agent's UUID as the checkpoint thread identifier).
    */
   private async updateStatus(
-    agent: LcpAgent,
+    agent: TcpAgent,
     status: AgentStatus,
     threadId?: string,
   ): Promise<void> {

@@ -10,9 +10,9 @@
 #   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 #   # shellcheck source=scripts/lib/check-no-lcp-running.sh
 #   source "$SCRIPT_DIR/lib/check-no-lcp-running.sh"
-#   check_no_lcp_containers_running || exit 1
+#   check_no_tcp_containers_running || exit 1
 
-check_no_lcp_containers_running() {
+check_no_tcp_containers_running() {
   local conflicting
   conflicting=$(docker ps --format '{{.Names}}' 2>/dev/null | grep '^lcp-' || true)
   if [ -n "$conflicting" ]; then

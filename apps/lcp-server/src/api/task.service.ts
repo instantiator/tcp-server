@@ -2,12 +2,12 @@ import {
   AuditEvent,
   buildTaskChangeSummary,
   formatShortcodeIndex,
-  LcpAssignment,
-  LcpCompany,
-  LcpRole,
-  LcpTask,
+  TcpAssignment,
+  TcpCompany,
+  TcpRole,
+  TcpTask,
   TaskChangeSummary,
-  type LcpMaterialArtifact,
+  type TcpMaterialArtifact,
 } from '@lcp/shared';
 import {
   ConflictException,
@@ -33,7 +33,7 @@ export interface TaskMaterialSummary {
 }
 
 /**
- * Creates and manages {@link LcpTask} records: creation, materials upload,
+ * Creates and manages {@link TcpTask} records: creation, materials upload,
  * starting (dispatch to the planner), and listing/retrieval. No plan
  * generation or assignment execution happens here — see
  * `docs/prompts/010.2.3` for this part's scope.
@@ -41,14 +41,14 @@ export interface TaskMaterialSummary {
 @Injectable()
 export class TaskService {
   constructor(
-    @InjectRepository(LcpTask)
-    private readonly taskRepo: Repository<LcpTask>,
-    @InjectRepository(LcpAssignment)
-    private readonly assignmentRepo: Repository<LcpAssignment>,
-    @InjectRepository(LcpCompany)
-    private readonly companyRepo: Repository<LcpCompany>,
-    @InjectRepository(LcpRole)
-    private readonly roleRepo: Repository<LcpRole>,
+    @InjectRepository(TcpTask)
+    private readonly taskRepo: Repository<TcpTask>,
+    @InjectRepository(TcpAssignment)
+    private readonly assignmentRepo: Repository<TcpAssignment>,
+    @InjectRepository(TcpCompany)
+    private readonly companyRepo: Repository<TcpCompany>,
+    @InjectRepository(TcpRole)
+    private readonly roleRepo: Repository<TcpRole>,
     private readonly storage: StorageService,
     private readonly dispatcher: TaskDispatcher,
     private readonly audit: AuditService,
@@ -59,7 +59,7 @@ export class TaskService {
    * Creates a task. `plannerRoleId`, when given, must belong to `companyId`.
    * @throws {@link NotFoundException} for an unknown company or planner role.
    */
-  async create(dto: CreateTaskDto): Promise<LcpTask> {
+  async create(dto: CreateTaskDto): Promise<TcpTask> {
     const company = await this.companyRepo.findOneBy({ id: dto.companyId });
     if (!company) {
       throw new NotFoundException(`Company ${dto.companyId} not found`);
@@ -87,7 +87,7 @@ export class TaskService {
    *   `plannerRoleId` that does not belong to the task's company.
    * @throws {@link ConflictException} once the task has left `ready`.
    */
-  async update(taskId: UUID, dto: UpdateTaskDto): Promise<LcpTask> {
+  async update(taskId: UUID, dto: UpdateTaskDto): Promise<TcpTask> {
     const task = await this.getTaskOrThrow(taskId);
     if (task.status !== 'ready') {
       throw new ConflictException(
@@ -126,7 +126,7 @@ export class TaskService {
       const [rows] = await this.dataSource.query<
         [{ nextTaskShortcodeIndex: number }[], number]
       >(
-        `UPDATE lcp_company SET "nextTaskShortcodeIndex" = "nextTaskShortcodeIndex" + 1 WHERE id = $1 RETURNING "nextTaskShortcodeIndex"`,
+        `UPDATE tcp_company SET "nextTaskShortcodeIndex" = "nextTaskShortcodeIndex" + 1 WHERE id = $1 RETURNING "nextTaskShortcodeIndex"`,
         [companyId],
       );
       index = (rows[0]?.nextTaskShortcodeIndex ?? 1) - 1;
@@ -179,7 +179,7 @@ export class TaskService {
     const key = taskMaterialsKey(company.slug, task.id, filename);
     const size = await this.storage.putByKey(key, content, contentType);
 
-    const artifact: LcpMaterialArtifact = {
+    const artifact: TcpMaterialArtifact = {
       type: 'task-materials-path',
       value: filename,
     };
@@ -198,7 +198,7 @@ export class TaskService {
    * @throws {@link UnprocessableEntityException} when no planner role is resolvable.
    * @throws {@link ConflictException} when the task is not `ready`.
    */
-  async start(taskId: UUID): Promise<LcpTask> {
+  async start(taskId: UUID): Promise<TcpTask> {
     const task = await this.getTaskOrThrow(taskId);
     const company = await this.companyRepo.findOneByOrFail({
       id: task.companyId,
@@ -239,12 +239,12 @@ export class TaskService {
    * @throws {@link ConflictException} when the task is already terminal
    *   (`succeeded`, `failed`, or `cancelled`).
    */
-  async cancel(taskId: UUID): Promise<LcpTask> {
+  async cancel(taskId: UUID): Promise<TcpTask> {
     await this.getTaskOrThrow(taskId);
 
     const claimed = await this.taskRepo
       .createQueryBuilder()
-      .update(LcpTask)
+      .update(TcpTask)
       .set({ status: 'cancelled' })
       .where('id = :id', { id: taskId })
       .andWhere('status NOT IN (:...terminal)', {
@@ -266,7 +266,7 @@ export class TaskService {
    * Lists a company's tasks, most recently created first.
    * @throws {@link NotFoundException} for an unknown company.
    */
-  async list(companyId: UUID): Promise<LcpTask[]> {
+  async list(companyId: UUID): Promise<TcpTask[]> {
     const company = await this.companyRepo.findOneBy({ id: companyId });
     if (!company) {
       throw new NotFoundException(`Company ${companyId} not found`);
@@ -284,7 +284,7 @@ export class TaskService {
    */
   async getWithAssignments(
     taskId: UUID,
-  ): Promise<{ task: LcpTask; assignments: LcpAssignment[] }> {
+  ): Promise<{ task: TcpTask; assignments: TcpAssignment[] }> {
     const task = await this.getTaskOrThrow(taskId);
     const assignments = await this.assignmentRepo.find({
       where: { taskId },
@@ -304,7 +304,7 @@ export class TaskService {
    * oldest first. This includes agent-less orchestrator rows (task/assignment
    * state changes) that the old assignments→agents join missed, and
    * consultations spawned mid-assignment (which inherit the task's `taskId`
-   * server-side — see {@link LcpAssignment.parentAssignmentId}).
+   * server-side — see {@link TcpAssignment.parentAssignmentId}).
    *
    * @throws {@link NotFoundException} for an unknown task.
    */
@@ -332,7 +332,7 @@ export class TaskService {
     const plan = await this.assignmentRepo.find({
       where: { taskId: In(tasks.map((t) => t.id)), mode: 'implement' },
     });
-    const byTask = new Map<UUID, LcpAssignment[]>();
+    const byTask = new Map<UUID, TcpAssignment[]>();
     for (const assignment of plan) {
       const list = byTask.get(assignment.taskId!) ?? [];
       list.push(assignment);
@@ -343,7 +343,7 @@ export class TaskService {
     );
   }
 
-  private async getTaskOrThrow(taskId: UUID): Promise<LcpTask> {
+  private async getTaskOrThrow(taskId: UUID): Promise<TcpTask> {
     const task = await this.taskRepo.findOneBy({ id: taskId });
     if (!task) throw new NotFoundException(`Task ${taskId} not found`);
     return task;

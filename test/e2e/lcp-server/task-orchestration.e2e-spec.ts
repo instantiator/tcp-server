@@ -1,9 +1,9 @@
 import {
   assignmentWorkingKey,
-  LcpAssignment,
-  LcpCompany,
-  LcpRole,
-  LcpTask,
+  TcpAssignment,
+  TcpCompany,
+  TcpRole,
+  TcpTask,
   taskCompletedPrefix,
 } from '@lcp/shared';
 import { INestApplication } from '@nestjs/common';
@@ -29,15 +29,15 @@ const INTERNAL_KEY = process.env.INTERNAL_API_KEY ?? 'e2e-test-internal-key';
  */
 describe('Task orchestration lifecycle (e2e)', () => {
   let app: INestApplication<App>;
-  let companyRepo: Repository<LcpCompany>;
-  let roleRepo: Repository<LcpRole>;
-  let taskRepo: Repository<LcpTask>;
-  let assignmentRepo: Repository<LcpAssignment>;
+  let companyRepo: Repository<TcpCompany>;
+  let roleRepo: Repository<TcpRole>;
+  let taskRepo: Repository<TcpTask>;
+  let assignmentRepo: Repository<TcpAssignment>;
   let storage: StorageService;
   let jwt: string;
 
-  let company: LcpCompany;
-  let role: LcpRole;
+  let company: TcpCompany;
+  let role: TcpRole;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -45,10 +45,10 @@ describe('Task orchestration lifecycle (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     await app.init();
-    companyRepo = moduleFixture.get(getRepositoryToken(LcpCompany));
-    roleRepo = moduleFixture.get(getRepositoryToken(LcpRole));
-    taskRepo = moduleFixture.get(getRepositoryToken(LcpTask));
-    assignmentRepo = moduleFixture.get(getRepositoryToken(LcpAssignment));
+    companyRepo = moduleFixture.get(getRepositoryToken(TcpCompany));
+    roleRepo = moduleFixture.get(getRepositoryToken(TcpRole));
+    taskRepo = moduleFixture.get(getRepositoryToken(TcpTask));
+    assignmentRepo = moduleFixture.get(getRepositoryToken(TcpAssignment));
     storage = moduleFixture.get(StorageService);
     jwt = makeTestJwt();
 
@@ -93,7 +93,7 @@ describe('Task orchestration lifecycle (e2e)', () => {
         plannerRoleId: role.id,
       })
       .expect(201);
-    const taskId = (created.body as LcpTask).id;
+    const taskId = (created.body as TcpTask).id;
     await request(app.getHttpServer())
       .post(`/api/task/${taskId}/start`)
       .set('Authorization', `Bearer ${jwt}`)
@@ -106,14 +106,14 @@ describe('Task orchestration lifecycle (e2e)', () => {
     return a.agentId!;
   }
 
-  async function planAssignment(taskId: UUID): Promise<LcpAssignment> {
+  async function planAssignment(taskId: UUID): Promise<TcpAssignment> {
     return assignmentRepo.findOneByOrFail({ taskId, mode: 'plan' });
   }
 
   async function step(
     taskId: UUID,
     orderIndex: number,
-  ): Promise<LcpAssignment> {
+  ): Promise<TcpAssignment> {
     return assignmentRepo.findOneByOrFail({
       taskId,
       mode: 'implement',
@@ -121,7 +121,7 @@ describe('Task orchestration lifecycle (e2e)', () => {
     });
   }
 
-  async function qaAssignment(targetId: UUID): Promise<LcpAssignment> {
+  async function qaAssignment(targetId: UUID): Promise<TcpAssignment> {
     return assignmentRepo.findOneByOrFail({
       targetAssignmentId: targetId,
       mode: 'qa',
@@ -266,7 +266,7 @@ describe('Task orchestration lifecycle (e2e)', () => {
         expected: [{ type: 'task-completed-path', value: 'out.md' }],
       })
       .expect(201);
-    const taskId = (created.body as LcpTask).id;
+    const taskId = (created.body as TcpTask).id;
     await request(app.getHttpServer())
       .post(`/api/task/${taskId}/start`)
       .set('Authorization', `Bearer ${jwt}`)
@@ -319,7 +319,7 @@ describe('Task orchestration lifecycle (e2e)', () => {
         expected: [{ type: 'task-completed-path', value: 'summary.md' }],
       })
       .expect(201);
-    const taskId = (created.body as LcpTask).id;
+    const taskId = (created.body as TcpTask).id;
     await request(app.getHttpServer())
       .post(`/api/task/${taskId}/start`)
       .set('Authorization', `Bearer ${jwt}`)

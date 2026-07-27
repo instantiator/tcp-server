@@ -3,8 +3,8 @@ import {
   ContextBudgetService,
   DEFAULT_LLM_CONTEXT_WINDOW,
   DEFAULT_SYSTEM_PROMPT_TEMPLATE,
-  LcpCompany,
-  LcpRole,
+  TcpCompany,
+  TcpRole,
   MCP_REGISTRY,
   buildPromptDateVars,
   renderTemplate,
@@ -53,8 +53,8 @@ export interface PromptSizeBreakdown {
 }
 
 interface FileFixture {
-  company?: Partial<LcpCompany>;
-  role?: Partial<LcpRole>;
+  company?: Partial<TcpCompany>;
+  role?: Partial<TcpRole>;
 }
 
 /** Loads `{ company, role }` from a JSON file instead of hitting a live server (see `--from-file`). */
@@ -73,7 +73,7 @@ async function loadFromApi(
   if (!companyIdentifier && !roleGiven) return {};
 
   const company = companyIdentifier
-    ? await apiRequest<LcpCompany>(
+    ? await apiRequest<TcpCompany>(
         api,
         'GET',
         `/api/company/${companyIdentifier}`,
@@ -89,11 +89,11 @@ async function loadFromApi(
     opts.roleSlug ??
     (opts.role && !UUID_RE.test(opts.role) ? opts.role : undefined);
 
-  let role: LcpRole | undefined;
+  let role: TcpRole | undefined;
   if (roleId) {
-    role = await apiRequest<LcpRole>(api, 'GET', `/api/role/${roleId}`);
+    role = await apiRequest<TcpRole>(api, 'GET', `/api/role/${roleId}`);
   } else if (roleSlug && company) {
-    role = await apiRequest<LcpRole>(
+    role = await apiRequest<TcpRole>(
       api,
       'GET',
       `/api/company/${company.id}/roles/by-slug/${roleSlug}`,
@@ -189,7 +189,7 @@ export function estimateContextWindowAction(
     if (cmdOpts.fromFile) {
       fixture = await loadFromFile(cmdOpts.fromFile);
     } else {
-      const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+      const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
       const api = apiOptions(opts, token);
       fixture = await loadFromApi(api, cmdOpts);
     }

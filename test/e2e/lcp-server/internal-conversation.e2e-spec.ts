@@ -6,11 +6,11 @@ import {
   CompanyUser,
   Conversation,
   ConversationMessage,
-  LcpAgent,
-  LcpAssignment,
-  LcpCompany,
-  LcpRole,
-  LcpTask,
+  TcpAgent,
+  TcpAssignment,
+  TcpCompany,
+  TcpRole,
+  TcpTask,
   PendingConsultation,
 } from '@lcp/shared';
 import { INestApplication } from '@nestjs/common';
@@ -31,11 +31,11 @@ const INTERNAL_KEY = process.env.INTERNAL_API_KEY ?? 'e2e-test-internal-key';
 
 describe('InternalController + ConversationController (e2e)', () => {
   let app: INestApplication<App>;
-  let companyRepo: Repository<LcpCompany>;
-  let roleRepo: Repository<LcpRole>;
-  let agentRepo: Repository<LcpAgent>;
-  let assignmentRepo: Repository<LcpAssignment>;
-  let taskRepo: Repository<LcpTask>;
+  let companyRepo: Repository<TcpCompany>;
+  let roleRepo: Repository<TcpRole>;
+  let agentRepo: Repository<TcpAgent>;
+  let assignmentRepo: Repository<TcpAssignment>;
+  let taskRepo: Repository<TcpTask>;
   let convRepo: Repository<Conversation>;
   let msgRepo: Repository<ConversationMessage>;
   let consultRepo: Repository<PendingConsultation>;
@@ -51,11 +51,11 @@ describe('InternalController + ConversationController (e2e)', () => {
     app = moduleFixture.createNestApplication();
     await app.init();
 
-    companyRepo = moduleFixture.get(getRepositoryToken(LcpCompany));
-    roleRepo = moduleFixture.get(getRepositoryToken(LcpRole));
-    agentRepo = moduleFixture.get(getRepositoryToken(LcpAgent));
-    assignmentRepo = moduleFixture.get(getRepositoryToken(LcpAssignment));
-    taskRepo = moduleFixture.get(getRepositoryToken(LcpTask));
+    companyRepo = moduleFixture.get(getRepositoryToken(TcpCompany));
+    roleRepo = moduleFixture.get(getRepositoryToken(TcpRole));
+    agentRepo = moduleFixture.get(getRepositoryToken(TcpAgent));
+    assignmentRepo = moduleFixture.get(getRepositoryToken(TcpAssignment));
+    taskRepo = moduleFixture.get(getRepositoryToken(TcpTask));
     convRepo = moduleFixture.get(getRepositoryToken(Conversation));
     msgRepo = moduleFixture.get(getRepositoryToken(ConversationMessage));
     consultRepo = moduleFixture.get(getRepositoryToken(PendingConsultation));
@@ -85,7 +85,7 @@ describe('InternalController + ConversationController (e2e)', () => {
   // Shared fixture helpers
   // ---------------------------------------------------------------------------
 
-  async function createCompany(): Promise<LcpCompany> {
+  async function createCompany(): Promise<TcpCompany> {
     await request(app.getHttpServer())
       .post('/api/company')
       .set('Authorization', `Bearer ${jwt}`)
@@ -97,7 +97,7 @@ describe('InternalController + ConversationController (e2e)', () => {
     return companyRepo.findOneByOrFail({ slug: 'e2e-co' });
   }
 
-  async function createRole(companyId: UUID): Promise<LcpRole> {
+  async function createRole(companyId: UUID): Promise<TcpRole> {
     const res = await request(app.getHttpServer())
       .post('/api/role')
       .set('Authorization', `Bearer ${jwt}`)
@@ -112,14 +112,14 @@ describe('InternalController + ConversationController (e2e)', () => {
         mcpServerList: [],
       })
       .expect(201);
-    return res.body as LcpRole;
+    return res.body as TcpRole;
   }
 
   /** Orphan implement-mode assignment for an agent's mandatory FK. */
   async function seedAssignment(
     companyId: UUID,
     roleId: UUID,
-  ): Promise<LcpAssignment> {
+  ): Promise<TcpAssignment> {
     return assignmentRepo.save(
       assignmentRepo.create({
         taskId: null,
@@ -136,7 +136,7 @@ describe('InternalController + ConversationController (e2e)', () => {
   async function createRunningAgent(
     companyId: UUID,
     roleId: UUID,
-  ): Promise<LcpAgent> {
+  ): Promise<TcpAgent> {
     const assignment = await seedAssignment(companyId, roleId);
     return agentRepo.save(
       agentRepo.create({
@@ -158,7 +158,7 @@ describe('InternalController + ConversationController (e2e)', () => {
     companyId: UUID,
     roleId: UUID,
     taskId: UUID,
-  ): Promise<LcpAgent> {
+  ): Promise<TcpAgent> {
     const assignment = await assignmentRepo.save(
       assignmentRepo.create({
         taskId,
@@ -351,7 +351,7 @@ describe('InternalController + ConversationController (e2e)', () => {
           mcpServerList: [],
         })
         .expect(201);
-      const roleB = res.body as LcpRole;
+      const roleB = res.body as TcpRole;
       const caller = await createRunningAgent(company.id, roleA.id);
 
       const pauseRes = await request(app.getHttpServer())

@@ -1,7 +1,7 @@
 import type {
   AuditWireEvent,
-  LcpAssignment,
-  LcpTask,
+  TcpAssignment,
+  TcpTask,
   TaskChangeSummary,
   WireEvent,
 } from '@lcp/shared';
@@ -187,7 +187,7 @@ export class ChatSession {
     private readonly tui: Tui | null,
     tokens: TokenSession,
   ) {
-    this.tokenManager = new TokenManager(this.opts.lcpServer, tokens);
+    this.tokenManager = new TokenManager(this.opts.tcpServer, tokens);
   }
 
   /** Whether any pane has a turn in flight. */
@@ -255,7 +255,7 @@ export class ChatSession {
    */
   watchCompanyEvents(): void {
     this.companyEventsAbort = new AbortController();
-    const url = `${this.opts.lcpServer.replace(/\/$/, '')}/api/company/${this.companyId}/events`;
+    const url = `${this.opts.tcpServer.replace(/\/$/, '')}/api/company/${this.companyId}/events`;
     void readWireStream(
       url,
       this.tokenManager.current,
@@ -298,11 +298,11 @@ export class ChatSession {
    */
   async fetchTaskDetail(
     taskId: string,
-  ): Promise<{ task: LcpTask; assignments: AssignmentInfo[] }> {
+  ): Promise<{ task: TcpTask; assignments: AssignmentInfo[] }> {
     const [{ task, assignments }, roles] = await Promise.all([
       this.tokenManager.request<{
-        task: LcpTask;
-        assignments: LcpAssignment[];
+        task: TcpTask;
+        assignments: TcpAssignment[];
       }>('GET', `/api/task/${taskId}`),
       this.tokenManager.request<{ id: string; name: string; slug: string }[]>(
         'GET',
@@ -330,7 +330,7 @@ export class ChatSession {
     };
   }
 
-  /** Fetches the company's default planner role id (`LcpCompany.plannerRoleId`), if it has one. */
+  /** Fetches the company's default planner role id (`TcpCompany.plannerRoleId`), if it has one. */
   async fetchCompanyDefaultPlannerRoleId(): Promise<string | undefined> {
     const company = await this.tokenManager.request<{
       plannerRoleId?: string | null;
@@ -345,12 +345,12 @@ export class ChatSession {
    */
   async createTask(
     submission: InitiateTaskSubmission,
-  ): Promise<{ task: LcpTask; assignments: AssignmentInfo[] }> {
+  ): Promise<{ task: TcpTask; assignments: AssignmentInfo[] }> {
     const expected = submission.expected.map((filename) => ({
       type: 'task-completed-path' as const,
       value: filename,
     }));
-    const created = await this.tokenManager.request<LcpTask>(
+    const created = await this.tokenManager.request<TcpTask>(
       'POST',
       '/api/task',
       {
@@ -381,7 +381,7 @@ export class ChatSession {
   watchTaskEvents(taskId: string): void {
     const abort = new AbortController();
     this.taskEventsAbort.set(taskId, abort);
-    const url = `${this.opts.lcpServer.replace(/\/$/, '')}/api/task/${taskId}/events`;
+    const url = `${this.opts.tcpServer.replace(/\/$/, '')}/api/task/${taskId}/events`;
     void readWireStream(
       url,
       this.tokenManager.current,
@@ -515,7 +515,7 @@ export class ChatSession {
     if (!TERMINAL_AGENT_STATUSES.has(agent.status)) {
       const abort = new AbortController();
       this.assignmentPaneWatchAbort.set(agentId, abort);
-      const url = `${this.opts.lcpServer.replace(/\/$/, '')}/api/agent/${agentId}/events`;
+      const url = `${this.opts.tcpServer.replace(/\/$/, '')}/api/agent/${agentId}/events`;
       void readWireStream(
         url,
         this.tokenManager.current,
@@ -687,7 +687,7 @@ export class ChatSession {
     signal: AbortSignal,
     onConnected?: () => void,
   ): Promise<TurnOutcome> {
-    const url = `${this.opts.lcpServer.replace(/\/$/, '')}/api/agent/${id}/events`;
+    const url = `${this.opts.tcpServer.replace(/\/$/, '')}/api/agent/${id}/events`;
     const followerAbort = new AbortController();
     const followers: Promise<unknown>[] = [];
     let outcome: TurnOutcome | undefined;

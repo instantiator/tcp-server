@@ -1,4 +1,4 @@
-import { CompanyUser, LcpCompany, LcpRole } from '@lcp/shared';
+import { CompanyUser, TcpCompany, TcpRole } from '@lcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -46,8 +46,8 @@ async function callTool(
 describe('lcp-mcp-interactions -> lcp-server (cross-service e2e)', () => {
   let app: INestApplication<App>;
   let baseUrl: string;
-  let companyRepo: Repository<LcpCompany>;
-  let roleRepo: Repository<LcpRole>;
+  let companyRepo: Repository<TcpCompany>;
+  let roleRepo: Repository<TcpRole>;
   let userRepo: Repository<CompanyUser>;
   let tools: InteractionsToolsService;
   let jwt: string;
@@ -68,8 +68,8 @@ describe('lcp-mcp-interactions -> lcp-server (cross-service e2e)', () => {
     }
     baseUrl = `http://127.0.0.1:${address.port}`;
 
-    companyRepo = moduleFixture.get(getRepositoryToken(LcpCompany));
-    roleRepo = moduleFixture.get(getRepositoryToken(LcpRole));
+    companyRepo = moduleFixture.get(getRepositoryToken(TcpCompany));
+    roleRepo = moduleFixture.get(getRepositoryToken(TcpRole));
     userRepo = moduleFixture.get(getRepositoryToken(CompanyUser));
     jwt = makeTestJwt();
 
@@ -91,7 +91,7 @@ describe('lcp-mcp-interactions -> lcp-server (cross-service e2e)', () => {
     await companyRepo.createQueryBuilder().delete().execute();
   });
 
-  async function createCompany(): Promise<LcpCompany> {
+  async function createCompany(): Promise<TcpCompany> {
     await request(app.getHttpServer())
       .post('/api/company')
       .set('Authorization', `Bearer ${jwt}`)
@@ -103,7 +103,7 @@ describe('lcp-mcp-interactions -> lcp-server (cross-service e2e)', () => {
     return companyRepo.findOneByOrFail({ slug: 'cross-service-co' });
   }
 
-  async function createRole(companyId: UUID): Promise<LcpRole> {
+  async function createRole(companyId: UUID): Promise<TcpRole> {
     const res = await request(app.getHttpServer())
       .post('/api/role')
       .set('Authorization', `Bearer ${jwt}`)
@@ -118,7 +118,7 @@ describe('lcp-mcp-interactions -> lcp-server (cross-service e2e)', () => {
         mcpServerList: [],
       })
       .expect(201);
-    return res.body as LcpRole;
+    return res.body as TcpRole;
   }
 
   async function createCompanyUser(companyId: UUID): Promise<CompanyUser> {

@@ -16,7 +16,7 @@ export function deleteKnowledgeAction(
   cmdOpts: EntityRefOpts & { file: string },
 ): Promise<void> {
   return runCommand(async () => {
-    const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+    const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
     const scopePath = await resolveKnowledgeScopePath(api, cmdOpts);
     await apiRequest(

@@ -20,7 +20,7 @@ const mockedApiUpload = apiUpload as jest.Mock;
 const mockedResolveToken = resolveToken as jest.Mock;
 const mockedFs = fs as jest.Mocked<typeof fs>;
 
-const opts = { lcpServer: 'http://localhost:3000' };
+const opts = { tcpServer: 'http://localhost:3000' };
 const company = { id: 'company-id' };
 const task = { id: 'task-id', status: 'ready' };
 

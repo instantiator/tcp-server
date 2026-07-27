@@ -1,8 +1,8 @@
 import {
   KnowledgeChunk,
   KnowledgeIndexState,
-  LcpCompany,
-  LcpRole,
+  TcpCompany,
+  TcpRole,
 } from '@lcp/shared';
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -33,8 +33,8 @@ import { RagRetrievalService } from './rag-retrieval.service';
     TypeOrmModule.forFeature([
       KnowledgeChunk,
       KnowledgeIndexState,
-      LcpCompany,
-      LcpRole,
+      TcpCompany,
+      TcpRole,
     ]),
     forwardRef(() => StorageModule),
   ],

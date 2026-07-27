@@ -32,7 +32,7 @@ export class PauseDto {
   @IsUUID()
   companyId?: UUID;
 
-  /** Alternate to `companyId` — resolved the same way `LcpCompany.slug` is elsewhere. */
+  /** Alternate to `companyId` — resolved the same way `TcpCompany.slug` is elsewhere. */
   @IsOptional()
   @IsString()
   companySlug?: string;

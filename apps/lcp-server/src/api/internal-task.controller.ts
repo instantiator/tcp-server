@@ -9,7 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
-import { InternalApiKeyGuard, LcpAssignment, LcpTask } from '@lcp/shared';
+import { InternalApiKeyGuard, TcpAssignment, TcpTask } from '@lcp/shared';
 import type { UUID } from 'crypto';
 import { AssignmentService, StorageScope } from './assignment.service';
 import {
@@ -39,7 +39,7 @@ export class InternalTaskController {
   @Get('agent/:agentId/assignment')
   async getAssignment(
     @Param('agentId') agentId: UUID,
-  ): Promise<{ assignment: LcpAssignment; task: LcpTask | null }> {
+  ): Promise<{ assignment: TcpAssignment; task: TcpTask | null }> {
     return this.assignments.getAgentAssignment(agentId);
   }
 

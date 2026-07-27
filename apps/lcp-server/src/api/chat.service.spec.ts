@@ -8,8 +8,8 @@ import {
   ContextCompactorService,
   ContextManagerService,
   IncomingDataGuardService,
-  LcpAgent,
-  LcpRole,
+  TcpAgent,
+  TcpRole,
   MODE_PROMPTS,
   WireEvent,
 } from '@lcp/shared';
@@ -80,7 +80,7 @@ import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import { AgentEventService } from '../events/agent-event.service';
 import { RagRetrievalService } from '../rag/rag-retrieval.service';
 
-function makeAgent(overrides: Partial<LcpAgent> = {}): LcpAgent {
+function makeAgent(overrides: Partial<TcpAgent> = {}): TcpAgent {
   return {
     id: randomUUID(),
     companyId: randomUUID(),
@@ -110,7 +110,7 @@ function makeAgent(overrides: Partial<LcpAgent> = {}): LcpAgent {
   };
 }
 
-function makeRole(overrides: Partial<LcpRole> = {}): LcpRole {
+function makeRole(overrides: Partial<TcpRole> = {}): TcpRole {
   return {
     id: randomUUID(),
     companyId: randomUUID(),

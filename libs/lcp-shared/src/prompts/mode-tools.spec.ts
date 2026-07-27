@@ -5,7 +5,7 @@ import {
   MODE_TOOLS,
   STORAGE_WRITE_TOOLS,
 } from './mode-tools';
-import type { LcpAssignmentMode } from '../models/LcpAssignment.model';
+import type { TcpAssignmentMode } from '../models/TcpAssignment.model';
 
 const tool = (serverName: string, base: string) => ({
   serverName,
@@ -25,7 +25,7 @@ const FULL_SET = [
   tool('interactions', 'request_agent_consultation'),
 ];
 
-const ALL_MODES: LcpAssignmentMode[] = [
+const ALL_MODES: TcpAssignmentMode[] = [
   'plan',
   'implement',
   'qa',

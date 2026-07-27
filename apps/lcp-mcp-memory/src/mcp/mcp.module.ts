@@ -1,7 +1,7 @@
 import {
   EmbeddingService,
   EpisodicMemory,
-  LcpCompany,
+  TcpCompany,
   AuditClientService,
 } from '@lcp/shared';
 import { Module } from '@nestjs/common';
@@ -11,7 +11,7 @@ import { MemoryToolsService } from './memory-tools.service';
 
 /** Wires the MCP controller and memory tools service. */
 @Module({
-  imports: [TypeOrmModule.forFeature([LcpCompany, EpisodicMemory])],
+  imports: [TypeOrmModule.forFeature([TcpCompany, EpisodicMemory])],
   controllers: [McpController],
   providers: [MemoryToolsService, EmbeddingService, AuditClientService],
 })

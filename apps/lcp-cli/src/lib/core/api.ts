@@ -9,7 +9,7 @@
 import { printWarning } from './warn';
 
 /** Header the server uses to report soft data-quality warnings (see `validation-warnings.ts` in lcp-server). */
-const WARNINGS_HEADER = 'X-Lcp-Warnings';
+const WARNINGS_HEADER = 'X-Tcp-Warnings';
 
 export interface ApiOptions {
   /** Base URL of the lcp-server (e.g. `http://localhost:3000`). */
@@ -63,7 +63,7 @@ export async function apiRequest<T>(
 }
 
 /**
- * Prints any `X-Lcp-Warnings` reported by the server (see {@link WARNINGS_HEADER}).
+ * Prints any `X-Tcp-Warnings` reported by the server (see {@link WARNINGS_HEADER}).
  *
  * Each entry is percent-encoded server-side (see `setWarningsHeader` in
  * lcp-server's `validation-warnings.ts`) so warning content carrying

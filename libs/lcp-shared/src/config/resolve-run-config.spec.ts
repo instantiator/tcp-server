@@ -1,16 +1,16 @@
-import type { LcpCompany } from '../models/LcpCompany.model';
-import type { LcpRole } from '../models/LcpRole.model';
+import type { TcpCompany } from '../models/TcpCompany.model';
+import type { TcpRole } from '../models/TcpRole.model';
 import { resolveRunConfig } from './resolve-run-config';
 
-const role = (maxIterations?: number): LcpRole =>
+const role = (maxIterations?: number): TcpRole =>
   ({
     runConfig: maxIterations !== undefined ? { maxIterations } : null,
-  }) as LcpRole;
+  }) as TcpRole;
 
-const company = (maxIterations?: number): LcpCompany =>
+const company = (maxIterations?: number): TcpCompany =>
   ({
     runConfig: maxIterations !== undefined ? { maxIterations } : null,
-  }) as LcpCompany;
+  }) as TcpCompany;
 
 describe('resolveRunConfig', () => {
   it('uses the role value when set', () => {

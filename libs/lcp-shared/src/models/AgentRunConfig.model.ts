@@ -2,8 +2,8 @@
  * Optional per-role or per-company overrides for agent run limits and
  * retrieval tuning.
  *
- * Values are applied in precedence order: {@link LcpRole.runConfig} →
- * {@link LcpCompany.runConfig} → environment variables → code defaults.
+ * Values are applied in precedence order: {@link TcpRole.runConfig} →
+ * {@link TcpCompany.runConfig} → environment variables → code defaults.
  * Any field left undefined falls through to the next level.
  */
 export interface AgentRunConfig {

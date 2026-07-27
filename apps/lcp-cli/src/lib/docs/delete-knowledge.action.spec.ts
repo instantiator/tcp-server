@@ -8,7 +8,7 @@ jest.mock('../auth/token');
 const mockedApiRequest = apiRequest as jest.Mock;
 const mockedResolveToken = resolveToken as jest.Mock;
 
-const opts = { lcpServer: 'http://localhost:3000' };
+const opts = { tcpServer: 'http://localhost:3000' };
 const roleId = '11111111-2222-3333-4444-555555555555';
 
 describe('deleteKnowledgeAction', () => {

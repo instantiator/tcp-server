@@ -2,8 +2,8 @@ import {
   CompanyUser,
   Conversation,
   ConversationMessage,
-  LcpCompany,
-  LcpRole,
+  TcpCompany,
+  TcpRole,
 } from '@lcp/shared';
 import {
   BadRequestException,
@@ -54,8 +54,8 @@ describe('ConversationService', () => {
   let convRepo: ReturnType<typeof makeRepo<Conversation>>;
   let msgRepo: ReturnType<typeof makeRepo<ConversationMessage>>;
   let userRepo: ReturnType<typeof makeRepo<CompanyUser>>;
-  let roleRepo: ReturnType<typeof makeRepo<LcpRole>>;
-  let companyRepo: ReturnType<typeof makeRepo<LcpCompany>>;
+  let roleRepo: ReturnType<typeof makeRepo<TcpRole>>;
+  let companyRepo: ReturnType<typeof makeRepo<TcpCompany>>;
   let dataSource: ReturnType<typeof makeDataSource>;
   let service: ConversationService;
 
@@ -74,8 +74,8 @@ describe('ConversationService', () => {
       convRepo as unknown as Repository<Conversation>,
       msgRepo as unknown as Repository<ConversationMessage>,
       userRepo as unknown as Repository<CompanyUser>,
-      roleRepo as unknown as Repository<LcpRole>,
-      companyRepo as unknown as Repository<LcpCompany>,
+      roleRepo as unknown as Repository<TcpRole>,
+      companyRepo as unknown as Repository<TcpCompany>,
       dataSource as unknown as DataSource,
     );
   });
@@ -130,7 +130,7 @@ describe('ConversationService', () => {
       msgRepo.find.mockResolvedValue([]);
       companyRepo.findOneBy.mockResolvedValue({
         timezone: 'Europe/London',
-      } as LcpCompany);
+      } as TcpCompany);
 
       const result = await service.get('analyst-1');
       expect(result.companyTimezone).toBe('Europe/London');
@@ -160,7 +160,7 @@ describe('ConversationService', () => {
       await service.create(companyId, roleId, 'cto', agentId, 'question');
 
       expect(dataSource.query).toHaveBeenCalledWith(
-        expect.stringContaining('UPDATE lcp_role'),
+        expect.stringContaining('UPDATE tcp_role'),
         [roleId],
       );
     });

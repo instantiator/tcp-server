@@ -1,6 +1,6 @@
 // lcp-mcp-memory requires a real Postgres connection, provisioned by the e2e
 // global setup — DATABASE_URL is always a real postgres URL.
-import { LcpCompany, LcpRole } from '@lcp/shared';
+import { TcpCompany, TcpRole } from '@lcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
@@ -100,24 +100,24 @@ describe('lcp-mcp-memory MCP endpoint (e2e)', () => {
     request(app.getHttpServer()).delete('/mcp').expect(405));
 
   describe('tool calls (real DB round trip)', () => {
-    let companyRepo: Repository<LcpCompany>;
-    let roleRepo: Repository<LcpRole>;
+    let companyRepo: Repository<TcpCompany>;
+    let roleRepo: Repository<TcpRole>;
     let companyId: UUID;
     let roleId: UUID;
 
     beforeAll(async () => {
       // AddMissingCompanyRoleForeignKeys1783357408218 added a real FK from
-      // episodic_memory.roleId to lcp_role.id, so a real row is required —
-      // McpModule only registers LcpCompany/EpisodicMemory as forFeature
-      // repositories (LcpRole is connection-only, see app.module.ts), so
-      // TypeOrmModule.forFeature([LcpRole]) is added here purely to expose
+      // episodic_memory.roleId to tcp_role.id, so a real row is required —
+      // McpModule only registers TcpCompany/EpisodicMemory as forFeature
+      // repositories (TcpRole is connection-only, see app.module.ts), so
+      // TypeOrmModule.forFeature([TcpRole]) is added here purely to expose
       // its repository for seeding, against the same connection AppModule
       // already established.
       const module: TestingModule = await Test.createTestingModule({
-        imports: [AppModule, TypeOrmModule.forFeature([LcpRole])],
+        imports: [AppModule, TypeOrmModule.forFeature([TcpRole])],
       }).compile();
-      companyRepo = module.get(getRepositoryToken(LcpCompany));
-      roleRepo = module.get(getRepositoryToken(LcpRole));
+      companyRepo = module.get(getRepositoryToken(TcpCompany));
+      roleRepo = module.get(getRepositoryToken(TcpRole));
 
       const company = await companyRepo.save(
         companyRepo.create({

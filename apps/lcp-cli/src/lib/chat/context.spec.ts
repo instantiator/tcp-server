@@ -8,7 +8,7 @@ jest.mock('../auth/token');
 const mockedApiRequest = apiRequest as jest.Mock;
 const mockedResolveSession = resolveSession as jest.Mock;
 
-const opts = { lcpServer: 'http://localhost:3000' };
+const opts = { tcpServer: 'http://localhost:3000' };
 const company = {
   id: 'company-uuid',
   slug: 'acme',

@@ -2,11 +2,11 @@ import {
   AgentStatus,
   AuditEvent,
   AuditEventType,
-  LcpAgent,
-  LcpAssignment,
-  LcpCompany,
-  LcpRole,
-  LcpTask,
+  TcpAgent,
+  TcpAssignment,
+  TcpCompany,
+  TcpRole,
+  TcpTask,
   McpClientService,
   MODE_PROMPTS,
   WireEvent,
@@ -64,10 +64,10 @@ async function setStubResponse(response: string): Promise<void> {
 describe('ChatService integration (stub LLM)', () => {
   let service: ChatService;
   let agentEvents: AgentEventService;
-  let agentRepo: Repository<LcpAgent>;
-  let assignmentRepo: Repository<LcpAssignment>;
-  let roleRepo: Repository<LcpRole>;
-  let companyRepo: Repository<LcpCompany>;
+  let agentRepo: Repository<TcpAgent>;
+  let assignmentRepo: Repository<TcpAssignment>;
+  let roleRepo: Repository<TcpRole>;
+  let companyRepo: Repository<TcpCompany>;
   let auditRepo: Repository<AuditEvent>;
   let dataSource: DataSource;
   let testCompanyId: UUID;
@@ -127,21 +127,21 @@ describe('ChatService integration (stub LLM)', () => {
           type: 'postgres',
           url: DATABASE_URL,
           entities: [
-            LcpAgent,
-            LcpRole,
-            LcpCompany,
-            LcpTask,
-            LcpAssignment,
+            TcpAgent,
+            TcpRole,
+            TcpCompany,
+            TcpTask,
+            TcpAssignment,
             AuditEvent,
           ],
           synchronize: true,
         }),
         TypeOrmModule.forFeature([
-          LcpAgent,
-          LcpRole,
-          LcpCompany,
-          LcpTask,
-          LcpAssignment,
+          TcpAgent,
+          TcpRole,
+          TcpCompany,
+          TcpTask,
+          TcpAssignment,
           AuditEvent,
         ]),
         ContextModule,
@@ -166,10 +166,10 @@ describe('ChatService integration (stub LLM)', () => {
 
     service = moduleRef.get(ChatService);
     agentEvents = moduleRef.get(AgentEventService);
-    agentRepo = moduleRef.get(getRepositoryToken(LcpAgent));
-    assignmentRepo = moduleRef.get(getRepositoryToken(LcpAssignment));
-    roleRepo = moduleRef.get(getRepositoryToken(LcpRole));
-    companyRepo = moduleRef.get(getRepositoryToken(LcpCompany));
+    agentRepo = moduleRef.get(getRepositoryToken(TcpAgent));
+    assignmentRepo = moduleRef.get(getRepositoryToken(TcpAssignment));
+    roleRepo = moduleRef.get(getRepositoryToken(TcpRole));
+    companyRepo = moduleRef.get(getRepositoryToken(TcpCompany));
     auditRepo = moduleRef.get(getRepositoryToken(AuditEvent));
     dataSource = moduleRef.get(DataSource);
 

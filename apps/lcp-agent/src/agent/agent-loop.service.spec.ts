@@ -9,11 +9,11 @@ import {
   AuditClientService,
   AuditEventType,
   ContextManagerService,
-  LcpAgent,
-  LcpAssignment,
-  LcpCompany,
-  LcpRole,
-  LcpTask,
+  TcpAgent,
+  TcpAssignment,
+  TcpCompany,
+  TcpRole,
+  TcpTask,
   LlmConfig,
   MODE_PROMPTS,
   renderTemplate,
@@ -32,7 +32,7 @@ import { agentPrompts } from '../agent-prompts';
 import { AgentEventPublisherService } from './agent-event-publisher.service';
 import { AgentLoopService } from './agent-loop.service';
 
-const ALL_ENTITIES = [LcpCompany, LcpRole, LcpAgent, LcpTask, LcpAssignment];
+const ALL_ENTITIES = [TcpCompany, TcpRole, TcpAgent, TcpTask, TcpAssignment];
 
 // Returns a compiled-graph stub whose streamEvents yields the given events.
 // getState defaults to next: [] (natural end) — these tests exercise one
@@ -150,11 +150,11 @@ jest.mock('@langchain/langgraph', () => {
 
 describe('AgentLoopService', () => {
   let service: AgentLoopService;
-  let agentRepo: Repository<LcpAgent>;
-  let assignmentRepo: Repository<LcpAssignment>;
-  let roleRepo: Repository<LcpRole>;
-  let companyRepo: Repository<LcpCompany>;
-  let taskRepo: Repository<LcpTask>;
+  let agentRepo: Repository<TcpAgent>;
+  let assignmentRepo: Repository<TcpAssignment>;
+  let roleRepo: Repository<TcpRole>;
+  let companyRepo: Repository<TcpCompany>;
+  let taskRepo: Repository<TcpTask>;
   let auditRecord: jest.Mock;
   let notifyComplete: jest.Mock;
   let notifyFailed: jest.Mock;
@@ -237,11 +237,11 @@ describe('AgentLoopService', () => {
     }).compile();
 
     service = testingModule.get(AgentLoopService);
-    agentRepo = testingModule.get(getRepositoryToken(LcpAgent));
-    assignmentRepo = testingModule.get(getRepositoryToken(LcpAssignment));
-    roleRepo = testingModule.get(getRepositoryToken(LcpRole));
-    companyRepo = testingModule.get(getRepositoryToken(LcpCompany));
-    taskRepo = testingModule.get(getRepositoryToken(LcpTask));
+    agentRepo = testingModule.get(getRepositoryToken(TcpAgent));
+    assignmentRepo = testingModule.get(getRepositoryToken(TcpAssignment));
+    roleRepo = testingModule.get(getRepositoryToken(TcpRole));
+    companyRepo = testingModule.get(getRepositoryToken(TcpCompany));
+    taskRepo = testingModule.get(getRepositoryToken(TcpTask));
     mcpClient = testingModule.get(McpClientService);
     ragProvider = testingModule.get(AgentRagService);
     configService = testingModule.get(ConfigService);
@@ -281,9 +281,9 @@ describe('AgentLoopService', () => {
       llmConfig?: LlmConfig;
       companyLlmConfig?: LlmConfig;
       systemPromptTemplate?: string;
-      mode?: LcpAssignment['mode'];
-      materials?: LcpAssignment['materials'];
-      expected?: LcpAssignment['expected'];
+      mode?: TcpAssignment['mode'];
+      materials?: TcpAssignment['materials'];
+      expected?: TcpAssignment['expected'];
     } = {
       llmConfig: {
         provider: 'lm-studio',

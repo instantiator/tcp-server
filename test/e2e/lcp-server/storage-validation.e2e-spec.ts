@@ -1,4 +1,4 @@
-import { LcpCompany } from '@lcp/shared';
+import { TcpCompany } from '@lcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -11,9 +11,9 @@ import { makeTestJwt } from '../helpers/test-jwt';
 /** e2e coverage for the standalone `POST /api/storage/validate` path (docs/prompts/009.4). */
 describe('StorageValidationController (e2e)', () => {
   let app: INestApplication<App>;
-  let companyRepo: Repository<LcpCompany>;
+  let companyRepo: Repository<TcpCompany>;
   let jwt: string;
-  let company: LcpCompany;
+  let company: TcpCompany;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -21,7 +21,7 @@ describe('StorageValidationController (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     await app.init();
-    companyRepo = moduleFixture.get(getRepositoryToken(LcpCompany));
+    companyRepo = moduleFixture.get(getRepositoryToken(TcpCompany));
     jwt = makeTestJwt();
 
     company = await companyRepo.save(

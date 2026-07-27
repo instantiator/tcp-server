@@ -3,7 +3,7 @@ import {
   AuditEventType,
   Conversation,
   ConversationMessage,
-  LcpAgent,
+  TcpAgent,
   PendingConsultation,
 } from '@lcp/shared';
 import { ConfigService } from '@nestjs/config';
@@ -33,7 +33,7 @@ jest.mock('@lcp/shared', () => ({
 
 const MockQueue = Queue as jest.MockedClass<typeof Queue>;
 
-function makeAgent(overrides: Partial<LcpAgent> = {}): LcpAgent {
+function makeAgent(overrides: Partial<TcpAgent> = {}): TcpAgent {
   return {
     id: randomUUID(),
     companyId: randomUUID(),
@@ -107,7 +107,7 @@ describe('AgentOrchestrationService', () => {
             getOrThrow: jest.fn().mockReturnValue('redis://localhost:6379'),
           },
         },
-        { provide: getRepositoryToken(LcpAgent), useValue: agentRepo },
+        { provide: getRepositoryToken(TcpAgent), useValue: agentRepo },
         {
           provide: getRepositoryToken(PendingConsultation),
           useValue: consultRepo,

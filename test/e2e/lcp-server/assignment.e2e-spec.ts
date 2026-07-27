@@ -1,4 +1,4 @@
-import { LcpAssignment, LcpCompany, LcpRole, LcpTask } from '@lcp/shared';
+import { TcpAssignment, TcpCompany, TcpRole, TcpTask } from '@lcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -11,10 +11,10 @@ import { makeTestJwt } from '../helpers/test-jwt';
 
 describe('AssignmentController (e2e)', () => {
   let app: INestApplication<App>;
-  let companyRepo: Repository<LcpCompany>;
-  let roleRepo: Repository<LcpRole>;
-  let taskRepo: Repository<LcpTask>;
-  let assignmentRepo: Repository<LcpAssignment>;
+  let companyRepo: Repository<TcpCompany>;
+  let roleRepo: Repository<TcpRole>;
+  let taskRepo: Repository<TcpTask>;
+  let assignmentRepo: Repository<TcpAssignment>;
   let jwt: string;
   let companyId: UUID;
   let roleId: UUID;
@@ -25,10 +25,10 @@ describe('AssignmentController (e2e)', () => {
     }).compile();
     app = module.createNestApplication();
     await app.init();
-    companyRepo = module.get(getRepositoryToken(LcpCompany));
-    roleRepo = module.get(getRepositoryToken(LcpRole));
-    taskRepo = module.get(getRepositoryToken(LcpTask));
-    assignmentRepo = module.get(getRepositoryToken(LcpAssignment));
+    companyRepo = module.get(getRepositoryToken(TcpCompany));
+    roleRepo = module.get(getRepositoryToken(TcpRole));
+    taskRepo = module.get(getRepositoryToken(TcpTask));
+    assignmentRepo = module.get(getRepositoryToken(TcpAssignment));
     jwt = makeTestJwt();
 
     const company = await companyRepo.save(
@@ -104,7 +104,7 @@ describe('AssignmentController (e2e)', () => {
         .get(`/api/assignment?companyId=${companyId}`)
         .set('Authorization', `Bearer ${jwt}`)
         .expect(200);
-      const ids = (res.body as LcpAssignment[]).map((a) => a.id);
+      const ids = (res.body as TcpAssignment[]).map((a) => a.id);
       expect(ids).toEqual(expect.arrayContaining([orphan.id, owned.id]));
     });
 
@@ -135,7 +135,7 @@ describe('AssignmentController (e2e)', () => {
         .get(`/api/assignment?companyId=${companyId}&taskId=null`)
         .set('Authorization', `Bearer ${jwt}`)
         .expect(200);
-      const ids = (res.body as LcpAssignment[]).map((a) => a.id);
+      const ids = (res.body as TcpAssignment[]).map((a) => a.id);
       expect(ids).toEqual([orphan.id]);
     });
 
@@ -166,7 +166,7 @@ describe('AssignmentController (e2e)', () => {
         .get(`/api/assignment?taskId=${task.id}`)
         .set('Authorization', `Bearer ${jwt}`)
         .expect(200);
-      const ids = (res.body as LcpAssignment[]).map((a) => a.id);
+      const ids = (res.body as TcpAssignment[]).map((a) => a.id);
       expect(ids).toEqual([owned.id]);
     });
 
@@ -196,7 +196,7 @@ describe('AssignmentController (e2e)', () => {
         .get(`/api/assignment?companyId=${companyId}&status=succeeded`)
         .set('Authorization', `Bearer ${jwt}`)
         .expect(200);
-      const ids = (res.body as LcpAssignment[]).map((a) => a.id);
+      const ids = (res.body as TcpAssignment[]).map((a) => a.id);
       expect(ids).toEqual([succeeded.id]);
     });
   });
@@ -217,7 +217,7 @@ describe('AssignmentController (e2e)', () => {
         .get(`/api/assignment/${assignment.id}`)
         .set('Authorization', `Bearer ${jwt}`)
         .expect(200);
-      expect((res.body as LcpAssignment).id).toBe(assignment.id);
+      expect((res.body as TcpAssignment).id).toBe(assignment.id);
     });
 
     it('returns 404 for an unknown assignment', () =>

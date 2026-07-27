@@ -4,9 +4,9 @@ import type { RunnableConfig } from '@langchain/core/runnables';
 import type { DynamicStructuredTool } from '@langchain/core/tools';
 import type { MessagesAnnotation } from '@langchain/langgraph';
 import type { ContextManagerService } from '../context/context-manager.service';
-import { AgentStatus } from '../models/LcpAgent.model';
-import type { LcpAgent } from '../models/LcpAgent.model';
-import type { LcpRole } from '../models/LcpRole.model';
+import { AgentStatus } from '../models/TcpAgent.model';
+import type { TcpAgent } from '../models/TcpAgent.model';
+import type { TcpRole } from '../models/TcpRole.model';
 import type { buildAgentGraph } from './build-agent-graph';
 import { isContextLengthError } from './context-length-error';
 import type { StreamEventLike } from './stream-event-mapper';
@@ -43,8 +43,8 @@ export interface SupervisedGraphHooks {
 
 export interface RunSupervisedGraphOptions {
   agentId: string;
-  agent: LcpAgent;
-  role: LcpRole;
+  agent: TcpAgent;
+  role: TcpRole;
   model: BaseChatModel;
   /** The full tool set loaded for this run (before any visibility gating). */
   allTools: DynamicStructuredTool[];

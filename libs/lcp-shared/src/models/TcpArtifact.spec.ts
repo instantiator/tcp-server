@@ -1,4 +1,4 @@
-import { canonicalArtifactType, canonicaliseArtifacts } from './LcpArtifact';
+import { canonicalArtifactType, canonicaliseArtifacts } from './TcpArtifact';
 
 describe('canonicalArtifactType', () => {
   it('maps word aliases to inline-text', () => {

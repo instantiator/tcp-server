@@ -5,8 +5,8 @@ import { DynamicStructuredTool } from '@langchain/core/tools';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { AuditEventType } from '../models/AuditEvent.model';
-import type { LcpAgent } from '../models/LcpAgent.model';
-import type { LcpRole } from '../models/LcpRole.model';
+import type { TcpAgent } from '../models/TcpAgent.model';
+import type { TcpRole } from '../models/TcpRole.model';
 import { ContextBudgetService } from './context-budget.service';
 import { ContextCompactorService } from './context-compactor.service';
 import {
@@ -29,12 +29,12 @@ function makeGraph(messages: unknown[] = []) {
   };
 }
 
-function makeAgent(): LcpAgent {
-  return { id: randomUUID(), companyId: randomUUID() } as LcpAgent;
+function makeAgent(): TcpAgent {
+  return { id: randomUUID(), companyId: randomUUID() } as TcpAgent;
 }
 
-function makeRole(): LcpRole {
-  return { name: 'analyst' } as LcpRole;
+function makeRole(): TcpRole {
+  return { name: 'analyst' } as TcpRole;
 }
 
 // Use a small window so the 10k-char test messages (≈2500 tokens) exceed the 80% threshold

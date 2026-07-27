@@ -1,8 +1,8 @@
 import {
   AuditEvent,
   InternalApiKeyGuard,
-  LcpAgent,
-  LcpAssignment,
+  TcpAgent,
+  TcpAssignment,
 } from '@lcp/shared';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -13,7 +13,7 @@ import { AuditService } from './audit.service';
 /** Provides audit event persistence and the internal POST /internal/audit endpoint. */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([AuditEvent, LcpAgent, LcpAssignment]),
+    TypeOrmModule.forFeature([AuditEvent, TcpAgent, TcpAssignment]),
     EventsModule,
   ],
   controllers: [AuditController],

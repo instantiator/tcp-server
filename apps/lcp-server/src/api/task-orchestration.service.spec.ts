@@ -3,12 +3,12 @@ import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import {
   AgentStatus,
   AuditEventType,
-  LcpAgent,
-  LcpAssignment,
-  LcpCompany,
-  LcpRole,
-  LcpTask,
-  type LcpMaterialArtifact,
+  TcpAgent,
+  TcpAssignment,
+  TcpCompany,
+  TcpRole,
+  TcpTask,
+  type TcpMaterialArtifact,
 } from '@lcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { type UUID } from 'crypto';
@@ -18,9 +18,9 @@ import { StorageService } from '../storage/storage.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { PauseAndResumeService } from './pause-and-resume.service';
 import { TaskOrchestrationService } from './task-orchestration.service';
-import type { LcpAgentTemplate } from '../templates/LcpAgentTemplate';
+import type { TcpAgentTemplate } from '../templates/TcpAgentTemplate';
 
-const ENTITIES = [LcpCompany, LcpRole, LcpAgent, LcpTask, LcpAssignment];
+const ENTITIES = [TcpCompany, TcpRole, TcpAgent, TcpTask, TcpAssignment];
 
 /**
  * Exercises {@link TaskOrchestrationService} against a real in-memory SQLite DB
@@ -33,11 +33,11 @@ const ENTITIES = [LcpCompany, LcpRole, LcpAgent, LcpTask, LcpAssignment];
 describe('TaskOrchestrationService', () => {
   let moduleRef: TestingModule;
   let service: TaskOrchestrationService;
-  let taskRepo: Repository<LcpTask>;
-  let assignmentRepo: Repository<LcpAssignment>;
-  let agentRepo: Repository<LcpAgent>;
-  let companyRepo: Repository<LcpCompany>;
-  let roleRepo: Repository<LcpRole>;
+  let taskRepo: Repository<TcpTask>;
+  let assignmentRepo: Repository<TcpAssignment>;
+  let agentRepo: Repository<TcpAgent>;
+  let companyRepo: Repository<TcpCompany>;
+  let roleRepo: Repository<TcpRole>;
 
   let agents: {
     createAgent: jest.Mock;
@@ -61,11 +61,11 @@ describe('TaskOrchestrationService', () => {
         TypeOrmModule.forFeature(ENTITIES),
       ],
     }).compile();
-    taskRepo = moduleRef.get(getRepositoryToken(LcpTask));
-    assignmentRepo = moduleRef.get(getRepositoryToken(LcpAssignment));
-    agentRepo = moduleRef.get(getRepositoryToken(LcpAgent));
-    companyRepo = moduleRef.get(getRepositoryToken(LcpCompany));
-    roleRepo = moduleRef.get(getRepositoryToken(LcpRole));
+    taskRepo = moduleRef.get(getRepositoryToken(TcpTask));
+    assignmentRepo = moduleRef.get(getRepositoryToken(TcpAssignment));
+    agentRepo = moduleRef.get(getRepositoryToken(TcpAgent));
+    companyRepo = moduleRef.get(getRepositoryToken(TcpCompany));
+    roleRepo = moduleRef.get(getRepositoryToken(TcpRole));
   });
 
   afterAll(async () => {
@@ -76,7 +76,7 @@ describe('TaskOrchestrationService', () => {
     // createAgent persists a real agent row (as DbService.createAgent would),
     // so the orchestrator's back-link and later lookups operate on real data.
     agents = {
-      createAgent: jest.fn().mockImplementation((t: LcpAgentTemplate) =>
+      createAgent: jest.fn().mockImplementation((t: TcpAgentTemplate) =>
         agentRepo.save(
           agentRepo.create({
             companyId: t.companyId,
@@ -120,8 +120,8 @@ describe('TaskOrchestrationService', () => {
     return Math.random().toString(36).slice(2, 8);
   }
   async function seedCompany(
-    partial: Partial<LcpCompany> = {},
-  ): Promise<LcpCompany> {
+    partial: Partial<TcpCompany> = {},
+  ): Promise<TcpCompany> {
     return companyRepo.save(
       companyRepo.create({
         slug: `acme-${slug()}`,
@@ -133,8 +133,8 @@ describe('TaskOrchestrationService', () => {
   }
   async function seedRole(
     companyId: UUID,
-    partial: Partial<LcpRole> = {},
-  ): Promise<LcpRole> {
+    partial: Partial<TcpRole> = {},
+  ): Promise<TcpRole> {
     return roleRepo.save(
       roleRepo.create({
         companyId,
@@ -147,8 +147,8 @@ describe('TaskOrchestrationService', () => {
   }
   async function seedTask(
     companyId: UUID,
-    partial: Partial<LcpTask> = {},
-  ): Promise<LcpTask> {
+    partial: Partial<TcpTask> = {},
+  ): Promise<TcpTask> {
     return taskRepo.save(
       taskRepo.create({
         companyId,
@@ -162,8 +162,8 @@ describe('TaskOrchestrationService', () => {
     );
   }
   async function seedAssignment(
-    partial: Partial<LcpAssignment>,
-  ): Promise<LcpAssignment> {
+    partial: Partial<TcpAssignment>,
+  ): Promise<TcpAssignment> {
     return assignmentRepo.save(
       assignmentRepo.create({
         mode: 'implement',
@@ -395,7 +395,7 @@ describe('TaskOrchestrationService', () => {
           { type: 'assignment-completed-path', value: 'extra.txt' },
         ],
       });
-      const hint: LcpMaterialArtifact = {
+      const hint: TcpMaterialArtifact = {
         type: 'inline-text',
         value: 'planner hint',
       };
@@ -427,9 +427,9 @@ describe('TaskOrchestrationService', () => {
 
   describe('assignmentAssured — accept', () => {
     async function seedInQa(): Promise<{
-      company: LcpCompany;
-      task: LcpTask;
-      target: LcpAssignment;
+      company: TcpCompany;
+      task: TcpTask;
+      target: TcpAssignment;
     }> {
       const company = await seedCompany();
       const role = await seedRole(company.id);
@@ -555,9 +555,9 @@ describe('TaskOrchestrationService', () => {
   describe('assignmentAssured — reject', () => {
     async function seedRejected(
       qaAttempts: number,
-      role?: LcpRole,
-      company?: LcpCompany,
-    ): Promise<LcpAssignment> {
+      role?: TcpRole,
+      company?: TcpCompany,
+    ): Promise<TcpAssignment> {
       const co = company ?? (await seedCompany());
       const r = role ?? (await seedRole(co.id));
       const task = await seedTask(co.id, { status: 'in-progress' });

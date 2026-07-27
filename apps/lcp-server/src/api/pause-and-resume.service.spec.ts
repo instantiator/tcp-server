@@ -1,8 +1,8 @@
 import {
   AgentStatus,
   AuditEventType,
-  LcpAgent,
-  LcpRole,
+  TcpAgent,
+  TcpRole,
   PendingConsultation,
 } from '@lcp/shared';
 import { NotFoundException } from '@nestjs/common';
@@ -23,7 +23,7 @@ const makeRepo = <T extends object>(): jest.Mocked<
   save: jest.fn().mockImplementation((e) => Promise.resolve(e as T)),
 });
 
-const makeAgent = (overrides: Partial<LcpAgent> = {}): LcpAgent => ({
+const makeAgent = (overrides: Partial<TcpAgent> = {}): TcpAgent => ({
   id: randomUUID(),
   companyId: randomUUID(),
   roleId: randomUUID(),
@@ -42,17 +42,17 @@ const makeAgent = (overrides: Partial<LcpAgent> = {}): LcpAgent => ({
   ...overrides,
 });
 
-const makeRole = (overrides: Partial<LcpRole> = {}): LcpRole =>
+const makeRole = (overrides: Partial<TcpRole> = {}): TcpRole =>
   ({
     id: randomUUID(),
     companyId: randomUUID(),
     name: 'analyst',
     ...overrides,
-  }) as LcpRole;
+  }) as TcpRole;
 
 describe('PauseAndResumeService', () => {
-  let agentRepo: ReturnType<typeof makeRepo<LcpAgent>>;
-  let roleRepo: ReturnType<typeof makeRepo<LcpRole>>;
+  let agentRepo: ReturnType<typeof makeRepo<TcpAgent>>;
+  let roleRepo: ReturnType<typeof makeRepo<TcpRole>>;
   let consultRepo: ReturnType<typeof makeRepo<PendingConsultation>>;
   let convService: { create: jest.Mock };
   let orchestration: {
@@ -78,8 +78,8 @@ describe('PauseAndResumeService', () => {
     recordAudit = jest.fn().mockResolvedValue(undefined);
 
     service = new PauseAndResumeService(
-      agentRepo as unknown as Repository<LcpAgent>,
-      roleRepo as unknown as Repository<LcpRole>,
+      agentRepo as unknown as Repository<TcpAgent>,
+      roleRepo as unknown as Repository<TcpRole>,
       consultRepo as unknown as Repository<PendingConsultation>,
       convService as unknown as ConversationService,
       orchestration as unknown as AgentOrchestrationService,
@@ -249,7 +249,7 @@ describe('PauseAndResumeService', () => {
         .mockResolvedValueOnce(caller)
         .mockResolvedValueOnce(callerRole as never);
       // Lookup is scoped to id, so only the intended role (B) is ever returned.
-      roleRepo.findOne.mockImplementation((opts: FindOneOptions<LcpRole>) => {
+      roleRepo.findOne.mockImplementation((opts: FindOneOptions<TcpRole>) => {
         const where = opts.where as { id?: string } | undefined;
         return Promise.resolve(
           where?.id === sameNameRoleB.id ? sameNameRoleB : null,

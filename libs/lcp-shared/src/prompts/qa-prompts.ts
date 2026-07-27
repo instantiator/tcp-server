@@ -1,5 +1,5 @@
-import type { LcpArtifact } from '../models/LcpArtifact';
-import type { LcpAssignment } from '../models/LcpAssignment.model';
+import type { TcpArtifact } from '../models/TcpArtifact';
+import type { TcpAssignment } from '../models/TcpAssignment.model';
 
 /**
  * Presentation strings `TaskOrchestrationService` feeds to the agents it
@@ -16,7 +16,7 @@ import type { LcpAssignment } from '../models/LcpAssignment.model';
  * assignment's working area (read-only), so a path-type artifact needs no
  * further resolution here; `inline-text` shows its literal value directly.
  */
-function renderArtifacts(artifacts: LcpArtifact[]): string {
+function renderArtifacts(artifacts: TcpArtifact[]): string {
   if (artifacts.length === 0) return '  (none)';
   return artifacts.map((a) => `  - ${a.value}`).join('\n');
 }
@@ -27,7 +27,7 @@ function renderArtifacts(artifacts: LcpArtifact[]): string {
  * agent actually prepared.
  */
 export function renderQaPresentation(
-  target: Pick<LcpAssignment, 'prompt' | 'expected' | 'prepared'>,
+  target: Pick<TcpAssignment, 'prompt' | 'expected' | 'prepared'>,
 ): string {
   return [
     'You are reviewing another agent’s completed assignment.',

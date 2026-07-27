@@ -10,8 +10,8 @@ import {
   EmbeddingService,
   KnowledgeChunk,
   KnowledgeIndexState,
-  LcpCompany,
-  LcpRole,
+  TcpCompany,
+  TcpRole,
 } from '@lcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { DataSource, Repository } from 'typeorm';
@@ -80,10 +80,10 @@ describe('KnowledgeReindex (integration)', () => {
   let s3: S3Client;
   let reindex: KnowledgeReindexService;
   let adapter: MinioStorageAdapter;
-  let companyRepo: Repository<LcpCompany>;
+  let companyRepo: Repository<TcpCompany>;
   let chunkRepo: Repository<KnowledgeChunk>;
-  let company: LcpCompany;
-  let role: LcpRole;
+  let company: TcpCompany;
+  let role: TcpRole;
 
   async function countChunks(roleId: string | null): Promise<number> {
     const rows = await ds.query<{ count: string }[]>(
@@ -98,7 +98,7 @@ describe('KnowledgeReindex (integration)', () => {
     ds = new DataSource({
       type: 'postgres',
       url: DATABASE_URL,
-      entities: [LcpCompany, LcpRole, KnowledgeChunk, KnowledgeIndexState],
+      entities: [TcpCompany, TcpRole, KnowledgeChunk, KnowledgeIndexState],
       synchronize: true,
     });
     await ds.initialize();
@@ -123,8 +123,8 @@ describe('KnowledgeReindex (integration)', () => {
       await s3.send(new CreateBucketCommand({ Bucket: BUCKET }));
     }
 
-    companyRepo = ds.getRepository(LcpCompany);
-    const roleRepo = ds.getRepository(LcpRole);
+    companyRepo = ds.getRepository(TcpCompany);
+    const roleRepo = ds.getRepository(TcpRole);
     chunkRepo = ds.getRepository(KnowledgeChunk);
     const stateRepo = ds.getRepository(KnowledgeIndexState);
 
@@ -199,7 +199,7 @@ describe('KnowledgeReindex (integration)', () => {
         [company.id],
       );
     }
-    await ds.getRepository(LcpRole).createQueryBuilder().delete().execute();
+    await ds.getRepository(TcpRole).createQueryBuilder().delete().execute();
     await companyRepo.createQueryBuilder().delete().execute();
     s3.destroy();
     await ds.destroy();

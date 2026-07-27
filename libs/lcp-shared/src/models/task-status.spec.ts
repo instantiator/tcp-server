@@ -1,17 +1,17 @@
-import type { LcpAssignment } from './LcpAssignment.model';
+import type { TcpAssignment } from './TcpAssignment.model';
 import { deriveTaskStatus, selectNextAssignments } from './task-status';
 
 function assignment(
-  status: LcpAssignment['status'],
-): Pick<LcpAssignment, 'status'> {
+  status: TcpAssignment['status'],
+): Pick<TcpAssignment, 'status'> {
   return { status };
 }
 
 /** A plan step with just the fields `selectNextAssignments` inspects. */
 function step(
-  status: LcpAssignment['status'],
+  status: TcpAssignment['status'],
   orderIndex: number,
-): Pick<LcpAssignment, 'status' | 'orderIndex'> {
+): Pick<TcpAssignment, 'status' | 'orderIndex'> {
   return { status, orderIndex };
 }
 

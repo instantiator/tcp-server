@@ -9,11 +9,11 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import {
   AgentStatus,
-  LcpAgent,
-  LcpAssignment,
-  LcpCompany,
-  LcpRole,
-  LcpTask,
+  TcpAgent,
+  TcpAssignment,
+  TcpCompany,
+  TcpRole,
+  TcpTask,
 } from '@lcp/shared';
 import { randomUUID, type UUID } from 'crypto';
 import { Repository } from 'typeorm';
@@ -23,7 +23,7 @@ import { PauseAndResumeService } from './pause-and-resume.service';
 import { TaskDispatcher } from './task-dispatcher.service';
 import { AssignmentService } from './assignment.service';
 
-const ENTITIES = [LcpCompany, LcpRole, LcpAgent, LcpTask, LcpAssignment];
+const ENTITIES = [TcpCompany, TcpRole, TcpAgent, TcpTask, TcpAssignment];
 
 /**
  * Exercises {@link AssignmentService} against a real in-memory SQLite DB so the
@@ -35,11 +35,11 @@ const ENTITIES = [LcpCompany, LcpRole, LcpAgent, LcpTask, LcpAssignment];
 describe('AssignmentService', () => {
   let moduleRef: TestingModule;
   let service: AssignmentService;
-  let agentRepo: Repository<LcpAgent>;
-  let assignmentRepo: Repository<LcpAssignment>;
-  let taskRepo: Repository<LcpTask>;
-  let companyRepo: Repository<LcpCompany>;
-  let roleRepo: Repository<LcpRole>;
+  let agentRepo: Repository<TcpAgent>;
+  let assignmentRepo: Repository<TcpAssignment>;
+  let taskRepo: Repository<TcpTask>;
+  let companyRepo: Repository<TcpCompany>;
+  let roleRepo: Repository<TcpRole>;
 
   let storage: { checkMissingFiles: jest.Mock; listFiles: jest.Mock };
   let db: {
@@ -68,11 +68,11 @@ describe('AssignmentService', () => {
       ],
     }).compile();
 
-    agentRepo = moduleRef.get(getRepositoryToken(LcpAgent));
-    assignmentRepo = moduleRef.get(getRepositoryToken(LcpAssignment));
-    taskRepo = moduleRef.get(getRepositoryToken(LcpTask));
-    companyRepo = moduleRef.get(getRepositoryToken(LcpCompany));
-    roleRepo = moduleRef.get(getRepositoryToken(LcpRole));
+    agentRepo = moduleRef.get(getRepositoryToken(TcpAgent));
+    assignmentRepo = moduleRef.get(getRepositoryToken(TcpAssignment));
+    taskRepo = moduleRef.get(getRepositoryToken(TcpTask));
+    companyRepo = moduleRef.get(getRepositoryToken(TcpCompany));
+    roleRepo = moduleRef.get(getRepositoryToken(TcpRole));
   });
 
   afterAll(async () => {
@@ -109,7 +109,7 @@ describe('AssignmentService', () => {
 
   // --- fixtures -----------------------------------------------------------
 
-  async function seedCompany(): Promise<LcpCompany> {
+  async function seedCompany(): Promise<TcpCompany> {
     return companyRepo.save(
       companyRepo.create({
         slug: `acme-${randomSlug()}`,
@@ -118,7 +118,7 @@ describe('AssignmentService', () => {
       }),
     );
   }
-  async function seedRole(companyId: UUID): Promise<LcpRole> {
+  async function seedRole(companyId: UUID): Promise<TcpRole> {
     return roleRepo.save(
       roleRepo.create({
         companyId,
@@ -130,8 +130,8 @@ describe('AssignmentService', () => {
   }
   async function seedTask(
     companyId: UUID,
-    status: LcpTask['status'] = 'planning',
-  ): Promise<LcpTask> {
+    status: TcpTask['status'] = 'planning',
+  ): Promise<TcpTask> {
     return taskRepo.save(
       taskRepo.create({
         companyId,
@@ -142,8 +142,8 @@ describe('AssignmentService', () => {
     );
   }
   async function seedAssignment(
-    partial: Partial<LcpAssignment>,
-  ): Promise<LcpAssignment> {
+    partial: Partial<TcpAssignment>,
+  ): Promise<TcpAssignment> {
     const company = partial.companyId
       ? { id: partial.companyId }
       : await seedCompany();
@@ -169,7 +169,7 @@ describe('AssignmentService', () => {
     companyId: UUID,
     roleId: UUID,
     assignmentId: UUID,
-  ): Promise<LcpAgent> {
+  ): Promise<TcpAgent> {
     return agentRepo.save(
       agentRepo.create({ companyId, roleId, assignmentId, initialPrompt: 'x' }),
     );
@@ -393,7 +393,7 @@ describe('AssignmentService', () => {
   // --- planTask -----------------------------------------------------------
 
   describe('planTask', () => {
-    async function setupPlanner(taskStatus: LcpTask['status'] = 'planning') {
+    async function setupPlanner(taskStatus: TcpTask['status'] = 'planning') {
       const company = await seedCompany();
       const role = await seedRole(company.id);
       const task = await seedTask(company.id, taskStatus);
@@ -620,7 +620,7 @@ describe('AssignmentService', () => {
   // --- completeAssignment -------------------------------------------------
 
   describe('completeAssignment', () => {
-    async function setupImplementer(partial: Partial<LcpAssignment> = {}) {
+    async function setupImplementer(partial: Partial<TcpAssignment> = {}) {
       const company = await seedCompany();
       const role = await seedRole(company.id);
       const assignment = await seedAssignment({

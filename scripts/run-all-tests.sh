@@ -40,7 +40,7 @@ source "$SCRIPTS/lib/check-no-lcp-running.sh"
 # step below starts the full deployment on the .env.testing host ports
 # (EXPOSE_PORT_API defaults to 3001, plus 8080, ...) that a running lcp-dev
 # would collide with outright.
-check_no_lcp_containers_running || exit 1
+check_no_tcp_containers_running || exit 1
 
 DEPLOYMENT_PROJECT=lcp-all
 DEPLOYMENT_STARTED=false

@@ -15,8 +15,8 @@ import {
   buildEnumValidationError,
   CompanyUser,
   InternalApiKeyGuard,
-  LcpAgent,
-  LcpRole,
+  TcpAgent,
+  TcpRole,
 } from '@lcp/shared';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -47,10 +47,10 @@ export class InternalController {
     private readonly pauseResume: PauseAndResumeService,
     private readonly taskOrchestration: TaskOrchestrationService,
     private readonly db: DbService,
-    @InjectRepository(LcpAgent)
-    private readonly agentRepo: Repository<LcpAgent>,
-    @InjectRepository(LcpRole)
-    private readonly roleRepo: Repository<LcpRole>,
+    @InjectRepository(TcpAgent)
+    private readonly agentRepo: Repository<TcpAgent>,
+    @InjectRepository(TcpRole)
+    private readonly roleRepo: Repository<TcpRole>,
     @InjectRepository(CompanyUser)
     private readonly userRepo: Repository<CompanyUser>,
   ) {}
@@ -61,7 +61,7 @@ export class InternalController {
    */
   @ApiOperation({ summary: 'Get agent record (internal)' })
   @Get('agent/:agentId')
-  async getAgent(@Param('agentId') agentId: UUID): Promise<Partial<LcpAgent>> {
+  async getAgent(@Param('agentId') agentId: UUID): Promise<Partial<TcpAgent>> {
     const agent = await this.agentRepo.findOneBy({ id: agentId });
     if (!agent) throw new NotFoundException(`Agent ${agentId} not found`);
     return { id: agent.id, storageChanges: agent.storageChanges };
@@ -194,7 +194,7 @@ export class InternalController {
   /** Returns all roles belonging to the given company. Used by lcp-mcp-interactions' `list_available_contacts`. */
   @ApiOperation({ summary: 'List roles for a company (internal)' })
   @Get('company/:companyId/roles')
-  async listRoles(@Param('companyId') companyId: UUID): Promise<LcpRole[]> {
+  async listRoles(@Param('companyId') companyId: UUID): Promise<TcpRole[]> {
     return this.roleRepo.findBy({ companyId });
   }
 

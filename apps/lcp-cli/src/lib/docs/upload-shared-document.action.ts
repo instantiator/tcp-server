@@ -46,7 +46,7 @@ export function uploadSharedDocumentAction(
     }
 
     process.stderr.write(`Uploading ${absSource} → ${cmdOpts.target}...\n`);
-    const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+    const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
 
     const data = fs.readFileSync(absSource);

@@ -1,4 +1,4 @@
-import { LcpCompany } from '@lcp/shared';
+import { TcpCompany } from '@lcp/shared';
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditModule } from '../audit/audit.module';
@@ -10,7 +10,7 @@ import { StorageService } from './storage.service';
  * Provides {@link StorageService}, backed today by {@link MinioStorageAdapter}.
  * Reads `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, and
  * `MINIO_BUCKET_PREFIX` from the global config on startup. Imports
- * {@link AuditModule} and the `LcpCompany` repository so writes can record
+ * {@link AuditModule} and the `TcpCompany` repository so writes can record
  * a properly attributed audit event.
  *
  * {@link RagModule} is imported via `forwardRef` because the adapter's write
@@ -20,7 +20,7 @@ import { StorageService } from './storage.service';
 @Module({
   imports: [
     AuditModule,
-    TypeOrmModule.forFeature([LcpCompany]),
+    TypeOrmModule.forFeature([TcpCompany]),
     forwardRef(() => RagModule),
   ],
   providers: [

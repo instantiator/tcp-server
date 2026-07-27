@@ -1,10 +1,10 @@
 import {
   AgentStatus,
-  LcpAgent,
-  LcpAssignment,
-  LcpCompany,
-  LcpRole,
-  LcpTask,
+  TcpAgent,
+  TcpAssignment,
+  TcpCompany,
+  TcpRole,
+  TcpTask,
 } from '@lcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -29,15 +29,15 @@ const INTERNAL_KEY = process.env.INTERNAL_API_KEY ?? 'e2e-test-internal-key';
  */
 describe('Storage scope + append (e2e)', () => {
   let app: INestApplication<App>;
-  let companyRepo: Repository<LcpCompany>;
-  let roleRepo: Repository<LcpRole>;
-  let taskRepo: Repository<LcpTask>;
-  let assignmentRepo: Repository<LcpAssignment>;
-  let agentRepo: Repository<LcpAgent>;
+  let companyRepo: Repository<TcpCompany>;
+  let roleRepo: Repository<TcpRole>;
+  let taskRepo: Repository<TcpTask>;
+  let assignmentRepo: Repository<TcpAssignment>;
+  let agentRepo: Repository<TcpAgent>;
 
-  let company: LcpCompany;
-  let role: LcpRole;
-  let task: LcpTask;
+  let company: TcpCompany;
+  let role: TcpRole;
+  let task: TcpTask;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -45,11 +45,11 @@ describe('Storage scope + append (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     await app.init();
-    companyRepo = moduleFixture.get(getRepositoryToken(LcpCompany));
-    roleRepo = moduleFixture.get(getRepositoryToken(LcpRole));
-    taskRepo = moduleFixture.get(getRepositoryToken(LcpTask));
-    assignmentRepo = moduleFixture.get(getRepositoryToken(LcpAssignment));
-    agentRepo = moduleFixture.get(getRepositoryToken(LcpAgent));
+    companyRepo = moduleFixture.get(getRepositoryToken(TcpCompany));
+    roleRepo = moduleFixture.get(getRepositoryToken(TcpRole));
+    taskRepo = moduleFixture.get(getRepositoryToken(TcpTask));
+    assignmentRepo = moduleFixture.get(getRepositoryToken(TcpAssignment));
+    agentRepo = moduleFixture.get(getRepositoryToken(TcpAgent));
 
     company = await companyRepo.save(
       companyRepo.create({
@@ -85,7 +85,7 @@ describe('Storage scope + append (e2e)', () => {
     await app.close();
   });
 
-  async function seedAgent(assignmentId: UUID): Promise<LcpAgent> {
+  async function seedAgent(assignmentId: UUID): Promise<TcpAgent> {
     return agentRepo.save(
       agentRepo.create({
         companyId: company.id,

@@ -1,8 +1,8 @@
 import {
   AuditEvent,
   AuditEventType,
-  LcpAgent,
-  LcpAssignment,
+  TcpAgent,
+  TcpAssignment,
 } from '@lcp/shared';
 import { randomUUID } from 'crypto';
 import { AuditService } from './audit.service';
@@ -13,8 +13,8 @@ describe('AuditService', () => {
   let mockRepo: { create: jest.Mock; save: jest.Mock; find: jest.Mock };
   let mockAgentRepo: { findOneBy: jest.Mock };
   let mockAssignmentRepo: { findOneBy: jest.Mock };
-  let agents: Record<string, Pick<LcpAgent, 'assignmentId'>>;
-  let assignments: Record<string, Pick<LcpAssignment, 'taskId'>>;
+  let agents: Record<string, Pick<TcpAgent, 'assignmentId'>>;
+  let assignments: Record<string, Pick<TcpAssignment, 'taskId'>>;
 
   beforeEach(() => {
     savedEvents = [];

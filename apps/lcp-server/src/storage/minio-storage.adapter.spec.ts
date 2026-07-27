@@ -7,7 +7,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
-import type { LcpCompany } from '@lcp/shared';
+import type { TcpCompany } from '@lcp/shared';
 import {
   BadRequestException,
   ConflictException,
@@ -54,7 +54,7 @@ function makeAudit(): { record: jest.Mock } {
   return { record: jest.fn().mockResolvedValue(undefined) };
 }
 
-/** `findOneBy` mock for the injected `LcpCompany` repository; resolves a company by default. */
+/** `findOneBy` mock for the injected `TcpCompany` repository; resolves a company by default. */
 function makeCompanyRepo(
   company: { id: string } | null = { id: 'company-uuid-1' },
 ): { findOneBy: jest.Mock } {
@@ -75,7 +75,7 @@ function makeAdapter(
   return new MinioStorageAdapter(
     config,
     audit as unknown as AuditService,
-    companyRepo as unknown as Repository<LcpCompany>,
+    companyRepo as unknown as Repository<TcpCompany>,
     reindex as unknown as KnowledgeReindexService,
   );
 }

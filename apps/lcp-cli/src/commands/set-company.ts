@@ -12,7 +12,7 @@ export function registerSetCompany(program: Command): void {
     );
   addCompanyOptions(cmd);
   cmd
-    .option('-i, --input <json>', 'Company JSON (DeepPartial<LcpCompany>)')
+    .option('-i, --input <json>', 'Company JSON (DeepPartial<TcpCompany>)')
     .action(
       (cmdOpts: {
         company?: string;

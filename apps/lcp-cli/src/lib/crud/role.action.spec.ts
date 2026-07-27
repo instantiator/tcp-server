@@ -11,7 +11,7 @@ const mockedApiRequest = apiRequest as jest.Mock;
 const mockedConfirm = confirmAction as jest.Mock;
 const mockedResolveToken = resolveToken as jest.Mock;
 
-const opts = { lcpServer: 'http://localhost:3000' };
+const opts = { tcpServer: 'http://localhost:3000' };
 const role = { id: 'role-id', slug: 'analyst', name: 'Analyst' };
 
 describe('deleteRoleAction', () => {

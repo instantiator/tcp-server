@@ -1,10 +1,10 @@
-import type { LcpCompany, LcpRole, LlmConfig } from '@lcp/shared';
+import type { TcpCompany, TcpRole, LlmConfig } from '@lcp/shared';
 import { resolveEmbeddingConfig } from '@lcp/shared';
 import { Logger } from '@nestjs/common';
 import type { Response } from 'express';
 
 /** Header used to report soft data-quality warnings without changing the response body shape. */
-export const WARNINGS_HEADER = 'X-Lcp-Warnings';
+export const WARNINGS_HEADER = 'X-Tcp-Warnings';
 
 const logger = new Logger('validation-warnings');
 
@@ -41,9 +41,9 @@ export function setWarningsHeader(res: Response, warnings: string[]): void {
 /**
  * Computes soft data-quality warnings for a role. These conditions are
  * technically valid (the action proceeds regardless) but inadvisable —
- * surfaced via the `X-Lcp-Warnings` response header, not a validation error.
+ * surfaced via the `X-Tcp-Warnings` response header, not a validation error.
  */
-export function computeRoleWarnings(role: LcpRole): string[] {
+export function computeRoleWarnings(role: TcpRole): string[] {
   const warnings: string[] = [];
   if (!role.knowledgeDomains || role.knowledgeDomains.length === 0) {
     warnings.push('Role has no knowledgeDomains set.');
@@ -55,7 +55,7 @@ export function computeRoleWarnings(role: LcpRole): string[] {
 }
 
 /** Computes soft data-quality warnings for a company (see {@link computeRoleWarnings}). */
-export function computeCompanyWarnings(company: LcpCompany): string[] {
+export function computeCompanyWarnings(company: TcpCompany): string[] {
   const warnings: string[] = [];
   if (!company.companyContext?.trim()) {
     warnings.push('Company has a blank or missing companyContext.');
@@ -71,7 +71,7 @@ export function computeCompanyWarnings(company: LcpCompany): string[] {
  * someone notices an index stuck at zero chunks.
  */
 export function computeEmbeddingConfigWarning(
-  company: LcpCompany,
+  company: TcpCompany,
   envFallback: LlmConfig | null | undefined,
 ): string[] {
   if (resolveEmbeddingConfig(company, envFallback)) return [];

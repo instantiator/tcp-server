@@ -53,7 +53,7 @@ export async function resolveChatContext(
 ): Promise<ChatContext> {
   const { token, refreshToken } = await resolveSession({
     ...opts,
-    baseUrl: opts.lcpServer,
+    baseUrl: opts.tcpServer,
   });
   const api = apiOptions(opts, token);
 
@@ -115,7 +115,7 @@ function printBanner(
   llmConfig: LlmConfig | null | undefined,
   useTui: boolean,
 ): void {
-  process.stderr.write(`LCP API: ${opts.lcpServer}\n`);
+  process.stderr.write(`LCP API: ${opts.tcpServer}\n`);
   if (roleName) {
     if (llmConfig) {
       process.stderr.write(

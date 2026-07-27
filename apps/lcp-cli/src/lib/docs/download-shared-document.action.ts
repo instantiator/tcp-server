@@ -19,7 +19,7 @@ export function downloadSharedDocumentAction(
 ): Promise<void> {
   return runCommand(async () => {
     process.stderr.write(`Downloading ${cmdOpts.source}...\n`);
-    const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+    const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
 
     const encodedPath = encodeURIComponent(cmdOpts.source);

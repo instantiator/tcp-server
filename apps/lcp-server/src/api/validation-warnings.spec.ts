@@ -1,4 +1,4 @@
-import type { LcpCompany, LcpRole, LlmConfig } from '@lcp/shared';
+import type { TcpCompany, TcpRole, LlmConfig } from '@lcp/shared';
 import type { Response } from 'express';
 import {
   WARNINGS_HEADER,
@@ -11,11 +11,11 @@ import {
 const baseRole = {
   knowledgeDomains: ['finance'],
   rolePrompt: 'You are a careful analyst.',
-} as LcpRole;
+} as TcpRole;
 
 const baseCompany = {
   companyContext: 'We build widgets.',
-} as LcpCompany;
+} as TcpCompany;
 
 describe('computeRoleWarnings', () => {
   it('returns no warnings when knowledgeDomains and rolePrompt are both set', () => {
@@ -84,14 +84,14 @@ describe('computeEmbeddingConfigWarning', () => {
 
   it('returns no warnings when the company has its own embeddingConfig', () => {
     expect(
-      computeEmbeddingConfigWarning({ embeddingConfig } as LcpCompany, null),
+      computeEmbeddingConfigWarning({ embeddingConfig } as TcpCompany, null),
     ).toEqual([]);
   });
 
   it('returns no warnings when the company has none but an env fallback is set', () => {
     expect(
       computeEmbeddingConfigWarning(
-        { embeddingConfig: null } as LcpCompany,
+        { embeddingConfig: null } as TcpCompany,
         embeddingConfig,
       ),
     ).toEqual([]);
@@ -99,7 +99,7 @@ describe('computeEmbeddingConfigWarning', () => {
 
   it('warns when neither the company nor an env fallback resolves', () => {
     const warnings = computeEmbeddingConfigWarning(
-      { embeddingConfig: null } as LcpCompany,
+      { embeddingConfig: null } as TcpCompany,
       null,
     );
     expect(warnings).toEqual(
@@ -147,7 +147,7 @@ describe('setWarningsHeader', () => {
     const res = fakeRes();
     res.setHeader.mockImplementation(() => {
       throw new TypeError(
-        'Invalid character in header content ["X-Lcp-Warnings"]',
+        'Invalid character in header content ["X-Tcp-Warnings"]',
       );
     });
     expect(() =>

@@ -9,23 +9,23 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import type {
-  LcpMaterialArtifact,
-  LcpTaskCompletedArtifact,
-} from './LcpArtifact';
+  TcpMaterialArtifact,
+  TcpTaskCompletedArtifact,
+} from './TcpArtifact';
 import {
   sanitiseArtifactsColumn,
   sanitiseTextColumn,
 } from '../validation/sanitize';
-import { LcpCompany } from './LcpCompany.model';
-import { LcpRole } from './LcpRole.model';
+import { TcpCompany } from './TcpCompany.model';
+import { TcpRole } from './TcpRole.model';
 import { VersionedEntity } from './VersionedEntity';
 
 /**
- * Lifecycle states for a {@link LcpTask}. `planning` reflects an active
+ * Lifecycle states for a {@link TcpTask}. `planning` reflects an active
  * planner dispatch; other transitions derive from the task's implement-mode
  * assignments (see `deriveTaskStatus`).
  */
-export type LcpTaskStatus =
+export type TcpTaskStatus =
   | 'ready'
   | 'planning'
   | 'in-progress'
@@ -38,22 +38,22 @@ export type LcpTaskStatus =
 
 /**
  * A piece of work requested by a user. A planner agent turns a task into a
- * plan — an ordered list of implement-mode {@link LcpAssignment} records
- * (there is no separate plan entity; see `LcpAssignment.orderIndex`).
+ * plan — an ordered list of implement-mode {@link TcpAssignment} records
+ * (there is no separate plan entity; see `TcpAssignment.orderIndex`).
  */
 @Entity()
 @Index(['companyId', 'shortcode'], { unique: true })
-export class LcpTask extends VersionedEntity {
+export class TcpTask extends VersionedEntity {
   /** @format uuid */
   @PrimaryGeneratedColumn('uuid')
   id!: UUID;
 
   /** The company this task belongs to. */
-  @ManyToOne(() => LcpCompany, { nullable: false, onDelete: 'CASCADE' })
-  company!: LcpCompany;
+  @ManyToOne(() => TcpCompany, { nullable: false, onDelete: 'CASCADE' })
+  company!: TcpCompany;
 
   /**
-   * Foreign key for the owning {@link LcpCompany}.
+   * Foreign key for the owning {@link TcpCompany}.
    * @format uuid
    */
   @Column()
@@ -65,7 +65,7 @@ export class LcpTask extends VersionedEntity {
 
   /**
    * Short, per-company identifier assigned at creation (`'000'`, `'001'`,
-   * …) — see {@link LcpCompany.nextTaskShortcodeIndex}. Unique within the
+   * …) — see {@link TcpCompany.nextTaskShortcodeIndex}. Unique within the
    * owning company only.
    */
   @Column()
@@ -73,10 +73,10 @@ export class LcpTask extends VersionedEntity {
 
   /**
    * Explicit planner role for this task. Falls back to
-   * {@link LcpCompany.plannerRoleId} at start time when unset.
+   * {@link TcpCompany.plannerRoleId} at start time when unset.
    */
-  @ManyToOne(() => LcpRole, { nullable: true, onDelete: 'SET NULL' })
-  plannerRole?: LcpRole | null;
+  @ManyToOne(() => TcpRole, { nullable: true, onDelete: 'SET NULL' })
+  plannerRole?: TcpRole | null;
 
   /**
    * Foreign key for {@link plannerRole}.
@@ -87,7 +87,7 @@ export class LcpTask extends VersionedEntity {
 
   /** Current lifecycle state of this task. */
   @Column({ type: 'varchar', default: 'ready' })
-  status!: LcpTaskStatus;
+  status!: TcpTaskStatus;
 
   /**
    * Task materials supplied at creation or upload time — `task-materials-path`
@@ -100,7 +100,7 @@ export class LcpTask extends VersionedEntity {
     default: '[]',
     transformer: sanitiseArtifactsColumn,
   })
-  materials!: LcpMaterialArtifact[];
+  materials!: TcpMaterialArtifact[];
 
   /** Artifacts the task is expected to produce. */
   @Column({
@@ -108,7 +108,7 @@ export class LcpTask extends VersionedEntity {
     default: '[]',
     transformer: sanitiseArtifactsColumn,
   })
-  expected!: LcpTaskCompletedArtifact[];
+  expected!: TcpTaskCompletedArtifact[];
 
   /** Set at finalisation: the artifacts actually produced by the task. */
   @Column({
@@ -116,7 +116,7 @@ export class LcpTask extends VersionedEntity {
     nullable: true,
     transformer: sanitiseArtifactsColumn,
   })
-  completed!: LcpTaskCompletedArtifact[] | null;
+  completed!: TcpTaskCompletedArtifact[] | null;
 
   /** Why the task failed — planner failure, QA exhaustion, etc. Null unless `status` is `failed`. */
   @Column({ type: 'text', nullable: true })

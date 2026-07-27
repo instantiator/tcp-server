@@ -14,7 +14,7 @@ export function getTokenAction(
   return runCommand(async () => {
     const token = await resolveToken({
       ...opts,
-      baseUrl: opts.lcpServer,
+      baseUrl: opts.tcpServer,
       force: cmdOpts?.force,
     });
     process.stdout.write(token + '\n');

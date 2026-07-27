@@ -6,29 +6,29 @@ import {
   AgentStatus,
   AuditEvent,
   AuditEventType,
-  LcpAgent,
-  LcpAssignment,
-  LcpCompany,
-  LcpRole,
-  LcpTask,
+  TcpAgent,
+  TcpAssignment,
+  TcpCompany,
+  TcpRole,
+  TcpTask,
 } from './index';
 
 const ALL_ENTITIES = [
-  LcpCompany,
-  LcpRole,
-  LcpAgent,
-  LcpTask,
-  LcpAssignment,
+  TcpCompany,
+  TcpRole,
+  TcpAgent,
+  TcpTask,
+  TcpAssignment,
   AuditEvent,
 ];
 
 let testingModule: TestingModule;
-let companies: Repository<LcpCompany>;
-let roles: Repository<LcpRole>;
-let agents: Repository<LcpAgent>;
+let companies: Repository<TcpCompany>;
+let roles: Repository<TcpRole>;
+let agents: Repository<TcpAgent>;
 let events: Repository<AuditEvent>;
-let tasks: Repository<LcpTask>;
-let assignments: Repository<LcpAssignment>;
+let tasks: Repository<TcpTask>;
+let assignments: Repository<TcpAssignment>;
 
 beforeAll(async () => {
   testingModule = await Test.createTestingModule({
@@ -43,12 +43,12 @@ beforeAll(async () => {
     ],
   }).compile();
 
-  companies = testingModule.get(getRepositoryToken(LcpCompany));
-  roles = testingModule.get(getRepositoryToken(LcpRole));
-  agents = testingModule.get(getRepositoryToken(LcpAgent));
+  companies = testingModule.get(getRepositoryToken(TcpCompany));
+  roles = testingModule.get(getRepositoryToken(TcpRole));
+  agents = testingModule.get(getRepositoryToken(TcpAgent));
   events = testingModule.get(getRepositoryToken(AuditEvent));
-  tasks = testingModule.get(getRepositoryToken(LcpTask));
-  assignments = testingModule.get(getRepositoryToken(LcpAssignment));
+  tasks = testingModule.get(getRepositoryToken(TcpTask));
+  assignments = testingModule.get(getRepositoryToken(TcpAssignment));
 });
 
 afterAll(async () => {
@@ -106,7 +106,7 @@ async function seedAssignment(companyId: UUID, roleId: UUID) {
   );
 }
 
-describe('LcpCompany entity', () => {
+describe('TcpCompany entity', () => {
   it('persists llmConfig as JSONB and retrieves it correctly', async () => {
     const company = await companies.save(
       companies.create({
@@ -138,7 +138,7 @@ describe('LcpCompany entity', () => {
   });
 });
 
-describe('LcpRole entity', () => {
+describe('TcpRole entity', () => {
   it('persists a role with JSONB llmConfig and array-field defaults', async () => {
     const company = await seedCompany();
     const role = await seedRole(company.id);
@@ -197,7 +197,7 @@ describe('LcpRole entity', () => {
   });
 });
 
-describe('LcpAgent entity', () => {
+describe('TcpAgent entity', () => {
   it('creates an agent with default status idle and null threadId', async () => {
     const company = await seedCompany();
     const role = await seedRole(company.id);
@@ -327,7 +327,7 @@ describe('AuditEvent entity', () => {
   });
 });
 
-describe('LcpCompany.plannerRoleId', () => {
+describe('TcpCompany.plannerRoleId', () => {
   it('allows a null plannerRoleId', async () => {
     const company = await seedCompany();
     const found = await companies.findOneByOrFail({ id: company.id });
@@ -343,7 +343,7 @@ describe('LcpCompany.plannerRoleId', () => {
   });
 });
 
-describe('LcpTask entity', () => {
+describe('TcpTask entity', () => {
   it('creates a task with default status ready and empty array defaults', async () => {
     const company = await seedCompany();
     const task = await tasks.save(
@@ -397,7 +397,7 @@ describe('LcpTask entity', () => {
   });
 });
 
-describe('LcpAssignment entity', () => {
+describe('TcpAssignment entity', () => {
   it('creates an orphan assignment with default mode implement and status ready', async () => {
     const company = await seedCompany();
     const role = await seedRole(company.id);

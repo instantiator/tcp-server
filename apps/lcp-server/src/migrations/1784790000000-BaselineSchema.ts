@@ -21,7 +21,7 @@ import { DEFAULT_EMBEDDING_DIMENSION } from '../../../../libs/lcp-shared/src/con
  *
  * - Timestamp columns are a deliberate mix. Everything the timestamptz
  *   consistency pass covered is `timestamptz`; the tables added afterwards
- *   (`lcp_task`, `lcp_assignment`, `knowledge_index_state`) kept naive
+ *   (`tcp_task`, `tcp_assignment`, `knowledge_index_state`) kept naive
  *   `timestamp`. See `docs/database.md` "Timestamp storage convention".
  * - `id` defaults are a mix of `gen_random_uuid()` and `uuid_generate_v4()`,
  *   following whichever the originating migration used.
@@ -62,23 +62,23 @@ export class BaselineSchema1784790000000 implements MigrationInterface {
       'knowledge_chunk',
       'episodic_memory',
       'audit_event',
-      'lcp_agent',
-      'lcp_assignment',
-      'lcp_task',
-      'lcp_role',
-      'lcp_company',
+      'tcp_agent',
+      'tcp_assignment',
+      'tcp_task',
+      'tcp_role',
+      'tcp_company',
     ]) {
       await queryRunner.query(`DROP TABLE IF EXISTS "${table}" CASCADE`);
     }
   }
 
   /**
-   * Creates all 13 tables without their foreign keys — `lcp_company` and
-   * `lcp_role` reference each other, so no creation order satisfies both.
+   * Creates all 13 tables without their foreign keys — `tcp_company` and
+   * `tcp_role` reference each other, so no creation order satisfies both.
    */
   private async createTables(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TABLE "lcp_company" (
+      CREATE TABLE "tcp_company" (
         "id"                     uuid              NOT NULL DEFAULT gen_random_uuid(),
         "slug"                   character varying NOT NULL,
         "name"                   character varying NOT NULL,
@@ -92,13 +92,13 @@ export class BaselineSchema1784790000000 implements MigrationInterface {
         "timezone"               character varying,
         "plannerRoleId"          uuid,
         "nextTaskShortcodeIndex" integer           NOT NULL DEFAULT 0,
-        CONSTRAINT "PK_lcp_company" PRIMARY KEY ("id"),
-        CONSTRAINT "UQ_lcp_company_slug" UNIQUE ("slug")
+        CONSTRAINT "PK_tcp_company" PRIMARY KEY ("id"),
+        CONSTRAINT "UQ_tcp_company_slug" UNIQUE ("slug")
       )
     `);
 
     await queryRunner.query(`
-      CREATE TABLE "lcp_role" (
+      CREATE TABLE "tcp_role" (
         "id"                   uuid              NOT NULL DEFAULT gen_random_uuid(),
         "companyId"            uuid              NOT NULL,
         "name"                 character varying NOT NULL,
@@ -111,12 +111,12 @@ export class BaselineSchema1784790000000 implements MigrationInterface {
         "queryIndex"           integer           NOT NULL DEFAULT 0,
         "runConfig"            jsonb,
         "slug"                 character varying NOT NULL,
-        CONSTRAINT "PK_lcp_role" PRIMARY KEY ("id")
+        CONSTRAINT "PK_tcp_role" PRIMARY KEY ("id")
       )
     `);
 
     await queryRunner.query(`
-      CREATE TABLE "lcp_task" (
+      CREATE TABLE "tcp_task" (
         "id"            uuid              NOT NULL DEFAULT uuid_generate_v4(),
         "companyId"     uuid              NOT NULL,
         "request"       text              NOT NULL,
@@ -130,12 +130,12 @@ export class BaselineSchema1784790000000 implements MigrationInterface {
         "updatedAt"     TIMESTAMP         NOT NULL DEFAULT now(),
         "version"       integer           NOT NULL DEFAULT 1,
         "shortcode"     character varying NOT NULL,
-        CONSTRAINT "PK_lcp_task" PRIMARY KEY ("id")
+        CONSTRAINT "PK_tcp_task" PRIMARY KEY ("id")
       )
     `);
 
     await queryRunner.query(`
-      CREATE TABLE "lcp_assignment" (
+      CREATE TABLE "tcp_assignment" (
         "id"                 uuid              NOT NULL DEFAULT uuid_generate_v4(),
         "taskId"             uuid,
         "companyId"          uuid              NOT NULL,
@@ -160,12 +160,12 @@ export class BaselineSchema1784790000000 implements MigrationInterface {
         "parentAssignmentId" uuid,
         "shortcode"          character varying,
         "failureReason"      text,
-        CONSTRAINT "PK_lcp_assignment" PRIMARY KEY ("id")
+        CONSTRAINT "PK_tcp_assignment" PRIMARY KEY ("id")
       )
     `);
 
     await queryRunner.query(`
-      CREATE TABLE "lcp_agent" (
+      CREATE TABLE "tcp_agent" (
         "id"                uuid              NOT NULL DEFAULT gen_random_uuid(),
         "companyId"         uuid              NOT NULL,
         "roleId"            uuid              NOT NULL,
@@ -180,7 +180,7 @@ export class BaselineSchema1784790000000 implements MigrationInterface {
         "pausedAt"          TIMESTAMPTZ,
         "requiredToolCalls" text,
         "assignmentId"      uuid              NOT NULL,
-        CONSTRAINT "PK_lcp_agent" PRIMARY KEY ("id")
+        CONSTRAINT "PK_tcp_agent" PRIMARY KEY ("id")
       )
     `);
 
@@ -306,27 +306,27 @@ export class BaselineSchema1784790000000 implements MigrationInterface {
   /** Creates every secondary index, including the two IVFFlat vector indexes. */
   private async createIndexes(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `CREATE UNIQUE INDEX "UQ_lcp_role_company_slug" ON "lcp_role" ("companyId", "slug")`,
+      `CREATE UNIQUE INDEX "UQ_tcp_role_company_slug" ON "tcp_role" ("companyId", "slug")`,
     );
 
     await queryRunner.query(
-      `CREATE INDEX "IDX_lcp_task_company" ON "lcp_task" ("companyId")`,
+      `CREATE INDEX "IDX_tcp_task_company" ON "tcp_task" ("companyId")`,
     );
     await queryRunner.query(
-      `CREATE UNIQUE INDEX "IDX_lcp_task_company_shortcode" ON "lcp_task" ("companyId", "shortcode")`,
+      `CREATE UNIQUE INDEX "IDX_tcp_task_company_shortcode" ON "tcp_task" ("companyId", "shortcode")`,
     );
 
     await queryRunner.query(
-      `CREATE INDEX "IDX_lcp_assignment_task_order" ON "lcp_assignment" ("taskId", "orderIndex")`,
+      `CREATE INDEX "IDX_tcp_assignment_task_order" ON "tcp_assignment" ("taskId", "orderIndex")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_lcp_assignment_company" ON "lcp_assignment" ("companyId")`,
+      `CREATE INDEX "IDX_tcp_assignment_company" ON "tcp_assignment" ("companyId")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_lcp_assignment_agent" ON "lcp_assignment" ("agentId")`,
+      `CREATE INDEX "IDX_tcp_assignment_agent" ON "tcp_assignment" ("agentId")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_lcp_assignment_parent" ON "lcp_assignment" ("parentAssignmentId")`,
+      `CREATE INDEX "IDX_tcp_assignment_parent" ON "tcp_assignment" ("parentAssignmentId")`,
     );
 
     await queryRunner.query(
@@ -393,82 +393,82 @@ export class BaselineSchema1784790000000 implements MigrationInterface {
   /** Adds every foreign key, once all referenced tables exist. */
   private async createForeignKeys(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `ALTER TABLE "lcp_company" ADD CONSTRAINT "FK_lcp_company_planner_role" FOREIGN KEY ("plannerRoleId") REFERENCES "lcp_role"("id") ON DELETE SET NULL`,
+      `ALTER TABLE "tcp_company" ADD CONSTRAINT "FK_tcp_company_planner_role" FOREIGN KEY ("plannerRoleId") REFERENCES "tcp_role"("id") ON DELETE SET NULL`,
     );
     await queryRunner.query(
-      `ALTER TABLE "lcp_role" ADD CONSTRAINT "FK_lcp_role_company" FOREIGN KEY ("companyId") REFERENCES "lcp_company"("id") ON DELETE CASCADE`,
+      `ALTER TABLE "tcp_role" ADD CONSTRAINT "FK_tcp_role_company" FOREIGN KEY ("companyId") REFERENCES "tcp_company"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
-      `ALTER TABLE "lcp_task" ADD CONSTRAINT "FK_lcp_task_company" FOREIGN KEY ("companyId") REFERENCES "lcp_company"("id") ON DELETE CASCADE`,
+      `ALTER TABLE "tcp_task" ADD CONSTRAINT "FK_tcp_task_company" FOREIGN KEY ("companyId") REFERENCES "tcp_company"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
-      `ALTER TABLE "lcp_task" ADD CONSTRAINT "FK_lcp_task_planner_role" FOREIGN KEY ("plannerRoleId") REFERENCES "lcp_role"("id") ON DELETE SET NULL`,
+      `ALTER TABLE "tcp_task" ADD CONSTRAINT "FK_tcp_task_planner_role" FOREIGN KEY ("plannerRoleId") REFERENCES "tcp_role"("id") ON DELETE SET NULL`,
     );
     await queryRunner.query(
-      `ALTER TABLE "lcp_assignment" ADD CONSTRAINT "FK_lcp_assignment_task" FOREIGN KEY ("taskId") REFERENCES "lcp_task"("id") ON DELETE CASCADE`,
+      `ALTER TABLE "tcp_assignment" ADD CONSTRAINT "FK_tcp_assignment_task" FOREIGN KEY ("taskId") REFERENCES "tcp_task"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
-      `ALTER TABLE "lcp_assignment" ADD CONSTRAINT "FK_lcp_assignment_company" FOREIGN KEY ("companyId") REFERENCES "lcp_company"("id") ON DELETE CASCADE`,
+      `ALTER TABLE "tcp_assignment" ADD CONSTRAINT "FK_tcp_assignment_company" FOREIGN KEY ("companyId") REFERENCES "tcp_company"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
-      `ALTER TABLE "lcp_assignment" ADD CONSTRAINT "FK_lcp_assignment_role" FOREIGN KEY ("roleId") REFERENCES "lcp_role"("id") ON DELETE CASCADE`,
+      `ALTER TABLE "tcp_assignment" ADD CONSTRAINT "FK_tcp_assignment_role" FOREIGN KEY ("roleId") REFERENCES "tcp_role"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
-      `ALTER TABLE "lcp_assignment" ADD CONSTRAINT "FK_lcp_assignment_agent" FOREIGN KEY ("agentId") REFERENCES "lcp_agent"("id") ON DELETE SET NULL`,
+      `ALTER TABLE "tcp_assignment" ADD CONSTRAINT "FK_tcp_assignment_agent" FOREIGN KEY ("agentId") REFERENCES "tcp_agent"("id") ON DELETE SET NULL`,
     );
     await queryRunner.query(
-      `ALTER TABLE "lcp_assignment" ADD CONSTRAINT "FK_lcp_assignment_target_assignment" FOREIGN KEY ("targetAssignmentId") REFERENCES "lcp_assignment"("id") ON DELETE CASCADE`,
+      `ALTER TABLE "tcp_assignment" ADD CONSTRAINT "FK_tcp_assignment_target_assignment" FOREIGN KEY ("targetAssignmentId") REFERENCES "tcp_assignment"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
-      `ALTER TABLE "lcp_assignment" ADD CONSTRAINT "FK_lcp_assignment_parent_assignment" FOREIGN KEY ("parentAssignmentId") REFERENCES "lcp_assignment"("id") ON DELETE SET NULL`,
+      `ALTER TABLE "tcp_assignment" ADD CONSTRAINT "FK_tcp_assignment_parent_assignment" FOREIGN KEY ("parentAssignmentId") REFERENCES "tcp_assignment"("id") ON DELETE SET NULL`,
     );
     await queryRunner.query(
-      `ALTER TABLE "lcp_agent" ADD CONSTRAINT "FK_lcp_agent_company" FOREIGN KEY ("companyId") REFERENCES "lcp_company"("id") ON DELETE CASCADE`,
+      `ALTER TABLE "tcp_agent" ADD CONSTRAINT "FK_tcp_agent_company" FOREIGN KEY ("companyId") REFERENCES "tcp_company"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
-      `ALTER TABLE "lcp_agent" ADD CONSTRAINT "FK_lcp_agent_role" FOREIGN KEY ("roleId") REFERENCES "lcp_role"("id") ON DELETE CASCADE`,
+      `ALTER TABLE "tcp_agent" ADD CONSTRAINT "FK_tcp_agent_role" FOREIGN KEY ("roleId") REFERENCES "tcp_role"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
-      `ALTER TABLE "lcp_agent" ADD CONSTRAINT "FK_lcp_agent_assignment" FOREIGN KEY ("assignmentId") REFERENCES "lcp_assignment"("id") ON DELETE CASCADE`,
+      `ALTER TABLE "tcp_agent" ADD CONSTRAINT "FK_tcp_agent_assignment" FOREIGN KEY ("assignmentId") REFERENCES "tcp_assignment"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
-      `ALTER TABLE "audit_event" ADD CONSTRAINT "FK_audit_event_company" FOREIGN KEY ("companyId") REFERENCES "lcp_company"("id") ON DELETE CASCADE`,
+      `ALTER TABLE "audit_event" ADD CONSTRAINT "FK_audit_event_company" FOREIGN KEY ("companyId") REFERENCES "tcp_company"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
-      `ALTER TABLE "audit_event" ADD CONSTRAINT "FK_audit_event_agent" FOREIGN KEY ("agentId") REFERENCES "lcp_agent"("id") ON DELETE SET NULL`,
+      `ALTER TABLE "audit_event" ADD CONSTRAINT "FK_audit_event_agent" FOREIGN KEY ("agentId") REFERENCES "tcp_agent"("id") ON DELETE SET NULL`,
     );
     await queryRunner.query(
-      `ALTER TABLE "episodic_memory" ADD CONSTRAINT "FK_episodic_memory_company" FOREIGN KEY ("companyId") REFERENCES "lcp_company"("id") ON DELETE CASCADE`,
+      `ALTER TABLE "episodic_memory" ADD CONSTRAINT "FK_episodic_memory_company" FOREIGN KEY ("companyId") REFERENCES "tcp_company"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
-      `ALTER TABLE "episodic_memory" ADD CONSTRAINT "FK_episodic_memory_role" FOREIGN KEY ("roleId") REFERENCES "lcp_role"("id") ON DELETE CASCADE`,
+      `ALTER TABLE "episodic_memory" ADD CONSTRAINT "FK_episodic_memory_role" FOREIGN KEY ("roleId") REFERENCES "tcp_role"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
-      `ALTER TABLE "knowledge_chunk" ADD CONSTRAINT "FK_knowledge_chunk_company" FOREIGN KEY ("companyId") REFERENCES "lcp_company"("id") ON DELETE CASCADE`,
+      `ALTER TABLE "knowledge_chunk" ADD CONSTRAINT "FK_knowledge_chunk_company" FOREIGN KEY ("companyId") REFERENCES "tcp_company"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
-      `ALTER TABLE "knowledge_chunk" ADD CONSTRAINT "FK_knowledge_chunk_role" FOREIGN KEY ("roleId") REFERENCES "lcp_role"("id") ON DELETE CASCADE`,
+      `ALTER TABLE "knowledge_chunk" ADD CONSTRAINT "FK_knowledge_chunk_role" FOREIGN KEY ("roleId") REFERENCES "tcp_role"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
-      `ALTER TABLE "company_user" ADD CONSTRAINT "FK_company_user_company" FOREIGN KEY ("companyId") REFERENCES "lcp_company"("id") ON DELETE CASCADE`,
+      `ALTER TABLE "company_user" ADD CONSTRAINT "FK_company_user_company" FOREIGN KEY ("companyId") REFERENCES "tcp_company"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
-      `ALTER TABLE "conversation" ADD CONSTRAINT "FK_conversation_company" FOREIGN KEY ("companyId") REFERENCES "lcp_company"("id") ON DELETE CASCADE`,
+      `ALTER TABLE "conversation" ADD CONSTRAINT "FK_conversation_company" FOREIGN KEY ("companyId") REFERENCES "tcp_company"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
-      `ALTER TABLE "conversation" ADD CONSTRAINT "FK_conversation_role" FOREIGN KEY ("roleId") REFERENCES "lcp_role"("id") ON DELETE CASCADE`,
+      `ALTER TABLE "conversation" ADD CONSTRAINT "FK_conversation_role" FOREIGN KEY ("roleId") REFERENCES "tcp_role"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
       `ALTER TABLE "conversation_message" ADD CONSTRAINT "FK_conversation_message_conversation" FOREIGN KEY ("conversationId") REFERENCES "conversation"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
-      `ALTER TABLE "pending_consultation" ADD CONSTRAINT "FK_pending_consultation_company" FOREIGN KEY ("companyId") REFERENCES "lcp_company"("id") ON DELETE CASCADE`,
+      `ALTER TABLE "pending_consultation" ADD CONSTRAINT "FK_pending_consultation_company" FOREIGN KEY ("companyId") REFERENCES "tcp_company"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
-      `ALTER TABLE "pending_consultation" ADD CONSTRAINT "FK_pending_consultation_calling_agent" FOREIGN KEY ("callingAgentId") REFERENCES "lcp_agent"("id") ON DELETE CASCADE`,
+      `ALTER TABLE "pending_consultation" ADD CONSTRAINT "FK_pending_consultation_calling_agent" FOREIGN KEY ("callingAgentId") REFERENCES "tcp_agent"("id") ON DELETE CASCADE`,
     );
     await queryRunner.query(
-      `ALTER TABLE "pending_consultation" ADD CONSTRAINT "FK_pending_consultation_consultation_agent" FOREIGN KEY ("consultationAgentId") REFERENCES "lcp_agent"("id") ON DELETE CASCADE`,
+      `ALTER TABLE "pending_consultation" ADD CONSTRAINT "FK_pending_consultation_consultation_agent" FOREIGN KEY ("consultationAgentId") REFERENCES "tcp_agent"("id") ON DELETE CASCADE`,
     );
   }
 }

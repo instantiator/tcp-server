@@ -1,11 +1,11 @@
 import {
   AuditEvent,
   AuditEventType,
-  LcpAgent,
-  LcpAssignment,
-  LcpCompany,
-  LcpRole,
-  LcpTask,
+  TcpAgent,
+  TcpAssignment,
+  TcpCompany,
+  TcpRole,
+  TcpTask,
 } from '@lcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -22,11 +22,11 @@ const INTERNAL_KEY = process.env.INTERNAL_API_KEY ?? 'e2e-test-internal-key';
 
 describe('AuditController (e2e)', () => {
   let app: INestApplication<App>;
-  let companyRepo: Repository<LcpCompany>;
-  let roleRepo: Repository<LcpRole>;
-  let agentRepo: Repository<LcpAgent>;
-  let assignmentRepo: Repository<LcpAssignment>;
-  let taskRepo: Repository<LcpTask>;
+  let companyRepo: Repository<TcpCompany>;
+  let roleRepo: Repository<TcpRole>;
+  let agentRepo: Repository<TcpAgent>;
+  let assignmentRepo: Repository<TcpAssignment>;
+  let taskRepo: Repository<TcpTask>;
   let auditRepo: Repository<AuditEvent>;
   let auditService: AuditService;
   let jwt: string;
@@ -40,11 +40,11 @@ describe('AuditController (e2e)', () => {
     }).compile();
     app = module.createNestApplication();
     await app.init();
-    companyRepo = module.get(getRepositoryToken(LcpCompany));
-    roleRepo = module.get(getRepositoryToken(LcpRole));
-    agentRepo = module.get(getRepositoryToken(LcpAgent));
-    assignmentRepo = module.get(getRepositoryToken(LcpAssignment));
-    taskRepo = module.get(getRepositoryToken(LcpTask));
+    companyRepo = module.get(getRepositoryToken(TcpCompany));
+    roleRepo = module.get(getRepositoryToken(TcpRole));
+    agentRepo = module.get(getRepositoryToken(TcpAgent));
+    assignmentRepo = module.get(getRepositoryToken(TcpAssignment));
+    taskRepo = module.get(getRepositoryToken(TcpTask));
     auditRepo = module.get(getRepositoryToken(AuditEvent));
     auditService = module.get(AuditService);
     jwt = makeTestJwt();
@@ -78,7 +78,7 @@ describe('AuditController (e2e)', () => {
           .set('Authorization', `Bearer ${jwt}`)
           .send({ companyId, roleId: role.id })
           .expect(201)
-      ).body as LcpAgent
+      ).body as TcpAgent
     ).id;
   });
 

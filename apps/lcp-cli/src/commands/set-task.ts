@@ -8,7 +8,7 @@ export function registerSetTask(program: Command): void {
     .command('set-task')
     .description('Edit an unstarted task (reads JSON from --input or stdin)')
     .requiredOption('--task-id <uuid>', 'Task UUID')
-    .option('-i, --input <json>', 'Task JSON (DeepPartial<LcpTask>)')
+    .option('-i, --input <json>', 'Task JSON (DeepPartial<TcpTask>)')
     .action((cmdOpts: { taskId: string; input?: string }) =>
       setTaskAction(getGlobalOptions(program), cmdOpts),
     );

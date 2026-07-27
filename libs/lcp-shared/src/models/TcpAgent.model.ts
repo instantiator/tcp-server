@@ -8,9 +8,9 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { sanitiseTextColumn } from '../validation/sanitize';
-import { LcpAssignment } from './LcpAssignment.model';
-import { LcpCompany } from './LcpCompany.model';
-import { LcpRole } from './LcpRole.model';
+import { TcpAssignment } from './TcpAssignment.model';
+import { TcpCompany } from './TcpCompany.model';
+import { TcpRole } from './TcpRole.model';
 import { VersionedEntity } from './VersionedEntity';
 
 /** Lifecycle states for an agent instance. */
@@ -35,12 +35,12 @@ export enum AgentStatus {
 }
 
 /**
- * A running instance of an {@link LcpRole} within an {@link LcpCompany}.
- * Each agent has a LangGraph `thread_id` (stored as {@link LcpAgent.threadId}) that links it
+ * A running instance of an {@link TcpRole} within an {@link TcpCompany}.
+ * Each agent has a LangGraph `thread_id` (stored as {@link TcpAgent.threadId}) that links it
  * to its checkpoint in the PostgreSQL checkpoint store, enabling resumability.
  */
 @Entity()
-export class LcpAgent extends VersionedEntity {
+export class TcpAgent extends VersionedEntity {
   /**
    * Auto-generated primary key. Also used as the LangGraph `thread_id`.
    * @format uuid
@@ -49,38 +49,38 @@ export class LcpAgent extends VersionedEntity {
   id!: UUID;
 
   /** The company this agent belongs to. */
-  @ManyToOne(() => LcpCompany, { nullable: false, onDelete: 'CASCADE' })
-  company!: LcpCompany;
+  @ManyToOne(() => TcpCompany, { nullable: false, onDelete: 'CASCADE' })
+  company!: TcpCompany;
 
   /**
-   * Foreign key for the owning {@link LcpCompany}.
+   * Foreign key for the owning {@link TcpCompany}.
    * @format uuid
    */
   @Column()
   companyId!: UUID;
 
   /** The role template this agent runs as. */
-  @ManyToOne(() => LcpRole, { nullable: false, onDelete: 'CASCADE' })
-  role!: LcpRole;
+  @ManyToOne(() => TcpRole, { nullable: false, onDelete: 'CASCADE' })
+  role!: TcpRole;
 
   /**
-   * Foreign key for the {@link LcpRole} this agent is an instance of.
+   * Foreign key for the {@link TcpRole} this agent is an instance of.
    * @format uuid
    */
   @Column()
   roleId!: UUID;
 
   /**
-   * The {@link LcpAssignment} this agent works. Every agent has one — task
+   * The {@link TcpAssignment} this agent works. Every agent has one — task
    * work uses the task's assignment; plain conversations, API-started agents,
    * and consultations get an auto-created "orphan" assignment. The agent's
    * mode is this assignment's mode (there is no mode column on the agent).
    */
-  @ManyToOne(() => LcpAssignment, { nullable: false, onDelete: 'CASCADE' })
-  assignment!: LcpAssignment;
+  @ManyToOne(() => TcpAssignment, { nullable: false, onDelete: 'CASCADE' })
+  assignment!: TcpAssignment;
 
   /**
-   * Foreign key for the owning {@link LcpAssignment}.
+   * Foreign key for the owning {@link TcpAssignment}.
    * @format uuid
    */
   @Column()

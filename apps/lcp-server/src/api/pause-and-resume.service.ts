@@ -1,8 +1,8 @@
 import {
   AgentStatus,
   AuditEventType,
-  LcpAgent,
-  LcpRole,
+  TcpAgent,
+  TcpRole,
   PendingConsultation,
 } from '@lcp/shared';
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
@@ -31,10 +31,10 @@ export class PauseAndResumeService {
   private readonly logger = new Logger(PauseAndResumeService.name);
 
   constructor(
-    @InjectRepository(LcpAgent)
-    private readonly agentRepo: Repository<LcpAgent>,
-    @InjectRepository(LcpRole)
-    private readonly roleRepo: Repository<LcpRole>,
+    @InjectRepository(TcpAgent)
+    private readonly agentRepo: Repository<TcpAgent>,
+    @InjectRepository(TcpRole)
+    private readonly roleRepo: Repository<TcpRole>,
     @InjectRepository(PendingConsultation)
     private readonly consultRepo: Repository<PendingConsultation>,
     private readonly convService: ConversationService,
@@ -172,7 +172,7 @@ export class PauseAndResumeService {
       mode: 'consultee',
       requiredToolCalls: ['complete_assignment'],
       // Links the new consultation assignment back to the task it was spawned
-      // for (via the calling agent's own assignment) — see LcpAssignment.parentAssignmentId.
+      // for (via the calling agent's own assignment) — see TcpAssignment.parentAssignmentId.
       parentAssignmentId: callingAgent.assignmentId,
     });
 
@@ -346,7 +346,7 @@ export class PauseAndResumeService {
   }
 
   /**
-   * Merges a storage change snapshot into {@link LcpAgent.storageChanges}.
+   * Merges a storage change snapshot into {@link TcpAgent.storageChanges}.
    * Called fire-and-forget by lcp-agent after each storage tool result.
    * Appends to existing arrays; does not deduplicate.
    */
@@ -379,7 +379,7 @@ export class PauseAndResumeService {
     });
   }
 
-  private async loadAgent(agentId: UUID): Promise<LcpAgent> {
+  private async loadAgent(agentId: UUID): Promise<TcpAgent> {
     const agent = await this.agentRepo.findOneBy({ id: agentId });
     if (!agent) throw new NotFoundException(`Agent ${agentId} not found`);
     return agent;

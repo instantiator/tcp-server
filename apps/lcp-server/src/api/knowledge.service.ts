@@ -2,8 +2,8 @@ import {
   DEFAULT_RAG_THRESHOLD,
   KnowledgeChunk,
   KnowledgeIndexState,
-  LcpCompany,
-  LcpRole,
+  TcpCompany,
+  TcpRole,
   resolveEmbeddingConfig,
   resolveEnvEmbeddingConfig,
   resolveRunConfig,
@@ -70,8 +70,8 @@ export interface CompanyKnowledgeStatus {
 
 /** A resolved knowledge scope, with the entities needed to address storage and RAG chunks. */
 interface ResolvedScope {
-  company: LcpCompany;
-  role: LcpRole | null;
+  company: TcpCompany;
+  role: TcpRole | null;
 }
 
 /**
@@ -91,10 +91,10 @@ export class KnowledgeService {
     private readonly reindex: KnowledgeReindexService,
     private readonly ragRetrieval: RagRetrievalService,
     private readonly config: ConfigService,
-    @InjectRepository(LcpRole)
-    private readonly roleRepo: Repository<LcpRole>,
-    @InjectRepository(LcpCompany)
-    private readonly companyRepo: Repository<LcpCompany>,
+    @InjectRepository(TcpRole)
+    private readonly roleRepo: Repository<TcpRole>,
+    @InjectRepository(TcpCompany)
+    private readonly companyRepo: Repository<TcpCompany>,
     @InjectRepository(KnowledgeChunk)
     private readonly chunkRepo: Repository<KnowledgeChunk>,
     @InjectRepository(KnowledgeIndexState)
@@ -241,7 +241,7 @@ export class KnowledgeService {
   }
 
   /**
-   * Warnings for the `X-Lcp-Warnings` header on any knowledge endpoint
+   * Warnings for the `X-Tcp-Warnings` header on any knowledge endpoint
    * touching this scope: whether RAG indexing is configured at all (company
    * `embeddingConfig`, or the `EMBEDDING_*` env fallback), and whether the
    * most recent rebuild failed (e.g. the embedding endpoint was
@@ -294,8 +294,8 @@ export class KnowledgeService {
 
   /** Computes a {@link KnowledgeStatus} for an already-resolved company/role scope. */
   private async computeStatus(
-    company: LcpCompany,
-    role: LcpRole | null,
+    company: TcpCompany,
+    role: TcpRole | null,
   ): Promise<KnowledgeStatus> {
     const roleId = role?.id ?? null;
     const [objects, chunkCount, state, indexing] = await Promise.all([
@@ -343,8 +343,8 @@ export class KnowledgeService {
 }
 
 function toStorageScope(
-  company: LcpCompany,
-  role: LcpRole | null,
+  company: TcpCompany,
+  role: TcpRole | null,
 ): KnowledgeScope {
   return { companySlug: company.slug, roleSlug: role?.slug ?? null };
 }

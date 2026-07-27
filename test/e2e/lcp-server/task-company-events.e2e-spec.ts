@@ -1,4 +1,4 @@
-import { LcpCompany, LcpTask, type WireEvent } from '@lcp/shared';
+import { TcpCompany, TcpTask, type WireEvent } from '@lcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -22,8 +22,8 @@ import { makeTestJwt } from '../helpers/test-jwt';
  */
 describe('Company/Task SSE events (e2e)', () => {
   let app: INestApplication<App>;
-  let companyRepo: Repository<LcpCompany>;
-  let taskRepo: Repository<LcpTask>;
+  let companyRepo: Repository<TcpCompany>;
+  let taskRepo: Repository<TcpTask>;
   let jwt: string;
 
   beforeAll(async () => {
@@ -37,12 +37,12 @@ describe('Company/Task SSE events (e2e)', () => {
     // `request(app.getHttpServer())` can't observe a long-lived SSE response.
     await app.listen(0);
 
-    companyRepo = moduleFixture.get(getRepositoryToken(LcpCompany));
-    taskRepo = moduleFixture.get(getRepositoryToken(LcpTask));
+    companyRepo = moduleFixture.get(getRepositoryToken(TcpCompany));
+    taskRepo = moduleFixture.get(getRepositoryToken(TcpTask));
     jwt = makeTestJwt();
   });
 
-  async function createCompany(): Promise<LcpCompany> {
+  async function createCompany(): Promise<TcpCompany> {
     const res = await request(app.getHttpServer())
       .post('/api/company')
       .set('Authorization', `Bearer ${jwt}`)
@@ -51,15 +51,15 @@ describe('Company/Task SSE events (e2e)', () => {
         name: 'SSE Co',
         description: 'test',
       });
-    return res.body as LcpCompany;
+    return res.body as TcpCompany;
   }
 
-  async function createTask(companyId: string): Promise<LcpTask> {
+  async function createTask(companyId: string): Promise<TcpTask> {
     const res = await request(app.getHttpServer())
       .post('/api/task')
       .set('Authorization', `Bearer ${jwt}`)
       .send({ companyId, request: 'Write a report' });
-    return res.body as LcpTask;
+    return res.body as TcpTask;
   }
 
   afterEach(async () => {

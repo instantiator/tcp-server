@@ -8,7 +8,7 @@ jest.mock('../auth/token');
 const mockedApiRequest = apiRequest as jest.Mock;
 const mockedResolveToken = resolveToken as jest.Mock;
 
-const opts = { lcpServer: 'http://localhost:3000' };
+const opts = { tcpServer: 'http://localhost:3000' };
 
 describe('listAgentsAction', () => {
   let exitSpy: jest.SpyInstance;

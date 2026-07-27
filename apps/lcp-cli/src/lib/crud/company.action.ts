@@ -1,4 +1,4 @@
-import type { LcpCompany } from '@lcp/shared';
+import type { TcpCompany } from '@lcp/shared';
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest } from '../core/api';
 import { confirmAction } from '../core/confirm';
@@ -17,7 +17,7 @@ interface CompanySummary {
 /** Lists all companies from the LCP server and writes them to stdout as JSON. */
 export function listCompaniesAction(opts: GlobalOptions): Promise<void> {
   return runCommand(async () => {
-    const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+    const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const companies = await apiRequest<CompanySummary[]>(
       apiOptions(opts, token),
       'GET',
@@ -47,7 +47,7 @@ export function setCompanyAction(
     const data = await readJsonBody(cmdOpts);
     const bodyId = typeof data['id'] === 'string' ? data['id'] : undefined;
 
-    const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+    const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
 
     // `/api/company/:id` accepts a UUID or a slug directly, so whichever
@@ -56,13 +56,13 @@ export function setCompanyAction(
     const identifier =
       cmdOpts.companyId ?? cmdOpts.companySlug ?? cmdOpts.company ?? bodyId;
     const result = identifier
-      ? await apiRequest<LcpCompany>(
+      ? await apiRequest<TcpCompany>(
           api,
           'PUT',
           `/api/company/${identifier}`,
           data,
         )
-      : await apiRequest<LcpCompany>(api, 'POST', '/api/company', data);
+      : await apiRequest<TcpCompany>(api, 'POST', '/api/company', data);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
   });
 }
@@ -89,10 +89,10 @@ export function deleteCompanyAction(
       return;
     }
 
-    const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+    const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
 
-    const company = await apiRequest<LcpCompany | null>(
+    const company = await apiRequest<TcpCompany | null>(
       api,
       'GET',
       `/api/company/${identifier}`,

@@ -20,7 +20,7 @@ jest.mock('../auth/token', () => ({
 const mockedApiRequest = apiRequest as jest.Mock;
 const mockedResolveSession = resolveSession as jest.Mock;
 
-const opts = { lcpServer: 'http://localhost:3000' };
+const opts = { tcpServer: 'http://localhost:3000' };
 
 const ROLE = { id: 'role-1', name: 'Implementer', slug: 'implementer' };
 

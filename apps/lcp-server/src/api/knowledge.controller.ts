@@ -364,7 +364,7 @@ export class KnowledgeController {
   }
 
   /**
-   * Sets `X-Lcp-Warnings` for this scope — whether RAG indexing is
+   * Sets `X-Tcp-Warnings` for this scope — whether RAG indexing is
    * configured at all, and whether the most recent rebuild failed (e.g. the
    * embedding endpoint was unreachable). Called by every knowledge endpoint
    * so these otherwise-invisible failure modes are always visible, not just

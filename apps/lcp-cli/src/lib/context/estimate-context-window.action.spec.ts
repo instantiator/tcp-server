@@ -1,4 +1,4 @@
-import { ContextBudgetService, LcpCompany, LcpRole } from '@lcp/shared';
+import { ContextBudgetService, TcpCompany, TcpRole } from '@lcp/shared';
 import { computeBreakdown } from './estimate-context-window.action';
 
 describe('computeBreakdown', () => {
@@ -24,8 +24,8 @@ describe('computeBreakdown', () => {
   });
 
   it('counts actual tokens for role/company text when present', async () => {
-    const role = { rolePrompt: 'You are a careful analyst.' } as LcpRole;
-    const company = { companyContext: 'We build widgets.' } as LcpCompany;
+    const role = { rolePrompt: 'You are a careful analyst.' } as TcpRole;
+    const company = { companyContext: 'We build widgets.' } as TcpCompany;
 
     const breakdown = await computeBreakdown(budget, { role, company }, {});
 
@@ -60,10 +60,10 @@ describe('computeBreakdown', () => {
   it("resolves the window size from the role's llmConfig over the company's", async () => {
     const role = {
       llmConfig: { provider: 'lm-studio', model: 'x', contextWindow: 4096 },
-    } as LcpRole;
+    } as TcpRole;
     const company = {
       llmConfig: { provider: 'lm-studio', model: 'y', contextWindow: 16384 },
-    } as LcpCompany;
+    } as TcpCompany;
 
     const breakdown = await computeBreakdown(budget, { role, company }, {});
     expect(breakdown.windowSize).toBe(4096);

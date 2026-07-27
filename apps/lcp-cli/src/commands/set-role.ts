@@ -11,7 +11,7 @@ export function registerSetRole(program: Command): void {
   addCompanyOptions(cmd);
   addRoleOptions(cmd);
   cmd
-    .option('-i, --input <json>', 'Role JSON (DeepPartial<LcpRole>)')
+    .option('-i, --input <json>', 'Role JSON (DeepPartial<TcpRole>)')
     .action(
       (cmdOpts: {
         company?: string;

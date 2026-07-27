@@ -3,11 +3,11 @@ import { createServer, type AddressInfo } from 'node:net';
 import {
   AgentStatus,
   AuditClientService,
-  LcpAgent,
-  LcpAssignment,
-  LcpCompany,
-  LcpRole,
-  LcpTask,
+  TcpAgent,
+  TcpAssignment,
+  TcpCompany,
+  TcpRole,
+  TcpTask,
   McpClientService,
 } from '@lcp/shared';
 import { DynamicStructuredTool } from '@langchain/core/tools';
@@ -18,8 +18,8 @@ import axios from 'axios';
 import { DataSource, Repository } from 'typeorm';
 import { z } from 'zod';
 import { AgentLoopService } from '../../../apps/lcp-agent/src/agent/agent-loop.service';
-import { AppModule as LcpAgentAppModule } from '../../../apps/lcp-agent/src/app.module';
-import { AppModule as LcpServerAppModule } from '../../../apps/lcp-server/src/app.module';
+import { AppModule as TcpAgentAppModule } from '../../../apps/lcp-agent/src/app.module';
+import { AppModule as TcpServerAppModule } from '../../../apps/lcp-server/src/app.module';
 import { requireEnv } from '../../support/require-env';
 
 const STUB_LLM_URL = requireEnv('STUB_LLM_URL');
@@ -41,15 +41,15 @@ const INTERNAL_API_KEY = requireEnv('INTERNAL_API_KEY');
 describe('Task/assignment flow via the agent loop (stub LLM)', () => {
   let serverApp: INestApplication;
   let agentModuleRef: TestingModule;
-  let lcpServerUrl: string;
+  let tcpServerUrl: string;
   let agentLoopService: AgentLoopService;
   let loadToolsMock: jest.Mock;
 
-  let companyRepo: Repository<LcpCompany>;
-  let roleRepo: Repository<LcpRole>;
-  let taskRepo: Repository<LcpTask>;
-  let assignmentRepo: Repository<LcpAssignment>;
-  let agentRepo: Repository<LcpAgent>;
+  let companyRepo: Repository<TcpCompany>;
+  let roleRepo: Repository<TcpRole>;
+  let taskRepo: Repository<TcpTask>;
+  let assignmentRepo: Repository<TcpAssignment>;
+  let agentRepo: Repository<TcpAgent>;
 
   let companyId: UUID;
   let roleId: UUID;
@@ -112,7 +112,7 @@ describe('Task/assignment flow via the agent loop (stub LLM)', () => {
       schema: z.object({ summary: z.string() }),
       func: async ({ summary }: { summary: string }): Promise<string> => {
         await axios.post(
-          `${lcpServerUrl}/internal/assignment/${assignmentId}/complete`,
+          `${tcpServerUrl}/internal/assignment/${assignmentId}/complete`,
           { agentId, summary, prepared: [] },
           { headers: { 'X-Internal-Api-Key': INTERNAL_API_KEY } },
         );
@@ -162,8 +162,8 @@ describe('Task/assignment flow via the agent loop (stub LLM)', () => {
 
   beforeAll(async () => {
     const port = await getFreePort();
-    lcpServerUrl = `http://127.0.0.1:${port}`;
-    process.env.LCP_SERVER_URL = lcpServerUrl;
+    tcpServerUrl = `http://127.0.0.1:${port}`;
+    process.env.LCP_SERVER_URL = tcpServerUrl;
 
     // Point both AppModules at a freshly-created, empty database so lcp-server's
     // startup migrations run against a clean schema (see the note by
@@ -187,17 +187,17 @@ describe('Task/assignment flow via the agent loop (stub LLM)', () => {
     // fake MCP tool (and lcp-agent's own fire-and-forget audit/notify
     // clients) call it exactly as a live lcp-mcp-tasks/lcp-agent process would.
     const serverModuleRef = await Test.createTestingModule({
-      imports: [LcpServerAppModule],
+      imports: [TcpServerAppModule],
     }).compile();
     serverApp = serverModuleRef.createNestApplication();
     await serverApp.init();
     await serverApp.listen(port);
 
-    companyRepo = serverModuleRef.get(getRepositoryToken(LcpCompany));
-    roleRepo = serverModuleRef.get(getRepositoryToken(LcpRole));
-    taskRepo = serverModuleRef.get(getRepositoryToken(LcpTask));
-    assignmentRepo = serverModuleRef.get(getRepositoryToken(LcpAssignment));
-    agentRepo = serverModuleRef.get(getRepositoryToken(LcpAgent));
+    companyRepo = serverModuleRef.get(getRepositoryToken(TcpCompany));
+    roleRepo = serverModuleRef.get(getRepositoryToken(TcpRole));
+    taskRepo = serverModuleRef.get(getRepositoryToken(TcpTask));
+    assignmentRepo = serverModuleRef.get(getRepositoryToken(TcpAssignment));
+    agentRepo = serverModuleRef.get(getRepositoryToken(TcpAgent));
 
     // lcp-agent's real AppModule (worker wiring, context management, the
     // agent loop itself) — only McpClientService is swapped for a mock, so
@@ -207,10 +207,10 @@ describe('Task/assignment flow via the agent loop (stub LLM)', () => {
     // takes once at ConfigModule.forRoot() time, which doesn't reliably pick
     // up a same-process env override made after an earlier module (here,
     // lcp-server's own) already triggered that validation — so its
-    // fire-and-forget calls are re-pointed at the real `lcpServerUrl` directly.
+    // fire-and-forget calls are re-pointed at the real `tcpServerUrl` directly.
     loadToolsMock = jest.fn();
     agentModuleRef = await Test.createTestingModule({
-      imports: [LcpAgentAppModule],
+      imports: [TcpAgentAppModule],
     })
       .overrideProvider(McpClientService)
       .useValue({ loadTools: loadToolsMock })
@@ -219,7 +219,7 @@ describe('Task/assignment flow via the agent loop (stub LLM)', () => {
         notifyComplete: () => {},
         notifyFailed: (agentId: UUID, reason: string) => {
           void axios.post(
-            `${lcpServerUrl}/internal/agent/${agentId}/fail`,
+            `${tcpServerUrl}/internal/agent/${agentId}/fail`,
             { reason },
             { headers: { 'X-Internal-Api-Key': INTERNAL_API_KEY } },
           );

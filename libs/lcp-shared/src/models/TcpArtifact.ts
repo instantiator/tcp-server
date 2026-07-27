@@ -3,7 +3,7 @@
  * to a location in the task/assignment storage tree (see `storage-keys.ts`);
  * `inline-text` carries literal text directly instead of pointing at storage.
  */
-export type LcpArtifactType =
+export type TcpArtifactType =
   /** `{companySlug}/tasks/{taskId}/materials/{value}` */
   | 'task-materials-path'
   /** `{companySlug}/tasks/{taskId}/completed/{value}` */
@@ -26,8 +26,8 @@ export type LcpArtifactType =
   | 'inline-text';
 
 /** `{ type, value }` pointer to (or literal content of) a single artifact. */
-export interface LcpArtifact {
-  type: LcpArtifactType;
+export interface TcpArtifact {
+  type: TcpArtifactType;
   value: string;
 }
 
@@ -37,7 +37,7 @@ export interface LcpArtifact {
  * `tasks-tools.service.ts`) as easier to guess than the fully descriptive
  * canonical names; the rest are synonyms an LLM might reach for instead.
  */
-const ARTIFACT_TYPE_ALIASES: Record<string, LcpArtifactType> = {
+const ARTIFACT_TYPE_ALIASES: Record<string, TcpArtifactType> = {
   text: 'inline-text',
   inline: 'inline-text',
   string: 'inline-text',
@@ -56,7 +56,7 @@ const ARTIFACT_TYPE_ALIASES: Record<string, LcpArtifactType> = {
  * vocabulary it was actually shown in the tool description, not the longer
  * internal storage-path name.
  */
-const ARTIFACT_TYPE_DISPLAY_NAMES: Record<LcpArtifactType, string> = {
+const ARTIFACT_TYPE_DISPLAY_NAMES: Record<TcpArtifactType, string> = {
   'inline-text': 'text',
   'assignment-working-path': 'file',
   'task-materials-path': 'material-file',
@@ -66,7 +66,7 @@ const ARTIFACT_TYPE_DISPLAY_NAMES: Record<LcpArtifactType, string> = {
 
 /** Maps canonical artifact types to their short, LLM-facing display name. */
 export function artifactTypeDisplayName(type: string): string {
-  return ARTIFACT_TYPE_DISPLAY_NAMES[type as LcpArtifactType] ?? type;
+  return ARTIFACT_TYPE_DISPLAY_NAMES[type as TcpArtifactType] ?? type;
 }
 
 /**
@@ -86,31 +86,31 @@ export function canonicalArtifactType(raw: string): string {
 }
 
 /** Returns a copy of `artifacts` with each `type` run through {@link canonicalArtifactType}. */
-export function canonicaliseArtifacts<T extends LcpArtifact>(
+export function canonicaliseArtifacts<T extends TcpArtifact>(
   artifacts: T[],
 ): T[] {
   return artifacts.map((a) => ({
     ...a,
-    type: canonicalArtifactType(a.type) as LcpArtifactType,
+    type: canonicalArtifactType(a.type) as TcpArtifactType,
   }));
 }
 
 /** An artifact usable as task materials: an uploaded file, a promoted assignment output, or inline text. */
-export type LcpMaterialArtifact = LcpArtifact & {
+export type TcpMaterialArtifact = TcpArtifact & {
   type: 'task-materials-path' | 'assignment-completed-path' | 'inline-text';
 };
 
 /** An artifact living in an assignment's own working directory, or inline text. */
-export type LcpAssignmentWorkingArtifact = LcpArtifact & {
+export type TcpAssignmentWorkingArtifact = TcpArtifact & {
   type: 'assignment-working-path' | 'inline-text';
 };
 
 /** An artifact promoted into an assignment's completed directory, or inline text. */
-export type LcpAssignmentCompletedArtifact = LcpArtifact & {
+export type TcpAssignmentCompletedArtifact = TcpArtifact & {
   type: 'assignment-completed-path' | 'inline-text';
 };
 
 /** An artifact promoted into a task's completed directory, or inline text. */
-export type LcpTaskCompletedArtifact = LcpArtifact & {
+export type TcpTaskCompletedArtifact = TcpArtifact & {
   type: 'task-completed-path' | 'inline-text';
 };

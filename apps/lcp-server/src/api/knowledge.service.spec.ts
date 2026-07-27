@@ -1,11 +1,11 @@
 import { NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { DEFAULT_RAG_THRESHOLD, LcpCompany, LcpRole } from '@lcp/shared';
+import { DEFAULT_RAG_THRESHOLD, TcpCompany, TcpRole } from '@lcp/shared';
 import { KnowledgeReindexService } from '../rag/knowledge-reindex.service';
 import { StorageObject, StorageService } from '../storage/storage.service';
 import { KnowledgeService } from './knowledge.service';
 
-function makeRole(overrides: Partial<LcpRole> = {}): LcpRole {
+function makeRole(overrides: Partial<TcpRole> = {}): TcpRole {
   return {
     id: randomUUID(),
     companyId: randomUUID(),
@@ -21,7 +21,7 @@ function makeRole(overrides: Partial<LcpRole> = {}): LcpRole {
   };
 }
 
-function makeCompany(overrides: Partial<LcpCompany> = {}): LcpCompany {
+function makeCompany(overrides: Partial<TcpCompany> = {}): TcpCompany {
   return {
     id: randomUUID(),
     slug: 'acme',

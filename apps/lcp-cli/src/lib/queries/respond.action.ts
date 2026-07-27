@@ -22,7 +22,7 @@ export function respondAction(
 ): Promise<void> {
   return runCommand(async () => {
     process.stderr.write('Sending response...\n');
-    const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+    const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
 
     const result = await apiRequest<Conversation>(

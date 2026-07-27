@@ -1,4 +1,4 @@
-import type { LcpAssignmentMode } from '../models/LcpAssignment.model';
+import type { TcpAssignmentMode } from '../models/TcpAssignment.model';
 import { MCP_REGISTRY } from '../mcp/mcp-registry';
 
 /** A registered MCP server name (`'tasks' | 'storage' | 'memory' | 'interactions'`). */
@@ -42,7 +42,7 @@ export interface ModeToolAccess {
  * terminates) and is storage read-only (it plans, it doesn't do the work); `qa`
  * is storage read-only (it reviews, it doesn't edit).
  */
-export const MODE_TOOLS: Record<LcpAssignmentMode, ModeToolAccess> = {
+export const MODE_TOOLS: Record<TcpAssignmentMode, ModeToolAccess> = {
   plan: { servers: ['tasks', 'storage', 'memory'], storage: 'read-only' },
   implement: {
     servers: ['tasks', 'storage', 'memory', 'interactions'],
@@ -67,7 +67,7 @@ export const MODE_TOOLS: Record<LcpAssignmentMode, ModeToolAccess> = {
 };
 
 /** Whether the storage scope for `mode` is read-only (server-side enforcement). */
-export function isStorageReadOnly(mode: LcpAssignmentMode): boolean {
+export function isStorageReadOnly(mode: TcpAssignmentMode): boolean {
   return MODE_TOOLS[mode].storage === 'read-only';
 }
 
@@ -85,7 +85,7 @@ function stripServerPrefix(toolName: string): string {
  */
 export function serverNamesForMode(
   serverNames: string[],
-  mode: LcpAssignmentMode,
+  mode: TcpAssignmentMode,
 ): string[] {
   const allowed = new Set<string>(MODE_TOOLS[mode].servers);
   return serverNames.filter((name) => allowed.has(name));
@@ -99,7 +99,7 @@ export function serverNamesForMode(
  */
 export function filterToolsForMode<
   T extends { serverName: string; toolName: string },
->(tools: T[], mode: LcpAssignmentMode): T[] {
+>(tools: T[], mode: TcpAssignmentMode): T[] {
   const allowedServers = new Set<string>(MODE_TOOLS[mode].servers);
   const dropWrites = MODE_TOOLS[mode].storage === 'read-only';
   const writeTools = new Set(STORAGE_WRITE_TOOLS);

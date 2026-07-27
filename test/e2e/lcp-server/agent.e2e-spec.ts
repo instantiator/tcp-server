@@ -1,9 +1,9 @@
 import {
   AuditEvent,
-  LcpAgent,
-  LcpAssignment,
-  LcpCompany,
-  LcpRole,
+  TcpAgent,
+  TcpAssignment,
+  TcpCompany,
+  TcpRole,
 } from '@lcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -17,10 +17,10 @@ import { makeTestJwt } from '../helpers/test-jwt';
 
 describe('AgentController (e2e)', () => {
   let app: INestApplication<App>;
-  let companyRepo: Repository<LcpCompany>;
-  let roleRepo: Repository<LcpRole>;
-  let agentRepo: Repository<LcpAgent>;
-  let assignmentRepo: Repository<LcpAssignment>;
+  let companyRepo: Repository<TcpCompany>;
+  let roleRepo: Repository<TcpRole>;
+  let agentRepo: Repository<TcpAgent>;
+  let assignmentRepo: Repository<TcpAssignment>;
   let auditRepo: Repository<AuditEvent>;
   let jwt: string;
   let companyId: UUID;
@@ -33,10 +33,10 @@ describe('AgentController (e2e)', () => {
     }).compile();
     app = module.createNestApplication();
     await app.init();
-    companyRepo = module.get(getRepositoryToken(LcpCompany));
-    roleRepo = module.get(getRepositoryToken(LcpRole));
-    agentRepo = module.get(getRepositoryToken(LcpAgent));
-    assignmentRepo = module.get(getRepositoryToken(LcpAssignment));
+    companyRepo = module.get(getRepositoryToken(TcpCompany));
+    roleRepo = module.get(getRepositoryToken(TcpRole));
+    agentRepo = module.get(getRepositoryToken(TcpAgent));
+    assignmentRepo = module.get(getRepositoryToken(TcpAssignment));
     auditRepo = module.get(getRepositoryToken(AuditEvent));
     jwt = makeTestJwt();
 
@@ -95,18 +95,18 @@ describe('AgentController (e2e)', () => {
         .set('Authorization', `Bearer ${jwt}`)
         .send({ companyId, roleId })
         .expect(201);
-      expect((res.body as LcpAgent).id).toBeDefined();
-      expect((res.body as LcpAgent).status).toBe('idle');
+      expect((res.body as TcpAgent).id).toBeDefined();
+      expect((res.body as TcpAgent).status).toBe('idle');
       // Every agent is created with an assignment — an orphan chat-mode one
       // here (empty prompt for chat-start).
-      const assignmentId = (res.body as LcpAgent).assignmentId;
+      const assignmentId = (res.body as TcpAgent).assignmentId;
       expect(assignmentId).toBeDefined();
       const assignment = await assignmentRepo.findOneByOrFail({
         id: assignmentId,
       });
       expect(assignment.taskId).toBeNull();
       expect(assignment.mode).toBe('chat');
-      expect(assignment.agentId).toBe((res.body as LcpAgent).id);
+      expect(assignment.agentId).toBe((res.body as TcpAgent).id);
     });
 
     it('returns 401 without a token', () =>
@@ -124,13 +124,13 @@ describe('AgentController (e2e)', () => {
           .set('Authorization', `Bearer ${jwt}`)
           .send({ companyId, roleId })
           .expect(201)
-      ).body as LcpAgent;
+      ).body as TcpAgent;
 
       const res = await request(app.getHttpServer())
         .get(`/api/agent/${created.id}`)
         .set('Authorization', `Bearer ${jwt}`)
         .expect(200);
-      expect((res.body as LcpAgent).id).toBe(created.id);
+      expect((res.body as TcpAgent).id).toBe(created.id);
     });
 
     it('returns 404 for an unknown agent id', () =>
@@ -154,13 +154,13 @@ describe('AgentController (e2e)', () => {
           .set('Authorization', `Bearer ${jwt}`)
           .send({ companyId, roleId })
           .expect(201)
-      ).body as LcpAgent;
+      ).body as TcpAgent;
 
       const res = await request(app.getHttpServer())
         .get(`/api/agent?companyId=${companyId}`)
         .set('Authorization', `Bearer ${jwt}`)
         .expect(200);
-      expect((res.body as LcpAgent[]).map((a) => a.id)).toContain(created.id);
+      expect((res.body as TcpAgent[]).map((a) => a.id)).toContain(created.id);
     });
 
     it('filters by an explicit status', async () => {
@@ -170,13 +170,13 @@ describe('AgentController (e2e)', () => {
           .set('Authorization', `Bearer ${jwt}`)
           .send({ companyId, roleId })
           .expect(201)
-      ).body as LcpAgent;
+      ).body as TcpAgent;
 
       const res = await request(app.getHttpServer())
         .get(`/api/agent?companyId=${companyId}&status=completed`)
         .set('Authorization', `Bearer ${jwt}`)
         .expect(200);
-      expect((res.body as LcpAgent[]).map((a) => a.id)).not.toContain(
+      expect((res.body as TcpAgent[]).map((a) => a.id)).not.toContain(
         created.id,
       );
     });
@@ -188,20 +188,20 @@ describe('AgentController (e2e)', () => {
           .set('Authorization', `Bearer ${jwt}`)
           .send({ companyId, roleId })
           .expect(201)
-      ).body as LcpAgent;
+      ).body as TcpAgent;
       const otherRoleAgent = (
         await request(app.getHttpServer())
           .post('/api/agent/chat/start')
           .set('Authorization', `Bearer ${jwt}`)
           .send({ companyId, roleId: otherRoleId })
           .expect(201)
-      ).body as LcpAgent;
+      ).body as TcpAgent;
 
       const res = await request(app.getHttpServer())
         .get(`/api/agent?roleId=${roleId}`)
         .set('Authorization', `Bearer ${jwt}`)
         .expect(200);
-      const ids = (res.body as LcpAgent[]).map((a) => a.id);
+      const ids = (res.body as TcpAgent[]).map((a) => a.id);
       expect(ids).toContain(created.id);
       expect(ids).not.toContain(otherRoleAgent.id);
     });
@@ -213,20 +213,20 @@ describe('AgentController (e2e)', () => {
           .set('Authorization', `Bearer ${jwt}`)
           .send({ companyId, roleId })
           .expect(201)
-      ).body as LcpAgent;
+      ).body as TcpAgent;
       const other = (
         await request(app.getHttpServer())
           .post('/api/agent/chat/start')
           .set('Authorization', `Bearer ${jwt}`)
           .send({ companyId, roleId })
           .expect(201)
-      ).body as LcpAgent;
+      ).body as TcpAgent;
 
       const res = await request(app.getHttpServer())
         .get(`/api/agent?assignmentId=${created.assignmentId}`)
         .set('Authorization', `Bearer ${jwt}`)
         .expect(200);
-      const ids = (res.body as LcpAgent[]).map((a) => a.id);
+      const ids = (res.body as TcpAgent[]).map((a) => a.id);
       expect(ids).toEqual([created.id]);
       expect(ids).not.toContain(other.id);
     });
@@ -240,7 +240,7 @@ describe('AgentController (e2e)', () => {
           .set('Authorization', `Bearer ${jwt}`)
           .send({ companyId, roleId })
           .expect(201)
-      ).body as LcpAgent;
+      ).body as TcpAgent;
 
       await auditRepo.save(
         auditRepo.create({
@@ -289,7 +289,7 @@ describe('AgentController (e2e)', () => {
           .set('Authorization', `Bearer ${jwt}`)
           .send({ companyId, roleId })
           .expect(201)
-      ).body as LcpAgent;
+      ).body as TcpAgent;
 
       await request(app.getHttpServer())
         .delete(`/api/agent/${created.id}`)

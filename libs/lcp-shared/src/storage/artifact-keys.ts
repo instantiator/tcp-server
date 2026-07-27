@@ -1,8 +1,8 @@
-import type { LcpArtifact } from '../models/LcpArtifact';
+import type { TcpArtifact } from '../models/TcpArtifact';
 
 /**
  * Object-key structure helpers for the task/assignment storage tree, plus
- * {@link resolveArtifactKey} which maps an {@link LcpArtifact} to its full
+ * {@link resolveArtifactKey} which maps an {@link TcpArtifact} to its full
  * storage key. Kept in `@lcp/shared` so both lcp-server (storage/task
  * services) and lcp-agent (assignment prompt assembly) can resolve keys the
  * same way. lcp-server re-exports these from its `storage/storage-keys.ts`
@@ -120,7 +120,7 @@ export function orphanWorkingPrefix(
   return `${companySlug}/assignments/${assignmentId}/working/`;
 }
 
-/** Context needed to resolve an {@link LcpArtifact} to a full storage key. */
+/** Context needed to resolve an {@link TcpArtifact} to a full storage key. */
 export interface ArtifactResolutionContext {
   companySlug: string;
   /** The task the artifact belongs to — required for any `task-*-path` or `assignment-*-path` type. */
@@ -131,7 +131,7 @@ export interface ArtifactResolutionContext {
    */
   planAssignments?: {
     orderIndex?: number | null;
-    approved: LcpArtifact[];
+    approved: TcpArtifact[];
   }[];
   /**
    * The assignment the artifact is attached to. Required for
@@ -149,7 +149,7 @@ export interface ArtifactResolutionContext {
 }
 
 /**
- * Resolves an {@link LcpArtifact} to a full storage key, or `null` for
+ * Resolves an {@link TcpArtifact} to a full storage key, or `null` for
  * `inline-text` (which carries its value directly, not a storage pointer).
  *
  * For `assignment-completed-path`, scans {@link ArtifactResolutionContext.planAssignments}
@@ -161,7 +161,7 @@ export interface ArtifactResolutionContext {
  *   `assignment-completed-path`) no matching prior assignment is found.
  */
 export function resolveArtifactKey(
-  artifact: LcpArtifact,
+  artifact: TcpArtifact,
   ctx: ArtifactResolutionContext,
 ): string | null {
   switch (artifact.type) {
@@ -209,7 +209,7 @@ export function resolveArtifactKey(
         )
         .reduce<{
           orderIndex?: number | null;
-          approved: LcpArtifact[];
+          approved: TcpArtifact[];
         } | null>(
           (best, a) =>
             best === null || a.orderIndex! > best.orderIndex! ? a : best,

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type { LcpAssignment, LcpCompany, LcpTask } from '@lcp/shared';
+import type { TcpAssignment, TcpCompany, TcpTask } from '@lcp/shared';
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest, apiUpload } from '../core/api';
 import {
@@ -36,7 +36,7 @@ export function createTaskAction(
   },
 ): Promise<void> {
   return runCommand(async () => {
-    const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+    const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
 
     const company = await apiRequest<{ id: string }>(
@@ -64,7 +64,7 @@ export function createTaskAction(
       value: filename,
     }));
 
-    let task = await apiRequest<LcpTask>(api, 'POST', '/api/task', {
+    let task = await apiRequest<TcpTask>(api, 'POST', '/api/task', {
       companyId: company.id,
       request: cmdOpts.request,
       ...(plannerRoleId ? { plannerRoleId } : {}),
@@ -86,7 +86,7 @@ export function createTaskAction(
 
     if (cmdOpts.start) {
       process.stderr.write(`Starting task ${task.id}...\n`);
-      task = await apiRequest<LcpTask>(
+      task = await apiRequest<TcpTask>(
         api,
         'POST',
         `/api/task/${task.id}/start`,
@@ -97,13 +97,13 @@ export function createTaskAction(
   });
 }
 
-/** Lists a company's tasks. stdout: `LcpTask[]` as JSON. */
+/** Lists a company's tasks. stdout: `TcpTask[]` as JSON. */
 export function listTasksAction(
   opts: GlobalOptions,
   cmdOpts: { company?: string; companyId?: string; companySlug?: string },
 ): Promise<void> {
   return runCommand(async () => {
-    const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+    const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
 
     const companyIdentifier =
@@ -113,7 +113,7 @@ export function listTasksAction(
       'GET',
       `/api/company/${companyIdentifier}`,
     );
-    const tasks = await apiRequest<LcpTask[]>(
+    const tasks = await apiRequest<TcpTask[]>(
       api,
       'GET',
       `/api/task?companyId=${company.id}`,
@@ -128,12 +128,12 @@ export function getTaskAction(
   cmdOpts: { taskId: string },
 ): Promise<void> {
   return runCommand(async () => {
-    const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+    const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
 
     const result = await apiRequest<{
-      task: LcpTask;
-      assignments: LcpAssignment[];
+      task: TcpTask;
+      assignments: TcpAssignment[];
     }>(api, 'GET', `/api/task/${cmdOpts.taskId}`);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
   });
@@ -145,10 +145,10 @@ export function cancelTaskAction(
   cmdOpts: { taskId: string },
 ): Promise<void> {
   return runCommand(async () => {
-    const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+    const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
 
-    const task = await apiRequest<LcpTask>(
+    const task = await apiRequest<TcpTask>(
       api,
       'POST',
       `/api/task/${cmdOpts.taskId}/cancel`,
@@ -163,10 +163,10 @@ export function startTaskAction(
   cmdOpts: { taskId: string },
 ): Promise<void> {
   return runCommand(async () => {
-    const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+    const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
 
-    const task = await apiRequest<LcpTask>(
+    const task = await apiRequest<TcpTask>(
       api,
       'POST',
       `/api/task/${cmdOpts.taskId}/start`,
@@ -185,10 +185,10 @@ export function setTaskAction(
 ): Promise<void> {
   return runCommand(async () => {
     const data = await readJsonBody(cmdOpts);
-    const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+    const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
 
-    const task = await apiRequest<LcpTask>(
+    const task = await apiRequest<TcpTask>(
       api,
       'PUT',
       `/api/task/${cmdOpts.taskId}`,
@@ -225,7 +225,7 @@ export function setPlannerAction(
       return;
     }
 
-    const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+    const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
 
     if (companyGiven) {
@@ -238,7 +238,7 @@ export function setPlannerAction(
         { id: cmdOpts.roleId, slug: cmdOpts.roleSlug, value: cmdOpts.role },
         { id: companyId },
       );
-      const company = await apiRequest<LcpCompany>(
+      const company = await apiRequest<TcpCompany>(
         api,
         'PUT',
         `/api/company/${companyId}`,
@@ -249,15 +249,15 @@ export function setPlannerAction(
     }
 
     const { task } = await apiRequest<{
-      task: LcpTask;
-      assignments: LcpAssignment[];
+      task: TcpTask;
+      assignments: TcpAssignment[];
     }>(api, 'GET', `/api/task/${cmdOpts.taskId!}`);
     const roleId = await resolveRoleIdFrom(
       api,
       { id: cmdOpts.roleId, slug: cmdOpts.roleSlug, value: cmdOpts.role },
       { id: task.companyId },
     );
-    const updated = await apiRequest<LcpTask>(
+    const updated = await apiRequest<TcpTask>(
       api,
       'PUT',
       `/api/task/${task.id}`,

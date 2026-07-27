@@ -11,7 +11,7 @@ import {
 } from '@aws-sdk/client-s3';
 import {
   AuditEventType,
-  LcpCompany,
+  TcpCompany,
   registerDefaultValidators,
   streamToBuffer,
   validateDocument,
@@ -76,8 +76,8 @@ export class MinioStorageAdapter
   constructor(
     private readonly config: ConfigService,
     private readonly audit: AuditService,
-    @InjectRepository(LcpCompany)
-    private readonly companyRepo: Repository<LcpCompany>,
+    @InjectRepository(TcpCompany)
+    private readonly companyRepo: Repository<TcpCompany>,
     @Inject(forwardRef(() => KnowledgeReindexService))
     private readonly reindex: KnowledgeReindexService,
   ) {
@@ -130,7 +130,7 @@ export class MinioStorageAdapter
    *
    * Never throws: the write/delete/copy/move it accompanies has already
    * succeeded by the time this runs, so an audit-side failure (e.g. a bad
-   * `agentId` no longer present in `lcp_agent`) must not turn a successful
+   * `agentId` no longer present in `tcp_agent`) must not turn a successful
    * storage operation into a 500 for the caller — matches the fire-and-forget
    * guarantee `AuditClientService.record()` already gives HTTP callers.
    */

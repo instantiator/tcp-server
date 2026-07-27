@@ -4,11 +4,11 @@ import { createServer, type AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import {
   AuditClientService,
-  LcpAgent,
-  LcpAssignment,
-  LcpCompany,
-  LcpRole,
-  LcpTask,
+  TcpAgent,
+  TcpAssignment,
+  TcpCompany,
+  TcpRole,
+  TcpTask,
   McpClientService,
   assignmentWorkingKey,
 } from '@lcp/shared';
@@ -20,9 +20,9 @@ import axios from 'axios';
 import { Repository } from 'typeorm';
 import { z } from 'zod';
 import { AgentLoopService } from '../../../apps/lcp-agent/src/agent/agent-loop.service';
-import { AppModule as LcpAgentAppModule } from '../../../apps/lcp-agent/src/app.module';
+import { AppModule as TcpAgentAppModule } from '../../../apps/lcp-agent/src/app.module';
 import { TaskService } from '../../../apps/lcp-server/src/api/task.service';
-import { AppModule as LcpServerAppModule } from '../../../apps/lcp-server/src/app.module';
+import { AppModule as TcpServerAppModule } from '../../../apps/lcp-server/src/app.module';
 import { StorageService } from '../../../apps/lcp-server/src/storage/storage.service';
 import { requireEnv } from '../../support/require-env';
 
@@ -73,16 +73,16 @@ interface FlowSetupFixture {
 describe('Agent loop interactions (e2e)', () => {
   let serverApp: INestApplication;
   let agentModuleRef: TestingModule;
-  let lcpServerUrl: string;
+  let tcpServerUrl: string;
   let taskService: TaskService;
   let storageService: StorageService;
   let loadToolsMock: jest.Mock;
 
-  let companyRepo: Repository<LcpCompany>;
-  let roleRepo: Repository<LcpRole>;
-  let taskRepo: Repository<LcpTask>;
-  let assignmentRepo: Repository<LcpAssignment>;
-  let agentRepo: Repository<LcpAgent>;
+  let companyRepo: Repository<TcpCompany>;
+  let roleRepo: Repository<TcpRole>;
+  let taskRepo: Repository<TcpTask>;
+  let assignmentRepo: Repository<TcpAssignment>;
+  let agentRepo: Repository<TcpAgent>;
 
   /** Polls `check` until it returns a truthy value, or throws after `timeoutMs`. */
   async function waitFor<T>(
@@ -167,7 +167,7 @@ describe('Agent loop interactions (e2e)', () => {
         }[];
       }): Promise<string> => {
         await axios.post(
-          `${lcpServerUrl}/internal/task/${taskId}/plan`,
+          `${tcpServerUrl}/internal/task/${taskId}/plan`,
           { agentId, assignments },
           { headers: { 'X-Internal-Api-Key': INTERNAL_API_KEY } },
         );
@@ -195,7 +195,7 @@ describe('Agent loop interactions (e2e)', () => {
         feedback?: string;
       }): Promise<string> => {
         await axios.post(
-          `${lcpServerUrl}/internal/assignment/${targetAssignmentId}/assure`,
+          `${tcpServerUrl}/internal/assignment/${targetAssignmentId}/assure`,
           { agentId, qa, feedback },
           { headers: { 'X-Internal-Api-Key': INTERNAL_API_KEY } },
         );
@@ -214,7 +214,7 @@ describe('Agent loop interactions (e2e)', () => {
    * real implementing agent.
    */
   function completeAssignmentTool(
-    assignment: LcpAssignment,
+    assignment: TcpAssignment,
     agentId: UUID,
     companySlug: string,
   ): DynamicStructuredTool {
@@ -253,7 +253,7 @@ describe('Agent loop interactions (e2e)', () => {
           }
         }
         await axios.post(
-          `${lcpServerUrl}/internal/assignment/${assignment.id}/complete`,
+          `${tcpServerUrl}/internal/assignment/${assignment.id}/complete`,
           { agentId, summary, prepared },
           { headers: { 'X-Internal-Api-Key': INTERNAL_API_KEY } },
         );
@@ -314,21 +314,21 @@ describe('Agent loop interactions (e2e)', () => {
 
   beforeAll(async () => {
     const port = await getFreePort();
-    lcpServerUrl = `http://127.0.0.1:${port}`;
-    process.env.LCP_SERVER_URL = lcpServerUrl;
+    tcpServerUrl = `http://127.0.0.1:${port}`;
+    process.env.LCP_SERVER_URL = tcpServerUrl;
 
     const serverModuleRef = await Test.createTestingModule({
-      imports: [LcpServerAppModule],
+      imports: [TcpServerAppModule],
     }).compile();
     serverApp = serverModuleRef.createNestApplication();
     await serverApp.init();
     await serverApp.listen(port);
 
-    companyRepo = serverModuleRef.get(getRepositoryToken(LcpCompany));
-    roleRepo = serverModuleRef.get(getRepositoryToken(LcpRole));
-    taskRepo = serverModuleRef.get(getRepositoryToken(LcpTask));
-    assignmentRepo = serverModuleRef.get(getRepositoryToken(LcpAssignment));
-    agentRepo = serverModuleRef.get(getRepositoryToken(LcpAgent));
+    companyRepo = serverModuleRef.get(getRepositoryToken(TcpCompany));
+    roleRepo = serverModuleRef.get(getRepositoryToken(TcpRole));
+    taskRepo = serverModuleRef.get(getRepositoryToken(TcpTask));
+    assignmentRepo = serverModuleRef.get(getRepositoryToken(TcpAssignment));
+    agentRepo = serverModuleRef.get(getRepositoryToken(TcpAgent));
     taskService = serverModuleRef.get(TaskService);
     storageService = serverModuleRef.get(StorageService);
 
@@ -341,7 +341,7 @@ describe('Agent loop interactions (e2e)', () => {
     );
 
     agentModuleRef = await Test.createTestingModule({
-      imports: [LcpAgentAppModule],
+      imports: [TcpAgentAppModule],
     })
       .overrideProvider(McpClientService)
       .useValue({ loadTools: loadToolsMock })
@@ -350,7 +350,7 @@ describe('Agent loop interactions (e2e)', () => {
         notifyComplete: () => {},
         notifyFailed: (agentId: UUID, reason: string) => {
           void axios.post(
-            `${lcpServerUrl}/internal/agent/${agentId}/fail`,
+            `${tcpServerUrl}/internal/agent/${agentId}/fail`,
             { reason },
             { headers: { 'X-Internal-Api-Key': INTERNAL_API_KEY } },
           );
@@ -378,7 +378,7 @@ describe('Agent loop interactions (e2e)', () => {
    * waits for it to reach a terminal status — the real BullMQ-driven
    * dispatch chain does everything in between.
    */
-  async function runFlow(flowName: string): Promise<LcpTask> {
+  async function runFlow(flowName: string): Promise<TcpTask> {
     const setup = loadFixture<FlowSetupFixture>(`${flowName}-setup`);
     const llmConfig = loadFixture<unknown>(`${flowName}-llm`);
     await putStubConfig(llmConfig);

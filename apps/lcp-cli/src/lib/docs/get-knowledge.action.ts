@@ -18,7 +18,7 @@ export function getKnowledgeAction(
   cmdOpts: EntityRefOpts & { file: string; out?: string },
 ): Promise<void> {
   return runCommand(async () => {
-    const token = await resolveToken({ ...opts, baseUrl: opts.lcpServer });
+    const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
     const scopePath = await resolveKnowledgeScopePath(api, cmdOpts);
     const { data } = await apiDownload(

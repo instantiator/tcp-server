@@ -1,10 +1,10 @@
 import type { UUID } from 'crypto';
 import type {
-  LcpAssignment,
-  LcpAssignmentMode,
-  LcpAssignmentStatus,
-} from '../models/LcpAssignment.model';
-import type { LcpTask, LcpTaskStatus } from '../models/LcpTask.model';
+  TcpAssignment,
+  TcpAssignmentMode,
+  TcpAssignmentStatus,
+} from '../models/TcpAssignment.model';
+import type { TcpTask, TcpTaskStatus } from '../models/TcpTask.model';
 import type { AuditEventType } from '../models/AuditEvent.model';
 
 /**
@@ -72,7 +72,7 @@ export const companyEventsChannel = (companyId: string): string =>
  */
 export interface TaskChangeSummary {
   id: UUID;
-  status: LcpTaskStatus;
+  status: TcpTaskStatus;
   request: string;
   shortcode: string;
   createdAt: string;
@@ -84,10 +84,10 @@ export interface TaskChangeSummary {
 /** Builds a {@link TaskChangeSummary} from a task and its implement-mode plan assignments. */
 export function buildTaskChangeSummary(
   task: Pick<
-    LcpTask,
+    TcpTask,
     'id' | 'status' | 'request' | 'shortcode' | 'createdAt' | 'updatedAt'
   >,
-  planAssignments: Pick<LcpAssignment, 'status'>[],
+  planAssignments: Pick<TcpAssignment, 'status'>[],
 ): TaskChangeSummary {
   return {
     id: task.id,
@@ -105,14 +105,14 @@ export function buildTaskChangeSummary(
 /** Minimal assignment summary carried in an assignment `state_change` payload. */
 export interface AssignmentChangeSummary {
   id: UUID;
-  status: LcpAssignmentStatus;
-  mode: LcpAssignmentMode;
+  status: TcpAssignmentStatus;
+  mode: TcpAssignmentMode;
   orderIndex: number | null;
 }
 
 /** Builds an {@link AssignmentChangeSummary} from an assignment. */
 export function buildAssignmentChangeSummary(
-  assignment: Pick<LcpAssignment, 'id' | 'status' | 'mode' | 'orderIndex'>,
+  assignment: Pick<TcpAssignment, 'id' | 'status' | 'mode' | 'orderIndex'>,
 ): AssignmentChangeSummary {
   return {
     id: assignment.id,

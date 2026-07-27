@@ -2,8 +2,8 @@ import {
   AuditEventType,
   buildAssignmentChangeSummary,
   type AuditEvent,
-  type LcpAssignment,
-  type LcpTask,
+  type TcpAssignment,
+  type TcpTask,
   type WireEvent,
 } from '@lcp/shared';
 import {
@@ -44,7 +44,7 @@ interface UploadedFileBuffer {
   mimetype?: string;
 }
 
-/** REST controller for {@link LcpTask} create, materials upload, start, list, and get. */
+/** REST controller for {@link TcpTask} create, materials upload, start, list, and get. */
 @ApiTags('tasks')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -58,7 +58,7 @@ export class TaskController {
   /** Creates a task in the `ready` state. No plan is generated until `POST /api/task/:id/start`. */
   @ApiOperation({ summary: 'Create a task' })
   @Post()
-  async createTask(@Body() body: CreateTaskDto): Promise<LcpTask> {
+  async createTask(@Body() body: CreateTaskDto): Promise<TcpTask> {
     return this.tasks.create(body);
   }
 
@@ -72,7 +72,7 @@ export class TaskController {
   async updateTask(
     @Param('id') id: UUID,
     @Body() body: UpdateTaskDto,
-  ): Promise<LcpTask> {
+  ): Promise<TcpTask> {
     return this.tasks.update(id, body);
   }
 
@@ -103,7 +103,7 @@ export class TaskController {
   @ApiOperation({ summary: 'Start a task' })
   @Post(':id/start')
   @HttpCode(202)
-  async startTask(@Param('id') id: UUID): Promise<LcpTask> {
+  async startTask(@Param('id') id: UUID): Promise<TcpTask> {
     return this.tasks.start(id);
   }
 
@@ -114,14 +114,14 @@ export class TaskController {
   @ApiOperation({ summary: 'Cancel a task' })
   @Post(':id/cancel')
   @HttpCode(202)
-  async cancelTask(@Param('id') id: UUID): Promise<LcpTask> {
+  async cancelTask(@Param('id') id: UUID): Promise<TcpTask> {
     return this.tasks.cancel(id);
   }
 
   /** Lists a company's tasks. */
   @ApiOperation({ summary: 'List tasks for a company' })
   @Get()
-  async listTasks(@Query('companyId') companyId?: UUID): Promise<LcpTask[]> {
+  async listTasks(@Query('companyId') companyId?: UUID): Promise<TcpTask[]> {
     if (!companyId) {
       throw new BadRequestException('companyId query parameter is required');
     }
@@ -133,7 +133,7 @@ export class TaskController {
   @Get(':id')
   async getTask(
     @Param('id') id: UUID,
-  ): Promise<{ task: LcpTask; assignments: LcpAssignment[] }> {
+  ): Promise<{ task: TcpTask; assignments: TcpAssignment[] }> {
     return this.tasks.getWithAssignments(id);
   }
 

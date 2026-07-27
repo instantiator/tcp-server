@@ -1,7 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
-import { CompanyUser, LcpAgent, LcpRole } from '@lcp/shared';
+import { CompanyUser, TcpAgent, TcpRole } from '@lcp/shared';
 import { DbService } from '../db/db.service';
 import { InternalController } from './internal.controller';
 import { PauseAndResumeService } from './pause-and-resume.service';
@@ -53,8 +53,8 @@ describe('InternalController', () => {
       pauseResume as unknown as PauseAndResumeService,
       taskOrchestration as unknown as TaskOrchestrationService,
       db as unknown as DbService,
-      agentRepo as unknown as Repository<LcpAgent>,
-      roleRepo as unknown as Repository<LcpRole>,
+      agentRepo as unknown as Repository<TcpAgent>,
+      roleRepo as unknown as Repository<TcpRole>,
       userRepo as unknown as Repository<CompanyUser>,
     );
   });

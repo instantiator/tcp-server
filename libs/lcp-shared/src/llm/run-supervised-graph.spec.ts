@@ -11,9 +11,9 @@ import {
   runSupervisedGraph,
   SupervisedGraphHooks,
 } from './run-supervised-graph';
-import { AgentStatus } from '../models/LcpAgent.model';
-import type { LcpAgent } from '../models/LcpAgent.model';
-import type { LcpRole } from '../models/LcpRole.model';
+import { AgentStatus } from '../models/TcpAgent.model';
+import type { TcpAgent } from '../models/TcpAgent.model';
+import type { TcpRole } from '../models/TcpRole.model';
 import type { ContextManagerService } from '../context/context-manager.service';
 
 const RUN_CONFIG = { configurable: { thread_id: randomUUID() } };
@@ -83,12 +83,12 @@ function makeContextManager(
   } as unknown as jest.Mocked<ContextManagerService>;
 }
 
-function makeAgent(): LcpAgent {
-  return { id: randomUUID(), companyId: randomUUID() } as LcpAgent;
+function makeAgent(): TcpAgent {
+  return { id: randomUUID(), companyId: randomUUID() } as TcpAgent;
 }
 
-function makeRole(): LcpRole {
-  return { name: 'analyst' } as LcpRole;
+function makeRole(): TcpRole {
+  return { name: 'analyst' } as TcpRole;
 }
 
 function toolCall(name: string): AIMessage {

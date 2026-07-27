@@ -84,13 +84,13 @@ describe('apiRequest', () => {
     ).rejects.toThrow('HTTP 404');
   });
 
-  it('prints X-Lcp-Warnings to stderr in yellow with a warning emoji', async () => {
+  it('prints X-Tcp-Warnings to stderr in yellow with a warning emoji', async () => {
     const stderrSpy = jest.spyOn(process.stderr, 'write').mockReturnValue(true);
     fetchSpy.mockResolvedValue({
       ok: true,
       status: 200,
       headers: new Headers({
-        'X-Lcp-Warnings': JSON.stringify([
+        'X-Tcp-Warnings': JSON.stringify([
           'Role has a blank or missing rolePrompt.',
         ]),
       }),
@@ -111,14 +111,14 @@ describe('apiRequest', () => {
     stderrSpy.mockRestore();
   });
 
-  it('decodes a percent-encoded X-Lcp-Warnings entry before printing (matches setWarningsHeader server-side)', async () => {
+  it('decodes a percent-encoded X-Tcp-Warnings entry before printing (matches setWarningsHeader server-side)', async () => {
     const stderrSpy = jest.spyOn(process.stderr, 'write').mockReturnValue(true);
     const message = 'Last reindex failed: connect refused — 例え話';
     fetchSpy.mockResolvedValue({
       ok: true,
       status: 200,
       headers: new Headers({
-        'X-Lcp-Warnings': JSON.stringify([encodeURIComponent(message)]),
+        'X-Tcp-Warnings': JSON.stringify([encodeURIComponent(message)]),
       }),
       json: () => Promise.resolve({ id: '1' }),
     });
@@ -139,7 +139,7 @@ describe('apiRequest', () => {
       ok: true,
       status: 200,
       headers: new Headers({
-        'X-Lcp-Warnings': JSON.stringify(['not%valid%encoding']),
+        'X-Tcp-Warnings': JSON.stringify(['not%valid%encoding']),
       }),
       json: () => Promise.resolve({ id: '1' }),
     });
@@ -265,13 +265,13 @@ describe('apiUpload', () => {
     ).rejects.toThrow('HTTP 400: Bad request');
   });
 
-  it('prints X-Lcp-Warnings on a successful upload', async () => {
+  it('prints X-Tcp-Warnings on a successful upload', async () => {
     const stderrSpy = jest.spyOn(process.stderr, 'write').mockReturnValue(true);
     fetchSpy.mockResolvedValue({
       ok: true,
       status: 201,
       headers: new Headers({
-        'X-Lcp-Warnings': JSON.stringify([
+        'X-Tcp-Warnings': JSON.stringify([
           'No embedding config resolved for this company.',
         ]),
       }),
@@ -338,13 +338,13 @@ describe('apiDownload', () => {
     ).rejects.toThrow('HTTP 404');
   });
 
-  it('prints X-Lcp-Warnings on a successful download', async () => {
+  it('prints X-Tcp-Warnings on a successful download', async () => {
     const stderrSpy = jest.spyOn(process.stderr, 'write').mockReturnValue(true);
     fetchSpy.mockResolvedValue({
       ok: true,
       status: 200,
       headers: new Headers({
-        'X-Lcp-Warnings': JSON.stringify([
+        'X-Tcp-Warnings': JSON.stringify([
           'No embedding config resolved for this company.',
         ]),
       }),

@@ -1,9 +1,9 @@
 import type {
   AuditWireEvent,
-  LcpAgent,
-  LcpAssignment,
-  LcpRole,
-  LcpTask,
+  TcpAgent,
+  TcpAssignment,
+  TcpRole,
+  TcpTask,
 } from '@lcp/shared';
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest, ApiOptions } from '../core/api';
@@ -103,7 +103,7 @@ const TERMINAL_TASK_STATUSES = new Set(['succeeded', 'failed', 'cancelled']);
 
 /** Fetches one role's name/slug (for the heading block and short-id prefix). */
 async function fetchRole(api: ApiOptions, roleId: string): Promise<RoleInfo> {
-  const role = await apiRequest<LcpRole>(api, 'GET', `/api/role/${roleId}`);
+  const role = await apiRequest<TcpRole>(api, 'GET', `/api/role/${roleId}`);
   return { name: role.name, slug: role.slug };
 }
 
@@ -146,7 +146,7 @@ async function resolveTarget(
   cmdOpts: EavesdropCmdOpts,
 ): Promise<Target> {
   if (cmdOpts.agentId) {
-    const agent = await apiRequest<LcpAgent>(
+    const agent = await apiRequest<TcpAgent>(
       api,
       'GET',
       `/api/agent/${cmdOpts.agentId}`,
@@ -161,7 +161,7 @@ async function resolveTarget(
     };
   }
   if (cmdOpts.assignmentId) {
-    const assignment = await apiRequest<LcpAssignment>(
+    const assignment = await apiRequest<TcpAssignment>(
       api,
       'GET',
       `/api/assignment/${cmdOpts.assignmentId}`,
@@ -193,10 +193,10 @@ async function resolveTarget(
   // finalise) — not any consultation spawned mid-assignment, which has no FK
   // back to the task (see the `010.3.1` plan's implementation notes).
   const { task, assignments } = await apiRequest<{
-    task: LcpTask;
-    assignments: LcpAssignment[];
+    task: TcpTask;
+    assignments: TcpAssignment[];
   }>(api, 'GET', `/api/task/${cmdOpts.taskId}`);
-  const roles = await apiRequest<LcpRole[]>(
+  const roles = await apiRequest<TcpRole[]>(
     api,
     'GET',
     `/api/company/${task.companyId}/roles`,
@@ -205,7 +205,7 @@ async function resolveTarget(
     roles.map((r) => [r.id, { name: r.name, slug: r.slug }]),
   );
   const agents: AgentContext[] = assignments
-    .filter((a): a is LcpAssignment & { agentId: string } => Boolean(a.agentId))
+    .filter((a): a is TcpAssignment & { agentId: string } => Boolean(a.agentId))
     .map((a) =>
       buildAgentContext(
         a.agentId,
@@ -233,12 +233,12 @@ async function resolveTarget(
  * `state_change` arrives or the stream closes.
  */
 async function followAgent(
-  lcpServer: string,
+  tcpServer: string,
   tokenManager: TokenManager,
   agentId: string,
   buffer: EventLogBuffer,
 ): Promise<void> {
-  const url = `${lcpServer.replace(/\/$/, '')}/api/agent/${agentId}/events`;
+  const url = `${tcpServer.replace(/\/$/, '')}/api/agent/${agentId}/events`;
   // Read the token at connection time, not when this follower was queued —
   // a long `--tail` can outlive its original token (see TokenManager).
   const res = await fetch(url, {
@@ -278,15 +278,15 @@ async function followAgent(
  * falls back to its own `fetchRole` round-trip.
  */
 async function resolveNewAssignmentAgent(
-  lcpServer: string,
+  tcpServer: string,
   tokenManager: TokenManager,
   assignmentId: string,
   roleById: Map<string, RoleInfo>,
 ): Promise<AgentContext | undefined> {
   // Built fresh (not the caller's original ApiOptions) so a token refreshed
   // since `--tail` started is used for this assignment, discovered mid-tail.
-  const api: ApiOptions = { baseUrl: lcpServer, token: tokenManager.current };
-  const assignment = await apiRequest<LcpAssignment>(
+  const api: ApiOptions = { baseUrl: tcpServer, token: tokenManager.current };
+  const assignment = await apiRequest<TcpAssignment>(
     api,
     'GET',
     `/api/assignment/${assignmentId}`,
@@ -326,7 +326,7 @@ async function tailTarget(
   agentsById: Map<string, AgentContext>,
 ): Promise<void> {
   const followers: Promise<void>[] = target.agents.map((ctx) =>
-    followAgent(opts.lcpServer, tokenManager, ctx.agentId, buffer),
+    followAgent(opts.tcpServer, tokenManager, ctx.agentId, buffer),
   );
 
   let watchAbort: AbortController | undefined;
@@ -337,7 +337,7 @@ async function tailTarget(
     watchAbort = new AbortController();
     const taskId = target.taskId;
     watchDone = readWireStream(
-      `${opts.lcpServer.replace(/\/$/, '')}/api/task/${taskId}/events`,
+      `${opts.tcpServer.replace(/\/$/, '')}/api/task/${taskId}/events`,
       tokenManager.current,
       watchAbort.signal,
       (wire) => {
@@ -353,7 +353,7 @@ async function tailTarget(
         known.add(assignmentId);
         followers.push(
           resolveNewAssignmentAgent(
-            opts.lcpServer,
+            opts.tcpServer,
             tokenManager,
             assignmentId,
             roleById,
@@ -361,7 +361,7 @@ async function tailTarget(
             if (!ctx) return undefined;
             agentsById.set(ctx.agentId, ctx);
             return followAgent(
-              opts.lcpServer,
+              opts.tcpServer,
               tokenManager,
               ctx.agentId,
               buffer,
@@ -416,8 +416,8 @@ export function eavesdropAction(
       return;
     }
 
-    const session = await resolveSession({ ...opts, baseUrl: opts.lcpServer });
-    const tokenManager = new TokenManager(opts.lcpServer, session);
+    const session = await resolveSession({ ...opts, baseUrl: opts.tcpServer });
+    const tokenManager = new TokenManager(opts.tcpServer, session);
     const api = apiOptions(opts, tokenManager.current);
     const target = await resolveTarget(api, cmdOpts);
     const agentsById = new Map(target.agents.map((a) => [a.agentId, a]));

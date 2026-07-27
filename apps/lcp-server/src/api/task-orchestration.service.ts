@@ -9,15 +9,15 @@ import {
   buildTaskChangeSummary,
   DEFAULT_TASK_MAX_QA_ATTEMPTS,
   deriveTaskStatus,
-  LcpAgent,
-  LcpAssignment,
-  LcpAssignmentStatus,
-  LcpCompany,
-  LcpMaterialArtifact,
-  LcpRole,
-  LcpTask,
-  LcpTaskCompletedArtifact,
-  LcpTaskStatus,
+  TcpAgent,
+  TcpAssignment,
+  TcpAssignmentStatus,
+  TcpCompany,
+  TcpMaterialArtifact,
+  TcpRole,
+  TcpTask,
+  TcpTaskCompletedArtifact,
+  TcpTaskStatus,
   renderQaPresentation,
   renderQaRejectionMessage,
   resolveRunConfig,
@@ -62,16 +62,16 @@ export class TaskOrchestrationService
   private readonly logger = new Logger(TaskOrchestrationService.name);
 
   constructor(
-    @InjectRepository(LcpTask)
-    private readonly taskRepo: Repository<LcpTask>,
-    @InjectRepository(LcpAssignment)
-    private readonly assignmentRepo: Repository<LcpAssignment>,
-    @InjectRepository(LcpAgent)
-    private readonly agentRepo: Repository<LcpAgent>,
-    @InjectRepository(LcpCompany)
-    private readonly companyRepo: Repository<LcpCompany>,
-    @InjectRepository(LcpRole)
-    private readonly roleRepo: Repository<LcpRole>,
+    @InjectRepository(TcpTask)
+    private readonly taskRepo: Repository<TcpTask>,
+    @InjectRepository(TcpAssignment)
+    private readonly assignmentRepo: Repository<TcpAssignment>,
+    @InjectRepository(TcpAgent)
+    private readonly agentRepo: Repository<TcpAgent>,
+    @InjectRepository(TcpCompany)
+    private readonly companyRepo: Repository<TcpCompany>,
+    @InjectRepository(TcpRole)
+    private readonly roleRepo: Repository<TcpRole>,
     private readonly agents: AgentOrchestrationService,
     private readonly pauseResume: PauseAndResumeService,
     private readonly storage: StorageService,
@@ -104,7 +104,7 @@ export class TaskOrchestrationService
    * assignment carrying the task's request and materials, then a plan agent for
    * it. Idempotent — no-op if a plan assignment already exists.
    */
-  async dispatchPlanner(task: LcpTask): Promise<void> {
+  async dispatchPlanner(task: TcpTask): Promise<void> {
     const existing = await this.assignmentRepo.findOneBy({
       taskId: task.id,
       mode: 'plan',
@@ -153,7 +153,7 @@ export class TaskOrchestrationService
   }
 
   /** Dispatches the first ready assignment once a plan exists. */
-  async taskPlanned(task: LcpTask): Promise<void> {
+  async taskPlanned(task: TcpTask): Promise<void> {
     await this.advance(task.id);
   }
 
@@ -162,7 +162,7 @@ export class TaskOrchestrationService
    * handed to QA (status `in-qa`, its implementing agent paused). Idempotent —
    * no-op if a live QA assignment already targets it.
    */
-  async assignmentReadyForQa(assignment: LcpAssignment): Promise<void> {
+  async assignmentReadyForQa(assignment: TcpAssignment): Promise<void> {
     const live = await this.assignmentRepo.findOneBy({
       targetAssignmentId: assignment.id,
       mode: 'qa',
@@ -197,7 +197,7 @@ export class TaskOrchestrationService
   }
 
   /** Reacts to a QA verdict already recorded on the target assignment. */
-  async assignmentAssured(assignment: LcpAssignment): Promise<void> {
+  async assignmentAssured(assignment: TcpAssignment): Promise<void> {
     const target = await this.assignmentRepo.findOneBy({ id: assignment.id });
     if (!target || target.status !== 'in-qa') return;
 
@@ -215,7 +215,7 @@ export class TaskOrchestrationService
    * `ready → in-progress`, and dispatches its implement agent. No-op if the
    * claim is lost (another dispatch/recovery won).
    */
-  private async dispatchAssignment(assignment: LcpAssignment): Promise<void> {
+  private async dispatchAssignment(assignment: TcpAssignment): Promise<void> {
     const materials = await this.mergeMaterials(assignment);
     assignment.materials = materials;
     await this.assignmentRepo.update(assignment.id, {
@@ -252,7 +252,7 @@ export class TaskOrchestrationService
    * accept/reject, and QA paths all resolve the working agent through it.
    */
   private async dispatchAgentFor(
-    assignment: LcpAssignment,
+    assignment: TcpAssignment,
     initialPrompt: string,
     requiredTool: string,
   ): Promise<UUID> {
@@ -273,12 +273,12 @@ export class TaskOrchestrationService
    * directory, record the approved artifacts, transition `in-qa → succeeded`,
    * complete the paused implementing agent, then advance the task.
    */
-  private async acceptAssignment(target: LcpAssignment): Promise<void> {
+  private async acceptAssignment(target: TcpAssignment): Promise<void> {
     const slug = await this.companySlug(target.companyId);
 
     // Copy is idempotent (same bytes), so it is safe to run before the atomic
     // claim below — a duplicate assure that loses the claim has done no harm.
-    const approved: LcpAssignment['approved'] = [];
+    const approved: TcpAssignment['approved'] = [];
     for (const item of target.prepared) {
       if (item.type === 'inline-text') {
         approved.push({ type: 'inline-text', value: item.value });
@@ -336,7 +336,7 @@ export class TaskOrchestrationService
    * task, otherwise return the assignment to `in-progress` and resume the
    * paused implementing agent with the QA feedback.
    */
-  private async rejectAssignment(target: LcpAssignment): Promise<void> {
+  private async rejectAssignment(target: TcpAssignment): Promise<void> {
     const nextAttempts = target.qaAttempts + 1;
     const max = await this.resolveMaxQaAttempts(target);
 
@@ -344,7 +344,7 @@ export class TaskOrchestrationService
       const failureReason = 'did not pass QA';
       const claimed = await this.assignmentRepo
         .createQueryBuilder()
-        .update(LcpAssignment)
+        .update(TcpAssignment)
         .set({ status: 'failed', qaAttempts: nextAttempts, failureReason })
         .where('id = :id', { id: target.id })
         .andWhere('status = :inQa', { inQa: 'in-qa' })
@@ -371,7 +371,7 @@ export class TaskOrchestrationService
 
     const claimed = await this.assignmentRepo
       .createQueryBuilder()
-      .update(LcpAssignment)
+      .update(TcpAssignment)
       .set({
         status: 'in-progress',
         qaAttempts: nextAttempts,
@@ -432,7 +432,7 @@ export class TaskOrchestrationService
    * directory (highest `orderIndex` wins on a filename collision). Idempotent —
    * a re-copy writes the same bytes. Returns the set of copied filenames.
    */
-  private async promoteToTaskCompleted(task: LcpTask): Promise<void> {
+  private async promoteToTaskCompleted(task: TcpTask): Promise<void> {
     const slug = await this.companySlug(task.companyId);
     const plan = await this.planAssignments(task.id);
     // Ascending order so a later assignment's file overwrites an earlier one —
@@ -460,22 +460,22 @@ export class TaskOrchestrationService
    * plus any approved `inline-text` from the plan assignments.
    */
   private async buildTaskCompleted(
-    task: LcpTask,
-  ): Promise<LcpTaskCompletedArtifact[]> {
+    task: TcpTask,
+  ): Promise<TcpTaskCompletedArtifact[]> {
     const slug = await this.companySlug(task.companyId);
     const files = await this.storage.listFiles(
       taskCompletedPrefix(slug, task.id),
     );
     const plan = await this.planAssignments(task.id);
     return [
-      ...files.map((f): LcpTaskCompletedArtifact => ({
+      ...files.map((f): TcpTaskCompletedArtifact => ({
         type: 'task-completed-path',
         value: f.name,
       })),
       ...plan.flatMap((a) =>
         a.approved
           .filter((art) => art.type === 'inline-text')
-          .map((art): LcpTaskCompletedArtifact => ({
+          .map((art): TcpTaskCompletedArtifact => ({
             type: 'inline-text',
             value: art.value,
           })),
@@ -488,7 +488,7 @@ export class TaskOrchestrationService
    * deliverables, record `completed`, mark `succeeded`. Idempotent — no-op once
    * `completed` is set.
    */
-  private async finaliseMechanical(task: LcpTask): Promise<void> {
+  private async finaliseMechanical(task: TcpTask): Promise<void> {
     if (task.completed != null) return;
     await this.promoteToTaskCompleted(task);
     const completed = await this.buildTaskCompleted(task);
@@ -504,7 +504,7 @@ export class TaskOrchestrationService
    * `finalising`, and creates + dispatches a finalise-mode assignment.
    * Idempotent — no-op if a finalise assignment already exists.
    */
-  private async dispatchFinalise(task: LcpTask): Promise<void> {
+  private async dispatchFinalise(task: TcpTask): Promise<void> {
     const existing = await this.assignmentRepo.findOneBy({
       taskId: task.id,
       mode: 'finalise',
@@ -573,7 +573,7 @@ export class TaskOrchestrationService
    * `succeeded`): record the task's final `completed` set from the completed/
    * directory, mark the task `succeeded`, and complete the finalise agent.
    */
-  async assignmentFinalised(finalise: LcpAssignment): Promise<void> {
+  async assignmentFinalised(finalise: TcpAssignment): Promise<void> {
     if (!finalise.taskId) return;
     const task = await this.taskRepo.findOneBy({ id: finalise.taskId });
     if (!task) return;
@@ -745,7 +745,7 @@ export class TaskOrchestrationService
    * Agents in `Running`/`Paused` are left alone — BullMQ and pause/resume own
    * their recovery; this only repairs work no live agent will finish.
    */
-  async reconcileTask(task: LcpTask): Promise<void> {
+  async reconcileTask(task: TcpTask): Promise<void> {
     if (task.status === 'planning') {
       const planner = await this.assignmentRepo.findOneBy({
         taskId: task.id,
@@ -849,8 +849,8 @@ export class TaskOrchestrationService
    * one entry per filename is enough here.
    */
   private async mergeMaterials(
-    assignment: LcpAssignment,
-  ): Promise<LcpMaterialArtifact[]> {
+    assignment: TcpAssignment,
+  ): Promise<TcpMaterialArtifact[]> {
     if (!assignment.taskId) return assignment.materials;
     const task = await this.taskRepo.findOneBy({ id: assignment.taskId });
     const priors = (await this.planAssignments(assignment.taskId)).filter(
@@ -861,12 +861,12 @@ export class TaskOrchestrationService
         a.orderIndex < assignment.orderIndex,
     );
 
-    const merged: LcpMaterialArtifact[] = [
+    const merged: TcpMaterialArtifact[] = [
       ...(task?.materials ?? []),
       ...priors.flatMap((a) =>
         a.approved
           .filter((art) => art.type === 'assignment-completed-path')
-          .map((art): LcpMaterialArtifact => ({
+          .map((art): TcpMaterialArtifact => ({
             type: 'assignment-completed-path',
             value: art.value,
           })),
@@ -894,11 +894,11 @@ export class TaskOrchestrationService
    * UPDATE, so re-running (e.g. a duplicate call) only touches rows still in
    * a non-terminal state.
    */
-  async cancelTask(task: LcpTask): Promise<void> {
+  async cancelTask(task: TcpTask): Promise<void> {
     const assignments = await this.assignmentRepo.find({
       where: { taskId: task.id },
     });
-    const terminalAssignment: LcpAssignmentStatus[] = [
+    const terminalAssignment: TcpAssignmentStatus[] = [
       'succeeded',
       'failed',
       'cancelled',
@@ -918,7 +918,7 @@ export class TaskOrchestrationService
       if (assignment.agentId) {
         await this.agentRepo
           .createQueryBuilder()
-          .update(LcpAgent)
+          .update(TcpAgent)
           .set({ status: AgentStatus.Cancelled })
           .where('id = :id', { id: assignment.agentId })
           .andWhere('status NOT IN (:...terminal)', {
@@ -938,7 +938,7 @@ export class TaskOrchestrationService
   private async failTask(taskId: UUID, reason: string): Promise<void> {
     const claimed = await this.taskRepo
       .createQueryBuilder()
-      .update(LcpTask)
+      .update(TcpTask)
       .set({ status: 'failed', failureReason: reason })
       .where('id = :id', { id: taskId })
       .andWhere('status NOT IN (:...terminal)', {
@@ -975,7 +975,7 @@ export class TaskOrchestrationService
   }
 
   /** The task's implement-mode plan assignments. */
-  private planAssignments(taskId: UUID): Promise<LcpAssignment[]> {
+  private planAssignments(taskId: UUID): Promise<TcpAssignment[]> {
     return this.assignmentRepo.find({
       where: { taskId, mode: 'implement' },
     });
@@ -986,9 +986,9 @@ export class TaskOrchestrationService
    * returns `false` when the claim was lost (another writer won the race).
    */
   private async transitionAssignment(
-    assignment: LcpAssignment,
-    from: LcpAssignmentStatus,
-    to: LcpAssignmentStatus,
+    assignment: TcpAssignment,
+    from: TcpAssignmentStatus,
+    to: TcpAssignmentStatus,
     reason: string,
     failureReason?: string,
   ): Promise<boolean> {
@@ -1013,7 +1013,7 @@ export class TaskOrchestrationService
 
   /** Resolves an assignment's max QA attempts: role → company → env → default. */
   private async resolveMaxQaAttempts(
-    assignment: LcpAssignment,
+    assignment: TcpAssignment,
   ): Promise<number> {
     const role = await this.roleRepo.findOneBy({ id: assignment.roleId });
     const company = await this.companyRepo.findOneBy({
@@ -1041,7 +1041,7 @@ export class TaskOrchestrationService
    * Null when the target isn't a task-linked, plan-indexed implement step
    * (shouldn't happen — only implement assignments are ever sent to QA).
    */
-  private async qaShortcode(target: LcpAssignment): Promise<string | null> {
+  private async qaShortcode(target: TcpAssignment): Promise<string | null> {
     if (!target.taskId || target.orderIndex == null) return null;
     const task = await this.taskRepo.findOneBy({ id: target.taskId });
     if (!task) return null;
@@ -1060,8 +1060,8 @@ export class TaskOrchestrationService
    * `docs/prompts/010.3.2` §2).
    */
   private async recordTaskState(
-    task: LcpTask,
-    newStatus: LcpTaskStatus,
+    task: TcpTask,
+    newStatus: TcpTaskStatus,
     reason: string,
   ): Promise<void> {
     const plan = await this.planAssignments(task.id);
@@ -1088,7 +1088,7 @@ export class TaskOrchestrationService
    * task's SSE stream (orphan assignments have no task stream to reach).
    */
   private async recordAssignmentState(
-    assignment: LcpAssignment,
+    assignment: TcpAssignment,
     reason: string,
     extra?: Record<string, unknown>,
   ): Promise<void> {

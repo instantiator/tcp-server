@@ -1,4 +1,4 @@
-import type { LcpArtifact, LcpAssignment } from '@lcp/shared';
+import type { TcpArtifact, TcpAssignment } from '@lcp/shared';
 import {
   assignmentCompletedKey,
   assignmentCompletedPrefix,
@@ -150,12 +150,12 @@ describe('resolveArtifactKey', () => {
   const task = { id: 'task-1' };
 
   it('returns null for inline-text', () => {
-    const artifact: LcpArtifact = { type: 'inline-text', value: 'any text' };
+    const artifact: TcpArtifact = { type: 'inline-text', value: 'any text' };
     expect(resolveArtifactKey(artifact, { companySlug })).toBeNull();
   });
 
   it('resolves task-materials-path against the task', () => {
-    const artifact: LcpArtifact = {
+    const artifact: TcpArtifact = {
       type: 'task-materials-path',
       value: 'brief.md',
     };
@@ -165,7 +165,7 @@ describe('resolveArtifactKey', () => {
   });
 
   it('resolves task-completed-path against the task', () => {
-    const artifact: LcpArtifact = {
+    const artifact: TcpArtifact = {
       type: 'task-completed-path',
       value: 'report.md',
     };
@@ -175,7 +175,7 @@ describe('resolveArtifactKey', () => {
   });
 
   it('throws when task-materials-path is resolved without a task', () => {
-    const artifact: LcpArtifact = {
+    const artifact: TcpArtifact = {
       type: 'task-materials-path',
       value: 'brief.md',
     };
@@ -183,7 +183,7 @@ describe('resolveArtifactKey', () => {
   });
 
   it('resolves assignment-working-path against a task assignment', () => {
-    const artifact: LcpArtifact = {
+    const artifact: TcpArtifact = {
       type: 'assignment-working-path',
       value: 'draft.md',
     };
@@ -194,7 +194,7 @@ describe('resolveArtifactKey', () => {
   });
 
   it('resolves assignment-working-path against an orphan assignment', () => {
-    const artifact: LcpArtifact = {
+    const artifact: TcpArtifact = {
       type: 'assignment-working-path',
       value: 'notes.md',
     };
@@ -207,7 +207,7 @@ describe('resolveArtifactKey', () => {
   it('resolves assignment-completed-path to the most recent prior assignment that approved the value', () => {
     // report.md is approved by assignments 0 and 2; a material on assignment 3
     // must resolve to assignment 2's completed directory, not assignment 0's.
-    const planAssignments: Pick<LcpAssignment, 'orderIndex' | 'approved'>[] = [
+    const planAssignments: Pick<TcpAssignment, 'orderIndex' | 'approved'>[] = [
       {
         orderIndex: 0,
         approved: [{ type: 'assignment-completed-path', value: 'report.md' }],
@@ -218,7 +218,7 @@ describe('resolveArtifactKey', () => {
         approved: [{ type: 'assignment-completed-path', value: 'report.md' }],
       },
     ];
-    const artifact: LcpArtifact = {
+    const artifact: TcpArtifact = {
       type: 'assignment-completed-path',
       value: 'report.md',
     };
@@ -234,7 +234,7 @@ describe('resolveArtifactKey', () => {
   });
 
   it('searches the whole plan when no current assignment is given (task-level material)', () => {
-    const planAssignments: Pick<LcpAssignment, 'orderIndex' | 'approved'>[] = [
+    const planAssignments: Pick<TcpAssignment, 'orderIndex' | 'approved'>[] = [
       {
         orderIndex: 0,
         approved: [{ type: 'assignment-completed-path', value: 'report.md' }],
@@ -244,7 +244,7 @@ describe('resolveArtifactKey', () => {
         approved: [{ type: 'assignment-completed-path', value: 'report.md' }],
       },
     ];
-    const artifact: LcpArtifact = {
+    const artifact: TcpArtifact = {
       type: 'assignment-completed-path',
       value: 'report.md',
     };
@@ -254,7 +254,7 @@ describe('resolveArtifactKey', () => {
   });
 
   it('throws when assignment-completed-path has no matching prior assignment', () => {
-    const artifact: LcpArtifact = {
+    const artifact: TcpArtifact = {
       type: 'assignment-completed-path',
       value: 'missing.md',
     };
