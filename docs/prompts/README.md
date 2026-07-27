@@ -8,7 +8,7 @@ It's worth noting that the tests regularly evolved by conversation with the codi
 
 Prompts are grouped into phase directories, each with its own numbering starting at `001.1`:
 
-- `phase 01 - service/` - the core service build-out (lcp-server, lcp-agent, MCP servers, shared library).
+- `phase 01 - service/` - the core service build-out (tcp-server, tcp-agent, MCP servers, shared library).
 - `phase 02 - web ui/` - reserved for a future web UI phase.
 - `phase 03 - service quality/` - standalone future-work items (security/ethics review, configurable third-party services, accessibility/i18n, Strands evaluation) not yet broken into sub-plans.
 
