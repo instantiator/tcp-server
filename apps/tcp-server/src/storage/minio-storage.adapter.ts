@@ -358,7 +358,7 @@ export class MinioStorageAdapter
     }
   }
 
-  // --- Full file-action surface (ported from tcp-mcp-storage's StorageToolsService) ---
+  // Generic file-action operations: list, read, write, delete, copy, move, search.
 
   async listFiles(prefix?: string): Promise<StorageObject[]> {
     const resp = await this.client.send(

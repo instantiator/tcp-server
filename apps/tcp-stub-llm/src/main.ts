@@ -32,6 +32,7 @@ async function main(): Promise<void> {
     const configNote = configFile
       ? ` (config: ${configFile})`
       : ' (no config file — defaults only)';
+    // aislop-ignore-next-line ai-slop/console-leftover -- tcp-stub-llm is a plain Node script, not a Nest app; no Logger exists to swap to, and this is the startup banner, not leftover debugging
     console.log(`tcp-stub-llm listening on :${resolvedPort}${configNote}`);
   });
 }

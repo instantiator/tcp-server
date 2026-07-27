@@ -4,7 +4,7 @@ import type {
   StubResponse,
 } from './config.ts';
 
-/** Why no response could be selected — mirrors the two OpenAI-doc'd cases the prompt calls out. */
+/** Why no response could be selected. */
 export type MatchFailureReason = 'no-match' | 'exhausted';
 
 export type MatchOutcome =

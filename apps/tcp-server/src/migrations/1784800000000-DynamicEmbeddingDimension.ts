@@ -65,7 +65,7 @@ export class DynamicEmbeddingDimension1784800000000 implements MigrationInterfac
             AND attname = 'embedding'
         `)) as Array<{ atttypmod: number | null }>;
       if (rows.length === 0 || !rows[0].atttypmod) return null;
-      return rows[0].atttypmod - 8;
+      return rows[0].atttypmod;
     } catch {
       return null;
     }

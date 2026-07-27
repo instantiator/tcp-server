@@ -7,8 +7,12 @@ import {
   IsUUID,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { IsNotUuid } from './is-not-uuid.validator';
+import {
+  IsIanaTimeZone,
+  normalizeIanaTimeZone,
+} from './is-valid-timezone.validator';
 import { LlmConfigDto } from './llm-config.dto';
 
 export class CreateCompanyDto {
@@ -49,7 +53,8 @@ export class CreateCompanyDto {
   mcpServerList?: string[];
 
   @IsOptional()
-  @IsString()
+  @Transform(({ value }: { value: unknown }) => normalizeIanaTimeZone(value))
+  @IsIanaTimeZone()
   timezone?: string;
 
   @IsOptional()
@@ -92,7 +97,8 @@ export class UpdateCompanyDto {
   mcpServerList?: string[];
 
   @IsOptional()
-  @IsString()
+  @Transform(({ value }: { value: unknown }) => normalizeIanaTimeZone(value))
+  @IsIanaTimeZone()
   timezone?: string;
 
   @IsOptional()

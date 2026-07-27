@@ -48,7 +48,7 @@ export interface StreamDelta {
 /** Everything crossing an SSE/Redis event stream: a persisted audit row or a live delta. */
 export type WireEvent = { type: 'audit'; event: AuditWireEvent } | StreamDelta;
 
-// --- Redis channel names (one per scoped SSE stream) -----------------------
+// Redis channel names, one per scoped SSE stream.
 
 /** Redis pub/sub channel carrying {@link WireEvent}s for one agent. */
 export const agentEventsChannel = (agentId: string): string =>
@@ -62,7 +62,7 @@ export const taskEventsChannel = (taskId: string): string =>
 export const companyEventsChannel = (companyId: string): string =>
   `company:events:${companyId}`;
 
-// --- Payload summary types (carried inside state_change payloads) ----------
+// Payload summary types carried inside state_change payloads.
 
 /**
  * Minimal task summary carried in a task/company `state_change` payload (and

@@ -170,4 +170,64 @@ describe('Baseline schema (migration verification)', () => {
       },
     ]);
   });
+
+  describe('DynamicEmbeddingDimension re-run behaviour', () => {
+    const originalEnv = process.env.EMBEDDING_DIMENSION;
+
+    afterEach(() => {
+      if (originalEnv === undefined) delete process.env.EMBEDDING_DIMENSION;
+      else process.env.EMBEDDING_DIMENSION = originalEnv;
+    });
+
+    async function indexOid(indexName: string): Promise<string> {
+      const rows = await ds.query<{ oid: string }[]>(
+        `SELECT c.oid::text AS oid
+         FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = $1 AND c.relname = $2`,
+        [SCHEMA, indexName],
+      );
+      return rows[0].oid;
+    }
+
+    it('is a genuine no-op when EMBEDDING_DIMENSION is unchanged', async () => {
+      if (originalEnv === undefined) delete process.env.EMBEDDING_DIMENSION;
+      else process.env.EMBEDDING_DIMENSION = originalEnv;
+      const before = await indexOid('IDX_knowledge_chunk_embedding');
+
+      await new DynamicEmbeddingDimension1784800000000().up(runner);
+
+      // A recreated index gets a new oid, so an unchanged oid proves the
+      // column and index were never dropped — not merely that the end state
+      // happens to look right.
+      expect(await indexOid('IDX_knowledge_chunk_embedding')).toBe(before);
+    });
+
+    it('still resizes both vector columns when EMBEDDING_DIMENSION changes', async () => {
+      const changedDimension = DEFAULT_EMBEDDING_DIMENSION + 1;
+      process.env.EMBEDDING_DIMENSION = String(changedDimension);
+
+      await new DynamicEmbeddingDimension1784800000000().up(runner);
+
+      const rows = await ds.query<{ relname: string; typename: string }[]>(
+        `SELECT c.relname, format_type(a.atttypid, a.atttypmod) AS typename
+         FROM pg_attribute a
+         JOIN pg_class c ON c.oid = a.attrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = $1 AND a.attname = 'embedding' AND c.relkind = 'r'
+         ORDER BY c.relname`,
+        [SCHEMA],
+      );
+      expect(rows).toEqual([
+        {
+          relname: 'episodic_memory',
+          typename: `vector(${changedDimension})`,
+        },
+        {
+          relname: 'knowledge_chunk',
+          typename: `vector(${changedDimension})`,
+        },
+      ]);
+    });
+  });
 });

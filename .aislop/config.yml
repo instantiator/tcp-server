@@ -10,6 +10,7 @@ rules:
   security/hardcoded-secret: warning
 
 ci:
-  # Current score is 55; ratchet this up as the remaining warnings
-  # (file sizes, nesting, duplicate blocks) are cleaned up.
-  failBelow: 50
+  # Current score is 65; ratchet this up as the remaining warnings — 12
+  # file-too-large (011.1.3/011.1.4) and 11 duplicate-block (011.1.5) — are
+  # cleaned up.
+  failBelow: 63

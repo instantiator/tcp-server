@@ -23,7 +23,7 @@ import { VersionedEntity } from './VersionedEntity';
 /**
  * Lifecycle states for a {@link TcpTask}. `planning` reflects an active
  * planner dispatch; other transitions derive from the task's implement-mode
- * assignments (see `deriveTaskStatus`).
+ * assignments via {@link deriveTaskStatus}.
  */
 export type TcpTaskStatus =
   | 'ready'

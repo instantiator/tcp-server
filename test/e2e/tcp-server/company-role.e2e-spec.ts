@@ -138,6 +138,34 @@ describe('CompanyController (e2e)', () => {
         })
         .expect(400);
     });
+
+    it('returns 400 when timezone is not a valid IANA name', async () => {
+      await request(app.getHttpServer())
+        .post('/api/company')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({
+          slug: 'acme',
+          name: 'Acme Corp',
+          description: 'A company that makes everything',
+          timezone: 'Not/AZone',
+        })
+        .expect(400);
+    });
+
+    it('accepts a case-insensitive timezone, storing its canonical form', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/company')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({
+          slug: 'acme',
+          name: 'Acme Corp',
+          description: 'A company that makes everything',
+          timezone: 'europe/london',
+        })
+        .expect(201);
+
+      expect((res.body as { timezone: string }).timezone).toBe('Europe/London');
+    });
   });
 
   describe('POST /api/company (slug replacement)', () => {

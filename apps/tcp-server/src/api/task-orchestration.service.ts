@@ -597,8 +597,7 @@ export class TaskOrchestrationService
 
   /**
    * Propagates an agent-run failure to its task, when the failed agent's
-   * assignment is task-linked. Called from the internal agent-failure endpoint
-   * after the agent itself has been marked failed. Idempotent per transition.
+   * assignment is task-linked. Idempotent per transition.
    */
   async handleAgentFailed(agentId: UUID, reason: string): Promise<void> {
     const agent = await this.agentRepo.findOneBy({ id: agentId });
@@ -1056,8 +1055,7 @@ export class TaskOrchestrationService
    * Records a task {@link AuditEventType.StateChange} event, and emits its
    * `task_changed` summary to both the task's own SSE stream and its
    * company's — this is the single place a task's status change reaches
-   * `GET /api/task/:id/events` and `GET /api/company/:id/events` (see
-   * `docs/prompts/010.3.2` §2).
+   * `GET /api/task/:id/events` and `GET /api/company/:id/events`.
    */
   private async recordTaskState(
     task: TcpTask,

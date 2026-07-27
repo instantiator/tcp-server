@@ -1621,7 +1621,7 @@
       "type": "object"
     },
     "TcpTaskStatus": {
-      "description": "Lifecycle states for a  {@link  TcpTask } . `planning` reflects an active planner dispatch; other transitions derive from the task's implement-mode assignments (see `deriveTaskStatus`).",
+      "description": "Lifecycle states for a  {@link  TcpTask } . `planning` reflects an active planner dispatch; other transitions derive from the task's implement-mode assignments via  {@link  deriveTaskStatus  } .",
       "enum": [
         "ready",
         "planning",

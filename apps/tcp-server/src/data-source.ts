@@ -13,5 +13,4 @@ export default new DataSource({
   url: process.env.DATABASE_URL,
   entities: ['libs/tcp-shared/src/models/*.model.ts'],
   migrations: ['apps/tcp-server/src/migrations/*.ts'],
-  migrationsTableName: 'typeorm_migrations',
 });

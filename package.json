@@ -5,6 +5,9 @@
   "author": "",
   "private": true,
   "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "npm run build:apps && npm run schema:generate && npm run licenses:generate",
     "build:apps": "nest build tcp-server && nest build tcp-agent && nest build tcp-mcp-storage && nest build tcp-mcp-memory && nest build tcp-mcp-interactions && nest build tcp-mcp-tasks && nest build tcp-cli",

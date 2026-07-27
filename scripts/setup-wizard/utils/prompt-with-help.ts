@@ -172,7 +172,7 @@ async function askConfirm(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic prompt wrapper needs flexible answer types
 async function askCheckbox(
   q: CheckboxPrompt,
-  answers: Record<string, any>,
+  _answers: Record<string, any>,
 ): Promise<string[]> {
   if (q.help) {
     const { wantHelp } = await inquirer.prompt<{ wantHelp: string }>({
