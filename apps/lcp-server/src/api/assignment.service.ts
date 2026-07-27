@@ -1,5 +1,6 @@
 import {
   AgentStatus,
+  artifactTypeDisplayName,
   assignmentWorkingPrefix,
   buildAssignmentShortcode,
   buildEnumValidationError,
@@ -323,7 +324,7 @@ export class AssignmentService {
         invalid.push({
           property: `assignment ${i} expected type`,
           value: type,
-          validValues: [...WORKING_ARTIFACT_TYPES],
+          validValues: this.artifactTypeValidValues(WORKING_ARTIFACT_TYPES),
         });
       }
       for (const type of this.invalidArtifactTypes(
@@ -333,7 +334,7 @@ export class AssignmentService {
         invalid.push({
           property: `assignment ${i} materials type`,
           value: type,
-          validValues: [...MATERIAL_ARTIFACT_TYPES],
+          validValues: this.artifactTypeValidValues(MATERIAL_ARTIFACT_TYPES),
         });
       }
     }
@@ -486,7 +487,7 @@ export class AssignmentService {
     ).map((type) => ({
       property: 'prepared type',
       value: type,
-      validValues: [...WORKING_ARTIFACT_TYPES],
+      validValues: this.artifactTypeValidValues(WORKING_ARTIFACT_TYPES),
     }));
     if (invalidPrepared.length > 0) {
       throw new BadRequestException(
@@ -811,5 +812,14 @@ export class AssignmentService {
         artifacts.map((a) => a.type).filter((type) => !allowed.has(type)),
       ),
     ];
+  }
+
+  /**
+   * Renders an allowed artifact-type set in the short, LLM-facing vocabulary
+   * (`file`/`text`/...) so a corrective error matches what the tool
+   * description advertised, not the longer internal storage-path name.
+   */
+  private artifactTypeValidValues(allowed: Set<string>): string[] {
+    return [...allowed].map(artifactTypeDisplayName);
   }
 }

@@ -42,17 +42,42 @@ interface CallerAssignment {
   targetAssignmentId: string | null;
 }
 
-/** Zod shape for an `{ type, value }` artifact — the server validates the type union. */
-const artifactSchema = z.object({
+/**
+ * Zod shape for an `{ type, value }` artifact naming your own working file or
+ * an assignment's own expected output — used for `expected` (create_plan) and
+ * `prepared` (complete_assignment). The server does the actual validation
+ * (and accepts near-miss synonyms, e.g. `working-file`, `path`) so this
+ * `.describe()` only needs to state the two values agents should aim for.
+ */
+const workingArtifactSchema = z.object({
   type: z
     .string()
     .describe(
-      "Artifact type, e.g. 'assignment-working-path' (a file in your working directory) or 'inline-text'.",
+      'Either `file` (a filename in your working directory) or `text` (literal text).',
     ),
   value: z
     .string()
     .describe(
-      'The filename (for a *-path type) or the literal text (inline-text).',
+      'The filename (for type `file`) or the literal text (for type `text`).',
+    ),
+});
+
+/**
+ * Zod shape for an `{ type, value }` material handed to a plan step: either
+ * an uploaded task material, a prior step's promoted output, or literal text.
+ * Kept distinct from {@link workingArtifactSchema} because a planner must be
+ * able to name both file sources at once, unlike a working artifact.
+ */
+const materialArtifactSchema = z.object({
+  type: z
+    .string()
+    .describe(
+      "One of `material-file` (an uploaded task material), `completed-file` (an earlier step's promoted output), or `text` (literal text).",
+    ),
+  value: z
+    .string()
+    .describe(
+      'The filename (for type `material-file`/`completed-file`) or the literal text (for type `text`).',
     ),
 });
 
@@ -155,10 +180,10 @@ export class TasksToolsService {
                   .min(1)
                   .describe('The role id or slug that must carry it out.'),
                 expected: z
-                  .array(artifactSchema)
+                  .array(workingArtifactSchema)
                   .describe('The outputs this assignment must produce.'),
                 materials: z
-                  .array(artifactSchema)
+                  .array(materialArtifactSchema)
                   .optional()
                   .describe('Optional inputs handed to this assignment.'),
               }),
@@ -211,7 +236,7 @@ export class TasksToolsService {
             .min(1)
             .describe('A concise summary of the completed assignment.'),
           prepared: z
-            .array(artifactSchema)
+            .array(workingArtifactSchema)
             .describe('The artifacts you prepared for review.'),
         },
       },
@@ -262,8 +287,8 @@ export class TasksToolsService {
           agentId: z.uuid().describe('The calling agent UUID.'),
           companyId: z.uuid().describe('The company UUID.'),
           qa: z
-            .enum(['accept', 'reject'])
-            .describe('Your verdict on the assignment under review.'),
+            .string()
+            .describe('Your verdict: `accept` or `reject` (case-insensitive).'),
           feedback: z
             .string()
             .optional()
@@ -275,19 +300,23 @@ export class TasksToolsService {
         if (!caller) return err(taskPrompts.error_no_assignment);
         if (caller.mode !== 'qa') return this.wrongMode(caller.mode);
 
+        // Fold case/whitespace here too (not just server-side) so the local
+        // verdict text and audit record match what actually gets stored.
+        const verdict = qa.trim().toLowerCase();
+
         try {
           await axios.post(
             `${this.serverUrl}/internal/assignment/${caller.targetAssignmentId}/assure`,
-            { agentId, qa, feedback },
+            { agentId, qa: verdict, feedback },
             { headers: { 'X-Internal-Api-Key': this.apiKey } },
           );
           this.audit.record(companyId, 'agent', agentId, 'state_change', {
             source: 'assure_assignment',
-            verdict: qa,
+            verdict,
           });
           return ok(
             interpolate(taskPrompts.assignment_assured, {
-              verdict: qa === 'accept' ? 'accepted' : 'rejected',
+              verdict: verdict === 'accept' ? 'accepted' : 'rejected',
             }),
           );
         } catch (e) {

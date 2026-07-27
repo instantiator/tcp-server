@@ -1,6 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { LcpCompany, LcpRole } from '@lcp/shared';
+import { DEFAULT_RAG_THRESHOLD, LcpCompany, LcpRole } from '@lcp/shared';
 import { KnowledgeReindexService } from '../rag/knowledge-reindex.service';
 import { StorageObject, StorageService } from '../storage/storage.service';
 import { KnowledgeService } from './knowledge.service';
@@ -299,7 +299,7 @@ describe('KnowledgeService', () => {
       );
     });
 
-    it('passes topK/threshold through as undefined when not given', async () => {
+    it('resolves the role/company threshold when the caller gives none, so the route reports what the role would really retrieve', async () => {
       await service.queryRag(role.id, 'query text');
       expect(ragRetrieval.retrieve).toHaveBeenCalledWith(
         role.id,
@@ -307,7 +307,19 @@ describe('KnowledgeService', () => {
         'query text',
         company.embeddingConfig,
         undefined,
+        DEFAULT_RAG_THRESHOLD,
+      );
+    });
+
+    it('lets an explicit threshold win over the resolved one, so operators can probe raw scores', async () => {
+      await service.queryRag(role.id, 'query text', undefined, 0);
+      expect(ragRetrieval.retrieve).toHaveBeenCalledWith(
+        role.id,
+        company.id,
+        'query text',
+        company.embeddingConfig,
         undefined,
+        0,
       );
     });
 

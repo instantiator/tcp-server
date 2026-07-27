@@ -129,8 +129,23 @@ export class AgentWorkerService implements OnModuleInit, OnModuleDestroy {
     this.logger.log('Agent worker started, listening on agent-jobs queue');
   }
 
-  /** Closes the worker gracefully on module destroy. */
+  /**
+   * Closes the worker gracefully on module destroy.
+   *
+   * Tolerates never having started: `onModuleInit` may have thrown before
+   * assigning `worker` (unreachable Redis), and closing an already-dead
+   * connection can itself reject. Either would replace the real startup error
+   * with a `Cannot read properties of undefined (reading 'close')` from
+   * teardown — and in a test run, a throwing destroy hook can leave the
+   * process hanging instead of failing cleanly.
+   */
   async onModuleDestroy(): Promise<void> {
-    await this.worker.close();
+    try {
+      await this.worker?.close();
+    } catch (err) {
+      this.logger.warn(
+        `agent worker close failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 }

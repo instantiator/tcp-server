@@ -97,7 +97,12 @@ function makeTui(
   const type = (s: string): void => {
     for (const ch of s) pressKey(ch);
   };
-  return { tui, term, rows, text, attrAt, pressKey, type };
+  /** Left-clicks a 0-based (col, row), offset for the Document's (1,1) pinning
+   * the same way `rows()` is — terminal mouse coordinates are 1-based. */
+  const click = (x: number, y: number): void => {
+    emitter.emit('mouse', 'MOUSE_LEFT_BUTTON_PRESSED', { x: x + 1, y: y + 1 });
+  };
+  return { tui, term, rows, text, attrAt, pressKey, type, click };
 }
 
 /** An agent `state_change` WireEvent — the pane renders `state_change:agent | <status>`. */
@@ -519,6 +524,49 @@ describe('Tui input box', () => {
     expect(text()).toContain('> for-chicken');
     pressKey('ENTER');
     expect(onSubmit).toHaveBeenCalledWith('for-chicken', 'b');
+  });
+
+  // The input occupies one row at the top of the INPUT_ROWS=3 band reserved
+  // for it (rows height-4 .. height-2, above the hint row), growing down into
+  // the rest only once Alt+Enter adds lines. Both specs below drive focus
+  // purely through the public surface — typed text only reaches the input when
+  // it genuinely holds focus.
+  const INPUT_TOP_ROW = HEIGHT - 1 - 3;
+
+  it('takes focus back when a turn ends, after a scrollback click moved it away', () => {
+    const { tui, text, type, click } = makeTui();
+    tui.addPane({ id: 'root', label: 'Cat', talkable: true });
+
+    tui.setBusy('root', true);
+    // Reading/selecting the streaming answer focuses the pane's scrollback —
+    // it is a scrollable TextBox, so terminal-kit hands focus to it.
+    click(10, CONTENT_TOP + 1);
+    type('ignored');
+    expect(text()).not.toContain('> ignored');
+
+    tui.setBusy('root', false);
+    type('next question');
+    expect(text()).toContain('> next question');
+  });
+
+  it('focuses the input from a click anywhere in its reserved band, including the prompt', () => {
+    // x=0 is the '> ' prompt (a non-scrollable TextBox child that never takes
+    // focus itself); the two rows below the input hold no element at all.
+    for (const [x, y] of [
+      [0, INPUT_TOP_ROW],
+      [10, INPUT_TOP_ROW + 1],
+      [10, INPUT_TOP_ROW + 2],
+    ]) {
+      const { tui, text, type, click } = makeTui();
+      tui.addPane({ id: 'root', label: 'Cat', talkable: true });
+      click(10, CONTENT_TOP + 1); // move focus off the input
+      type('ignored');
+      expect(text()).not.toContain('> ignored');
+
+      click(x, y);
+      type('typed');
+      expect(text()).toContain('> typed');
+    }
   });
 });
 

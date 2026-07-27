@@ -49,10 +49,10 @@ Lists the human users and/or agent roles available in the company — users can 
 
 **Arguments:**
 
-| Parameter   | Type                               | Required | Description                                   |
-| ----------- | ---------------------------------- | -------- | --------------------------------------------- |
-| `companyId` | UUID                               | yes      | The company to query                          |
-| `kind`      | `'users'` \| `'roles'` \| `'both'` | no       | Which contacts to list. Defaults to `'both'`. |
+| Parameter   | Type                               | Required | Description                                                                 |
+| ----------- | ---------------------------------- | -------- | --------------------------------------------------------------------------- |
+| `companyId` | UUID                               | yes      | The company to query                                                        |
+| `kind`      | `'users'` \| `'roles'` \| `'both'` | no       | Which contacts to list (case/whitespace-insensitive). Defaults to `'both'`. |
 
 **Returns:** With `kind: 'users'` or `kind: 'roles'`, the raw JSON array for that collection (same shape as before):
 

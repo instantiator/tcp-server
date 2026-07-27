@@ -1,4 +1,4 @@
-import { LlmConfig } from '@lcp/shared';
+import { DEFAULT_RAG_THRESHOLD, LlmConfig } from '@lcp/shared';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
@@ -48,7 +48,9 @@ export class RagRetrievalService {
    * @param query - Natural-language query string (e.g. the task prompt).
    * @param embeddingConfig - Company embedding config. Returns empty when null.
    * @param topK - Maximum number of chunks to return (default 5).
-   * @param threshold - Minimum cosine similarity to include (default 0.7).
+   * @param threshold - Minimum cosine similarity to include. Defaults to
+   *   {@link DEFAULT_RAG_THRESHOLD}; callers with a role/company in hand pass
+   *   the value resolved through their `runConfig` cascade instead.
    */
   async retrieve(
     roleId: UUID,
@@ -56,7 +58,7 @@ export class RagRetrievalService {
     query: string,
     embeddingConfig: LlmConfig | null | undefined,
     topK = 5,
-    threshold = 0.7,
+    threshold = DEFAULT_RAG_THRESHOLD,
   ): Promise<RagChunk[]> {
     if (!embeddingConfig) return [];
 

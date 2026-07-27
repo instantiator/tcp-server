@@ -20,7 +20,9 @@ export function registerQueryKnowledge(program: Command): void {
     .option('--top-k <n>', 'Maximum chunks to return (default 5)')
     .option(
       '--threshold <n>',
-      'Minimum cosine similarity to include (default 0.7)',
+      'Minimum cosine similarity to include. Defaults to the value the role ' +
+        'itself would use (runConfig.ragThreshold → RAG_THRESHOLD → built-in). ' +
+        'Pass 0 to see every chunk with its raw score, for calibration.',
     )
     .action(
       (cmdOpts: {

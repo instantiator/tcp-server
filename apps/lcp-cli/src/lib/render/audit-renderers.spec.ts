@@ -64,7 +64,15 @@ describe('renderAuditEvent', () => {
       { deltasSeen: true },
     );
     expect(entries).toHaveLength(1);
-    expect(entries[0]).toMatchObject({ label: 'llm_response', text: '' });
+    // style 'llm' (not 'response') so this renders as a line, not an empty
+    // content block — 'response' would trigger the "(blank)" placeholder
+    // meant for a genuinely empty final answer, misleading here since the
+    // real text already streamed live a few lines up.
+    expect(entries[0]).toMatchObject({
+      style: 'llm',
+      label: 'llm_response',
+      text: '',
+    });
   });
 
   it('renders input as a user-styled block', () => {

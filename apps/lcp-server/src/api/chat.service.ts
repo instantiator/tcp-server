@@ -6,6 +6,7 @@ import {
   AuditEventType,
   ContextManagerService,
   DEFAULT_LLM_CONTEXT_WINDOW,
+  DEFAULT_RAG_THRESHOLD,
   LcpAgent,
   LcpAssignment,
   LcpCompany,
@@ -27,6 +28,7 @@ import {
   resolveLlmConfig,
   resolveMcpServerList,
   resolveMcpServerUrls,
+  resolveRunConfig,
   runSupervisedGraph,
 } from '@lcp/shared';
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
@@ -268,6 +270,14 @@ export class ChatService {
             company,
             resolveEnvEmbeddingConfig(this.config),
           ),
+          undefined,
+          resolveRunConfig(
+            'ragThreshold',
+            role,
+            company,
+            this.config.get<number>('RAG_THRESHOLD'),
+            DEFAULT_RAG_THRESHOLD,
+          ),
         );
         if (ragChunks.length) {
           const rawRagText = buildRagMessage(ragChunks, CHAT_PROMPT_STRINGS);
@@ -339,6 +349,14 @@ export class ChatService {
           ]
         : [new HumanMessage(preparedMessage)];
 
+      // Lifecycle-event audit writes (below) are fired from the synchronous
+      // onEvent hook and can't be awaited there — tracked here instead, and
+      // flushed before every terminal state_change record, so a slow
+      // llm_response write can never be overtaken on the wire by the turn's
+      // own completion event (the SSE client stops reading the moment it
+      // sees a terminal event, so an out-of-order llm_response is dropped).
+      const pendingAuditWrites: Promise<unknown>[] = [];
+
       // Supervise the turn: check terminal status, context budget, and tool
       // visibility between every tool-loop iteration, instead of letting the
       // graph's tools -> agent edge run unattended to the end. Forwards
@@ -363,12 +381,14 @@ export class ChatService {
             // and publish token deltas directly to the agent channel.
             const audit = enrichedAuditForEvent(event);
             if (audit) {
-              void this.audit.record(
-                agent.companyId,
-                role.name,
-                agentId,
-                audit.eventType,
-                audit.payload,
+              pendingAuditWrites.push(
+                this.audit.record(
+                  agent.companyId,
+                  role.name,
+                  agentId,
+                  audit.eventType,
+                  audit.payload,
+                ),
               );
             }
             for (const delta of mapStreamDeltas(event, agentId)) {
@@ -396,10 +416,12 @@ export class ChatService {
       // record the terminal state_change now from the persisted output.
       if (result.terminalStatus === AgentStatus.Paused) {
         await closeCheckpointer();
+        await Promise.all(pendingAuditWrites);
         return;
       }
       if (result.terminalStatus === AgentStatus.Completed) {
         await closeCheckpointer();
+        await Promise.all(pendingAuditWrites);
         const freshAgent = await this.agentRepo.findOneBy({ id: agentId });
         await this.audit.record(
           agent.companyId,
@@ -423,7 +445,11 @@ export class ChatService {
 
       // The turn's llm_response row is written by onEvent (enriched); here we
       // just persist the output and record the terminal transition to idle,
-      // which streams live and drives client-side terminal detection.
+      // which streams live and drives client-side terminal detection. Flush
+      // those onEvent-triggered writes first so the CLI's stream — which
+      // stops reading as soon as it sees this terminal event — never
+      // outraces the llm_response row it depends on for rendering.
+      await Promise.all(pendingAuditWrites);
       await this.agentRepo.update(agentId, {
         status: AgentStatus.Idle,
         output: content,

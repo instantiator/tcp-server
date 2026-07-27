@@ -4,7 +4,7 @@
 // replaces the per-surface PaneEntryLog / responseSeen / mapAuditHistoryToEvents.
 
 import { AuditWireEvent, StreamDelta } from '@lcp/shared';
-import { parseClockTime } from '../core/agent-log-format';
+import { isBlankText, parseClockTime } from '../core/agent-log-format';
 import { renderAuditEvent, TurnState } from './audit-renderers';
 import { LogEntry, renderEntry } from './entries';
 import {
@@ -92,7 +92,12 @@ export class EventLogBuffer {
   /** Adds one stream delta: extends the trailing same-channel entry, or opens a new one. */
   appendDelta(d: StreamDelta): void {
     if (this.hideReasoning && d.channel === 'reasoning') return;
-    this.turn.deltasSeen = true;
+    // A whitespace-only chunk (some providers send one as a leading framing
+    // token before real content starts) shouldn't arm the dedup collapse on
+    // its own — if nothing substantial ever follows, the later `llm_response`
+    // audit row must still render its real text instead of being discarded
+    // as "already shown live".
+    if (!isBlankText(d.delta)) this.turn.deltasSeen = true;
 
     const last = this.items[this.items.length - 1];
     if (last?.type === 'entry' && last.entry.style === d.channel) {

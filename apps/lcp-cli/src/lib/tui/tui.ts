@@ -303,6 +303,9 @@ export class Tui {
       height: HINT_ROWS,
     });
     this.term.on('key', (name) => this.handleKey(name as string));
+    this.term.on('mouse', (name, data) =>
+      this.handleMouse(name as string, data as { x: number; y: number }),
+    );
 
     // terminal-kit's own Document#onEventSourceResize (registered on `term`
     // inside the Document constructor above, so it fires *before* anything
@@ -697,6 +700,10 @@ export class Tui {
     pane.busy = busy;
     if (this.manager.activePane?.id === paneId) {
       if (this.input) this.input.disabled = busy;
+      // Hand focus back when the turn ends: a disabled InlineInput is skipped
+      // by the Document's focus handling, so without this the user has to
+      // click the box before they can type the next message.
+      if (!busy) this.focus();
       this.renderChrome();
       this.draw();
     }
@@ -713,6 +720,34 @@ export class Tui {
     // only does this on the default Ctrl+C→processExit path, not when a
     // caller supplies its own onQuit handler and calls stop() directly.
     this.term.hideCursor(false);
+  }
+
+  /**
+   * Focuses the input when a left-click lands anywhere in the rows reserved
+   * for it, not just on the one row it currently occupies.
+   *
+   * terminal-kit only focuses an element that is itself under the pointer,
+   * which leaves two dead zones a user reasonably expects to be live: the
+   * `'> '` prompt (a plain TextBox child, and `TextBox.onClick` only takes
+   * focus when scrollable) and the {@link INPUT_ROWS} growth rows below a
+   * single-line input, which contain no element at all until Alt+Enter grows
+   * into them. Both look like part of the input box on screen.
+   *
+   * The Document's own handler runs first (registered in its constructor),
+   * so a click that already did the right thing — landing on the editable
+   * area, which focuses and positions the cursor — is left alone.
+   */
+  private handleMouse(name: string, data: { x: number; y: number }): void {
+    if (name !== 'MOUSE_LEFT_BUTTON_PRESSED') return;
+    const input = this.input;
+    if (!input || input.disabled || input.hasFocus) return;
+    // Mouse coordinates are 1-based and document-relative; elements position
+    // themselves in the Document's own 0-based space.
+    const row = data.y - this.document.outputY;
+    const top = input.outputY;
+    if (row < top || row >= top + INPUT_ROWS) return;
+    this.document.giveFocusTo(input);
+    this.draw();
   }
 
   private handleKey(name: string): void {

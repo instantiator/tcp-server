@@ -699,17 +699,26 @@ Runs a RAG similarity search for a role and prints the raw chunks that would be 
 
 - **stdout**: JSON `{ id, documentPath, chunkIndex, content, similarity }[]`, ranked by similarity descending
 
-| Flag                  | Alias | Description                                               |
-| --------------------- | ----- | --------------------------------------------------------- |
-| `--role <slug-or-id>` | `-r`  | **(Required)** Role slug or UUID                          |
-| `--query <text>`      | `-q`  | **(Required)** Query text                                 |
-| `--top-k <n>`         |       | Maximum chunks to return (default 5, matching the server) |
-| `--threshold <n>`     |       | Minimum cosine similarity to include (default 0.7)        |
+| Flag                  | Alias | Description                                                                                                                                                                                           |
+| --------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--role <slug-or-id>` | `-r`  | **(Required)** Role slug or UUID                                                                                                                                                                      |
+| `--query <text>`      | `-q`  | **(Required)** Query text                                                                                                                                                                             |
+| `--top-k <n>`         |       | Maximum chunks to return (default 5, matching the server)                                                                                                                                             |
+| `--threshold <n>`     |       | Minimum cosine similarity to include. Defaults to the value the role itself would use (`runConfig.ragThreshold` → `RAG_THRESHOLD` → built-in), so the output matches what a real prompt would receive |
 
 ```bash
 ./lcp-cli.sh -t $TOKEN query-knowledge -r <roleId> -q "remote work policy"
 ./lcp-cli.sh -t $TOKEN query-knowledge -r <roleId> -q "remote work policy" --top-k 3 --threshold 0.5
+# Calibration: --threshold 0 shows every chunk with its raw score, including
+# ones the role's own threshold would filter out.
+./lcp-cli.sh -t $TOKEN query-knowledge -r <roleId> -q "remote work policy" --threshold 0
 ```
+
+Queries are embedded and matched by meaning, not keywords: a natural-language
+question ("how do I mount a shelf on a plasterboard wall?") scores measurably
+better than a bare keyword ("shelves"). If a search returns nothing, see
+[Tuning RAG retrieval](development.md#tuning-rag-retrieval) — a threshold above
+the embedding model's score range filters out everything, silently.
 
 ### `open-document-store`
 

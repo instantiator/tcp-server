@@ -730,6 +730,17 @@ export class ChatSession {
               );
               continue;
             }
+            // The server synthesizes this for a late subscriber reconnecting
+            // to an already-finished turn — but this stream always connects
+            // *before* posting the message (to not miss early events), so at
+            // connect time the agent is always still idle from its *previous*
+            // turn (or never having run at all). Treating that as this turn's
+            // own completion made every turn terminate instantly with an
+            // empty response, before the real events ever arrived. Not
+            // terminal, and not worth rendering — it describes stale state.
+            if (agentState['reason'] === 'replay') {
+              continue;
+            }
             if (status === 'completed' || status === 'idle') {
               outcome = { response: str(agentState, 'response') };
               break;

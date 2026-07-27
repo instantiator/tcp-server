@@ -106,16 +106,19 @@ export class InteractionsToolsService {
         inputSchema: {
           companyId: z.uuid().describe('The company UUID.'),
           kind: z
-            .enum(['users', 'roles', 'both'])
+            .string()
             .optional()
             .describe(
-              "Which contacts to list: 'users', 'roles', or 'both' (default).",
+              'Which contacts to list: `users`, `roles`, or `both` (default, case-insensitive).',
             ),
         },
       },
       async ({ companyId, kind }): Promise<ToolResult> => {
+        const normalisedKind = kind?.trim().toLowerCase();
         const collections: Array<'users' | 'roles'> =
-          kind === 'users' || kind === 'roles' ? [kind] : ['users', 'roles'];
+          normalisedKind === 'users' || normalisedKind === 'roles'
+            ? [normalisedKind]
+            : ['users', 'roles'];
 
         const fetched = await Promise.all(
           collections.map((collection) =>

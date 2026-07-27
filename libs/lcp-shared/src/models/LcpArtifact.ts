@@ -31,12 +31,43 @@ export interface LcpArtifact {
   value: string;
 }
 
-/** Common near-miss spellings an LLM produces, mapped to the canonical type. */
+/**
+ * Common near-miss spellings an LLM produces, mapped to the canonical type.
+ * `file`/`text` are the short forms now advertised to agents (see
+ * `tasks-tools.service.ts`) as easier to guess than the fully descriptive
+ * canonical names; the rest are synonyms an LLM might reach for instead.
+ */
 const ARTIFACT_TYPE_ALIASES: Record<string, LcpArtifactType> = {
   text: 'inline-text',
   inline: 'inline-text',
   string: 'inline-text',
+  file: 'assignment-working-path',
+  'working-file': 'assignment-working-path',
+  path: 'assignment-working-path',
+  filename: 'assignment-working-path',
+  'material-file': 'task-materials-path',
+  'completed-file': 'assignment-completed-path',
 };
+
+/**
+ * Short, LLM-facing name for each canonical artifact type — the inverse of
+ * {@link ARTIFACT_TYPE_ALIASES}' primary short forms. Used when reporting
+ * valid values back to an agent so the corrective message matches the
+ * vocabulary it was actually shown in the tool description, not the longer
+ * internal storage-path name.
+ */
+const ARTIFACT_TYPE_DISPLAY_NAMES: Record<LcpArtifactType, string> = {
+  'inline-text': 'text',
+  'assignment-working-path': 'file',
+  'task-materials-path': 'material-file',
+  'assignment-completed-path': 'completed-file',
+  'task-completed-path': 'task-completed-path',
+};
+
+/** Maps canonical artifact types to their short, LLM-facing display name. */
+export function artifactTypeDisplayName(type: string): string {
+  return ARTIFACT_TYPE_DISPLAY_NAMES[type as LcpArtifactType] ?? type;
+}
 
 /**
  * Normalises a caller-supplied artifact `type` to its canonical form so common

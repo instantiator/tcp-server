@@ -17,6 +17,29 @@ import { z } from 'zod';
 import { memoryPrompts } from '../memory-prompts';
 import { memoryToolDescriptions } from '../memory-tool-descriptions';
 
+/**
+ * Composition guidance for the `query` argument of both semantic-search tools
+ * (`recall` and `search_knowledge`). Reaches the model as the parameter's
+ * JSON Schema description, so it is the one place an agent is told *how* to
+ * phrase a search rather than merely that it can.
+ *
+ * Retrieval embeds the query as a whole and ranks chunks by cosine
+ * similarity against the indexed prose, so a query that reads like the
+ * passage being looked for scores higher than a keyword list — measurably so:
+ * on a real corpus a bare "shelves" scored 0.49 against the very chunk that a
+ * full "How do I put up shelves?" scored 0.61 on.
+ */
+const SEMANTIC_QUERY_GUIDANCE =
+  'What to look for, phrased as a natural-language question or descriptive ' +
+  'sentence — "how do I mount a shelf on a plasterboard wall?", not a bare ' +
+  'keyword like "shelves". This is semantic similarity, not keyword matching: ' +
+  'fuller phrasing that reads like the passage you expect to find scores ' +
+  'better, so include the domain terms the source material would itself use. ' +
+  'Search one topic per call — for several topics, call this tool once each ' +
+  'rather than combining them into a single query. If a search returns ' +
+  'nothing useful, retry with a rephrasing that reads more like the wording ' +
+  'of the material, rather than with fewer words.';
+
 /** Replaces `{{key}}` placeholders in a template string. */
 function interpolate(template: string, vars: Record<string, string>): string {
   return template.replace(
@@ -92,7 +115,7 @@ export class MemoryToolsService {
           companyId: z
             .uuid()
             .describe('The company ID (used to load embedding config).'),
-          query: z.string().describe('The search query.'),
+          query: z.string().describe(SEMANTIC_QUERY_GUIDANCE),
           top_k: z
             .number()
             .int()
@@ -173,7 +196,7 @@ export class MemoryToolsService {
           companyId: z
             .uuid()
             .describe('The company ID (used to load embedding config).'),
-          query: z.string().describe('The search query.'),
+          query: z.string().describe(SEMANTIC_QUERY_GUIDANCE),
           top_k: z
             .number()
             .int()

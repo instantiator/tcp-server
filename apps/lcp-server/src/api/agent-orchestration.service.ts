@@ -76,9 +76,24 @@ export class AgentOrchestrationService
     this.logger.log('Connected to agent-jobs queue');
   }
 
-  /** Closes the queue connection gracefully on shutdown. */
+  /**
+   * Closes the queue connection gracefully on shutdown.
+   *
+   * Tolerates never having connected: `onModuleInit` may have thrown before
+   * assigning `queue` (unreachable Redis), and closing a already-dead
+   * connection can itself reject. Either would replace the real startup error
+   * with a `Cannot read properties of undefined (reading 'close')` from
+   * teardown — and in a test run, a throwing destroy hook can leave the
+   * process hanging instead of failing cleanly.
+   */
   async onModuleDestroy(): Promise<void> {
-    await this.queue.close();
+    try {
+      await this.queue?.close();
+    } catch (err) {
+      this.logger.warn(
+        `agent-jobs queue close failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   /**
