@@ -13,9 +13,14 @@ conversations/consultations), and in `plan`/`qa` modes (the planner's own
 assignment, and QA review assignments). See ADR-010 for the design record.
 
 The full lifecycle — planner dispatch, plan execution, QA review, file
-promotion, finalisation, failure propagation, and startup recovery — is
-implemented by `TaskOrchestrationService`
-(`apps/tcp-server/src/api/task-orchestration.service.ts`). See
+promotion, finalisation, failure propagation, and startup recovery — is driven
+by `TaskOrchestrationService`
+(`apps/tcp-server/src/api/task-orchestration.service.ts`), which delegates the
+distinct phases to focused collaborators in the same directory:
+`TaskStateService` (atomic conditional transitions), `QaVerdictService` (QA
+accept/reject consequences), `TaskDeliverablesService` (file promotion and
+finalisation), `TaskFailureService` (the paths that end a task badly), and
+`TaskRecoveryService` (post-restart repair). See
 [Orchestration flow](#orchestration-flow) below.
 
 ## Entities
@@ -39,7 +44,7 @@ implemented by `TaskOrchestrationService`
 | -------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `taskId`             | uuid, nullable                     | Null = orphan assignment                                                                                                                                                                                                                                                           |
 | `companyId`          | uuid                               | Needed directly for orphans                                                                                                                                                                                                                                                        |
-| `mode`               | `TcpAssignmentMode`                | `plan \| implement \| qa` — the agent's mode IS its assignment's mode; there is no mode column on `TcpAgent`                                                                                                                                                                       |
+| `mode`               | `TcpAssignmentMode`                | See [Agent modes](#agent-modes) — the agent's mode IS its assignment's mode; there is no mode column on `TcpAgent`                                                                                                                                                                 |
 | `orderIndex`         | int, nullable                      | Position in the task plan. Set only for implement-mode assignments belonging to a task                                                                                                                                                                                             |
 | `prompt`             | text                               | Instructions given to the assigned agent                                                                                                                                                                                                                                           |
 | `roleId`             | uuid                               | The role this assignment must be worked by                                                                                                                                                                                                                                         |
@@ -255,8 +260,8 @@ the task: a planner failure (`planner failed: …`), an implement-agent failure
 (assignment `in-progress → failed` → task failed), or a QA-agent failure (the
 target assignment fails → task failed; a failed QA agent is not retried).
 
-**Startup recovery.** On module init, `reconcileTask` idempotently repairs every
-non-terminal task: a `planning` task with no live planner → failed; an
+**Startup recovery.** On module init, `TaskRecoveryService.reconcileTask`
+idempotently repairs every non-terminal task: a `planning` task with no live planner → failed; an
 `in-progress` assignment whose agent died → failure propagated; an `in-qa`
 assignment with no live QA agent → a fresh QA agent dispatched; nothing running
 with a ready step → dispatched; all succeeded but not finalised → finalised.

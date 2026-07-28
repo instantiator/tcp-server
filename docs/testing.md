@@ -2,20 +2,24 @@
 
 ## Strategy
 
-The project uses four test tiers that run in increasing order of scope and
+The project uses five test tiers that run in increasing order of scope and
 infrastructure requirement. CI runs them in this order — a failure at any tier
 gates the next:
 
 ```
-unit → integration → api (includes smoke) + e2e
+unit → integration → api + smoke + e2e
 ```
 
-| Tier        | What it proves                                                                       | Infrastructure                  |
-| ----------- | ------------------------------------------------------------------------------------ | ------------------------------- |
-| Unit        | Individual classes and functions behave correctly                                    | None — SQLite in-memory         |
-| Integration | The app can connect to and use each backing service                                  | Docker (postgres, redis, minio) |
-| API         | Health checks, and requests and responses through the tcp-server API with a real JWT | Docker + Zitadel                |
-| E2E         | HTTP API workflows produce the right responses end-to-end                            | Docker (postgres, redis, minio) |
+| Tier        | What it proves                                                               | Infrastructure                            |
+| ----------- | ---------------------------------------------------------------------------- | ----------------------------------------- |
+| Unit        | Individual classes and functions behave correctly                            | None — SQLite in-memory                   |
+| Integration | The app can connect to and use each backing service                          | Docker (postgres, redis, minio, stub-llm) |
+| E2E         | HTTP API workflows produce the right responses end-to-end                    | Docker (postgres, redis, minio)           |
+| API         | Requests and responses through the tcp-server API with a real JWT            | A running stack, with Zitadel             |
+| Smoke       | Every service in a deployed stack is up, healthy, and serving its Swagger UI | A running stack                           |
+
+The api and smoke tiers run against the same stack in CI's `api-test` job,
+which is why they are often referred to together.
 
 **Unit tests** use `better-sqlite3` in-memory and `@nestjs/testing` to wire
 modules without starting a real server. They run in milliseconds with no

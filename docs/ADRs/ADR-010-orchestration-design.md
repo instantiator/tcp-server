@@ -157,6 +157,8 @@ On tcp-server startup:
 - Parallel task steps: the current design is sequential. Parallel steps (where the plan specifies no dependency between them) are a future extension — the BullMQ dispatch logic and plan data model support it but the orchestrator loop handles sequential first.
 - Dead-letter queue for permanently failed jobs: note for implementation
 
+<a id="amendments-as-implemented-01023"></a>
+
 ## Amendments as implemented (010.2.3)
 
 The drafted `TaskStep` (JSONB steps embedded in a task config) is superseded
@@ -192,6 +194,8 @@ Still outstanding: the planner role agent, multi-step plan execution, the QA
 review cycle, and task/assignment cancellation — tracked across the
 remaining `010.2.x` sub-plans.
 
+<a id="amendments-as-implemented-01024"></a>
+
 ## Amendments as implemented (010.2.4)
 
 - **Every `TcpAgent` now carries an assignment** (`assignmentId`, non-nullable
@@ -207,6 +211,8 @@ remaining `010.2.x` sub-plans.
   [ADR-013 010.2.4 amendment](ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-01024)
   for how the assignment drives prompt part 4.
 - `plan`/`qa` modes exist but nothing dispatches them yet (parts 5/7).
+
+<a id="amendments-as-implemented-01025"></a>
 
 ## Amendments as implemented (010.2.5)
 
@@ -227,6 +233,8 @@ remaining `010.2.x` sub-plans.
   one winner; the loser gets a `409`. The MCP server holds no state — it
   resolves the caller's assignment (`GET /internal/agent/:id/assignment`),
   mode-gates the tool, and relays validation/gate errors verbatim.
+
+<a id="amendments-as-implemented-01027"></a>
 
 ## Amendments as implemented (010.2.7)
 
@@ -275,6 +283,8 @@ behavioural walk-through; the design record:
 - **Deferred:** task/assignment cancellation, plan revision, and parallel/DAG
   plans.
 
+<a id="amendments-as-implemented-01028"></a>
+
 ## Amendments as implemented (010.2.8)
 
 _2026-07-13._
@@ -299,6 +309,8 @@ _2026-07-13._
   semantics (chat returns to `Idle`) vs. run-to-completion (`Completed`/`Paused`/
   `Failed`); and who owns the abort signal. Full extraction of the supervised-run
   spine into a single shared `runAgentTurn` is the noted next step.
+
+<a id="amendments-as-implemented-010282"></a>
 
 ## Amendments as implemented (010.2.8.2)
 
@@ -361,6 +373,8 @@ _2026-07-13._
   (a cheap `EXISTS` check, no embedding) drops the `memory` server and skips RAG
   retrieval for a role with no indexed chunks.
 
+<a id="amendments-as-implemented-010283"></a>
+
 ## Amendments as implemented (010.2.8.3)
 
 _2026-07-14._
@@ -402,6 +416,8 @@ _2026-07-14._
   with no per-call discipline; `AssignmentService` also strips the `qaFeedback`
   query-builder update path (where transformers don't apply).
 
+<a id="amendments-as-implemented-01031"></a>
+
 ## Amendments as implemented (010.3.1)
 
 _2026-07-15._
@@ -426,6 +442,8 @@ failed, cancelled)`). Every transition is recorded via the existing
   near-instant interruption is ever needed is to wire a Redis-published abort
   into that registry instead of waiting for the next poll.
 - **CLI**: `cancel-task --task-id <uuid>`.
+
+<a id="amendments-as-implemented-01032"></a>
 
 ## Amendments as implemented (010.3.2)
 

@@ -25,7 +25,7 @@ Before starting, ensure the following are in place.
 | Docker running         | `docker info` returns engine details                                 |
 | `.env` file present    | `ls .env` — copy from `.env.example` if missing                      |
 | LLM provider reachable | LM Studio (or similar) running and accessible from the URL in `.env` |
-| Node.js ≥ 22           | `node --version`                                                     |
+| Node.js 24 LTS         | `node --version`                                                     |
 
 If you do not have a `.env` file, copy the example and fill in the LLM provider details:
 
@@ -52,16 +52,20 @@ Work through these in order.
 
 ## Quick reference — service ports
 
-| Service              | Port | Purpose                           |
-| -------------------- | ---- | --------------------------------- |
-| tcp-server           | 3000 | REST API                          |
-| tcp-agent            | 3001 | Agent loop health                 |
-| tcp-mcp-storage      | 3010 | Storage MCP server                |
-| tcp-mcp-memory       | 3011 | Memory MCP server (stub)          |
-| tcp-mcp-interactions | 3012 | Interactions MCP server (stub)    |
-| MinIO API            | 9000 | S3-compatible object storage      |
-| MinIO console        | 9001 | Web UI for browsing stored files  |
-| Zitadel              | 8080 | OIDC provider (auth profile only) |
+| Service              | Port  | Purpose                           |
+| -------------------- | ----- | --------------------------------- |
+| tcp-server           | 3000  | REST API                          |
+| tcp-agent            | 3001¹ | Agent loop health                 |
+| tcp-mcp-storage      | 3010¹ | Storage MCP server                |
+| tcp-mcp-memory       | 3011¹ | Memory MCP server                 |
+| tcp-mcp-interactions | 3012¹ | Interactions MCP server           |
+| tcp-mcp-tasks        | 3013¹ | Tasks MCP server                  |
+| MinIO API            | 9000  | S3-compatible object storage      |
+| MinIO console        | 9001  | Web UI for browsing stored files  |
+| Zitadel              | 8080  | OIDC provider (auth profile only) |
+
+¹ Internal-only unless you start the stack with
+`./scripts/start-deployment.sh --dev-ports`. Section 6 needs these published.
 
 ---
 

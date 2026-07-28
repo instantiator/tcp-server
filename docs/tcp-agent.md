@@ -12,7 +12,7 @@ The `tcp-agent` service runs the LangGraph agent loop. It consumes jobs from the
    - Loads the `TcpAgent` and its `TcpRole` from the shared PostgreSQL database.
    - Sets the agent status to `running`.
    - Opens a `PostgresSaver` checkpoint store (LangGraph resumability).
-   - Builds a `StateGraph` with a single `agent` node that invokes the configured LLM.
+   - Builds a `StateGraph` (`buildAgentGraph` in `@tcp/shared`) with an `agent` node that invokes the configured LLM, plus a conditional `tools` node when the role's mode has any MCP tools.
    - Streams graph events; writes an `AuditEvent` row for each LLM request/response.
    - After the stream: validates that the agent produced non-empty output; retries once if not.
    - Sets the final status to `completed` or `failed`.
@@ -156,14 +156,20 @@ Returns `{ provider, model, supportsTools, supportsStructuredOutput, compatible,
 
 ---
 
-## Resource limits (MVP)
+## Resource limits
 
-| Limit         | Value | Config                           |
-| ------------- | ----- | -------------------------------- |
-| Max LLM calls | 10    | Hard-coded in `AgentLoopService` |
-| Timeout       | 60 s  | Hard-coded in `AgentLoopService` |
+Each limit resolves role → company → environment → code default, via
+`runConfig` and `resolveRunConfig` (`@tcp/shared`):
 
-Both are candidates for `TcpRole.runConfig` JSONB once per-role tuning is needed.
+| Limit                        | `runConfig` key | Env override            | Default |
+| ---------------------------- | --------------- | ----------------------- | ------- |
+| Max LLM invocations per run  | `maxIterations` | `AGENT_ITERATIONS`      | 40      |
+| Wall-clock timeout for a run | `timeoutMs`     | `AGENT_LOOP_TIMEOUT_MS` | 30 min  |
+| Timeout for one LLM call     | —               | `LLM_TIMEOUT_MS`        | 30 min  |
+
+The run-level timeout is deliberately kept at or above the per-call timeout: a
+shorter one would abort the run before a single legitimate call could finish.
+Defaults live in `libs/tcp-shared/src/config/defaults.ts`.
 
 To estimate a role's worst-case initial-prompt token footprint against its
 LLM's context window before running it, see `tcp-cli`'s
@@ -178,11 +184,16 @@ Before running the LangGraph loop, `AgentLoopService` connects to each MCP serve
 
 MCP server URLs are resolved from environment variables:
 
-| Variable               | Server                                                                                     |
-| ---------------------- | ------------------------------------------------------------------------------------------ |
-| `MCP_STORAGE_URL`      | [tcp-mcp-storage](tcp-mcp-storage.md) — MinIO file operations                              |
-| `MCP_MEMORY_URL`       | [tcp-mcp-memory](tcp-mcp-memory.md) — episodic memory and knowledge search (stub)          |
-| `MCP_INTERACTIONS_URL` | [tcp-mcp-interactions](tcp-mcp-interactions.md) — user input and agent consultation (stub) |
+| Variable               | Server                                                                                        |
+| ---------------------- | --------------------------------------------------------------------------------------------- |
+| `MCP_STORAGE_URL`      | [tcp-mcp-storage](tcp-mcp-storage.md) — shared-storage exploration, working files, materials  |
+| `MCP_MEMORY_URL`       | [tcp-mcp-memory](tcp-mcp-memory.md) — episodic memory and knowledge search                    |
+| `MCP_INTERACTIONS_URL` | [tcp-mcp-interactions](tcp-mcp-interactions.md) — user input and agent consultation           |
+| `MCP_TASKS_URL`        | [tcp-mcp-tasks](tcp-mcp-tasks.md) — plan a task, submit finished work, assure QA (mode-gated) |
+
+Which of the loaded servers an agent actually gets is then narrowed by its
+mode — `MODE_TOOLS` in `@tcp/shared` is the single source of truth (see
+[tasks.md → Agent modes](tasks.md#agent-modes)).
 
 See [agent-services.md → MCP Servers](agent-services.md#mcp-servers) for configuration details.
 
@@ -196,7 +207,7 @@ While the agent loop runs, `AgentLoopService` maintains an in-memory tracker tha
 
 **Storage changes** — structured record of MinIO mutations: `created`, `modified`, `deleted`, and `moved` file paths. Populated on `on_tool_end` events by inspecting the tool result text (e.g. `"Written:"`, `"Deleted:"`, `"Moved:"`).
 
-After each storage `on_tool_end`, the tracker is persisted to `TcpAgent.storageChanges` via a fire-and-forget `PATCH /internal/agent/:id/storage` to tcp-server. This makes the data available to tcp-mcp-interactions for `complete_task` file validation error messages without in-process coupling.
+After each storage `on_tool_end`, the tracker is persisted to `TcpAgent.storageChanges` via a fire-and-forget `PATCH /internal/agent/:id/storage` to tcp-server. This makes the data available to the completion gate's file-validation error messages without in-process coupling.
 
 ---
 
@@ -204,14 +215,22 @@ After each storage `on_tool_end`, the tracker is persisted to `TcpAgent.storageC
 
 Every agent run produces `AuditEvent` rows in the `audit_event` table:
 
-| Event type              | When                                                                  |
-| ----------------------- | --------------------------------------------------------------------- |
-| `llm_request`           | LLM invocation starts                                                 |
-| `llm_response`          | LLM invocation completes                                              |
-| `tool_call`             | MCP tool is invoked                                                   |
-| `tool_result`           | MCP tool returns a result                                             |
-| `state_change`          | Agent status changes (e.g. failed with reason)                        |
-| `agent_loop_completion` | Agent loop ends via `complete_task` — structured summary + action log |
+| Event type              | When                                                                               |
+| ----------------------- | ---------------------------------------------------------------------------------- |
+| `llm_request`           | LLM invocation starts                                                              |
+| `llm_response`          | LLM invocation completes                                                           |
+| `tool_call`             | MCP tool is invoked                                                                |
+| `tool_result`           | MCP tool returns a result                                                          |
+| `state_change`          | An agent, assignment, task or company changes state (`payload.entity` says which)  |
+| `agent_loop_completion` | Agent loop ends via its required completion tool — structured summary + action log |
+| `compaction`            | Context-window compaction started or completed (`payload.phase`)                   |
+| `input`                 | User-submitted text — a chat message or a conversation answer                      |
+| `decision`              | An explicitly recorded decision                                                    |
+
+These rows are also the live stream: `AuditService.write` persists each one and
+then publishes it as a `WireEvent` on the relevant SSE channel, so history
+replay and a live tail render identically. See
+[ADR-008](ADRs/ADR-008-audit-logging.md).
 
 The `agent_loop_completion` payload is an `AgentLoopCompletionSummary`:
 
@@ -234,7 +253,7 @@ The `agent_loop_completion` payload is an `AgentLoopCompletionSummary`:
 
 The `summary` field is generated by a direct LLM call after the run completes. If the LLM call fails, the event is not written (the failure is logged as a warning; the task status is unaffected).
 
-Query: `SELECT * FROM audit_event WHERE agent_id = $1 ORDER BY timestamp`.
+Query: `SELECT * FROM audit_event WHERE "agentId" = $1 ORDER BY timestamp`.
 
 ---
 
@@ -244,4 +263,4 @@ Query: `SELECT * FROM audit_event WHERE agent_id = $1 ORDER BY timestamp`.
 
 The Redis check uses the shared bounded `assertRedisReachable` probe, so it cannot hang. tcp-agent also fails fast at **startup** if Redis is unreachable (`AgentWorkerService.onModuleInit`): rather than letting the BullMQ worker block indefinitely against a downed broker, it throws a clear error. `main.ts` calls `app.enableShutdownHooks()` so the worker and its Redis connection close cleanly on `SIGTERM`.
 
-> **Known gap (non-blocking):** `config/config.schema.ts` still requires `MINIO_ENDPOINT`/`MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` at startup, but tcp-agent never constructs an S3 client anywhere — storage access across the whole monorepo goes through `tcp-server`'s `StorageService`/`/internal/storage/*` endpoints instead. Likely leftover from an earlier design. Not removed in this pass; flagged here as a follow-up cleanup opportunity.
+tcp-agent needs no MinIO configuration and is given no MinIO credentials: it never constructs an S3 client. Every storage action it takes — like every other service's — goes through tcp-server's `StorageService` behind the `/internal/storage/*` endpoints.

@@ -37,7 +37,7 @@ Returns a markdown overview of the interactions service and its tools.
 
 **Returns:** Markdown text listing all tools and usage guidance.
 
-**Usage pattern:** Agents should call this first when they discover the interactions server is available. Prompt part 3 directs agents to do this automatically.
+**Usage pattern:** useful when an agent wants an orientation on what the interactions server offers. It is not a precondition for anything.
 
 **Note:** all of this server's tools are bound to the model from turn 1 — the describe-then-reveal gating that used to delay non-`describe_server` tools until first use was removed in 010.2.8.2 (see [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-010282)). Before that removal, `interactions` was already exempt from the gating, since `request_user_input` and `request_agent_consultation` are essential control-flow calls that must stay reachable at all times.
 

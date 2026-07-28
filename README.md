@@ -111,7 +111,7 @@ You will need an LLM service to provide inference. Once you've settled on one, u
 
 ```bash
 npm install
-scripts/run-dev.sh
+scripts/start-dev.sh
 ```
 
 ---
@@ -257,18 +257,26 @@ flowchart TD
   end
   subgraph Retrieval
     Query[Agent initial prompt] -->|embed| Embed2[Embedding Model]
-    Embed2 -->|cosine similarity ≥ 0.7| PG
+    Embed2 -->|cosine similarity ≥ threshold| PG
     PG -->|top-k chunks| Part5[Prompt part 5]
   end
 ```
 
-> RAG subsystem: knowledge documents are uploaded via the CLI, chunked into ~800-token segments, embedded using the company's embedding model, and stored as vectors in PostgreSQL (pgvector). When an agent runs, the initial prompt is embedded and the most similar chunks above the 0.7 cosine threshold are retrieved and injected into the prompt. The embedding model is configured separately from the chat LLM via `company.embeddingConfig`.
+> RAG subsystem: knowledge documents are uploaded via the CLI, chunked into ~800-token segments, embedded using the company's embedding model, and stored as vectors in PostgreSQL (pgvector). When an agent runs, the initial prompt is embedded and the most similar chunks above the role's cosine threshold (`runConfig.ragThreshold`, default `0.35`) are retrieved and injected into the prompt. The right threshold depends on the embedding model — see [Tuning RAG retrieval](docs/development.md#tuning-rag-retrieval). The embedding model is configured separately from the chat LLM via `company.embeddingConfig`.
 
 ### Documentation
 
-Key architectural decisions are documented as ADRs in [docs/ADRs/](docs/ADRs/).
+[docs/index.md](docs/index.md) lists every document with a one-line description
+— start there. The ones you are most likely to want directly:
 
-See [docs/index.md](docs/index.md) for the full list with implementation status.
+| Document                                 | For                                                 |
+| ---------------------------------------- | --------------------------------------------------- |
+| [Development](docs/development.md)       | Tech stack, source layout, everyday commands        |
+| [tcp-cli reference](docs/tcp-cli.md)     | Every CLI verb and flag                             |
+| [Authentication](docs/authentication.md) | OIDC setup, tokens, external identity providers     |
+| [Tasks and Assignments](docs/tasks.md)   | The task/assignment model and orchestration flow    |
+| [Testing](docs/testing.md)               | The five test tiers and how to run each             |
+| [ADRs](docs/ADRs/)                       | Architectural decisions, with implementation status |
 
 ## Testing
 
@@ -288,21 +296,22 @@ Quick reference:
 
 ## Commands reference
 
-| Command                      | Purpose                                                                    |
-| ---------------------------- | -------------------------------------------------------------------------- |
-| `npm run build`              | Compile all apps to `dist/`, then regenerate the schema and license report |
-| `npm run build tcp-server`   | Compile tcp-server only                                                    |
-| `npm run build tcp-agent`    | Compile tcp-agent only                                                     |
-| `npm run start:dev`          | Start tcp-server with hot reload                                           |
-| `npm run lint`               | ESLint with auto-fix                                                       |
-| `npm run format`             | Prettier over `apps/`, `libs/`, `test/`, and `docs/`                       |
-| `npm test`                   | Unit tests                                                                 |
-| `npm run test:e2e`           | E2E tests                                                                  |
-| `npm run test:integration`   | Integration tests (needs Docker)                                           |
-| `npm run test:api`           | API contract tests (needs `docker compose up --profile auth`)              |
-| `npm run test:smoke`         | Smoke tests (needs `docker compose up --profile auth`)                     |
-| `npm run schema:generate`    | Regenerate [schemas/schema.json](schemas/schema.json)                      |
-| `npm run licenses:generate`  | Regenerate [docs/licenses.md](docs/licenses.md)                            |
-| `npm run migration:generate` | Generate a new TypeORM migration                                           |
-| `npm run migration:run`      | Run pending migrations                                                     |
-| `npm run migration:revert`   | Revert the last migration                                                  |
+| Command                      | Purpose                                                                                      |
+| ---------------------------- | -------------------------------------------------------------------------------------------- |
+| `npm run build`              | Compile all apps to `dist/`, then regenerate the schema and license report                   |
+| `npm run build tcp-server`   | Compile tcp-server only                                                                      |
+| `npm run build tcp-agent`    | Compile tcp-agent only                                                                       |
+| `npm run start:dev`          | Start tcp-server with hot reload                                                             |
+| `npm run lint`               | ESLint with auto-fix                                                                         |
+| `npm run format`             | Prettier over `apps/`, `libs/`, `test/`, and `docs/`                                         |
+| `npm test`                   | Unit tests                                                                                   |
+| `npm run test:e2e`           | E2E tests                                                                                    |
+| `npm run test:integration`   | Integration tests (needs Docker)                                                             |
+| `npm run test:api`           | API contract tests (needs `docker compose up --profile auth`)                                |
+| `npm run test:smoke`         | Smoke tests (needs `docker compose up --profile auth`)                                       |
+| `npm run schema:generate`    | Regenerate [schemas/schema.json](schemas/schema.json)                                        |
+| `npm run licenses:generate`  | Regenerate [docs/licenses.md](docs/licenses.md)                                              |
+| `npm run migration:generate` | Generate a new TypeORM migration                                                             |
+| `npm run migration:run`      | Run pending migrations                                                                       |
+| `npm run migration:revert`   | Revert the last migration                                                                    |
+| `npm run setup`              | Interactive environment setup wizard (see [docs/scripts.md](docs/scripts.md#setup-wizardsh)) |

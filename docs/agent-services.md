@@ -25,7 +25,7 @@ flowchart LR
 
 1. Knowledge documents (`.md`, `.txt`, `.html`, `.pdf`, `.docx`, `.csv`, `.json`, `.yaml`) are uploaded per role, or to a company's shared knowledge, via `tcp-cli store-knowledge` — the server converts non-`.md` formats to OKF Markdown before storing (see [tcp-cli.md → store-knowledge](tcp-cli.md#store-knowledge)).
 2. Each document is split into ~800-token chunks, embedded via the company's `embeddingConfig` model, and stored in the `knowledge_chunk` PostgreSQL table (pgvector column) — `roleId` is `null` for company-shared chunks. Indexing is asynchronous and kept in sync with storage automatically (write hook + reconciliation poller); see [shared-storage.md → Automatic RAG sync](shared-storage.md#automatic-rag-sync-01022).
-3. When an agent runs, the initial prompt is embedded and the top-k most similar chunks above a 0.7 cosine threshold are retrieved. Retrieval is scoped to the agent's **role plus its company's shared** chunks (`("roleId" = role) OR ("roleId" IS NULL AND "companyId" = company)`), and never another company's.
+3. When an agent runs, the initial prompt is embedded and the top-k most similar chunks above the role's cosine threshold are retrieved (`runConfig.ragThreshold` → `RAG_THRESHOLD` → `DEFAULT_RAG_THRESHOLD`, currently `0.35`; see [Tuning RAG retrieval](development.md#tuning-rag-retrieval) — the right value is per-embedding-model, not universal). Retrieval is scoped to the agent's **role plus its company's shared** chunks (`("roleId" = role) OR ("roleId" IS NULL AND "companyId" = company)`), and never another company's.
 4. Retrieved chunks are injected as prompt part 5. If the RAG text exceeds the context budget, it is compacted or stored to MinIO (context overflow) before injection.
 
 ### Configuring the embedding model
@@ -47,13 +47,14 @@ Add an `embeddingConfig` to the company:
 
 ### CLI commands
 
-| Command                                                         | Description                                                         |
-| --------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `store-knowledge (--role <id>\|--company <id>) --source <path>` | Upload and index a document (converted to OKF Markdown server-side) |
-| `list-knowledge (--role <id>\|--company <id>)`                  | List indexed documents                                              |
-| `get-knowledge (--role <id>\|--company <id>) --file <name>`     | Get a document's content                                            |
-| `delete-knowledge (--role <id>\|--company <id>) --file <name>`  | Remove a document and its chunks                                    |
-| `open-document-store`                                           | Print/open the MinIO console URL                                    |
+Knowledge is managed entirely through `tcp-cli` — `store-knowledge`,
+`list-knowledge`, `get-knowledge`, `delete-knowledge`, `reindex-knowledge`,
+`get-knowledge-index-status`, and `query-knowledge` (which shows exactly what a
+role's next prompt would retrieve, without spending an LLM call). See
+[tcp-cli.md → `store-knowledge`](tcp-cli.md#store-knowledge) for the full flag
+reference, and
+[shared-storage.md → Managing knowledge documents](shared-storage.md#managing-knowledge-documents)
+for worked examples.
 
 ### OKF document format
 
@@ -117,9 +118,9 @@ Add server names to the role's `mcpServerList`:
 
 At agent startup, `McpClientService` loads tools from each listed server. Tools are prefixed `{serverName}__` (e.g. `storage__list_files`) to avoid name collisions across servers. The LangGraph graph adds a conditional `ToolNode` when any tools are available.
 
-The agent receives prompt part 3 listing available servers and is directed to call `describe_server` on each before using its tools.
+The agent receives prompt part 3 listing the servers available to it, with `describe_server` offered as the way to learn what any one of them can do. Calling it is no longer a precondition for using the rest — all of a server's tools are bound from turn 1 (see below).
 
-**Tool-schema gating — removed in 010.2.8.2.** From 008.6 through 010.2.8, only each server's `describe_server` tool was bound to the model at first; a server's other tools became bound only after the agent called `describe_server`, tracked per-run by `ToolVisibilityTracker`. That mechanism (and `ToolVisibilityTracker`) is gone: all mode-filtered tools are now bound to the model from turn 1, since their schemas are compact and the gating cost extra round-trips and let weak models "forget" a tool. Mode filtering (`@tcp/shared` `mode-tools.ts`) still limits which servers/tools a mode gets. See [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-010282).
+**Tool-schema gating — removed in 010.2.8.2.** From 008.6 through 010.2.8, only each server's `describe_server` tool was bound to the model at first; a server's other tools became bound only after the agent called `describe_server`, tracked per-run by `ToolVisibilityTracker`. That mechanism (and `ToolVisibilityTracker`) is gone: all mode-filtered tools are now bound to the model from turn 1, since their schemas are compact and the gating cost extra round-trips and let weak models "forget" a tool. Mode filtering (`@tcp/shared` `mode-tools.ts`) still limits which servers/tools a mode gets — see [tasks.md → Agent modes](tasks.md#agent-modes). See also [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-010282).
 
 **Identity fields (`agentId`, `companyId`):** `loadTools` accepts an optional context (`{ agentId, companyId }`) for the agent currently running. Any tool parameter matching one of those names is removed from the schema the LLM sees and the real value substituted on every call, regardless of what (if anything) the LLM supplies — the LLM has no reliable way to know its own `agentId` (it's a DB id, not part of its context) and shouldn't be trusted to assert one. This is why `request_user_input`/`request_agent_consultation` in `tcp-mcp-interactions` and `create_plan`/`complete_assignment`/`assure_assignment` in `tcp-mcp-tasks` no longer need `agentId`/`companyId` filled in by the model, even though those fields are still part of the MCP server's published tool schema.
 

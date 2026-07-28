@@ -4,29 +4,38 @@
 
 > **Requires:** Section 1 complete — Docker stack running. Section 5 recommended (storage operations are more interesting with files present).
 
-You are testing the three MCP (Model Context Protocol) servers. Each exposes an HTTP endpoint that agents use to call tools at runtime. The servers use a stateless request-per-connection model: a fresh MCP session is created for every tool call.
+You are testing the four MCP (Model Context Protocol) servers. Each exposes an HTTP endpoint that agents use to call tools at runtime. The servers use a stateless request-per-connection model: a fresh MCP session is created for every tool call.
 
-The three servers are:
+The four servers are:
 
-- **tcp-mcp-storage** (port 3010) — real S3/MinIO integration; agents use this to read and write files.
-- **tcp-mcp-memory** (port 3011) — stub; returns informative "not yet implemented" responses.
-- **tcp-mcp-interactions** (port 3012) — stub; same pattern as memory.
+- **tcp-mcp-storage** (port 3010) — shared-storage exploration plus assignment-scoped working files and materials. Holds no S3 client: it proxies to tcp-server.
+- **tcp-mcp-memory** (port 3011) — `recall`, `remember`, `search_knowledge`, over pgvector. The only one with its own database connection.
+- **tcp-mcp-interactions** (port 3012) — `request_user_input`, `request_agent_consultation`, `list_available_contacts`. Proxies to tcp-server.
+- **tcp-mcp-tasks** (port 3013) — `create_plan`, `complete_assignment`, `assure_assignment`, gated to the caller's mode. Proxies to tcp-server.
+
+> The MCP servers are internal-only unless the stack was started with
+> `./scripts/start-deployment.sh --dev-ports`. Start it that way before running
+> this section's `curl`s against `localhost`.
 
 ```mermaid
 sequenceDiagram
     participant A as tcp-agent
     participant C as McpClientService
     participant S as tcp-mcp-storage :3010
+    participant TS as tcp-server
+    participant MIO as MinIO
 
     A->>C: loadTools(["storage"], urls)
     C->>S: POST /mcp (initialize + listTools)
     S-->>C: tool list
-    C-->>A: DynamicStructuredTool[]
+    C-->>A: DynamicStructuredTool[] (agentId/companyId stripped from the schema)
 
     A->>C: invoke storage__list_files
-    C->>S: POST /mcp (callTool: list_files)
-    S->>MIO: ListObjectsV2
-    MIO-->>S: file list
+    C->>S: POST /mcp (callTool: list_files, agentId injected)
+    S->>TS: POST /internal/storage/list (X-Internal-Api-Key)
+    TS->>MIO: ListObjectsV2
+    MIO-->>TS: file list
+    TS-->>S: JSON result
     S-->>C: JSON result
     C-->>A: text response
 ```
@@ -209,29 +218,25 @@ Expected: the file's text content, or `File not found: {path}` if the key does n
 
 ---
 
-## 6.7 — Verify stub servers respond correctly
+## 6.7 — Verify the memory server searches for real
 
-Memory and interactions servers return informative stub responses:
+`recall` runs a live pgvector query, so this needs a company with an
+`embeddingConfig` and some indexed knowledge (Section 5).
 
 ```bash
-# Memory server
 curl -s -X POST http://localhost:3011/mcp \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"recall","arguments":{"query":"test"}}}' \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{
+        \"name\":\"recall\",
+        \"arguments\":{\"roleId\":\"$ROLE_ID\",\"companyId\":\"$COMPANY_ID\",\"query\":\"remote work policy\"}}}" \
   | jq -r '.result.content[0].text'
 ```
 
-Expected: a message explaining that memory recall is not yet implemented and directing the agent to use RAG context instead.
-
-```bash
-# Interactions server
-curl -s -X POST http://localhost:3012/mcp \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"request_user_input","arguments":{"question":"test"}}}' \
-  | jq -r '.result.content[0].text'
-```
-
-Expected: a message explaining that user input requests are not yet implemented.
+Expected: matching chunks with their cosine similarity scores, or a "no results"
+message if nothing clears the threshold. With no `embeddingConfig` on the
+company, expect a message directing the agent to the RAG context in its prompt
+instead — that is the one remaining "not implemented"-shaped response, and it
+means "not configured", not "not built".
 
 ---
 

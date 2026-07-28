@@ -2,14 +2,19 @@
 
 ## Overview
 
-TCP uses a single BullMQ queue named **`agent-jobs`** backed by Redis. All
-agent execution is asynchronous: tcp-server enqueues jobs, tcp-agent workers
-consume them.
+Agent execution is asynchronous: tcp-server enqueues jobs on the **`agent-jobs`**
+BullMQ queue, and tcp-agent workers consume them. This is the queue this
+document is about.
 
 | Role     | Service    | Component                   |
 | -------- | ---------- | --------------------------- |
 | Producer | tcp-server | `AgentOrchestrationService` |
 | Consumer | tcp-agent  | `AgentWorkerService`        |
+
+A second queue, **`knowledge-reindex`**, is internal to tcp-server — both its
+producer and its worker live in `KnowledgeReindexService`, so it never crosses
+a service boundary. See
+[shared-storage.md → Automatic RAG sync](shared-storage.md#automatic-rag-sync-01022).
 
 ## Job types
 
@@ -39,8 +44,8 @@ sequenceDiagram
     Q->>A: deliver job
     A->>A: AgentLoopService.run()
     Note over A: LangGraph runs to completion
-    A->>A: complete_task called (required; reminded if missed)
-    A->>S: POST /internal/agent/:id/complete (or /fail)
+    A->>A: complete_assignment called (required — reminded if missed)
+    A->>S: POST /internal/assignment/:id/complete (or /internal/agent/:id/fail)
     S->>S: store output, mark Completed (or Failed)
     A-->>Q: job done
 ```
@@ -70,7 +75,7 @@ sequenceDiagram
 
     Q->>Chkn: deliver job
     Chkn->>Chkn: LangGraph runs, produces answer
-    Chkn->>S: POST /internal/agent/chicken/complete
+    Chkn->>S: complete_assignment → POST /internal/assignment/:id/complete
     S->>S: mark PendingConsultation complete
     Note over S: resumeAgent gate: 0 outstanding
     S->>Q: add job {type: resume, agentId: cat, replyContent}
@@ -79,7 +84,7 @@ sequenceDiagram
     Q->>Cat: deliver resume job
     Cat->>Cat: LangGraph resumes from checkpoint
     Cat->>Cat: LLM produces final answer
-    Cat->>S: POST /internal/agent/cat/complete
+    Cat->>S: complete_assignment → POST /internal/assignment/:id/complete
     S->>S: mark cat Completed
     Cat-->>Q: job done
 ```
@@ -90,50 +95,44 @@ sequenceDiagram
 
 A chat session (triggered by `POST /api/agent/:id/message`) runs LangGraph
 **inline** in tcp-server — no BullMQ job for the calling agent's first turn.
-The POST returns `202` immediately and the turn streams over SSE; when a
-consultation tool is called, tcp-server dispatches a BullMQ job for the called
-agent as normal. Once that job's chain completes, the calling agent's resumed
-run finishes and tcp-server emits the terminal `completed` event to the client's
-SSE stream.
-
-> **Note:** the sequence diagram below predates [ADR-015](ADRs/ADR-015-agent-completion-sse.md)
-> (amended) — the `SUBSCRIBE agent:completed` / "HTTP held open" long-poll it
-> shows was replaced by the `202` + SSE flow. Steps are otherwise unchanged. See
-> [ADR-012](ADRs/ADR-012-human-in-the-loop.md) for the pause/resume details.
+The POST returns `202` immediately and the turn streams over the agent's SSE
+event stream; when a consultation tool is called, tcp-server dispatches a BullMQ
+job for the called agent as normal. Once that job's chain completes, the calling
+agent's resumed run finishes and its terminal `completed` event reaches the
+client over the same stream — nothing is held open waiting for it. See
+[ADR-015](ADRs/ADR-015-agent-completion-sse.md) for the delivery design and
+[ADR-012](ADRs/ADR-012-human-in-the-loop.md) for the pause/resume details.
 
 ```mermaid
 sequenceDiagram
     participant CLI as Client (tcp-cli)
     participant CS as chat.service (tcp-server)
-    participant R as Redis
+    participant R as Redis (pub/sub)
     participant Q as BullMQ (agent-jobs)
     participant Chkn as tcp-agent (chicken)
     participant Cat2 as tcp-agent (cat resume)
 
     CLI->>CS: POST /api/agent/:id/message
+    CS-->>CLI: 202 Accepted
+    CLI->>CS: GET /api/agent/:id/events (SSE, stays open)
     CS->>CS: graph.invoke() — cat LangGraph runs inline
     CS->>CS: LLM calls request_agent_consultation
     CS->>CS: POST /internal/pause (agent: Paused)
     CS->>Q: add job {type: start, agentId: chicken}
     Note over CS: graph.invoke() returns (cat: Paused)
-    CS->>R: SUBSCRIBE agent:completed:{catId}
-    Note over CS: HTTP held open
 
     Q->>Chkn: deliver job
     Chkn->>Chkn: LangGraph runs, produces answer
-    Chkn->>CS: POST /internal/agent/chicken/complete
+    Chkn->>CS: complete_assignment → POST /internal/assignment/:id/complete
     CS->>Q: add job {type: resume, agentId: cat}
     Chkn-->>Q: job done
 
     Q->>Cat2: deliver resume job
     Cat2->>Cat2: LangGraph resumes from checkpoint
     Cat2->>Cat2: LLM produces real answer
-    Cat2->>R: PUBLISH agent:completed:{catId}
-    R-->>CS: event received
-    CS->>R: UNSUBSCRIBE
-    CS-->>CLI: real answer from cat agent
-    Cat2->>CS: POST /internal/agent/cat/complete
-    Cat2-->>Q: job done
+    Cat2->>R: PUBLISH agent:events:{catId} (audit + stream events)
+    R-->>CS: relayed by AgentEventService
+    CS-->>CLI: streamed events, ending with `completed`
 ```
 
 ---
@@ -180,14 +179,22 @@ for the agent. The job is only dispatched when both counts are zero, ensuring
 the agent sees every answer it asked for in a single resumed run rather than
 resuming prematurely on the first response to arrive.
 
-## Redis pub/sub channel
+## Redis pub/sub channels
 
-In addition to job routing, Redis carries a lightweight completion signal:
+Redis carries more than the queue. Two unrelated families of channel run
+alongside `agent-jobs`, both defined in `@tcp/shared`
+(`events/wire-events.ts`, `events/shutdown-channel.ts`):
 
-| Channel                     | Published by                   | Consumed by                |
-| --------------------------- | ------------------------------ | -------------------------- |
-| `agent:completed:{agentId}` | `AgentLoopService` (tcp-agent) | `ChatService` (tcp-server) |
+| Channel                  | Direction              | Carries                                                                                                                |
+| ------------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `agent:events:{agentId}` | tcp-agent → tcp-server | `WireEvent`s for one agent — persisted audit rows plus live token deltas — relayed onto that agent's SSE stream        |
+| `task:events:{taskId}`   | tcp-server → itself    | Task and assignment state changes, relayed onto the task's SSE stream                                                  |
+| `company:events:{id}`    | tcp-server → itself    | Company/task state changes, backing the TUI roster's live task list                                                    |
+| `tcp:shutdown:command`   | tcp-server → workers   | `drain` \| `force` \| `cancel` (see [ADR-019](ADRs/ADR-019-graceful-shutdown.md))                                      |
+| `tcp:shutdown:status`    | workers → tcp-server   | `{ activeAgents }` — the worker's real in-memory count of running loops, which is what lets a drain confirm quiescence |
 
-This channel is only relevant for **chat sessions** (use case 3). Standard
-BullMQ agent runs (use cases 1, 2, 4) do not depend on it — if no one
-subscribes, the message goes nowhere harmlessly.
+The earlier `agent:completed:{agentId}` completion signal no longer exists: it
+was retired along with the chat long-poll (see
+[ADR-015](ADRs/ADR-015-agent-completion-sse.md)), and audit events are now the
+single source of truth for both history and live streaming (see
+[ADR-008](ADRs/ADR-008-audit-logging.md)).

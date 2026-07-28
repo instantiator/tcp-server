@@ -93,6 +93,8 @@ external surface: a non-blocking `202` plus SSE rather than a blocked `200`.
   `AgentEventService` — one subscriber per agent regardless of how many SSE
   clients are connected.
 
+<a id="amendments-as-implemented-0084"></a>
+
 ## Amendments as implemented (008.4)
 
 The proposal above was implemented with the following changes, driven by the
@@ -136,6 +138,8 @@ The proposal above was implemented with the following changes, driven by the
 rather than `Idle` (the old `Idle` reset lived in the deleted long-poll
 `finally`). This is harmless — `sendMessage` does not gate on status, and the
 recovery poll treats `Completed`-with-output as a finished turn.
+
+<a id="amendments-as-implemented-01032"></a>
 
 ## Amendments as implemented (010.3.2)
 

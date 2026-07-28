@@ -7,17 +7,21 @@ You are testing that all Docker Compose services start correctly, pass their hea
 ```mermaid
 graph LR
     H[Host] --> S[tcp-server :3000]
-    H --> A[tcp-agent :3001]
-    H --> MS[tcp-mcp-storage :3010]
-    H --> MM[tcp-mcp-memory :3011]
-    H --> MI[tcp-mcp-interactions :3012]
     H --> MIO[MinIO :9001 console]
+    A[tcp-agent :3001]
     S --> PG[(PostgreSQL)]
     S --> RD[(Redis)]
     S --> MIO2[MinIO :9000]
     A --> PG
     A --> RD
-    MS --> MIO2
+    A --> MS[tcp-mcp-storage :3010]
+    A --> MM[tcp-mcp-memory :3011]
+    A --> MI[tcp-mcp-interactions :3012]
+    A --> MT[tcp-mcp-tasks :3013]
+    MS --> S
+    MI --> S
+    MT --> S
+    MM --> PG
 ```
 
 ---
@@ -46,6 +50,7 @@ Expected: all services show `healthy` in the Status column.
 | tcp-mcp-storage      | healthy         |
 | tcp-mcp-memory       | healthy         |
 | tcp-mcp-interactions | healthy         |
+| tcp-mcp-tasks        | healthy         |
 
 If a service is `starting` after 60 seconds, check its logs:
 

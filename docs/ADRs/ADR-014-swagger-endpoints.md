@@ -34,6 +34,8 @@ A new `tcp-cli open-swagger --service <name>` command mirrors `open-document-sto
 - `tcp-cli open-swagger --service <name>` prints the Swagger UI URL and (by default) opens it in the system browser. `--no-open` suppresses the browser launch.
 - Smoke tests verify that `GET /swagger` returns 200 on each service.
 
+<a id="amendment-as-implemented-01025"></a>
+
 ## Amendment as implemented (010.2.5)
 
 `tcp-mcp-tasks`, added after this ADR as the sixth server app, was wired up the same way from the start — `SwaggerModule` in its `main.ts`, `@nestjs/swagger` in `nest-cli.json`'s plugin list, and a smoke-test assertion — so it was never a gap to fix, just a service this ADR's "five" wording predates. `tcp-cli open-swagger --service tcp-mcp-tasks` and all other consequences above apply to it unchanged.

@@ -5,7 +5,7 @@ Core terminology for discussing how the TCP system works.
 ## Services
 
 **tcp-server**
-The NestJS REST API service. Hosts all HTTP endpoints, manages entity lifecycle (companies, roles, agents, conversations), enqueues jobs onto BullMQ, and will eventually house the orchestrator.
+The NestJS REST API service. Hosts all HTTP endpoints, manages entity lifecycle (companies, roles, agents, tasks, assignments, conversations), owns the task orchestrator, and enqueues jobs onto BullMQ. It also owns all storage access — every other service reaches MinIO through its `/internal/storage/*` endpoints.
 
 **tcp-agent**
 The agent loop runner service. Consumes jobs from the `agent-jobs` BullMQ queue and executes the LangGraph agent loop for each job.
@@ -17,10 +17,13 @@ MCP server (port 3012) that lets agents pause for human input (`request_user_inp
 MCP server (port 3011) that provides agents with access to episodic memory and role knowledge via `recall`, `remember`, and `search_knowledge`.
 
 **tcp-mcp-storage**
-MCP server (port 3010) that provides agents with read/write access to the shared MinIO object store (12 tools: list, read, write, delete, restore, search, copy, move, etc.).
+MCP server (port 3010) giving agents read-only exploration of the shared document store, plus assignment-scoped working-file and material tools. It holds no S3 client — it proxies to tcp-server.
+
+**tcp-mcp-tasks**
+MCP server (port 3013) through which an agent completes its assignment: `create_plan`, `complete_assignment`, or `assure_assignment`, gated to the agent's mode.
 
 **tcp-cli**
-Developer CLI tool for interacting with the system: obtaining OIDC tokens, managing companies and roles, starting agents, and responding to open queries.
+Developer CLI tool for interacting with the system: obtaining OIDC tokens, managing companies and roles, creating and monitoring tasks, chatting with agents (including a full-screen TUI), responding to open queries, and draining the system for shutdown. See [tcp-cli.md](tcp-cli.md).
 
 ## Domain entities
 
@@ -48,7 +51,7 @@ A human user associated with a company. Used for query routing: their `knowledge
 ## Execution concepts
 
 **Agent loop**
-The core execution cycle inside tcp-agent: assemble prompt → invoke LLM → invoke tool(s) → repeat until the agent signals completion. Implemented as a LangGraph `StateGraph`.
+The core execution cycle: assemble prompt → invoke LLM → invoke tool(s) → repeat until the agent signals completion. Implemented as a LangGraph `StateGraph` built by `buildAgentGraph` (`@tcp/shared`) and supervised by `runSupervisedGraph`, which re-checks the context budget and the agent's status at every iteration boundary. Runs in tcp-agent for queued work, and inline in tcp-server for chat turns.
 
 **BullMQ job**
 A queued unit of work dispatched by tcp-server to tcp-agent. Each job carries `{ agentId, type: 'start' | 'resume' }`. A single agent run may be served by multiple jobs if it pauses and resumes.
@@ -62,11 +65,23 @@ LangGraph's identifier for a checkpoint state thread. Stored on the `TcpAgent` r
 **Pause / Resume**
 When an agent calls `request_user_input` or `request_agent_consultation`, its status is set to `paused` (with `pausedAt` recorded) and the BullMQ job completes cleanly (no CPU consumed while waiting). The agent only resumes once it has no other outstanding requests; tcp-server then re-enqueues the job (`type: 'resume'`) with every response received since `pausedAt` aggregated into one message. See [cross-agent-consultations.md](cross-agent-consultations.md#resume-conditions).
 
-**Task (future)**
-A higher-level unit of work managed by the orchestrator, broken into ordered `TaskStep` objects each assigned to a role. Not yet fully implemented; see [ADR-010](ADRs/ADR-010-orchestration-design.md).
+**Task (`TcpTask`)**
+A piece of work requested by a user of a company. Carries the `request`, its `materials`, the `expected` outputs, and a status. A planner agent turns it into a plan; the orchestrator then drives it to `succeeded` or `failed`. See [tasks.md](tasks.md).
 
-**Planner role (future)**
-A special role designated per company to generate structured task plans from a task description. Produces a list of `TaskStep` objects that the orchestrator dispatches sequentially.
+**Plan**
+Not an entity: a task's plan **is** its implement-mode assignments, ordered by `orderIndex`. Produced by a planner agent calling `create_plan`.
+
+**Assignment (`TcpAssignment`)**
+One unit of work given to an agent of a specific role — a plan step, the planner's own assignment, a QA review, a consultation, a finalisation pass, or a plain chat. An assignment with no `taskId` is an **orphan** (a conversation or consultation outside any task).
+
+**Mode (`TcpAssignmentMode`)**
+`plan | implement | qa | chat | consultee | finalise`. An agent's mode **is** its assignment's mode. It decides the prompt (`MODE_PROMPTS`), the tools offered (`MODE_TOOLS`), and the tool the agent must call to finish (`requiredToolForMode`). See [tasks.md → Agent modes](tasks.md#agent-modes).
+
+**Planner role**
+The role that plans a company's tasks. Resolved per task: the task's own `plannerRoleId`, falling back to the company's. Set with `tcp-cli set-planner`.
+
+**Shortcode**
+A task's short, per-company identifier (`000`, `001`, …), assigned at creation and used to label it in the CLI and TUI.
 
 ## Prompt and context
 
@@ -74,13 +89,13 @@ A special role designated per company to generate structured task plans from a t
 The base system message rendered for prompt part 0. Resolved with role → company → baked-in default precedence (`SystemPromptTemplateResolver`; a blank template counts as unset). Supports `{{name}}`, `{{description}}`, `{{date}}`, `{{datetime}}`, `{{timezone}}`, `{{localDatetime}}`, `{{companyId}}`, and `{{roleId}}` placeholders — see [`buildPromptDateVars`](../libs/tcp-shared/src/llm/prompt-vars.ts).
 
 **Prompt parts**
-The prompt assembled for each LLM call is composed of up to 8 numbered sections (parts 0–8): system intro, role description, company environment, MCP server list, supplementary context, RAG knowledge, MCP pre-fetched responses, and output instructions. See [ADR-013](ADRs/ADR-013-prompt-assembly-context-management.md).
+The prompt assembled for each LLM call is composed of numbered sections (parts 0–8): system intro, role description, company environment, MCP server list, the assignment presentation, RAG knowledge, pre-fetched MCP responses (part 6 — deferred, not built), and output instructions. Every builder lives in `@tcp/shared`'s `prompt-assembly.ts`, shared by tcp-server's chat path and tcp-agent's worker. See [ADR-013](ADRs/ADR-013-prompt-assembly-context-management.md).
 
 **Context window**
 The token budget for a single LLM invocation. Configured via `LlmConfig.contextWindow`; defaults to 8192.
 
 **Compaction**
-Automatic reduction of the assembled prompt when it exceeds the trigger threshold (80% of the context window). Applied in two tiers: sliding-window trim (no LLM call) then LLM summarisation of oversized messages.
+Automatic reduction of the assembled prompt when it exceeds the trigger threshold (80% of the context window). Applied in two tiers: sliding-window trim (no LLM call) then LLM summarisation of oversized messages. Checked once per tool-calling iteration, not just once per turn. See [context-management.md](context-management.md).
 
 **Context overflow**
 When data (RAG results, MCP responses) still exceeds the context budget after compaction, the full content is written to MinIO at `{company_slug}/tasks/{agent_id}/context-overflow/{timestamp}.txt` and a compact reference summary is injected in its place.
@@ -94,10 +109,10 @@ The configuration block for an LLM provider: `provider`, `model`, `baseUrl`, `ap
 Configuration for an embedding model. Same shape as `LlmConfig` but points to a model that supports `/v1/embeddings`. Required for RAG; if absent, RAG is silently skipped.
 
 **RAG (Retrieval-Augmented Generation)**
-Knowledge relevant to the agent's current task is retrieved from pgvector, ranked by cosine similarity, and injected into prompt part 5 before each LLM call.
+Knowledge relevant to the agent's current task is retrieved from pgvector, ranked by cosine similarity above the role's `runConfig.ragThreshold`, and injected into prompt part 5. The threshold is per-embedding-model, not universal — see [Tuning RAG retrieval](development.md#tuning-rag-retrieval).
 
 **Knowledge chunk (`KnowledgeChunk`)**
-An ~800-token slice of a role knowledge document, embedded via the company's `embeddingConfig` and stored in PostgreSQL (pgvector). The unit of RAG retrieval.
+An ~800-token slice of a knowledge document, embedded via the company's `embeddingConfig` and stored in PostgreSQL (pgvector). The unit of RAG retrieval. A null `roleId` marks a chunk as company-wide shared knowledge.
 
 **Episodic memory (`EpisodicMemory`)**
 Per-agent memories written by the agent via the `remember` MCP tool and retrieved via `recall`. Backed by pgvector; persists across runs.
@@ -114,7 +129,7 @@ The protocol used to expose tools to an LLM agent. Each MCP server exposes tools
 Tools are namespaced as `{serverName}__{toolName}` (e.g., `storage__list_files`) to prevent name collisions across MCP servers.
 
 **mcpServerList**
-A list of MCP server names on a role (or task step) specifying which servers the agent can access during its run.
+A list of MCP server names on a role, additive with the company's and the system registry's, specifying which servers are available to the agent. Its mode then narrows that set further (`MODE_TOOLS`).
 
 ## Storage
 
@@ -122,25 +137,46 @@ A list of MCP server names on a role (or task step) specifying which servers the
 Per-company object storage. All task inputs, outputs, knowledge documents, audit logs, and context overflow are stored under `{company_slug}/` in a single bucket.
 
 **Task materials**
-User-supplied inputs placed in `tasks/{task_id}/materials/` before a run starts. Read-only for agents.
+User-supplied inputs placed in `tasks/{task_id}/materials/` before a task starts. Read-only for agents.
 
-**Task output**
-The agent's working area at `tasks/{task_id}/output/`. Files written here during a run are candidates for promotion to `finished/` on completion.
+**Working directory**
+An assignment's private scratch area — `tasks/{task_id}/assignments/{orderIndex}/working/`, or `assignments/{assignment_id}/working/` for an orphan. The agent supplies only a filename; the prefix is derived server-side from its assignment, so it cannot write outside it.
+
+**Completed directory**
+Where approved work lands: an assignment's `completed/` holds the files QA accepted from its `working/`; the task's `completed/` holds the final deliverables gathered from those at finalisation.
+
+**Artifact**
+A `{ type, value }` pair naming an input or output — a storage pointer (`task-materials-path`, `assignment-working-path`, `assignment-completed-path`, `task-completed-path`) or literal `inline-text`. There is no artifact table; `resolveArtifactKey` turns a pointer into a storage key. See [tasks.md → Artifact model](tasks.md#artifact-model).
 
 ## Audit
 
 **Audit event (`AuditEvent`)**
-An append-only record of system activity. Types include `llm_request`, `llm_response`, `tool_call`, `tool_result`, `state_change`, and `task_completion_summary`.
+An append-only record of system activity: `llm_request`, `llm_response`, `tool_call`, `tool_result`, `state_change`, `agent_loop_completion`, `compaction`, `input`, `decision`. Since 010.5.1 these rows are the single source of truth for **both** stored history and the live SSE stream — `AuditService.write` persists a row and then publishes it. See [ADR-008](ADRs/ADR-008-audit-logging.md).
 
-**Task completion summary (`TcpTaskCompletionSummary`)**
-A structured audit event emitted at the end of a successful run: a brief overall narrative plus tracked lists of actions taken and storage changes (created, modified, deleted, moved files). See [006.5](prompts/006.5%20-%20task%20completion%20planning.md).
+**Agent loop completion summary (`AgentLoopCompletionSummary`)**
+The payload of an `agent_loop_completion` event: a brief narrative plus tracked lists of actions taken and storage changes (created, modified, deleted, moved files).
+
+**Wire event (`WireEvent`)**
+What crosses an SSE or Redis event stream: either a persisted audit row (`{ type: 'audit', event }`) or a live-only token delta (`StreamDelta`). One shape for three CLI surfaces — `chat`, `tui`, and `eavesdrop` all render through the same library.
 
 ## Agent status values
 
-| Status      | Meaning                                              |
-| ----------- | ---------------------------------------------------- |
-| `idle`      | Created but not yet started                          |
-| `running`   | Agent loop is actively executing                     |
-| `paused`    | Waiting for user input or a consultation result      |
-| `completed` | Run finished successfully; `output` is populated     |
-| `failed`    | Run ended with an error; `errorMessage` explains why |
+| Status      | Meaning                                                |
+| ----------- | ------------------------------------------------------ |
+| `idle`      | Created but not yet started, or between chat turns     |
+| `running`   | Agent loop is actively executing                       |
+| `paused`    | Stopped at a resumable point — see `pauseReason` below |
+| `completed` | Run finished successfully; `output` is populated       |
+| `failed`    | Run ended with an error; `errorMessage` explains why   |
+| `cancelled` | The task or assignment it was working was cancelled    |
+
+**Pause reason (`TcpAgent.pauseReason`)**
+Why a `paused` agent stopped: `user_input`, `consultation`, or `shutdown`. It exists so `resumeAgent`'s "no outstanding requests" gate — which a shutdown-paused agent would otherwise sail straight through — can tell the cases apart. See [ADR-019](ADRs/ADR-019-graceful-shutdown.md).
+
+## Task and assignment status values
+
+**`TcpTaskStatus`**: `ready | planning | in-progress | finalising | succeeded | failed | cancelled`.
+
+**`TcpAssignmentStatus`**: `ready | in-progress | in-qa | succeeded | failed | cancelled`.
+
+See [tasks.md](tasks.md#task-status) for how each is derived and what moves it.

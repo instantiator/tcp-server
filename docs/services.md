@@ -5,17 +5,22 @@ starts when the `auth` profile is active (`docker compose --profile auth up`).
 
 ## Summary
 
-| Service              | Container name         | Exposed ports              | Description                                           |
-| -------------------- | ---------------------- | -------------------------- | ----------------------------------------------------- |
-| tcp-server           | `tcp-server`           | 3000                       | REST API and orchestration layer                      |
-| tcp-agent            | `tcp-agent`            | 3001                       | Agent loop runner                                     |
-| tcp-mcp-storage      | `tcp-mcp-storage`      | 3010                       | Storage MCP server (MinIO tools)                      |
-| tcp-mcp-memory       | `tcp-mcp-memory`       | 3011                       | Memory MCP server (stub)                              |
-| tcp-mcp-interactions | `tcp-mcp-interactions` | 3012                       | Interactions MCP server (stub)                        |
-| PostgreSQL           | `postgres`             | 5432                       | Primary relational store (pgvector extension enabled) |
-| Redis                | `redis`                | 6379                       | Task queue broker (BullMQ)                            |
-| MinIO                | `minio`                | 9000 (API), 9001 (console) | S3-compatible object storage                          |
-| Zitadel              | `zitadel`              | 8080                       | OIDC identity provider (profile: auth)                |
+| Service              | Container name         | Exposed ports              | Description                                              |
+| -------------------- | ---------------------- | -------------------------- | -------------------------------------------------------- |
+| tcp-server           | `tcp-server`           | 3000                       | REST API and orchestration layer                         |
+| tcp-agent            | `tcp-agent`            | 3001                       | Agent loop runner                                        |
+| tcp-mcp-storage      | `tcp-mcp-storage`      | 3010¹                      | Storage MCP server                                       |
+| tcp-mcp-memory       | `tcp-mcp-memory`       | 3011¹                      | Memory MCP server                                        |
+| tcp-mcp-interactions | `tcp-mcp-interactions` | 3012¹                      | Interactions MCP server                                  |
+| tcp-mcp-tasks        | `tcp-mcp-tasks`        | 3013¹                      | Tasks MCP server                                         |
+| stub-llm             | `stub-llm`             | 3002¹                      | Configurable stub LLM for tests (profile: `integration`) |
+| PostgreSQL           | `postgres`             | 5432                       | Primary relational store (pgvector extension enabled)    |
+| Redis                | `redis`                | 6379                       | BullMQ broker and pub/sub transport for SSE and shutdown |
+| MinIO                | `minio`                | 9000 (API), 9001 (console) | S3-compatible object storage                             |
+| Zitadel              | `zitadel`              | 8080                       | OIDC identity provider (profile: auth)                   |
+
+¹ Internal-only by default. `start-deployment.sh --dev-ports` publishes these
+to the host (needed by the smoke tier and for direct `curl` access).
 
 ## TCP services
 
@@ -24,9 +29,9 @@ starts when the `auth` profile is active (`docker compose --profile auth up`).
 NestJS REST API. Handles incoming HTTP requests, persists data to PostgreSQL,
 enqueues agent tasks via BullMQ, and validates JWT tokens issued by Zitadel.
 
-- **Health:** `GET http://localhost:3000/health` — checks PostgreSQL, MinIO, and OIDC reachability
+- **Health:** `GET http://localhost:3000/health` — checks PostgreSQL, Redis, MinIO, and OIDC reachability
 - **Depends on:** postgres, redis, minio (all must be healthy before startup)
-- **Built from:** `apps/tcp-server/Dockerfile`
+- **Built from:** the root `Dockerfile`, target `tcp-server`
 
 ### tcp-agent
 
@@ -34,32 +39,50 @@ NestJS agent loop runner. Consumes BullMQ jobs from Redis, executes agent steps,
 
 - **Health:** `GET http://localhost:3001/health`
 - **Depends on:** postgres, redis
-- **Built from:** `apps/tcp-agent/Dockerfile`
+- **Built from:** the root `Dockerfile`, target `tcp-agent`
 
 ### tcp-mcp-storage
 
-NestJS MCP server providing agents with read/write access to the shared MinIO object store. Uses the MCP Streamable HTTP transport — stateless, one session per request. See [tcp-mcp-storage.md](tcp-mcp-storage.md) for tool reference.
+NestJS MCP server giving agents read-only exploration of the shared document store plus assignment-scoped working-file and material tools. It holds no S3 client of its own — every action is proxied to tcp-server's `/internal/storage/*` endpoints. Uses the MCP Streamable HTTP transport — stateless, one session per request. See [tcp-mcp-storage.md](tcp-mcp-storage.md) for the tool reference.
 
-- **Health:** `GET http://localhost:3010/health`
+- **Health:** `GET http://localhost:3010/health` — static (no dependency of its own to probe)
 - **API:** `POST http://localhost:3010/mcp` (MCP JSON-RPC)
-- **Depends on:** minio
-- **Built from:** `apps/tcp-mcp-storage/Dockerfile`
+- **Depends on:** tcp-server
+- **Built from:** the root `Dockerfile`, target `tcp-mcp-storage`
 
 ### tcp-mcp-memory
 
-NestJS MCP server for semantic search over episodic memory and role knowledge. Currently a stub — all tools return informative "not yet implemented" responses. See [tcp-mcp-memory.md](tcp-mcp-memory.md) for tool reference and planned implementation.
+NestJS MCP server for semantic search over episodic memory and role/shared knowledge — `recall`, `remember`, and `search_knowledge`, all backed by pgvector. See [tcp-mcp-memory.md](tcp-mcp-memory.md) for the tool reference.
 
-- **Health:** `GET http://localhost:3011/health`
+- **Health:** `GET http://localhost:3011/health` — checks its PostgreSQL connection
 - **API:** `POST http://localhost:3011/mcp`
-- **Built from:** `apps/tcp-mcp-memory/Dockerfile`
+- **Depends on:** postgres
+- **Built from:** the root `Dockerfile`, target `tcp-mcp-memory`
 
 ### tcp-mcp-interactions
 
-NestJS MCP server for requesting input from human users or consulting other agents by role. Currently a stub. See [tcp-mcp-interactions.md](tcp-mcp-interactions.md) for tool reference and planned implementation.
+NestJS MCP server for requesting input from human users or consulting other agents by role. See [tcp-mcp-interactions.md](tcp-mcp-interactions.md) for the tool reference.
 
-- **Health:** `GET http://localhost:3012/health`
+- **Health:** `GET http://localhost:3012/health` — static (it delegates all writes to tcp-server)
 - **API:** `POST http://localhost:3012/mcp`
-- **Built from:** `apps/tcp-mcp-interactions/Dockerfile`
+- **Depends on:** tcp-server
+- **Built from:** the root `Dockerfile`, target `tcp-mcp-interactions`
+
+### tcp-mcp-tasks
+
+NestJS MCP server through which an agent completes its assignment — `create_plan`, `complete_assignment`, `assure_assignment`, mode-gated to the agent's assignment mode. Like the other two proxies it owns no state; every transition happens behind tcp-server's `/internal/*` endpoints. See [tcp-mcp-tasks.md](tcp-mcp-tasks.md) for the tool reference.
+
+- **Health:** `GET http://localhost:3013/health` — static
+- **API:** `POST http://localhost:3013/mcp`
+- **Depends on:** tcp-server
+- **Built from:** the root `Dockerfile`, target `tcp-mcp-tasks`
+
+### stub-llm _(profile: integration)_
+
+A configurable stub LLM server that answers `POST /v1/chat/completions` with pre-scripted text and tool calls, so the integration tier can drive a whole agent run deterministically without a real model. Started automatically by the integration tier's Jest global setup. See [tcp-stub-llm](stub-llm.md).
+
+- **Health:** `GET http://localhost:3002/health`
+- **Built from:** `apps/tcp-stub-llm/Dockerfile` (its own context — it shares no code with the monorepo)
 
 ## Stopping the simulation
 
@@ -81,6 +104,45 @@ the same drain works when the stack is run outside Docker (`npm run start:dev`)
 — you just stop the processes yourself once it reports quiesced. See
 [ADR-019](ADRs/ADR-019-graceful-shutdown.md) for why the responsibility is split
 this way, and [tcp-cli.md](tcp-cli.md#shutdown) for the flags.
+
+The part worth understanding is why the drain waits on the _worker_ rather than
+on the database: marking an agent `Paused` is tcp-server's own write, and says
+only that a stop was requested. tcp-agent reports its real in-flight loop count,
+and that is what quiescence is measured against.
+
+```mermaid
+sequenceDiagram
+    participant W as tcp-cli.sh
+    participant C as tcp-cli (node)
+    participant S as tcp-server
+    participant R as Redis (pub/sub)
+    participant A as tcp-agent
+    participant D as Docker
+
+    C->>S: POST /api/system/shutdown { force? }
+    S->>S: mark draining — new work now 503s
+    S->>S: mark each Running agent Paused (pauseReason: shutdown)
+    S->>R: PUBLISH tcp:shutdown:command { drain | force }
+    S-->>C: { state: draining, agentsRunning }
+
+    R->>A: command received
+    A->>A: worker.pause() — take no new jobs
+    Note over A: drain: let each loop reach its next<br/>tool-boundary checkpoint and exit<br/>force: abort in-flight LLM calls now
+    loop until zero
+        A->>R: PUBLISH tcp:shutdown:status { activeAgents }
+        R->>S: relayed
+        C->>S: GET /api/system/shutdown (poll)
+        S-->>C: { state, agentsRunning }
+    end
+
+    S-->>C: { state: quiesced }
+    C-->>W: exit 0
+    W->>D: docker compose stop
+```
+
+A `DELETE /api/system/shutdown` at any point cancels the drain and publishes
+`cancel`, handing the worker back. Agents the drain already paused stay paused —
+resume them explicitly.
 
 Agents paused by a drain keep their LangGraph checkpoints and stay paused
 across a restart; resume them explicitly when you are ready to spend tokens

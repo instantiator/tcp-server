@@ -36,6 +36,7 @@ therefore run alongside a dev stack (or each other) without conflict.
 
 | Script                                               | Purpose                                                              | Requires              |
 | ---------------------------------------------------- | -------------------------------------------------------------------- | --------------------- |
+| [setup-wizard.sh](#setup-wizardsh)                   | Interactive first-time environment configuration                     | Node                  |
 | [start-deployment.sh](#start-deploymentsh)           | Start a named Docker Compose stack and bootstrap Zitadel             | Docker                |
 | [start-dev.sh](#start-devsh)                         | Start the local dev environment (delegates to `start-deployment.sh`) | Docker                |
 | [stop-dev.sh](#stop-devsh)                           | Stop the dev environment; optionally remove volumes                  | Docker                |
@@ -48,6 +49,24 @@ therefore run alongside a dev stack (or each other) without conflict.
 | [run-e2e-tests.sh](#run-e2e-testssh)                 | E2E tests — HTTP API workflows                                       | Docker                |
 | [manual-verify.sh](#manual-verifysh)                 | Interactive scenario walkthrough with human checks                   | Running stack         |
 | [run-stub-llm.sh](#run-stub-llmsh)                   | Run `tcp-stub-llm` from source, for manual testing                   | Node                  |
+| [check-migrations.sh](#check-migrationssh)           | Diagnostic report of entity-vs-schema migration drift                | Docker                |
+
+## setup-wizard.sh
+
+Interactive first-time configuration (`npm run setup` runs the same wizard
+directly). Asks about the instance name, ports, LLM and embedding providers,
+OIDC, and resource limits, then writes a commented `.env.<instance>` plus a
+gitignored `.env.<instance>.local` for the secrets. Probes the chosen embedding
+model for its dimension, and generates a Docker Compose override when the
+answers need one.
+
+```bash
+npm run setup              # or: ./scripts/setup-wizard.sh
+```
+
+Manual `.env` editing remains a supported fallback — the wizard is a
+convenience, not a gate. See
+[ADR-018](ADRs/ADR-018-system-configuration-setup-wizard.md).
 
 ## start-deployment.sh
 
@@ -355,6 +374,26 @@ TypeScript, run by Node's native type-stripping), for manual testing. See
 | `--port <n>`      | Port to listen on              | `3002`  |
 
 **Requires:** Node.
+
+## check-migrations.sh
+
+Reports how the TypeORM entities and the migrated schema differ, by generating a
+throwaway migration against a live PostgreSQL and printing it.
+
+**Diagnostic only — never a gate.** Some drift is permanent and expected: the
+entities deliberately leave `Date` columns untyped so the same models work
+against SQLite, so every `timestamptz` column is reported forever (see
+[database.md → Timestamp storage convention](database.md#timestamp-storage-convention)).
+pgvector columns and index names drift the same way. Read the output; don't
+automate on it.
+
+```bash
+./scripts/check-migrations.sh
+```
+
+**Requires:** Docker (for a PostgreSQL to diff against).
+
+See also: [docs/db-migrations.md](db-migrations.md).
 
 ## run-all-tests.sh
 

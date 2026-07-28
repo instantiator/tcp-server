@@ -84,10 +84,16 @@ Events (non-exhaustive — see [ADR-015](ADRs/ADR-015-agent-completion-sse.md) f
 
 ## Audit log
 
-Compaction activity is written to the `audit_events` table as `Decision` events with payloads:
+Compaction activity is written to the `audit_event` table under its own
+`compaction` event type, discriminated by `payload.phase`:
 
-- `compaction_triggered` — before compaction, with token counts and strategies
-- `compaction_complete` — after compaction, with updated token counts and per-activity log
+- `started` — before compaction, with token counts and strategies
+- `complete` — after compaction, with updated token counts and per-activity log
+
+Since 010.5.1 these rows are the SSE events too — `AuditService.write` persists
+each one and then publishes it, so there is no separate emit. (They were
+previously `decision` events carrying an `event: compaction_*` payload field,
+mirrored by a parallel SSE emit; see [ADR-008](ADRs/ADR-008-audit-logging.md).)
 
 ## Architecture
 

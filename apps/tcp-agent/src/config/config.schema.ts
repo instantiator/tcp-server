@@ -9,9 +9,8 @@ export const configSchema = Joi.object({
   PORT: Joi.number().default(3001),
   DATABASE_URL: Joi.string().required(),
   REDIS_URL: Joi.string().required(),
-  MINIO_ENDPOINT: Joi.string().required(),
-  MINIO_ACCESS_KEY: Joi.string().required(),
-  MINIO_SECRET_KEY: Joi.string().required(),
+  // No MINIO_* here: tcp-agent never constructs an S3 client. Every storage
+  // action it takes goes through tcp-server's /internal/storage/* endpoints.
   MCP_STORAGE_URL: Joi.string().uri().optional(),
   MCP_MEMORY_URL: Joi.string().uri().optional(),
   MCP_INTERACTIONS_URL: Joi.string().uri().optional(),

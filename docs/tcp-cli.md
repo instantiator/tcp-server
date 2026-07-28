@@ -108,6 +108,9 @@ See [schema.md](schema.md) for the full field reference, VS Code integration, ex
 | [`create-task`](#create-task)                               | `create-task -c <slug-or-id> -r <text> [--planner-role <slug-or-id>] [-m <paths...>] [-e <filenames...>] [--start]` | Create a task, optionally uploading materials and starting it                                 |
 | [`list-tasks`](#list-tasks)                                 | `list-tasks -c <slug-or-id>`                                                                                        | List a company's tasks                                                                        |
 | [`get-task`](#get-task)                                     | `get-task --task-id <uuid>`                                                                                         | Get a task, including its assignment statuses and QA outcomes                                 |
+| [`set-task`](#set-task)                                     | `set-task --task-id <uuid> [-i <json>]`                                                                             | Edit an unstarted task's request, planner, materials or expected outputs                      |
+| [`set-planner`](#set-planner)                               | `set-planner (--company <slug-or-id> \| --task-id <uuid>) --role <slug-or-id>`                                      | Set a company's default planner role, or an unstarted task's                                  |
+| [`start-task`](#start-task)                                 | `start-task --task-id <uuid>`                                                                                       | Start a task that was created earlier                                                         |
 | [`cancel-task`](#cancel-task)                               | `cancel-task --task-id <uuid>`                                                                                      | Cancel a task and its still-non-terminal assignments/agents                                   |
 | [`list-agents`](#list-agents)                               | `list-agents (--role \| --company <slug-or-id>) [--filter k=v...]`                                                  | List agents for a role or company                                                             |
 | [`list-assignments`](#list-assignments)                     | `list-assignments (--task-id <uuid> \| --company <slug-or-id>) [--filter k=v...]`                                   | List assignments for a task or company                                                        |
@@ -313,7 +316,7 @@ mid-session, it is renewed automatically using the refresh token (provided via
 `-T` or obtained from the initial username+password grant).
 
 If the agent consults another role mid-chat and that consultation fails (the consulted
-agent errors, times out, or never calls `complete_task` despite reminders), the failure
+agent errors, times out, or never calls `complete_assignment` despite reminders), the failure
 is reported back to your agent, which decides how to proceed — you get a real answer
 (possibly one that explains the failure) instead of the chat hanging until the timeout.
 

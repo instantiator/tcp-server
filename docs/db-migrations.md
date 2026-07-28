@@ -104,7 +104,9 @@ revert multiple steps.
   that no longer exist on the entity — a production data loss risk.
 - **Always commit the entity and migration together.** A migration without an entity
   change (or vice versa) leaves the codebase in an inconsistent state.
-- **Always register new migration classes in `app.module.ts`.** Globs do not work in
-  the webpack bundle. Forgetting this means the migration will never run.
+- **Always register new migration classes in `migrations-list.ts`.** Globs do not work in
+  the webpack bundle. Forgetting this means the migration will never run — and the
+  TypeORM CLI's own `data-source.ts` uses a glob, so it will happily run a migration
+  the deployed app never sees.
 - **Never edit a migration that has already been applied** to a shared environment.
   Create a new migration to correct it instead.

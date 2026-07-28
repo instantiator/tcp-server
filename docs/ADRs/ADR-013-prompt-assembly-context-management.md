@@ -100,6 +100,8 @@ A `// TODO` comment marks the drop-messages intervention point in `ContextCompac
 
 **Per-role thresholds**: `TRIGGER_PCT` and `TARGET_PCT` are global constants. Per-role tuning via `TcpRole.runConfig` JSONB is deferred; ponytail comments mark the location in `ContextBudgetService`.
 
+<a id="amendments-as-implemented-0086"></a>
+
 ## Amendments as implemented (008.6)
 
 A real end-to-end test (an agent consulting another over a task) surfaced two compounding gaps this ADR's original design didn't account for, both now fixed:
@@ -114,10 +116,14 @@ Also implemented:
 - **Tool-schema gating (describe-then-reveal), removed in 010.2.8.2 — see that section below.** `ToolVisibilityTracker` kept only each MCP server's own `describe_server` tool bound until the agent called it, at which point that server's other tools became bound for a small number of iterations before being hidden again. The `interactions` server was exempt (its tools are essential control-flow calls that must stay reachable, and it has few enough tools that gating it saved little context anyway). At the time, this was the single biggest lever for supporting models with smaller context windows, since tool-schema overhead (point 1 above) scales with the number of MCP servers loaded — 010.2.8.2 replaced it with static mode-based tool filtering instead.
 - **Root cause of the originally reported bug**: a consultation-resolution tool call (or `complete_task`) mutates the agent's DB status, but the LangGraph `tools → agent` edge would still route back to the `agent` node for one more (unwanted, context-length-risking) model call unless something actually stops it. Breaking the event-consumption loop is not enough — it doesn't reliably stop LangGraph's own internal execution. `interruptAfterTools: true` fixes this structurally: the graph cannot proceed past a tool result without the runner explicitly resuming it, so a terminal-status check between iterations reliably prevents the wasted call.
 
+<a id="amendments-as-implemented-0092"></a>
+
 ## Amendments as implemented (009.2)
 
 - **`{{date}}` duplication removed**: the identical `new Date().toISOString().split('T')[0]` snippet in `agent-loop.service.ts` and `chat.service.ts` (prompt part 0) is now `buildPromptDateVars(company)` (`libs/tcp-shared/src/llm/prompt-vars.ts`), which also adds `{{datetime}}` (an explicit, human-labeled UTC timestamp — the LLM's authoritative "now"), `{{timezone}}`, and `{{localDatetime}}` (re-rendered via `Intl.DateTimeFormat` against the new `TcpCompany.timezone` field). The UTC anchor is always present; region/local time is additional context, never a replacement.
 - **`estimate-context-window` CLI verb** (`tcp-cli`) reuses `ContextBudgetService` to project a role's worst-case initial-prompt token footprint (system prompt + role prompt + company context + services message + task query + RAG estimate) plus `n` further turns, against the resolved LLM's context window — a pre-flight sizing check ahead of the proactive/reactive budget enforcement described above, not a replacement for it. See `docs/tcp-cli.md#estimate-context-window`.
+
+<a id="amendments-as-implemented-01024"></a>
 
 ## Amendments as implemented (010.2.4)
 
@@ -125,12 +131,16 @@ Also implemented:
 - **Prompt-part construction extracted to `apps/tcp-agent/src/agent/prompt-assembly.ts`.** `AgentLoopService.buildInitialState` was an inline monolith; the per-part builders (`renderSystemPrompt`, `buildServicesMessage`, `buildRagMessage`, and the new `buildAssignmentMessage`) are now pure, unit-tested functions there, and `buildInitialState` is a thin composition. Material/expected artifact keys are resolved via `resolveArtifactKey`, moved to `@tcp/shared` (`storage/artifact-keys.ts`, re-exported from tcp-server's `storage-keys.ts`) so tcp-agent can reach it.
 - **Modes `plan`/`qa` exist but are not yet dispatched** (parts 5/7). Their mode prompts name `create_plan`/`assure_assignment`; `implement` still names the current `complete_task` (renamed to `complete_assignment` in part 5 — `TODO(010.2.5)`). `requiredToolForMode(mode)` (same module) seeds `TcpAgent.requiredToolCalls` at creation, preserving the prior default `['complete_task']` for implement mode.
 
+<a id="amendments-as-implemented-01028"></a>
+
 ## Amendments as implemented (010.2.8)
 
 _2026-07-13._
 
 - **Prompt-assembly moved to `@tcp/shared` and shared by both operation paths.** The pure per-part builders (`renderSystemPrompt`, `buildServicesMessage`, `buildRagMessage`, `buildAssignmentMessage`) now live in `libs/tcp-shared/src/prompts/prompt-assembly.ts` (relocated from `apps/tcp-agent/src/agent/prompt-assembly.ts`). Both `AgentLoopService.buildInitialState` (tcp-agent worker runs) and `ChatService` (tcp-server in-process chat turns) build their first-turn message list from these same builders — the chat path previously duplicated its own `buildServicesMessage`/`buildRagMessage` and rendered a bare user message as part 4. The two tcp-agent-specific fixed strings the builders closed over are now passed in as a `PromptAssemblyStrings` argument (tcp-agent supplies its jsonc-loaded `agentPrompts`; tcp-server supplies its own equivalent set); the MCP `usage` lookup uses the already-shared `MCP_REGISTRY`.
 - **The chat path now renders the mode-aware part 4.** A chat agent carries a `chat`-mode orphan assignment (see [ADR-010 010.2.8 amendment](ADR-010-orchestration-design.md#amendments-as-implemented-01028)); `ChatService` renders part 4 via `buildAssignmentMessage` with `MODE_PROMPTS.chat`, so a conversational agent now knows it is in a conversation rather than inferring it from the role prompt. Chat behaviour is otherwise preserved: SSE streaming, per-turn user message on resume turns, RAG overflow-guarding, and returning the agent to `Idle` after each turn (`requiredToolCalls: []` keeps required-tool enforcement out of a chat turn).
+
+<a id="amendments-as-implemented-010282"></a>
 
 ## Amendments as implemented (010.2.8.2)
 

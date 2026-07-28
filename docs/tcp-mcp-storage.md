@@ -43,6 +43,7 @@ Assignment-scoped working files (filename-only; write tools are read-only in qa 
 | `replace_in_working_file`     | `replace_in_working_file(filename, find, replace)`   | Replace every occurrence of `find`                                |
 | `delete_working_file`         | `delete_working_file(filename)`                      | Soft-delete a working file                                        |
 | `restore_working_file`        | `restore_working_file(filename)`                     | Restore a soft-deleted working file                               |
+| `rename_working_file`         | `rename_working_file(filename, newFilename)`         | Rename a working file within the working directory                |
 
 Assignment-scoped materials (read-only):
 
@@ -62,7 +63,7 @@ Returns a markdown overview of the storage service: available tools and path con
 
 **Returns:** Markdown text listing all tools and a note on path format.
 
-**Usage pattern:** Agents should call this first when they discover the storage server is available. Prompt part 3 directs agents to do this automatically.
+**Usage pattern:** useful when an agent wants an orientation on what the storage server offers. It is not a precondition for anything.
 
 **Tool-schema gating:** removed in 010.2.8.2 — all tools in this table are bound to the model from turn 1 (subject to mode filtering; see [Agent Services → Enabling MCP tools](agent-services.md#enabling-mcp-tools-for-a-role) and [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-010282)), not gated behind a `describe_server` call.
 
@@ -74,27 +75,25 @@ Returns a canned description of what a given folder path is for, based on the [A
 
 **Arguments:**
 
-| Parameter | Type   | Required | Description                                                   |
-| --------- | ------ | -------- | ------------------------------------------------------------- |
-| `path`    | string | yes      | Folder path prefix to describe (e.g. `acme/tasks/abc/output`) |
+| Parameter | Type   | Required | Description                                                      |
+| --------- | ------ | -------- | ---------------------------------------------------------------- |
+| `path`    | string | yes      | Folder path prefix to describe (e.g. `acme/tasks/abc/completed`) |
 
 **Returns:** A short prose description of the folder's purpose and conventions.
 
-**Recognised path patterns:**
+**Recognised path patterns** (matched in this order — the first hit wins):
 
-| Pattern                       | Description                                           |
-| ----------------------------- | ----------------------------------------------------- |
-| `.../tasks/.../materials`     | Task inputs — read-only after task creation           |
-| `.../tasks/.../output`        | Agent working area during task execution              |
-| `.../knowledge/...`           | RAG source documents — treat as read-only from agents |
-| `.../finished/reports`        | Reviewed report artefacts                             |
-| `.../finished/specifications` | Reviewed technical/functional specs                   |
-| `.../finished/designs`        | Reviewed design documents                             |
-| `.../finished/code`           | Reviewed code artefacts                               |
-| `.../finished/other`          | Stable artefacts not in a named category              |
-| `.../audit/...`               | Append-only JSONL audit records — do not modify       |
+| Pattern                                    | Description                                                      |
+| ------------------------------------------ | ---------------------------------------------------------------- |
+| `.../tasks/.../materials`                  | Task inputs — read-only after task creation                      |
+| `.../tasks/.../completed` (not assignment) | The task's final deliverables                                    |
+| `.../working`                              | An assignment's private working area                             |
+| `.../assignments/.../completed`            | Files promoted from an assignment's working area once QA accepts |
+| `.../knowledge/...`                        | RAG source documents — treat as read-only from agents            |
+| `.../audit/...`                            | Append-only JSONL audit records — do not modify                  |
 
 Unrecognised paths return a generic message and suggest using `list_files` to explore.
+The descriptions themselves live in `apps/tcp-mcp-storage/src/prompts.jsonc`.
 
 ---
 
@@ -113,7 +112,7 @@ Lists all files (object keys) under a given path prefix, excluding soft-deleted 
 ```json
 [
   {
-    "key": "acme/tasks/abc/output/report.md",
+    "key": "acme/tasks/abc/completed/report.md",
     "size": 4096,
     "lastModified": "2026-06-01T12:00:00.000Z"
   }
@@ -130,9 +129,9 @@ Reads the full text content of a single file.
 
 **Arguments:**
 
-| Parameter | Type   | Required | Description                                                 |
-| --------- | ------ | -------- | ----------------------------------------------------------- |
-| `path`    | string | yes      | Object key to read (e.g. `acme/tasks/abc/output/notes.txt`) |
+| Parameter | Type   | Required | Description                                                    |
+| --------- | ------ | -------- | -------------------------------------------------------------- |
+| `path`    | string | yes      | Object key to read (e.g. `acme/tasks/abc/materials/brief.txt`) |
 
 **Returns:** The file's text content, or `"File not found: {path}"` if the key does not exist.
 
@@ -152,6 +151,7 @@ These tools operate on the caller's own working directory (or, in qa mode, the a
 - **`append_working_file(filename, content)`** — appends `content`, **creating the file if absent**. The resulting document is validated (same rules as a direct write); returns `"Created working file: {filename}"` or `"Appended to working file: {filename}"`. In qa mode: `"Not available in qa mode…"`.
 - **`replace_in_working_file(filename, find, replace)`** — replaces **all** occurrences of the literal string `find`, validates the result, and returns `"Replaced {N} occurrence(s) in working file: {filename}"`. Errors if the file is missing or `find` occurs zero times.
 - **`delete_working_file(filename)`** / **`restore_working_file(filename)`** — soft-delete and restore, using the same `_deleted/` mechanism as the internal `delete`/`restore` endpoints.
+- **`rename_working_file(filename, newFilename)`** — renames a file within the working directory; both names are validated the same way, so a rename can't move a file out of the working area.
 
 Backed by `POST /internal/storage/write` (`create_working_file`, returns `key`/`size`), `POST /internal/storage/append` (returns `created`) and `POST /internal/storage/replace` (returns `count`), plus the existing `list`/`read`/`properties`/`delete`/`restore` endpoints.
 
@@ -199,7 +199,7 @@ Returns metadata for a file without reading its content body.
 ```json
 {
   "exists": true,
-  "key": "acme/tasks/abc/output/report.md",
+  "key": "acme/tasks/abc/completed/report.md",
   "size": 4096,
   "contentType": "text/markdown",
   "lastModified": "2026-06-01T12:00:00.000Z"
@@ -244,11 +244,15 @@ Paths are object keys relative to the bucket root. They follow the ADR-007 struc
 
 Do not include a leading `/`. Examples:
 
-| Path                                      | Meaning                               |
-| ----------------------------------------- | ------------------------------------- |
-| `acme/tasks/abc123/output/analysis.md`    | Agent output for task `abc123`        |
-| `acme/knowledge/analyst/policies.md`      | RAG source doc for the `analyst` role |
-| `acme/finished/reports/abc123/summary.md` | Promoted stable report                |
+| Path                                                  | Meaning                                |
+| ----------------------------------------------------- | -------------------------------------- |
+| `acme/tasks/abc123/materials/brief.md`                | A material supplied with task `abc123` |
+| `acme/tasks/abc123/assignments/2/working/analysis.md` | Step 2's agent's working file          |
+| `acme/tasks/abc123/completed/report.md`               | A final deliverable of task `abc123`   |
+| `acme/knowledge/analyst/policies.md`                  | RAG source doc for the `analyst` role  |
+
+See [shared-storage.md → Folder structure](shared-storage.md#folder-structure)
+for the full tree.
 
 ### Soft-delete prefix
 

@@ -46,6 +46,8 @@ LangGraph models agent execution as a state graph where nodes are actions (call 
 - LangGraph.js is actively maintained by LangChain Inc. as of 2026. Verify dependency health before first use (per `dev-environment/pre-coding-activities.md`).
 - A role's graph definition (which tools it has, which nodes are in its loop) is likely static per role type — but the inputs (prompts, context, MCP servers) vary per task step.
 
+<a id="amendment-as-implemented-01029"></a>
+
 ## Amendment as implemented (010.2.9)
 
 Two pieces of the Decision above didn't end up matching the built system:

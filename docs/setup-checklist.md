@@ -38,8 +38,10 @@ into `.git/hooks/`. Pre-commit formats, regenerates `schemas/schema.json` and
 `docs/licenses.md`, and stages the results into the commit; pre-push re-checks
 typecheck/lint/build and migration drift, then runs the unit, integration, and
 e2e test tiers — it does not regenerate anything itself. See
-[docs/schema.md](schema.md) for more on the schema hook, and bypass either
-hook with `--no-verify` when needed.
+[docs/schema.md](schema.md) for more on the schema hook.
+
+A failing hook is reporting a real problem — fix what it says rather than
+passing `--no-verify`.
 
 ## 4. Configure environment variables
 
@@ -70,8 +72,9 @@ id/secret in that same `.local` file. See [ADR-018 §7](ADRs/ADR-018-system-conf
 docker compose up -d
 ```
 
-This starts PostgreSQL, Redis, and MinIO. tcp-server and tcp-agent are built
-and started from the Docker images.
+This starts PostgreSQL, Redis, and MinIO, then builds and starts tcp-server,
+tcp-agent, and the four MCP servers. See [docs/services.md](services.md) for
+the full list.
 
 On first boot, Docker pulls the base images and npm installs inside the build —
 expect this to take several minutes.
@@ -79,20 +82,27 @@ expect this to take several minutes.
 ## 6. Verify services are healthy
 
 ```bash
-curl http://localhost:3000/health   # tcp-server: database + MinIO + OIDC
-curl http://localhost:3001/health   # tcp-agent
+curl http://localhost:3000/health   # tcp-server: database + Redis + MinIO + OIDC
+docker compose exec tcp-agent curl -s http://localhost:3001/health   # tcp-agent: database + Redis
 ```
+
+tcp-agent is a worker and is not published to the host, so its health endpoint
+is reached from inside the container (or from another service on the Compose
+network).
 
 Both should return HTTP 200. If tcp-server returns 503, check
 `docker compose logs tcp-server` — the most common cause is a dependency
 (PostgreSQL or MinIO) that hasn't finished starting yet. Wait 10–20 seconds
 and retry.
 
-| Service        | URL                   |
-| -------------- | --------------------- |
-| tcp-server API | http://localhost:3000 |
-| tcp-agent      | http://localhost:3001 |
-| MinIO console  | http://localhost:9001 |
+| Service        | URL                           |
+| -------------- | ----------------------------- |
+| tcp-server API | http://localhost:3000         |
+| Swagger UI     | http://localhost:3000/swagger |
+| MinIO console  | http://localhost:9001         |
+
+tcp-agent and the MCP servers are internal-only by default; start with
+`./scripts/start-deployment.sh --dev-ports` to publish them.
 
 ## 7. (Optional) Set up authentication with Zitadel
 

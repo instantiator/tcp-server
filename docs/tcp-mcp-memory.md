@@ -33,7 +33,7 @@ Returns a markdown overview of the memory service and its tools.
 
 **Returns:** Markdown text listing all tools and usage guidance.
 
-**Usage pattern:** Agents should call this first when they discover the memory server is available. Prompt part 3 directs agents to do this automatically.
+**Usage pattern:** useful when an agent wants an orientation on what the memory server offers. It is not a precondition for anything.
 
 **Tool-schema gating:** removed in 010.2.8.2 — `recall`, `remember`, and `search_knowledge` are bound to the model from turn 1, like every other mode-filtered tool (see [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-010282)).
 
@@ -56,7 +56,7 @@ Runs a hybrid semantic search across both episodic memory (`episodic_memory` tab
 
 **Behaviour when no embedding config exists:** Returns an informative message directing the agent to use the RAG context already injected into its initial prompt instead.
 
-**Similarity threshold:** 0.5 (cosine) — lower than the 0.7 threshold used by the automatic RAG injection (prompt part 5), since this is an agent-initiated on-demand search rather than a fixed initial-prompt query. Results below this threshold are discarded. The top-k limit is applied after threshold filtering.
+**Similarity threshold:** `recall` keeps its own cut-off (0.5 cosine) rather than the role's `runConfig.ragThreshold`, because it runs a hybrid query across episodic memory as well as knowledge, and it is an agent-initiated on-demand search rather than a fixed initial-prompt query. Results below the threshold are discarded; the top-k limit is applied afterwards. Every other retrieval path — including `search_knowledge` — goes through `KnowledgeRetrievalService` and uses the role's own threshold (see [Tuning RAG retrieval](development.md#tuning-rag-retrieval)).
 
 **Relationship to RAG injection:** The automatic RAG injection (prompt part 5) runs once before the first LLM call, using the initial task prompt as the query. `recall` is an on-demand search that the agent can call at any point mid-task, with any query.
 

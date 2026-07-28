@@ -70,6 +70,8 @@ The `TcpCompany` entity will be extended to include:
 - Monorepo structure (npm workspaces or NX) vs. separate repositories — defer until tcp-agent scaffolding begins
 - Whether the BullMQ queue needs a dead-letter queue for failed agent jobs — note for ADR-010
 
+<a id="amendment-as-implemented-01029"></a>
+
 ## Amendment as implemented (010.2.9)
 
 The decision above ("Two services") undersold what was actually built. As implemented:

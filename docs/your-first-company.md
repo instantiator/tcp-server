@@ -6,38 +6,19 @@ Once you have prepared your deployment with the [setup checklist](setup-checklis
 
 ### 0.0 Prerequisites
 
+You need **Docker** and **Node.js 24**, and a `bash` shell (macOS or Linux —
+every script in this repository assumes one). Then:
+
+```bash
+git clone --recurse-submodules https://github.com/instantiator/tcp-server.git
+cd tcp-server
+npm install
+```
+
 > [!NOTE]
-> These are the bare minimum pre-requisites. Developers should follow steps at: [Developer setup checklist](./setup-checklist.md)
-
-> [!TIP]
-> The scripts in this repository use the `bash` shell by default. Run on a system with `bash` available - ie. Mac OS or Linux.
-
-1. [Install Docker](https://docs.docker.com/get-started/get-docker/)
-
-   ```bash
-   # If you prefer to use Homebrew, here's the invocation
-   brew install --cask docker-desktop
-   ```
-
-2. [Install NodeJS](https://nodejs.org/en/download)
-
-   ```bash
-   # If you prefer to use Homebrew, here's the invocation
-   brew install node
-   ```
-
-3. Clone this repository
-
-   ```bash
-   git clone https://github.com/instantiator/tcp-server.git
-   ```
-
-4. Install packages
-
-   ```bash
-   cd tcp-server
-   npm install
-   ```
+> This is the bare minimum to follow this walkthrough. If you are going to work
+> on the code, follow the [Developer setup checklist](./setup-checklist.md)
+> instead — it covers git hooks, environment configuration, and the test tiers.
 
 ### 0.1 Launch a dev instance
 
@@ -147,7 +128,7 @@ LLM_API_KEY=<your API key goes here>
 Pipe it into `tcp-cli.sh` with the `set-company` verb:
 
 ```bash
-cat scripts/companies/test-data/companies/simple-company.json | tcp-cli.sh set-company
+cat scripts/test-data/companies/simple-company.json | ./tcp-cli.sh set-company
 ```
 
 > [!NOTE]
@@ -268,7 +249,7 @@ Using the `chat` verb allows you create an **agent** from a defined **role** and
 The `chat` verb has several options:
 
 - `-r` / `--role-id`, or `--role-slug` (needs `--company-id`/`--company-slug` alongside it — role slugs are only unique within a company) - a role to talk to
-- `-c` / `--company-id`, or `--company-slug` - the company context (mutually exclusive with a role identifier - provide exactly one)
+- `-c` / `--company-id`, or `--company-slug` - the company that scopes a `--role-slug` (role slugs are unique only within a company). `chat` always needs a role; to browse a company's roster without picking one first, use `tui` instead
 - `-q` / `--query` - provide the query or prompt for your agent as a parameter (requires a role)
 - `--hide-reasoning` - doesn't show the reasoning stream before an answer
 - `--no-tui` - disables the full-screen TUI in favour of a plain scrolling renderer; still interactive on its own (a readline prompt) - combine with `--query` for fully non-interactive, pipeable output

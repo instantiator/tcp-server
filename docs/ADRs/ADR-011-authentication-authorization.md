@@ -82,13 +82,45 @@ The `CompanyMembership` entity described here was simplified. The implemented en
 - **`CompanyUser` entity** in `libs/tcp-shared/src/models/`: `(id, companyId, identifier, name, memberType, roles[], knowledgeDomains[], createdAt)`. Used for query routing in the conversation flow.
 - Since 009.2: `POST /api/company` auto-creates a `CompanyUser` with `memberType: 'creator'` for the requesting user (from the JWT `sub`/`email` claims), skipped if one already exists for that `(companyId, identifier)` pair.
 - `GET /api/company/:companyId/users`, `POST /api/company/:companyId/users`, `PATCH /api/company/:companyId/users/:userId`, `DELETE /api/company/:companyId/users/:userId` — full CRUD
-- Keycloak setup documented in `docs/keycloak-setup.md`
+- IdP setup documented (Keycloak at the time; see the 010.7 amendment below for the move to Zitadel)
 - `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` required at startup (validated by ConfigModule)
 
 ### Deferred
 
 - Full `CompanyMembership` permission flag system (`create_tasks`, `initiate_conversations`, etc.) — no decorator or per-endpoint enforcement exists yet; `JwtAuthGuard` only proves _who_ the caller is, not what they're allowed to do
 - `POST /users` and `PATCH /users/:id/status` Keycloak proxy endpoints — deferred
+
+<a id="amendments-as-implemented-0107"></a>
+
+## Amendments as implemented (010.7) — Zitadel replaces Keycloak
+
+The identity-provider sub-decision recorded above chose Keycloak. That choice is
+superseded by [ADR-017](ADR-017-oidc-provider-selection.md): the bundled provider
+is **Zitadel**, and the migration is complete. The authentication _design_ is
+unchanged — any standards-compliant OIDC provider still works, tokens are still
+validated against the provider's JWKS, and `JwtAuthGuard` still guards every
+user-facing controller. What changed is which provider ships in the box, and a
+few things that follow from it:
+
+- **`docs/keycloak-setup.md` no longer exists.** Setup is documented in
+  [docs/zitadel-setup.md](../zitadel-setup.md), with the provider-agnostic
+  picture in [docs/authentication.md](../authentication.md).
+- **The IdP-admin proxy endpoints (`POST /users`, `PATCH /users/:id/status`)
+  are dropped, not merely deferred.** They existed to wrap Keycloak's admin API;
+  nothing replaced them, and user administration is done in the provider's own
+  console.
+- **Zitadel must issue JWTs, not its default opaque tokens.** Every OIDC
+  application and machine user needs `accessTokenType: OIDC_TOKEN_TYPE_JWT`
+  (apps) or `ACCESS_TOKEN_TYPE_JWT` (machine users), or JWKS verification cannot
+  parse the token at all. `scripts/start-deployment.sh` sets this for everything
+  it creates.
+- **Token acquisition moved from ROPC to the OAuth 2.0 Device Authorization
+  Grant.** Zitadel does not support the password grant under any configuration,
+  so `tcp-cli get-token` proxies the device flow through tcp-server
+  (`POST /api/auth/device`), keeping the client secret server-side.
+
+The gap this ADR names in Consequences — no per-action permission enforcement —
+is unaffected and still open.
 
 ## Consequences
 

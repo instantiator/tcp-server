@@ -222,7 +222,7 @@ key file rather than a rotating shared secret). The generate-then-capture flow
 is idiomatic for Zitadel and, once captured into the gitignored `.local`, is
 safe — so the extra moving part wasn't warranted.
 
-See [010.8.4 - config resolution plan](../prompts/010.8.4%20-%20config%20resolution%20plan.md).
+See [010.8.4 - config resolution plan](../prompts/phase%2001%20-%20service/010.8.4%20-%20config%20resolution%20plan.md).
 
 ## Consequences
 
