@@ -10,8 +10,10 @@ rules:
   security/hardcoded-secret: warning
 
 ci:
-  # Current score is 73; ratchet this up as the remaining warnings are cleaned
-  # up. 011.1.4 decomposed the 8 server/agent-side oversized files, leaving 4
-  # file-too-large findings — all CLI/TUI files owned by 011.1.5, which also
-  # owns the remaining duplicate-block warnings.
-  failBelow: 71
+  # Current score is 76; ratchet this up as the remaining warnings are cleaned
+  # up. 011.1.5 decomposed the 4 CLI/TUI oversized files, leaving one
+  # file-too-large finding: tui.ts, which owns the terminal-kit Document and
+  # its widgets as a single lifecycle — see the note at the top of that file.
+  # The remaining duplicate-block warnings are in server-side files, outside
+  # both sub-plans' scope.
+  failBelow: 74

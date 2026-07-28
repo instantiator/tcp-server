@@ -13,13 +13,9 @@
 import type { TaskChangeSummary, WireEvent } from '@tcp/shared';
 import { EventEmitter } from 'events';
 import { ScreenBuffer } from 'terminal-kit';
-import {
-  interpretKey,
-  resolveTaskListEntryMaxLines,
-  Tui,
-  tuiRenderer,
-  TuiTerminal,
-} from './tui';
+import { resolveTaskListEntryMaxLines, Tui, TuiTerminal } from './tui';
+import { interpretKey } from './tui-keys';
+import { tuiRenderer } from './tui-renderer';
 
 function taskSummary(
   overrides: Partial<TaskChangeSummary> = {},

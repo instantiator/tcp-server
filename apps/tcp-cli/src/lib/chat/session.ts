@@ -1,174 +1,40 @@
-import type {
-  AuditWireEvent,
-  TcpAssignment,
-  TcpTask,
-  TaskChangeSummary,
-  WireEvent,
-} from '@tcp/shared';
-import type { UUID } from 'crypto';
+import type { TaskChangeSummary, TcpTask } from '@tcp/shared';
 import { GlobalOptions } from '../core/cli-options';
 import { TokenManager, TokenSession } from '../auth/token';
-import { createRenderer, Renderer } from '../core/render';
-import { parseWireEvents } from '../core/sse';
 import { readWireStream } from '../core/sse-reader';
+import { auditWire, failedWire, toWire } from '../render/audit-wire';
 import {
   AssignmentInfo,
   InitiateTaskSubmission,
   RoleOption,
   Tui,
-  tuiRenderer,
 } from '../tui/tui';
-
-/** Minimal shape of a history audit row (`GET /api/agent/:id/history`). */
-interface AuditRow {
-  id?: string;
-  timestamp: string;
-  companyId?: string;
-  role?: string;
-  agentId?: string | null;
-  assignmentId?: string | null;
-  taskId?: string | null;
-  eventType: string;
-  payload?: Record<string, unknown>;
-}
-
-/** Converts a persisted history row to the {@link AuditWireEvent} the render buffer consumes. */
-function toWire(row: AuditRow): AuditWireEvent {
-  return {
-    id: row.id,
-    timestamp: row.timestamp,
-    companyId: row.companyId ?? '',
-    role: row.role ?? '',
-    agentId: row.agentId ?? null,
-    assignmentId: row.assignmentId ?? null,
-    taskId: row.taskId ?? null,
-    eventType: row.eventType as AuditWireEvent['eventType'],
-    payload: row.payload ?? {},
-  };
-}
-
-/** Wraps a persisted/synthesized audit row as an `audit` {@link WireEvent}. */
-function auditWire(event: AuditWireEvent): WireEvent {
-  return { type: 'audit', event };
-}
-
-/** A synthetic terminal agent `state_change` (for locally-reported failures). */
-function failedWire(reason: string): WireEvent {
-  return auditWire({
-    timestamp: new Date().toISOString(),
-    companyId: '',
-    role: '',
-    agentId: null,
-    assignmentId: null,
-    taskId: null,
-    eventType: 'state_change',
-    payload: { entity: 'agent', newStatus: 'failed', reason },
-  });
-}
-
-interface AgentRecord {
-  id: string;
-  status: string;
-  assignmentId: string;
-}
-
-/** Plain shape of `GET /api/assignment/:id` — just what a pane's heading needs. */
-interface AssignmentRecord {
-  id: string;
-  shortcode: string | null;
-  status: string;
-  prompt: string;
-}
+import * as api from './session-api';
+import { TurnRunner } from './turn-runner';
+import { parseTaskChangeSummary, str } from './wire-parse';
 
 /** Statuses beyond which an assignment's working agent has nothing left to stream live. */
 const TERMINAL_AGENT_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 
-/** Plain shape of `GET /api/task?companyId=` rows — just what the task list needs. */
-interface TaskRecord {
-  id: string;
-  status: string;
-  request: string;
-  shortcode: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/** Result of watching one agent's turn to its terminal event. */
-type TurnOutcome = { response: string } | { error: string };
-
-/** Sentinel error signalling the SSE stream ended before a terminal event. */
-const STREAM_ENDED = 'stream ended before completion';
-
-/** Reads a string field from a record, defaulting to ''. */
-function str(obj: Record<string, unknown> | undefined, key: string): string {
-  const value = obj?.[key];
-  return typeof value === 'string' ? value : '';
-}
-
 /**
- * Parses an assignment's plan index back out of its shortcode's middle
- * segment (`{taskShortcode}-{planIndex}-{mode}`, e.g. `000-001-implement` →
- * `1`) — see `buildAssignmentShortcode`. Null for a null/malformed shortcode
- * (an orphan assignment, or a shape this client doesn't recognise).
- */
-function planIndexFromShortcode(shortcode: string | null): number | null {
-  const segment = shortcode?.split('-')[1];
-  const index = segment !== undefined ? Number(segment) : NaN;
-  return Number.isInteger(index) ? index : null;
-}
-
-/**
- * Validates and narrows a task `state_change`'s `payload.summary` into a
- * {@link TaskChangeSummary}, rather than trusting/casting it directly —
- * `null` for a summary missing its required fields.
- */
-function parseTaskChangeSummary(
-  data: Record<string, unknown> | undefined,
-): TaskChangeSummary | null {
-  if (!data || typeof data.id !== 'string' || typeof data.status !== 'string') {
-    return null;
-  }
-  return {
-    id: data.id as UUID,
-    status: data.status as TaskChangeSummary['status'],
-    request: typeof data.request === 'string' ? data.request : '',
-    shortcode: typeof data.shortcode === 'string' ? data.shortcode : '',
-    createdAt: typeof data.createdAt === 'string' ? data.createdAt : '',
-    updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : '',
-    completedSteps:
-      typeof data.completedSteps === 'number' ? data.completedSteps : 0,
-    totalSteps: typeof data.totalSteps === 'number' ? data.totalSteps : 0,
-  };
-}
-
-/** Resolves after `ms`, or immediately if the signal aborts. */
-function delay(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    signal.addEventListener('abort', () => {
-      clearTimeout(timer);
-      resolve();
-    });
-  });
-}
-
-/**
- * Owns one chat session's mutable state — its {@link TokenManager}, every
- * agent created (for cleanup), and each pane's in-flight turn — and the
- * operations that act on it: starting agent panes, running a turn
- * (post message → stream its events → resolve the outcome), and cleanup.
+ * Owns one chat session's mutable state — its {@link TokenManager}, every agent
+ * created (for cleanup), and its open event subscriptions — and the operations
+ * that act on it: starting agent panes, keeping the roster and task panels
+ * live, and cleanup.
  *
- * Kept as a class (rather than closures, as before this file was split out)
- * because nearly every operation shares this same mutable state; the class
- * just gives that state a name instead of a chain of captured variables.
+ * Turns themselves are run by {@link TurnRunner}; the REST calls live in
+ * {@link api}.
+ *
+ * NB. kept as a class (rather than closures, as before this file was split out)
+ * because nearly every operation shares this same mutable state; the class just
+ * gives that state a name instead of a chain of captured variables.
  */
 export class ChatSession {
   private readonly agentIds = new Set<string>();
-  /** In-flight turns keyed by pane (== agent) id; empty when idle. */
-  private readonly abortControllers = new Map<string, AbortController>();
   /** Owns the session's access token, refreshing it in the background so a
    * long-running TUI/chat session doesn't hit a stale-token 401. */
   private readonly tokenManager: TokenManager;
+  private readonly turns: TurnRunner;
   /** The company's tasks, keyed by id — kept live by {@link watchCompanyEvents}. */
   private readonly tasksById = new Map<string, TaskChangeSummary>();
   private companyEventsAbort: AbortController | null = null;
@@ -183,79 +49,69 @@ export class ChatSession {
   constructor(
     private readonly opts: GlobalOptions,
     readonly companyId: string,
-    private readonly hideReasoning: boolean,
+    hideReasoning: boolean,
     private readonly tui: Tui | null,
     tokens: TokenSession,
   ) {
     this.tokenManager = new TokenManager(this.opts.tcpServer, tokens);
+    this.turns = new TurnRunner(
+      this.tokenManager,
+      this.opts.tcpServer,
+      this.tui,
+      hideReasoning,
+    );
   }
 
   /** Whether any pane has a turn in flight. */
   get hasInFlightTurns(): boolean {
-    return this.abortControllers.size > 0;
+    return this.turns.hasInFlightTurns;
   }
 
   /** Whether `paneId` specifically has a turn in flight. */
   isBusy(paneId: string): boolean {
-    return this.abortControllers.has(paneId);
+    return this.turns.isBusy(paneId);
   }
 
   /** Aborts every in-flight turn (the agents continue running server-side). */
   abortAllTurns(): void {
-    for (const controller of this.abortControllers.values()) controller.abort();
-    this.abortControllers.clear();
+    this.turns.abortAll();
   }
 
-  /**
-   * Fetches the company's current role roster (used at startup and on
-   * refresh), sorted alphabetically by name.
-   */
+  /** Runs one turn on `paneId`'s agent — see {@link TurnRunner.runTurn}. */
+  async runTurn(
+    paneId: string,
+    message: string,
+    interactive: boolean,
+  ): Promise<void> {
+    await this.turns.runTurn(paneId, message, interactive);
+  }
+
+  /** Fetches the company's role roster (used at startup and on refresh). */
   async fetchRoles(): Promise<RoleOption[]> {
-    const roles = await this.tokenManager.request<RoleOption[]>(
-      'GET',
-      `/api/company/${this.companyId}/roles`,
-    );
-    return roles.sort((a, b) => a.name.localeCompare(b.name));
+    return api.fetchRoles(this.tokenManager, this.companyId);
   }
 
   /**
-   * Fetches the company's current tasks (used once at panel-open time, ahead
-   * of {@link watchCompanyEvents}'s live updates). Step counts aren't in this
-   * plain listing — placeholders here are corrected almost immediately by
-   * the company SSE stream's priming `task_changed` events.
+   * Fetches the company's current tasks, once at panel-open time, ahead of
+   * {@link watchCompanyEvents}'s live updates.
    */
   async fetchTasks(): Promise<TaskChangeSummary[]> {
-    const tasks = await this.tokenManager.request<TaskRecord[]>(
-      'GET',
-      `/api/task?companyId=${this.companyId}`,
-    );
-    for (const task of tasks) {
-      this.tasksById.set(task.id, {
-        id: task.id as UUID,
-        status: task.status as TaskChangeSummary['status'],
-        request: task.request,
-        shortcode: task.shortcode,
-        // Same discipline as parseTaskChangeSummary below: don't trust the
-        // wire shape blindly — a non-string date field must not reach
-        // RosterPane's `.localeCompare` sort and crash the TUI.
-        createdAt: typeof task.createdAt === 'string' ? task.createdAt : '',
-        updatedAt: typeof task.updatedAt === 'string' ? task.updatedAt : '',
-        completedSteps: 0,
-        totalSteps: 0,
-      });
-    }
+    const tasks = await api.fetchTasks(this.tokenManager, this.companyId);
+    for (const task of tasks) this.tasksById.set(task.id, task);
     return [...this.tasksById.values()];
   }
 
   /**
-   * Opens `GET /api/company/:id/events` in the background and keeps the
-   * roster pane's Tasks list live: `task_changed` upserts the one task named;
-   * `company_changed` is just a signal today (no company-detail view to
-   * refresh yet), so it's ignored. Aborted on {@link cleanup}.
+   * Opens `GET /api/company/:id/events` in the background and keeps the roster
+   * pane's Tasks list live.
+   *
+   * `task_changed` upserts the one task named; `company_changed` is just a
+   * signal today (no company-detail view to refresh yet), so it's ignored.
+   * Aborted on {@link cleanup}.
    */
   watchCompanyEvents(): void {
     this.companyEventsAbort = new AbortController();
-    const url = `${this.opts.tcpServer.replace(/\/$/, '')}/api/company/${this.companyId}/events`;
+    const url = `${this.baseUrl}/api/company/${this.companyId}/events`;
     void readWireStream(
       url,
       this.tokenManager.current,
@@ -279,8 +135,8 @@ export class ChatSession {
   /**
    * Reports a pane-triggered failure (initiate-chat/refresh on the roster,
    * cancel/start on a task panel) — into the pane's own log when it has one
-   * (an {@link AssignmentPane}), and always to stderr too, since the roster
-   * and task panels have no log of their own for `Tui.appendEvent` to reach.
+   * (an `AssignmentPane`), and always to stderr too, since the roster and task
+   * panels have no log of their own for `Tui.appendEvent` to reach.
    */
   reportPaneError(paneId: string, err: unknown): void {
     const message = String(err instanceof Error ? err.message : err);
@@ -289,88 +145,33 @@ export class ChatSession {
     process.stderr.write(`\nError: ${message}\n`);
   }
 
-  /**
-   * Fetches a task with its assignments, resolving each assignment's role id
-   * to its display name (an extra `GET /api/company/:id/roles` call) for the
-   * task panel's Assignments list. The two fetches are independent — a
-   * session's tasks always belong to its own `companyId` — so they run in
-   * parallel rather than waiting for the task fetch to learn its companyId.
-   */
+  /** Fetches a task with its assignments, for the task panel's list. */
   async fetchTaskDetail(
     taskId: string,
   ): Promise<{ task: TcpTask; assignments: AssignmentInfo[] }> {
-    const [{ task, assignments }, roles] = await Promise.all([
-      this.tokenManager.request<{
-        task: TcpTask;
-        assignments: TcpAssignment[];
-      }>('GET', `/api/task/${taskId}`),
-      this.tokenManager.request<{ id: string; name: string; slug: string }[]>(
-        'GET',
-        `/api/company/${this.companyId}/roles`,
-      ),
-    ]);
-    const roleById = new Map(roles.map((r) => [r.id, r]));
-    return {
-      task,
-      assignments: assignments.map((a) => {
-        const shortcode = a.shortcode ?? null;
-        return {
-          id: a.id,
-          role: roleById.get(a.roleId)?.name ?? a.roleId,
-          roleSlug: roleById.get(a.roleId)?.slug ?? a.roleId,
-          mode: a.mode,
-          status: a.status,
-          prompt: a.prompt,
-          shortcode,
-          planIndex: planIndexFromShortcode(shortcode),
-          agentId: a.agentId ?? null,
-          failureReason: a.failureReason ?? null,
-        };
-      }),
-    };
+    return api.fetchTaskDetail(this.tokenManager, this.companyId, taskId);
   }
 
-  /** Fetches the company's default planner role id (`TcpCompany.plannerRoleId`), if it has one. */
+  /** Fetches the company's default planner role id, if it has one. */
   async fetchCompanyDefaultPlannerRoleId(): Promise<string | undefined> {
-    const company = await this.tokenManager.request<{
-      plannerRoleId?: string | null;
-    }>('GET', `/api/company/${this.companyId}`);
-    return company.plannerRoleId ?? undefined;
+    return api.fetchCompanyDefaultPlannerRoleId(
+      this.tokenManager,
+      this.companyId,
+    );
   }
 
-  /**
-   * Creates a task from the initiate-task form's submission, starting it
-   * immediately when requested, then returns its detail the same way
-   * {@link fetchTaskDetail} does (for the task panel this hands off to).
-   */
+  /** Creates a task from the initiate-task form's submission. */
   async createTask(
     submission: InitiateTaskSubmission,
   ): Promise<{ task: TcpTask; assignments: AssignmentInfo[] }> {
-    const expected = submission.expected.map((filename) => ({
-      type: 'task-completed-path' as const,
-      value: filename,
-    }));
-    const created = await this.tokenManager.request<TcpTask>(
-      'POST',
-      '/api/task',
-      {
-        companyId: submission.companyId,
-        request: submission.request,
-        plannerRoleId: submission.plannerRoleId,
-        ...(expected.length > 0 ? { expected } : {}),
-      },
-    );
-    if (submission.startImmediately) {
-      await this.tokenManager.request('POST', `/api/task/${created.id}/start`);
-    }
-    return this.fetchTaskDetail(created.id);
+    return api.createTask(this.tokenManager, submission);
   }
 
   /**
-   * Opens `GET /api/task/:id/events` for an open task panel and keeps it
-   * live: `task_changed` updates the pane's own status (drives the
-   * cancel/start hint and shortcut gating); `assignment_changed` re-fetches
-   * the task's full detail and refreshes the pane's Assignments list.
+   * Opens `GET /api/task/:id/events` for an open task panel and keeps it live:
+   * `task_changed` updates the pane's own status (drives the cancel/start hint
+   * and shortcut gating); `assignment_changed` re-fetches the task's full
+   * detail and refreshes the pane's Assignments list.
    *
    * ponytail: refetches on every assignment_changed rather than patching the
    * one changed row in place (the event payload has no prompt/role, so a
@@ -381,7 +182,7 @@ export class ChatSession {
   watchTaskEvents(taskId: string): void {
     const abort = new AbortController();
     this.taskEventsAbort.set(taskId, abort);
-    const url = `${this.opts.tcpServer.replace(/\/$/, '')}/api/task/${taskId}/events`;
+    const url = `${this.baseUrl}/api/task/${taskId}/events`;
     void readWireStream(
       url,
       this.tokenManager.current,
@@ -412,32 +213,35 @@ export class ChatSession {
     this.taskEventsAbort.delete(taskId);
   }
 
-  /** Cancels a task from its task panel (`POST /api/task/:id/cancel`). */
+  /** Cancels a task from its task panel, reporting failure onto its pane. */
   async cancelTask(taskId: string): Promise<void> {
     try {
-      await this.tokenManager.request('POST', `/api/task/${taskId}/cancel`);
+      await api.cancelTask(this.tokenManager, taskId);
     } catch (err) {
       this.reportPaneError(taskId, err);
     }
   }
 
-  /** Starts a `ready` task from its task panel (`POST /api/task/:id/start`). */
+  /** Starts a `ready` task from its task panel, reporting failure onto its pane. */
   async startTask(taskId: string): Promise<void> {
     try {
-      await this.tokenManager.request('POST', `/api/task/${taskId}/start`);
+      await api.startTask(this.tokenManager, taskId);
     } catch (err) {
       this.reportPaneError(taskId, err);
     }
   }
 
   /**
-   * Creates a new chat-mode agent for `roleId` and adds it as a pane (when
-   * the TUI is active). Used both for the initial root agent (when
-   * --role-id was given at startup) and for "initiate chat" selections made
-   * from the company roster pane. Its backing assignment is an orphan (a
-   * plain conversation, not part of any task's plan) — fetched anyway so the
-   * pane's heading can show its id/status/prompt (shortcode is always null
-   * here; the tab label falls back to `label`).
+   * Creates a new chat-mode agent for `roleId` and adds it as a pane (when the
+   * TUI is active).
+   *
+   * Used both for the initial root agent (when --role-id was given at startup)
+   * and for "initiate chat" selections made from the company roster pane.
+   *
+   * NB. its backing assignment is an orphan (a plain conversation, not part of
+   * any task's plan) — fetched anyway so the pane's heading can show its
+   * id/status/prompt. The shortcode is always null here, so the tab label falls
+   * back to `label`.
    */
   async startAssignmentPane(
     roleId: string,
@@ -445,15 +249,15 @@ export class ChatSession {
     label: string,
     talkable: boolean,
   ): Promise<string> {
-    const agent = await this.tokenManager.request<AgentRecord>(
-      'POST',
-      '/api/agent/chat/start',
-      { companyId: this.companyId, roleId },
+    const agent = await api.startChatAgent(
+      this.tokenManager,
+      this.companyId,
+      roleId,
     );
     this.agentIds.add(agent.id);
-    const assignment = await this.tokenManager.request<AssignmentRecord>(
-      'GET',
-      `/api/assignment/${agent.assignmentId}`,
+    const assignment = await api.fetchAssignment(
+      this.tokenManager,
+      agent.assignmentId,
     );
     this.tui?.addPane({
       id: agent.id,
@@ -466,11 +270,13 @@ export class ChatSession {
   }
 
   /**
-   * Opens (or switches to, if already open) a read-only chat panel for a
-   * begun assignment's working agent: first renders its audit history up to
-   * now (mapped into the same event shapes the live stream produces), then —
-   * if the agent is still running — follows its live SSE stream for whatever
-   * happens next. A finished agent shows history only; nothing is live.
+   * Opens (or switches to, if already open) a read-only chat panel for a begun
+   * assignment's working agent.
+   *
+   * First renders its audit history up to now (mapped into the same event
+   * shapes the live stream produces), then — if the agent is still running —
+   * follows its live SSE stream for whatever happens next. A finished agent
+   * shows history only; nothing is live.
    */
   async openAssignmentChatPane(assignment: AssignmentInfo): Promise<void> {
     const agentId = assignment.agentId;
@@ -479,10 +285,7 @@ export class ChatSession {
       this.tui.switchToPane(agentId);
       return;
     }
-    const agent = await this.tokenManager.request<AgentRecord>(
-      'GET',
-      `/api/agent/${agentId}`,
-    );
+    const agent = await api.fetchAgent(this.tokenManager, agentId);
     this.tui?.addPane({
       id: agentId,
       label: assignment.role,
@@ -500,10 +303,7 @@ export class ChatSession {
     // History up to now — for a running agent this is everything before the
     // pane was opened, which the live stream (new events only) would otherwise
     // miss.
-    const rows = await this.tokenManager.request<AuditRow[]>(
-      'GET',
-      `/api/agent/${agentId}/history`,
-    );
+    const rows = await api.fetchAgentHistory(this.tokenManager, agentId);
     for (const row of rows) {
       this.tui?.appendEvent(agentId, auditWire(toWire(row)));
     }
@@ -515,7 +315,7 @@ export class ChatSession {
     if (!TERMINAL_AGENT_STATUSES.has(agent.status)) {
       const abort = new AbortController();
       this.assignmentPaneWatchAbort.set(agentId, abort);
-      const url = `${this.opts.tcpServer.replace(/\/$/, '')}/api/agent/${agentId}/events`;
+      const url = `${this.baseUrl}/api/agent/${agentId}/events`;
       void readWireStream(
         url,
         this.tokenManager.current,
@@ -548,300 +348,33 @@ export class ChatSession {
    * the TUI by the time this is called): aborts any turn in flight on that
    * pane, deletes the underlying agent if this session created it, and stops
    * watching its task/assignment-chat events if it was one of those panels.
-   * Consultation-follower panes aren't session-owned agents, so closing one
+   *
+   * NB. consultation-follower panes aren't session-owned agents, so closing one
    * of those just stops watching it — nothing to delete.
    */
   async closeTab(paneId: string): Promise<void> {
     this.stopWatchingTask(paneId);
     this.assignmentPaneWatchAbort.get(paneId)?.abort();
     this.assignmentPaneWatchAbort.delete(paneId);
-    const controller = this.abortControllers.get(paneId);
-    if (controller) {
-      controller.abort();
-      this.abortControllers.delete(paneId);
-    }
+    this.turns.abort(paneId);
     if (this.agentIds.has(paneId)) {
       this.agentIds.delete(paneId);
       await this.deleteAgent(paneId);
     }
   }
 
+  /** The tcp-server's base URL, without a trailing slash. */
+  private get baseUrl(): string {
+    return this.opts.tcpServer.replace(/\/$/, '');
+  }
+
   /** DELETEs one agent (best-effort — failures are logged, not thrown). */
   private async deleteAgent(id: string): Promise<void> {
     try {
-      await this.tokenManager.request('DELETE', `/api/agent/${id}`);
+      await api.deleteAgent(this.tokenManager, id);
       process.stderr.write(`\nAgent ${id} removed.\n`);
     } catch {
       // best-effort cleanup
     }
-  }
-
-  /**
-   * Runs one turn on `paneId`'s agent: opens the event stream, posts the
-   * message, waits for the terminal event, then prints the final response.
-   * `interactive` is only ever false for a `--query` turn with no TUI (piped
-   * output, or `--no-tui`): progress streams to stderr and the final answer
-   * prints to stdout once, keeping it pipeable. Every other case — normal
-   * interactive turns, and `--query` turns once a TUI is involved — passes
-   * `interactive: true`, so the response renders into the pane like any
-   * other turn instead of being printed and torn down. Multiple panes can
-   * each have a turn in flight concurrently — state is tracked per `paneId`.
-   */
-  async runTurn(
-    paneId: string,
-    message: string,
-    interactive: boolean,
-  ): Promise<void> {
-    const abort = new AbortController();
-    this.abortControllers.set(paneId, abort);
-    // Typing stays possible while the turn runs, but Enter won't submit
-    // until it finishes (the hint row explains why, on this pane).
-    this.tui?.setBusy(paneId, true);
-    const signal = AbortSignal.any([
-      abort.signal,
-      AbortSignal.timeout(35 * 60 * 1000),
-    ]);
-    const renderer = this.tui
-      ? tuiRenderer(this.tui, paneId)
-      : createRenderer({
-          hideReasoning: this.hideReasoning,
-          out: interactive ? process.stdout : process.stderr,
-          err: process.stderr,
-        });
-    try {
-      // Open the stream before posting so early events aren't missed; the
-      // server also replays the terminal event to late subscribers.
-      let markConnected!: () => void;
-      const connected = new Promise<void>((r) => (markConnected = r));
-      const streamPromise = this.streamAgent(
-        paneId,
-        renderer,
-        signal,
-        markConnected,
-      );
-      await connected;
-      // No local echo — the typed message renders from its `input` audit event
-      // as it arrives over the stream (decision 1).
-      await this.postMessage(paneId, message, signal);
-
-      let outcome = await streamPromise;
-      if (
-        'error' in outcome &&
-        outcome.error === STREAM_ENDED &&
-        !abort.signal.aborted
-      ) {
-        outcome = await this.pollForCompletion(paneId, signal);
-      }
-
-      if (abort.signal.aborted) return;
-      if ('response' in outcome) {
-        if (!interactive) {
-          // Tear the TUI down before writing the final answer — it must
-          // land in normal scrollback, not the (about to vanish) alt screen.
-          this.tui?.stop();
-          process.stdout.write(outcome.response + '\n');
-        } else if (!renderer.responseSeen) {
-          if (this.tui) {
-            this.tui.appendEvent(paneId, {
-              type: 'stream',
-              agentId: paneId,
-              channel: 'response',
-              delta: outcome.response,
-              timestamp: new Date().toISOString(),
-            });
-          } else {
-            const text = outcome.response.trim() ? outcome.response : '(blank)';
-            process.stdout.write(`\nResponse: ${text}\n`);
-          }
-        }
-      } else if (outcome.error !== STREAM_ENDED) {
-        if (this.tui) {
-          this.tui.appendEvent(paneId, failedWire(outcome.error));
-        } else {
-          process.stderr.write(`\n[Error] ${outcome.error}\n`);
-        }
-      }
-    } catch (err) {
-      const message = String(err instanceof Error ? err.message : err);
-      if (this.tui) {
-        this.tui.appendEvent(paneId, failedWire(message));
-      } else {
-        process.stderr.write(`\nError: ${message}\n`);
-      }
-    } finally {
-      this.abortControllers.delete(paneId);
-      this.tui?.setBusy(paneId, false);
-    }
-  }
-
-  /**
-   * Opens the SSE stream for `id`, rendering each event until the agent's
-   * terminal (`completed`/`failed`) event arrives. When the agent pauses to
-   * consult another agent, spawns a follower stream for that agent, prefixed
-   * with its role name. Resolves with the outcome; resolves with a
-   * {@link STREAM_ENDED} error if the stream closes with no terminal event.
-   */
-  private async streamAgent(
-    id: string,
-    renderer: Renderer,
-    signal: AbortSignal,
-    onConnected?: () => void,
-  ): Promise<TurnOutcome> {
-    const url = `${this.opts.tcpServer.replace(/\/$/, '')}/api/agent/${id}/events`;
-    const followerAbort = new AbortController();
-    const followers: Promise<unknown>[] = [];
-    let outcome: TurnOutcome | undefined;
-    try {
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${this.tokenManager.current}` },
-        signal,
-      });
-      onConnected?.();
-      if (!res.ok || !res.body) {
-        return { error: `events stream failed with HTTP ${res.status}` };
-      }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      while (!outcome) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const { events, rest } = parseWireEvents(buffer);
-        buffer = rest;
-        for (const wire of events) {
-          const agentState =
-            wire.type === 'audit' &&
-            wire.event.eventType === 'state_change' &&
-            wire.event.payload['entity'] === 'agent'
-              ? wire.event.payload
-              : undefined;
-          if (agentState) {
-            const status = str(agentState, 'newStatus');
-            // A consultation pause: render the line, then follow the consulted
-            // agent (keyed on `consultedAgentId`) — not terminal.
-            if (agentState['reason'] === 'consultation') {
-              renderer.render(wire);
-              this.followConsultation(
-                str(agentState, 'consultedAgentId'),
-                str(agentState, 'consultedRoleName'),
-                followerAbort.signal,
-                followers,
-              );
-              continue;
-            }
-            // The server synthesizes this for a late subscriber reconnecting
-            // to an already-finished turn — but this stream always connects
-            // *before* posting the message (to not miss early events), so at
-            // connect time the agent is always still idle from its *previous*
-            // turn (or never having run at all). Treating that as this turn's
-            // own completion made every turn terminate instantly with an
-            // empty response, before the real events ever arrived. Not
-            // terminal, and not worth rendering — it describes stale state.
-            if (agentState['reason'] === 'replay') {
-              continue;
-            }
-            if (status === 'completed' || status === 'idle') {
-              outcome = { response: str(agentState, 'response') };
-              break;
-            }
-            if (status === 'failed' || status === 'cancelled') {
-              outcome = { error: str(agentState, 'reason') };
-              break;
-            }
-          }
-          renderer.render(wire);
-        }
-      }
-    } catch (err) {
-      onConnected?.();
-      if (err instanceof Error && err.name === 'AbortError') {
-        return { error: STREAM_ENDED };
-      }
-      return {
-        error: err instanceof Error ? err.message : String(err),
-      };
-    } finally {
-      renderer.finish();
-      followerAbort.abort();
-      await Promise.allSettled(followers);
-    }
-    return outcome ?? { error: STREAM_ENDED };
-  }
-
-  /**
-   * Spawns a follower stream for a consulted agent — a new pane (TUI) or a
-   * stderr renderer (piped) — and queues it in `followers`. No-op without a
-   * `consultId`.
-   */
-  private followConsultation(
-    consultId: string,
-    consultRoleName: string,
-    signal: AbortSignal,
-    followers: Promise<unknown>[],
-  ): void {
-    if (!consultId) return;
-    let follower: Renderer;
-    if (this.tui) {
-      this.tui.addPane({
-        id: consultId,
-        label: consultRoleName,
-        talkable: false,
-      });
-      follower = tuiRenderer(this.tui, consultId);
-    } else {
-      follower = createRenderer({
-        hideReasoning: this.hideReasoning,
-        out: process.stderr,
-        err: process.stderr,
-      });
-    }
-    followers.push(
-      this.streamAgent(consultId, follower, signal).catch(() => undefined),
-    );
-  }
-
-  /** POSTs a message to `paneId`'s agent (expects 202); {@link TokenManager.request} handles a 401 by refreshing and retrying. */
-  private async postMessage(
-    paneId: string,
-    message: string,
-    signal: AbortSignal,
-  ): Promise<void> {
-    await this.tokenManager.request<{ accepted: boolean }>(
-      'POST',
-      `/api/agent/${paneId}/message`,
-      { message },
-      signal,
-    );
-  }
-
-  /**
-   * Fallback when the SSE stream drops mid-turn: polls the agent record
-   * until it reaches a terminal (or idle-after-run) state.
-   */
-  private async pollForCompletion(
-    id: string,
-    signal: AbortSignal,
-  ): Promise<TurnOutcome> {
-    const deadline = Date.now() + 35 * 60 * 1000;
-    while (!signal.aborted && Date.now() < deadline) {
-      await delay(2000, signal);
-      if (signal.aborted) break;
-      try {
-        const agent = await this.tokenManager.request<{
-          status: string;
-          output?: string;
-        }>('GET', `/api/agent/${id}`, undefined, signal);
-        if (agent.status === 'completed' || agent.status === 'idle') {
-          return { response: agent.output ?? '' };
-        }
-        if (agent.status === 'failed') {
-          return { error: agent.output ?? 'agent failed' };
-        }
-      } catch {
-        // transient error — keep polling
-      }
-    }
-    return { error: 'timed out waiting for completion' };
   }
 }

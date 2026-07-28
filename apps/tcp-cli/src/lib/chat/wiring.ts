@@ -3,13 +3,16 @@ import { Tui } from '../tui/tui';
 import { ChatSession } from './session';
 
 /**
- * `--query` mode. Without a TUI (piped output, or `--no-tui`), this is fully
- * one-shot: run the turn, print the final answer to stdout, clean up, and
- * exit — the classic pipeable behaviour. With the TUI, the query is just the
- * first message of an otherwise normal interactive session: it renders into
- * the root pane like any other turn, and the TUI stays open afterward so the
- * response isn't lost the instant it arrives — the user can keep chatting,
- * switch tabs, or quit whenever they're done.
+ * `--query` mode: answer a single question given on the command line.
+ *
+ * Without a TUI (piped output, or `--no-tui`) this is fully one-shot — run the
+ * turn, print the final answer to stdout, clean up, and exit. That is the
+ * classic pipeable behaviour.
+ *
+ * With the TUI, the query is just the first message of an otherwise normal
+ * interactive session: it renders into the root pane like any other turn, and
+ * the TUI stays open afterwards so the response isn't lost the instant it
+ * arrives. The user can keep chatting, switch tabs, or quit when they're done.
  */
 export async function runOneShotQuery(
   session: ChatSession,
@@ -32,11 +35,19 @@ export async function runOneShotQuery(
 }
 
 /**
- * Wires the full-screen TUI's input/quit/roster events to the session and
- * waits for the user to quit. The TUI's InlineInput replaces readline
- * entirely; Ctrl+C is a raw key event delivered via grabInput (not a SIGINT
- * signal), so the two-stage quit semantics are wired through `Tui.onQuit`
- * instead of `process.on('SIGINT', ...)`.
+ * Wires the full-screen TUI's events to the session, then waits for the user
+ * to quit.
+ *
+ * The TUI's {@link Tui} InlineInput replaces readline entirely, so there is no
+ * prompt loop here — every interaction arrives as one of the callbacks
+ * registered below.
+ *
+ * NB. Ctrl+C reaches the TUI as a raw key event (via `grabInput`), never as a
+ * SIGINT signal, so quitting is wired through {@link Tui.onQuit} rather than
+ * `process.on('SIGINT', ...)`. It quits in two stages:
+ * 1. While a turn is in flight, abort the turn (the agent continues
+ *    server-side).
+ * 2. While idle, stop the TUI and end the session.
  */
 export async function runTuiInteractive(
   session: ChatSession,
@@ -152,11 +163,15 @@ export async function runTuiInteractive(
 }
 
 /**
- * Plain readline loop (no TUI) — two-stage SIGINT: during a turn, stop
- * watching (the agent continues server-side); at the idle prompt, clean up
- * and exit. `--company-id` without `--role-id` is rejected before this mode
- * can ever be reached (there's no roster to browse without the TUI), so
- * `rootAgentId` is always a real agent here.
+ * Plain readline loop (no TUI).
+ *
+ * Handles SIGINT in two stages:
+ * 1. During a turn, stop watching (the agent continues server-side).
+ * 2. At the idle prompt, clean up and exit.
+ *
+ * NB. `--company-id` without `--role-id` is rejected before this mode can ever
+ * be reached (there's no roster to browse without the TUI), so `rootAgentId`
+ * is guaranteed to be a real agent here.
  */
 export async function runReadlineInteractive(
   session: ChatSession,

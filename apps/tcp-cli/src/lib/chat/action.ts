@@ -1,10 +1,7 @@
 import { EntityRefOpts } from '../core/entity-ref';
 import { GlobalOptions } from '../core/cli-options';
-import {
-  installCrashSafetyNet,
-  resolveTaskListEntryMaxLines,
-  Tui,
-} from '../tui/tui';
+import { installCrashSafetyNet } from '../tui/crash-safety';
+import { resolveTaskListEntryMaxLines, Tui } from '../tui/tui';
 import { shouldUseTui, validateChatFlags } from './flags';
 import { ChatContext, resolveChatContext } from './context';
 import { ChatSession } from './session';
