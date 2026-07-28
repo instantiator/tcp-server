@@ -25,6 +25,7 @@ import { AgentRagModule } from '../rag/agent-rag.module';
 import { AgentRegistryService } from '../registry/agent-registry.service';
 import { StorageTrackingClientService } from '../storage-tracking/storage-tracking-client.service';
 import { AgentWorkerService } from './agent-worker.service';
+import { ShutdownListenerService } from './shutdown-listener.service';
 
 /**
  * Wires the BullMQ worker, the agent loop, and the in-memory registry
@@ -55,6 +56,9 @@ import { AgentWorkerService } from './agent-worker.service';
     SupervisedTurnService,
     AgentEventPublisherService,
     AgentRegistryService,
+    // Answers tcp-server's drain: stops the worker taking jobs and reports how
+    // many loops are genuinely still in flight.
+    ShutdownListenerService,
     AuditClientService,
     InternalApiClient,
     StorageTrackingClientService,

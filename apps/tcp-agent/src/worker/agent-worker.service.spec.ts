@@ -4,6 +4,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AgentLoopService } from '../agent/agent-loop.service';
 import { AgentRegistryService } from '../registry/agent-registry.service';
 import { AgentWorkerService } from './agent-worker.service';
+import { ShutdownListenerService } from './shutdown-listener.service';
 
 jest.mock('bullmq', () => ({
   Worker: jest.fn().mockImplementation(() => ({
@@ -35,6 +36,9 @@ describe('AgentWorkerService', () => {
       providers: [
         AgentWorkerService,
         AgentRegistryService,
+        // Real instance: with REDIS_URL unset it stays inert, so binding the
+        // worker and reporting a finished job are both no-ops here.
+        ShutdownListenerService,
         { provide: AgentLoopService, useValue: { run: loopRun } },
         {
           provide: ConfigService,
@@ -156,6 +160,7 @@ describe('AgentWorkerService', () => {
         providers: [
           AgentWorkerService,
           AgentRegistryService,
+          ShutdownListenerService,
           { provide: AgentLoopService, useValue: { run: jest.fn() } },
           {
             provide: ConfigService,

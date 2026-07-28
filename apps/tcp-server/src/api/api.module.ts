@@ -34,6 +34,7 @@ import { RoleController } from './api.role.controller';
 import { StorageActionsController } from './storage-actions.controller';
 import { StorageProxyController } from './storage-proxy.controller';
 import { StorageValidationController } from './storage-validation.controller';
+import { SystemController } from './system.controller';
 import { TaskController } from './task.controller';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { ApiService } from './api.service';
@@ -47,6 +48,8 @@ import { OutputGateService } from './output-gate.service';
 import { PauseAndResumeService } from './pause-and-resume.service';
 import { PlanValidationService } from './plan-validation.service';
 import { StorageScopeService } from './storage-scope.service';
+import { SystemDrainService } from './system-drain.service';
+import { SystemShutdownService } from './system-shutdown.service';
 import { QaVerdictService } from './qa-verdict.service';
 import { TaskDeliverablesService } from './task-deliverables.service';
 import { TaskDispatcher } from './task-dispatcher.service';
@@ -92,6 +95,7 @@ import { TaskService } from './task.service';
     StorageActionsController,
     StorageProxyController,
     StorageValidationController,
+    SystemController,
     TaskController,
     AgentController,
     ModelController,
@@ -110,6 +114,10 @@ import { TaskService } from './task.service';
     ConversationService,
     KnowledgeService,
     PauseAndResumeService,
+    // The drain executes shutdowns; the shutdown service holds the state every
+    // intake path guards on.
+    SystemShutdownService,
+    SystemDrainService,
     // The orchestration stack: TaskOrchestrationService drives a task forward,
     // delegating status writes, artifact promotion, QA verdicts, failure
     // propagation and startup repair to the collaborators below.

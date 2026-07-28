@@ -21,6 +21,7 @@ import { In, MoreThanOrEqual, Repository } from 'typeorm';
 import { DbService } from '../db/db.service';
 import { AuditService } from '../audit/audit.service';
 import { TcpAgentTemplate } from '../templates/TcpAgentTemplate';
+import { SystemShutdownService } from './system-shutdown.service';
 
 /** Payload dispatched to the `agent-jobs` BullMQ queue. */
 interface AgentJob {
@@ -29,6 +30,18 @@ interface AgentJob {
   /** User reply or consultation result injected as the first message on resume. */
   replyContent?: string;
 }
+
+/**
+ * Injected as the opening message when resuming an agent that a shutdown drain
+ * paused.
+ *
+ * Such an agent has no reply waiting for it, and tcp-agent treats a resume
+ * carrying no content at all as a fresh run — rebuilding the whole initial
+ * prompt on top of the checkpoint it should simply be continuing from.
+ */
+const SHUTDOWN_RESUME_PROMPT =
+  'The system was shut down while you were working, and has now restarted. ' +
+  'Continue from where you left off.';
 
 /**
  * Creates and resumes agents by enqueuing jobs to the `agent-jobs` BullMQ queue,
@@ -56,6 +69,7 @@ export class AgentOrchestrationService
     @InjectRepository(ConversationMessage)
     private readonly msgRepo: Repository<ConversationMessage>,
     private readonly audit: AuditService,
+    private readonly shutdown: SystemShutdownService,
   ) {}
 
   /** Connects to the Redis-backed BullMQ queue on startup. */
@@ -117,8 +131,14 @@ export class AgentOrchestrationService
     return this.db.createAgent(template);
   }
 
-  /** Dispatches a `start` job for an already-created agent. */
+  /**
+   * Dispatches a `start` job for an already-created agent.
+   *
+   * Refused while the system is draining: a drain that kept handing new work
+   * to the workers it is waiting on would never quiesce.
+   */
   async dispatchStartJob(agentId: UUID): Promise<void> {
+    this.shutdown.assertAccepting();
     await this.queue.add('start', { agentId, type: 'start' });
     this.logger.log(`Dispatched start job for agent ${agentId}`);
   }
@@ -134,8 +154,10 @@ export class AgentOrchestrationService
    *   (e.g. a manual retry). Pause-triggered resumes aggregate every response
    *   received since the agent paused instead.
    * @throws if the agent does not exist or is not in a resumable state
+   * @throws `ServiceUnavailableException` while the system is draining
    */
   async resumeAgent(agentId: UUID, replyContent?: string): Promise<TcpAgent> {
+    this.shutdown.assertAccepting();
     const agent = await this.db.getAgent(agentId);
     if (!agent) {
       throw new Error(`Agent ${agentId} not found`);
@@ -176,7 +198,7 @@ export class AgentOrchestrationService
       const claim = await this.agentRepo
         .createQueryBuilder()
         .update(TcpAgent)
-        .set({ pausedAt: () => 'NULL' })
+        .set({ pausedAt: () => 'NULL', pauseReason: () => 'NULL' })
         .where('id = :agentId', { agentId })
         .andWhere('pausedAt = :pausedAt', { pausedAt: agent.pausedAt })
         .execute();
@@ -192,7 +214,10 @@ export class AgentOrchestrationService
     await this.queue.add('resume', {
       agentId: agent.id,
       type: 'resume',
-      replyContent: aggregated ?? replyContent,
+      replyContent:
+        aggregated ??
+        replyContent ??
+        (agent.pauseReason === 'shutdown' ? SHUTDOWN_RESUME_PROMPT : undefined),
     });
     // Let any client observing the calling agent see it come back to life —
     // one state_change row, streamed live by the persist-then-publish path.

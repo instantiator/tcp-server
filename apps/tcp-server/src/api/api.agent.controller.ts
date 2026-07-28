@@ -32,6 +32,7 @@ import { DbService } from '../db/db.service';
 import { AgentEventService } from '../events/agent-event.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { ChatService } from './chat.service';
+import { SystemShutdownService } from './system-shutdown.service';
 import { SendMessageDto, StartAgentDto, StartChatDto } from './dto/agent.dto';
 
 /** REST controller for starting, resuming, chatting with, and inspecting {@link TcpAgent} instances. */
@@ -46,15 +47,19 @@ export class AgentController {
     private readonly chat: ChatService,
     private readonly agentEvents: AgentEventService,
     private readonly audit: AuditService,
+    private readonly shutdown: SystemShutdownService,
   ) {}
 
   /**
    * Creates a new agent and dispatches it to the tcp-agent worker pool.
    * Returns the agent record immediately; status starts as `idle`.
+   *
+   * Refused with `503` while the system is draining for shutdown.
    */
   @ApiOperation({ summary: 'Start a new agent' })
   @Post('start')
   async startAgent(@Body() body: StartAgentDto): Promise<TcpAgent> {
+    this.shutdown.assertAccepting();
     return this.orchestration.startAgent(body);
   }
 
@@ -62,10 +67,13 @@ export class AgentController {
    * Creates a new chat-mode agent without dispatching to the worker queue.
    * The agent starts in `idle` status and is driven by calls to
    * {@link sendMessage} instead of the BullMQ pipeline.
+   *
+   * Refused with `503` while the system is draining for shutdown.
    */
   @ApiOperation({ summary: 'Start a chat-mode agent' })
   @Post('chat/start')
   async startChat(@Body() body: StartChatDto): Promise<TcpAgent> {
+    this.shutdown.assertAccepting();
     const agent = await this.db.createAgent({
       companyId: body.companyId,
       roleId: body.roleId,

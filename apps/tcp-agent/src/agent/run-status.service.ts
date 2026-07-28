@@ -107,12 +107,27 @@ export class AgentRunStatusService {
    *
    * No-op if the agent has already reached Completed — `complete_assignment` may
    * have won the race against a late failure (e.g. a summary error).
+   *
+   * Also a no-op for an agent a shutdown drain has paused. A forced drain stops
+   * the run by aborting its signal, which surfaces here as an ordinary run
+   * failure; recording it as {@link AgentStatus.Failed} would bury the reason
+   * the run really stopped and lose the pause the operator is meant to resume
+   * from.
    */
   async failRun(agent: TcpAgent, reason: string): Promise<void> {
     const fresh = await this.agentRepo.findOneBy({ id: agent.id });
     if (fresh?.status === AgentStatus.Completed) {
       this.logger.warn(
         `Agent ${agent.id} already completed — ignoring failure: ${reason}`,
+      );
+      return;
+    }
+    if (
+      fresh?.status === AgentStatus.Paused &&
+      fresh.pauseReason === 'shutdown'
+    ) {
+      this.logger.warn(
+        `Agent ${agent.id} stopped by a shutdown — staying paused rather than failing: ${reason}`,
       );
       return;
     }

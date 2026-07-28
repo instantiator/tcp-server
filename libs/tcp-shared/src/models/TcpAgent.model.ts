@@ -35,6 +35,16 @@ export enum AgentStatus {
 }
 
 /**
+ * Why an agent is currently {@link AgentStatus.Paused}.
+ *
+ * `user_input` and `consultation` pauses resolve themselves — a reply or a
+ * consultation result arrives and the agent is re-dispatched automatically. A
+ * `shutdown` pause has nothing outstanding to wait on, so it stays paused
+ * until a user resumes it explicitly.
+ */
+export type PauseReason = 'user_input' | 'consultation' | 'shutdown';
+
+/**
  * A running instance of an {@link TcpRole} within an {@link TcpCompany}.
  * Each agent has a LangGraph `thread_id` (stored as {@link TcpAgent.threadId}) that links it
  * to its checkpoint in the PostgreSQL checkpoint store, enabling resumability.
@@ -154,4 +164,15 @@ export class TcpAgent extends VersionedEntity {
    */
   @Column({ nullable: true })
   pausedAt?: Date;
+
+  /**
+   * Why this agent is paused; cleared on resume, and null whenever the agent
+   * is not paused.
+   *
+   * Lets a resume path tell a shutdown drain apart from a pause that is
+   * waiting on a reply — both have zero outstanding requests, so status alone
+   * cannot distinguish them.
+   */
+  @Column({ type: 'varchar', nullable: true })
+  pauseReason?: PauseReason | null;
 }

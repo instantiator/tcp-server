@@ -33,7 +33,8 @@ apps/
   tcp-server/            # REST API + orchestration state (port 3000)
     src/
       api/                # HTTP layer — controllers + services (company, role, agent, task,
-                           # assignment/task-orchestration, conversation, storage proxy, ...)
+                           # assignment/task-orchestration, conversation, storage proxy,
+                           # system shutdown/drain, ...)
       audit/               # AuditService — internal audit-event endpoint
       auth/                # OIDC JWT strategy + guard
       config/              # Joi validation schema for env vars
@@ -84,6 +85,7 @@ apps/
         auth/                # token.ts (resolution/renewal) + get-token action
         chat/                # chat command: flags, context, session, wiring, action
         tui/                 # full-screen TUI (terminal-kit widgets)
+        system/              # fleet-level actions: shutdown drain (see docs/tcp-cli.md#shutdown)
         crud/, docs/, queries/, links/  # remaining commands' actions, grouped by purpose
     tsconfig.app.json        # extends root; adds @tcp/shared paths
     tsconfig.json            # extends tsconfig.app.json; includes spec files (for ESLint)

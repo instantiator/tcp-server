@@ -13,6 +13,7 @@ import { Worker } from 'bullmq';
 import { UUID } from 'crypto';
 import { AgentLoopService } from '../agent/agent-loop.service';
 import { AgentRegistryService } from '../registry/agent-registry.service';
+import { ShutdownListenerService } from './shutdown-listener.service';
 
 /** Payload shape expected on the `agent-jobs` queue. */
 interface AgentJobPayload {
@@ -38,6 +39,7 @@ export class AgentWorkerService implements OnModuleInit, OnModuleDestroy {
     private readonly loop: AgentLoopService,
     private readonly registry: AgentRegistryService,
     private readonly config: ConfigService,
+    private readonly shutdown: ShutdownListenerService,
   ) {}
 
   /** Starts the BullMQ worker on module init. */
@@ -77,6 +79,8 @@ export class AgentWorkerService implements OnModuleInit, OnModuleDestroy {
           await this.loop.run(agentId, replyContent, abortController);
         } finally {
           this.registry.deregister(agentId);
+          // A drain is waiting on exactly this number reaching zero.
+          this.shutdown.reportActive();
         }
       },
       {
@@ -125,6 +129,9 @@ export class AgentWorkerService implements OnModuleInit, OnModuleDestroy {
     // listeners left, crashing the process. Waiting for 'ready' here means
     // that promise has already settled by the time close() can ever run.
     await this.worker.waitUntilReady();
+
+    // Hand the worker over so a drain can stop it taking further jobs.
+    this.shutdown.bindWorker(this.worker);
 
     this.logger.log('Agent worker started, listening on agent-jobs queue');
   }

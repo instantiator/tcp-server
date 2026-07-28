@@ -33,4 +33,21 @@ export class AgentRegistryService {
   get activeCount(): number {
     return this.running.size;
   }
+
+  /**
+   * Aborts every active loop, stopping any in-flight LLM call immediately.
+   *
+   * Entries are left in place: each loop deregisters itself in its own
+   * `finally`, so removing them here would hide runs that are still unwinding.
+   *
+   * @param reason - Surfaced as the abort signal's reason, and from there in
+   *   the run's recorded failure.
+   * @returns How many loops were aborted.
+   */
+  abortAll(reason: string): number {
+    for (const handle of this.running.values()) {
+      handle.abortController.abort(reason);
+    }
+    return this.running.size;
+  }
 }

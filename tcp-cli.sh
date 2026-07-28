@@ -73,4 +73,33 @@ if [ "$REBUILD" = "true" ] || [ ! -f "$DIST" ]; then
   npm --prefix "$ROOT" run build:tcp-cli
 fi
 
-exec node "$DIST" "${NODE_ARGS[@]+"${NODE_ARGS[@]}"}"
+# The `shutdown` verb drains through the API, then this wrapper halts the stack.
+#
+# Halting has to happen host-side rather than in the Node CLI: every Compose
+# service runs with `restart: unless-stopped`, so a process that exited itself
+# would simply be restarted seconds later. See docs/ADRs/ADR-019.
+#
+# `--no-stop` drains only. `set -e` means a failed drain (e.g. a timeout) exits
+# here with the CLI's own status and never reaches the stop.
+HALT_AFTER=false
+if [[ "${NODE_ARGS[0]:-}" == "shutdown" ]]; then
+  HALT_AFTER=true
+  for arg in "${NODE_ARGS[@]}"; do
+    [[ "$arg" == "--no-stop" ]] && HALT_AFTER=false
+  done
+fi
+
+if [[ "$HALT_AFTER" == false ]]; then
+  exec node "$DIST" "${NODE_ARGS[@]+"${NODE_ARGS[@]}"}"
+fi
+
+node "$DIST" "${NODE_ARGS[@]}"
+
+DC=(docker compose -p tcp-dev --profile auth --env-file "$ENV_FILE")
+if [[ -n "$("${DC[@]}" ps --quiet 2>/dev/null)" ]]; then
+  echo "[tcp-cli] Drained — stopping containers..." >&2
+  "${DC[@]}" stop
+  echo "[tcp-cli] Stopped. Run './scripts/start-dev.sh' to bring the stack back." >&2
+else
+  echo "[tcp-cli] Drained. No tcp-dev containers are running — nothing to stop." >&2
+fi

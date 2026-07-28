@@ -111,6 +111,7 @@ describe('PauseAndResumeService', () => {
       expect(agentRepo.update).toHaveBeenCalledWith(agent.id, {
         status: AgentStatus.Paused,
         pausedAt: expect.any(Date) as Date,
+        pauseReason: 'user_input',
       });
       expect(convService.create).toHaveBeenCalledWith(
         agent.companyId,
@@ -321,6 +322,7 @@ describe('PauseAndResumeService', () => {
       expect(agentRepo.update).toHaveBeenCalledWith(caller.id, {
         status: AgentStatus.Paused,
         pausedAt: expect.any(Date) as Date,
+        pauseReason: 'consultation',
       });
       expect(orchestration.createAgent).toHaveBeenCalledWith(
         expect.objectContaining({

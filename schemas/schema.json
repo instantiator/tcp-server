@@ -688,6 +688,15 @@
       ],
       "type": "string"
     },
+    "PauseReason": {
+      "description": "Why an agent is currently  {@link  AgentStatus.Paused } .\n\n`user_input` and `consultation` pauses resolve themselves — a reply or a consultation result arrives and the agent is re-dispatched automatically. A `shutdown` pause has nothing outstanding to wait on, so it stays paused until a user resumes it explicitly.",
+      "enum": [
+        "user_input",
+        "consultation",
+        "shutdown"
+      ],
+      "type": "string"
+    },
     "PendingConsultation": {
       "additionalProperties": false,
       "description": "Tracks a paused agent waiting for another agent's consultation response.\n\nCreated when an agent calls `request_agent_consultation` via the interactions MCP server. The calling agent is set to  {@link  AgentStatus.Paused  }  until the consultation agent completes and `PauseAndResumeService.completeAgent()` finds this record and re-enqueues the calling agent.",
@@ -782,6 +791,17 @@
             "string",
             "null"
           ]
+        },
+        "pauseReason": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PauseReason"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why this agent is paused; cleared on resume, and null whenever the agent is not paused.\n\nLets a resume path tell a shutdown drain apart from a pause that is waiting on a reply — both have zero outstanding requests, so status alone cannot distinguish them."
         },
         "pausedAt": {
           "description": "Set when this agent transitions to  {@link  AgentStatus.Paused } ; cleared on resume. Scopes which consultation/conversation responses belong to the current pause episode when aggregating a resume message.",

@@ -112,6 +112,7 @@ See [schema.md](schema.md) for the full field reference, VS Code integration, ex
 | [`list-agents`](#list-agents)                               | `list-agents (--role \| --company <slug-or-id>) [--filter k=v...]`                                                  | List agents for a role or company                                                             |
 | [`list-assignments`](#list-assignments)                     | `list-assignments (--task-id <uuid> \| --company <slug-or-id>) [--filter k=v...]`                                   | List assignments for a task or company                                                        |
 | [`eavesdrop`](#eavesdrop)                                   | `eavesdrop (--agent-id \| --assignment-id \| --task-id <uuid>) [--show-history] [--tail]`                           | Replay and/or follow an agent's, assignment's, or task's activity                             |
+| [`shutdown`](#shutdown)                                     | `shutdown [--force] [--no-stop] [--timeout <seconds>]`                                                              | Drain the system for shutdown, wait for agents to pause, then stop the containers             |
 
 ### Entity identifiers: `--x`, `--x-id`, `--x-slug`
 
@@ -1184,6 +1185,70 @@ prefix; by default only immediate children are checked.
 # Validate every document under a role's knowledge base, including subfolders
 ./tcp-cli.sh validate-shared-document --path "acme/knowledge/analyst/*" --recursive
 ```
+
+### `shutdown`
+
+Drains the simulation for shutdown, then halts it.
+
+Draining means: refuse new work, and bring every running agent to rest. A
+**graceful** shutdown (the default) lets each agent finish the LLM call it is
+already making and stop at its next resumable point, so nothing already paid
+for is thrown away — which is why it can legitimately take minutes. Progress is
+reported on stderr while it waits.
+
+`--force` aborts the in-flight LLM calls instead of waiting. **This wastes the
+tokens already spent on them.** Use it when you need the stack down now and
+accept the cost.
+
+Either way the agents end up `paused` with the reason `shutdown`, keeping their
+LangGraph checkpoints. They stay paused across a restart and are resumed
+explicitly, one at a time, with `POST /api/agent/resume/:id` — nothing
+auto-resumes on boot, so bringing the stack up never starts spending tokens by
+itself.
+
+Halting the containers is done by `tcp-cli.sh` (via `docker compose stop`)
+after the API reports the system drained, not by the server: every Compose
+service is `restart: unless-stopped`, so a service that stopped itself would be
+restarted seconds later. See [ADR-019](ADRs/ADR-019-graceful-shutdown.md). When
+no `tcp-dev` containers are running — a bare `npm run start:dev`, say — it says
+so and leaves the processes for you to stop.
+
+- **stdout**: the final shutdown status as JSON
+  (`{ state, forced, agentsRunning }`)
+- **stderr**: one progress line per poll
+- **Exit codes**: `0` once drained; `1` on timeout, having reported what is
+  still running. A timeout never escalates to `--force` — throwing away
+  part-paid-for work is your decision, not a fallback
+
+| Flag               | Description                                                              |
+| ------------------ | ------------------------------------------------------------------------ |
+| `-f, --force`      | Abort in-flight LLM calls immediately, wasting the tokens spent on them  |
+| `--no-stop`        | Drain only; leave the containers running                                 |
+| `--timeout <secs>` | Give up waiting after this many seconds and exit non-zero (default: 600) |
+
+```bash
+# Graceful: drain, wait for every agent to pause, then stop the containers
+./tcp-cli.sh -t $TOKEN shutdown
+
+# Forced: abort in-flight LLM work, then stop the containers
+./tcp-cli.sh -t $TOKEN shutdown --force
+
+# Drain only — useful before a deploy that will restart the containers anyway
+./tcp-cli.sh -t $TOKEN shutdown --no-stop
+
+# Give up after two minutes and report what is still running
+./tcp-cli.sh -t $TOKEN shutdown --timeout 120
+```
+
+To cancel a drain that is taking too long, without halting anything:
+
+```bash
+curl -X DELETE -H "Authorization: Bearer $TOKEN" \
+  http://localhost:3000/api/system/shutdown
+```
+
+Agents the drain already paused stay paused — cancelling does not auto-resume
+them.
 
 ---
 

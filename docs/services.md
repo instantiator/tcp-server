@@ -61,6 +61,31 @@ NestJS MCP server for requesting input from human users or consulting other agen
 - **API:** `POST http://localhost:3012/mcp`
 - **Built from:** `apps/tcp-mcp-interactions/Dockerfile`
 
+## Stopping the simulation
+
+Every service is declared `restart: unless-stopped`, so a container that exits
+on its own is restarted seconds later. Stopping the simulation therefore means
+stopping the _containers_, not signalling the processes.
+
+Two ways to do that, and the difference costs money:
+
+| Command                         | What happens                                                                                                                            |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `./tcp-cli.sh shutdown`         | Drains first: refuses new work, waits for every running agent to finish its current LLM call and pause, then runs `docker compose stop` |
+| `./tcp-cli.sh shutdown --force` | Aborts in-flight LLM calls immediately, then stops — **wastes the tokens already spent on those calls**                                 |
+| `./scripts/stop-dev.sh`         | Stops (`docker compose down`) straight away, with no drain. Whatever was mid-call loses its work                                        |
+
+Draining is tcp-server's job; halting is the host's. tcp-server exposes
+`POST`/`GET`/`DELETE /api/system/shutdown` and never stops a process itself, so
+the same drain works when the stack is run outside Docker (`npm run start:dev`)
+— you just stop the processes yourself once it reports quiesced. See
+[ADR-019](ADRs/ADR-019-graceful-shutdown.md) for why the responsibility is split
+this way, and [tcp-cli.md](tcp-cli.md#shutdown) for the flags.
+
+Agents paused by a drain keep their LangGraph checkpoints and stay paused
+across a restart; resume them explicitly when you are ready to spend tokens
+again.
+
 ## Third-party services
 
 ### PostgreSQL

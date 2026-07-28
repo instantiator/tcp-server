@@ -6,6 +6,7 @@ import {
   TcpAgent,
   PendingConsultation,
 } from '@tcp/shared';
+import { ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -14,6 +15,7 @@ import { randomUUID } from 'crypto';
 import { DbService } from '../db/db.service';
 import { AuditService } from '../audit/audit.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
+import { SystemShutdownService } from './system-shutdown.service';
 
 // Prevent BullMQ from trying to open a real Redis connection
 jest.mock('bullmq', () => ({
@@ -91,6 +93,7 @@ describe('AgentOrchestrationService', () => {
   let convRepo: ReturnType<typeof makeRepo>;
   let msgRepo: ReturnType<typeof makeRepo>;
   let recordAudit: jest.Mock;
+  let shutdown: SystemShutdownService;
 
   /**
    * Builds the service against the mocks assigned in `beforeEach`, *without*
@@ -118,9 +121,13 @@ describe('AgentOrchestrationService', () => {
           useValue: msgRepo,
         },
         { provide: AuditService, useValue: { record: recordAudit } },
+        // Real instance: it holds only in-memory state and no collaborators,
+        // so a spec that needs the draining behaviour can just call begin().
+        SystemShutdownService,
       ],
     }).compile();
 
+    shutdown = testingModule.get(SystemShutdownService);
     return testingModule.get(AgentOrchestrationService);
   }
 
@@ -192,7 +199,57 @@ describe('AgentOrchestrationService', () => {
     });
   });
 
+  describe('while the system is draining', () => {
+    beforeEach(() => {
+      shutdown.begin(false);
+    });
+
+    it('refuses to dispatch a start job', async () => {
+      await expect(service.dispatchStartJob(randomUUID())).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      expect(mockQueueInstance.add).not.toHaveBeenCalled();
+    });
+
+    it('refuses to dispatch a resume job', async () => {
+      const agent = makeAgent({ status: AgentStatus.Paused });
+      mockDb.getAgent.mockResolvedValue(agent);
+
+      await expect(service.resumeAgent(agent.id)).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      expect(mockQueueInstance.add).not.toHaveBeenCalled();
+    });
+
+    it('dispatches again once the drain is cancelled', async () => {
+      shutdown.cancel();
+      await service.dispatchStartJob(randomUUID());
+      expect(mockQueueInstance.add).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('resumeAgent', () => {
+    it('injects a continuation prompt when resuming a shutdown-paused agent, so tcp-agent continues from the checkpoint rather than restarting', async () => {
+      const agent = makeAgent({
+        status: AgentStatus.Paused,
+        pausedAt: new Date(),
+        pauseReason: 'shutdown',
+      });
+      mockDb.getAgent.mockResolvedValue(agent);
+      consultRepo.count.mockResolvedValue(0);
+      convRepo.count.mockResolvedValue(0);
+
+      await service.resumeAgent(agent.id);
+
+      expect(mockQueueInstance.add).toHaveBeenCalledWith('resume', {
+        agentId: agent.id,
+        type: 'resume',
+        replyContent: expect.stringContaining(
+          'Continue from where you left off',
+        ) as string,
+      });
+    });
+
     it('enqueues a resume job for an idle agent', async () => {
       const agent = makeAgent({ status: AgentStatus.Idle });
       mockDb.getAgent.mockResolvedValue(agent);
@@ -350,6 +407,7 @@ describe('AgentOrchestrationService', () => {
       expect(agentRepo.createQueryBuilder).toHaveBeenCalled();
       expect(agentRepo.updateQueryBuilder.set).toHaveBeenCalledWith({
         pausedAt: expect.any(Function) as () => string,
+        pauseReason: expect.any(Function) as () => string,
       });
       expect(agentRepo.updateQueryBuilder.where).toHaveBeenCalledWith(
         'id = :agentId',

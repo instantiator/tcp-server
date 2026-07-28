@@ -35,6 +35,7 @@ import { map } from 'rxjs/operators';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TaskEventService } from '../events/task-event.service';
 import { CreateTaskDto, UpdateTaskDto } from './dto/task.dto';
+import { SystemShutdownService } from './system-shutdown.service';
 import { TaskMaterialSummary, TaskService } from './task.service';
 
 /** Subset of the multer file object relevant to a materials upload. */
@@ -53,6 +54,7 @@ export class TaskController {
   constructor(
     private readonly tasks: TaskService,
     private readonly taskEvents: TaskEventService,
+    private readonly shutdown: SystemShutdownService,
   ) {}
 
   /** Creates a task in the `ready` state. No plan is generated until `POST /api/task/:id/start`. */
@@ -99,11 +101,14 @@ export class TaskController {
   /**
    * Starts a task: transitions `ready → planning` and dispatches the planner
    * agent (a logged no-op until `docs/prompts/010.2.7`).
+   *
+   * Refused with `503` while the system is draining for shutdown.
    */
   @ApiOperation({ summary: 'Start a task' })
   @Post(':id/start')
   @HttpCode(202)
   async startTask(@Param('id') id: UUID): Promise<TcpTask> {
+    this.shutdown.assertAccepting();
     return this.tasks.start(id);
   }
 

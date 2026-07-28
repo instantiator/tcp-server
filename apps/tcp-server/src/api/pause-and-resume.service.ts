@@ -84,6 +84,7 @@ export class PauseAndResumeService {
     await this.agentRepo.update(agentId, {
       status: AgentStatus.Paused,
       pausedAt: new Date(),
+      pauseReason: 'user_input',
     });
 
     // Create the conversation — routes to explicit userIds when given,
@@ -142,6 +143,7 @@ export class PauseAndResumeService {
     await this.agentRepo.update(callingAgentId, {
       status: AgentStatus.Paused,
       pausedAt: new Date(),
+      pauseReason: 'consultation',
     });
 
     const callingRole = await this.roleRepo.findOneBy({

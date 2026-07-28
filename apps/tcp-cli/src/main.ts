@@ -31,6 +31,7 @@ import { registerSetCompany } from './commands/set-company';
 import { registerSetPlanner } from './commands/set-planner';
 import { registerSetRole } from './commands/set-role';
 import { registerSetTask } from './commands/set-task';
+import { registerShutdown } from './commands/shutdown';
 import { registerStartTask } from './commands/start-task';
 import { registerStoreKnowledge } from './commands/store-knowledge';
 import { registerTui } from './commands/tui';
@@ -101,5 +102,6 @@ registerCancelTask(program);
 registerListAgents(program);
 registerListAssignments(program);
 registerEavesdrop(program);
+registerShutdown(program);
 
 program.parse(process.argv);

@@ -135,6 +135,13 @@ data (databases, Zitadel configuration) persists across restarts. Pass
 | `-e`, `--env <path>` | Environment file                 | `.env` if present, else `.env.testing` |
 | `-v`, `--volumes`    | Remove volumes (resets all data) | off                                    |
 
+`stop-dev.sh` stops the containers immediately, without asking the simulation
+to wind down first — an agent mid-LLM-call loses the tokens it has already
+spent. To wind down cleanly, drain first with `./tcp-cli.sh shutdown`, which
+pauses every running agent at its next resumable point and then runs
+`docker compose stop` itself. Use `stop-dev.sh` when nothing is running, when
+you want the volumes removed, or when you don't care about the in-flight work.
+
 ## tcp-cli.sh
 
 Runs the `tcp-cli` developer tool. Builds the CLI automatically if the
@@ -148,6 +155,20 @@ a fresh build before running.
 ./tcp-cli.sh get-token
 ./tcp-cli.sh -r <roleId> chat
 ./tcp-cli.sh -r <roleId> -q "hello" chat
+```
+
+The `shutdown` verb is the one case where this wrapper does more than launch
+the CLI: once the API reports the simulation drained, the wrapper stops the
+`tcp-dev` containers with `docker compose stop`. Halting has to happen here
+rather than in the Node process, because every Compose service runs with
+`restart: unless-stopped` and would simply be restarted if it exited itself —
+see [ADR-019](ADRs/ADR-019-graceful-shutdown.md). Pass `--no-stop` to drain
+without halting.
+
+```bash
+./tcp-cli.sh shutdown              # drain, wait, then stop the containers
+./tcp-cli.sh shutdown --force      # abort in-flight LLM work, then stop
+./tcp-cli.sh shutdown --no-stop    # drain only
 ```
 
 See also: [docs/tcp-cli.md](tcp-cli.md) for the full CLI reference.

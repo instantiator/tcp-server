@@ -5,7 +5,11 @@ import {
   StreamDelta,
   WireEvent,
 } from '@tcp/shared';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { EMPTY, firstValueFrom, of, take, toArray } from 'rxjs';
 import { DbService } from '../db/db.service';
@@ -13,6 +17,7 @@ import { AgentEventService } from '../events/agent-event.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { AgentController } from './api.agent.controller';
 import { ChatService } from './chat.service';
+import { SystemShutdownService } from './system-shutdown.service';
 
 function makeAgent(overrides: Partial<TcpAgent> = {}): TcpAgent {
   return {
@@ -46,6 +51,7 @@ describe('AgentController', () => {
     Pick<AgentEventService, 'observe' | 'emit' | 'cleanup'>
   >;
   let auditService: { record: jest.Mock };
+  let shutdown: SystemShutdownService;
   let controller: AgentController;
 
   beforeEach(() => {
@@ -62,12 +68,15 @@ describe('AgentController', () => {
       cleanup: jest.fn(),
     };
     auditService = { record: jest.fn().mockResolvedValue(undefined) };
+    // Real instance: in-memory state only, so a spec can drive it directly.
+    shutdown = new SystemShutdownService();
     controller = new AgentController(
       db as unknown as DbService,
       orchestration as unknown as AgentOrchestrationService,
       chat as unknown as ChatService,
       agentEvents as unknown as AgentEventService,
       auditService as never,
+      shutdown,
     );
   });
 
@@ -84,6 +93,30 @@ describe('AgentController', () => {
 
       expect(orchestration.startAgent).toHaveBeenCalledTimes(1);
       expect(result.id).toBe(agent.id);
+    });
+
+    it('refuses to start an agent while the system is draining', async () => {
+      shutdown.begin(false);
+
+      await expect(
+        controller.startAgent({
+          companyId: randomUUID(),
+          roleId: randomUUID(),
+          initialPrompt: 'Do something.',
+        }),
+      ).rejects.toThrow(ServiceUnavailableException);
+      expect(orchestration.startAgent).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('startChat', () => {
+    it('refuses to start a chat agent while the system is draining', async () => {
+      shutdown.begin(false);
+
+      await expect(
+        controller.startChat({ companyId: randomUUID(), roleId: randomUUID() }),
+      ).rejects.toThrow(ServiceUnavailableException);
+      expect(db.createAgent).not.toHaveBeenCalled();
     });
   });
 
