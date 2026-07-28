@@ -12,6 +12,10 @@ Unit, integration, and e2e suites manage their own Docker infrastructure.
 The api and smoke suites require the full TCP stack — this script starts it
 automatically using .env.testing and tears it down on exit.
 
+Prints how long each step took at the end of the run, including when a step
+fails (covering everything that ran up to that point). Docker prune steps are
+excluded from the per-step list but counted in the wall-clock total.
+
 Prerequisites:
   - Docker and Docker Compose
   - .env.testing present in the repo root (see .env.example)
@@ -55,9 +59,53 @@ cleanup() {
 trap cleanup EXIT
 
 CURRENT_STEP=""
+RUN_START=$SECONDS
+STEP_START=$SECONDS
+STEP_NAMES=()
+STEP_SECONDS=()
+
+# Renders a duration in whole seconds as `45s` or `3m 07s`.
+format_duration() {
+  local total="$1"
+  if [[ "$total" -ge 60 ]]; then
+    printf '%dm %02ds' "$((total / 60))" "$((total % 60))"
+  else
+    printf '%ds' "$total"
+  fi
+}
+
+# Closes off the step now running and files its elapsed time for the summary.
+# Docker prune steps are skipped: they are infrastructure housekeeping between
+# suites, not work any suite is accountable for.
+record_step() {
+  local suffix="${1:-}"
+  if [[ -z "$CURRENT_STEP" ]]; then return 0; fi
+  if [[ "$CURRENT_STEP" == "Docker prune"* ]]; then return 0; fi
+  STEP_NAMES+=("${CURRENT_STEP}${suffix}")
+  STEP_SECONDS+=("$((SECONDS - STEP_START))")
+}
+
+# Prints how long each step took, and the wall-clock time for the whole run
+# (which includes the docker prunes omitted above).
+print_durations() {
+  echo ""
+  echo "════════════════════════════════════════"
+  echo "  Durations"
+  echo "════════════════════════════════════════"
+  local width=0 i
+  for ((i = 0; i < ${#STEP_NAMES[@]}; i++)); do
+    if [[ "${#STEP_NAMES[i]}" -gt "$width" ]]; then width="${#STEP_NAMES[i]}"; fi
+  done
+  for ((i = 0; i < ${#STEP_NAMES[@]}; i++)); do
+    printf '  %-*s  %s\n' "$width" "${STEP_NAMES[i]}" "$(format_duration "${STEP_SECONDS[i]}")"
+  done
+  printf '  %-*s  %s\n' "$width" "TOTAL (wall clock)" "$(format_duration "$((SECONDS - RUN_START))")"
+}
 
 step() {
+  record_step
   CURRENT_STEP="$1"
+  STEP_START=$SECONDS
   echo ""
   echo "════════════════════════════════════════"
   echo "  $CURRENT_STEP"
@@ -69,6 +117,8 @@ on_error() {
   echo "════════════════════════════════════════"
   echo "  FAILED: $CURRENT_STEP"
   echo "════════════════════════════════════════"
+  record_step " (failed)"
+  print_durations
   exit 1
 }
 
@@ -140,5 +190,9 @@ step "Smoke tests"
 "$SCRIPTS/run-smoke-tests.sh" --base-url "$API_BASE_URL"
 echo
 
+record_step
+CURRENT_STEP=""
+
 echo "All steps passed."
+print_durations
 echo
