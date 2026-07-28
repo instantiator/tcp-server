@@ -32,6 +32,11 @@ import { StorageTrackingClientService } from '../storage-tracking/storage-tracki
 import { agentPrompts } from '../agent-prompts';
 import { AgentEventPublisherService } from './agent-event-publisher.service';
 import { AgentLoopService } from './agent-loop.service';
+import { SupervisedTurnService } from './supervised-turn.service';
+import { InitialStateService } from './initial-state.service';
+import { AgentLoopEventRecorder } from './loop-events.service';
+import { AgentRunEnvironmentService } from './run-environment.service';
+import { AgentRunStatusService } from './run-status.service';
 
 const ALL_ENTITIES = [TcpCompany, TcpRole, TcpAgent, TcpTask, TcpAssignment];
 
@@ -201,6 +206,11 @@ describe('AgentLoopService', () => {
       ],
       providers: [
         AgentLoopService,
+        AgentRunEnvironmentService,
+        InitialStateService,
+        AgentRunStatusService,
+        AgentLoopEventRecorder,
+        SupervisedTurnService,
         {
           provide: AuditClientService,
           useValue: { record: auditRecord, notifyComplete, notifyFailed },

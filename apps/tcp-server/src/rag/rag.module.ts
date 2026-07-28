@@ -9,6 +9,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { StorageModule } from '../storage/storage.module';
 import { EmbeddingService } from '@tcp/shared';
+import { KnowledgeIndexStateService } from './knowledge-index-state.service';
 import { KnowledgeReindexService } from './knowledge-reindex.service';
 import { RagIndexService } from './rag-index.service';
 
@@ -43,6 +44,7 @@ import { RagIndexService } from './rag-index.service';
     RagIndexService,
     KnowledgeRetrievalService,
     KnowledgeReindexService,
+    KnowledgeIndexStateService,
   ],
   exports: [
     EmbeddingService,

@@ -19,6 +19,7 @@ import type { Repository } from 'typeorm';
 import type { AuditService } from '../audit/audit.service';
 import type { KnowledgeReindexService } from '../rag/knowledge-reindex.service';
 import { MinioStorageAdapter } from './minio-storage.adapter';
+import { StorageSideEffects } from './storage-side-effects.service';
 import { DocumentValidationException } from './document-validation.exception';
 
 jest.mock('@aws-sdk/client-s3', () => {
@@ -74,9 +75,11 @@ function makeAdapter(
 ): MinioStorageAdapter {
   return new MinioStorageAdapter(
     config,
-    audit as unknown as AuditService,
-    companyRepo as unknown as Repository<TcpCompany>,
-    reindex as unknown as KnowledgeReindexService,
+    new StorageSideEffects(
+      audit as unknown as AuditService,
+      companyRepo as unknown as Repository<TcpCompany>,
+      reindex as unknown as KnowledgeReindexService,
+    ),
   );
 }
 

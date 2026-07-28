@@ -1,4 +1,9 @@
-import { extractContentText } from '@tcp/shared';
+import {
+  AgentLoopCompletionSummary,
+  extractContentText,
+  renderTemplate,
+} from '@tcp/shared';
+import { agentPrompts } from '../agent-prompts';
 
 /** Structured record of storage operations performed during an agent loop run. */
 export interface StorageChanges {
@@ -192,4 +197,32 @@ export function applyStorageResult(
   } else if (base === 'restore_working_file' && text.startsWith('Restored')) {
     tracker.storage.created.push(filename);
   }
+}
+
+/**
+ * Builds a deterministic completion summary from the tracked actions and
+ * storage changes.
+ *
+ * No LLM call — the tracked data is already precise and complete, so an
+ * LLM-authored abstractive summary added narrative framing but no new facts,
+ * at the cost of an extra round-trip on every completed run.
+ */
+export function buildCompletionSummary(
+  tracker: AgentLoopTracker,
+): AgentLoopCompletionSummary {
+  const { actions, storage } = tracker;
+  const none = agentPrompts.completion_summary_no_storage;
+  const summary = renderTemplate(
+    agentPrompts.completion_summary_deterministic,
+    {
+      actionLines: actions.length
+        ? actions.map((a, i) => `${i + 1}. ${a}`).join('\n')
+        : agentPrompts.completion_summary_no_actions,
+      created: storage.created.join(', ') || none,
+      modified: storage.modified.join(', ') || none,
+      deleted: storage.deleted.join(', ') || none,
+      moved: storage.moved.map((m) => `${m.from} → ${m.to}`).join(', ') || none,
+    },
+  );
+  return { summary, actions, storage };
 }

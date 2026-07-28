@@ -10,7 +10,8 @@ rules:
   security/hardcoded-secret: warning
 
 ci:
-  # Current score is 65; ratchet this up as the remaining warnings — 12
-  # file-too-large (011.1.3/011.1.4) and 11 duplicate-block (011.1.5) — are
-  # cleaned up.
-  failBelow: 63
+  # Current score is 73; ratchet this up as the remaining warnings are cleaned
+  # up. 011.1.4 decomposed the 8 server/agent-side oversized files, leaving 4
+  # file-too-large findings — all CLI/TUI files owned by 011.1.5, which also
+  # owns the remaining duplicate-block warnings.
+  failBelow: 71

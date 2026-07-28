@@ -14,7 +14,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken, TypeOrmModule } from '@nestjs/typeorm';
 import { randomUUID, UUID } from 'crypto';
 import { EntityManager, QueryFailedError, Repository } from 'typeorm';
+import { AgentDbService } from './agent-db.service';
+import { CompanyDbService } from './company-db.service';
 import { DbService } from './db.service';
+import { RoleDbService } from './role-db.service';
 
 const ALL_ENTITIES = [
   TcpCompany,
@@ -47,7 +50,7 @@ describe('DbService', () => {
         }),
         TypeOrmModule.forFeature(ALL_ENTITIES),
       ],
-      providers: [DbService],
+      providers: [DbService, CompanyDbService, RoleDbService, AgentDbService],
     }).compile();
 
     dbService = testingModule.get(DbService);

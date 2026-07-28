@@ -17,22 +17,32 @@ import { AuditService } from '../audit/audit.service';
 import { StorageService } from '../storage/storage.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { PauseAndResumeService } from './pause-and-resume.service';
+import { QaVerdictService } from './qa-verdict.service';
+import { TaskDeliverablesService } from './task-deliverables.service';
+import { TaskFailureService } from './task-failure.service';
 import { TaskOrchestrationService } from './task-orchestration.service';
+import { TaskRecoveryService } from './task-recovery.service';
+import { TaskStateService } from './task-state.service';
 import type { TcpAgentTemplate } from '../templates/TcpAgentTemplate';
 
 const ENTITIES = [TcpCompany, TcpRole, TcpAgent, TcpTask, TcpAssignment];
 
 /**
- * Exercises {@link TaskOrchestrationService} against a real in-memory SQLite DB
- * so the atomic conditional UPDATEs, state transitions, materials merge, and
- * recovery decisions are covered end-to-end. Only the outward-facing
- * collaborators (agent dispatch, pause/resume, storage, audit, config) are
- * mocked — `createAgent` still persists a real agent row so the assignment↔agent
- * back-link the completion/QA paths rely on is genuine.
+ * Exercises the whole orchestration stack — {@link TaskOrchestrationService}
+ * and its {@link TaskStateService}/{@link TaskDeliverablesService}/
+ * {@link QaVerdictService}/{@link TaskFailureService}/
+ * {@link TaskRecoveryService} collaborators, wired together for real — against
+ * an in-memory SQLite DB, so the atomic conditional UPDATEs, state transitions,
+ * materials merge, and recovery decisions are covered end-to-end. Only the
+ * outward-facing collaborators (agent dispatch, pause/resume, storage, audit,
+ * config) are mocked — `createAgent` still persists a real agent row so the
+ * assignment↔agent back-link the completion/QA paths rely on is genuine.
  */
 describe('TaskOrchestrationService', () => {
   let moduleRef: TestingModule;
   let service: TaskOrchestrationService;
+  let failures: TaskFailureService;
+  let recovery: TaskRecoveryService;
   let taskRepo: Repository<TcpTask>;
   let assignmentRepo: Repository<TcpAssignment>;
   let agentRepo: Repository<TcpAgent>;
@@ -100,17 +110,54 @@ describe('TaskOrchestrationService', () => {
     audit = { record: jest.fn().mockResolvedValue(undefined) };
     config = { get: jest.fn().mockReturnValue(undefined) };
 
-    service = new TaskOrchestrationService(
+    const state = new TaskStateService(
       taskRepo,
       assignmentRepo,
-      agentRepo,
+      audit as unknown as AuditService,
+    );
+    const deliverables = new TaskDeliverablesService(
+      taskRepo,
+      companyRepo,
+      storage as unknown as StorageService,
+      state,
+    );
+    const qa = new QaVerdictService(
+      taskRepo,
+      assignmentRepo,
       companyRepo,
       roleRepo,
       agents as unknown as AgentOrchestrationService,
       pauseResume as unknown as PauseAndResumeService,
-      storage as unknown as StorageService,
-      audit as unknown as AuditService,
+      deliverables,
+      state,
       config as unknown as ConfigService,
+    );
+    failures = new TaskFailureService(
+      taskRepo,
+      assignmentRepo,
+      agentRepo,
+      deliverables,
+      state,
+    );
+    service = new TaskOrchestrationService(
+      taskRepo,
+      assignmentRepo,
+      companyRepo,
+      agents as unknown as AgentOrchestrationService,
+      pauseResume as unknown as PauseAndResumeService,
+      qa,
+      failures,
+      deliverables,
+      state,
+    );
+    recovery = new TaskRecoveryService(
+      taskRepo,
+      assignmentRepo,
+      agentRepo,
+      service,
+      failures,
+      deliverables,
+      state,
     );
   });
 
@@ -668,7 +715,7 @@ describe('TaskOrchestrationService', () => {
         }),
       );
 
-      await service.handleAgentFailed(agent.id, 'boom');
+      await failures.handleAgentFailed(agent.id, 'boom');
 
       const taskAfter = (await taskRepo.findOneBy({ id: task.id }))!;
       expect(taskAfter.status).toBe('failed');
@@ -699,7 +746,7 @@ describe('TaskOrchestrationService', () => {
         }),
       );
 
-      await service.handleAgentFailed(agent.id, 'crashed');
+      await failures.handleAgentFailed(agent.id, 'crashed');
 
       const stepAfter = (await assignmentRepo.findOneBy({ id: step.id }))!;
       expect(stepAfter.status).toBe('failed');
@@ -728,7 +775,7 @@ describe('TaskOrchestrationService', () => {
       );
 
       await expect(
-        service.handleAgentFailed(agent.id, 'boom'),
+        failures.handleAgentFailed(agent.id, 'boom'),
       ).resolves.toBeUndefined();
       expect((await assignmentRepo.findOneBy({ id: orphan.id }))!.status).toBe(
         'in-progress',
@@ -763,7 +810,7 @@ describe('TaskOrchestrationService', () => {
         }),
       );
 
-      await service.handleAgentFailed(agent.id, 'qa crashed');
+      await failures.handleAgentFailed(agent.id, 'qa crashed');
 
       const targetAfter = (await assignmentRepo.findOneBy({ id: target.id }))!;
       expect(targetAfter.status).toBe('failed');
@@ -805,7 +852,7 @@ describe('TaskOrchestrationService', () => {
         }),
       );
 
-      await service.handleAgentFailed(agent.id, 'qa crashed late');
+      await failures.handleAgentFailed(agent.id, 'qa crashed late');
 
       expect((await assignmentRepo.findOneBy({ id: target.id }))!.status).toBe(
         'succeeded',
@@ -931,7 +978,7 @@ describe('TaskOrchestrationService', () => {
         }),
       );
 
-      await service.handleAgentCompleted(agent.id);
+      await failures.handleAgentCompleted(agent.id);
 
       const taskAfter = (await taskRepo.findOneBy({ id: task.id }))!;
       expect(taskAfter.status).toBe('failed');
@@ -965,7 +1012,7 @@ describe('TaskOrchestrationService', () => {
         }),
       );
 
-      await service.handleAgentCompleted(agent.id);
+      await failures.handleAgentCompleted(agent.id);
 
       expect((await taskRepo.findOneBy({ id: task.id }))!.status).toBe(
         'failed',
@@ -1004,7 +1051,7 @@ describe('TaskOrchestrationService', () => {
         }),
       );
 
-      await service.handleAgentCompleted(agent.id);
+      await failures.handleAgentCompleted(agent.id);
 
       expect((await taskRepo.findOneBy({ id: task.id }))!.status).toBe(
         'in-progress',
@@ -1033,7 +1080,7 @@ describe('TaskOrchestrationService', () => {
       );
 
       await expect(
-        service.handleAgentCompleted(agent.id),
+        failures.handleAgentCompleted(agent.id),
       ).resolves.toBeUndefined();
       expect((await taskRepo.findOneBy({ id: task.id }))!.status).toBe(
         'in-progress',
@@ -1098,7 +1145,7 @@ describe('TaskOrchestrationService', () => {
         { key: 'k/report.txt', name: 'report.txt', size: 1, lastModified: 'x' },
       ]);
 
-      await service.handleAgentFailed(agent.id, 'boom');
+      await failures.handleAgentFailed(agent.id, 'boom');
 
       const fresh = await taskRepo.findOneByOrFail({ id: task.id });
       expect(fresh.status).toBe('failed');
@@ -1141,7 +1188,7 @@ describe('TaskOrchestrationService', () => {
       );
       await assignmentRepo.update(plan.id, { agentId: agent.id });
 
-      await service.reconcileTask(task);
+      await recovery.reconcileTask(task);
       expect((await taskRepo.findOneBy({ id: task.id }))!.status).toBe(
         'failed',
       );
@@ -1163,7 +1210,7 @@ describe('TaskOrchestrationService', () => {
         status: 'ready',
       });
 
-      await service.reconcileTask(task);
+      await recovery.reconcileTask(task);
       expect((await assignmentRepo.findOneBy({ id: step.id }))!.status).toBe(
         'in-progress',
       );
@@ -1181,7 +1228,7 @@ describe('TaskOrchestrationService', () => {
         status: 'in-qa',
       });
 
-      await service.reconcileTask(task);
+      await recovery.reconcileTask(task);
       const qa = await assignmentRepo.findOneBy({
         targetAssignmentId: step.id,
         mode: 'qa',
@@ -1218,7 +1265,7 @@ describe('TaskOrchestrationService', () => {
         { key: 'k/report.txt', name: 'report.txt', size: 1, lastModified: 'x' },
       ]);
 
-      await service.reconcileTask(task);
+      await recovery.reconcileTask(task);
 
       const fresh = await taskRepo.findOneByOrFail({ id: task.id });
       expect(fresh.status).toBe('failed');

@@ -19,18 +19,25 @@ import { randomUUID, type UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { DbService } from '../db/db.service';
 import { StorageService } from '../storage/storage.service';
+import { AssignmentCompletionService } from './assignment-completion.service';
+import { OutputGateService } from './output-gate.service';
 import { PauseAndResumeService } from './pause-and-resume.service';
+import { PlanValidationService } from './plan-validation.service';
+import { StorageScopeService } from './storage-scope.service';
 import { TaskDispatcher } from './task-dispatcher.service';
 import { AssignmentService } from './assignment.service';
 
 const ENTITIES = [TcpCompany, TcpRole, TcpAgent, TcpTask, TcpAssignment];
 
 /**
- * Exercises {@link AssignmentService} against a real in-memory SQLite DB so the
- * atomic conditional UPDATEs, the completion output-gate, and the state
- * transitions are covered end-to-end (only StorageService, DbService,
- * TaskDispatcher, and PauseAndResumeService — which have no DB of their own
- * here — are mocked).
+ * Exercises {@link AssignmentService} and the collaborators it delegates to
+ * ({@link AssignmentCompletionService}, {@link OutputGateService},
+ * {@link PlanValidationService}, {@link StorageScopeService}), wired together
+ * for real, against an in-memory
+ * SQLite DB — so the atomic conditional UPDATEs, the completion output-gate,
+ * and the state transitions are covered end-to-end (only StorageService,
+ * DbService, TaskDispatcher, and PauseAndResumeService — which have no DB of
+ * their own here — are mocked).
  */
 describe('AssignmentService', () => {
   let moduleRef: TestingModule;
@@ -96,14 +103,28 @@ describe('AssignmentService', () => {
       assignmentFinalised: jest.fn().mockResolvedValue(undefined),
     };
     pauseResume = { completeAgent: jest.fn().mockResolvedValue(undefined) };
+    const dbService = db as unknown as DbService;
+    const gate = new OutputGateService(
+      taskRepo,
+      dbService,
+      storage as unknown as StorageService,
+    );
     service = new AssignmentService(
       agentRepo,
       assignmentRepo,
       taskRepo,
-      db as unknown as DbService,
-      storage as unknown as StorageService,
       dispatcher as unknown as TaskDispatcher,
       pauseResume as unknown as PauseAndResumeService,
+      new AssignmentCompletionService(
+        agentRepo,
+        assignmentRepo,
+        taskRepo,
+        dispatcher as unknown as TaskDispatcher,
+        pauseResume as unknown as PauseAndResumeService,
+        gate,
+      ),
+      new PlanValidationService(dbService),
+      new StorageScopeService(assignmentRepo, dbService),
     );
   });
 

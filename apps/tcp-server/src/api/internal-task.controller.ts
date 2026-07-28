@@ -11,7 +11,8 @@ import {
 import { ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { InternalApiKeyGuard, TcpAssignment, TcpTask } from '@tcp/shared';
 import type { UUID } from 'crypto';
-import { AssignmentService, StorageScope } from './assignment.service';
+import { AssignmentService } from './assignment.service';
+import { StorageScope } from './storage-scope.service';
 import {
   AssureAssignmentDto,
   CompleteAssignmentDto,

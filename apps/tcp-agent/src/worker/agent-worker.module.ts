@@ -15,6 +15,11 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AgentEventPublisherService } from '../agent/agent-event-publisher.service';
 import { AgentLoopService } from '../agent/agent-loop.service';
+import { InitialStateService } from '../agent/initial-state.service';
+import { AgentLoopEventRecorder } from '../agent/loop-events.service';
+import { AgentRunEnvironmentService } from '../agent/run-environment.service';
+import { AgentRunStatusService } from '../agent/run-status.service';
+import { SupervisedTurnService } from '../agent/supervised-turn.service';
 import { McpClientModule } from '../mcp/mcp-client.module';
 import { AgentRagModule } from '../rag/agent-rag.module';
 import { AgentRegistryService } from '../registry/agent-registry.service';
@@ -40,7 +45,14 @@ import { AgentWorkerService } from './agent-worker.service';
   ],
   providers: [
     AgentWorkerService,
+    // The agent loop, plus the collaborators it delegates the run envelope,
+    // the opening prompt, and its status writes to.
     AgentLoopService,
+    AgentRunEnvironmentService,
+    InitialStateService,
+    AgentRunStatusService,
+    AgentLoopEventRecorder,
+    SupervisedTurnService,
     AgentEventPublisherService,
     AgentRegistryService,
     AuditClientService,

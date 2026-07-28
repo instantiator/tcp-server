@@ -37,12 +37,23 @@ import { StorageValidationController } from './storage-validation.controller';
 import { TaskController } from './task.controller';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { ApiService } from './api.service';
+import { AssignmentCompletionService } from './assignment-completion.service';
 import { AssignmentService } from './assignment.service';
 import { ChatService } from './chat.service';
+import { ChatTurnEnvironmentService } from './chat-turn-environment.service';
+import { ChatTurnPromptService } from './chat-turn-prompt.service';
 import { KnowledgeService } from './knowledge.service';
+import { OutputGateService } from './output-gate.service';
 import { PauseAndResumeService } from './pause-and-resume.service';
+import { PlanValidationService } from './plan-validation.service';
+import { StorageScopeService } from './storage-scope.service';
+import { QaVerdictService } from './qa-verdict.service';
+import { TaskDeliverablesService } from './task-deliverables.service';
 import { TaskDispatcher } from './task-dispatcher.service';
+import { TaskFailureService } from './task-failure.service';
 import { TaskOrchestrationService } from './task-orchestration.service';
+import { TaskRecoveryService } from './task-recovery.service';
+import { TaskStateService } from './task-state.service';
 import { TaskService } from './task.service';
 
 /** HTTP API module: wires all REST controllers and supporting services. */
@@ -89,11 +100,25 @@ import { TaskService } from './task.service';
     ApiService,
     AgentOrchestrationService,
     AssignmentService,
+    AssignmentCompletionService,
+    OutputGateService,
+    PlanValidationService,
+    StorageScopeService,
     ChatService,
+    ChatTurnEnvironmentService,
+    ChatTurnPromptService,
     ConversationService,
     KnowledgeService,
     PauseAndResumeService,
+    // The orchestration stack: TaskOrchestrationService drives a task forward,
+    // delegating status writes, artifact promotion, QA verdicts, failure
+    // propagation and startup repair to the collaborators below.
     TaskOrchestrationService,
+    TaskStateService,
+    TaskDeliverablesService,
+    QaVerdictService,
+    TaskFailureService,
+    TaskRecoveryService,
     // The real dispatcher: TaskDispatcher (the token the transition services
     // inject) resolves to the single TaskOrchestrationService instance.
     { provide: TaskDispatcher, useExisting: TaskOrchestrationService },

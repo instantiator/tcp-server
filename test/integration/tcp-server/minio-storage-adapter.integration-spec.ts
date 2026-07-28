@@ -20,6 +20,7 @@ import { StorageActionsController } from '../../../apps/tcp-server/src/api/stora
 import { KnowledgeReindexService } from '../../../apps/tcp-server/src/rag/knowledge-reindex.service';
 import { DocumentValidationException } from '../../../apps/tcp-server/src/storage/document-validation.exception';
 import { MinioStorageAdapter } from '../../../apps/tcp-server/src/storage/minio-storage.adapter';
+import { StorageSideEffects } from '../../../apps/tcp-server/src/storage/storage-side-effects.service';
 import { requireEnv } from '../../support/require-env';
 
 /**
@@ -85,6 +86,7 @@ describe('MinioStorageAdapter (integration)', () => {
       ],
       providers: [
         MinioStorageAdapter,
+        StorageSideEffects,
         { provide: AuditService, useValue: { record: jest.fn() } },
         {
           provide: KnowledgeReindexService,

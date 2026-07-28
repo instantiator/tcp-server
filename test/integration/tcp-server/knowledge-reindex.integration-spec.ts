@@ -16,8 +16,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { DataSource, Repository } from 'typeorm';
 import { AuditService } from '../../../apps/tcp-server/src/audit/audit.service';
+import { KnowledgeIndexStateService } from '../../../apps/tcp-server/src/rag/knowledge-index-state.service';
 import { KnowledgeReindexService } from '../../../apps/tcp-server/src/rag/knowledge-reindex.service';
 import { RagIndexService } from '../../../apps/tcp-server/src/rag/rag-index.service';
+import { StorageSideEffects } from '../../../apps/tcp-server/src/storage/storage-side-effects.service';
 import { MinioStorageAdapter } from '../../../apps/tcp-server/src/storage/minio-storage.adapter';
 import { requireEnv } from '../../support/require-env';
 
@@ -158,24 +160,23 @@ describe('KnowledgeReindex (integration)', () => {
     const audit = { record: jest.fn() } as unknown as AuditService;
     // Construct the adapter first with a placeholder reindex, then close the
     // deliberate cycle once the reindex service exists.
-    adapter = new MinioStorageAdapter(
-      config,
+    const sideEffects = new StorageSideEffects(
       audit,
       companyRepo,
       undefined as unknown as KnowledgeReindexService,
     );
+    adapter = new MinioStorageAdapter(config, sideEffects);
     const ragIndex = new RagIndexService(new EmbeddingService(), chunkRepo, ds);
     reindex = new KnowledgeReindexService(
       config,
       adapter,
       ragIndex,
-      stateRepo,
+      new KnowledgeIndexStateService(stateRepo, ds),
       chunkRepo,
       companyRepo,
       roleRepo,
-      ds,
     );
-    (adapter as unknown as { reindex: KnowledgeReindexService }).reindex =
+    (sideEffects as unknown as { reindex: KnowledgeReindexService }).reindex =
       reindex;
 
     await adapter.ensureBucketExists();

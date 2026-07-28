@@ -1,7 +1,11 @@
 import { InternalApiClient } from '@tcp/shared';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import { MaterialFileToolsService } from './material-file-tools.service';
+import { SharedStorageToolsService } from './shared-storage-tools.service';
+import { StorageApiService } from './storage-api.service';
 import { StorageToolsService } from './storage-tools.service';
+import { WorkingFileToolsService } from './working-file-tools.service';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -25,8 +29,29 @@ function makeConfig(): ConfigService {
   } as unknown as ConfigService;
 }
 
+function makeApi(): StorageApiService {
+  return new StorageApiService(new InternalApiClient(makeConfig()));
+}
+
+function makeSharedTools(): SharedStorageToolsService {
+  return new SharedStorageToolsService(makeApi());
+}
+
+function makeWorkingTools(): WorkingFileToolsService {
+  return new WorkingFileToolsService(makeApi());
+}
+
+function makeMaterialTools(): MaterialFileToolsService {
+  return new MaterialFileToolsService(makeApi());
+}
+
 function makeService(): StorageToolsService {
-  return new StorageToolsService(new InternalApiClient(makeConfig()));
+  const storage = makeApi();
+  return new StorageToolsService(
+    new SharedStorageToolsService(storage),
+    new WorkingFileToolsService(storage),
+    new MaterialFileToolsService(storage),
+  );
 }
 
 function axiosError(status: number, body: unknown): unknown {
@@ -94,7 +119,7 @@ describe('StorageToolsService', () => {
           entries: [{ key: 'a', name: 'a', size: 1, lastModified: 'x' }],
         },
       });
-      const result = await makeService().listFiles('acme');
+      const result = await makeSharedTools().listFiles('acme');
       expect(mockedAxios.post).toHaveBeenCalledWith(
         'http://tcp-server:3000/internal/storage/list',
         { prefix: 'acme' },
@@ -109,7 +134,7 @@ describe('StorageToolsService', () => {
   describe('readFile', () => {
     it('returns the file content as text', async () => {
       mockedAxios.post.mockResolvedValue({ data: { content: 'hello' } });
-      const result = await makeService().readFile('acme/a.txt');
+      const result = await makeSharedTools().readFile('acme/a.txt');
       expect(result.content[0].text).toBe('hello');
     });
 
@@ -117,7 +142,7 @@ describe('StorageToolsService', () => {
       mockedAxios.post.mockRejectedValue(
         axiosError(404, { message: 'File not found: acme/missing.txt' }),
       );
-      const result = await makeService().readFile('acme/missing.txt');
+      const result = await makeSharedTools().readFile('acme/missing.txt');
       expect(result.content[0].text).toBe('File not found: acme/missing.txt');
     });
   });
@@ -127,7 +152,7 @@ describe('StorageToolsService', () => {
       mockedAxios.post.mockResolvedValue({
         data: { format: 'json-object', keys: ['a'] },
       });
-      const result = await makeService().getFileSummary('acme/config.json');
+      const result = await makeSharedTools().getFileSummary('acme/config.json');
       expect(JSON.parse(result.content[0].text)).toEqual({
         format: 'json-object',
         keys: ['a'],
@@ -161,7 +186,7 @@ describe('StorageToolsService', () => {
     it('lists under the working prefix from the resolved scope', async () => {
       mockScope({ workingPrefix: 'acme/tasks/t1/assignments/2/working/' });
       mockedAxios.post.mockResolvedValue({ data: { entries: [] } });
-      await makeService().listWorkingFiles('agent-1');
+      await makeWorkingTools().listWorkingFiles('agent-1');
       expect(mockedAxios.post).toHaveBeenCalledWith(
         'http://tcp-server:3000/internal/storage/list',
         { prefix: 'acme/tasks/t1/assignments/2/working/' },
@@ -172,7 +197,7 @@ describe('StorageToolsService', () => {
     it('resolves a filename to a key under the working prefix (orphan)', async () => {
       mockScope({ workingPrefix: 'acme/assignments/a9/working/' });
       mockedAxios.post.mockResolvedValue({ data: { content: 'x' } });
-      await makeService().readWorkingFile('agent-1', 'notes/plan.md');
+      await makeWorkingTools().readWorkingFile('agent-1', 'notes/plan.md');
       expect(mockedAxios.post).toHaveBeenCalledWith(
         'http://tcp-server:3000/internal/storage/read',
         { path: 'acme/assignments/a9/working/notes/plan.md' },
@@ -185,7 +210,7 @@ describe('StorageToolsService', () => {
     it('reports a create when the file did not exist', async () => {
       mockScope({});
       mockedAxios.post.mockResolvedValue({ data: { created: true } });
-      const result = await makeService().appendWorkingFile(
+      const result = await makeWorkingTools().appendWorkingFile(
         'agent-1',
         'out.md',
         '# hi',
@@ -205,7 +230,7 @@ describe('StorageToolsService', () => {
     it('reports an append when the file already existed', async () => {
       mockScope({});
       mockedAxios.post.mockResolvedValue({ data: { created: false } });
-      const result = await makeService().appendWorkingFile(
+      const result = await makeWorkingTools().appendWorkingFile(
         'agent-1',
         'out.md',
         'more',
@@ -221,7 +246,7 @@ describe('StorageToolsService', () => {
           errors: [{ llmHint: 'Fix the JSON syntax.' }],
         }),
       );
-      const result = await makeService().appendWorkingFile(
+      const result = await makeWorkingTools().appendWorkingFile(
         'agent-1',
         'out.json',
         '{bad',
@@ -240,7 +265,7 @@ describe('StorageToolsService', () => {
           data: { key: 'acme/tasks/t1/assignments/0/working/out.md', size: 4 },
         });
       });
-      const result = await makeService().createWorkingFile(
+      const result = await makeWorkingTools().createWorkingFile(
         'agent-1',
         'out.md',
         '# hi',
@@ -267,7 +292,7 @@ describe('StorageToolsService', () => {
           data: { key: 'acme/tasks/t1/assignments/0/working/out.md', size: 4 },
         });
       });
-      const result = await makeService().createWorkingFile(
+      const result = await makeWorkingTools().createWorkingFile(
         'agent-1',
         'out.md',
         'new content',
@@ -283,7 +308,7 @@ describe('StorageToolsService', () => {
           return Promise.resolve({ data: { exists: true } });
         throw new Error('write should not be called');
       });
-      const result = await makeService().createWorkingFile(
+      const result = await makeWorkingTools().createWorkingFile(
         'agent-1',
         'out.md',
         'new content',
@@ -295,7 +320,7 @@ describe('StorageToolsService', () => {
 
     it('is refused in a read-only scope', async () => {
       mockScope({ mode: 'qa', readOnly: true });
-      const result = await makeService().createWorkingFile(
+      const result = await makeWorkingTools().createWorkingFile(
         'agent-1',
         'out.md',
         'x',
@@ -310,7 +335,7 @@ describe('StorageToolsService', () => {
     it('reports the replacement count', async () => {
       mockScope({});
       mockedAxios.post.mockResolvedValue({ data: { count: 3 } });
-      const result = await makeService().replaceInWorkingFile(
+      const result = await makeWorkingTools().replaceInWorkingFile(
         'agent-1',
         'out.md',
         'foo',
@@ -338,7 +363,7 @@ describe('StorageToolsService', () => {
           message: 'The string "foo" does not occur in ...; nothing replaced.',
         }),
       );
-      const result = await makeService().replaceInWorkingFile(
+      const result = await makeWorkingTools().replaceInWorkingFile(
         'agent-1',
         'out.md',
         'foo',
@@ -352,7 +377,7 @@ describe('StorageToolsService', () => {
     it('renames the working file via POST /internal/storage/move', async () => {
       mockScope({});
       mockedAxios.post.mockResolvedValue({ data: {} });
-      const result = await makeService().renameWorkingFile(
+      const result = await makeWorkingTools().renameWorkingFile(
         'agent-1',
         'a.md',
         'b.md',
@@ -374,7 +399,10 @@ describe('StorageToolsService', () => {
     it('deletes the working file via POST /internal/storage/delete', async () => {
       mockScope({});
       mockedAxios.post.mockResolvedValue({ data: {} });
-      const result = await makeService().deleteWorkingFile('agent-1', 'f.md');
+      const result = await makeWorkingTools().deleteWorkingFile(
+        'agent-1',
+        'f.md',
+      );
       expect(mockedAxios.post).toHaveBeenCalledWith(
         'http://tcp-server:3000/internal/storage/delete',
         {
@@ -393,7 +421,10 @@ describe('StorageToolsService', () => {
     it('restores the working file via POST /internal/storage/restore', async () => {
       mockScope({});
       mockedAxios.post.mockResolvedValue({ data: {} });
-      const result = await makeService().restoreWorkingFile('agent-1', 'f.md');
+      const result = await makeWorkingTools().restoreWorkingFile(
+        'agent-1',
+        'f.md',
+      );
       expect(mockedAxios.post).toHaveBeenCalledWith(
         'http://tcp-server:3000/internal/storage/restore',
         {
@@ -412,7 +443,7 @@ describe('StorageToolsService', () => {
       mockedAxios.post.mockResolvedValue({
         data: { size: 42, lastModified: 'x' },
       });
-      const result = await makeService().getWorkingFileProperties(
+      const result = await makeWorkingTools().getWorkingFileProperties(
         'agent-1',
         'f.md',
       );
@@ -434,7 +465,7 @@ describe('StorageToolsService', () => {
       mockedAxios.post.mockResolvedValue({
         data: { format: 'csv', columns: ['name', 'age'], rowCount: 2 },
       });
-      const result = await makeService().getWorkingFileSummary(
+      const result = await makeWorkingTools().getWorkingFileSummary(
         'agent-1',
         'report.csv',
       );
@@ -454,7 +485,7 @@ describe('StorageToolsService', () => {
   describe('filename safety', () => {
     it('rejects a parent-traversal filename and never calls the append endpoint', async () => {
       mockScope({});
-      const result = await makeService().appendWorkingFile(
+      const result = await makeWorkingTools().appendWorkingFile(
         'agent-1',
         '../secrets.txt',
         'x',
@@ -465,7 +496,7 @@ describe('StorageToolsService', () => {
 
     it('rejects an absolute filename', async () => {
       mockScope({});
-      const result = await makeService().readWorkingFile(
+      const result = await makeWorkingTools().readWorkingFile(
         'agent-1',
         '/etc/passwd',
       );
@@ -475,7 +506,7 @@ describe('StorageToolsService', () => {
 
     it('rejects a filename shaped like a resolved storage key instead of silently double-nesting it', async () => {
       mockScope({ workingPrefix: 'acme/tasks/t1/assignments/2/working/' });
-      const result = await makeService().readWorkingFile(
+      const result = await makeWorkingTools().readWorkingFile(
         'agent-1',
         'test-company/tasks/t1/assignments/2/working/report.md',
       );
@@ -492,7 +523,10 @@ describe('StorageToolsService', () => {
       "rejects a filename with a reserved segment ('%s')",
       async (filename) => {
         mockScope({});
-        const result = await makeService().readWorkingFile('agent-1', filename);
+        const result = await makeWorkingTools().readWorkingFile(
+          'agent-1',
+          filename,
+        );
         expect(result.content[0].text).toContain('resolved storage path');
         expect(mockedAxios.post).not.toHaveBeenCalled();
       },
@@ -501,7 +535,7 @@ describe('StorageToolsService', () => {
     it('still allows a genuine subdirectory filename with no reserved segment', async () => {
       mockScope({});
       mockedAxios.post.mockResolvedValue({ data: { content: 'x' } });
-      const result = await makeService().readWorkingFile(
+      const result = await makeWorkingTools().readWorkingFile(
         'agent-1',
         'notes/plan.md',
       );
@@ -525,7 +559,7 @@ describe('StorageToolsService', () => {
       '%s names the tool and the read tools',
       async (method, tool, args) => {
         mockScope({ mode: 'qa', readOnly: true });
-        const svc = makeService();
+        const svc = makeWorkingTools();
         const result = await (
           svc[method] as (
             ...a: unknown[]
@@ -557,7 +591,7 @@ describe('StorageToolsService', () => {
       '%s also refuses in plan-mode read-only scope',
       async (method, tool, args) => {
         mockScope({ mode: 'plan', readOnly: true });
-        const svc = makeService();
+        const svc = makeWorkingTools();
         const result = await (
           svc[method] as (
             ...a: unknown[]
@@ -573,7 +607,10 @@ describe('StorageToolsService', () => {
     it('still allows reading in qa mode', async () => {
       mockScope({ mode: 'qa', readOnly: true });
       mockedAxios.post.mockResolvedValue({ data: { content: 'reviewed' } });
-      const result = await makeService().readWorkingFile('agent-1', 'f.md');
+      const result = await makeWorkingTools().readWorkingFile(
+        'agent-1',
+        'f.md',
+      );
       expect(result.content[0].text).toBe('reviewed');
     });
   });
@@ -588,7 +625,7 @@ describe('StorageToolsService', () => {
           { name: 'inline-1', key: null, inlineText: 'do the thing' },
         ],
       });
-      const result = await makeService().listMaterialFiles('agent-1');
+      const result = await makeMaterialTools().listMaterialFiles('agent-1');
       expect(JSON.parse(result.content[0].text)).toEqual([
         { name: 'brief.md', kind: 'file' },
         { name: 'inline-1', kind: 'inline-text' },
@@ -599,7 +636,7 @@ describe('StorageToolsService', () => {
       mockScope({
         materials: [{ name: 'inline-1', key: null, inlineText: 'literal' }],
       });
-      const result = await makeService().readMaterialFile(
+      const result = await makeMaterialTools().readMaterialFile(
         'agent-1',
         'inline-1',
       );
@@ -614,7 +651,7 @@ describe('StorageToolsService', () => {
         ],
       });
       mockedAxios.post.mockResolvedValue({ data: { content: 'the brief' } });
-      const result = await makeService().readMaterialFile(
+      const result = await makeMaterialTools().readMaterialFile(
         'agent-1',
         'brief.md',
       );
@@ -628,7 +665,10 @@ describe('StorageToolsService', () => {
 
     it('reports an unknown material name', async () => {
       mockScope({ materials: [] });
-      const result = await makeService().readMaterialFile('agent-1', 'nope.md');
+      const result = await makeMaterialTools().readMaterialFile(
+        'agent-1',
+        'nope.md',
+      );
       expect(result.content[0].text).toContain("No material named 'nope.md'");
     });
   });
@@ -638,7 +678,7 @@ describe('StorageToolsService', () => {
       mockScope({
         materials: [{ name: 'inline-1', key: null, inlineText: 'literal' }],
       });
-      const result = await makeService().getMaterialFileProperties(
+      const result = await makeMaterialTools().getMaterialFileProperties(
         'agent-1',
         'inline-1',
       );
@@ -660,7 +700,7 @@ describe('StorageToolsService', () => {
       mockedAxios.post.mockResolvedValue({
         data: { size: 10, lastModified: 'x' },
       });
-      const result = await makeService().getMaterialFileProperties(
+      const result = await makeMaterialTools().getMaterialFileProperties(
         'agent-1',
         'brief.md',
       );
@@ -677,7 +717,7 @@ describe('StorageToolsService', () => {
 
     it('reports an unknown material name', async () => {
       mockScope({ materials: [] });
-      const result = await makeService().getMaterialFileProperties(
+      const result = await makeMaterialTools().getMaterialFileProperties(
         'agent-1',
         'nope.md',
       );

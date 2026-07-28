@@ -16,6 +16,8 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken, TypeOrmModule } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
 import { DataSource, Repository } from 'typeorm';
+import { ChatTurnEnvironmentService } from '../../../apps/tcp-server/src/api/chat-turn-environment.service';
+import { ChatTurnPromptService } from '../../../apps/tcp-server/src/api/chat-turn-prompt.service';
 import { ChatService } from '../../../apps/tcp-server/src/api/chat.service';
 import { AuditModule } from '../../../apps/tcp-server/src/audit/audit.module';
 import { ContextModule } from '../../../apps/tcp-server/src/context/context.module';
@@ -149,6 +151,8 @@ describe('ChatService integration (stub LLM)', () => {
       ],
       providers: [
         ChatService,
+        ChatTurnEnvironmentService,
+        ChatTurnPromptService,
         // AuditService + AgentEventService + AuditEventPublisher come from
         // AuditModule (which re-exports EventsModule), so ChatService, the
         // persist-then-publish path, and this test all share one wiring — the

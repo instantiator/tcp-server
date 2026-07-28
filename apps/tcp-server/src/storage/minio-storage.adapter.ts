@@ -1,40 +1,22 @@
 import {
-  CopyObjectCommand,
-  CreateBucketCommand,
-  DeleteObjectCommand,
-  GetObjectCommand,
-  HeadBucketCommand,
-  HeadObjectCommand,
-  ListObjectsV2Command,
-  PutObjectCommand,
-  S3Client,
-} from '@aws-sdk/client-s3';
-import {
-  AuditEventType,
-  TcpCompany,
   registerDefaultValidators,
   streamToBuffer,
   validateDocument,
 } from '@tcp/shared';
 import {
   ConflictException,
-  Inject,
   Injectable,
   Logger,
   NotFoundException,
   OnModuleInit,
-  forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import type { UUID } from 'crypto';
 import * as nodePath from 'path';
 import { Readable } from 'stream';
-import { Repository } from 'typeorm';
-import { AuditService } from '../audit/audit.service';
-import { KnowledgeReindexService } from '../rag/knowledge-reindex.service';
 import { analyzeContent } from './content-analysis';
 import { DocumentValidationException } from './document-validation.exception';
+import { S3ObjectStore } from './s3-object-store';
+import { StorageSideEffects } from './storage-side-effects.service';
 import {
   KnowledgeScope,
   knowledgeScopeKey,
@@ -44,16 +26,8 @@ import {
   assertValidStoragePath,
   DELETED_PREFIX,
   globToRegex,
-  isNotFoundError,
-  objectExists,
 } from './storage-path-helpers';
 import { Originators, StorageObject, StorageService } from './storage.service';
-
-const DEFAULT_ORIGINATORS: Originators = {
-  user: null,
-  agent: null,
-  task: null,
-};
 
 /**
  * MinIO/S3 implementation of {@link StorageService}.
@@ -61,6 +35,11 @@ const DEFAULT_ORIGINATORS: Originators = {
  * Uses a single shared bucket (`tcp` by default) with structured object keys
  * that follow the ADR-007 layout: `{company_slug}/knowledge/{role_slug}/{filename}`
  * (or `{company_slug}/knowledge/shared/{filename}` for company-wide knowledge).
+ *
+ * This class is the *policy* layer — path validation, document validation,
+ * soft-delete, and the audit/reindex side effects. The object primitives it
+ * builds on live in {@link S3ObjectStore}, and the side effects in
+ * {@link StorageSideEffects}.
  *
  * The bucket is created on startup if it does not already exist.
  */
@@ -70,133 +49,29 @@ export class MinioStorageAdapter
   implements OnModuleInit
 {
   private readonly logger = new Logger(MinioStorageAdapter.name);
-  private readonly client: S3Client;
-  private readonly bucket: string;
+  private readonly store: S3ObjectStore;
 
   constructor(
-    private readonly config: ConfigService,
-    private readonly audit: AuditService,
-    @InjectRepository(TcpCompany)
-    private readonly companyRepo: Repository<TcpCompany>,
-    @Inject(forwardRef(() => KnowledgeReindexService))
-    private readonly reindex: KnowledgeReindexService,
+    config: ConfigService,
+    private readonly effects: StorageSideEffects,
   ) {
     super();
     registerDefaultValidators();
-    const endpoint = this.config.getOrThrow<string>('MINIO_ENDPOINT');
-    const accessKeyId = this.config.getOrThrow<string>('MINIO_ACCESS_KEY');
-    const secretAccessKey = this.config.getOrThrow<string>('MINIO_SECRET_KEY');
-    this.bucket = this.config.get<string>('MINIO_BUCKET_PREFIX') ?? 'tcp';
-
-    this.client = new S3Client({
-      endpoint,
-      region: 'us-east-1', // MinIO requires a region string; value is ignored
-      forcePathStyle: true, // Required for MinIO
-      credentials: { accessKeyId, secretAccessKey },
-    });
-  }
-
-  /** Validates `content` before it's written to `path`, throwing on failure. */
-  private async validateBeforeWrite(
-    path: string,
-    content: string,
-  ): Promise<void> {
-    const result = await validateDocument(path, content, (ref) =>
-      this.resolveSchemaRef(path, ref),
-    );
-    if (!result.valid) {
-      throw new DocumentValidationException(result.errors);
-    }
-  }
-
-  /** Resolves a local/relative `$schema` reference against the document's own directory. */
-  private async resolveSchemaRef(
-    basePath: string,
-    ref: string,
-  ): Promise<string | null> {
-    const refKey = nodePath.posix.join(nodePath.posix.dirname(basePath), ref);
-    const result = await this.getByKey(refKey);
-    if (!result) return null;
-    const buf = await streamToBuffer(result.stream);
-    return buf.toString('utf-8');
-  }
-
-  /**
-   * Records a storage audit event with a real `companyId` resolved from the
-   * key's leading slug segment. Skips (with a visible warning) rather than
-   * writing a doomed nil-company-id event when no real company can be
-   * resolved — see docs/prompts/009.4 §Risks (the previous nil-UUID
-   * placeholder silently failed the FK constraint on every call).
-   *
-   * Never throws: the write/delete/copy/move it accompanies has already
-   * succeeded by the time this runs, so an audit-side failure (e.g. a bad
-   * `agentId` no longer present in `tcp_agent`) must not turn a successful
-   * storage operation into a 500 for the caller — matches the fire-and-forget
-   * guarantee `AuditClientService.record()` already gives HTTP callers.
-   */
-  private async emitStorageAudit(
-    tool: string,
-    path: string,
-    companySlug: string,
-    originators: Originators | undefined,
-    extra: Record<string, unknown> = {},
-  ): Promise<void> {
-    try {
-      const company = await this.companyRepo.findOneBy({ slug: companySlug });
-      if (!company) {
-        this.logger.warn(
-          `Skipping storage audit for "${tool}" on ${path}: no company found for slug "${companySlug}"`,
-        );
-        return;
-      }
-      const resolvedOriginators = originators ?? DEFAULT_ORIGINATORS;
-      await this.audit.record(
-        company.id,
-        'storage',
-        resolvedOriginators.agent as UUID | null,
-        AuditEventType.ToolCall,
-        { tool, path, originators: resolvedOriginators, ...extra },
-      );
-    } catch (err) {
-      this.logger.warn(
-        `Storage audit write failed for "${tool}" on ${path}: ${String(err instanceof Error ? err.message : err)}`,
-      );
-    }
-  }
-
-  /**
-   * Enqueues a RAG rebuild for any affected key that falls under a
-   * `knowledge/` folder — the single chokepoint that keeps embeddings in sync
-   * with storage, whoever wrote the file (user, agent, or CLI). A no-op for
-   * non-knowledge keys ({@link KnowledgeReindexService.bumpByKey} filters
-   * them). Never throws: the write it accompanies has already succeeded, so a
-   * queue-side failure must not turn it into an error for the caller.
-   */
-  private async triggerReindex(...keys: string[]): Promise<void> {
-    for (const key of keys) {
-      try {
-        await this.reindex.bumpByKey(key);
-      } catch (err) {
-        this.logger.warn(
-          `Knowledge reindex trigger failed for ${key}: ${String(err instanceof Error ? err.message : err)}`,
-        );
-      }
-    }
+    this.store = new S3ObjectStore(config);
   }
 
   async onModuleInit(): Promise<void> {
     await this.ensureBucketExists();
   }
 
+  async ensureBucketExists(): Promise<void> {
+    await this.store.ensureBucket();
+  }
+
+  // Knowledge-base documents
+
   async putRaw(key: string, body: string): Promise<void> {
-    await this.client.send(
-      new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-        Body: body,
-        ContentType: 'text/plain',
-      }),
-    );
+    await this.store.put(key, body, 'text/plain');
     this.logger.debug(`Stored raw object at ${key} (${body.length} chars)`);
   }
 
@@ -210,103 +85,59 @@ export class MinioStorageAdapter
     const text =
       typeof content === 'string' ? content : content.toString('utf-8');
     await this.validateBeforeWrite(key, text);
-    await this.client.send(
-      new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-        Body: content,
-        ContentType: 'text/markdown',
-      }),
-    );
+    await this.store.put(key, content, 'text/markdown');
     this.logger.debug(
       `Stored ${key} (${typeof content === 'string' ? content.length : content.byteLength} bytes)`,
     );
-    await this.emitStorageAudit(
+    await this.effects.recordAudit(
       'put_knowledge_file',
       key,
       scope.companySlug,
       originators,
     );
-    await this.triggerReindex(key);
+    await this.effects.triggerReindex(key);
     return key;
   }
 
   async listKnowledgeFiles(scope: KnowledgeScope): Promise<StorageObject[]> {
     const prefix = knowledgeScopePrefix(scope);
-    const results: StorageObject[] = [];
-    let continuationToken: string | undefined;
-
-    do {
-      const resp = await this.client.send(
-        new ListObjectsV2Command({
-          Bucket: this.bucket,
-          Prefix: prefix,
-          ContinuationToken: continuationToken,
-        }),
-      );
-
-      for (const obj of resp.Contents ?? []) {
-        if (!obj.Key) continue;
-        results.push({
-          key: obj.Key,
-          name: obj.Key.slice(prefix.length),
-          size: obj.Size ?? 0,
-          lastModified: obj.LastModified ?? new Date(0),
-          etag: obj.ETag,
-        });
-      }
-
-      continuationToken = resp.NextContinuationToken;
-    } while (continuationToken);
-
-    return results;
+    const objects = await this.store.listAll(prefix);
+    return objects
+      .filter((obj) => obj.Key)
+      .map((obj) => ({
+        key: obj.Key!,
+        name: obj.Key!.slice(prefix.length),
+        size: obj.Size ?? 0,
+        lastModified: obj.LastModified ?? new Date(0),
+        etag: obj.ETag,
+      }));
   }
 
   async getKnowledgeFile(
     scope: KnowledgeScope,
     filename: string,
   ): Promise<string | null> {
-    const key = knowledgeScopeKey(scope, filename);
-    try {
-      const resp = await this.client.send(
-        new GetObjectCommand({ Bucket: this.bucket, Key: key }),
-      );
-      const buf = await streamToBuffer(resp.Body as Readable);
-      return buf.toString('utf-8');
-    } catch (err) {
-      if (isNotFoundError(err)) return null;
-      throw err;
-    }
+    return this.store.getText(knowledgeScopeKey(scope, filename));
   }
 
   /**
    * Soft-deletes a knowledge-base document by delegating to {@link deleteFile}
    * — see docs/prompts/009.4 for why hard-delete was unified to soft-delete.
    */
-  deleteKnowledgeFile(
+  async deleteKnowledgeFile(
     scope: KnowledgeScope,
     filename: string,
     originators?: Originators,
   ): Promise<void> {
-    const key = knowledgeScopeKey(scope, filename);
-    return this.deleteFile(key, originators);
+    return this.deleteFile(knowledgeScopeKey(scope, filename), originators);
   }
+
+  // Raw key access (no path validation — callers hold already-resolved keys)
 
   async getByKey(
     key: string,
   ): Promise<{ stream: Readable; contentType: string } | null> {
-    try {
-      const resp = await this.client.send(
-        new GetObjectCommand({ Bucket: this.bucket, Key: key }),
-      );
-      return {
-        stream: resp.Body as Readable,
-        contentType: resp.ContentType ?? 'application/octet-stream',
-      };
-    } catch (err) {
-      if (isNotFoundError(err)) return null;
-      throw err;
-    }
+    return this.store.get(key);
   }
 
   async putByKey(
@@ -316,55 +147,23 @@ export class MinioStorageAdapter
     originators?: Originators,
   ): Promise<number> {
     await this.validateBeforeWrite(key, data.toString('utf-8'));
-    await this.client.send(
-      new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-        Body: data,
-        ContentType: contentType,
-        ContentLength: data.length,
-      }),
+    await this.store.put(key, data, contentType, data.length);
+    await this.effects.recordAudit(
+      'put_by_key',
+      key,
+      companySlugOf(key),
+      originators,
+      { contentType },
     );
-    const companySlug = key.split('/')[0];
-    await this.emitStorageAudit('put_by_key', key, companySlug, originators, {
-      contentType,
-    });
-    await this.triggerReindex(key);
+    await this.effects.triggerReindex(key);
     return data.length;
-  }
-
-  async ensureBucketExists(): Promise<void> {
-    try {
-      await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
-    } catch (err) {
-      // If the bucket simply doesn't exist, create it. Any other error (e.g.
-      // MinIO unreachable in tests) is logged and swallowed so the module can
-      // still initialise — operations will fail at call time with clear errors.
-      if (
-        err instanceof Error &&
-        (err.name === 'NoSuchBucket' ||
-          err.name === 'NotFound' ||
-          err.name === 'NoSuchKey')
-      ) {
-        await this.client.send(
-          new CreateBucketCommand({ Bucket: this.bucket }),
-        );
-        this.logger.log(`Created MinIO bucket: ${this.bucket}`);
-      } else {
-        this.logger.warn(
-          `Could not verify MinIO bucket "${this.bucket}": ${String(err instanceof Error ? err.message : err)}`,
-        );
-      }
-    }
   }
 
   // Generic file-action operations: list, read, write, delete, copy, move, search.
 
   async listFiles(prefix?: string): Promise<StorageObject[]> {
-    const resp = await this.client.send(
-      new ListObjectsV2Command({ Bucket: this.bucket, Prefix: prefix ?? '' }),
-    );
-    return (resp.Contents ?? [])
+    const objects = await this.store.listPage(prefix ?? '');
+    return objects
       .filter((obj) => !obj.Key?.startsWith(DELETED_PREFIX))
       .map((obj) => ({
         key: obj.Key ?? '',
@@ -376,16 +175,7 @@ export class MinioStorageAdapter
 
   async readFile(path: string): Promise<string | null> {
     assertValidStoragePath(path);
-    try {
-      const resp = await this.client.send(
-        new GetObjectCommand({ Bucket: this.bucket, Key: path }),
-      );
-      const buf = await streamToBuffer(resp.Body as Readable);
-      return buf.toString('utf-8');
-    } catch (err) {
-      if (isNotFoundError(err)) return null;
-      throw err;
-    }
+    return this.store.getText(path);
   }
 
   async writeFile(
@@ -395,70 +185,58 @@ export class MinioStorageAdapter
     originators?: Originators,
   ): Promise<{ key: string; size: number }> {
     assertValidStoragePath(path);
-    if (!overwrite && (await objectExists(this.client, this.bucket, path))) {
+    if (!overwrite && (await this.store.exists(path))) {
       throw new ConflictException(
         `File already exists at ${path}. Set overwrite: true to replace it.`,
       );
     }
     await this.validateBeforeWrite(path, content);
-    await this.client.send(
-      new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: path,
-        Body: content,
-        ContentType: 'text/plain',
-      }),
+    await this.store.put(path, content, 'text/plain');
+    await this.effects.recordAudit(
+      'write_file',
+      path,
+      companySlugOf(path),
+      originators,
+      { overwrite },
     );
-    const companySlug = path.split('/')[0];
-    await this.emitStorageAudit('write_file', path, companySlug, originators, {
-      overwrite,
-    });
-    await this.triggerReindex(path);
+    await this.effects.triggerReindex(path);
     return { key: path, size: Buffer.byteLength(content, 'utf-8') };
   }
 
   async deleteFile(path: string, originators?: Originators): Promise<void> {
     assertValidStoragePath(path);
-    if (!(await objectExists(this.client, this.bucket, path))) {
+    if (!(await this.store.exists(path))) {
       throw new NotFoundException(`File not found: ${path}`);
     }
     // Soft delete: copy to _deleted/ prefix, then remove the original.
-    await this.client.send(
-      new CopyObjectCommand({
-        Bucket: this.bucket,
-        CopySource: `${this.bucket}/${path}`,
-        Key: `${DELETED_PREFIX}${path}`,
-      }),
+    await this.store.copy(path, `${DELETED_PREFIX}${path}`);
+    await this.store.remove(path);
+    await this.effects.recordAudit(
+      'delete_file',
+      path,
+      companySlugOf(path),
+      originators,
     );
-    await this.client.send(
-      new DeleteObjectCommand({ Bucket: this.bucket, Key: path }),
-    );
-    const companySlug = path.split('/')[0];
-    await this.emitStorageAudit('delete_file', path, companySlug, originators);
-    await this.triggerReindex(path);
+    await this.effects.triggerReindex(path);
   }
 
   async restoreFile(path: string, originators?: Originators): Promise<void> {
     assertValidStoragePath(path);
     const deletedKey = `${DELETED_PREFIX}${path}`;
-    if (!(await objectExists(this.client, this.bucket, deletedKey))) {
+    if (!(await this.store.exists(deletedKey))) {
       throw new NotFoundException(
         `No soft-deleted file found at ${deletedKey}`,
       );
     }
-    await this.client.send(
-      new CopyObjectCommand({
-        Bucket: this.bucket,
-        CopySource: `${this.bucket}/${deletedKey}`,
-        Key: path,
-      }),
+    await this.store.copy(deletedKey, path);
+    await this.store.remove(deletedKey);
+    await this.effects.recordAudit(
+      'restore_file',
+      path,
+      companySlugOf(path),
+      originators,
     );
-    await this.client.send(
-      new DeleteObjectCommand({ Bucket: this.bucket, Key: deletedKey }),
-    );
-    const companySlug = path.split('/')[0];
-    await this.emitStorageAudit('restore_file', path, companySlug, originators);
-    await this.triggerReindex(path);
+    await this.effects.triggerReindex(path);
   }
 
   async searchFiles(
@@ -471,6 +249,43 @@ export class MinioStorageAdapter
     return entries.filter((e) => re.test(e.key));
   }
 
+  async copyFile(
+    source: string,
+    destination: string,
+    originators?: Originators,
+  ): Promise<void> {
+    await this.copyObjectChecked(source, destination);
+    await this.effects.recordAudit(
+      'copy_file',
+      source,
+      companySlugOf(source),
+      originators,
+      { destination },
+    );
+    await this.effects.triggerReindex(destination);
+  }
+
+  async moveFile(
+    source: string,
+    destination: string,
+    originators?: Originators,
+  ): Promise<void> {
+    await this.copyObjectChecked(source, destination);
+    await this.store.remove(source);
+    await this.effects.recordAudit(
+      'move_file',
+      source,
+      companySlugOf(source),
+      originators,
+      { destination },
+    );
+    // A move changes two keys, so both scopes must be reindexed — this is why
+    // move is not "a copy that happens to delete afterwards".
+    await this.effects.triggerReindex(source, destination);
+  }
+
+  // Inspection
+
   async getFileProperties(path: string): Promise<{
     key: string;
     exists: boolean;
@@ -479,107 +294,27 @@ export class MinioStorageAdapter
     lastModified?: Date;
   }> {
     assertValidStoragePath(path);
-    try {
-      const resp = await this.client.send(
-        new HeadObjectCommand({ Bucket: this.bucket, Key: path }),
-      );
-      return {
-        key: path,
-        exists: true,
-        size: resp.ContentLength,
-        contentType: resp.ContentType,
-        lastModified: resp.LastModified,
-      };
-    } catch (err) {
-      if (isNotFoundError(err)) return { key: path, exists: false };
-      throw err;
-    }
-  }
-
-  /**
-   * Validates both paths, refuses a missing source, and copies the object.
-   *
-   * Shared by {@link MinioStorageAdapter.copyFile} and
-   * {@link MinioStorageAdapter.moveFile}; each keeps its own audit action and
-   * reindex call, because what a move means to the audit trail and to the
-   * knowledge index is genuinely not "a copy that happens to delete after".
-   *
-   * @returns The source's company slug, for the caller's audit event.
-   */
-  private async copyObjectChecked(
-    source: string,
-    destination: string,
-  ): Promise<string> {
-    assertValidStoragePath(source, 'source');
-    assertValidStoragePath(destination, 'destination');
-    if (!(await objectExists(this.client, this.bucket, source))) {
-      throw new NotFoundException(`Source file not found: ${source}`);
-    }
-    await this.client.send(
-      new CopyObjectCommand({
-        Bucket: this.bucket,
-        CopySource: `${this.bucket}/${source}`,
-        Key: destination,
-      }),
-    );
-    return source.split('/')[0];
-  }
-
-  async copyFile(
-    source: string,
-    destination: string,
-    originators?: Originators,
-  ): Promise<void> {
-    const companySlug = await this.copyObjectChecked(source, destination);
-    await this.emitStorageAudit('copy_file', source, companySlug, originators, {
-      destination,
-    });
-    await this.triggerReindex(destination);
-  }
-
-  async moveFile(
-    source: string,
-    destination: string,
-    originators?: Originators,
-  ): Promise<void> {
-    const companySlug = await this.copyObjectChecked(source, destination);
-    await this.client.send(
-      new DeleteObjectCommand({ Bucket: this.bucket, Key: source }),
-    );
-    await this.emitStorageAudit('move_file', source, companySlug, originators, {
-      destination,
-    });
-    await this.triggerReindex(source, destination);
+    const head = await this.store.head(path);
+    return head
+      ? { key: path, exists: true, ...head }
+      : { key: path, exists: false };
   }
 
   async getFileSummary(path: string): Promise<Record<string, unknown>> {
     assertValidStoragePath(path);
-    let content: string;
-    let size: number | undefined;
-    try {
-      const head = await this.client.send(
-        new HeadObjectCommand({ Bucket: this.bucket, Key: path }),
-      );
-      size = head.ContentLength;
-      const resp = await this.client.send(
-        new GetObjectCommand({ Bucket: this.bucket, Key: path }),
-      );
-      const buf = await streamToBuffer(resp.Body as Readable);
-      content = buf.toString('utf-8');
-    } catch (err) {
-      if (isNotFoundError(err)) {
-        throw new NotFoundException(`File not found: ${path}`);
-      }
-      throw err;
+    const head = await this.store.head(path);
+    const content = head === null ? null : await this.store.getText(path);
+    if (head === null || content === null) {
+      throw new NotFoundException(`File not found: ${path}`);
     }
-    return analyzeContent(path, content, size);
+    return analyzeContent(path, content, head.size);
   }
 
   async checkMissingFiles(paths: string[]): Promise<string[]> {
     const results = await Promise.all(
       paths.map(async (p) => ({
         path: p,
-        exists: await objectExists(this.client, this.bucket, p),
+        exists: await this.store.exists(p),
       })),
     );
     return results.filter((r) => !r.exists).map((r) => r.path);
@@ -605,4 +340,56 @@ export class MinioStorageAdapter
       errors: result.errors.map((e) => e.llmHint),
     };
   }
+
+  // Policy helpers
+
+  /**
+   * Validates both paths, refuses a missing source, and copies the object.
+   *
+   * Shared by {@link copyFile} and {@link moveFile}; each keeps its own audit
+   * action and reindex call, because what a move means to the audit trail and
+   * to the knowledge index is genuinely not "a copy that happens to delete
+   * after".
+   */
+  private async copyObjectChecked(
+    source: string,
+    destination: string,
+  ): Promise<void> {
+    assertValidStoragePath(source, 'source');
+    assertValidStoragePath(destination, 'destination');
+    if (!(await this.store.exists(source))) {
+      throw new NotFoundException(`Source file not found: ${source}`);
+    }
+    await this.store.copy(source, destination);
+  }
+
+  /** Validates `content` before it's written to `path`, throwing on failure. */
+  private async validateBeforeWrite(
+    path: string,
+    content: string,
+  ): Promise<void> {
+    const result = await validateDocument(path, content, (ref) =>
+      this.resolveSchemaRef(path, ref),
+    );
+    if (!result.valid) {
+      throw new DocumentValidationException(result.errors);
+    }
+  }
+
+  /** Resolves a local/relative `$schema` reference against the document's own directory. */
+  private async resolveSchemaRef(
+    basePath: string,
+    ref: string,
+  ): Promise<string | null> {
+    const refKey = nodePath.posix.join(nodePath.posix.dirname(basePath), ref);
+    const result = await this.store.get(refKey);
+    if (!result) return null;
+    const buf = await streamToBuffer(result.stream);
+    return buf.toString('utf-8');
+  }
+}
+
+/** The company slug an object key belongs to — its leading path segment. */
+function companySlugOf(key: string): string {
+  return key.split('/')[0];
 }

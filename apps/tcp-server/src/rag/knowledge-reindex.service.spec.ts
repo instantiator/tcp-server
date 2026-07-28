@@ -5,8 +5,9 @@ import { DataSource } from 'typeorm';
 import { RagIndexService } from './rag-index.service';
 import {
   fingerprintListing,
-  KnowledgeReindexService,
-} from './knowledge-reindex.service';
+  KnowledgeIndexStateService,
+} from './knowledge-index-state.service';
+import { KnowledgeReindexService } from './knowledge-reindex.service';
 import { StorageObject, StorageService } from '../storage/storage.service';
 
 const COMPANY_ID = randomUUID();
@@ -85,11 +86,10 @@ function makeService() {
     config,
     storage as unknown as StorageService,
     ragIndex as unknown as RagIndexService,
-    stateRepo as never,
+    new KnowledgeIndexStateService(stateRepo as never, dataSource),
     chunkRepo as never,
     companyRepo as never,
     roleRepo as never,
-    dataSource,
   );
   const queue = {
     add: jest.fn().mockResolvedValue(undefined),

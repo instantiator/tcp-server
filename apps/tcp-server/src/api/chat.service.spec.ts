@@ -75,6 +75,8 @@ jest.mock('@langchain/core/messages', () => {
 });
 
 import { ChatService } from './chat.service';
+import { ChatTurnEnvironmentService } from './chat-turn-environment.service';
+import { ChatTurnPromptService } from './chat-turn-prompt.service';
 import { AIMessage } from '@langchain/core/messages';
 import { StateGraph } from '@langchain/langgraph';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
@@ -323,9 +325,17 @@ describe('ChatService', () => {
       config,
       contextManager,
       agentEvents,
-      ragRetrieval as unknown as KnowledgeRetrievalService,
+      new ChatTurnEnvironmentService(
+        config,
+        contextManager,
+        mcpClient as never,
+      ),
+      new ChatTurnPromptService(
+        config,
+        contextManager,
+        ragRetrieval as unknown as KnowledgeRetrievalService,
+      ),
       auditService as unknown as AuditService,
-      mcpClient as never,
       agentRepo as never,
       assignmentRepo as never,
       roleRepo as never,

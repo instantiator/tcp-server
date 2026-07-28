@@ -23,7 +23,7 @@ import { Repository } from 'typeorm';
 import type { UUID } from 'crypto';
 import { DbService } from '../db/db.service';
 import { PauseAndResumeService } from './pause-and-resume.service';
-import { TaskOrchestrationService } from './task-orchestration.service';
+import { TaskFailureService } from './task-failure.service';
 import {
   CompleteDto,
   FailDto,
@@ -45,7 +45,7 @@ import {
 export class InternalController {
   constructor(
     private readonly pauseResume: PauseAndResumeService,
-    private readonly taskOrchestration: TaskOrchestrationService,
+    private readonly taskFailures: TaskFailureService,
     private readonly db: DbService,
     @InjectRepository(TcpAgent)
     private readonly agentRepo: Repository<TcpAgent>,
@@ -153,7 +153,7 @@ export class InternalController {
     await this.pauseResume.completeAgent(agentId, body.output);
     // Belt-and-braces: fail the task if a planner reached Completed without
     // producing a plan (a no-op for every other completion).
-    await this.taskOrchestration.handleAgentCompleted(agentId);
+    await this.taskFailures.handleAgentCompleted(agentId);
   }
 
   /**
@@ -173,7 +173,7 @@ export class InternalController {
     await this.pauseResume.failAgent(agentId, body.reason);
     // Propagate the failure to the agent's task, when it has one (orphan/chat
     // agents are unaffected).
-    await this.taskOrchestration.handleAgentFailed(agentId, body.reason);
+    await this.taskFailures.handleAgentFailed(agentId, body.reason);
   }
 
   /**

@@ -5,7 +5,7 @@ import { CompanyUser, TcpAgent, TcpRole } from '@tcp/shared';
 import { DbService } from '../db/db.service';
 import { InternalController } from './internal.controller';
 import { PauseAndResumeService } from './pause-and-resume.service';
-import { TaskOrchestrationService } from './task-orchestration.service';
+import { TaskFailureService } from './task-failure.service';
 
 describe('InternalController', () => {
   let pauseResume: {
@@ -15,7 +15,7 @@ describe('InternalController', () => {
     failAgent: jest.Mock;
     updateStorageChanges: jest.Mock;
   };
-  let taskOrchestration: {
+  let taskFailures: {
     handleAgentFailed: jest.Mock;
     handleAgentCompleted: jest.Mock;
   };
@@ -37,7 +37,7 @@ describe('InternalController', () => {
       failAgent: jest.fn().mockResolvedValue(undefined),
       updateStorageChanges: jest.fn().mockResolvedValue(undefined),
     };
-    taskOrchestration = {
+    taskFailures = {
       handleAgentFailed: jest.fn().mockResolvedValue(undefined),
       handleAgentCompleted: jest.fn().mockResolvedValue(undefined),
     };
@@ -51,7 +51,7 @@ describe('InternalController', () => {
     userRepo = { findBy: jest.fn() };
     controller = new InternalController(
       pauseResume as unknown as PauseAndResumeService,
-      taskOrchestration as unknown as TaskOrchestrationService,
+      taskFailures as unknown as TaskFailureService,
       db as unknown as DbService,
       agentRepo as unknown as Repository<TcpAgent>,
       roleRepo as unknown as Repository<TcpRole>,
@@ -234,9 +234,7 @@ describe('InternalController', () => {
         agentId,
         'My final answer.',
       );
-      expect(taskOrchestration.handleAgentCompleted).toHaveBeenCalledWith(
-        agentId,
-      );
+      expect(taskFailures.handleAgentCompleted).toHaveBeenCalledWith(agentId);
     });
   });
 

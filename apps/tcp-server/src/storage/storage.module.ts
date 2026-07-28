@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditModule } from '../audit/audit.module';
 import { RagModule } from '../rag/rag.module';
 import { MinioStorageAdapter } from './minio-storage.adapter';
+import { StorageSideEffects } from './storage-side-effects.service';
 import { StorageService } from './storage.service';
 
 /**
@@ -25,6 +26,7 @@ import { StorageService } from './storage.service';
   ],
   providers: [
     MinioStorageAdapter,
+    StorageSideEffects,
     { provide: StorageService, useExisting: MinioStorageAdapter },
   ],
   exports: [StorageService, MinioStorageAdapter],

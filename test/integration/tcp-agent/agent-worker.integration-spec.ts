@@ -20,6 +20,11 @@ import { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { AgentEventPublisherService } from '../../../apps/tcp-agent/src/agent/agent-event-publisher.service';
 import { AgentLoopService } from '../../../apps/tcp-agent/src/agent/agent-loop.service';
+import { InitialStateService } from '../../../apps/tcp-agent/src/agent/initial-state.service';
+import { AgentLoopEventRecorder } from '../../../apps/tcp-agent/src/agent/loop-events.service';
+import { AgentRunEnvironmentService } from '../../../apps/tcp-agent/src/agent/run-environment.service';
+import { AgentRunStatusService } from '../../../apps/tcp-agent/src/agent/run-status.service';
+import { SupervisedTurnService } from '../../../apps/tcp-agent/src/agent/supervised-turn.service';
 import { AuditClientService } from '@tcp/shared';
 import * as factory from '@tcp/shared/llm/llm-factory';
 import { KnowledgeRetrievalService, McpClientService } from '@tcp/shared';
@@ -71,6 +76,11 @@ describe('AgentWorkerService (integration)', () => {
       providers: [
         AgentWorkerService,
         AgentLoopService,
+        AgentRunEnvironmentService,
+        InitialStateService,
+        AgentRunStatusService,
+        AgentLoopEventRecorder,
+        SupervisedTurnService,
         AgentRegistryService,
         {
           provide: AuditClientService,
