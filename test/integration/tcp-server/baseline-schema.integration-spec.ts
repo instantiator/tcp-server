@@ -8,10 +8,10 @@ import { requireEnv } from '../../support/require-env';
 // always present. Run via: ./scripts/run-integration-tests.sh
 //
 // Applies both migrations into a dedicated schema rather than `public`, which
-// other specs populate via `synchronize: true` in an order this spec cannot
-// rely on. That isolation is what lets the baseline be exercised the way it is
-// in production — plain CREATEs against an empty schema — so a baseline that
-// only applies to an already-populated database fails here instead of passing.
+// global-setup has already migrated. That empty schema is the point, not a
+// workaround: it lets the baseline be exercised the way it is in production —
+// plain CREATEs against nothing — so a baseline that only applies to an
+// already-populated database fails here instead of passing.
 describe('Baseline schema (migration verification)', () => {
   const SCHEMA = 'baseline_verification';
 

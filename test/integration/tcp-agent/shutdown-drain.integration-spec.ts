@@ -42,11 +42,11 @@ const SHARED_DATABASE_URL = requireEnv('DATABASE_URL');
 /**
  * This spec's own throwaway database, built with `synchronize: true`.
  *
- * The tier's shared database is migration-built, and a `synchronize` schema
- * carries TypeORM's auto-generated constraint names rather than the migrations'
- * hand-written ones — so synchronising onto the shared database leaves it in a
- * state the migrations can no longer be run against, which breaks whichever
- * spec boots a real `AppModule` afterwards.
+ * Unlike its siblings, this spec cannot share the tier's migration-built
+ * database: its `beforeEach`/`afterEach` truncate the agent, assignment, role
+ * and company tables wholesale, which would take any other spec's fixtures
+ * with them. Because the database is its own, `synchronize` is safe here —
+ * nothing else ever runs migrations against it.
  */
 const ISOLATED_DATABASE_URL = (() => {
   const url = new URL(SHARED_DATABASE_URL);

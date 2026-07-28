@@ -1,23 +1,7 @@
-import { DataSource } from 'typeorm';
-import { MIGRATIONS } from '../../apps/tcp-server/src/migrations-list';
-import {
-  AuditEvent,
-  CompanyUser,
-  Conversation,
-  ConversationMessage,
-  EpisodicMemory,
-  KnowledgeChunk,
-  KnowledgeIndexState,
-  TcpAgent,
-  TcpAssignment,
-  TcpCompany,
-  TcpRole,
-  TcpTask,
-  PendingConsultation,
-} from '../../libs/tcp-shared/src/models';
 import { assertMinioReachable } from '../../libs/tcp-shared/src/storage/minio-reachability';
 import { assertRedisReachable } from '../../libs/tcp-shared/src/redis/redis-reachability';
 import { rememberComposeEnv } from '../support/compose-env-handle';
+import { migrateDatabase } from '../support/migrate-database';
 import { startComposeTier } from '../support/testcontainers-env';
 
 /**
@@ -62,44 +46,7 @@ export default async function globalSetup(): Promise<void> {
 
   rememberComposeEnv(environment);
 
-  // Every e2e spec in the tier needs a migrated schema, but only specs that
-  // boot tcp-server's own AppModule get one as an incidental side effect of
-  // that app's startup (migrationsRun: true, see makeTypeOrmConfig). Specs
-  // that only ever boot another app's AppModule — e.g.
-  // test/e2e/tcp-mcp-memory/*.e2e-spec.ts — never trigger that, and per the
-  // single-migration-owner design (see apps/tcp-server/src/migrations-list.ts)
-  // never should. Running tcp-server's migrations once here, against the
-  // shared Postgres container, gives every spec a real schema regardless of
-  // which app it boots or what order specs run in.
-  //
-  // `entities` must be passed alongside `migrations`, not omitted: TypeORM's
-  // PostgresDriver auto-creates the `uuid-ossp` extension during connect,
-  // but only when it detects a `uuid`-generated column in entity metadata
-  // (PostgresDriver.js's post-connect setup). Without entities, several
-  // migrations' raw `DEFAULT uuid_generate_v4()` SQL fails outright — the
-  // same entity list `AppModule` registers is reused here for that reason,
-  // not because this DataSource ever reads/writes through them.
-  const migrationDataSource = new DataSource({
-    type: 'postgres',
-    url: env.DATABASE_URL,
-    entities: [
-      TcpCompany,
-      TcpRole,
-      TcpAgent,
-      TcpTask,
-      TcpAssignment,
-      AuditEvent,
-      KnowledgeChunk,
-      KnowledgeIndexState,
-      EpisodicMemory,
-      CompanyUser,
-      Conversation,
-      ConversationMessage,
-      PendingConsultation,
-    ],
-    migrations: MIGRATIONS,
-  });
-  await migrationDataSource.initialize();
-  await migrationDataSource.runMigrations();
-  await migrationDataSource.destroy();
+  // Every spec in the tier needs a migrated schema before it runs — see
+  // migrateDatabase for why no spec is allowed to build one itself.
+  await migrateDatabase(env.DATABASE_URL);
 }

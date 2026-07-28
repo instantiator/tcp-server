@@ -136,7 +136,6 @@ describe('ChatService integration (stub LLM)', () => {
             TcpAssignment,
             AuditEvent,
           ],
-          synchronize: true,
         }),
         TypeOrmModule.forFeature([
           TcpAgent,

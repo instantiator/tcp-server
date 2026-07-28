@@ -57,7 +57,6 @@ describe('AgentLoopService (integration)', () => {
           type: 'postgres',
           url: DATABASE_URL,
           entities: ALL_ENTITIES,
-          synchronize: true,
         }),
         TypeOrmModule.forFeature(ALL_ENTITIES),
       ],

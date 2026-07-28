@@ -101,14 +101,8 @@ describe('KnowledgeReindex (integration)', () => {
       type: 'postgres',
       url: DATABASE_URL,
       entities: [TcpCompany, TcpRole, KnowledgeChunk, KnowledgeIndexState],
-      synchronize: true,
     });
     await ds.initialize();
-    // pgvector column is invisible to TypeORM — add it (and the extension) by hand.
-    await ds.query(`CREATE EXTENSION IF NOT EXISTS vector`);
-    await ds.query(
-      `ALTER TABLE "knowledge_chunk" ADD COLUMN IF NOT EXISTS embedding vector(768)`,
-    );
 
     s3 = new S3Client({
       endpoint: ENDPOINT,

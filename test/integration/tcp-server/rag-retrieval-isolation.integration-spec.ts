@@ -49,13 +49,8 @@ describe('KnowledgeRetrievalService scoped-retrieval isolation (integration)', (
       type: 'postgres',
       url: DATABASE_URL,
       entities: [TcpCompany, TcpRole, KnowledgeChunk],
-      synchronize: true,
     });
     await ds.initialize();
-    await ds.query(`CREATE EXTENSION IF NOT EXISTS vector`);
-    await ds.query(
-      `ALTER TABLE "knowledge_chunk" ADD COLUMN IF NOT EXISTS embedding vector(768)`,
-    );
 
     companyRepo = ds.getRepository(TcpCompany);
     roleRepo = ds.getRepository(TcpRole);

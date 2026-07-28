@@ -80,7 +80,6 @@ describe('MinioStorageAdapter (integration)', () => {
           // TcpRole is registered but never queried here — required so
           // TypeORM can resolve TcpCompany.plannerRole's relation target.
           entities: [TcpCompany, TcpRole],
-          synchronize: true,
         }),
         TypeOrmModule.forFeature([TcpCompany]),
       ],

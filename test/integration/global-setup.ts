@@ -1,13 +1,15 @@
 import { assertMinioReachable } from '../../libs/tcp-shared/src/storage/minio-reachability';
 import { assertRedisReachable } from '../../libs/tcp-shared/src/redis/redis-reachability';
 import { rememberComposeEnv } from '../support/compose-env-handle';
+import { migrateDatabase } from '../support/migrate-database';
 import { startComposeTier } from '../support/testcontainers-env';
 
 /**
  * Jest global setup for the integration tier. Starts the dependency containers
  * (Postgres, Redis, MinIO, and the stub-llm service) once for the whole run via
- * testcontainers, then exposes their connection details as env vars for the
- * spec files. Torn down by the matching global-teardown.
+ * testcontainers, exposes their connection details as env vars for the spec
+ * files, and migrates the shared database. Torn down by the matching
+ * global-teardown.
  *
  * `assertRedisReachable`/`assertMinioReachable` are imported by relative path
  * rather than from `@tcp/shared` because Jest's moduleNameMapper is not
@@ -38,4 +40,8 @@ export default async function globalSetup(): Promise<void> {
   );
 
   rememberComposeEnv(environment);
+
+  // Every spec in the tier needs a migrated schema before it runs — see
+  // migrateDatabase for why no spec is allowed to build one itself.
+  await migrateDatabase(env.DATABASE_URL);
 }

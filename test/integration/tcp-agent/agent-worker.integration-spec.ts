@@ -70,7 +70,6 @@ describe('AgentWorkerService (integration)', () => {
           type: 'postgres',
           url: dbUrl,
           entities: ALL_ENTITIES,
-          synchronize: true,
         }),
         TypeOrmModule.forFeature(ALL_ENTITIES),
       ],
