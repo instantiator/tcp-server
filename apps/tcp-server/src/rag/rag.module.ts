@@ -8,7 +8,7 @@ import {
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { StorageModule } from '../storage/storage.module';
-import { EmbeddingService } from './embedding.service';
+import { EmbeddingService } from '@tcp/shared';
 import { KnowledgeReindexService } from './knowledge-reindex.service';
 import { RagIndexService } from './rag-index.service';
 

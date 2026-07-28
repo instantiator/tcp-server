@@ -4,7 +4,7 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
 import pgvector from 'pgvector';
 import { DataSource, IsNull, Repository } from 'typeorm';
-import { EmbeddingService } from './embedding.service';
+import { EmbeddingService } from '@tcp/shared';
 
 /** Maximum characters per chunk before splitting (≈ 400–600 tokens at 4 chars/token). */
 const MAX_CHUNK_CHARS = 2000;

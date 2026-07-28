@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ModelCompatibilityService } from './model-compatibility.service';
-import * as factory from './llm-factory';
+import * as factory from '@tcp/shared/llm/llm-factory';
 
 // Shared mock for the BaseChatModel instance returned by buildChatModel
 const mockInvoke = jest.fn();

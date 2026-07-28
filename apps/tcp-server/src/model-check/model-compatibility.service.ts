@@ -1,7 +1,7 @@
 import { LlmConfig } from '@tcp/shared';
 import { Injectable, Logger } from '@nestjs/common';
 import { z } from 'zod';
-import { buildChatModel } from './llm-factory';
+import { buildChatModel } from '@tcp/shared';
 
 /** Compatibility report for a single model. */
 export interface ModelCompatibilityResult {

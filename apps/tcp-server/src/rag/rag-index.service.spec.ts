@@ -1,7 +1,7 @@
 import { KnowledgeChunk } from '@tcp/shared';
 import { randomUUID } from 'crypto';
 import { DataSource, IsNull, Repository } from 'typeorm';
-import { EmbeddingService } from './embedding.service';
+import { EmbeddingService } from '@tcp/shared';
 import { RagIndexService } from './rag-index.service';
 
 function makeEmbedding(): jest.Mocked<EmbeddingService> {
