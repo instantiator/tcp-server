@@ -75,7 +75,7 @@ export const DEFAULT_EMBEDDING_DIMENSION = 768;
  * Default minimum cosine similarity a knowledge chunk must score to be
  * retrieved. Overridden by `RAG_THRESHOLD` (env), then by
  * {@link AgentRunConfig.ragThreshold} via {@link resolveRunConfig}.
- * Used in {@link RagRetrievalService.retrieve}.
+ * Used in {@link KnowledgeRetrievalService.retrieve}.
  *
  * Cosine scores are **not** comparable across embedding models — each has its
  * own score distribution, so this is a per-model calibration, not a universal

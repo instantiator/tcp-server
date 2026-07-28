@@ -2,6 +2,7 @@ import { AuditEventType } from '../models/AuditEvent.model';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import { InternalApiClient } from '../http/internal-api.client';
 import { AuditClientService } from './audit-client.service';
 
 jest.mock('axios');
@@ -18,7 +19,7 @@ function makeService(
         key === 'TCP_SERVER_URL' ? serverUrl : apiKey,
       ),
   } as unknown as ConfigService;
-  return new AuditClientService(config);
+  return new AuditClientService(new InternalApiClient(config));
 }
 
 describe('AuditClientService', () => {

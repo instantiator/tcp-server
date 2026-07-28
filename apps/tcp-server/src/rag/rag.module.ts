@@ -1,5 +1,6 @@
 import {
   KnowledgeChunk,
+  KnowledgeRetrievalService,
   KnowledgeIndexState,
   TcpCompany,
   TcpRole,
@@ -10,14 +11,13 @@ import { StorageModule } from '../storage/storage.module';
 import { EmbeddingService } from './embedding.service';
 import { KnowledgeReindexService } from './knowledge-reindex.service';
 import { RagIndexService } from './rag-index.service';
-import { RagRetrievalService } from './rag-retrieval.service';
 
 /**
  * Provides RAG (Retrieval-Augmented Generation) services for tcp-server.
  *
  * - {@link EmbeddingService} — generates embeddings using the company's config
  * - {@link RagIndexService} — ingests and removes OKF knowledge-base documents
- * - {@link RagRetrievalService} — retrieves relevant chunks for a query
+ * - {@link KnowledgeRetrievalService} — retrieves relevant chunks for a query
  * - {@link KnowledgeReindexService} — keeps embeddings in sync with storage
  *   (write hook + reconciliation poller) and owns the reindex queue/worker
  *
@@ -41,13 +41,13 @@ import { RagRetrievalService } from './rag-retrieval.service';
   providers: [
     EmbeddingService,
     RagIndexService,
-    RagRetrievalService,
+    KnowledgeRetrievalService,
     KnowledgeReindexService,
   ],
   exports: [
     EmbeddingService,
     RagIndexService,
-    RagRetrievalService,
+    KnowledgeRetrievalService,
     KnowledgeReindexService,
   ],
 })

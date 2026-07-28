@@ -69,7 +69,7 @@ function ask(
     case 'number':
       return askNumber(q, answers);
     case 'confirm':
-      return askConfirm(q, answers);
+      return askConfirm(q);
     case 'checkbox':
       return askCheckbox(q, answers);
     default:
@@ -77,96 +77,86 @@ function ask(
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic prompt wrapper needs flexible answer types
-async function askInput(
-  q: InputPrompt,
-  answers: Record<string, any>,
-): Promise<string> {
+/**
+ * Asks one free-text question, printing `help` and re-asking whenever the user
+ * answers `?`.
+ *
+ * The three typed prompts below differ only in their default, their validation
+ * and how they read the answer back — the `?` contract itself lives here, so a
+ * new prompt type cannot quietly omit it.
+ */
+async function askWithHelp<T>(
+  q: PromptBase,
+  spec: {
+    message: string;
+    default?: string | number;
+    /** Validates an answer that is not a help request. */
+    validate: (input: string) => true | string;
+    /** Reads the accepted answer back as its final type. */
+    parse: (input: string) => T;
+  },
+): Promise<T> {
   const { value } = await inquirer.prompt<{ value: string }>({
     type: 'input',
     name: 'value',
-    message: q.message,
-    default:
-      typeof q.default === 'function'
-        ? q.default(answers)
-        : q.default,
+    message: spec.message,
+    default: spec.default,
     validate: (input: string) => {
-      if (input.trim() === '?' && q.help) return true;
-      if (input.trim() === '?') return 'No help available for this question.';
-      return q.validate ? q.validate(input) : true;
-    },
-  });
-
-  if (value.trim() === '?' && q.help) {
-    console.log(`\n${q.help}\n`);
-    return askInput(q, answers);
-  }
-
-  return value;
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic prompt wrapper needs flexible answer types
-async function askNumber(
-  q: NumberPrompt,
-  answers: Record<string, any>,
-): Promise<number> {
-  const { value } = await inquirer.prompt<{ value: string }>({
-    type: 'input',
-    name: 'value',
-    message: q.message,
-    default:
-      typeof q.default === 'function'
-        ? q.default(answers)
-        : q.default,
-    validate: (input: string) => {
-      if (input.trim() === '?' && q.help) return true;
-      if (input.trim() === '?') return 'No help available for this question.';
-      const n = Number(input);
-      if (!Number.isInteger(n) || n <= 0) return 'Must be a positive integer.';
-      return q.validate ? q.validate(n) : true;
+      if (input.trim() === '?') {
+        return q.help ? true : 'No help available for this question.';
+      }
+      return spec.validate(input);
     },
   });
 
   if (String(value).trim() === '?' && q.help) {
     console.log(`\n${q.help}\n`);
-    return askNumber(q, answers);
+    return askWithHelp(q, spec);
   }
 
-  return Number(value);
+  return spec.parse(String(value));
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic prompt wrapper needs flexible answer types
-async function askConfirm(
-  q: ConfirmPrompt,
+function askInput(
+  q: InputPrompt,
   answers: Record<string, any>,
-): Promise<boolean> {
-  const { value } = await inquirer.prompt<{ value: string }>({
-    type: 'input',
-    name: 'value',
-    message: `${q.message} (y/n/?)`,
-    default:
-      q.default === true
-        ? 'y'
-        : q.default === false
-          ? 'n'
-          : undefined,
-    validate: (input: string) => {
-      const lower = input.trim().toLowerCase();
-      if (lower === '?' && q.help) return true;
-      if (lower === '?') return 'No help available for this question.';
-      if (['y', 'yes', 'n', 'no', ''].includes(lower)) return true;
-      return 'Please enter y, n, or ?.';
-    },
+): Promise<string> {
+  return askWithHelp(q, {
+    message: q.message,
+    default: typeof q.default === 'function' ? q.default(answers) : q.default,
+    validate: (input: string) => (q.validate ? q.validate(input) : true),
+    parse: (input: string) => input,
   });
+}
 
-  const lower = String(value).trim().toLowerCase();
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic prompt wrapper needs flexible answer types
+function askNumber(
+  q: NumberPrompt,
+  answers: Record<string, any>,
+): Promise<number> {
+  return askWithHelp(q, {
+    message: q.message,
+    default: typeof q.default === 'function' ? q.default(answers) : q.default,
+    validate: (input: string) => {
+      const n = Number(input);
+      if (!Number.isInteger(n) || n <= 0) return 'Must be a positive integer.';
+      return q.validate ? q.validate(n) : true;
+    },
+    parse: Number,
+  });
+}
 
-  if (lower === '?' && q.help) {
-    console.log(`\n${q.help}\n`);
-    return askConfirm(q, answers);
-  }
-
-  return lower === 'y' || lower === 'yes';
+function askConfirm(q: ConfirmPrompt): Promise<boolean> {
+  return askWithHelp(q, {
+    message: `${q.message} (y/n/?)`,
+    default: q.default === true ? 'y' : q.default === false ? 'n' : undefined,
+    validate: (input: string) =>
+      ['y', 'yes', 'n', 'no', ''].includes(input.trim().toLowerCase())
+        ? true
+        : 'Please enter y, n, or ?.',
+    parse: (input: string) => ['y', 'yes'].includes(input.trim().toLowerCase()),
+  });
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic prompt wrapper needs flexible answer types

@@ -261,27 +261,10 @@ export class PauseAndResumeService {
       result: resolvedOutput,
     });
 
-    const calling = await this.agentRepo.findOneBy({
-      id: consultation.callingAgentId,
-    });
-    if (calling?.status !== AgentStatus.Paused) return;
-
-    // Ask the orchestrator to resume the calling agent — it will stay paused
-    // if other requests are still outstanding, or aggregate every response
-    // since the pause (including this one) if this was the last.
-    // Fire-and-forget — DB state is already consistent; don't block on Redis.
-    void this.orchestration
-      .resumeAgent(consultation.callingAgentId)
-      .then(() =>
-        this.logger.log(
-          `Resumed calling agent ${consultation.callingAgentId} with consultation result`,
-        ),
-      )
-      .catch((err: unknown) =>
-        this.logger.error(
-          `Failed to resume calling agent ${consultation.callingAgentId}: ${err instanceof Error ? err.message : String(err)}`,
-        ),
-      );
+    await this.resumeCallingAgentIfPaused(
+      consultation.callingAgentId,
+      'with consultation result',
+    );
   }
 
   /**
@@ -323,24 +306,42 @@ export class PauseAndResumeService {
       result: reason,
     });
 
-    const calling = await this.agentRepo.findOneBy({
-      id: consultation.callingAgentId,
-    });
+    await this.resumeCallingAgentIfPaused(
+      consultation.callingAgentId,
+      'after consultation failure',
+    );
+  }
+
+  /**
+   * Resumes the agent that requested a consultation, once the consultation has
+   * resolved either way. A calling agent that is no longer paused has already
+   * moved on, so it is left alone.
+   *
+   * The orchestrator decides what resuming means: the agent stays paused while
+   * other requests are still outstanding, and aggregates every response since
+   * the pause once this was the last one.
+   *
+   * Deliberately fire-and-forget — the database state is already consistent by
+   * this point, so the caller must not block (or fail) on Redis being
+   * available.
+   *
+   * @param reason - Completes the log line describing why the resume happened.
+   */
+  private async resumeCallingAgentIfPaused(
+    callingAgentId: UUID,
+    reason: string,
+  ): Promise<void> {
+    const calling = await this.agentRepo.findOneBy({ id: callingAgentId });
     if (calling?.status !== AgentStatus.Paused) return;
 
-    // Same resume contract as completeAgent: the orchestrator aggregates all
-    // responses (including this failure) once nothing else is outstanding.
-    // Fire-and-forget — DB state is already consistent; don't block on Redis.
     void this.orchestration
-      .resumeAgent(consultation.callingAgentId)
+      .resumeAgent(callingAgentId)
       .then(() =>
-        this.logger.log(
-          `Resumed calling agent ${consultation.callingAgentId} after consultation failure`,
-        ),
+        this.logger.log(`Resumed calling agent ${callingAgentId} ${reason}`),
       )
       .catch((err: unknown) =>
         this.logger.error(
-          `Failed to resume calling agent ${consultation.callingAgentId}: ${err instanceof Error ? err.message : String(err)}`,
+          `Failed to resume calling agent ${callingAgentId}: ${err instanceof Error ? err.message : String(err)}`,
         ),
       );
   }

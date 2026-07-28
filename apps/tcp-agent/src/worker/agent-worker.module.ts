@@ -1,5 +1,6 @@
 import {
   AuditClientService,
+  InternalApiClient,
   CONTEXT_AUDIT_SINK,
   ContextBudgetService,
   ContextCompactorService,
@@ -43,6 +44,7 @@ import { AgentWorkerService } from './agent-worker.service';
     AgentEventPublisherService,
     AgentRegistryService,
     AuditClientService,
+    InternalApiClient,
     StorageTrackingClientService,
     ContextBudgetService,
     ContextCompactorService,

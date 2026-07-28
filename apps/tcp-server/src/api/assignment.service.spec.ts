@@ -791,6 +791,25 @@ describe('AssignmentService', () => {
         ).rejects.toBeInstanceOf(UnprocessableEntityException);
         expect(dispatcher.assignmentFinalised).not.toHaveBeenCalled();
       });
+
+      // The finalise path claims the assignment through the same guard as the
+      // orphan and QA-handoff paths; losing the race must not finalise twice.
+      it('409s a double finalise', async () => {
+        const { assignment, agent } = await setupFinalise();
+        storage.listFiles.mockResolvedValue([
+          {
+            key: 'k/report.txt',
+            name: 'report.txt',
+            size: 1,
+            lastModified: 'x',
+          },
+        ]);
+        await service.completeAssignment(assignment.id, agent.id, 'ok', []);
+        await expect(
+          service.completeAssignment(assignment.id, agent.id, 'ok', []),
+        ).rejects.toBeInstanceOf(ConflictException);
+        expect(dispatcher.assignmentFinalised).toHaveBeenCalledTimes(1);
+      });
     });
 
     it('rejects a caller that is not the assignment agent', async () => {

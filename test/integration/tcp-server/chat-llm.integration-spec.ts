@@ -20,7 +20,7 @@ import { ChatService } from '../../../apps/tcp-server/src/api/chat.service';
 import { AuditModule } from '../../../apps/tcp-server/src/audit/audit.module';
 import { ContextModule } from '../../../apps/tcp-server/src/context/context.module';
 import { AgentEventService } from '../../../apps/tcp-server/src/events/agent-event.service';
-import { RagRetrievalService } from '../../../apps/tcp-server/src/rag/rag-retrieval.service';
+import { KnowledgeRetrievalService } from '@tcp/shared';
 import { requireEnv } from '../../support/require-env';
 
 const TERMINAL_STATUSES = ['completed', 'failed', 'idle', 'cancelled'];
@@ -154,7 +154,7 @@ describe('ChatService integration (stub LLM)', () => {
         // persist-then-publish path, and this test all share one wiring — the
         // event stream is how the detached turn reports completion.
         {
-          provide: RagRetrievalService,
+          provide: KnowledgeRetrievalService,
           useValue: { retrieve: jest.fn().mockResolvedValue([]) },
         },
         {

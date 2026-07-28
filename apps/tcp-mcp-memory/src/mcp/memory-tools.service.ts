@@ -2,7 +2,12 @@ import {
   AuditEventType,
   EmbeddingService,
   TcpCompany,
+  TcpRole,
   AuditClientService,
+  KnowledgeRetrievalService,
+  ToolResult,
+  ok,
+  registerDescribeServer,
   resolveEmbeddingConfig,
   resolveEnvEmbeddingConfig,
 } from '@tcp/shared';
@@ -48,12 +53,6 @@ function interpolate(template: string, vars: Record<string, string>): string {
   );
 }
 
-/** MCP tool result envelope. */
-interface ToolResult {
-  [key: string]: unknown;
-  content: Array<{ type: 'text'; text: string }>;
-}
-
 interface MemoryRow {
   id: UUID;
   source: 'knowledge' | 'episodic';
@@ -72,46 +71,90 @@ export class MemoryToolsService {
 
   constructor(
     private readonly embedding: EmbeddingService,
+    private readonly knowledge: KnowledgeRetrievalService,
     private readonly audit: AuditClientService,
     private readonly config: ConfigService,
     @InjectRepository(TcpCompany)
     private readonly companyRepo: Repository<TcpCompany>,
+    @InjectRepository(TcpRole)
+    private readonly roleRepo: Repository<TcpRole>,
     @InjectDataSource()
     private readonly dataSource: DataSource,
   ) {}
+
+  /**
+   * Resolves the human-readable name to record against an audit event.
+   *
+   * The audit trail denormalises the role *name* so history stays readable
+   * after a role is renamed or deleted; the tools receive only a `roleId`, so
+   * it has to be looked up. Falls back to `'agent'` — the convention the other
+   * MCP services already use — when the role no longer exists.
+   */
+  private async auditRoleName(roleId: string): Promise<string> {
+    const role = await this.roleRepo.findOne({
+      where: { id: roleId as UUID },
+      select: { name: true },
+    });
+    return role?.name ?? 'agent';
+  }
 
   /** Creates and returns a configured McpServer with all memory tools registered. */
   createServer(): McpServer {
     const server = new McpServer({ name: 'tcp-mcp-memory', version: '1.0.0' });
     this.registerDescribeServer(server);
-    this.registerRecall(server);
+    this.registerSemanticSearchTool(
+      server,
+      'recall',
+      memoryToolDescriptions.recall,
+      'The role ID whose memory to search.',
+      (companyId, roleId, query, topK) =>
+        this.hybridSearch(companyId, roleId, query, topK),
+    );
     this.registerRemember(server);
-    this.registerSearchKnowledge(server);
+    this.registerSemanticSearchTool(
+      server,
+      'search_knowledge',
+      memoryToolDescriptions.search_knowledge,
+      'The role ID whose knowledge base to search.',
+      (companyId, roleId, query, topK) =>
+        this.knowledgeSearch(companyId, roleId, query, topK),
+    );
     return server;
   }
 
   private registerDescribeServer(server: McpServer): void {
-    server.registerTool(
-      'describe_server',
-      { description: memoryToolDescriptions.describe_server },
-      (): ToolResult => ({
-        content: [
-          {
-            type: 'text',
-            text: memoryPrompts.describe_server,
-          },
-        ],
-      }),
+    registerDescribeServer(
+      server,
+      memoryToolDescriptions.describe_server,
+      memoryPrompts.describe_server,
     );
   }
 
-  private registerRecall(server: McpServer): void {
+  /**
+   * Registers one of the two semantic-search tools.
+   *
+   * They differ only in name, description, the `roleId` hint and which search
+   * runs; the schema, the `top_k` default, the audit row and the result
+   * envelope are identical, so neither can drift from the other.
+   */
+  private registerSemanticSearchTool(
+    server: McpServer,
+    tool: 'recall' | 'search_knowledge',
+    description: string,
+    roleIdDescription: string,
+    search: (
+      companyId: string,
+      roleId: string,
+      query: string,
+      topK: number,
+    ) => Promise<string>,
+  ): void {
     server.registerTool(
-      'recall',
+      tool,
       {
-        description: memoryToolDescriptions.recall,
+        description,
         inputSchema: {
-          roleId: z.uuid().describe('The role ID whose memory to search.'),
+          roleId: z.uuid().describe(roleIdDescription),
           companyId: z
             .uuid()
             .describe('The company ID (used to load embedding config).'),
@@ -126,13 +169,15 @@ export class MemoryToolsService {
       },
       async ({ roleId, companyId, query, top_k }): Promise<ToolResult> => {
         const k = top_k ?? 5;
-        const result = await this.hybridSearch(companyId, roleId, query, k);
-        this.audit.record(companyId, roleId, null, AuditEventType.ToolCall, {
-          tool: 'recall',
-          query,
-          top_k: k,
-        });
-        return { content: [{ type: 'text', text: result }] };
+        const result = await search(companyId, roleId, query, k);
+        this.audit.record(
+          companyId,
+          await this.auditRoleName(roleId),
+          null,
+          AuditEventType.ToolCall,
+          { tool, query, top_k: k },
+        );
+        return ok(result);
       },
     );
   }
@@ -174,46 +219,12 @@ export class MemoryToolsService {
         );
         this.audit.record(
           companyId,
-          roleId,
+          await this.auditRoleName(roleId),
           agentId ?? null,
           AuditEventType.ToolCall,
           { tool: 'remember' },
         );
         return { content: [{ type: 'text', text }] };
-      },
-    );
-  }
-
-  private registerSearchKnowledge(server: McpServer): void {
-    server.registerTool(
-      'search_knowledge',
-      {
-        description: memoryToolDescriptions.search_knowledge,
-        inputSchema: {
-          roleId: z
-            .uuid()
-            .describe('The role ID whose knowledge base to search.'),
-          companyId: z
-            .uuid()
-            .describe('The company ID (used to load embedding config).'),
-          query: z.string().describe(SEMANTIC_QUERY_GUIDANCE),
-          top_k: z
-            .number()
-            .int()
-            .positive()
-            .optional()
-            .describe('Maximum results (default 5).'),
-        },
-      },
-      async ({ roleId, companyId, query, top_k }): Promise<ToolResult> => {
-        const k = top_k ?? 5;
-        const result = await this.knowledgeSearch(companyId, roleId, query, k);
-        this.audit.record(companyId, roleId, null, AuditEventType.ToolCall, {
-          tool: 'search_knowledge',
-          query,
-          top_k: k,
-        });
-        return { content: [{ type: 'text', text: result }] };
       },
     );
   }
@@ -261,20 +272,23 @@ export class MemoryToolsService {
     const embeddingConfig = await this.loadEmbeddingConfig(companyId);
     if (!embeddingConfig) return memoryPrompts.no_embedding_config;
 
-    const queryVector = await this.embedding.embedQuery(embeddingConfig, query);
-
-    const rows = await this.dataSource.query<MemoryRow[]>(
-      `SELECT 'knowledge' AS source, id::text, "documentPath" AS path, content,
-              1 - (embedding <=> $1::vector) AS similarity
-       FROM knowledge_chunk
-       WHERE (("roleId" = $2::uuid) OR ("roleId" IS NULL AND "companyId" = $3::uuid))
-         AND embedding IS NOT NULL AND 1 - (embedding <=> $1::vector) >= 0.5
-       ORDER BY similarity DESC
-       LIMIT $4`,
-      [pgvector.toSql(queryVector), roleId, companyId, topK],
+    const chunks = await this.knowledge.retrieve(
+      roleId as UUID,
+      companyId as UUID,
+      query,
+      embeddingConfig,
+      topK,
     );
 
-    return this.formatResults(rows);
+    return this.formatResults(
+      chunks.map((chunk) => ({
+        id: chunk.id,
+        source: 'knowledge' as const,
+        path: chunk.documentPath,
+        content: chunk.content,
+        similarity: chunk.similarity,
+      })),
+    );
   }
 
   async storeMemory(

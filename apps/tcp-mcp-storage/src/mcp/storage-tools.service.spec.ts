@@ -1,3 +1,4 @@
+import { InternalApiClient } from '@tcp/shared';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { StorageToolsService } from './storage-tools.service';
@@ -25,7 +26,7 @@ function makeConfig(): ConfigService {
 }
 
 function makeService(): StorageToolsService {
-  return new StorageToolsService(makeConfig());
+  return new StorageToolsService(new InternalApiClient(makeConfig()));
 }
 
 function axiosError(status: number, body: unknown): unknown {

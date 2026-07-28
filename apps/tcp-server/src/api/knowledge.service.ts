@@ -1,8 +1,10 @@
 import {
   DEFAULT_RAG_THRESHOLD,
   KnowledgeChunk,
+  KnowledgeRetrievalService,
   KnowledgeIndexState,
   TcpCompany,
+  RagChunk,
   TcpRole,
   resolveEmbeddingConfig,
   resolveEnvEmbeddingConfig,
@@ -14,7 +16,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
 import { IsNull, Repository } from 'typeorm';
 import { KnowledgeReindexService } from '../rag/knowledge-reindex.service';
-import { RagChunk, RagRetrievalService } from '../rag/rag-retrieval.service';
+
 import { KnowledgeScope } from '../storage/storage-keys';
 import {
   Originators,
@@ -89,7 +91,7 @@ export class KnowledgeService {
   constructor(
     private readonly storage: StorageService,
     private readonly reindex: KnowledgeReindexService,
-    private readonly ragRetrieval: RagRetrievalService,
+    private readonly ragRetrieval: KnowledgeRetrievalService,
     private readonly config: ConfigService,
     @InjectRepository(TcpRole)
     private readonly roleRepo: Repository<TcpRole>,
@@ -198,7 +200,7 @@ export class KnowledgeService {
   /**
    * Runs a RAG similarity search for a role, exactly as prompt assembly
    * would, without invoking any chat/LLM call — see
-   * {@link RagRetrievalService.retrieve} for the scoping and threshold rules.
+   * {@link KnowledgeRetrievalService.retrieve} for the scoping and threshold rules.
    *
    * @throws {@link NotFoundException} when the role does not exist.
    */

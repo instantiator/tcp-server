@@ -274,7 +274,7 @@ describe('KnowledgeService', () => {
   });
 
   describe('queryRag', () => {
-    it('resolves the role/company and delegates to RagRetrievalService.retrieve', async () => {
+    it('resolves the role/company and delegates to KnowledgeRetrievalService.retrieve', async () => {
       const chunks = [
         {
           id: randomUUID(),

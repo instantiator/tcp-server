@@ -103,6 +103,41 @@ export abstract class Pane {
 }
 
 /**
+ * A pane whose body is a selectable {@link renderMultiListPanel}, kept
+ * scrolled to the current selection. Subclasses supply their own heading and
+ * populate {@link MultiListPane.lists}.
+ *
+ * The selected line's offset has to account for however many lines the
+ * heading and error banner occupy above the list; keeping that arithmetic
+ * here means a new list pane cannot get it subtly wrong.
+ */
+export abstract class MultiListPane extends Pane {
+  protected readonly selection = new MultiListSelection();
+  protected lists: SelectableList[] = [];
+  private selectedLine = -1;
+
+  /** This pane's heading lines, rendered above the lists. */
+  protected abstract renderHeading(width: number): string[];
+
+  protected render(width: number): string[] {
+    const heading = this.renderHeading(width);
+    const banner = this.renderErrorBanner();
+    const { lines, selectedLine } = renderMultiListPanel(
+      this.lists,
+      this.selection.current,
+      width,
+    );
+    this.selectedLine =
+      selectedLine < 0 ? -1 : heading.length + banner.length + selectedLine;
+    return [...heading, ...banner, ...lines];
+  }
+
+  protected afterRedraw(): void {
+    if (this.selectedLine >= 0) this.scrollLineIntoView(this.selectedLine);
+  }
+}
+
+/**
  * A monitored agent's tab: its event log (rendered under the agent/role/
  * assignment identifying heading — see {@link renderAssignmentPaneHeading}),
  * auto-scrolling to the newest entry unless the user has scrolled up to read
@@ -206,11 +241,8 @@ export class AssignmentPane extends Pane {
  * routed into this pane's own methods, since there's no InlineInput
  * competing for those keys.
  */
-export class RosterPane extends Pane {
+export class RosterPane extends MultiListPane {
   readonly talkable = false;
-  private readonly selection = new MultiListSelection();
-  private lists: SelectableList[] = [];
-  private selectedLine = -1;
 
   constructor(
     id: string,
@@ -294,21 +326,8 @@ export class RosterPane extends Pane {
     this.selection.setLists(this.lists);
   }
 
-  protected render(width: number): string[] {
-    const heading = renderRosterHeading(this.slug, this.id);
-    const banner = this.renderErrorBanner();
-    const { lines, selectedLine } = renderMultiListPanel(
-      this.lists,
-      this.selection.current,
-      width,
-    );
-    this.selectedLine =
-      selectedLine < 0 ? -1 : heading.length + banner.length + selectedLine;
-    return [...heading, ...banner, ...lines];
-  }
-
-  protected afterRedraw(): void {
-    if (this.selectedLine >= 0) this.scrollLineIntoView(this.selectedLine);
+  protected renderHeading(): string[] {
+    return renderRosterHeading(this.slug, this.id);
   }
 }
 
@@ -319,11 +338,8 @@ export class RosterPane extends Pane {
  * assignments that have begun are selectable (see `makeAssignmentEntry`);
  * selecting one opens the assignment pane.
  */
-export class TaskPane extends Pane {
+export class TaskPane extends MultiListPane {
   readonly talkable = false;
-  private readonly selection = new MultiListSelection();
-  private lists: SelectableList[] = [];
-  private selectedLine = -1;
   private assignments: AssignmentInfo[] = [];
 
   constructor(
@@ -395,26 +411,8 @@ export class TaskPane extends Pane {
     return this.assignments.find((a) => a.id === pos.entry.id);
   }
 
-  protected render(width: number): string[] {
-    const heading = renderTaskPaneHeading(
-      this.id,
-      this.status,
-      this.prompt,
-      width,
-    );
-    const banner = this.renderErrorBanner();
-    const { lines, selectedLine } = renderMultiListPanel(
-      this.lists,
-      this.selection.current,
-      width,
-    );
-    this.selectedLine =
-      selectedLine < 0 ? -1 : heading.length + banner.length + selectedLine;
-    return [...heading, ...banner, ...lines];
-  }
-
-  protected afterRedraw(): void {
-    if (this.selectedLine >= 0) this.scrollLineIntoView(this.selectedLine);
+  protected renderHeading(width: number): string[] {
+    return renderTaskPaneHeading(this.id, this.status, this.prompt, width);
   }
 }
 

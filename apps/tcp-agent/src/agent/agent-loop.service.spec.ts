@@ -9,6 +9,7 @@ import {
   AuditClientService,
   AuditEventType,
   ContextManagerService,
+  KnowledgeRetrievalService,
   TcpAgent,
   TcpAssignment,
   TcpCompany,
@@ -24,8 +25,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
-import * as factory from '../llm/llm-factory';
-import { McpClientService } from '../mcp/mcp-client.service';
+import * as factory from '@tcp/shared/llm/llm-factory';
+import { McpClientService } from '@tcp/shared';
 import { AgentRagService } from '../rag/agent-rag.service';
 import { StorageTrackingClientService } from '../storage-tracking/storage-tracking-client.service';
 import { agentPrompts } from '../agent-prompts';
@@ -160,7 +161,8 @@ describe('AgentLoopService', () => {
   let notifyFailed: jest.Mock;
   let publishEvent: jest.Mock;
   let mcpClient: { loadTools: jest.Mock };
-  let ragProvider: { hasKnowledge: jest.Mock; retrieve: jest.Mock };
+  let ragProvider: { hasKnowledge: jest.Mock };
+  let knowledgeProvider: { retrieve: jest.Mock };
   let configService: { get: jest.Mock; getOrThrow: jest.Mock };
   let prepareContext: jest.Mock;
   let checkBudget: jest.Mock;
@@ -217,10 +219,11 @@ describe('AgentLoopService', () => {
         },
         {
           provide: AgentRagService,
-          useValue: {
-            retrieve: jest.fn().mockResolvedValue([]),
-            hasKnowledge: jest.fn().mockResolvedValue(true),
-          },
+          useValue: { hasKnowledge: jest.fn().mockResolvedValue(true) },
+        },
+        {
+          provide: KnowledgeRetrievalService,
+          useValue: { retrieve: jest.fn().mockResolvedValue([]) },
         },
         {
           provide: McpClientService,
@@ -244,6 +247,7 @@ describe('AgentLoopService', () => {
     taskRepo = testingModule.get(getRepositoryToken(TcpTask));
     mcpClient = testingModule.get(McpClientService);
     ragProvider = testingModule.get(AgentRagService);
+    knowledgeProvider = testingModule.get(KnowledgeRetrievalService);
     configService = testingModule.get(ConfigService);
   });
 
@@ -581,7 +585,7 @@ describe('AgentLoopService', () => {
 
       const [serverNames] = mcpClient.loadTools.mock.calls[0] as [string[]];
       expect(serverNames).not.toContain('memory');
-      expect(ragProvider.retrieve).not.toHaveBeenCalled();
+      expect(knowledgeProvider.retrieve).not.toHaveBeenCalled();
     });
   });
 
@@ -910,6 +914,36 @@ describe('AgentLoopService', () => {
       expect(notifyComplete).not.toHaveBeenCalled();
       expect(notifyFailed).not.toHaveBeenCalled();
       expect(auditRecord).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        agent.id,
+        AuditEventType.AgentLoopCompletion,
+        expect.any(Object),
+      );
+    });
+
+    // The main run and the reminder round share one terminal-status ladder;
+    // cancellation is the arm a second copy would most easily have missed.
+    it('stops cleanly when the task is cancelled during a required-tool reminder', async () => {
+      mcpClient.loadTools.mockResolvedValueOnce([INTERACTIONS_TOOL]);
+      const graph = makeSequentialStubGraph(SUCCESS_EVENTS, SUCCESS_EVENTS);
+      mockToolGraphOnce(graph);
+
+      const { agent } = await seedAgentAndRole();
+      jest
+        .spyOn(agentRepo, 'findOneBy')
+        // Post-stream re-read: still running — enforcement kicks in
+        .mockResolvedValueOnce({ ...agent, status: AgentStatus.Running })
+        // Re-read after the nudge round: the task was cancelled meanwhile
+        .mockResolvedValueOnce({ ...agent, status: AgentStatus.Cancelled });
+
+      await service.run(agent.id, undefined, new AbortController());
+
+      // Cancellation already recorded its own state change server-side, so the
+      // loop must neither fail the run nor write a completion summary.
+      expect(notifyFailed).not.toHaveBeenCalled();
+      expect(notifyComplete).not.toHaveBeenCalled();
+      expect(auditRecord).not.toHaveBeenCalledWith(
         expect.anything(),
         expect.anything(),
         agent.id,

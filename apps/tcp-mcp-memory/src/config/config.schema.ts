@@ -1,10 +1,9 @@
-import Joi from 'joi';
+import { baseMcpConfigSchema } from '@tcp/shared';
+import * as Joi from 'joi';
 
 /** Joi validation schema for tcp-mcp-memory required environment variables. */
-export const configSchema = Joi.object({
+export const configSchema = baseMcpConfigSchema(3011).keys({
   DATABASE_URL: Joi.string().uri().required(),
-  TCP_SERVER_URL: Joi.string().uri().required(),
-  INTERNAL_API_KEY: Joi.string().required(),
   // Environment-level embedding fallback — used when a company has no embeddingConfig.
   // Both EMBEDDING_PROVIDER and EMBEDDING_MODEL must be present to activate the fallback.
   EMBEDDING_PROVIDER: Joi.string().empty('').optional(),

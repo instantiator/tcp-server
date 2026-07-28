@@ -1,8 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import axios, { AxiosError } from 'axios';
 import { z } from 'zod';
+import {
+  InternalApiClient,
+  ToolResult,
+  err,
+  ok,
+  registerDescribeServer,
+  relay4xxOrError,
+} from '@tcp/shared';
 import { interactionPrompts } from '../interactions-prompts';
 import { interactionToolDescriptions } from '../interactions-tool-descriptions';
 
@@ -12,36 +18,6 @@ function interpolate(template: string, vars: Record<string, string>): string {
     /\{\{(\w+)\}\}/g,
     (_, key: string) => vars[key] ?? '',
   );
-}
-
-/** MCP tool result envelope — index signature satisfies the SDK's Zod-inferred type. */
-interface ToolResult {
-  [key: string]: unknown;
-  content: Array<{ type: 'text'; text: string }>;
-}
-
-function ok(text: string): ToolResult {
-  return { content: [{ type: 'text', text }] };
-}
-
-function err(text: string): ToolResult {
-  return { content: [{ type: 'text', text: `Error: ${text}` }] };
-}
-
-/**
- * Relays a 4xx server error's message to the model as a normal (non-error)
- * tool result so it can self-correct and retry; falls back to `fallback` for
- * 5xx/transport errors it cannot act on. Mirrors tcp-mcp-tasks' `relayOrError`.
- */
-function relay4xxOrError(e: unknown, fallback: string): ToolResult {
-  const axiosErr = e as AxiosError<{ message?: string | string[] }>;
-  const status = axiosErr.response?.status;
-  if (status && status >= 400 && status < 500) {
-    const raw = axiosErr.response?.data?.message;
-    const message = Array.isArray(raw) ? raw.join('; ') : raw;
-    if (message) return ok(message);
-  }
-  return err(fallback);
 }
 
 /**
@@ -57,13 +33,8 @@ function relay4xxOrError(e: unknown, fallback: string): ToolResult {
 @Injectable()
 export class InteractionsToolsService {
   private readonly logger = new Logger(InteractionsToolsService.name);
-  private readonly serverUrl: string;
-  private readonly apiKey: string;
 
-  constructor(config: ConfigService) {
-    this.serverUrl = config.getOrThrow<string>('TCP_SERVER_URL');
-    this.apiKey = config.getOrThrow<string>('INTERNAL_API_KEY');
-  }
+  constructor(private readonly api: InternalApiClient) {}
 
   /** Creates and returns a configured McpServer with all interaction tools registered. */
   createServer(): McpServer {
@@ -81,10 +52,10 @@ export class InteractionsToolsService {
   }
 
   private registerDescribeServer(server: McpServer): void {
-    server.registerTool(
-      'describe_server',
-      { description: interactionToolDescriptions.describe_server },
-      (): ToolResult => ok(interactionPrompts.describe_server),
+    registerDescribeServer(
+      server,
+      interactionToolDescriptions.describe_server,
+      interactionPrompts.describe_server,
     );
   }
 
@@ -151,11 +122,10 @@ export class InteractionsToolsService {
     collection: 'users' | 'roles',
   ): Promise<{ ok: true; data: unknown } | { ok: false; errorPrompt: string }> {
     try {
-      const res = await axios.get<unknown[]>(
-        `${this.serverUrl}/internal/company/${companyId}/${collection}`,
-        { headers: { 'X-Internal-Api-Key': this.apiKey } },
+      const data = await this.api.get<unknown[]>(
+        `/internal/company/${companyId}/${collection}`,
       );
-      return { ok: true, data: res.data };
+      return { ok: true, data };
     } catch (e) {
       this.logger.warn(
         `list_available_contacts (${collection}) failed: ${String(e)}`,
@@ -202,8 +172,8 @@ export class InteractionsToolsService {
         userIds,
       }): Promise<ToolResult> => {
         try {
-          const res = await axios.post<{ slug: string }>(
-            `${this.serverUrl}/internal/pause`,
+          const { slug } = await this.api.post<{ slug: string }>(
+            '/internal/pause',
             {
               type: 'user_input',
               agentId,
@@ -212,13 +182,11 @@ export class InteractionsToolsService {
               context,
               userIds,
             },
-            { headers: { 'X-Internal-Api-Key': this.apiKey } },
           );
 
           // Report the conversation slug back to the agent so it knows the
           // request was submitted; the agent loop pauses here until a reply
           // resumes it.
-          const { slug } = res.data;
           return ok(
             interpolate(interactionPrompts.paused_user_input, { slug }),
           );
@@ -292,12 +260,11 @@ export class InteractionsToolsService {
           // (scoped to the company either way, so it's unambiguous even when
           // multiple roles share a name), starts the consulting agent, and
           // records the PendingConsultation link between them.
-          const res = await axios.post<{
-            consultationId: string;
-            roleName: string;
-          }>(
-            `${this.serverUrl}/internal/pause`,
-            {
+          const { consultationId, roleName: resolvedRoleName } =
+            await this.api.post<{
+              consultationId: string;
+              roleName: string;
+            }>('/internal/pause', {
               type: 'agent_consultation',
               agentId,
               companyId,
@@ -307,14 +274,11 @@ export class InteractionsToolsService {
               roleName,
               question,
               context,
-            },
-            { headers: { 'X-Internal-Api-Key': this.apiKey } },
-          );
+            });
 
           // Report the resolved role name (from the server, not the caller's
           // possibly-stale label) and consultation id; the agent loop pauses
           // here until the consulting agent completes.
-          const { consultationId, roleName: resolvedRoleName } = res.data;
           return ok(
             interpolate(interactionPrompts.paused_consultation, {
               roleName: resolvedRoleName,

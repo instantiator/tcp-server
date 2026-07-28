@@ -13,6 +13,8 @@ import {
   DEFAULT_LLM_CONTEXT_WINDOW,
   DEFAULT_RAG_THRESHOLD,
   DEFAULT_REQUIRED_TOOL_RETRIES,
+  KnowledgeRetrievalService,
+  McpClientService,
   TcpAgent,
   TcpAssignment,
   TcpRole,
@@ -22,6 +24,7 @@ import {
   buildAgentGraph,
   buildAssignmentMessage,
   buildAvailableRolesMessage,
+  buildChatModel,
   buildRagMessage,
   buildServicesMessage,
   enrichedAuditForEvent,
@@ -35,6 +38,7 @@ import {
   resolveEnvLlmConfig,
   resolveLlmConfig,
   resolveMcpServerList,
+  resolveMcpServerUrls,
   resolveRunConfig,
   runSupervisedGraph,
   serverNamesForMode,
@@ -45,9 +49,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { agentPrompts } from '../agent-prompts';
-import { buildChatModel } from '../llm/llm-factory';
-import { McpClientService } from '../mcp/mcp-client.service';
-import { resolveMcpServerUrls } from '../mcp/mcp-registry';
 import { AgentRagService } from '../rag/agent-rag.service';
 import { StorageTrackingClientService } from '../storage-tracking/storage-tracking-client.service';
 import { AgentEventPublisherService } from './agent-event-publisher.service';
@@ -111,6 +112,17 @@ interface SupervisedRunContext {
 }
 
 /**
+ * Log lines for each terminal outcome in {@link AgentLoopService.settleRunResult},
+ * so the main run and the required-tool reminder can narrate themselves
+ * differently while sharing one ladder.
+ */
+interface TerminalLogMessages {
+  paused: string;
+  completed: string;
+  cancelled: string;
+}
+
+/**
  * Executes and manages the LangGraph agent loop for a single {@link TcpAgent} run.
  *
  * Each call to {@link AgentLoopService.run} corresponds to one BullMQ job.
@@ -140,6 +152,7 @@ export class AgentLoopService {
 
   constructor(
     private readonly rag: AgentRagService,
+    private readonly knowledge: KnowledgeRetrievalService,
     private readonly mcp: McpClientService,
     private readonly config: ConfigService,
     private readonly auditClient: AuditClientService,
@@ -377,32 +390,15 @@ export class AgentLoopService {
     try {
       const result = await this.runSupervised(ctx, input, tracker);
 
-      if (result.aborted) {
-        await this.failRun(
-          agent,
-          result.failureReason ??
-            this.describeAbort(abortController, timeoutMs),
-        );
-        return;
-      }
-
-      if (result.terminalStatus === AgentStatus.Paused) {
-        this.logger.log(
-          `Agent ${agent.id} loop ending with status 'paused' (set by tool call)`,
-        );
-        return;
-      }
-      if (result.terminalStatus === AgentStatus.Completed) {
-        this.logger.log(
-          `Agent ${agent.id} loop ending with status 'completed' (set by tool call)`,
-        );
-        this.recordCompletionSummary(agent, tracker);
-        return;
-      }
-      if (result.terminalStatus === AgentStatus.Cancelled) {
-        // Task cancellation already set this status (and recorded the audit
-        // event) — just stop the loop, no further writes.
-        this.logger.log(`Agent ${agent.id} loop ending: task cancelled`);
+      if (
+        await this.settleRunResult(agent, ctx, result, tracker, {
+          paused: `Agent ${agent.id} loop ending with status 'paused' (set by tool call)`,
+          completed: `Agent ${agent.id} loop ending with status 'completed' (set by tool call)`,
+          // Task cancellation already set this status (and recorded the audit
+          // event) — just stop the loop, no further writes.
+          cancelled: `Agent ${agent.id} loop ending: task cancelled`,
+        })
+      ) {
         return;
       }
 
@@ -627,32 +623,13 @@ export class AgentLoopService {
         tracker,
       );
 
-      if (result.aborted) {
-        await this.failRun(
-          agent,
-          result.failureReason ??
-            this.describeAbort(ctx.abortController, ctx.timeoutMs),
-        );
-        return;
-      }
-
-      if (result.terminalStatus === AgentStatus.Paused) {
-        this.logger.log(
-          `Agent ${agent.id} paused during required-tool reminder — exiting`,
-        );
-        return;
-      }
-      if (result.terminalStatus === AgentStatus.Completed) {
-        this.logger.log(
-          `Agent ${agent.id} completed after required-tool reminder ${attempt}`,
-        );
-        this.recordCompletionSummary(agent, tracker);
-        return;
-      }
-      if (result.terminalStatus === AgentStatus.Cancelled) {
-        this.logger.log(
-          `Agent ${agent.id} loop ending during required-tool reminder: task cancelled`,
-        );
+      if (
+        await this.settleRunResult(agent, ctx, result, tracker, {
+          paused: `Agent ${agent.id} paused during required-tool reminder — exiting`,
+          completed: `Agent ${agent.id} completed after required-tool reminder ${attempt}`,
+          cancelled: `Agent ${agent.id} loop ending during required-tool reminder: task cancelled`,
+        })
+      ) {
         return;
       }
     }
@@ -661,6 +638,49 @@ export class AgentLoopService {
       agent,
       `Agent ended without successfully calling required tool(s): ${requiredTools.join(', ')} after ${retries} reminder(s)`,
     );
+  }
+
+  /**
+   * Applies the terminal outcome of one supervised run: fails the run if it
+   * was aborted, records the completion summary if it completed, and logs the
+   * caller's wording otherwise.
+   *
+   * Both the main run and each required-tool reminder settle their result
+   * here, so a newly terminal {@link AgentStatus} only has to be handled once.
+   *
+   * @returns `true` when the run reached a terminal state and the loop should
+   *   stop; `false` when it ended without one and the caller should continue.
+   */
+  private async settleRunResult(
+    agent: TcpAgent,
+    ctx: SupervisedRunContext,
+    result: SupervisedGraphResult,
+    tracker: AgentLoopTracker,
+    messages: TerminalLogMessages,
+  ): Promise<boolean> {
+    if (result.aborted) {
+      await this.failRun(
+        agent,
+        result.failureReason ??
+          this.describeAbort(ctx.abortController, ctx.timeoutMs),
+      );
+      return true;
+    }
+
+    switch (result.terminalStatus) {
+      case AgentStatus.Paused:
+        this.logger.log(messages.paused);
+        return true;
+      case AgentStatus.Completed:
+        this.logger.log(messages.completed);
+        this.recordCompletionSummary(agent, tracker);
+        return true;
+      case AgentStatus.Cancelled:
+        this.logger.log(messages.cancelled);
+        return true;
+      default:
+        return false;
+    }
   }
 
   /**
@@ -742,7 +762,7 @@ export class AgentLoopService {
     // Skip RAG entirely (including the embedding call) when the role has no
     // indexed knowledge — there is nothing to retrieve.
     const ragChunks = hasKnowledge
-      ? await this.rag.retrieve(
+      ? await this.knowledge.retrieve(
           role.id,
           company.id,
           initialPrompt,

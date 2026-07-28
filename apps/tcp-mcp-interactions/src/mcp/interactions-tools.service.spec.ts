@@ -1,3 +1,4 @@
+import { InternalApiClient } from '@tcp/shared';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { randomUUID } from 'crypto';
@@ -50,7 +51,7 @@ describe('InteractionsToolsService', () => {
       TCP_SERVER_URL: 'http://tcp-server:3000',
       INTERNAL_API_KEY: 'test-key',
     });
-    service = new InteractionsToolsService(config);
+    service = new InteractionsToolsService(new InternalApiClient(config));
     // Spy on axios.post to get a bound reference (avoids @typescript-eslint/unbound-method)
     axiosPost = jest.spyOn(mockedAxios, 'post') as unknown as jest.Mock;
     axiosGet = jest.spyOn(mockedAxios, 'get') as unknown as jest.Mock;

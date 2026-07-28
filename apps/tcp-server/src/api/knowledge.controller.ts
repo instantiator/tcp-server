@@ -1,4 +1,5 @@
 import * as path from 'path';
+import { RagChunk } from '@tcp/shared';
 import {
   BadRequestException,
   Body,
@@ -27,7 +28,7 @@ import type { UUID } from 'crypto';
 import type { Request, Response } from 'express';
 import { getCurrentUserId } from '../auth/current-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RagChunk } from '../rag/rag-retrieval.service';
+
 import { Originators } from '../storage/storage.service';
 import {
   ensureOkfFrontMatter,
@@ -101,7 +102,7 @@ export class KnowledgeController {
    * Runs a RAG similarity search for the role and returns the raw chunks —
    * the same data prompt assembly would inject, without invoking any
    * chat/LLM call. Searches the role's own chunks plus its company's shared
-   * chunks (see {@link RagRetrievalService.retrieve}), so this one route
+   * chunks (see {@link KnowledgeRetrievalService.retrieve}), so this one route
    * covers both "what would this role see" and "what's in the shared pool";
    * a separate company-shared-only route would be redundant.
    *

@@ -7,6 +7,7 @@ import {
   ContextManagerService,
   DEFAULT_LLM_CONTEXT_WINDOW,
   DEFAULT_RAG_THRESHOLD,
+  KnowledgeRetrievalService,
   TcpAgent,
   TcpAssignment,
   TcpCompany,
@@ -38,7 +39,7 @@ import { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
 import { AgentEventService } from '../events/agent-event.service';
-import { RagRetrievalService } from '../rag/rag-retrieval.service';
+
 import { claimStatus } from './claim-status';
 
 /**
@@ -90,7 +91,7 @@ export class ChatService {
     private readonly config: ConfigService,
     private readonly contextManager: ContextManagerService,
     private readonly agentEvents: AgentEventService,
-    private readonly ragRetrieval: RagRetrievalService,
+    private readonly ragRetrieval: KnowledgeRetrievalService,
     private readonly audit: AuditService,
     private readonly mcp: McpClientService,
     @InjectRepository(TcpAgent)

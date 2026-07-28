@@ -1,4 +1,11 @@
-import { EmbeddingService, TcpCompany } from '@tcp/shared';
+import {
+  AuditEventType,
+  EmbeddingService,
+  KnowledgeRetrievalService,
+  RagChunk,
+  TcpCompany,
+  TcpRole,
+} from '@tcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { DataSource, Repository } from 'typeorm';
@@ -35,6 +42,22 @@ function makeCompanyRepo(
   } as unknown as jest.Mocked<Repository<TcpCompany>>;
 }
 
+function makeKnowledge(
+  chunks: RagChunk[] = [],
+): jest.Mocked<KnowledgeRetrievalService> {
+  return {
+    retrieve: jest.fn().mockResolvedValue(chunks),
+  } as unknown as jest.Mocked<KnowledgeRetrievalService>;
+}
+
+function makeRoleRepo(
+  name: string | null = 'analyst',
+): jest.Mocked<Repository<TcpRole>> {
+  return {
+    findOne: jest.fn().mockResolvedValue(name === null ? null : { name }),
+  } as unknown as jest.Mocked<Repository<TcpRole>>;
+}
+
 function makeDataSource(rows: unknown[] = []): jest.Mocked<DataSource> {
   return {
     query: jest.fn().mockResolvedValue(rows),
@@ -52,16 +75,20 @@ function makeConfig(): jest.Mocked<ConfigService> {
 
 function makeService({
   embedding = makeEmbedding(),
+  knowledge = makeKnowledge(),
   audit = makeAudit(),
   config = makeConfig(),
   companyRepo = makeCompanyRepo(),
+  roleRepo = makeRoleRepo(),
   dataSource = makeDataSource(),
 } = {}) {
   return new MemoryToolsService(
     embedding,
+    knowledge,
     audit,
     config,
     companyRepo,
+    roleRepo,
     dataSource,
   );
 }
@@ -86,6 +113,63 @@ async function callTool(
 }
 
 describe('MemoryToolsService', () => {
+  // The audit trail denormalises the role *name*; this service only receives a
+  // roleId, and used to write that UUID straight into the name column.
+  describe('audit role', () => {
+    it.each(['recall', 'remember', 'search_knowledge'])(
+      'records the role name rather than the roleId for %s',
+      async (tool) => {
+        const audit = makeAudit();
+        // One row satisfies all three: the searches format it, remember's
+        // INSERT ... RETURNING reads its id.
+        const dataSource = makeDataSource([
+          {
+            id: 'mem-1',
+            source: 'knowledge',
+            path: 'doc.md',
+            content: 'c',
+            similarity: 0.9,
+          },
+        ]);
+        await callTool(makeService({ audit, dataSource }), tool, {
+          roleId: ROLE_ID,
+          companyId: COMPANY_ID,
+          query: 'q',
+          content: 'c',
+        });
+
+        expect(audit.record).toHaveBeenCalledWith(
+          COMPANY_ID,
+          'analyst',
+          null,
+          AuditEventType.ToolCall,
+          expect.objectContaining({ tool }),
+        );
+      },
+    );
+
+    it('falls back to "agent" when the role no longer exists', async () => {
+      const audit = makeAudit();
+      await callTool(
+        makeService({ audit, roleRepo: makeRoleRepo(null) }),
+        'recall',
+        {
+          roleId: ROLE_ID,
+          companyId: COMPANY_ID,
+          query: 'q',
+        },
+      );
+
+      expect(audit.record).toHaveBeenCalledWith(
+        COMPANY_ID,
+        'agent',
+        null,
+        AuditEventType.ToolCall,
+        expect.objectContaining({ tool: 'recall' }),
+      );
+    });
+  });
+
   describe('describe_server', () => {
     it('returns the overview text from prompts', async () => {
       const text = await callTool(makeService(), 'describe_server', {});
@@ -178,33 +262,55 @@ describe('MemoryToolsService', () => {
       expect(text).toBe(memoryPrompts.no_embedding_config);
     });
 
-    it('queries only knowledge_chunk (not episodic_memory)', async () => {
+    // Scoping, thresholding and the SQL itself belong to the shared
+    // KnowledgeRetrievalService and are covered by its own spec; what matters
+    // here is that memory delegates rather than running its own query.
+    it('delegates to the shared retriever with the company embedding config', async () => {
+      const knowledge = makeKnowledge();
       const dataSource = makeDataSource([]);
-      const svc = makeService({ dataSource });
+      const svc = makeService({ knowledge, dataSource });
+
       await svc.knowledgeSearch(COMPANY_ID, ROLE_ID, 'q', 5);
-      const sql = dataSource.query.mock.calls[0][0];
-      expect(sql).toContain('knowledge_chunk');
-      expect(sql).not.toContain('episodic_memory');
+
+      expect(knowledge.retrieve).toHaveBeenCalledWith(
+        ROLE_ID,
+        COMPANY_ID,
+        'q',
+        EMBEDDING_CONFIG,
+        5,
+      );
+      expect(dataSource.query).not.toHaveBeenCalled();
     });
 
-    it('scopes to the role plus the company shared chunks', async () => {
-      const dataSource = makeDataSource([]);
-      const svc = makeService({ dataSource });
-      await svc.knowledgeSearch(COMPANY_ID, ROLE_ID, 'q', 5);
-      const [sql, params] = dataSource.query.mock.calls[0] as [
-        string,
-        unknown[],
-      ];
-      expect(sql).toContain(
-        '(("roleId" = $2::uuid) OR ("roleId" IS NULL AND "companyId" = $3::uuid))',
+    it('formats retrieved chunks as knowledge results', async () => {
+      const knowledge = makeKnowledge([
+        {
+          id: randomUUID(),
+          documentPath: 'handbook.md',
+          chunkIndex: 0,
+          content: 'relevant text',
+          similarity: 0.92,
+        },
+      ]);
+      const text = await makeService({ knowledge }).knowledgeSearch(
+        COMPANY_ID,
+        ROLE_ID,
+        'q',
+        5,
       );
-      expect(params).toContain(ROLE_ID);
-      expect(params).toContain(COMPANY_ID);
+      expect(text).toContain('knowledge');
+      expect(text).toContain('handbook.md');
+      expect(text).toContain('relevant text');
+      expect(text).toContain('0.92');
     });
 
     it('returns no_results for empty results', async () => {
-      const svc = makeService({ dataSource: makeDataSource([]) });
-      const text = await svc.knowledgeSearch(COMPANY_ID, ROLE_ID, 'q', 5);
+      const text = await makeService().knowledgeSearch(
+        COMPANY_ID,
+        ROLE_ID,
+        'q',
+        5,
+      );
       expect(text).toBe(memoryPrompts.no_results);
     });
   });

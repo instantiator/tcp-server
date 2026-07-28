@@ -1,30 +1,21 @@
+import { Injectable } from '@nestjs/common';
+import { InternalApiClient } from '../http/internal-api.client';
 import { AuditEventType } from '../models/AuditEvent.model';
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
 
 /**
- * Fire-and-forget HTTP client for writing audit events to `POST /internal/audit`
- * on tcp-server. Errors are logged but never thrown — audit failures must not
+ * Fire-and-forget writer for agent lifecycle notifications and audit events on
+ * tcp-server. Errors are logged but never thrown — audit failures must not
  * interrupt agent or MCP tool operations.
  *
  * Used by tcp-agent and all three MCP services. Register as a provider in the
- * host app's module alongside {@link ConfigService}.
+ * host app's module alongside {@link InternalApiClient}.
  */
 @Injectable()
 export class AuditClientService {
-  private readonly logger = new Logger(AuditClientService.name);
-  private readonly serverUrl: string;
-  private readonly apiKey: string;
-
-  constructor(config: ConfigService) {
-    this.serverUrl = config.getOrThrow<string>('TCP_SERVER_URL');
-    this.apiKey = config.getOrThrow<string>('INTERNAL_API_KEY');
-  }
+  constructor(private readonly api: InternalApiClient) {}
 
   /**
    * Notifies tcp-server that an agent has completed with the given output.
-   * Fire-and-forget — errors are logged but never thrown.
    *
    * Idempotent on the server side: if the agent is already completed (e.g.
    * because `complete_task` was called during the run) this is a no-op.
@@ -32,22 +23,15 @@ export class AuditClientService {
    * Only used by tcp-agent; MCP services do not call this method.
    */
   notifyComplete(agentId: string, output: string): void {
-    axios
-      .post(
-        `${this.serverUrl}/internal/agent/${agentId}/complete`,
-        { output },
-        { headers: { 'X-Internal-Api-Key': this.apiKey } },
-      )
-      .catch((err: unknown) => {
-        this.logger.warn(
-          `Agent complete notification failed for ${agentId}: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      });
+    this.api.postAndForget(
+      `/internal/agent/${agentId}/complete`,
+      { output },
+      `Agent complete notification for ${agentId}`,
+    );
   }
 
   /**
    * Notifies tcp-server that an agent run has failed with the given reason.
-   * Fire-and-forget — errors are logged but never thrown.
    *
    * The server resolves any pending consultation as `failed` and resumes the
    * calling agent so it can react to the failure rather than wait forever.
@@ -55,17 +39,11 @@ export class AuditClientService {
    * Only used by tcp-agent; MCP services do not call this method.
    */
   notifyFailed(agentId: string, reason: string): void {
-    axios
-      .post(
-        `${this.serverUrl}/internal/agent/${agentId}/fail`,
-        { reason },
-        { headers: { 'X-Internal-Api-Key': this.apiKey } },
-      )
-      .catch((err: unknown) => {
-        this.logger.warn(
-          `Agent failure notification failed for ${agentId}: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      });
+    this.api.postAndForget(
+      `/internal/agent/${agentId}/fail`,
+      { reason },
+      `Agent failure notification for ${agentId}`,
+    );
   }
 
   /** Writes an audit event. Never throws. */
@@ -76,16 +54,10 @@ export class AuditClientService {
     eventType: AuditEventType,
     payload: Record<string, unknown>,
   ): void {
-    axios
-      .post(
-        `${this.serverUrl}/internal/audit`,
-        { companyId, role, agentId: agentId ?? undefined, eventType, payload },
-        { headers: { 'X-Internal-Api-Key': this.apiKey } },
-      )
-      .catch((err: unknown) => {
-        this.logger.warn(
-          `Audit write failed (${eventType}): ${err instanceof Error ? err.message : String(err)}`,
-        );
-      });
+    this.api.postAndForget(
+      '/internal/audit',
+      { companyId, role, agentId: agentId ?? undefined, eventType, payload },
+      `Audit write (${eventType})`,
+    );
   }
 }

@@ -6,16 +6,16 @@ import {
 } from '@tcp/shared';
 import { DataSource, Repository } from 'typeorm';
 import { RagIndexService } from '../../../apps/tcp-server/src/rag/rag-index.service';
-import { RagRetrievalService } from '../../../apps/tcp-server/src/rag/rag-retrieval.service';
+import { KnowledgeRetrievalService } from '@tcp/shared';
 import { requireEnv } from '../../support/require-env';
 
 const DATABASE_URL = requireEnv('DATABASE_URL');
 const STUB_LLM_URL = requireEnv('STUB_LLM_URL');
 
 /**
- * Proves the row-level company/role isolation of {@link RagRetrievalService.retrieve}
+ * Proves the row-level company/role isolation of {@link KnowledgeRetrievalService.retrieve}
  * against real seeded rows in Postgres, rather than just asserting the SQL string
- * (the unit-level coverage in rag-retrieval.service.spec.ts mocks the DataSource
+ * (the unit-level coverage in knowledge-retrieval.service.spec.ts mocks the DataSource
  * entirely, so it can't catch a scoping regression that still produces valid SQL).
  *
  * Seeds three chunk groups — company A/role A (private), company A/shared, and
@@ -24,13 +24,13 @@ const STUB_LLM_URL = requireEnv('STUB_LLM_URL');
  *
  * Run via: ./scripts/run-integration-tests.sh
  */
-describe('RagRetrievalService scoped-retrieval isolation (integration)', () => {
+describe('KnowledgeRetrievalService scoped-retrieval isolation (integration)', () => {
   let ds: DataSource;
   let companyRepo: Repository<TcpCompany>;
   let roleRepo: Repository<TcpRole>;
   let chunkRepo: Repository<KnowledgeChunk>;
   let index: RagIndexService;
-  let retrieval: RagRetrievalService;
+  let retrieval: KnowledgeRetrievalService;
 
   let companyA: TcpCompany;
   let roleA: TcpRole;
@@ -63,7 +63,7 @@ describe('RagRetrievalService scoped-retrieval isolation (integration)', () => {
 
     const embedding = new EmbeddingService();
     index = new RagIndexService(embedding, chunkRepo, ds);
-    retrieval = new RagRetrievalService(embedding, ds);
+    retrieval = new KnowledgeRetrievalService(embedding, ds);
 
     companyA = await companyRepo.save(
       companyRepo.create({

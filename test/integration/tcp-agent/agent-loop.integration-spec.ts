@@ -21,8 +21,8 @@ import { Repository } from 'typeorm';
 import { AgentEventPublisherService } from '../../../apps/tcp-agent/src/agent/agent-event-publisher.service';
 import { AgentLoopService } from '../../../apps/tcp-agent/src/agent/agent-loop.service';
 import { AuditClientService } from '@tcp/shared';
-import * as factory from '../../../apps/tcp-agent/src/llm/llm-factory';
-import { McpClientService } from '../../../apps/tcp-agent/src/mcp/mcp-client.service';
+import * as factory from '@tcp/shared/llm/llm-factory';
+import { KnowledgeRetrievalService, McpClientService } from '@tcp/shared';
 import { AgentRagService } from '../../../apps/tcp-agent/src/rag/agent-rag.service';
 import { StorageTrackingClientService } from '../../../apps/tcp-agent/src/storage-tracking/storage-tracking-client.service';
 import { requireEnv } from '../../support/require-env';
@@ -64,10 +64,11 @@ describe('AgentLoopService (integration)', () => {
         },
         {
           provide: AgentRagService,
-          useValue: {
-            retrieve: jest.fn().mockResolvedValue([]),
-            hasKnowledge: jest.fn().mockResolvedValue(true),
-          },
+          useValue: { hasKnowledge: jest.fn().mockResolvedValue(true) },
+        },
+        {
+          provide: KnowledgeRetrievalService,
+          useValue: { retrieve: jest.fn().mockResolvedValue([]) },
         },
         {
           provide: McpClientService,

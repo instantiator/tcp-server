@@ -55,9 +55,9 @@ apps/
       agent/               # AgentLoopService — LangGraph agent loop, initial-state assembly
       config/              # Joi validation schema for env vars
       health/              # GET /health endpoint
-      llm/                 # LLM wiring specific to tcp-agent
       mcp/                 # McpClientService wiring for the agent loop
-      rag/                 # AgentRagService — RAG retrieval on the worker path
+      rag/                 # AgentRagService — the worker's "is anything indexed?" check
+                           # (retrieval itself is @tcp/shared's KnowledgeRetrievalService)
       registry/            # Role/company/agent lookups the worker needs
       storage-tracking/    # Tracks storage-scope resolution for a running agent
       worker/               # AgentWorkerService — BullMQ `agent-jobs` consumer
@@ -66,9 +66,12 @@ apps/
   tcp-mcp-memory/         # Memory MCP server — recall/remember/search_knowledge (port 3011)
   tcp-mcp-interactions/   # Interactions MCP server — user input, agent consultation (port 3012)
   tcp-mcp-tasks/          # Tasks MCP server — create_plan/complete_assignment/assure_assignment (port 3013)
-                           # Each MCP app follows the same shape: src/{health,mcp}/, a
-                           # tools.jsonc + prompts.jsonc pair, and a thin HTTP-proxy
-                           # *-tools.service.ts calling tcp-server's /internal/* endpoints.
+                           # Each MCP app follows the same shape: src/mcp/, a tools.jsonc +
+                           # prompts.jsonc pair, and a thin HTTP-proxy *-tools.service.ts
+                           # calling tcp-server's /internal/* endpoints via InternalApiClient.
+                           # Bootstrap, health and config come from @tcp/shared
+                           # (bootstrapMcpApp, StaticHealthModule, mcpConfigModule); only
+                           # tcp-mcp-memory keeps its own health module, for its DB ping.
   tcp-stub-llm/           # Configurable stub LLM server for tests (port 3002) — see docs/stub-llm.md.
                            # Standalone: own package.json/tsconfig/lint config, no NestJS, no @tcp/shared.
   tcp-cli/
@@ -89,16 +92,20 @@ libs/
     src/
       models/                # TypeORM entities (shared across all apps) — doubles as JSON Schema source
       audit/                 # AuditClientService (used by all apps)
+      bootstrap/             # bootstrapMcpApp — shared MCP server startup
+      health/                # StaticHealthModule — /health for services with no dependency to probe
+      http/                  # InternalApiClient — authenticated calls to tcp-server /internal/*
       auth/                  # InternalApiKeyGuard
       config/                # defaults, run-config/llm-config/system-prompt-template resolution
       context/                # Context budget, compaction, and incoming-data-guard services
       db/                     # makeTypeOrmConfig factory + optimistic-retry helper
       events/                 # WireEvent (unified SSE/Redis shape) + channel/summary helpers
       llm/                    # buildChatModel factory, agent-graph builder, reasoning-content recovery
-      mcp/                    # BaseMcpController, McpClientService, MCP_REGISTRY, resolve-mcp-server-list
+      mcp/                    # BaseMcpController, McpClientService, MCP_REGISTRY, resolve-mcp-server-list,
+                              # tool-result kit (ToolResult, ok/err, relay4xxOrError)
       prompts/                # mode-prompts, mode-tools, prompt-assembly, qa-prompts — the single
                                # home for every prompt-part builder shared by tcp-server and tcp-agent
-      rag/                    # EmbeddingService
+      rag/                    # EmbeddingService, KnowledgeRetrievalService
       redis/                  # assertRedisReachable
       storage/                # artifact-keys (resolveArtifactKey), write validation, stream-to-buffer
       validation/              # enum validation, control-char sanitisation
@@ -200,6 +207,12 @@ Beyond the database/Redis/MinIO/OIDC connection strings (see `.env.example`), a 
 Knowledge chunks are returned only when their cosine similarity to the query
 meets `runConfig.ragThreshold` (role → company → `RAG_THRESHOLD` →
 `DEFAULT_RAG_THRESHOLD`, currently `0.35`).
+
+Every path retrieves through the same `KnowledgeRetrievalService` in
+`@tcp/shared` — tcp-server's chat and knowledge queries, tcp-agent's prompt
+assembly, and tcp-mcp-memory's `search_knowledge` tool — so one threshold
+governs them all. `recall` is the exception: it runs its own hybrid query
+across episodic memory as well as knowledge, and keeps its own cut-off.
 
 **Cosine scores are not comparable across embedding models** — each has its own
 score distribution, so this is a per-model calibration rather than a universal

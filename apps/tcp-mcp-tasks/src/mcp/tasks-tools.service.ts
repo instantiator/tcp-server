@@ -1,12 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import axios, { AxiosError } from 'axios';
 import { z } from 'zod';
 import {
   AuditClientService,
+  InternalApiClient,
   TcpAssignmentMode,
   MODE_PROMPTS,
+  ToolResult,
+  err,
+  ok,
+  relay4xxOrError,
   requiredToolForMode,
 } from '@tcp/shared';
 import { taskPrompts } from '../tasks-prompts';
@@ -18,20 +21,6 @@ function interpolate(template: string, vars: Record<string, string>): string {
     /\{\{(\w+)\}\}/g,
     (_, key: string) => vars[key] ?? '',
   );
-}
-
-/** MCP tool result envelope — index signature satisfies the SDK's Zod-inferred type. */
-interface ToolResult {
-  [key: string]: unknown;
-  content: Array<{ type: 'text'; text: string }>;
-}
-
-function ok(text: string): ToolResult {
-  return { content: [{ type: 'text', text }] };
-}
-
-function err(text: string): ToolResult {
-  return { content: [{ type: 'text', text: `Error: ${text}` }] };
 }
 
 /** The subset of an assignment the tool handlers need for mode-gating and proxying. */
@@ -96,16 +85,11 @@ const materialArtifactSchema = z.object({
 @Injectable()
 export class TasksToolsService {
   private readonly logger = new Logger(TasksToolsService.name);
-  private readonly serverUrl: string;
-  private readonly apiKey: string;
 
   constructor(
     private readonly audit: AuditClientService,
-    config: ConfigService,
-  ) {
-    this.serverUrl = config.getOrThrow<string>('TCP_SERVER_URL');
-    this.apiKey = config.getOrThrow<string>('INTERNAL_API_KEY');
-  }
+    private readonly api: InternalApiClient,
+  ) {}
 
   /** Creates and returns a configured McpServer with all task tools registered. */
   createServer(): McpServer {
@@ -198,18 +182,17 @@ export class TasksToolsService {
         if (caller.mode !== 'plan') return this.wrongMode(caller.mode);
 
         try {
-          const res = await axios.post<{ created: number }>(
-            `${this.serverUrl}/internal/task/${caller.taskId}/plan`,
+          const { created } = await this.api.post<{ created: number }>(
+            `/internal/task/${caller.taskId}/plan`,
             { agentId, assignments },
-            { headers: { 'X-Internal-Api-Key': this.apiKey } },
           );
           this.audit.record(companyId, 'agent', agentId, 'state_change', {
             source: 'create_plan',
-            created: res.data.created,
+            created,
           });
           return ok(
             interpolate(taskPrompts.plan_created, {
-              count: String(res.data.created),
+              count: String(created),
             }),
           );
         } catch (e) {
@@ -256,11 +239,11 @@ export class TasksToolsService {
           return this.wrongMode(caller.mode);
 
         try {
-          await axios.post(
-            `${this.serverUrl}/internal/assignment/${caller.id}/complete`,
-            { agentId, summary, prepared: prepared ?? [] },
-            { headers: { 'X-Internal-Api-Key': this.apiKey } },
-          );
+          await this.api.post(`/internal/assignment/${caller.id}/complete`, {
+            agentId,
+            summary,
+            prepared: prepared ?? [],
+          });
           this.audit.record(companyId, 'agent', agentId, 'state_change', {
             source: 'complete_assignment',
           });
@@ -305,10 +288,9 @@ export class TasksToolsService {
         const verdict = qa.trim().toLowerCase();
 
         try {
-          await axios.post(
-            `${this.serverUrl}/internal/assignment/${caller.targetAssignmentId}/assure`,
+          await this.api.post(
+            `/internal/assignment/${caller.targetAssignmentId}/assure`,
             { agentId, qa: verdict, feedback },
-            { headers: { 'X-Internal-Api-Key': this.apiKey } },
           );
           this.audit.record(companyId, 'agent', agentId, 'state_change', {
             source: 'assure_assignment',
@@ -335,11 +317,10 @@ export class TasksToolsService {
     agentId: string,
   ): Promise<CallerAssignment | null> {
     try {
-      const res = await axios.get<{ assignment: CallerAssignment }>(
-        `${this.serverUrl}/internal/agent/${agentId}/assignment`,
-        { headers: { 'X-Internal-Api-Key': this.apiKey } },
-      );
-      return res.data.assignment;
+      const { assignment } = await this.api.get<{
+        assignment: CallerAssignment;
+      }>(`/internal/agent/${agentId}/assignment`);
+      return assignment;
     } catch (e) {
       this.logger.warn(
         `Could not resolve assignment for agent ${agentId}: ${String(e)}`,
@@ -358,20 +339,8 @@ export class TasksToolsService {
     );
   }
 
-  /**
-   * A 4xx from an internal endpoint carries a corrective message written for
-   * the LLM — relay it verbatim as a normal tool result so the model can fix
-   * its call. Anything else (5xx, network) returns the generic fallback.
-   */
+  /** Relays a corrective 4xx to the model, logging anything it cannot act on. */
   private relayOrError(e: unknown, tool: string, fallback: string): ToolResult {
-    const axiosErr = e as AxiosError<{ message?: string | string[] }>;
-    const status = axiosErr.response?.status;
-    if (status && status >= 400 && status < 500) {
-      const raw = axiosErr.response?.data?.message;
-      const message = Array.isArray(raw) ? raw.join('; ') : raw;
-      if (message) return ok(message);
-    }
-    this.logger.error(`${tool} failed: ${String(e)}`);
-    return err(fallback);
+    return relay4xxOrError(e, fallback, { tool, logger: this.logger });
   }
 }

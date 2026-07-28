@@ -1,6 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
+import { InternalApiClient } from '@tcp/shared';
+import { Injectable } from '@nestjs/common';
 import type { StorageChanges } from '../agent/loop-tracker';
 
 /**
@@ -13,25 +12,14 @@ import type { StorageChanges } from '../agent/loop-tracker';
  */
 @Injectable()
 export class StorageTrackingClientService {
-  private readonly logger = new Logger(StorageTrackingClientService.name);
-  private readonly serverUrl: string;
-  private readonly apiKey: string;
-
-  constructor(config: ConfigService) {
-    this.serverUrl = config.getOrThrow<string>('TCP_SERVER_URL');
-    this.apiKey = config.getOrThrow<string>('INTERNAL_API_KEY');
-  }
+  constructor(private readonly api: InternalApiClient) {}
 
   /** Merges the current storage change state into the agent record on tcp-server. */
   patch(agentId: string, storage: StorageChanges): void {
-    axios
-      .patch(`${this.serverUrl}/internal/agent/${agentId}/storage`, storage, {
-        headers: { 'X-Internal-Api-Key': this.apiKey },
-      })
-      .catch((err: unknown) => {
-        this.logger.warn(
-          `Storage tracking update failed for agent ${agentId}: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      });
+    this.api.patchAndForget(
+      `/internal/agent/${agentId}/storage`,
+      storage,
+      `Storage tracking update for agent ${agentId}`,
+    );
   }
 }

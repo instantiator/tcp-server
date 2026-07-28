@@ -496,11 +496,20 @@ export class MinioStorageAdapter
     }
   }
 
-  async copyFile(
+  /**
+   * Validates both paths, refuses a missing source, and copies the object.
+   *
+   * Shared by {@link MinioStorageAdapter.copyFile} and
+   * {@link MinioStorageAdapter.moveFile}; each keeps its own audit action and
+   * reindex call, because what a move means to the audit trail and to the
+   * knowledge index is genuinely not "a copy that happens to delete after".
+   *
+   * @returns The source's company slug, for the caller's audit event.
+   */
+  private async copyObjectChecked(
     source: string,
     destination: string,
-    originators?: Originators,
-  ): Promise<void> {
+  ): Promise<string> {
     assertValidStoragePath(source, 'source');
     assertValidStoragePath(destination, 'destination');
     if (!(await objectExists(this.client, this.bucket, source))) {
@@ -513,7 +522,15 @@ export class MinioStorageAdapter
         Key: destination,
       }),
     );
-    const companySlug = source.split('/')[0];
+    return source.split('/')[0];
+  }
+
+  async copyFile(
+    source: string,
+    destination: string,
+    originators?: Originators,
+  ): Promise<void> {
+    const companySlug = await this.copyObjectChecked(source, destination);
     await this.emitStorageAudit('copy_file', source, companySlug, originators, {
       destination,
     });
@@ -525,22 +542,10 @@ export class MinioStorageAdapter
     destination: string,
     originators?: Originators,
   ): Promise<void> {
-    assertValidStoragePath(source, 'source');
-    assertValidStoragePath(destination, 'destination');
-    if (!(await objectExists(this.client, this.bucket, source))) {
-      throw new NotFoundException(`Source file not found: ${source}`);
-    }
-    await this.client.send(
-      new CopyObjectCommand({
-        Bucket: this.bucket,
-        CopySource: `${this.bucket}/${source}`,
-        Key: destination,
-      }),
-    );
+    const companySlug = await this.copyObjectChecked(source, destination);
     await this.client.send(
       new DeleteObjectCommand({ Bucket: this.bucket, Key: source }),
     );
-    const companySlug = source.split('/')[0];
     await this.emitStorageAudit('move_file', source, companySlug, originators, {
       destination,
     });

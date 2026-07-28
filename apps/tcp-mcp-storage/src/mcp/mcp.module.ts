@@ -1,3 +1,4 @@
+import { InternalApiClient } from '@tcp/shared';
 import { Module } from '@nestjs/common';
 import { McpController } from './mcp.controller';
 import { StorageToolsService } from './storage-tools.service';
@@ -9,6 +10,6 @@ import { StorageToolsService } from './storage-tools.service';
  */
 @Module({
   controllers: [McpController],
-  providers: [StorageToolsService],
+  providers: [StorageToolsService, InternalApiClient],
 })
 export class McpModule {}

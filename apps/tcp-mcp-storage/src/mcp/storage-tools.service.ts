@@ -1,8 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import axios from 'axios';
 import { z } from 'zod';
+import {
+  InternalApiClient,
+  ToolResult,
+  extractServerErrorMessage,
+  ok,
+  registerDescribeServer,
+} from '@tcp/shared';
 import { getReadOnlyMessage, storagePrompts } from '../storage-prompts';
 import { storageToolDescriptions } from '../storage-tool-descriptions';
 
@@ -36,12 +41,6 @@ interface StorageScope {
   readOnly: boolean;
   workingPrefix: string;
   materials: ResolvedMaterial[];
-}
-
-/** MCP tool result envelope — index signature satisfies the SDK's Zod-inferred type. */
-interface ToolResult {
-  [key: string]: unknown;
-  content: Array<{ type: 'text'; text: string }>;
 }
 
 /** The working-directory inspect tools an agent keeps in a read-only scope. */
@@ -121,13 +120,8 @@ function resolveScopedKey(prefix: string, filename: string): string {
 @Injectable()
 export class StorageToolsService {
   private readonly logger = new Logger(StorageToolsService.name);
-  private readonly serverUrl: string;
-  private readonly apiKey: string;
 
-  constructor(private readonly config: ConfigService) {
-    this.serverUrl = this.config.getOrThrow<string>('TCP_SERVER_URL');
-    this.apiKey = this.config.getOrThrow<string>('INTERNAL_API_KEY');
-  }
+  constructor(private readonly api: InternalApiClient) {}
 
   /** Creates and returns a configured McpServer with all storage tools registered. */
   createServer(): McpServer {
@@ -168,7 +162,7 @@ export class StorageToolsService {
     const { entries } = await this.post<{ entries: FileEntry[] }>('list', {
       prefix,
     });
-    return this.textResult(JSON.stringify(entries, null, 2));
+    return ok(JSON.stringify(entries, null, 2));
   }
 
   async readFile(path: string): Promise<ToolResult> {
@@ -176,9 +170,9 @@ export class StorageToolsService {
       const { content } = await this.post<{ content: string }>('read', {
         path,
       });
-      return this.textResult(content);
+      return ok(content);
     } catch (e) {
-      return this.textResult(this.extractErrorMessage(e));
+      return ok(extractServerErrorMessage(e));
     }
   }
 
@@ -187,15 +181,15 @@ export class StorageToolsService {
       prefix,
       pattern,
     });
-    return this.textResult(JSON.stringify(entries, null, 2));
+    return ok(JSON.stringify(entries, null, 2));
   }
 
   async getFileProperties(path: string): Promise<ToolResult> {
     try {
       const props = await this.post<FileProperties>('properties', { path });
-      return this.textResult(JSON.stringify(props, null, 2));
+      return ok(JSON.stringify(props, null, 2));
     } catch (e) {
-      return this.textResult(this.extractErrorMessage(e));
+      return ok(extractServerErrorMessage(e));
     }
   }
 
@@ -204,9 +198,9 @@ export class StorageToolsService {
       const summary = await this.post<Record<string, unknown>>('summary', {
         path,
       });
-      return this.textResult(JSON.stringify(summary, null, 2));
+      return ok(JSON.stringify(summary, null, 2));
     } catch (e) {
-      return this.textResult(this.extractErrorMessage(e));
+      return ok(extractServerErrorMessage(e));
     }
   }
 
@@ -218,9 +212,9 @@ export class StorageToolsService {
       const { entries } = await this.post<{ entries: FileEntry[] }>('list', {
         prefix: scope.workingPrefix,
       });
-      return this.textResult(JSON.stringify(entries, null, 2));
+      return ok(JSON.stringify(entries, null, 2));
     } catch (e) {
-      return this.textResult(this.extractErrorMessage(e));
+      return ok(extractServerErrorMessage(e));
     }
   }
 
@@ -234,9 +228,9 @@ export class StorageToolsService {
       const props = await this.post<FileProperties>('properties', {
         path: key,
       });
-      return this.textResult(JSON.stringify(props, null, 2));
+      return ok(JSON.stringify(props, null, 2));
     } catch (e) {
-      return this.textResult(this.extractErrorMessage(e));
+      return ok(extractServerErrorMessage(e));
     }
   }
 
@@ -250,9 +244,9 @@ export class StorageToolsService {
       const summary = await this.post<Record<string, unknown>>('summary', {
         path: key,
       });
-      return this.textResult(JSON.stringify(summary, null, 2));
+      return ok(JSON.stringify(summary, null, 2));
     } catch (e) {
-      return this.textResult(this.extractErrorMessage(e));
+      return ok(extractServerErrorMessage(e));
     }
   }
 
@@ -266,9 +260,41 @@ export class StorageToolsService {
       const { content } = await this.post<{ content: string }>('read', {
         path: key,
       });
-      return this.textResult(content);
+      return ok(content);
     } catch (e) {
-      return this.textResult(this.extractErrorMessage(e));
+      return ok(extractServerErrorMessage(e));
+    }
+  }
+
+  /**
+   * Runs a working-file mutation behind the checks every one of them needs:
+   * the caller's scope is resolved, a read-only scope is refused, and the
+   * model-supplied filename is confined to the working directory before `run`
+   * sees it. Failures come back as a readable tool result, not an exception.
+   *
+   * Routing every mutation through here is what makes the read-only gate
+   * impossible to forget when a new working-file tool is added.
+   *
+   * @param tool - Tool name, named in the read-only refusal message.
+   * @param filename - Model-supplied name, resolved to `key` for `run`.
+   * @param run - Performs the action and returns the message for the model.
+   *   Receives the scope too, for tools that resolve a second path.
+   */
+  private async workingFileAction(
+    agentId: string,
+    tool: string,
+    filename: string,
+    run: (key: string, scope: StorageScope) => Promise<string>,
+  ): Promise<ToolResult> {
+    try {
+      const scope = await this.fetchScope(agentId);
+      if (scope.readOnly) {
+        return ok(getReadOnlyMessage(tool, READ_ONLY_WORKING_TOOLS));
+      }
+      const key = resolveScopedKey(scope.workingPrefix, filename);
+      return ok(await run(key, scope));
+    } catch (e) {
+      return ok(extractServerErrorMessage(e));
     }
   }
 
@@ -278,33 +304,26 @@ export class StorageToolsService {
     content: string,
     overwrite?: boolean,
   ): Promise<ToolResult> {
-    try {
-      const scope = await this.fetchScope(agentId);
-      if (scope.readOnly)
-        return this.textResult(
-          getReadOnlyMessage('create_working_file', READ_ONLY_WORKING_TOOLS),
-        );
-      const key = resolveScopedKey(scope.workingPrefix, filename);
-      const props = await this.post<FileProperties>('properties', {
-        path: key,
-      });
-      if (props.exists && !overwrite) {
-        return this.textResult(
-          `Working file '${filename}' already exists. Set overwrite: true to replace it, or use append_working_file to add to it.`,
-        );
-      }
-      await this.post('write', {
-        path: key,
-        content,
-        overwrite: true,
-        originators: { agent: agentId },
-      });
-      return this.textResult(
-        `${props.exists ? 'Replaced' : 'Created'} working file: ${filename}`,
-      );
-    } catch (e) {
-      return this.textResult(this.extractErrorMessage(e));
-    }
+    return this.workingFileAction(
+      agentId,
+      'create_working_file',
+      filename,
+      async (key) => {
+        const props = await this.post<FileProperties>('properties', {
+          path: key,
+        });
+        if (props.exists && !overwrite) {
+          return `Working file '${filename}' already exists. Set overwrite: true to replace it, or use append_working_file to add to it.`;
+        }
+        await this.post('write', {
+          path: key,
+          content,
+          overwrite: true,
+          originators: { agent: agentId },
+        });
+        return `${props.exists ? 'Replaced' : 'Created'} working file: ${filename}`;
+      },
+    );
   }
 
   async appendWorkingFile(
@@ -312,24 +331,19 @@ export class StorageToolsService {
     filename: string,
     content: string,
   ): Promise<ToolResult> {
-    try {
-      const scope = await this.fetchScope(agentId);
-      if (scope.readOnly)
-        return this.textResult(
-          getReadOnlyMessage('append_working_file', READ_ONLY_WORKING_TOOLS),
-        );
-      const key = resolveScopedKey(scope.workingPrefix, filename);
-      const { created } = await this.post<{ created: boolean }>('append', {
-        path: key,
-        content,
-        originators: { agent: agentId },
-      });
-      return this.textResult(
-        `${created ? 'Created' : 'Appended to'} working file: ${filename}`,
-      );
-    } catch (e) {
-      return this.textResult(this.extractErrorMessage(e));
-    }
+    return this.workingFileAction(
+      agentId,
+      'append_working_file',
+      filename,
+      async (key) => {
+        const { created } = await this.post<{ created: boolean }>('append', {
+          path: key,
+          content,
+          originators: { agent: agentId },
+        });
+        return `${created ? 'Created' : 'Appended to'} working file: ${filename}`;
+      },
+    );
   }
 
   async replaceInWorkingFile(
@@ -338,72 +352,56 @@ export class StorageToolsService {
     find: string,
     replace: string,
   ): Promise<ToolResult> {
-    try {
-      const scope = await this.fetchScope(agentId);
-      if (scope.readOnly)
-        return this.textResult(
-          getReadOnlyMessage(
-            'replace_in_working_file',
-            READ_ONLY_WORKING_TOOLS,
-          ),
-        );
-      const key = resolveScopedKey(scope.workingPrefix, filename);
-      const { count } = await this.post<{ count: number }>('replace', {
-        path: key,
-        find,
-        replace,
-        originators: { agent: agentId },
-      });
-      return this.textResult(
-        `Replaced ${count} occurrence(s) in working file: ${filename}`,
-      );
-    } catch (e) {
-      return this.textResult(this.extractErrorMessage(e));
-    }
+    return this.workingFileAction(
+      agentId,
+      'replace_in_working_file',
+      filename,
+      async (key) => {
+        const { count } = await this.post<{ count: number }>('replace', {
+          path: key,
+          find,
+          replace,
+          originators: { agent: agentId },
+        });
+        return `Replaced ${count} occurrence(s) in working file: ${filename}`;
+      },
+    );
   }
 
   async deleteWorkingFile(
     agentId: string,
     filename: string,
   ): Promise<ToolResult> {
-    try {
-      const scope = await this.fetchScope(agentId);
-      if (scope.readOnly)
-        return this.textResult(
-          getReadOnlyMessage('delete_working_file', READ_ONLY_WORKING_TOOLS),
-        );
-      const key = resolveScopedKey(scope.workingPrefix, filename);
-      await this.post('delete', {
-        path: key,
-        originators: { agent: agentId },
-      });
-      return this.textResult(
-        `Deleted working file: ${filename} (restorable via restore_working_file)`,
-      );
-    } catch (e) {
-      return this.textResult(this.extractErrorMessage(e));
-    }
+    return this.workingFileAction(
+      agentId,
+      'delete_working_file',
+      filename,
+      async (key) => {
+        await this.post('delete', {
+          path: key,
+          originators: { agent: agentId },
+        });
+        return `Deleted working file: ${filename} (restorable via restore_working_file)`;
+      },
+    );
   }
 
   async restoreWorkingFile(
     agentId: string,
     filename: string,
   ): Promise<ToolResult> {
-    try {
-      const scope = await this.fetchScope(agentId);
-      if (scope.readOnly)
-        return this.textResult(
-          getReadOnlyMessage('restore_working_file', READ_ONLY_WORKING_TOOLS),
-        );
-      const key = resolveScopedKey(scope.workingPrefix, filename);
-      await this.post('restore', {
-        path: key,
-        originators: { agent: agentId },
-      });
-      return this.textResult(`Restored working file: ${filename}`);
-    } catch (e) {
-      return this.textResult(this.extractErrorMessage(e));
-    }
+    return this.workingFileAction(
+      agentId,
+      'restore_working_file',
+      filename,
+      async (key) => {
+        await this.post('restore', {
+          path: key,
+          originators: { agent: agentId },
+        });
+        return `Restored working file: ${filename}`;
+      },
+    );
   }
 
   async renameWorkingFile(
@@ -411,24 +409,21 @@ export class StorageToolsService {
     from: string,
     to: string,
   ): Promise<ToolResult> {
-    try {
-      const scope = await this.fetchScope(agentId);
-      if (scope.readOnly)
-        return this.textResult(
-          getReadOnlyMessage('rename_working_file', READ_ONLY_WORKING_TOOLS),
-        );
-      // Both ends are confined to the working directory by resolveScopedKey.
-      const source = resolveScopedKey(scope.workingPrefix, from);
-      const destination = resolveScopedKey(scope.workingPrefix, to);
-      await this.post('move', {
-        source,
-        destination,
-        originators: { agent: agentId },
-      });
-      return this.textResult(`Renamed working file: ${from} → ${to}`);
-    } catch (e) {
-      return this.textResult(this.extractErrorMessage(e));
-    }
+    return this.workingFileAction(
+      agentId,
+      'rename_working_file',
+      from,
+      async (source, scope) => {
+        // Both ends are confined to the working directory by resolveScopedKey.
+        const destination = resolveScopedKey(scope.workingPrefix, to);
+        await this.post('move', {
+          source,
+          destination,
+          originators: { agent: agentId },
+        });
+        return `Renamed working file: ${from} → ${to}`;
+      },
+    );
   }
 
   // Assignment-scoped material handlers (public for testability).
@@ -440,9 +435,9 @@ export class StorageToolsService {
         name: m.name,
         kind: m.key === null ? 'inline-text' : 'file',
       }));
-      return this.textResult(JSON.stringify(list, null, 2));
+      return ok(JSON.stringify(list, null, 2));
     } catch (e) {
-      return this.textResult(this.extractErrorMessage(e));
+      return ok(extractServerErrorMessage(e));
     }
   }
 
@@ -453,9 +448,9 @@ export class StorageToolsService {
     try {
       const scope = await this.fetchScope(agentId);
       const material = this.findMaterial(scope, filename);
-      if (!material) return this.textResult(this.materialNotFound(filename));
+      if (!material) return ok(this.materialNotFound(filename));
       if (material.key === null) {
-        return this.textResult(
+        return ok(
           JSON.stringify(
             {
               name: material.name,
@@ -471,9 +466,9 @@ export class StorageToolsService {
       const props = await this.post<FileProperties>('properties', {
         path: material.key,
       });
-      return this.textResult(JSON.stringify(props, null, 2));
+      return ok(JSON.stringify(props, null, 2));
     } catch (e) {
-      return this.textResult(this.extractErrorMessage(e));
+      return ok(extractServerErrorMessage(e));
     }
   }
 
@@ -484,28 +479,26 @@ export class StorageToolsService {
     try {
       const scope = await this.fetchScope(agentId);
       const material = this.findMaterial(scope, filename);
-      if (!material) return this.textResult(this.materialNotFound(filename));
+      if (!material) return ok(this.materialNotFound(filename));
       if (material.key === null) {
-        return this.textResult(material.inlineText ?? '');
+        return ok(material.inlineText ?? '');
       }
       const { content } = await this.post<{ content: string }>('read', {
         path: material.key,
       });
-      return this.textResult(content);
+      return ok(content);
     } catch (e) {
-      return this.textResult(this.extractErrorMessage(e));
+      return ok(extractServerErrorMessage(e));
     }
   }
 
   // Private helpers
 
   /** Resolves the caller's storage scope for the current tool call. */
-  private async fetchScope(agentId: string): Promise<StorageScope> {
-    const res = await axios.get<StorageScope>(
-      `${this.serverUrl}/internal/agent/${agentId}/storage-scope`,
-      { headers: this.headers() },
+  private fetchScope(agentId: string): Promise<StorageScope> {
+    return this.api.get<StorageScope>(
+      `/internal/agent/${agentId}/storage-scope`,
     );
-    return res.data;
   }
 
   private findMaterial(
@@ -519,46 +512,17 @@ export class StorageToolsService {
     return `No material named '${name}'. Use list_material_files to see the available materials.`;
   }
 
-  private async post<T>(action: string, body: unknown): Promise<T> {
-    const res = await axios.post<T>(
-      `${this.serverUrl}/internal/storage/${action}`,
-      body,
-      { headers: this.headers() },
-    );
-    return res.data;
-  }
-
-  private headers(): Record<string, string> {
-    return { 'X-Internal-Api-Key': this.apiKey };
-  }
-
-  /** Extracts a friendly message from an tcp-server error response (422 validation errors, 404s, etc.). */
-  private extractErrorMessage(error: unknown): string {
-    if (axios.isAxiosError(error)) {
-      const data = error.response?.data as
-        { message?: string; errors?: { llmHint: string }[] } | undefined;
-      if (data?.errors?.length) {
-        return data.errors.map((e) => e.llmHint).join(' ');
-      }
-      if (data?.message) return data.message;
-      return error.message;
-    }
-    return error instanceof Error ? error.message : String(error);
-  }
-
-  private textResult(text: string): ToolResult {
-    return { content: [{ type: 'text', text }] };
+  private post<T>(action: string, body: unknown): Promise<T> {
+    return this.api.post<T>(`/internal/storage/${action}`, body);
   }
 
   // Server registration
 
   private registerDescribeServer(server: McpServer): void {
-    server.registerTool(
-      'describe_server',
-      { description: storageToolDescriptions.describe_server },
-      (): ToolResult => ({
-        content: [{ type: 'text', text: storagePrompts.describe_server }],
-      }),
+    registerDescribeServer(
+      server,
+      storageToolDescriptions.describe_server,
+      storagePrompts.describe_server,
     );
   }
 

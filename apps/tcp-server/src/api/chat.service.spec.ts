@@ -8,6 +8,7 @@ import {
   ContextCompactorService,
   ContextManagerService,
   IncomingDataGuardService,
+  KnowledgeRetrievalService,
   TcpAgent,
   TcpRole,
   MODE_PROMPTS,
@@ -78,7 +79,6 @@ import { AIMessage } from '@langchain/core/messages';
 import { StateGraph } from '@langchain/langgraph';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import { AgentEventService } from '../events/agent-event.service';
-import { RagRetrievalService } from '../rag/rag-retrieval.service';
 
 function makeAgent(overrides: Partial<TcpAgent> = {}): TcpAgent {
   return {
@@ -323,7 +323,7 @@ describe('ChatService', () => {
       config,
       contextManager,
       agentEvents,
-      ragRetrieval as unknown as RagRetrievalService,
+      ragRetrieval as unknown as KnowledgeRetrievalService,
       auditService as unknown as AuditService,
       mcpClient as never,
       agentRepo as never,

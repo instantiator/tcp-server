@@ -33,4 +33,29 @@ describe('buildChatModel', () => {
       buildChatModel({ ...baseConfig, provider: 'unknown' }),
     ).toThrow('Unsupported LLM provider: unknown');
   });
+
+  it('builds a ChatOpenAI for the lm-studio provider', () => {
+    expect(buildChatModel(baseConfig)).toBeInstanceOf(ChatOpenAI);
+  });
+
+  it('builds a ChatOpenAI for the openai provider', () => {
+    const model = buildChatModel({
+      provider: 'openai',
+      model: 'gpt-4o',
+      apiKey: 'OPENAI_API_KEY',
+    });
+    expect(model).toBeInstanceOf(ChatOpenAI);
+  });
+
+  it('resolves apiKey as the name of an environment variable', () => {
+    process.env['TEST_LLM_KEY'] = 'test-secret';
+    expect(() =>
+      buildChatModel({
+        provider: 'openai',
+        model: 'gpt-4o',
+        apiKey: 'TEST_LLM_KEY',
+      }),
+    ).not.toThrow();
+    delete process.env['TEST_LLM_KEY'];
+  });
 });

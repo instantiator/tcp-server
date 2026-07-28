@@ -170,7 +170,8 @@
       "node_modules/(?!(pgvector|commander)/)"
     ],
     "moduleNameMapper": {
-      "@tcp/shared": "<rootDir>/libs/tcp-shared/src/index.ts"
+      "^@tcp/shared/(.*)$": "<rootDir>/libs/tcp-shared/src/$1",
+      "^@tcp/shared$": "<rootDir>/libs/tcp-shared/src/index.ts"
     },
     "setupFilesAfterEnv": [
       "<rootDir>/test/unit-test-setup.ts"

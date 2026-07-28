@@ -1,9 +1,10 @@
-import { DEFAULT_RAG_THRESHOLD, LlmConfig } from '@tcp/shared';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
 import pgvector from 'pgvector';
 import { DataSource } from 'typeorm';
+import { DEFAULT_RAG_THRESHOLD } from '../config/defaults';
+import type { LlmConfig } from '../models/LlmConfig.model';
 import { EmbeddingService } from './embedding.service';
 
 /** A single chunk returned by a RAG similarity search. */
@@ -28,10 +29,13 @@ export interface RagChunk {
  * Only chunks whose similarity exceeds `threshold` are returned, so the caller
  * receives an empty array when nothing relevant exists — RAG is not injected
  * into the prompt unless it adds value.
+ *
+ * Shared by tcp-server, tcp-agent and tcp-mcp-memory so all three retrieve on
+ * identical scoping and threshold rules.
  */
 @Injectable()
-export class RagRetrievalService {
-  private readonly logger = new Logger(RagRetrievalService.name);
+export class KnowledgeRetrievalService {
+  private readonly logger = new Logger(KnowledgeRetrievalService.name);
 
   constructor(
     private readonly embedding: EmbeddingService,
@@ -64,15 +68,7 @@ export class RagRetrievalService {
 
     const queryVector = await this.embedding.embedQuery(embeddingConfig, query);
 
-    const rows = await this.dataSource.query<
-      {
-        id: UUID;
-        documentPath: string;
-        chunkIndex: number;
-        content: string;
-        similarity: number;
-      }[]
-    >(
+    const rows = await this.dataSource.query<RagChunk[]>(
       `SELECT id, "documentPath", "chunkIndex", content,
               1 - (embedding <=> $1::vector) AS similarity
        FROM knowledge_chunk

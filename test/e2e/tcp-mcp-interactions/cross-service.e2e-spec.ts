@@ -1,4 +1,9 @@
-import { CompanyUser, TcpCompany, TcpRole } from '@tcp/shared';
+import {
+  CompanyUser,
+  InternalApiClient,
+  TcpCompany,
+  TcpRole,
+} from '@tcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -80,7 +85,7 @@ describe('tcp-mcp-interactions -> tcp-server (cross-service e2e)', () => {
         throw new Error(`Unexpected config key requested: ${key}`);
       },
     } as unknown as ConfigService;
-    tools = new InteractionsToolsService(config);
+    tools = new InteractionsToolsService(new InternalApiClient(config));
   });
 
   afterAll(() => app.close());

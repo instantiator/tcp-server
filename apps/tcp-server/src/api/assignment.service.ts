@@ -12,6 +12,7 @@ import {
   TcpArtifact,
   TcpAssignment,
   TcpAssignmentMode,
+  TcpAssignmentStatus,
   TcpAssignmentWorkingArtifact,
   TcpMaterialArtifact,
   TcpTask,
@@ -506,21 +507,13 @@ export class AssignmentService {
       if (problems.length > 0) {
         throw new UnprocessableEntityException(this.buildGateMessage(problems));
       }
-      const claim = await claimStatus(
-        this.assignmentRepo,
-        assignmentId,
-        'in-progress',
+      await this.claimAndPersist(
+        assignment,
         'succeeded',
+        canonPrepared,
+        cleanSummary,
+        `Assignment ${assignmentId} was already finalised.`,
       );
-      if (claim === 0) {
-        throw new ConflictException(
-          `Assignment ${assignmentId} was already finalised.`,
-        );
-      }
-      assignment.prepared = canonPrepared;
-      assignment.summary = cleanSummary;
-      assignment.status = 'succeeded';
-      await this.assignmentRepo.save(assignment);
       await this.dispatcher.assignmentFinalised(assignment);
       return;
     }
@@ -532,21 +525,13 @@ export class AssignmentService {
 
     if (assignment.taskId === null || assignment.taskId === undefined) {
       // Orphan: the prepared work is immediately final (there is no QA cycle).
-      const claim = await claimStatus(
-        this.assignmentRepo,
-        assignmentId,
-        'in-progress',
+      await this.claimAndPersist(
+        assignment,
         'succeeded',
+        canonPrepared,
+        cleanSummary,
+        `Assignment ${assignmentId} was already completed.`,
       );
-      if (claim === 0) {
-        throw new ConflictException(
-          `Assignment ${assignmentId} was already completed.`,
-        );
-      }
-      assignment.prepared = canonPrepared;
-      assignment.summary = cleanSummary;
-      assignment.status = 'succeeded';
-      await this.assignmentRepo.save(assignment);
       // Same completion path as complete_task used to take — resolves any
       // pending consultation/conversation for this agent.
       await this.pauseResume.completeAgent(agentId, cleanSummary);
@@ -556,21 +541,13 @@ export class AssignmentService {
 
     // Task assignment: hand off to QA. Record prepared/summary, pause the
     // agent so part 7 can resume it with the QA verdict.
-    const claim = await claimStatus(
-      this.assignmentRepo,
-      assignmentId,
-      'in-progress',
+    await this.claimAndPersist(
+      assignment,
       'in-qa',
+      canonPrepared,
+      cleanSummary,
+      `Assignment ${assignmentId} was already handed to QA.`,
     );
-    if (claim === 0) {
-      throw new ConflictException(
-        `Assignment ${assignmentId} was already handed to QA.`,
-      );
-    }
-    assignment.prepared = canonPrepared;
-    assignment.summary = cleanSummary;
-    assignment.status = 'in-qa';
-    await this.assignmentRepo.save(assignment);
 
     await this.agentRepo.update(agentId, {
       status: AgentStatus.Paused,
@@ -580,6 +557,39 @@ export class AssignmentService {
     await this.dispatcher.assignmentReadyForQa(assignment);
     await this.recomputeTaskStatus(assignment.taskId);
     this.logger.log(`Assignment ${assignmentId} handed to QA`);
+  }
+
+  /**
+   * Atomically moves the assignment out of `in-progress` into `to`, then
+   * persists the agent's prepared outputs and summary against it.
+   *
+   * The claim is what stops two concurrent completions both proceeding: a
+   * zero row count means another writer already moved the assignment on, so
+   * this caller lost the race and must not write over the winner's result.
+   *
+   * @param conflictMessage - What the loser of that race is told.
+   * @throws {ConflictException} when the assignment was already claimed.
+   */
+  private async claimAndPersist(
+    assignment: TcpAssignment,
+    to: TcpAssignmentStatus,
+    prepared: TcpAssignmentWorkingArtifact[],
+    summary: string,
+    conflictMessage: string,
+  ): Promise<void> {
+    const claim = await claimStatus(
+      this.assignmentRepo,
+      assignment.id,
+      'in-progress',
+      to,
+    );
+    if (claim === 0) {
+      throw new ConflictException(conflictMessage);
+    }
+    assignment.prepared = prepared;
+    assignment.summary = summary;
+    assignment.status = to;
+    await this.assignmentRepo.save(assignment);
   }
 
   /**

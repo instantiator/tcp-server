@@ -95,17 +95,33 @@ async function lookupCompanyId(
   return company.id;
 }
 
-export async function resolveCompanyIdFrom(
-  api: ApiOptions,
+/**
+ * The precedence every entity reference follows: an explicit `id` wins, then
+ * an explicit `slug`, then the combined `value` form — used as-is when it
+ * looks like a UUID, otherwise resolved as a slug.
+ *
+ * @param lookup - Resolves a slug to its entity UUID.
+ * @throws when none of the three values is given.
+ */
+async function resolveRef(
   { id, slug, value }: RawEntityRef,
-  label = 'company',
+  label: string,
+  lookup: (slug: string) => Promise<string>,
 ): Promise<string> {
   if (id) return id;
-  if (slug) return lookupCompanyId(api, slug);
-  if (value) return UUID_RE.test(value) ? value : lookupCompanyId(api, value);
+  if (slug) return lookup(slug);
+  if (value) return UUID_RE.test(value) ? value : lookup(value);
   throw new Error(
     `Provide a ${label}: --${label}, --${label}-id, or --${label}-slug`,
   );
+}
+
+export async function resolveCompanyIdFrom(
+  api: ApiOptions,
+  ref: RawEntityRef,
+  label = 'company',
+): Promise<string> {
+  return resolveRef(ref, label, (slug) => lookupCompanyId(api, slug));
 }
 
 /** {@link resolveCompanyIdFrom} for the standard `--company`/`--company-id`/`--company-slug` options. */
@@ -131,7 +147,7 @@ export async function resolveCompanyId(
  */
 export async function resolveRoleIdFrom(
   api: ApiOptions,
-  { id, slug, value }: RawEntityRef,
+  ref: RawEntityRef,
   company: RawEntityRef,
   label = 'role',
 ): Promise<string> {
@@ -149,12 +165,7 @@ export async function resolveRoleIdFrom(
     return role.id;
   };
 
-  if (id) return id;
-  if (slug) return bySlug(slug);
-  if (value) return UUID_RE.test(value) ? value : bySlug(value);
-  throw new Error(
-    `Provide a ${label}: --${label}, --${label}-id, or --${label}-slug`,
-  );
+  return resolveRef(ref, label, bySlug);
 }
 
 /** {@link resolveRoleIdFrom} for the standard `--role`/`--role-id`/`--role-slug` options, scoped by `--company`/`--company-id`/`--company-slug`. */

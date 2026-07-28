@@ -17,7 +17,7 @@ import { apiRequest } from '../core/api';
 import { runCommand } from '../core/run-command';
 import { EntityRefOpts, UUID_RE } from '../core/entity-ref';
 
-// Mirrors the server's RAG worst-case sizing: `rag-retrieval.service.ts`'s
+// Mirrors the server's RAG worst-case sizing: `knowledge-retrieval.service.ts`'s
 // default `topK` (5 chunks) and `rag-index.service.ts`'s `MAX_CHUNK_CHARS`
 // (2000) — not imported directly since tcp-cli doesn't depend on tcp-server.
 const DEFAULT_RAG_TOP_K = 5;
