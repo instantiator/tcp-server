@@ -7,11 +7,14 @@ export interface InstanceResult {
 
 /** Prompts for instance suffix and env file name. */
 export async function promptInstance(): Promise<InstanceResult> {
-  const answers = await promptWithHelp<{ instanceSuffix: string; envFileName: string }>([
+  const answers = await promptWithHelp<{
+    instanceSuffix: string;
+    envFileName: string;
+  }>([
     {
       type: 'input',
       name: 'instanceSuffix',
-      message: 'Instance suffix (the part after "lcp-"):',
+      message: 'Instance suffix (the part after "tcp-"):',
       default: 'dev',
       validate: (input: string) =>
         input.trim().length > 0 || 'Suffix cannot be empty',
@@ -36,7 +39,7 @@ Common suffixes: dev, staging, prod, local`,
   ]);
 
   return {
-    instanceName: `lcp-${answers.instanceSuffix}`,
+    instanceName: `tcp-${answers.instanceSuffix}`,
     envFileName: answers.envFileName,
   };
 }

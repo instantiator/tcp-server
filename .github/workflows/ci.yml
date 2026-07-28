@@ -115,12 +115,12 @@ jobs:
         with:
           files: docker-compose.yml
           targets: |
-            lcp-server
-            lcp-agent
-            lcp-mcp-storage
-            lcp-mcp-memory
-            lcp-mcp-interactions
-            lcp-mcp-tasks
+            tcp-server
+            tcp-agent
+            tcp-mcp-storage
+            tcp-mcp-memory
+            tcp-mcp-interactions
+            tcp-mcp-tasks
           set: |
             *.cache-from=type=gha,scope=monorepo-build
             *.cache-to=type=gha,scope=monorepo-build,mode=max
@@ -136,7 +136,7 @@ jobs:
           port="$(grep -E '^EXPOSE_PORT_API=' .env.testing | tail -1 | cut -d= -f2)"
           echo "API_BASE_URL=http://localhost:${port:-3000}" >> "$GITHUB_ENV"
       - name: Start deployment stack
-        run: ./scripts/start-deployment.sh --project lcp-api --env-file .env.testing --dev-ports
+        run: ./scripts/start-deployment.sh --project tcp-api --env-file .env.testing --dev-ports
       - name: Run API tests
         run: ./scripts/run-api-tests.sh --base-url "$API_BASE_URL" --env-file .env.testing
       - name: Publish API test results
@@ -158,7 +158,7 @@ jobs:
           reporter: jest-junit
           fail-on-error: false
       - if: always()
-        run: docker compose -p lcp-api --profile auth down -v
+        run: docker compose -p tcp-api --profile auth down -v
 
   e2e-test:
     name: E2E tests

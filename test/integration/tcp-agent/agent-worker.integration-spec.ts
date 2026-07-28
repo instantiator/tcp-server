@@ -1,0 +1,296 @@
+import { FakeListChatModel } from '@langchain/core/utils/testing';
+import {
+  AgentStatus,
+  CONTEXT_AUDIT_SINK,
+  ContextBudgetService,
+  ContextCompactorService,
+  ContextManagerService,
+  IncomingDataGuardService,
+  TcpAgent,
+  TcpAssignment,
+  TcpCompany,
+  TcpRole,
+  TcpTask,
+} from '@tcp/shared';
+import { ConfigService } from '@nestjs/config';
+import { Test, TestingModule } from '@nestjs/testing';
+import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
+import { Queue } from 'bullmq';
+import { UUID } from 'crypto';
+import { Repository } from 'typeorm';
+import { AgentEventPublisherService } from '../../../apps/tcp-agent/src/agent/agent-event-publisher.service';
+import { AgentLoopService } from '../../../apps/tcp-agent/src/agent/agent-loop.service';
+import { InitialStateService } from '../../../apps/tcp-agent/src/agent/initial-state.service';
+import { AgentLoopEventRecorder } from '../../../apps/tcp-agent/src/agent/loop-events.service';
+import { AgentRunEnvironmentService } from '../../../apps/tcp-agent/src/agent/run-environment.service';
+import { AgentRunStatusService } from '../../../apps/tcp-agent/src/agent/run-status.service';
+import { SupervisedTurnService } from '../../../apps/tcp-agent/src/agent/supervised-turn.service';
+import { AuditClientService } from '@tcp/shared';
+import * as factory from '@tcp/shared/llm/llm-factory';
+import { KnowledgeRetrievalService, McpClientService } from '@tcp/shared';
+import { AgentRagService } from '../../../apps/tcp-agent/src/rag/agent-rag.service';
+import { AgentRegistryService } from '../../../apps/tcp-agent/src/registry/agent-registry.service';
+import { AgentWorkerService } from '../../../apps/tcp-agent/src/worker/agent-worker.service';
+import { ShutdownListenerService } from '../../../apps/tcp-agent/src/worker/shutdown-listener.service';
+import { StorageTrackingClientService } from '../../../apps/tcp-agent/src/storage-tracking/storage-tracking-client.service';
+import { requireEnv } from '../../support/require-env';
+
+// PostgreSQL and Redis are provisioned by the integration global setup;
+// DATABASE_URL and REDIS_URL are always present.
+// Run via: ./scripts/run-integration-tests.sh
+
+const ALL_ENTITIES = [TcpCompany, TcpRole, TcpAgent, TcpTask, TcpAssignment];
+
+const dbUrl = requireEnv('DATABASE_URL');
+const redisUrl = requireEnv('REDIS_URL');
+
+async function pollUntil(
+  check: () => Promise<boolean>,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await check()) return;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  throw new Error(`pollUntil: timed out after ${timeoutMs}ms`);
+}
+
+describe('AgentWorkerService (integration)', () => {
+  let module: TestingModule;
+  let companyRepo: Repository<TcpCompany>;
+  let roleRepo: Repository<TcpRole>;
+  let agentRepo: Repository<TcpAgent>;
+  let assignmentRepo: Repository<TcpAssignment>;
+
+  beforeAll(async () => {
+    module = await Test.createTestingModule({
+      imports: [
+        TypeOrmModule.forRoot({
+          type: 'postgres',
+          url: dbUrl,
+          entities: ALL_ENTITIES,
+        }),
+        TypeOrmModule.forFeature(ALL_ENTITIES),
+      ],
+      providers: [
+        AgentWorkerService,
+        // Real instance: this module's ConfigService leaves REDIS_URL to the
+        // worker's own getOrThrow, so the listener stays inert here.
+        ShutdownListenerService,
+        AgentLoopService,
+        AgentRunEnvironmentService,
+        InitialStateService,
+        AgentRunStatusService,
+        AgentLoopEventRecorder,
+        SupervisedTurnService,
+        AgentRegistryService,
+        {
+          provide: AuditClientService,
+          useValue: { record: jest.fn(), notifyComplete: jest.fn() },
+        },
+        {
+          provide: AgentRagService,
+          useValue: { hasKnowledge: jest.fn().mockResolvedValue(true) },
+        },
+        {
+          provide: KnowledgeRetrievalService,
+          useValue: { retrieve: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: McpClientService,
+          useValue: { loadTools: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: StorageTrackingClientService,
+          useValue: { patch: jest.fn() },
+        },
+        {
+          provide: AgentEventPublisherService,
+          useValue: { publish: jest.fn() },
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockReturnValue(undefined),
+            getOrThrow: (key: string) => {
+              if (key === 'DATABASE_URL') return dbUrl;
+              if (key === 'REDIS_URL') return redisUrl;
+              throw new Error(`Unknown config key in test: ${key}`);
+            },
+          },
+        },
+        // Real context-management wiring (mirrors AgentWorkerModule).
+        ContextBudgetService,
+        ContextCompactorService,
+        IncomingDataGuardService,
+        { provide: CONTEXT_AUDIT_SINK, useExisting: AuditClientService },
+        ContextManagerService,
+      ],
+    }).compile();
+
+    jest.spyOn(factory, 'buildChatModel').mockReturnValue(
+      new FakeListChatModel({
+        responses: ['Integration test response from stub LLM.'],
+      }),
+    );
+
+    await module.init();
+
+    companyRepo = module.get(getRepositoryToken(TcpCompany));
+    roleRepo = module.get(getRepositoryToken(TcpRole));
+    agentRepo = module.get(getRepositoryToken(TcpAgent));
+    assignmentRepo = module.get(getRepositoryToken(TcpAssignment));
+  });
+
+  afterAll(async () => {
+    jest.restoreAllMocks();
+    await module.close();
+  });
+
+  // Use DELETE (not TRUNCATE) to avoid PostgreSQL FK constraint errors.
+  // beforeEach ensures a clean slate even when a previous run failed mid-cleanup.
+  async function cleanDb() {
+    await agentRepo.createQueryBuilder().delete().execute();
+    await assignmentRepo.createQueryBuilder().delete().execute();
+    await roleRepo.createQueryBuilder().delete().execute();
+    await companyRepo.createQueryBuilder().delete().execute();
+  }
+
+  beforeEach(cleanDb);
+  afterEach(cleanDb);
+
+  /** Creates an orphan implement-mode assignment for an agent's mandatory FK. */
+  async function seedAssignment(companyId: UUID, roleId: UUID) {
+    return assignmentRepo.save(
+      assignmentRepo.create({
+        taskId: null,
+        companyId,
+        roleId,
+        mode: 'implement',
+        prompt: 'Task.',
+        status: 'in-progress',
+      }),
+    );
+  }
+
+  it('worker picks up a queued job and runs the agent to Completed', async () => {
+    const company = await companyRepo.save(
+      companyRepo.create({
+        slug: 'test-co',
+        name: 'Test Co',
+        description: 'Test company',
+      }),
+    );
+    const role = await roleRepo.save(
+      roleRepo.create({
+        companyId: company.id,
+        slug: 'analyst',
+        name: 'Analyst',
+        description: 'Analyses things.',
+        llmConfig: {
+          provider: 'lm-studio',
+          model: 'test-model',
+          baseUrl: 'http://127.0.0.1:1/v1',
+          apiKey: process.env['LM_STUDIO_API_KEY'],
+        },
+        systemPromptTemplate: 'You are {{name}}.',
+      }),
+    );
+    const assignment = await seedAssignment(company.id, role.id);
+    const agent = await agentRepo.save(
+      agentRepo.create({
+        companyId: company.id,
+        roleId: role.id,
+        assignmentId: assignment.id,
+        initialPrompt: 'Summarise what you can do.',
+      }),
+    );
+
+    // Enqueue the job directly — the AgentWorkerService started by module.init() will pick it up
+    const queue = new Queue('agent-jobs', { connection: { url: redisUrl } });
+    await queue.add('agent-job', { agentId: agent.id, type: 'start' });
+    await queue.close();
+
+    await pollUntil(async () => {
+      const a = await agentRepo.findOneBy({ id: agent.id });
+      return a?.status === AgentStatus.Completed;
+    }, 15_000);
+
+    const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+    expect(updated.status).toBe(AgentStatus.Completed);
+    expect(updated.threadId).toBe(agent.id);
+  }, 20_000);
+
+  it('two agents complete concurrently without cross-contaminating LangGraph state', async () => {
+    const company = await companyRepo.save(
+      companyRepo.create({
+        slug: 'test-co-concurrent',
+        name: 'Test Co (Concurrent)',
+        description: 'Test company',
+      }),
+    );
+    const role = await roleRepo.save(
+      roleRepo.create({
+        companyId: company.id,
+        slug: 'analyst',
+        name: 'Analyst',
+        description: 'Analyses things.',
+        llmConfig: {
+          provider: 'lm-studio',
+          model: 'test-model',
+          baseUrl: 'http://127.0.0.1:1/v1',
+          apiKey: process.env['LM_STUDIO_API_KEY'],
+        },
+        systemPromptTemplate: 'You are {{name}}.',
+      }),
+    );
+    const assignmentA = await seedAssignment(company.id, role.id);
+    const assignmentB = await seedAssignment(company.id, role.id);
+    const [agentA, agentB] = await Promise.all([
+      agentRepo.save(
+        agentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          assignmentId: assignmentA.id,
+          initialPrompt: 'Task A',
+        }),
+      ),
+      agentRepo.save(
+        agentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          assignmentId: assignmentB.id,
+          initialPrompt: 'Task B',
+        }),
+      ),
+    ]);
+
+    const queue = new Queue('agent-jobs', { connection: { url: redisUrl } });
+    await queue.add('agent-job', { agentId: agentA.id, type: 'start' });
+    await queue.add('agent-job', { agentId: agentB.id, type: 'start' });
+    await queue.close();
+
+    await pollUntil(async () => {
+      const [a, b] = await Promise.all([
+        agentRepo.findOneBy({ id: agentA.id }),
+        agentRepo.findOneBy({ id: agentB.id }),
+      ]);
+      return (
+        a?.status === AgentStatus.Completed &&
+        b?.status === AgentStatus.Completed
+      );
+    }, 20_000);
+
+    const [updatedA, updatedB] = await Promise.all([
+      agentRepo.findOneByOrFail({ id: agentA.id }),
+      agentRepo.findOneByOrFail({ id: agentB.id }),
+    ]);
+
+    expect(updatedA.status).toBe(AgentStatus.Completed);
+    expect(updatedB.status).toBe(AgentStatus.Completed);
+    // Each agent must write to its own LangGraph thread, not the other's
+    expect(updatedA.threadId).toBe(agentA.id);
+    expect(updatedB.threadId).toBe(agentB.id);
+  }, 30_000);
+});

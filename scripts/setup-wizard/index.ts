@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 /**
- * Setup wizard for LCP Server — guides users through initial configuration
+ * Setup wizard for TCP Server — guides users through initial configuration
  * and generates `.env.<instance>` files with explanatory comments.
  *
  * Run via: `npm run setup` or `./scripts/setup-wizard.sh`
@@ -16,11 +16,11 @@ import { promptDocker } from './prompts/docker';
 import { writeEnvFile } from './utils/env-writer';
 
 async function main(): Promise<void> {
-  console.log('LCP Server Setup Wizard');
+  console.log('TCP Server Setup Wizard');
   console.log('=======================');
   console.log();
   console.log(
-    'This wizard will guide you through configuring your LCP instance.',
+    'This wizard will guide you through configuring your TCP instance.',
   );
   console.log('Answer with ? to get help about any question.');
   console.log('Press Ctrl+C at any time to cancel.');

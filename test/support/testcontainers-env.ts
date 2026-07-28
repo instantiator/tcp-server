@@ -197,8 +197,8 @@ function deriveConnectionEnv(
     if (!password) {
       throw new Error('DB_PASSWORD is not set — expected it in .env.testing.');
     }
-    const user = process.env.DB_USER ?? 'lcp';
-    const dbName = process.env.DB_NAME ?? 'lcp';
+    const user = process.env.DB_USER ?? 'tcp';
+    const dbName = process.env.DB_NAME ?? 'tcp';
     const credentials = `${user}:${password}`;
     env.DATABASE_URL = `postgres://${credentials}@${host}:${port}/${dbName}`;
   }
@@ -228,7 +228,7 @@ export async function startComposeTier(
 ): Promise<ComposeTierResult> {
   loadEnvFileWithLocal(join(REPO_ROOT, ENV_FILE));
 
-  const projectName = `lcp-${options.tier}-${process.pid}`;
+  const projectName = `tcp-${options.tier}-${process.pid}`;
   let composeEnv = new DockerComposeEnvironment(REPO_ROOT, COMPOSE_FILES)
     .withProjectName(projectName)
     .withEnvironmentFile(ENV_FILE)

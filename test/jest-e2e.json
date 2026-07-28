@@ -20,7 +20,7 @@
     ]
   },
   "moduleNameMapper": {
-    "@lcp/shared": "<rootDir>/libs/lcp-shared/src/index.ts",
+    "@tcp/shared": "<rootDir>/libs/tcp-shared/src/index.ts",
     "^jwks-rsa$": "<rootDir>/test/e2e/__mocks__/jwks-rsa.ts"
   },
   "reporters": [

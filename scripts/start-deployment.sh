@@ -5,7 +5,7 @@ usage() {
   cat <<EOF
 Usage: $(basename "$0") --project <name> (--env-file <path> | --env-files <f1,f2,...>) [--rebuild] [--dev-ports] [-h|--help]
 
-Start the LCP Docker Compose stack and configure it for use.
+Start the TCP Docker Compose stack and configure it for use.
 
 By default, the MCP servers and stub-llm are internal-only (not reachable from
 the host) — the production-safe posture. Pass --dev-ports to additionally
@@ -24,7 +24,7 @@ client secrets server-side (they can't be pre-set the way Keycloak's could)
 and they can only be read at generation time, so on EVERY run this script
 (re)generates the OIDC_CLIENT_ID/SECRET and TEST_CLIENT_ID/SECRET and writes
 them to the gitignored '<env-file>.local' override (never the committed base
-file), before starting lcp-server and its dependents. Regenerating every run —
+file), before starting tcp-server and its dependents. Regenerating every run —
 rather than trusting the file — is what keeps the credentials and Zitadel from
 silently drifting apart (a wiped-and-rebootstrapped Zitadel, or a swapped env
 file, otherwise leaves a stale secret that fails auth with an opaque
@@ -105,7 +105,7 @@ fi
 
 # Gitignored per-instance override holding generated/provider-issued secrets
 # (OIDC_CLIENT_ID/SECRET, TEST_CLIENT_ID/SECRET — the LOCAL_ONLY_ENV_KEYS from
-# libs/lcp-shared/src/config/local-env-keys.ts). Layered on top of the committed
+# libs/tcp-shared/src/config/local-env-keys.ts). Layered on top of the committed
 # base file (local wins) and where this script writes Zitadel's bootstrap
 # output. Created empty here so it always exists for the docker compose
 # `--env-file` below and for the later writes.
@@ -132,7 +132,7 @@ if [[ -n "${ZITADEL_ADMIN_PASSWORD:-}" ]]; then
 fi
 
 # Pre-flight: verify all required variables are non-empty.
-# DATABASE_URL, MINIO_ENDPOINT, OIDC_ISSUER_URL, and LCP_SERVER_URL are
+# DATABASE_URL, MINIO_ENDPOINT, OIDC_ISSUER_URL, and TCP_SERVER_URL are
 # derived above from EXPOSE_PORT_* and DB_* — they don't need to be in the env file.
 REQUIRED_VARS=(
   DB_PASSWORD MINIO_ACCESS_KEY MINIO_SECRET_KEY
@@ -207,7 +207,7 @@ INFRA_SERVICES=(postgres redis minio)
 # (./docker/zitadel-machinekey/${COMPOSE_PROJECT_NAME}): each Compose project
 # has its own independently-bootstrapped Zitadel instance tied to its own
 # Postgres volume, so its PAT file must be scoped the same way — otherwise
-# two projects (e.g. a `lcp-dev` stack and a `lcp-api`/`lcp-all` test run)
+# two projects (e.g. a `tcp-dev` stack and a `tcp-api`/`tcp-all` test run)
 # sharing one unscoped pat.txt would silently overwrite each other's PAT,
 # leaving whichever project didn't bootstrap most recently with a PAT that
 # authenticates fine but against the wrong Zitadel instance's admin API.
@@ -264,12 +264,12 @@ if [[ -n "$AUTH_PROFILE" ]]; then
 fi
 
 # Zitadel bootstrap (skipped when auth profile is not active). Must happen
-# before lcp-server starts: Zitadel generates the OIDC client's secret
-# server-side, so lcp-server can only be started with the *correct* secret
+# before tcp-server starts: Zitadel generates the OIDC client's secret
+# server-side, so tcp-server can only be started with the *correct* secret
 # once bootstrap has captured it.
-ORG_NAME="lcp"
-PROJECT_NAME="lcp"
-APP_NAME="lcp-server"
+ORG_NAME="tcp"
+PROJECT_NAME="tcp"
+APP_NAME="tcp-server"
 TEST_MACHINE_USERNAME="test-machine"
 
 if [[ -n "$AUTH_PROFILE" ]]; then
@@ -346,7 +346,7 @@ EOF
 
   # OIDC application — device-code + refresh-token grants (no ROPC support on
   # Zitadel). accessTokenType must be explicitly JWT: Zitadel otherwise issues
-  # opaque/encrypted access tokens that lcp-server's JWKS-based verification
+  # opaque/encrypted access tokens that tcp-server's JWKS-based verification
   # cannot parse.
   # A client secret can only be read at generation time, so it can silently
   # drift from the env file (a wiped-and-rebootstrapped Zitadel, or a swapped
@@ -377,7 +377,7 @@ EOF
   export OIDC_CLIENT_ID="$APP_CLIENT_ID"
   export OIDC_CLIENT_SECRET="$APP_CLIENT_SECRET"
 
-  # Human test user — for manually exercising `lcp-cli get-token`'s device-flow login.
+  # Human test user — for manually exercising `tcp-cli get-token`'s device-flow login.
   TEST_USER="${TEST_USERNAME:-test}"
   TEST_PASS="${TEST_PASSWORD:-test}"
   EXISTING_USER=$(zit POST "/management/v1/users/_search" \
@@ -389,7 +389,7 @@ EOF
       username: $u,
       human: {
         profile: {givenName: "Test", familyName: "User"},
-        email: {email: ($u + "@lcp.local"), isVerified: true},
+        email: {email: ($u + "@tcp.local"), isVerified: true},
         password: {password: $p}
       }
     }')" > /dev/null
@@ -409,7 +409,7 @@ EOF
     MACHINE_ID=$(zit POST "/v2/users/new" "$(jq -n --arg org "$ORG_ID" --arg u "$TEST_MACHINE_USERNAME" '{
       organizationId: $org,
       username: $u,
-      machine: {name: "LCP API Test Machine", accessTokenType: "ACCESS_TOKEN_TYPE_JWT"}
+      machine: {name: "TCP API Test Machine", accessTokenType: "ACCESS_TOKEN_TYPE_JWT"}
     }')" | jq -r '.id')
     echo "  Created machine user: $TEST_MACHINE_USERNAME (client secret written to $LOCAL_ENV_FILE)"
   else
@@ -432,14 +432,14 @@ else
   $DC up -d
 fi
 
-wait_for lcp-server           "curl -sf http://localhost:${EXPOSE_PORT_API:-3000}/health"
-# lcp-agent and the MCP servers are internal-only by default (no published
+wait_for tcp-server           "curl -sf http://localhost:${EXPOSE_PORT_API:-3000}/health"
+# tcp-agent and the MCP servers are internal-only by default (no published
 # host port unless --dev-ports) — poll via `exec` into the container instead
 # of the host, so this works the same whether or not the port is published.
-wait_for lcp-mcp-storage      "$DC exec -T lcp-mcp-storage curl -sf http://localhost:3010/health"
-wait_for lcp-mcp-memory       "$DC exec -T lcp-mcp-memory curl -sf http://localhost:3011/health"
-wait_for lcp-mcp-interactions "$DC exec -T lcp-mcp-interactions curl -sf http://localhost:3012/health"
-wait_for lcp-mcp-tasks        "$DC exec -T lcp-mcp-tasks curl -sf http://localhost:3013/health"
+wait_for tcp-mcp-storage      "$DC exec -T tcp-mcp-storage curl -sf http://localhost:3010/health"
+wait_for tcp-mcp-memory       "$DC exec -T tcp-mcp-memory curl -sf http://localhost:3011/health"
+wait_for tcp-mcp-interactions "$DC exec -T tcp-mcp-interactions curl -sf http://localhost:3012/health"
+wait_for tcp-mcp-tasks        "$DC exec -T tcp-mcp-tasks curl -sf http://localhost:3013/health"
 
 # Summary
 
@@ -449,14 +449,14 @@ echo "  Deployment ready (project: $PROJECT)"
 echo "=================================================="
 echo ""
 echo "Services:"
-echo "  lcp-server API         →  http://localhost:${EXPOSE_PORT_API:-3000}"
+echo "  tcp-server API         →  http://localhost:${EXPOSE_PORT_API:-3000}"
 if [[ "$DEV_PORTS" = "true" ]]; then
-  echo "  lcp-mcp-storage        →  http://localhost:3010"
-  echo "  lcp-mcp-memory         →  http://localhost:3011"
-  echo "  lcp-mcp-interactions   →  http://localhost:3012"
-  echo "  lcp-mcp-tasks          →  http://localhost:3013"
+  echo "  tcp-mcp-storage        →  http://localhost:3010"
+  echo "  tcp-mcp-memory         →  http://localhost:3011"
+  echo "  tcp-mcp-interactions   →  http://localhost:3012"
+  echo "  tcp-mcp-tasks          →  http://localhost:3013"
 else
-  echo "  lcp-mcp-*              →  internal only (rerun with --dev-ports to publish)"
+  echo "  tcp-mcp-*              →  internal only (rerun with --dev-ports to publish)"
 fi
 if [[ -n "$AUTH_PROFILE" ]]; then
   echo "  Zitadel console        →  http://localhost:8080/ui/console  (admin / ${ZITADEL_ADMIN_PASSWORD})"
@@ -471,6 +471,6 @@ if [[ -n "$AUTH_PROFILE" ]]; then
   echo "  Password:  $TEST_PASS"
   echo ""
   echo "Get a token (opens a browser for login):"
-  echo "  npx lcp-cli get-token"
+  echo "  npx tcp-cli get-token"
   echo ""
 fi

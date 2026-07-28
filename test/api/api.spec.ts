@@ -1,24 +1,24 @@
 /**
- * System tests for the API surface exercised by lcp-cli.
+ * System tests for the API surface exercised by tcp-cli.
  *
  * These tests confirm the full round-trip that each CLI verb performs:
  * the server must reach Zitadel internally (catching the ECONNREFUSED
  * regression), and all JWT-guarded endpoints must be reachable.
  *
  * Run via: ./scripts/run-api-tests.sh
- * Requires: docker compose --profile auth up, Zitadel lcp org configured.
+ * Requires: docker compose --profile auth up, Zitadel tcp org configured.
  */
 
 import { randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-import { LcpCompany, LcpRole } from '../../libs/lcp-shared/src';
+import { TcpCompany, TcpRole } from '../../libs/tcp-shared/src';
 import { ApiHelper, BASE, ChatResponse, RUN_ID } from './helpers/ApiHelper';
 
 const fixture = (name: string) =>
   fs.readFileSync(path.join(__dirname, 'fixtures', name));
 
-describe('lcp-cli API flows', () => {
+describe('tcp-cli API flows', () => {
   // device authorization: the server must reach Zitadel internally to start/poll the flow.
   // Regression: ECONNREFUSED if Zitadel is not reachable or ready.
   describe('device authorization (POST /api/auth/device, POST /api/auth/device/token)', () => {
@@ -71,7 +71,7 @@ describe('lcp-cli API flows', () => {
     });
 
     describe('with a company', () => {
-      let company: LcpCompany;
+      let company: TcpCompany;
 
       // Create a company for use with the remaining tests
       beforeAll(async () => {
@@ -104,7 +104,7 @@ describe('lcp-cli API flows', () => {
         });
 
         describe('with role', () => {
-          let role: LcpRole;
+          let role: TcpRole;
 
           beforeAll(async () => {
             role = await api.createTestRole(`test-role-${RUN_ID}`, company.id);

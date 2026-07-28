@@ -8,7 +8,7 @@ You are testing the core data model. Every agent belongs to a company and has a 
 
 ```mermaid
 flowchart LR
-    CLI[lcp-cli] -- "set-company / set-role" --> API[lcp-server :3000]
+    CLI[tcp-cli] -- "set-company / set-role" --> API[tcp-server :3000]
     API --> DB[(PostgreSQL)]
     CLI -- "list-companies / list-roles" --> API
 ```
@@ -38,7 +38,7 @@ Update the `baseUrl` and `model` to match your LLM provider, then create the com
 
 ```bash
 cat scripts/test-data/companies/simple-company.json \
-  | ./lcp-cli.sh set-company
+  | ./tcp-cli.sh set-company
 ```
 
 Expected response (status 200 or 201):
@@ -62,7 +62,7 @@ export COMPANY_ID=<id from above>
 Confirm the company was saved:
 
 ```bash
-./lcp-cli.sh list-companies
+./tcp-cli.sh list-companies
 ```
 
 Expected: a table or JSON list containing your new company. Each row shows `id`, `name`, and `slug`.
@@ -91,7 +91,7 @@ Key fields:
 Create the role, setting the `companyId` to the value from 2.1:
 
 ```bash
-./lcp-cli.sh set-role \
+./tcp-cli.sh set-role \
   --company-id "$COMPANY_ID" \
   --file scripts/test-data/simple-role.json
 ```
@@ -115,7 +115,7 @@ export ROLE_ID=<id from above>
 ## 2.4 — List roles
 
 ```bash
-./lcp-cli.sh list-roles --company-id "$COMPANY_ID"
+./tcp-cli.sh list-roles --company-id "$COMPANY_ID"
 ```
 
 Expected: a table or JSON list containing your new role.

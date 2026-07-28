@@ -4,7 +4,7 @@ Status: Proposed
 
 ## Context
 
-The spec requires that each `LcpAgent` can use "whichever LLM service is specified" — including third-party APIs (Anthropic, OpenAI) or a locally hosted model served by LM Studio on a local network machine. The abstraction layer must be:
+The spec requires that each `TcpAgent` can use "whichever LLM service is specified" — including third-party APIs (Anthropic, OpenAI) or a locally hosted model served by LM Studio on a local network machine. The abstraction layer must be:
 
 1. Easy to swap per agent/role without changing the agent loop code
 2. Compatible with LangGraph.js (see [ADR-002](./ADR-002-agent-loop-framework.md))
@@ -49,13 +49,13 @@ interface LlmConfig {
 }
 ```
 
-lcp-agent resolves the `BaseChatModel` instance at task step startup using this config. API keys are stored in the database as part of the `LlmConfig` JSONB block and masked (`***`) in API responses when `LCP_MASK_API_KEYS=true` (the default).
+tcp-agent resolves the `BaseChatModel` instance at task step startup using this config. API keys are stored in the database as part of the `LlmConfig` JSONB block and masked (`***`) in API responses when `TCP_MASK_API_KEYS=true` (the default).
 
 ## Consequences
 
 - No extra dependencies beyond LangGraph.js (ADR-002)
 - LLM provider is a runtime config value, not a compile-time choice
-- Adding a new provider = adding a new `provider` value and a small factory case in lcp-agent
+- Adding a new provider = adding a new `provider` value and a small factory case in tcp-agent
 
 ## Open Questions / Assumptions
 

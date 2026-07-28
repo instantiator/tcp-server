@@ -56,7 +56,7 @@ describe('writeEnvFile — committed base vs gitignored .local split', () => {
   let dir: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'lcp-env-writer-'));
+    dir = mkdtempSync(join(tmpdir(), 'tcp-env-writer-'));
   });
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true });

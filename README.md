@@ -1,8 +1,8 @@
-# LCP server
+# TCP server
 
-LCP manages one or more companies of AI agents that collaborate to complete tasks.
+TCP manages one or more companies of AI agents that collaborate to complete tasks.
 
-[![CI](https://github.com/instantiator/lcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/instantiator/lcp-server/actions/workflows/ci.yml)
+[![CI](https://github.com/instantiator/tcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/instantiator/tcp-server/actions/workflows/ci.yml)
 
 ## Key concepts
 
@@ -28,10 +28,10 @@ When all Assignments in the Plan are complete, a finalisation Agent runs - check
 ```mermaid
 flowchart LR
   User(["User"])
-  CLI["lcp-cli"]
+  CLI["tcp-cli"]
 
-  subgraph LCP["LCP"]
-    subgraph Server["LCP Server"]
+  subgraph TCP["TCP"]
+    subgraph Server["TCP Server"]
       API["API"]
       subgraph DB["Database"]
         Company["Company"]
@@ -48,7 +48,7 @@ flowchart LR
       Orchestration --> DB
     end
 
-    subgraph AgentSvc["LCP Agent"]
+    subgraph AgentSvc["TCP Agent"]
       AgentLoop["Agent loop"]
     end
 
@@ -72,22 +72,22 @@ flowchart LR
 
 > ### Simplified summary
 >
-> - A user talks to LCP using **LCP CLI**, which calls **LCP Server**'s API.
+> - A user talks to TCP using **TCP CLI**, which calls **TCP Server**'s API.
 > - Companies, Roles, Agents, Tasks, and Assignments are persisted in the database.
-> - An agent is a running instance combining a role and assignment, executing in **LCP Agent**.
+> - An agent is a running instance combining a role and assignment, executing in **TCP Agent**.
 > - Agents have access to **MCP Services** administering shared storage, individual knowledge, tasks and assignments.
 
 ### Applications
 
 | Application          | Purpose                                                                                           |
 | -------------------- | ------------------------------------------------------------------------------------------------- |
-| lcp-cli              | User-facing CLI interface to simplify interactions with lcp-server.                               |
-| lcp-server           | API and orchestration service for the system.                                                     |
-| lcp-agent            | Manages agents and the agent loop. Interacts with lcp-server to receive and complete assignments. |
-| lcp-mcp-interactions | MCP tools allowing agents to ask users questions and consult other agent roles.                   |
-| lcp-mcp-tasks        | MCP tools allowing agents to complete their assignment — plan, submit work, or assure QA.         |
-| lcp-mcp-memory       | MCP tools allowing agents to retrieve memory from their stored expertise.                         |
-| lcp-mcp-storage      | MCP tools allowing agents interact with shared storage.                                           |
+| tcp-cli              | User-facing CLI interface to simplify interactions with tcp-server.                               |
+| tcp-server           | API and orchestration service for the system.                                                     |
+| tcp-agent            | Manages agents and the agent loop. Interacts with tcp-server to receive and complete assignments. |
+| tcp-mcp-interactions | MCP tools allowing agents to ask users questions and consult other agent roles.                   |
+| tcp-mcp-tasks        | MCP tools allowing agents to complete their assignment — plan, submit work, or assure QA.         |
+| tcp-mcp-memory       | MCP tools allowing agents to retrieve memory from their stored expertise.                         |
+| tcp-mcp-storage      | MCP tools allowing agents interact with shared storage.                                           |
 
 ## Getting started
 
@@ -98,12 +98,12 @@ Follow the steps in **[Your first company](docs/your-first-company.md)** to popu
 > Prerequisites: Docker, Node.js 24
 
 > [!NOTE]
-> The `start-dev.sh` script builds and launches LCP with an instance of Zitadel to manage authorisation. It configures an `lcp` org with a project, an API application, and the test users read from your env file. It can take several minutes to launch.
+> The `start-dev.sh` script builds and launches TCP with an instance of Zitadel to manage authorisation. It configures an `tcp` org with a project, an API application, and the test users read from your env file. It can take several minutes to launch.
 >
 > - **Username / Password:** set via `TEST_USERNAME` / `TEST_PASSWORD` in your env file.
 
 ```bash
-git clone --recurse-submodules https://github.com/instantiator/lcp-server.git && cd lcp-server
+git clone --recurse-submodules https://github.com/instantiator/tcp-server.git && cd tcp-server
 cp .env.example .env
 ```
 
@@ -111,7 +111,7 @@ You will need an LLM service to provide inference. Once you've settled on one, u
 
 ```bash
 npm install
-scripts/run-dev.sh
+scripts/start-dev.sh
 ```
 
 ---
@@ -142,23 +142,23 @@ The main service topology.
 ```mermaid
 flowchart TD
   User["User / Browser"]
-  LcpServer["lcp-server\n(NestJS)"]
-  LcpAgent["lcp-agent\n(NestJS) :3001"]
+  TcpServer["tcp-server\n(NestJS)"]
+  TcpAgent["tcp-agent\n(NestJS) :3001"]
   Redis[(Redis :6379)]
   Zitadel["Zitadel :8080\n(optional --profile auth)"]
   Postgres[(PostgreSQL\n+ pgvector :5432)]
   MinIO[(MinIO :9000\nconsole :9001)]
-  McpStorage["lcp-mcp-storage\n:3010"]
-  McpMemory["lcp-mcp-memory\n:3011"]
-  McpInteract["lcp-mcp-interactions\n:3012"]
-  McpTasks["lcp-mcp-tasks\n:3013"]
+  McpStorage["tcp-mcp-storage\n:3010"]
+  McpMemory["tcp-mcp-memory\n:3011"]
+  McpInteract["tcp-mcp-interactions\n:3012"]
+  McpTasks["tcp-mcp-tasks\n:3013"]
 
-  subgraph LCP["LCP (containers)"]
+  subgraph TCP["TCP (containers)"]
       Server ~~~ Dbs ~~~ Agent ~~~ ThirdParty
   end
 
   subgraph Server["Server"]
-      LcpServer
+      TcpServer
   end
 
   subgraph Dbs["Persistence"]
@@ -167,7 +167,7 @@ flowchart TD
 
 
   subgraph Agent["Agent"]
-      LcpAgent
+      TcpAgent
       subgraph MCP
         McpStorage ~~~ McpMemory ~~~ McpInteract ~~~ McpTasks
       end
@@ -177,32 +177,32 @@ flowchart TD
       MinIO ~~~ Zitadel
   end
 
-  User -->|REST API :3000| LcpServer
-  LcpServer -->|OIDC token\nvalidation| Zitadel
-  LcpServer -->|S3 API| MinIO
-  LcpServer -->|BullMQ jobs| Redis
-  LcpAgent -->|BullMQ results| Redis
-  LcpServer -->|TypeORM| Postgres
-  LcpAgent -->|TypeORM| Postgres
-  LcpAgent -->|HTTP /mcp| McpStorage
-  LcpAgent -->|HTTP /mcp| McpMemory
-  LcpAgent -->|HTTP /mcp| McpInteract
-  LcpAgent -->|HTTP /mcp| McpTasks
-  McpStorage -->|HTTP /internal/storage/*\nX-Internal-Api-Key| LcpServer
-  McpTasks -->|HTTP /internal/*\nX-Internal-Api-Key| LcpServer
+  User -->|REST API :3000| TcpServer
+  TcpServer -->|OIDC token\nvalidation| Zitadel
+  TcpServer -->|S3 API| MinIO
+  TcpServer -->|BullMQ jobs| Redis
+  TcpAgent -->|BullMQ results| Redis
+  TcpServer -->|TypeORM| Postgres
+  TcpAgent -->|TypeORM| Postgres
+  TcpAgent -->|HTTP /mcp| McpStorage
+  TcpAgent -->|HTTP /mcp| McpMemory
+  TcpAgent -->|HTTP /mcp| McpInteract
+  TcpAgent -->|HTTP /mcp| McpTasks
+  McpStorage -->|HTTP /internal/storage/*\nX-Internal-Api-Key| TcpServer
+  McpTasks -->|HTTP /internal/*\nX-Internal-Api-Key| TcpServer
 ```
 
 > #### Service overview
 >
-> - **lcp-server** is the REST API and orchestration layer
-> - **lcp-server** communicates directly with the authorisation service, and storage service
-> - **lcp-server** and **lcp-agent** use Postgres to store and manage state, and Redis with BullMQ queues to communicate
-> - **lcp-agent** consumes BullMQ jobs and runs the LangGraph agent loop.
+> - **tcp-server** is the REST API and orchestration layer
+> - **tcp-server** communicates directly with the authorisation service, and storage service
+> - **tcp-server** and **tcp-agent** use Postgres to store and manage state, and Redis with BullMQ queues to communicate
+> - **tcp-agent** consumes BullMQ jobs and runs the LangGraph agent loop.
 > - Four MCP servers provide tool access to agents:
->   - **lcp-mcp-storage** proxies file operations to lcp-server's internal storage endpoints
->   - **lcp-mcp-memory** manages RAG access to embeddings from role-knowledge and company-knowledge, and memories
->   - **lcp-mcp-interactions** lets agents ask users questions and consult other agent roles
->   - **lcp-mcp-tasks** lets agents complete their assignment — plan a task, submit finished work, or assure another agent's work (mode-gated)
+>   - **tcp-mcp-storage** proxies file operations to tcp-server's internal storage endpoints
+>   - **tcp-mcp-memory** manages RAG access to embeddings from role-knowledge and company-knowledge, and memories
+>   - **tcp-mcp-interactions** lets agents ask users questions and consult other agent roles
+>   - **tcp-mcp-tasks** lets agents complete their assignment — plan a task, submit finished work, or assure another agent's work (mode-gated)
 > - **PostgreSQL** (with pgvector) stores entities, agent checkpoints, and knowledge embeddings
 > - **MinIO** stores knowledge documents, task files, and context-overflow data
 > - **Zitadel** is an optional auth service, which starts if the `auth` profile is specified (ie. with `--profile auth`)
@@ -214,7 +214,7 @@ How a single agent turn flows through the system.
 ```mermaid
 sequenceDiagram
   participant U as User / BullMQ
-  participant S as lcp-server / lcp-agent
+  participant S as tcp-server / tcp-agent
   participant DB as PostgreSQL
   participant E as Embedding Model
   participant MCP as MCP Servers
@@ -249,7 +249,7 @@ How knowledge documents flow from upload to retrieval.
 ```mermaid
 flowchart TD
   subgraph Upload
-    CLI[lcp-cli store-knowledge] -->|POST /api/role/:id/knowledge| API[lcp-server]
+    CLI[tcp-cli store-knowledge] -->|POST /api/role/:id/knowledge| API[tcp-server]
     API -->|store raw file| MinIO2[(MinIO\nknowledge/role_slug/)]
     API -->|chunk 800 tokens| Chunker[Chunker]
     Chunker -->|embed /v1/embeddings| Embed[Embedding Model]
@@ -257,18 +257,26 @@ flowchart TD
   end
   subgraph Retrieval
     Query[Agent initial prompt] -->|embed| Embed2[Embedding Model]
-    Embed2 -->|cosine similarity ≥ 0.7| PG
+    Embed2 -->|cosine similarity ≥ threshold| PG
     PG -->|top-k chunks| Part5[Prompt part 5]
   end
 ```
 
-> RAG subsystem: knowledge documents are uploaded via the CLI, chunked into ~800-token segments, embedded using the company's embedding model, and stored as vectors in PostgreSQL (pgvector). When an agent runs, the initial prompt is embedded and the most similar chunks above the 0.7 cosine threshold are retrieved and injected into the prompt. The embedding model is configured separately from the chat LLM via `company.embeddingConfig`.
+> RAG subsystem: knowledge documents are uploaded via the CLI, chunked into ~800-token segments, embedded using the company's embedding model, and stored as vectors in PostgreSQL (pgvector). When an agent runs, the initial prompt is embedded and the most similar chunks above the role's cosine threshold (`runConfig.ragThreshold`, default `0.35`) are retrieved and injected into the prompt. The right threshold depends on the embedding model — see [Tuning RAG retrieval](docs/development.md#tuning-rag-retrieval). The embedding model is configured separately from the chat LLM via `company.embeddingConfig`.
 
 ### Documentation
 
-Key architectural decisions are documented as ADRs in [docs/ADRs/](docs/ADRs/).
+[docs/index.md](docs/index.md) lists every document with a one-line description
+— start there. The ones you are most likely to want directly:
 
-See [docs/index.md](docs/index.md) for the full list with implementation status.
+| Document                                 | For                                                 |
+| ---------------------------------------- | --------------------------------------------------- |
+| [Development](docs/development.md)       | Tech stack, source layout, everyday commands        |
+| [tcp-cli reference](docs/tcp-cli.md)     | Every CLI verb and flag                             |
+| [Authentication](docs/authentication.md) | OIDC setup, tokens, external identity providers     |
+| [Tasks and Assignments](docs/tasks.md)   | The task/assignment model and orchestration flow    |
+| [Testing](docs/testing.md)               | The five test tiers and how to run each             |
+| [ADRs](docs/ADRs/)                       | Architectural decisions, with implementation status |
 
 ## Testing
 
@@ -288,21 +296,22 @@ Quick reference:
 
 ## Commands reference
 
-| Command                      | Purpose                                                                    |
-| ---------------------------- | -------------------------------------------------------------------------- |
-| `npm run build`              | Compile all apps to `dist/`, then regenerate the schema and license report |
-| `npm run build lcp-server`   | Compile lcp-server only                                                    |
-| `npm run build lcp-agent`    | Compile lcp-agent only                                                     |
-| `npm run start:dev`          | Start lcp-server with hot reload                                           |
-| `npm run lint`               | ESLint with auto-fix                                                       |
-| `npm run format`             | Prettier over `apps/`, `libs/`, `test/`, and `docs/`                       |
-| `npm test`                   | Unit tests                                                                 |
-| `npm run test:e2e`           | E2E tests                                                                  |
-| `npm run test:integration`   | Integration tests (needs Docker)                                           |
-| `npm run test:api`           | API contract tests (needs `docker compose up --profile auth`)              |
-| `npm run test:smoke`         | Smoke tests (needs `docker compose up --profile auth`)                     |
-| `npm run schema:generate`    | Regenerate [schemas/schema.json](schemas/schema.json)                      |
-| `npm run licenses:generate`  | Regenerate [docs/licenses.md](docs/licenses.md)                            |
-| `npm run migration:generate` | Generate a new TypeORM migration                                           |
-| `npm run migration:run`      | Run pending migrations                                                     |
-| `npm run migration:revert`   | Revert the last migration                                                  |
+| Command                      | Purpose                                                                                      |
+| ---------------------------- | -------------------------------------------------------------------------------------------- |
+| `npm run build`              | Compile all apps to `dist/`, then regenerate the schema and license report                   |
+| `npm run build tcp-server`   | Compile tcp-server only                                                                      |
+| `npm run build tcp-agent`    | Compile tcp-agent only                                                                       |
+| `npm run start:dev`          | Start tcp-server with hot reload                                                             |
+| `npm run lint`               | ESLint with auto-fix                                                                         |
+| `npm run format`             | Prettier over `apps/`, `libs/`, `test/`, and `docs/`                                         |
+| `npm test`                   | Unit tests                                                                                   |
+| `npm run test:e2e`           | E2E tests                                                                                    |
+| `npm run test:integration`   | Integration tests (needs Docker)                                                             |
+| `npm run test:api`           | API contract tests (needs `docker compose up --profile auth`)                                |
+| `npm run test:smoke`         | Smoke tests (needs `docker compose up --profile auth`)                                       |
+| `npm run schema:generate`    | Regenerate [schemas/schema.json](schemas/schema.json)                                        |
+| `npm run licenses:generate`  | Regenerate [docs/licenses.md](docs/licenses.md)                                              |
+| `npm run migration:generate` | Generate a new TypeORM migration                                                             |
+| `npm run migration:run`      | Run pending migrations                                                                       |
+| `npm run migration:revert`   | Revert the last migration                                                                    |
+| `npm run setup`              | Interactive environment setup wizard (see [docs/scripts.md](docs/scripts.md#setup-wizardsh)) |

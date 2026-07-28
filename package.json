@@ -1,21 +1,24 @@
 {
-  "name": "lcp-server",
+  "name": "tcp-server",
   "version": "0.0.1",
   "description": "",
   "author": "",
   "private": true,
   "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "npm run build:apps && npm run schema:generate && npm run licenses:generate",
-    "build:apps": "nest build lcp-server && nest build lcp-agent && nest build lcp-mcp-storage && nest build lcp-mcp-memory && nest build lcp-mcp-interactions && nest build lcp-mcp-tasks && nest build lcp-cli",
-    "build:lcp-cli": "nest build lcp-cli",
-    "start:lcp-cli": "node dist/apps/lcp-cli/main",
+    "build:apps": "nest build tcp-server && nest build tcp-agent && nest build tcp-mcp-storage && nest build tcp-mcp-memory && nest build tcp-mcp-interactions && nest build tcp-mcp-tasks && nest build tcp-cli",
+    "build:tcp-cli": "nest build tcp-cli",
+    "start:tcp-cli": "node dist/apps/tcp-cli/main",
     "format": "prettier --write --list-different \"apps/**/*.ts\" \"libs/**/*.ts\" \"test/**/*.ts\" \"docs/**/*.md\" \"*.md\" \"apps/**/*.jsonc\"",
-    "start": "nest start lcp-server",
-    "start:dev": "nest start lcp-server --watch",
-    "start:debug": "nest start lcp-server --debug --watch",
-    "start:prod": "node dist/apps/lcp-server/main",
-    "typecheck": "tsc --noemit -p apps/lcp-server/tsconfig.json && tsc --noemit -p apps/lcp-agent/tsconfig.json && tsc --noemit -p apps/lcp-cli/tsconfig.app.json && tsc --noemit -p apps/lcp-mcp-storage/tsconfig.app.json && tsc --noemit -p apps/lcp-mcp-memory/tsconfig.app.json && tsc --noemit -p apps/lcp-mcp-interactions/tsconfig.app.json && tsc --noemit -p apps/lcp-mcp-tasks/tsconfig.app.json && tsc --noemit -p libs/lcp-shared/tsconfig.json && tsc --noemit -p test/tsconfig.json",
+    "start": "nest start tcp-server",
+    "start:dev": "nest start tcp-server --watch",
+    "start:debug": "nest start tcp-server --debug --watch",
+    "start:prod": "node dist/apps/tcp-server/main",
+    "typecheck": "tsc --noemit -p apps/tcp-server/tsconfig.json && tsc --noemit -p apps/tcp-agent/tsconfig.json && tsc --noemit -p apps/tcp-cli/tsconfig.app.json && tsc --noemit -p apps/tcp-mcp-storage/tsconfig.app.json && tsc --noemit -p apps/tcp-mcp-memory/tsconfig.app.json && tsc --noemit -p apps/tcp-mcp-interactions/tsconfig.app.json && tsc --noemit -p apps/tcp-mcp-tasks/tsconfig.app.json && tsc --noemit -p libs/tcp-shared/tsconfig.json && tsc --noemit -p test/tsconfig.json",
     "lint": "NODE_OPTIONS=--max-old-space-size=4096 eslint \"{apps,libs,test}/**/*.ts\" \"apps/**/*.jsonc\" --fix --cache",
     "lint:check": "NODE_OPTIONS=--max-old-space-size=4096 eslint \"{apps,libs,test}/**/*.ts\" \"apps/**/*.jsonc\" --cache",
     "test": "jest --runInBand",
@@ -27,12 +30,12 @@
     "test:integration": "jest --config test/jest-integration.json",
     "test:api": "jest --config test/jest-api.json",
     "test:smoke": "jest --config test/jest-smoke.json",
-    "schema:generate": "ts-json-schema-generator --path 'libs/lcp-shared/src/models/*.ts' --type '*' --out schemas/schema.json",
+    "schema:generate": "ts-json-schema-generator --path 'libs/tcp-shared/src/models/*.ts' --type '*' --out schemas/schema.json",
     "shellcheck": "shellcheck $(find . -name '*.sh' -not -path './node_modules/*' -not -path './.git/*') scripts/hooks/pre-commit scripts/hooks/pre-push",
     "licenses:generate": "license-report --config=.license-report.json --output=markdown --only=prod > docs/licenses.md",
-    "migration:generate": "typeorm-ts-node-commonjs migration:generate -d apps/lcp-server/src/data-source.ts",
-    "migration:run": "typeorm-ts-node-commonjs migration:run -d apps/lcp-server/src/data-source.ts",
-    "migration:revert": "typeorm-ts-node-commonjs migration:revert -d apps/lcp-server/src/data-source.ts",
+    "migration:generate": "typeorm-ts-node-commonjs migration:generate -d apps/tcp-server/src/data-source.ts",
+    "migration:run": "typeorm-ts-node-commonjs migration:run -d apps/tcp-server/src/data-source.ts",
+    "migration:revert": "typeorm-ts-node-commonjs migration:revert -d apps/tcp-server/src/data-source.ts",
     "hooks:install": "cp scripts/hooks/pre-commit scripts/hooks/pre-push .git/hooks/ && chmod +x .git/hooks/pre-commit .git/hooks/pre-push && echo 'Git hooks installed.'",
     "setup": "tsx scripts/setup-wizard/index.ts",
     "setup:build": "tsc -p scripts/setup-wizard/tsconfig.json"
@@ -153,7 +156,7 @@
     "testRegex": ".*\\.spec\\.ts$",
     "testPathIgnorePatterns": [
       "/node_modules/",
-      "<rootDir>/apps/lcp-stub-llm/"
+      "<rootDir>/apps/tcp-stub-llm/"
     ],
     "transform": {
       "^.+\\.(t|j)s$": [
@@ -167,7 +170,8 @@
       "node_modules/(?!(pgvector|commander)/)"
     ],
     "moduleNameMapper": {
-      "@lcp/shared": "<rootDir>/libs/lcp-shared/src/index.ts"
+      "^@tcp/shared/(.*)$": "<rootDir>/libs/tcp-shared/src/$1",
+      "^@tcp/shared$": "<rootDir>/libs/tcp-shared/src/index.ts"
     },
     "setupFilesAfterEnv": [
       "<rootDir>/test/unit-test-setup.ts"

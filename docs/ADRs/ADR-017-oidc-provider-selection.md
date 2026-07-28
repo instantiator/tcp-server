@@ -84,8 +84,8 @@ suite. On balance the resource-usage criterion — the one this evaluation was
 explicitly asked to prioritise — outweighs the license difference, given
 Zitadel is only ever run here as an unmodified upstream container reached
 over HTTP: AGPL's copyleft obligations attach to modifications of Zitadel's
-own source, not to software (lcp-server, MIT-licensed) that merely talks to
-it over the network. There is no obligation for lcp-server to change its
+own source, not to software (tcp-server, MIT-licensed) that merely talks to
+it over the network. There is no obligation for tcp-server to change its
 license as a result of this choice.
 
 ### Why not Ory
@@ -112,7 +112,7 @@ classic login is actually removed upstream.
 - **The ROPC-grant gap is the largest real cost of this migration.** Zitadel
   does not support the Resource Owner Password Credentials grant under any
   configuration. Today's `POST /api/auth/token` (`auth-token.service.ts` /
-  `auth-token.controller.ts`), used by `lcp-cli get-token`, proxies exactly
+  `auth-token.controller.ts`), used by `tcp-cli get-token`, proxies exactly
   this grant, as does the `api` test tier's
   `ApiHelper.postCredentialsForToken()`. This requires migrating the CLI
   login flow to the **OAuth Device Authorization Grant** (RFC 8628), which
@@ -141,8 +141,6 @@ classic login is actually removed upstream.
 - No Keycloak Admin-API migration cost: ADR-011's `POST /users` /
   `PATCH /users/:id/status` Keycloak-admin-API proxy endpoints were deferred
   and never built, so there's nothing to port there.
-- See `docs/prompts/010.4.1` for the concrete migration plan (not yet
-  executed).
 
 ## Alternatives considered
 

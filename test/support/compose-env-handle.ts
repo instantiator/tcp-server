@@ -8,7 +8,7 @@ import type { StartedDockerComposeEnvironment } from 'testcontainers';
  */
 
 /** Well-known key under which the running environment is stashed. */
-const HANDLE_KEY = '__lcpComposeEnv__';
+const HANDLE_KEY = '__tcpComposeEnv__';
 
 /** Records the running environment for teardown to find. */
 export function rememberComposeEnv(

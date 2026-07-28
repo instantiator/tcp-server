@@ -1,6 +1,6 @@
-# LCP Server
+# TCP Server
 
-NestJS monorepo for the LCP simulation: `lcp-server` (REST API + orchestration), `lcp-agent` (agent loop runner), three MCP servers, and a shared library (`libs/lcp-shared`, imported as `@lcp/shared`).
+NestJS monorepo for the TCP simulation: `tcp-server` (REST API + orchestration), `tcp-agent` (agent loop runner), three MCP servers, and a shared library (`libs/tcp-shared`, imported as `@tcp/shared`).
 
 ## Mandatory instructions
 

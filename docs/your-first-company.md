@@ -6,52 +6,33 @@ Once you have prepared your deployment with the [setup checklist](setup-checklis
 
 ### 0.0 Prerequisites
 
+You need **Docker** and **Node.js 24**, and a `bash` shell (macOS or Linux —
+every script in this repository assumes one). Then:
+
+```bash
+git clone --recurse-submodules https://github.com/instantiator/tcp-server.git
+cd tcp-server
+npm install
+```
+
 > [!NOTE]
-> These are the bare minimum pre-requisites. Developers should follow steps at: [Developer setup checklist](./setup-checklist.md)
-
-> [!TIP]
-> The scripts in this repository use the `bash` shell by default. Run on a system with `bash` available - ie. Mac OS or Linux.
-
-1. [Install Docker](https://docs.docker.com/get-started/get-docker/)
-
-   ```bash
-   # If you prefer to use Homebrew, here's the invocation
-   brew install --cask docker-desktop
-   ```
-
-2. [Install NodeJS](https://nodejs.org/en/download)
-
-   ```bash
-   # If you prefer to use Homebrew, here's the invocation
-   brew install node
-   ```
-
-3. Clone this repository
-
-   ```bash
-   git clone https://github.com/instantiator/lcp-server.git
-   ```
-
-4. Install packages
-
-   ```bash
-   cd lcp-server
-   npm install
-   ```
+> This is the bare minimum to follow this walkthrough. If you are going to work
+> on the code, follow the [Developer setup checklist](./setup-checklist.md)
+> instead — it covers git hooks, environment configuration, and the test tiers.
 
 ### 0.1 Launch a dev instance
 
-The dev instance is much like a production instance. It's launched with docker compose and has all services, including an OIDC provider (Zitadel). This is configured to have an `admin` user for the org, and a test user in the `lcp` org.
+The dev instance is much like a production instance. It's launched with docker compose and has all services, including an OIDC provider (Zitadel). This is configured to have an `admin` user for the org, and a test user in the `tcp` org.
 
 ```bash
 scripts/start-dev.sh
 ```
 
-The `lcp` org is created with a default account, if not already available:
+The `tcp` org is created with a default account, if not already available:
 
 | Org   | Username | Password |
 | ----- | -------- | -------- |
-| `lcp` | `test`   | `test`   |
+| `tcp` | `test`   | `test`   |
 
 For more about working with Zitadel, see:
 
@@ -59,7 +40,7 @@ For more about working with Zitadel, see:
 
 ### 0.2 Service healthchecks
 
-Check the `/health` pages for the lcp-server, and lcp-agent applications.
+Check the `/health` pages for the tcp-server, and tcp-agent applications.
 
 - http://localhost:3000/health
 - http://localhost:3001/health
@@ -69,23 +50,23 @@ Check the `/health` pages for the lcp-server, and lcp-agent applications.
 A `test` account is created for the dev server, and stored in Zitadel. You can confirm that it's working by retrieving an access token — `get-token` uses a device-flow login, so it prints a browser link to sign in as:
 
 ```bash
-./lcp-cli.sh get-token
+./tcp-cli.sh get-token
 ```
 
 Follow the printed `verification_uri`, sign in as `test` / `test`, and the CLI will pick up the token once login completes. You should see a token returned - it _looks like_ a long string of random characters.
 
-The rest of this walkthrough passes that token to `lcp-cli.sh` via
-the `LCP_TOKEN` environment variable, rather than repeating the browser login on every command, so capture it once into an environment variable:
+The rest of this walkthrough passes that token to `tcp-cli.sh` via
+the `TCP_TOKEN` environment variable, rather than repeating the browser login on every command, so capture it once into an environment variable:
 
 ```bash
-export LCP_TOKEN=$(./lcp-cli.sh get-token)
+export TCP_TOKEN=$(./tcp-cli.sh get-token)
 ```
 
 > [!TIP]
-> The `LCP_TOKEN` environment variable is the default assumption for lcp-cli, so placing a token there means it will be automatically picked up.
+> The `TCP_TOKEN` environment variable is the default assumption for tcp-cli, so placing a token there means it will be automatically picked up.
 
 > [!NOTE]
-> If you need to use a different variable, pass the `--access-token-env-var` option to lcp-cli.
+> If you need to use a different variable, pass the `--access-token-env-var` option to tcp-cli.
 
 ### 0.4 Set up your environment config
 
@@ -134,7 +115,7 @@ LLM_API_KEY=<your API key goes here>
 ```
 
 > [!TIP]
-> The `LLM_BASE_URL` is at `host.docker.internal` because that's how to address localhost on your machine from the Docker container running lcp-agent.
+> The `LLM_BASE_URL` is at `host.docker.internal` because that's how to address localhost on your machine from the Docker container running tcp-agent.
 
 </details>
 
@@ -144,10 +125,10 @@ LLM_API_KEY=<your API key goes here>
 
 `scripts/test-data/companies/simple-company.json` is a minimal company definition with no LLM config — it relies on the environment-level fallback.
 
-Pipe it into `lcp-cli.sh` with the `set-company` verb:
+Pipe it into `tcp-cli.sh` with the `set-company` verb:
 
 ```bash
-cat scripts/companies/test-data/companies/simple-company.json | lcp-cli.sh set-company
+cat scripts/test-data/companies/simple-company.json | ./tcp-cli.sh set-company
 ```
 
 > [!NOTE]
@@ -179,7 +160,7 @@ cat scripts/companies/test-data/companies/simple-company.json | lcp-cli.sh set-c
 List the companies available with the `list-companies` verb:
 
 ```bash
-lcp-cli.sh list-companies
+tcp-cli.sh list-companies
 ```
 
 You'll get a condensed list of companies:
@@ -200,11 +181,11 @@ You'll get a condensed list of companies:
 Create a role in the new company with the `set-role` verb. Provide your company's slug in the `--company-slug` field to let it know which company to associate the role with:
 
 ```bash
-cat scripts/test-data/roles/chicken-assistant.json | lcp-cli.sh set-role --company-slug test-company
+cat scripts/test-data/roles/chicken-assistant.json | tcp-cli.sh set-role --company-slug test-company
 ```
 
 ```bash
-cat scripts/test-data/roles/cat-assistant.json | lcp-cli.sh set-role --company-slug test-company
+cat scripts/test-data/roles/cat-assistant.json | tcp-cli.sh set-role --company-slug test-company
 ```
 
 > [!TIP]
@@ -215,13 +196,13 @@ cat scripts/test-data/roles/cat-assistant.json | lcp-cli.sh set-role --company-s
 List the roles available with the `list-roles` verb:
 
 ```bash
-lcp-cli.sh list-roles
+tcp-cli.sh list-roles
 ```
 
 Or scope it to just your company:
 
 ```bash
-lcp-cli.sh list-roles --company-slug test-company
+tcp-cli.sh list-roles --company-slug test-company
 ```
 
 It'll give you a list of all roles in each company:
@@ -268,7 +249,7 @@ Using the `chat` verb allows you create an **agent** from a defined **role** and
 The `chat` verb has several options:
 
 - `-r` / `--role-id`, or `--role-slug` (needs `--company-id`/`--company-slug` alongside it — role slugs are only unique within a company) - a role to talk to
-- `-c` / `--company-id`, or `--company-slug` - the company context (mutually exclusive with a role identifier - provide exactly one)
+- `-c` / `--company-id`, or `--company-slug` - the company that scopes a `--role-slug` (role slugs are unique only within a company). `chat` always needs a role; to browse a company's roster without picking one first, use `tui` instead
 - `-q` / `--query` - provide the query or prompt for your agent as a parameter (requires a role)
 - `--hide-reasoning` - doesn't show the reasoning stream before an answer
 - `--no-tui` - disables the full-screen TUI in favour of a plain scrolling renderer; still interactive on its own (a readline prompt) - combine with `--query` for fully non-interactive, pipeable output
@@ -283,13 +264,13 @@ TUI mode is the easiest way to manually interact with the company and roles.
 In the example below, the TUI is launched with a company slug. This could have been provided with `--company` or `--company-slug` (to be explicit).
 
 ```bash
-./lcp-cli.sh tui --company test-company
+./tcp-cli.sh tui --company test-company
 ```
 
 > [!TIP]
 > Use `tab` and `shift`+`tab` to switch between tabs. Other keyboard shortcuts are described at the bottom of the interface.
 
-See [lcp-cli.md](lcp-cli.md#chat) for a full description of the TUI.
+See [tcp-cli.md](tcp-cli.md#chat) for a full description of the TUI.
 
 | Screenshot                                                                                            | Description                                                                                                                                     |
 | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -305,7 +286,7 @@ See [lcp-cli.md](lcp-cli.md#chat) for a full description of the TUI.
 In the example below, `chat` is started without TUI, and the prompt is provided directly:
 
 ```bash
-./lcp-cli.sh chat --company-slug test-company --role-slug chicken-assistant --no-tui --query 'Tell me about yourself'
+./tcp-cli.sh chat --company-slug test-company --role-slug chicken-assistant --no-tui --query 'Tell me about yourself'
 ```
 
 The agent will be invoked to answer the query, and will then be closed.
@@ -472,12 +453,12 @@ A user may view all outstanding queries, and may choose to respond to one. On re
 
 ## 3. Give the company a task
 
-The core functionality of LCP is built around planned tasks. You can give a task to the company, and a planner agent will create a plan, with assignments for different agents.
+The core functionality of TCP is built around planned tasks. You can give a task to the company, and a planner agent will create a plan, with assignments for different agents.
 
 ### 3.1 Create a task
 
 ```bash
-./lcp-cli.sh create-task \
+./tcp-cli.sh create-task \
   -c test-company \
   -r "Create a very short report on what chickens like to eat" \
   --planner-role cat-assistant \
@@ -485,14 +466,14 @@ The core functionality of LCP is built around planned tasks. You can give a task
   --start
 ```
 
-On successful creation of a task, `lcp-cli` will respond with a full JSON description of the task.
+On successful creation of a task, `tcp-cli` will respond with a full JSON description of the task.
 
 Note the task's id - so you can use it to monitor the task.
 
 ### 3.2 List all tasks
 
 ```bash
-./lcp-cli.sh list-tasks -c test-company
+./tcp-cli.sh list-tasks -c test-company
 ```
 
 This shows each task the company has.
@@ -500,7 +481,7 @@ This shows each task the company has.
 ### 3.3 Monitor the task
 
 ```bash
-./lcp-cli.sh get-task --task-id 'the-task-id'
+./tcp-cli.sh get-task --task-id 'the-task-id'
 ```
 
 This will show the current state of the task, and the assignments in its plan.

@@ -17,8 +17,8 @@ export {
   DEFAULT_EXPOSE_PORT_DB,
   DEFAULT_EXPOSE_PORT_MINIO,
   DEFAULT_EXPOSE_PORT_ZITADEL,
-  DEFAULT_LCP_MASK_API_KEYS,
+  DEFAULT_TCP_MASK_API_KEYS,
   DEFAULT_KNOWLEDGE_POLL_INTERVAL_MS,
-} from '@lcp/shared/config/defaults';
+} from '@tcp/shared/config/defaults';
 
-export { LOCAL_ONLY_ENV_KEYS } from '@lcp/shared/config/local-env-keys';
+export { LOCAL_ONLY_ENV_KEYS } from '@tcp/shared/config/local-env-keys';

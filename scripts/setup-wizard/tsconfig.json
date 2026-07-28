@@ -4,8 +4,8 @@
     "rootDir": "../..",
     "outDir": "../../dist/scripts/setup-wizard",
     "paths": {
-      "@lcp/shared": ["../../libs/lcp-shared/src/index.ts"],
-      "@lcp/shared/*": ["../../libs/lcp-shared/src/*"]
+      "@tcp/shared": ["../../libs/tcp-shared/src/index.ts"],
+      "@tcp/shared/*": ["../../libs/tcp-shared/src/*"]
     }
   },
   "include": ["**/*.ts"],

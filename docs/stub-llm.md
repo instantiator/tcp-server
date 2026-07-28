@@ -1,6 +1,6 @@
-# lcp-stub-llm
+# tcp-stub-llm
 
-`apps/lcp-stub-llm` is a configurable stub LLM server used by this suite's
+`apps/tcp-stub-llm` is a configurable stub LLM server used by this suite's
 integration/e2e tests (and available for manual testing) in place of a real
 model. It answers `POST /v1/chat/completions` with pre-scripted text and tool
 calls instead of running an actual model, so a test can deterministically
@@ -10,7 +10,7 @@ It is a **standalone application**: its own `package.json`, `tsconfig.json`,
 lint config, and tests, sharing no code with any other app in this repo. That
 is deliberate — it is generally useful for testing any LLM/agentic system,
 not just this one, and is designed to be copied out to its own repository
-unchanged. See `apps/lcp-stub-llm/README.md` for its own README.
+unchanged. See `apps/tcp-stub-llm/README.md` for its own README.
 
 ## Running it
 
@@ -67,11 +67,11 @@ rules and default responses:
   would. The caller's own agent loop dispatches them, exactly as it would a
   real LLM's tool calls.
 - Real MCP tool names are `{mcpServerName}__{toolName}` (e.g.
-  `lcp-mcp-tasks__complete_assignment`) — use that naming in test configs so
+  `tcp-mcp-tasks__complete_assignment`) — use that naming in test configs so
   the agent's tool-dispatch logic recognises them.
 
 Full config reference, endpoint list, and the multi-format design (only
-`openai` is implemented today) are in `apps/lcp-stub-llm/README.md`.
+`openai` is implemented today) are in `apps/tcp-stub-llm/README.md`.
 
 ## How this suite uses it
 
@@ -81,12 +81,12 @@ automatically by the integration tier's Jest global setup
 Postgres/Redis/MinIO — see [Testing](testing.md). `STUB_LLM_URL` is exposed to
 spec files as an env var; tests configure it per-test via `PUT /stub/config`.
 
-- `test/integration/lcp-server/chat-llm.integration-spec.ts` — a chat turn
+- `test/integration/tcp-server/chat-llm.integration-spec.ts` — a chat turn
   end-to-end against a single canned response.
-- `test/integration/lcp-server/knowledge-reindex.integration-spec.ts` and
+- `test/integration/tcp-server/knowledge-reindex.integration-spec.ts` and
   `rag-retrieval-isolation.integration-spec.ts` — RAG indexing/retrieval
   against the stub's deterministic `/v1/embeddings`.
-- `test/integration/lcp-agent/task-flow.integration-spec.ts` — a full
+- `test/integration/tcp-agent/task-flow.integration-spec.ts` — a full
   task/assignment run driven by the real agent loop, using scripted tool
   calls to complete (and separately, to fail) an assignment.
 
@@ -94,7 +94,7 @@ spec files as an env var; tests configure it per-test via `PUT /stub/config`.
 
 Earlier revisions of this suite used a much smaller stub
 (`docker/stub-llm/server.js`, since removed) with a single canned response set
-via `POST /stub/config`. `lcp-stub-llm` is its replacement — the endpoint
+via `POST /stub/config`. `tcp-stub-llm` is its replacement — the endpoint
 paths, port (3002), and `/health` check are unchanged, but `/stub/config` is
 now a `GET`/`PUT` pair carrying the richer config shape above instead of a
 bare `{ "response": "..." }`.

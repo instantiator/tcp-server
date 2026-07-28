@@ -2,7 +2,7 @@
 
 An agent can pause mid-task and ask another role's agent a question, then resume once it gets an answer. This document describes the end-to-end flow.
 
-See [lcp-mcp-interactions.md](lcp-mcp-interactions.md) for the MCP tool reference and [user-input-conversations.md](user-input-conversations.md) for the agent-to-human equivalent of this flow.
+See [tcp-mcp-interactions.md](tcp-mcp-interactions.md) for the MCP tool reference and [user-input-conversations.md](user-input-conversations.md) for the agent-to-human equivalent of this flow.
 
 ---
 
@@ -15,18 +15,18 @@ The agent calls `request_agent_consultation(agentId, companyId, roleId, question
 ```
 Calling Agent ──► interactions__request_agent_consultation
                     │
-                    └──► POST /internal/pause (lcp-server)
+                    └──► POST /internal/pause (tcp-server)
                           │
                           ├── Looks up the role by id (scoped to companyId)
                           ├── Creates PendingConsultation record
                           ├── Starts a new consultation agent for that role
                           │     (with supplementary: "This is a consultation from X...")
-                          └── Sets calling LcpAgent.status = paused, pausedAt = now()
+                          └── Sets calling TcpAgent.status = paused, pausedAt = now()
 ```
 
 ### 2. Consultation agent runs
 
-The consultation agent runs as a normal agent job, created with `requiredToolCalls: ['complete_assignment']` — its answer is only delivered via `complete_assignment`, so lcp-agent will not accept a narrated (text-only) ending. If the stream ends without the call, the agent is reminded up to `AGENT_REQUIRED_TOOL_RETRIES` times (default 2) before the run is failed. When it calls `complete_assignment(agentId, summary, prepared)`:
+The consultation agent runs as a normal agent job, created with `requiredToolCalls: ['complete_assignment']` — its answer is only delivered via `complete_assignment`, so tcp-agent will not accept a narrated (text-only) ending. If the stream ends without the call, the agent is reminded up to `AGENT_REQUIRED_TOOL_RETRIES` times (default 2) before the run is failed. When it calls `complete_assignment(agentId, summary, prepared)`:
 
 ```
 Consulting Agent ──► tasks__complete_assignment
@@ -34,7 +34,7 @@ Consulting Agent ──► tasks__complete_assignment
                        └──► POST /internal/agent/:agentId/complete
                              │
                              ├── Sets consulting agent status = completed
-                             ├── Stores finalAnswer as LcpAgent.output and PendingConsultation.result
+                             ├── Stores finalAnswer as TcpAgent.output and PendingConsultation.result
                              └──► AgentOrchestrationService.resumeAgent(callingAgentId)
                                    │
                                    └── See "Resume conditions" below
@@ -49,7 +49,7 @@ Once the calling agent has no other outstanding requests (see below), it resumes
 If the consultation agent fails — an LLM error, a timeout or max-iterations abort, or exhausting its required-tool reminders without calling `complete_assignment` — the failure propagates instead of leaving the caller paused forever:
 
 ```
-lcp-agent (failing run) ──► POST /internal/agent/:agentId/fail { reason }
+tcp-agent (failing run) ──► POST /internal/agent/:agentId/fail { reason }
                               │
                               ├── Sets failing agent status = failed (never clobbers Completed)
                               ├── Marks PendingConsultation status = 'failed', result = reason
@@ -67,8 +67,8 @@ The calling agent decides what to do — retry with a different role, continue w
 ```mermaid
 sequenceDiagram
     participant CA as Calling Agent
-    participant I as lcp-mcp-interactions
-    participant S as lcp-server
+    participant I as tcp-mcp-interactions
+    participant S as tcp-server
     participant Q as BullMQ
     participant CON as Consulting Agent
 
@@ -98,7 +98,7 @@ sequenceDiagram
 Both this flow and the [agent-to-human flow](user-input-conversations.md) go through the same choke point, `AgentOrchestrationService.resumeAgent`, regardless of which one triggers it:
 
 - **Gating:** an agent only resumes once it has _no_ remaining outstanding requests — no `PendingConsultation` with `status: 'pending'` and no `Conversation` with `status: 'awaiting_user'` linked to it. If an agent raised more than one request before pausing, resolving any single one of them leaves it paused until the rest are resolved too. A consultation resolving as `'failed'` opens the gate the same way `'complete'` does.
-- **Aggregation:** `LcpAgent.pausedAt` is set whenever an agent transitions to `Paused`. When the gate finally passes, the resume message is built by collecting every consultation result (complete or failed) and user reply received since `pausedAt` — not just whichever one happened to resolve last — so the agent sees every answer it asked for.
+- **Aggregation:** `TcpAgent.pausedAt` is set whenever an agent transitions to `Paused`. When the gate finally passes, the resume message is built by collecting every consultation result (complete or failed) and user reply received since `pausedAt` — not just whichever one happened to resolve last — so the agent sees every answer it asked for.
 - `pausedAt` is cleared once the resume is dispatched, so the next pause episode starts scoping fresh.
 
 If an agent only ever raises one request before pausing — the common case today — this behaves exactly like a single-response resume.
@@ -110,10 +110,10 @@ If an agent only ever raises one request before pausing — the common case toda
 | Entity                | Key fields                                                                                                                        |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `PendingConsultation` | `id`, `callingAgentId`, `consultationAgentId`, `companyId`, `status` (`pending` \| `complete` \| `failed`), `result`, `createdAt` |
-| `LcpAgent`            | (relevant fields) `id`, `status`, `pausedAt`, `requiredToolCalls`                                                                 |
+| `TcpAgent`            | (relevant fields) `id`, `status`, `pausedAt`, `requiredToolCalls`                                                                 |
 
 ---
 
 ## API endpoints
 
-Consultations are dispatched and resolved entirely through the internal endpoints used by lcp-mcp-interactions and lcp-agent (`POST /internal/pause`, `POST /internal/agent/:agentId/complete`, `POST /internal/agent/:agentId/fail`) — there is no public REST surface for consultations the way there is for conversations.
+Consultations are dispatched and resolved entirely through the internal endpoints used by tcp-mcp-interactions and tcp-agent (`POST /internal/pause`, `POST /internal/agent/:agentId/complete`, `POST /internal/agent/:agentId/fail`) — there is no public REST surface for consultations the way there is for conversations.

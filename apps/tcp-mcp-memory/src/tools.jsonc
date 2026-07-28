@@ -1,0 +1,7 @@
+{
+  // Tool descriptions for tcp-mcp-memory
+  "describe_server": "Returns an overview of the memory service and its tools.",
+  "recall": "Search both episodic memory and the knowledge base by semantic similarity. Phrase `query` as a natural-language question or descriptive sentence, not bare keywords — see its description.",
+  "remember": "Store an episodic memory entry for later recall.",
+  "search_knowledge": "Search the role knowledge base only by semantic similarity. Phrase `query` as a natural-language question or descriptive sentence, not bare keywords — see its description."
+}

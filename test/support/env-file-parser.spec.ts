@@ -6,7 +6,7 @@ import { loadEnvFileWithLocal, parseEnvFile } from './env-file-parser';
 describe('parseEnvFile', () => {
   let dir: string;
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'lcp-env-parse-'));
+    dir = mkdtempSync(join(tmpdir(), 'tcp-env-parse-'));
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -22,7 +22,7 @@ describe('loadEnvFileWithLocal — base + .local layering', () => {
   const touched: string[] = [];
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'lcp-env-local-'));
+    dir = mkdtempSync(join(tmpdir(), 'tcp-env-local-'));
   });
   afterEach(() => {
     for (const key of touched) delete process.env[key];

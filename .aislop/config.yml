@@ -1,6 +1,6 @@
 # aislop configuration — see https://github.com/scanaislop/aislop
 rules:
-  # @lcp/shared is this monorepo's tsconfig path alias, not an npm dependency;
+  # @tcp/shared is this monorepo's tsconfig path alias, not an npm dependency;
   # the rule cannot resolve workspace aliases, so its 13 findings here are
   # false positives. Kept as a warning (not off) so genuinely hallucinated
   # imports remain visible.
@@ -10,6 +10,10 @@ rules:
   security/hardcoded-secret: warning
 
 ci:
-  # Current score is 55; ratchet this up as the remaining warnings
-  # (file sizes, nesting, duplicate blocks) are cleaned up.
-  failBelow: 50
+  # Current score is 76; ratchet this up as the remaining warnings are cleaned
+  # up. 011.1.5 decomposed the 4 CLI/TUI oversized files, leaving one
+  # file-too-large finding: tui.ts, which owns the terminal-kit Document and
+  # its widgets as a single lifecycle — see the note at the top of that file.
+  # The remaining duplicate-block warnings are in server-side files, outside
+  # both sub-plans' scope.
+  failBelow: 74

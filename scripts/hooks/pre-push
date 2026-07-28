@@ -50,8 +50,8 @@ upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/
 
 if git rev-parse --verify --quiet "$upstream" >/dev/null; then
   changed=$(git diff --name-only "$upstream...HEAD")
-  models_changed=$(echo "$changed" | grep -E 'libs/lcp-shared/src/models/.*\.model\.ts' || true)
-  migrations_changed=$(echo "$changed" | grep -E 'apps/lcp-server/src/migrations/.*\.ts' || true)
+  models_changed=$(echo "$changed" | grep -E 'libs/tcp-shared/src/models/.*\.model\.ts' || true)
+  migrations_changed=$(echo "$changed" | grep -E 'apps/tcp-server/src/migrations/.*\.ts' || true)
 
   # A .model.ts file only implies schema when it actually declares a table or
   # column (@Entity/@Column). Pure interfaces/types whose values live inside a
@@ -76,7 +76,7 @@ if git rev-parse --verify --quiet "$upstream" >/dev/null; then
     echo "    ${entity_models//$'\n'/$'\n'    }"
     echo ""
     echo "  If the schema changed, generate a migration before pushing:"
-    echo "    npm run migration:generate -- apps/lcp-server/src/migrations/<Name>"
+    echo "    npm run migration:generate -- apps/tcp-server/src/migrations/<Name>"
     echo ""
     echo "  If the change was non-structural (comments, validation decorators,"
     echo "  or a type-only refactor), bypass this check with:  git push --no-verify"

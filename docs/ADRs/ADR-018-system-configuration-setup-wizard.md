@@ -4,7 +4,7 @@ Status: Accepted
 
 ## Context
 
-LCP Server currently requires manual configuration of environment variables, with limited guidance for new deployments. Key pain points:
+TCP Server currently requires manual configuration of environment variables, with limited guidance for new deployments. Key pain points:
 
 1. **No structured first-time setup** — users must manually edit `.env` files, consult documentation, and understand the relationship between services (PostgreSQL, Redis, MinIO, OIDC, LLM providers).
 
@@ -41,9 +41,9 @@ The goal is to provide:
 
 ### 1. Configuration defaults in code
 
-All fallback default values live in `libs/lcp-shared/src/config/defaults.ts` — the single source of truth. This eliminates the need for `.env.defaults` files and ensures defaults are typed, testable, and consistent across all apps.
+All fallback default values live in `libs/tcp-shared/src/config/defaults.ts` — the single source of truth. This eliminates the need for `.env.defaults` files and ensures defaults are typed, testable, and consistent across all apps.
 
-Joi schemas in each app import defaults from `defaults.ts` via `@lcp/shared/config/defaults`.
+Joi schemas in each app import defaults from `defaults.ts` via `@tcp/shared/config/defaults`.
 
 ### 2. Environment variable conventions
 
@@ -55,12 +55,12 @@ Joi schemas in each app import defaults from `defaults.ts` via `@lcp/shared/conf
 | `EXPOSE_PORT_DB`                        | 5432                    | Formula: API + 2432                                |
 | `EXPOSE_PORT_MINIO`                     | 9000                    | Formula: API + 6000                                |
 | `EXPOSE_PORT_ZITADEL`                   | 8080                    | Formula: API + 5080                                |
-| `DB_USER`                               | lcp                     |                                                    |
+| `DB_USER`                               | tcp                     |                                                    |
 | `DB_PASSWORD`                           | dev-password            | Renamed from `POSTGRES_PASSWORD`                   |
-| `DB_NAME`                               | lcp                     | New variable                                       |
-| `MINIO_ACCESS_KEY`                      | lcp-access-key          |                                                    |
-| `MINIO_SECRET_KEY`                      | lcp-secret-key          |                                                    |
-| `MINIO_BUCKET_PREFIX`                   | lcp                     |                                                    |
+| `DB_NAME`                               | tcp                     | New variable                                       |
+| `MINIO_ACCESS_KEY`                      | tcp-access-key          |                                                    |
+| `MINIO_SECRET_KEY`                      | tcp-secret-key          |                                                    |
+| `MINIO_BUCKET_PREFIX`                   | tcp                     |                                                    |
 | `INTERNAL_API_KEY`                      | change-me-in-production |                                                    |
 | `OIDC_ISSUER_URL`                       | —                       | Absent = derives from `EXPOSE_PORT_ZITADEL`        |
 | `OIDC_CLIENT_ID`                        | —                       | Generated/provider-issued → `<env>.local` (see §7) |
@@ -72,11 +72,11 @@ Joi schemas in each app import defaults from `defaults.ts` via `@lcp/shared/conf
 
 | Variable                   | Value                                                                     | Mapped to app variable     |
 | -------------------------- | ------------------------------------------------------------------------- | -------------------------- |
-| `INTERNAL_URL_DB`          | `postgres://${DB_USER:-lcp}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-lcp}` | `DATABASE_URL`             |
+| `INTERNAL_URL_DB`          | `postgres://${DB_USER:-tcp}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-tcp}` | `DATABASE_URL`             |
 | `INTERNAL_URL_REDIS`       | `redis://redis:6379`                                                      | `REDIS_URL`                |
 | `INTERNAL_URL_MINIO`       | `http://minio:9000`                                                       | `MINIO_ENDPOINT`           |
 | `INTERNAL_URL_OIDC_ISSUER` | `http://zitadel:8080`                                                     | `OIDC_INTERNAL_ISSUER_URL` |
-| `INTERNAL_URL_LCP_SERVER`  | `http://lcp-server:3000`                                                  | `LCP_SERVER_URL`           |
+| `INTERNAL_URL_TCP_SERVER`  | `http://tcp-server:3000`                                                  | `TCP_SERVER_URL`           |
 
 **Host-facing URLs** (derived at runtime, not stored in `.env.*`):
 
@@ -90,7 +90,7 @@ URL derivation happens in `scripts/lib/derive-urls.sh`, called by deployment and
 
 ### 3. Configurable embedding dimension
 
-A new env var `EMBEDDING_DIMENSION` (default: 768) controls the vector column width. On startup, lcp-server compares this value against the actual database schema:
+A new env var `EMBEDDING_DIMENSION` (default: 768) controls the vector column width. On startup, tcp-server compares this value against the actual database schema:
 
 - **If unchanged**: no action
 - **If changed**: prompt user for confirmation, then:
@@ -110,7 +110,7 @@ A standalone Node/TypeScript script using `inquirer`, invoked via:
 **Wizard flow:**
 
 1. **Instance configuration**
-   - "Instance suffix (the part after 'lcp-'): (default: dev)"
+   - "Instance suffix (the part after 'tcp-'): (default: dev)"
    - "Env file name: (default: .env.dev)"
 
 2. **Port configuration**
@@ -177,7 +177,7 @@ A standalone script for changing the embedding model post-setup:
 ### 7. Config resolution: committed base + gitignored `.local` override
 
 Some credentials must not be committed: the local Zitadel bootstrap **generates**
-`OIDC_CLIENT_ID/SECRET` (for the `lcp-server` app) and `TEST_CLIENT_ID/SECRET`
+`OIDC_CLIENT_ID/SECRET` (for the `tcp-server` app) and `TEST_CLIENT_ID/SECRET`
 (for the api-tier machine user) on **every** deployment run — Zitadel issues
 client secrets server-side and can't be told a chosen value — and an external
 OIDC provider issues its own fixed client id/secret per deployment. Committing
@@ -191,7 +191,7 @@ Resolution follows the conventional dotenv-layering split:
 - A gitignored **`<env-file>.local`** sibling holds the secrets that must not be
   committed — the `LOCAL_ONLY_ENV_KEYS`: `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`,
   `TEST_CLIENT_ID`, `TEST_CLIENT_SECRET` (single source of truth:
-  `libs/lcp-shared/src/config/local-env-keys.ts`).
+  `libs/tcp-shared/src/config/local-env-keys.ts`).
 - Loaders apply the base file then the `.local` override (**local wins**); a
   value already in the environment (an explicit export) still wins over both.
   `start-deployment.sh` passes both to `docker compose` via repeated
@@ -207,7 +207,7 @@ Static test placeholders (`DB_PASSWORD`, `MINIO_*`, `ZITADEL_MASTERKEY`,
 per-machine, so they stay in the committed `.env.testing` — the split targets
 only generated/provider-issued credentials.
 
-One nuance for `.env.testing`: the integration and e2e tiers boot lcp-server's
+One nuance for `.env.testing`: the integration and e2e tiers boot tcp-server's
 `AppModule` directly (no Zitadel bootstrap step), and its Joi schema _requires_
 `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` even though those tiers never perform real
 OIDC (auth is mocked / internal-key). So the committed `.env.testing` keeps
@@ -222,7 +222,7 @@ key file rather than a rotating shared secret). The generate-then-capture flow
 is idiomatic for Zitadel and, once captured into the gitignored `.local`, is
 safe — so the extra moving part wasn't warranted.
 
-See [010.8.4 - config resolution plan](../prompts/010.8.4%20-%20config%20resolution%20plan.md).
+See [010.8.4 - config resolution plan](../prompts/phase%2001%20-%20service/010.8.4%20-%20config%20resolution%20plan.md).
 
 ## Consequences
 
@@ -256,23 +256,23 @@ See [010.8.4 - config resolution plan](../prompts/010.8.4%20-%20config%20resolut
 - `scripts/setup-wizard.sh` — shell wrapper
 - `scripts/lib/derive-urls.sh` — host-facing URL derivation
 - `scripts/lib/check-ports.sh` — port availability check
-- `apps/lcp-server/src/migrations/1784800000000-DynamicEmbeddingDimension.ts` — parameterized dimension migration
-- `apps/lcp-server/src/embedding-dimension-check.ts` — OnModuleInit startup check
-- `libs/lcp-shared/src/config/local-env-keys.ts` — `LOCAL_ONLY_ENV_KEYS` (secrets that live in `<env>.local`)
+- `apps/tcp-server/src/migrations/1784800000000-DynamicEmbeddingDimension.ts` — parameterized dimension migration
+- `apps/tcp-server/src/embedding-dimension-check.ts` — OnModuleInit startup check
+- `libs/tcp-shared/src/config/local-env-keys.ts` — `LOCAL_ONLY_ENV_KEYS` (secrets that live in `<env>.local`)
 - `scripts/setup-wizard/utils/ports.ts` — shared port derivation/validation
 - `docker-compose.dev-ports.yml` — dev-only overlay publishing internal service ports
 
 ### Files modified
 
-- `libs/lcp-shared/src/config/defaults.ts` — single source of truth for all defaults
-- `libs/lcp-shared/src/config/resolve-embedding-dimension.ts` — re-exports DEFAULT_EMBEDDING_DIMENSION from defaults.ts
+- `libs/tcp-shared/src/config/defaults.ts` — single source of truth for all defaults
+- `libs/tcp-shared/src/config/resolve-embedding-dimension.ts` — re-exports DEFAULT_EMBEDDING_DIMENSION from defaults.ts
 - `docker-compose.yml` — INTERNAL_URL_* via YAML anchors, EXPOSE_PORT_* port mappings
 - `scripts/start-deployment.sh` — URL derivation, port checks, updated required vars
 - `scripts/start-dev.sh` — removed .env.defaults reference
 - `scripts/check-migrations.sh` — uses derive_host_urls
 - `test/support/testcontainers-env.ts` — uses DB_PASSWORD, DB_USER, DB_NAME
-- `apps/lcp-server/src/config/config.schema.ts` — imports defaults from defaults.ts
-- `apps/lcp-agent/src/config/config.schema.ts` — imports DEFAULT_EMBEDDING_DIMENSION from defaults.ts
+- `apps/tcp-server/src/config/config.schema.ts` — imports defaults from defaults.ts
+- `apps/tcp-agent/src/config/config.schema.ts` — imports DEFAULT_EMBEDDING_DIMENSION from defaults.ts
 
 ### Files removed
 

@@ -2,27 +2,27 @@
 # manual-verify.sh — interactive manual verification script.
 #
 # Spins up a test company and two roles (chicken/cat assistant) against a
-# running LCP server, runs a short scenario of chat prompts through them, and
+# running TCP server, runs a short scenario of chat prompts through them, and
 # asks the operator to confirm each response by eye. Halts immediately on any
 # failure (a failed API call, missing data, or a "n" answer to a check).
 #
 # Usage: ./scripts/manual-verify.sh [OPTIONS]
 #
-# Logs in once via `lcp-cli get-token`'s device-flow login (prints a
+# Logs in once via `tcp-cli get-token`'s device-flow login (prints a
 # verification URL/code for you to complete in a browser) before running any
 # scenarios, then reuses that token for every call.
 #
 # Options:
-#   -s, --lcp-server <url>         LCP server URL (default: http://localhost:3000)
+#   -s, --tcp-server <url>         TCP server URL (default: http://localhost:3000)
 #   -r, --run-scenario <n>         Run only scenario n (1-indexed); may be repeated
 #   -f, --scenarios-file <f>       Scenarios JSON (default: scripts/test-data/manual-verify-scenarios.json)
-#   --capture-docker-logs          Tail lcp-server and lcp-agent container logs during the run
-#   --docker-logs-output <file>    File to write Docker logs to (default: ./lcp-docker-logs-<ts>.log)
-#   --docker-project <name>        Docker Compose project name (default: lcp-dev)
+#   --capture-docker-logs          Tail tcp-server and tcp-agent container logs during the run
+#   --docker-logs-output <file>    File to write Docker logs to (default: ./tcp-docker-logs-<ts>.log)
+#   --docker-project <name>        Docker Compose project name (default: tcp-dev)
 #   --capture-lm-studio-logs       Stream LM Studio server logs via `lms log stream`
-#   --lm-studio-logs-output <file> File to write LM Studio logs to (default: ./lcp-lmstudio-logs-<ts>.log)
+#   --lm-studio-logs-output <file> File to write LM Studio logs to (default: ./tcp-lmstudio-logs-<ts>.log)
 #
-# Prerequisites: a running LCP stack with default LLM config in its .env,
+# Prerequisites: a running TCP stack with default LLM config in its .env,
 # Zitadel running for auth, and `jq` on the PATH.
 
 set -euo pipefail
@@ -45,12 +45,12 @@ else
   RESET=""
 fi
 
-LCP_SERVER="http://localhost:3000"
+TCP_SERVER="http://localhost:3000"
 SCENARIOS_FILE="$ROOT/scripts/test-data/manual-verify-scenarios.json"
 SCENARIO_FILTER=()
 CAPTURE_DOCKER_LOGS=false
 DOCKER_LOGS_OUTPUT=""
-DOCKER_PROJECT="lcp-dev"
+DOCKER_PROJECT="tcp-dev"
 DOCKER_LOG_PIDS=()
 CAPTURE_LM_STUDIO_LOGS=false
 LM_STUDIO_LOGS_OUTPUT=""
@@ -59,7 +59,7 @@ LM_STUDIO_LOG_PID=""
 # Parse flags — everything else is rejected rather than silently ignored.
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -s|--lcp-server) LCP_SERVER="$2"; shift 2 ;;
+    -s|--tcp-server) TCP_SERVER="$2"; shift 2 ;;
     -r|--run-scenario) SCENARIO_FILTER+=("$2"); shift 2 ;;
     -f|--scenarios-file) SCENARIOS_FILE="$2"; shift 2 ;;
     --capture-docker-logs) CAPTURE_DOCKER_LOGS=true; shift ;;
@@ -79,16 +79,16 @@ command -v jq >/dev/null || { echo "ERROR: jq is required but not installed" >&2
 start_docker_capture() {
   if [[ "$CAPTURE_DOCKER_LOGS" != "true" ]]; then return; fi
   if [[ -z "$DOCKER_LOGS_OUTPUT" ]]; then
-    DOCKER_LOGS_OUTPUT="$(pwd)/lcp-docker-logs-$(date +%Y%m%d-%H%M%S).log"
+    DOCKER_LOGS_OUTPUT="$(pwd)/tcp-docker-logs-$(date +%Y%m%d-%H%M%S).log"
   fi
   echo "Docker logs → $DOCKER_LOGS_OUTPUT" >&2
   local since
   since=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-  docker logs -f --since "$since" "${DOCKER_PROJECT}-lcp-server-1" 2>&1 \
-    | sed -u 's/^/[lcp-server] /' >> "$DOCKER_LOGS_OUTPUT" &
+  docker logs -f --since "$since" "${DOCKER_PROJECT}-tcp-server-1" 2>&1 \
+    | sed -u 's/^/[tcp-server] /' >> "$DOCKER_LOGS_OUTPUT" &
   DOCKER_LOG_PIDS+=($!)
-  docker logs -f --since "$since" "${DOCKER_PROJECT}-lcp-agent-1" 2>&1 \
-    | sed -u 's/^/[lcp-agent] /' >> "$DOCKER_LOGS_OUTPUT" &
+  docker logs -f --since "$since" "${DOCKER_PROJECT}-tcp-agent-1" 2>&1 \
+    | sed -u 's/^/[tcp-agent] /' >> "$DOCKER_LOGS_OUTPUT" &
   DOCKER_LOG_PIDS+=($!)
 }
 
@@ -102,7 +102,7 @@ start_lm_studio_capture() {
   if [[ "$CAPTURE_LM_STUDIO_LOGS" != "true" ]]; then return; fi
   command -v lms >/dev/null || { echo "ERROR: lms CLI not found — cannot capture LM Studio logs" >&2; exit 1; }
   if [[ -z "$LM_STUDIO_LOGS_OUTPUT" ]]; then
-    LM_STUDIO_LOGS_OUTPUT="$(pwd)/lcp-lmstudio-logs-$(date +%Y%m%d-%H%M%S).log"
+    LM_STUDIO_LOGS_OUTPUT="$(pwd)/tcp-lmstudio-logs-$(date +%Y%m%d-%H%M%S).log"
   fi
   echo "LM Studio logs → $LM_STUDIO_LOGS_OUTPUT" >&2
   lms log stream --source server >> "$LM_STUDIO_LOGS_OUTPUT" 2>&1 &
@@ -113,11 +113,11 @@ stop_lm_studio_capture() {
   [[ -n "$LM_STUDIO_LOG_PID" ]] && kill "$LM_STUDIO_LOG_PID" 2>/dev/null || true
 }
 
-# Wraps lcp-cli.sh with auth/server flags pre-filled, so every call site below
+# Wraps tcp-cli.sh with auth/server flags pre-filled, so every call site below
 # only needs to specify the verb and its own flags.
 cli() {
-  "$ROOT/lcp-cli.sh" \
-    --lcp-server "$LCP_SERVER" \
+  "$ROOT/tcp-cli.sh" \
+    --tcp-server "$TCP_SERVER" \
     --access-token "$ACCESS_TOKEN" \
     "$@"
 }
@@ -163,7 +163,7 @@ trap 'stop_docker_capture; stop_lm_studio_capture' EXIT
 # Log in once via device-flow (prints a verification URL/code to complete in
 # a browser) and reuse the resulting token for every cli() call below.
 echo "${BLUE}=== Signing in ===${RESET}" >&2
-ACCESS_TOKEN=$("$ROOT/lcp-cli.sh" --lcp-server "$LCP_SERVER" get-token) \
+ACCESS_TOKEN=$("$ROOT/tcp-cli.sh" --tcp-server "$TCP_SERVER" get-token) \
   || fail "get-token failed"
 
 start_docker_capture

@@ -9,12 +9,12 @@ orchestrated entirely by shell scripts wrapping the root `docker-compose.yml`.
 For the `integration` and `e2e` tiers this had grown fragile:
 
 - `run-integration-tests.sh` hardcoded and paused a specific dev container name
-  (`lcp-dev-lcp-agent-1`) to stop a competing BullMQ worker from stealing queue
+  (`tcp-dev-tcp-agent-1`) to stop a competing BullMQ worker from stealing queue
   jobs off the same shared Redis.
 - Both `run-integration-tests.sh` and `run-e2e-tests.sh` carried two divergent
   teardown paths depending on whether a dev stack was already running.
 - All services bound fixed host ports, so no two stacks could run at once
-  (`run-all-tests.sh` pre-flight-checked for stray `lcp-*` containers).
+  (`run-all-tests.sh` pre-flight-checked for stray `tcp-*` containers).
 - Running the e2e suite directly (bypassing the wrapper) **hung** rather than
   failing, because BullMQ enqueue calls block forever against an unreachable
   Redis.
@@ -75,9 +75,9 @@ migration must not blur that line.
 ### Redis fail-fast (root-cause fix)
 
 The e2e "hang" was rooted in production code: neither the agent-jobs `Queue`
-(lcp-server) nor the `Worker` (lcp-agent) bounded its Redis connection, so an
+(tcp-server) nor the `Worker` (tcp-agent) bounded its Redis connection, so an
 unreachable Redis blocked indefinitely. Services now probe reachability at
-startup via `assertRedisReachable` (`@lcp/shared`) and refuse to start with a
+startup via `assertRedisReachable` (`@tcp/shared`) and refuse to start with a
 clear error, and both `main.ts` files call `app.enableShutdownHooks()` so the
 existing `onModuleDestroy` cleanup actually runs on `SIGTERM`. **Scope:
 startup-time reachability only.** Mid-run Redis loss (a connection that drops

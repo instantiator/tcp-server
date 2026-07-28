@@ -1,12 +1,12 @@
 # Context Management
 
-This document covers how the LCP server manages the LLM context window during agent conversations.
+This document covers how the TCP server manages the LLM context window during agent conversations.
 
 ## Overview
 
-Each message turn in a chat session, and every iteration of an lcp-agent worker run, assembles a prompt from conversation history, system configuration, and the new user message, then invokes the LLM. As conversations grow, the combined prompt can exceed the model's context window. The context management system detects this and compacts the context before the invocation.
+Each message turn in a chat session, and every iteration of an tcp-agent worker run, assembles a prompt from conversation history, system configuration, and the new user message, then invokes the LLM. As conversations grow, the combined prompt can exceed the model's context window. The context management system detects this and compacts the context before the invocation.
 
-Budget checks run **once per tool-calling iteration**, not just once at the start of a turn — a long-running agent that calls several tools in sequence is re-checked after each one, not only before its first model call. Both `chat.service.ts` (lcp-server) and `agent-loop.service.ts` (lcp-agent's worker, covering standard runs, resumed runs, and consulted-agent runs) share this behaviour via `runSupervisedGraph` (`libs/lcp-shared/src/llm/run-supervised-graph.ts`).
+Budget checks run **once per tool-calling iteration**, not just once at the start of a turn — a long-running agent that calls several tools in sequence is re-checked after each one, not only before its first model call. Both `chat.service.ts` (tcp-server) and `agent-loop.service.ts` (tcp-agent's worker, covering standard runs, resumed runs, and consulted-agent runs) share this behaviour via `runSupervisedGraph` (`libs/tcp-shared/src/llm/run-supervised-graph.ts`).
 
 ## Context window size
 
@@ -48,7 +48,7 @@ When prompt sections (role description, company environment, RAG data, MCP respo
 
 ### Reactive backstop
 
-The proactive tiktoken-based estimate can still be wrong (encoding differences between providers, provider-side overhead not visible to the client). Every model-streaming pass is wrapped in a `try/catch` classifying context-length-exceeded errors via `isContextLengthError` (`libs/lcp-shared/src/llm/context-length-error.ts`, matching common provider substrings like `"context_length_exceeded"`, `"maximum context length"`, `"context window"`). On a match: if compaction hasn't already been attempted this cycle, it compacts once and retries; if it has, the run fails cleanly with `"Context window exceeded even after compaction"` rather than retrying indefinitely.
+The proactive tiktoken-based estimate can still be wrong (encoding differences between providers, provider-side overhead not visible to the client). Every model-streaming pass is wrapped in a `try/catch` classifying context-length-exceeded errors via `isContextLengthError` (`libs/tcp-shared/src/llm/context-length-error.ts`, matching common provider substrings like `"context_length_exceeded"`, `"maximum context length"`, `"context window"`). On a match: if compaction hasn't already been attempted this cycle, it compacts once and retries; if it has, the run fails cleanly with `"Context window exceeded even after compaction"` rather than retrying indefinitely.
 
 ### Incoming data guard
 
@@ -56,7 +56,7 @@ Before any new data (user message, RAG results, MCP responses) is added to the c
 
 ### Tool-schema gating (removed)
 
-From 008.6 through 010.2.8, only each MCP server's `describe_server` tool was bound to the model until the agent called it; the server's other tools then became bound for a small number of iterations before being hidden again (`ToolVisibilityTracker`). This describe-then-reveal gating was removed in 010.2.8.2 — all mode-filtered tools are now bound from turn 1 (the per-mode server/tool filtering in `@lcp/shared` `mode-tools.ts` is what actually keeps the bound-tool count, and therefore the token count, down). See [agent-services.md](agent-services.md#enabling-mcp-tools-for-a-role) and [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-010282).
+From 008.6 through 010.2.8, only each MCP server's `describe_server` tool was bound to the model until the agent called it; the server's other tools then became bound for a small number of iterations before being hidden again (`ToolVisibilityTracker`). This describe-then-reveal gating was removed in 010.2.8.2 — all mode-filtered tools are now bound from turn 1 (the per-mode server/tool filtering in `@tcp/shared` `mode-tools.ts` is what actually keeps the bound-tool count, and therefore the token count, down). See [agent-services.md](agent-services.md#enabling-mcp-tools-for-a-role) and [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-010282).
 
 ## Compaction reporting
 
@@ -80,14 +80,20 @@ Events (non-exhaustive — see [ADR-015](ADRs/ADR-015-agent-completion-sse.md) f
 | `llm`                 | Model activity (reasoning/response deltas, tool calls)                                                       |
 | `completed`           | Terminal event; payload includes the final `compactionReport` if compaction ran during the run               |
 
-`lcp-cli chat` connects to this stream as soon as a turn is dispatched and renders events in real time.
+`tcp-cli chat` connects to this stream as soon as a turn is dispatched and renders events in real time.
 
 ## Audit log
 
-Compaction activity is written to the `audit_events` table as `Decision` events with payloads:
+Compaction activity is written to the `audit_event` table under its own
+`compaction` event type, discriminated by `payload.phase`:
 
-- `compaction_triggered` — before compaction, with token counts and strategies
-- `compaction_complete` — after compaction, with updated token counts and per-activity log
+- `started` — before compaction, with token counts and strategies
+- `complete` — after compaction, with updated token counts and per-activity log
+
+Since 010.5.1 these rows are the SSE events too — `AuditService.write` persists
+each one and then publishes it, so there is no separate emit. (They were
+previously `decision` events carrying an `event: compaction_*` payload field,
+mirrored by a parallel SSE emit; see [ADR-008](ADRs/ADR-008-audit-logging.md).)
 
 ## Architecture
 
@@ -95,14 +101,14 @@ See [ADR-013](ADRs/ADR-013-prompt-assembly-context-management.md) for the full d
 
 ### Services
 
-`ContextBudgetService`, `ContextCompactorService`, `IncomingDataGuardService`, and `ContextManagerService` live in `libs/lcp-shared/src/context/` (moved from `apps/lcp-server/src/context/` in 008.6 so lcp-agent's worker can share them). `ContextManagerService` depends on two small structural sink interfaces (`ContextEventSink`, `ContextAuditSink`) rather than lcp-server's concrete services directly, so both lcp-server and lcp-agent can wire it to their own event/audit implementations.
+`ContextBudgetService`, `ContextCompactorService`, `IncomingDataGuardService`, and `ContextManagerService` live in `libs/tcp-shared/src/context/` (moved from `apps/tcp-server/src/context/` in 008.6 so tcp-agent's worker can share them). `ContextManagerService` depends on two small structural sink interfaces (`ContextEventSink`, `ContextAuditSink`) rather than tcp-server's concrete services directly, so both tcp-server and tcp-agent can wire it to their own event/audit implementations.
 
 | Service/module             | Location                                                     | Purpose                                                                                         |
 | -------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| `ContextBudgetService`     | `libs/lcp-shared/src/context/context-budget.service.ts`      | Token counting (messages + bound tools) and budget thresholds                                   |
-| `ContextCompactorService`  | `libs/lcp-shared/src/context/context-compactor.service.ts`   | Trim and summarise operations                                                                   |
-| `IncomingDataGuardService` | `libs/lcp-shared/src/context/incoming-data-guard.service.ts` | Pre-check incoming data size                                                                    |
-| `ContextManagerService`    | `libs/lcp-shared/src/context/context-manager.service.ts`     | Orchestrates budget checks and compaction (`prepare()` per-turn, `checkBudget()` per-iteration) |
-| `isContextLengthError`     | `libs/lcp-shared/src/llm/context-length-error.ts`            | Provider-agnostic reactive-backstop classifier                                                  |
-| `runSupervisedGraph`       | `libs/lcp-shared/src/llm/run-supervised-graph.ts`            | Shared per-iteration loop: budget, tool visibility, terminal-status, abort-on-pause             |
-| `AgentEventService`        | `apps/lcp-server/src/events/agent-event.service.ts`          | In-memory SSE event bus per agent (lcp-server's `ContextEventSink`)                             |
+| `ContextBudgetService`     | `libs/tcp-shared/src/context/context-budget.service.ts`      | Token counting (messages + bound tools) and budget thresholds                                   |
+| `ContextCompactorService`  | `libs/tcp-shared/src/context/context-compactor.service.ts`   | Trim and summarise operations                                                                   |
+| `IncomingDataGuardService` | `libs/tcp-shared/src/context/incoming-data-guard.service.ts` | Pre-check incoming data size                                                                    |
+| `ContextManagerService`    | `libs/tcp-shared/src/context/context-manager.service.ts`     | Orchestrates budget checks and compaction (`prepare()` per-turn, `checkBudget()` per-iteration) |
+| `isContextLengthError`     | `libs/tcp-shared/src/llm/context-length-error.ts`            | Provider-agnostic reactive-backstop classifier                                                  |
+| `runSupervisedGraph`       | `libs/tcp-shared/src/llm/run-supervised-graph.ts`            | Shared per-iteration loop: budget, tool visibility, terminal-status, abort-on-pause             |
+| `AgentEventService`        | `apps/tcp-server/src/events/agent-event.service.ts`          | In-memory SSE event bus per agent (tcp-server's `ContextEventSink`)                             |

@@ -1,6 +1,6 @@
 # Manual Testing — Start Here
 
-This guide walks you through manually testing the LCP system end to end. Work through each section in order: later sections depend on data created earlier (companies, roles, documents).
+This guide walks you through manually testing the TCP system end to end. Work through each section in order: later sections depend on data created earlier (companies, roles, documents).
 
 Each section is self-contained: it tells you what you are testing, what commands to run, and what to expect. Where a section builds on a previous one, there is a note at the top.
 
@@ -25,7 +25,7 @@ Before starting, ensure the following are in place.
 | Docker running         | `docker info` returns engine details                                 |
 | `.env` file present    | `ls .env` — copy from `.env.example` if missing                      |
 | LLM provider reachable | LM Studio (or similar) running and accessible from the URL in `.env` |
-| Node.js ≥ 22           | `node --version`                                                     |
+| Node.js 24 LTS         | `node --version`                                                     |
 
 If you do not have a `.env` file, copy the example and fill in the LLM provider details:
 
@@ -52,16 +52,20 @@ Work through these in order.
 
 ## Quick reference — service ports
 
-| Service              | Port | Purpose                           |
-| -------------------- | ---- | --------------------------------- |
-| lcp-server           | 3000 | REST API                          |
-| lcp-agent            | 3001 | Agent loop health                 |
-| lcp-mcp-storage      | 3010 | Storage MCP server                |
-| lcp-mcp-memory       | 3011 | Memory MCP server (stub)          |
-| lcp-mcp-interactions | 3012 | Interactions MCP server (stub)    |
-| MinIO API            | 9000 | S3-compatible object storage      |
-| MinIO console        | 9001 | Web UI for browsing stored files  |
-| Zitadel              | 8080 | OIDC provider (auth profile only) |
+| Service              | Port  | Purpose                           |
+| -------------------- | ----- | --------------------------------- |
+| tcp-server           | 3000  | REST API                          |
+| tcp-agent            | 3001¹ | Agent loop health                 |
+| tcp-mcp-storage      | 3010¹ | Storage MCP server                |
+| tcp-mcp-memory       | 3011¹ | Memory MCP server                 |
+| tcp-mcp-interactions | 3012¹ | Interactions MCP server           |
+| tcp-mcp-tasks        | 3013¹ | Tasks MCP server                  |
+| MinIO API            | 9000  | S3-compatible object storage      |
+| MinIO console        | 9001  | Web UI for browsing stored files  |
+| Zitadel              | 8080  | OIDC provider (auth profile only) |
+
+¹ Internal-only unless you start the stack with
+`./scripts/start-deployment.sh --dev-ports`. Section 6 needs these published.
 
 ---
 
@@ -70,12 +74,12 @@ Work through these in order.
 You will use the CLI frequently. These aliases make the commands shorter:
 
 ```bash
-alias lcp="./lcp-cli.sh"
+alias tcp="./tcp-cli.sh"
 # get-token opens a browser (device-flow login); sign in with the test user
-# credentials from your env file (TEST_USERNAME/TEST_PASSWORD). LCP_TOKEN is
-# picked up automatically by every subsequent lcp-cli command — no
+# credentials from your env file (TEST_USERNAME/TEST_PASSWORD). TCP_TOKEN is
+# picked up automatically by every subsequent tcp-cli command — no
 # --access-token-env-var flag needed.
-export LCP_TOKEN=$(lcp get-token)
+export TCP_TOKEN=$(tcp get-token)
 ```
 
 ---
@@ -83,6 +87,6 @@ export LCP_TOKEN=$(lcp get-token)
 ## If something goes wrong
 
 - **Service not starting**: check `docker compose logs <service-name>` for error detail.
-- **401 from lcp-server**: your token has expired — re-run `get-token` and update `$LCP_TOKEN`.
+- **401 from tcp-server**: your token has expired — re-run `get-token` and update `$TCP_TOKEN`.
 - **LLM errors**: confirm your LLM provider is running and the `baseUrl` in your company/role config is reachable.
-- **MinIO errors**: the lcp-mcp-storage server logs to `docker compose logs lcp-mcp-storage`.
+- **MinIO errors**: the tcp-mcp-storage server logs to `docker compose logs tcp-mcp-storage`.

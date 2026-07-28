@@ -2,13 +2,13 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_DIR="$REPO_ROOT/apps/lcp-stub-llm"
+APP_DIR="$REPO_ROOT/apps/tcp-stub-llm"
 
 usage() {
   cat <<EOF
 Usage: $(basename "$0") [-h|--help] [--config <path>] [--port <n>]
 
-Runs lcp-stub-llm directly from source (no build step — it's plain
+Runs tcp-stub-llm directly from source (no build step — it's plain
 TypeScript run by Node's native type-stripping), for manual testing.
 
 Options:

@@ -17,8 +17,8 @@ export function makeTestJwt(): string {
   const payload = b64url(
     JSON.stringify({
       sub: 'test-user',
-      aud: process.env.OIDC_CLIENT_ID ?? 'lcp-server',
-      iss: process.env.OIDC_ISSUER_URL ?? 'http://localhost:8080/realms/lcp',
+      aud: process.env.OIDC_CLIENT_ID ?? 'tcp-server',
+      iss: process.env.OIDC_ISSUER_URL ?? 'http://localhost:8080/realms/tcp',
       iat: now,
       exp: now + 3600,
     }),

@@ -1,8 +1,8 @@
 import { randomUUID, UUID } from 'crypto';
 import { DeepPartial } from 'typeorm';
-import { LcpCompany, LcpRole } from '../../../libs/lcp-shared/src/models';
+import { TcpCompany, TcpRole } from '../../../libs/tcp-shared/src/models';
 
-export const BASE = process.env.LCP_SERVER_URL ?? 'http://localhost:3000';
+export const BASE = process.env.TCP_SERVER_URL ?? 'http://localhost:3000';
 export const OIDC_DISCOVERY_URL =
   process.env.OIDC_DISCOVERY_URL ??
   'http://localhost:8080/.well-known/openid-configuration';
@@ -137,7 +137,7 @@ export class ApiHelper {
   }
 
   async listRoles(companyId: UUID) {
-    const { data } = await this.invokeApi<undefined, LcpRole[]>({
+    const { data } = await this.invokeApi<undefined, TcpRole[]>({
       method: 'GET',
       path: `/api/company/${companyId}/roles`,
       expectedStatus: 200,
@@ -149,7 +149,7 @@ export class ApiHelper {
   }
 
   async createTestCompany(name: string, slug: string) {
-    const { data } = await this.invokeApi<LcpCompany, LcpCompany>({
+    const { data } = await this.invokeApi<TcpCompany, TcpCompany>({
       method: 'POST',
       path: '/api/company',
       body: {
@@ -164,8 +164,8 @@ export class ApiHelper {
     return data!;
   }
 
-  async updateCompany(id: UUID, changes: DeepPartial<LcpCompany>) {
-    const { data } = await this.invokeApi<LcpCompany, LcpCompany>({
+  async updateCompany(id: UUID, changes: DeepPartial<TcpCompany>) {
+    const { data } = await this.invokeApi<TcpCompany, TcpCompany>({
       method: 'PUT',
       path: `/api/company/${id}`,
       body: changes,
@@ -176,7 +176,7 @@ export class ApiHelper {
   }
 
   async createTestRole(name: string, companyId: UUID) {
-    const { data } = await this.invokeApi<LcpRole, LcpRole>({
+    const { data } = await this.invokeApi<TcpRole, TcpRole>({
       method: 'POST',
       path: `/api/role`,
       body: {
@@ -206,8 +206,8 @@ export class ApiHelper {
     return data!;
   }
 
-  async updateRole(id: UUID, changes: DeepPartial<LcpRole>) {
-    const { data } = await this.invokeApi<LcpRole, LcpRole>({
+  async updateRole(id: UUID, changes: DeepPartial<TcpRole>) {
+    const { data } = await this.invokeApi<TcpRole, TcpRole>({
       method: 'PUT',
       path: `/api/role/${id}`,
       body: changes,

@@ -4,7 +4,7 @@
 
 ## Context
 
-The LCP monorepo exposes HTTP APIs across five NestJS services (`lcp-server`, `lcp-agent`, `lcp-mcp-storage`, `lcp-mcp-memory`, `lcp-mcp-interactions`), but had no machine-readable API documentation. Developers had to read source code or run the server and guess endpoint shapes. There was no built-in way to discover, explore, or test endpoints without writing CLI scripts or reading TypeScript.
+The TCP monorepo exposes HTTP APIs across five NestJS services (`tcp-server`, `tcp-agent`, `tcp-mcp-storage`, `tcp-mcp-memory`, `tcp-mcp-interactions`), but had no machine-readable API documentation. Developers had to read source code or run the server and guess endpoint shapes. There was no built-in way to discover, explore, or test endpoints without writing CLI scripts or reading TypeScript.
 
 ## Decision
 
@@ -17,13 +17,13 @@ The `@nestjs/swagger` CLI plugin is enabled in `nest-cli.json` for each server p
 
 Controller-level enrichment (`@ApiTags`, `@ApiOperation`, `@ApiBearerAuth`, `@ApiSecurity`) is added to all controllers so the generated spec groups endpoints logically and reflects the security requirements of each route.
 
-A new `lcp-cli open-swagger --service <name>` command mirrors `open-document-store` for quick browser access during development.
+A new `tcp-cli open-swagger --service <name>` command mirrors `open-document-store` for quick browser access during development.
 
 ## Alternatives considered
 
 - **`swagger-ui-dist` without `@nestjs/swagger`**: Would require manually authoring the OpenAPI spec. Ruled out — far more maintenance overhead.
 - **Redoc**: An alternative UI renderer. Not chosen — Swagger UI is the NestJS default and sufficient for this use case. Redoc can be layered on top later without changing the OpenAPI spec.
-- **Only documenting `lcp-server`**: Rejected — all services expose HTTP endpoints (health checks, MCP protocol) and consistency across the stack is more valuable than the small install cost.
+- **Only documenting `tcp-server`**: Rejected — all services expose HTTP endpoints (health checks, MCP protocol) and consistency across the stack is more valuable than the small install cost.
 
 ## Consequences
 
@@ -31,9 +31,11 @@ A new `lcp-cli open-swagger --service <name>` command mirrors `open-document-sto
 - The OpenAPI spec is generated at runtime from TypeScript metadata — it stays in sync with the code automatically.
 - The CLI plugin must be listed in `nest-cli.json` under each project's `compilerOptions.plugins`; omitting it causes DTO properties to appear as `object` in the spec.
 - `swagger-ui-express` is a production dependency. Its bundle (~10 MB) is included in all server images. This is acceptable given the development and operator value.
-- `lcp-cli open-swagger --service <name>` prints the Swagger UI URL and (by default) opens it in the system browser. `--no-open` suppresses the browser launch.
+- `tcp-cli open-swagger --service <name>` prints the Swagger UI URL and (by default) opens it in the system browser. `--no-open` suppresses the browser launch.
 - Smoke tests verify that `GET /swagger` returns 200 on each service.
+
+<a id="amendment-as-implemented-01025"></a>
 
 ## Amendment as implemented (010.2.5)
 
-`lcp-mcp-tasks`, added after this ADR as the sixth server app, was wired up the same way from the start — `SwaggerModule` in its `main.ts`, `@nestjs/swagger` in `nest-cli.json`'s plugin list, and a smoke-test assertion — so it was never a gap to fix, just a service this ADR's "five" wording predates. `lcp-cli open-swagger --service lcp-mcp-tasks` and all other consequences above apply to it unchanged.
+`tcp-mcp-tasks`, added after this ADR as the sixth server app, was wired up the same way from the start — `SwaggerModule` in its `main.ts`, `@nestjs/swagger` in `nest-cli.json`'s plugin list, and a smoke-test assertion — so it was never a gap to fix, just a service this ADR's "five" wording predates. `tcp-cli open-swagger --service tcp-mcp-tasks` and all other consequences above apply to it unchanged.

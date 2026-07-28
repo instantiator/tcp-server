@@ -6,18 +6,22 @@ You are testing that all Docker Compose services start correctly, pass their hea
 
 ```mermaid
 graph LR
-    H[Host] --> S[lcp-server :3000]
-    H --> A[lcp-agent :3001]
-    H --> MS[lcp-mcp-storage :3010]
-    H --> MM[lcp-mcp-memory :3011]
-    H --> MI[lcp-mcp-interactions :3012]
+    H[Host] --> S[tcp-server :3000]
     H --> MIO[MinIO :9001 console]
+    A[tcp-agent :3001]
     S --> PG[(PostgreSQL)]
     S --> RD[(Redis)]
     S --> MIO2[MinIO :9000]
     A --> PG
     A --> RD
-    MS --> MIO2
+    A --> MS[tcp-mcp-storage :3010]
+    A --> MM[tcp-mcp-memory :3011]
+    A --> MI[tcp-mcp-interactions :3012]
+    A --> MT[tcp-mcp-tasks :3013]
+    MS --> S
+    MI --> S
+    MT --> S
+    MM --> PG
 ```
 
 ---
@@ -41,11 +45,12 @@ Expected: all services show `healthy` in the Status column.
 | postgres             | healthy         |
 | redis                | healthy         |
 | minio                | healthy         |
-| lcp-server           | healthy         |
-| lcp-agent            | healthy         |
-| lcp-mcp-storage      | healthy         |
-| lcp-mcp-memory       | healthy         |
-| lcp-mcp-interactions | healthy         |
+| tcp-server           | healthy         |
+| tcp-agent            | healthy         |
+| tcp-mcp-storage      | healthy         |
+| tcp-mcp-memory       | healthy         |
+| tcp-mcp-interactions | healthy         |
+| tcp-mcp-tasks        | healthy         |
 
 If a service is `starting` after 60 seconds, check its logs:
 
@@ -55,9 +60,9 @@ docker compose logs <service-name> --tail 30
 
 ---
 
-## 1.2 — LCP service health checks
+## 1.2 — TCP service health checks
 
-Each LCP service exposes a `GET /health` endpoint. Check them all:
+Each TCP service exposes a `GET /health` endpoint. Check them all:
 
 ```bash
 curl -s http://localhost:3000/health | jq
@@ -73,7 +78,7 @@ Expected response for each (status 200):
 | -------- | -------------- |
 | `status` | `"ok"`         |
 
-Example output for `lcp-server` (includes dependency checks):
+Example output for `tcp-server` (includes dependency checks):
 
 ```json
 {
@@ -94,14 +99,14 @@ MinIO stores all company knowledge documents and context-overflow files. Open th
 
 1. Navigate to [http://localhost:9001](http://localhost:9001) in your browser.
 2. Log in with the credentials from your `.env` file (`MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY`; defaults: `minioadmin` / `minioadmin`).
-3. You should see the MinIO dashboard. The `lcp` bucket should already exist (created on lcp-server startup).
+3. You should see the MinIO dashboard. The `tcp` bucket should already exist (created on tcp-server startup).
 
 | Check               | Expected                     |
 | ------------------- | ---------------------------- |
 | Login succeeds      | MinIO dashboard visible      |
-| `lcp` bucket exists | Listed in the Object Browser |
+| `tcp` bucket exists | Listed in the Object Browser |
 
-If the bucket is missing, check `docker compose logs lcp-server` for the line `Created MinIO bucket: lcp`.
+If the bucket is missing, check `docker compose logs tcp-server` for the line `Created MinIO bucket: tcp`.
 
 ---
 
@@ -113,7 +118,7 @@ The CLI uses OIDC to obtain a bearer token. In development, Zitadel runs under t
 
 ```bash
 docker compose --profile auth up -d
-./lcp-cli.sh get-token
+./tcp-cli.sh get-token
 ```
 
 `get-token` uses a device-flow login — it prints a `verification_uri`/code for you to
@@ -122,7 +127,7 @@ complete sign-in (`test`/`test`) in a browser, then prints the token.
 **Without Zitadel (stub OIDC, no auth required):**
 
 ```bash
-./lcp-cli.sh list-companies
+./tcp-cli.sh list-companies
 ```
 
 > Auth guards are wired but not yet applied to endpoints — unauthenticated requests are accepted in the current build. When Zitadel is running you still need a token for the `chat` command.

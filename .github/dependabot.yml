@@ -6,10 +6,10 @@ updates:
       interval: weekly
     open-pull-requests-limit: 0
 
-  # lcp-stub-llm has its own package.json — it shares no dependencies with
+  # tcp-stub-llm has its own package.json — it shares no dependencies with
   # the rest of this monorepo.
   - package-ecosystem: npm
-    directory: "/apps/lcp-stub-llm"
+    directory: "/apps/tcp-stub-llm"
     schedule:
       interval: weekly
     open-pull-requests-limit: 0
@@ -27,43 +27,43 @@ updates:
     open-pull-requests-limit: 0
 
   - package-ecosystem: docker
-    directory: "/apps/lcp-server"
+    directory: "/apps/tcp-server"
     schedule:
       interval: weekly
     open-pull-requests-limit: 0
 
   - package-ecosystem: docker
-    directory: "/apps/lcp-agent"
+    directory: "/apps/tcp-agent"
     schedule:
       interval: weekly
     open-pull-requests-limit: 0
 
   - package-ecosystem: docker
-    directory: "/apps/lcp-mcp-interactions"
+    directory: "/apps/tcp-mcp-interactions"
     schedule:
       interval: weekly
     open-pull-requests-limit: 0
 
   - package-ecosystem: docker
-    directory: "/apps/lcp-mcp-tasks"
+    directory: "/apps/tcp-mcp-tasks"
     schedule:
       interval: weekly
     open-pull-requests-limit: 0
 
   - package-ecosystem: docker
-    directory: "/apps/lcp-mcp-memory"
+    directory: "/apps/tcp-mcp-memory"
     schedule:
       interval: weekly
     open-pull-requests-limit: 0
 
   - package-ecosystem: docker
-    directory: "/apps/lcp-mcp-storage"
+    directory: "/apps/tcp-mcp-storage"
     schedule:
       interval: weekly
     open-pull-requests-limit: 0
 
   - package-ecosystem: docker
-    directory: "/apps/lcp-stub-llm"
+    directory: "/apps/tcp-stub-llm"
     schedule:
       interval: weekly
     open-pull-requests-limit: 0

@@ -1,23 +1,7 @@
-import { DataSource } from 'typeorm';
-import { MIGRATIONS } from '../../apps/lcp-server/src/migrations-list';
-import {
-  AuditEvent,
-  CompanyUser,
-  Conversation,
-  ConversationMessage,
-  EpisodicMemory,
-  KnowledgeChunk,
-  KnowledgeIndexState,
-  LcpAgent,
-  LcpAssignment,
-  LcpCompany,
-  LcpRole,
-  LcpTask,
-  PendingConsultation,
-} from '../../libs/lcp-shared/src/models';
-import { assertMinioReachable } from '../../libs/lcp-shared/src/storage/minio-reachability';
-import { assertRedisReachable } from '../../libs/lcp-shared/src/redis/redis-reachability';
+import { assertMinioReachable } from '../../libs/tcp-shared/src/storage/minio-reachability';
+import { assertRedisReachable } from '../../libs/tcp-shared/src/redis/redis-reachability';
 import { rememberComposeEnv } from '../support/compose-env-handle';
+import { migrateDatabase } from '../support/migrate-database';
 import { startComposeTier } from '../support/testcontainers-env';
 
 /**
@@ -29,12 +13,12 @@ import { startComposeTier } from '../support/testcontainers-env';
  * global-teardown.
  *
  * stub-llm is provisioned tier-wide (not per-spec) so specs that need a real
- * agent-loop run against it (e.g. `lcp-agent/agent-loop-interactions.e2e-spec.ts`)
+ * agent-loop run against it (e.g. `tcp-agent/agent-loop-interactions.e2e-spec.ts`)
  * can just read `STUB_LLM_URL` — the container is started once regardless of
  * how many specs use it, same as the integration tier already does.
  *
  * `assertRedisReachable`/`assertMinioReachable` are imported by relative path
- * rather than from `@lcp/shared` because Jest's moduleNameMapper is not
+ * rather than from `@tcp/shared` because Jest's moduleNameMapper is not
  * reliably applied to globalSetup modules.
  */
 export default async function globalSetup(): Promise<void> {
@@ -62,44 +46,7 @@ export default async function globalSetup(): Promise<void> {
 
   rememberComposeEnv(environment);
 
-  // Every e2e spec in the tier needs a migrated schema, but only specs that
-  // boot lcp-server's own AppModule get one as an incidental side effect of
-  // that app's startup (migrationsRun: true, see makeTypeOrmConfig). Specs
-  // that only ever boot another app's AppModule — e.g.
-  // test/e2e/lcp-mcp-memory/*.e2e-spec.ts — never trigger that, and per the
-  // single-migration-owner design (see apps/lcp-server/src/migrations-list.ts)
-  // never should. Running lcp-server's migrations once here, against the
-  // shared Postgres container, gives every spec a real schema regardless of
-  // which app it boots or what order specs run in.
-  //
-  // `entities` must be passed alongside `migrations`, not omitted: TypeORM's
-  // PostgresDriver auto-creates the `uuid-ossp` extension during connect,
-  // but only when it detects a `uuid`-generated column in entity metadata
-  // (PostgresDriver.js's post-connect setup). Without entities, several
-  // migrations' raw `DEFAULT uuid_generate_v4()` SQL fails outright — the
-  // same entity list `AppModule` registers is reused here for that reason,
-  // not because this DataSource ever reads/writes through them.
-  const migrationDataSource = new DataSource({
-    type: 'postgres',
-    url: env.DATABASE_URL,
-    entities: [
-      LcpCompany,
-      LcpRole,
-      LcpAgent,
-      LcpTask,
-      LcpAssignment,
-      AuditEvent,
-      KnowledgeChunk,
-      KnowledgeIndexState,
-      EpisodicMemory,
-      CompanyUser,
-      Conversation,
-      ConversationMessage,
-      PendingConsultation,
-    ],
-    migrations: MIGRATIONS,
-  });
-  await migrationDataSource.initialize();
-  await migrationDataSource.runMigrations();
-  await migrationDataSource.destroy();
+  // Every spec in the tier needs a migrated schema before it runs — see
+  // migrateDatabase for why no spec is allowed to build one itself.
+  await migrateDatabase(env.DATABASE_URL);
 }
