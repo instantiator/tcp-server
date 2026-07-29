@@ -6,10 +6,20 @@ It's worth noting that the tests regularly evolved by conversation with the codi
 
 ## Structure
 
-Prompts are grouped into phase directories, each with its own numbering starting at `001.1`:
+Prompts are grouped into phase directories, each with its own numbering starting at `001.01.00`:
 
 - `phase 01 - service/` - the core service build-out (tcp-server, tcp-agent, MCP servers, shared library).
 - `phase 02 - web ui/` - reserved for a future web UI phase.
 - `phase 03 - service quality/` - standalone future-work items (security/ethics review, configurable third-party services, accessibility/i18n, Strands evaluation) not yet broken into sub-plans.
 
-A prompt numbered `N.1` is typically the original high-level ask; sub-plans generated from it are numbered `N.1.1`, `N.1.2`, etc.
+## Numbering
+
+Every document is numbered `xxx.yy.zz.prompt` or `xxx.yy.zz.plan` (e.g. `001.01.00.prompt - initial planning and ADRs.md`), so both its place in the history and its kind are visible right after the number:
+
+- `xxx` - the major theme (kept from the original numbering).
+- `yy` - a sub-theme, related topic, or side-mission within that theme. A single user prompt that spawns several plans (e.g. a "combination prompt" broken into ordered sub-plans) keeps one `yy` for the whole thread, even where the individual parts cover different components.
+- `zz` - chronological order within that `yy` bucket - prompts, plans, feedback, and fixes all share the same sequence, in the order they were written.
+- `.prompt` - a user-authored ask, question, or piece of feedback.
+- `.plan` - an implementation plan or other assistant-authored planning artefact.
+
+Where a prompt has no companion plan, it's very likely because the work was small enough to implement directly; those files carry a note near the top saying so. `phase 03` prompts are the exception - they're future work that hasn't been picked up yet, not work implemented without a plan, so they carry no such note.
