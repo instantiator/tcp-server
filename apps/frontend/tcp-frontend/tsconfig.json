@@ -1,0 +1,43 @@
+{
+  // The browser workspace does NOT extend tsconfig.base.json: that config
+  // enables decorators and pulls in Node/Jest/multer types, none of which
+  // belong in a bundle that runs in a browser (ADR-022).
+  //
+  // Note the `paths` block declares `@tcp/shared/client` and deliberately
+  // omits the bare `@tcp/shared`. That alone does not block the server-only
+  // export — @tcp/shared is a real workspace package, so Node resolution
+  // finds it through node_modules regardless. The alias omission removes the
+  // *convenient* route; the `no-restricted-imports` rule in the root
+  // eslint.config.mjs is what actually fails the edit, and Vite failing on
+  // `typeorm` (002.01) is the backstop.
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "resolvePackageJsonExports": true,
+    "paths": {
+      "@tcp/shared/client": ["../../../libs/tcp-shared/src/client.ts"]
+    },
+    // Syntax support only, and not a licence to use decorators here.
+    // `@tcp/shared` is consumed as source, not as built .d.ts files (ADR-022),
+    // so `export type { TcpTask }` makes tsc parse TcpTask.model.ts — which
+    // carries `@Entity`/`@Column`. Without this it fails with TS1240 on the
+    // decorators. `emitDecoratorMetadata` stays off: that one has a runtime
+    // cost, and nothing here emits. Browser safety comes from those exports
+    // being `export type` (erased), not from this flag.
+    "experimentalDecorators": true,
+    "types": [],
+    "noEmit": true,
+    "strict": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  // test/fixtures holds the deliberately-broken import-boundary fixture, which
+  // must not be typechecked. See package.json's test:import-boundary.
+  "include": ["src/**/*"]
+}

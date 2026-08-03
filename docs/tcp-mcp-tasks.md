@@ -17,7 +17,7 @@
 
 See [tasks.md → Agent modes](tasks.md#agent-modes) for what each mode may do.
 
-It lives in `apps/tcp-mcp-tasks/` and runs as a Docker Compose service. Like `tcp-mcp-storage` and `tcp-mcp-interactions`, it is a **thin proxy**: every state transition lives in tcp-server (which owns the DB and `StorageService`) behind `X-Internal-Api-Key`-guarded `/internal/*` endpoints. This service resolves the caller's assignment, mode-gates the tool, and relays validation/gate errors verbatim so the model can correct itself.
+It lives in `apps/backend/apps/tcp-mcp-tasks/` and runs as a Docker Compose service. Like `tcp-mcp-storage` and `tcp-mcp-interactions`, it is a **thin proxy**: every state transition lives in tcp-server (which owns the DB and `StorageService`) behind `X-Internal-Api-Key`-guarded `/internal/*` endpoints. This service resolves the caller's assignment, mode-gates the tool, and relays validation/gate errors verbatim so the model can correct itself.
 
 Each endpoint performs its validated state transition and then fires a `TaskDispatcher` hook. Since 010.2.7 the real dispatcher (`TaskOrchestrationService`) is wired to those hooks and drives the orchestration _reactions_ — dispatching QA agents, resuming after a rejection, promoting approved files, advancing the plan, finalising the task. See [tasks.md → Orchestration flow](tasks.md#orchestration-flow).
 

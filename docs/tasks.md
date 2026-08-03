@@ -15,7 +15,7 @@ assignment, and QA review assignments). See ADR-010 for the design record.
 The full lifecycle — planner dispatch, plan execution, QA review, file
 promotion, finalisation, failure propagation, and startup recovery — is driven
 by `TaskOrchestrationService`
-(`apps/tcp-server/src/api/task-orchestration.service.ts`), which delegates the
+(`apps/backend/apps/tcp-server/src/api/task-orchestration.service.ts`), which delegates the
 distinct phases to focused collaborators in the same directory:
 `TaskStateService` (atomic conditional transitions), `QaVerdictService` (QA
 accept/reject consequences), `TaskDeliverablesService` (file promotion and

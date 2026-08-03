@@ -1,9 +1,9 @@
 # aislop configuration — see https://github.com/scanaislop/aislop
 rules:
-  # @tcp/shared is this monorepo's tsconfig path alias, not an npm dependency;
-  # the rule cannot resolve workspace aliases, so its 13 findings here are
-  # false positives. Kept as a warning (not off) so genuinely hallucinated
-  # imports remain visible.
+  # @tcp/shared is a local npm workspace (libs/tcp-shared), resolved through a
+  # symlink and a tsconfig path alias rather than the registry; the rule cannot
+  # follow either, so its findings here are false positives. Kept as a warning
+  # (not off) so genuinely hallucinated imports remain visible.
   ai-slop/hallucinated-import: warning
   # The setup wizard generates local dev env files with well-known placeholder
   # credentials (dev-password, etc.) — these are not real secrets.

@@ -4,7 +4,7 @@
 **Port:** 3012
 **Transport:** MCP Streamable HTTP — stateless, one session per request
 
-`tcp-mcp-interactions` is a NestJS MCP server that lets agents pause and coordinate — either requesting input from a human user or dispatching a question to another agent role. It lives in `apps/tcp-mcp-interactions/` and runs as a Docker Compose service.
+`tcp-mcp-interactions` is a NestJS MCP server that lets agents pause and coordinate — either requesting input from a human user or dispatching a question to another agent role. It lives in `apps/backend/apps/tcp-mcp-interactions/` and runs as a Docker Compose service.
 
 When an agent calls `request_user_input` or `request_agent_consultation`, tcp-agent detects the pause signal on the next iteration of its event loop and exits the stream cleanly, freeing resources. The BullMQ job is considered complete. The agent resumes automatically once a reply arrives.
 

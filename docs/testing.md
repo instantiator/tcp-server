@@ -146,18 +146,18 @@ directly too — it no longer hangs on an unreachable Redis. See
 
 The **integration** and **e2e** tiers provision their backing services with
 [testcontainers](https://node.testcontainers.org/), driven from Jest
-`globalSetup`/`globalTeardown` (`test/integration/global-*.ts`,
-`test/e2e/global-*.ts`). The shared helper `test/support/testcontainers-env.ts`
+`globalSetup`/`globalTeardown` (`apps/backend/test/integration/global-*.ts`,
+`apps/backend/test/e2e/global-*.ts`). The shared helper `apps/backend/test/support/testcontainers-env.ts`
 starts the services from the project's own `docker-compose.yml`, so there is one
 source of truth for how they are configured.
 
-A small test-only overlay, `test/support/docker-compose.dynamic-ports.yml`,
+A small test-only overlay, `apps/backend/test/support/docker-compose.dynamic-ports.yml`,
 replaces the fixed host-port bindings with random ones (via the Compose Spec's
 `!override` tag). This is what lets a test run coexist with a dev stack — and is
 why the runner scripts no longer pause a dev container or probe for
 already-running infrastructure.
 
-Required env vars are read via `test/support/require-env.ts`, which throws if a
+Required env vars are read via `apps/backend/test/support/require-env.ts`, which throws if a
 value is missing rather than letting a spec silently skip. If a container fails
 to start, the helper writes each service's logs to
 `test-results/<tier>-compose-logs/` (uploaded as a CI artifact on failure) and
@@ -170,13 +170,17 @@ clients against an already-running instance.
 
 ## Test file locations
 
-| Suite       | Pattern                                         | Jest config                  |
-| ----------- | ----------------------------------------------- | ---------------------------- |
-| Unit        | `apps/**/src/**/*.spec.ts`, `libs/**/*.spec.ts` | `jest.config.js` (root)      |
-| E2E         | `test/e2e/*.e2e-spec.ts`                        | `test/jest-e2e.json`         |
-| Integration | `test/integration/**/*.integration-spec.ts`     | `test/jest-integration.json` |
-| Smoke       | `test/smoke/**/*.spec.ts`                       | `test/jest-smoke.json`       |
-| API         | `test/api/**/*.spec.ts`                         | `test/jest-api.json`         |
+All paths are relative to the repository root. The unit tier is configured in
+the `jest` block of `apps/backend/package.json`; its `roots` reach out to
+`libs/tcp-shared` and `scripts/setup-wizard`, which sit outside that workspace.
+
+| Suite       | Pattern                                                      | Jest config                                |
+| ----------- | ------------------------------------------------------------ | ------------------------------------------ |
+| Unit        | `apps/backend/apps/**/src/**/*.spec.ts`, `libs/**/*.spec.ts` | `apps/backend/package.json` (`jest` block) |
+| E2E         | `apps/backend/test/e2e/**/*.e2e-spec.ts`                     | `apps/backend/test/jest-e2e.json`          |
+| Integration | `apps/backend/test/integration/**/*.integration-spec.ts`     | `apps/backend/test/jest-integration.json`  |
+| Smoke       | `apps/backend/test/smoke/**/*.spec.ts`                       | `apps/backend/test/jest-smoke.json`        |
+| API         | `apps/backend/test/api/**/*.spec.ts`                         | `apps/backend/test/jest-api.json`          |
 
 ## CI pipeline
 

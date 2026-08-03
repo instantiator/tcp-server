@@ -21,7 +21,7 @@ That decision isn't re-opened. This ADR covers the browser end of the same pipe.
 
 **The obvious approach doesn't work.** Browsers have a built-in SSE client called `EventSource`, but it can only be given a URL — there is no way to attach an `Authorization` header. All three streams require one. So `EventSource` is unusable here, and the planning prompt's recommendation predates that discovery.
 
-1. **A working reader already exists.** `apps/tcp-cli/src/lib/core/sse.ts` (30 lines) and `sse-reader.ts` (43 lines) read these exact endpoints and are unit-tested. What they lack is reconnection.
+1. **A working reader already exists.** `apps/backend/apps/tcp-cli/src/lib/core/sse.ts` (30 lines) and `sse-reader.ts` (43 lines) read these exact endpoints and are unit-tested. What they lack is reconnection.
 2. **Connection count is a real limit.** Agent transcripts only ever reach the agent stream, so every open chat and every assignment panel needs its own connection. A task dialog with four assignments plus the live activity view is already five — and browsers cap concurrent connections at six per address under HTTP/1.1.
 
 ## Options considered
@@ -89,7 +89,7 @@ Every stream carries the same union, `WireEvent`:
 
 Which entity an event concerns is discriminated at runtime on `payload.entity`. There are no separate agent, company and task event types to model.
 
-`parseWireEvents` (in `apps/tcp-cli/src/lib/core/sse.ts`) imports only a _type_ from `@tcp/shared`, so it moves to the client export verbatim.
+`parseWireEvents` (in `apps/backend/apps/tcp-cli/src/lib/core/sse.ts`) imports only a _type_ from `@tcp/shared`, so it moves to the client export verbatim.
 
 ### Why not the Microsoft library
 

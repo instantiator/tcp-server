@@ -1,0 +1,14 @@
+{
+  "name": "@tcp/shared",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Code shared between the backend services and the web client.",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noemit -p tsconfig.json"
+  }
+}

@@ -16,7 +16,7 @@ cd "$TOP"
 # Paths format/licenses:generate/schema:generate can touch — scoping `git add`
 # to these avoids sweeping up unrelated tracked-file changes sitting dirty
 # elsewhere in the working tree.
-GENERATED_PATHS=(apps libs test docs schemas '*.md')
+GENERATED_PATHS=(apps libs docs schemas '*.md')
 
 echo "→ pre-commit: regenerating licenses..."
 npm run licenses:generate --silent

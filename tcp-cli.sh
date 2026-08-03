@@ -66,7 +66,7 @@ if [[ -n "$EXPLICIT_ENV" ]]; then
     2>/dev/null || echo "[tcp-cli] Docker sync skipped (not running)." >&2
 fi
 
-DIST="$ROOT/dist/apps/tcp-cli/main.js"
+DIST="$ROOT/apps/backend/dist/apps/tcp-cli/main.js"
 
 if [ "$REBUILD" = "true" ] || [ ! -f "$DIST" ]; then
   echo "[tcp-cli] Building tcp-cli..." >&2

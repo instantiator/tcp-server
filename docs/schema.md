@@ -3,7 +3,7 @@
 This document covers two related but distinct topics:
 
 - **`schemas/schema.json`** — generated from the TypeORM entity models; describes database/response shapes; used for CLI pre-flight validation and VS Code schema inference.
-- **DTO classes** — TypeScript classes in `apps/tcp-server/src/api/dto/`; define the exact fields accepted by each REST endpoint; validated at runtime by the server's `ValidationPipe`.
+- **DTO classes** — TypeScript classes in `apps/backend/apps/tcp-server/src/api/dto/`; define the exact fields accepted by each REST endpoint; validated at runtime by the server's `ValidationPipe`.
 
 ---
 
@@ -13,15 +13,15 @@ Every endpoint that accepts a request body uses a dedicated DTO (Data Transfer O
 
 ### DTO source files
 
-| File                                              | DTOs                                              |
-| ------------------------------------------------- | ------------------------------------------------- |
-| `apps/tcp-server/src/api/dto/llm-config.dto.ts`   | `LlmConfigDto`                                    |
-| `apps/tcp-server/src/api/dto/company.dto.ts`      | `CreateCompanyDto`, `UpdateCompanyDto`            |
-| `apps/tcp-server/src/api/dto/role.dto.ts`         | `CreateRoleDto`, `UpdateRoleDto`                  |
-| `apps/tcp-server/src/api/dto/company-user.dto.ts` | `CreateCompanyUserDto`, `UpdateCompanyUserDto`    |
-| `apps/tcp-server/src/api/dto/agent.dto.ts`        | `StartAgentDto`, `StartChatDto`, `SendMessageDto` |
-| `apps/tcp-server/src/api/dto/conversation.dto.ts` | `ConversationReplyDto`                            |
-| `apps/tcp-server/src/api/dto/internal.dto.ts`     | `PauseDto`, `CompleteDto`                         |
+| File                                                           | DTOs                                              |
+| -------------------------------------------------------------- | ------------------------------------------------- |
+| `apps/backend/apps/tcp-server/src/api/dto/llm-config.dto.ts`   | `LlmConfigDto`                                    |
+| `apps/backend/apps/tcp-server/src/api/dto/company.dto.ts`      | `CreateCompanyDto`, `UpdateCompanyDto`            |
+| `apps/backend/apps/tcp-server/src/api/dto/role.dto.ts`         | `CreateRoleDto`, `UpdateRoleDto`                  |
+| `apps/backend/apps/tcp-server/src/api/dto/company-user.dto.ts` | `CreateCompanyUserDto`, `UpdateCompanyUserDto`    |
+| `apps/backend/apps/tcp-server/src/api/dto/agent.dto.ts`        | `StartAgentDto`, `StartChatDto`, `SendMessageDto` |
+| `apps/backend/apps/tcp-server/src/api/dto/conversation.dto.ts` | `ConversationReplyDto`                            |
+| `apps/backend/apps/tcp-server/src/api/dto/internal.dto.ts`     | `PauseDto`, `CompleteDto`                         |
 
 ### DTO field reference
 

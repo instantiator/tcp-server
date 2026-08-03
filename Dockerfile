@@ -14,29 +14,42 @@
 #   docker build --target tcp-mcp-storage -t tcp-mcp-storage:latest .
 
 # ---- Shared builder: install once, build every app once --------------------
+# `npm ci` at a workspace root resolves and hoists the whole workspace graph in
+# ONE pass — it does not run per member. Every member's manifest must be present
+# before it runs, hence the four COPY lines; the layer still invalidates only
+# when a manifest changes, not on every source edit (ADR-022).
 FROM node:26-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
+COPY apps/backend/package.json ./apps/backend/
+COPY apps/frontend/tcp-frontend/package.json ./apps/frontend/tcp-frontend/
+COPY libs/tcp-shared/package.json ./libs/tcp-shared/
 RUN --mount=type=cache,target=/root/.npm npm ci
 COPY . .
 # build:apps runs the nest/webpack build for every app (no schema/licence steps).
 RUN npm run build:apps
 
 # ---- Shared production dependencies (no devDependencies) --------------------
+# --omit=dev at the root installs prod deps for every workspace, so each backend
+# image carries the frontend's few prod deps. Already true across the six
+# services sharing one node_modules; scoping with --workspace is not required.
 FROM node:26-alpine AS prod-deps
 WORKDIR /app
 COPY package*.json ./
+COPY apps/backend/package.json ./apps/backend/
+COPY apps/frontend/tcp-frontend/package.json ./apps/frontend/tcp-frontend/
+COPY libs/tcp-shared/package.json ./libs/tcp-shared/
 RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev
 
 # ---- Per-service runtime images --------------------------------------------
-# Webpack bundles each app into dist/apps/<app>/main.js; after the COPY it sits
+# Webpack bundles each app into apps/backend/dist/apps/<app>/main.js; after the COPY it sits
 # at ./dist/main.js. curl is present for the compose healthchecks.
 
 FROM node:26-alpine AS tcp-server
 WORKDIR /app
 RUN apk add --no-cache curl
 COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=builder /app/dist/apps/tcp-server ./dist
+COPY --from=builder /app/apps/backend/dist/apps/tcp-server ./dist
 EXPOSE 3000
 CMD ["node", "dist/main.js"]
 
@@ -44,7 +57,7 @@ FROM node:26-alpine AS tcp-agent
 WORKDIR /app
 RUN apk add --no-cache curl
 COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=builder /app/dist/apps/tcp-agent ./dist
+COPY --from=builder /app/apps/backend/dist/apps/tcp-agent ./dist
 EXPOSE 3001
 CMD ["node", "dist/main.js"]
 
@@ -52,7 +65,7 @@ FROM node:26-alpine AS tcp-mcp-storage
 WORKDIR /app
 RUN apk add --no-cache curl
 COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=builder /app/dist/apps/tcp-mcp-storage ./dist
+COPY --from=builder /app/apps/backend/dist/apps/tcp-mcp-storage ./dist
 EXPOSE 3010
 CMD ["node", "dist/main.js"]
 
@@ -60,7 +73,7 @@ FROM node:26-alpine AS tcp-mcp-memory
 WORKDIR /app
 RUN apk add --no-cache curl
 COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=builder /app/dist/apps/tcp-mcp-memory ./dist
+COPY --from=builder /app/apps/backend/dist/apps/tcp-mcp-memory ./dist
 EXPOSE 3011
 CMD ["node", "dist/main.js"]
 
@@ -68,7 +81,7 @@ FROM node:26-alpine AS tcp-mcp-interactions
 WORKDIR /app
 RUN apk add --no-cache curl
 COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=builder /app/dist/apps/tcp-mcp-interactions ./dist
+COPY --from=builder /app/apps/backend/dist/apps/tcp-mcp-interactions ./dist
 EXPOSE 3012
 CMD ["node", "dist/main.js"]
 
@@ -76,6 +89,6 @@ FROM node:26-alpine AS tcp-mcp-tasks
 WORKDIR /app
 RUN apk add --no-cache curl
 COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=builder /app/dist/apps/tcp-mcp-tasks ./dist
+COPY --from=builder /app/apps/backend/dist/apps/tcp-mcp-tasks ./dist
 EXPOSE 3013
 CMD ["node", "dist/main.js"]

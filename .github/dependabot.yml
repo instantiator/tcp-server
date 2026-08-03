@@ -20,44 +20,10 @@ updates:
       interval: weekly
     open-pull-requests-limit: 0
 
+  # The root Dockerfile builds all six services; the per-app Dockerfiles it
+  # replaced are gone, so there is nothing to scan under apps/backend.
   - package-ecosystem: docker
     directory: "/"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 0
-
-  - package-ecosystem: docker
-    directory: "/apps/tcp-server"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 0
-
-  - package-ecosystem: docker
-    directory: "/apps/tcp-agent"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 0
-
-  - package-ecosystem: docker
-    directory: "/apps/tcp-mcp-interactions"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 0
-
-  - package-ecosystem: docker
-    directory: "/apps/tcp-mcp-tasks"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 0
-
-  - package-ecosystem: docker
-    directory: "/apps/tcp-mcp-memory"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 0
-
-  - package-ecosystem: docker
-    directory: "/apps/tcp-mcp-storage"
     schedule:
       interval: weekly
     open-pull-requests-limit: 0

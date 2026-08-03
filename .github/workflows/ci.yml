@@ -18,6 +18,10 @@ jobs:
         with:
           node-version: "24"
           cache: npm
+          # Explicit: the default hashes **/package-lock.json, and the
+          # workspace members add package.json files that would otherwise
+          # churn the key. Only the root lockfile is authoritative (ADR-022).
+          cache-dependency-path: package-lock.json
       - run: npm ci
       - run: npm run build
       - run: npm run lint:check
@@ -38,6 +42,10 @@ jobs:
         with:
           node-version: "24"
           cache: npm
+          # Explicit: the default hashes **/package-lock.json, and the
+          # workspace members add package.json files that would otherwise
+          # churn the key. Only the root lockfile is authoritative (ADR-022).
+          cache-dependency-path: package-lock.json
       - run: npm ci
       - run: ./scripts/run-unit-tests.sh
       - name: Publish test results
@@ -64,6 +72,10 @@ jobs:
         with:
           node-version: "24"
           cache: npm
+          # Explicit: the default hashes **/package-lock.json, and the
+          # workspace members add package.json files that would otherwise
+          # churn the key. Only the root lockfile is authoritative (ADR-022).
+          cache-dependency-path: package-lock.json
       - run: npm ci
       # Diagnostic: testcontainers drives the `docker compose` CLI, whose
       # behaviour is version-sensitive. Surface the version to catch drift early.
@@ -104,6 +116,10 @@ jobs:
         with:
           node-version: "24"
           cache: npm
+          # Explicit: the default hashes **/package-lock.json, and the
+          # workspace members add package.json files that would otherwise
+          # churn the key. Only the root lockfile is authoritative (ADR-022).
+          cache-dependency-path: package-lock.json
       - uses: docker/setup-buildx-action@v4
       # One bake build for all six service images. They share the `builder`
       # (npm ci + build:apps) and `prod-deps` stages of the root Dockerfile, so
@@ -175,6 +191,10 @@ jobs:
         with:
           node-version: "24"
           cache: npm
+          # Explicit: the default hashes **/package-lock.json, and the
+          # workspace members add package.json files that would otherwise
+          # churn the key. Only the root lockfile is authoritative (ADR-022).
+          cache-dependency-path: package-lock.json
       - run: npm ci
       # Diagnostic: testcontainers drives the `docker compose` CLI, whose
       # behaviour is version-sensitive. Surface the version to catch drift early.

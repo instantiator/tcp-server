@@ -1,6 +1,6 @@
 # ADR-022: Monorepo Workspace Structure
 
-**Status:** Accepted (2026-07-31)
+**Status:** Implemented (amended — see [Amendments](#amendments-as-implemented-00200) at the end)
 
 ## Context
 
@@ -69,7 +69,7 @@ The full split is preferred over the minimal one, because the stated goal is the
 
 ## Prompts to update when this is decided
 
-- `002.00.00.prompt - monorepo restructuring (draft).md`
+- `002.00.00.prompt - monorepo restructuring.md`
 - `002.01.00.prompt - application infrastructure (draft).md`
 - `002.02.00.prompt - testing infrastructure (draft).md`
 - `002.03.00.prompt - static hosting and runtime configuration (draft).md`
@@ -138,3 +138,20 @@ RUN --mount=type=cache,target=/root/.npm npm ci
 The layer still invalidates only when a manifest changes. `builder` and `prod-deps` remain shared across all service targets.
 
 The frontend's runtime image is **simpler** than the six Node services, not an additional build path: it is static assets served by nginx, so it copies from `builder` and needs neither `node_modules` nor a Node runtime ([ADR-029](ADR-029-spa-hosting-and-runtime-configuration.md)).
+
+## Amendments as implemented (002.00) <a id="amendments-as-implemented-00200"></a>
+
+The migration landed as described. Five things this ADR left open or got wrong:
+
+- **The Nest apps nest one level deeper than the shorthand suggests: `apps/backend/apps/<name>/`.** Chosen over a flatter `apps/backend/<name>/` because it leaves `nest-cli.json`'s seven project roots, every `tsconfig.app.json`'s `extends`, and the `dist/apps/<name>` output shape untouched. Only the `../../libs/tcp-shared` path prefixes gained levels — [migration cost](#migration-cost)'s first two bullets shrank accordingly.
+- **The `test/` tree moved with the apps, to `apps/backend/test/`.** Not anticipated here. It matters: all 30 spec files reach into app source with `../../../apps/tcp-<app>/src/…`, and moving both together leaves every one of those strings valid. Leaving `test/` at the root would have rewritten 30 files for no gain — it tests only the backend.
+- **A root `tsconfig.base.json` was added.** [The root `package.json` section](#the-root-packagejson-shrinks-but-does-not-disappear) has `tsconfig.json` moving wholesale to `apps/backend/`, which would leave `libs/tcp-shared` extending an application's config. The shared `compilerOptions` live in `tsconfig.base.json` instead, and `apps/backend/tsconfig.json` extends it. It is deliberately not named `tsconfig.json`: a root one would be found by proximity, which is exactly how the browser workspace would silently inherit Node types and decorators.
+- **`apps/backend/webpack.config.js` was needed, and is not optional.** Nest's default webpack config calls `nodeExternals()`, which looks for `node_modules` relative to the CWD. `nest build` now runs from `apps/backend`, where npm's hoisting leaves no such directory — so nothing was externalised and webpack tried to bundle the entire dependency tree, including optional peers (`@mikro-orm/core`, `@nestjs/mongoose`) it cannot resolve. The override points `additionalModuleDirs` at the root.
+- **The enforcement is two layers here, not three, and the first is weaker than described.** [The `exports` section](#tcp-shared-becomes-a-package-and-its-exports-map-is-the-enforcement) says the frontend's `tsconfig.json` declaring no `@tcp/shared` alias keeps the bare specifier out. It does not: `@tcp/shared` is a real workspace package, so ordinary node resolution finds it through the `node_modules` symlink regardless. Omitting the alias removes the convenient route; the `no-restricted-imports` rule is what actually fails the edit. Vite is the third layer and arrives with 002.01. `apps/frontend/tcp-frontend/test/fixtures/server-import-must-fail.ts` is a committed fixture that must fail lint, asserted by `npm run test:import-boundary`.
+
+Two consequences of the `./client` surface worth recording:
+
+- **Model types are exported with `export type`, never as values.** `AuditEventType` (a const object) and `AgentStatus` (an enum) exist at runtime, but their modules import `typeorm`, so only their type side crosses the boundary. A web client needing either as a value must first extract it to an import-free module.
+- **`crypto`'s `UUID` was replaced by `libs/tcp-shared/src/uuid.ts`.** Fourteen model files imported the type from `crypto`, which made the shared _type_ surface depend on `@types/node` and forced the browser workspace to declare Node types. The local alias is the same template literal type, so `randomUUID()` still assigns without a cast.
+
+**ADR bodies elsewhere in `docs/ADRs/` were not path-swept.** They are dated records, and most of their `apps/tcp-<app>/…` references describe where code was at the time. `docs/development.md` is the authority on the current layout.
