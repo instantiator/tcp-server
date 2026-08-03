@@ -2,28 +2,22 @@ const { resolve } = require('path');
 const nodeExternals = require('webpack-node-externals');
 
 /**
- * Overrides one field of the Nest CLI's default webpack config: `externals`.
+ * Overrides one field of the Nest CLI's default webpack config, `externals`,
+ * which its `nodeExternals()` default gets wrong for a workspace member.
  *
- * Two problems, both created by becoming an npm workspace:
+ * `additionalModuleDirs` — `nodeExternals` searches for `node_modules` relative
+ * to the CWD, and `nest build` runs from this workspace, where npm's hoisting
+ * leaves none. Without this, nothing is externalised and webpack pulls in the
+ * whole dependency tree, unresolvable optional peers (`@mikro-orm/core`,
+ * `@nestjs/mongoose`) and loader-less `.d.ts`/`.js.map` files included.
+ * `additionalModuleDirs` rather than `modulesDir` so a version conflict that
+ * gives this workspace its own `node_modules` is still honoured.
  *
- * 1. Nest's default is `nodeExternals()`, which looks for `node_modules`
- *    relative to the CWD. `nest build` runs from this workspace, and npm hoists
- *    every dependency to the repository root, so that directory does not exist
- *    here — nothing got externalised and webpack tried to bundle the whole
- *    dependency tree, including optional peers it cannot resolve
- *    (`@mikro-orm/core`, `@nestjs/mongoose`) and `.d.ts`/`.js.map` files it has
- *    no loader for. `additionalModuleDirs` rather than `modulesDir`: a future
- *    version conflict would give this workspace its own `node_modules`, and
- *    both must be honoured.
- *
- * 2. `@tcp/shared` must stay **bundled**, not externalised. It used to be a
- *    bare tsconfig path alias, invisible to `nodeExternals`, so webpack inlined
- *    its TypeScript source. Now it resolves through a `node_modules` symlink,
- *    which makes `nodeExternals` treat it as a third-party package and emit a
- *    bare `require('@tcp/shared')`. The runtime images copy `node_modules` from
- *    `prod-deps` but not `libs/`, leaving that symlink dangling — the container
- *    then dies at startup with `Cannot find module '@tcp/shared'`. This fails
- *    only at runtime: the build, the typecheck and every test tier pass.
+ * `allowlist` — `@tcp/shared` must be bundled from source, not externalised.
+ * It resolves through a `node_modules` symlink into `libs/`, which the runtime
+ * images do not copy, so a bare `require('@tcp/shared')` in the output kills
+ * the container at startup. Nothing short of running an image catches that:
+ * the build, the typecheck and every test tier pass either way.
  */
 module.exports = (options) => ({
   ...options,

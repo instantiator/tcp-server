@@ -104,11 +104,16 @@
     "ts-loader": "^9.6.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "webpack-node-externals": "^3.0.0"
   },
   "jest": {
     "verbose": true,
-    "moduleFileExtensions": ["js", "json", "ts"],
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
     "roots": [
       "<rootDir>/apps",
       "<rootDir>/test/support",
@@ -116,7 +121,9 @@
       "<rootDir>/../../scripts/setup-wizard"
     ],
     "testRegex": ".*\\.spec\\.ts$",
-    "testPathIgnorePatterns": ["/node_modules/"],
+    "testPathIgnorePatterns": [
+      "/node_modules/"
+    ],
     "transform": {
       "^.+\\.(t|j)s$": [
         "ts-jest",
@@ -125,13 +132,19 @@
         }
       ]
     },
-    "transformIgnorePatterns": ["node_modules/(?!(pgvector|commander)/)"],
+    "transformIgnorePatterns": [
+      "node_modules/(?!(pgvector|commander)/)"
+    ],
     "moduleNameMapper": {
       "^@tcp/shared/(.*)$": "<rootDir>/../../libs/tcp-shared/src/$1",
       "^@tcp/shared$": "<rootDir>/../../libs/tcp-shared/src/index.ts"
     },
-    "setupFilesAfterEnv": ["<rootDir>/test/unit-test-setup.ts"],
-    "collectCoverageFrom": ["**/*.(t|j)s"],
+    "setupFilesAfterEnv": [
+      "<rootDir>/test/unit-test-setup.ts"
+    ],
+    "collectCoverageFrom": [
+      "**/*.(t|j)s"
+    ],
     "coverageDirectory": "<rootDir>/../../coverage",
     "testEnvironment": "node",
     "reporters": [
