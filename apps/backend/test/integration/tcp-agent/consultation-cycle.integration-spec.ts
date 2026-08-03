@@ -78,6 +78,23 @@ describe('Consultation cycle (stub LLM, real queue)', () => {
     headers: { 'X-Internal-Api-Key': INTERNAL_API_KEY },
   };
 
+  /**
+   * Fallback for any prompt no rule matches, applied to every stub config below.
+   *
+   * The stub 400s on an unmatched prompt, which fails the agent outright. The
+   * two blocks below each swap this shared, process-wide config in their own
+   * `beforeAll`, so an agent still resuming from the previous block can arrive
+   * after the swap, match nothing, and take a live test down with it — which is
+   * how this spec flaked under load on 2026-08-03.
+   *
+   * The text is deliberately conspicuous: this response should never reach an
+   * assertion, and if it does the diff says so outright.
+   */
+  const UNMATCHED_PROMPT_FALLBACK = {
+    mode: 'loop',
+    responses: [{ text: 'stub-llm fallback: no rule matched this prompt' }],
+  };
+
   /** Polls `check` until it returns a truthy value, or throws after `timeoutMs`. */
   async function waitFor<T>(
     check: () => Promise<T | null | undefined | false>,
@@ -92,6 +109,35 @@ describe('Consultation cycle (stub LLM, real queue)', () => {
       }
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
+  }
+
+  /**
+   * Waits for an agent to reach `expected`, aborting as soon as it settles on
+   * any other terminal state.
+   *
+   * Polling for `Completed` alone cannot distinguish "not there yet" from
+   * "already failed, and never will be" — both just run out the clock, and the
+   * reason sits in a Nest log line far above the assertion. Failing fast names
+   * the state actually reached, so the next occurrence explains itself.
+   */
+  async function waitForAgentStatus(agentId: UUID, expected: AgentStatus) {
+    const settledElsewhere = [
+      AgentStatus.Completed,
+      AgentStatus.Failed,
+      AgentStatus.Cancelled,
+    ].filter((status) => status !== expected);
+
+    return waitFor(async () => {
+      const found = await agentRepo.findOneBy({ id: agentId });
+      if (!found) return null;
+      if (settledElsewhere.includes(found.status)) {
+        throw new Error(
+          `agent ${agentId} settled on ${found.status}, expected ${expected}. ` +
+            `output: ${found.output ?? '(none)'}`,
+        );
+      }
+      return found.status === expected ? found : null;
+    });
   }
 
   async function putStubConfig(config: unknown): Promise<void> {
@@ -370,6 +416,7 @@ describe('Consultation cycle (stub LLM, real queue)', () => {
             ],
           },
         ],
+        defaults: UNMATCHED_PROMPT_FALLBACK,
       });
 
       // Dispatched through tcp-server's own orchestration service, so the
@@ -395,10 +442,10 @@ describe('Consultation cycle (stub LLM, real queue)', () => {
     }, 60_000);
 
     it('resumes the caller with the answer rather than a blank response', async () => {
-      const caller = await waitFor(async () => {
-        const found = await agentRepo.findOneBy({ id: callerAgentId });
-        return found?.status === AgentStatus.Completed ? found : null;
-      });
+      const caller = await waitForAgentStatus(
+        callerAgentId,
+        AgentStatus.Completed,
+      );
       // The stub only produces this summary for a prompt containing the
       // aggregated "Consultation response:" text, so the caller demonstrably
       // saw the oracle's answer on resume — the blank-response failure this
@@ -434,6 +481,7 @@ describe('Consultation cycle (stub LLM, real queue)', () => {
             ],
           },
         ],
+        defaults: UNMATCHED_PROMPT_FALLBACK,
       });
 
       // The state the race leaves behind: the caller is paused waiting, and
@@ -523,10 +571,10 @@ describe('Consultation cycle (stub LLM, real queue)', () => {
     });
 
     it('still resumes the caller, which completes with the answer', async () => {
-      const caller = await waitFor(async () => {
-        const found = await agentRepo.findOneBy({ id: callerAgentId });
-        return found?.status === AgentStatus.Completed ? found : null;
-      });
+      const caller = await waitForAgentStatus(
+        callerAgentId,
+        AgentStatus.Completed,
+      );
       const assignment = await assignmentRepo.findOneByOrFail({
         id: caller.assignmentId,
       });
