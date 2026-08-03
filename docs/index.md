@@ -102,7 +102,7 @@ In-depth guides for implemented system features.
 
 ## Planning
 
-Historical planning documents and session prompts are in [prompts/](prompts/).
+Historical planning documents and session prompts are in [prompts/](prompts/). Phase 02's branching and PR workflow is in [prompts/phase 02 - web ui/README.md](<prompts/phase 02 - web ui/README.md>).
 
 > [!NOTE]
 > These are records of how the project was designed, not active documentation.
