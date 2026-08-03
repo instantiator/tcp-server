@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { expectNoA11yViolations } from '../test-support/axe';
 import { ThemeProvider } from './ThemeProvider';
 import { THEME_STORAGE_KEY } from './storage';
 import { useTheme } from './useTheme';
@@ -120,5 +121,19 @@ describe('the theme seam', () => {
 
     expect(screen.getByTestId('choice')).toHaveTextContent('default/dark');
     expect(token('--tcp-color-bg')).toBe('#0d1117');
+  });
+
+  it('has no accessibility violations in either theme', async () => {
+    const { container } = render(
+      <ThemeProvider>
+        <Harness />
+      </ThemeProvider>,
+    );
+
+    await expectNoA11yViolations(container);
+
+    await userEvent.click(screen.getByRole('button', { name: 'contrast' }));
+
+    await expectNoA11yViolations(container);
   });
 });

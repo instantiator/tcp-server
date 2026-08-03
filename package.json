@@ -28,6 +28,7 @@
     "test:integration": "npm run test:integration --workspace apps/backend",
     "test:api": "npm run test:api --workspace apps/backend",
     "test:smoke": "npm run test:smoke --workspace apps/backend",
+    "test:browser": "npm run test:browser --workspace apps/frontend/tcp-frontend",
     "schema:generate": "ts-json-schema-generator --path 'libs/tcp-shared/src/models/*.ts' --type '*' --out schemas/schema.json",
     "shellcheck": "shellcheck $(find . -name '*.sh' -not -path './node_modules/*' -not -path './.git/*') scripts/hooks/pre-commit scripts/hooks/pre-push",
     "licenses:generate": "./scripts/generate-licenses.sh",

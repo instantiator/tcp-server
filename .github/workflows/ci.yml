@@ -47,6 +47,9 @@ jobs:
           # churn the key. Only the root lockfile is authoritative (ADR-022).
           cache-dependency-path: package-lock.json
       - run: npm ci
+      # Fans out to every workspace: Jest for the backend, Vitest for the
+      # frontend's unit and component tests (ADR-028). Two XML files, two
+      # reporter steps below.
       - run: ./scripts/run-unit-tests.sh
       - name: Publish test results
         uses: dorny/test-reporter@v3
@@ -54,6 +57,15 @@ jobs:
         with:
           name: Unit tests
           path: test-results/unit.xml
+          reporter: jest-junit
+          fail-on-error: false
+      - name: Publish frontend test results
+        uses: dorny/test-reporter@v3
+        if: ${{ !cancelled() }}
+        with:
+          name: Frontend unit & component tests
+          # Vitest's junit reporter emits the same schema jest-junit does.
+          path: test-results/frontend.xml
           reporter: jest-junit
           fail-on-error: false
 
@@ -175,6 +187,68 @@ jobs:
           fail-on-error: false
       - if: always()
         run: docker compose -p tcp-api --profile auth down -v
+
+  browser-test:
+    name: Browser tests
+    needs: [integration-test]
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          # Explicit: the default hashes **/package-lock.json, and the
+          # workspace members add package.json files that would otherwise
+          # churn the key. Only the root lockfile is authoritative (ADR-022).
+          cache-dependency-path: package-lock.json
+      # Keyed on the resolved Playwright version rather than the whole
+      # lockfile, so an unrelated dependency bump doesn't re-download ~180 MB
+      # of browser. Read straight from the lockfile — this runs before npm ci.
+      - name: Resolve Playwright version
+        run: |
+          version="$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")"
+          echo "PLAYWRIGHT_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}
+      - run: npm ci
+      # --with-deps installs the system libraries headless Chromium needs on a
+      # bare runner; it needs root, which is why run-browser-tests.sh leaves it
+      # to CI. Both are no-ops once the cache above hits.
+      - name: Install Chromium
+        run: npm exec --workspace apps/frontend/tcp-frontend -- playwright install --with-deps chromium
+      # The tier drives the built bundle, not the dev server. Until 002.03
+      # serves it from the deployment, the Playwright config runs
+      # `vite preview` over this dist/.
+      - name: Build the web app
+        run: npm run build --workspace apps/frontend/tcp-frontend
+      - run: ./scripts/run-browser-tests.sh
+      - name: Publish test results
+        uses: dorny/test-reporter@v3
+        if: ${{ !cancelled() }}
+        with:
+          name: Browser tests
+          # Playwright's junit reporter emits the same schema jest-junit does.
+          path: test-results/browser.xml
+          reporter: jest-junit
+          fail-on-error: false
+      # Traces and failure screenshots, for diagnosing a failure that did not
+      # reproduce locally.
+      - name: Upload Playwright artefacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-artifacts
+          path: test-results/browser-artifacts/
+          if-no-files-found: ignore
 
   e2e-test:
     name: E2E tests

@@ -233,7 +233,8 @@ npm run test:cov              # Coverage report
 ./scripts/run-integration-tests.sh
 ./scripts/run-api-tests.sh
 ./scripts/run-smoke-tests.sh
-./scripts/run-all-tests.sh    # All five tiers
+./scripts/run-browser-tests.sh
+./scripts/run-all-tests.sh    # All six tiers
 
 # Docker
 docker compose up             # Start all services

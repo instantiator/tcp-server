@@ -6,7 +6,7 @@ usage() {
 Usage: $(basename "$0") [-h|--help]
 
 Build the project, lint, and run every test suite in order:
-  unit → integration → e2e → api → smoke
+  unit → integration → e2e → api → smoke → browser
 
 Unit, integration, and e2e suites manage their own Docker infrastructure.
 The api and smoke suites require the full TCP stack — this script starts it
@@ -188,6 +188,13 @@ echo
 
 step "Smoke tests"
 "$SCRIPTS/run-smoke-tests.sh" --base-url "$API_BASE_URL"
+echo
+
+# Runs inside the deployment's lifetime, where it will belong from 002.03 —
+# until then nothing in the stack serves the web app, so the Playwright config
+# starts `vite preview` over the dist/ the Build step above produced.
+step "Browser tests"
+"$SCRIPTS/run-browser-tests.sh"
 echo
 
 record_step

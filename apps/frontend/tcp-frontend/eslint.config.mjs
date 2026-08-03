@@ -20,8 +20,13 @@ export default tseslint.config(
     // --no-ignore and asserts that no-restricted-imports fires (ADR-022).
     ignores: [
       'dist/**',
+      'playwright-report/**',
       'eslint.config.mjs',
+      // Tooling configs belong to tsconfig.node.json, which `projectService`
+      // does not discover — it looks for a tsconfig.json. Typed rules cannot
+      // run on them, so they are excluded rather than half-linted.
       'vite.config.ts',
+      'playwright.config.ts',
       'test/fixtures/**',
     ],
   },

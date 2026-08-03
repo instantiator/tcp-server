@@ -275,7 +275,7 @@ flowchart TD
 | [tcp-cli reference](docs/tcp-cli.md)     | Every CLI verb and flag                             |
 | [Authentication](docs/authentication.md) | OIDC setup, tokens, external identity providers     |
 | [Tasks and Assignments](docs/tasks.md)   | The task/assignment model and orchestration flow    |
-| [Testing](docs/testing.md)               | The five test tiers and how to run each             |
+| [Testing](docs/testing.md)               | The six test tiers and how to run each              |
 | [ADRs](docs/ADRs/)                       | Architectural decisions, with implementation status |
 
 ## Testing
@@ -291,7 +291,8 @@ Quick reference:
 ./scripts/run-e2e-tests.sh          # starts postgres, redis, minio
 ./scripts/run-api-tests.sh          # starts full stack including Zitadel
 ./scripts/run-smoke-tests.sh        # starts full stack including Zitadel
-./scripts/run-all-tests.sh          # all five tiers
+./scripts/run-browser-tests.sh      # drives the built web app in Chromium
+./scripts/run-all-tests.sh          # all six tiers
 ```
 
 ## Commands reference

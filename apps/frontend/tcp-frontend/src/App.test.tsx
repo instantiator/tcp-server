@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import { App } from './App';
 import { t } from './strings';
+import { expectNoA11yViolations } from './test-support/axe';
 import { ThemeProvider } from './theme/ThemeProvider';
 
 const renderApp = () =>
@@ -32,5 +33,11 @@ describe('App', () => {
     expect(
       screen.getByRole('heading', { name: t('app.title') }),
     ).toBeInTheDocument();
+  });
+
+  it('has no accessibility violations', async () => {
+    const { container } = renderApp();
+
+    await expectNoA11yViolations(container);
   });
 });

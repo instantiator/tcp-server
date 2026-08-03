@@ -47,6 +47,7 @@ therefore run alongside a dev stack (or each other) without conflict.
 | [run-smoke-tests.sh](#run-smoke-testssh)             | Smoke tests — requires a running deployment                          | Running stack         |
 | [run-api-tests.sh](#run-api-testssh)                 | API tests — requires a running deployment                            | Running stack         |
 | [run-e2e-tests.sh](#run-e2e-testssh)                 | E2E tests — HTTP API workflows                                       | Docker                |
+| [run-browser-tests.sh](#run-browser-testssh)         | Browser tests — requires something serving the web app               | Built web app         |
 | [manual-verify.sh](#manual-verifysh)                 | Interactive scenario walkthrough with human checks                   | Running stack         |
 | [run-stub-llm.sh](#run-stub-llmsh)                   | Run `tcp-stub-llm` from source, for manual testing                   | Node                  |
 | [check-migrations.sh](#check-migrationssh)           | Diagnostic report of entity-vs-schema migration drift                | Docker                |
@@ -314,6 +315,41 @@ application via `supertest`. Zitadel is not required — auth is mocked
 ```
 
 **Requires:** Docker and Docker Compose, `.env.testing` in the repo root.
+
+See also: [docs/testing.md](testing.md).
+
+## run-browser-tests.sh
+
+Pure test runner — like the api and smoke tiers it drives whatever is serving
+at `--base-url` and provisions nothing itself. Playwright drives Chromium
+against the built bundle and scans each page with axe.
+
+Until 002.03 serves the web app from the deployment, nothing in the compose
+stack does, so `playwright.config.ts` starts `vite preview` when nothing
+already answers on the base URL. Build the app first, or it serves a stale
+`dist/`.
+
+Browser binaries are **not** installed by `npm ci` — they are ~180 MB, and only
+this script needs them. It installs Chromium on first use, which is a no-op
+afterwards.
+
+```bash
+npm run build --workspace apps/frontend/tcp-frontend
+./scripts/run-browser-tests.sh
+
+# Against a deployment that already serves the app
+./scripts/run-browser-tests.sh --base-url http://localhost:5173
+
+# Pass options through to Playwright
+./scripts/run-browser-tests.sh -- --headed
+./scripts/run-browser-tests.sh -- --grep "heading"
+```
+
+**Options:**
+
+| Flag             | Env var       | Description      | Default                 |
+| ---------------- | ------------- | ---------------- | ----------------------- |
+| `--base-url URL` | `TCP_WEB_URL` | Web app base URL | `http://localhost:4173` |
 
 See also: [docs/testing.md](testing.md).
 

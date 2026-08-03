@@ -1,7 +1,7 @@
 {
-  // Covers the build tooling only. `vite.config.ts` runs in Node and needs
-  // Node types; tsconfig.json (the browser project) sets `"types": []` on
-  // purpose, so it cannot typecheck this file and must not be widened to.
+  // Covers the build and test-runner configuration only. These run in Node and
+  // need Node types; tsconfig.json (the browser project) sets `"types": []` on
+  // purpose, so it cannot typecheck them and must not be widened to.
   "compilerOptions": {
     "target": "ES2023",
     "lib": ["ES2023"],
@@ -15,5 +15,5 @@
     "esModuleInterop": true,
     "skipLibCheck": true
   },
-  "include": ["vite.config.ts"]
+  "include": ["vite.config.ts", "playwright.config.ts"]
 }

@@ -58,5 +58,10 @@ export default defineConfig({
     setupFiles: ['./src/test-setup.ts'],
     css: true,
     include: ['src/**/*.test.{ts,tsx}'],
+    // The five Jest tiers write JUnit XML into the repo-root test-results/ for
+    // CI's reporter to pick up. This tier reports the same way, so the CI job
+    // needs no special case (ADR-028).
+    reporters: ['default', 'junit'],
+    outputFile: { junit: '../../../test-results/frontend.xml' },
   },
 });
