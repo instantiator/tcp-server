@@ -169,7 +169,7 @@ API_BASE_URL="http://localhost:${EXPOSE_PORT_API:-3000}"
 # Start the full stack (including Zitadel) only now, for API and smoke tests.
 step "Starting deployment for API + smoke tests"
 DEPLOYMENT_STARTED=true
-# --dev-ports: the smoke tier (test/smoke/smoke.spec.ts) hits the MCP servers
+# --dev-ports: the smoke tier (apps/backend/test/smoke/smoke.spec.ts) hits the MCP servers
 # directly on their host ports, so they must be published for this run.
 "$SCRIPTS/start-deployment.sh" \
   --project "$DEPLOYMENT_PROJECT" \

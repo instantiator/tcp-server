@@ -55,7 +55,7 @@ The full split is preferred over the minimal one, because the stated goal is the
 ## Consequences
 
 - A one-off migration touching roughly fifteen configuration surfaces (see [migration cost](#migration-cost)). It must land as its own change, worked through explicitly — not folded into the frontend scaffold.
-- **`scripts/hooks/pre-push`'s migration-drift regex fails open.** If its path is not updated, the guard stops firing and nothing reports it. This is the single most dangerous item on the list precisely because its failure is silent.
+- **`scripts/hooks/pre-push`'s migration-drift regex fails open.** If its path is not updated, the guard stops firing and nothing reports it. This is the single most dangerous item on the list precisely because its failure is silent. (Verified in 002.00 — see [Amendments](#amendments-as-implemented-00200).)
 - `npm ci --omit=dev` at the root installs prod dependencies for every workspace, so each backend image carries the frontend's few prod deps. A few MB, and already true today across the six services sharing one `node_modules`. Scoping with `--workspace` would avoid it and is not required.
 - CI's `setup-node` currently has no `cache-dependency-path` and hashes `**/package-lock.json`. Adding manifests changes the cache key; an explicit path becomes worth setting.
 - The frontend gains real CI coverage — install, lint, typecheck, test — rather than inheriting `tcp-stub-llm`'s gap in coverage. Bringing `tcp-stub-llm` itself in as a fourth workspace is now cheap, and is **out of scope here**: it has its own TypeScript major and its own eslint config, and mixing that into this migration would confuse two independent problems.
@@ -146,7 +146,7 @@ The migration landed as described. Five things this ADR left open or got wrong:
 - **The Nest apps nest one level deeper than the shorthand suggests: `apps/backend/apps/<name>/`.** Chosen over a flatter `apps/backend/<name>/` because it leaves `nest-cli.json`'s seven project roots, every `tsconfig.app.json`'s `extends`, and the `dist/apps/<name>` output shape untouched. Only the `../../libs/tcp-shared` path prefixes gained levels — [migration cost](#migration-cost)'s first two bullets shrank accordingly.
 - **The `test/` tree moved with the apps, to `apps/backend/test/`.** Not anticipated here. It matters: all 30 spec files reach into app source with `../../../apps/tcp-<app>/src/…`, and moving both together leaves every one of those strings valid. Leaving `test/` at the root would have rewritten 30 files for no gain — it tests only the backend.
 - **A root `tsconfig.base.json` was added.** [The root `package.json` section](#the-root-packagejson-shrinks-but-does-not-disappear) has `tsconfig.json` moving wholesale to `apps/backend/`, which would leave `libs/tcp-shared` extending an application's config. The shared `compilerOptions` live in `tsconfig.base.json` instead, and `apps/backend/tsconfig.json` extends it. It is deliberately not named `tsconfig.json`: a root one would be found by proximity, which is exactly how the browser workspace would silently inherit Node types and decorators.
-- **`apps/backend/webpack.config.js` was needed, and is not optional.** Nest's default webpack config calls `nodeExternals()`, which looks for `node_modules` relative to the CWD. `nest build` now runs from `apps/backend`, where npm's hoisting leaves no such directory — so nothing was externalised and webpack tried to bundle the entire dependency tree, including optional peers (`@mikro-orm/core`, `@nestjs/mongoose`) it cannot resolve. The override points `additionalModuleDirs` at the root.
+- **`apps/backend/webpack.config.js` was needed, and is not optional.** Nest's default webpack config calls `nodeExternals()`, which looks for `node_modules` relative to the CWD. `nest build` now runs from `apps/backend`, where npm's hoisting leaves no such directory — so nothing was externalised and webpack tried to bundle the entire dependency tree, including optional peers (`@mikro-orm/core`, `@nestjs/mongoose`) it cannot resolve. The override points `additionalModuleDirs` at the root. It must **also** allowlist `@tcp/shared`: as a package it resolves through a `node_modules` symlink into `libs/`, which the runtime images do not copy, so externalising it emitted a bare `require('@tcp/shared')` and killed every container at startup. Nothing short of running an image catches that — the build, the typecheck and all five test tiers pass either way. It is the sharpest edge in this migration.
 - **The enforcement is two layers here, not three, and the first is weaker than described.** [The `exports` section](#tcp-shared-becomes-a-package-and-its-exports-map-is-the-enforcement) says the frontend's `tsconfig.json` declaring no `@tcp/shared` alias keeps the bare specifier out. It does not: `@tcp/shared` is a real workspace package, so ordinary node resolution finds it through the `node_modules` symlink regardless. Omitting the alias removes the convenient route; the `no-restricted-imports` rule is what actually fails the edit. Vite is the third layer and arrives with 002.01. `apps/frontend/tcp-frontend/test/fixtures/server-import-must-fail.ts` is a committed fixture that must fail lint, asserted by `npm run test:import-boundary`.
 
 Two consequences of the `./client` surface worth recording:
@@ -154,4 +154,23 @@ Two consequences of the `./client` surface worth recording:
 - **Model types are exported with `export type`, never as values.** `AuditEventType` (a const object) and `AgentStatus` (an enum) exist at runtime, but their modules import `typeorm`, so only their type side crosses the boundary. A web client needing either as a value must first extract it to an import-free module.
 - **`crypto`'s `UUID` was replaced by `libs/tcp-shared/src/uuid.ts`.** Fourteen model files imported the type from `crypto`, which made the shared _type_ surface depend on `@types/node` and forced the browser workspace to declare Node types. The local alias is the same template literal type, so `randomUUID()` still assigns without a cast.
 
+- **The aislop gate had to be re-based, not just re-pointed.** `ai-slop/hallucinated-import` checks imports against the nearest `package.json`. The root one no longer declares a single runtime dependency, so every `@nestjs/*`, `joi` and `express` import read as hallucinated — 85 findings, 83 of them false, dropping the score from 76 to 35 and turning `ci.failBelow: 74` from a gate into an obstacle. The rule is now `off` at the root, where it cannot work; `aislop ci apps/backend` resolves correctly and scores 83. TypeScript already fails on an unresolvable import, so the loss is small. It did surface two real undeclared dependencies: `webpack-node-externals` (now declared) and `express` (pre-existing, left alone).
+- **Git hooks are copies, not symlinks.** `npm run hooks:install` copies `scripts/hooks/*` into `.git/hooks/`. Editing the tracked versions changes nothing until it is re-run — which matters most for the migration-drift guard, whose whole risk is silent failure.
+
 **ADR bodies elsewhere in `docs/ADRs/` were not path-swept.** They are dated records, and most of their `apps/tcp-<app>/…` references describe where code was at the time. `docs/development.md` is the authority on the current layout.
+
+### How the migration-drift guard was verified
+
+Firing is not enough to prove the path fix: a guard with a typo'd migration path
+fires identically. Both halves were checked.
+
+1. **It fires.** A scratch branch whose upstream was the migration branch (so the
+   diff was one commit — the branch itself moves migration files, which would
+   otherwise mask the test) added an `@Column` to `TcpCompany.model.ts` with no
+   migration. `bash .git/hooks/pre-push` exited 1 naming that file.
+2. **It recognises migrations at the new path.** The regex, extracted from the
+   installed hook rather than retyped, matches a real
+   `apps/backend/apps/tcp-server/src/migrations/*.ts` file and does not match the
+   old `apps/tcp-server/…` location.
+
+Re-run both after any change to the hook — and run `npm run hooks:install` first.
