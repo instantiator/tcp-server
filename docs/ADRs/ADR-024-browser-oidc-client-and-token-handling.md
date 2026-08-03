@@ -1,6 +1,6 @@
 # ADR-024: Browser OIDC Client and Token Handling
 
-**Status:** Proposed (2026-07-30)
+**Status:** Approved (2026-08-03)
 
 ## Context
 
@@ -13,8 +13,6 @@ What's new is the **client**. A browser app is a _public_ client: it runs entire
 [^device]: The OAuth Device Authorization Grant — the flow where a terminal shows you a code to type into a browser. Chosen in ADR-017 because Zitadel doesn't support password grants.
 
 ## What needs deciding
-
-Two things:
 
 1. **Which client library** handles the sign-in flow.
 2. **Where tokens are stored** in the browser — the security decision in this ADR.
@@ -47,9 +45,7 @@ Storage is a real trade-off. Anything JavaScript can read, an XSS[^xss] attack c
 
 The usual objection to in-memory tokens is that a page reload signs the user out. It doesn't — provided re-authentication uses a full-page redirect rather than a hidden iframe. See [why in-memory survives a reload](#why-in-memory-survives-a-page-reload).
 
-Storage is a configuration setting, not a rewrite. If the redirect proves annoying in practice, moving to `sessionStorage` is [a knob](#storage-is-a-knob-not-a-rewrite) — but it should be a recorded decision, with the trade-off restated.
-
-Three supporting rules:
+Storage is a configuration setting, not a rewrite. If the redirect proves annoying in practice, moving to `sessionStorage` is [a small configuration change](#storage-is-a-small-configuration-change-not-a-rewrite) — but it should be a recorded decision, with the trade-off restated.
 
 - The access token is [fetched per request, never captured](#the-access-token-is-fetched-per-request) — otherwise a long-lived component keeps presenting an expired one.
 - [One shared 401 policy](#one-401-policy-shared) covers both API calls and event streams.
@@ -61,7 +57,7 @@ Three supporting rules:
 
 - A brief redirect to Zitadel and back on every full page load. It's visible, and it's the price of not keeping a long-lived token where scripts can read it.
 - That redirect is only seamless while the user has an active Zitadel session. Once the provider's session expires they see a login form — correct behaviour, worth stating so it isn't reported as a bug.
-- `scripts/start-deployment.sh` grows a second application registration, and the generated client ID has to reach the app's runtime configuration ([ADR-029](ADR-029-spa-hosting-and-runtime-configuration.md)).
+- `scripts/start-deployment.sh` gets a second application registration, and the generated client ID has to reach the app's runtime configuration ([ADR-029](ADR-029-spa-hosting-and-runtime-configuration.md)).
 - Redirect URLs are environment-specific and must be derived, not hardcoded, or any non-default web port breaks sign-in with a provider-side error that doesn't name the cause.
 - **An open event stream outlives token expiry, and therefore outlives revocation.** This is the one place the security posture is weaker than a request-by-request model. Accepted for the MVP; see the Detail section.
 - The CLI's device flow is untouched. Both clients live in one Zitadel project.
@@ -70,7 +66,7 @@ Three supporting rules:
 ## Alternatives considered
 
 - **Refresh token in `localStorage`, with rotation.** The common SPA pattern, and Zitadel supports it. Rejected as the default: rotation limits how long a stolen token is useful, but doesn't stop the theft, and an XSS on a page holding one owns the session for as long as it keeps rotating. Kept as the documented fallback.
-- **Hidden-iframe silent renewal.** The traditional answer, and increasingly unreliable — it depends on third-party cookie access that browsers are removing. Rejected as building on a disappearing foundation.
+- **Hidden-iframe silent renewal.** The traditional answer, and increasingly unreliable — it depends on third-party cookie access that browsers are removing. Rejected because it depends on something that is actively being taken away, not just a mechanism with rough edges.
 - **A backend-for-frontend holding a session cookie.** The strongest option: no token ever reaches JavaScript. Rejected for the MVP because it makes the static app stateful and contradicts the "hosted statically" requirement. It's the natural upgrade if this is ever exposed beyond a trusted network.
 
 ## Prompts to update when this is decided
@@ -88,13 +84,13 @@ Three supporting rules:
 
 The distinction that carries this decision is **full-page redirect versus hidden iframe**.
 
-Silent renewal in a hidden iframe depends on the provider's session cookie being readable inside a cross-origin frame. That's a third-party cookie, and browsers are restricting them — iframe-based renewal is on a path to simply not working.
+Silent renewal in a hidden iframe depends on the provider's session cookie being readable inside a cross-origin frame. That's a third-party cookie, and browsers are increasingly blocking them — so iframe-based renewal is likely to stop working, not just occasionally fail.
 
 A full-page redirect to Zitadel is a **first-party** navigation. The session cookie applies normally. With an active session the user is redirected straight back, usually in a few hundred milliseconds and without seeing a login form.
 
 So the cost is a brief redirect on page load. The benefit is that an XSS gets at most a short-lived access token, never a refresh token — and the mechanism doesn't degrade as browsers tighten cookie rules.
 
-### Storage is a knob, not a rewrite
+### Storage is a small configuration change, not a rewrite
 
 `oidc-client-ts` takes a pluggable store. Moving from memory to `sessionStorage` is a configuration change.
 

@@ -12,8 +12,6 @@ The web UI adds a second client. This ADR describes the goals of the MVP.
 
 How much of the CLI's surface should the first web release cover?
 
-Three considerations shape the answer:
-
 1. **The CLI will remain.** It's useful and offers more control of configuration than the MVP web UI.
 2. **The web UI offers a live overview.** The terminal mode of `tcp-cli` shows one agent stream; `tcp-cli tui` offers multiple panes. The proposed web UI can go further, showing multiple live lists and conversations.
 3. **The MVP is deliberately unstyled.** Visual design can wait until post-MVP. Accessibility is much more important. (See [ADR-026](ADR-026-web-ui-accessibility-and-component-library.md) and [ADR-027](ADR-027-screen-reader-strategy.md)).

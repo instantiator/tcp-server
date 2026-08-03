@@ -1,6 +1,6 @@
 # ADR-029: SPA Hosting and Runtime Configuration
 
-**Status:** Proposed (2026-07-30)
+**Status:** Accepted (2026-08-03)
 
 ## Context
 

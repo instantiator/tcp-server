@@ -1,6 +1,6 @@
 # ADR-028: Frontend Testing Strategy
 
-**Status:** Proposed (2026-07-30)
+**Status:** Accepted (2026-08-03)
 
 ## Context
 
@@ -12,8 +12,6 @@ Two things in ADR-016 matter here:
 2. The api and smoke tiers must stay pure black-box clients — they test whatever stack they're pointed at, and never reach inside it.
 
 ## What needs deciding
-
-Three things:
 
 1. **Which test runner** the frontend uses.
 2. **How browser tests fit** the existing tier model.
@@ -45,20 +43,19 @@ The decisive argument for Vitest is the transform pipeline. The frontend is a Vi
 
 [ADR-022](ADR-022-monorepo-workspace-structure.md) makes per-workspace tooling normal, so this is no longer an all-or-nothing choice for the repository.
 
-Supporting decisions:
-
 - The browser tier is [black-box, like api and smoke](#the-browser-tier-is-black-box) — it drives a deployment someone else started.
 - ["Comprehensive" is defined](#what-comprehensive-means), with a proportionate bar per tier.
 - [Mocking stops at the network boundary](#mocking-stops-at-the-network-boundary).
 
 ## Consequences
 
-- **Two test runners in one repository.** Justified by the transform-pipeline argument and made unremarkable by the workspace split, but it's a real cost: a contributor has to know which applies where, and the two configs will drift in small ways.
+- **Two test runners in one repository.** Justified by the transform-pipeline argument, and no longer unusual now that the workspace split ([ADR-022](ADR-022-monorepo-workspace-structure.md)) gives each part of the repo its own tooling — but it's a real cost: a contributor has to know which applies where, and the two configs will drift in small ways.
 - A sixth tier means a sixth launcher script, a new step in `run-all-tests.sh`, a new CI job, and Playwright browser binaries in CI — cached, or the job pays a download every run.
 - Those binaries are a large dev dependency. Contributors who never touch the frontend still pay the install unless it's scoped to the frontend workspace, which the workspace split makes possible.
 - Accessibility assertions in every component test slow the suite, and will surface violations in components that "look fine". That's the intent.
 - **The browser tier depends on `tcp-stub-llm`, which today has no CI coverage at all** ([ADR-022](ADR-022-monorepo-workspace-structure.md)). Making it the engine of the browser tier gives it coverage by use — but a stub-llm regression now breaks the browser tier, which is worth knowing when one fails.
 - Excluding snapshot tests removes the fastest way to add nominal coverage. The bar is deliberately harder to game.
+- `@guidepup/virtual-screen-reader` joins the component tier's dev dependencies, per [ADR-027](ADR-027-screen-reader-strategy.md). jsdom-based, no browser or OS screen reader needed — it doesn't change the tier's shape, only what "comprehensive" requires of announcer-related components.
 - `run-all-tests.sh` gets longer. It's already the slowest thing in the repo, and a browser tier isn't fast.
 
 ## Alternatives considered
@@ -98,7 +95,9 @@ This honours ADR-016's black-box invariant, and it reuses the CI job shape that 
 | Components     | Behaviour, not appearance. Query by role and accessible name; assert what a user can do. One accessibility assertion per component. **No snapshot tests** |
 | Browser        | Roughly six journeys covering the MVP end to end — not per-component coverage                                                                             |
 
-**Querying by role and accessible name is the point**, not a stylistic preference: a component that can't be queried that way is a component a screen reader can't describe. The component tier therefore doubles as continuous accessibility pressure.
+**Querying by role and accessible name is the point**, not a stylistic preference: a component that can't be queried that way is a component a screen reader can't describe. The component tier therefore also works as an ongoing accessibility check, every time the tests run.
+
+**Any component that announces to screen readers carries a heavier bar.** [ADR-027](ADR-027-screen-reader-strategy.md) makes the announcer's coalescing, throttling and "never word by word" rules an automated gate in this same tier, using `@guidepup/virtual-screen-reader` alongside plain live-region assertions. "Comprehensive" for those components means that test exists, not just the usual behavioural one — see ADR-027's Detail section for the exact mechanism.
 
 That's also why snapshots are excluded — they assert structure, catch nothing about usability, and fail on every intended change.
 

@@ -1,6 +1,6 @@
 # ADR-026: Accessibility Standards, Component Library and Auditing
 
-**Status:** Proposed (2026-07-30)
+**Status:** Accepted (2026-08-03)
 
 ## Context
 
@@ -9,8 +9,6 @@ The MVP ships deliberately unstyled ([ADR-020](ADR-020-web-ui-mvp-scope.md)). Wi
 That inverts the usual way a component library is chosen. How it looks, and how quickly it can be themed, barely matter here. What matters is the quality of the keyboard handling, focus management and screen reader semantics underneath, and whether it stays out of the way of a CSS layer written later.
 
 ## What needs deciding
-
-Three things:
 
 1. **What standard we're aiming at**, and how it's measured.
 2. **Which component library** provides the behaviour.
@@ -50,8 +48,6 @@ Tailwind isn't a candidate: it supplies utility classes, not component semantics
 **WCAG 2.2 AA as the project target, with three AAA criteria adopted. React Aria Components for behaviour. CSS custom properties for theming. Automated accessibility checks in both test tiers.**
 
 React Aria Components wins on the two criteria that matter: its accessibility work is tested against real assistive technology rather than against the spec alone, and — decisively — it ships a **live announcer**, which is the single hardest primitive ADR-027 needs and the one thing no other candidate provides.
-
-Supporting decisions:
 
 - [Three AAA criteria](#the-three-aaa-criteria-adopted) are adopted above AA; three others are explicitly not.
 - [Themes are CSS custom properties](#how-themes-work), and component stylesheets never contain literal values.

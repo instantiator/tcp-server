@@ -18,8 +18,6 @@ _For now_, a general-purpose client-side data store isn't needed.
 
 ## What needs deciding
 
-Two things:
-
 1. **How the browser talks to the API.** The API description is generated from the server's code and changes with it, so a hand-maintained client would drift.
 2. **Where state lives.** With almost no client-side state, a conventional data store may be unnecessary weight.
 

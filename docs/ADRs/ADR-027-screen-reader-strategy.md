@@ -1,6 +1,6 @@
 # ADR-027: Screen Reader Strategy for Live and Data-Rich Views
 
-**Status:** Proposed (2026-07-30)
+**Status:** Accepted (2026-08-03)
 
 ## Context
 
@@ -24,6 +24,17 @@ The specific hazard here is the streaming transcript. Agent responses arrive wor
 | Data-rich views | Expose everything, read as it sees fit | Suppress, give a curated summary |
 | Live changes    | Announce each change as it arrives     | Announce a coalesced summary     |
 
+### Testing the announcement behaviour
+
+Everything above is a behaviour, not a structure — axe ([ADR-026](ADR-026-web-ui-accessibility-and-component-library.md)) checks roles and labels, not whether the right words were announced at the right time.
+
+| Option                                                                  | Notes                                                                                                                                                                                                                                 |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Assert on the live region directly** _(chosen)_                       | Free — the existing Vitest/Testing Library component tier ([ADR-028](ADR-028-frontend-testing-strategy.md)), with fake timers advanced past the throttle interval. Checks the right text landed in the right place at the right time  |
+| **`@guidepup/virtual-screen-reader`** _(chosen)_                        | A screen reader simulator that runs against jsdom — no browser, no OS screen reader. Reports what would actually be spoken, not just what's in the DOM. See [Detail](#automated-tests-for-announcement-behaviour)                     |
+| Real screen reader automation (`@guidepup/playwright` + VoiceOver/NVDA) | The closest to ground truth — and it needs a macOS runner for VoiceOver and a Windows runner for NVDA, the same cost ADR-026 already named as the reason its manual matrix only runs per release. Documented as optional, not adopted |
+| Status quo (axe only)                                                   | Catches structural accessibility issues. Catches nothing about announcement timing, coalescing, or the per-token-noise failure mode this ADR exists to prevent                                                                        |
+
 ## Decision
 
 **Expose everything for browsing; curate what gets announced. These are two different channels, not two settings of one.**
@@ -35,13 +46,13 @@ So: **option A for exposure, option B for announcement.**
 
 The policy is applied per surface — see the [per-surface policy table](#per-surface-policy).
 
-Three rules make it workable:
-
 1. **Never announce a partial response.** Words render on screen as they arrive; the announcement happens once, when the response is complete.
-2. **[Coalesce and throttle](#coalescing-and-throttling) per region.** Under a burst, the user hears one sentence, not six.
+2. **[Combine and throttle](#coalescing-and-throttling) per region.** Multiple changes in one region become a single announcement, sent at most once per interval. Under a burst, the user hears one sentence, not six.
 3. **Announce what changed, not the new state.** "Tasks: 2 added" is useful; re-reading the whole list is not.
 
 Two supporting decisions: [focus is managed at exactly four points](#focus-is-managed-at-four-points), and [live updates never reorder what's under the cursor](#live-updates-never-reorder-the-list).
+
+**The coalescing and throttling rules above are an automated test gate, not just a description.** Every announcer behaviour — the "never word by word" rule, the per-region throttle, the "what changed" wording — gets a Vitest test using `@guidepup/virtual-screen-reader` alongside plain Testing Library assertions on the live region. See [Detail](#automated-tests-for-announcement-behaviour).
 
 ## Consequences
 
@@ -51,14 +62,16 @@ Two supporting decisions: [focus is managed at exactly four points](#focus-is-ma
 - **A completed response can be long.** An agent's answer may run to several paragraphs, and announcing all of it is disruptive in a different way. The implementation should consider announcing only that a response arrived, leaving the content to be browsed. Flagged as **unresolved** until the manual pass — it needs real listening to judge.
 - Stable list ordering conflicts with "most recently active first", which is the obvious visual design. Stability wins; recency ordering would need an explicit control rather than automatic reordering.
 - A toast is never the only notice of an event — the underlying list must also reflect it (following ADR-026's "no timing" criterion).
-- **This is the ADR most likely to be quietly dropped under delivery pressure**, because nothing fails a build when it is. That's what ADR-026's manual matrix is for.
+- **The coalescing/throttling behaviour now has an automated gate** ([Detail](#automated-tests-for-announcement-behaviour)), so a regression that announces per-token noise or drops the throttle fails the build, not just a manual pass. What the gate still can't check is _phrasing quality_ — whether "Tasks: 2 added" is actually the most useful wording. That judgement stays with ADR-026's manual matrix.
+- `@guidepup/virtual-screen-reader` is a new dev dependency, MIT-licensed, jsdom-based — no OS screen reader or extra CI runner needed. Its docs are written against Jest; since ADR-028 chose Vitest, confirming it works under Vitest's jsdom environment is a short spike before it's relied on, not an assumption.
 
 ## Alternatives considered
 
 - **Expose everything, announce everything.** The naive reading of "let the screen reader read it as it sees fit". Rejected: with word-by-word streaming it produces continuous interruption, and the screen reader has no way to know which of a hundred changes mattered.
-- **Suppress the view, announce only summaries.** The other pole. Rejected because it removes browsing — a user who hears "3 tasks running" and then can't explore those tasks has less access than before. Suppression also hides content from other assistive technology that relies on the same information.
+- **Suppress the view, announce only summaries.** The opposite approach. Rejected because it removes browsing — a user who hears "3 tasks running" and then can't explore those tasks has less access than before. Suppression also hides content from other assistive technology that relies on the same information.
 - **A live region per component.** The path of least resistance during implementation, and the reason live-region output is so often unusable. Rejected in favour of one announcer — see [Detail](#one-announcer-not-scattered-live-regions).
 - **A user-configurable verbosity setting.** Genuinely useful, and deferred: it assumes a sensible default to vary from, which is what this ADR establishes. Worth revisiting once the manual pass has tuned the defaults.
+- **Real screen reader automation in CI** (`@guidepup/playwright` driving VoiceOver/NVDA). The most faithful test available, and rejected as a required gate on cost, not capability: it needs a macOS runner and a Windows runner specifically for this, on top of whatever the rest of CI already runs on. Left as a documented, optional upgrade — see [Detail](#automated-tests-for-announcement-behaviour).
 
 ## Prompts to update when this is decided
 
@@ -98,6 +111,30 @@ Each live list accumulates its changes and emits at most one announcement per in
 
 Under a burst — a task fanning out to six assignments — the user hears one sentence, not six.
 
+### Automated tests for announcement behaviour
+
+Two layers, both in the Vitest/Testing Library component tier ([ADR-028](ADR-028-frontend-testing-strategy.md)), neither needing a browser or a real screen reader.
+
+**Layer 1 — assert on the live region's DOM node.** Render the announcer, dispatch mock `WireEvent`s, advance fake timers past the throttle interval, and assert the live region's `textContent` (`@testing-library/jest-dom`'s `toHaveTextContent`). This alone catches "the wrong text landed" or "it fired before the throttle interval elapsed."
+
+**Layer 2 — `@guidepup/virtual-screen-reader`.** A screen reader simulator, not a DOM inspector: it runs against jsdom, and reports what would actually be _spoken_, in order.
+
+```ts
+import { virtual } from '@guidepup/virtual-screen-reader';
+
+await virtual.start({ container: document.body });
+// ...dispatch WireEvents, advance fake timers past the throttle interval...
+expect(virtual.spokenPhraseLog()).toEqual(['Tasks: 2 added, 1 completed']);
+```
+
+`spokenPhraseLog()` is the assertion that matters: it's the ordered sequence of everything the simulator would announce. A test asserting the log contains exactly one coalesced phrase — and does **not** contain a hundred per-token entries — directly encodes the one rule this ADR exists to enforce. `lastSpokenPhrase()` covers the simpler single-announcement cases (dialog labelling, error alerts).
+
+MIT-licensed, actively maintained, and — being DOM-based rather than tied to a specific test runner — should port from its Jest-oriented docs to Vitest without needing Jest itself. Confirm that in a short spike before relying on it; don't assume it.
+
+**What this doesn't replace.** Neither layer judges whether the announced text is _good_ — clear, appropriately brief, correctly prioritised. That's a human judgement, and stays with ADR-026's manual screen reader matrix. These two layers close the "silently regressed" gap; they don't close the "is it well-designed" one.
+
+**The real-screen-reader option, if it's ever adopted.** `@guidepup/playwright` drives actual VoiceOver (macOS) and NVDA (Windows) from Playwright, and would sit in the browser tier's six journeys rather than the component tier. Not adopted now — see [Alternatives considered](#alternatives-considered) for the CI-cost reasoning — but it can be added later without touching Layers 1–2.
+
 ### One announcer, not scattered live regions
 
 A single application-level announcer owns the polite and assertive regions. React Aria's live announcer ([ADR-026](ADR-026-web-ui-accessibility-and-component-library.md)) provides the primitive. Components request announcements through it, rather than each mounting its own live region.
@@ -114,7 +151,7 @@ Scattered live regions are the standard way this goes wrong:
 - **Route change** — the main heading, which must be programmatically focusable
 - **Destructive completion**, such as closing a chat — a stable neighbouring element, never the page body
 
-Moving focus anywhere else — including "helpfully" onto newly arrived content — steals the cursor from someone who was reading something else.
+Moving focus anywhere else — including "helpfully" onto newly arrived content — pulls a screen reader user away, without warning, from whatever they were reading.
 
 ### Live updates never reorder the list
 

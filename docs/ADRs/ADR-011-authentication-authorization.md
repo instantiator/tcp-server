@@ -137,13 +137,19 @@ write to it.
 
 Nothing about the permission model above changes. Two things are recorded:
 
-**1. ADR-023's `?mine=true` is a convenience filter, not a security control.**
-[ADR-023](ADR-023-backend-api-surface-for-the-web-ui.md) adds membership
-scoping to `GET /api/company` so the overview shows the right companies. That is
-a _list filter_. `GET /api/company/:id`, `GET /api/task?companyId=…`,
-`POST /api/agent/chat/start` and every other route remain unscoped — a user who
-knows or guesses an ID still reaches it. Anyone reading this ADR after ADR-023
-lands must not conclude the gap is closed.
+**1. ADR-023 scopes one list; it does not enforce anything.**
+[ADR-023](ADR-023-backend-api-surface-for-the-web-ui.md) makes
+`GET /api/company` return the caller's own companies by default, with
+`?all=true` as an explicit, named escape hatch — a real improvement over an
+unscoped default, and still not a security control: `?all=true` carries no
+permission check yet, so any authenticated caller can still ask for it and get
+every company, exactly as today. `GET /api/company/:id`,
+`GET /api/task?companyId=…`, `POST /api/agent/chat/start` and every other route
+remain entirely unscoped regardless of this change — a user who knows or
+guesses an ID still reaches it. Anyone reading this ADR after ADR-023 lands
+must not conclude the gap is closed; `?all=true` is exactly the flag this
+amendment's enforcement work (point 2) will eventually gate to system
+administrators.
 
 **2. Enforcement is a pre-deployment gate, not a backlog item.** The permission
 flags in the model above need actual enforcement — a guard resolving the caller's

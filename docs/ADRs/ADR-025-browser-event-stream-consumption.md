@@ -1,7 +1,8 @@
 # ADR-025: Browser Event Stream Consumption
 
-**Status:** Proposed (2026-07-30)
+**Status:** Accepted (2026-08-03)
 
+> [!NOTE]
 > **This supersedes the "use a native `EventSource`" recommendation in `docs/prompts/phase 02 - web ui/001.01.00.prompt - mvp planning.md`.** That recommendation cannot be implemented — see below.
 
 ## Context
@@ -19,8 +20,6 @@ That decision isn't re-opened. This ADR covers the browser end of the same pipe.
 ## What needs deciding
 
 **The obvious approach doesn't work.** Browsers have a built-in SSE client called `EventSource`, but it can only be given a URL — there is no way to attach an `Authorization` header. All three streams require one. So `EventSource` is unusable here, and the planning prompt's recommendation predates that discovery.
-
-Two further facts shape the answer:
 
 1. **A working reader already exists.** `apps/tcp-cli/src/lib/core/sse.ts` (30 lines) and `sse-reader.ts` (43 lines) read these exact endpoints and are unit-tested. What they lack is reconnection.
 2. **Connection count is a real limit.** Agent transcripts only ever reach the agent stream, so every open chat and every assignment panel needs its own connection. A task dialog with four assignments plus the live activity view is already five — and browsers cap concurrent connections at six per address under HTTP/1.1.
@@ -40,8 +39,6 @@ Two further facts shape the answer:
 **Use fetch + `ReadableStream`, extending the reader `tcp-cli` already has, and move it into `@tcp/shared/client`.**
 
 Both clients then parse the stream through one implementation, so the CLI and the browser can't drift on what an event means.
-
-Three things follow:
 
 - **HTTP/2[^http2] is required — in development as well as production.** Not a nicety; see [why](#http2-is-required-in-development-too).
 - **One [subscription manager](#a-subscription-manager-owns-every-connection) owns every connection**, shared between components and capped.
@@ -64,7 +61,7 @@ The Microsoft library is the strongest alternative and is [rejected on maintenan
 ## Alternatives considered
 
 - **`@microsoft/fetch-event-source`.** The strongest alternative — it supplies exactly the reconnection we lack. Rejected on maintenance age, and because it would leave two parsers for the same format in one repository. See [Detail](#why-not-the-microsoft-library).
-- **`eventsource-parser`.** Maintained and widely used, but parser-only. It replaces the 30 lines that already work and leaves the 40–60 lines that don't exist. The wrong half of the problem.
+- **`eventsource-parser`.** Maintained and widely used, but parser-only. It replaces the 30 lines that already work and leaves the 40–60 lines that don't exist — it solves the part of the problem we don't have, not the part we do.
 - **Token in the query string.** The only route to using `EventSource` with no server change. Rejected: bearer tokens in URLs get logged by proxies and kept in browser history.
 - **Cookie authentication for stream routes.** Also enables `EventSource`, and needs a parallel server-side auth mechanism plus a session, contradicting ADR-024.
 - **Polling instead of streaming.** Sidesteps the connection limit entirely. Rejected — live observation is the capability the web client exists to provide ([ADR-020](ADR-020-web-ui-mvp-scope.md)).

@@ -35,7 +35,7 @@ This is also a style preference: files that are linked to an application should 
 | ------------------------------------ | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | Layout                               | `apps/backend/`, `apps/frontend/tcp-frontend/`, `libs/tcp-shared/` each with a `package.json` | Root keeps the Nest apps in place; only `tcp-frontend` and `tcp-shared` become packages | Frontend added under `apps/`, excluded from root tooling like `tcp-stub-llm` |
 | Solves the barrel problem            | Yes, via `exports`                                                                            | Yes, via `exports`                                                                      | Only by convention                                                           |
-| CI coverage for the frontend         | Yes                                                                                           | Yes                                                                                     | No — inherits the `tcp-stub-llm` blind spot                                  |
+| CI coverage for the frontend         | Yes                                                                                           | Yes                                                                                     | No — inherits the same gap in coverage that `tcp-stub-llm` has               |
 | Matches the stated layout preference | Yes                                                                                           | Partly                                                                                  | No                                                                           |
 | Migration cost                       | High — see [migration cost](#migration-cost)                                                  | Low                                                                                     | Very low                                                                     |
 
@@ -44,8 +44,6 @@ This is also a style preference: files that are linked to an application should 
 **Adopt npm workspaces[^workspaces] with three members: `apps/backend`, `apps/frontend/tcp-frontend`, and `libs/tcp-shared`.**
 
 The full split is preferred over the minimal one, because the stated goal is the layout itself (not only the barrel fix). The cost is a one-off migration with a mechanical checklist; the layout is permanent. It is recorded here so the migration is scoped deliberately rather than discovered halfway through.
-
-Four points carry the decision:
 
 - The root `package.json` shrinks but [does not disappear](#the-root-packagejson-shrinks-but-does-not-disappear) — npm workspaces require it.
 - `tcp-shared` becomes a package, and [its `exports` map is what keeps server-only code out of the browser](#tcp-shared-becomes-a-package-and-its-exports-map-is-the-enforcement).
@@ -60,13 +58,13 @@ Four points carry the decision:
 - **`scripts/hooks/pre-push`'s migration-drift regex fails open.** If its path is not updated, the guard stops firing and nothing reports it. This is the single most dangerous item on the list precisely because its failure is silent.
 - `npm ci --omit=dev` at the root installs prod dependencies for every workspace, so each backend image carries the frontend's few prod deps. A few MB, and already true today across the six services sharing one `node_modules`. Scoping with `--workspace` would avoid it and is not required.
 - CI's `setup-node` currently has no `cache-dependency-path` and hashes `**/package-lock.json`. Adding manifests changes the cache key; an explicit path becomes worth setting.
-- The frontend gains real CI coverage — install, lint, typecheck, test — rather than inheriting `tcp-stub-llm`'s blind spot. Bringing `tcp-stub-llm` itself in as a fourth workspace is now cheap, and is **out of scope here**: it has its own TypeScript major and its own eslint config, and mixing that into this migration would confuse two independent problems.
+- The frontend gains real CI coverage — install, lint, typecheck, test — rather than inheriting `tcp-stub-llm`'s gap in coverage. Bringing `tcp-stub-llm` itself in as a fourth workspace is now cheap, and is **out of scope here**: it has its own TypeScript major and its own eslint config, and mixing that into this migration would confuse two independent problems.
 - `libs/tcp-shared` gaining a `package.json` does not remove the ten `tsconfig` path declarations or four Jest mappers. They keep working; converging on workspace resolution is optional follow-up, not part of this change.
 
 ## Alternatives considered
 
 - **Minimal split** — `tcp-shared` and the frontend become packages, the six Nest apps stay put. Delivers the entire build-breaking fix (the `exports` split) and full frontend CI for a fraction of the cost, since every item in the cost list is caused by relocating the Nest apps. Rejected only because the layout is itself a goal; it remains the fallback if the migration proves disruptive.
-- **Repeat the `tcp-stub-llm` pattern** — add the frontend under `apps/` with seven exclusions and no workspace machinery. Cheapest, and rejected: it reproduces a known blind spot, on a larger application, and leaves the barrel split unenforced.
+- **Repeat the `tcp-stub-llm` pattern** — add the frontend under `apps/` with seven exclusions and no workspace machinery. Cheapest, and rejected: it reproduces a known gap in coverage, on a larger application, and leaves the barrel split unenforced.
 - **Nx or Turborepo.** Real caching and task-graph wins at this size. Rejected: a build orchestrator is a much larger change than the problem needs, and the single-`npm ci` Dockerfile already delivers the sharing that matters here.
 
 ## Prompts to update when this is decided
