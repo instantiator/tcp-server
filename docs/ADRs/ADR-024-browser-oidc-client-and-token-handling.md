@@ -1,6 +1,6 @@
 # ADR-024: Browser OIDC Client and Token Handling
 
-**Status:** Approved (2026-08-03)
+**Status:** Accepted (2026-08-03)
 
 ## Context
 
