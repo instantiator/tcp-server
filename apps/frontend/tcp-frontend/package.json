@@ -1,12 +1,40 @@
 {
   "name": "tcp-frontend",
   "version": "0.0.1",
-  "description": "The TCP web client. Scaffolded in 002.01 — this workspace currently holds only its manifest, its TypeScript config, and the @tcp/shared import-boundary check.",
+  "description": "The TCP web client: React, Vite, React Router and TanStack Query, with React Aria Components for behaviour.",
   "private": true,
   "license": "MIT",
+  "type": "module",
   "scripts": {
-    "typecheck": "tsc --noemit -p tsconfig.json",
-    "test": "npm run test:import-boundary",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --fix",
+    "lint:check": "eslint .",
+    "typecheck": "tsc --noemit -p tsconfig.json && tsc --noemit -p tsconfig.node.json",
+    "test": "vitest run && npm run test:import-boundary",
     "test:import-boundary": "eslint --no-ignore -f json test/fixtures/server-import-must-fail.ts | grep -q '\"ruleId\":\"no-restricted-imports\"'"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.101.4",
+    "@tcp/shared": "^0.0.1",
+    "react": "^19.2.8",
+    "react-aria-components": "^1.20.0",
+    "react-dom": "^19.2.8",
+    "react-router": "^8.3.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "jsdom": "^29.1.1",
+    "vite": "^8.2.0",
+    "vitest": "^4.1.10"
   }
 }

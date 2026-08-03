@@ -1,0 +1,31 @@
+/*
+ * The `high-contrast` theme: few colours, used functionally for edges, boxes
+ * and focus. Targets WCAG 2.2 AAA contrast (7:1), which is the criterion this
+ * theme exists to meet (ADR-026, 1.4.6 Contrast Enhanced).
+ *
+ * Token names must stay in step with `default.css` — see the note there.
+ */
+
+:root[data-theme='high-contrast'][data-mode='light'] {
+  --tcp-color-bg: #ffffff;
+  --tcp-color-surface: #ffffff;
+  --tcp-color-text: #000000;
+  --tcp-color-text-muted: #3d3d3d;
+  --tcp-color-border: #000000;
+  --tcp-color-accent: #0000cc;
+  --tcp-color-accent-text: #ffffff;
+  --tcp-color-focus: #0000cc;
+  --tcp-color-danger: #a00000;
+}
+
+:root[data-theme='high-contrast'][data-mode='dark'] {
+  --tcp-color-bg: #000000;
+  --tcp-color-surface: #000000;
+  --tcp-color-text: #ffffff;
+  --tcp-color-text-muted: #cccccc;
+  --tcp-color-border: #ffffff;
+  --tcp-color-accent: #66ccff;
+  --tcp-color-accent-text: #000000;
+  --tcp-color-focus: #ffff00;
+  --tcp-color-danger: #ff8080;
+}

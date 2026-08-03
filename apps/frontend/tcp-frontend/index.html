@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TCP</title>
+    <script>
+      // Applies the theme before the first paint. Without this the page
+      // renders in whatever the stylesheets default to and then corrects
+      // itself once the bundle loads, which is a visible flash of the wrong
+      // theme (ADR-026).
+      //
+      // This deliberately duplicates resolveThemeChoice/applyThemeChoice from
+      // src/theme/storage.ts: it has to run ahead of the bundle, so it cannot
+      // import them. Change one, change the other. Persisting is left to
+      // ThemeProvider, so this only ever reads.
+      (function () {
+        var themes = ['default', 'high-contrast'];
+        var modes = ['light', 'dark'];
+        var choice = null;
+        try {
+          var parsed = JSON.parse(localStorage.getItem('tcp.theme'));
+          if (
+            parsed &&
+            themes.indexOf(parsed.theme) !== -1 &&
+            modes.indexOf(parsed.mode) !== -1
+          ) {
+            choice = parsed;
+          }
+        } catch (e) {
+          // Unreadable or absent storage falls through to the system settings.
+        }
+        if (!choice) {
+          choice = {
+            theme: matchMedia('(prefers-contrast: more)').matches
+              ? 'high-contrast'
+              : 'default',
+            mode: matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : 'light',
+          };
+        }
+        document.documentElement.dataset.theme = choice.theme;
+        document.documentElement.dataset.mode = choice.mode;
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

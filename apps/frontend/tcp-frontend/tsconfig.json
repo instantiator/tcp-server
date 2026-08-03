@@ -7,15 +7,17 @@
   // omits the bare `@tcp/shared`. That alone does not block the server-only
   // export — @tcp/shared is a real workspace package, so Node resolution
   // finds it through node_modules regardless. The alias omission removes the
-  // *convenient* route; the `no-restricted-imports` rule in the root
+  // *convenient* route; the `no-restricted-imports` rule in this workspace's
   // eslint.config.mjs is what actually fails the edit, and Vite failing on
-  // `typeorm` (002.01) is the backstop.
+  // `typeorm` is the backstop.
   "compilerOptions": {
     "target": "ES2023",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "preserve",
     "moduleResolution": "bundler",
     "resolvePackageJsonExports": true,
+    "jsx": "react-jsx",
+    "verbatimModuleSyntax": true,
     "paths": {
       "@tcp/shared/client": ["../../../libs/tcp-shared/src/client.ts"]
     },
@@ -37,7 +39,8 @@
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true
   },
-  // test/fixtures holds the deliberately-broken import-boundary fixture, which
-  // must not be typechecked. See package.json's test:import-boundary.
+  // Tests are colocated in src/, so this covers them. test/fixtures holds the
+  // deliberately-broken import-boundary fixture, which must not be
+  // typechecked — see package.json's test:import-boundary.
   "include": ["src/**/*"]
 }

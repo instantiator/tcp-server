@@ -70,7 +70,7 @@ The full split is preferred over the minimal one, because the stated goal is the
 ## Prompts to update when this is decided
 
 - `002.00.00.prompt - monorepo restructuring.md`
-- `002.01.00.prompt - application infrastructure (draft).md`
+- `002.01.00.prompt - application infrastructure.md`
 - `002.02.00.prompt - testing infrastructure (draft).md`
 - `002.03.00.prompt - static hosting and runtime configuration (draft).md`
 - `005.01.00.prompt - generated api client (draft).md`
@@ -158,6 +158,14 @@ Two consequences of the `./client` surface worth recording:
 - **Git hooks are copies, not symlinks.** `npm run hooks:install` copies `scripts/hooks/*` into `.git/hooks/`. Editing the tracked versions changes nothing until it is re-run — which matters most for the migration-drift guard, whose whole risk is silent failure.
 
 **ADR bodies elsewhere in `docs/ADRs/` were not path-swept.** They are dated records, and most of their `apps/tcp-<app>/…` references describe where code was at the time. `docs/development.md` is the authority on the current layout.
+
+## Amendment as implemented (002.01) <a id="amendment-as-implemented-00201"></a>
+
+**Layer 3 does not exist by default — it had to be built.** [The `exports` section](#tcp-shared-becomes-a-package-and-its-exports-map-is-the-enforcement) says "Vite fails the build when it meets `typeorm` or `ioredis`", and [the 002.00 amendment](#amendments-as-implemented-00200) repeats it as arriving with 002.01. Tested directly with Vite 8 (rolldown), it is false: adding `import '@tcp/shared'` to a source file **builds successfully**. Vite externalises the Node built-ins with warnings and emits a bundle carrying express, body-parser, multer and busboy — 4.5 MB against the normal 250 kB. It then fails in the browser at runtime, with nothing pointing back at the import.
+
+The layer is therefore an explicit `resolveId` plugin in `apps/frontend/tcp-frontend/vite.config.ts`, which throws on the bare specifier and on any deep import other than `@tcp/shared/client`. Making it explicit also covers the development server, which the assumed behaviour never would have.
+
+All three layers are now exercised: the eslint rule fires (asserted by `npm run test:import-boundary`), the plugin fails the build with a legible message, and `src/shared-client.ts` imports a **value** from `@tcp/shared/client` as the positive control — the previous `import type` was erased before the bundler saw it and proved nothing about resolution through the `exports` map.
 
 ### How the migration-drift guard was verified
 

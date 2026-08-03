@@ -1,0 +1,19 @@
+{
+  // Covers the build tooling only. `vite.config.ts` runs in Node and needs
+  // Node types; tsconfig.json (the browser project) sets `"types": []` on
+  // purpose, so it cannot typecheck this file and must not be widened to.
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "resolvePackageJsonExports": true,
+    "types": ["node"],
+    "noEmit": true,
+    "strict": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  },
+  "include": ["vite.config.ts"]
+}

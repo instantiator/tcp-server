@@ -1,0 +1,76 @@
+/*
+ * The minimal base stylesheet. React Aria Components ships no styling at all,
+ * so without this there is no focus ring and no border and early screens
+ * cannot be reviewed by a sighted tester (ADR-026).
+ *
+ * Two rules hold for every stylesheet in this application:
+ *   1. No literal colour, spacing or border value — use a `--tcp-*` token.
+ *   2. Component stylesheets carry meaningful class names with empty rule
+ *      bodies, to be filled per theme later.
+ * This file is the one place the tokens themselves are declared.
+ */
+
+/*
+ * Non-colour tokens are theme-independent, so they are declared once here
+ * rather than repeated across the four theme blocks. A theme may still
+ * override any of them.
+ */
+:root {
+  --tcp-space-xs: 0.25rem;
+  --tcp-space-sm: 0.5rem;
+  --tcp-space-md: 1rem;
+  --tcp-space-lg: 1.5rem;
+  --tcp-space-xl: 2.5rem;
+
+  --tcp-border-width: 1px;
+  --tcp-radius: 0.25rem;
+
+  --tcp-focus-ring-width: 2px;
+  --tcp-focus-ring-offset: 2px;
+
+  --tcp-font-family:
+    system-ui, -apple-system, 'Segoe UI', roboto, helvetica, arial, sans-serif;
+  --tcp-font-size-base: 1rem;
+  --tcp-line-height: 1.5;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: var(--tcp-space-md);
+  background-color: var(--tcp-color-bg);
+  color: var(--tcp-color-text);
+  font-family: var(--tcp-font-family);
+  font-size: var(--tcp-font-size-base);
+  line-height: var(--tcp-line-height);
+}
+
+/*
+ * The single most important rule in this file: React Aria's components are
+ * keyboard-operable from the start, but invisible to a sighted keyboard user
+ * without a focus indicator.
+ */
+:focus-visible {
+  outline: var(--tcp-focus-ring-width) solid var(--tcp-color-focus);
+  outline-offset: var(--tcp-focus-ring-offset);
+}
+
+/*
+ * Honoured from the start. There is little motion in an unstyled MVP, which
+ * is exactly why establishing the convention now is cheap (ADR-026).
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

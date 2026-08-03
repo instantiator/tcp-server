@@ -1,3 +1,5 @@
+## Backend
+
 | Name                                     | License      | Repository                                                     | Author                                                                 | Installed | Defined   |
 | :--------------------------------------- | :----------- | :------------------------------------------------------------- | :--------------------------------------------------------------------- | :-------- | :-------- |
 | @aws-sdk/client-s3                       | Apache-2.0   | git+https://github.com/aws/aws-sdk-js-v3.git                   | AWS SDK for JavaScript Team https://aws.amazon.com/sdk-for-javascript/ | 3.1090.0  | ^3.1090.0 |
@@ -50,4 +52,17 @@
 | typeorm                                  | MIT          | git+https://github.com/typeorm/typeorm.git                     | TypeORM maintainers@typeorm.io                                         | 1.1.0     | ^1.1.0    |
 | undici                                   | MIT          | git+https://github.com/nodejs/undici.git                       | n/a                                                                    | 8.8.0     | ^8.8.0    |
 | zod                                      | MIT          | git+https://github.com/colinhacks/zod.git                      | Colin McDonnell <zod@colinhacks.com>                                   | 4.4.3     | ^4.4.3    |
+
+
+
+## Web client
+
+| Name                  | License    | Repository                                      | Author                           | Installed | Defined  |
+| :-------------------- | :--------- | :---------------------------------------------- | :------------------------------- | :-------- | :------- |
+| @tanstack/react-query | MIT        | git+https://github.com/TanStack/query.git       | tannerlinsley                    | 5.101.4   | ^5.101.4 |
+| react                 | MIT        | git+https://github.com/react/react.git          | n/a                              | 19.2.8    | ^19.2.8  |
+| react-aria-components | Apache-2.0 | git+https://github.com/adobe/react-spectrum.git | n/a                              | 1.20.0    | ^1.20.0  |
+| react-dom             | MIT        | git+https://github.com/react/react.git          | n/a                              | 19.2.8    | ^19.2.8  |
+| react-router          | MIT        | https://github.com/remix-run/react-router       | Remix Software <hello@remix.run> | 8.3.0     | ^8.3.0   |
+
 

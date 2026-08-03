@@ -49,7 +49,7 @@ One `npm ci` at the root installs all three; dependencies hoist to the root `nod
 }
 ```
 
-The default export re-exports TypeORM entities, NestJS modules, BullMQ, ioredis and MinIO helpers — none of which run in a browser. The web client may import **only** `@tcp/shared/client`, enforced by a `no-restricted-imports` rule in the root `eslint.config.mjs`. `apps/frontend/tcp-frontend/test/fixtures/server-import-must-fail.ts` is a committed fixture that must fail lint; `npm run test:import-boundary` asserts it does.
+The default export re-exports TypeORM entities, NestJS modules, BullMQ, ioredis and MinIO helpers — none of which run in a browser. The web client may import **only** `@tcp/shared/client`, enforced by a `no-restricted-imports` rule in `apps/frontend/tcp-frontend/eslint.config.mjs` and by a resolver plugin in its `vite.config.ts`. `apps/frontend/tcp-frontend/test/fixtures/server-import-must-fail.ts` is a committed fixture that must fail lint; `npm run test:import-boundary` asserts it does. See [Web Client](web-client.md#the-tcpshared-boundary) — Vite does _not_ reject the bare specifier on its own, which is why the plugin exists.
 
 Everything in `client.ts` must survive type erasure with no runtime import — see the rule documented at the top of that file before adding to it.
 
@@ -143,10 +143,18 @@ apps/
     tsconfig.json
   dist/apps/<app>/            # build output (gitignored)
  frontend/
-  tcp-frontend/              # ── workspace: the web client (scaffolded in 002.01)
-   src/                       # application code; imports @tcp/shared/client only
+  tcp-frontend/              # ── workspace: the web client. See docs/web-client.md
+   index.html                 # entry document; carries the pre-paint theme script
+   vite.config.ts             # dev port from EXPOSE_PORT_WEB; @tcp/shared boundary plugin; vitest
+   eslint.config.mjs          # browser/ESM rules + jsx-a11y as errors (the root config is Node)
+   tsconfig.json              # browser target; NO bare @tcp/shared path alias, "types": []
+   tsconfig.node.json         # vite.config.ts only — the one file here that runs in Node
+   src/
+     strings.ts               # the single lookup every user-facing string resolves through
+     theme/                   # storage contract, ThemeProvider, useTheme
+     styles/                  # base.css + themes/{default,high-contrast}.css — tokens only
+     *.test.tsx               # Vitest + Testing Library, colocated
    test/fixtures/             # server-import-must-fail.ts — the boundary's negative control
-   tsconfig.json              # browser target; NO bare @tcp/shared path alias
  tcp-stub-llm/               # NOT a workspace: own package.json/tsconfig/lint config, no
                              # NestJS, no @tcp/shared. See docs/stub-llm.md (port 3002).
 libs/
@@ -199,8 +207,13 @@ npm run build                 # Build all apps + generate schema + license repor
 npm run build tcp-server      # Build tcp-server only
 npm run build tcp-agent       # Build tcp-agent only
 npm run build:tcp-cli         # Build tcp-cli standalone binary
-npm run lint                  # ESLint with auto-fix
+npm run lint                  # ESLint with auto-fix (delegates to each workspace's own config)
 npm run format                # Prettier over apps/, libs/, docs/
+
+# Web client (see docs/web-client.md)
+npm run dev --workspace apps/frontend/tcp-frontend     # Vite dev server on EXPOSE_PORT_WEB
+npm run build --workspace apps/frontend/tcp-frontend   # static bundle into dist/
+npm test --workspace apps/frontend/tcp-frontend        # Vitest + the import-boundary check
 
 # Quality gate (also run by the git hooks)
 ./dev-environment/scripts/check.sh          # Full: lint, typecheck, build, unit tests, aislop
@@ -284,6 +297,8 @@ reports exactly what that role would retrieve in a real prompt.
 - **Entities in `libs/tcp-shared/src/models/`** double as TypeORM entities and JSON Schema sources. Annotate with TSDoc validation tags (`@format`, `@minLength`, etc.) so the generated schema is accurate.
 - **Prompt content lives in `libs/tcp-shared/src/prompts/`** — `mode-prompts.ts` (per-mode preambles), `mode-tools.ts` (per-mode server/tool gating), `prompt-assembly.ts` (the shared initial-prompt-part builders used by both `ChatService` and `AgentLoopService`), and `qa-prompts.ts` (QA presentation/rejection text used by `TaskOrchestrationService`). Add new prompt-part logic here, not locally in an app, so tcp-server and tcp-agent can't drift.
 - **`schemas/schema.json`** and **`docs/licenses.md`** are generated artefacts — never edit them directly; regenerate via `npm run build`.
+- **No user-facing string is inlined in JSX.** Every one resolves through `t('key')` from `apps/frontend/tcp-frontend/src/strings.ts`, so the phase 03 translation work replaces one module instead of every component ([ADR-021](ADRs/ADR-021-web-ui-framework-and-architecture.md#strings-and-theme-tokens)).
+- **No literal colour, spacing or border value in a component stylesheet.** They resolve through `--tcp-*` custom properties, and component stylesheets ship with meaningful class names and empty rule bodies to be filled per theme ([ADR-026](ADRs/ADR-026-web-ui-accessibility-and-component-library.md#how-themes-work)). This one is invisible to linting — it only holds if review enforces it.
 - **Unit tests** (`.spec.ts`) use `better-sqlite3` in-memory; wire TypeORM directly in `Test.createTestingModule`, never through `AppModule`.
 - **Integration and e2e tests** boot against real PostgreSQL, Redis, and MinIO started by [testcontainers](https://node.testcontainers.org/) from Jest's global setup (`test/{integration,e2e}/global-setup.ts`), on random host ports. Connection env vars are provisioned there, so `require-env.ts` (not a silent skip) guards each spec. See [docs/testing.md](testing.md#test-infrastructure).
 - **Event architecture (audit-as-source-of-truth)**: audit events are the single source of truth for both history and live streaming (see [ADR-008](ADRs/ADR-008-audit-logging.md)). `AuditService.write` persists a row then hands it to `AuditEventPublisher`, which emits it as a `WireEvent` (`{ type: 'audit'; event }` or a live-only `{ type: 'stream'; … }` token delta — the sole non-audit wire shape) on the relevant agent/task/company SSE channel. All three CLI surfaces (`tui`, `chat`, `eavesdrop`) render through one shared library — `apps/backend/apps/tcp-cli/src/lib/render/` (`EventLogBuffer` accumulates events; `StreamPresenter` writes stdout/stderr incrementally; the renderer registry maps each audit event to display lines) — so history replay and the live stream produce identical output. Add new event kinds by extending the renderer registry, not by adding a parallel event family.

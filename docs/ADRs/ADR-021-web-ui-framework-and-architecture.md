@@ -70,7 +70,7 @@ See Detail for [how the generated types stay current](#the-generated-artefact-is
 
 ## Prompts to update when this is decided
 
-- `002.01.00.prompt - application infrastructure (draft).md`
+- `002.01.00.prompt - application infrastructure.md`
 - `003.02.00.prompt - application shell, routing and header (draft).md`
 - `005.01.00.prompt - generated api client (draft).md`
 

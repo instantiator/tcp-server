@@ -1,11 +1,12 @@
 # compiled output — unanchored: each workspace builds into its own dist/
 # (apps/backend/dist), not a single root one.
 dist
-/node_modules
 /build
 
-# tcp-stub-llm is a standalone package with its own node_modules
-/apps/tcp-stub-llm/node_modules
+# Unanchored: most dependencies hoist to the root, but npm still nests a few
+# per workspace wherever a version cannot be shared — and tcp-stub-llm, which
+# is not a workspace at all, has its own tree.
+node_modules
 
 # Logs
 logs
