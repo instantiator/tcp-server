@@ -122,6 +122,49 @@ few things that follow from it:
 The gap this ADR names in Consequences — no per-action permission enforcement —
 is unaffected and still open.
 
+<a id="amendment-phase-02-membership-scoping"></a>
+
+## Amendment (phase 02) — membership scoping for the web UI
+
+_2026-07-30._ The deferred authorization gap is coming due. Until now the only
+client has been `tcp-cli`, run by an operator who already has the credentials
+and the intent to administer the system; the gap's practical exposure was
+limited by there being no other way in. A browser client with a **public** OIDC
+application ([ADR-024](ADR-024-browser-oidc-client-and-token-handling.md))
+changes that: any account the provider will issue a token to can reach every
+company in the system, read its tasks and knowledge, chat with its agents, and
+write to it.
+
+Nothing about the permission model above changes. Two things are recorded:
+
+**1. ADR-023 scopes one list; it does not enforce anything.**
+[ADR-023](ADR-023-backend-api-surface-for-the-web-ui.md) makes
+`GET /api/company` return the caller's own companies by default, with
+`?all=true` as an explicit, named escape hatch — a real improvement over an
+unscoped default, and still not a security control: `?all=true` carries no
+permission check yet, so any authenticated caller can still ask for it and get
+every company, exactly as today. `GET /api/company/:id`,
+`GET /api/task?companyId=…`, `POST /api/agent/chat/start` and every other route
+remain entirely unscoped regardless of this change — a user who knows or
+guesses an ID still reaches it. Anyone reading this ADR after ADR-023 lands
+must not conclude the gap is closed; `?all=true` is exactly the flag this
+amendment's enforcement work (point 2) will eventually gate to system
+administrators.
+
+**2. Enforcement is a pre-deployment gate, not a backlog item.** The permission
+flags in the model above need actual enforcement — a guard resolving the caller's
+`CompanyUser` for the company an action targets, and rejecting when there is
+none. This does not block local MVP development, where the operator is the only
+user. It **does** block any deployment reachable beyond localhost. Drafted as
+`002.05.00.prompt - membership authorization enforcement (draft).md` in phase 02
+so it has a number and an owner rather than living in this Consequences list.
+
+One implementation note carried over from ADR-023: `CompanyUser.identifier`
+holds an OIDC `sub` **or** an email address, so any enforcement lookup must
+match both. Matching on `sub` alone silently denies users whose membership rows
+were created with an email — a failure that looks like a permissions bug and is
+a data-shape bug.
+
 ## Consequences
 
 - `JwtAuthGuard` is applied to every user-facing controller (see Implemented above)
