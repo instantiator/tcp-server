@@ -109,9 +109,21 @@ target Node, with CommonJS and decorators. Prettier is shared with the root.
 
 - `eslint.config.mjs` — browser globals, ES modules, typed rules, and
   `eslint-plugin-jsx-a11y` **as errors** (ADR-026).
-- `tsconfig.json` — the browser project. `"types": []`, so Node types cannot
+  Three TypeScript projects, each in the directory it governs. Editors resolve a
+  file by walking up to the nearest file _named_ `tsconfig.json` and ignore every
+  other name, so a project under any other name gets typechecked on the command
+  line while the IDE falls back to a default with no `types` at all:
+
+- `src/tsconfig.json` — the browser bundle. `"types": []`, so Node types cannot
   leak in.
-- `tsconfig.node.json` — `vite.config.ts` only, which does run in Node.
+- `tsconfig.json` — the root-level tooling configs, `vite.config.ts` and
+  `playwright.config.ts`, which do run in Node.
+- `test/browser/tsconfig.json` — the Playwright specs, also Node.
+
+> If an editor reports `process` as undefined in one of these and offers to add
+> `"node"` to the browser project's `types`, don't: it dissolves the
+> server/browser boundary ADR-022 exists to hold. The file belongs to one of the
+> Node projects instead.
 
 > `eslint-plugin-jsx-a11y` declares an `eslint@^9` peer while this repo is on
 > eslint 10. Without intervention npm installs a second, nested eslint 9,

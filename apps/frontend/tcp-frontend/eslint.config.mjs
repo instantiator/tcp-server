@@ -18,15 +18,13 @@ export default tseslint.config(
     // The import-boundary fixture is deliberately broken and must not fail the
     // ordinary lint sweep. `test:import-boundary` re-enables it with
     // --no-ignore and asserts that no-restricted-imports fires (ADR-022).
+    // `vite.config.ts` and `playwright.config.ts` are deliberately absent:
+    // they belong to the root tsconfig.json, which `projectService` discovers
+    // like any other, so typed rules work on them and they are linted in full.
     ignores: [
       'dist/**',
       'playwright-report/**',
       'eslint.config.mjs',
-      // Tooling configs belong to tsconfig.node.json, which `projectService`
-      // does not discover — it looks for a tsconfig.json. Typed rules cannot
-      // run on them, so they are excluded rather than half-linted.
-      'vite.config.ts',
-      'playwright.config.ts',
       'test/fixtures/**',
     ],
   },

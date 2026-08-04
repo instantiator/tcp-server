@@ -147,9 +147,10 @@ apps/
    index.html                 # entry document; carries the pre-paint theme script
    vite.config.ts             # dev port from EXPOSE_PORT_WEB; @tcp/shared boundary plugin; vitest
    eslint.config.mjs          # browser/ESM rules + jsx-a11y as errors (the root config is Node)
-   tsconfig.json              # browser target; NO bare @tcp/shared path alias, "types": []
-   tsconfig.node.json         # vite.config.ts only — the one file here that runs in Node
+   playwright.config.ts       # browser tier: chromium, axe, JUnit into test-results/
+   tsconfig.json              # the root-level tooling configs — the Node-side ones
    src/
+     tsconfig.json            # browser target; NO bare @tcp/shared path alias, "types": []
      strings.ts               # the single lookup every user-facing string resolves through
      theme/                   # storage contract, ThemeProvider, useTheme
      styles/                  # base.css + themes/{default,high-contrast}.css — tokens only

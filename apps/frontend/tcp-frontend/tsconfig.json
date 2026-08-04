@@ -1,46 +1,38 @@
 {
-  // The browser workspace does NOT extend tsconfig.base.json: that config
-  // enables decorators and pulls in Node/Jest/multer types, none of which
-  // belong in a bundle that runs in a browser (ADR-022).
+  // The root-level tooling configs — `vite.config.ts` and
+  // `playwright.config.ts`. They run in Node and need Node types; the browser
+  // project (`src/tsconfig.json`) sets `"types": []` on purpose, so it cannot
+  // typecheck them and must not be widened to.
   //
-  // Note the `paths` block declares `@tcp/shared/client` and deliberately
-  // omits the bare `@tcp/shared`. That alone does not block the server-only
-  // export — @tcp/shared is a real workspace package, so Node resolution
-  // finds it through node_modules regardless. The alias omission removes the
-  // *convenient* route; the `no-restricted-imports` rule in this workspace's
-  // eslint.config.mjs is what actually fails the edit, and Vite failing on
-  // `typeorm` is the backstop.
+  // This is why the project lives here rather than under a name like
+  // `tsconfig.node.json`: editors resolve a file by walking up to the nearest
+  // file *named* `tsconfig.json` and ignore every other name. A config named
+  // anything else typechecks these files on the command line while the IDE
+  // quietly falls back to a default project with no `types` at all — which is
+  // what made `process` report as undefined in `playwright.config.ts` while
+  // `npm run typecheck` passed. Each project now sits in the directory it
+  // governs, so both agree:
+  //
+  //   ./tsconfig.json                this, the root-level tooling configs
+  //   ./src/tsconfig.json            the browser bundle
+  //   ./test/browser/tsconfig.json   the Playwright specs
+  //
+  // Project references are the other way to tell an editor this, and are not
+  // usable here: a referenced project must be `composite`, which requires a
+  // closed file list, and the browser project reaches across the workspace
+  // into `@tcp/shared`'s *sources* (ADR-022) rather than its built types.
   "compilerOptions": {
     "target": "ES2023",
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "lib": ["ES2023"],
     "module": "preserve",
     "moduleResolution": "bundler",
     "resolvePackageJsonExports": true,
-    "jsx": "react-jsx",
-    "verbatimModuleSyntax": true,
-    "paths": {
-      "@tcp/shared/client": ["../../../libs/tcp-shared/src/client.ts"]
-    },
-    // Syntax support only, and not a licence to use decorators here.
-    // `@tcp/shared` is consumed as source, not as built .d.ts files (ADR-022),
-    // so `export type { TcpTask }` makes tsc parse TcpTask.model.ts — which
-    // carries `@Entity`/`@Column`. Without this it fails with TS1240 on the
-    // decorators. `emitDecoratorMetadata` stays off: that one has a runtime
-    // cost, and nothing here emits. Browser safety comes from those exports
-    // being `export type` (erased), not from this flag.
-    "experimentalDecorators": true,
-    "types": [],
+    "types": ["node"],
     "noEmit": true,
     "strict": true,
     "isolatedModules": true,
     "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "noFallthroughCasesInSwitch": true
+    "skipLibCheck": true
   },
-  // Tests are colocated in src/, so this covers them. test/fixtures holds the
-  // deliberately-broken import-boundary fixture, which must not be
-  // typechecked — see package.json's test:import-boundary.
-  "include": ["src/**/*"]
+  "include": ["vite.config.ts", "playwright.config.ts"]
 }
