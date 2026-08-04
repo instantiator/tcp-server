@@ -12,21 +12,138 @@ retrofitting them once components exist is disproportionately expensive.
 
 ## Running it
 
+The deployment serves the app. The `tcp-web` service is an nginx image holding
+the built bundle, and it reverse-proxies `/api` to tcp-server so the browser
+sees a single origin ([ADR-029](ADRs/ADR-029-spa-hosting-and-runtime-configuration.md)).
+
 ```bash
-npm run dev --workspace apps/frontend/tcp-frontend      # development server
-npm run build --workspace apps/frontend/tcp-frontend    # static bundle into dist/
-npm run preview --workspace apps/frontend/tcp-frontend  # serve that bundle
+./scripts/start-deployment.sh --project tcp-dev --env-file .env.dev
+# → https://localhost:5173
 ```
 
-The development server's port comes from `EXPOSE_PORT_WEB` (default `5173`),
-read from the repo-root env files by `vite.config.ts` — the same convention
-every other service follows. `strictPort` is on, so a collision fails rather
-than silently moving. Serving the built bundle behind nginx, proxying `/api`,
-and the SPA fallback for deep links are 002.03.
+**https, not http, and that is not optional.** The live views open five or more
+simultaneous event streams, HTTP/1.1 caps a browser at six connections per
+origin, and the seventh request then hangs with no error — a symptom
+indistinguishable from a broken backend
+([ADR-025](ADRs/ADR-025-browser-event-stream-consumption.md)). HTTP/2 removes
+the ceiling by carrying every stream over one connection, and **no browser
+negotiates HTTP/2 without TLS** — there is no cleartext h2c in Chrome, Firefox
+or Safari. So the certificate is not production hardening; it is what makes
+HTTP/2 exist at all, including on a laptop.
+
+The container generates a self-signed certificate on first start, so nothing
+has to be set up before the stack will run. Your browser will warn once per
+machine. [Use mkcert](#a-trusted-certificate-with-mkcert) to stop it.
+
+### Two ports
+
+| Variable              | Default | What listens                                                     |
+| --------------------- | ------- | ---------------------------------------------------------------- |
+| `EXPOSE_PORT_WEB`     | `5173`  | nginx — HTTPS and HTTP/2. The address people and tests use.      |
+| `EXPOSE_PORT_WEB_DEV` | `4173`  | The Vite development server — plain HTTP, reached only by nginx. |
+
+`.env.testing` sets `EXPOSE_PORT_WEB=5174`, so a testing stack can run
+alongside a dev one — the same reason its `EXPOSE_PORT_API` is `3001`.
+
+### The development loop
+
+Vite's development server has no HTTP/2 implementation, so working directly
+against it would mean developing under the exact six-connection ceiling the
+deployment doesn't have. Instead, nginx stays in front and proxies to it:
+
+```bash
+npm run dev --workspace apps/frontend/tcp-frontend                  # Vite on 4173
+./scripts/start-deployment.sh --project tcp-dev --env-file .env.dev --dev-web
+# → https://localhost:5173, now served by Vite through nginx
+```
+
+Hot module replacement still works. nginx doesn't implement WebSockets over
+HTTP/2 (RFC 8441), so the browser opens a separate HTTP/1.1 connection for the
+HMR socket and passes it through `proxy_set_header Upgrade` — page loads and
+API calls stay on HTTP/2.
+
+Loading `http://localhost:4173` directly also works, but there is no `/config.js`
+there and no `/api`, so the app throws on startup with an error saying exactly
+that (`src/runtime-config.ts`).
+
+The other workspace commands are unchanged:
+
+```bash
+npm run build --workspace apps/frontend/tcp-frontend    # static bundle into dist/
+npm run preview --workspace apps/frontend/tcp-frontend  # serve that bundle, HTTP/1.1
+```
 
 The root commands cover this workspace too: `npm run build`, `npm run lint`,
 `npm run lint:check`, `npm run typecheck` and `npm test` all delegate with
 `npm run … --workspaces --if-present`, so CI needs no frontend-specific job.
+
+### A trusted certificate, with mkcert
+
+Optional. It replaces the browser's warning with a padlock, and lets `curl`
+work without `-k`. It takes about two minutes, once per machine.
+
+[mkcert](https://github.com/FiloSottile/mkcert) generates certificates signed
+by a local certificate authority that it installs into your system and browser
+trust stores. Nothing it produces is trusted anywhere else, which is the point.
+
+```bash
+# 1. Install it.
+brew install mkcert nss          # macOS; nss is for Firefox
+sudo apt install mkcert          # Debian/Ubuntu
+
+# 2. Install the local CA into your system and browser trust stores.
+mkcert -install
+
+# 3. Generate the certificate the container expects.
+mkdir -p docker/nginx/certs
+mkcert -cert-file docker/nginx/certs/tls.crt \
+       -key-file  docker/nginx/certs/tls.key \
+       localhost 127.0.0.1 ::1
+
+# 4. Hand it to the container. Add this to docker-compose.dev-web.yml, or
+#    to a compose override of your own:
+#
+#      services:
+#        tcp-web:
+#          volumes:
+#            - ./docker/nginx/certs:/etc/nginx/certs:ro
+#
+# 5. Restart the stack.
+```
+
+A mounted certificate always wins: the entrypoint only generates one when
+`/etc/nginx/certs/tls.crt` is missing or empty. `docker/nginx/certs/` is
+gitignored — a mkcert certificate is trusted only by the machine whose CA
+signed it, and its private key should not travel.
+
+For a real deployment, mount a real certificate the same way.
+
+### Runtime configuration
+
+The bundle is built once and runs in several environments, so two values reach
+it at startup rather than at build time — the identity provider's address and
+the client ID. `docker/nginx/10-tcp-init.sh` writes them into `/config.js` when
+the container starts, and `index.html` loads it ahead of the bundle:
+
+```js
+window.__TCP_CONFIG__ = {
+  oidcIssuerUrl: '…',
+  oidcClientId: '…',
+};
+```
+
+Read it through `getRuntimeConfig()` in `src/runtime-config.ts`, never off the
+global directly. There is no API address here, by construction: it is always
+`/api`, on this same origin.
+
+`config.js` is served `Cache-Control: no-store`, while everything under
+`/assets/` is `immutable`. That asymmetry is deliberate — Vite content-hashes
+assets, so a cached one can never be stale, whereas a cached `config.js` from
+another environment points the app at the wrong identity provider and fails at
+sign-in with nothing to suggest why.
+
+The container refuses to start if either value is empty, rather than serving a
+blank issuer that fails several steps later.
 
 ## Strings: one lookup, no literals in JSX
 

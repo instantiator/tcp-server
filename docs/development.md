@@ -145,7 +145,7 @@ apps/
  frontend/
   tcp-frontend/              # ── workspace: the web client. See docs/web-client.md
    index.html                 # entry document; carries the pre-paint theme script
-   vite.config.ts             # dev port from EXPOSE_PORT_WEB; @tcp/shared boundary plugin; vitest
+   vite.config.ts             # dev port from EXPOSE_PORT_WEB_DEV; @tcp/shared boundary plugin; vitest
    eslint.config.mjs          # browser/ESM rules + jsx-a11y as errors (the root config is Node)
    playwright.config.ts       # browser tier: chromium, axe, JUnit into test-results/
    tsconfig.json              # the root-level tooling configs — the Node-side ones
@@ -212,7 +212,8 @@ npm run lint                  # ESLint with auto-fix (delegates to each workspac
 npm run format                # Prettier over apps/, libs/, docs/
 
 # Web client (see docs/web-client.md)
-npm run dev --workspace apps/frontend/tcp-frontend     # Vite dev server on EXPOSE_PORT_WEB
+npm run dev --workspace apps/frontend/tcp-frontend     # Vite dev server on EXPOSE_PORT_WEB_DEV
+                                                       # (put nginx in front: start-deployment.sh --dev-web)
 npm run build --workspace apps/frontend/tcp-frontend   # static bundle into dist/
 npm test --workspace apps/frontend/tcp-frontend        # Vitest + the import-boundary check
 

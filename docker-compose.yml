@@ -201,6 +201,36 @@ services:
       timeout: 5s
       retries: 10
 
+  tcp-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: tcp-web
+    image: tcp-web:latest
+    restart: unless-stopped
+    environment:
+      # Mirrors tcp-server's OIDC_ISSUER_URL derivation above: explicit value
+      # wins, else derive from the Zitadel host port.
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-http://localhost:${EXPOSE_PORT_ZITADEL:-8080}}
+      # The same confidential client tcp-server uses. A browser SPA can't keep
+      # a client secret, so this is a stopgap — 004.01 replaces it with a
+      # dedicated public client registered for PKCE.
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
+    depends_on:
+      tcp-server:
+        condition: service_healthy
+    ports:
+      # Published as 443: HTTP/2 requires TLS, and no browser negotiates it
+      # over plain HTTP, so the host port has to be the TLS one.
+      - "${EXPOSE_PORT_WEB:-5173}:443"
+    healthcheck:
+      # busybox wget (nginx:alpine's only HTTP client) with --no-check-certificate:
+      # the default certificate is self-signed until a real one is mounted.
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://localhost/config.js >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   tcp-agent:
     build:
       context: .

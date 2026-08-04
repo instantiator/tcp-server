@@ -46,3 +46,10 @@ index arrives as one commit and the final merge preserves exactly that sequence.
 - Each prompt's `> **Branch:**` header names the branch that prompt belongs on.
 - Every prompt requires a model allocation section in its plan — see
   [model allocation](model-allocation.md).
+- Every prompt ends by recording what it leaves open in
+  [unresolved notes](unresolved-notes.md). Work a later prompt will do goes
+  **into that prompt**, not only into the plan or this file; anything whose
+  trigger is a condition rather than a date needs a memory too, because nothing
+  in the repository will prompt anyone to re-check it. A prompt that leaves
+  nothing open says so in its plan — silence and "checked, nothing to add" read
+  identically afterwards.

@@ -3,10 +3,13 @@
 // (ADR-016). scripts/run-browser-tests.sh is the launcher.
 import { defineConfig, devices } from '@playwright/test';
 
-// Set by scripts/run-browser-tests.sh from its --base-url. The fallback is
-// `vite preview`'s default port, for running `playwright test` directly during
-// development. From 002.03 it becomes the deployment's EXPOSE_PORT_WEB.
-const baseURL = process.env.TCP_WEB_URL ?? 'http://localhost:4173';
+// Set by scripts/run-browser-tests.sh from its --base-url. The fallback is the
+// deployment's default EXPOSE_PORT_WEB, for running `playwright test` directly
+// against a stack someone already started.
+//
+// https, not http: the web service is TLS-only because HTTP/2 is (ADR-025), and
+// no browser negotiates HTTP/2 over cleartext.
+const baseURL = process.env.TCP_WEB_URL ?? 'https://localhost:5173';
 
 export default defineConfig({
   testDir: './test/browser',
@@ -28,6 +31,12 @@ export default defineConfig({
   ],
   use: {
     baseURL,
+    // The web container generates a self-signed certificate when none is
+    // mounted, which is the default and is what CI runs against. Trusting it
+    // here is not a lowered bar — mkcert is documented for humans who want the
+    // browser to stop warning (docs/web-client.md), and the tier asserts on the
+    // negotiated protocol either way.
+    ignoreHTTPSErrors: true,
     // With no retries, a failure has to be diagnosable from its first and only
     // run — so the trace is kept then, not on a second attempt that never comes.
     trace: 'retain-on-failure',
@@ -41,14 +50,9 @@ export default defineConfig({
     // { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
     // { name: 'webkit', use: { ...devices['Desktop Safari'] } },
   ],
-  // ponytail: temporary. Nothing serves the SPA until 002.03 puts it behind
-  // nginx in the deployment — until then this starts `vite preview` so the tier
-  // has something to drive. reuseExistingServer makes it inert the moment a
-  // deployment answers on baseURL; delete the whole block in 002.03.
-  webServer: {
-    command: 'npm run preview',
-    url: baseURL,
-    reuseExistingServer: true,
-    timeout: 30_000,
-  },
+  // No webServer block, deliberately. The deployment's tcp-web service serves
+  // the app now, so this tier provisions nothing and drives whatever answers on
+  // baseURL — the same black-box posture as the api and smoke tiers (ADR-016).
+  // A fallback that started its own server would also serve HTTP/1.1, quietly
+  // hiding the protocol regression this tier exists to catch.
 });

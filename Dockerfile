@@ -92,3 +92,24 @@ COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=builder /app/apps/backend/dist/apps/tcp-mcp-tasks ./dist
 EXPOSE 3013
 CMD ["node", "dist/main.js"]
+
+# ---- Web bundle -------------------------------------------------------------
+# `builder`'s build:apps is `--workspace apps/backend` only, so the frontend
+# has never been built by anything above this line. Giving it its own stage
+# off `builder` (rather than folding a second build command into that stage)
+# means the six backend images above don't pay for a frontend build they
+# never use — Docker only executes the layers a given `--target` depends on.
+FROM builder AS web-builder
+RUN npm run build --workspace apps/frontend/tcp-frontend
+
+# tcp-web is the simplest image in the stack: static files behind nginx, no
+# node_modules and no Node runtime at all (ADR-022's server/browser boundary,
+# ADR-029's single-origin proxy). docker/nginx/*.template and 10-tcp-init.sh
+# carry the actual serving logic — see there.
+FROM nginx:1.29-alpine AS tcp-web
+RUN apk add --no-cache openssl
+COPY --from=web-builder /app/apps/frontend/tcp-frontend/dist /usr/share/nginx/html
+COPY docker/nginx/static.conf.template docker/nginx/proxy.conf.template /etc/nginx/tcp/
+COPY docker/nginx/10-tcp-init.sh /docker-entrypoint.d/
+RUN chmod +x /docker-entrypoint.d/10-tcp-init.sh
+EXPOSE 443

@@ -198,18 +198,25 @@ Like the api and smoke tiers, this one is a black-box client: it drives
 whatever is serving at `--base-url` and provisions nothing
 ([ADR-016](ADRs/ADR-016-test-infrastructure-orchestration.md)).
 
-**What needs to be running first:** something serving the built web app. Until
-002.03 puts it behind nginx in the deployment, nothing in the compose stack
-does — so the Playwright config starts `vite preview` itself when nothing
-already answers on the base URL, over whatever is in the frontend's `dist/`.
-Build first:
+**What needs to be running first:** a deployment. Its `tcp-web` service serves
+the app, and there is no `webServer` fallback in `playwright.config.ts` — one
+that started `vite preview` would also serve HTTP/1.1, quietly hiding the
+protocol regression `hosting.spec.ts` exists to catch.
 
 ```bash
-npm run build --workspace apps/frontend/tcp-frontend
+./scripts/start-deployment.sh --project tcp-dev --env-file .env.dev
 ./scripts/run-browser-tests.sh
-./scripts/run-browser-tests.sh --base-url http://localhost:5173   # a deployment
+./scripts/run-browser-tests.sh --base-url https://localhost:5174  # the testing stack
 ./scripts/run-browser-tests.sh -- --headed --grep "heading"
 ```
+
+`hosting.spec.ts` covers what nginx has to get right
+([ADR-029](ADRs/ADR-029-spa-hosting-and-runtime-configuration.md)): HTTP/2 is
+actually negotiated (asserted from the browser's own `nextHopProtocol`, not
+inferred from the config file), eight simultaneous requests share one
+connection rather than hitting the HTTP/1.1 six-connection ceiling, `config.js`
+is `no-store` while hashed assets are `immutable`, a deep link survives a cold
+load, and `/api` reaches tcp-server on the same origin.
 
 Chromium is the only browser configured; Firefox and WebKit are commented out
 in `playwright.config.ts` for a later prompt to enable. Safari and Firefox are
@@ -274,10 +281,14 @@ lint run in parallel first; each subsequent tier only runs if the previous
 passed.
 
 ```
-verify (build + lint + typecheck) → unit-test → integration-test ─┬─→ api-test (includes smoke)
-                                                                   ├─→ e2e-test
-                                                                   └─→ browser-test
+verify (build + lint + typecheck) → unit-test → integration-test ─┬─→ api-test (includes smoke + browser)
+                                                                   └─→ e2e-test
 ```
+
+The browser tier shares the `api-test` job rather than having one of its own:
+from 002.03 it drives the deployment's `tcp-web` service, and `api-test` is the
+job that starts a deployment. A separate job would pay for a second full stack
+to reach the same state.
 
 `unit-test` publishes two reports — `unit.xml` from Jest and `frontend.xml`
 from Vitest — because one job runs both runners.

@@ -48,7 +48,21 @@ const forbidServerOnlyShared = (): Plugin => ({
 export default defineConfig({
   plugins: [react(), forbidServerOnlyShared()],
   server: {
-    port: Number(exposePorts.EXPOSE_PORT_WEB ?? 5173),
+    // EXPOSE_PORT_WEB_DEV, not EXPOSE_PORT_WEB: nginx (tcp-web) owns the
+    // latter, and it is the HTTPS/HTTP2 address people and tests actually use.
+    // This server is the plain-HTTP upstream behind it, reached through the
+    // --dev-web overlay rather than by a browser directly (ADR-029).
+    port: Number(exposePorts.EXPOSE_PORT_WEB_DEV ?? 4173),
+    // Listen on all interfaces, not just loopback. The --dev-web overlay puts
+    // nginx in front of this server from inside a container, reaching it via
+    // host.docker.internal — which arrives on the host's bridge interface, not
+    // on 127.0.0.1, so a loopback-only bind answers that with a 502.
+    //
+    // This does open the port to the local network. Vite's `allowedHosts`
+    // still rejects any request whose Host header isn't localhost, so reaching
+    // it by LAN address gets a refusal rather than your source — but treat it
+    // as an open port on an untrusted network regardless.
+    host: true,
     // Fail loudly on a port collision rather than silently picking another —
     // the deployment scripts pre-flight these ports and expect the declared one.
     strictPort: true,

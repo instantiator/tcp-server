@@ -190,11 +190,12 @@ step "Smoke tests"
 "$SCRIPTS/run-smoke-tests.sh" --base-url "$API_BASE_URL"
 echo
 
-# Runs inside the deployment's lifetime, where it will belong from 002.03 —
-# until then nothing in the stack serves the web app, so the Playwright config
-# starts `vite preview` over the dist/ the Build step above produced.
+# Runs inside the deployment's lifetime: the stack's tcp-web service is what
+# serves the app, and the tier provisions nothing of its own. https because the
+# web service is TLS-only — HTTP/2 needs it (ADR-025).
 step "Browser tests"
-"$SCRIPTS/run-browser-tests.sh"
+EXPOSE_PORT_WEB="$(grep -E '^EXPOSE_PORT_WEB=' "$REPO_ROOT/.env.testing" | tail -1 | cut -d= -f2)"
+"$SCRIPTS/run-browser-tests.sh" --base-url "https://localhost:${EXPOSE_PORT_WEB:-5173}"
 echo
 
 record_step

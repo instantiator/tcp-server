@@ -8,18 +8,21 @@ Usage: $(basename "$0") [-h|--help] [--base-url URL] [-- <playwright options>]
 Run the browser test suite against a running TCP web deployment.
 
 Like the api and smoke tiers, this is a black-box client: it drives whatever is
-serving at --base-url and provisions nothing itself (ADR-016). It defaults to
-http://localhost:4173, which is where 'vite preview' serves the built bundle.
+serving at --base-url and provisions nothing itself (ADR-016). The deployment's
+tcp-web service serves the app, so start a stack first:
 
-  npm run build --workspace apps/frontend/tcp-frontend
+  ./scripts/start-deployment.sh --project tcp-dev --env-file .env.dev
   $(basename "$0")
 
-Until 002.03 puts the web app behind nginx in the deployment, nothing in the
-compose stack serves it — so the Playwright config starts 'vite preview' itself
-when nothing already answers on the base URL. Once the deployment serves the
-app, point this at it and that fallback goes unused:
+The URL is https, not http. The web service is TLS-only because HTTP/2 is a
+requirement (ADR-025) and no browser negotiates HTTP/2 over cleartext. The
+container's certificate is self-signed unless you mount your own, so Playwright
+is configured to accept it — see docs/web-client.md for the mkcert route.
 
-  $(basename "$0") --base-url http://localhost:5173
+Point it at another stack with --base-url, for example the testing project on
+EXPOSE_PORT_WEB=5174:
+
+  $(basename "$0") --base-url https://localhost:5174
 
 Browser binaries are large and are NOT installed by 'npm ci' — contributors who
 never run this script never download them. This script installs Chromium on
@@ -30,14 +33,14 @@ Any extra arguments after -- are passed through to Playwright, for example:
   $(basename "$0") -- --grep "heading"
 
 Options:
-  --base-url URL   Web app base URL (default: http://localhost:4173)
+  --base-url URL   Web app base URL (default: https://localhost:\${EXPOSE_PORT_WEB:-5173})
   -h, --help       Show this help message and exit
 
 --base-url can also be supplied as TCP_WEB_URL; the flag takes precedence.
 EOF
 }
 
-BASE_URL="${TCP_WEB_URL:-http://localhost:4173}"
+BASE_URL="${TCP_WEB_URL:-https://localhost:${EXPOSE_PORT_WEB:-5173}}"
 PASSTHROUGH=()
 
 while [[ $# -gt 0 ]]; do

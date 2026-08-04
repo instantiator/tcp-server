@@ -114,7 +114,7 @@ jobs:
           if-no-files-found: ignore
 
   api-test:
-    name: API & smoke tests
+    name: API, smoke & browser tests
     needs: [integration-test]
     runs-on: ubuntu-latest
     permissions:
@@ -133,11 +133,27 @@ jobs:
           # churn the key. Only the root lockfile is authoritative (ADR-022).
           cache-dependency-path: package-lock.json
       - uses: docker/setup-buildx-action@v4
-      # One bake build for all six service images. They share the `builder`
+      # Keyed on the resolved Playwright version rather than the whole
+      # lockfile, so an unrelated dependency bump doesn't re-download ~180 MB
+      # of browser. Read straight from the lockfile — this runs before npm ci.
+      - name: Resolve Playwright version
+        run: |
+          version="$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")"
+          echo "PLAYWRIGHT_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}
+      # One bake build for all seven service images. They share the `builder`
       # (npm ci + build:apps) and `prod-deps` stages of the root Dockerfile, so
       # bake resolves those once across the whole graph. Targets/tags come from
       # docker-compose.yml's build config; `output=type=docker` loads them into
       # the local image store for start-deployment.sh to reuse.
+      #
+      # A target missing from this list is never built, and the deployment then
+      # fails to start on an image that does not exist — so tcp-web belongs here
+      # as much as it belongs in docker-compose.yml.
       - name: Build service images
         uses: docker/bake-action@v7
         with:
@@ -149,20 +165,31 @@ jobs:
             tcp-mcp-memory
             tcp-mcp-interactions
             tcp-mcp-tasks
+            tcp-web
           set: |
             *.cache-from=type=gha,scope=monorepo-build
             *.cache-to=type=gha,scope=monorepo-build,mode=max
             *.output=type=docker
       - run: npm ci
-      # .env.testing sets EXPOSE_PORT_API=3001 (testing uses non-default ports
-      # to coexist with a dev stack), so target that, not a hardcoded 3000.
-      # --dev-ports publishes the MCP host ports the smoke tier reaches directly.
-      # The Zitadel bootstrap writes generated OIDC/test client creds to the
-      # gitignored .env.testing.local, which run-api-tests.sh then reads.
-      - name: Derive API base URL from .env.testing
+      # --with-deps installs the system libraries headless Chromium needs on a
+      # bare runner; it needs root, which is why run-browser-tests.sh leaves it
+      # to CI. Both are no-ops once the cache above hits.
+      - name: Install Chromium
+        run: npm exec --workspace apps/frontend/tcp-frontend -- playwright install --with-deps chromium
+      # .env.testing sets EXPOSE_PORT_API=3001 and EXPOSE_PORT_WEB=5174 (testing
+      # uses non-default ports to coexist with a dev stack), so target those, not
+      # hardcoded defaults. --dev-ports publishes the MCP host ports the smoke
+      # tier reaches directly. The Zitadel bootstrap writes generated OIDC/test
+      # client creds to the gitignored .env.testing.local, which
+      # run-api-tests.sh then reads.
+      #
+      # The web URL is https: tcp-web is TLS-only because HTTP/2 is (ADR-025).
+      - name: Derive base URLs from .env.testing
         run: |
           port="$(grep -E '^EXPOSE_PORT_API=' .env.testing | tail -1 | cut -d= -f2)"
           echo "API_BASE_URL=http://localhost:${port:-3000}" >> "$GITHUB_ENV"
+          web_port="$(grep -E '^EXPOSE_PORT_WEB=' .env.testing | tail -1 | cut -d= -f2)"
+          echo "WEB_BASE_URL=https://localhost:${web_port:-5173}" >> "$GITHUB_ENV"
       - name: Start deployment stack
         run: ./scripts/start-deployment.sh --project tcp-api --env-file .env.testing --dev-ports
       - name: Run API tests
@@ -185,53 +212,13 @@ jobs:
           path: test-results/smoke.xml
           reporter: jest-junit
           fail-on-error: false
-      - if: always()
-        run: docker compose -p tcp-api --profile auth down -v
-
-  browser-test:
-    name: Browser tests
-    needs: [integration-test]
-    runs-on: ubuntu-latest
-    permissions:
-      checks: write
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: true
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "24"
-          cache: npm
-          # Explicit: the default hashes **/package-lock.json, and the
-          # workspace members add package.json files that would otherwise
-          # churn the key. Only the root lockfile is authoritative (ADR-022).
-          cache-dependency-path: package-lock.json
-      # Keyed on the resolved Playwright version rather than the whole
-      # lockfile, so an unrelated dependency bump doesn't re-download ~180 MB
-      # of browser. Read straight from the lockfile — this runs before npm ci.
-      - name: Resolve Playwright version
-        run: |
-          version="$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")"
-          echo "PLAYWRIGHT_VERSION=$version" >> "$GITHUB_ENV"
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}
-      - run: npm ci
-      # --with-deps installs the system libraries headless Chromium needs on a
-      # bare runner; it needs root, which is why run-browser-tests.sh leaves it
-      # to CI. Both are no-ops once the cache above hits.
-      - name: Install Chromium
-        run: npm exec --workspace apps/frontend/tcp-frontend -- playwright install --with-deps chromium
-      # The tier drives the built bundle, not the dev server. Until 002.03
-      # serves it from the deployment, the Playwright config runs
-      # `vite preview` over this dist/.
-      - name: Build the web app
-        run: npm run build --workspace apps/frontend/tcp-frontend
-      - run: ./scripts/run-browser-tests.sh
-      - name: Publish test results
+      # The browser tier runs here rather than in a job of its own: from 002.03
+      # it drives the deployment's tcp-web service, and this job is the one that
+      # has a deployment. A separate job would pay for a second full stack
+      # startup to reach the same state. The order mirrors run-all-tests.sh.
+      - name: Run browser tests
+        run: ./scripts/run-browser-tests.sh --base-url "$WEB_BASE_URL"
+      - name: Publish browser test results
         uses: dorny/test-reporter@v3
         if: ${{ !cancelled() }}
         with:
@@ -249,6 +236,8 @@ jobs:
           name: browser-artifacts
           path: test-results/browser-artifacts/
           if-no-files-found: ignore
+      - if: always()
+        run: docker compose -p tcp-api --profile auth down -v
 
   e2e-test:
     name: E2E tests
