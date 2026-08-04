@@ -44,3 +44,5 @@ index arrives as one commit and the final merge preserves exactly that sequence.
   If the branch does not exist yet, create it from `phase-02`, not from `main`
   and not from the previous index's branch.
 - Each prompt's `> **Branch:**` header names the branch that prompt belongs on.
+- Every prompt requires a model allocation section in its plan — see
+  [model allocation](model-allocation.md).
