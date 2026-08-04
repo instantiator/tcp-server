@@ -6,6 +6,11 @@ import type {
 } from '../models/TcpAssignment.model';
 import type { TcpTask, TcpTaskStatus } from '../models/TcpTask.model';
 import type { AuditEventType } from '../models/AuditEvent.model';
+import type { AgentStatus, TcpAgent } from '../models/TcpAgent.model';
+import type {
+  Conversation,
+  ConversationStatus,
+} from '../models/Conversation.model';
 
 /**
  * A serialized {@link AuditEvent} row as it crosses the SSE/Redis wire.
@@ -108,16 +113,73 @@ export interface AssignmentChangeSummary {
   status: TcpAssignmentStatus;
   mode: TcpAssignmentMode;
   orderIndex: number | null;
+  /** The role working the assignment — what lets a row render a role name. */
+  roleId: UUID | null;
 }
 
 /** Builds an {@link AssignmentChangeSummary} from an assignment. */
 export function buildAssignmentChangeSummary(
-  assignment: Pick<TcpAssignment, 'id' | 'status' | 'mode' | 'orderIndex'>,
+  assignment: Pick<
+    TcpAssignment,
+    'id' | 'status' | 'mode' | 'orderIndex' | 'roleId'
+  >,
 ): AssignmentChangeSummary {
   return {
     id: assignment.id,
     status: assignment.status,
     mode: assignment.mode,
     orderIndex: assignment.orderIndex ?? null,
+    roleId: assignment.roleId ?? null,
+  };
+}
+
+/** Minimal agent summary carried in an agent `state_change` payload. */
+export interface AgentChangeSummary {
+  id: UUID;
+  status: AgentStatus;
+  roleId: UUID | null;
+  assignmentId: UUID | null;
+}
+
+/** Builds an {@link AgentChangeSummary} from an agent. */
+export function buildAgentChangeSummary(
+  agent: Pick<TcpAgent, 'id' | 'status' | 'roleId' | 'assignmentId'>,
+): AgentChangeSummary {
+  return {
+    id: agent.id,
+    status: agent.status,
+    roleId: agent.roleId ?? null,
+    assignmentId: agent.assignmentId ?? null,
+  };
+}
+
+/**
+ * Minimal enquiry (conversation) summary carried in an enquiry `state_change`
+ * payload. An enquiry has no entity of its own — it is a {@link Conversation}
+ * — so this is the only shape the company stream carries for one.
+ */
+export interface EnquiryChangeSummary {
+  id: UUID;
+  slug: string;
+  status: ConversationStatus;
+  roleName: string;
+  question: string;
+  createdAt: string;
+}
+
+/** Builds an {@link EnquiryChangeSummary} from a conversation. */
+export function buildEnquiryChangeSummary(
+  conv: Pick<
+    Conversation,
+    'id' | 'slug' | 'status' | 'roleName' | 'question' | 'createdAt'
+  >,
+): EnquiryChangeSummary {
+  return {
+    id: conv.id,
+    slug: conv.slug,
+    status: conv.status,
+    roleName: conv.roleName,
+    question: conv.question,
+    createdAt: conv.createdAt.toISOString(),
   };
 }

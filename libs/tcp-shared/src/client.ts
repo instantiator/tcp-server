@@ -31,14 +31,26 @@ export type {
   StreamDelta,
   TaskChangeSummary,
   AssignmentChangeSummary,
+  AgentChangeSummary,
+  EnquiryChangeSummary,
 } from './events/wire-events';
 export {
   buildTaskChangeSummary,
   buildAssignmentChangeSummary,
+  buildAgentChangeSummary,
+  buildEnquiryChangeSummary,
   agentEventsChannel,
   taskEventsChannel,
   companyEventsChannel,
 } from './events/wire-events';
+
+// -- Company statistics: the `GET /api/company` response shape ---------------
+// CompanyStats.model.ts imports only types, so its helper is safe as a value.
+export type {
+  CompanyStats,
+  CompanyListItem,
+} from './models/CompanyStats.model';
+export { emptyCompanyStats } from './models/CompanyStats.model';
 
 // -- Model types used as API DTOs -------------------------------------------
 // Types only. `AuditEventType` and `AgentStatus` also exist at runtime (a

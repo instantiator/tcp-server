@@ -105,9 +105,11 @@ export class ChatSession {
    * Opens `GET /api/company/:id/events` in the background and keeps the roster
    * pane's Tasks list live.
    *
-   * `task_changed` upserts the one task named; `company_changed` is just a
-   * signal today (no company-detail view to refresh yet), so it's ignored.
-   * Aborted on {@link cleanup}.
+   * `task_changed` upserts the one task named. Every other entity is ignored:
+   * `company` is just a signal (no company-detail view to refresh yet), and
+   * since 002.04 the stream also carries `agent`, `assignment` and `enquiry`
+   * rows for the web UI's live activity view, none of which the roster
+   * renders. Aborted on {@link cleanup}.
    */
   watchCompanyEvents(): void {
     this.companyEventsAbort = new AbortController();

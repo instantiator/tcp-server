@@ -6,9 +6,11 @@ import { KeyedEventBus } from './keyed-event-bus';
 
 /**
  * Per-company event bus feeding the `GET /api/company/:id/events` SSE
- * endpoint — company and task state-change {@link WireEvent}s only (agent- and
- * assignment-level rows are filtered out to protect the roster TUI from
- * volume). See {@link KeyedEventBus} for the delivery mechanics.
+ * endpoint — company, task, agent, assignment and enquiry state-change
+ * {@link WireEvent}s (ADR-023: the web UI's live activity view renders all
+ * five as separate lists on one screen). See {@link AuditEventPublisher} for
+ * which rows reach this bus, and {@link KeyedEventBus} for the delivery
+ * mechanics.
  */
 @Injectable()
 export class CompanyEventService {

@@ -14,14 +14,20 @@ interface CompanySummary {
   description: string;
 }
 
-/** Lists all companies from the TCP server and writes them to stdout as JSON. */
+/**
+ * Lists all companies from the TCP server and writes them to stdout as JSON.
+ *
+ * Sends `?all=true` because the CLI administers the system: `GET /api/company`
+ * now defaults to the caller's own memberships for the web UI (ADR-023), and
+ * an operator inspecting a deployment needs the wider view.
+ */
 export function listCompaniesAction(opts: GlobalOptions): Promise<void> {
   return runCommand(async () => {
     const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const companies = await apiRequest<CompanySummary[]>(
       apiOptions(opts, token),
       'GET',
-      '/api/company',
+      '/api/company?all=true',
     );
     process.stdout.write(
       JSON.stringify(

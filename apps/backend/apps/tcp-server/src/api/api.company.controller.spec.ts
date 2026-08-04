@@ -1,13 +1,20 @@
-import { AuditEventType, WireEvent } from '@tcp/shared';
+import {
+  AuditEventType,
+  emptyCompanyStats,
+  TcpCompany,
+  WireEvent,
+} from '@tcp/shared';
 import { NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import type { UUID } from 'crypto';
 import { firstValueFrom, Subject, take, toArray } from 'rxjs';
 import type { Request, Response } from 'express';
 import { DbService } from '../db/db.service';
 import { CompanyEventService } from '../events/company-event.service';
 import { CompanyController } from './api.company.controller';
+import { CompanyPrimingService } from './company-priming.service';
+import { CompanyStatsService } from './company-stats.service';
 import { ApiService } from './api.service';
-import { TaskService } from './task.service';
 
 const fakeReq = (user: Record<string, unknown> = { sub: 'alice' }): Request =>
   ({ user }) as unknown as Request;
@@ -53,10 +60,16 @@ const makeDbService = (): jest.Mocked<
   deleteRole: jest.fn().mockResolvedValue(true),
 });
 
-const makeTaskService = (): jest.Mocked<
-  Pick<TaskService, 'listChangeSummaries'>
+const makeStatsService = (): jest.Mocked<
+  Pick<CompanyStatsService, 'listStats'>
 > => ({
-  listChangeSummaries: jest.fn().mockResolvedValue([]),
+  listStats: jest.fn().mockResolvedValue(new Map()),
+});
+
+const makePrimingService = (): jest.Mocked<
+  Pick<CompanyPrimingService, 'prime'>
+> => ({
+  prime: jest.fn().mockResolvedValue([]),
 });
 
 const makeCompanyEventService = (): jest.Mocked<
@@ -69,19 +82,22 @@ const makeCompanyEventService = (): jest.Mocked<
 describe('CompanyController', () => {
   let api: ReturnType<typeof makeApiService>;
   let db: ReturnType<typeof makeDbService>;
-  let tasks: ReturnType<typeof makeTaskService>;
+  let stats: ReturnType<typeof makeStatsService>;
+  let priming: ReturnType<typeof makePrimingService>;
   let companyEvents: ReturnType<typeof makeCompanyEventService>;
   let controller: CompanyController;
 
   beforeEach(() => {
     api = makeApiService();
     db = makeDbService();
-    tasks = makeTaskService();
+    stats = makeStatsService();
+    priming = makePrimingService();
     companyEvents = makeCompanyEventService();
     controller = new CompanyController(
       api as unknown as ApiService,
       db as unknown as DbService,
-      tasks as unknown as TaskService,
+      stats as unknown as CompanyStatsService,
+      priming as unknown as CompanyPrimingService,
       companyEvents as unknown as CompanyEventService,
     );
   });
@@ -197,22 +213,56 @@ describe('CompanyController', () => {
   });
 
   describe('listCompanies', () => {
-    it('delegates to dbService.listCompanies and returns the result', async () => {
-      const companies = [
-        {
-          id: randomUUID(),
-          slug: 'acme',
-          name: 'Acme',
-          description: 'A Company That Makes Everything',
-          mcpServerList: [],
-          nextTaskShortcodeIndex: 0,
-        },
-      ];
-      db.listCompanies.mockResolvedValue(companies);
+    const company = (id: UUID): TcpCompany => ({
+      id,
+      slug: 'acme',
+      name: 'Acme',
+      description: 'A Company That Makes Everything',
+      mcpServerList: [],
+      nextTaskShortcodeIndex: 0,
+    });
 
-      const result = await controller.listCompanies();
-      expect(db.listCompanies).toHaveBeenCalledTimes(1);
-      expect(result).toBe(companies);
+    it('scopes to the caller’s identifiers by default', async () => {
+      await controller.listCompanies(
+        fakeReq({ sub: 'alice', email: 'alice@example.com' }),
+      );
+      expect(db.listCompanies).toHaveBeenCalledWith([
+        'alice',
+        'alice@example.com',
+      ]);
+    });
+
+    // A malformed flag must never widen scope — only `?all=true` and a bare
+    // `?all` mean "every company".
+    it.each([
+      ['true', undefined],
+      ['', undefined],
+    ])('is unscoped for ?all=%p', async (all, expected) => {
+      await controller.listCompanies(fakeReq(), all);
+      expect(db.listCompanies).toHaveBeenCalledWith(expected);
+    });
+
+    it.each(['false', 'yes'])('stays scoped for ?all=%p', async (all) => {
+      await controller.listCompanies(fakeReq({ sub: 'alice' }), all);
+      expect(db.listCompanies).toHaveBeenCalledWith(['alice']);
+    });
+
+    it('merges each company’s stats onto its row', async () => {
+      const withStats = randomUUID();
+      const withoutStats = randomUUID();
+      db.listCompanies.mockResolvedValue([
+        company(withStats),
+        company(withoutStats),
+      ]);
+      const populated = { ...emptyCompanyStats(), activeAgents: 3 };
+      stats.listStats.mockResolvedValue(new Map([[withStats, populated]]));
+
+      const result = await controller.listCompanies(fakeReq());
+
+      expect(stats.listStats).toHaveBeenCalledWith([withStats, withoutStats]);
+      expect(result[0].stats).toEqual(populated);
+      // A company the stats query returned nothing for still gets a stat set.
+      expect(result[1].stats).toEqual(emptyCompanyStats());
     });
   });
 
@@ -287,25 +337,28 @@ describe('CompanyController', () => {
   });
 
   describe('streamCompanyEvents', () => {
-    it('resolves the company, primes company_changed + each task_changed, then relays live events', async () => {
+    it('resolves the company, replays the priming events, then relays live ones', async () => {
       const companyId = randomUUID();
       db.getCompany.mockResolvedValue({ id: companyId } as never);
-      const taskSummary = {
-        id: randomUUID(),
-        status: 'ready' as const,
-        request: 'Write a report',
-        shortcode: '000',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        completedSteps: 0,
-        totalSteps: 0,
+      const primed: WireEvent = {
+        type: 'audit',
+        event: {
+          timestamp: new Date().toISOString(),
+          companyId,
+          role: 'system',
+          agentId: null,
+          assignmentId: null,
+          taskId: null,
+          eventType: AuditEventType.StateChange,
+          payload: { entity: 'company', reason: 'replay' },
+        },
       };
-      tasks.listChangeSummaries.mockResolvedValue([taskSummary]);
+      priming.prime.mockResolvedValue([primed]);
       const live = new Subject<WireEvent>();
       companyEvents.observe.mockReturnValue(live);
 
       const resultPromise = firstValueFrom(
-        controller.streamCompanyEvents('acme-slug').pipe(take(3), toArray()),
+        controller.streamCompanyEvents('acme-slug').pipe(take(2), toArray()),
       );
       // Let the priming chain's awaits resolve before the live event arrives.
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -325,14 +378,15 @@ describe('CompanyController', () => {
 
       const results = await resultPromise;
       expect(db.getCompany).toHaveBeenCalledWith('acme-slug');
-      expect(tasks.listChangeSummaries).toHaveBeenCalledWith(companyId);
+      expect(priming.prime).toHaveBeenCalledWith(companyId);
       expect(companyEvents.observe).toHaveBeenCalledWith(companyId);
-      // Priming: company signal, then each task summary; then the live row.
-      const entities = results.map((r) => {
+      // Primed rows first, then the live one. Which rows priming produces is
+      // CompanyPrimingService's own spec.
+      const reasons = results.map((r) => {
         const wire = r.data as WireEvent;
-        return wire.type === 'audit' ? wire.event.payload.entity : wire.type;
+        return wire.type === 'audit' ? wire.event.payload.reason : wire.type;
       });
-      expect(entities).toEqual(['company', 'task', 'company']);
+      expect(reasons).toEqual(['replay', 'updated']);
     });
 
     it('throws NotFoundException when the company does not resolve', async () => {

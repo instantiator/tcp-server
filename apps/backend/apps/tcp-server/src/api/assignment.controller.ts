@@ -1,5 +1,5 @@
 import { TcpAssignment } from '@tcp/shared';
-import type { TcpAssignmentStatus } from '@tcp/shared';
+import type { TcpAssignmentMode, TcpAssignmentStatus } from '@tcp/shared';
 import {
   BadRequestException,
   Controller,
@@ -33,16 +33,30 @@ export class AssignmentController {
 
   /**
    * Lists assignments filtered by company and/or task (at least one
-   * required), and optionally by role and/or status. `taskId=null` (the
+   * required), and optionally by role, status and/or mode. `taskId=null` (the
    * literal string) filters to orphan assignments (`taskId IS NULL`) —
    * plain conversations and consultations.
    */
   @ApiOperation({ summary: 'List assignments' })
+  @ApiQuery({ name: 'companyId', required: false, description: 'Company UUID' })
   @ApiQuery({
     name: 'taskId',
     required: false,
     description:
       'Task UUID, or the literal string "null" to list orphan assignments',
+  })
+  @ApiQuery({ name: 'roleId', required: false, description: 'Role UUID' })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['ready', 'in-progress', 'in-qa', 'succeeded', 'failed', 'cancelled'],
+  })
+  @ApiQuery({
+    name: 'mode',
+    required: false,
+    enum: ['plan', 'implement', 'qa', 'chat', 'consultee', 'finalise'],
+    description:
+      '`?taskId=null&mode=consultee` is the consultations list (ADR-023)',
   })
   @Get()
   async list(
@@ -50,6 +64,7 @@ export class AssignmentController {
     @Query('taskId') taskId?: string,
     @Query('roleId') roleId?: UUID,
     @Query('status') status?: TcpAssignmentStatus,
+    @Query('mode') mode?: TcpAssignmentMode,
   ): Promise<TcpAssignment[]> {
     if (!companyId && !taskId) {
       throw new BadRequestException(
@@ -60,6 +75,7 @@ export class AssignmentController {
       ...(companyId ? { companyId } : {}),
       ...(roleId ? { roleId } : {}),
       ...(status ? { status } : {}),
+      ...(mode ? { mode } : {}),
       ...(taskId === 'null'
         ? { taskId: IsNull() }
         : taskId

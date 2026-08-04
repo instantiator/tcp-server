@@ -10,24 +10,40 @@ import {
   Param,
   Post,
   Put,
+  Query,
   Req,
   Res,
   Sse,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { UUID } from 'crypto';
 import type { Request, Response } from 'express';
-import { AuditEventType, TcpCompany, TcpRole, WireEvent } from '@tcp/shared';
+import {
+  CompanyListItem,
+  emptyCompanyStats,
+  TcpCompany,
+  TcpRole,
+  WireEvent,
+} from '@tcp/shared';
 import { defer, from, merge, mergeMap, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { DbService } from '../db/db.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { getCurrentUserIdentifiers } from '../auth/current-user';
 import { CompanyEventService } from '../events/company-event.service';
 import { ApiService } from './api.service';
+import { CompanyPrimingService } from './company-priming.service';
+import { CompanyStatsService } from './company-stats.service';
 import { CreateCompanyDto, UpdateCompanyDto } from './dto/company.dto';
+import { CompanyListItemDto } from './dto/company-stats.dto';
 import { UpdateRoleDto } from './dto/role.dto';
-import { TaskService } from './task.service';
 import { isUUID } from '../utils/ObjectUtils';
 import {
   computeCompanyWarnings,
@@ -44,15 +60,48 @@ export class CompanyController {
   constructor(
     private readonly api: ApiService,
     private readonly db: DbService,
-    private readonly tasks: TaskService,
+    private readonly stats: CompanyStatsService,
+    private readonly priming: CompanyPrimingService,
     private readonly companyEvents: CompanyEventService,
   ) {}
 
-  /** Returns all {@link TcpCompany} records. */
-  @ApiOperation({ summary: 'List all companies' })
+  /**
+   * Lists the companies the caller is a {@link CompanyUser} of, each with its
+   * {@link CompanyStats} — the browser has to discover what the signed-in
+   * user may see (ADR-023). `?all=true` returns every company instead.
+   *
+   * **`?all=true` carries no permission check**: any authenticated caller can
+   * still use it, exactly as before this endpoint was scoped. Gating it is
+   * 002.05's work; nothing here closes that gap.
+   */
+  @ApiOperation({
+    summary: "List the caller's companies, with per-company statistics",
+  })
+  @ApiQuery({
+    name: 'all',
+    required: false,
+    type: Boolean,
+    description:
+      "Return every company rather than the caller's memberships. Bare `?all` counts as true. NOT permission-checked — open to any authenticated caller until 002.05 gates it.",
+  })
+  @ApiOkResponse({ type: CompanyListItemDto, isArray: true })
   @Get()
-  async listCompanies(): Promise<TcpCompany[]> {
-    return this.db.listCompanies();
+  async listCompanies(
+    @Req() req: Request,
+    @Query('all') all?: string,
+  ): Promise<CompanyListItem[]> {
+    // `?all` bare and `?all=true` both mean every company. Anything else is
+    // the membership-scoped default — a malformed flag must never widen scope.
+    const wantsAll = all === 'true' || all === '';
+    const companies = await this.db.listCompanies(
+      wantsAll ? undefined : getCurrentUserIdentifiers(req),
+    );
+    // Stats accompany both modes — the administrative view wants them too.
+    const stats = await this.stats.listStats(companies.map((c) => c.id));
+    return companies.map((company) => ({
+      ...company,
+      stats: stats.get(company.id) ?? emptyCompanyStats(),
+    }));
   }
 
   /**
@@ -210,12 +259,16 @@ export class CompanyController {
   }
 
   /**
-   * SSE stream of `company_changed`/`task_changed` events for this company
-   * and its tasks. Primed with the company's current state and every current
-   * task's summary, so a client that subscribes late renders immediately,
-   * then live updates via {@link CompanyEventService}.
+   * SSE stream of this company's `state_change` events — company, task,
+   * agent, assignment and enquiry rows (ADR-023). Primed by
+   * {@link CompanyPrimingService} with the current state of each of those
+   * lists, so a client that subscribes late renders immediately, then live
+   * updates via {@link CompanyEventService}.
    */
-  @ApiOperation({ summary: "Stream a company's and its tasks' events" })
+  @ApiOperation({
+    summary:
+      "Stream a company's company, task, agent, assignment and enquiry events",
+  })
   @Sse(':id/events')
   streamCompanyEvents(@Param('id') id: string): Observable<MessageEvent> {
     return defer(() => from(this.buildCompanyStream(id))).pipe(
@@ -230,51 +283,8 @@ export class CompanyController {
    */
   private async buildCompanyStream(id: string): Promise<Observable<WireEvent>> {
     const company = await this.resolveCompanyOrThrow(id);
-    const primed = await this.primeCompanyEvents(company.id);
+    const primed = await this.priming.prime(company.id);
     return merge(from(primed), this.companyEvents.observe(company.id));
-  }
-
-  /**
-   * Builds the priming {@link WireEvent}s for {@link buildCompanyStream}: the
-   * company signal, then each task's current summary — synthesized
-   * `state_change` rows (`reason:'replay'`) matching the live path's shapes.
-   */
-  private async primeCompanyEvents(companyId: UUID): Promise<WireEvent[]> {
-    const timestamp = new Date().toISOString();
-    const taskSummaries = await this.tasks.listChangeSummaries(companyId);
-    return [
-      {
-        type: 'audit',
-        event: {
-          timestamp,
-          companyId,
-          role: 'system',
-          agentId: null,
-          assignmentId: null,
-          taskId: null,
-          eventType: AuditEventType.StateChange,
-          payload: { entity: 'company', reason: 'replay' },
-        },
-      },
-      ...taskSummaries.map((summary): WireEvent => ({
-        type: 'audit',
-        event: {
-          timestamp,
-          companyId,
-          role: 'orchestrator',
-          agentId: null,
-          assignmentId: null,
-          taskId: summary.id,
-          eventType: AuditEventType.StateChange,
-          payload: {
-            entity: 'task',
-            newStatus: summary.status,
-            reason: 'replay',
-            summary,
-          },
-        },
-      })),
-    ];
   }
 
   /** Resolves a company by UUID or slug, throwing 404 if no match. */

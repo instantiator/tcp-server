@@ -121,13 +121,18 @@ export class ApiHelper {
     return data.access_token;
   }
 
-  async listCompanies() {
+  /**
+   * Lists companies. Defaults to the membership-scoped view the API now
+   * returns, so existing callers exercise the new default; `all` opts into
+   * the unscoped administrative list.
+   */
+  async listCompanies(all = false) {
     const { data } = await this.invokeApi<
       undefined,
       { id: UUID; name: string }[]
     >({
       method: 'GET',
-      path: '/api/company',
+      path: all ? '/api/company?all=true' : '/api/company',
       expectedStatus: 200,
     });
     expect(data).toBeDefined();

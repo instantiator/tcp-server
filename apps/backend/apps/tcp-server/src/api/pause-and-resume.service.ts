@@ -1,6 +1,7 @@
 import {
   AgentStatus,
   AuditEventType,
+  buildEnquiryChangeSummary,
   TcpAgent,
   TcpRole,
   PendingConsultation,
@@ -106,6 +107,24 @@ export class PauseAndResumeService {
       AgentStatus.Paused,
       { reason: 'user_input', conversationSlug: conv.slug },
     );
+
+    // The enquiry's own opening row, company-scoped. `agentId` must stay null:
+    // AuditService.write derives assignmentId/taskId from a supplied agentId,
+    // and the publisher routes any row carrying one to the agent channel —
+    // either would take this row off the company stream (ADR-023).
+    await this.audit.record(
+      agent.companyId,
+      role?.name ?? 'agent',
+      null,
+      AuditEventType.StateChange,
+      {
+        entity: 'enquiry',
+        newStatus: 'awaiting_user',
+        reason: 'created',
+        summary: buildEnquiryChangeSummary(conv),
+      },
+    );
+
     this.logger.log(
       `Agent ${agentId} paused for user input — conversation ${conv.slug}`,
     );

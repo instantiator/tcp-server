@@ -18,6 +18,11 @@
 # ONE pass — it does not run per member. Every member's manifest must be present
 # before it runs, hence the four COPY lines; the layer still invalidates only
 # when a manifest changes, not on every source edit (ADR-022).
+#
+# `apps/tcp-stub-llm` is deliberately NOT copied: it is a test-only stub LLM
+# server, not a workspace member, and has no place in a service image. The root
+# `postinstall` that installs it is guarded on the directory existing, so it
+# no-ops here — see package.json.
 FROM node:26-alpine AS builder
 WORKDIR /app
 COPY package*.json ./

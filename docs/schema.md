@@ -169,6 +169,28 @@ Represents a human user associated with a company. Used for query routing.
 | `roles`            | `string[]`                         | Yes      | Role names this user covers (for query routing) |
 | `knowledgeDomains` | `string[]`                         | Yes      | Domain tags (for query routing)                 |
 
+### `CompanyStatsDto`
+
+The per-company statistic set returned with each `GET /api/company` row. The
+set is fixed rather than open-ended so the whole list costs one query per
+stat, not one request per company (see [ADR-023](ADRs/ADR-023-backend-api-surface-for-the-web-ui.md)).
+
+| Field           | Type                            | Required | Notes                                                   |
+| --------------- | ------------------------------- | -------- | ------------------------------------------------------- |
+| `activeAgents`  | `number`                        | Yes      | Agents that are `idle`, `running` or `paused`           |
+| `tasksByStatus` | `Record<TcpTaskStatus, number>` | Yes      | Count per status; every status key present, zero-filled |
+| `openEnquiries` | `number`                        | Yes      | Conversations whose `status` is `awaiting_user`         |
+
+### `CompanyListItemDto`
+
+One row of the `GET /api/company` response: the company record plus its
+stats. The company fields are those of `CreateCompanyDto`.
+
+| Field   | Type              | Required | Notes                    |
+| ------- | ----------------- | -------- | ------------------------ |
+| `id`    | UUID string       | Yes      | The company's identifier |
+| `stats` | `CompanyStatsDto` | Yes      | See above                |
+
 ---
 
 ## Validating JSON before using the CLI

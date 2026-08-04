@@ -1,4 +1,5 @@
 import type { Conversation, ConversationMessage } from '@tcp/shared';
+import { AuditEventType, buildEnquiryChangeSummary } from '@tcp/shared';
 import {
   Body,
   Controller,
@@ -11,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { UUID } from 'crypto';
+import { AuditService } from '../audit/audit.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { ConversationService } from './conversation.service';
@@ -27,6 +29,7 @@ export class ConversationController {
   constructor(
     private readonly service: ConversationService,
     private readonly orchestration: AgentOrchestrationService,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -58,7 +61,8 @@ export class ConversationController {
   }
 
   /**
-   * Posts a user reply to an open conversation, closing it.
+   * Posts a user reply to an open conversation, closing it, and records the
+   * enquiry's `closed` state change on the company stream.
    * If the conversation is linked to a paused agent, re-enqueues it with the
    * reply injected as the first message on resume.
    */
@@ -73,6 +77,23 @@ export class ConversationController {
       slug,
       body.content,
       body.authorIdentifier,
+    );
+
+    // The enquiry's closing row, company-scoped. `agentId` stays null so the
+    // publisher keeps it on the company stream rather than routing it to the
+    // agent channel — see {@link PauseAndResumeService.pauseForUserInput},
+    // which writes the matching opening row.
+    await this.audit.record(
+      conv.companyId,
+      conv.roleName,
+      null,
+      AuditEventType.StateChange,
+      {
+        entity: 'enquiry',
+        newStatus: 'closed',
+        reason: 'replied',
+        summary: buildEnquiryChangeSummary(conv),
+      },
     );
 
     if (conv.agentId) {

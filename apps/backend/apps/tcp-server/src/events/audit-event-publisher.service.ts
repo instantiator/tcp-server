@@ -23,6 +23,21 @@ export function toWireEvent(event: AuditEvent): AuditWireEvent {
 }
 
 /**
+ * `payload.entity` values that reach a company's stream. Widened in 002.04
+ * so the live activity view's agent, consultation and enquiry lists update
+ * (ADR-023); before that only tasks could. Every audit write already flows
+ * through this one point, so this is a predicate change, not an
+ * architecture change.
+ */
+const COMPANY_CHANNEL_ENTITIES = new Set([
+  'company',
+  'task',
+  'agent',
+  'assignment',
+  'enquiry',
+]);
+
+/**
  * The single live-publish point for audit events. Every write flows through
  * here after it is persisted (see `AuditService.write`), so the live stream
  * and history are one source of truth (`docs/prompts/010.5.1` A.7).
@@ -31,7 +46,8 @@ export function toWireEvent(event: AuditEvent): AuditWireEvent {
  * - agent channel: any row with an `agentId`;
  * - task channel: rows with a `taskId` whose `payload.entity` is `task` or
  *   `assignment`;
- * - company channel: rows whose `payload.entity` is `company` or `task`.
+ * - company channel: rows whose `payload.entity` is in
+ *   {@link COMPANY_CHANNEL_ENTITIES}.
  */
 @Injectable()
 export class AuditEventPublisher {
@@ -52,7 +68,7 @@ export class AuditEventPublisher {
     if (wire.taskId && (entity === 'task' || entity === 'assignment')) {
       this.taskEvents.emit(wire.taskId, { type: 'audit', event: wire });
     }
-    if (entity === 'company' || entity === 'task') {
+    if (typeof entity === 'string' && COMPANY_CHANNEL_ENTITIES.has(entity)) {
       this.companyEvents.emit(wire.companyId, { type: 'audit', event: wire });
     }
   }

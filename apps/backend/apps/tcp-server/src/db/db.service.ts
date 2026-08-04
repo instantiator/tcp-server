@@ -59,9 +59,12 @@ export class DbService {
     return this.companies.set(company, identifiers);
   }
 
-  /** Returns all companies — {@link CompanyDbService.list}. */
-  listCompanies(): Promise<TcpCompany[]> {
-    return this.companies.list();
+  /**
+   * Returns the companies `identifiers` is a member of, or all companies when
+   * omitted — {@link CompanyDbService.list}.
+   */
+  listCompanies(identifiers?: string[]): Promise<TcpCompany[]> {
+    return this.companies.list(identifiers);
   }
 
   /** Retrieves a company by UUID or slug — {@link CompanyDbService.get}. */

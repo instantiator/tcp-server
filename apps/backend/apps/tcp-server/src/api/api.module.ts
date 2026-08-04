@@ -23,6 +23,8 @@ import { StorageModule } from '../storage/storage.module';
 import { AgentController } from './api.agent.controller';
 import { AssignmentController } from './assignment.controller';
 import { CompanyController } from './api.company.controller';
+import { CompanyPrimingService } from './company-priming.service';
+import { CompanyStatsService } from './company-stats.service';
 import { CompanyUserController } from './company-user.controller';
 import { ConversationController } from './conversation.controller';
 import { ConversationService } from './conversation.service';
@@ -112,6 +114,8 @@ import { TaskService } from './task.service';
     ChatTurnEnvironmentService,
     ChatTurnPromptService,
     ConversationService,
+    CompanyStatsService,
+    CompanyPrimingService,
     KnowledgeService,
     PauseAndResumeService,
     // The drain executes shutdowns; the shutdown service holds the state every

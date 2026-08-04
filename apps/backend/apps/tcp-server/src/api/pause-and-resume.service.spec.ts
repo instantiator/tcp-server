@@ -1,6 +1,7 @@
 import {
   AgentStatus,
   AuditEventType,
+  Conversation,
   TcpAgent,
   TcpRole,
   PendingConsultation,
@@ -49,6 +50,19 @@ const makeRole = (overrides: Partial<TcpRole> = {}): TcpRole =>
     name: 'analyst',
     ...overrides,
   }) as TcpRole;
+
+/** A newly opened enquiry as {@link ConversationService.create} returns one. */
+const makeConv = (slug: string, overrides: Partial<Conversation> = {}) =>
+  ({
+    id: randomUUID(),
+    slug,
+    companyId: randomUUID(),
+    roleName: 'analyst',
+    question: 'What is the plan?',
+    status: 'awaiting_user',
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    ...overrides,
+  }) as Conversation;
 
 describe('PauseAndResumeService', () => {
   let agentRepo: ReturnType<typeof makeRepo<TcpAgent>>;
@@ -100,7 +114,7 @@ describe('PauseAndResumeService', () => {
       const role = makeRole({ id: agent.roleId, name: 'analyst' });
       agentRepo.findOneBy.mockResolvedValue(agent);
       roleRepo.findOneBy.mockResolvedValue(role);
-      convService.create.mockResolvedValue({ slug: 'analyst-1' });
+      convService.create.mockResolvedValue(makeConv('analyst-1'));
 
       const result = await service.pauseForUserInput(
         agent.id,
@@ -141,7 +155,7 @@ describe('PauseAndResumeService', () => {
       const agent = makeAgent();
       agentRepo.findOneBy.mockResolvedValue(agent);
       roleRepo.findOneBy.mockResolvedValue(null);
-      convService.create.mockResolvedValue({ slug: 'agent-0' });
+      convService.create.mockResolvedValue(makeConv('agent-0'));
 
       await service.pauseForUserInput(agent.id, 'question');
 
@@ -156,12 +170,45 @@ describe('PauseAndResumeService', () => {
       );
     });
 
+    it('records the enquiry opening on the company stream', async () => {
+      const agent = makeAgent();
+      const role = makeRole({ id: agent.roleId, name: 'analyst' });
+      agentRepo.findOneBy.mockResolvedValue(agent);
+      roleRepo.findOneBy.mockResolvedValue(role);
+      const conv = makeConv('analyst-1');
+      convService.create.mockResolvedValue(conv);
+
+      await service.pauseForUserInput(agent.id, 'What is the plan?');
+
+      // agentId must be null: a row carrying one is routed to the agent
+      // channel and never reaches the company stream.
+      expect(recordAudit).toHaveBeenCalledWith(
+        agent.companyId,
+        'analyst',
+        null,
+        AuditEventType.StateChange,
+        {
+          entity: 'enquiry',
+          newStatus: 'awaiting_user',
+          reason: 'created',
+          summary: {
+            id: conv.id,
+            slug: 'analyst-1',
+            status: 'awaiting_user',
+            roleName: 'analyst',
+            question: 'What is the plan?',
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        },
+      );
+    });
+
     it('forwards userIds to ConversationService.create when given', async () => {
       const agent = makeAgent();
       const role = makeRole({ id: agent.roleId, name: 'analyst' });
       agentRepo.findOneBy.mockResolvedValue(agent);
       roleRepo.findOneBy.mockResolvedValue(role);
-      convService.create.mockResolvedValue({ slug: 'analyst-1' });
+      convService.create.mockResolvedValue(makeConv('analyst-1'));
       const userIds = [randomUUID(), randomUUID()];
 
       await service.pauseForUserInput(agent.id, 'question', undefined, userIds);

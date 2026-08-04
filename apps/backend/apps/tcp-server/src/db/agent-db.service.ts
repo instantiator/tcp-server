@@ -10,6 +10,17 @@ import { UUID } from 'crypto';
 import { DataSource, FindOptionsWhere, In, Repository } from 'typeorm';
 import { TcpAgentTemplate } from '../templates/TcpAgentTemplate';
 
+/**
+ * Agent statuses counted as "active" — the non-terminal ones. Shared by
+ * {@link AgentDbService.list}'s default filter and the company statistics, so
+ * a company's `activeAgents` count can never disagree with its agent list.
+ */
+export const ACTIVE_AGENT_STATUSES = [
+  AgentStatus.Idle,
+  AgentStatus.Running,
+  AgentStatus.Paused,
+] as const;
+
 /** TypeORM operations for {@link TcpAgent}, behind {@link DbService}. */
 @Injectable()
 export class AgentDbService {
@@ -111,9 +122,7 @@ export class AgentDbService {
       ...(filter.companyId ? { companyId: filter.companyId } : {}),
       ...(filter.roleId ? { roleId: filter.roleId } : {}),
       ...(filter.assignmentId ? { assignmentId: filter.assignmentId } : {}),
-      status:
-        filter.status ??
-        In([AgentStatus.Idle, AgentStatus.Running, AgentStatus.Paused]),
+      status: filter.status ?? In([...ACTIVE_AGENT_STATUSES]),
     };
     return this.agentRepo.find({ where, order: { createdAt: 'DESC' } });
   }

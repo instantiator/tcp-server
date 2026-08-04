@@ -145,6 +145,27 @@ sign-in with nothing to suggest why.
 The container refuses to start if either value is empty, rather than serving a
 blank issuer that fails several steps later.
 
+#### CORS is not configured, deliberately
+
+`enableCors()` is **not** called in [main.ts](../apps/backend/apps/tcp-server/src/main.ts),
+and will not be. `tcp-web` reverse-proxies `/api` to tcp-server on the same
+origin, so a browser never makes a cross-origin API call — there is nothing
+for an allowlist to permit.
+
+The one deployment shape that loses the proxy is serving the built bundle from
+a static CDN. That shape needs two things this repo does not have: an API base
+URL in `config.js` (there is deliberately none — see above), and CORS on the
+server. If it is ever built, the server half is:
+
+```ts
+// main.ts, before app.listen
+app.enableCors({ origin: [process.env.TCP_WEB_URL!], credentials: true });
+```
+
+with the allowlist derived from `TCP_WEB_URL`, the same environment value that
+already carries the web address. Do not add it now: an allowlist nobody
+exercises is an allowlist nobody maintains.
+
 ## Strings: one lookup, no literals in JSX
 
 Every user-facing string resolves through `src/strings.ts`:

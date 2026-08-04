@@ -121,4 +121,18 @@ If an agent only ever raises one request before pausing — the common case toda
 
 ## API endpoints
 
-Consultations are dispatched and resolved entirely through the internal endpoints used by tcp-mcp-interactions and tcp-agent (`POST /internal/pause`, `POST /internal/agent/:agentId/complete`, `POST /internal/agent/:agentId/fail`) — there is no public REST surface for consultations the way there is for conversations.
+Consultations are dispatched and resolved entirely through the internal endpoints used by tcp-mcp-interactions and tcp-agent (`POST /internal/pause`, `POST /internal/agent/:agentId/complete`, `POST /internal/agent/:agentId/fail`). There is no consultations controller the way there is for conversations, and no `PendingConsultation` REST surface.
+
+What there is, since 002.04, is an approximation good enough to list them:
+
+```
+GET /api/assignment?companyId=<id>&taskId=null&mode=consultee
+```
+
+Every consulting agent works an orphan `consultee`-mode assignment, so this
+returns one row per consultation that has actually started. **It is not a
+complete list.** A consultation that has been requested but whose agent has
+not yet been created has no assignment and does not appear — and a consultation
+whose assignment has finished still appears unless the caller also filters on
+`status`. Treat the result as "consultations with an agent on them", not as
+the set of pending consultations.

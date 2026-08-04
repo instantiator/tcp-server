@@ -22,6 +22,8 @@ import { ChatService } from '../../../apps/tcp-server/src/api/chat.service';
 import { AuditModule } from '../../../apps/tcp-server/src/audit/audit.module';
 import { ContextModule } from '../../../apps/tcp-server/src/context/context.module';
 import { AgentEventService } from '../../../apps/tcp-server/src/events/agent-event.service';
+import { CompanyEventService } from '../../../apps/tcp-server/src/events/company-event.service';
+import { TaskEventService } from '../../../apps/tcp-server/src/events/task-event.service';
 import { KnowledgeRetrievalService } from '@tcp/shared';
 import { requireEnv } from '../../support/require-env';
 
@@ -66,6 +68,13 @@ async function setStubResponse(response: string): Promise<void> {
 describe('ChatService integration (stub LLM)', () => {
   let service: ChatService;
   let agentEvents: AgentEventService;
+  // Held only to be torn down: this module is a bare .compile() with no
+  // lifecycle hooks, so every bus that lazily opens a Redis connection has to
+  // be closed by hand or Jest never exits. Since 002.04 an `entity:'agent'`
+  // row reaches the company channel as well as the agent one (ADR-023), so
+  // closing AgentEventService alone is no longer enough.
+  let companyEvents: CompanyEventService;
+  let taskEvents: TaskEventService;
   let agentRepo: Repository<TcpAgent>;
   let assignmentRepo: Repository<TcpAssignment>;
   let roleRepo: Repository<TcpRole>;
@@ -169,6 +178,8 @@ describe('ChatService integration (stub LLM)', () => {
 
     service = moduleRef.get(ChatService);
     agentEvents = moduleRef.get(AgentEventService);
+    companyEvents = moduleRef.get(CompanyEventService);
+    taskEvents = moduleRef.get(TaskEventService);
     agentRepo = moduleRef.get(getRepositoryToken(TcpAgent));
     assignmentRepo = moduleRef.get(getRepositoryToken(TcpAssignment));
     roleRepo = moduleRef.get(getRepositoryToken(TcpRole));
@@ -212,6 +223,8 @@ describe('ChatService integration (stub LLM)', () => {
     await roleRepo.delete({ companyId: testCompanyId });
     await companyRepo.delete({ id: testCompanyId });
     await agentEvents.onModuleDestroy();
+    await companyEvents.onModuleDestroy();
+    await taskEvents.onModuleDestroy();
     await dataSource.destroy();
   });
 

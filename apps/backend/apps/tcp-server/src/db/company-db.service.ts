@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UUID } from 'crypto';
-import { DeepPartial, Repository } from 'typeorm';
+import { DeepPartial, In, Repository } from 'typeorm';
 import { TcpCompanyTemplate } from '../templates/TcpCompanyTemplate';
 import { isUUID } from '../utils/ObjectUtils';
 
@@ -143,9 +143,27 @@ export class CompanyDbService {
     return this.companyRepo.save(this.companyRepo.create(merged));
   }
 
-  /** Returns all {@link TcpCompany} records. */
-  async list(): Promise<TcpCompany[]> {
-    return this.companyRepo.find();
+  /**
+   * Returns companies the given identifiers are a {@link CompanyUser} of, or
+   * every company when `identifiers` is omitted (ADR-023). A `CompanyUser`
+   * row may be keyed by an OIDC `sub` **or** an email address, so callers
+   * pass every identifier form the caller holds.
+   *
+   * Two finds rather than a join: `CompanyUser` has no relation to
+   * {@link TcpCompany}, so joining needs a raw QueryBuilder for no gain.
+   */
+  async list(identifiers?: string[]): Promise<TcpCompany[]> {
+    if (!identifiers) return this.companyRepo.find();
+    // An authenticated caller with neither claim is a member of nothing —
+    // never a caller who sees everything. `In([])` must not be reached.
+    if (identifiers.length === 0) return [];
+    const rows = await this.companyUserRepo.find({
+      where: { identifier: In(identifiers) },
+    });
+    const ids = [...new Set(rows.map((row) => row.companyId))];
+    return ids.length === 0
+      ? []
+      : this.companyRepo.find({ where: { id: In(ids) } });
   }
 
   /** Retrieves a company by its UUID or slug. Returns `null` if not found. */

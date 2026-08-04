@@ -161,6 +161,11 @@ List all companies.
 
 - **stdout**: `{ id, slug, name, description }[]` as JSON
 
+Since 002.04, `GET /api/company` defaults to the caller's own memberships for
+the web UI's benefit; the CLI sends `?all=true` because it administers the
+system, so operator behaviour is unchanged. The stat set the API now returns
+alongside each company is not rendered.
+
 ```bash
 ./tcp-cli.sh -t $TOKEN list-companies
 ```

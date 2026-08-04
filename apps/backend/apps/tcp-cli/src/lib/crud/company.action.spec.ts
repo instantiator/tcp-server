@@ -1,7 +1,7 @@
 import { apiRequest } from '../core/api';
 import { confirmAction } from '../core/confirm';
 import { resolveToken } from '../auth/token';
-import { deleteCompanyAction } from './company.action';
+import { deleteCompanyAction, listCompaniesAction } from './company.action';
 
 jest.mock('../core/api');
 jest.mock('../core/confirm');
@@ -13,6 +13,54 @@ const mockedResolveToken = resolveToken as jest.Mock;
 
 const opts = { tcpServer: 'http://localhost:3000' };
 const company = { id: 'company-id', slug: 'acme', name: 'Acme Corp' };
+
+describe('listCompaniesAction', () => {
+  let stdoutSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockedResolveToken.mockResolvedValue('token');
+    stdoutSpy = jest
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
+  });
+
+  afterEach(() => stdoutSpy.mockRestore());
+
+  it('requests the unscoped list — the CLI administers the system', async () => {
+    mockedApiRequest.mockResolvedValue([]);
+
+    await listCompaniesAction(opts);
+
+    expect(mockedApiRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      'GET',
+      '/api/company?all=true',
+    );
+  });
+
+  it('renders the same four columns as before the stats were added', async () => {
+    mockedApiRequest.mockResolvedValue([
+      {
+        ...company,
+        description: 'Makes everything',
+        stats: { activeAgents: 2 },
+      },
+    ]);
+
+    await listCompaniesAction(opts);
+
+    const written = (stdoutSpy.mock.calls[0] as [string])[0];
+    expect(JSON.parse(written)).toEqual([
+      {
+        id: 'company-id',
+        slug: 'acme',
+        name: 'Acme Corp',
+        description: 'Makes everything',
+      },
+    ]);
+  });
+});
 
 describe('deleteCompanyAction', () => {
   let exitSpy: jest.SpyInstance;

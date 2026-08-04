@@ -24,7 +24,7 @@
     "lint": "NODE_OPTIONS=--max-old-space-size=4096 eslint \"{apps,libs}/**/*.ts\" \"apps/**/*.jsonc\" --fix --cache && npm run lint --workspaces --if-present && npm --prefix apps/tcp-stub-llm run lint",
     "lint:check": "NODE_OPTIONS=--max-old-space-size=4096 eslint \"{apps,libs}/**/*.ts\" \"apps/**/*.jsonc\" --cache && npm run lint:check --workspaces --if-present && npm --prefix apps/tcp-stub-llm run lint:check",
     "test": "npm test --workspaces --if-present",
-    "postinstall": "npm ci --prefix apps/tcp-stub-llm",
+    "postinstall": "if [ -d apps/tcp-stub-llm ]; then npm ci --prefix apps/tcp-stub-llm; fi",
     "test:all": "./scripts/run-all-tests.sh",
     "test:e2e": "npm run test:e2e --workspace apps/backend",
     "test:integration": "npm run test:integration --workspace apps/backend",
