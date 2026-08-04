@@ -38,7 +38,7 @@ The repository is an [npm workspace](https://docs.npmjs.com/cli/using-npm/worksp
 
 One `npm ci` at the root installs all three; dependencies hoist to the root `node_modules`. The root `package.json` keeps only cross-cutting scripts (`schema:generate`, `licenses:generate`, `migration:*`, `hooks:install`, lint/format) and delegates the rest with `--workspace`, so `npm run build`, `npm test` and friends still work from the root exactly as before.
 
-`apps/tcp-stub-llm` is deliberately **not** a workspace — it has its own TypeScript major and eslint config. See [ADR-022](ADRs/ADR-022-monorepo-workspace-structure.md#consequences).
+`apps/tcp-stub-llm` is deliberately **not** a workspace — it has its own TypeScript major and eslint config. See [ADR-022](ADRs/ADR-022-monorepo-workspace-structure.md#consequences). It's still covered by the root `lint`, `lint:check`, `typecheck`, `format` and `format:check` scripts, each of which chains a separate `npm --prefix apps/tcp-stub-llm run <script>` call; a root `postinstall` runs `npm ci --prefix apps/tcp-stub-llm` so its own dependency tree stays installed. Its unit tests (`node --test`, not Jest) run as a distinct step in `scripts/run-unit-tests.sh` rather than through `npm test --workspaces`.
 
 ### `@tcp/shared` has two entry points
 

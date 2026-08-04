@@ -18,6 +18,7 @@ Match the task against a trigger below, then follow that SKILL.md literally.
 
 <!-- dev-environment:skills:end -->
 <!-- dev-environment:start -->
+
 # Agent instructions
 
 These rules are mandatory and override your defaults. `dev-environment/` is in this repo (or clone <https://github.com/instantiator/dev-environment> to a temporary location once per session).
@@ -45,4 +46,5 @@ These rules are mandatory and override your defaults. `dev-environment/` is in t
 ## Assurance
 
 - State the filename of any guidance doc you read, so the user can see you are following it.
+
 <!-- dev-environment:end -->

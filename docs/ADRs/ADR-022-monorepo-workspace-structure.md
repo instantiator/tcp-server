@@ -23,7 +23,7 @@ Adding a browser application breaks 2 assumptions:
 
 2. **The root tooling is for Node.** `eslint.config.mjs` sets `sourceType: 'commonjs'` and `globals.node`; the root `tsconfig.json` targets Node with decorators enabled. A React/TSX/browser app cannot share it.
 
-There is 1 non-Nest app: `tcp-stub-llm` is excluded from the root tooling — and consequently has no CI coverage. Its install, lint, typecheck, and tests aren't run. That's an oversight, and shouldn't be repeated for the frontend.
+There is 1 non-Nest app: `tcp-stub-llm` is excluded from the root tooling — and at the time of writing had no CI coverage. Its install, lint, typecheck, and tests weren't run. That was an oversight, and shouldn't be repeated for the frontend. (Closed later without becoming a workspace: the root `lint`, `lint:check`, `typecheck` and `format`/`format:check` scripts each gained a chained `npm --prefix apps/tcp-stub-llm run <script>` call, a root `postinstall` runs `npm ci --prefix apps/tcp-stub-llm`, and `scripts/run-unit-tests.sh` runs its `node --test` suite as a separate step since Jest passthrough args don't apply to it. This also required dropping its `typescript` devDependency from `^7.0.2` to `~6.0.3` — `typescript-eslint@8.65.0`'s peer range caps at `<6.1.0`, so a clean install was failing.)
 
 This is also a style preference: files that are linked to an application should be close to the application, rather than in a single manifest at the root.
 
