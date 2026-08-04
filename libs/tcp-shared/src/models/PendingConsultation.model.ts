@@ -8,8 +8,16 @@ import {
 } from 'typeorm';
 import { VersionedEntity } from './VersionedEntity';
 
-/** Lifecycle states for an inter-agent consultation. */
-export type ConsultationStatus = 'pending' | 'complete' | 'failed';
+/**
+ * Lifecycle states for an inter-agent consultation.
+ *
+ * `consumed` is the terminal state: the result has been folded into a resume
+ * payload and handed to the calling agent. It is what stops a later resume
+ * re-delivering an answer the agent has already seen — a job previously done by
+ * comparing `createdAt` against the agent's `pausedAt`, which compared the
+ * database's clock against the application's and lost answers by milliseconds.
+ */
+export type ConsultationStatus = 'pending' | 'complete' | 'failed' | 'consumed';
 
 /**
  * Tracks a paused agent waiting for another agent's consultation response.

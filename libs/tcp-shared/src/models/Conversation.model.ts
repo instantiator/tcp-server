@@ -86,4 +86,16 @@ export class Conversation extends VersionedEntity {
   /** Set when status transitions to `closed`. */
   @Column({ nullable: true })
   closedAt?: Date;
+
+  /**
+   * Set once the user's reply has been folded into a resume payload and handed
+   * to the waiting agent. Null means "still to deliver".
+   *
+   * This is what stops a later resume re-delivering a reply the agent has
+   * already seen. It replaces a comparison of this row's `createdAt` against
+   * the agent's `pausedAt`, which weighed the database's clock against the
+   * application's and dropped replies when they disagreed by milliseconds.
+   */
+  @Column({ nullable: true })
+  repliesDeliveredAt?: Date;
 }

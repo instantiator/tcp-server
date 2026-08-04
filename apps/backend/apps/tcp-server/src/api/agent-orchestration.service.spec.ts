@@ -340,7 +340,7 @@ describe('AgentOrchestrationService', () => {
       expect(mockQueueInstance.add).not.toHaveBeenCalled();
     });
 
-    it('aggregates every response received since pausedAt into one replyContent', async () => {
+    it('aggregates every undelivered response into one replyContent', async () => {
       const pausedAt = new Date('2026-06-01T00:00:00Z');
       const agent = makeAgent({ status: AgentStatus.Paused, pausedAt });
       mockDb.getAgent.mockResolvedValue(agent);
@@ -353,7 +353,7 @@ describe('AgentOrchestrationService', () => {
       ]);
       const conversationId = randomUUID();
       convRepo.find.mockResolvedValue([{ id: conversationId }]);
-      msgRepo.findOne.mockResolvedValue({ content: 'User answer.' });
+      msgRepo.find.mockResolvedValue([{ content: 'User answer.' }]);
 
       await service.resumeAgent(agent.id);
 
@@ -395,6 +395,102 @@ describe('AgentOrchestrationService', () => {
         'Consultation FAILED: Agent ended without calling complete_task',
       );
       expect(payload.replyContent).toContain('request_user_input');
+    });
+
+    it('delivers every user message in a conversation, oldest first', async () => {
+      const agent = makeAgent({
+        status: AgentStatus.Paused,
+        pausedAt: new Date(),
+      });
+      mockDb.getAgent.mockResolvedValue(agent);
+      convRepo.find.mockResolvedValue([{ id: randomUUID() }]);
+      msgRepo.find.mockResolvedValue([
+        { content: 'First half of my answer.' },
+        { content: 'And the second half.' },
+      ]);
+
+      await service.resumeAgent(agent.id);
+
+      // A user who answers across two messages has said two things. Taking
+      // only the most recent silently discards the rest of the answer.
+      const [, payload] = mockQueueInstance.add.mock.calls[0] as [
+        string,
+        { replyContent: string },
+      ];
+      expect(payload.replyContent).toBe(
+        'User response: First half of my answer.\n\n' +
+          'User response: And the second half.',
+      );
+      const [[where]] = msgRepo.find.mock.calls as [[{ order: object }]];
+      expect(where.order).toEqual({ timestamp: 'ASC' });
+    });
+
+    it('scopes replies by delivery state, never by a timestamp comparison', async () => {
+      const agent = makeAgent({
+        status: AgentStatus.Paused,
+        pausedAt: new Date(),
+      });
+      mockDb.getAgent.mockResolvedValue(agent);
+      consultRepo.find.mockResolvedValue([
+        { id: randomUUID(), status: 'complete', result: 'All good.' },
+      ]);
+
+      await service.resumeAgent(agent.id);
+
+      // The bug this guards: `createdAt` is stamped by the database's clock and
+      // `pausedAt` by this process's, so comparing them dropped an answer
+      // whenever the two disagreed by a millisecond — and the agent resumed
+      // knowing nothing about the question it had asked.
+      const [[consultWhere], [convWhere]] = [
+        consultRepo.find.mock.calls[0] as [{ where: object }],
+        convRepo.find.mock.calls[0] as [{ where: object }],
+      ];
+      expect(consultWhere.where).not.toHaveProperty('createdAt');
+      expect(convWhere.where).not.toHaveProperty('createdAt');
+    });
+
+    it('marks delivered replies so a later resume cannot repeat them', async () => {
+      const consultationId = randomUUID();
+      const conversationId = randomUUID();
+      const agent = makeAgent({
+        status: AgentStatus.Paused,
+        pausedAt: new Date(),
+      });
+      mockDb.getAgent.mockResolvedValue(agent);
+      consultRepo.find.mockResolvedValue([
+        { id: consultationId, status: 'complete', result: 'All good.' },
+      ]);
+      convRepo.find.mockResolvedValue([{ id: conversationId }]);
+      msgRepo.find.mockResolvedValue([{ content: 'User answer.' }]);
+
+      await service.resumeAgent(agent.id);
+
+      expect(consultRepo.update).toHaveBeenCalledWith([consultationId], {
+        status: 'consumed',
+      });
+      expect(convRepo.update).toHaveBeenCalledWith([conversationId], {
+        repliesDeliveredAt: expect.any(Date) as Date,
+      });
+    });
+
+    it('leaves replies undelivered when the resume job cannot be queued', async () => {
+      const agent = makeAgent({
+        status: AgentStatus.Paused,
+        pausedAt: new Date(),
+      });
+      mockDb.getAgent.mockResolvedValue(agent);
+      consultRepo.find.mockResolvedValue([
+        { id: randomUUID(), status: 'complete', result: 'All good.' },
+      ]);
+      mockQueueInstance.add.mockRejectedValueOnce(new Error('queue is down'));
+
+      await expect(service.resumeAgent(agent.id)).rejects.toThrow(
+        'queue is down',
+      );
+
+      // Marking them consumed here would strand the answer: the agent never
+      // gets the job, and the next resume would find nothing left to give it.
+      expect(consultRepo.update).not.toHaveBeenCalled();
     });
 
     it('clears pausedAt via an atomic conditional update after a successful resume', async () => {

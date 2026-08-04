@@ -286,11 +286,12 @@
       "type": "object"
     },
     "ConsultationStatus": {
-      "description": "Lifecycle states for an inter-agent consultation.",
+      "description": "Lifecycle states for an inter-agent consultation.\n\n`consumed` is the terminal state: the result has been folded into a resume payload and handed to the calling agent. It is what stops a later resume re-delivering an answer the agent has already seen — a job previously done by comparing `createdAt` against the agent's `pausedAt`, which compared the database's clock against the application's and lost answers by milliseconds.",
       "enum": [
         "pending",
         "complete",
-        "failed"
+        "failed",
+        "consumed"
       ],
       "type": "string"
     },
@@ -339,6 +340,11 @@
         },
         "question": {
           "description": "The question the agent is asking.",
+          "type": "string"
+        },
+        "repliesDeliveredAt": {
+          "description": "Set once the user's reply has been folded into a resume payload and handed to the waiting agent. Null means \"still to deliver\".\n\nThis is what stops a later resume re-delivering a reply the agent has already seen. It replaces a comparison of this row's `createdAt` against the agent's `pausedAt`, which weighed the database's clock against the application's and dropped replies when they disagreed by milliseconds.",
+          "format": "date-time",
           "type": "string"
         },
         "roleId": {

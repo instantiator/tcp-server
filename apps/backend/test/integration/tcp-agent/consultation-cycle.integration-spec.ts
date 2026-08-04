@@ -81,11 +81,17 @@ describe('Consultation cycle (stub LLM, real queue)', () => {
   /**
    * Fallback for any prompt no rule matches, applied to every stub config below.
    *
-   * The stub 400s on an unmatched prompt, which fails the agent outright. The
-   * two blocks below each swap this shared, process-wide config in their own
-   * `beforeAll`, so an agent still resuming from the previous block can arrive
-   * after the swap, match nothing, and take a live test down with it — which is
-   * how this spec flaked under load on 2026-08-03.
+   * The stub 400s on an unmatched prompt, which fails the agent outright and
+   * reports it far from the assertion that then times out. This turns that into
+   * a legible diff instead.
+   *
+   * It was added on 2026-08-03 in the belief that the spec's flake came from
+   * the two blocks swapping this shared, process-wide config while an agent
+   * from the previous block was still running. That diagnosis was wrong: the
+   * cause was `collectRepliesSince` comparing the database's clock against the
+   * application's, dropping the consultation and resuming the caller with an
+   * empty payload — fixed in the service, not here. The fallback earns its
+   * place regardless, so it stays.
    *
    * The text is deliberately conspicuous: this response should never reach an
    * assertion, and if it does the diff says so outright.
@@ -94,6 +100,25 @@ describe('Consultation cycle (stub LLM, real queue)', () => {
     mode: 'loop',
     responses: [{ text: 'stub-llm fallback: no rule matched this prompt' }],
   };
+
+  /**
+   * Waits for a consultation to carry its answer.
+   *
+   * Deliberately accepts `complete` **or** `consumed`: `complete` is transient,
+   * because the resume it triggers marks the consultation consumed as soon as
+   * the answer has been handed to the calling agent (which is what stops a
+   * later resume repeating it). Polling for `complete` alone races that
+   * transition. The result reaching the record is the property under test.
+   */
+  async function waitForResolvedConsultation(
+    callingAgentId: UUID,
+  ): Promise<PendingConsultation> {
+    return waitFor(async () => {
+      const found = await consultRepo.findOne({ where: { callingAgentId } });
+      if (!found) return null;
+      return ['complete', 'consumed'].includes(found.status) ? found : null;
+    });
+  }
 
   /** Polls `check` until it returns a truthy value, or throws after `timeoutMs`. */
   async function waitFor<T>(
@@ -432,12 +457,7 @@ describe('Consultation cycle (stub LLM, real queue)', () => {
     afterAll(clearRuns);
 
     it('resolves the consultation with the consulting agent’s answer', async () => {
-      const consultation = await waitFor(async () => {
-        const found = await consultRepo.findOne({
-          where: { callingAgentId: callerAgentId },
-        });
-        return found?.status === 'complete' ? found : null;
-      });
+      const consultation = await waitForResolvedConsultation(callerAgentId);
       expect(consultation.result).toContain(ORACLE_ANSWER);
     }, 60_000);
 
@@ -561,12 +581,7 @@ describe('Consultation cycle (stub LLM, real queue)', () => {
     afterAll(clearRuns);
 
     it('resolves the consultation from the stored output instead of the empty notification', async () => {
-      const consultation = await waitFor(async () => {
-        const found = await consultRepo.findOne({
-          where: { callingAgentId: callerAgentId },
-        });
-        return found?.status === 'complete' ? found : null;
-      });
+      const consultation = await waitForResolvedConsultation(callerAgentId);
       expect(consultation.result).toBe(ORACLE_ANSWER);
     });
 

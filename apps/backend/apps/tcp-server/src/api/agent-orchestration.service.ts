@@ -17,7 +17,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Queue } from 'bullmq';
 import { UUID } from 'crypto';
-import { In, MoreThanOrEqual, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { DbService } from '../db/db.service';
 import { AuditService } from '../audit/audit.service';
 import { TcpAgentTemplate } from '../templates/TcpAgentTemplate';
@@ -29,6 +29,16 @@ interface AgentJob {
   type: 'start' | 'resume';
   /** User reply or consultation result injected as the first message on resume. */
   replyContent?: string;
+}
+
+/**
+ * The replies waiting for a resuming agent, alongside the rows they came from
+ * so they can be marked delivered once the resume job is safely queued.
+ */
+interface UndeliveredReplies {
+  text: string;
+  consultationIds: UUID[];
+  conversationIds: UUID[];
 }
 
 /**
@@ -184,10 +194,9 @@ export class AgentOrchestrationService
       return agent;
     }
 
-    // Combine every response received since this pause episode began, so
-    // the resumed agent sees all the answers it asked for, not just the
-    // last one to arrive.
-    let aggregated: string | null = null;
+    // Combine every response this agent has not yet been given, so the resumed
+    // agent sees all the answers it asked for, not just the last one to arrive.
+    let replies: UndeliveredReplies | null = null;
     if (agent.pausedAt) {
       // Atomically claim this pause episode's resume: only the caller that
       // actually clears pausedAt proceeds to enqueue. Without this, two
@@ -208,17 +217,20 @@ export class AgentOrchestrationService
         );
         return agent;
       }
-      aggregated = await this.collectRepliesSince(agentId, agent.pausedAt);
+      replies = await this.collectUndeliveredReplies(agentId);
     }
 
     await this.queue.add('resume', {
       agentId: agent.id,
       type: 'resume',
       replyContent:
-        aggregated ??
+        replies?.text ??
         replyContent ??
         (agent.pauseReason === 'shutdown' ? SHUTDOWN_RESUME_PROMPT : undefined),
     });
+    // Only once the job is safely queued: a failure above must leave these
+    // undelivered, so the next resume picks them up rather than losing them.
+    if (replies) await this.markDelivered(replies);
     // Let any client observing the calling agent see it come back to life —
     // one state_change row, streamed live by the persist-then-publish path.
     await this.audit.record(
@@ -244,39 +256,48 @@ export class AgentOrchestrationService
   }
 
   /**
-   * Gathers every consultation result and user reply received for this
-   * agent since `pausedAt`, joined into one message. Returns `null` if
-   * nothing was found (e.g. the agent is being resumed for another reason).
+   * Gathers every consultation result and user reply this agent has not yet
+   * been given, joined into one message. Returns `null` if there are none
+   * (e.g. the agent is being resumed for another reason).
+   *
+   * Scoping is by delivery state, not by time. The obvious alternative — take
+   * everything created since the agent paused — compares `createdAt`, stamped
+   * by the database's clock, against `pausedAt`, stamped by the application's.
+   * Those two writes are milliseconds apart, so a database clock lagging by a
+   * few milliseconds silently drops the very answer the agent is waiting for,
+   * and it resumes with an empty payload. Measured at 1–3ms of headroom before
+   * this changed.
    */
-  private async collectRepliesSince(
+  private async collectUndeliveredReplies(
     agentId: UUID,
-    pausedAt: Date,
-  ): Promise<string | null> {
+  ): Promise<UndeliveredReplies | null> {
     const [consultations, conversations] = await Promise.all([
       this.consultRepo.find({
         where: {
           callingAgentId: agentId,
           status: In(['complete', 'failed']),
-          createdAt: MoreThanOrEqual(pausedAt),
         },
       }),
       this.convRepo.find({
         where: {
           agentId,
           status: 'closed',
-          createdAt: MoreThanOrEqual(pausedAt),
+          repliesDeliveredAt: IsNull(),
         },
       }),
     ]);
 
+    // Every user message, not just the most recent one: a user who answers in
+    // two messages before the conversation closes has said two things, and an
+    // agent that only ever sees the last of them loses the rest of the answer.
+    // Oldest first, so the agent reads them in the order they were written.
     const conversationReplies = await Promise.all(
-      conversations.map(async (conv) => {
-        const reply = await this.msgRepo.findOne({
+      conversations.map((conv) =>
+        this.msgRepo.find({
           where: { conversationId: conv.id, author: 'user' },
-          order: { timestamp: 'DESC' },
-        });
-        return reply?.content;
-      }),
+          order: { timestamp: 'ASC' },
+        }),
+      ),
     );
 
     const parts = [
@@ -292,10 +313,37 @@ export class AgentOrchestrationService
             'essential, consider escalating to a user via request_user_input.',
         ),
       ...conversationReplies
-        .filter((content): content is string => Boolean(content))
+        .flat()
+        .map((message) => message.content)
+        .filter(Boolean)
         .map((content) => `User response: ${content}`),
     ];
 
-    return parts.length > 0 ? parts.join('\n\n') : null;
+    if (parts.length === 0) return null;
+    return {
+      text: parts.join('\n\n'),
+      consultationIds: consultations.map((c) => c.id),
+      conversationIds: conversations.map((c) => c.id),
+    };
+  }
+
+  /**
+   * Records that these replies have been handed to the agent, so a later
+   * resume does not deliver them a second time.
+   */
+  private async markDelivered(replies: UndeliveredReplies): Promise<void> {
+    const deliveredAt = new Date();
+    await Promise.all([
+      replies.consultationIds.length > 0
+        ? this.consultRepo.update(replies.consultationIds, {
+            status: 'consumed',
+          })
+        : Promise.resolve(),
+      replies.conversationIds.length > 0
+        ? this.convRepo.update(replies.conversationIds, {
+            repliesDeliveredAt: deliveredAt,
+          })
+        : Promise.resolve(),
+    ]);
   }
 }
