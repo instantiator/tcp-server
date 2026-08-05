@@ -474,7 +474,7 @@ echo "=================================================="
 echo ""
 echo "Services:"
 echo "  tcp-server API         →  http://localhost:${EXPOSE_PORT_API:-3000}"
-echo "  Web app                →  https://localhost:${EXPOSE_PORT_WEB:-5173}"
+echo "  Web app                →  $TCP_WEB_URL"
 if [[ "$DEV_PORTS" = "true" ]]; then
   echo "  tcp-mcp-storage        →  http://localhost:3010"
   echo "  tcp-mcp-memory         →  http://localhost:3011"
@@ -496,6 +496,14 @@ if [[ -n "$AUTH_PROFILE" ]]; then
   echo "  Password:  $TEST_PASS"
   echo ""
   echo "Get a token (opens a browser for login):"
-  echo "  npx tcp-cli get-token"
+  echo "  ./tcp-cli.sh get-token"
   echo ""
 fi
+
+# The landing page is where a person starts, so it is the last thing printed
+# rather than one row in the service table. https, and self-signed unless a
+# real certificate is mounted, so expect a browser warning on first visit —
+# see docs/web-client.md for the mkcert route.
+echo "Open the landing page:"
+echo "  $TCP_WEB_URL"
+echo ""
