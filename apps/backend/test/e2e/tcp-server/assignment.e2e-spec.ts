@@ -1,4 +1,10 @@
-import { TcpAssignment, TcpCompany, TcpRole, TcpTask } from '@tcp/shared';
+import {
+  CompanyUser,
+  TcpAssignment,
+  TcpCompany,
+  TcpRole,
+  TcpTask,
+} from '@tcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -8,6 +14,7 @@ import type { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { AppModule } from '../../../apps/tcp-server/src/app.module';
 import { makeTestJwt } from '../helpers/test-jwt';
+import { seedMembership } from '../helpers/seed-membership';
 
 describe('AssignmentController (e2e)', () => {
   let app: INestApplication<App>;
@@ -39,6 +46,10 @@ describe('AssignmentController (e2e)', () => {
       }),
     );
     companyId = company.id;
+    await seedMembership(
+      module.get(getRepositoryToken(CompanyUser)),
+      company.id,
+    );
     const role = await roleRepo.save(
       roleRepo.create({
         slug: 'worker',

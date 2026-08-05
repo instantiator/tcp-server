@@ -27,6 +27,11 @@ import type { UUID } from 'crypto';
 import { defer, from, merge, Observable } from 'rxjs';
 import { filter, map } from 'rxjs/operators';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CompanyMembershipGuard } from '../auth/company-membership.guard';
+import {
+  CompanyScope,
+  CompanyScopeRequired,
+} from '../auth/company-scope.decorator';
 import { AuditService } from '../audit/audit.service';
 import { DbService } from '../db/db.service';
 import { AgentEventService } from '../events/agent-event.service';
@@ -38,7 +43,7 @@ import { SendMessageDto, StartAgentDto, StartChatDto } from './dto/agent.dto';
 /** REST controller for starting, resuming, chatting with, and inspecting {@link TcpAgent} instances. */
 @ApiTags('agents')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CompanyMembershipGuard)
 @Controller({ path: 'api/agent' })
 export class AgentController {
   constructor(
@@ -57,6 +62,7 @@ export class AgentController {
    * Refused with `503` while the system is draining for shutdown.
    */
   @ApiOperation({ summary: 'Start a new agent' })
+  @CompanyScope({ from: 'body', key: 'companyId', via: 'company' })
   @Post('start')
   async startAgent(@Body() body: StartAgentDto): Promise<TcpAgent> {
     this.shutdown.assertAccepting();
@@ -71,6 +77,7 @@ export class AgentController {
    * Refused with `503` while the system is draining for shutdown.
    */
   @ApiOperation({ summary: 'Start a chat-mode agent' })
+  @CompanyScope({ from: 'body', key: 'companyId', via: 'company' })
   @Post('chat/start')
   async startChat(@Body() body: StartChatDto): Promise<TcpAgent> {
     this.shutdown.assertAccepting();
@@ -103,6 +110,7 @@ export class AgentController {
   @ApiOperation({
     summary: 'Send a message to a chat agent (accepted; watch SSE)',
   })
+  @CompanyScope({ from: 'param', key: 'id', via: 'agent' })
   @Post(':id/message')
   @HttpCode(HttpStatus.ACCEPTED)
   async sendMessage(
@@ -131,6 +139,7 @@ export class AgentController {
    * replayed from the persisted status/output so the client still terminates.
    */
   @ApiOperation({ summary: 'Subscribe to agent events (SSE)' })
+  @CompanyScope({ from: 'param', key: 'id', via: 'agent' })
   @Sse(':id/events')
   streamEvents(@Param('id') id: UUID): Observable<MessageEvent> {
     const replay$ = defer(() => from(this.replayTerminal(id))).pipe(
@@ -182,6 +191,7 @@ export class AgentController {
    * The agent must be in `idle`, `paused`, or `failed` status.
    */
   @ApiOperation({ summary: 'Resume a paused or idle agent' })
+  @CompanyScope({ from: 'param', key: 'id', via: 'agent' })
   @Post('resume/:id')
   async resumeAgent(@Param('id') id: UUID): Promise<TcpAgent> {
     try {
@@ -199,6 +209,14 @@ export class AgentController {
    * (`idle`, `running`, `paused`) when `status` is omitted.
    */
   @ApiOperation({ summary: 'List agents' })
+  @CompanyScope(
+    { from: 'query', key: 'companyId', via: 'company' },
+    { from: 'query', key: 'roleId', via: 'role' },
+    { from: 'query', key: 'assignmentId', via: 'assignment' },
+  )
+  @CompanyScopeRequired(
+    'Provide at least one of companyId, roleId, or assignmentId',
+  )
   @Get()
   async listAgents(
     @Query('companyId') companyId?: UUID,
@@ -216,6 +234,7 @@ export class AgentController {
 
   /** Retrieves the current state of an agent by its UUID. */
   @ApiOperation({ summary: 'Get an agent by ID' })
+  @CompanyScope({ from: 'param', key: 'id', via: 'agent' })
   @Get(':id')
   async getAgent(@Param('id') id: UUID): Promise<TcpAgent> {
     const agent = await this.db.getAgent(id);
@@ -229,6 +248,7 @@ export class AgentController {
    * `state_change`/`agent_loop_completion` row recorded for it.
    */
   @ApiOperation({ summary: "Get an agent's audit history" })
+  @CompanyScope({ from: 'param', key: 'id', via: 'agent' })
   @Get(':id/history')
   async getAgentHistory(@Param('id') id: UUID): Promise<AuditEvent[]> {
     const agent = await this.db.getAgent(id);
@@ -237,6 +257,7 @@ export class AgentController {
   }
 
   @ApiOperation({ summary: 'Delete an agent' })
+  @CompanyScope({ from: 'param', key: 'id', via: 'agent' })
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteAgent(@Param('id') id: UUID): Promise<void> {

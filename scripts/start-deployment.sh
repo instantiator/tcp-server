@@ -392,7 +392,7 @@ EOF
     "$(jq -n --arg u "$TEST_USER" '{queries:[{userNameQuery:{userName:$u,method:"TEXT_QUERY_METHOD_EQUALS"}}]}')" \
     | jq -r '.result[0].id // empty')
   if [[ -z "$EXISTING_USER" ]]; then
-    zit POST "/v2/users/new" "$(jq -n --arg org "$ORG_ID" --arg u "$TEST_USER" --arg p "$TEST_PASS" '{
+    TEST_USER_ID=$(zit POST "/v2/users/new" "$(jq -n --arg org "$ORG_ID" --arg u "$TEST_USER" --arg p "$TEST_PASS" '{
       organizationId: $org,
       username: $u,
       human: {
@@ -400,9 +400,10 @@ EOF
         email: {email: ($u + "@tcp.local"), isVerified: true},
         password: {password: $p}
       }
-    }')" > /dev/null
+    }')" | jq -r '.id')
     echo "  Created user: $TEST_USER"
   else
+    TEST_USER_ID="$EXISTING_USER"
     echo "  User $TEST_USER: already exists"
   fi
 
@@ -430,6 +431,16 @@ EOF
   set_env_var "$LOCAL_ENV_FILE" TEST_CLIENT_SECRET "$MACHINE_CLIENT_SECRET"
   export TEST_CLIENT_ID="$MACHINE_CLIENT_ID"
   export TEST_CLIENT_SECRET="$MACHINE_CLIENT_SECRET"
+
+  # Administrators (002.05). Membership decides who reaches which company;
+  # `?all=true` and the /api/system routes need someone above that, and until
+  # permission groups exist that is this list. Both ids are regenerated with
+  # the bundled Zitadel, so they belong in the .local override rather than a
+  # committed file: the human user administers via tcp-cli, the machine user
+  # is what the api test tier signs in as. A deployment against an external
+  # provider sets TCP_ADMIN_IDENTIFIERS itself — see docs/authentication.md.
+  set_env_var "$LOCAL_ENV_FILE" TCP_ADMIN_IDENTIFIERS "$TEST_USER_ID,$MACHINE_ID"
+  export TCP_ADMIN_IDENTIFIERS="$TEST_USER_ID,$MACHINE_ID"
 fi
 
 echo ""

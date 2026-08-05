@@ -28,6 +28,8 @@ import type { UUID } from 'crypto';
 import type { Request, Response } from 'express';
 import { getCurrentUserId } from '../auth/current-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CompanyMembershipGuard } from '../auth/company-membership.guard';
+import { CompanyScope } from '../auth/company-scope.decorator';
 
 import { Originators } from '../storage/storage.service';
 import {
@@ -62,13 +64,14 @@ interface StoreKnowledgeBody {
  */
 @ApiTags('knowledge')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CompanyMembershipGuard)
 @Controller('api')
 export class KnowledgeController {
   constructor(private readonly knowledge: KnowledgeService) {}
 
   /** Lists all OKF documents stored for the role. */
   @ApiOperation({ summary: 'List OKF documents for a role' })
+  @CompanyScope({ from: 'param', key: 'roleId', via: 'role' })
   @Get('role/:roleId/knowledge')
   async listRoleKnowledge(
     @Param('roleId') roleId: UUID,
@@ -87,6 +90,7 @@ export class KnowledgeController {
    * mistaken for a filename.
    */
   @ApiOperation({ summary: 'Get knowledge index status for a role' })
+  @CompanyScope({ from: 'param', key: 'roleId', via: 'role' })
   @Get('role/:roleId/knowledge/status')
   async getRoleKnowledgeStatus(
     @Param('roleId') roleId: UUID,
@@ -113,6 +117,7 @@ export class KnowledgeController {
    * @throws {@link NotFoundException} when the role does not exist.
    */
   @ApiOperation({ summary: 'Query the RAG index for a role' })
+  @CompanyScope({ from: 'param', key: 'roleId', via: 'role' })
   @Get('role/:roleId/knowledge/query')
   async queryRoleKnowledge(
     @Param('roleId') roleId: UUID,
@@ -134,6 +139,7 @@ export class KnowledgeController {
 
   /** Returns a role knowledge document's content. */
   @ApiOperation({ summary: 'Get an OKF document for a role' })
+  @CompanyScope({ from: 'param', key: 'roleId', via: 'role' })
   @Get('role/:roleId/knowledge/:filename')
   async getRoleKnowledgeFile(
     @Param('roleId') roleId: UUID,
@@ -157,6 +163,7 @@ export class KnowledgeController {
    */
   @ApiOperation({ summary: 'Upload a document for a role' })
   @ApiConsumes('multipart/form-data')
+  @CompanyScope({ from: 'param', key: 'roleId', via: 'role' })
   @Post('role/:roleId/knowledge')
   @UseInterceptors(FileInterceptor('file'))
   async storeRoleKnowledgeFile(
@@ -177,6 +184,7 @@ export class KnowledgeController {
 
   /** Deletes a role knowledge document and its RAG chunks. Idempotent. */
   @ApiOperation({ summary: 'Delete an OKF document for a role' })
+  @CompanyScope({ from: 'param', key: 'roleId', via: 'role' })
   @Delete('role/:roleId/knowledge/:filename')
   @HttpCode(204)
   async deleteRoleKnowledgeFile(
@@ -196,6 +204,7 @@ export class KnowledgeController {
 
   /** Lists all OKF documents stored in the company's shared knowledge. */
   @ApiOperation({ summary: 'List company-shared OKF documents' })
+  @CompanyScope({ from: 'param', key: 'companyId', via: 'company' })
   @Get('company/:companyId/knowledge')
   async listCompanyKnowledge(
     @Param('companyId') companyId: string,
@@ -215,6 +224,7 @@ export class KnowledgeController {
   @ApiOperation({
     summary: 'Get knowledge index status for a company (shared + every role)',
   })
+  @CompanyScope({ from: 'param', key: 'companyId', via: 'company' })
   @Get('company/:companyId/knowledge/status')
   async getCompanyKnowledgeStatus(
     @Param('companyId') companyId: string,
@@ -227,6 +237,7 @@ export class KnowledgeController {
 
   /** Returns a company-shared knowledge document's content. */
   @ApiOperation({ summary: 'Get a company-shared OKF document' })
+  @CompanyScope({ from: 'param', key: 'companyId', via: 'company' })
   @Get('company/:companyId/knowledge/:filename')
   async getCompanyKnowledgeFile(
     @Param('companyId') companyId: string,
@@ -247,6 +258,7 @@ export class KnowledgeController {
    */
   @ApiOperation({ summary: 'Upload a company-shared document' })
   @ApiConsumes('multipart/form-data')
+  @CompanyScope({ from: 'param', key: 'companyId', via: 'company' })
   @Post('company/:companyId/knowledge')
   @UseInterceptors(FileInterceptor('file'))
   async storeCompanyKnowledgeFile(
@@ -271,6 +283,7 @@ export class KnowledgeController {
    * happens asynchronously on the reindex worker.
    */
   @ApiOperation({ summary: 'Reindex all knowledge for a company' })
+  @CompanyScope({ from: 'param', key: 'companyId', via: 'company' })
   @Post('company/:companyId/knowledge/reindex')
   @HttpCode(202)
   async reindexCompanyKnowledge(
@@ -284,6 +297,7 @@ export class KnowledgeController {
 
   /** Deletes a company-shared knowledge document and its RAG chunks. Idempotent. */
   @ApiOperation({ summary: 'Delete a company-shared OKF document' })
+  @CompanyScope({ from: 'param', key: 'companyId', via: 'company' })
   @Delete('company/:companyId/knowledge/:filename')
   @HttpCode(204)
   async deleteCompanyKnowledgeFile(

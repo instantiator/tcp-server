@@ -30,20 +30,31 @@ scripts/start-dev.sh
 
 The `tcp` org is created with a default account, if not already available:
 
-| Org   | Username | Password |
-| ----- | -------- | -------- |
-| `tcp` | `test`   | `test`   |
+| Org   | Username | Password      |
+| ----- | -------- | ------------- |
+| `tcp` | `test`   | `Testing123!` |
+
+> [!TIP]
+> These values come from the `.env.testing` config file, where you'll find other configuration options, too.
 
 For more about working with Zitadel, see:
 
 - [Zitadel setup](./zitadel-setup.md)
 
-### 0.2 Service healthchecks
+### 0.2 Service health checks (optional)
 
-Check the `/health` pages for the tcp-server, and tcp-agent applications.
+To confirm that the system is in a good state, you can check the `/health` pages for the tcp-server, and tcp-agent applications:
 
 - http://localhost:3000/health
 - http://localhost:3001/health
+
+Alternatively, you can run the smoke tests with:
+
+```bash
+./scripts/run-smoke-tests.sh
+```
+
+These tests review health check results and will alert if anything reports an issue.
 
 ### 0.3 Check the `test` account
 

@@ -33,6 +33,13 @@ export const configSchema = Joi.object({
   OIDC_AUDIENCE: Joi.string().optional(),
   OIDC_CLIENT_ID: Joi.string().required(),
   OIDC_CLIENT_SECRET: Joi.string().required(),
+  /**
+   * Comma-separated OIDC `sub` claims and/or email addresses permitted to use
+   * `?all=true` and the system routes. Empty (the default) means no caller is
+   * an administrator — the fail-closed choice, because a deployment that
+   * forgets to set it should lose an administrative view, not gain one.
+   */
+  TCP_ADMIN_IDENTIFIERS: Joi.string().allow('').default(''),
   // When true, apiKey values in LlmConfig are replaced with '***' in API responses.
   TCP_MASK_API_KEYS: Joi.boolean().default(DEFAULT_TCP_MASK_API_KEYS),
   // Shared secret used to authenticate internal service-to-service calls (tcp-agent, MCP servers).

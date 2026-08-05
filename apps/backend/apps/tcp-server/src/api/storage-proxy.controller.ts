@@ -23,6 +23,8 @@ import type { Request, Response } from 'express';
 import * as path from 'path';
 import { getCurrentUserId } from '../auth/current-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CompanyMembershipGuard } from '../auth/company-membership.guard';
+import { CompanyScope } from '../auth/company-scope.decorator';
 import { StorageService } from '../storage/storage.service';
 
 /** Maximum upload size accepted by {@link StorageProxyController.upload}. */
@@ -53,7 +55,7 @@ function assertSafePath(p: string): void {
  */
 @ApiTags('storage')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CompanyMembershipGuard)
 @Controller({ path: 'api/storage' })
 export class StorageProxyController {
   constructor(private readonly storage: StorageService) {}
@@ -63,6 +65,7 @@ export class StorageProxyController {
    * response. Returns 404 when the key does not exist.
    */
   @ApiOperation({ summary: 'Download a file from shared storage' })
+  @CompanyScope({ from: 'query', key: 'path', via: 'storagePath' })
   @Get()
   async download(
     @Query('path') objectPath: string,
@@ -84,6 +87,7 @@ export class StorageProxyController {
    */
   @ApiOperation({ summary: 'Upload a file to shared storage' })
   @ApiConsumes('multipart/form-data')
+  @CompanyScope({ from: 'query', key: 'path', via: 'storagePath' })
   @Post()
   @UseInterceptors(FileInterceptor('file'))
   async upload(

@@ -423,18 +423,30 @@ describe('tcp-cli API flows', () => {
 
 describe('storage proxy', () => {
   let token: string;
+  /**
+   * Storage keys are company-prefixed (`{companySlug}/…`), and since 002.05
+   * that prefix is what the membership guard scopes the request by — a key
+   * outside any company's prefix belongs to nobody and is refused. These
+   * tests write under a company the machine user creates, and therefore owns.
+   */
+  let companySlug: string;
 
   beforeAll(async () => {
     token = (await ApiHelper.getMachineToken())!;
+    const api = new ApiHelper(token);
+    companySlug = `storage-proxy-${RUN_ID}`;
+    await api.createTestCompany('Storage Proxy Co', companySlug);
   });
 
   const authHeaders = () => ({ Authorization: `Bearer ${token}` });
 
   describe('POST /api/storage/:path + GET /api/storage?path=', () => {
-    const key = `api-test/${RUN_ID}/proxy-test.txt`;
     const content = `proxy test content ${RUN_ID}`;
 
+    const proxyKey = () => `${companySlug}/api-test/${RUN_ID}/proxy-test.txt`;
+
     it('uploads a file and returns key and size', async () => {
+      const key = proxyKey();
       const form = new FormData();
       form.append(
         'file',
@@ -453,7 +465,7 @@ describe('storage proxy', () => {
 
     it('downloads the uploaded file back', async () => {
       const res = await fetch(
-        `${BASE}/api/storage?path=${encodeURIComponent(key)}`,
+        `${BASE}/api/storage?path=${encodeURIComponent(proxyKey())}`,
         { headers: authHeaders() },
       );
       expect(res.status).toBe(200);
@@ -463,15 +475,25 @@ describe('storage proxy', () => {
 
     it('returns 404 for a non-existent key', async () => {
       const res = await fetch(
-        `${BASE}/api/storage?path=${encodeURIComponent('api-test/does-not-exist.txt')}`,
+        `${BASE}/api/storage?path=${encodeURIComponent(`${companySlug}/api-test/does-not-exist.txt`)}`,
         { headers: authHeaders() },
       );
       expect(res.status).toBe(404);
     });
 
-    it('returns 400 for a path traversal attempt', async () => {
+    // A key whose first segment names no company belongs to nobody: the
+    // membership guard refuses it before the store is ever consulted.
+    it('returns 404 for a key outside any company prefix', async () => {
       const res = await fetch(
-        `${BASE}/api/storage?path=${encodeURIComponent('../etc/passwd')}`,
+        `${BASE}/api/storage?path=${encodeURIComponent('api-test/orphan.txt')}`,
+        { headers: authHeaders() },
+      );
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 400 for a path traversal attempt inside a company prefix', async () => {
+      const res = await fetch(
+        `${BASE}/api/storage?path=${encodeURIComponent(`${companySlug}/../etc/passwd`)}`,
         { headers: authHeaders() },
       );
       expect(res.status).toBe(400);
@@ -479,7 +501,7 @@ describe('storage proxy', () => {
 
     it('returns 401 without a token', async () => {
       const res = await fetch(
-        `${BASE}/api/storage?path=${encodeURIComponent(key)}`,
+        `${BASE}/api/storage?path=${encodeURIComponent(proxyKey())}`,
       );
       expect(res.status).toBe(401);
     });

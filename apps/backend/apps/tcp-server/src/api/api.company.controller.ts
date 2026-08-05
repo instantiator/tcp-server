@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -36,6 +37,9 @@ import { defer, from, merge, mergeMap, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { DbService } from '../db/db.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CompanyMembershipGuard } from '../auth/company-membership.guard';
+import { CompanyScope, NoCompanyScope } from '../auth/company-scope.decorator';
+import { MembershipService } from '../auth/membership.service';
 import { getCurrentUserIdentifiers } from '../auth/current-user';
 import { CompanyEventService } from '../events/company-event.service';
 import { ApiService } from './api.service';
@@ -54,7 +58,7 @@ import {
 /** REST controller for company (tenant) create, read, and update operations. */
 @ApiTags('companies')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CompanyMembershipGuard)
 @Controller({ path: 'api/company' })
 export class CompanyController {
   constructor(
@@ -63,16 +67,17 @@ export class CompanyController {
     private readonly stats: CompanyStatsService,
     private readonly priming: CompanyPrimingService,
     private readonly companyEvents: CompanyEventService,
+    private readonly membership: MembershipService,
   ) {}
 
   /**
    * Lists the companies the caller is a {@link CompanyUser} of, each with its
    * {@link CompanyStats} — the browser has to discover what the signed-in
-   * user may see (ADR-023). `?all=true` returns every company instead.
-   *
-   * **`?all=true` carries no permission check**: any authenticated caller can
-   * still use it, exactly as before this endpoint was scoped. Gating it is
-   * 002.05's work; nothing here closes that gap.
+   * user may see (ADR-023). `?all=true` returns every company instead, and is
+   * **restricted to administrators** — the identifiers named in
+   * `TCP_ADMIN_IDENTIFIERS` (ADR-011, phase-02 amendment). A caller who is not
+   * one is refused rather than quietly given the scoped list: degrading one
+   * request into a different one hides the fact that they lack the access.
    */
   @ApiOperation({
     summary: "List the caller's companies, with per-company statistics",
@@ -82,9 +87,12 @@ export class CompanyController {
     required: false,
     type: Boolean,
     description:
-      "Return every company rather than the caller's memberships. Bare `?all` counts as true. NOT permission-checked — open to any authenticated caller until 002.05 gates it.",
+      "Return every company rather than the caller's memberships. Bare `?all` counts as true. Administrators only (`TCP_ADMIN_IDENTIFIERS`); 403 for anyone else.",
   })
   @ApiOkResponse({ type: CompanyListItemDto, isArray: true })
+  @NoCompanyScope(
+    'scoped to the caller in the handler; ?all=true is admin-only',
+  )
   @Get()
   async listCompanies(
     @Req() req: Request,
@@ -93,8 +101,14 @@ export class CompanyController {
     // `?all` bare and `?all=true` both mean every company. Anything else is
     // the membership-scoped default — a malformed flag must never widen scope.
     const wantsAll = all === 'true' || all === '';
+    const identifiers = getCurrentUserIdentifiers(req);
+    if (wantsAll && !this.membership.isAdmin(identifiers)) {
+      throw new ForbiddenException(
+        'Listing every company requires administrator access',
+      );
+    }
     const companies = await this.db.listCompanies(
-      wantsAll ? undefined : getCurrentUserIdentifiers(req),
+      wantsAll ? undefined : identifiers,
     );
     // Stats accompany both modes — the administrative view wants them too.
     const stats = await this.stats.listStats(companies.map((c) => c.id));
@@ -111,6 +125,9 @@ export class CompanyController {
    * {@link CompanyUser} with `memberType: 'creator'`.
    */
   @ApiOperation({ summary: 'Create or replace a company' })
+  @NoCompanyScope(
+    'any authenticated caller may create a company; becomes its creator',
+  )
   @Post()
   async postCompany(
     @Body() body: CreateCompanyDto,
@@ -147,6 +164,7 @@ export class CompanyController {
    * the `X-Tcp-Warnings` response header — the update still succeeds.
    */
   @ApiOperation({ summary: 'Partially update a company by ID or slug' })
+  @CompanyScope({ from: 'param', key: 'id', via: 'company' })
   @Put(':id')
   async putCompany(
     @Param('id') id: string,
@@ -163,6 +181,7 @@ export class CompanyController {
    * Returns `null` (serialised as an empty body) when no company matches.
    */
   @ApiOperation({ summary: 'Get a company by ID or slug' })
+  @CompanyScope({ from: 'param', key: 'id', via: 'company' })
   @Get(':id')
   async getCompany(@Param('id') id: UUID): Promise<TcpCompany | null> {
     return await this.api.getCompany(id);
@@ -174,6 +193,7 @@ export class CompanyController {
    * users (see the `AddMissingCompanyRoleForeignKeys` migration).
    */
   @ApiOperation({ summary: 'Delete a company by ID or slug' })
+  @CompanyScope({ from: 'param', key: 'id', via: 'company' })
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteCompany(@Param('id') id: string): Promise<void> {
@@ -186,6 +206,7 @@ export class CompanyController {
    * identified by UUID or slug.
    */
   @ApiOperation({ summary: 'List roles for a company by ID or slug' })
+  @CompanyScope({ from: 'param', key: 'id', via: 'company' })
   @Get(':id/roles')
   async listRoles(@Param('id') id: string): Promise<TcpRole[]> {
     const company = await this.resolveCompanyOrThrow(id);
@@ -199,6 +220,7 @@ export class CompanyController {
    * scoping the lookup to `companyId` (itself UUID-or-slug).
    */
   @ApiOperation({ summary: 'Get a role by slug (or ID) within a company' })
+  @CompanyScope({ from: 'param', key: 'companyId', via: 'company' })
   @Get(':companyId/roles/by-slug/:slug')
   async getRoleBySlug(
     @Param('companyId') companyId: string,
@@ -220,6 +242,7 @@ export class CompanyController {
    * {@link RoleController.createRole} for the `X-Tcp-Warnings` header.
    */
   @ApiOperation({ summary: 'Update a role by slug (or ID) within a company' })
+  @CompanyScope({ from: 'param', key: 'companyId', via: 'company' })
   @Put(':companyId/roles/by-slug/:slug')
   async putRoleBySlug(
     @Param('companyId') companyId: string,
@@ -242,6 +265,7 @@ export class CompanyController {
    * the role's agents, knowledge chunks, episodic memory, and conversations.
    */
   @ApiOperation({ summary: 'Delete a role by slug (or ID) within a company' })
+  @CompanyScope({ from: 'param', key: 'companyId', via: 'company' })
   @Delete(':companyId/roles/by-slug/:slug')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteRoleBySlug(
@@ -269,6 +293,7 @@ export class CompanyController {
     summary:
       "Stream a company's company, task, agent, assignment and enquiry events",
   })
+  @CompanyScope({ from: 'param', key: 'id', via: 'company' })
   @Sse(':id/events')
   streamCompanyEvents(@Param('id') id: string): Observable<MessageEvent> {
     return defer(() => from(this.buildCompanyStream(id))).pipe(

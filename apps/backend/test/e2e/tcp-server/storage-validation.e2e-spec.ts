@@ -1,4 +1,4 @@
-import { TcpCompany } from '@tcp/shared';
+import { CompanyUser, TcpCompany } from '@tcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -7,6 +7,7 @@ import { App } from 'supertest/types';
 import { Repository } from 'typeorm';
 import { AppModule } from '../../../apps/tcp-server/src/app.module';
 import { makeTestJwt } from '../helpers/test-jwt';
+import { seedMembership } from '../helpers/seed-membership';
 
 /** e2e coverage for the standalone `POST /api/storage/validate` path (docs/prompts/009.4). */
 describe('StorageValidationController (e2e)', () => {
@@ -30,6 +31,10 @@ describe('StorageValidationController (e2e)', () => {
         name: 'Validate Endpoint Co',
         description: 'test',
       }),
+    );
+    await seedMembership(
+      moduleFixture.get(getRepositoryToken(CompanyUser)),
+      company.id,
     );
   });
 

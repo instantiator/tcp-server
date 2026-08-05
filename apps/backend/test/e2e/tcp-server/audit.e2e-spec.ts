@@ -1,6 +1,7 @@
 import {
   AuditEvent,
   AuditEventType,
+  CompanyUser,
   TcpAgent,
   TcpAssignment,
   TcpCompany,
@@ -17,6 +18,7 @@ import { Repository } from 'typeorm';
 import { AuditService } from '../../../apps/tcp-server/src/audit/audit.service';
 import { AppModule } from '../../../apps/tcp-server/src/app.module';
 import { makeTestJwt } from '../helpers/test-jwt';
+import { seedMembership } from '../helpers/seed-membership';
 
 const INTERNAL_KEY = process.env.INTERNAL_API_KEY ?? 'e2e-test-internal-key';
 
@@ -57,6 +59,10 @@ describe('AuditController (e2e)', () => {
       }),
     );
     companyId = company.id;
+    await seedMembership(
+      module.get(getRepositoryToken(CompanyUser)),
+      company.id,
+    );
     const role = await roleRepo.save(
       roleRepo.create({
         slug: 'auditor',

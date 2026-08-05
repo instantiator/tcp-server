@@ -1,4 +1,10 @@
-import { AuditEvent, TcpAgent, TcpCompany, TcpRole } from '@tcp/shared';
+import {
+  AuditEvent,
+  CompanyUser,
+  TcpAgent,
+  TcpCompany,
+  TcpRole,
+} from '@tcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -9,6 +15,7 @@ import { Repository } from 'typeorm';
 import { AppModule } from '../../../apps/tcp-server/src/app.module';
 import { RagIndexService } from '../../../apps/tcp-server/src/rag/rag-index.service';
 import { makeTestJwt } from '../helpers/test-jwt';
+import { seedMembership } from '../helpers/seed-membership';
 import { requireEnv } from '../../support/require-env';
 
 const STUB_LLM_URL = requireEnv('STUB_LLM_URL');
@@ -19,6 +26,7 @@ describe('KnowledgeController (e2e)', () => {
   let roleRepo: Repository<TcpRole>;
   let agentRepo: Repository<TcpAgent>;
   let auditRepo: Repository<AuditEvent>;
+  let companyUserRepo: Repository<CompanyUser>;
   let ragIndex: RagIndexService;
   let roleId: UUID;
   let companyId: UUID;
@@ -33,6 +41,7 @@ describe('KnowledgeController (e2e)', () => {
     roleRepo = module.get(getRepositoryToken(TcpRole));
     agentRepo = module.get(getRepositoryToken(TcpAgent));
     auditRepo = module.get(getRepositoryToken(AuditEvent));
+    companyUserRepo = module.get(getRepositoryToken(CompanyUser));
     ragIndex = module.get(RagIndexService);
     const company = await companyRepo.save(
       companyRepo.create({
@@ -42,6 +51,7 @@ describe('KnowledgeController (e2e)', () => {
       }),
     );
     companyId = company.id;
+    await seedMembership(companyUserRepo, company.id);
     const role = await roleRepo.save(
       roleRepo.create({
         slug: 'writer',
@@ -409,6 +419,7 @@ describe('KnowledgeController (e2e)', () => {
           embeddingConfig,
         }),
       );
+      await seedMembership(companyUserRepo, company.id);
       const role = await roleRepo.save(
         roleRepo.create({
           slug: 'query-writer',

@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CompanyMembershipGuard } from '../auth/company-membership.guard';
+import { CompanyScope } from '../auth/company-scope.decorator';
 import { StorageObject, StorageService } from '../storage/storage.service';
 import { ValidateSharedDocumentDto } from './dto/validate-shared-document.dto';
 
@@ -51,7 +53,7 @@ function isImmediateChild(prefix: string, key: string): boolean {
  */
 @ApiTags('storage')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CompanyMembershipGuard)
 @Controller('api/storage/validate')
 export class StorageValidationController {
   constructor(private readonly storage: StorageService) {}
@@ -64,6 +66,7 @@ export class StorageValidationController {
    * returns 404.
    */
   @ApiOperation({ summary: 'Validate one or more shared-storage documents' })
+  @CompanyScope({ from: 'body', key: 'path', via: 'storagePath' })
   @Post()
   @HttpCode(200)
   async validate(

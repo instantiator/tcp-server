@@ -17,6 +17,8 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { UUID } from 'crypto';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CompanyMembershipGuard } from '../auth/company-membership.guard';
+import { CompanyScope } from '../auth/company-scope.decorator';
 import { DbService } from '../db/db.service';
 import { CreateRoleDto, UpdateRoleDto } from './dto/role.dto';
 import { computeRoleWarnings, setWarningsHeader } from './validation-warnings';
@@ -32,7 +34,7 @@ import { computeRoleWarnings, setWarningsHeader } from './validation-warnings';
  */
 @ApiTags('roles')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CompanyMembershipGuard)
 @Controller({ path: 'api/role' })
 export class RoleController {
   constructor(private readonly db: DbService) {}
@@ -43,6 +45,7 @@ export class RoleController {
    * `X-Tcp-Warnings` response header — the role is still created.
    */
   @ApiOperation({ summary: 'Create a role' })
+  @CompanyScope({ from: 'body', key: 'companyId', via: 'company' })
   @Post()
   async createRole(
     @Body() body: CreateRoleDto,
@@ -61,6 +64,7 @@ export class RoleController {
    * {@link createRole} for the `X-Tcp-Warnings` header.
    */
   @ApiOperation({ summary: 'Partially update a role' })
+  @CompanyScope({ from: 'param', key: 'id', via: 'role' })
   @Put(':id')
   async updateRole(
     @Param('id') id: UUID,
@@ -74,6 +78,7 @@ export class RoleController {
 
   /** Retrieves a role by its UUID. Returns 404 when not found. */
   @ApiOperation({ summary: 'Get a role by ID' })
+  @CompanyScope({ from: 'param', key: 'id', via: 'role' })
   @Get(':id')
   async getRole(@Param('id') id: UUID): Promise<TcpRole> {
     const role = await this.db.getRole(id);
@@ -86,6 +91,7 @@ export class RoleController {
    * chunks, episodic memory, and conversations.
    */
   @ApiOperation({ summary: 'Delete a role by ID' })
+  @CompanyScope({ from: 'param', key: 'id', via: 'role' })
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteRole(@Param('id') id: UUID): Promise<void> {

@@ -93,7 +93,10 @@ describe('SystemController (e2e)', () => {
     assignmentRepo = module.get(getRepositoryToken(TcpAssignment));
     taskRepo = module.get(getRepositoryToken(TcpTask));
     auditRepo = module.get(getRepositoryToken(AuditEvent));
-    jwt = makeTestJwt();
+    // Draining the system is an administrator action: every route this suite
+    // drives is `@AdminOnly()`, and TCP_ADMIN_IDENTIFIERS in .env.testing names
+    // this `sub`.
+    jwt = makeTestJwt({ sub: 'e2e-admin' });
 
     publisher = new Redis(process.env.REDIS_URL as string);
     // An unhandled 'error' from a shared-process connection can crash an

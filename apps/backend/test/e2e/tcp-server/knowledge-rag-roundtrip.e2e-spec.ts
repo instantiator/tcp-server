@@ -1,4 +1,4 @@
-import { TcpCompany, TcpRole } from '@tcp/shared';
+import { CompanyUser, TcpCompany, TcpRole } from '@tcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -8,6 +8,7 @@ import { App } from 'supertest/types';
 import { Repository } from 'typeorm';
 import { AppModule } from '../../../apps/tcp-server/src/app.module';
 import { makeTestJwt } from '../helpers/test-jwt';
+import { seedMembership } from '../helpers/seed-membership';
 import { requireEnv } from '../../support/require-env';
 
 const STUB_LLM_URL = requireEnv('STUB_LLM_URL');
@@ -65,6 +66,10 @@ describe('knowledge RAG round trip (e2e)', () => {
         description: 'Test',
         embeddingConfig,
       }),
+    );
+    await seedMembership(
+      module.get(getRepositoryToken(CompanyUser)),
+      company.id,
     );
     const role = await roleRepo.save(
       roleRepo.create({

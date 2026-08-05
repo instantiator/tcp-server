@@ -33,6 +33,11 @@ import type { UUID } from 'crypto';
 import { defer, from, merge, mergeMap, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CompanyMembershipGuard } from '../auth/company-membership.guard';
+import {
+  CompanyScope,
+  CompanyScopeRequired,
+} from '../auth/company-scope.decorator';
 import { TaskEventService } from '../events/task-event.service';
 import { CreateTaskDto, UpdateTaskDto } from './dto/task.dto';
 import { SystemShutdownService } from './system-shutdown.service';
@@ -48,7 +53,7 @@ interface UploadedFileBuffer {
 /** REST controller for {@link TcpTask} create, materials upload, start, list, and get. */
 @ApiTags('tasks')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CompanyMembershipGuard)
 @Controller({ path: 'api/task' })
 export class TaskController {
   constructor(
@@ -59,6 +64,7 @@ export class TaskController {
 
   /** Creates a task in the `ready` state. No plan is generated until `POST /api/task/:id/start`. */
   @ApiOperation({ summary: 'Create a task' })
+  @CompanyScope({ from: 'body', key: 'companyId', via: 'company' })
   @Post()
   async createTask(@Body() body: CreateTaskDto): Promise<TcpTask> {
     return this.tasks.create(body);
@@ -70,6 +76,7 @@ export class TaskController {
    * editable.
    */
   @ApiOperation({ summary: 'Partially update an unstarted task' })
+  @CompanyScope({ from: 'param', key: 'id', via: 'task' })
   @Put(':id')
   async updateTask(
     @Param('id') id: UUID,
@@ -84,6 +91,7 @@ export class TaskController {
    */
   @ApiOperation({ summary: 'Upload a task material' })
   @ApiConsumes('multipart/form-data')
+  @CompanyScope({ from: 'param', key: 'id', via: 'task' })
   @Post(':id/materials')
   @UseInterceptors(FileInterceptor('file'))
   async uploadMaterial(
@@ -105,6 +113,7 @@ export class TaskController {
    * Refused with `503` while the system is draining for shutdown.
    */
   @ApiOperation({ summary: 'Start a task' })
+  @CompanyScope({ from: 'param', key: 'id', via: 'task' })
   @Post(':id/start')
   @HttpCode(202)
   async startTask(@Param('id') id: UUID): Promise<TcpTask> {
@@ -117,6 +126,7 @@ export class TaskController {
    * cascades to its still-non-terminal assignments and their working agents.
    */
   @ApiOperation({ summary: 'Cancel a task' })
+  @CompanyScope({ from: 'param', key: 'id', via: 'task' })
   @Post(':id/cancel')
   @HttpCode(202)
   async cancelTask(@Param('id') id: UUID): Promise<TcpTask> {
@@ -125,6 +135,8 @@ export class TaskController {
 
   /** Lists a company's tasks. */
   @ApiOperation({ summary: 'List tasks for a company' })
+  @CompanyScope({ from: 'query', key: 'companyId', via: 'company' })
+  @CompanyScopeRequired('companyId query parameter is required')
   @Get()
   async listTasks(@Query('companyId') companyId?: UUID): Promise<TcpTask[]> {
     if (!companyId) {
@@ -135,6 +147,7 @@ export class TaskController {
 
   /** Retrieves a task with its assignments. */
   @ApiOperation({ summary: 'Get a task by ID' })
+  @CompanyScope({ from: 'param', key: 'id', via: 'task' })
   @Get(':id')
   async getTask(
     @Param('id') id: UUID,
@@ -149,6 +162,7 @@ export class TaskController {
    * {@link TaskService.getHistory}.
    */
   @ApiOperation({ summary: "Get a task's audit history" })
+  @CompanyScope({ from: 'param', key: 'id', via: 'task' })
   @Get(':id/history')
   async getTaskHistory(@Param('id') id: UUID): Promise<AuditEvent[]> {
     return this.tasks.getHistory(id);
@@ -161,6 +175,7 @@ export class TaskController {
    * then live updates via {@link TaskEventService}.
    */
   @ApiOperation({ summary: "Stream a task's and its assignments' events" })
+  @CompanyScope({ from: 'param', key: 'id', via: 'task' })
   @Sse(':id/events')
   streamTaskEvents(@Param('id') id: UUID): Observable<MessageEvent> {
     const replay$ = defer(() => from(this.primeTaskEvents(id))).pipe(

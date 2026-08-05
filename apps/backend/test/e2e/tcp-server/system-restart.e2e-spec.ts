@@ -64,7 +64,9 @@ describe('Restart after a shutdown (e2e)', () => {
   let companyId: UUID;
 
   beforeAll(async () => {
-    jwt = makeTestJwt();
+    // `GET /api/system/shutdown` is administrator-only; TCP_ADMIN_IDENTIFIERS
+    // in .env.testing names this `sub`.
+    jwt = makeTestJwt({ sub: 'e2e-admin' });
 
     // Phase 1: the state a graceful shutdown leaves behind — a task still
     // in-progress, its implement assignment still claimed, and the agent

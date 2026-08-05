@@ -10,10 +10,20 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { UUID } from 'crypto';
 import { AuditService } from '../audit/audit.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CompanyMembershipGuard } from '../auth/company-membership.guard';
+import {
+  CompanyScope,
+  CompanyScopeRequired,
+} from '../auth/company-scope.decorator';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { ConversationService } from './conversation.service';
 import { ConversationReplyDto } from './dto/conversation.dto';
@@ -21,7 +31,7 @@ import { ConversationReplyDto } from './dto/conversation.dto';
 /** REST controller for agent-to-human conversation queries. */
 @ApiTags('conversations')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CompanyMembershipGuard)
 @Controller({ path: 'api/conversation' })
 export class ConversationController {
   private readonly logger = new Logger(ConversationController.name);
@@ -33,10 +43,18 @@ export class ConversationController {
   ) {}
 
   /**
-   * Lists conversations, optionally filtered by `companyId` and/or `status`.
-   * Defaults to returning all statuses when neither filter is provided.
+   * Lists a company's conversations, optionally filtered by `status`.
+   * Defaults to returning all statuses.
+   *
+   * `companyId` is required since 002.05: an unfiltered list spans every
+   * company, which is precisely the cross-company read membership
+   * enforcement exists to refuse.
    */
-  @ApiOperation({ summary: 'List conversations' })
+  @ApiOperation({ summary: "List a company's conversations" })
+  @ApiQuery({ name: 'companyId', required: true, description: 'Company UUID' })
+  @ApiQuery({ name: 'status', required: false })
+  @CompanyScope({ from: 'query', key: 'companyId', via: 'company' })
+  @CompanyScopeRequired('companyId query parameter is required')
   @Get()
   async list(
     @Query('companyId') companyId?: UUID,
@@ -51,6 +69,7 @@ export class ConversationController {
    * timestamps themselves are always UTC).
    */
   @ApiOperation({ summary: 'Get a conversation by slug' })
+  @CompanyScope({ from: 'param', key: 'slug', via: 'conversation' })
   @Get(':slug')
   async get(@Param('slug') slug: string): Promise<{
     conversation: Conversation;
@@ -67,6 +86,7 @@ export class ConversationController {
    * reply injected as the first message on resume.
    */
   @ApiOperation({ summary: 'Reply to a conversation' })
+  @CompanyScope({ from: 'param', key: 'slug', via: 'conversation' })
   @Post(':slug/reply')
   async reply(
     @Param('slug') slug: string,

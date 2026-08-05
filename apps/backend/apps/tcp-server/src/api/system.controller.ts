@@ -10,6 +10,8 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CompanyMembershipGuard } from '../auth/company-membership.guard';
+import { AdminOnly } from '../auth/company-scope.decorator';
 import { ShutdownStatus, SystemDrainService } from './system-drain.service';
 
 /**
@@ -23,7 +25,7 @@ import { ShutdownStatus, SystemDrainService } from './system-drain.service';
  */
 @ApiTags('system')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, CompanyMembershipGuard)
 @Controller({ path: 'api/system' })
 export class SystemController {
   constructor(private readonly drain: SystemDrainService) {}
@@ -41,6 +43,7 @@ export class SystemController {
    * in progress.
    */
   @ApiOperation({ summary: 'Begin draining the system for shutdown' })
+  @AdminOnly()
   @Post('shutdown')
   @HttpCode(HttpStatus.ACCEPTED)
   async beginShutdown(@Query('force') force?: string): Promise<ShutdownStatus> {
@@ -51,6 +54,7 @@ export class SystemController {
 
   /** Reports how far the drain has got. Cheap enough to poll every second. */
   @ApiOperation({ summary: 'Get the current shutdown state' })
+  @AdminOnly()
   @Get('shutdown')
   async getShutdown(): Promise<ShutdownStatus> {
     return this.drain.status();
@@ -64,6 +68,7 @@ export class SystemController {
    * `POST /api/agent/resume/:id`.
    */
   @ApiOperation({ summary: 'Cancel a shutdown in progress' })
+  @AdminOnly()
   @Delete('shutdown')
   async cancelShutdown(): Promise<ShutdownStatus> {
     return (await this.drain.cancel()) ?? this.drain.status();

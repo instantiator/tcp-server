@@ -4,11 +4,12 @@ import {
   TcpCompany,
   WireEvent,
 } from '@tcp/shared';
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import type { UUID } from 'crypto';
 import { firstValueFrom, Subject, take, toArray } from 'rxjs';
 import type { Request, Response } from 'express';
+import { MembershipService } from '../auth/membership.service';
 import { DbService } from '../db/db.service';
 import { CompanyEventService } from '../events/company-event.service';
 import { CompanyController } from './api.company.controller';
@@ -72,6 +73,14 @@ const makePrimingService = (): jest.Mocked<
   prime: jest.fn().mockResolvedValue([]),
 });
 
+/** Admin by default; individual tests flip it to exercise the ?all=true gate. */
+const makeMembershipService = (): jest.Mocked<
+  Pick<MembershipService, 'isAdmin' | 'isMember'>
+> => ({
+  isAdmin: jest.fn().mockReturnValue(true),
+  isMember: jest.fn().mockResolvedValue(true),
+});
+
 const makeCompanyEventService = (): jest.Mocked<
   Pick<CompanyEventService, 'emit' | 'observe'>
 > => ({
@@ -85,6 +94,7 @@ describe('CompanyController', () => {
   let stats: ReturnType<typeof makeStatsService>;
   let priming: ReturnType<typeof makePrimingService>;
   let companyEvents: ReturnType<typeof makeCompanyEventService>;
+  let membership: ReturnType<typeof makeMembershipService>;
   let controller: CompanyController;
 
   beforeEach(() => {
@@ -93,12 +103,14 @@ describe('CompanyController', () => {
     stats = makeStatsService();
     priming = makePrimingService();
     companyEvents = makeCompanyEventService();
+    membership = makeMembershipService();
     controller = new CompanyController(
       api as unknown as ApiService,
       db as unknown as DbService,
       stats as unknown as CompanyStatsService,
       priming as unknown as CompanyPrimingService,
       companyEvents as unknown as CompanyEventService,
+      membership as unknown as MembershipService,
     );
   });
 
@@ -237,12 +249,29 @@ describe('CompanyController', () => {
     it.each([
       ['true', undefined],
       ['', undefined],
-    ])('is unscoped for ?all=%p', async (all, expected) => {
-      await controller.listCompanies(fakeReq(), all);
-      expect(db.listCompanies).toHaveBeenCalledWith(expected);
-    });
+    ])(
+      'is unscoped for ?all=%p, for an administrator',
+      async (all, expected) => {
+        await controller.listCompanies(fakeReq(), all);
+        expect(db.listCompanies).toHaveBeenCalledWith(expected);
+      },
+    );
+
+    // Refused, not quietly downgraded to the scoped list: a caller who cannot
+    // see every company should be told so, not handed a different answer.
+    it.each(['true', ''])(
+      'refuses ?all=%p for a caller who is not an administrator',
+      async (all) => {
+        membership.isAdmin.mockReturnValue(false);
+        await expect(
+          controller.listCompanies(fakeReq({ sub: 'alice' }), all),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+        expect(db.listCompanies).not.toHaveBeenCalled();
+      },
+    );
 
     it.each(['false', 'yes'])('stays scoped for ?all=%p', async (all) => {
+      membership.isAdmin.mockReturnValue(false);
       await controller.listCompanies(fakeReq({ sub: 'alice' }), all);
       expect(db.listCompanies).toHaveBeenCalledWith(['alice']);
     });

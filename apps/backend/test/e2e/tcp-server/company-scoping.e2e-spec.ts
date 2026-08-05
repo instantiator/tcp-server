@@ -23,8 +23,9 @@ interface CompanyRow {
 /**
  * Exercises the membership scoping of `GET /api/company` (ADR-023): the
  * default list is what the signed-in user may see, `?all=true` is the
- * unscoped administrative view, and a membership keyed by email is found as
- * readily as one keyed by the OIDC `sub`.
+ * unscoped administrative view — restricted to `TCP_ADMIN_IDENTIFIERS` since
+ * 002.05 — and a membership keyed by email is found as readily as one keyed
+ * by the OIDC `sub`.
  */
 describe('GET /api/company scoping (e2e)', () => {
   let app: INestApplication<App>;
@@ -35,6 +36,8 @@ describe('GET /api/company scoping (e2e)', () => {
   /** Alice creates her own company; Bob's is created under a second identity. */
   const aliceJwt = makeTestJwt({ sub: 'alice', email: 'alice@example.com' });
   const bobJwt = makeTestJwt({ sub: 'bob', email: 'bob@example.com' });
+  /** Named in `.env.testing`'s TCP_ADMIN_IDENTIFIERS — the only `?all=true` caller. */
+  const adminJwt = makeTestJwt({ sub: 'e2e-admin' });
 
   let aliceCompanyId: string;
   let bobCompanyId: string;
@@ -100,8 +103,8 @@ describe('GET /api/company scoping (e2e)', () => {
     expect(ids).not.toContain(bobCompanyId);
   });
 
-  it('includes every company under ?all=true', async () => {
-    const ids = (await list(aliceJwt, true)).map((c) => c.id);
+  it('includes every company under ?all=true, for an administrator', async () => {
+    const ids = (await list(adminJwt, true)).map((c) => c.id);
     expect(ids).toEqual(
       expect.arrayContaining([
         aliceCompanyId,
@@ -110,6 +113,14 @@ describe('GET /api/company scoping (e2e)', () => {
       ]),
     );
   });
+
+  // Refused rather than silently narrowed to her own companies: a caller who
+  // may not see everything should be told so, not handed a different answer.
+  it('refuses ?all=true to a caller who is not an administrator', () =>
+    request(app.getHttpServer())
+      .get('/api/company?all=true')
+      .set('Authorization', `Bearer ${aliceJwt}`)
+      .expect(403));
 
   it('finds a company reachable only through an email-keyed membership', async () => {
     const ids = (await list(aliceJwt)).map((c) => c.id);
@@ -120,7 +131,7 @@ describe('GET /api/company scoping (e2e)', () => {
     const mine = new Set([aliceCompanyId, bobCompanyId, emailOnlyCompanyId]);
     // Filtered to this suite's own companies: `?all=true` also returns
     // whatever other e2e suites have in the shared database.
-    for (const rows of [await list(aliceJwt), await list(aliceJwt, true)]) {
+    for (const rows of [await list(aliceJwt), await list(adminJwt, true)]) {
       for (const row of rows.filter((r) => mine.has(r.id))) {
         expect(row.stats).toMatchObject({
           activeAgents: 0,

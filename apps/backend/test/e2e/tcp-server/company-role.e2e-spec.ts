@@ -233,16 +233,15 @@ describe('CompanyController (e2e)', () => {
         expect((res.body as { slug: string }).slug).toBe('acme');
       });
 
-      it('returns 200 with empty body for an unknown UUID', async () => {
-        // NestJS serialises a null return as {} rather than null.
-        // TODO: add a NotFoundException guard to return 404 instead — before guarded endpoints are shipped, to align with REST conventions.
-        const res = await request(app.getHttpServer())
+      // Was a 200 with an empty body (a null return serialised as `{}`), with
+      // a TODO asking for this 404 before guarded endpoints shipped. 002.05
+      // delivers it: the membership guard resolves the company before the
+      // handler runs, so an id naming nothing is a 404 either way.
+      it('returns 404 for an unknown UUID', () =>
+        request(app.getHttpServer())
           .get('/api/company/00000000-0000-0000-0000-000000000000')
           .set('Authorization', `Bearer ${jwt}`)
-          .expect(200);
-
-        expect(res.body).toEqual({});
-      });
+          .expect(404));
     });
 
     describe('PUT /api/company/:id', () => {
@@ -400,7 +399,11 @@ describe('RoleController (e2e)', () => {
         .expect(404);
     });
 
-    it('returns 400 when companyId is not a valid UUID', async () => {
+    // Was a 400 from the DTO's `@IsUUID`. Guards run before validation pipes,
+    // so since 002.05 the membership guard answers first: a company handle is
+    // UUID-or-slug, and `not-a-uuid` is simply a slug naming no company. Still
+    // a loud, accurate refusal — a different 4xx.
+    it('returns 404 when companyId is not a valid UUID', async () => {
       await request(app.getHttpServer())
         .post('/api/role')
         .set('Authorization', `Bearer ${jwt}`)
@@ -414,7 +417,7 @@ describe('RoleController (e2e)', () => {
           knowledgeDomains: [],
           mcpServerList: [],
         })
-        .expect(400);
+        .expect(404);
     });
   });
 

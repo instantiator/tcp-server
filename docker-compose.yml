@@ -163,6 +163,9 @@ services:
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-http://localhost:${EXPOSE_PORT_ZITADEL:-8080}}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+      # Who may use `?all=true` and the system routes. Empty means nobody —
+      # see docs/authentication.md#administrators.
+      TCP_ADMIN_IDENTIFIERS: ${TCP_ADMIN_IDENTIFIERS:-}
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}

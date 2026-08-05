@@ -1,5 +1,6 @@
 import {
   AuditEvent,
+  CompanyUser,
   TcpAgent,
   TcpAssignment,
   TcpCompany,
@@ -15,6 +16,7 @@ import type { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { AppModule } from '../../../apps/tcp-server/src/app.module';
 import { makeTestJwt } from '../helpers/test-jwt';
+import { seedMembership } from '../helpers/seed-membership';
 
 describe('TaskController (e2e)', () => {
   let app: INestApplication<App>;
@@ -24,6 +26,7 @@ describe('TaskController (e2e)', () => {
   let assignmentRepo: Repository<TcpAssignment>;
   let agentRepo: Repository<TcpAgent>;
   let auditRepo: Repository<AuditEvent>;
+  let companyUserRepo: Repository<CompanyUser>;
   let jwt: string;
 
   beforeAll(async () => {
@@ -38,6 +41,7 @@ describe('TaskController (e2e)', () => {
     assignmentRepo = moduleFixture.get(getRepositoryToken(TcpAssignment));
     agentRepo = moduleFixture.get(getRepositoryToken(TcpAgent));
     auditRepo = moduleFixture.get(getRepositoryToken(AuditEvent));
+    companyUserRepo = moduleFixture.get(getRepositoryToken(CompanyUser));
     jwt = makeTestJwt();
   });
 
@@ -56,6 +60,7 @@ describe('TaskController (e2e)', () => {
           description: 'test',
         }),
       );
+      await seedMembership(companyUserRepo, company.id);
     });
 
     afterEach(async () => {

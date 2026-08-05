@@ -1,4 +1,10 @@
-import { AuditEvent, TcpAgent, TcpCompany, TcpRole } from '@tcp/shared';
+import {
+  AuditEvent,
+  CompanyUser,
+  TcpAgent,
+  TcpCompany,
+  TcpRole,
+} from '@tcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -7,6 +13,7 @@ import { App } from 'supertest/types';
 import { Repository } from 'typeorm';
 import { AppModule } from '../../../apps/tcp-server/src/app.module';
 import { makeTestJwt } from '../helpers/test-jwt';
+import { seedMembership } from '../helpers/seed-membership';
 
 describe('CompanyUserController (e2e)', () => {
   let app: INestApplication<App>;
@@ -37,6 +44,10 @@ describe('CompanyUserController (e2e)', () => {
       }),
     );
     companyId = company.id;
+    await seedMembership(
+      module.get(getRepositoryToken(CompanyUser)),
+      company.id,
+    );
   });
 
   afterEach(async () => {

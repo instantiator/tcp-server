@@ -1,9 +1,10 @@
 import {
-  assignmentWorkingKey,
+  CompanyUser,
   TcpAssignment,
   TcpCompany,
   TcpRole,
   TcpTask,
+  assignmentWorkingKey,
   taskCompletedPrefix,
 } from '@tcp/shared';
 import { INestApplication } from '@nestjs/common';
@@ -16,6 +17,7 @@ import { Repository } from 'typeorm';
 import { AppModule } from '../../../apps/tcp-server/src/app.module';
 import { StorageService } from '../../../apps/tcp-server/src/storage/storage.service';
 import { makeTestJwt } from '../helpers/test-jwt';
+import { seedMembership } from '../helpers/seed-membership';
 
 const INTERNAL_KEY = process.env.INTERNAL_API_KEY ?? 'e2e-test-internal-key';
 
@@ -58,6 +60,10 @@ describe('Task orchestration lifecycle (e2e)', () => {
         name: 'Orchestration Co',
         description: 'x',
       }),
+    );
+    await seedMembership(
+      moduleFixture.get(getRepositoryToken(CompanyUser)),
+      company.id,
     );
     role = await roleRepo.save(
       roleRepo.create({

@@ -1,5 +1,6 @@
 import {
   AuditEvent,
+  CompanyUser,
   TcpAgent,
   TcpAssignment,
   TcpCompany,
@@ -14,6 +15,7 @@ import type { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { AppModule } from '../../../apps/tcp-server/src/app.module';
 import { makeTestJwt } from '../helpers/test-jwt';
+import { seedMembership } from '../helpers/seed-membership';
 
 describe('AgentController (e2e)', () => {
   let app: INestApplication<App>;
@@ -48,6 +50,10 @@ describe('AgentController (e2e)', () => {
       }),
     );
     companyId = company.id;
+    await seedMembership(
+      module.get(getRepositoryToken(CompanyUser)),
+      company.id,
+    );
     const role = await roleRepo.save(
       roleRepo.create({
         slug: 'engineer',

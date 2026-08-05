@@ -23,16 +23,71 @@ OIDC_TOKEN_TYPE_JWT` (apps) or `ACCESS_TOKEN_TYPE_JWT` (machine users), or auth 
    creates; it's the single easiest thing to get wrong when hand-configuring Zitadel
    yourself (see [docs/zitadel-setup.md](zitadel-setup.md)).
 
+## Authorization
+
+Authentication proves who the caller is. **Authorization decides which company
+they may reach**, and since 002.05 it is enforced on every user-facing route
+([ADR-011](ADRs/ADR-011-authentication-authorization.md#amendments-as-implemented-00205)).
+
+### Membership
+
+A caller reaches a company if a `CompanyUser` row exists for it whose
+`identifier` matches the token's `sub` **or** its `email`. Both forms are
+checked: a membership added by email address grants access exactly as one added
+by `sub` does. `POST /api/company` adds the creator's row automatically.
+
+Most routes don't name a company directly. The company is resolved from
+whatever the route does name — a task, agent, assignment, role, conversation
+slug, or the company-slug prefix of a storage key — so reaching a company's task
+as a non-member fails just as reaching the company does.
+
+**A refusal is a `403`, not an empty result.** A non-member asking for a
+company is told so rather than handed a filtered-down answer that looks like the
+company is empty. A `404` means the id names nothing at all; the two are kept
+distinct so a permissions problem never reads as a missing record.
+
+<a id="administrators"></a>
+
+### Administrators
+
+Two things sit above membership: `?all=true` on `GET /api/company` (every
+company, not just the caller's) and the `/api/system` shutdown routes.
+`TCP_ADMIN_IDENTIFIERS` names who may use them — comma-separated `sub` claims
+and/or email addresses. Administrators also reach any company without a
+membership row, which is how an operator administers a system they are not a
+member of.
+
+**It is empty by default: nobody is an administrator.** Forgetting to set it
+costs you an administrative view; it never grants one by accident.
+
+With the bundled Zitadel, `scripts/start-deployment.sh` writes the bootstrapped
+human and machine user ids into the gitignored `<env-file>.local` override, so
+`tcp-cli` and the api test tier work without further setup. Against an external
+provider, set it yourself — the values are the `sub` claims (or email addresses)
+your provider issues.
+
+This is deliberately a flat list. Permission groups, and the per-action
+permission flags ADR-011 describes, are still deferred: **any member of a
+company may take any action within it.**
+
+### What is not covered
+
+`/internal/*` is a different trust boundary, guarded by the `X-Internal-Api-Key`
+shared secret rather than a JWT, and carries no membership check — tcp-agent and
+the MCP servers hold no membership and need none. Do not expose those routes
+outside the Compose network.
+
 ## Environment variables
 
-| Variable                   | Required | Description                                                                                                                   |
-| -------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `OIDC_ISSUER_URL`          | **Yes**  | The provider's issuer URL. Must match the `iss` claim in tokens. Committed.                                                   |
-| `OIDC_CLIENT_ID`           | **Yes**  | Client ID. Generated (bundled Zitadel) or provider-issued (external) — lives in the gitignored `<env>.local`, not committed.  |
-| `OIDC_CLIENT_SECRET`       | **Yes**  | Client secret (used server-side by the device-authorization and refresh endpoints). Same `.local` placement as the client ID. |
-| `OIDC_INTERNAL_ISSUER_URL` | No       | Alternative URL for server-side HTTP calls to the provider (see [Docker networking](#docker-networking)).                     |
-| `OIDC_JWKS_URI`            | No       | Explicit JWKS URI override. If unset, discovered from the provider's discovery document.                                      |
-| `OIDC_AUDIENCE`            | No       | Audience claim to validate. If unset, audience validation is skipped (see [Audience validation](#audience-validation)).       |
+| Variable                   | Required | Description                                                                                                                                                       |
+| -------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OIDC_ISSUER_URL`          | **Yes**  | The provider's issuer URL. Must match the `iss` claim in tokens. Committed.                                                                                       |
+| `OIDC_CLIENT_ID`           | **Yes**  | Client ID. Generated (bundled Zitadel) or provider-issued (external) — lives in the gitignored `<env>.local`, not committed.                                      |
+| `OIDC_CLIENT_SECRET`       | **Yes**  | Client secret (used server-side by the device-authorization and refresh endpoints). Same `.local` placement as the client ID.                                     |
+| `OIDC_INTERNAL_ISSUER_URL` | No       | Alternative URL for server-side HTTP calls to the provider (see [Docker networking](#docker-networking)).                                                         |
+| `OIDC_JWKS_URI`            | No       | Explicit JWKS URI override. If unset, discovered from the provider's discovery document.                                                                          |
+| `OIDC_AUDIENCE`            | No       | Audience claim to validate. If unset, audience validation is skipped (see [Audience validation](#audience-validation)).                                           |
+| `TCP_ADMIN_IDENTIFIERS`    | No       | Comma-separated `sub` claims and/or emails permitted to use `?all=true` and the `/api/system` routes. Empty means nobody (see [Administrators](#administrators)). |
 
 ## Using the included Zitadel (local development)
 
