@@ -115,8 +115,15 @@ export interface TuiTerminal {
   fullscreen(on: boolean): void;
   grabInput(on: boolean | Record<string, unknown>): void;
   processExit(code: number): void;
-  on(event: string, handler: (...args: unknown[]) => void): unknown;
-  off(event: string, handler: (...args: unknown[]) => void): unknown;
+  /*
+   * `never[]` rather than `unknown[]`: each event carries its own argument
+   * list, so a handler declares the arity it actually wants — `resize` takes
+   * (width, height). Parameters are contravariant, so `unknown[]` would demand
+   * a handler prepared to receive *any* arguments and reject every real one.
+   * TypeScript 6 enforces this where 5.9 let it pass.
+   */
+  on(event: string, handler: (...args: never[]) => void): unknown;
+  off(event: string, handler: (...args: never[]) => void): unknown;
   /** Shows/hides the terminal's own blinking cursor (see Tui's cursor-visibility note above). */
   hideCursor(hidden: boolean): void;
 }
@@ -211,10 +218,8 @@ export class Tui {
       width: this.termWidth(),
       height: HINT_ROWS,
     });
-    this.term.on('key', (name) => this.handleKey(name as string));
-    this.term.on('mouse', (name, data) =>
-      this.handleMouse(name as string, data as { x: number; y: number }),
-    );
+    this.term.on('key', (name) => this.handleKey(name));
+    this.term.on('mouse', (name, data) => this.handleMouse(name, data));
 
     // terminal-kit's own Document#onEventSourceResize (registered on `term`
     // inside the Document constructor above, so it fires *before* anything

@@ -17,7 +17,16 @@ export default tseslint.config(
     // React bundle (ADR-022). It has its own
     // apps/frontend/tcp-frontend/eslint.config.mjs, which the root `lint` and
     // `lint:check` scripts reach through `npm run … --workspaces`.
-    ignores: ['eslint.config.mjs', 'apps/tcp-stub-llm/**', 'apps/frontend/**'],
+    // `dist/**` is build output. It normally holds only webpack bundles, but
+    // anything that emits declarations there — a stray `tsc -p` without
+    // `--noEmit` — lands `.d.ts` files inside the `{apps,libs}/**/*.ts` glob,
+    // and they fail to parse because no tsconfig project claims them.
+    ignores: [
+      'eslint.config.mjs',
+      'apps/tcp-stub-llm/**',
+      'apps/frontend/**',
+      '**/dist/**',
+    ],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
@@ -38,6 +47,13 @@ export default tseslint.config(
   {
     rules: {
       '@typescript-eslint/no-deprecated': 'error',
+      // Makes the `_`-prefix convention for deliberately unused parameters
+      // explicit. It previously held only by accident of position: the default
+      // `args: 'after-used'` ignores an unused parameter that precedes a used
+      // one (`intercept(_ctx, next)`) but reports a trailing one, so a
+      // signature that exists purely to match an overload — `(message,
+      // ..._optionalParams)` — failed where `_ctx` passed.
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/no-floating-promises': 'warn',
       '@typescript-eslint/no-unsafe-argument': 'warn',
       "prettier/prettier": ["error", { endOfLine: "auto" }],

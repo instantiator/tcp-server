@@ -28,9 +28,15 @@ export function captureNestLogs(): LogCapture {
   const spies = levels.map((level) =>
     jest
       .spyOn(Logger.prototype, level)
-      .mockImplementation((message: unknown) => {
-        logs.push({ level, message: String(message) });
-      }),
+      // The full variadic shape is required to match every overload Nest's
+      // Logger declares — TypeScript 6 rejects a lone `message` parameter
+      // here. Only the message is ever asserted on, so the rest is named for
+      // the signature and deliberately unused.
+      .mockImplementation(
+        (message?: unknown, ..._optionalParams: unknown[]) => {
+          logs.push({ level, message: String(message) });
+        },
+      ),
   );
   return {
     logs,

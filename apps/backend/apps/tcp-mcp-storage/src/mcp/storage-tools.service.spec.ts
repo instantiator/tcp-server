@@ -100,12 +100,9 @@ function mockScope(scope: Partial<Scope>): void {
 
 describe('StorageToolsService', () => {
   beforeEach(() => {
-    mockedAxios.isAxiosError = jest
-      .fn()
-      .mockImplementation(
-        (e: unknown) =>
-          (e as { isAxiosError?: boolean })?.isAxiosError === true,
-      ) as unknown as typeof axios.isAxiosError;
+    mockedAxios.isAxiosError.mockImplementation(
+      (e: unknown) => (e as { isAxiosError?: boolean })?.isAxiosError === true,
+    );
   });
 
   afterEach(() => jest.clearAllMocks());
