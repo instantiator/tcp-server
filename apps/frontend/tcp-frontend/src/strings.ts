@@ -10,6 +10,19 @@
  */
 const strings = {
   'app.title': 'TCP',
+
+  'landing.intro':
+    'TCP manages one or more companies of AI agents that collaborate to complete tasks. Sign in to watch a company work, and to take part.',
+  'landing.getStarted.heading': 'Get started',
+  'landing.signIn': 'Sign in',
+  'landing.appearance.heading': 'Appearance',
+
+  'theme.palette.label': 'Theme',
+  'theme.palette.default': 'Default',
+  'theme.palette.highContrast': 'High contrast',
+  'theme.mode.label': 'Colour mode',
+  'theme.mode.light': 'Light',
+  'theme.mode.dark': 'Dark',
 } as const;
 
 /** Every key `t` accepts. A typo is a type error, not a blank screen. */

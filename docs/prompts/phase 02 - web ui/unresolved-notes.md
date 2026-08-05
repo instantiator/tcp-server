@@ -171,6 +171,57 @@ an allow-list of destinations or making the route administrator-only. Recorded
 in the memory `project-model-check-ssrf`, because nothing in this repository will
 surface it on its own.
 
+### `base.css` styles React Aria through its default class names
+
+**Raised by:** 003.01 · **Condition to revisit:** a `react-aria-components`
+upgrade renames a default class, or deprecates a component the way 1.20
+deprecated `Radio`
+
+React Aria ships no styling, so `src/styles/base.css` carries the minimum a
+control needs to be usable — a radio indicator, a selected state and a focus
+ring — selected by `.react-aria-RadioButton`, `.react-aria-RadioGroup` and
+`.react-aria-Button`. Those names are the library's `defaultClassName` values,
+a convention rather than a documented API, and the surface is demonstrably
+moving: 1.20 deprecates `Radio` in favour of `RadioField` + `RadioButton`, which
+this prompt had to adopt mid-implementation.
+
+Two things make the failure quiet. Passing `className` to a React Aria
+component **replaces** the default rather than adding to it (`computedClassName
+?? defaultClassName`), so a component that sets its own class silently loses
+every rule unless it repeats the library's name — `ThemeControl` does. And a
+renamed class breaks nothing that any test can see in jsdom: the `data-*`
+attributes are still emitted, so only the browser tier's computed-style
+assertions would notice. Recorded in the memory `project-react-aria-class-names`.
+
+### The theme storage key is written in three places
+
+**Raised by:** 003.01 · **Condition to revisit:** a build step that can inject a
+shared constant into the entry document becomes worth its cost
+
+`THEME_STORAGE_KEY` is declared in `src/theme/storage.ts`, duplicated in the
+pre-paint script in `index.html` (which must run before the bundle loads and so
+cannot import it), and now repeated a third time in
+`test/browser/app-shell.spec.ts`, which seeds a theme through `localStorage` and
+cannot import from `src/`. The doc comment on the constant names all three; that
+comment is the only thing holding them together.
+
+### A component stylesheet with an empty rule body cannot space its own content
+
+**Raised by:** 003.01 · **Condition to revisit:** the first theme is written,
+which is when the empty rule bodies get filled
+
+ADR-026's convention means `LandingPage.css` and `ThemeControl.css` ship real
+class names and no declarations, which is the intended trade. The visible
+consequence is that the two radio groups on the landing page sit flush against
+each other, with the "Colour mode" label directly beneath the last palette
+option — the grouping is unambiguous to a screen reader, which reads the
+`radiogroup` name, and merely cramped to a sighted reader.
+
+This is a compromise taken knowingly, not a defect: ADR-020 defers visual design
+entirely, and the alternative is putting layout values in `base.css`, where they
+would apply to every page and be much harder to undo. Nothing needs doing until
+the themes are written.
+
 ## Carried into a later prompt
 
 | Note                                                                                                                                         | Raised by | Goes to  |
@@ -190,3 +241,10 @@ surface it on its own.
 | The memberships dialog is authoritative — membership _is_ the access control, so the list is exactly what the user can reach                 | 002.05    | `008.06` |
 | The ADR-011 **permission flags** (migration, defaults, `@RequirePermission`, and the UI to set them) — 002.05 enforced membership only       | 002.05    | `010.01` |
 | ADR-011's status wording: membership is enforced, flags are not; `route-audit.spec.ts` must stay green and cover every controller            | 002.05    | `009.03` |
+| `ThemeControl` already exists and is written for reuse — the header adopts it rather than building a second theme control                    | 003.01    | `003.02` |
+| `main` lives inside `LandingPage`; when the shell owns layout there must still be exactly one `main` on the page                             | 003.01    | `003.02` |
+| The account menu needs its own token-valued rules in `base.css` — React Aria renders it invisible otherwise                                  | 003.01    | `003.02` |
+| The landing page's `h1` is a route-change focus target; making it focusable must not change its name or level                                | 003.01    | `003.02` |
+| `startSignIn()` in `src/auth/sign-in.ts` is the seam — replace the body, don't move the call site                                            | 003.01    | `004.02` |
+| Extend the four-combination contrast scan to every page; the component tier cannot check contrast at all                                     | 003.01    | `009.02` |
+| Assert what is drawn, not only the `data-*` attribute — jsdom resolves neither pseudo-elements nor shorthands                                | 003.01    | `009.02` |

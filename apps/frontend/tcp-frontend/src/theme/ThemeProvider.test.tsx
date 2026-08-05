@@ -13,9 +13,9 @@ const token = (name: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 /**
- * A test-only surface onto the theme context. No theme control ships in this
- * prompt — the header owns that from 003.02 — so the seam is exercised
- * directly rather than through a component that does not exist yet.
+ * A test-only surface onto the theme context, kept deliberately minimal so
+ * these tests cover the provider rather than `ThemeControl` — which has its
+ * own tests.
  */
 const Harness = () => {
   const { theme, mode, setTheme, setMode } = useTheme();
