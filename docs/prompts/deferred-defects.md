@@ -51,3 +51,43 @@ Another I've noticed is that the `-s` option for the `store-knowledge` verb fail
 ```
 
 As a part of the repair, please also unify: `-i`, `--input`, `-s`, `--source` to: `-i`, `--input-path`
+
+## CI: the `api-test` bake spends its time exporting, not building
+
+The `api-test` job dominates CI wall clock. Its `Build service images` step took
+6m05s of a 10m06s job, but the compilation is not the cost — the export is.
+From the step log of run `31016372220`:
+
+| Layer                                            | Time |
+| ------------------------------------------------ | ---- |
+| `RUN npm run build:apps` (shared across targets) | 111s |
+| `exporting to docker image format` × 6 images    | 772s |
+| `exporting to GitHub Actions Cache`              | 114s |
+
+`*.output=type=docker` serialises each image to a tarball and loads it into the
+daemon, which is why six images cost 772s of work between them. Two ways out,
+neither yet tried:
+
+- Enable the **containerd image store** on the runner, so `type=docker` writes
+  straight to the store instead of round-tripping through a tarball. Smallest
+  change, but depends on runner daemon configuration.
+- Push to a **local `registry:2` container** and have compose pull from it.
+  Avoids the tarball entirely; more moving parts.
+
+Two cheaper wins from the same analysis were already taken (see `.github/workflows/ci.yml`):
+`npm ci` and the Playwright browser install now run underneath the bake instead
+of after it, and `--with-deps` was dropped from the Chromium install — the
+browser cache was hitting and the ~1m20s was entirely apt.
+
+## CI: `mode=max` cache export is paying for a cache that cannot hit
+
+The same bake sets `*.cache-to=type=gha,scope=monorepo-build,mode=max`, which
+writes **every** intermediate layer to the Actions cache — 114s per run. The log
+shows the cache manifest importing but essentially nothing hitting (`#1 CACHED`
+alone), because `npm run build:apps` is invalidated by any source change, which
+is every push on an active branch.
+
+So the run pays full export cost for a cache that cannot hit on the layer that
+matters. Worth measuring `mode=min` against the current setting, and worth
+checking whether the branch scoping of the Actions cache means a PR ever reads
+what its base branch wrote in the first place.

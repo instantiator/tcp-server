@@ -6,9 +6,33 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Job graph — a block of cheap checks, then the three heavy tiers. Parallel
+# within each block, gated between them:
+#
+#   build ─────┐                    ┌─ integration
+#   lint ──────┤                    │
+#   typecheck ─┼─ all must pass ──→ ├─ api/smoke/browser
+#   unit ──────┘                    └─ e2e
+#
+# Everything in the first block is parallel because nothing in it consumes
+# anything else's output: no artefacts pass between jobs, every job checks out
+# and runs `npm ci` for itself, and `@tcp/shared` resolves through its `exports`
+# map to *source* (`./src/index.ts`) rather than to `dist`. That last point is
+# what makes lint and typecheck independent of build — verified by running both
+# against a tree with every `dist/` removed.
+#
+# The gate between the blocks is deliberate and strict: every cheap signal must
+# be green before anything starts a Docker stack. A broken build, a lint error,
+# a type error or a failing unit test each halt the run before the expensive
+# tiers begin, which is where nearly all of the CI budget goes.
+#
+# The cost of the split is one extra `npm ci` per job (they are parallel, so it
+# costs runner-minutes, not wall clock). The benefit is that the heavy tiers now
+# start when the slowest *single* check finishes rather than after all four run
+# back to back.
 jobs:
-  verify:
-    name: Build, lint & typecheck
+  build:
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -27,12 +51,39 @@ jobs:
           cache-dependency-path: package-lock.json
       - run: npm ci
       - run: npm run build
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
       - run: npm run lint:check
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
       - run: npm run typecheck
 
   unit-test:
     name: Unit tests
-    needs: [verify]
     runs-on: ubuntu-latest
     permissions:
       checks: write
@@ -77,7 +128,7 @@ jobs:
 
   integration-test:
     name: Integration tests
-    needs: [unit-test]
+    needs: [build, lint, typecheck, unit-test]
     runs-on: ubuntu-latest
     permissions:
       checks: write
@@ -124,7 +175,7 @@ jobs:
 
   api-test:
     name: API, smoke & browser tests
-    needs: [integration-test]
+    needs: [build, lint, typecheck, unit-test]
     runs-on: ubuntu-latest
     permissions:
       checks: write
@@ -157,6 +208,23 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}
+      # Started here and awaited after the bake, rather than run in sequence
+      # after it: neither touches anything the Docker build reads. .dockerignore
+      # excludes node_modules, dist and the caches from the build context, and
+      # Playwright writes to ~/.cache. The bake is the long pole at ~6m, so this
+      # is ~1m of otherwise idle sequential time reclaimed.
+      #
+      # No --with-deps. The apt install it performs is *not* covered by the
+      # browser cache above and cost ~1m20s on every run even when that cache
+      # hit; ubuntu-latest already carries the system libraries headless
+      # Chromium needs. If that stops being true, the browser tier fails at
+      # launch — restore --with-deps here rather than anywhere else.
+      - name: Install host dependencies (background)
+        run: |
+          nohup bash -c '
+            npm ci && npm exec --workspace apps/frontend/tcp-frontend -- playwright install chromium
+            echo $? > /tmp/host-deps.status
+          ' > /tmp/host-deps.log 2>&1 &
       # One bake build for all seven service images. They share the `builder`
       # (npm ci + build:apps) and `prod-deps` stages of the root Dockerfile, so
       # bake resolves those once across the whole graph. Targets/tags come from
@@ -182,12 +250,21 @@ jobs:
             *.cache-from=type=gha,scope=monorepo-build
             *.cache-to=type=gha,scope=monorepo-build,mode=max
             *.output=type=docker
-      - run: npm ci
-      # --with-deps installs the system libraries headless Chromium needs on a
-      # bare runner; it needs root, which is why run-browser-tests.sh leaves it
-      # to CI. Both are no-ops once the cache above hits.
-      - name: Install Chromium
-        run: npm exec --workspace apps/frontend/tcp-frontend -- playwright install --with-deps chromium
+      # Echoes the backgrounded install's output into the log either way, so a
+      # failure there is diagnosable, and exits with its status so the job fails
+      # on it rather than limping on to a missing node_modules.
+      - name: Wait for host dependencies
+        run: |
+          for _ in $(seq 1 600); do
+            [ -f /tmp/host-deps.status ] && break
+            sleep 1
+          done
+          cat /tmp/host-deps.log || true
+          if [ ! -f /tmp/host-deps.status ]; then
+            echo "::error::Host dependency install did not finish within 10 minutes."
+            exit 1
+          fi
+          exit "$(cat /tmp/host-deps.status)"
       # .env.testing sets EXPOSE_PORT_API=3001 and EXPOSE_PORT_WEB=5174 (testing
       # uses non-default ports to coexist with a dev stack), so target those, not
       # hardcoded defaults. --dev-ports publishes the MCP host ports the smoke
@@ -263,7 +340,7 @@ jobs:
 
   e2e-test:
     name: E2E tests
-    needs: [integration-test]
+    needs: [build, lint, typecheck, unit-test]
     runs-on: ubuntu-latest
     permissions:
       checks: write
