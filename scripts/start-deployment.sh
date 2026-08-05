@@ -507,3 +507,5 @@ fi
 echo "Open the landing page:"
 echo "  $TCP_WEB_URL"
 echo ""
+echo "  NB. On first use, you may need to click through a certificate warning."
+echo ""
