@@ -6,7 +6,7 @@
   "private": true,
   "license": "MIT",
   "engines": {
-    "node": ">=18"
+    "node": ">=26"
   },
   "workspaces": ["apps/backend", "apps/frontend/tcp-frontend", "libs/tcp-shared"],
   "scripts": {

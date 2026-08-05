@@ -16,7 +16,10 @@ jobs:
           submodules: true
       - uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          # Pinned exactly in .nvmrc so CI and developer machines move together.
+          # A floating "24" let CI drift onto a patch release that changed
+          # Buffer.poolSize, failing a unit test that passed locally.
+          node-version-file: .nvmrc
           cache: npm
           # Explicit: the default hashes **/package-lock.json, and the
           # workspace members add package.json files that would otherwise
@@ -40,7 +43,10 @@ jobs:
           submodules: true
       - uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          # Pinned exactly in .nvmrc so CI and developer machines move together.
+          # A floating "24" let CI drift onto a patch release that changed
+          # Buffer.poolSize, failing a unit test that passed locally.
+          node-version-file: .nvmrc
           cache: npm
           # Explicit: the default hashes **/package-lock.json, and the
           # workspace members add package.json files that would otherwise
@@ -82,7 +88,10 @@ jobs:
           submodules: true
       - uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          # Pinned exactly in .nvmrc so CI and developer machines move together.
+          # A floating "24" let CI drift onto a patch release that changed
+          # Buffer.poolSize, failing a unit test that passed locally.
+          node-version-file: .nvmrc
           cache: npm
           # Explicit: the default hashes **/package-lock.json, and the
           # workspace members add package.json files that would otherwise
@@ -126,7 +135,10 @@ jobs:
           submodules: true
       - uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          # Pinned exactly in .nvmrc so CI and developer machines move together.
+          # A floating "24" let CI drift onto a patch release that changed
+          # Buffer.poolSize, failing a unit test that passed locally.
+          node-version-file: .nvmrc
           cache: npm
           # Explicit: the default hashes **/package-lock.json, and the
           # workspace members add package.json files that would otherwise
@@ -252,7 +264,10 @@ jobs:
           submodules: true
       - uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          # Pinned exactly in .nvmrc so CI and developer machines move together.
+          # A floating "24" let CI drift onto a patch release that changed
+          # Buffer.poolSize, failing a unit test that passed locally.
+          node-version-file: .nvmrc
           cache: npm
           # Explicit: the default hashes **/package-lock.json, and the
           # workspace members add package.json files that would otherwise

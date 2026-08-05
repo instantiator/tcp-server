@@ -6,7 +6,7 @@ Once you have prepared your deployment with the [setup checklist](setup-checklis
 
 ### 0.0 Prerequisites
 
-You need **Docker** and **Node.js 24**, and a `bash` shell (macOS or Linux —
+You need **Docker** and **Node.js 26**, and a `bash` shell (macOS or Linux —
 every script in this repository assumes one). Then:
 
 ```bash

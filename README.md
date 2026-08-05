@@ -95,7 +95,7 @@ Follow the steps in **[Your first company](docs/your-first-company.md)** to popu
 
 ### Quick start (very)
 
-> Prerequisites: Docker, Node.js 24
+> Prerequisites: Docker, Node.js 26
 
 > [!NOTE]
 > The `start-dev.sh` script builds and launches TCP with an instance of Zitadel to manage authorisation. It configures an `tcp` org with a project, an API application, and the test users read from your env file. It can take several minutes to launch.

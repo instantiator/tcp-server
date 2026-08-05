@@ -6,6 +6,32 @@ import { defineConfig, loadEnv, type Plugin } from 'vite';
 const repoRoot = resolve(import.meta.dirname, '../../..');
 
 /**
+ * Hands `localStorage` and `sessionStorage` back to jsdom in the test tier.
+ *
+ * Node 25 turned the Web Storage API on by default, making both names own
+ * properties of globalThis. Vitest declines to copy a jsdom global over a name
+ * the runtime already defines, so jsdom's implementations stopped being
+ * installed and the names read back as `undefined` — Node only populates them
+ * given `--localstorage-file`. Switching Node's version off restores jsdom's
+ * (vitest-dev/vitest#8757); drop this once vitest populates web storage itself.
+ *
+ * The flag has to reach the pool worker at startup, which `poolOptions.execArgv`
+ * does not manage and `test.env` applies too late. Setting it here — rather than
+ * in the npm script — means a bare `vitest`, a watch run and an IDE runner are
+ * all covered, since workers inherit this process's environment and the config
+ * is evaluated before any of them are forked.
+ */
+const disableNodeWebStorage = (): void => {
+  const flag = '--no-webstorage';
+  const existing = process.env.NODE_OPTIONS ?? '';
+  if (!existing.includes(flag)) {
+    process.env.NODE_OPTIONS = `${existing} ${flag}`.trim();
+  }
+};
+
+disableNodeWebStorage();
+
+/**
  * Reads the repo's `EXPOSE_PORT_*` convention rather than hardcoding a port.
  * `loadEnv` merges matching `process.env` entries over the file values, so a
  * shell that has already sourced the env file wins.
@@ -70,6 +96,14 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
+    // Node 25 turned the Web Storage API on by default, so `localStorage` and
+    // `sessionStorage` became own properties of globalThis. Vitest declines to
+    // copy a jsdom global over a name the runtime already defines, so jsdom's
+    // implementations stopped being installed and both names read back as
+    // `undefined` — Node only populates them given --localstorage-file. Turning
+    // Node's version off hands the names back to jsdom (vitest-dev/vitest#8757).
+    //
+    // (Web Storage is handed back to jsdom in disableNodeWebStorage(), above.)
     css: true,
     include: ['src/**/*.test.{ts,tsx}'],
     // The five Jest tiers write JUnit XML into the repo-root test-results/ for
