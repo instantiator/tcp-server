@@ -1,7 +1,7 @@
 # tcp-cli — Developer CLI Reference
 
 `tcp-cli` is a TypeScript command-line tool for interacting with an TCP server.
-It lives in `apps/tcp-cli/` and is launched via `./tcp-cli.sh` at the repository root.
+It lives in `apps/backend/apps/tcp-cli/` and is launched via `./tcp-cli.sh` at the repository root.
 
 ## Quick start
 
@@ -160,6 +160,11 @@ export TCP_TOKEN=$(./tcp-cli.sh get-token)
 List all companies.
 
 - **stdout**: `{ id, slug, name, description }[]` as JSON
+
+Since 002.04, `GET /api/company` defaults to the caller's own memberships for
+the web UI's benefit; the CLI sends `?all=true` because it administers the
+system, so operator behaviour is unchanged. The stat set the API now returns
+alongside each company is not rendered.
 
 ```bash
 ./tcp-cli.sh -t $TOKEN list-companies
@@ -1061,7 +1066,7 @@ combined (history prints first, then the tail follows).
 | `--tail`                 | Follow current events live, via the same SSE stream `chat` uses                   |
 
 - **stdout**: history (`--show-history`) and the live tail (`--tail`) render
-  through **one shared pipeline** (the `apps/tcp-cli/src/lib/render/` library,
+  through **one shared pipeline** (the `apps/backend/apps/tcp-cli/src/lib/render/` library,
   the same one `chat` and the `tui` panes use), so replayed history is
   line-for-line identical to eavesdropping the same activity live. A scope
   heading block is printed whenever the active `(task, assignment, agent)`

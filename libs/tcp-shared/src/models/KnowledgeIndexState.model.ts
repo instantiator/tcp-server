@@ -1,4 +1,4 @@
-import type { UUID } from 'crypto';
+import type { UUID } from '../uuid';
 import {
   Column,
   Entity,

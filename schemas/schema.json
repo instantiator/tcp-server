@@ -223,6 +223,190 @@
       ],
       "type": "string"
     },
+    "CompanyListItem": {
+      "additionalProperties": false,
+      "description": "A company as `GET /api/company` returns it — the record plus its stats.",
+      "properties": {
+        "companyContext": {
+          "description": "Optional company context injected as prompt part 2 at agent start. Describes the company environment: agent roster, shared storage layout, company name and description, and any company-wide behavioural guidelines.\n\nWhen null, part 2 is omitted from the agent prompt.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "description": "Human-readable description for the company.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "embeddingConfig": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LlmConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Provider and model configuration used for generating and querying embeddings. Must point to an OpenAI-compatible embeddings endpoint (e.g. LM Studio `/v1/embeddings`, OpenAI `text-embedding-3-small`).\n\nWhen null, the RAG index and retrieval services are disabled for this company. Stored as JSONB — same shape as  {@link  LlmConfig }  but the `contextWindow` field is ignored."
+        },
+        "id": {
+          "$ref": "#/definitions/UUID",
+          "description": "Auto-generated primary key for this company.",
+          "format": "uuid"
+        },
+        "llmConfig": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LlmConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional company-wide default LLM configuration. Roles that do not specify their own  {@link  TcpRole.llmConfig }  fall back to this value at run time, then to the environment-configured LLM fallback (`LLM_PROVIDER` / `LLM_MODEL`), before failing. Resolved via  {@link  LlmConfigResolver  } ."
+        },
+        "mcpServerList": {
+          "description": "Additional MCP server identifiers made available to every agent in this company, on top of the system's default servers and any extras listed on the running role. Additive, not a precedence override — resolved via  {@link  resolveMcpServerList  } .",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Human-readable display name for the company.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "nextTaskShortcodeIndex": {
+          "description": "Monotonically incrementing counter used to generate each new  {@link  TcpTask.shortcode  }  (`nextTaskShortcodeIndex` at generation time, then incremented). Incremented atomically (raw SQL `UPDATE … RETURNING` on PostgreSQL) — see `TaskService.create`.",
+          "type": "number"
+        },
+        "plannerRole": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TcpRole"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Company-default planner role, used by  {@link  TcpTask.plannerRole  }  when a task does not specify its own. Must belong to this company — enforced at write time by `DbService`/`ApiService`, not by the FK alone."
+        },
+        "plannerRoleId": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/UUID"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Foreign key for  {@link  plannerRole } .",
+          "format": "uuid"
+        },
+        "runConfig": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/AgentRunConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional company-wide agent-loop resource overrides. Applied when the running role has no  {@link  TcpRole.runConfig }  set. See  {@link  AgentRunConfig }  for available fields."
+        },
+        "slug": {
+          "description": "URL-safe identifier used in API paths and agent namespacing. Must be globally unique across all companies.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "stats": {
+          "$ref": "#/definitions/CompanyStats"
+        },
+        "systemPromptTemplate": {
+          "description": "Optional company-wide default `systemPromptTemplate`. Used when a role does not specify its own  {@link  TcpRole.systemPromptTemplate } ; falls back to `DEFAULT_SYSTEM_PROMPT_TEMPLATE` when neither is set. Resolved via  {@link  SystemPromptTemplateResolver  } .",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timezone": {
+          "description": "IANA timezone name (e.g. `'Europe/London'`) used only for *display* and prompt localization — CLI/UI timestamp formatting, and the `{{timezone}}`/ `{{localDatetime}}` prompt variables (see `buildPromptDateVars`). Never used for storage (always UTC) or as a replacement for the UTC time given to the LLM (`{{datetime}}` remains the authoritative anchor).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "description",
+        "id",
+        "mcpServerList",
+        "name",
+        "nextTaskShortcodeIndex",
+        "slug",
+        "stats"
+      ],
+      "type": "object"
+    },
+    "CompanyStats": {
+      "additionalProperties": false,
+      "description": "The fixed per-company statistic set returned with `GET /api/company` (ADR-023). Fixed rather than open-ended so it stays one query per stat for the whole list, not one request per company.",
+      "properties": {
+        "activeAgents": {
+          "description": "Agents in a non-terminal state: idle, running or paused.",
+          "type": "number"
+        },
+        "openEnquiries": {
+          "description": "Conversations awaiting a user reply.",
+          "type": "number"
+        },
+        "tasksByStatus": {
+          "additionalProperties": false,
+          "description": "Task count per status; every status key is present, zero-filled.",
+          "properties": {
+            "cancelled": {
+              "type": "number"
+            },
+            "failed": {
+              "type": "number"
+            },
+            "finalising": {
+              "type": "number"
+            },
+            "in-progress": {
+              "type": "number"
+            },
+            "planning": {
+              "type": "number"
+            },
+            "ready": {
+              "type": "number"
+            },
+            "succeeded": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "ready",
+            "planning",
+            "in-progress",
+            "finalising",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "activeAgents",
+        "tasksByStatus",
+        "openEnquiries"
+      ],
+      "type": "object"
+    },
     "CompanyUser": {
       "additionalProperties": false,
       "description": "A human user associated with a company. Used for query routing (matching conversations to the right user) and for the human-in-the-loop pause/resume flow in Phases 5–6.",
@@ -286,11 +470,12 @@
       "type": "object"
     },
     "ConsultationStatus": {
-      "description": "Lifecycle states for an inter-agent consultation.",
+      "description": "Lifecycle states for an inter-agent consultation.\n\n`consumed` is the terminal state: the result has been folded into a resume payload and handed to the calling agent. It is what stops a later resume re-delivering an answer the agent has already seen — a job previously done by comparing `createdAt` against the agent's `pausedAt`, which compared the database's clock against the application's and lost answers by milliseconds.",
       "enum": [
         "pending",
         "complete",
-        "failed"
+        "failed",
+        "consumed"
       ],
       "type": "string"
     },
@@ -339,6 +524,11 @@
         },
         "question": {
           "description": "The question the agent is asking.",
+          "type": "string"
+        },
+        "repliesDeliveredAt": {
+          "description": "Set once the user's reply has been folded into a resume payload and handed to the waiting agent. Null means \"still to deliver\".\n\nThis is what stops a later resume re-delivering a reply the agent has already seen. It replaces a comparison of this row's `createdAt` against the agent's `pausedAt`, which weighed the database's clock against the application's and dropped replies when they disagreed by milliseconds.",
+          "format": "date-time",
           "type": "string"
         },
         "roleId": {
@@ -1654,6 +1844,7 @@
       "type": "string"
     },
     "UUID": {
+      "description": "A UUID string, structurally identical to `crypto`'s `UUID`.\n\nThe entity models use this type in fields that reach the browser through `@tcp/shared/client`. Importing it from `crypto` made the shared *type* surface depend on `@types/node`, which forced the browser workspace to declare Node types it must not have — and once declared, `Buffer` and `process` typecheck happily in browser code and fail at runtime.\n\n`crypto.randomUUID()` still assigns to this without a cast: the definition is the same template literal type (`@types/node`, crypto.d.ts).",
       "type": "string"
     },
     "VersionedEntity": {
@@ -1839,6 +2030,9 @@
         }
       },
       "type": "object"
+    },
+    "emptyCompanyStats": {
+      "$comment": "() => CompanyStats"
     },
     "formatShortcodeIndex": {
       "$comment": "(index: number) => string",

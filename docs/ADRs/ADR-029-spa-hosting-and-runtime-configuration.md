@@ -128,3 +128,50 @@ Note that `.env.example`'s comment claiming other ports are derived arithmetical
 nginx falls back to `index.html` for any path that isn't a file and isn't `/api`, so React Router's deep links survive a page refresh.
 
 Without it, loading `/company/acme` directly returns 404 — a classic and easily-missed deployment fault that only shows up on refresh, never during navigation.
+
+<a id="amendments-as-implemented-002031"></a>
+
+## Amendments as implemented (002.03) — HTTP/2 forced TLS at the edge
+
+- **The web service is HTTPS-only, and the Vite option was struck.** This ADR
+  offered two routes to HTTP/2 in development: "enable HTTP/2 on the Vite
+  development server" or "run the same nginx image in front of it". The first
+  does not exist. Vite's development server has no HTTP/2 implementation —
+  `server.https` gives TLS over HTTP/1.1 — and, more fundamentally, **no
+  browser negotiates HTTP/2 over cleartext**: there is no h2c support in
+  Chrome, Firefox or Safari. Requiring HTTP/2 therefore requires TLS, in
+  development as much as in a deployment. `tcp-web` listens on 443 with
+  `http2 on` and nothing else; `EXPOSE_PORT_WEB` publishes to that.
+- **Certificates.** `docker/nginx/10-tcp-init.sh` generates a self-signed
+  `localhost` certificate at container start unless one is mounted at
+  `/etc/nginx/certs`, so a first run needs no setup. mkcert is the documented
+  route to a trusted one ([web-client.md](../web-client.md#a-trusted-certificate-with-mkcert)).
+  This is the one cost the decision carries that the ADR did not anticipate: a
+  browser warning on first use, per machine.
+- **A fourth wiring site: `EXPOSE_PORT_WEB_DEV`.** The ADR named three places
+  `EXPOSE_PORT_WEB` had to reach. Because nginx now owns that port, the Vite
+  development server needs one of its own — `EXPOSE_PORT_WEB_DEV` (4173),
+  read by `vite.config.ts` and by `docker-compose.dev-web.yml`. It is
+  deliberately **not** in `check-ports.sh`: it is a host process the deployment
+  never publishes, and pre-flighting it would refuse to start a stack whenever
+  a development server was legitimately already running.
+- **The dev-web overlay.** `docker-compose.dev-web.yml` plus
+  `start-deployment.sh --dev-web` swaps nginx from serving the built bundle to
+  proxying that Vite server. Hot module replacement survives: nginx does not
+  implement WebSockets over HTTP/2 (RFC 8441), so the browser opens a separate
+  HTTP/1.1 connection for the HMR socket while page loads and API calls stay on
+  HTTP/2.
+- **`proxy_buffering off` on `/api`.** Not mentioned in the decision, and
+  load-bearing for [ADR-025](ADR-025-browser-event-stream-consumption.md):
+  nginx buffers proxied responses by default, which would hold each SSE event
+  until a buffer filled. In a live view that is indistinguishable from the
+  server having stopped.
+- **HTTP/2 is asserted, not assumed.** `hosting.spec.ts` in the browser tier
+  reads the browser's own `nextHopProtocol` for both an asset and an `/api`
+  request, and proves multiplexing by firing eight simultaneous requests and
+  asserting none of them opened a connection. The end-to-end ">6 simultaneous
+  event streams" test the prompt asked for needs long-lived authenticated SSE
+  connections, which arrive with the stream client in 005.02.
+- **The browser tier moved into the api-test CI job**, which already starts a
+  deployment — the tier now drives `tcp-web` rather than a `vite preview` it
+  started itself, and a second job would have paid for a second full stack.

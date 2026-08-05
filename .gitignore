@@ -1,10 +1,12 @@
-# compiled output
-/dist
-/node_modules
+# compiled output — unanchored: each workspace builds into its own dist/
+# (apps/backend/dist), not a single root one.
+dist
 /build
 
-# tcp-stub-llm is a standalone package with its own node_modules
-/apps/tcp-stub-llm/node_modules
+# Unanchored: most dependencies hoist to the root, but npm still nests a few
+# per workspace wherever a version cannot be shared — and tcp-stub-llm, which
+# is not a workspace at all, has its own tree.
+node_modules
 
 # Logs
 logs
@@ -22,6 +24,10 @@ lerna-debug.log*
 /coverage
 /.nyc_output
 /test-results
+# Playwright writes its HTML report next to its config, not at the repo root.
+# Its traces and screenshots go to /test-results, above (see `outputDir` in
+# apps/frontend/tcp-frontend/playwright.config.ts).
+playwright-report
 
 # IDEs and editors
 /.idea
@@ -68,3 +74,8 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # Zitadel bootstrap machine-user PAT (generated on first boot; see docker-compose.yml)
 /docker/zitadel-machinekey/*
 !/docker/zitadel-machinekey/.gitkeep
+
+# TLS certificate for tcp-web, if one is supplied rather than self-signed at
+# container start. Machine-local by definition — a mkcert certificate is only
+# trusted by the machine whose CA signed it (see docs/web-client.md).
+/docker/nginx/certs/

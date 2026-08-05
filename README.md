@@ -95,7 +95,7 @@ Follow the steps in **[Your first company](docs/your-first-company.md)** to popu
 
 ### Quick start (very)
 
-> Prerequisites: Docker, Node.js 24
+> Prerequisites: Docker, Node.js 26
 
 > [!NOTE]
 > The `start-dev.sh` script builds and launches TCP with an instance of Zitadel to manage authorisation. It configures an `tcp` org with a project, an API application, and the test users read from your env file. It can take several minutes to launch.
@@ -275,7 +275,7 @@ flowchart TD
 | [tcp-cli reference](docs/tcp-cli.md)     | Every CLI verb and flag                             |
 | [Authentication](docs/authentication.md) | OIDC setup, tokens, external identity providers     |
 | [Tasks and Assignments](docs/tasks.md)   | The task/assignment model and orchestration flow    |
-| [Testing](docs/testing.md)               | The five test tiers and how to run each             |
+| [Testing](docs/testing.md)               | The six test tiers and how to run each              |
 | [ADRs](docs/ADRs/)                       | Architectural decisions, with implementation status |
 
 ## Testing
@@ -291,7 +291,8 @@ Quick reference:
 ./scripts/run-e2e-tests.sh          # starts postgres, redis, minio
 ./scripts/run-api-tests.sh          # starts full stack including Zitadel
 ./scripts/run-smoke-tests.sh        # starts full stack including Zitadel
-./scripts/run-all-tests.sh          # all five tiers
+./scripts/run-browser-tests.sh      # drives the built web app in Chromium
+./scripts/run-all-tests.sh          # all six tiers
 ```
 
 ## Commands reference

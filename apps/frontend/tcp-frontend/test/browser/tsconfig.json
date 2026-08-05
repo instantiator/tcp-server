@@ -1,0 +1,25 @@
+{
+  // The browser tier's own project. Playwright specs run in Node — they need
+  // Node types, which the workspace tsconfig.json deliberately withholds
+  // (`"types": []`, because it describes a browser bundle). DOM types are still
+  // needed: Playwright's `evaluate` signatures are written against them.
+  //
+  // It is named tsconfig.json rather than being folded into tsconfig.node.json
+  // so that eslint's `projectService` discovers it as the nearest project for
+  // these files, and typed rules keep working here.
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "resolvePackageJsonExports": true,
+    "types": ["node"],
+    "noEmit": true,
+    "strict": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["**/*.ts"]
+}

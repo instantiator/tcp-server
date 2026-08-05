@@ -11,7 +11,13 @@ export default tseslint.config(
     // and eslint config — it shares no code or tooling with the rest of this
     // monorepo, so the root config (and root `npm run lint`) must not sweep
     // it in even though it sits under apps/.
-    ignores: ['eslint.config.mjs', 'apps/tcp-stub-llm/**'],
+    //
+    // The browser workspace is likewise excluded: this config sets
+    // `sourceType: 'commonjs'` and Node globals, neither of which suits a
+    // React bundle (ADR-022). It has its own
+    // apps/frontend/tcp-frontend/eslint.config.mjs, which the root `lint` and
+    // `lint:check` scripts reach through `npm run … --workspaces`.
+    ignores: ['eslint.config.mjs', 'apps/tcp-stub-llm/**', 'apps/frontend/**'],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,

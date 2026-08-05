@@ -3,14 +3,16 @@ set -euo pipefail
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") --project <name> (--env-file <path> | --env-files <f1,f2,...>) [--rebuild] [--dev-ports] [-h|--help]
+Usage: $(basename "$0") --project <name> (--env-file <path> | --env-files <f1,f2,...>) [--rebuild] [--dev-ports] [--dev-web] [-h|--help]
 
 Start the TCP Docker Compose stack and configure it for use.
 
 By default, the MCP servers and stub-llm are internal-only (not reachable from
 the host) — the production-safe posture. Pass --dev-ports to additionally
 publish their ports (docker-compose.dev-ports.yml) for direct host access,
-e.g. manual debugging or the smoke-test tier.
+e.g. manual debugging or the smoke-test tier. Pass --dev-web to point tcp-web
+at a Vite dev server on the host instead of a built bundle
+(docker-compose.dev-web.yml), for frontend development with HMR.
 
 Reads all configuration — including Zitadel credentials and the first test
 users — from the env file. If ZITADEL_ADMIN_PASSWORD is set in the env file,
@@ -36,6 +38,7 @@ Options:
   --env-files <f1,f2,...> Comma-separated env files in precedence order (first wins)
   --rebuild               Force a Docker image rebuild before starting
   --dev-ports             Publish MCP server / stub-llm ports to the host (non-production)
+  --dev-web               Point tcp-web at a host Vite dev server instead of a built bundle
   -h, --help              Show this help message and exit
 
 Env file precedence (when using --env-files):
@@ -54,6 +57,7 @@ ENV_FILE=""
 ENV_FILES=""
 REBUILD=false
 DEV_PORTS=false
+DEV_WEB=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -68,6 +72,7 @@ while [[ $# -gt 0 ]]; do
       ENV_FILES="$2"; shift 2 ;;
     --rebuild) REBUILD=true; shift ;;
     --dev-ports) DEV_PORTS=true; shift ;;
+    --dev-web) DEV_WEB=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
   esac
@@ -160,6 +165,9 @@ fi
 COMPOSE_FILES="-f $REPO_ROOT/docker-compose.yml"
 if [[ "$DEV_PORTS" = "true" ]]; then
   COMPOSE_FILES="$COMPOSE_FILES -f $REPO_ROOT/docker-compose.dev-ports.yml"
+fi
+if [[ "$DEV_WEB" = "true" ]]; then
+  COMPOSE_FILES="$COMPOSE_FILES -f $REPO_ROOT/docker-compose.dev-web.yml"
 fi
 
 # Both env files feed Compose interpolation; the .local override is passed last
@@ -384,7 +392,7 @@ EOF
     "$(jq -n --arg u "$TEST_USER" '{queries:[{userNameQuery:{userName:$u,method:"TEXT_QUERY_METHOD_EQUALS"}}]}')" \
     | jq -r '.result[0].id // empty')
   if [[ -z "$EXISTING_USER" ]]; then
-    zit POST "/v2/users/new" "$(jq -n --arg org "$ORG_ID" --arg u "$TEST_USER" --arg p "$TEST_PASS" '{
+    TEST_USER_ID=$(zit POST "/v2/users/new" "$(jq -n --arg org "$ORG_ID" --arg u "$TEST_USER" --arg p "$TEST_PASS" '{
       organizationId: $org,
       username: $u,
       human: {
@@ -392,9 +400,10 @@ EOF
         email: {email: ($u + "@tcp.local"), isVerified: true},
         password: {password: $p}
       }
-    }')" > /dev/null
+    }')" | jq -r '.id')
     echo "  Created user: $TEST_USER"
   else
+    TEST_USER_ID="$EXISTING_USER"
     echo "  User $TEST_USER: already exists"
   fi
 
@@ -422,6 +431,16 @@ EOF
   set_env_var "$LOCAL_ENV_FILE" TEST_CLIENT_SECRET "$MACHINE_CLIENT_SECRET"
   export TEST_CLIENT_ID="$MACHINE_CLIENT_ID"
   export TEST_CLIENT_SECRET="$MACHINE_CLIENT_SECRET"
+
+  # Administrators (002.05). Membership decides who reaches which company;
+  # `?all=true` and the /api/system routes need someone above that, and until
+  # permission groups exist that is this list. Both ids are regenerated with
+  # the bundled Zitadel, so they belong in the .local override rather than a
+  # committed file: the human user administers via tcp-cli, the machine user
+  # is what the api test tier signs in as. A deployment against an external
+  # provider sets TCP_ADMIN_IDENTIFIERS itself — see docs/authentication.md.
+  set_env_var "$LOCAL_ENV_FILE" TCP_ADMIN_IDENTIFIERS "$TEST_USER_ID,$MACHINE_ID"
+  export TCP_ADMIN_IDENTIFIERS="$TEST_USER_ID,$MACHINE_ID"
 fi
 
 echo ""
@@ -440,6 +459,11 @@ wait_for tcp-mcp-storage      "$DC exec -T tcp-mcp-storage curl -sf http://local
 wait_for tcp-mcp-memory       "$DC exec -T tcp-mcp-memory curl -sf http://localhost:3011/health"
 wait_for tcp-mcp-interactions "$DC exec -T tcp-mcp-interactions curl -sf http://localhost:3012/health"
 wait_for tcp-mcp-tasks        "$DC exec -T tcp-mcp-tasks curl -sf http://localhost:3013/health"
+# -k: the default certificate is self-signed until a real one is mounted. This
+# probe matters — without it, the script would print "Deployment ready" while
+# nginx might still be generating its certificate or picking a config, the
+# exact race that makes a browser tier flaky against a just-started stack.
+wait_for tcp-web              "curl -skf -o /dev/null https://localhost:${EXPOSE_PORT_WEB:-5173}/config.js"
 
 # Summary
 
@@ -450,6 +474,7 @@ echo "=================================================="
 echo ""
 echo "Services:"
 echo "  tcp-server API         →  http://localhost:${EXPOSE_PORT_API:-3000}"
+echo "  Web app                →  https://localhost:${EXPOSE_PORT_WEB:-5173}"
 if [[ "$DEV_PORTS" = "true" ]]; then
   echo "  tcp-mcp-storage        →  http://localhost:3010"
   echo "  tcp-mcp-memory         →  http://localhost:3011"

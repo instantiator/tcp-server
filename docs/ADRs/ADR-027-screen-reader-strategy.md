@@ -1,6 +1,6 @@
 # ADR-027: Screen Reader Strategy for Live and Data-Rich Views
 
-**Status:** Accepted (2026-08-03)
+**Status:** Accepted (amended — see [Amendment](#amendment-as-implemented-00202) at the end)
 
 ## Context
 
@@ -158,3 +158,28 @@ Moving focus anywhere else — including "helpfully" onto newly arrived content 
 A list that re-sorts as items change status moves content out from under someone mid-read.
 
 Lists keep a stable sort: new items append, and status changes update in place.
+
+## Amendment as implemented (002.02) <a id="amendment-as-implemented-00202"></a>
+
+**The spike passed: `@guidepup/virtual-screen-reader` 0.32.1 works under Vitest 4 and jsdom**, with no Jest present. The proof lives in `apps/frontend/tcp-frontend/src/test-support/screen-reader.test.tsx` — a throwaway announcer streaming six tokens into a transcript and one completion into a `role="status"` region, asserting that `spokenPhraseLog()` holds one phrase and no per-token entries. It is stable over repeated runs.
+
+Three corrections to [the snippet above](#automated-tests-for-announcement-behaviour), which was written from the library's documentation rather than from a run:
+
+1. **`spokenPhraseLog()` returns a Promise.** So do `lastSpokenPhrase()`, `start()`, `stop()` and `clearSpokenPhraseLog()`. Without `await`, the snippet's `expect(...).toEqual([...])` compares a Promise to an array and fails for the wrong reason — or, with `toHaveLength`, passes for the wrong reason.
+
+2. **`start()` seeds the log.** It announces the container itself, so the log opens with `'document'`. Call `await virtual.clearSpokenPhraseLog()` immediately after starting, or every assertion carries an entry the announcer did not produce.
+
+3. **Phrases are prefixed with the region's politeness** — `'polite: Reply from Sales received'`, not `'Reply from Sales received'`. This is an improvement on what the ADR assumed: the [per-surface policy table](#per-surface-policy)'s politeness column becomes assertable in the same expression as the wording.
+
+Corrected:
+
+```ts
+await virtual.start({ container: document.body });
+await virtual.clearSpokenPhraseLog();
+// ...dispatch WireEvents, advance fake timers past the throttle interval...
+expect(await virtual.spokenPhraseLog()).toEqual([
+  'polite: Tasks: 2 added, 1 completed',
+]);
+```
+
+**Fake timers need `shouldAdvanceTime`.** The throttle must be driven deterministically (`vi.advanceTimersByTimeAsync`), but the simulator has its own awaits that never settle under a frozen clock. `vi.useFakeTimers({ shouldAdvanceTime: true })` keeps real time moving underneath, and is what makes the two coexist.

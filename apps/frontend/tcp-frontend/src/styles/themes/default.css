@@ -1,0 +1,32 @@
+/*
+ * The `default` theme: soft colours, WCAG 2.2 AA contrast (4.5:1) for text
+ * against its background (ADR-026).
+ *
+ * This file and `high-contrast.css` must declare the *same* token names —
+ * anything declared in one and not the other is undefined under the other
+ * theme, which renders as an unstyled element rather than an error.
+ */
+
+:root[data-theme='default'][data-mode='light'] {
+  --tcp-color-bg: #ffffff;
+  --tcp-color-surface: #f6f8fa;
+  --tcp-color-text: #1f2328;
+  --tcp-color-text-muted: #57606a;
+  --tcp-color-border: #d0d7de;
+  --tcp-color-accent: #0757ba;
+  --tcp-color-accent-text: #ffffff;
+  --tcp-color-focus: #0757ba;
+  --tcp-color-danger: #cf222e;
+}
+
+:root[data-theme='default'][data-mode='dark'] {
+  --tcp-color-bg: #0d1117;
+  --tcp-color-surface: #161b22;
+  --tcp-color-text: #e6edf3;
+  --tcp-color-text-muted: #9198a1;
+  --tcp-color-border: #30363d;
+  --tcp-color-accent: #4493f8;
+  --tcp-color-accent-text: #0d1117;
+  --tcp-color-focus: #4493f8;
+  --tcp-color-danger: #ff7b72;
+}

@@ -6,7 +6,7 @@ usage() {
 Usage: $(basename "$0") [-h|--help]
 
 Build the project, lint, and run every test suite in order:
-  unit → integration → e2e → api → smoke
+  unit → integration → e2e → api → smoke → browser
 
 Unit, integration, and e2e suites manage their own Docker infrastructure.
 The api and smoke suites require the full TCP stack — this script starts it
@@ -165,11 +165,17 @@ echo
 # api and smoke tiers must target that same host port, not a hardcoded one.
 EXPOSE_PORT_API="$(grep -E '^EXPOSE_PORT_API=' "$REPO_ROOT/.env.testing" | tail -1 | cut -d= -f2)"
 API_BASE_URL="http://localhost:${EXPOSE_PORT_API:-3000}"
+# Same for tcp-agent, published by --dev-ports on its own port (3004 under
+# .env.testing). Read from the file, not this shell: the variable is not
+# exported here, so a `${EXPOSE_PORT_AGENT:-3003}` default would silently point
+# the smoke tier at the dev stack's port instead.
+EXPOSE_PORT_AGENT="$(grep -E '^EXPOSE_PORT_AGENT=' "$REPO_ROOT/.env.testing" | tail -1 | cut -d= -f2)"
+AGENT_BASE_URL="http://localhost:${EXPOSE_PORT_AGENT:-3003}"
 
 # Start the full stack (including Zitadel) only now, for API and smoke tests.
 step "Starting deployment for API + smoke tests"
 DEPLOYMENT_STARTED=true
-# --dev-ports: the smoke tier (test/smoke/smoke.spec.ts) hits the MCP servers
+# --dev-ports: the smoke tier (apps/backend/test/smoke/smoke.spec.ts) hits the MCP servers
 # directly on their host ports, so they must be published for this run.
 "$SCRIPTS/start-deployment.sh" \
   --project "$DEPLOYMENT_PROJECT" \
@@ -187,7 +193,17 @@ step "API tests"
 echo
 
 step "Smoke tests"
-"$SCRIPTS/run-smoke-tests.sh" --base-url "$API_BASE_URL"
+# --agent-url: tcp-agent is published by --dev-ports on EXPOSE_PORT_AGENT,
+# never on 3001 — that is tcp-server's port in .env.testing.
+"$SCRIPTS/run-smoke-tests.sh" --base-url "$API_BASE_URL" --agent-url "$AGENT_BASE_URL"
+echo
+
+# Runs inside the deployment's lifetime: the stack's tcp-web service is what
+# serves the app, and the tier provisions nothing of its own. https because the
+# web service is TLS-only — HTTP/2 needs it (ADR-025).
+step "Browser tests"
+EXPOSE_PORT_WEB="$(grep -E '^EXPOSE_PORT_WEB=' "$REPO_ROOT/.env.testing" | tail -1 | cut -d= -f2)"
+"$SCRIPTS/run-browser-tests.sh" --base-url "https://localhost:${EXPOSE_PORT_WEB:-5173}"
 echo
 
 record_step

@@ -3,7 +3,7 @@
 # can be reached directly from outside the Docker network for manual
 # debugging or the smoke-test tier.
 #
-# Additive, like test/support/docker-compose.dynamic-ports.yml: the root
+# Additive, like apps/backend/test/support/docker-compose.dynamic-ports.yml: the root
 # docker-compose.yml is never modified, so it stays production-safe on its
 # own. Enable via scripts/start-deployment.sh --dev-ports (start-dev.sh and
 # run-all-tests.sh's api/smoke deployment step always pass it).
@@ -11,6 +11,13 @@ services:
   stub-llm:
     ports:
       - "3002:3002"
+  # Not 3001 (its container port): the testing env publishes tcp-server on the
+  # host's 3001, so a same-number publish here would either collide with it or,
+  # worse, quietly answer for it — which is exactly how the smoke tier came to
+  # "test" tcp-agent by talking to tcp-server.
+  tcp-agent:
+    ports:
+      - "${EXPOSE_PORT_AGENT:-3003}:3001"
   tcp-mcp-storage:
     ports:
       - "3010:3010"

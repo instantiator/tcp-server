@@ -1,3 +1,5 @@
+## Backend
+
 | Name                                     | License      | Repository                                                     | Author                                                                 | Installed | Defined   |
 | :--------------------------------------- | :----------- | :------------------------------------------------------------- | :--------------------------------------------------------------------- | :-------- | :-------- |
 | @aws-sdk/client-s3                       | Apache-2.0   | git+https://github.com/aws/aws-sdk-js-v3.git                   | AWS SDK for JavaScript Team https://aws.amazon.com/sdk-for-javascript/ | 3.1090.0  | ^3.1090.0 |
@@ -31,7 +33,7 @@
 | ioredis                                  | MIT          | git://github.com/luin/ioredis.git                              | Zihua Li <i@zihua.li> (http://zihua.li)                                | 5.11.1    | ^5.11.1   |
 | joi                                      | BSD-3-Clause | git://github.com/hapijs/joi.git                                | n/a                                                                    | 18.2.3    | ^18.2.3   |
 | js-tiktoken                              | MIT          | git+https://github.com/dqbd/tiktoken.git                       | n/a                                                                    | 1.0.21    | ^1.0.21   |
-| js-yaml                                  | MIT          | git+https://github.com/nodeca/js-yaml.git                      | Vladimir Zapparov <dervus.grim@gmail.com>                              | 5.2.1     | ^5.2.1    |
+| js-yaml                                  | MIT          | git+https://github.com/nodeca/js-yaml.git                      | Vladimir Zapparov <dervus.grim@gmail.com>                              | 5.2.2     | ^5.2.1    |
 | json5                                    | MIT          | git+https://github.com/json5/json5.git                         | Aseem Kishore <aseem.kishore@gmail.com>                                | 2.2.3     | ^2.2.3    |
 | jwks-rsa                                 | MIT          | git+https://github.com/auth0/node-jwks-rsa.git                 | Auth0                                                                  | 4.1.0     | ^4.1.0    |
 | mammoth                                  | BSD-2-Clause | git+https://github.com/mwilliamson/mammoth.js.git              | Michael Williamson <mike@zwobble.org>                                  | 1.12.0    | ^1.12.0   |
@@ -50,4 +52,8 @@
 | typeorm                                  | MIT          | git+https://github.com/typeorm/typeorm.git                     | TypeORM maintainers@typeorm.io                                         | 1.1.0     | ^1.1.0    |
 | undici                                   | MIT          | git+https://github.com/nodejs/undici.git                       | n/a                                                                    | 8.8.0     | ^8.8.0    |
 | zod                                      | MIT          | git+https://github.com/colinhacks/zod.git                      | Colin McDonnell <zod@colinhacks.com>                                   | 4.4.3     | ^4.4.3    |
+
+
+
+## Web client
 

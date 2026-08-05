@@ -1,0 +1,19 @@
+# Dev-only overlay: swaps tcp-web from serving the built bundle to proxying a
+# Vite development server running on the host. Vite's dev server has no
+# HTTP/2 implementation at all (ADR-025 requires it), so nginx stays in front
+# either way — this just points it at Vite instead of at /usr/share/nginx/html.
+# The result is a dev loop with the same HTTP/2 + same-origin /api as
+# deployment, and HMR still working through nginx's WebSocket passthrough
+# (see docker/nginx/proxy.conf.template).
+#
+# extra_hosts is a no-op on Docker Desktop (host.docker.internal already
+# resolves there) and required on Linux, where it doesn't exist by default.
+#
+# Additive, like docker-compose.dev-ports.yml: the root docker-compose.yml is
+# never modified. Enable via scripts/start-deployment.sh --dev-web.
+services:
+  tcp-web:
+    environment:
+      WEB_UPSTREAM: http://host.docker.internal:${EXPOSE_PORT_WEB_DEV:-4173}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

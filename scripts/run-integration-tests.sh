@@ -9,7 +9,7 @@ Run the integration test suite against live infrastructure services.
 
 PostgreSQL, Redis, MinIO, and the stub-llm service are started automatically
 as ephemeral Docker containers by Jest's global setup
-(test/integration/global-setup.ts) and torn down by its global teardown, so no
+(apps/backend/test/integration/global-setup.ts) and torn down by its global teardown, so no
 manual Docker orchestration is needed here. Connection details are provisioned
 on random host ports, so this doesn't collide on ports with a dev stack — but
 a running tcp-* stack still competes for the same Docker daemon/CPU, so one
