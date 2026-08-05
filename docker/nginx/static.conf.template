@@ -12,7 +12,13 @@ server {
   # The certificate is self-signed by default, generated at container start.
   # Mount a real one (mkcert locally) over /etc/nginx/certs to remove the
   # browser warning — see docs/web-client.md.
+  # Dual-stack. busybox `wget https://localhost/…` — the container's own
+  # healthcheck — resolves `localhost` to ::1 before 127.0.0.1, so an
+  # IPv4-only listener answers the host perfectly while reporting itself
+  # unhealthy from the inside. (nginx:alpine's 10-listen-on-ipv6-by-default.sh
+  # only patches the stock default.conf, which this template replaces.)
   listen 443 ssl;
+  listen [::]:443 ssl;
   http2 on;
   ssl_certificate     /etc/nginx/certs/tls.crt;
   ssl_certificate_key /etc/nginx/certs/tls.key;

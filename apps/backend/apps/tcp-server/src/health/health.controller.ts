@@ -1,5 +1,10 @@
-import { assertRedisReachable } from '@tcp/shared';
-import { Controller, Get } from '@nestjs/common';
+import {
+  assertRedisReachable,
+  serviceIdentity,
+  setHealthRefresh,
+} from '@tcp/shared';
+import { Controller, Get, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import {
   HealthCheck,
@@ -28,7 +33,8 @@ export class HealthController {
    */
   @Get()
   @HealthCheck()
-  check() {
+  check(@Res({ passthrough: true }) res: Response) {
+    setHealthRefresh(res);
     const minioEndpoint = this.config.get<string>('MINIO_ENDPOINT') ?? '';
     // Prefer the internal URL for health checks so the probe works from inside Docker.
     const oidcIssuer =
@@ -36,6 +42,9 @@ export class HealthController {
       this.config.get<string>('OIDC_ISSUER_URL') ??
       '';
     return this.health.check([
+      // Names the responding service in both the 200 and the 503 body — see
+      // `serviceIdentity`. First, so it heads the document.
+      () => serviceIdentity('tcp-server'),
       () => this.db.pingCheck('database'),
       () => this.pingRedis(),
       () => this.http.pingCheck('minio', `${minioEndpoint}/minio/health/live`),

@@ -165,6 +165,12 @@ echo
 # api and smoke tiers must target that same host port, not a hardcoded one.
 EXPOSE_PORT_API="$(grep -E '^EXPOSE_PORT_API=' "$REPO_ROOT/.env.testing" | tail -1 | cut -d= -f2)"
 API_BASE_URL="http://localhost:${EXPOSE_PORT_API:-3000}"
+# Same for tcp-agent, published by --dev-ports on its own port (3004 under
+# .env.testing). Read from the file, not this shell: the variable is not
+# exported here, so a `${EXPOSE_PORT_AGENT:-3003}` default would silently point
+# the smoke tier at the dev stack's port instead.
+EXPOSE_PORT_AGENT="$(grep -E '^EXPOSE_PORT_AGENT=' "$REPO_ROOT/.env.testing" | tail -1 | cut -d= -f2)"
+AGENT_BASE_URL="http://localhost:${EXPOSE_PORT_AGENT:-3003}"
 
 # Start the full stack (including Zitadel) only now, for API and smoke tests.
 step "Starting deployment for API + smoke tests"
@@ -187,7 +193,9 @@ step "API tests"
 echo
 
 step "Smoke tests"
-"$SCRIPTS/run-smoke-tests.sh" --base-url "$API_BASE_URL"
+# --agent-url: tcp-agent is published by --dev-ports on EXPOSE_PORT_AGENT,
+# never on 3001 — that is tcp-server's port in .env.testing.
+"$SCRIPTS/run-smoke-tests.sh" --base-url "$API_BASE_URL" --agent-url "$AGENT_BASE_URL"
 echo
 
 # Runs inside the deployment's lifetime: the stack's tcp-web service is what

@@ -5,6 +5,10 @@ import { McpModule } from './mcp/mcp.module';
 
 /** Root module for tcp-mcp-tasks. Wires config validation, health, and MCP tooling. */
 @Module({
-  imports: [mcpConfigModule(configSchema), StaticHealthModule, McpModule],
+  imports: [
+    mcpConfigModule(configSchema),
+    StaticHealthModule.forService('tcp-mcp-tasks'),
+    McpModule,
+  ],
 })
 export class AppModule {}

@@ -24,4 +24,18 @@ describe('tcp-mcp-tasks health (e2e)', () => {
         expect([200, 503]).toContain(res.status);
         expect((res.body as { status: string }).status).toMatch(/ok|error/);
       }));
+
+  // The identity indicator is in the document whether the check passed or
+  // failed — a 503 is exactly when knowing which service answered matters.
+  it('names the service it answered as, in both info and details', () =>
+    request(app.getHttpServer())
+      .get('/health')
+      .expect((res) => {
+        const body = res.body as {
+          info?: Record<string, { name?: string }>;
+          details?: Record<string, { name?: string }>;
+        };
+        expect(body.details?.service?.name).toBe('tcp-mcp-tasks');
+        expect(body.info?.service?.name).toBe('tcp-mcp-tasks');
+      }));
 });
