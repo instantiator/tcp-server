@@ -20,8 +20,15 @@ const repoRoot = resolve(import.meta.dirname, '../../..');
  * in the npm script — means a bare `vitest`, a watch run and an IDE runner are
  * all covered, since workers inherit this process's environment and the config
  * is evaluated before any of them are forked.
+ *
+ * Guarded on the presence of the global rather than on a version number: the
+ * flag only exists from the release that introduced the problem, and passing it
+ * to an older Node aborts every pool worker on startup with `bad option` —
+ * which surfaces as an unattributed "Worker exited unexpectedly" and no tests.
  */
 const disableNodeWebStorage = (): void => {
+  if (!('localStorage' in globalThis)) return;
+
   const flag = '--no-webstorage';
   const existing = process.env.NODE_OPTIONS ?? '';
   if (!existing.includes(flag)) {
