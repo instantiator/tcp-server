@@ -19,7 +19,7 @@ const renderApp = () =>
   );
 
 describe('App', () => {
-  it('renders the placeholder route through the full provider stack', () => {
+  it('renders the landing page through the full provider stack', () => {
     renderApp();
 
     expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();

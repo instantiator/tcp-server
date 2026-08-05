@@ -7,7 +7,10 @@
  *   1. No literal colour, spacing or border value — use a `--tcp-*` token.
  *   2. Component stylesheets carry meaningful class names with empty rule
  *      bodies, to be filled per theme later.
- * This file is the one place the tokens themselves are declared.
+ * This file is the one place the tokens themselves are declared, and the one
+ * place React Aria's own defaults are given values — the library ships none,
+ * and a control with no focus ring or no visible selected state is an
+ * accessibility failure, not a cosmetic gap.
  */
 
 /*
@@ -58,6 +61,65 @@ body {
 :focus-visible {
   outline: var(--tcp-focus-ring-width) solid var(--tcp-color-focus);
   outline-offset: var(--tcp-focus-ring-offset);
+}
+
+/*
+ * The minimum React Aria Components needs to be usable, in tokens.
+ *
+ * RAC renders a RadioButton as a visually hidden <input> inside a <label>,
+ * exposing state as data attributes on that label. With no rules at all, a
+ * radio group shows its option text with nothing marking the chosen option
+ * (WCAG 1.4.1), and the :focus-visible rule above lands on an input the user
+ * cannot see (WCAG 2.4.7). Both are fixed here rather than deferred to a
+ * theme.
+ *
+ * Component stylesheets still ship with empty rule bodies (ADR-026) — this
+ * file is where the library's own defaults belong.
+ */
+.react-aria-RadioGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tcp-space-xs);
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.react-aria-RadioButton {
+  display: flex;
+  align-items: center;
+  gap: var(--tcp-space-sm);
+}
+
+.react-aria-RadioButton::before {
+  content: '';
+  display: block;
+  flex: none;
+  inline-size: var(--tcp-space-md);
+  block-size: var(--tcp-space-md);
+  border: var(--tcp-border-width) solid var(--tcp-color-border);
+  border-radius: 50%;
+}
+
+/* Shape as well as colour, so the selection survives a monochrome rendering. */
+.react-aria-RadioButton[data-selected]::before {
+  border-color: var(--tcp-color-accent);
+  background-color: var(--tcp-color-accent);
+  box-shadow: inset 0 0 0 var(--tcp-focus-ring-width) var(--tcp-color-bg);
+}
+
+.react-aria-RadioButton[data-focus-visible] {
+  outline: var(--tcp-focus-ring-width) solid var(--tcp-color-focus);
+  outline-offset: var(--tcp-focus-ring-offset);
+}
+
+.react-aria-Button {
+  padding: var(--tcp-space-sm) var(--tcp-space-md);
+  border: var(--tcp-border-width) solid var(--tcp-color-accent);
+  border-radius: var(--tcp-radius);
+  background-color: var(--tcp-color-accent);
+  color: var(--tcp-color-accent-text);
+  font: inherit;
 }
 
 /*
