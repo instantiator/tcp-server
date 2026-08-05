@@ -1,4 +1,10 @@
-A few defects have popped up during manual testing. Please prepare a plan to repair these.
+# Outstanding issues
+
+Known defects and deferred work, each with the condition that should trigger
+acting on it. Not a backlog of features — this is for things already found and
+knowingly left, so they stay visible instead of being rediscovered.
+
+Resolve an entry by deleting it, in the change that resolves it.
 
 ## Finalisation assignment status
 
@@ -91,3 +97,28 @@ So the run pays full export cost for a cache that cannot hit on the layer that
 matters. Worth measuring `mode=min` against the current setting, and worth
 checking whether the branch scoping of the Actions cache means a PR ever reads
 what its base branch wrote in the first place.
+
+## The integration tier can hang after every test passes
+
+**Act when:** it happens twice on CI, or anything else needs `pdf-parse`.
+
+`@napi-rs/canvas` starts a native GC thread when `pdf-parse` (via `pdfjs-dist`)
+is imported at [knowledge-conversion.ts:9](../apps/backend/apps/tcp-server/src/api/knowledge-conversion.ts#L9).
+That file is reachable from `app.module.ts`, which every integration spec loads,
+so the thread starts in a tier that never converts a PDF. Occasionally it wins
+the race against Jest's one-second exit grace period and the job hangs — all
+tests green, `Jest did not exit one second after the test run has completed` —
+burning runner time until the workflow times out. **Cancel and re-run before
+investigating.**
+
+Seen once, on run `31043814055` (2026-08-05); a re-run of the identical commit
+passed in 2m24s. It is not a regression and not specific to a branch: the
+TypeScript 6 bump was ruled out (emit for that file is byte-identical between
+5.9.3 and 6.0.3, and no runtime dependency moved in the lockfile), so the handle
+is latent everywhere and other runs simply win the race.
+
+The fix is to import `pdf-parse` lazily — `await import()` inside the conversion
+function — so the native thread starts only when a PDF is actually converted.
+That removes the race and stops every process that touches `app.module.ts`
+paying for it. Prefer it to `--forceExit`, which would hide real leaks; unclosed
+BullMQ connections have already caused one cross-suite failure here.
