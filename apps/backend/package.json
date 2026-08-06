@@ -16,7 +16,7 @@
     "start:debug": "nest start tcp-server --debug --watch",
     "start:prod": "node dist/apps/tcp-server/main",
     "start:tcp-cli": "node dist/apps/tcp-cli/main",
-    "typecheck": "tsc --noemit -p apps/tcp-server/tsconfig.json && tsc --noemit -p apps/tcp-agent/tsconfig.json && tsc --noemit -p apps/tcp-cli/tsconfig.app.json && tsc --noemit -p apps/tcp-mcp-storage/tsconfig.app.json && tsc --noemit -p apps/tcp-mcp-memory/tsconfig.app.json && tsc --noemit -p apps/tcp-mcp-interactions/tsconfig.app.json && tsc --noemit -p apps/tcp-mcp-tasks/tsconfig.app.json && tsc --noemit -p test/tsconfig.json",
+    "typecheck": "tsc --noemit -p apps/tcp-server/tsconfig.json && tsc --noemit -p apps/tcp-agent/tsconfig.json && tsc --noemit -p apps/tcp-cli/tsconfig.json && tsc --noemit -p apps/tcp-mcp-storage/tsconfig.json && tsc --noemit -p apps/tcp-mcp-memory/tsconfig.json && tsc --noemit -p apps/tcp-mcp-interactions/tsconfig.json && tsc --noemit -p apps/tcp-mcp-tasks/tsconfig.json && tsc --noemit -p test/tsconfig.json",
     "test": "jest --runInBand",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
@@ -104,7 +104,7 @@
     "ts-loader": "^9.6.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.7.3",
+    "typescript": "~6.0.3",
     "webpack-node-externals": "^3.0.0"
   },
   "jest": {
@@ -128,7 +128,7 @@
       "^.+\\.(t|j)s$": [
         "ts-jest",
         {
-          "tsconfig": "<rootDir>/tsconfig.json"
+          "tsconfig": "<rootDir>/tsconfig.spec.json"
         }
       ]
     },

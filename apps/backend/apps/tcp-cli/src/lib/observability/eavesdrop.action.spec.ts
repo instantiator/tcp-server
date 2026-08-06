@@ -41,7 +41,7 @@ function fakeSseResponse(sseText: string): Partial<Response> {
           });
         },
       }),
-    } as unknown as ReadableStream<Uint8Array>,
+    } as unknown as ReadableStream<Uint8Array<ArrayBuffer>>,
   };
 }
 
@@ -54,7 +54,7 @@ function neverEndingSseResponse(): Partial<Response> {
       getReader: () => ({
         read: () => new Promise(() => undefined),
       }),
-    } as unknown as ReadableStream<Uint8Array>,
+    } as unknown as ReadableStream<Uint8Array<ArrayBuffer>>,
   };
 }
 
@@ -71,10 +71,14 @@ describe('eavesdropAction', () => {
       .mockImplementation(() => undefined as never);
     jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
     writes = [];
-    jest.spyOn(process.stdout, 'write').mockImplementation((s: string) => {
-      writes.push(s);
-      return true;
-    });
+    jest
+      .spyOn(process.stdout, 'write')
+      .mockImplementation((chunk: string | Uint8Array<ArrayBufferLike>) => {
+        writes.push(
+          typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString(),
+        );
+        return true;
+      });
     fetchSpy = jest.spyOn(global, 'fetch');
     // Terminal shape (process.stdout.isTTY/.columns, which eavesdropAction
     // reads to pick a style and wrap width) is forced to a fixed value for

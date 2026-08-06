@@ -23,7 +23,7 @@ function taskSummary(
   overrides: Partial<TaskChangeSummary> = {},
 ): TaskChangeSummary {
   return {
-    id: 't1',
+    id: '11111111-1111-4111-8111-111111111111',
     status: 'ready',
     request: 'Write a short story about a cat.',
     shortcode: '000',
@@ -100,13 +100,21 @@ describe('renderRosterHeading', () => {
 
 describe('makeRoleEntry', () => {
   it('marks the selected row with an inverse ">" and leaves the rest unmarked', () => {
-    const entry = makeRoleEntry({ id: 'r1', name: 'Cat assistant' });
+    const entry = makeRoleEntry({
+      id: 'r1',
+      name: 'Cat assistant',
+      slug: 'cat-assistant',
+    });
     expect(entry.render(80, false)).toEqual(['  Cat assistant']);
     expect(entry.render(80, true)).toEqual(['^!>^: Cat assistant']);
   });
 
   it('escapes a literal caret in a role name', () => {
-    const entry = makeRoleEntry({ id: 'r1', name: 'x^2 assistant' });
+    const entry = makeRoleEntry({
+      id: 'r1',
+      name: 'x^2 assistant',
+      slug: 'x-2-assistant',
+    });
     expect(entry.render(80, true)).toEqual(['^!>^: x^^2 assistant']);
   });
 });
@@ -116,7 +124,9 @@ describe('renderMultiListPanel', () => {
     const lists: SelectableList[] = [
       {
         title: 'Roles',
-        groups: [{ entries: [makeRoleEntry({ id: 'r1', name: 'Cat' })] }],
+        groups: [
+          { entries: [makeRoleEntry({ id: 'r1', name: 'Cat', slug: 'cat' })] },
+        ],
       },
       {
         title: 'Tasks',
@@ -146,8 +156,8 @@ describe('renderMultiListPanel', () => {
         groups: [
           {
             entries: [
-              makeRoleEntry({ id: 'r1', name: 'Cat' }),
-              makeRoleEntry({ id: 'r2', name: 'Dog' }),
+              makeRoleEntry({ id: 'r1', name: 'Cat', slug: 'cat' }),
+              makeRoleEntry({ id: 'r2', name: 'Dog', slug: 'dog' }),
             ],
           },
         ],

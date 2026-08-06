@@ -21,7 +21,7 @@ function taskSummary(
   overrides: Partial<TaskChangeSummary> = {},
 ): TaskChangeSummary {
   return {
-    id: 't1',
+    id: '00000000-0000-4000-8000-000000000000',
     status: 'ready',
     request: 'Write a report',
     shortcode: '000',
@@ -403,7 +403,9 @@ describe('Tui input box', () => {
       id: 'acme',
       label: 'Acme',
       slug: 'acme-corp',
-      roles: [{ id: 'r1', name: 'Chicken assistant' }],
+      roles: [
+        { id: 'r1', name: 'Chicken assistant', slug: 'chicken-assistant' },
+      ],
     });
     tui.addPane({ id: 'agent-1', label: 'Chicken assistant', talkable: true });
     tui.switchToPane('agent-1');
@@ -621,7 +623,7 @@ describe('Tui resize resilience', () => {
       id: 'acme',
       label: 'Acme',
       slug: 'acme-corp',
-      roles: [{ id: 'r1', name: 'Cat assistant' }],
+      roles: [{ id: 'r1', name: 'Cat assistant', slug: 'cat-assistant' }],
     });
 
     expect(() => resize(term, 2, 4)).not.toThrow();
@@ -677,6 +679,7 @@ describe('Tui resize resilience', () => {
       roles: Array.from({ length: 30 }, (_, i) => ({
         id: `r${i}`,
         name: `Role ${i} with a fairly long name to force wrapping`,
+        slug: `role-${i}-with-a-fairly-long-name-to-force-wrapping`,
       })),
     });
     for (let i = 0; i < 20; i++) pressKey('DOWN');
@@ -699,7 +702,7 @@ describe('Tui resize resilience', () => {
       id: 'acme',
       label: 'Acme',
       slug: 'acme-corp',
-      roles: [{ id: 'r1', name: 'Cat assistant' }],
+      roles: [{ id: 'r1', name: 'Cat assistant', slug: 'cat-assistant' }],
     });
 
     expect(() => resize(term, 2, 4)).not.toThrow();
@@ -707,7 +710,10 @@ describe('Tui resize resilience', () => {
     // unpositioned (too small for content) must not throw.
     expect(() =>
       tui.updateRosterTasks('acme', [
-        taskSummary({ id: 't1', request: 'Mid-resize task' }),
+        taskSummary({
+          id: '11111111-1111-4111-8111-111111111111',
+          request: 'Mid-resize task',
+        }),
       ]),
     ).not.toThrow();
 
@@ -724,8 +730,8 @@ describe('Tui company roster pane', () => {
       label: 'Acme Corp',
       slug: 'acme-corp',
       roles: [
-        { id: 'r1', name: 'Cat assistant' },
-        { id: 'r2', name: 'Chicken assistant' },
+        { id: 'r1', name: 'Cat assistant', slug: 'cat-assistant' },
+        { id: 'r2', name: 'Chicken assistant', slug: 'chicken-assistant' },
       ],
     });
     expect(rows()[0]).toContain('[ Acme Corp ]');
@@ -739,7 +745,7 @@ describe('Tui company roster pane', () => {
       id: 'acme',
       label: 'Acme Corp',
       slug: 'acme-corp',
-      roles: [{ id: 'r1', name: 'Cat assistant' }],
+      roles: [{ id: 'r1', name: 'Cat assistant', slug: 'cat-assistant' }],
     });
     expect(rows()[CONTENT_TOP]).toContain('Slug: acme-corp');
     expect(rows()[CONTENT_TOP + 1]).toContain('Id: acme');
@@ -759,8 +765,8 @@ describe('Tui company roster pane', () => {
       label: 'Acme Corp',
       slug: 'acme-corp',
       roles: [
-        { id: 'r1', name: 'Cat assistant' },
-        { id: 'r2', name: 'Chicken assistant' },
+        { id: 'r1', name: 'Cat assistant', slug: 'cat-assistant' },
+        { id: 'r2', name: 'Chicken assistant', slug: 'chicken-assistant' },
       ],
     });
     const selectedRow = CONTENT_TOP + 6;
@@ -776,7 +782,7 @@ describe('Tui company roster pane', () => {
       id: 'acme',
       label: 'Acme Corp',
       slug: 'acme-corp',
-      roles: [{ id: 'r1', name: 'Cat assistant' }],
+      roles: [{ id: 'r1', name: 'Cat assistant', slug: 'cat-assistant' }],
     });
     expect(rows()[term.height - 1]).not.toContain('Enter send');
     expect(rows()[term.height - 1]).toContain('Up/Down select');
@@ -791,8 +797,8 @@ describe('Tui company roster pane', () => {
       label: 'Acme Corp',
       slug: 'acme-corp',
       roles: [
-        { id: 'r1', name: 'Cat assistant' },
-        { id: 'r2', name: 'Chicken assistant' },
+        { id: 'r1', name: 'Cat assistant', slug: 'cat-assistant' },
+        { id: 'r2', name: 'Chicken assistant', slug: 'chicken-assistant' },
       ],
     });
 
@@ -813,18 +819,18 @@ describe('Tui company roster pane', () => {
       id: 'acme',
       label: 'Acme Corp',
       slug: 'acme-corp',
-      roles: [{ id: 'r1', name: 'Cat assistant' }],
+      roles: [{ id: 'r1', name: 'Cat assistant', slug: 'cat-assistant' }],
     });
     tui.updateRosterTasks('acme', [
       taskSummary({
-        id: 't1',
+        id: '11111111-1111-4111-8111-111111111111',
         status: 'in-progress',
         completedSteps: 1,
         totalSteps: 2,
         request: 'Active task',
       }),
       taskSummary({
-        id: 't2',
+        id: '22222222-2222-4222-8222-222222222222',
         status: 'succeeded',
         request: 'Done task',
       }),
@@ -863,12 +869,15 @@ describe('Tui company roster pane', () => {
       label: 'Acme Corp',
       slug: 'acme-corp',
       roles: [
-        { id: 'r1', name: 'Cat assistant' },
-        { id: 'r2', name: 'Chicken assistant' },
+        { id: 'r1', name: 'Cat assistant', slug: 'cat-assistant' },
+        { id: 'r2', name: 'Chicken assistant', slug: 'chicken-assistant' },
       ],
     });
     tui.updateRosterTasks('acme', [
-      taskSummary({ id: 't1', request: 'Active task' }),
+      taskSummary({
+        id: '11111111-1111-4111-8111-111111111111',
+        request: 'Active task',
+      }),
     ]);
     const markerFor = (needle: string): string =>
       rows().find((r) => r.includes(needle))![0];
@@ -889,6 +898,7 @@ describe('Tui company roster pane', () => {
     const roles = Array.from({ length: 15 }, (_, i) => ({
       id: `r${i}`,
       name: `Role ${String(i).padStart(2, '0')}`,
+      slug: `role-${String(i).padStart(2, '0')}`,
     }));
     tui.addRosterPane({
       id: 'acme',
@@ -912,8 +922,8 @@ describe('Tui company roster pane', () => {
       label: 'Acme Corp',
       slug: 'acme-corp',
       roles: [
-        { id: 'r1', name: 'Cat assistant' },
-        { id: 'r2', name: 'Chicken assistant' },
+        { id: 'r1', name: 'Cat assistant', slug: 'cat-assistant' },
+        { id: 'r2', name: 'Chicken assistant', slug: 'chicken-assistant' },
       ],
     });
     const onSelectRole = jest.fn();
@@ -925,6 +935,7 @@ describe('Tui company roster pane', () => {
     expect(onSelectRole).toHaveBeenCalledWith({
       id: 'r2',
       name: 'Chicken assistant',
+      slug: 'chicken-assistant',
     });
   });
 
@@ -934,12 +945,12 @@ describe('Tui company roster pane', () => {
       id: 'acme',
       label: 'Acme Corp',
       slug: 'acme-corp',
-      roles: [{ id: 'r1', name: 'Cat assistant' }],
+      roles: [{ id: 'r1', name: 'Cat assistant', slug: 'cat-assistant' }],
     });
     const onRefreshRoster = jest.fn(() => {
       tui.updateRosterRoles('acme', [
-        { id: 'r1', name: 'Cat assistant' },
-        { id: 'r2', name: 'Chicken assistant' },
+        { id: 'r1', name: 'Cat assistant', slug: 'cat-assistant' },
+        { id: 'r2', name: 'Chicken assistant', slug: 'chicken-assistant' },
       ]);
     });
     tui.onRefreshRoster(onRefreshRoster);
@@ -956,7 +967,7 @@ describe('Tui company roster pane', () => {
       id: 'acme',
       label: 'Acme Corp',
       slug: 'acme-corp',
-      roles: [{ id: 'r1', name: 'Cat assistant' }],
+      roles: [{ id: 'r1', name: 'Cat assistant', slug: 'cat-assistant' }],
     });
     tui.addPane({ id: 'r1', label: 'Cat assistant', talkable: true });
 
@@ -972,10 +983,13 @@ describe('Tui company roster pane', () => {
       id: 'acme',
       label: 'Acme Corp',
       slug: 'acme-corp',
-      roles: [{ id: 'r1', name: 'Cat assistant' }],
+      roles: [{ id: 'r1', name: 'Cat assistant', slug: 'cat-assistant' }],
     });
     tui.updateRosterTasks('acme', [
-      taskSummary({ id: 't1', request: 'Write a report' }),
+      taskSummary({
+        id: '11111111-1111-4111-8111-111111111111',
+        request: 'Write a report',
+      }),
     ]);
     const onSelectTask = jest.fn((task: TaskChangeSummary) => {
       tui.addTaskPane({
@@ -993,10 +1007,12 @@ describe('Tui company roster pane', () => {
     pressKey('ENTER');
 
     expect(onSelectTask).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 't1' }),
+      expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' }),
     );
-    expect(rows()[0]).toContain('[ t1 ]');
-    expect(rows()[CONTENT_TOP]).toContain('Task id:  t1');
+    expect(rows()[0]).toContain('[ 11111111-1111-4111-8111-111111111111 ]');
+    expect(rows()[CONTENT_TOP]).toContain(
+      'Task id:  11111111-1111-4111-8111-111111111111',
+    );
   });
 });
 
@@ -1013,30 +1029,45 @@ describe('Tui task panel', () => {
       label: 'task-1',
       prompt: 'Write a report',
       status: overrides.status ?? 'in-progress',
+      // No explicit shortcode/planIndex on these fixtures — several specs
+      // below (e.g. the `>` cycling test and the live-update test) exercise
+      // the fallback to array position that null/null triggers.
       assignments: overrides.assignments ?? [
         {
           id: 'a1',
           role: 'Planner',
+          roleSlug: 'planner',
           mode: 'plan',
           status: 'succeeded',
           prompt: 'Draft the plan',
+          shortcode: null,
+          planIndex: null,
           agentId: 'agent-1',
+          failureReason: null,
         },
         {
           id: 'a2',
           role: 'Implementer',
+          roleSlug: 'implementer',
           mode: 'implement',
           status: 'in-progress',
           prompt: 'Write the report body',
+          shortcode: null,
+          planIndex: null,
           agentId: 'agent-2',
+          failureReason: null,
         },
         {
           id: 'a3',
           role: 'QA',
+          roleSlug: 'qa',
           mode: 'qa',
           status: 'ready',
           prompt: 'Review the report',
+          shortcode: null,
+          planIndex: null,
           agentId: null,
+          failureReason: null,
         },
       ],
     });
@@ -1104,26 +1135,38 @@ describe('Tui task panel', () => {
       {
         id: 'a1',
         role: 'Planner',
+        roleSlug: 'planner',
         mode: 'plan',
         status: 'succeeded',
         prompt: 'Draft the plan',
+        shortcode: null,
+        planIndex: null,
         agentId: 'agent-1',
+        failureReason: null,
       },
       {
         id: 'a2',
         role: 'Implementer',
+        roleSlug: 'implementer',
         mode: 'implement',
         status: 'succeeded',
         prompt: 'Write the report body',
+        shortcode: null,
+        planIndex: null,
         agentId: 'agent-2',
+        failureReason: null,
       },
       {
         id: 'a3',
         role: 'QA',
+        roleSlug: 'qa',
         mode: 'qa',
         status: 'in-progress',
         prompt: 'Review the report',
+        shortcode: null,
+        planIndex: null,
         agentId: 'agent-3',
+        failureReason: null,
       },
     ]);
 
@@ -1196,13 +1239,13 @@ describe('Tui initiate-task panel', () => {
       id: 'acme',
       label: 'Acme Corp',
       slug: 'acme-corp',
-      roles: [{ id: 'r1', name: 'Cat assistant' }],
+      roles: [{ id: 'r1', name: 'Cat assistant', slug: 'cat-assistant' }],
     });
     tui.addInitiateTaskPane({
       companyId: 'acme',
       roles: [
-        { id: 'r1', name: 'Planner' },
-        { id: 'r2', name: 'Implementer' },
+        { id: 'r1', name: 'Planner', slug: 'planner' },
+        { id: 'r2', name: 'Implementer', slug: 'implementer' },
       ],
       defaultRoleId: 'r1',
     });
@@ -1214,7 +1257,7 @@ describe('Tui initiate-task panel', () => {
       id: 'acme',
       label: 'Acme Corp',
       slug: 'acme-corp',
-      roles: [{ id: 'r1', name: 'Cat assistant' }],
+      roles: [{ id: 'r1', name: 'Cat assistant', slug: 'cat-assistant' }],
     });
     const onOpen = jest.fn(() => {
       tui.addInitiateTaskPane({

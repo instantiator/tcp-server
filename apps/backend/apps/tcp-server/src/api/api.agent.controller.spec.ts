@@ -244,11 +244,12 @@ describe('AgentController', () => {
       db.getAgent.mockResolvedValue(agent);
       agentEvents.observe.mockReturnValue(EMPTY);
 
-      const first = (await firstValueFrom(
+      const first = await firstValueFrom(
         controller.streamEvents(agent.id).pipe(take(1)),
-      )) as { data: WireEvent };
+      );
+      const data = first.data as WireEvent;
 
-      expect(first.data).toMatchObject({
+      expect(data).toMatchObject({
         type: 'audit',
         event: {
           eventType: AuditEventType.StateChange,
@@ -266,13 +267,14 @@ describe('AgentController', () => {
       db.getAgent.mockResolvedValue(agent);
       agentEvents.observe.mockReturnValue(EMPTY);
 
-      const first = (await firstValueFrom(
+      const first = await firstValueFrom(
         controller.streamEvents(agent.id).pipe(take(1)),
-      )) as { data: WireEvent };
+      );
+      const data = first.data as WireEvent;
 
-      expect(first.data.type).toBe('audit');
-      if (first.data.type === 'audit') {
-        expect(first.data.event.payload.newStatus).toBe('failed');
+      expect(data.type).toBe('audit');
+      if (data.type === 'audit') {
+        expect(data.event.payload.newStatus).toBe('failed');
       }
     });
 
@@ -288,12 +290,13 @@ describe('AgentController', () => {
       };
       agentEvents.observe.mockReturnValue(of(live));
 
-      const events = (await firstValueFrom(
+      const events = await firstValueFrom(
         controller.streamEvents(agent.id).pipe(toArray()),
-      )) as { data: WireEvent }[];
+      );
 
       expect(events).toHaveLength(1);
-      expect(events[0].data.type).toBe('stream');
+      const data0 = events[0].data as WireEvent;
+      expect(data0.type).toBe('stream');
     });
   });
 });

@@ -1,4 +1,10 @@
-A few defects have popped up during manual testing. Please prepare a plan to repair these.
+# Outstanding issues
+
+Known defects and deferred work, each with the condition that should trigger
+acting on it. Not a backlog of features — this is for things already found and
+knowingly left, so they stay visible instead of being rediscovered.
+
+Resolve an entry by deleting it, in the change that resolves it.
 
 ## Finalisation assignment status
 

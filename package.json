@@ -18,7 +18,7 @@
     "start:debug": "npm run start:debug --workspace apps/backend",
     "start:prod": "npm run start:prod --workspace apps/backend",
     "start:tcp-cli": "npm run start:tcp-cli --workspace apps/backend",
-    "typecheck": "npm run typecheck --workspaces --if-present && npm --prefix apps/tcp-stub-llm run typecheck",
+    "typecheck": "npm run typecheck --workspaces --if-present && npm --prefix apps/tcp-stub-llm run typecheck && tsc --noemit -p scripts/setup-wizard/tsconfig.json",
     "format": "prettier --write --list-different \"apps/**/*.{ts,tsx,css,html}\" \"libs/**/*.ts\" \"docs/**/*.md\" \"*.md\" \"apps/**/*.jsonc\" && npm --prefix apps/tcp-stub-llm run format",
     "format:check": "prettier --check \"apps/**/*.{ts,tsx,css,html}\" \"libs/**/*.ts\" \"docs/**/*.md\" \"*.md\" \"apps/**/*.jsonc\" && npm --prefix apps/tcp-stub-llm run format:check",
     "lint": "NODE_OPTIONS=--max-old-space-size=4096 eslint \"{apps,libs}/**/*.ts\" \"apps/**/*.jsonc\" --fix --cache && npm run lint --workspaces --if-present && npm --prefix apps/tcp-stub-llm run lint",
@@ -52,7 +52,7 @@
     "license-report": "^6.8.5",
     "prettier": "^3.9.5",
     "ts-json-schema-generator": "^2.9.0",
-    "typescript": "^5.7.3",
+    "typescript": "~6.0.3",
     "typescript-eslint": "^8.64.0"
   },
   "overrides": {
