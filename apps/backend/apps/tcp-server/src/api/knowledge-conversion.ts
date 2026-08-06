@@ -6,7 +6,6 @@ import { parse as parseCsv } from 'csv-parse/sync';
 import * as cheerio from 'cheerio';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
-import { PDFParse } from 'pdf-parse';
 import * as mammoth from 'mammoth';
 
 /** Extensions `store-knowledge` accepts; each is converted to OKF Markdown server-side. */
@@ -87,6 +86,19 @@ function convertHtml(buffer: Buffer): ConvertedDocument {
 }
 
 async function convertPdf(buffer: Buffer): Promise<ConvertedDocument> {
+  // Imported here, not at module scope. `pdf-parse` pulls in `pdfjs-dist`,
+  // which loads `@napi-rs/canvas`'s native binding, and that starts a GC
+  // thread the moment it is required. This module is reachable from
+  // `app.module.ts`, so a top-level import started that thread in every
+  // process that touched the API module — including test runs that never
+  // convert a PDF, where it raced Jest's one-second exit grace period and
+  // occasionally hung the run outright.
+  // `require`, not `await import()`: the latter stays a real dynamic import
+  // under `module: nodenext`, which Jest's CJS sandbox rejects with "A dynamic
+  // import callback was invoked without --experimental-vm-modules" (the same
+  // limitation this module's spec already documents for pdfjs-dist).
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { PDFParse } = require('pdf-parse') as typeof import('pdf-parse');
   const parser = new PDFParse({ data: buffer });
   try {
     const result = await parser.getText();
