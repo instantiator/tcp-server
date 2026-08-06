@@ -39,8 +39,10 @@ describe('DbService', () => {
   let auditRepo: Repository<AuditEvent>;
   let companyUserRepo: Repository<CompanyUser>;
 
+  let testingModule: TestingModule;
+
   beforeAll(async () => {
-    const testingModule: TestingModule = await Test.createTestingModule({
+    testingModule = await Test.createTestingModule({
       imports: [
         TypeOrmModule.forRoot({
           type: 'better-sqlite3',
@@ -61,6 +63,14 @@ describe('DbService', () => {
     taskRepo = testingModule.get(getRepositoryToken(TcpTask));
     auditRepo = testingModule.get(getRepositoryToken(AuditEvent));
     companyUserRepo = testingModule.get(getRepositoryToken(CompanyUser));
+  });
+
+  // Closes the better-sqlite3 DataSource this module opened. Without it the
+  // connection outlives the suite, and `@nestjs/typeorm`'s connection retry —
+  // an rxjs timer — can fire after Jest has torn the environment down, at
+  // which point re-loading the driver throws "require after teardown".
+  afterAll(async () => {
+    await testingModule.close();
   });
 
   afterEach(async () => {

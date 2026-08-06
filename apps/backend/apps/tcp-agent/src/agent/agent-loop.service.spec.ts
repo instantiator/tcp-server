@@ -171,6 +171,7 @@ describe('AgentLoopService', () => {
   let configService: { get: jest.Mock; getOrThrow: jest.Mock };
   let prepareContext: jest.Mock;
   let checkBudget: jest.Mock;
+  let testingModule: TestingModule;
 
   beforeAll(async () => {
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
@@ -194,7 +195,7 @@ describe('AgentLoopService', () => {
       .fn()
       .mockResolvedValue({ report: null, stillOverBudget: false });
 
-    const testingModule: TestingModule = await Test.createTestingModule({
+    testingModule = await Test.createTestingModule({
       imports: [
         TypeOrmModule.forRoot({
           type: 'better-sqlite3',
@@ -259,6 +260,14 @@ describe('AgentLoopService', () => {
     ragProvider = testingModule.get(AgentRagService);
     knowledgeProvider = testingModule.get(KnowledgeRetrievalService);
     configService = testingModule.get(ConfigService);
+  });
+
+  // Closes the better-sqlite3 DataSource this module opened. Without it the
+  // connection outlives the suite, and `@nestjs/typeorm`'s connection retry —
+  // an rxjs timer — can fire after Jest has torn the environment down, at
+  // which point re-loading the driver throws "require after teardown".
+  afterAll(async () => {
+    await testingModule.close();
   });
 
   afterEach(async () => {
