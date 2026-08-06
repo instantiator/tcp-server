@@ -211,3 +211,44 @@ test.describe('the application shell on an unknown address', () => {
     ).toEqual([]);
   });
 });
+
+// The one security property of the development sign-in escape hatch, asserted
+// against the artefact that actually ships rather than against the source.
+//
+// `readDevSession` is guarded by `import.meta.env.DEV`, which Vite replaces
+// with a literal at build time, so the whole capability should be unreachable
+// code the minifier has dropped. That is a claim about a build pipeline, and
+// this tier is the only one positioned to check it: the component tier runs
+// with `DEV` true by construction and would report the opposite of production.
+test.describe('the development session escape hatch', () => {
+  test('cannot sign anyone in against a production build', async ({ page }) => {
+    await page.goto('/companies?devSession=someone');
+
+    // Redirected to the landing page: `RequireSession` saw no session, which
+    // is only true if the query string was never read. If this ever fails,
+    // anyone who can put a URL in front of a user can walk them past the
+    // route guard — treat it as a release blocker, not a flaky test.
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'TCP' }),
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Account' })).toHaveCount(0);
+  });
+
+  test('leaves no trace of itself in the served bundle', async ({
+    page,
+    request,
+  }) => {
+    await page.goto('/');
+    const bundleSrc = await page
+      .locator('script[type="module"]')
+      .first()
+      .getAttribute('src');
+
+    const bundle = await (await request.get(bundleSrc ?? '')).text();
+
+    // Stronger than the behavioural check above, and it fails earlier: the
+    // parameter name surviving into the bundle means the branch was kept, even
+    // if some other condition happens to stop it firing today.
+    expect(bundle).not.toContain('devSession');
+  });
+});

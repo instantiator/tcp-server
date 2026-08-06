@@ -238,6 +238,28 @@ That covers the skip link's real focus behaviour, which is the one thing jsdom c
 
 This is deliberate rather than unfinished: consuming it means validating it, and an unvalidated return address is an open redirect. The prompt that adds sign-in is the one that can test both halves together.
 
+### A query string can create a session in a development build
+
+**Raised by:** 003.02 · **Condition to revisit:** a `Session` starts carrying a
+token or a permission — which is 004.03 — or 009.04 generalises the build flag
+
+`?devSession=<id>` supplies a stand-in signed-in user so the shell could be
+tested before sign-in existed. It is guarded by `import.meta.env.DEV`, which
+Vite replaces with a literal at build time, so the capability is **absent from a
+production bundle** rather than disabled in one; `test/browser/app-shell.spec.ts`
+asserts that twice, behaviourally and by searching the served JavaScript.
+
+What makes it acceptable today is how little a session is: a user id that
+decides whether `RequireSession` renders or redirects. It carries no token, so
+tcp-server refuses every request it leads to with a 401 exactly as it would for
+a signed-out visitor. It is a way to see the header, not a way to reach data.
+
+That reasoning expires when the session becomes the thing that holds
+credentials. The guard protects the artefact, not a developer's own browser, and
+nothing stops a future change to `Session` from making `?devSession=admin` mean
+something. Written into 004.03 and 009.04; recorded in the memory
+`project-dev-session-escape-hatch`.
+
 ## Carried into a later prompt
 
 | Note                                                                                                                                         | Raised by | Goes to  |
@@ -275,3 +297,5 @@ This is deliberate rather than unfinished: consuming it means validating it, and
 | `onAccountAction` in `Header.tsx` is the dialogs' entry point; `MenuTrigger` already restores focus on close                                 | 003.02    | `008.06` |
 | Scan `document.body`, not the render container — React Aria's popover portals out of it                                                      | 003.02    | `008.06` |
 | A jsdom test can be green while the browser is wrong; the shell's browser coverage runs on an unknown address                                | 003.02    | `009.02` |
+| `?devSession=` builds a `Session` from a URL — when a session carries a token, it must not be able to mint one                               | 003.02    | `004.03` |
+| The production build flag, removing dev-only capabilities from the artefact, and query-string feature flags                                  | 003.02    | `009.04` |

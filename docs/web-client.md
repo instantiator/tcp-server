@@ -52,9 +52,21 @@ against it would mean developing under the exact six-connection ceiling the
 deployment doesn't have. Instead, nginx stays in front and proxies to it:
 
 ```bash
+./scripts/start-dev.sh --dev-web
+# → https://localhost:5173, now served by Vite through nginx
+```
+
+`--dev-web` starts the Vite server on the host, waits for it to answer, and
+then brings the stack up pointing at it — in that order, because nginx proxies
+to Vite and the deployment's own health check on `tcp-web` cannot pass while
+the upstream is refusing connections. `./scripts/stop-dev.sh` stops both.
+
+The underlying two-command form still works, and is what to reach for when the
+dev server is already running or needs different arguments:
+
+```bash
 npm run dev --workspace apps/frontend/tcp-frontend                  # Vite on 4173
 ./scripts/start-deployment.sh --project tcp-dev --env-file .env.dev --dev-web
-# → https://localhost:5173, now served by Vite through nginx
 ```
 
 Hot module replacement still works. nginx doesn't implement WebSockets over
@@ -192,6 +204,57 @@ other page's `main` comes from `AppShell`. There must never be two on one
 page.
 
 The OIDC callback route is deliberately absent and arrives with 004.02.
+
+## Reaching protected routes before sign-in exists
+
+`?devSession=<id>` on any URL supplies a stand-in signed-in user, so the
+header, the account menu and the protected routes can be exercised before
+004.02 builds real sign-in — for example
+`http://localhost:4173/companies?devSession=alice`.
+
+It is read once at startup (`src/main.tsx`), so it survives in-app navigation
+that drops the query string, but it does **not** survive a manual reload of a
+URL without the parameter. A `console.warn` names it on every page where it is
+active.
+
+**It only works where the app is served in development mode**, which is the
+part that catches people out:
+
+| How you started it                                   | URL                      | Works? |
+| ---------------------------------------------------- | ------------------------ | ------ |
+| `./scripts/start-dev.sh --dev-web`                   | `https://localhost:5173` | Yes    |
+| `npm run dev --workspace apps/frontend/tcp-frontend` | `http://localhost:4173`  | Yes    |
+| `./scripts/start-dev.sh`                             | `https://localhost:5173` | **No** |
+
+Without `--dev-web`, `tcp-web` serves the **built** bundle out of
+`/usr/share/nginx/html` — a production `vite build`, which is exactly where the
+parameter has been compiled away. A protected route simply redirects to the
+landing page, with nothing in the console to explain why, because the code that
+would have logged it is not there either. That is the guarantee below working,
+not a fault to debug. `start-dev.sh` says which of the two it gave you as its
+last line, for that reason.
+
+`--dev-web` is the one to use: it keeps HTTPS, HTTP/2 and a same-origin `/api`,
+because nginx stays in front and proxies to the dev server. For the shell alone
+plain `vite dev` on 4173 is enough — nothing here calls the API yet.
+
+**Why it is safe:** it is compiled out of a production build, not disabled in
+one. `import.meta.env.DEV` is replaced with a literal at build time, so the
+whole branch is unreachable code the minifier drops. Two browser-tier tests in
+`test/browser/app-shell.spec.ts` assert this against a real deployment — one
+that the route guard still redirects, one that the string `devSession` does
+not appear in the served bundle.
+
+**What it does not do:** a session today is a user id and nothing else. It
+carries no token, so tcp-server refuses every API call it leads to with a 401,
+exactly as it would for a signed-out visitor. It is a way to see the shell,
+not a way to reach data.
+
+**The constraint on future work:** when 004.03 makes the session hold a
+bearer token, a session built from a query string must not be able to mint
+one. [prompts/phase 02 - web ui/009.04.00.prompt - production build flag and development feature flags (draft).md](<prompts/phase 02 - web ui/009.04.00.prompt - production build flag and development feature flags (draft).md>)
+owns the general production-build-flag rule this capability is the first case
+of.
 
 ## Strings: one lookup, no literals in JSX
 
