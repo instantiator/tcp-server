@@ -52,9 +52,21 @@ against it would mean developing under the exact six-connection ceiling the
 deployment doesn't have. Instead, nginx stays in front and proxies to it:
 
 ```bash
+./scripts/start-dev.sh --dev-web
+# → https://localhost:5173, now served by Vite through nginx
+```
+
+`--dev-web` starts the Vite server on the host, waits for it to answer, and
+then brings the stack up pointing at it — in that order, because nginx proxies
+to Vite and the deployment's own health check on `tcp-web` cannot pass while
+the upstream is refusing connections. `./scripts/stop-dev.sh` stops both.
+
+The underlying two-command form still works, and is what to reach for when the
+dev server is already running or needs different arguments:
+
+```bash
 npm run dev --workspace apps/frontend/tcp-frontend                  # Vite on 4173
 ./scripts/start-deployment.sh --project tcp-dev --env-file .env.dev --dev-web
-# → https://localhost:5173, now served by Vite through nginx
 ```
 
 Hot module replacement still works. nginx doesn't implement WebSockets over
@@ -166,6 +178,175 @@ with the allowlist derived from `TCP_WEB_URL`, the same environment value that
 already carries the web address. Do not add it now: an allowlist nobody
 exercises is an allowlist nobody maintains.
 
+## Routing
+
+React Router's route table, in `src/App.tsx`:
+
+| Path                  | Page               | Access    | Built by                           |
+| --------------------- | ------------------ | --------- | ---------------------------------- |
+| `/`                   | Landing page       | Public    | 003.01                             |
+| `/companies`          | Companies overview | Protected | placeholder here, real page 006.01 |
+| `/company/:companyId` | Company view       | Protected | placeholder here, real page 006.01 |
+| `*`                   | Not found          | Public    | 003.02                             |
+
+Protected routes sit behind `RequireSession`, which redirects to `/` when
+there is no session. There is no way to sign in until 004.02, so today every
+protected route redirects.
+
+nginx returns the app document with a 200 for any unknown path
+([ADR-029](ADRs/ADR-029-spa-hosting-and-runtime-configuration.md)) and always
+will — a static server cannot know which paths the router knows. The
+catch-all route is what makes an unknown address render a page rather than a
+blank screen; the status code is not a defect.
+
+The landing page renders outside the shell and owns its own `main`. Every
+other page's `main` comes from `AppShell`. There must never be two on one
+page.
+
+The OIDC callback route is deliberately absent and arrives with 004.02.
+
+## Reaching protected routes before sign-in exists
+
+`?devSession=<id>` on any URL supplies a stand-in signed-in user, so the
+header, the account menu and the protected routes can be exercised before
+004.02 builds real sign-in — for example
+`http://localhost:4173/companies?devSession=alice`.
+
+It is read once at startup (`src/main.tsx`), so it survives in-app navigation
+that drops the query string, but it does **not** survive a manual reload of a
+URL without the parameter. A `console.warn` names it on every page where it is
+active.
+
+**It only works where the app is served in development mode**, which is the
+part that catches people out:
+
+| How you started it                                   | URL                      | Works? |
+| ---------------------------------------------------- | ------------------------ | ------ |
+| `./scripts/start-dev.sh --dev-web`                   | `https://localhost:5173` | Yes    |
+| `npm run dev --workspace apps/frontend/tcp-frontend` | `http://localhost:4173`  | Yes    |
+| `./scripts/start-dev.sh`                             | `https://localhost:5173` | **No** |
+
+Without `--dev-web`, `tcp-web` serves the **built** bundle out of
+`/usr/share/nginx/html` — a production `vite build`, which is exactly where the
+parameter has been compiled away. A protected route simply redirects to the
+landing page, with nothing in the console to explain why, because the code that
+would have logged it is not there either. That is the guarantee below working,
+not a fault to debug. `start-dev.sh` says which of the two it gave you as its
+last line, for that reason.
+
+`--dev-web` is the one to use: it keeps HTTPS, HTTP/2 and a same-origin `/api`,
+because nginx stays in front and proxies to the dev server. For the shell alone
+plain `vite dev` on 4173 is enough — nothing here calls the API yet.
+
+**Why it is safe:** it is compiled out of a production build, not disabled in
+one. `import.meta.env.DEV` is replaced with a literal at build time, so the
+whole branch is unreachable code the minifier drops. Two browser-tier tests in
+`test/browser/app-shell.spec.ts` assert this against a real deployment — one
+that the route guard still redirects, one that the string `devSession` does
+not appear in the served bundle.
+
+**What it does not do:** a session today is a user id and nothing else. It
+carries no token, so tcp-server refuses every API call it leads to with a 401,
+exactly as it would for a signed-out visitor. It is a way to see the shell,
+not a way to reach data.
+
+**The constraint on future work:** when 004.03 makes the session hold a
+bearer token, a session built from a query string must not be able to mint
+one. [prompts/phase 02 - web ui/009.04.00.prompt - production build flag and development feature flags (draft).md](<prompts/phase 02 - web ui/009.04.00.prompt - production build flag and development feature flags (draft).md>)
+owns the general production-build-flag rule this capability is the first case
+of.
+
+## Announcements: one announcer, coalesced and throttled
+
+Everything a screen reader is told, it is told from `src/announce/announcer.ts`
+([ADR-027](ADRs/ADR-027-screen-reader-strategy.md)).
+
+```ts
+import { announce } from './announce/announcer';
+
+announce({ channel: 'tasks', change: 'announce.tasksAdded' });
+```
+
+**No component renders a live region.** The announcer owns the only two — a
+polite one and an assertive one, built by
+[`@react-aria/live-announcer`](https://www.npmjs.com/package/@react-aria/live-announcer)
+and kept in `document.body`, outside the React root. That is not a style
+preference. A region mounted at the same moment as its content announces all of
+it or none of it, and two regions updating together interleave into output that
+reads as neither message. Both failures look completely correct in a component
+test that only asserts on markup.
+
+Every announcement names a **channel** — one surface, one channel. Changes on a
+channel accumulate for `ANNOUNCE_THROTTLE_MS` and are then spoken as one
+phrase, so a task fanning out to fifty assignments becomes "Tasks: 50 added"
+rather than fifty interruptions. Repeats are **counted, not discarded**: two
+identical calls mean two things happened.
+
+That last point is the one that bites. Because the announcer counts, guarding
+against `StrictMode`'s double-invoked effects is the **caller's** job:
+
+```ts
+// Guard on the value that changed…
+const announced = useRef<string | null>(null);
+useEffect(() => {
+  if (announced.current === message) return;
+  announced.current = message;
+  announce({
+    channel,
+    change: 'state.error.announcement',
+    params: { message },
+  });
+}, [channel, message]);
+
+// …never on whether the effect has run. StrictMode spends this on mount.
+const hasRun = useRef(false);
+```
+
+| Surface       | Politeness  | When                                                        |
+| ------------- | ----------- | ----------------------------------------------------------- |
+| Route change  | `polite`    | Immediately, after focus moves to the main heading          |
+| Live lists    | `polite`    | Coalesced, once per `ANNOUNCE_THROTTLE_MS`                  |
+| Loading       | `polite`    | On completion only, and only over `ANNOUNCE_LOADING_MIN_MS` |
+| Errors        | `assertive` | Immediately                                                 |
+| Notifications | either      | Once, on appearance; `assertive` when it carries a failure  |
+| Empty states  | —           | Never — they are reached by browsing                        |
+
+`ANNOUNCE_THROTTLE_MS` (10s) and `ANNOUNCE_LOADING_MIN_MS` (1s) are provisional
+guesses that 009.02's manual screen reader pass tunes.
+
+The gate is `src/announce/announcer.test.tsx`, which asserts on
+`spokenPhraseLog()` from `@guidepup/virtual-screen-reader` — the ordered
+sequence of everything a screen reader would say. Component tests for anything
+that announces belong there too, not in an assertion on the DOM.
+
+`test/browser/app-shell.spec.ts` covers the one half jsdom cannot: react-aria
+delays its _first_ announcement by 100ms in a real browser so the regions have
+attached, and skips that delay entirely under test. The browser tier proves
+both regions exist empty on load, and that a real navigation lands the page
+title in the polite one.
+
+## Shared states
+
+Four components, in `src/components/`, for the situations every data-driven
+view meets. None of them mounts a live region.
+
+| Component      | Role                                  | Announces                              |
+| -------------- | ------------------------------------- | -------------------------------------- |
+| `LoadingState` | Indeterminate `progressbar`           | Nothing — see `useLoadingAnnouncement` |
+| `ErrorState`   | `group`, in place beside the failure  | The message, `assertive`               |
+| `EmptyState`   | A heading and a body                  | Nothing                                |
+| `Notification` | `group`, with a required durable link | Once, on appearance                    |
+
+`ErrorState` is deliberately **not** `role="alert"`: that role _is_ a live
+region, and three failing lists would mount three of them. `Notification`'s
+`durableHref` is required for the same kind of reason — WCAG 2.2.3, adopted by
+[ADR-026](ADRs/ADR-026-web-ui-accessibility-and-component-library.md), forbids a
+notice that vanishes being the only record of an event, and a required prop
+enforces that at compile time rather than at review time. Nothing here
+self-dismisses.
+
+Nothing consumes these yet: 006.01 and 007.01 are the first views to.
+
 ## Strings: one lookup, no literals in JSX
 
 Every user-facing string resolves through `src/strings.ts`:
@@ -181,6 +362,18 @@ is no i18n library and there are no locale files yet — the seam exists so the
 phase 03 translation work replaces one module instead of rewriting every
 component. **Call `t(…)`; never import `strings` directly**, or the call sites
 stop being replaceable.
+
+`t` takes an optional second argument filling `{placeholder}` slots:
+
+```ts
+t('announce.tasksAdded', { count: 2 }); // 'Tasks: 2 added'
+```
+
+That is the whole of it — no pluralisation, no number or date formatting, no
+nesting. An unmatched placeholder is left in the output rather than blanked, so
+a missing value is visible instead of reading as though it worked. Because
+there are no plural rules, announcement wordings are phrased count-agnostically
+(`'Tasks: {count} added'`, never `'{count} tasks added'`).
 
 ## Theme: tokens, never literal values
 

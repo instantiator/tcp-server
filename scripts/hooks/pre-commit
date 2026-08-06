@@ -18,6 +18,10 @@ cd "$TOP"
 # elsewhere in the working tree.
 GENERATED_PATHS=(apps libs docs schemas '*.md')
 
+# First, because everything below inherits the invoking shell's Node and a
+# mismatch surfaces as ~200 unrelated test failures rather than as itself.
+bash "$TOP/scripts/check-node-version.sh"
+
 echo "→ pre-commit: regenerating licenses..."
 npm run licenses:generate --silent
 

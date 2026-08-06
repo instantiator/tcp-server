@@ -17,6 +17,7 @@
     "test:import-boundary": "eslint --no-ignore -f json test/fixtures/server-import-must-fail.ts | grep -q '\"ruleId\":\"no-restricted-imports\"'"
   },
   "dependencies": {
+    "@react-aria/live-announcer": "^3.5.1",
     "@tanstack/react-query": "^5.101.4",
     "@tcp/shared": "^0.0.1",
     "react": "^19.2.8",

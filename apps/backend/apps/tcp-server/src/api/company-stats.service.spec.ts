@@ -34,8 +34,10 @@ describe('CompanyStatsService', () => {
   let acme: UUID;
   let beta: UUID;
 
+  let testingModule: TestingModule;
+
   beforeAll(async () => {
-    const testingModule: TestingModule = await Test.createTestingModule({
+    testingModule = await Test.createTestingModule({
       imports: [
         TypeOrmModule.forRoot({
           type: 'better-sqlite3',
@@ -167,6 +169,14 @@ describe('CompanyStatsService', () => {
     await enquiry('analyst-2', 'awaiting_user', acme);
     await enquiry('analyst-3', 'closed', acme);
     await enquiry('analyst-4', 'awaiting_user', beta);
+  });
+
+  // Closes the better-sqlite3 DataSource this module opened. Without it the
+  // connection outlives the suite, and `@nestjs/typeorm`'s connection retry —
+  // an rxjs timer — can fire after Jest has torn the environment down, at
+  // which point re-loading the driver throws "require after teardown".
+  afterAll(async () => {
+    await testingModule.close();
   });
 
   afterEach(() => jest.restoreAllMocks());

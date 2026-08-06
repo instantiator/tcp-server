@@ -148,3 +148,148 @@ test.describe('the landing page', () => {
     expect(outlineWidth).not.toBe('0px');
   });
 });
+
+// The application shell (skip link, header, `main`) renders on every
+// signed-in page and on the not-found page. No signed-in page is reachable in
+// a real browser until 004.02 builds sign-in — so an unknown address is the
+// ONLY shell-bearing route this tier can reach today. That is why these tests
+// navigate to a deliberately meaningless path rather than to a real page, and
+// it will read as an odd choice otherwise.
+test.describe('the application shell on an unknown address', () => {
+  test('renders a not-found page rather than a blank screen', async ({
+    page,
+  }) => {
+    await page.goto('/no-such-page');
+
+    // hosting.spec.ts deliberately asserts only that nginx served the app
+    // document for a deep link; this is the rendering half that prompt left
+    // to 003.02.
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  });
+
+  test('moves focus to main when the skip link is used', async ({ page }) => {
+    await page.goto('/no-such-page');
+
+    await page.keyboard.press('Tab');
+
+    const skipLink = page.locator('.skip-link');
+    await expect(skipLink).toBeFocused();
+
+    // `toBeVisible()` is NOT the assertion to make here, and was the first
+    // thing tried: Playwright calls an element visible when it has a non-empty
+    // bounding box, and `.skip-link` is clipped to 1×1 rather than hidden — so
+    // that assertion passes with `.skip-link:focus` deleted, which is exactly
+    // the regression it was meant to catch. Verified by suppressing the rule
+    // in the browser and watching it stay green.
+    //
+    // What has to hold is that focusing it *unclips* it. Both halves matter:
+    // `clip-path: none` is the rule having applied at all, and the width is
+    // the link being big enough for a sighted keyboard user to read.
+    const revealed = await skipLink.evaluate((el) => ({
+      clipPath: getComputedStyle(el).clipPath,
+      width: el.getBoundingClientRect().width,
+    }));
+    expect(revealed.clipPath).toBe('none');
+    expect(revealed.width).toBeGreaterThan(50);
+
+    await page.keyboard.press('Enter');
+
+    // This is the ONLY tier that can prove this — jsdom does not implement
+    // fragment-navigation focus at all, so the component tier can assert the
+    // link's target but never that focus arrives.
+    const focusedId = await page.evaluate(() => document.activeElement?.id);
+    expect(focusedId).toBe('main-content');
+  });
+
+  test('has no accessibility violations', async ({ page }) => {
+    await page.goto('/no-such-page');
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+
+    expect(
+      violations.map((v) => `${v.id}: ${v.help} (${v.nodes.length} nodes)`),
+    ).toEqual([]);
+  });
+
+  // The announcer's only browser-reachable path, and worth having: react-aria
+  // builds its live regions on the first announcement and, outside a test
+  // environment, waits 100ms before speaking so the regions have attached.
+  // jsdom skips that delay entirely, so the component tier never exercises
+  // the code path a real user gets. The announcer primes at import to make
+  // the two the same; this is the tier that can tell whether it worked.
+  test('carries the announcer, and only the announcer, as a live region', async ({
+    page,
+  }) => {
+    await page.goto('/no-such-page');
+
+    const regions = await page.evaluate(() => ({
+      announcers: document.querySelectorAll('[data-live-announcer]').length,
+      // Both regions, built empty before anything needed them.
+      logs: [...document.querySelectorAll('[data-live-announcer] [role="log"]')]
+        .map((el) => el.getAttribute('aria-live'))
+        .sort(),
+      // 003.02's interim region, which 003.03 replaced rather than joined.
+      strays: document.querySelectorAll(
+        'p[role="status"], [aria-live]:not([data-live-announcer] *)',
+      ).length,
+    }));
+
+    expect(regions.announcers).toBe(1);
+    expect(regions.logs).toEqual(['assertive', 'polite']);
+    expect(regions.strays).toBe(0);
+  });
+
+  test('announces the page title on a real route change', async ({ page }) => {
+    await page.goto('/no-such-page');
+
+    await page.getByRole('link', { name: 'Go to the landing page' }).click();
+
+    // The announcer appends a node per message rather than mutating one, so
+    // the region's text is the announcement itself. Waiting on it also proves
+    // the message survives react-aria's first-announcement delay, which is
+    // the whole reason this test is in this tier.
+    const polite = page.locator('[data-live-announcer] [aria-live="polite"]');
+    await expect(polite).toHaveText('TCP');
+  });
+});
+
+// The one security property of the development sign-in escape hatch, asserted
+// against the artefact that actually ships rather than against the source.
+//
+// `readDevSession` is guarded by `import.meta.env.DEV`, which Vite replaces
+// with a literal at build time, so the whole capability should be unreachable
+// code the minifier has dropped. That is a claim about a build pipeline, and
+// this tier is the only one positioned to check it: the component tier runs
+// with `DEV` true by construction and would report the opposite of production.
+test.describe('the development session escape hatch', () => {
+  test('cannot sign anyone in against a production build', async ({ page }) => {
+    await page.goto('/companies?devSession=someone');
+
+    // Redirected to the landing page: `RequireSession` saw no session, which
+    // is only true if the query string was never read. If this ever fails,
+    // anyone who can put a URL in front of a user can walk them past the
+    // route guard — treat it as a release blocker, not a flaky test.
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'TCP' }),
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Account' })).toHaveCount(0);
+  });
+
+  test('leaves no trace of itself in the served bundle', async ({
+    page,
+    request,
+  }) => {
+    await page.goto('/');
+    const bundleSrc = await page
+      .locator('script[type="module"]')
+      .first()
+      .getAttribute('src');
+
+    const bundle = await (await request.get(bundleSrc ?? '')).text();
+
+    // Stronger than the behavioural check above, and it fails earlier: the
+    // parameter name surviving into the bundle means the branch was kept, even
+    // if some other condition happens to stop it firing today.
+    expect(bundle).not.toContain('devSession');
+  });
+});

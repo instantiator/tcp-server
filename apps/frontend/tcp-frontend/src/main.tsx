@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router';
 import { App } from './App';
+import { SessionProvider } from './auth/session';
+import { readDevSession } from './dev/dev-session';
 import { ThemeProvider } from './theme/ThemeProvider';
 import './styles/base.css';
 import './styles/themes/default.css';
@@ -23,7 +25,16 @@ createRoot(container).render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <BrowserRouter>
-          <App />
+          {/*
+            No real session exists until 004.03, so every protected route
+            redirects — correctly. `?devSession=<id>` supplies a stand-in for
+            local testing; it is read once here rather than per render, so it
+            survives in-app navigation that drops the query string, and it is
+            compiled out of a production build entirely.
+          */}
+          <SessionProvider session={readDevSession(window.location.search)}>
+            <App />
+          </SessionProvider>
         </BrowserRouter>
       </ThemeProvider>
     </QueryClientProvider>
