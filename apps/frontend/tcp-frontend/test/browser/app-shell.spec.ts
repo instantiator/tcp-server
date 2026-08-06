@@ -148,3 +148,66 @@ test.describe('the landing page', () => {
     expect(outlineWidth).not.toBe('0px');
   });
 });
+
+// The application shell (skip link, header, `main`) renders on every
+// signed-in page and on the not-found page. No signed-in page is reachable in
+// a real browser until 004.02 builds sign-in — so an unknown address is the
+// ONLY shell-bearing route this tier can reach today. That is why these tests
+// navigate to a deliberately meaningless path rather than to a real page, and
+// it will read as an odd choice otherwise.
+test.describe('the application shell on an unknown address', () => {
+  test('renders a not-found page rather than a blank screen', async ({
+    page,
+  }) => {
+    await page.goto('/no-such-page');
+
+    // hosting.spec.ts deliberately asserts only that nginx served the app
+    // document for a deep link; this is the rendering half that prompt left
+    // to 003.02.
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  });
+
+  test('moves focus to main when the skip link is used', async ({ page }) => {
+    await page.goto('/no-such-page');
+
+    await page.keyboard.press('Tab');
+
+    const skipLink = page.locator('.skip-link');
+    await expect(skipLink).toBeFocused();
+
+    // `toBeVisible()` is NOT the assertion to make here, and was the first
+    // thing tried: Playwright calls an element visible when it has a non-empty
+    // bounding box, and `.skip-link` is clipped to 1×1 rather than hidden — so
+    // that assertion passes with `.skip-link:focus` deleted, which is exactly
+    // the regression it was meant to catch. Verified by suppressing the rule
+    // in the browser and watching it stay green.
+    //
+    // What has to hold is that focusing it *unclips* it. Both halves matter:
+    // `clip-path: none` is the rule having applied at all, and the width is
+    // the link being big enough for a sighted keyboard user to read.
+    const revealed = await skipLink.evaluate((el) => ({
+      clipPath: getComputedStyle(el).clipPath,
+      width: el.getBoundingClientRect().width,
+    }));
+    expect(revealed.clipPath).toBe('none');
+    expect(revealed.width).toBeGreaterThan(50);
+
+    await page.keyboard.press('Enter');
+
+    // This is the ONLY tier that can prove this — jsdom does not implement
+    // fragment-navigation focus at all, so the component tier can assert the
+    // link's target but never that focus arrives.
+    const focusedId = await page.evaluate(() => document.activeElement?.id);
+    expect(focusedId).toBe('main-content');
+  });
+
+  test('has no accessibility violations', async ({ page }) => {
+    await page.goto('/no-such-page');
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+
+    expect(
+      violations.map((v) => `${v.id}: ${v.help} (${v.nodes.length} nodes)`),
+    ).toEqual([]);
+  });
+});

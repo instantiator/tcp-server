@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router';
 import { App } from './App';
+import { SessionProvider } from './auth/session';
 import { ThemeProvider } from './theme/ThemeProvider';
 import './styles/base.css';
 import './styles/themes/default.css';
@@ -23,7 +24,10 @@ createRoot(container).render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <BrowserRouter>
-          <App />
+          {/* No session exists until 004.03, so every protected route redirects — correctly. */}
+          <SessionProvider>
+            <App />
+          </SessionProvider>
         </BrowserRouter>
       </ThemeProvider>
     </QueryClientProvider>

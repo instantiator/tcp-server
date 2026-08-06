@@ -166,6 +166,33 @@ with the allowlist derived from `TCP_WEB_URL`, the same environment value that
 already carries the web address. Do not add it now: an allowlist nobody
 exercises is an allowlist nobody maintains.
 
+## Routing
+
+React Router's route table, in `src/App.tsx`:
+
+| Path                  | Page               | Access    | Built by                           |
+| --------------------- | ------------------ | --------- | ---------------------------------- |
+| `/`                   | Landing page       | Public    | 003.01                             |
+| `/companies`          | Companies overview | Protected | placeholder here, real page 006.01 |
+| `/company/:companyId` | Company view       | Protected | placeholder here, real page 006.01 |
+| `*`                   | Not found          | Public    | 003.02                             |
+
+Protected routes sit behind `RequireSession`, which redirects to `/` when
+there is no session. There is no way to sign in until 004.02, so today every
+protected route redirects.
+
+nginx returns the app document with a 200 for any unknown path
+([ADR-029](ADRs/ADR-029-spa-hosting-and-runtime-configuration.md)) and always
+will — a static server cannot know which paths the router knows. The
+catch-all route is what makes an unknown address render a page rather than a
+blank screen; the status code is not a defect.
+
+The landing page renders outside the shell and owns its own `main`. Every
+other page's `main` comes from `AppShell`. There must never be two on one
+page.
+
+The OIDC callback route is deliberately absent and arrives with 004.02.
+
 ## Strings: one lookup, no literals in JSX
 
 Every user-facing string resolves through `src/strings.ts`:

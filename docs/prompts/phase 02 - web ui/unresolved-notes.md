@@ -222,6 +222,22 @@ entirely, and the alternative is putting layout values in `base.css`, where they
 would apply to every page and be much harder to undo. Nothing needs doing until
 the themes are written.
 
+### The not-found page is the only shell-bearing route a browser can reach
+
+**Raised by:** 003.02 · **Condition to revisit:** 004.02 lands, making a signed-in page reachable in a browser
+
+The header, the skip link and `main` render on every protected page and on the not-found page. No protected page is reachable without a session, and there is no way to sign in until 004.02 — so every browser-tier assertion about the shell runs against `/no-such-page`, which is the only shell-bearing route left open.
+
+That covers the skip link's real focus behaviour, which is the one thing jsdom cannot test at all. It does not cover the account menu, which renders only for a signed-in user and therefore has no browser-tier coverage whatsoever — its keyboard behaviour is asserted in jsdom against React Aria's own well-tested pattern, and nothing has yet confirmed it in a real browser.
+
+### A deep link to a protected route loses its destination
+
+**Raised by:** 003.02 · **Condition to revisit:** 004.02 reads the `from` state it is handed
+
+`RequireSession` redirects a signed-out visitor to `/` and records where they were going in the navigation state. Nothing consumes it, so the visitor arrives at the landing page and stays there — a shared link to a company view is, today, a link to the landing page.
+
+This is deliberate rather than unfinished: consuming it means validating it, and an unvalidated return address is an open redirect. The prompt that adds sign-in is the one that can test both halves together.
+
 ## Carried into a later prompt
 
 | Note                                                                                                                                         | Raised by | Goes to  |
@@ -248,3 +264,14 @@ the themes are written.
 | `startSignIn()` in `src/auth/sign-in.ts` is the seam — replace the body, don't move the call site                                            | 003.01    | `004.02` |
 | Extend the four-combination contrast scan to every page; the component tier cannot check contrast at all                                     | 003.01    | `009.02` |
 | Assert what is drawn, not only the `data-*` attribute — jsdom resolves neither pseudo-elements nor shorthands                                | 003.01    | `009.02` |
+| A polite live region already exists in `App.tsx` — the announcer replaces it rather than adding a second                                     | 003.02    | `003.03` |
+| Test the announcer under `StrictMode`; a boolean "have I run?" ref is spent by its double invocation                                         | 003.02    | `003.03` |
+| `RequireSession` saves the attempted path as `{ from }`; validate it before navigating, or it is an open redirect                            | 003.02    | `004.02` |
+| The OIDC callback route is absent, and must be public — behind the guard it is a redirect loop                                               | 003.02    | `004.02` |
+| `startSignOut()` is the seam; sign-out must clear the session, not just the tokens, or the account menu stays                                | 003.02    | `004.03` |
+| `SessionProvider`'s `session` prop must keep working for tests when 004.03 derives the real session                                          | 003.02    | `004.03` |
+| `Breadcrumbs` exists and takes `readonly Crumb[]`; `CompaniesPage`/`CompanyPage` are placeholders to replace                                 | 003.02    | `006.01` |
+| Decide on React Aria's `RouterProvider` if its links start appearing beyond the breadcrumb                                                   | 003.02    | `006.01` |
+| `onAccountAction` in `Header.tsx` is the dialogs' entry point; `MenuTrigger` already restores focus on close                                 | 003.02    | `008.06` |
+| Scan `document.body`, not the render container — React Aria's popover portals out of it                                                      | 003.02    | `008.06` |
+| A jsdom test can be green while the browser is wrong; the shell's browser coverage runs on an unknown address                                | 003.02    | `009.02` |

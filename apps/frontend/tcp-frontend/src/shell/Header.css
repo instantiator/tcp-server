@@ -1,0 +1,13 @@
+/*
+ * Empty by design (ADR-026): meaningful class names now, rules filled per
+ * theme later. No literal colour, spacing or border value may appear here —
+ * React Aria's own defaults live in `styles/base.css`.
+ */
+.app-header {
+}
+
+.app-header__logo {
+}
+
+.app-header__account {
+}

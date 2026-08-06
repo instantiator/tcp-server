@@ -23,6 +23,22 @@ const strings = {
   'theme.mode.label': 'Colour mode',
   'theme.mode.light': 'Light',
   'theme.mode.dark': 'Dark',
+
+  'shell.skipToContent': 'Skip to content',
+
+  'header.account.label': 'Account',
+  'header.account.profile': 'My profile',
+  'header.account.memberships': 'My company memberships',
+  'header.account.signOut': 'Sign out',
+
+  'breadcrumbs.label': 'Breadcrumb',
+
+  'page.companies.title': 'Companies',
+  'page.company.title': 'Company',
+  'page.notFound.title': 'Page not found',
+  'page.notFound.body':
+    'That address does not match anything in this application. It may have been mistyped, or the thing it pointed at may no longer exist.',
+  'page.notFound.home': 'Go to the landing page',
 } as const;
 
 /** Every key `t` accepts. A typo is a type error, not a blank screen. */
