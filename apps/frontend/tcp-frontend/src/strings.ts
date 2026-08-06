@@ -33,6 +33,23 @@ const strings = {
 
   'breadcrumbs.label': 'Breadcrumb',
 
+  // Announcements. Every wording here is deliberately count-agnostic —
+  // 'Tasks: {count} added', never '{count} tasks added' — because `t` has no
+  // plural rules and reads the same for one as for many.
+  'announce.separator': ', ',
+  'announce.routeChange': '{title}',
+  'announce.tasksAdded': 'Tasks: {count} added',
+  'announce.tasksCompleted': '{count} completed',
+
+  'state.loading': 'Loading {label}…',
+  'state.error.label': 'Error',
+  'state.error.announcement': 'Error: {message}',
+  'state.error.retry': 'Try again',
+
+  'notification.label': 'Notification',
+  'notification.announcement': '{message}',
+  'notification.dismiss': 'Dismiss',
+
   'page.companies.title': 'Companies',
   'page.company.title': 'Company',
   'page.notFound.title': 'Page not found',
@@ -44,5 +61,25 @@ const strings = {
 /** Every key `t` accepts. A typo is a type error, not a blank screen. */
 export type StringKey = keyof typeof strings;
 
-/** Resolves a user-facing string. */
-export const t = (key: StringKey): string => strings[key];
+/** Values interpolated into a string's `{placeholder}` slots. */
+export type StringParams = Readonly<Record<string, string | number>>;
+
+/**
+ * Resolves a user-facing string, filling `{placeholder}` slots from `params`.
+ *
+ * This is the whole of the interpolation this application has: no
+ * pluralisation, no number or date formatting, no nesting. Announcements need
+ * it — "Tasks: 2 added" cannot be assembled from a key alone without inlining
+ * the number beside the words in JSX, which ADR-021 forbids — and the phase 03
+ * i18n work still replaces this module rather than every call site, because
+ * `t(key, params)` is the signature every real library also offers.
+ *
+ * An unmatched placeholder is left in place rather than blanked, so a missing
+ * value shows up in the output instead of silently producing "Tasks: added".
+ */
+export const t = (key: StringKey, params?: StringParams): string =>
+  params === undefined
+    ? strings[key]
+    : strings[key].replace(/\{(\w+)\}/g, (placeholder, name: string) =>
+        name in params ? String(params[name]) : placeholder,
+      );

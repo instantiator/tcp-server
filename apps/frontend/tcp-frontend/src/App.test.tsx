@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { virtual } from '@guidepup/virtual-screen-reader';
 import { MemoryRouter } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { t } from './strings';
 import { expectNoA11yViolations } from './test-support/axe';
@@ -148,9 +148,38 @@ describe('App', () => {
         screen.getByRole('link', { name: t('page.notFound.home') }),
       );
 
-      expect(await virtual.spokenPhraseLog()).toContain(
-        `polite: ${t('app.title')}`,
+      // The announcer speaks from a timer rather than from the render that
+      // triggered it, so the click returning is not the announcement landing.
+      await vi.waitFor(async () => {
+        expect(await virtual.spokenPhraseLog()).toContain(
+          `polite: ${t('app.title')}`,
+        );
+      });
+    });
+
+    it('announces once under StrictMode, not twice', async () => {
+      const user = userEvent.setup();
+      // `renderAppAt` includes StrictMode, as `main.tsx` does — which
+      // double-invokes every effect on mount. 003.02 shipped a route-change
+      // guard that this spent, and stayed green because the helper did not.
+      renderAppAt('/nothing-here');
+
+      await virtual.start({ container: document.body });
+      await virtual.clearSpokenPhraseLog();
+
+      await user.click(
+        screen.getByRole('link', { name: t('page.notFound.home') }),
       );
+
+      // The log also carries the focus move onto the heading, which is the
+      // other half of ADR-027's route-change row and belongs there. Only the
+      // spoken announcement is counted.
+      await vi.waitFor(async () => {
+        const announcements = (await virtual.spokenPhraseLog()).filter(
+          (phrase) => phrase === `polite: ${t('app.title')}`,
+        );
+        expect(announcements).toHaveLength(1);
+      });
     });
 
     it('neither announces nor moves focus on first render', async () => {
@@ -164,6 +193,17 @@ describe('App', () => {
       expect(await virtual.spokenPhraseLog()).toEqual([]);
       expect(document.activeElement).toBe(document.body);
     });
+  });
+
+  it("renders exactly one live region, and it is the announcer's", () => {
+    renderAppAt('/companies', TEST_SESSION);
+
+    // The regression gate for replacing 003.02's `<p role="status">` rather
+    // than adding a second region beside it. Two regions updating together
+    // interleave into output that reads as neither message (ADR-027), and
+    // nothing else in the suite would notice.
+    expect(document.querySelectorAll('[data-live-announcer]')).toHaveLength(1);
+    expect(document.querySelector('p[role="status"]')).toBeNull();
   });
 
   it('has no accessibility violations across the shell', async () => {

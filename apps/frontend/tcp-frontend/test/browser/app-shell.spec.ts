@@ -210,6 +210,47 @@ test.describe('the application shell on an unknown address', () => {
       violations.map((v) => `${v.id}: ${v.help} (${v.nodes.length} nodes)`),
     ).toEqual([]);
   });
+
+  // The announcer's only browser-reachable path, and worth having: react-aria
+  // builds its live regions on the first announcement and, outside a test
+  // environment, waits 100ms before speaking so the regions have attached.
+  // jsdom skips that delay entirely, so the component tier never exercises
+  // the code path a real user gets. The announcer primes at import to make
+  // the two the same; this is the tier that can tell whether it worked.
+  test('carries the announcer, and only the announcer, as a live region', async ({
+    page,
+  }) => {
+    await page.goto('/no-such-page');
+
+    const regions = await page.evaluate(() => ({
+      announcers: document.querySelectorAll('[data-live-announcer]').length,
+      // Both regions, built empty before anything needed them.
+      logs: [...document.querySelectorAll('[data-live-announcer] [role="log"]')]
+        .map((el) => el.getAttribute('aria-live'))
+        .sort(),
+      // 003.02's interim region, which 003.03 replaced rather than joined.
+      strays: document.querySelectorAll(
+        'p[role="status"], [aria-live]:not([data-live-announcer] *)',
+      ).length,
+    }));
+
+    expect(regions.announcers).toBe(1);
+    expect(regions.logs).toEqual(['assertive', 'polite']);
+    expect(regions.strays).toBe(0);
+  });
+
+  test('announces the page title on a real route change', async ({ page }) => {
+    await page.goto('/no-such-page');
+
+    await page.getByRole('link', { name: 'Go to the landing page' }).click();
+
+    // The announcer appends a node per message rather than mutating one, so
+    // the region's text is the announcement itself. Waiting on it also proves
+    // the message survives react-aria's first-announcement delay, which is
+    // the whole reason this test is in this tier.
+    const polite = page.locator('[data-live-announcer] [aria-live="polite"]');
+    await expect(polite).toHaveText('TCP');
+  });
 });
 
 // The one security property of the development sign-in escape hatch, asserted

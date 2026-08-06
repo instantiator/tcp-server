@@ -184,10 +184,13 @@ body {
 }
 
 /*
- * The route announcement's live region: present in the accessibility tree,
- * absent from the page. `display: none` and `visibility: hidden` both remove a
- * live region from that tree entirely, which is the standard way an announcer
- * silently announces nothing.
+ * Text present in the accessibility tree and absent from the page: a label a
+ * screen reader needs and a sighted user reads from context instead.
+ *
+ * Never reach for `display: none` or `visibility: hidden` to get this — both
+ * remove the element from that tree entirely, so it is read by nobody. The
+ * announcer's own regions are styled this way by react-aria, for the same
+ * reason.
  */
 .visually-hidden {
   position: absolute;

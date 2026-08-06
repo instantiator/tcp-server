@@ -1,6 +1,6 @@
 # ADR-027: Screen Reader Strategy for Live and Data-Rich Views
 
-**Status:** Accepted (amended — see [Amendment](#amendment-as-implemented-00202) at the end)
+**Status:** Accepted (amended — see [002.02](#amendment-as-implemented-00202) and [003.03](#amendment-as-implemented-00303) at the end)
 
 ## Context
 
@@ -161,7 +161,7 @@ Lists keep a stable sort: new items append, and status changes update in place.
 
 ## Amendment as implemented (002.02) <a id="amendment-as-implemented-00202"></a>
 
-**The spike passed: `@guidepup/virtual-screen-reader` 0.32.1 works under Vitest 4 and jsdom**, with no Jest present. The proof lives in `apps/frontend/tcp-frontend/src/test-support/screen-reader.test.tsx` — a throwaway announcer streaming six tokens into a transcript and one completion into a `role="status"` region, asserting that `spokenPhraseLog()` holds one phrase and no per-token entries. It is stable over repeated runs.
+**The spike passed: `@guidepup/virtual-screen-reader` 0.32.1 works under Vitest 4 and jsdom**, with no Jest present. The proof was a throwaway announcer streaming six tokens into a transcript and one completion into a `role="status"` region, asserting that `spokenPhraseLog()` holds one phrase and no per-token entries. It was stable over repeated runs. 003.03 superseded it with the real gate, `apps/frontend/tcp-frontend/src/announce/announcer.test.tsx`, and deleted the spike.
 
 Three corrections to [the snippet above](#automated-tests-for-announcement-behaviour), which was written from the library's documentation rather than from a run:
 
@@ -183,3 +183,21 @@ expect(await virtual.spokenPhraseLog()).toEqual([
 ```
 
 **Fake timers need `shouldAdvanceTime`.** The throttle must be driven deterministically (`vi.advanceTimersByTimeAsync`), but the simulator has its own awaits that never settle under a frozen clock. `vi.useFakeTimers({ shouldAdvanceTime: true })` keeps real time moving underneath, and is what makes the two coexist.
+
+## Amendment as implemented (003.03) <a id="amendment-as-implemented-00303"></a>
+
+The announcer exists. `apps/frontend/tcp-frontend/src/announce/announcer.ts` is the single application-level announcer this ADR asks for, and `announcer.test.tsx` is the gate. Six things the ADR did not know, and one deliberate deviation.
+
+1. **The primitive is `@react-aria/live-announcer`, not React Aria Components.** [ADR-026](ADR-026-web-ui-accessibility-and-component-library.md) chose React Aria partly for its live announcer, which is true but not reachable the obvious way: `announce` is absent from `react-aria-components`' index, and that package's exports map contains `"./private/*": null`, deliberately blocking the subpath the function actually lives at. The public route is the sibling package `@react-aria/live-announcer` (3.5.1, Apache-2.0), a one-line re-export whose own `react-aria: ^3.48.0` dependency dedupes onto the copy `react-aria-components` already pins — a manifest, and no second implementation.
+
+2. **`announce()` defaults to `assertive`.** Every call site must pass politeness explicitly, and the announcer's `Announcement` type therefore defaults it to `polite` itself rather than letting the library's default through. A missed politeness argument would otherwise interrupt on every list update.
+
+3. **It creates its regions lazily, on first call, and mitigates that with a delay.** Outside a test environment it waits 100ms after building the regions before speaking the first message, because a region that appears at the same moment as its content is announced by nothing. The announcer therefore **primes at import** — one empty polite message, immediately cleared — so no real announcement ever depends on that delay, and jsdom (where the delay is skipped) exercises the same path as the browser.
+
+4. **It uses `role="log"` with a new child node per message**, not one node whose text is replaced. That fixes a defect the interim implementation had: two consecutive routes sharing a title now announce twice, correctly, where a single mutated node would have looked unchanged and said nothing.
+
+5. **Coalescing counts changes; it does not join strings.** Fifty additions become `t('announce.tasksAdded', { count: 50 })` → "Tasks: 50 added". Joining pre-built phrases would have produced "Tasks: 1 added, Tasks: 1 added, …" — one announcement, still a flood, and a test asserting only the log's _length_ would have passed it. The gate asserts the phrase.
+
+6. **`t` gained interpolation.** "Tasks: 2 added" cannot be built from a key alone without inlining a number beside words in JSX, which ADR-021 forbids. `t(key, params)` fills `{placeholder}` slots and does nothing else — no plural rules, so every announcement wording is phrased count-agnostically.
+
+**The deviation: an in-context error is `role="group"` plus an assertive announcement, not `role="alert"`.** `role="alert"` is itself a live region, and this ADR allows one; three failing lists would mount three. Routing the announcement through the announcer also lets two failures in the same tick coalesce into one interruption, which per-component alerts cannot do. The visible half is unchanged — the error still appears beside what failed. **009.02's manual pass owns confirming this reads as well as a native alert**, and one thing it should listen for specifically: two _different_ assertive channels firing in the same tick still truncate each other, because they are separate sentences by design.

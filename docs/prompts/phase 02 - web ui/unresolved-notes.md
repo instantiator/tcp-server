@@ -260,6 +260,40 @@ nothing stops a future change to `Session` from making `?devSession=admin` mean
 something. Written into 004.03 and 009.04; recorded in the memory
 `project-dev-session-escape-hatch`.
 
+### `@react-aria/live-announcer` is a one-line shim over a `private` subpath
+
+**Raised by:** 003.03 · **Condition to revisit:** the shim stops publishing alongside `react-aria`, or `announce` becomes a public export of `react-aria` or `react-aria-components`
+
+[ADR-026](../../ADRs/ADR-026-web-ui-accessibility-and-component-library.md) chose React Aria partly for its live announcer, which is real but not reachable the obvious way: `announce` is absent from `react-aria-components`' index, and that package's exports map contains `"./private/*": null`, deliberately blocking the subpath the function lives at. The application therefore depends on the sibling package `@react-aria/live-announcer`, whose entire published source is `export { announce, clearAnnouncer, destroyAnnouncer } from 'react-aria/private/live-announcer/LiveAnnouncer'`.
+
+This is the least-bad of three options — the alternatives were importing the `private` path directly as a phantom dependency, or hand-rolling two live regions and giving up Adobe's assistive-technology testing. It is fine while Adobe keeps publishing the shim in step with `react-aria`. It stops being fine silently: nothing breaks at install time if the shim is abandoned at an older major, it just quietly stops receiving fixes.
+
+Testable as `npm view @react-aria/live-announcer version` lagging `react-aria`'s major, or as `announce` appearing in `react-aria-components`' index types. Recorded in the memory `project-react-aria-live-announcer-shim`.
+
+### `t` has no plural rules, so announcements are phrased around the gap
+
+**Raised by:** 003.03 · **Condition to revisit:** the phase 03 i18n library lands and replaces `src/strings.ts`
+
+`t(key, params)` fills `{placeholder}` slots and does nothing else. Every announcement wording is therefore written to read acceptably at any count — `'Tasks: {count} added'`, never `'{count} tasks added'`, which is wrong at one.
+
+That constraint is invisible in the code: a later prompt adding `'{count} enquiries waiting'` gets no warning and produces "1 enquiries waiting" for the most common case. It holds only as long as someone remembers why the existing keys are phrased the way they are, which is why it is written into 007.01 as well. Recorded in the memory `project-strings-no-pluralisation`.
+
+### A channel's throttle interval is fixed by whichever announcement opens its window
+
+**Raised by:** 003.03 · **Condition to revisit:** a channel ever gets two writers
+
+`announce({ throttleMs })` is read only when a channel has no open window. A second announcement arriving mid-window joins it and its own `throttleMs` is ignored, so a caller asking for an immediate announcement on a channel that is already accumulating waits for the accumulation instead.
+
+This is correct while a channel belongs to one surface, which is the documented rule and is true of everything built so far. It becomes a real defect the moment two components announce on the same channel with different urgencies — and it fails quietly, as a delay rather than an error. The fix if it happens is a channel per urgency, not a shorter window.
+
+### Nothing consumes `Notification` or `useLoadingAnnouncement`
+
+**Raised by:** 003.03 · **Condition to revisit:** 006.01 and 007.01 build the first views that need them
+
+Both were built without a caller, which is normally the wrong thing to do. They exist because the rules they encode are the ones that get lost when each view reinvents them: that a notification is never the only record of an event (enforced here by `durableHref` being a required prop rather than by review), and that a wait announces its completion and never its start.
+
+The shapes are therefore guesses about what 006.01 and 007.01 will want. If either is wrong, changing it there is the right response — working around it, or building a second component beside it, is not.
+
 ## Carried into a later prompt
 
 | Note                                                                                                                                         | Raised by | Goes to  |
@@ -286,8 +320,6 @@ something. Written into 004.03 and 009.04; recorded in the memory
 | `startSignIn()` in `src/auth/sign-in.ts` is the seam — replace the body, don't move the call site                                            | 003.01    | `004.02` |
 | Extend the four-combination contrast scan to every page; the component tier cannot check contrast at all                                     | 003.01    | `009.02` |
 | Assert what is drawn, not only the `data-*` attribute — jsdom resolves neither pseudo-elements nor shorthands                                | 003.01    | `009.02` |
-| A polite live region already exists in `App.tsx` — the announcer replaces it rather than adding a second                                     | 003.02    | `003.03` |
-| Test the announcer under `StrictMode`; a boolean "have I run?" ref is spent by its double invocation                                         | 003.02    | `003.03` |
 | `RequireSession` saves the attempted path as `{ from }`; validate it before navigating, or it is an open redirect                            | 003.02    | `004.02` |
 | The OIDC callback route is absent, and must be public — behind the guard it is a redirect loop                                               | 003.02    | `004.02` |
 | `startSignOut()` is the seam; sign-out must clear the session, not just the tokens, or the account menu stays                                | 003.02    | `004.03` |
@@ -299,3 +331,13 @@ something. Written into 004.03 and 009.04; recorded in the memory
 | A jsdom test can be green while the browser is wrong; the shell's browser coverage runs on an unknown address                                | 003.02    | `009.02` |
 | `?devSession=` builds a `Session` from a URL — when a session carries a token, it must not be able to mint one                               | 003.02    | `004.03` |
 | The production build flag, removing dev-only capabilities from the artefact, and query-string feature flags                                  | 003.02    | `009.04` |
+| The four state components exist with fixed props; `LoadingState` does not set `aria-busy` — the loading region's owner must                  | 003.03    | `006.01` |
+| `useLoadingAnnouncement(loading, completion)` announces a completed wait only; never announce that loading started                           | 003.03    | `006.01` |
+| The final announcement wording for all four lists, and the three lists' missing keys — `announce.tasks*` are placeholders                    | 003.03    | `007.01` |
+| One announcer channel per list, and never a live region; the announcer counts repeats, so guard on the value that changed                    | 003.03    | `007.01` |
+| Where a `Notification` renders is 007.01's layout decision — 003.03 ships the component with no queue, provider or container                 | 003.03    | `007.01` |
+| Suppressing per-token announcements is the caller's job — the throttle thins what was announced, it does not decide what to announce         | 003.03    | `008.01` |
+| An individually-announced enquiry needs its own channel, not a `throttleMs` override on a shared one                                         | 003.03    | `008.04` |
+| Tune `ANNOUNCE_THROTTLE_MS` (10s) and `ANNOUNCE_LOADING_MIN_MS` (1s), and record the values the manual pass lands on                         | 003.03    | `009.02` |
+| Confirm `ErrorState`'s `role="group"` plus assertive announcement reads as well as `role="alert"`, and listen for assertive truncation       | 003.03    | `009.02` |
+| Only route change has browser-tier announcement coverage; coalescing, throttling and assertive politeness are jsdom-only                     | 003.03    | `009.02` |

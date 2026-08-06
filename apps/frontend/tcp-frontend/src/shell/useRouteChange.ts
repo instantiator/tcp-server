@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router';
+import { ANNOUNCE_IMMEDIATE_MS, announce } from '../announce/announcer';
 
 /**
- * Moves focus to the page's main heading on every route change, and returns the
- * text to announce: the page title, once focus has moved (ADR-027).
+ * Moves focus to the page's main heading on every route change, and asks the
+ * announcer to say where the user has arrived (ADR-027).
  *
  * Route change is one of exactly four points at which this application moves
  * focus. Don't add a fifth here.
@@ -27,13 +28,14 @@ import { useLocation } from 'react-router';
  *   what is being focused is defined by the rendered document rather than by
  *   the component tree.
  *
- * Two consecutive routes sharing a title announce once, because the live
- * region's text never changes. No pair of MVP routes does, and the general case
- * belongs to 003.03's announcer.
+ * The announcement does not wait for a throttle window: it follows a
+ * deliberate action, and the user is standing still until they know where they
+ * are. Two consecutive routes sharing a title announce twice, which is
+ * correct — the announcer appends a fresh node per message rather than
+ * mutating one whose unchanged text a screen reader would ignore.
  */
-export const useRouteChange = (): string => {
+export const useRouteChange = (): void => {
   const { pathname } = useLocation();
-  const [announcement, setAnnouncement] = useState('');
   const actedOn = useRef(pathname);
 
   useEffect(() => {
@@ -46,8 +48,11 @@ export const useRouteChange = (): string => {
       heading.focus();
     }
 
-    setAnnouncement(document.title);
+    announce({
+      channel: 'route',
+      change: 'announce.routeChange',
+      params: { title: document.title },
+      throttleMs: ANNOUNCE_IMMEDIATE_MS,
+    });
   }, [pathname]);
-
-  return announcement;
 };

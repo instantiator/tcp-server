@@ -18,10 +18,11 @@ import { channelForAgent } from './shared-client';
  * inside the shell but outside the guard, so an unknown address stays reachable
  * signed out. Everything else sits behind `RequireSession`.
  *
- * The live region is rendered here, above `Routes`, so it is not unmounted and
- * remounted on navigation — a live region that appears at the same moment as
- * its content announces nothing at all (ADR-027). 003.03's announcer replaces
- * it; it must not become a second region.
+ * **No live region is rendered here, or anywhere else in this application.**
+ * The announcer owns the only two, and keeps them in `document.body` outside
+ * the React root, so nothing can unmount them by navigating and no component
+ * has to be trusted not to add a third. `useRouteChange` is called for its
+ * effect: it asks the announcer to speak rather than rendering what it says.
  *
  * The hidden `channelForAgent` reference keeps the `@tcp/shared/client` import
  * boundary's positive control reachable from the entry point. 005.02's SSE
@@ -29,14 +30,10 @@ import { channelForAgent } from './shared-client';
  * and should remove this.
  */
 export const App = () => {
-  const announcement = useRouteChange();
+  useRouteChange();
 
   return (
     <>
-      <p role="status" className="visually-hidden">
-        {announcement}
-      </p>
-
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route element={<AppShell />}>
