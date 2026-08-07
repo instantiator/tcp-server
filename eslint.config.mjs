@@ -53,10 +53,13 @@ export default tseslint.config(
       // one (`intercept(_ctx, next)`) but reports a trailing one, so a
       // signature that exists purely to match an overload — `(message,
       // ..._optionalParams)` — failed where `_ctx` passed.
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_' },
+      ],
       '@typescript-eslint/no-floating-promises': 'warn',
       '@typescript-eslint/no-unsafe-argument': 'warn',
-      "prettier/prettier": ["error", { endOfLine: "auto" }],
+      'prettier/prettier': ['error', { endOfLine: 'auto' }],
     },
   },
   {

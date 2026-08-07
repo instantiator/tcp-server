@@ -27,7 +27,9 @@ You can also set it per-role or per-company later.`,
     answers.embeddingModel = await promptEmbeddingModel();
   }
 
-  const inferenceAnswers = await promptWithHelp<Pick<LlmAnswers, 'configureInference'>>([
+  const inferenceAnswers = await promptWithHelp<
+    Pick<LlmAnswers, 'configureInference'>
+  >([
     {
       type: 'confirm',
       name: 'configureInference',

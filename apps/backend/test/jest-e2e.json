@@ -1,16 +1,12 @@
 {
   "verbose": true,
   "rootDir": "..",
-  "testMatch": [
-    "<rootDir>/test/e2e/**/*.e2e-spec.ts"
-  ],
+  "testMatch": ["<rootDir>/test/e2e/**/*.e2e-spec.ts"],
   "testEnvironment": "node",
   "maxWorkers": 1,
   "globalSetup": "<rootDir>/test/e2e/global-setup.ts",
   "globalTeardown": "<rootDir>/test/e2e/global-teardown.ts",
-  "setupFiles": [
-    "<rootDir>/test/e2e/e2e-setup.ts"
-  ],
+  "setupFiles": ["<rootDir>/test/e2e/e2e-setup.ts"],
   "transform": {
     "^.+\\.(t|j)s$": [
       "ts-jest",
@@ -33,7 +29,5 @@
       }
     ]
   ],
-  "transformIgnorePatterns": [
-    "node_modules/(?!(pgvector)/)"
-  ]
+  "transformIgnorePatterns": ["node_modules/(?!(pgvector)/)"]
 }

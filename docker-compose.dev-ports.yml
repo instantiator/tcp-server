@@ -10,23 +10,23 @@
 services:
   stub-llm:
     ports:
-      - "3002:3002"
+      - '3002:3002'
   # Not 3001 (its container port): the testing env publishes tcp-server on the
   # host's 3001, so a same-number publish here would either collide with it or,
   # worse, quietly answer for it — which is exactly how the smoke tier came to
   # "test" tcp-agent by talking to tcp-server.
   tcp-agent:
     ports:
-      - "${EXPOSE_PORT_AGENT:-3003}:3001"
+      - '${EXPOSE_PORT_AGENT:-3003}:3001'
   tcp-mcp-storage:
     ports:
-      - "3010:3010"
+      - '3010:3010'
   tcp-mcp-memory:
     ports:
-      - "3011:3011"
+      - '3011:3011'
   tcp-mcp-interactions:
     ports:
-      - "3012:3012"
+      - '3012:3012'
   tcp-mcp-tasks:
     ports:
-      - "3013:3013"
+      - '3013:3013'
