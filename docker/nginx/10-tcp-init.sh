@@ -36,7 +36,9 @@ fi
 
 # ---- config.js -------------------------------------------------------------
 # The two values the reverse proxy cannot remove (ADR-029). The API address is
-# absent by construction: it is always /api, on this same origin.
+# absent by construction: it is always /api, on this same origin. A third
+# value, OIDC_LOAD_USER_INFO, is optional and boolean — it is handled
+# separately below and deliberately does not join this required-value loop.
 #
 # Fail here rather than serve an empty issuer. An app that loads with a blank
 # identity provider fails at sign-in, several steps away from the cause, with
@@ -60,6 +62,20 @@ for var in OIDC_ISSUER_URL OIDC_CLIENT_ID; do
   esac
 done
 
+# A JavaScript boolean, not a string. config.js is code, and the string
+# 'false' is truthy — so an unquoted literal is the only correct emission, and
+# anything that is not recognisably true or false is a typo worth failing on
+# rather than silently reading as false.
+case "${OIDC_LOAD_USER_INFO:-false}" in
+  true|True|TRUE|1)        LOAD_USER_INFO=true ;;
+  false|False|FALSE|0|'')  LOAD_USER_INFO=false ;;
+  *)
+    echo "tcp-web: OIDC_LOAD_USER_INFO must be true or false, not" >&2
+    echo "tcp-web: '${OIDC_LOAD_USER_INFO}' — refusing to start." >&2
+    exit 1
+    ;;
+esac
+
 cat > "$HTML_DIR/config.js" <<EOF
 // Generated at container start by docker/nginx/10-tcp-init.sh. Served with
 // Cache-Control: no-store, and loaded ahead of the bundle. Not built, not
@@ -67,6 +83,7 @@ cat > "$HTML_DIR/config.js" <<EOF
 window.__TCP_CONFIG__ = {
   oidcIssuerUrl: '${OIDC_ISSUER_URL}',
   oidcClientId: '${OIDC_CLIENT_ID}',
+  oidcLoadUserInfo: ${LOAD_USER_INFO},
 };
 EOF
 

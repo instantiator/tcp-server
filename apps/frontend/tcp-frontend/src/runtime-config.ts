@@ -7,6 +7,17 @@
 export interface RuntimeConfig {
   oidcIssuerUrl: string;
   oidcClientId: string;
+  /**
+   * Whether to read `profile` and `email` from the provider's userinfo
+   * endpoint rather than the ID token (ADR-024). Optional, and absent means
+   * `false`: Zitadel puts both claims in the ID token, and a provider that
+   * does not is the exception this exists for.
+   *
+   * Emitted as an unquoted JavaScript boolean, which is the whole reason
+   * `10-tcp-init.sh` normalises it rather than interpolating it as the other
+   * two are — the string `'false'` would satisfy this type and be truthy.
+   */
+  oidcLoadUserInfo?: boolean;
 }
 
 declare global {

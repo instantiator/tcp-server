@@ -14,6 +14,17 @@ afterEach(cleanup);
 // window fires into whichever test happens to be running when it elapses.
 afterEach(resetAnnouncer);
 
+// Every component test now renders through `AuthProvider`, which constructs the
+// OIDC client, which reads the configuration nginx generates at runtime.
+// Without this each of them would assert against a thrown configuration error
+// instead of the page. The authority is never contacted: nothing in this tier
+// gets as far as discovery. `??=`, so `user-manager.test.ts`'s own assignment —
+// which is the point of that file — still wins.
+window.__TCP_CONFIG__ ??= {
+  oidcIssuerUrl: 'https://identity.test/',
+  oidcClientId: 'tcp-web-test',
+};
+
 // jsdom does not implement matchMedia, and the theme seam reads it to seed a
 // first visit. Default every query to "no preference"; a test that cares about
 // a specific preference overrides this.

@@ -79,15 +79,17 @@ outside the Compose network.
 
 ## Environment variables
 
-| Variable                   | Required | Description                                                                                                                                                       |
-| -------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `OIDC_ISSUER_URL`          | **Yes**  | The provider's issuer URL. Must match the `iss` claim in tokens. Committed.                                                                                       |
-| `OIDC_CLIENT_ID`           | **Yes**  | Client ID. Generated (bundled Zitadel) or provider-issued (external) — lives in the gitignored `<env>.local`, not committed.                                      |
-| `OIDC_CLIENT_SECRET`       | **Yes**  | Client secret (used server-side by the device-authorization and refresh endpoints). Same `.local` placement as the client ID.                                     |
-| `OIDC_INTERNAL_ISSUER_URL` | No       | Alternative URL for server-side HTTP calls to the provider (see [Docker networking](#docker-networking)).                                                         |
-| `OIDC_JWKS_URI`            | No       | Explicit JWKS URI override. If unset, discovered from the provider's discovery document.                                                                          |
-| `OIDC_AUDIENCE`            | No       | Audience claim to validate. If unset, audience validation is skipped (see [Audience validation](#audience-validation)).                                           |
-| `TCP_ADMIN_IDENTIFIERS`    | No       | Comma-separated `sub` claims and/or emails permitted to use `?all=true` and the `/api/system` routes. Empty means nobody (see [Administrators](#administrators)). |
+| Variable                   | Required  | Description                                                                                                                                                                                                                                                                                   |
+| -------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OIDC_ISSUER_URL`          | **Yes**   | The provider's issuer URL. Must match the `iss` claim in tokens. Committed.                                                                                                                                                                                                                   |
+| `OIDC_CLIENT_ID`           | **Yes**   | Client ID. Generated (bundled Zitadel) or provider-issued (external) — lives in the gitignored `<env>.local`, not committed.                                                                                                                                                                  |
+| `OIDC_CLIENT_SECRET`       | **Yes**   | Client secret (used server-side by the device-authorization and refresh endpoints). Same `.local` placement as the client ID.                                                                                                                                                                 |
+| `OIDC_WEB_CLIENT_ID`       | **Yes**\* | Client ID for the browser's public PKCE client (see [Browser sign-in](#browser-sign-in-authorization-code-with-pkce)). Generated (bundled Zitadel) or provider-issued (external) — same gitignored `.local` placement as `OIDC_CLIENT_ID`. \*Required by `tcp-web`, not by tcp-server itself. |
+| `OIDC_INTERNAL_ISSUER_URL` | No        | Alternative URL for server-side HTTP calls to the provider (see [Docker networking](#docker-networking)).                                                                                                                                                                                     |
+| `OIDC_JWKS_URI`            | No        | Explicit JWKS URI override. If unset, discovered from the provider's discovery document.                                                                                                                                                                                                      |
+| `OIDC_AUDIENCE`            | No        | Audience claim to validate. If unset, audience validation is skipped (see [Audience validation](#audience-validation)).                                                                                                                                                                       |
+| `OIDC_LOAD_USER_INFO`      | No        | Whether the browser client reads `profile`/`email` from the provider's userinfo endpoint instead of the ID token. Defaults to `false`. The symptom that calls for `true`: a profile dialog showing a bare subject identifier even though the client requested the `profile`/`email` scopes.   |
+| `TCP_ADMIN_IDENTIFIERS`    | No        | Comma-separated `sub` claims and/or emails permitted to use `?all=true` and the `/api/system` routes. Empty means nobody (see [Administrators](#administrators)).                                                                                                                             |
 
 ## Using the included Zitadel (local development)
 
@@ -102,6 +104,7 @@ This creates:
 
 - Org: `tcp`
 - Application: `tcp-server` (OIDC, device authorization + refresh token grants)
+- Application: `tcp-web` (OIDC, public client, Authorization Code + PKCE — see [Browser sign-in](#browser-sign-in-authorization-code-with-pkce))
 - Test user: `test` / `test`
 
 Zitadel is then accessible at `http://localhost:8080/ui/console` (admin console). The
@@ -111,12 +114,82 @@ nothing to configure by hand.
 
 See [docs/zitadel-setup.md](zitadel-setup.md) for manual configuration steps.
 
+## Browser sign-in (Authorization Code with PKCE)
+
+`tcp-web` is a second, separate OIDC client from `tcp-server`'s — and it has to be,
+because a browser can't keep a secret the way a server can. Anyone with the developer
+console open can read the client's source, so `tcp-web` is registered as a **public**
+client with no client secret at all. In its place, the Authorization Code flow runs with
+PKCE ([RFC 7636](https://www.rfc-editor.org/rfc/rfc7636)), which lets the client prove it
+started the sign-in it's now completing without ever holding a secret to protect.
+
+**Tokens live in memory only** — never in `localStorage` or `sessionStorage` — so an XSS
+attack can read at most the short-lived access token that happens to be current, never
+anything longer-lived. The cost is that a full page reload clears them: the app
+re-authenticates with a full-page redirect to the provider rather than a hidden iframe,
+because iframe-based silent renewal depends on reading the provider's session cookie
+across origins, and browsers are actively removing that. With a live provider session the
+redirect is seamless — the user bounces back with a fresh token in well under a second and
+never sees a form. Once that session has expired, they see the provider's login page,
+which is correct behaviour rather than a bug to chase.
+
+The client requests the `openid profile email` scopes, so the eventual profile view has
+more than a bare subject identifier to show. Its redirect and post-logout URLs are derived
+from `EXPOSE_PORT_WEB` over **https** — `tcp-web` is TLS-only
+([ADR-025](ADRs/ADR-025-browser-event-stream-consumption.md),
+[ADR-029](ADRs/ADR-029-spa-hosting-and-runtime-configuration.md)) — rather than
+hardcoded, so a non-default port never disagrees with what was registered.
+
+The browser journey built on top of this — the control, the redirect, the `/callback`
+route and the validated return address — is described in
+[the web client guide](web-client.md#signing-in). Session persistence across a reload,
+token expiry while the app is open, and sign-out are covered next.
+
+### Sessions, expiry and revocation in the browser
+
+Tokens live in memory only, so nothing survives a page reload on its own.
+`RequireSession` recovers the same way sign-in itself does: it calls
+`handleUnauthorized()`, the one deduplicated `signinRedirect()` above. Against
+an active provider session that's a full-page round trip of a few hundred
+milliseconds and no visible form; against an expired one, the provider's login
+page appears, which is the correct outcome rather than a bug. A visible warning
+appears 30 seconds before the access token expires, with a **Stay signed in**
+control that makes the same redirect on demand — [WCAG 2.2.1](https://www.w3.org/WAI/WCAG22/Understanding/timing-adjustable.html)
+requires a timed session to be extendable, not merely noticed. Ignoring the
+warning removes the signed-in user once the token actually expires, so the
+account menu disappears rather than staying on screen pointing at a token that
+no longer works. Signing out from the account menu ends the session at the
+provider as well as locally.
+
+**Accepted limitation: an open event stream outlives revocation.** tcp-server
+authenticates a stream once, when it opens, and never re-checks it — so
+revoking a user does not take effect until that stream drops, however the
+revocation happened. This is decided in
+[ADR-024](ADRs/ADR-024-browser-oidc-client-and-token-handling.md#token-expiry-during-an-open-stream)
+and accepted for the MVP. There is no browser stream client to observe this in
+yet — it arrives with 005.02 — so an operator revoking a user today isn't
+hunting for behaviour that hasn't shipped; this is recorded here so it isn't a
+surprise once it has.
+
+**Multi-tab caveat.** `monitorSession` is off, so signing out in one tab
+doesn't notify another: a second tab keeps showing a signed-in-looking header
+until its next request is refused with a 401.
+
 ## Using an external OIDC provider
 
 Set `OIDC_ISSUER_URL` in your committed env file, and put the provider-issued
 `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` in the gitignored `<env-file>.local` override (the
 `.env` snippets below show the combined effect). `OIDC_INTERNAL_ISSUER_URL` is not needed
 for external providers.
+
+The browser client is plain OIDC, so the same swap extends to it rather than needing its
+own configuration. Register a **public** client using Authorization Code with PKCE — no
+secret — with redirect URI `https://<web-host>/callback`, post-logout redirect URI
+`https://<web-host>/`, and scopes `openid profile email`. `OIDC_ISSUER_URL`,
+`OIDC_WEB_CLIENT_ID` and, optionally, `OIDC_LOAD_USER_INFO` are the only values that
+change: put the provider-issued client ID in `<env-file>.local` as `OIDC_WEB_CLIENT_ID`,
+and set `OIDC_LOAD_USER_INFO=true` if the provider's ID token omits `profile`/`email` —
+Zitadel's does not, which is why the bundled stack never sets it.
 
 ### Auth0
 

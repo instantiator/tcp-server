@@ -215,10 +215,13 @@ services:
       # Mirrors tcp-server's OIDC_ISSUER_URL derivation above: explicit value
       # wins, else derive from the Zitadel host port.
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-http://localhost:${EXPOSE_PORT_ZITADEL:-8080}}
-      # The same confidential client tcp-server uses. A browser SPA can't keep
-      # a client secret, so this is a stopgap — 004.01 replaces it with a
-      # dedicated public client registered for PKCE.
-      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
+      # The public PKCE client start-deployment.sh registers for the browser
+      # (ADR-024) — not tcp-server's confidential one above. The container's
+      # own variable keeps the generic name; only the source changes.
+      OIDC_CLIENT_ID: ${OIDC_WEB_CLIENT_ID}
+      # Providers that omit profile/email from the ID token need this true.
+      # Zitadel does not, so the bundled stack never sets it.
+      OIDC_LOAD_USER_INFO: ${OIDC_LOAD_USER_INFO:-false}
     depends_on:
       tcp-server:
         condition: service_healthy

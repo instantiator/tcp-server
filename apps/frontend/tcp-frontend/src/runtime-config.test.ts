@@ -38,4 +38,41 @@ describe('getRuntimeConfig', () => {
 
     expect(() => getRuntimeConfig()).toThrow();
   });
+
+  it('round-trips oidcLoadUserInfo as true', () => {
+    window.__TCP_CONFIG__ = {
+      oidcIssuerUrl: 'https://idp.example.com',
+      oidcClientId: 'tcp-web',
+      oidcLoadUserInfo: true,
+    };
+
+    expect(getRuntimeConfig()).toEqual({
+      oidcIssuerUrl: 'https://idp.example.com',
+      oidcClientId: 'tcp-web',
+      oidcLoadUserInfo: true,
+    });
+  });
+
+  it('round-trips oidcLoadUserInfo as false', () => {
+    window.__TCP_CONFIG__ = {
+      oidcIssuerUrl: 'https://idp.example.com',
+      oidcClientId: 'tcp-web',
+      oidcLoadUserInfo: false,
+    };
+
+    expect(getRuntimeConfig()).toEqual({
+      oidcIssuerUrl: 'https://idp.example.com',
+      oidcClientId: 'tcp-web',
+      oidcLoadUserInfo: false,
+    });
+  });
+
+  it('does not throw when oidcLoadUserInfo is absent', () => {
+    window.__TCP_CONFIG__ = {
+      oidcIssuerUrl: 'https://idp.example.com',
+      oidcClientId: 'tcp-web',
+    };
+
+    expect(() => getRuntimeConfig()).not.toThrow();
+  });
 });

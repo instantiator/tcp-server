@@ -5,7 +5,10 @@ export const DEV_SESSION_PARAM = 'devSession';
 
 /**
  * Reads a stand-in session from the query string, so the signed-in shell can
- * be exercised before 004.02 builds real sign-in.
+ * be exercised without a round trip to the identity provider.
+ *
+ * It is {@link AuthSession}'s *fallback*, never an override: a real signed-in
+ * user always wins, so this cannot be used to displace or impersonate one.
  *
  * **This is compiled out of a production build, not merely disabled in one.**
  * Vite replaces `import.meta.env.DEV` with the literal `false` at build time,

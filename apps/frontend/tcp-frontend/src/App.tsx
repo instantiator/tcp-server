@@ -1,5 +1,6 @@
 import { Route, Routes } from 'react-router';
 import { RequireSession } from './auth/session';
+import { CallbackPage } from './pages/CallbackPage/CallbackPage';
 import { CompaniesPage } from './pages/CompaniesPage/CompaniesPage';
 import { CompanyPage } from './pages/CompanyPage/CompanyPage';
 import { LandingPage } from './pages/LandingPage/LandingPage';
@@ -14,9 +15,13 @@ import { channelForAgent } from './shared-client';
  * the catch-all below is what stops an unknown one rendering a blank page.
  *
  * Three levels, and each earns its place. `/` is outside the shell because the
- * landing page is header-free and owns its own `main`. The not-found page is
- * inside the shell but outside the guard, so an unknown address stays reachable
- * signed out. Everything else sits behind `RequireSession`.
+ * landing page is header-free and owns its own `main`. `/callback` sits beside
+ * it for both reasons at once: it is where the identity provider returns a user
+ * who has no session yet, so behind `RequireSession` it would be a redirect
+ * loop, and it is transient enough that flashing a signed-out header on the way
+ * through would be worse than no header at all. The not-found page is inside
+ * the shell but outside the guard, so an unknown address stays reachable signed
+ * out. Everything else sits behind `RequireSession`.
  *
  * **No live region is rendered here, or anywhere else in this application.**
  * The announcer owns the only two, and keeps them in `document.body` outside
@@ -36,6 +41,7 @@ export const App = () => {
     <>
       <Routes>
         <Route path="/" element={<LandingPage />} />
+        <Route path="/callback" element={<CallbackPage />} />
         <Route element={<AppShell />}>
           <Route element={<RequireSession />}>
             <Route path="/companies" element={<CompaniesPage />} />

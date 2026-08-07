@@ -241,7 +241,8 @@ This is deliberate rather than unfinished: consuming it means validating it, and
 ### A query string can create a session in a development build
 
 **Raised by:** 003.02 · **Condition to revisit:** a `Session` starts carrying a
-token or a permission — which is 004.03 — or 009.04 generalises the build flag
+token or a permission — **004.03 has now passed without this happening** — or
+009.04 generalises the build flag
 
 `?devSession=<id>` supplies a stand-in signed-in user so the shell could be
 tested before sign-in existed. It is guarded by `import.meta.env.DEV`, which
@@ -259,6 +260,15 @@ credentials. The guard protects the artefact, not a developer's own browser, and
 nothing stops a future change to `Session` from making `?devSession=admin` mean
 something. Written into 004.03 and 009.04; recorded in the memory
 `project-dev-session-escape-hatch`.
+
+004.03 was named above as the prompt most likely to trigger this, and it did
+not: reload recovery, expiry handling and sign-out all landed with `Session`
+still `{ userId }`. That is the good outcome, and it is also the reason this
+entry stays open rather than closing. The change that would have broken the
+guarantee has now been made without breaking it, so the next person to touch the
+type will not be approaching it as the dangerous one — and from here the build
+flag is the whole of the defence rather than the second half of it. 009.04 owns
+what remains.
 
 ### `@react-aria/live-announcer` is a one-line shim over a `private` subpath
 
@@ -294,50 +304,137 @@ Both were built without a caller, which is normally the wrong thing to do. They 
 
 The shapes are therefore guesses about what 006.01 and 007.01 will want. If either is wrong, changing it there is the right response — working around it, or building a second component beside it, is not.
 
+### The renewal and the sign-in are the same redirect
+
+**Raised by:** 004.01 · **Condition to revisit:** the `sessionStorage` fallback in [ADR-024](../../ADRs/ADR-024-browser-oidc-client-and-token-handling.md) is taken, so a refresh token exists. Testable: `offline_access` appears in `createUserManagerSettings().scope`.
+
+ADR-024 asks for one renewal attempt, then a redirect to sign-in if that fails. Both halves need something to renew _with_, and this client has nothing: no refresh token, because that is the basis of the in-memory decision, and no hidden iframe, because the ADR rejected the mechanism. So `handleUnauthorized()` makes a single `signinRedirect()` and lets the provider decide. Against a live provider session it returns a fresh token with no form shown, which is the renewal; against an expired one it shows the login page, which is the sign-in.
+
+This is correct only while no refresh token exists. Taking the `sessionStorage` fallback would make a genuine two-step policy possible, and the single call would then be hiding a step rather than collapsing one. Recorded as amendment (a) on ADR-024.
+
+### The bootstrap's Zitadel calls are pinned to port 8080
+
+**Raised by:** 004.01 · **Condition to revisit:** anyone runs `start-deployment.sh` with `EXPOSE_PORT_ZITADEL` set to anything but 8080. Testable: set it and run the script — it fails with a connection error that never names the port.
+
+The `zit()` helper in `scripts/start-deployment.sh` posts to a hardcoded `http://localhost:8080`, while the readiness probe a few lines above it correctly uses `${EXPOSE_PORT_ZITADEL:-8080}`. Pre-existing, and not introduced by the second application registration that sits below it — left alone deliberately rather than fixed in passing, because both committed env files use 8080 and a change here would have gone untested by everything in the repository.
+
+### The local browser client is registered with Zitadel `devMode` on
+
+**Raised by:** 004.01 · **Condition to revisit:** the first deployment on a hostname that is not `localhost`
+
+`devMode: true` relaxes Zitadel's redirect-URI validation, which is what lets a self-signed `https://localhost:<port>` registration work at all. It is correct for a bootstrap that only ever targets the bundled localhost instance, and wrong for anything else — a real deployment registers its client by hand, and `docs/authentication.md` now says what to register. The risk is not that the setting is wrong today; it is that `start-deployment.sh` is the obvious thing to copy when a real deployment is first stood up.
+
+Recorded in the memory `project-zitadel-web-client-devmode`.
+
+### The PKCE verifier and `state` are in `sessionStorage`, so "nothing in browser storage" is not literally true
+
+**Raised by:** 004.01 · **Condition to revisit:** anything else starts writing to `sessionStorage` under an OIDC key, at which point matching on token strings alone stops being sufficient
+
+Tokens are held in an in-memory store, but the PKCE verifier and the `state` nonce cannot be: they have to survive the navigation to the provider and back. Neither is a credential — single-use, scoped to one sign-in, and worthless to an attacker who cannot also receive the callback — so this is a correct configuration rather than a compromise. It is recorded because the shorthand people will remember is "no OIDC material in browser storage", and the test asserts the narrower, accurate property: that no _token_ is.
+
+### The allow-list of return destinations is maintained by hand
+
+**Raised by:** 004.02 · **Condition to revisit:** a third route goes behind `RequireSession`, or the route table in `App.tsx` stops fitting on one screen. Testable: count the guarded routes in `App.tsx` against the entries in `RETURNABLE_ROUTES`.
+
+`safeRedirectTarget()` refuses any destination that is not one of the routes named in `RETURNABLE_ROUTES` (`src/auth/redirect-target.ts`). That list cannot simply be the route table: the catch-all `*` matches every address, and `/` and `/callback` are both the redirect loop, so an allow-list derived from the table would allow exactly what it exists to refuse.
+
+Deriving both from one shared array is the fix, and it was not worth the indirection for two entries. The failure it leaves is mild and silent — a route added later and not listed still works, but a user sent there before signing in arrives at `/companies` instead, with nothing to say why. Written into `006.01`, which is the next prompt to touch those routes, and recorded in the memory `project-oidc-callback-and-return-routes`.
+
+### A signed-in browser journey is proven only in jsdom
+
+**Raised by:** 004.02 · **Condition to revisit:** `009.01` lands journey 1. Testable: `test/browser/` contains a spec that reaches a page behind `RequireSession`.
+
+`CallbackPage.test.tsx` intercepts `signinCallback()` on the real `UserManager`, so everything above the exchange is real — the provider mount, the session derivation, the route table, the redirect-target validation. The exchange itself is not: the redirect to Zitadel, the PKCE round trip, and the provider's own response have no coverage in any tier. `test/browser/oidc-registration.spec.ts` sends a real authorize request but has nowhere to land, and `app-shell.spec.ts` still runs the shell's coverage on `/no-such-page` for the same reason.
+
+That is a gap in what is proven, not a compromise taken — 009.01 is the prompt that closes it, and both notes are written into it.
+
+### Signing out in one browser tab leaves the others looking signed in
+
+**Raised by:** 004.03 · **Condition to revisit:** `monitorSession` becomes usable without third-party cookies, or someone reports a stale tab. Testable: `check_session_iframe` appears in the provider's discovery document _and_ the browser still delivers the provider's cookie to an iframe on this origin.
+
+Tokens are per-tab, because the store is per-tab: an in-memory user store is not shared, and neither is anything derived from it. So signing out in one tab ends that tab's session and the provider's, but a second tab keeps its own copy of a user the provider no longer recognises. Its header still offers an account menu, and it stays that way until its next request comes back 401 and `handleUnauthorized()` sends it to the provider, which by then has no session to return.
+
+The two mechanisms that would close this are both rejected or unavailable. `monitorSession` is the library's own answer and works by polling a hidden iframe against the provider's `check_session_iframe` — the third-party-cookie mechanism [ADR-024](../../ADRs/ADR-024-browser-oidc-client-and-token-handling.md) rejected for renewal, for the same reason it would fail here. `BroadcastChannel` would work and is a dozen lines, but it broadcasts a sign-out that a tab is free to ignore, and it buys a shorter window rather than a closed one — every tab still ends up correct at its next request either way.
+
+So this is a compromise taken knowingly: the window is bounded by the next request, the failure is a menu that looks live rather than access that is, and no data is reachable through it. It becomes worth revisiting if a user meets it, or if the browser and the provider make the iframe approach honest again.
+
+### Reload recovery has no cross-page-load loop counter
+
+**Raised by:** 004.03 · **Condition to revisit:** a provider is observed returning a user with no `sub`, or one already expired on arrival. Testable: `AuthSession` yields `null` for a user that `react-oidc-context` reports as authenticated.
+
+`RequireSession` redirects to the provider when it has no session, which is the same shape of hazard `/callback` was written to avoid — a page that re-attempts sign-in on mount can bounce forever. Three things stop it here, and none of them is a counter: `handleUnauthorized()`'s module latch absorbs StrictMode's double mount and any second guarded component; the `failed` flag stops the effect re-firing after a rejection, which is the only way that latch reopens; and the provider's return leg always lands on `/callback`, which never redirects on its own.
+
+The gap those three leave is narrow but real. A page load is where the latch resets, so the loop that survives is one that completes a round trip and still arrives with no session — which needs a provider that returns a user the exchange accepts but `AuthSession` maps to nothing. `sub` is mandatory in an ID token and `isAuthenticated` already excludes an expired user, so this is close to unreachable against a conforming provider, and a `sessionStorage` counter to guard it would have to be cleared on a successful sign-in or it would break the legitimate second recovery an hour later.
+
+Left out deliberately, with the reasoning recorded in `session.tsx` beside the code rather than only here. An unreachable provider does **not** produce this: `signinRedirect()` rejects before navigating, and the guard shows an error with a manual retry.
+
 ## Carried into a later prompt
 
-| Note                                                                                                                                         | Raised by | Goes to  |
-| -------------------------------------------------------------------------------------------------------------------------------------------- | --------- | -------- |
-| End-to-end test that more than six simultaneous event streams work — 002.03 proved the transport, not the streams                            | 002.03    | `005.02` |
-| `tcp-web` is handed the confidential OIDC client as a stopgap; it needs the public PKCE one, and `https` redirect URIs from `TCP_WEB_URL`    | 002.03    | `004.01` |
-| A catch-all route: nginx returns the app document for any deep link, so an unknown path currently renders blank rather than a 404            | 002.03    | `003.02` |
-| The browser tier drives the deployment over https with no local-server fallback, and runs inside CI's `api-test` job                         | 002.03    | `009.01` |
-| Regenerate the client after 002.04: `GET /api/company` (`?all`, `stats`), `GET /api/assignment` (`?mode`), and four summary types changed    | 002.04    | `005.01` |
-| The stat field names: `stats.activeAgents`, `stats.tasksByStatus` (zero-filled per status) and `stats.openEnquiries`, returned with the list | 002.04    | `006.01` |
-| The company stream's five `payload.entity` values, the priming order, the summary shapes, and the exact consultations query                  | 002.04    | `007.01` |
-| Live `agent` rows carry no summary — only primed ones do; render from priming and patch by `agentId`                                         | 002.04    | `007.01` |
-| Enquiries stream open and close only — no per-message event, so a reply in progress is invisible until it closes                             | 002.04    | `007.01` |
-| Memberships come from the scoped `GET /api/company`; 002.04 added to this prompt's **Needs first**                                           | 002.04    | `008.06` |
-| SSE streams now refuse a non-member with `403` at connect — a permanent failure the backoff must not retry forever                           | 002.05    | `005.02` |
-| `?all=true` is administrator-only; a `403` in the overview is a real error, not an empty state                                               | 002.05    | `006.01` |
-| The memberships dialog is authoritative — membership _is_ the access control, so the list is exactly what the user can reach                 | 002.05    | `008.06` |
-| The ADR-011 **permission flags** (migration, defaults, `@RequirePermission`, and the UI to set them) — 002.05 enforced membership only       | 002.05    | `010.01` |
-| ADR-011's status wording: membership is enforced, flags are not; `route-audit.spec.ts` must stay green and cover every controller            | 002.05    | `009.03` |
-| `ThemeControl` already exists and is written for reuse — the header adopts it rather than building a second theme control                    | 003.01    | `003.02` |
-| `main` lives inside `LandingPage`; when the shell owns layout there must still be exactly one `main` on the page                             | 003.01    | `003.02` |
-| The account menu needs its own token-valued rules in `base.css` — React Aria renders it invisible otherwise                                  | 003.01    | `003.02` |
-| The landing page's `h1` is a route-change focus target; making it focusable must not change its name or level                                | 003.01    | `003.02` |
-| `startSignIn()` in `src/auth/sign-in.ts` is the seam — replace the body, don't move the call site                                            | 003.01    | `004.02` |
-| Extend the four-combination contrast scan to every page; the component tier cannot check contrast at all                                     | 003.01    | `009.02` |
-| Assert what is drawn, not only the `data-*` attribute — jsdom resolves neither pseudo-elements nor shorthands                                | 003.01    | `009.02` |
-| `RequireSession` saves the attempted path as `{ from }`; validate it before navigating, or it is an open redirect                            | 003.02    | `004.02` |
-| The OIDC callback route is absent, and must be public — behind the guard it is a redirect loop                                               | 003.02    | `004.02` |
-| `startSignOut()` is the seam; sign-out must clear the session, not just the tokens, or the account menu stays                                | 003.02    | `004.03` |
-| `SessionProvider`'s `session` prop must keep working for tests when 004.03 derives the real session                                          | 003.02    | `004.03` |
-| `Breadcrumbs` exists and takes `readonly Crumb[]`; `CompaniesPage`/`CompanyPage` are placeholders to replace                                 | 003.02    | `006.01` |
-| Decide on React Aria's `RouterProvider` if its links start appearing beyond the breadcrumb                                                   | 003.02    | `006.01` |
-| `onAccountAction` in `Header.tsx` is the dialogs' entry point; `MenuTrigger` already restores focus on close                                 | 003.02    | `008.06` |
-| Scan `document.body`, not the render container — React Aria's popover portals out of it                                                      | 003.02    | `008.06` |
-| A jsdom test can be green while the browser is wrong; the shell's browser coverage runs on an unknown address                                | 003.02    | `009.02` |
-| `?devSession=` builds a `Session` from a URL — when a session carries a token, it must not be able to mint one                               | 003.02    | `004.03` |
-| The production build flag, removing dev-only capabilities from the artefact, and query-string feature flags                                  | 003.02    | `009.04` |
-| The four state components exist with fixed props; `LoadingState` does not set `aria-busy` — the loading region's owner must                  | 003.03    | `006.01` |
-| `useLoadingAnnouncement(loading, completion)` announces a completed wait only; never announce that loading started                           | 003.03    | `006.01` |
-| The final announcement wording for all four lists, and the three lists' missing keys — `announce.tasks*` are placeholders                    | 003.03    | `007.01` |
-| One announcer channel per list, and never a live region; the announcer counts repeats, so guard on the value that changed                    | 003.03    | `007.01` |
-| Where a `Notification` renders is 007.01's layout decision — 003.03 ships the component with no queue, provider or container                 | 003.03    | `007.01` |
-| Suppressing per-token announcements is the caller's job — the throttle thins what was announced, it does not decide what to announce         | 003.03    | `008.01` |
-| An individually-announced enquiry needs its own channel, not a `throttleMs` override on a shared one                                         | 003.03    | `008.04` |
-| Tune `ANNOUNCE_THROTTLE_MS` (10s) and `ANNOUNCE_LOADING_MIN_MS` (1s), and record the values the manual pass lands on                         | 003.03    | `009.02` |
-| Confirm `ErrorState`'s `role="group"` plus assertive announcement reads as well as `role="alert"`, and listen for assertive truncation       | 003.03    | `009.02` |
-| Only route change has browser-tier announcement coverage; coalescing, throttling and assertive politeness are jsdom-only                     | 003.03    | `009.02` |
+| Note                                                                                                                                                                          | Raised by | Goes to  |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | -------- |
+| End-to-end test that more than six simultaneous event streams work — 002.03 proved the transport, not the streams                                                             | 002.03    | `005.02` |
+| `tcp-web` is handed the confidential OIDC client as a stopgap; it needs the public PKCE one, and `https` redirect URIs from `TCP_WEB_URL`                                     | 002.03    | `004.01` |
+| A catch-all route: nginx returns the app document for any deep link, so an unknown path currently renders blank rather than a 404                                             | 002.03    | `003.02` |
+| The browser tier drives the deployment over https with no local-server fallback, and runs inside CI's `api-test` job                                                          | 002.03    | `009.01` |
+| Regenerate the client after 002.04: `GET /api/company` (`?all`, `stats`), `GET /api/assignment` (`?mode`), and four summary types changed                                     | 002.04    | `005.01` |
+| The stat field names: `stats.activeAgents`, `stats.tasksByStatus` (zero-filled per status) and `stats.openEnquiries`, returned with the list                                  | 002.04    | `006.01` |
+| The company stream's five `payload.entity` values, the priming order, the summary shapes, and the exact consultations query                                                   | 002.04    | `007.01` |
+| Live `agent` rows carry no summary — only primed ones do; render from priming and patch by `agentId`                                                                          | 002.04    | `007.01` |
+| Enquiries stream open and close only — no per-message event, so a reply in progress is invisible until it closes                                                              | 002.04    | `007.01` |
+| Memberships come from the scoped `GET /api/company`; 002.04 added to this prompt's **Needs first**                                                                            | 002.04    | `008.06` |
+| SSE streams now refuse a non-member with `403` at connect — a permanent failure the backoff must not retry forever                                                            | 002.05    | `005.02` |
+| `?all=true` is administrator-only; a `403` in the overview is a real error, not an empty state                                                                                | 002.05    | `006.01` |
+| The memberships dialog is authoritative — membership _is_ the access control, so the list is exactly what the user can reach                                                  | 002.05    | `008.06` |
+| The ADR-011 **permission flags** (migration, defaults, `@RequirePermission`, and the UI to set them) — 002.05 enforced membership only                                        | 002.05    | `010.01` |
+| ADR-011's status wording: membership is enforced, flags are not; `route-audit.spec.ts` must stay green and cover every controller                                             | 002.05    | `009.03` |
+| `ThemeControl` already exists and is written for reuse — the header adopts it rather than building a second theme control                                                     | 003.01    | `003.02` |
+| `main` lives inside `LandingPage`; when the shell owns layout there must still be exactly one `main` on the page                                                              | 003.01    | `003.02` |
+| The account menu needs its own token-valued rules in `base.css` — React Aria renders it invisible otherwise                                                                   | 003.01    | `003.02` |
+| The landing page's `h1` is a route-change focus target; making it focusable must not change its name or level                                                                 | 003.01    | `003.02` |
+| `startSignIn()` in `src/auth/sign-in.ts` is the seam — replace the body, don't move the call site                                                                             | 003.01    | `004.02` |
+| Extend the four-combination contrast scan to every page; the component tier cannot check contrast at all                                                                      | 003.01    | `009.02` |
+| Assert what is drawn, not only the `data-*` attribute — jsdom resolves neither pseudo-elements nor shorthands                                                                 | 003.01    | `009.02` |
+| `RequireSession` saves the attempted path as `{ from }`; validate it before navigating, or it is an open redirect                                                             | 003.02    | `004.02` |
+| The OIDC callback route is absent, and must be public — behind the guard it is a redirect loop                                                                                | 003.02    | `004.02` |
+| `startSignOut()` is the seam; sign-out must clear the session, not just the tokens, or the account menu stays                                                                 | 003.02    | `004.03` |
+| `SessionProvider`'s `session` prop must keep working for tests when 004.03 derives the real session                                                                           | 003.02    | `004.03` |
+| `Breadcrumbs` exists and takes `readonly Crumb[]`; `CompaniesPage`/`CompanyPage` are placeholders to replace                                                                  | 003.02    | `006.01` |
+| Decide on React Aria's `RouterProvider` if its links start appearing beyond the breadcrumb                                                                                    | 003.02    | `006.01` |
+| `onAccountAction` in `Header.tsx` is the dialogs' entry point; `MenuTrigger` already restores focus on close                                                                  | 003.02    | `008.06` |
+| Scan `document.body`, not the render container — React Aria's popover portals out of it                                                                                       | 003.02    | `008.06` |
+| A jsdom test can be green while the browser is wrong; the shell's browser coverage runs on an unknown address                                                                 | 003.02    | `009.02` |
+| `?devSession=` builds a `Session` from a URL — when a session carries a token, it must not be able to mint one                                                                | 003.02    | `004.03` |
+| The production build flag, removing dev-only capabilities from the artefact, and query-string feature flags                                                                   | 003.02    | `009.04` |
+| The four state components exist with fixed props; `LoadingState` does not set `aria-busy` — the loading region's owner must                                                   | 003.03    | `006.01` |
+| `useLoadingAnnouncement(loading, completion)` announces a completed wait only; never announce that loading started                                                            | 003.03    | `006.01` |
+| The final announcement wording for all four lists, and the three lists' missing keys — `announce.tasks*` are placeholders                                                     | 003.03    | `007.01` |
+| One announcer channel per list, and never a live region; the announcer counts repeats, so guard on the value that changed                                                     | 003.03    | `007.01` |
+| Where a `Notification` renders is 007.01's layout decision — 003.03 ships the component with no queue, provider or container                                                  | 003.03    | `007.01` |
+| Suppressing per-token announcements is the caller's job — the throttle thins what was announced, it does not decide what to announce                                          | 003.03    | `008.01` |
+| An individually-announced enquiry needs its own channel, not a `throttleMs` override on a shared one                                                                          | 003.03    | `008.04` |
+| Tune `ANNOUNCE_THROTTLE_MS` (10s) and `ANNOUNCE_LOADING_MIN_MS` (1s), and record the values the manual pass lands on                                                          | 003.03    | `009.02` |
+| Confirm `ErrorState`'s `role="group"` plus assertive announcement reads as well as `role="alert"`, and listen for assertive truncation                                        | 003.03    | `009.02` |
+| Only route change has browser-tier announcement coverage; coalescing, throttling and assertive politeness are jsdom-only                                                      | 003.03    | `009.02` |
+| `AuthProvider` must wrap `getUserManager()`'s existing instance, not fresh settings — two managers hold two different users                                                   | 004.01    | `004.02` |
+| `renderAppAt` must mirror whatever `main.tsx` gains, or the component tier asserts a stack that only exists in tests                                                          | 004.01    | `004.02` |
+| ~~The callback route completes the flow with `signinRedirectCallback()`~~ — **wrong**: `AuthProvider` does it, and doing both double-exchanges the code (corrected by 004.02) | 004.01    | `004.02` |
+| `handleUnauthorized()` also sets `state.from`, and its value carries a query string where `RequireSession`'s does not                                                         | 004.01    | `004.02` |
+| Sign-out is `signoutRedirect()` plus clearing the in-memory user; the registered post-logout URI is `${TCP_WEB_URL}/`                                                         | 004.01    | `004.03` |
+| `signoutRedirect()` throws with no `end_session_endpoint` — optional in OIDC, so fall back to clearing locally rather than throwing                                           | 004.01    | `004.03` |
+| The storage assertion must be re-run when the session starts carrying a token, not assumed to still cover it                                                                  | 004.01    | `004.03` |
+| The fetch wrapper calls `getAccessToken()` per request and `handleUnauthorized()` on 401; the policy redirects, it does not renew and return                                  | 004.01    | `005.01` |
+| The stream reader calls `getAccessToken()` on every connection attempt including reconnects, and routes a connect 401 to the shared policy                                    | 004.01    | `005.02` |
+| A profile dialog showing a bare subject has a configuration cause: `OIDC_LOAD_USER_INFO`, not a rebuild                                                                       | 004.01    | `008.06` |
+| Assert against the production bundle that no token reaches browser storage — jsdom proves the configuration, not the artefact                                                 | 004.01    | `009.04` |
+| The session derivation landed in 004.02, not here — `AuthSession` exists, the `session` prop is its fallback, and the OIDC user wins                                          | 004.02    | `004.03` |
+| `AuthProvider` is already mounted; `matchSignoutCallback`/`onSignoutCallback` are the sign-out return hooks — do not add a second route                                       | 004.02    | `004.03` |
+| Adding a guarded route means adding it to `RETURNABLE_ROUTES`; `DEFAULT_SIGNED_IN_PATH` is hardcoded to `/companies` and needs confirming                                     | 004.02    | `006.01` |
+| Journey 1 is sign-in's first browser coverage — the jsdom tier intercepts the exchange and proves nothing about the PKCE round trip                                           | 004.02    | `009.01` |
+| Retire `app-shell.spec.ts`'s `/no-such-page` workaround: a signed-in page is browser-reachable now                                                                            | 004.02    | `009.01` |
+| The `/callback` route's loading and error states need the manual pass, and it is a signed-out page the contrast scan can reach                                                | 004.02    | `009.02` |
+| The "a request after token expiry recovers" test — 004.03 was asked for it and had no fetch wrapper to make the request                                                       | 004.03    | `005.01` |
+| Reconnecting a stream after expiry must send the _new_ token on the wire; the failure is a permanent loop after the first blip, not at expiry itself                          | 004.03    | `005.02` |
+| A real-browser journey through sign-in, reload and sign-out — 004.03 proves only that a guarded route leaves for the provider                                                 | 004.03    | `009.01` |
+| The expiry warning interrupts assertively and is the only surface that speaks unprompted; it and the two recovery states need the manual pass                                 | 004.03    | `009.02` |
+| ADR-024 now carries (a)–(l); confirm the deliberately-unwired `matchSignoutCallback` and the two operator-facing limitations survived                                         | 004.03    | `009.03` |
+| `Session` stayed `{ userId }` through 004.03, so the build flag is now the whole of what stops `?devSession=` mattering                                                       | 004.03    | `009.04` |

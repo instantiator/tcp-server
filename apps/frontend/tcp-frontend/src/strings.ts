@@ -15,6 +15,8 @@ const strings = {
     'TCP manages one or more companies of AI agents that collaborate to complete tasks. Sign in to watch a company work, and to take part.',
   'landing.getStarted.heading': 'Get started',
   'landing.signIn': 'Sign in',
+  'landing.signIn.failed':
+    'Sign-in could not be started. The identity provider could not be reached.',
   'landing.appearance.heading': 'Appearance',
 
   'theme.palette.label': 'Theme',
@@ -56,6 +58,29 @@ const strings = {
   'page.notFound.body':
     'That address does not match anything in this application. It may have been mistyped, or the thing it pointed at may no longer exist.',
   'page.notFound.home': 'Go to the landing page',
+
+  // The callback route. `callback.loading` is a label rather than a sentence:
+  // `LoadingState` renders it through `state.loading`, as "Loading sign-in…".
+  'page.callback.title': 'Signing in',
+  'callback.loading': 'sign-in',
+  'callback.error.cancelled':
+    'Sign-in was cancelled. You have not been signed in.',
+  'callback.error.failed':
+    'Sign-in could not be completed. Try signing in again.',
+  'callback.error.direct':
+    'This page is part of signing in and cannot be opened on its own.',
+
+  // Session recovery on page load and expiry warnings. `session.recovering` is a
+  // label rather than a sentence: `LoadingState` renders it through `state.loading`,
+  // as "Loading your session…".
+  'session.recovering': 'your session',
+  'session.recovery.failed':
+    'We could not reach the sign-in service. Check your connection and try again.',
+  'session.expiry.label': 'Session expiry',
+  'session.expiring': 'Your session is about to expire.',
+  'session.staySignedIn': 'Stay signed in',
+  'session.expiring.announcement':
+    'Your session is about to expire. Choose "Stay signed in" to continue.',
 } as const;
 
 /** Every key `t` accepts. A typo is a type error, not a blank screen. */

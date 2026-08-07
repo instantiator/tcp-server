@@ -352,7 +352,7 @@ EOF
     echo "  Project $PROJECT_NAME: already exists"
   fi
 
-  # OIDC application — device-code + refresh-token grants (no ROPC support on
+  # CLI application — device-code + refresh-token grants (no ROPC support on
   # Zitadel). accessTokenType must be explicitly JWT: Zitadel otherwise issues
   # opaque/encrypted access tokens that tcp-server's JWKS-based verification
   # cannot parse.
@@ -384,6 +384,56 @@ EOF
   set_env_var "$LOCAL_ENV_FILE" OIDC_CLIENT_SECRET "$APP_CLIENT_SECRET"
   export OIDC_CLIENT_ID="$APP_CLIENT_ID"
   export OIDC_CLIENT_SECRET="$APP_CLIENT_SECRET"
+
+  # Browser application — a public client using Authorization Code with PKCE
+  # (ADR-024). No secret: a browser cannot keep one, so there is none to
+  # regenerate and nothing to drift. accessTokenType is JWT for the same
+  # reason as the CLI's client above.
+  #
+  # Redirect URIs come from TCP_WEB_URL (scripts/lib/derive-urls.sh), which is
+  # https because tcp-web is TLS-only (ADR-029). A hardcoded port would work in
+  # development and fail sign-in on .env.testing's 5174, with a provider-side
+  # error that never names the port.
+  #
+  # devMode relaxes Zitadel's redirect-URI validation for localhost. This
+  # bootstrap only ever targets the bundled localhost Zitadel; a real
+  # deployment registers its client by hand.
+  WEB_APP_NAME="tcp-web"
+  WEB_APP_ID=$(echo "$APP_LIST" | jq -r --arg n "$WEB_APP_NAME" '.result[]? | select(.name == $n) | .id // empty')
+  WEB_APP_CONFIG=$(jq -n --arg cb "${TCP_WEB_URL}/callback" --arg home "${TCP_WEB_URL}/" '{
+    redirectUris: [$cb],
+    postLogoutRedirectUris: [$home],
+    responseTypes: ["OIDC_RESPONSE_TYPE_CODE"],
+    grantTypes: ["OIDC_GRANT_TYPE_AUTHORIZATION_CODE"],
+    appType: "OIDC_APP_TYPE_USER_AGENT",
+    authMethodType: "OIDC_AUTH_METHOD_TYPE_NONE",
+    accessTokenType: "OIDC_TOKEN_TYPE_JWT",
+    devMode: true
+  }')
+  if [[ -z "$WEB_APP_ID" ]]; then
+    OIDC_WEB_CLIENT_ID=$(zit POST "/management/v1/projects/$PROJECT_ID/apps/oidc" \
+      "$(echo "$WEB_APP_CONFIG" | jq --arg name "$WEB_APP_NAME" '. + {name: $name}')" \
+      | jq -r '.clientId')
+    echo "  Created application: $WEB_APP_NAME (public PKCE client, no secret)"
+  else
+    OIDC_WEB_CLIENT_ID=$(echo "$APP_LIST" | jq -r --arg n "$WEB_APP_NAME" '.result[]? | select(.name == $n) | .oidcConfig.clientId // empty')
+    # The redirect URI moves with EXPOSE_PORT_WEB, and a reused Zitadel volume
+    # would otherwise keep the previous port's — which fails at the very end of
+    # an otherwise-working sign-in. So rewrite it when it has moved.
+    #
+    # Only when it has moved: Zitadel answers an update that changes nothing
+    # with 400 "No changes", and zit() uses `curl -sf`, so an unconditional
+    # rewrite aborts the whole script on the second run of an unchanged stack.
+    WEB_APP_URIS=$(echo "$APP_LIST" | jq -r --arg n "$WEB_APP_NAME" '.result[]? | select(.name == $n) | .oidcConfig.redirectUris // [] | join(",")')
+    if [[ "$WEB_APP_URIS" != "${TCP_WEB_URL}/callback" ]]; then
+      zit PUT "/management/v1/projects/$PROJECT_ID/apps/$WEB_APP_ID/oidc_config" "$WEB_APP_CONFIG" > /dev/null
+      echo "  Application $WEB_APP_NAME: redirect URIs rewritten to $TCP_WEB_URL"
+    else
+      echo "  Application $WEB_APP_NAME: already exists"
+    fi
+  fi
+  set_env_var "$LOCAL_ENV_FILE" OIDC_WEB_CLIENT_ID "$OIDC_WEB_CLIENT_ID"
+  export OIDC_WEB_CLIENT_ID
 
   # Human test user — for manually exercising `tcp-cli get-token`'s device-flow login.
   TEST_USER="${TEST_USERNAME:-test}"
@@ -485,6 +535,7 @@ else
 fi
 if [[ -n "$AUTH_PROFILE" ]]; then
   echo "  Zitadel console        →  http://localhost:8080/ui/console  (admin / ${ZITADEL_ADMIN_PASSWORD})"
+  echo "  OIDC web client ID     →  $OIDC_WEB_CLIENT_ID"
 fi
 echo "  MinIO console          →  http://localhost:9001"
 echo ""
