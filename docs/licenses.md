@@ -57,15 +57,16 @@
 
 ## Web client
 
-| Name                       | License    | Repository                                           | Author                           | Installed | Defined  |
-| :------------------------- | :--------- | :--------------------------------------------------- | :------------------------------- | :-------- | :------- |
-| @react-aria/live-announcer | Apache-2.0 | git+https://github.com/adobe/react-spectrum.git      | n/a                              | 3.5.1     | ^3.5.1   |
-| @tanstack/react-query      | MIT        | git+https://github.com/TanStack/query.git            | tannerlinsley                    | 5.101.4   | ^5.101.4 |
-| oidc-client-ts             | Apache-2.0 | git+https://github.com/authts/oidc-client-ts.git     | n/a                              | 3.5.0     | ^3.5.0   |
-| react                      | MIT        | git+https://github.com/react/react.git               | n/a                              | 19.2.8    | ^19.2.8  |
-| react-aria-components      | Apache-2.0 | git+https://github.com/adobe/react-spectrum.git      | n/a                              | 1.20.0    | ^1.20.0  |
-| react-dom                  | MIT        | git+https://github.com/react/react.git               | n/a                              | 19.2.8    | ^19.2.8  |
-| react-oidc-context         | MIT        | git+https://github.com/authts/react-oidc-context.git | n/a                              | 3.3.1     | ^3.3.1   |
-| react-router               | MIT        | https://github.com/remix-run/react-router            | Remix Software <hello@remix.run> | 8.3.0     | ^8.3.0   |
+| Name                       | License    | Repository                                               | Author                           | Installed | Defined  |
+| :------------------------- | :--------- | :------------------------------------------------------- | :------------------------------- | :-------- | :------- |
+| @react-aria/live-announcer | Apache-2.0 | git+https://github.com/adobe/react-spectrum.git          | n/a                              | 3.5.1     | ^3.5.1   |
+| @tanstack/react-query      | MIT        | git+https://github.com/TanStack/query.git                | tannerlinsley                    | 5.101.4   | ^5.101.4 |
+| oidc-client-ts             | Apache-2.0 | git+https://github.com/authts/oidc-client-ts.git         | n/a                              | 3.5.0     | ^3.5.0   |
+| openapi-fetch              | MIT        | git+https://github.com/openapi-ts/openapi-typescript.git | Drew Powers drew@pow.rs          | 0.17.0    | ^0.17.0  |
+| react                      | MIT        | git+https://github.com/react/react.git                   | n/a                              | 19.2.8    | ^19.2.8  |
+| react-aria-components      | Apache-2.0 | git+https://github.com/adobe/react-spectrum.git          | n/a                              | 1.20.0    | ^1.20.0  |
+| react-dom                  | MIT        | git+https://github.com/react/react.git                   | n/a                              | 19.2.8    | ^19.2.8  |
+| react-oidc-context         | MIT        | git+https://github.com/authts/react-oidc-context.git     | n/a                              | 3.3.1     | ^3.3.1   |
+| react-router               | MIT        | https://github.com/remix-run/react-router                | Remix Software <hello@remix.run> | 8.3.0     | ^8.3.0   |
 
 

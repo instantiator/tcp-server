@@ -368,6 +368,12 @@ The gap those three leave is narrow but real. A page load is where the latch res
 
 Left out deliberately, with the reasoning recorded in `session.tsx` beside the code rather than only here. An unreachable provider does **not** produce this: `signinRedirect()` rejects before navigating, and the guard shows an error with a manual retry.
 
+### `openapi-fetch` is a `0.x` dependency under the application's whole data layer
+
+**Raised by:** 005.01 · **Condition to revisit:** the package reaches 1.0, or a minor release breaks the build
+
+Reasoning: chosen over hand-written conditional types because those are where the "no `any` at the boundary" rule breaks in practice — openapi-fetch is by openapi-typescript's author, in the same repository, MIT, one transitive dependency, and its middleware hook is where the shared 401 policy goes. Pre-1.0 means a minor version may break. The exposure is bounded: one import in `src/api/client.ts` plus the type plumbing in `src/api/queries.ts`, and the fallback — hand-written generics over the same generated `paths` type — stays available.
+
 ## Carried into a later prompt
 
 | Note                                                                                                                                                                          | Raised by | Goes to  |
@@ -438,3 +444,10 @@ Left out deliberately, with the reasoning recorded in `session.tsx` beside the c
 | The expiry warning interrupts assertively and is the only surface that speaks unprompted; it and the two recovery states need the manual pass                                 | 004.03    | `009.02` |
 | ADR-024 now carries (a)–(l); confirm the deliberately-unwired `matchSignoutCallback` and the two operator-facing limitations survived                                         | 004.03    | `009.03` |
 | `Session` stayed `{ userId }` through 004.03, so the build flag is now the whole of what stops `?devSession=` mattering                                                       | 004.03    | `009.04` |
+| Query keys are `[entity, scope, …]` keyed on the event's `payload.entity` — conversations key on `'enquiry'`                                                                  | 005.01    | `005.02` |
+| `ApiError` (`src/api/errors.ts`) is the one failure shape; the stream reader throws it too                                                                                    | 005.01    | `005.02` |
+| One redirect across a fetch 401 and a stream 401 together is untested — each side is proven alone                                                                             | 005.01    | `005.02` |
+| `App.tsx`'s boundary-control `<span>` still has no real import to replace it                                                                                                  | 005.01    | `005.02` |
+| SSE payload summary types are absent from the OpenAPI description; the drift check cannot police the event contract                                                           | 005.01    | `005.02` |
+| Mutation hooks are unwritten; the client and error shape they use are built                                                                                                   | 005.01    | `006.01` |
+| The two knowledge file-download GETs have no query hook, by design                                                                                                            | 005.01    | `010.01` |

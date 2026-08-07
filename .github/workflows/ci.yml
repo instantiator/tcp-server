@@ -291,6 +291,22 @@ jobs:
           echo "WEB_BASE_URL=https://localhost:${web_port:-5173}" >> "$GITHUB_ENV"
       - name: Start deployment stack
         run: ./scripts/start-deployment.sh --project tcp-api --env-file .env.testing --dev-ports
+      # apps/frontend/tcp-frontend/src/api/schema.d.ts is generated from
+      # tcp-server's OpenAPI description, which is produced at runtime from
+      # controller metadata (ADR-014). A controller change makes the committed
+      # types stale in a way nothing else notices — the frontend keeps
+      # typechecking against a contract the server no longer honours.
+      #
+      # This lives inside api-test rather than in a job of its own because the
+      # check needs a running tcp-server and this job has already booted one.
+      # It runs before the test tiers so the cheap failure is reported first.
+      - name: Check the generated API types are current
+        run: |
+          ./scripts/generate-api-types.sh --base-url "$API_BASE_URL"
+          if ! git diff --exit-code -- apps/frontend/tcp-frontend/src/api/schema.d.ts; then
+            echo "::error::Generated API types are stale. Run 'npm run api:generate' against a running tcp-server and commit the result."
+            exit 1
+          fi
       - name: Run API tests
         run: ./scripts/run-api-tests.sh --base-url "$API_BASE_URL" --env-file .env.testing
       - name: Publish API test results

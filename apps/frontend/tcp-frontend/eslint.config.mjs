@@ -26,6 +26,10 @@ export default tseslint.config(
       'playwright-report/**',
       'eslint.config.mjs',
       'test/fixtures/**',
+      // Generated from tcp-server's OpenAPI description by
+      // `npm run api:generate`. Its generator's output is authoritative; a
+      // lint fix here is undone by the next regeneration.
+      'src/api/schema.d.ts',
     ],
   },
   js.configs.recommended,

@@ -20,3 +20,4 @@ dev-environment
 docs/licenses.md
 .license-report.json
 schemas/schema.json
+apps/frontend/tcp-frontend/src/api/schema.d.ts
