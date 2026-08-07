@@ -180,12 +180,23 @@ test.describe('static hosting', () => {
       () =>
         (
           window as unknown as {
-            __TCP_CONFIG__?: { oidcIssuerUrl?: string; oidcClientId?: string };
+            __TCP_CONFIG__?: {
+              oidcIssuerUrl?: string;
+              oidcClientId?: string;
+              oidcLoadUserInfo?: boolean;
+            };
           }
         ).__TCP_CONFIG__,
     );
 
     expect(config?.oidcIssuerUrl).toBeTruthy();
     expect(config?.oidcClientId).toBeTruthy();
+
+    // Strictly `false`, not falsy. Nothing type-checks the heredoc in
+    // 10-tcp-init.sh against RuntimeConfig — they are a shell script and a
+    // TypeScript interface that happen to agree — and a quoted 'false' would
+    // satisfy the interface, be truthy at the one place it is read, and turn
+    // the default into its opposite.
+    expect(config?.oidcLoadUserInfo).toBe(false);
   });
 });

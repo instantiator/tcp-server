@@ -34,6 +34,15 @@ delegates to) using a machine-user Personal Access Token (PAT):
    - an OIDC "web" application named `tcp-server`, with grant types
      `OIDC_GRANT_TYPE_DEVICE_CODE` and `OIDC_GRANT_TYPE_REFRESH_TOKEN`, and
      `accessTokenType: OIDC_TOKEN_TYPE_JWT`
+   - a second OIDC application named `tcp-web` ([ADR-024](ADRs/ADR-024-browser-oidc-client-and-token-handling.md))
+     — a public client with `authMethodType: OIDC_AUTH_METHOD_TYPE_NONE` and no
+     secret, `grantTypes: OIDC_GRANT_TYPE_AUTHORIZATION_CODE`, `appType:
+OIDC_APP_TYPE_USER_AGENT`, and `accessTokenType: OIDC_TOKEN_TYPE_JWT`. Its
+     redirect and post-logout URIs are derived from `TCP_WEB_URL`
+     (`https://localhost:${EXPOSE_PORT_WEB}`), and `devMode: true` relaxes
+     Zitadel's redirect-URI validation for that localhost address — correct for
+     this bootstrap, wrong for anything else. The generated client ID is
+     written to `<env-file>.local` as `OIDC_WEB_CLIENT_ID`.
    - a human test user, from `TEST_USERNAME`/`TEST_PASSWORD` in the env file
      (default `test`/`test`)
    - a machine test user named `test-machine`, with `accessTokenType:

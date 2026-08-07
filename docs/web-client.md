@@ -132,17 +132,29 @@ For a real deployment, mount a real certificate the same way.
 
 ### Runtime configuration
 
-The bundle is built once and runs in several environments, so two values reach
-it at startup rather than at build time — the identity provider's address and
-the client ID. `docker/nginx/10-tcp-init.sh` writes them into `/config.js` when
-the container starts, and `index.html` loads it ahead of the bundle:
+The bundle is built once and runs in several environments, so three values
+reach it at startup rather than at build time — the identity provider's
+address, the client ID, and whether to load the user's profile from the
+userinfo endpoint. `docker/nginx/10-tcp-init.sh` writes them into `/config.js`
+when the container starts, and `index.html` loads it ahead of the bundle:
 
 ```js
 window.__TCP_CONFIG__ = {
   oidcIssuerUrl: '…',
   oidcClientId: '…',
+  oidcLoadUserInfo: false,
 };
 ```
+
+`oidcClientId` carries the public PKCE client `start-deployment.sh` registers
+for the browser ([ADR-024](ADRs/ADR-024-browser-oidc-client-and-token-handling.md))
+— not tcp-server's own confidential client, which has no business being
+readable from a browser. `oidcLoadUserInfo` is emitted as an **unquoted**
+JavaScript boolean, not a quoted string: `config.js` is code, and the string
+`'false'` is truthy, so a quoted literal would satisfy `RuntimeConfig`'s type
+while silently inverting the default. Unlike the other two values, its absence
+doesn't stop the container — a missing boolean has a correct default (`false`)
+where a missing issuer or client ID does not.
 
 Read it through `getRuntimeConfig()` in `src/runtime-config.ts`, never off the
 global directly. There is no API address here, by construction: it is always
@@ -154,8 +166,8 @@ assets, so a cached one can never be stale, whereas a cached `config.js` from
 another environment points the app at the wrong identity provider and fails at
 sign-in with nothing to suggest why.
 
-The container refuses to start if either value is empty, rather than serving a
-blank issuer that fails several steps later.
+The container refuses to start if `oidcIssuerUrl` or `oidcClientId` is empty,
+rather than serving a blank issuer that fails several steps later.
 
 #### CORS is not configured, deliberately
 

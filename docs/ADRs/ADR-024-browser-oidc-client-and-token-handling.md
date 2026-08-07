@@ -1,6 +1,6 @@
 # ADR-024: Browser OIDC Client and Token Handling
 
-**Status:** Accepted (2026-08-03)
+**Status:** Accepted (amended — see [004.01](#amendments-as-implemented-004-01) at the end)
 
 ## Context
 
@@ -122,3 +122,19 @@ Two consequences, both decisions:
 ### Registering the web client with Zitadel
 
 `scripts/start-deployment.sh` already creates the project, application and users for the CLI's device flow. It gains a second application registration: a public client, PKCE required, no secret, with redirect and post-logout URLs derived from the web app's configured address — not hardcoded, since the port comes from `EXPOSE_PORT_WEB` ([ADR-029](ADR-029-spa-hosting-and-runtime-configuration.md)).
+
+<a id="amendments-as-implemented-004-01"></a>
+
+## Amendments as implemented (004.01)
+
+The `UserManager` singleton, `getAccessToken()` and `handleUnauthorized()` now exist (`apps/frontend/tcp-frontend/src/auth/`), along with the second Zitadel registration. Five points where the implementation is more specific than the decision above, or diverges from it in a way that must not read afterwards as an oversight.
+
+(a) **The renewal and the sign-in are the same redirect.** This ADR asks for "one renewal attempt, then a redirect to sign-in if that fails" — two steps. With no refresh token, there is nothing to renew with, and a hidden-iframe renewal is exactly the mechanism [Decision](#decision) rejected. `handleUnauthorized()` therefore makes one deduplicated `signinRedirect()` and lets the provider decide whether a login form is needed: with a live session the user bounces straight back, which _is_ the renewal; without one, they see the form, which _is_ the sign-in. This is only correct because no refresh token exists — it is coupled to the in-memory storage decision, not a general substitute for a two-step policy.
+
+(b) **The PKCE verifier and `state` live in `sessionStorage`, not memory.** Both have to survive the navigation to the provider and back, so memory isn't an option the way it is for tokens. Neither is a token, though: each is single-use, scoped to one sign-in attempt, and worthless to an attacker who cannot also receive the callback. The storage test asserts the narrower and accurate property this ADR's threat model actually cares about — no _token_ reaches browser storage — rather than the stronger and false claim that nothing OIDC-related does.
+
+(c) **`AuthProvider` is deferred to 004.02.** Nothing in the tree consumes an auth context yet, and the two real consumers of a token — a fetch wrapper and a stream reader — are not components and cannot read one. `getUserManager()`'s module singleton is the shared instance; 004.02 must mount `AuthProvider` **around this instance**, not around a second set of settings, or the app ends up with two managers holding two different in-memory users.
+
+(d) **The local registration uses Zitadel `devMode: true`**, which relaxes redirect-URI validation for `localhost`. Correct for a self-signed localhost bootstrap; wrong for the first deployment on a hostname that isn't `localhost`, at which point this needs revisiting rather than carrying forward unexamined.
+
+(e) **`loadUserInfo` is a runtime setting, `OIDC_LOAD_USER_INFO`, not a constant.** It reaches the client through `config.js` ([ADR-029](ADR-029-spa-hosting-and-runtime-configuration.md)), so a provider whose ID token omits the `profile`/`email` claims is a variable change rather than a rebuild. This is what keeps the standards-only claim in [Decision](#decision) true in practice as well as in principle: Zitadel puts both claims in the ID token, but nothing in the client code assumes every provider will.

@@ -294,6 +294,34 @@ Both were built without a caller, which is normally the wrong thing to do. They 
 
 The shapes are therefore guesses about what 006.01 and 007.01 will want. If either is wrong, changing it there is the right response — working around it, or building a second component beside it, is not.
 
+### The renewal and the sign-in are the same redirect
+
+**Raised by:** 004.01 · **Condition to revisit:** the `sessionStorage` fallback in [ADR-024](../../ADRs/ADR-024-browser-oidc-client-and-token-handling.md) is taken, so a refresh token exists. Testable: `offline_access` appears in `createUserManagerSettings().scope`.
+
+ADR-024 asks for one renewal attempt, then a redirect to sign-in if that fails. Both halves need something to renew _with_, and this client has nothing: no refresh token, because that is the basis of the in-memory decision, and no hidden iframe, because the ADR rejected the mechanism. So `handleUnauthorized()` makes a single `signinRedirect()` and lets the provider decide. Against a live provider session it returns a fresh token with no form shown, which is the renewal; against an expired one it shows the login page, which is the sign-in.
+
+This is correct only while no refresh token exists. Taking the `sessionStorage` fallback would make a genuine two-step policy possible, and the single call would then be hiding a step rather than collapsing one. Recorded as amendment (a) on ADR-024.
+
+### The bootstrap's Zitadel calls are pinned to port 8080
+
+**Raised by:** 004.01 · **Condition to revisit:** anyone runs `start-deployment.sh` with `EXPOSE_PORT_ZITADEL` set to anything but 8080. Testable: set it and run the script — it fails with a connection error that never names the port.
+
+The `zit()` helper in `scripts/start-deployment.sh` posts to a hardcoded `http://localhost:8080`, while the readiness probe a few lines above it correctly uses `${EXPOSE_PORT_ZITADEL:-8080}`. Pre-existing, and not introduced by the second application registration that sits below it — left alone deliberately rather than fixed in passing, because both committed env files use 8080 and a change here would have gone untested by everything in the repository.
+
+### The local browser client is registered with Zitadel `devMode` on
+
+**Raised by:** 004.01 · **Condition to revisit:** the first deployment on a hostname that is not `localhost`
+
+`devMode: true` relaxes Zitadel's redirect-URI validation, which is what lets a self-signed `https://localhost:<port>` registration work at all. It is correct for a bootstrap that only ever targets the bundled localhost instance, and wrong for anything else — a real deployment registers its client by hand, and `docs/authentication.md` now says what to register. The risk is not that the setting is wrong today; it is that `start-deployment.sh` is the obvious thing to copy when a real deployment is first stood up.
+
+Recorded in the memory `project-zitadel-web-client-devmode`.
+
+### The PKCE verifier and `state` are in `sessionStorage`, so "nothing in browser storage" is not literally true
+
+**Raised by:** 004.01 · **Condition to revisit:** anything else starts writing to `sessionStorage` under an OIDC key, at which point matching on token strings alone stops being sufficient
+
+Tokens are held in an in-memory store, but the PKCE verifier and the `state` nonce cannot be: they have to survive the navigation to the provider and back. Neither is a credential — single-use, scoped to one sign-in, and worthless to an attacker who cannot also receive the callback — so this is a correct configuration rather than a compromise. It is recorded because the shorthand people will remember is "no OIDC material in browser storage", and the test asserts the narrower, accurate property: that no _token_ is.
+
 ## Carried into a later prompt
 
 | Note                                                                                                                                         | Raised by | Goes to  |
@@ -341,3 +369,13 @@ The shapes are therefore guesses about what 006.01 and 007.01 will want. If eith
 | Tune `ANNOUNCE_THROTTLE_MS` (10s) and `ANNOUNCE_LOADING_MIN_MS` (1s), and record the values the manual pass lands on                         | 003.03    | `009.02` |
 | Confirm `ErrorState`'s `role="group"` plus assertive announcement reads as well as `role="alert"`, and listen for assertive truncation       | 003.03    | `009.02` |
 | Only route change has browser-tier announcement coverage; coalescing, throttling and assertive politeness are jsdom-only                     | 003.03    | `009.02` |
+| `AuthProvider` must wrap `getUserManager()`'s existing instance, not fresh settings — two managers hold two different users                  | 004.01    | `004.02` |
+| `renderAppAt` must mirror whatever `main.tsx` gains, or the component tier asserts a stack that only exists in tests                         | 004.01    | `004.02` |
+| The callback route completes the flow with `signinRedirectCallback()`; `handleUnauthorized()` also sets `state.from`, with a query string    | 004.01    | `004.02` |
+| Sign-out is `signoutRedirect()` plus clearing the in-memory user; the registered post-logout URI is `${TCP_WEB_URL}/`                        | 004.01    | `004.03` |
+| `signoutRedirect()` throws with no `end_session_endpoint` — optional in OIDC, so fall back to clearing locally rather than throwing          | 004.01    | `004.03` |
+| The storage assertion must be re-run when the session starts carrying a token, not assumed to still cover it                                 | 004.01    | `004.03` |
+| The fetch wrapper calls `getAccessToken()` per request and `handleUnauthorized()` on 401; the policy redirects, it does not renew and return | 004.01    | `005.01` |
+| The stream reader calls `getAccessToken()` on every connection attempt including reconnects, and routes a connect 401 to the shared policy   | 004.01    | `005.02` |
+| A profile dialog showing a bare subject has a configuration cause: `OIDC_LOAD_USER_INFO`, not a rebuild                                      | 004.01    | `008.06` |
+| Assert against the production bundle that no token reaches browser storage — jsdom proves the configuration, not the artefact                | 004.01    | `009.04` |

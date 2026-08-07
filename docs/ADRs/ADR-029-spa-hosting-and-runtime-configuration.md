@@ -1,6 +1,6 @@
 # ADR-029: SPA Hosting and Runtime Configuration
 
-**Status:** Accepted (2026-08-03)
+**Status:** Accepted (amended — see [002.03](#amendments-as-implemented-002031) and [004.01](#amendments-as-implemented-004-01) at the end)
 
 ## Context
 
@@ -175,3 +175,21 @@ Without it, loading `/company/acme` directly returns 404 — a classic and easil
 - **The browser tier moved into the api-test CI job**, which already starts a
   deployment — the tier now drives `tcp-web` rather than a `vite preview` it
   started itself, and a second job would have paid for a second full stack.
+
+<a id="amendments-as-implemented-004-01"></a>
+
+## Amendments as implemented (004.01)
+
+[ADR-024](ADR-024-browser-oidc-client-and-token-handling.md) needed a third value in `config.js`, and one of the two consequences below is what makes it fit the "generated `config.js`" decision without weakening it.
+
+(a) **`config.js` carries a third value, `oidcLoadUserInfo`.** Still nothing about the API address, and still only identity — it tells the OIDC client whether to read `profile`/`email` from the userinfo endpoint rather than the ID token, which is a provider difference, not an application one. The shape [above](#configjs-carries-only-what-remains) is now:
+
+```js
+window.__TCP_CONFIG__ = {
+  oidcIssuerUrl: '…',
+  oidcClientId: '…',
+  oidcLoadUserInfo: false,
+};
+```
+
+(b) **Unlike the other two, it is optional and does not stop the container.** `oidcIssuerUrl` and `oidcClientId` are required — a missing one silently points the app at the wrong identity provider, which is why the entrypoint fails loudly rather than serving a blank value. A missing `oidcLoadUserInfo` has a correct default (`false`), so refusing to start over its absence would be the opposite of a fix. It is still emitted unquoted and validated in the shell (`docker/nginx/10-tcp-init.sh`), because `config.js` is JavaScript and the string `'false'` is truthy — a quoted literal would satisfy the type and invert the default at the one place it's read.
