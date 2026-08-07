@@ -1,9 +1,7 @@
 {
   "verbose": true,
   "rootDir": "..",
-  "testMatch": [
-    "<rootDir>/test/smoke/*.spec.ts"
-  ],
+  "testMatch": ["<rootDir>/test/smoke/*.spec.ts"],
   "testEnvironment": "node",
   "transform": {
     "^.+\\.(t|j)s$": [
@@ -24,7 +22,5 @@
       }
     ]
   ],
-  "transformIgnorePatterns": [
-    "node_modules/(?!(pgvector)/)"
-  ]
+  "transformIgnorePatterns": ["node_modules/(?!(pgvector)/)"]
 }

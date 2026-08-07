@@ -8,8 +8,18 @@ interface PromptBase {
   help?: string;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic prompt wrapper needs flexible default callbacks
-type DefaultFn<T> = (answers: Record<string, any>) => T;
+/**
+ * Everything a prompt can answer with. Every branch of {@link ask} returns one
+ * of these four, so the accumulator needs no wider type — `any` here used to
+ * hide that `string[]` was a possible answer, which is why the assignment in
+ * {@link promptWithHelp} asserted a union that omitted it.
+ */
+type Answer = string | number | boolean | string[];
+
+/** The answers given so far, keyed by question name. */
+type Answers = Record<string, Answer>;
+
+type DefaultFn<T> = (answers: Answers) => T;
 
 interface InputPrompt extends PromptBase {
   type: 'input';
@@ -47,22 +57,16 @@ type Prompt = InputPrompt | NumberPrompt | ConfirmPrompt | CheckboxPrompt;
 export async function promptWithHelp<T extends object>(
   questions: Prompt[],
 ): Promise<T> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic prompt wrapper needs flexible answer accumulation
-  const answers: Record<string, any> = {};
+  const answers: Answers = {};
 
   for (const q of questions) {
-    const raw = await ask(q, answers);
-    answers[q.name] = raw as string | number | boolean;
+    answers[q.name] = await ask(q, answers);
   }
 
   return answers as T;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic prompt wrapper needs flexible answer types
-function ask(
-  q: Prompt,
-  answers: Record<string, any>,
-): Promise<string | number | boolean | string[]> {
+function ask(q: Prompt, answers: Answers): Promise<Answer> {
   switch (q.type) {
     case 'input':
       return askInput(q, answers);
@@ -71,7 +75,7 @@ function ask(
     case 'confirm':
       return askConfirm(q);
     case 'checkbox':
-      return askCheckbox(q, answers);
+      return askCheckbox(q);
     default:
       throw new Error(`Unsupported prompt type: ${(q as Prompt).type}`);
   }
@@ -117,11 +121,7 @@ async function askWithHelp<T>(
   return spec.parse(String(value));
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic prompt wrapper needs flexible answer types
-function askInput(
-  q: InputPrompt,
-  answers: Record<string, any>,
-): Promise<string> {
+function askInput(q: InputPrompt, answers: Answers): Promise<string> {
   return askWithHelp(q, {
     message: q.message,
     default: typeof q.default === 'function' ? q.default(answers) : q.default,
@@ -130,11 +130,7 @@ function askInput(
   });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic prompt wrapper needs flexible answer types
-function askNumber(
-  q: NumberPrompt,
-  answers: Record<string, any>,
-): Promise<number> {
+function askNumber(q: NumberPrompt, answers: Answers): Promise<number> {
   return askWithHelp(q, {
     message: q.message,
     default: typeof q.default === 'function' ? q.default(answers) : q.default,
@@ -159,11 +155,9 @@ function askConfirm(q: ConfirmPrompt): Promise<boolean> {
   });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic prompt wrapper needs flexible answer types
-async function askCheckbox(
-  q: CheckboxPrompt,
-  _answers: Record<string, any>,
-): Promise<string[]> {
+// Takes no answers: a checkbox has no dynamic default to compute from them,
+// which is why `ask` calls it with only the question — as it does askConfirm.
+async function askCheckbox(q: CheckboxPrompt): Promise<string[]> {
   if (q.help) {
     const { wantHelp } = await inquirer.prompt<{ wantHelp: string }>({
       type: 'input',
@@ -177,7 +171,10 @@ async function askCheckbox(
       },
     });
 
-    if (wantHelp.trim().toLowerCase() === 'y' || wantHelp.trim().toLowerCase() === 'yes') {
+    if (
+      wantHelp.trim().toLowerCase() === 'y' ||
+      wantHelp.trim().toLowerCase() === 'yes'
+    ) {
       console.log(`\n${q.help}\n`);
     }
   }

@@ -23,14 +23,14 @@
 services:
   postgres:
     ports: !override
-      - "5432"
+      - '5432'
   redis:
     ports: !override
-      - "6379"
+      - '6379'
   minio:
     ports: !override
-      - "9000"
-      - "9001"
+      - '9000'
+      - '9001'
   stub-llm:
     ports: !override
-      - "3002"
+      - '3002'
