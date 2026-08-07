@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json.schemastore.org/nest-cli",
+  "collection": "@nestjs/schematics",
+  "monorepo": true,
+  "root": "apps/tcp-server",
+  "sourceRoot": "apps/tcp-server/src",
+  "compilerOptions": {
+    "deleteOutDir": true,
+    "webpack": true,
+    "webpackConfigPath": "webpack.config.js"
+  },
+  "projects": {
+    "tcp-server": {
+      "type": "application",
+      "root": "apps/tcp-server",
+      "entryFile": "main",
+      "sourceRoot": "apps/tcp-server/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/tcp-server/tsconfig.app.json",
+        "plugins": ["@nestjs/swagger"]
+      }
+    },
+    "tcp-agent": {
+      "type": "application",
+      "root": "apps/tcp-agent",
+      "entryFile": "main",
+      "sourceRoot": "apps/tcp-agent/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/tcp-agent/tsconfig.app.json",
+        "plugins": ["@nestjs/swagger"],
+        "assets": [
+          { "include": "prompts.jsonc", "outDir": "dist/apps/tcp-agent" }
+        ]
+      }
+    },
+    "tcp-shared": {
+      "type": "library",
+      "root": "libs/tcp-shared",
+      "entryFile": "index",
+      "sourceRoot": "libs/tcp-shared/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/tcp-shared/tsconfig.lib.json"
+      }
+    },
+    "tcp-cli": {
+      "type": "application",
+      "root": "apps/tcp-cli",
+      "entryFile": "main",
+      "sourceRoot": "apps/tcp-cli/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/tcp-cli/tsconfig.app.json"
+      }
+    },
+    "tcp-mcp-storage": {
+      "type": "application",
+      "root": "apps/tcp-mcp-storage",
+      "entryFile": "main",
+      "sourceRoot": "apps/tcp-mcp-storage/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/tcp-mcp-storage/tsconfig.app.json",
+        "plugins": ["@nestjs/swagger"],
+        "assets": [
+          { "include": "prompts.jsonc", "outDir": "dist/apps/tcp-mcp-storage" },
+          { "include": "tools.jsonc", "outDir": "dist/apps/tcp-mcp-storage" }
+        ]
+      }
+    },
+    "tcp-mcp-memory": {
+      "type": "application",
+      "root": "apps/tcp-mcp-memory",
+      "entryFile": "main",
+      "sourceRoot": "apps/tcp-mcp-memory/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/tcp-mcp-memory/tsconfig.app.json",
+        "plugins": ["@nestjs/swagger"],
+        "assets": [
+          { "include": "prompts.jsonc", "outDir": "dist/apps/tcp-mcp-memory" },
+          { "include": "tools.jsonc", "outDir": "dist/apps/tcp-mcp-memory" }
+        ]
+      }
+    },
+    "tcp-mcp-interactions": {
+      "type": "application",
+      "root": "apps/tcp-mcp-interactions",
+      "entryFile": "main",
+      "sourceRoot": "apps/tcp-mcp-interactions/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/tcp-mcp-interactions/tsconfig.app.json",
+        "plugins": ["@nestjs/swagger"],
+        "assets": [
+          {
+            "include": "prompts.jsonc",
+            "outDir": "dist/apps/tcp-mcp-interactions"
+          },
+          {
+            "include": "tools.jsonc",
+            "outDir": "dist/apps/tcp-mcp-interactions"
+          }
+        ]
+      }
+    },
+    "tcp-mcp-tasks": {
+      "type": "application",
+      "root": "apps/tcp-mcp-tasks",
+      "entryFile": "main",
+      "sourceRoot": "apps/tcp-mcp-tasks/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/tcp-mcp-tasks/tsconfig.app.json",
+        "plugins": ["@nestjs/swagger"],
+        "assets": [
+          { "include": "prompts.jsonc", "outDir": "dist/apps/tcp-mcp-tasks" },
+          { "include": "tools.jsonc", "outDir": "dist/apps/tcp-mcp-tasks" }
+        ]
+      }
+    }
+  }
+}

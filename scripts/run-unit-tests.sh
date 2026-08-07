@@ -28,3 +28,9 @@ for arg in "$@"; do
 done
 
 npm test -- ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}
+
+# tcp-stub-llm isn't an npm workspace (own TypeScript major/eslint config — see
+# ADR-022), so `npm test --workspaces` above never reaches it. Passthrough args
+# are Jest-specific and don't apply to its node:test runner, so it gets its own
+# unconditional invocation rather than sharing the line above.
+npm --prefix apps/tcp-stub-llm test

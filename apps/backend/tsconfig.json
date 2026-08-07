@@ -1,0 +1,12 @@
+{
+  // Base config for the backend workspace. Every app's tsconfig.app.json
+  // extends this, and ts-jest uses it directly for the unit tier.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@tcp/shared": ["../../libs/tcp-shared/src/index.ts"],
+      "@tcp/shared/*": ["../../libs/tcp-shared/src/*"]
+    },
+    "outDir": "./dist"
+  }
+}

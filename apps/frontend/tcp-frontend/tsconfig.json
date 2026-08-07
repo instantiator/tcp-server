@@ -1,0 +1,38 @@
+{
+  // The root-level tooling configs — `vite.config.ts` and
+  // `playwright.config.ts`. They run in Node and need Node types; the browser
+  // project (`src/tsconfig.json`) sets `"types": []` on purpose, so it cannot
+  // typecheck them and must not be widened to.
+  //
+  // This is why the project lives here rather than under a name like
+  // `tsconfig.node.json`: editors resolve a file by walking up to the nearest
+  // file *named* `tsconfig.json` and ignore every other name. A config named
+  // anything else typechecks these files on the command line while the IDE
+  // quietly falls back to a default project with no `types` at all — which is
+  // what made `process` report as undefined in `playwright.config.ts` while
+  // `npm run typecheck` passed. Each project now sits in the directory it
+  // governs, so both agree:
+  //
+  //   ./tsconfig.json                this, the root-level tooling configs
+  //   ./src/tsconfig.json            the browser bundle
+  //   ./test/browser/tsconfig.json   the Playwright specs
+  //
+  // Project references are the other way to tell an editor this, and are not
+  // usable here: a referenced project must be `composite`, which requires a
+  // closed file list, and the browser project reaches across the workspace
+  // into `@tcp/shared`'s *sources* (ADR-022) rather than its built types.
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "resolvePackageJsonExports": true,
+    "types": ["node"],
+    "noEmit": true,
+    "strict": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  },
+  "include": ["vite.config.ts", "playwright.config.ts"]
+}

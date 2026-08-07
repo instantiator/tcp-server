@@ -73,7 +73,7 @@ React Aria Components wins on the two criteria that matter: its accessibility wo
 
 ## Prompts to update when this is decided
 
-- `002.01.00.prompt - application infrastructure (draft).md`
+- `002.01.00.prompt - application infrastructure.md`
 - `002.02.00.prompt - testing infrastructure (draft).md`
 - `003.01.00.prompt - landing page (draft).md`
 - `003.02.00.prompt - application shell, routing and header (draft).md`

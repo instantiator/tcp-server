@@ -1,0 +1,36 @@
+# Test-only Docker Compose overlay for the integration and e2e tiers.
+#
+# The root docker-compose.yml publishes each dependency service on a fixed host
+# port (5432, 6379, 9000/9001, 3002). Those fixed bindings mean two stacks
+# cannot run on one machine at once. When testcontainers drives the compose
+# file for a test run we want ephemeral, collision-free host ports instead, so
+# runs never fight each other and no pre-flight "is the port free?" check is
+# needed.
+#
+# The Compose Spec's `!override` tag replaces the inherited value rather than
+# merging with it (Compose merges `ports:` lists by dedup, so a plain
+# re-declaration would keep the fixed binding). Each service publishes only its
+# container port (no host part), letting Docker assign a random host port that
+# testcontainers reads back via getMappedPort().
+#
+# `!override` is used rather than `!reset`: `!reset` nulls the value entirely
+# (no ports published at all, so getMappedPort would fail), whereas `!override`
+# swaps in the new list.
+#
+# This file is additive: the root docker-compose.yml is never modified, so it
+# stays usable for real deployments. Only the four dependency services the
+# integration/e2e tiers start are listed here.
+services:
+  postgres:
+    ports: !override
+      - '5432'
+  redis:
+    ports: !override
+      - '6379'
+  minio:
+    ports: !override
+      - '9000'
+      - '9001'
+  stub-llm:
+    ports: !override
+      - '3002'

@@ -9,4 +9,11 @@ derive_host_urls() {
   # OIDC_ISSUER_URL: use explicit value if set, else derive from Zitadel port
   export OIDC_ISSUER_URL="${OIDC_ISSUER_URL:-http://localhost:${EXPOSE_PORT_ZITADEL:-8080}}"
   export TCP_SERVER_URL="http://localhost:${EXPOSE_PORT_API:-3000}"
+  # tcp-agent is internal-only unless the deployment was started --dev-ports
+  # (docker-compose.dev-ports.yml). Its host port is deliberately not 3001 —
+  # that is tcp-server's in the testing env.
+  export TCP_AGENT_URL="http://localhost:${EXPOSE_PORT_AGENT:-3003}"
+  # https, not http: HTTP/2 requires TLS at the nginx edge (ADR-025), so this
+  # is the only scheme tcp-web ever answers on.
+  export TCP_WEB_URL="https://localhost:${EXPOSE_PORT_WEB:-5173}"
 }

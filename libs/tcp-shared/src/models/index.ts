@@ -1,6 +1,7 @@
 export * from './AgentRunConfig.model';
 export * from './AuditEvent.model';
 export * from './VersionedEntity';
+export * from './CompanyStats.model';
 export * from './CompanyUser.model';
 export * from './Conversation.model';
 export * from './ConversationMessage.model';

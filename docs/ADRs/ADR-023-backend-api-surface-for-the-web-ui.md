@@ -140,3 +140,67 @@ The larger half is the priming: the live view must render immediately when it su
 Per company: active agent count, task counts by status, and open enquiry count. Computed in the same query that resolves memberships.
 
 Naming them is the point. "A few live stats" is not implementable, and an open-ended stat block turns into one request per company.
+
+---
+
+<a id="amendments-as-implemented-002041"></a>
+
+## Amendments as implemented (002.04.01)
+
+Three things the implementation had to settle differently from the text above.
+
+### `entity: 'enquiry'` audit rows were added
+
+The decision table names only `agent` and `assignment` as the entities to add
+to the company channel. That is not enough for the live activity view's four
+lists: **there is no `enquiry` entity and no `Enquiry` model** — an enquiry is
+a `Conversation`, and `ConversationService` wrote no audit rows at all. Nothing
+about an enquiry reached any stream, so the "all four lists update live"
+requirement was unmeetable as written.
+
+002.04 therefore writes two `entity: 'enquiry'` rows — one at open
+(`PauseAndResumeService.pauseForUserInput`, `newStatus: 'awaiting_user'`,
+`reason: 'created'`) and one at close (`ConversationController.reply`,
+`newStatus: 'closed'`, `reason: 'replied'`) — and widens the predicate to five
+entities: `company`, `task`, `agent`, `assignment`, `enquiry`. Both rows are
+written with `agentId: null` on purpose: `AuditService.write` derives
+`assignmentId`/`taskId` from a supplied `agentId`, and the publisher routes any
+row carrying one to the agent channel, which would take an enquiry row off the
+company stream entirely.
+
+**Enquiries stream their open and close transitions only.** There is no
+per-message event, so a reply in progress is invisible until it closes.
+
+### The stat set is four queries, not one
+
+"Computed in the same query that resolves memberships" is not achievable at a
+sensible cost. A literal single query needs seven correlated subqueries for the
+per-status task breakdown, on two database engines with different aggregate
+return types.
+
+`CompanyStatsService.listStats` instead issues **four queries in total**: one
+scoped company query, then three `GROUP BY companyId` aggregates (active
+agents, tasks by status, open enquiries). That count is constant regardless of
+how many companies the caller belongs to, which is what the requirement was
+actually protecting against — the failure mode named above is "one request per
+company", not "more than one query". Counts are coerced with `Number(...)`
+because Postgres returns them as strings and SQLite as numbers.
+
+### `?mode=` was added to `GET /api/assignment`
+
+The consultations query the ADR documents —
+`?companyId=X&taskId=null&mode=consultee` — could not be expressed: `mode` was
+not a query parameter. It is now (three lines plus an `@ApiQuery`), so the
+documented query is real rather than aspirational. This is still "no new
+endpoint", as the ADR requires.
+
+### What did not change
+
+`?all=true` carries **no permission check**. Any authenticated caller can still
+use it, exactly as before. Gating it remains 002.05's work; the seam is
+`getCurrentUserIdentifiers` in `auth/current-user.ts`, `CompanyDbService.list(identifiers?)`,
+and the `wantsAll` parse in `CompanyController.listCompanies`.
+
+`enableCors()` is still not called, and now will not be — see
+[web-client.md](../web-client.md#runtime-configuration) for why, and for what a
+CDN deployment would need if that shape is ever built.
