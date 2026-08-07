@@ -28,7 +28,9 @@
       "compilerOptions": {
         "tsConfigPath": "apps/tcp-agent/tsconfig.app.json",
         "plugins": ["@nestjs/swagger"],
-        "assets": [{ "include": "prompts.jsonc", "outDir": "dist/apps/tcp-agent" }]
+        "assets": [
+          { "include": "prompts.jsonc", "outDir": "dist/apps/tcp-agent" }
+        ]
       }
     },
     "tcp-shared": {
@@ -86,8 +88,14 @@
         "tsConfigPath": "apps/tcp-mcp-interactions/tsconfig.app.json",
         "plugins": ["@nestjs/swagger"],
         "assets": [
-          { "include": "prompts.jsonc", "outDir": "dist/apps/tcp-mcp-interactions" },
-          { "include": "tools.jsonc", "outDir": "dist/apps/tcp-mcp-interactions" }
+          {
+            "include": "prompts.jsonc",
+            "outDir": "dist/apps/tcp-mcp-interactions"
+          },
+          {
+            "include": "tools.jsonc",
+            "outDir": "dist/apps/tcp-mcp-interactions"
+          }
         ]
       }
     },

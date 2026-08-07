@@ -16,4 +16,4 @@ services:
     environment:
       WEB_UPSTREAM: http://host.docker.internal:${EXPOSE_PORT_WEB_DEV:-4173}
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - 'host.docker.internal:host-gateway'

@@ -1,12 +1,8 @@
 {
   "verbose": true,
   "rootDir": "..",
-  "setupFiles": [
-    "<rootDir>/test/api/api-setup.ts"
-  ],
-  "testMatch": [
-    "<rootDir>/test/api/*.spec.ts"
-  ],
+  "setupFiles": ["<rootDir>/test/api/api-setup.ts"],
+  "testMatch": ["<rootDir>/test/api/*.spec.ts"],
   "testEnvironment": "node",
   "transform": {
     "^.+\\.(t|j)s$": [
@@ -27,7 +23,5 @@
       }
     ]
   ],
-  "transformIgnorePatterns": [
-    "node_modules/(?!(pgvector)/)"
-  ]
+  "transformIgnorePatterns": ["node_modules/(?!(pgvector)/)"]
 }
