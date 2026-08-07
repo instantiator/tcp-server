@@ -1,3 +1,31 @@
+<!-- dev-environment:start -->
+
+# Agent instructions
+
+These rules are mandatory and override your defaults. `dev-environment/` is in this repo (or clone https://github.com/instantiator/dev-environment to a temporary location once per session).
+
+## Non-negotiable rules
+
+1. Less is more: concise, readable code and simple interfaces. No unrequested abstractions.
+2. Comments state intent, not mechanics. Comment classes, functions, and consts; skip trivial ones.
+3. Zero compiler errors and warnings; zero linter errors and warnings.
+4. Never cast to `any` (or equivalent type escapes), especially in test mocks.
+5. Never store secrets in the code base.
+6. Only change code you have been asked to change; ask permission otherwise.
+
+## Process
+
+- Planning is collaborative: present options and trade-offs before committing to libraries, approaches, data structures, or key business logic.
+- Before coding: read `dev-environment/guidance/process/before-coding.md`.
+- Route via `dev-environment/guidance/index.md`: lazy-load only the docs relevant to the task, following references recursively when needed.
+- For multi-step tasks (setup, review, deploy, audit): use the matching skill from `dev-environment/skills/index.md`.
+- After every change: run `dev-environment/scripts/check.sh` and fix what it reports.
+- When done: apply the judgment items in `dev-environment/guidance/process/after-coding.md` — tests for intent and edge cases, simplification, comment accuracy, documentation updates.
+
+## Assurance
+
+- State the filename of any guidance doc you read, so the user can see you are following it.
+  <!-- dev-environment:end -->
   <!-- dev-environment:skills:start -->
 
 ## Skills (multi-step task playbooks)
@@ -17,34 +45,3 @@ Match the task against a trigger below, then follow that SKILL.md literally.
 - [adr](dev-environment/skills/adr/SKILL.md) — Think through and record an architectural decision. Use when making architecture, infrastructure, or significant design choices.
 
 <!-- dev-environment:skills:end -->
-<!-- dev-environment:start -->
-
-# Agent instructions
-
-These rules are mandatory and override your defaults. `dev-environment/` is in this repo (or clone <https://github.com/instantiator/dev-environment> to a temporary location once per session).
-
-## Non-negotiable rules
-
-1. Less is more: concise, readable code and simple interfaces. No unrequested abstractions.
-2. Comments state intent, not mechanics. Comment classes, functions, and consts; skip trivial ones.
-3. Zero compiler errors and warnings; zero linter errors and warnings.
-4. Never cast to `any` (or equivalent type escapes), especially in test mocks.
-5. Never store secrets in the code base.
-6. Only change code you have been asked to change; ask permission otherwise.
-
-## Process
-
-- Planning is collaborative: present options and trade-offs before committing to libraries, approaches, data structures, or key business logic.
-- Before coding: read `dev-environment/guidance/process/before-coding.md`.
-- Route via `dev-environment/guidance/index.md`: lazy-load only the docs relevant to the task, following references recursively when needed.
-- For multi-step tasks (setup, review, deploy, audit): use the matching skill from `dev-environment/skills/index.md`.
-- After every change: run `dev-environment/scripts/check.sh` and fix what it reports.
-- When done: apply the judgment items in `dev-environment/guidance/process/after-coding.md` — tests for intent and edge cases, simplification, comment accuracy, documentation updates.
-- Anything left undone goes in `docs/outstanding-issues.md` with a measurable condition for when to act on it, and into your summary to the user.
-- Sub-agents and a choice of model available? Allocate work by capability and cost first: `dev-environment/guidance/process/model-allocation.md`.
-
-## Assurance
-
-- State the filename of any guidance doc you read, so the user can see you are following it.
-
-<!-- dev-environment:end -->

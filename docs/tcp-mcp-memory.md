@@ -4,7 +4,7 @@
 **Port:** 3011
 **Transport:** MCP Streamable HTTP — stateless, one session per request
 
-`tcp-mcp-memory` is a NestJS MCP server that gives agents semantic search over episodic memory and the role's knowledge base, and lets them store new episodic memories mid-task. It lives in `apps/backend/apps/tcp-mcp-memory/` and runs as a Docker Compose service with a direct PostgreSQL connection (pgvector).
+`tcp-mcp-memory` is a NestJS MCP server that gives agents semantic search over episodic memory and the role's knowledge base, and lets them store new episodic memories mid-task. It lives in `apps/tcp-mcp-memory/` and runs as a Docker Compose service with a direct PostgreSQL connection (pgvector).
 
 Each tool call creates a fresh MCP session so no state is shared across requests. The server exposes `GET /health` (checks PostgreSQL connectivity) and `POST /mcp`.
 

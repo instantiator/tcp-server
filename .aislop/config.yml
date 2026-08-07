@@ -1,17 +1,10 @@
 # aislop configuration — see https://github.com/scanaislop/aislop
 rules:
-  # Off, not warning: this became unusable at the root when 002.00 made the
-  # repo an npm workspace. The rule checks imports against the nearest
-  # package.json, and the root one no longer declares any runtime dependency —
-  # they all live in apps/backend/package.json. Every `@nestjs/*`, `joi`,
-  # `express` import therefore reads as hallucinated: 85 findings, all false,
-  # which sank the score from 76 to 35 and made the ci gate meaningless.
-  #
-  # Little is lost. TypeScript already fails on an import it cannot resolve, so
-  # a genuinely hallucinated one never reaches this rule. To run it properly,
-  # scan a workspace directly, where it resolves correctly:
-  #     npx aislop@latest ci apps/backend
-  ai-slop/hallucinated-import: off
+  # @tcp/shared is this monorepo's tsconfig path alias, not an npm dependency;
+  # the rule cannot resolve workspace aliases, so its 13 findings here are
+  # false positives. Kept as a warning (not off) so genuinely hallucinated
+  # imports remain visible.
+  ai-slop/hallucinated-import: warning
   # The setup wizard generates local dev env files with well-known placeholder
   # credentials (dev-password, etc.) — these are not real secrets.
   security/hardcoded-secret: warning

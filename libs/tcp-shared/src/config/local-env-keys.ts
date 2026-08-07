@@ -12,7 +12,6 @@
 export const LOCAL_ONLY_ENV_KEYS = [
   'OIDC_CLIENT_ID',
   'OIDC_CLIENT_SECRET',
-  'OIDC_WEB_CLIENT_ID',
   'TEST_CLIENT_ID',
   'TEST_CLIENT_SECRET',
 ] as const;

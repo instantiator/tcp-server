@@ -4,7 +4,7 @@
 **Port:** 3010
 **Transport:** MCP Streamable HTTP — stateless, one session per request
 
-`tcp-mcp-storage` is a NestJS MCP server that gives agents read-only exploration of the shared document store plus **assignment-scoped** working-file and material tools. It lives in `apps/backend/apps/tcp-mcp-storage/` and runs as a Docker Compose service alongside tcp-agent.
+`tcp-mcp-storage` is a NestJS MCP server that gives agents read-only exploration of the shared document store plus **assignment-scoped** working-file and material tools. It lives in `apps/tcp-mcp-storage/` and runs as a Docker Compose service alongside tcp-agent.
 
 Each tool call creates a fresh MCP session (`McpServer` + `StreamableHTTPServerTransport`) so no state is shared across requests. The server exposes `GET /health` and `POST /mcp`.
 
@@ -93,7 +93,7 @@ Returns a canned description of what a given folder path is for, based on the [A
 | `.../audit/...`                            | Append-only JSONL audit records — do not modify                  |
 
 Unrecognised paths return a generic message and suggest using `list_files` to explore.
-The descriptions themselves live in `apps/backend/apps/tcp-mcp-storage/src/prompts.jsonc`.
+The descriptions themselves live in `apps/tcp-mcp-storage/src/prompts.jsonc`.
 
 ---
 

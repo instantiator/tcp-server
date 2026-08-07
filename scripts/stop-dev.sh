@@ -53,21 +53,6 @@ fi
 
 [[ -f "$ENV_FILE" ]] || { echo "ERROR: env file not found: $ENV_FILE" >&2; exit 1; }
 
-# Stop the Vite dev server, if start-dev.sh --dev-web left one running.
-#
-# Children first: killing the npm wrapper alone reparents vite, which keeps the
-# port held and makes the next `start-dev.sh --dev-web` think a server is
-# already up and reuse a process nobody owns.
-DEV_WEB_PID_FILE="$REPO_ROOT/.tcp-web-dev.pid"
-
-if [[ -f "$DEV_WEB_PID_FILE" ]]; then
-  DEV_WEB_PID="$(cat "$DEV_WEB_PID_FILE")"
-  echo "Stopping Vite dev server (pid $DEV_WEB_PID)..."
-  pkill -P "$DEV_WEB_PID" 2>/dev/null || true
-  kill "$DEV_WEB_PID" 2>/dev/null || true
-  rm -f "$DEV_WEB_PID_FILE"
-fi
-
 # Stop services
 
 DC="docker compose -p tcp-dev --profile auth --env-file $ENV_FILE"

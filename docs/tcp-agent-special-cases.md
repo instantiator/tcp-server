@@ -49,7 +49,7 @@ The nudge round-trip (the original unusable message, and the nudge itself) isn't
 
 - [`reasoning-content-recovery.spec.ts`](../libs/tcp-shared/src/llm/reasoning-content-recovery.spec.ts) — unit tests for the recovery/nudge/fallback logic, including which nudge wording is chosen.
 - [`build-agent-graph.spec.ts`](../libs/tcp-shared/src/llm/build-agent-graph.spec.ts) — confirms the nudge-and-retry actually fires inside a real (non-mocked) LangGraph node and the model is invoked exactly twice.
-- [`chat.service.spec.ts`](../apps/backend/apps/tcp-server/src/api/chat.service.spec.ts) — regression test reproducing the original production scenario (`tcp-cli chat` against a Qwen model via LM Studio).
+- [`chat.service.spec.ts`](../apps/tcp-server/src/api/chat.service.spec.ts) — regression test reproducing the original production scenario (`tcp-cli chat` against a Qwen model via LM Studio).
 
 ---
 

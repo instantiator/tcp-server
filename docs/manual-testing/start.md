@@ -25,7 +25,7 @@ Before starting, ensure the following are in place.
 | Docker running         | `docker info` returns engine details                                 |
 | `.env` file present    | `ls .env` — copy from `.env.example` if missing                      |
 | LLM provider reachable | LM Studio (or similar) running and accessible from the URL in `.env` |
-| Node.js 26             | `node --version`                                                     |
+| Node.js 24 LTS         | `node --version`                                                     |
 
 If you do not have a `.env` file, copy the example and fill in the LLM provider details:
 

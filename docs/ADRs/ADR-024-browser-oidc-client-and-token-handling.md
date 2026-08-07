@@ -1,6 +1,6 @@
 # ADR-024: Browser OIDC Client and Token Handling
 
-**Status:** Accepted (amended — see [004.01](#amendments-as-implemented-004-01), [004.02](#amendments-as-implemented-004-02) and [004.03](#amendments-as-implemented-004-03) at the end)
+**Status:** Accepted (2026-08-03)
 
 ## Context
 
@@ -73,8 +73,8 @@ Storage is a configuration setting, not a rewrite. If the redirect proves annoyi
 
 - `002.03.00.prompt - static hosting and runtime configuration (draft).md`
 - `004.01.00.prompt - oidc client (draft).md`
-- `004.02.00.prompt - sign in.md`
-- `004.03.00.prompt - session persistence and sign out.md`
+- `004.02.00.prompt - sign in (draft).md`
+- `004.03.00.prompt - session persistence and sign out (draft).md`
 - `005.01.00.prompt - generated api client (draft).md`
 - `005.02.00.prompt - sse client and event handling (draft).md`
 
@@ -122,45 +122,3 @@ Two consequences, both decisions:
 ### Registering the web client with Zitadel
 
 `scripts/start-deployment.sh` already creates the project, application and users for the CLI's device flow. It gains a second application registration: a public client, PKCE required, no secret, with redirect and post-logout URLs derived from the web app's configured address — not hardcoded, since the port comes from `EXPOSE_PORT_WEB` ([ADR-029](ADR-029-spa-hosting-and-runtime-configuration.md)).
-
-<a id="amendments-as-implemented-004-01"></a>
-
-## Amendments as implemented (004.01)
-
-The `UserManager` singleton, `getAccessToken()` and `handleUnauthorized()` now exist (`apps/frontend/tcp-frontend/src/auth/`), along with the second Zitadel registration. Five points where the implementation is more specific than the decision above, or diverges from it in a way that must not read afterwards as an oversight.
-
-(a) **The renewal and the sign-in are the same redirect.** This ADR asks for "one renewal attempt, then a redirect to sign-in if that fails" — two steps. With no refresh token, there is nothing to renew with, and a hidden-iframe renewal is exactly the mechanism [Decision](#decision) rejected. `handleUnauthorized()` therefore makes one deduplicated `signinRedirect()` and lets the provider decide whether a login form is needed: with a live session the user bounces straight back, which _is_ the renewal; without one, they see the form, which _is_ the sign-in. This is only correct because no refresh token exists — it is coupled to the in-memory storage decision, not a general substitute for a two-step policy.
-
-(b) **The PKCE verifier and `state` live in `sessionStorage`, not memory.** Both have to survive the navigation to the provider and back, so memory isn't an option the way it is for tokens. Neither is a token, though: each is single-use, scoped to one sign-in attempt, and worthless to an attacker who cannot also receive the callback. The storage test asserts the narrower and accurate property this ADR's threat model actually cares about — no _token_ reaches browser storage — rather than the stronger and false claim that nothing OIDC-related does.
-
-(c) **`AuthProvider` is deferred to 004.02.** Nothing in the tree consumes an auth context yet, and the two real consumers of a token — a fetch wrapper and a stream reader — are not components and cannot read one. `getUserManager()`'s module singleton is the shared instance; 004.02 must mount `AuthProvider` **around this instance**, not around a second set of settings, or the app ends up with two managers holding two different in-memory users.
-
-(d) **The local registration uses Zitadel `devMode: true`**, which relaxes redirect-URI validation for `localhost`. Correct for a self-signed localhost bootstrap; wrong for the first deployment on a hostname that isn't `localhost`, at which point this needs revisiting rather than carrying forward unexamined.
-
-(e) **`loadUserInfo` is a runtime setting, `OIDC_LOAD_USER_INFO`, not a constant.** It reaches the client through `config.js` ([ADR-029](ADR-029-spa-hosting-and-runtime-configuration.md)), so a provider whose ID token omits the `profile`/`email` claims is a variable change rather than a rebuild. This is what keeps the standards-only claim in [Decision](#decision) true in practice as well as in principle: Zitadel puts both claims in the ID token, but nothing in the client code assumes every provider will.
-
-<a id="amendments-as-implemented-004-02"></a>
-
-## Amendments as implemented (004.02)
-
-The sign-in journey now exists end to end: the landing page's control, `/callback`, and the validated return address (`apps/frontend/tcp-frontend/src/auth/`, `src/pages/CallbackPage/`). Three points where the implementation is more specific than the decision above, or diverges from it.
-
-(f) **`AuthProvider` performs the code exchange, and the callback route must not.** Closing out (c): the provider is mounted in `main.tsx` around `getUserManager()`'s instance, as required. What was not anticipated is that `react-oidc-context` completes the exchange itself — its init effect calls `signinCallback()` whenever the address carries authorization parameters, behind a ref that survives StrictMode's double mount. A callback route that _also_ called `signinRedirectCallback()` would present the same single-use code twice, and the second attempt fails with "No matching state found in storage" — reporting an error for a sign-in that worked. `CallbackPage` is therefore presentational: it reads `useAuth()` and renders a wait, a failure, or a navigation.
-
-(g) **The return address is validated against the route table, not merely against the origin.** `safeRedirectTarget()` parses the saved destination with `URL` and requires both this application's origin and a pathname matching one of the routes behind `RequireSession`. An origin check alone would still allow `/` and `/callback`, both of which return a freshly signed-in user to the sign-in journey — the redirect loop this ADR's flow is most likely to produce. Parsing rather than string-matching is load-bearing: the WHATWG parser folds `\` into `/`, so `/\evil.example` becomes an off-origin URL that a `startsWith('/')` test would have accepted.
-
-(h) **The session is derived here, not in 004.03.** `AuthSession` maps the OIDC user's `sub` onto the `Session` the shell reads. Deferring it would have left the callback navigating to a guarded route with no session, `RequireSession` bouncing it back to `/`, and sign-in returning the user to the sign-in control. 004.03 retains reload recovery, expiry and sign-out. The OIDC user always takes precedence over the `session` prop, which is what keeps `?devSession=` from displacing a real user once the session carries a token.
-
-<a id="amendments-as-implemented-004-03"></a>
-
-## Amendments as implemented (004.03)
-
-The session now survives a page reload, expiry is visible before it happens, and sign-out ends the session at both ends (`apps/frontend/tcp-frontend/src/auth/`, `src/shell/SessionExpiryWarning.tsx`). Four points where the implementation is more specific than the decision above, or diverges from it.
-
-(i) **Reload recovery lives in `RequireSession`, and it replaced the bounce to the landing page rather than sitting beside it.** Tokens are in memory, so a reload arrives at a guarded route indistinguishable from a visitor who was never signed in — and the client does not have to tell them apart, because the one full-page redirect this ADR specifies answers both. What the earlier behaviour did instead was return the user to `/` with a **Sign in** button, which is not "reloading keeps the user signed in"; it is asking them to sign in again for a session that had not ended. `RequireSession` now calls `handleUnauthorized()` — deliberately the same function, not a second path beside it, so recovery shares the deduplication latch and the `{ from }` state shape with the 401 policy. Extending (a): a page that has lost its token and a request that was refused want the same navigation.
-
-(j) **Nothing was watching the token expire, and `isAuthenticated` was stale as a result.** `automaticSilentRenew` is false by decision, so the library takes no action of its own; `react-oidc-context` recomputes `isAuthenticated` only when something dispatches. Between expiry and the next request, therefore, the account menu went on rendering against a token that had gone — the "signed in but nothing works" state this ADR exists to prevent, reached by omission rather than by design. The client now subscribes once, at construction, to `accessTokenExpired` and removes the user, which raises `userUnloaded` and _is_ the dispatch. Expiry is also announced 30 seconds ahead (`accessTokenExpiringNotificationTimeInSeconds`) by a warning carrying a **Stay signed in** control. That control is not a convenience: a session that ends on a timer needs a way to extend it to meet WCAG 2.2.1 ([ADR-026](ADR-026-accessibility-standard-and-scope.md)), and 30 seconds is above the 20 that criterion requires.
-
-(k) **`matchSignoutCallback` and `onSignoutCallback` were not wired, contrary to the prompt that asked for them.** `UserManager._signoutStart()` removes the local user itself, before it builds the request, and the post-logout URI is `/` — which is unguarded and renders correctly against an empty store. The hooks would therefore have done nothing but sweep an abandoned `sessionStorage` entry, behind a predicate that has to guess whether a `state` parameter on `/` is a logout return rather than anything else. `clearStaleState()` at construction does that sweep without the guess. If a genuine post-logout hook is ever needed, adding the props back is a two-line change.
-
-(l) **The open-stream limitation is unchanged, and is now written where an operator will meet it.** [Token expiry during an open stream](#token-expiry-during-an-open-stream) is still accepted for the MVP and still unbuilt — no browser stream client exists until 005.02. What changed is only that revocation not taking effect until a stream drops is now stated in [authentication.md](../authentication.md), rather than only here, because the person revoking a user's access does not read ADRs. The same section records a second limitation this prompt did not resolve: `monitorSession` is off, so signing out in one browser tab leaves another looking signed in until its next request is refused.

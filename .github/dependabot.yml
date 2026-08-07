@@ -1,7 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: npm
-    directory: '/'
+    directory: "/"
     schedule:
       interval: weekly
     open-pull-requests-limit: 0
@@ -9,27 +9,61 @@ updates:
   # tcp-stub-llm has its own package.json — it shares no dependencies with
   # the rest of this monorepo.
   - package-ecosystem: npm
-    directory: '/apps/tcp-stub-llm'
+    directory: "/apps/tcp-stub-llm"
     schedule:
       interval: weekly
     open-pull-requests-limit: 0
 
   - package-ecosystem: github-actions
-    directory: '/'
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 0
-
-  # The root Dockerfile builds all six services; the per-app Dockerfiles it
-  # replaced are gone, so there is nothing to scan under apps/backend.
-  - package-ecosystem: docker
-    directory: '/'
+    directory: "/"
     schedule:
       interval: weekly
     open-pull-requests-limit: 0
 
   - package-ecosystem: docker
-    directory: '/apps/tcp-stub-llm'
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: docker
+    directory: "/apps/tcp-server"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: docker
+    directory: "/apps/tcp-agent"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: docker
+    directory: "/apps/tcp-mcp-interactions"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: docker
+    directory: "/apps/tcp-mcp-tasks"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: docker
+    directory: "/apps/tcp-mcp-memory"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: docker
+    directory: "/apps/tcp-mcp-storage"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: docker
+    directory: "/apps/tcp-stub-llm"
     schedule:
       interval: weekly
     open-pull-requests-limit: 0

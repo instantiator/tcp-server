@@ -1,6 +1,6 @@
 # ADR-021: Web UI Framework and Application Architecture
 
-**Status:** Accepted (amended — see [005.01](#amendments-as-implemented-005-01) at the end)
+**Status:** Accepted (2026-07-30)
 
 ## Context
 
@@ -70,7 +70,7 @@ See Detail for [how the generated types stay current](#the-generated-artefact-is
 
 ## Prompts to update when this is decided
 
-- `002.01.00.prompt - application infrastructure.md`
+- `002.01.00.prompt - application infrastructure (draft).md`
 - `003.02.00.prompt - application shell, routing and header (draft).md`
 - `005.01.00.prompt - generated api client (draft).md`
 
@@ -108,15 +108,3 @@ These decisions are architectural commitments at MVP:
 - **Theme tokens.** Colour, spacing and border values will resolve through CSS custom properties, not literals, in component CSS. Component CSS files will have meaningful class names and empty rule bodies, to be filled per theme later.
 
 This will reduce the effort required to retrofit these accessibility features later. [ADR-026](ADR-026-web-ui-accessibility-and-component-library.md) describes the theme model.
-
-<a id="amendments-as-implemented-005-01"></a>
-
-## Amendments as implemented (005.01)
-
-The generated client now exists (`apps/frontend/tcp-frontend/src/api/`): `schema.d.ts` from `openapi-typescript`, and a hand-written `client.ts`, `errors.ts`, `query-keys.ts` and `queries.ts` built on it. Three points where the implementation is more specific than the decision above, or settles something the text above left open.
-
-(a) **`openapi-fetch` sits under the hand-written layer — it is not the layer.** The [API client generation](#api-client-generation) table set "`openapi-typescript` types with a hand-written fetch wrapper" against a fully generated client, and rejected the latter because a generated layer wouldn't know about the 401 policy, the token source or the error shape, leaving a generated layer and a hand-written one to maintain side by side. `openapi-fetch` is not that: it generates no code and produces no callable methods of its own. What it supplies is typed request plumbing — path, params and response inference — read off the generated `paths` type at call sites; the three things this ADR actually cares about (token, error shape, 401 policy) still live entirely in `client.ts`'s hand-written `onRequest`/`onResponse` middleware, which is exactly where the shared policy was always going to sit regardless of what constructs the `Request`. It is MIT-licensed with one transitive dependency, `openapi-typescript-helpers` (types only, from openapi-typescript's own author and repository). The honest risk: it is at `0.17.0`, pre-1.0, and sits under the whole data layer. The exposure is bounded, though — the fallback is hand-written generics over the same generated `paths` type, which touches two files (`client.ts`, `queries.ts`).
-
-(b) **The drift check boots no server of its own.** [Consequences](#consequences) left this open: "either tcp-server is booted, or a copy of `swagger.json` is committed alongside the generated types and diffed instead." Decided: neither, quite. The `api-test` CI job already boots the full stack for the API, smoke and browser tiers, so the check is one more step inside that job — regenerate `schema.d.ts` from the live `GET /swagger-json`, then `git diff --exit-code`. No `swagger.json` is committed; that would be a second generated artefact with no consumer of its own, and a second thing to keep in step with the first. The cost is honest: drift is reported only after that job's Docker build, so the feedback is slow. The cheaper half — a committed description diffed on its own, with no server — stays available to add later without undoing this.
-
-(c) **The generated types describe the REST surface only.** `@Sse` routes carry no response schema — the Nest swagger plugin emits nothing for them — so the SSE payload summary types (`AssignmentChangeSummary`, `AgentChangeSummary`, `EnquiryChangeSummary`) are absent from the OpenAPI description entirely, and are asserted against `@tcp/shared/client` instead. The drift check in (b) therefore polices the REST surface only; it will never catch a drifted event contract, generated or otherwise. [ADR-025](ADR-025-browser-event-stream-consumption.md) owns that half.

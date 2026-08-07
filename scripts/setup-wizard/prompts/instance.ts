@@ -28,7 +28,7 @@ Common suffixes: dev, staging, prod, local`,
       type: 'input',
       name: 'envFileName',
       message: 'Env file name:',
-      default: (a) => `.env.${String(a['instanceSuffix'])}`,
+      default: (a: Record<string, string>) => `.env.${a.instanceSuffix}`,
       validate: (input: string) =>
         input.startsWith('.env.') || 'File name must start with .env.',
       help: `The env file stores all configuration for this instance.

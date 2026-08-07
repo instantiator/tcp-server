@@ -23,7 +23,7 @@ function lastQuestion(): AskedQuestion {
 /** Queues one answer per prompt call, in order. */
 function answerWith(...values: string[]): void {
   for (const value of values) {
-    mockedPrompt.mockResolvedValueOnce({ value });
+    mockedPrompt.mockResolvedValueOnce({ value } as never);
   }
 }
 
@@ -137,7 +137,7 @@ describe('promptWithHelp', () => {
         type: 'input',
         name: 'db',
         message: 'Database',
-        default: (answers) => `${String(answers['slug'])}-db`,
+        default: (answers: Record<string, string>) => `${answers['slug']}-db`,
       },
     ]);
 

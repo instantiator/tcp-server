@@ -187,16 +187,3 @@ events/keyed-event-bus.ts`) folds emit and relay into one class: `emit`
   payload would have reported the stale prior status (`in-qa`) instead of the
   real new one (`succeeded`/`failed`/`in-progress`).
 - A company entity update (`ApiService.setCompany`) emits `company_changed`.
-
----
-
-<a id="amendments-as-implemented-002041"></a>
-
-## Amendments as implemented (002.04.01)
-
-`GET /api/company/:id/events` now carries **five** `payload.entity` kinds —
-`company`, `task`, `agent`, `assignment` and `enquiry` — rather than the
-company and task rows described above, and is primed with one row per current
-task, active agent, open consultation and open enquiry. See the
-[002.04.01 amendment to ADR-023](ADR-023-backend-api-surface-for-the-web-ui.md#amendments-as-implemented-002041)
-for why, including the `entity: 'enquiry'` rows that did not previously exist.

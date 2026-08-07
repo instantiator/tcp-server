@@ -78,10 +78,10 @@ sequenceDiagram
 
 ## Data model
 
-| Entity                | Key fields                                                                                                                                                        |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Conversation`        | `id`, `slug`, `agentId`, `companyId`, `roleName`, `roleId`, `question`, `context`, `status`, `routedToIdentifiers`, `createdAt`, `closedAt`, `repliesDeliveredAt` |
-| `ConversationMessage` | `id`, `conversationId`, `author` (`user`/`agent`), `authorIdentifier`, `content`, `timestamp`                                                                     |
+| Entity                | Key fields                                                                                                                                  |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Conversation`        | `id`, `slug`, `agentId`, `companyId`, `roleName`, `roleId`, `question`, `context`, `status`, `routedToIdentifiers`, `createdAt`, `closedAt` |
+| `ConversationMessage` | `id`, `conversationId`, `author` (`user`/`agent`), `authorIdentifier`, `content`, `timestamp`                                               |
 
 **Slug generation:** `{role-name}-{queryIndex}` where `queryIndex` is an atomic counter on the `TcpRole` entity, incremented in a transaction. This gives stable, human-readable conversation identifiers.
 

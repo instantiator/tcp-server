@@ -101,14 +101,14 @@ See [ADR-013](ADRs/ADR-013-prompt-assembly-context-management.md) for the full d
 
 ### Services
 
-`ContextBudgetService`, `ContextCompactorService`, `IncomingDataGuardService`, and `ContextManagerService` live in `libs/tcp-shared/src/context/` (moved from `apps/backend/apps/tcp-server/src/context/` in 008.6 so tcp-agent's worker can share them). `ContextManagerService` depends on two small structural sink interfaces (`ContextEventSink`, `ContextAuditSink`) rather than tcp-server's concrete services directly, so both tcp-server and tcp-agent can wire it to their own event/audit implementations.
+`ContextBudgetService`, `ContextCompactorService`, `IncomingDataGuardService`, and `ContextManagerService` live in `libs/tcp-shared/src/context/` (moved from `apps/tcp-server/src/context/` in 008.6 so tcp-agent's worker can share them). `ContextManagerService` depends on two small structural sink interfaces (`ContextEventSink`, `ContextAuditSink`) rather than tcp-server's concrete services directly, so both tcp-server and tcp-agent can wire it to their own event/audit implementations.
 
-| Service/module             | Location                                                         | Purpose                                                                                         |
-| -------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `ContextBudgetService`     | `libs/tcp-shared/src/context/context-budget.service.ts`          | Token counting (messages + bound tools) and budget thresholds                                   |
-| `ContextCompactorService`  | `libs/tcp-shared/src/context/context-compactor.service.ts`       | Trim and summarise operations                                                                   |
-| `IncomingDataGuardService` | `libs/tcp-shared/src/context/incoming-data-guard.service.ts`     | Pre-check incoming data size                                                                    |
-| `ContextManagerService`    | `libs/tcp-shared/src/context/context-manager.service.ts`         | Orchestrates budget checks and compaction (`prepare()` per-turn, `checkBudget()` per-iteration) |
-| `isContextLengthError`     | `libs/tcp-shared/src/llm/context-length-error.ts`                | Provider-agnostic reactive-backstop classifier                                                  |
-| `runSupervisedGraph`       | `libs/tcp-shared/src/llm/run-supervised-graph.ts`                | Shared per-iteration loop: budget, tool visibility, terminal-status, abort-on-pause             |
-| `AgentEventService`        | `apps/backend/apps/tcp-server/src/events/agent-event.service.ts` | In-memory SSE event bus per agent (tcp-server's `ContextEventSink`)                             |
+| Service/module             | Location                                                     | Purpose                                                                                         |
+| -------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `ContextBudgetService`     | `libs/tcp-shared/src/context/context-budget.service.ts`      | Token counting (messages + bound tools) and budget thresholds                                   |
+| `ContextCompactorService`  | `libs/tcp-shared/src/context/context-compactor.service.ts`   | Trim and summarise operations                                                                   |
+| `IncomingDataGuardService` | `libs/tcp-shared/src/context/incoming-data-guard.service.ts` | Pre-check incoming data size                                                                    |
+| `ContextManagerService`    | `libs/tcp-shared/src/context/context-manager.service.ts`     | Orchestrates budget checks and compaction (`prepare()` per-turn, `checkBudget()` per-iteration) |
+| `isContextLengthError`     | `libs/tcp-shared/src/llm/context-length-error.ts`            | Provider-agnostic reactive-backstop classifier                                                  |
+| `runSupervisedGraph`       | `libs/tcp-shared/src/llm/run-supervised-graph.ts`            | Shared per-iteration loop: budget, tool visibility, terminal-status, abort-on-pause             |
+| `AgentEventService`        | `apps/tcp-server/src/events/agent-event.service.ts`          | In-memory SSE event bus per agent (tcp-server's `ContextEventSink`)                             |

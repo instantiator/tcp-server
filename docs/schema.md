@@ -3,7 +3,7 @@
 This document covers two related but distinct topics:
 
 - **`schemas/schema.json`** — generated from the TypeORM entity models; describes database/response shapes; used for CLI pre-flight validation and VS Code schema inference.
-- **DTO classes** — TypeScript classes in `apps/backend/apps/tcp-server/src/api/dto/`; define the exact fields accepted by each REST endpoint; validated at runtime by the server's `ValidationPipe`.
+- **DTO classes** — TypeScript classes in `apps/tcp-server/src/api/dto/`; define the exact fields accepted by each REST endpoint; validated at runtime by the server's `ValidationPipe`.
 
 ---
 
@@ -13,15 +13,15 @@ Every endpoint that accepts a request body uses a dedicated DTO (Data Transfer O
 
 ### DTO source files
 
-| File                                                           | DTOs                                              |
-| -------------------------------------------------------------- | ------------------------------------------------- |
-| `apps/backend/apps/tcp-server/src/api/dto/llm-config.dto.ts`   | `LlmConfigDto`                                    |
-| `apps/backend/apps/tcp-server/src/api/dto/company.dto.ts`      | `CreateCompanyDto`, `UpdateCompanyDto`            |
-| `apps/backend/apps/tcp-server/src/api/dto/role.dto.ts`         | `CreateRoleDto`, `UpdateRoleDto`                  |
-| `apps/backend/apps/tcp-server/src/api/dto/company-user.dto.ts` | `CreateCompanyUserDto`, `UpdateCompanyUserDto`    |
-| `apps/backend/apps/tcp-server/src/api/dto/agent.dto.ts`        | `StartAgentDto`, `StartChatDto`, `SendMessageDto` |
-| `apps/backend/apps/tcp-server/src/api/dto/conversation.dto.ts` | `ConversationReplyDto`                            |
-| `apps/backend/apps/tcp-server/src/api/dto/internal.dto.ts`     | `PauseDto`, `CompleteDto`                         |
+| File                                              | DTOs                                              |
+| ------------------------------------------------- | ------------------------------------------------- |
+| `apps/tcp-server/src/api/dto/llm-config.dto.ts`   | `LlmConfigDto`                                    |
+| `apps/tcp-server/src/api/dto/company.dto.ts`      | `CreateCompanyDto`, `UpdateCompanyDto`            |
+| `apps/tcp-server/src/api/dto/role.dto.ts`         | `CreateRoleDto`, `UpdateRoleDto`                  |
+| `apps/tcp-server/src/api/dto/company-user.dto.ts` | `CreateCompanyUserDto`, `UpdateCompanyUserDto`    |
+| `apps/tcp-server/src/api/dto/agent.dto.ts`        | `StartAgentDto`, `StartChatDto`, `SendMessageDto` |
+| `apps/tcp-server/src/api/dto/conversation.dto.ts` | `ConversationReplyDto`                            |
+| `apps/tcp-server/src/api/dto/internal.dto.ts`     | `PauseDto`, `CompleteDto`                         |
 
 ### DTO field reference
 
@@ -168,28 +168,6 @@ Represents a human user associated with a company. Used for query routing.
 | `memberType`       | `"creator" \| "owner" \| "member"` | Yes      |                                                 |
 | `roles`            | `string[]`                         | Yes      | Role names this user covers (for query routing) |
 | `knowledgeDomains` | `string[]`                         | Yes      | Domain tags (for query routing)                 |
-
-### `CompanyStatsDto`
-
-The per-company statistic set returned with each `GET /api/company` row. The
-set is fixed rather than open-ended so the whole list costs one query per
-stat, not one request per company (see [ADR-023](ADRs/ADR-023-backend-api-surface-for-the-web-ui.md)).
-
-| Field           | Type                            | Required | Notes                                                   |
-| --------------- | ------------------------------- | -------- | ------------------------------------------------------- |
-| `activeAgents`  | `number`                        | Yes      | Agents that are `idle`, `running` or `paused`           |
-| `tasksByStatus` | `Record<TcpTaskStatus, number>` | Yes      | Count per status; every status key present, zero-filled |
-| `openEnquiries` | `number`                        | Yes      | Conversations whose `status` is `awaiting_user`         |
-
-### `CompanyListItemDto`
-
-One row of the `GET /api/company` response: the company record plus its
-stats. The company fields are those of `CreateCompanyDto`.
-
-| Field   | Type              | Required | Notes                    |
-| ------- | ----------------- | -------- | ------------------------ |
-| `id`    | UUID string       | Yes      | The company's identifier |
-| `stats` | `CompanyStatsDto` | Yes      | See above                |
 
 ---
 

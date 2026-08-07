@@ -7,9 +7,7 @@ the relevant documentation where more detail is available.
 
 - [ ] **Docker** and **Docker Compose** installed
       ([Docker Desktop](https://docs.docker.com/get-docker/) includes both)
-- [ ] **Node.js 26** and npm installed ([nodejs.org](https://nodejs.org/)) —
-      `.nvmrc` pins the exact patch release CI uses, so `nvm use` in the repo
-      root is the surest way to match it
+- [ ] **Node.js 24 LTS** and npm installed ([nodejs.org](https://nodejs.org/))
 - [ ] **Git** with submodule support (any recent version)
 
 ## 2. Clone the repository

@@ -98,13 +98,8 @@ sequenceDiagram
 Both this flow and the [agent-to-human flow](user-input-conversations.md) go through the same choke point, `AgentOrchestrationService.resumeAgent`, regardless of which one triggers it:
 
 - **Gating:** an agent only resumes once it has _no_ remaining outstanding requests — no `PendingConsultation` with `status: 'pending'` and no `Conversation` with `status: 'awaiting_user'` linked to it. If an agent raised more than one request before pausing, resolving any single one of them leaves it paused until the rest are resolved too. A consultation resolving as `'failed'` opens the gate the same way `'complete'` does.
-- **Aggregation:** when the gate finally passes, the resume message is built by collecting every consultation result (complete or failed) and every user reply the agent has **not yet been given** — not just whichever one happened to resolve last — so it sees every answer it asked for. Where a user answered across several messages, all of them are included, oldest first.
-- **Delivery is tracked as state, not as a time window.** Once the resume job is queued, each consultation moves to `status: 'consumed'` and each conversation gets a `repliesDeliveredAt` stamp. That is what stops a later resume repeating an answer the agent has already seen.
-- `pausedAt` is still set on every pause and cleared when the resume is dispatched, but only to claim the pause episode atomically — two near-simultaneous resume triggers race on it and exactly one wins. It is no longer used to decide _which_ replies belong to the resume.
-
-> **Why not simply take everything created since `pausedAt`?** Because `pausedAt` is stamped by the application's clock and `PendingConsultation.createdAt` by the database's, and the two writes are milliseconds apart. A database clock lagging by a few milliseconds put the consultation outside the window, and the agent resumed with an empty payload — knowing nothing about the question it had asked. Measured at 1–3ms of headroom before this changed. If you are tempted to reintroduce a timestamp comparison here, this is the failure it produces.
-
-The marking happens **after** the job is queued, deliberately: if queueing fails, the replies must stay undelivered so the next resume still finds them.
+- **Aggregation:** `TcpAgent.pausedAt` is set whenever an agent transitions to `Paused`. When the gate finally passes, the resume message is built by collecting every consultation result (complete or failed) and user reply received since `pausedAt` — not just whichever one happened to resolve last — so the agent sees every answer it asked for.
+- `pausedAt` is cleared once the resume is dispatched, so the next pause episode starts scoping fresh.
 
 If an agent only ever raises one request before pausing — the common case today — this behaves exactly like a single-response resume.
 
@@ -112,27 +107,13 @@ If an agent only ever raises one request before pausing — the common case toda
 
 ## Data model
 
-| Entity                | Key fields                                                                                                                                      |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PendingConsultation` | `id`, `callingAgentId`, `consultationAgentId`, `companyId`, `status` (`pending` \| `complete` \| `failed` \| `consumed`), `result`, `createdAt` |
-| `TcpAgent`            | (relevant fields) `id`, `status`, `pausedAt`, `requiredToolCalls`                                                                               |
+| Entity                | Key fields                                                                                                                        |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `PendingConsultation` | `id`, `callingAgentId`, `consultationAgentId`, `companyId`, `status` (`pending` \| `complete` \| `failed`), `result`, `createdAt` |
+| `TcpAgent`            | (relevant fields) `id`, `status`, `pausedAt`, `requiredToolCalls`                                                                 |
 
 ---
 
 ## API endpoints
 
-Consultations are dispatched and resolved entirely through the internal endpoints used by tcp-mcp-interactions and tcp-agent (`POST /internal/pause`, `POST /internal/agent/:agentId/complete`, `POST /internal/agent/:agentId/fail`). There is no consultations controller the way there is for conversations, and no `PendingConsultation` REST surface.
-
-What there is, since 002.04, is an approximation good enough to list them:
-
-```
-GET /api/assignment?companyId=<id>&taskId=null&mode=consultee
-```
-
-Every consulting agent works an orphan `consultee`-mode assignment, so this
-returns one row per consultation that has actually started. **It is not a
-complete list.** A consultation that has been requested but whose agent has
-not yet been created has no assignment and does not appear — and a consultation
-whose assignment has finished still appears unless the caller also filters on
-`status`. Treat the result as "consultations with an agent on them", not as
-the set of pending consultations.
+Consultations are dispatched and resolved entirely through the internal endpoints used by tcp-mcp-interactions and tcp-agent (`POST /internal/pause`, `POST /internal/agent/:agentId/complete`, `POST /internal/agent/:agentId/fail`) — there is no public REST surface for consultations the way there is for conversations.

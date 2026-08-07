@@ -28,8 +28,7 @@ export async function promptDocker(): Promise<DockerAnswers> {
   const { wantHelp } = await inquirer.prompt<{ wantHelp: string }>({
     type: 'input',
     name: 'wantHelp',
-    message:
-      'Which Docker Compose services do you want to run? — need more info first? (y/n)',
+    message: 'Which Docker Compose services do you want to run? — need more info first? (y/n)',
     default: 'n',
     validate: (input: string) => {
       const lower = input.trim().toLowerCase();
@@ -38,10 +37,7 @@ export async function promptDocker(): Promise<DockerAnswers> {
     },
   });
 
-  if (
-    wantHelp.trim().toLowerCase() === 'y' ||
-    wantHelp.trim().toLowerCase() === 'yes'
-  ) {
+  if (wantHelp.trim().toLowerCase() === 'y' || wantHelp.trim().toLowerCase() === 'yes') {
     console.log(`\n${DOCKER_HELP}\n`);
   }
 

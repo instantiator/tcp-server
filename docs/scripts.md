@@ -47,7 +47,6 @@ therefore run alongside a dev stack (or each other) without conflict.
 | [run-smoke-tests.sh](#run-smoke-testssh)             | Smoke tests — requires a running deployment                          | Running stack         |
 | [run-api-tests.sh](#run-api-testssh)                 | API tests — requires a running deployment                            | Running stack         |
 | [run-e2e-tests.sh](#run-e2e-testssh)                 | E2E tests — HTTP API workflows                                       | Docker                |
-| [run-browser-tests.sh](#run-browser-testssh)         | Browser tests — requires a running deployment serving the web app    | Docker                |
 | [manual-verify.sh](#manual-verifysh)                 | Interactive scenario walkthrough with human checks                   | Running stack         |
 | [run-stub-llm.sh](#run-stub-llmsh)                   | Run `tcp-stub-llm` from source, for manual testing                   | Node                  |
 | [check-migrations.sh](#check-migrationssh)           | Diagnostic report of entity-vs-schema migration drift                | Docker                |
@@ -97,12 +96,6 @@ silently drifting apart (a stale secret otherwise fails auth with an opaque
 By default the MCP servers and stub-llm are internal-only (not published to the
 host); pass `--dev-ports` to publish them for direct access or the smoke tier.
 
-`--dev-web` points the `tcp-web` nginx service at a Vite development server
-running on the host (`EXPOSE_PORT_WEB_DEV`) instead of the bundle baked into its
-image, so frontend work keeps hot module replacement while still reaching the
-browser over HTTP/2 and the same `/api` origin as a deployment. See
-[web-client → the development loop](web-client.md#the-development-loop).
-
 ```bash
 ./scripts/start-deployment.sh --project tcp-dev --env-file .env
 ./scripts/start-deployment.sh --project tcp-api --env-file .env.testing
@@ -117,7 +110,6 @@ browser over HTTP/2 and the same `/api` origin as a deployment. See
 | `--env-file <path>` | Path to env file                                 | Yes      |
 | `--rebuild`         | Rebuild images before starting                   | No       |
 | `--dev-ports`       | Publish MCP/stub-llm host ports (non-production) | No       |
-| `--dev-web`         | Point `tcp-web` at a host Vite dev server        | No       |
 
 ## start-dev.sh
 
@@ -322,59 +314,6 @@ application via `supertest`. Zitadel is not required — auth is mocked
 ```
 
 **Requires:** Docker and Docker Compose, `.env.testing` in the repo root.
-
-See also: [docs/testing.md](testing.md).
-
-## run-browser-tests.sh
-
-Pure test runner — like the api and smoke tiers it drives whatever is serving
-at `--base-url` and provisions nothing itself. Playwright drives Chromium
-against the built bundle and scans each page with axe.
-
-The deployment's `tcp-web` service is what serves the app, so start a stack
-first. The URL is **https**: `tcp-web` is TLS-only because HTTP/2 is
-([ADR-025](ADRs/ADR-025-browser-event-stream-consumption.md)), and Playwright is
-configured to accept the container's self-signed certificate.
-
-Browser binaries are **not** installed by `npm ci` — they are ~180 MB, and only
-this script needs them. It installs Chromium on first use, which is a no-op
-afterwards.
-
-The concurrent-stream test (`test/browser/event-streams.spec.ts`) needs a
-token to open several event streams at once, and there is no signed-in-human
-helper yet ([009.01](<prompts/phase 02 - web ui/009.01.00.prompt - browser test suite for mvp journeys (draft).md>)
-builds that). So this script mints one the same way `run-api-tests.sh` does —
-a `client_credentials` grant for the Zitadel machine test user — and accepts
-the same credential flags for it: `--client-id`/`--client-secret`, an
-`--oidc-discovery-url` to grant against, and an `--env-file` to read the
-first two from when they aren't passed or exported (checking that file's
-gitignored `<env-file>.local` override first, where `start-deployment.sh`'s
-bootstrap writes them).
-
-```bash
-./scripts/start-deployment.sh --project tcp-dev --env-file .env.dev
-./scripts/run-browser-tests.sh --env-file .env.dev
-
-# Against the testing stack, which uses EXPOSE_PORT_WEB=5174
-./scripts/run-browser-tests.sh --base-url https://localhost:5174 --env-file .env.testing
-
-# Explicit credentials, no env file
-./scripts/run-browser-tests.sh --client-id your-client-id --client-secret your-client-secret
-
-# Pass options through to Playwright
-./scripts/run-browser-tests.sh -- --headed
-./scripts/run-browser-tests.sh -- --grep "heading"
-```
-
-**Options:**
-
-| Flag                       | Env var              | Description                                        | Default                                                  |
-| -------------------------- | -------------------- | -------------------------------------------------- | -------------------------------------------------------- |
-| `--base-url URL`           | `TCP_WEB_URL`        | Web app base URL                                   | `https://localhost:${EXPOSE_PORT_WEB:-5173}`             |
-| `--client-id ID`           | `TEST_CLIENT_ID`     | Machine test user client ID (`client_credentials`) | read from env file                                       |
-| `--client-secret SECRET`   | `TEST_CLIENT_SECRET` | Machine test user client secret                    | read from env file                                       |
-| `--oidc-discovery-url URL` | `OIDC_DISCOVERY_URL` | OIDC discovery endpoint to grant against           | `http://localhost:8080/.well-known/openid-configuration` |
-| `--env-file PATH`          | —                    | Env file to read `TEST_CLIENT_ID`/`SECRET` from    | `.env`, else `.env.testing`                              |
 
 See also: [docs/testing.md](testing.md).
 

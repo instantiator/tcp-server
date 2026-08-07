@@ -27,17 +27,17 @@ Point `DATABASE_URL` at a running PostgreSQL instance (e.g. `docker compose up -
 
 ```bash
 DATABASE_URL=postgres://tcp:dev-password@localhost:5432/tcp \
-  npm run migration:generate -- apps/backend/apps/tcp-server/src/migrations/DescriptiveName
+  npm run migration:generate -- apps/tcp-server/src/migrations/DescriptiveName
 ```
 
 eg.
 
 ```bash
 DATABASE_URL=postgres://tcp:dev-password@localhost:5432/tcp \
-  npm run migration:generate -- apps/backend/apps/tcp-server/src/migrations/AddCompanyDescription
+  npm run migration:generate -- apps/tcp-server/src/migrations/AddCompanyDescription
 ```
 
-TypeORM compares the current database schema against the entity definitions and writes a new file to `apps/backend/apps/tcp-server/src/migrations/`.
+TypeORM compares the current database schema against the entity definitions and writes a new file to `apps/tcp-server/src/migrations/`.
 
 ### 3. Review the generated file
 
@@ -56,7 +56,7 @@ Open the generated migration and check:
 TypeORM is built with webpack, so glob patterns (`*.js`) cannot be used at runtime —
 every migration class must be imported explicitly.
 
-Open `apps/backend/apps/tcp-server/src/migrations-list.ts` and add the new class to the ordered
+Open `apps/tcp-server/src/migrations-list.ts` and add the new class to the ordered
 `MIGRATIONS` array (`AppModule` and the e2e global setup both read it from there):
 
 ```typescript
@@ -78,8 +78,8 @@ repository is never in a state where the entity and the schema disagree.
 
 ```bash
 git add libs/tcp-shared/src/models/TcpCompany.model.ts \
-        apps/backend/apps/tcp-server/src/migrations/<timestamp>-DescriptiveName.ts \
-        apps/backend/apps/tcp-server/src/migrations-list.ts
+        apps/tcp-server/src/migrations/<timestamp>-DescriptiveName.ts \
+        apps/tcp-server/src/migrations-list.ts
 git commit -m "Add region column to tcp_company"
 ```
 

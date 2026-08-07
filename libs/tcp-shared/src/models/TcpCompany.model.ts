@@ -1,4 +1,4 @@
-import type { UUID } from '../uuid';
+import type { UUID } from 'crypto';
 import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import type { AgentRunConfig } from './AgentRunConfig.model';
 import { TcpRole } from './TcpRole.model';

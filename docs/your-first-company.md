@@ -6,7 +6,7 @@ Once you have prepared your deployment with the [setup checklist](setup-checklis
 
 ### 0.0 Prerequisites
 
-You need **Docker** and **Node.js 26**, and a `bash` shell (macOS or Linux —
+You need **Docker** and **Node.js 24**, and a `bash` shell (macOS or Linux —
 every script in this repository assumes one). Then:
 
 ```bash
@@ -30,31 +30,20 @@ scripts/start-dev.sh
 
 The `tcp` org is created with a default account, if not already available:
 
-| Org   | Username | Password      |
-| ----- | -------- | ------------- |
-| `tcp` | `test`   | `Testing123!` |
-
-> [!TIP]
-> These values come from the `.env.testing` config file, where you'll find other configuration options, too.
+| Org   | Username | Password |
+| ----- | -------- | -------- |
+| `tcp` | `test`   | `test`   |
 
 For more about working with Zitadel, see:
 
 - [Zitadel setup](./zitadel-setup.md)
 
-### 0.2 Service health checks (optional)
+### 0.2 Service healthchecks
 
-To confirm that the system is in a good state, you can check the `/health` pages for the tcp-server, and tcp-agent applications:
+Check the `/health` pages for the tcp-server, and tcp-agent applications.
 
 - http://localhost:3000/health
 - http://localhost:3001/health
-
-Alternatively, you can run the smoke tests with:
-
-```bash
-./scripts/run-smoke-tests.sh
-```
-
-These tests review health check results and will alert if anything reports an issue.
 
 ### 0.3 Check the `test` account
 
@@ -64,35 +53,42 @@ A `test` account is created for the dev server, and stored in Zitadel. You can c
 ./tcp-cli.sh get-token
 ```
 
-Follow the printed uri, sign in as the test user, and the CLI will pick up the token once login completes. You should see a token returned - it _looks like_ a long string of random characters.
+Follow the printed `verification_uri`, sign in as `test` / `test`, and the CLI will pick up the token once login completes. You should see a token returned - it _looks like_ a long string of random characters.
 
-The rest of this walkthrough passes that token to `tcp-cli.sh` via the `TCP_TOKEN` environment variable, rather than repeating the browser login on every command, so capture it once into an environment variable:
+The rest of this walkthrough passes that token to `tcp-cli.sh` via
+the `TCP_TOKEN` environment variable, rather than repeating the browser login on every command, so capture it once into an environment variable:
 
 ```bash
 export TCP_TOKEN=$(./tcp-cli.sh get-token)
 ```
 
-> [!NOTE]
-> The `TCP_TOKEN` environment variable is the default assumption for tcp-cli, so placing a token there means it will be automatically picked up in future calls to tcp-cli.
-
 > [!TIP]
+> The `TCP_TOKEN` environment variable is the default assumption for tcp-cli, so placing a token there means it will be automatically picked up.
+
+> [!NOTE]
 > If you need to use a different variable, pass the `--access-token-env-var` option to tcp-cli.
 
 ### 0.4 Set up your environment config
 
-The easiest way is the setup wizard, which writes a `.env.<instance>` file (and a gitignored `.env.<instance>.local` for secrets) with commented guidance:
+The easiest way is the setup wizard, which writes a `.env.<instance>` file (and a
+gitignored `.env.<instance>.local` for secrets) with commented guidance:
 
 ```bash
 npm run setup
 ```
 
-Or, for a quick start, copy the committed test config to the dev env file that `start-dev.sh` uses:
+Or, for a quick start, copy the committed test config to the dev env file that
+`start-dev.sh` uses:
 
 ```bash
 cp .env.testing .env.dev
 ```
 
-Most of the defaults are sufficient for a dev or testing environment. You don't set the OIDC/test client credentials by hand: when you start the stack, `start-dev.sh` bootstraps Zitadel and writes the generated `OIDC_CLIENT_ID/SECRET` and `TEST_CLIENT_ID/SECRET` to the gitignored `<env-file>.local` override (e.g. `.env.dev.local`) — never the committed file.
+Most of the defaults are sufficient for a dev or testing environment. You don't
+set the OIDC/test client credentials by hand: when you start the stack,
+`start-dev.sh` bootstraps Zitadel and writes the generated
+`OIDC_CLIENT_ID/SECRET` and `TEST_CLIENT_ID/SECRET` to the gitignored
+`<env-file>.local` override (e.g. `.env.dev.local`) — never the committed file.
 
 ### 0.5 Set LLM configuration
 
@@ -104,25 +100,12 @@ The LLM used for each role is determined by checking, in order:
 
 _The first found is used._ This allows you to individualise the configuration for your agents (eg. coding agents might need a more powerful, coding-capable model, and others may be able to work with lighter, simpler models).
 
-> [!TIP]
-> For the simplest configuration, set the `LLM_*` variables in your `.env` file.
+For the simplest configuration, set the `LLM_*` variables in your `.env` file.
 
-> [!NOTE]
-> See `.env.example` for the available environment variables.
-
-If you wish to run local models, there are a variety of tools you can install that will run these LLMs locally and make them available to other applications through a standard API.
-
-Here are some of the popular choices:
-
-- [LM Studio](https://lmstudio.ai/)
-- [Ollama](https://ollama.com/)
+See `.env.example` for the available environment variables.
 
 <details>
 <summary><b>LM Studio example...</b></summary>
-
-These parameters are an example that you can set in `.env.dev` - they match an LM Studio installation that has downloaded the `qwen3.5-9b` model.
-
-LM Studio also allows you to set an API key through its configuration, and you can provide that to TCP with with the `LLM_API_KEY` parameter.
 
 ```env
 LLM_PROVIDER=lm-studio
@@ -132,7 +115,7 @@ LLM_API_KEY=<your API key goes here>
 ```
 
 > [!TIP]
-> The `LLM_BASE_URL` is at `host.docker.internal` because that's how to address localhost on your machine from inside the Docker container that runs tcp-agent.
+> The `LLM_BASE_URL` is at `host.docker.internal` because that's how to address localhost on your machine from the Docker container running tcp-agent.
 
 </details>
 
@@ -149,7 +132,7 @@ cat scripts/test-data/companies/simple-company.json | ./tcp-cli.sh set-company
 ```
 
 > [!NOTE]
-> The response will show you a full json object describing the new company, _including its `id` field_ - indicating that it has been successfully added to the database.
+> The response will be a full instance of the company, _including its `id`_ - indicating that it has been added to the database.
 
 ```json
 {
@@ -170,14 +153,14 @@ cat scripts/test-data/companies/simple-company.json | ./tcp-cli.sh set-company
 ```
 
 > [!TIP]
-> You can modify a company by passing in only the fields you want to change with the `set-company` verb. Target it with `--company-slug test-company` (or `--company-id`/a body `id`).
+> You can modify a company by passing in only the fields you want to change with the `set-company` verb. Target it with `--company-slug test-company` (or `--company-id`/a body `id`) — you don't need to look up its id first.
 
 ### 1.2 List all companies
 
 List the companies available with the `list-companies` verb:
 
 ```bash
-./tcp-cli.sh list-companies
+tcp-cli.sh list-companies
 ```
 
 You'll get a condensed list of companies:
@@ -195,9 +178,7 @@ You'll get a condensed list of companies:
 
 ### 1.3 Create some roles
 
-Create a role in the new company with the `set-role` verb. Provide your company's slug in the `--company-slug` field to let it know which company to associate the role with.
-
-There are two sample roles to use with `simple-company` - a chicken assistant, and a cat assistant:
+Create a role in the new company with the `set-role` verb. Provide your company's slug in the `--company-slug` field to let it know which company to associate the role with:
 
 ```bash
 cat scripts/test-data/roles/chicken-assistant.json | tcp-cli.sh set-role --company-slug test-company
@@ -215,13 +196,13 @@ cat scripts/test-data/roles/cat-assistant.json | tcp-cli.sh set-role --company-s
 List the roles available with the `list-roles` verb:
 
 ```bash
-./tcp-cli.sh list-roles
+tcp-cli.sh list-roles
 ```
 
 Or scope it to just your company:
 
 ```bash
-./tcp-cli.sh list-roles --company-slug test-company
+tcp-cli.sh list-roles --company-slug test-company
 ```
 
 It'll give you a list of all roles in each company:
@@ -261,11 +242,24 @@ It'll give you a list of all roles in each company:
 
 ## 2. Talk to an agent
 
-### 2.1 Interactive mode (TUI)
+Using the `chat` verb allows you create an **agent** from a defined **role** and talk to it. It'll enter chat mode, where you can ask it about itself, other agents, and shared resources.
 
-TUI[^TUI] mode is the easiest way to manually interact with the company and roles.
+### 2.1 Options
 
-[^TUI]: Terminal User Interface - an interactive user interface that's displayed using a text-based terminal.
+The `chat` verb has several options:
+
+- `-r` / `--role-id`, or `--role-slug` (needs `--company-id`/`--company-slug` alongside it — role slugs are only unique within a company) - a role to talk to
+- `-c` / `--company-id`, or `--company-slug` - the company that scopes a `--role-slug` (role slugs are unique only within a company). `chat` always needs a role; to browse a company's roster without picking one first, use `tui` instead
+- `-q` / `--query` - provide the query or prompt for your agent as a parameter (requires a role)
+- `--hide-reasoning` - doesn't show the reasoning stream before an answer
+- `--no-tui` - disables the full-screen TUI in favour of a plain scrolling renderer; still interactive on its own (a readline prompt) - combine with `--query` for fully non-interactive, pipeable output
+
+> [!NOTE]
+> When neither the role nor the company carries an explicit LLM config, the CLI will display `LLM: (using server environment default)`. The actual provider and model are determined by the `LLM_PROVIDER` / `LLM_MODEL` env vars on the server.
+
+### 2.2 Interactive mode (TUI)
+
+TUI mode is the easiest way to manually interact with the company and roles.
 
 In the example below, the TUI is launched with a company slug. This could have been provided with `--company` or `--company-slug` (to be explicit).
 
@@ -284,21 +278,6 @@ See [tcp-cli.md](tcp-cli.md#chat) for a full description of the TUI.
 | ![Asking a question of the chicken assistant](./screenshots/002.chat.tui.chicken-assistant-input.png) | Each new agent is given an assignment on a new tab. Switch between tabs with `tab`. Type your question or prompt for the agent and press enter. |
 | ![Chicken assistant response](./screenshots/003.chat.tui.chicken-assistant-response.png)              | The agent will respond to your request. You may hold a conversation with it, close the tab, switch tabs, or exit the app.                       |
 
-### 2.2 `chat` verb
-
-Using the `chat` verb allows you create an **agent** from a defined **role** and talk to it. It'll enter chat mode, where you can ask it about itself, other agents, and shared resources.
-
-The `chat` verb has several options:
-
-- `-r` / `--role-id`, or `--role-slug` (needs `--company-id`/`--company-slug` alongside it — role slugs are only unique within a company) - a role to talk to
-- `-c` / `--company-id`, or `--company-slug` - the company that scopes a `--role-slug` (role slugs are unique only within a company). `chat` always needs a role; to browse a company's roster without picking one first, use `tui` instead
-- `-q` / `--query` - provide the query or prompt for your agent as a parameter (requires a role)
-- `--hide-reasoning` - doesn't show the reasoning stream before an answer
-- `--no-tui` - disables the full-screen TUI in favour of a plain scrolling renderer; still interactive on its own (a readline prompt) - combine with `--query` for fully non-interactive, pipeable output
-
-> [!NOTE]
-> When neither the role nor the company carries an explicit LLM config, the CLI will display `LLM: (using server environment default)`. The actual provider and model are determined by the `LLM_PROVIDER` / `LLM_MODEL` env vars on the server.
-
 ### 2.3 Non-TUI mode
 
 > [!TIP]
@@ -310,7 +289,7 @@ In the example below, `chat` is started without TUI, and the prompt is provided 
 ./tcp-cli.sh chat --company-slug test-company --role-slug chicken-assistant --no-tui --query 'Tell me about yourself'
 ```
 
-The agent will be invoked, should respond to the query, and your session will then be closed.
+The agent will be invoked to answer the query, and will then be closed.
 
 <details>
 

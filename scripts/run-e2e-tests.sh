@@ -8,7 +8,7 @@ Usage: $(basename "$0") [-h|--help] [-- <jest options>]
 Run the end-to-end test suite against a live NestJS application.
 
 PostgreSQL, Redis, and MinIO are started automatically as ephemeral Docker
-containers by Jest's global setup (apps/backend/test/e2e/global-setup.ts) and torn down by
+containers by Jest's global setup (test/e2e/global-setup.ts) and torn down by
 its global teardown, so no manual Docker orchestration is needed here.
 Connection details are provisioned on random host ports, so this doesn't
 collide on ports with a dev stack — but a running tcp-* stack still competes
