@@ -3,11 +3,10 @@
 // after `eavesdrop` connects are picked up too.
 
 import type { AuditWireEvent, TcpAssignment } from '@tcp/shared';
+import { parseWireEvents, readWireStream } from '@tcp/shared';
 import { TokenManager } from '../auth/token';
 import { apiRequest, ApiOptions } from '../core/api';
 import { GlobalOptions } from '../core/cli-options';
-import { parseWireEvents } from '../core/sse';
-import { readWireStream } from '../core/sse-reader';
 import { EventLogBuffer } from '../render/event-log';
 import {
   AgentContext,
@@ -134,7 +133,9 @@ export async function tailTarget(
   );
 
   let watchAbort: AbortController | undefined;
-  let watchDone: Promise<void> | undefined;
+  // readWireStream now resolves a StreamEnd rather than void; this call site
+  // only awaits completion and never inspects the result.
+  let watchDone: Promise<unknown> | undefined;
   if (target.taskId) {
     const known = new Set(target.agents.map((a) => a.assignmentId));
     const roleById = target.roleById ?? new Map<string, RoleInfo>();

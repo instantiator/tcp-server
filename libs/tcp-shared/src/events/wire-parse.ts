@@ -2,8 +2,8 @@
 // declared type: an SSE payload that doesn't match its contract must degrade to
 // a safe default rather than reach the TUI and crash it mid-render.
 
-import type { TaskChangeSummary } from '@tcp/shared';
-import type { UUID } from 'crypto';
+import type { TaskChangeSummary } from './wire-events';
+import type { UUID } from '../uuid';
 
 /** Reads a string field from a record, defaulting to ''. */
 export function str(

@@ -27,6 +27,8 @@ export * from './config/resolve-embedding-dimension';
 export * from './config/resolve-system-prompt-template';
 export * from './events/shutdown-channel';
 export * from './events/wire-events';
+export * from './events/wire-stream';
+export * from './events/wire-parse';
 export * from './models';
 export * from './mcp/resolve-mcp-server-list';
 export * from './llm/llm-factory';

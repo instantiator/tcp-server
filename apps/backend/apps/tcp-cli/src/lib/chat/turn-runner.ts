@@ -3,13 +3,12 @@
 // in-flight turn bookkeeping, since a turn's abort signal is the only handle
 // anyone has on a running turn.
 
+import { parseWireEvents, str } from '@tcp/shared';
 import { TokenManager } from '../auth/token';
 import { createRenderer, Renderer } from '../core/render';
-import { parseWireEvents } from '../core/sse';
 import { failedWire } from '../render/audit-wire';
 import { Tui } from '../tui/tui';
 import { tuiRenderer } from '../tui/tui-renderer';
-import { str } from './wire-parse';
 
 /** Result of watching one agent's turn to its terminal event. */
 type TurnOutcome = { response: string } | { error: string };

@@ -556,6 +556,43 @@ no clue where it came from.
 just a type: a type-only import is erased before the bundler sees it and would
 prove nothing. Keep a value import reachable from the entry point.
 
+## Event client
+
+`src/events/` reads the company, task and agent Server-Sent Events streams
+([ADR-025](ADRs/ADR-025-browser-event-stream-consumption.md)):
+
+| File                | Holds                                                                       |
+| ------------------- | --------------------------------------------------------------------------- |
+| `connect.ts`        | The reconnecting reader — one connection, kept alive until closed           |
+| `subscriptions.ts`  | `subscribe(url, onEvent, onError)`, `streamUrls`, and the `MAX_STREAMS` cap |
+| `cache.ts`          | `applyEvent(queryClient, event)` — folds a `WireEvent` into the query cache |
+| `useEventStream.ts` | The React hook components call                                              |
+
+`subscribe` shares one connection per URL across every subscriber, opened on
+the first and closed after the last, so several components watching the same
+stream don't each open their own. `MAX_STREAMS = 12` is a hard cap — twice
+HTTP/1.1's six-per-origin ceiling, which HTTP/2 removes anyway — and exceeding
+it **throws visibly** rather than queuing connections silently.
+
+**Reconnection.** `connect.ts` retries a dropped stream with exponential
+backoff and full jitter (1s base, 30s cap), and pauses entirely while
+`navigator.onLine` is false or the tab is hidden, resuming immediately on
+either. A fresh token is fetched on every attempt, including reconnects, so a
+token that expired mid-connection doesn't get retried forever. A `401`
+routes through the shared `handleUnauthorized()` policy; a `403` (or any other
+`4xx`) surfaces as an `ApiError` and is never retried — that is a permanent
+refusal, not a blip.
+
+**Reconnection correctness depends on the server continuing to prime.** The
+client keeps no bookkeeping across a drop — no last-seen id, no replay buffer.
+Recovery instead relies on the server: the company and task streams prime with
+current state on every subscribe, and the agent stream synthesises a terminal
+event for a late subscriber that missed it. A reconnected stream re-renders
+correctly only because of that priming, not because of anything the client
+remembers. That coupling is load-bearing, not incidental — ADR-025 records it,
+and changing how any of the three streams prime is a client-behaviour change
+even though no client file moves.
+
 ## Tooling
 
 The workspace has its own eslint and TypeScript configuration — the root ones

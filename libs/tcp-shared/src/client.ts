@@ -43,6 +43,13 @@ export {
   taskEventsChannel,
   companyEventsChannel,
 } from './events/wire-events';
+export { parseWireEvents, readWireStream } from './events/wire-stream';
+export type { StreamEnd } from './events/wire-stream';
+export {
+  str,
+  planIndexFromShortcode,
+  parseTaskChangeSummary,
+} from './events/wire-parse';
 
 // -- Company statistics: the `GET /api/company` response shape ---------------
 // CompanyStats.model.ts imports only types, so its helper is safe as a value.

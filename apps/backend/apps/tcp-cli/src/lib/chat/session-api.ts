@@ -4,11 +4,11 @@
 // result — rather than a list of URLs.
 
 import type { TcpAssignment, TcpTask, TaskChangeSummary } from '@tcp/shared';
+import { planIndexFromShortcode } from '@tcp/shared';
 import type { UUID } from 'crypto';
 import { TokenManager } from '../auth/token';
 import { AuditRow } from '../render/audit-wire';
 import { AssignmentInfo, InitiateTaskSubmission, RoleOption } from '../tui/tui';
-import { planIndexFromShortcode } from './wire-parse';
 
 /** A chat agent as `POST /api/agent/chat/start` and `GET /api/agent/:id` return it. */
 export interface AgentRecord {

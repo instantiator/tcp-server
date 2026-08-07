@@ -1,11 +1,17 @@
 import type { WireEvent } from '@tcp/shared';
+import { readWireStream } from '@tcp/shared';
 import { apiRequest } from '../core/api';
-import { readWireStream } from '../core/sse-reader';
 import { Tui } from '../tui/tui';
 import { ChatSession } from './session';
 
 jest.mock('../core/api');
-jest.mock('../core/sse-reader');
+// Only readWireStream is mocked — session.ts also pulls parseTaskChangeSummary
+// and str from this module, and those need their real implementations for
+// these tests to exercise ChatSession's event handling.
+jest.mock('@tcp/shared', () => ({
+  ...jest.requireActual<typeof import('@tcp/shared')>('@tcp/shared'),
+  readWireStream: jest.fn(),
+}));
 
 const mockedApiRequest = apiRequest as jest.Mock;
 const mockedReadWireStream = jest.mocked(readWireStream);

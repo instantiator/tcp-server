@@ -330,7 +330,11 @@ turn runs on the server and everything it does is streamed back live over the
 agent's Server-Sent Events stream (`GET /api/agent/:id/events`). The CLI opens
 that stream and renders each event until the terminal `completed` (or
 `failed`) event arrives — either in the full-screen TUI (default on a TTY) or
-as colour-coded scrolling text (piped output, or `--no-tui`); see below.
+as colour-coded scrolling text (piped output, or `--no-tui`); see below. The
+SSE parser and reader (`parseWireEvents`, `readWireStream`) live in
+`@tcp/shared`, not in tcp-cli itself — the same implementation is re-exported
+as `@tcp/shared/client` for the web client's event streams, so the two clients
+cannot drift on what an event means (ADR-025).
 
 **Following consultations.** When your agent pauses to consult another role,
 the CLI automatically opens a second stream for the consulted agent and

@@ -113,7 +113,8 @@ apps/
        main.ts               # commander entry point; global options
        commands/             # thin per-command registration (flags → lib/<domain> action)
        lib/
-         core/                # api.ts, cli-options.ts, run-command.ts, sse.ts (parseWireEvents), render.ts, ...
+         core/                # api.ts, cli-options.ts, run-command.ts, render.ts, ... (SSE parsing/reading
+                              # moved to libs/tcp-shared/src/events/, shared with the web client)
          render/              # shared render library: EventLogBuffer, StreamPresenter, renderers, style backends
          auth/                # token.ts (resolution/renewal) + get-token action
          chat/                # chat command: flags, context, session, wiring, action
@@ -174,7 +175,9 @@ libs/
       config/                # defaults, run-config/llm-config/system-prompt-template resolution
       context/                # Context budget, compaction, and incoming-data-guard services
       db/                     # makeTypeOrmConfig factory + optimistic-retry helper
-      events/                 # WireEvent (unified SSE/Redis shape) + channel/summary helpers
+      events/                 # WireEvent (unified SSE/Redis shape) + channel/summary helpers;
+                               # wire-stream.ts (parseWireEvents, readWireStream) and wire-parse.ts —
+                               # the SSE parser/reader shared by tcp-cli and the web client (ADR-025)
       llm/                    # buildChatModel factory, agent-graph builder, reasoning-content recovery
       mcp/                    # BaseMcpController, McpClientService, MCP_REGISTRY, resolve-mcp-server-list,
                               # tool-result kit (ToolResult, ok/err, relay4xxOrError)

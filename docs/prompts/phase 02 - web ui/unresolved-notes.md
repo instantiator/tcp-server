@@ -374,6 +374,24 @@ Left out deliberately, with the reasoning recorded in `session.tsx` beside the c
 
 Reasoning: chosen over hand-written conditional types because those are where the "no `any` at the boundary" rule breaks in practice — openapi-fetch is by openapi-typescript's author, in the same repository, MIT, one transitive dependency, and its middleware hook is where the shared 401 policy goes. Pre-1.0 means a minor version may break. The exposure is bounded: one import in `src/api/client.ts` plus the type plumbing in `src/api/queries.ts`, and the fallback — hand-written generics over the same generated `paths` type — stays available.
 
+### `MAX_STREAMS = 12` is a guess
+
+**Raised by:** 005.02 · **Condition to revisit:** the first time a real view is refused, or when 007.01 establishes an actual per-view stream count
+
+Picked as twice HTTP/1.1's six-per-origin ceiling, with headroom for a live view plus several dialogs — not measured against anything built. No view yet opens more than one stream, so the number has never been tested against real usage.
+
+### The browser tier authenticates as a machine client, not a user
+
+**Raised by:** 005.02 · **Condition to revisit:** when 009.01 builds a real end-user sign-in helper
+
+`test/browser/event-streams.spec.ts` proves the transport carries seven concurrent streams, using a `client_credentials` grant. It does not prove a signed-in human can open seven — that needs a real OIDC login, which no browser-tier test performs yet.
+
+### Reconnection correctness is load-bearing on server-side priming
+
+**Raised by:** 005.02 · **Condition to revisit:** any change to `CompanyPrimingService.prime`, `TaskController.primeTaskEvents` or `AgentController.replayTerminal` — this needs ADR-025 revisited, not just a test fixed
+
+The client keeps no bookkeeping across a drop: no last-seen id, no replay buffer. A reconnected stream re-renders correctly only because the company and task streams keep priming with current state on every subscribe, and the agent stream keeps synthesising a terminal event for a late subscriber. That coupling is recorded in ADR-025, not enforced by any type the client and server share.
+
 ## Carried into a later prompt
 
 | Note                                                                                                                                                                          | Raised by | Goes to  |
@@ -451,3 +469,11 @@ Reasoning: chosen over hand-written conditional types because those are where th
 | SSE payload summary types are absent from the OpenAPI description; the drift check cannot police the event contract                                                           | 005.01    | `005.02` |
 | Mutation hooks are unwritten; the client and error shape they use are built                                                                                                   | 005.01    | `006.01` |
 | The two knowledge file-download GETs have no query hook, by design                                                                                                            | 005.01    | `010.01` |
+| `useEventStream(streamUrls.company(id))` already subscribes on the company route; build on it, don't open a second connection                                                 | 005.02    | `006.01` |
+| The hook returns an `error` that nothing renders yet — 006.01 owns giving a stream failure a visible state                                                                    | 005.02    | `006.01` |
+| The live activity view is the first place `MAX_STREAMS = 12` could plausibly bite; raise it deliberately if a view needs more                                                 | 005.02    | `007.01` |
+| Token-level `StreamDelta`s reach a transcript via `useEventStream`'s `onDelta` and belong in local state, never the query cache                                               | 005.02    | `008.01` |
+| A `403` on a stream is a permanent `ApiError`, never retried — render it as a refusal, not a spinner that never resolves                                                      | 005.02    | `008.01` |
+| Each open chat's `StreamDelta`s belong in that conversation's own local state, kept separate across several open chats                                                        | 005.02    | `008.02` |
+| The browser tier can mint a machine token but not a human one; a real end-user sign-in helper is still unbuilt                                                                | 005.02    | `009.01` |
+| SSE payload summary types are absent from the OpenAPI description; the generated-types drift check can't police the event contract                                            | 005.02    | `009.03` |

@@ -203,7 +203,11 @@ echo
 # web service is TLS-only — HTTP/2 needs it (ADR-025).
 step "Browser tests"
 EXPOSE_PORT_WEB="$(grep -E '^EXPOSE_PORT_WEB=' "$REPO_ROOT/.env.testing" | tail -1 | cut -d= -f2)"
-"$SCRIPTS/run-browser-tests.sh" --base-url "https://localhost:${EXPOSE_PORT_WEB:-5173}"
+# --env-file for the same reason the API tier passes it: the concurrent-stream
+# spec mints a machine token, and its credentials must come from the env file
+# this deployment was bootstrapped with rather than a stale .env.dev.
+"$SCRIPTS/run-browser-tests.sh" --base-url "https://localhost:${EXPOSE_PORT_WEB:-5173}" \
+  --env-file "$REPO_ROOT/.env.testing"
 echo
 
 record_step

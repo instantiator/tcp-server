@@ -7,7 +7,6 @@ import { LandingPage } from './pages/LandingPage/LandingPage';
 import { NotFoundPage } from './pages/NotFoundPage/NotFoundPage';
 import { AppShell } from './shell/AppShell';
 import { useRouteChange } from './shell/useRouteChange';
-import { channelForAgent } from './shared-client';
 
 /**
  * The application's route table. Every URL here can be deep-linked, refreshed
@@ -28,30 +27,21 @@ import { channelForAgent } from './shared-client';
  * the React root, so nothing can unmount them by navigating and no component
  * has to be trusted not to add a third. `useRouteChange` is called for its
  * effect: it asks the announcer to speak rather than rendering what it says.
- *
- * The hidden `channelForAgent` reference keeps the `@tcp/shared/client` import
- * boundary's positive control reachable from the entry point. 005.02's SSE
- * client is the first screen that will import from the shared package for real,
- * and should remove this.
  */
 export const App = () => {
   useRouteChange();
 
   return (
-    <>
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/callback" element={<CallbackPage />} />
-        <Route element={<AppShell />}>
-          <Route element={<RequireSession />}>
-            <Route path="/companies" element={<CompaniesPage />} />
-            <Route path="/company/:companyId" element={<CompanyPage />} />
-          </Route>
-          <Route path="*" element={<NotFoundPage />} />
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/callback" element={<CallbackPage />} />
+      <Route element={<AppShell />}>
+        <Route element={<RequireSession />}>
+          <Route path="/companies" element={<CompaniesPage />} />
+          <Route path="/company/:companyId" element={<CompanyPage />} />
         </Route>
-      </Routes>
-
-      <span hidden>{channelForAgent('boundary-control')}</span>
-    </>
+        <Route path="*" element={<NotFoundPage />} />
+      </Route>
+    </Routes>
   );
 };

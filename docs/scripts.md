@@ -340,12 +340,26 @@ Browser binaries are **not** installed by `npm ci` — they are ~180 MB, and onl
 this script needs them. It installs Chromium on first use, which is a no-op
 afterwards.
 
+The concurrent-stream test (`test/browser/event-streams.spec.ts`) needs a
+token to open several event streams at once, and there is no signed-in-human
+helper yet ([009.01](<prompts/phase 02 - web ui/009.01.00.prompt - browser test suite for mvp journeys (draft).md>)
+builds that). So this script mints one the same way `run-api-tests.sh` does —
+a `client_credentials` grant for the Zitadel machine test user — and accepts
+the same credential flags for it: `--client-id`/`--client-secret`, an
+`--oidc-discovery-url` to grant against, and an `--env-file` to read the
+first two from when they aren't passed or exported (checking that file's
+gitignored `<env-file>.local` override first, where `start-deployment.sh`'s
+bootstrap writes them).
+
 ```bash
 ./scripts/start-deployment.sh --project tcp-dev --env-file .env.dev
-./scripts/run-browser-tests.sh
+./scripts/run-browser-tests.sh --env-file .env.dev
 
 # Against the testing stack, which uses EXPOSE_PORT_WEB=5174
-./scripts/run-browser-tests.sh --base-url https://localhost:5174
+./scripts/run-browser-tests.sh --base-url https://localhost:5174 --env-file .env.testing
+
+# Explicit credentials, no env file
+./scripts/run-browser-tests.sh --client-id your-client-id --client-secret your-client-secret
 
 # Pass options through to Playwright
 ./scripts/run-browser-tests.sh -- --headed
@@ -354,9 +368,13 @@ afterwards.
 
 **Options:**
 
-| Flag             | Env var       | Description      | Default                                      |
-| ---------------- | ------------- | ---------------- | -------------------------------------------- |
-| `--base-url URL` | `TCP_WEB_URL` | Web app base URL | `https://localhost:${EXPOSE_PORT_WEB:-5173}` |
+| Flag                       | Env var              | Description                                        | Default                                                  |
+| -------------------------- | -------------------- | -------------------------------------------------- | -------------------------------------------------------- |
+| `--base-url URL`           | `TCP_WEB_URL`        | Web app base URL                                   | `https://localhost:${EXPOSE_PORT_WEB:-5173}`             |
+| `--client-id ID`           | `TEST_CLIENT_ID`     | Machine test user client ID (`client_credentials`) | read from env file                                       |
+| `--client-secret SECRET`   | `TEST_CLIENT_SECRET` | Machine test user client secret                    | read from env file                                       |
+| `--oidc-discovery-url URL` | `OIDC_DISCOVERY_URL` | OIDC discovery endpoint to grant against           | `http://localhost:8080/.well-known/openid-configuration` |
+| `--env-file PATH`          | —                    | Env file to read `TEST_CLIENT_ID`/`SECRET` from    | `.env`, else `.env.testing`                              |
 
 See also: [docs/testing.md](testing.md).
 

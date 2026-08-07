@@ -1,4 +1,6 @@
 import { useParams } from 'react-router';
+import { streamUrls } from '../../events/subscriptions';
+import { useEventStream } from '../../events/useEventStream';
 import { useDocumentTitle } from '../../shell/useDocumentTitle';
 import { t } from '../../strings';
 
@@ -10,6 +12,10 @@ import { t } from '../../strings';
 export const CompanyPage = () => {
   const { companyId } = useParams();
   useDocumentTitle(t('page.company.title'));
+
+  // ponytail: the error is unrendered until 006.01, which owns this page's
+  // real layout and its error states.
+  useEventStream(companyId ? streamUrls.company(companyId) : null);
 
   return (
     <>

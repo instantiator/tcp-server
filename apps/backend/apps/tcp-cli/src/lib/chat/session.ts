@@ -1,7 +1,7 @@
 import type { TaskChangeSummary, TcpTask } from '@tcp/shared';
+import { parseTaskChangeSummary, readWireStream, str } from '@tcp/shared';
 import { GlobalOptions } from '../core/cli-options';
 import { TokenManager, TokenSession } from '../auth/token';
-import { readWireStream } from '../core/sse-reader';
 import { auditWire, failedWire, toWire } from '../render/audit-wire';
 import {
   AssignmentInfo,
@@ -11,7 +11,6 @@ import {
 } from '../tui/tui';
 import * as api from './session-api';
 import { TurnRunner } from './turn-runner';
-import { parseTaskChangeSummary, str } from './wire-parse';
 
 /** Statuses beyond which an assignment's working agent has nothing left to stream live. */
 const TERMINAL_AGENT_STATUSES = new Set(['completed', 'failed', 'cancelled']);
