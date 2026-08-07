@@ -1,6 +1,10 @@
 import { vi } from 'vitest';
 
-vi.mock('../../auth/sign-in', () => ({ startSignIn: vi.fn() }));
+// Resolving, not a bare `vi.fn()`: the page attaches a `.catch` to show a
+// message when the redirect never starts, and an undefined return has none.
+vi.mock('../../auth/sign-in', () => ({
+  startSignIn: vi.fn(() => Promise.resolve()),
+}));
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
@@ -20,12 +24,18 @@ import '../../styles/themes/high-contrast.css';
 const token = (name: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-/** Renders the page through the same provider stack `App.test.tsx` uses. */
-const renderLandingPage = () =>
+/**
+ * Renders the page through the same provider stack `App.test.tsx` uses.
+ *
+ * `state` is what `RequireSession` puts in the location state when it turns a
+ * signed-out visitor away — the destination this page has to hand on to
+ * sign-in without looking inside it.
+ */
+const renderLandingPage = (state?: unknown) =>
   render(
     <QueryClientProvider client={new QueryClient()}>
       <ThemeProvider>
-        <MemoryRouter initialEntries={['/']}>
+        <MemoryRouter initialEntries={[{ pathname: '/', state }]}>
           <LandingPage />
         </MemoryRouter>
       </ThemeProvider>
@@ -70,6 +80,45 @@ describe('LandingPage', () => {
     await user.click(screen.getByRole('button', { name: t('landing.signIn') }));
 
     expect(startSignIn).toHaveBeenCalledTimes(1);
+  });
+
+  it('hands the saved destination on without unwrapping it', async () => {
+    const user = userEvent.setup();
+    renderLandingPage({ from: '/company/acme' });
+
+    await user.click(screen.getByRole('button', { name: t('landing.signIn') }));
+
+    // The whole location state, passed through: `safeRedirectTarget` is the
+    // only code that knows the shape, and the only code that distrusts it.
+    // Rewrapping it here would survive every other test in this file and lose
+    // every destination on the way back.
+    expect(startSignIn).toHaveBeenCalledWith({ from: '/company/acme' });
+  });
+
+  it('does not hand the press event on as a destination', async () => {
+    const user = userEvent.setup();
+    renderLandingPage();
+
+    await user.click(screen.getByRole('button', { name: t('landing.signIn') }));
+
+    // `onPress={startSignIn}` would put React Aria's `PressEvent` here, and it
+    // would ride to the provider and back as the address to return to. `null`
+    // rather than `undefined` because that is what React Router reports for a
+    // location with no state, and `safeRedirectTarget` handles both.
+    expect(startSignIn).toHaveBeenCalledWith(null);
+  });
+
+  it('says so when the redirect to the provider never starts', async () => {
+    const user = userEvent.setup();
+    vi.mocked(startSignIn).mockRejectedValueOnce(new Error('no metadata'));
+    renderLandingPage();
+
+    await user.click(screen.getByRole('button', { name: t('landing.signIn') }));
+
+    // Without this the control is a button that does nothing and says nothing.
+    expect(
+      await screen.findByText(t('landing.signIn.failed')),
+    ).toBeInTheDocument();
   });
 
   it('reaches and operates the sign-in control by keyboard alone', async () => {

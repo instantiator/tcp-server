@@ -95,6 +95,12 @@ describe('App', () => {
     expect(document.querySelectorAll('main')).toHaveLength(1);
     landing.unmount();
 
+    // `/callback` is the other route outside the shell, so it owns its own
+    // `main` for the same reason the landing page does.
+    const callback = renderAppAt('/callback');
+    expect(document.querySelectorAll('main')).toHaveLength(1);
+    callback.unmount();
+
     renderAppAt('/companies', TEST_SESSION);
     expect(document.querySelectorAll('main')).toHaveLength(1);
   });

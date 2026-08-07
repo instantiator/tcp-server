@@ -140,9 +140,10 @@ from `EXPOSE_PORT_WEB` over **https** — `tcp-web` is TLS-only
 [ADR-029](ADRs/ADR-029-spa-hosting-and-runtime-configuration.md)) — rather than
 hardcoded, so a non-default port never disagrees with what was registered.
 
-None of this yet produces a sign-in journey a person can use: there is no callback route
-and no button. That arrives with prompt 004.02. What exists today is the client
-configuration and the Zitadel registration underneath it.
+The browser journey built on top of this — the control, the redirect, the `/callback`
+route and the validated return address — is described in
+[the web client guide](web-client.md#signing-in). Session persistence across a reload,
+token expiry while the app is open, and sign-out arrive with prompt 004.03.
 
 ## Using an external OIDC provider
 

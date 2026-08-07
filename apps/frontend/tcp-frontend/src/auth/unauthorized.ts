@@ -22,10 +22,12 @@ let redirecting: Promise<void> | null = null;
  * fails the stream and every queued request at once, and each unguarded caller
  * would start its own navigation. The first one wins and the rest wait on it.
  *
- * The attempted location travels in `state` for 004.02 to return the user to.
- * **That prompt must validate it against the route table before navigating** —
- * it is round-tripped through the provider and comes back
- * attacker-influenced, and following one unchecked is an open redirect.
+ * The attempted location travels in `state` for the callback route to return
+ * the user to, in the same `{ from }` shape `RequireSession` uses. It is
+ * round-tripped through the provider and comes back attacker-influenced;
+ * {@link safeRedirectTarget} is what refuses to follow it blindly, and is the
+ * only place that should. Note the query string, which `RequireSession`'s does
+ * not carry — a validator matching bare route paths would discard it.
  */
 export const handleUnauthorized = (): Promise<void> =>
   (redirecting ??= getUserManager()

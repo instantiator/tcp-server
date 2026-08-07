@@ -6,7 +6,7 @@ import './AppShell.css';
 /**
  * The frame every signed-in page renders inside, and the not-found page with
  * it — an unknown address is reached without a session, and is the only route
- * in the shell that can be until 004.02 exists.
+ * in the shell that can be.
  *
  * Order matters and is the whole point of this component: the skip link is the
  * first thing in the tab order, the header comes next, and `main` follows both,

@@ -82,9 +82,9 @@ let manager: UserManager | undefined;
  *
  * A singleton because the fetch wrapper (005.01) and the stream reader
  * (005.02) are not components and cannot read a React context, and because two
- * managers would hold two different in-memory users. When 004.02 mounts
- * `AuthProvider`, it must be given **this** instance rather than a second set
- * of settings.
+ * managers would hold two different in-memory users. `main.tsx` gives
+ * `AuthProvider` **this** instance rather than a second set of settings, and
+ * must keep doing so.
  */
 export const getUserManager = (): UserManager =>
   (manager ??= new UserManager(createUserManagerSettings()));

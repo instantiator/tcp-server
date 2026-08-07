@@ -6,9 +6,10 @@ cache and React Aria Components for behaviour
 ([ADR-021](ADRs/ADR-021-web-ui-framework-and-architecture.md),
 [ADR-026](ADRs/ADR-026-web-ui-accessibility-and-component-library.md)).
 
-Nothing user-facing ships yet: the application renders a placeholder route.
-What it does have is the set of seams every later prompt depends on, because
-retrofitting them once components exist is disproportionately expensive.
+One journey works end to end — [signing in](#signing-in). Everything behind it
+is still a placeholder route, and what the application mostly has so far is the
+set of seams every later prompt depends on, because retrofitting them once
+components exist is disproportionately expensive.
 
 ## Running it
 
@@ -197,13 +198,17 @@ React Router's route table, in `src/App.tsx`:
 | Path                  | Page               | Access    | Built by                           |
 | --------------------- | ------------------ | --------- | ---------------------------------- |
 | `/`                   | Landing page       | Public    | 003.01                             |
+| `/callback`           | Sign-in return     | Public    | 004.02                             |
 | `/companies`          | Companies overview | Protected | placeholder here, real page 006.01 |
 | `/company/:companyId` | Company view       | Protected | placeholder here, real page 006.01 |
 | `*`                   | Not found          | Public    | 003.02                             |
 
 Protected routes sit behind `RequireSession`, which redirects to `/` when
-there is no session. There is no way to sign in until 004.02, so today every
-protected route redirects.
+there is no session, carrying the attempted path in the location state.
+
+`/callback` is public and has to be. It is where the identity provider returns a
+user who does not have a session yet — behind the guard it would redirect to `/`
+every time, which is a sign-in that bounces back to the sign-in control.
 
 nginx returns the app document with a 200 for any unknown path
 ([ADR-029](ADRs/ADR-029-spa-hosting-and-runtime-configuration.md)) and always
@@ -211,18 +216,76 @@ will — a static server cannot know which paths the router knows. The
 catch-all route is what makes an unknown address render a page rather than a
 blank screen; the status code is not a defect.
 
-The landing page renders outside the shell and owns its own `main`. Every
-other page's `main` comes from `AppShell`. There must never be two on one
-page.
+The landing page and `/callback` render outside the shell and own their own
+`main`. Every other page's `main` comes from `AppShell`. There must never be two
+on one page.
 
-The OIDC callback route is deliberately absent and arrives with 004.02.
+## Signing in
 
-## Reaching protected routes before sign-in exists
+Four hops, and nothing in between them is a decision this application makes:
+
+1. **The control.** `startSignIn(state)` in `src/auth/sign-in.ts` calls
+   `signinRedirect()` on the one `UserManager`
+   ([ADR-024](ADRs/ADR-024-browser-oidc-client-and-token-handling.md)). `state`
+   is whatever `RequireSession` put in the location state — `{ from }`, passed
+   through untouched. `handleUnauthorized()` builds the same shape when the API
+   rejects a token, so both entry points arrive at the same validation.
+2. **The provider.** A full-page redirect. The client holds no refresh token, so
+   this is both "sign in" and "renew": against a live provider session the user
+   comes back in a few hundred milliseconds without seeing a form.
+3. **`/callback`.** `react-oidc-context`'s `AuthProvider` performs the code
+   exchange itself, on mount, when the address carries authorization parameters.
+   **The page must not also call `signinRedirectCallback()`** — that would
+   exchange the same single-use code twice, and the second attempt fails with
+   "No matching state found in storage", reporting an error for a sign-in that
+   worked. The page reads `useAuth()` and renders one of three things.
+4. **The destination.** `safeRedirectTarget()` in `src/auth/redirect-target.ts`
+   turns the returned `state` into a path, or into `/companies` if it cannot.
+
+### The open-redirect gate
+
+`state.from` is attacker-influenced twice over: it is read out of the address
+bar, and it then makes a round trip through the provider. `safeRedirectTarget`
+is the only code that trusts it, and it allows only two things:
+
+- a URL whose origin, once parsed by `URL`, is this application's own — which is
+  what rejects `//evil.example`, `/\evil.example` and `javascript:` alike; and
+- a pathname matching one of the routes listed in `RETURNABLE_ROUTES`, which is
+  exactly the set behind `RequireSession`.
+
+`/` and `/callback` are deliberately not in that set — returning a
+freshly signed-in user to either is the redirect loop — and neither is the
+catch-all, which matches every address and would make the list decorative. The
+query string travels with the path, because `handleUnauthorized()` saves
+`pathname + search` and dropping half of it loses the view the user was on.
+
+**Adding a protected route means adding it to `RETURNABLE_ROUTES`.** The list is
+maintained by hand; a route missing from it still works, but a user sent there
+before signing in quietly arrives at `/companies` instead.
+
+### What a failure looks like
+
+Nothing on `/callback` ever redirects to the provider on its own. Every route
+back out is a control someone pressed — which is what makes the loop impossible
+rather than unlikely.
+
+| What happened                               | What the user sees                                       |
+| ------------------------------------------- | -------------------------------------------------------- |
+| Cancelled at the provider (`access_denied`) | "Sign-in was cancelled", with "Try again" and a way home |
+| The provider returned any other error       | "Sign-in could not be completed"                         |
+| The callback was replayed, or arrived twice | The same message — the user's next action is identical   |
+| `/callback` opened directly                 | "This page is part of signing in…", with no retry        |
+| The redirect never started at all           | The landing page says so, beside the sign-in control     |
+
+## `?devSession=`: skipping the provider
 
 `?devSession=<id>` on any URL supplies a stand-in signed-in user, so the
-header, the account menu and the protected routes can be exercised before
-004.02 builds real sign-in — for example
+header, the account menu and the protected routes can be exercised without going
+through the identity provider — for example
 `http://localhost:4173/companies?devSession=alice`.
+
+It is the **fallback**, not an override: `AuthSession` prefers a real OIDC user
+whenever there is one, so signing in for real always wins.
 
 It is read once at startup (`src/main.tsx`), so it survives in-app navigation
 that drops the query string, but it does **not** survive a manual reload of a
@@ -235,7 +298,7 @@ part that catches people out:
 | How you started it                                   | URL                      | Works? |
 | ---------------------------------------------------- | ------------------------ | ------ |
 | `./scripts/start-dev.sh --dev-web`                   | `https://localhost:5173` | Yes    |
-| `npm run dev --workspace apps/frontend/tcp-frontend` | `http://localhost:4173`  | Yes    |
+| `npm run dev --workspace apps/frontend/tcp-frontend` | `http://localhost:4173`  | **No** |
 | `./scripts/start-dev.sh`                             | `https://localhost:5173` | **No** |
 
 Without `--dev-web`, `tcp-web` serves the **built** bundle out of
@@ -246,9 +309,11 @@ would have logged it is not there either. That is the guarantee below working,
 not a fault to debug. `start-dev.sh` says which of the two it gave you as its
 last line, for that reason.
 
-`--dev-web` is the one to use: it keeps HTTPS, HTTP/2 and a same-origin `/api`,
-because nginx stays in front and proxies to the dev server. For the shell alone
-plain `vite dev` on 4173 is enough — nothing here calls the API yet.
+`--dev-web` is now the **only** one to use. Since 004.02 mounted `AuthProvider`
+at the root, the OIDC client is constructed on load, and `getRuntimeConfig()`
+throws when `/config.js` is absent — which it is under a bare `vite dev`, because
+nothing generates it there. The message names the fix, but it arrives as a blank
+page rather than as text, so the symptom to recognise is a white screen on 4173.
 
 **Why it is safe:** it is compiled out of a production build, not disabled in
 one. `import.meta.env.DEV` is replaced with a literal at build time, so the
@@ -264,7 +329,8 @@ not a way to reach data.
 
 **The constraint on future work:** when 004.03 makes the session hold a
 bearer token, a session built from a query string must not be able to mint
-one. [prompts/phase 02 - web ui/009.04.00.prompt - production build flag and development feature flags (draft).md](<prompts/phase 02 - web ui/009.04.00.prompt - production build flag and development feature flags (draft).md>)
+one. Today it sets `AuthSession`'s `fallback` and nothing else, which is why a
+real user always displaces it — that ordering is the thing to preserve. [prompts/phase 02 - web ui/009.04.00.prompt - production build flag and development feature flags (draft).md](<prompts/phase 02 - web ui/009.04.00.prompt - production build flag and development feature flags (draft).md>)
 owns the general production-build-flag rule this capability is the first case
 of.
 

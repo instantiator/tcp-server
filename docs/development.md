@@ -152,7 +152,7 @@ apps/
    src/
      tsconfig.json            # browser target; NO bare @tcp/shared path alias, "types": []
      strings.ts               # the single lookup every user-facing string resolves through
-     auth/                    # sign-in seam — a placeholder until 004.02 replaces its body
+     auth/                    # the OIDC client, the session, and the validated return address
      components/<Name>/       # shared components owned by no single page
      pages/<PageName>/        # one folder per route-level page: component, stylesheet, test
      shell/                   # the application frame: layout, header, and the route-change behaviour

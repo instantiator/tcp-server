@@ -149,12 +149,48 @@ test.describe('the landing page', () => {
   });
 });
 
+// The callback route, from the outside. The component tier intercepts
+// `signinCallback()` on the real `UserManager`, so it proves everything above
+// the exchange and nothing about how this address behaves when a browser asks
+// nginx for it — a route the SPA fallback serves but the router does not know
+// renders the not-found page, and would do so silently.
+//
+// Opened with no authorization parameters, which is the case a person can
+// actually reach by hand. The signed-in journey through here is 009.01's.
+test.describe('the sign-in callback route', () => {
+  test('renders its own page, not the not-found page', async ({ page }) => {
+    await page.goto('/callback');
+
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+      'Signing in',
+    );
+    // Nothing to retry: there was no sign-in attempt, only an address someone
+    // typed. And nothing redirects, which is the property the whole route is
+    // built around — a callback that re-attempted sign-in would loop.
+    await expect(page.getByRole('button', { name: 'Try again' })).toHaveCount(
+      0,
+    );
+    expect(new URL(page.url()).pathname).toBe('/callback');
+  });
+
+  test('has no accessibility violations', async ({ page }) => {
+    await page.goto('/callback');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+
+    const { violations } = await new AxeBuilder({ page }).analyze();
+
+    expect(
+      violations.map((v) => `${v.id}: ${v.help} (${v.nodes.length} nodes)`),
+    ).toEqual([]);
+  });
+});
+
 // The application shell (skip link, header, `main`) renders on every
-// signed-in page and on the not-found page. No signed-in page is reachable in
-// a real browser until 004.02 builds sign-in — so an unknown address is the
-// ONLY shell-bearing route this tier can reach today. That is why these tests
-// navigate to a deliberately meaningless path rather than to a real page, and
-// it will read as an odd choice otherwise.
+// signed-in page and on the not-found page. Sign-in exists as of 004.02, so a
+// signed-in page IS reachable in a real browser now — but nothing in this tier
+// drives it yet, which is 009.01's journey 1. Until then an unknown address is
+// still the only shell-bearing route these tests use, and the choice will read
+// as odd otherwise.
 test.describe('the application shell on an unknown address', () => {
   test('renders a not-found page rather than a blank screen', async ({
     page,

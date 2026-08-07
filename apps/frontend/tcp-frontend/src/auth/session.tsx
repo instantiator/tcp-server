@@ -5,11 +5,10 @@ import { SessionContext, useSession, type Session } from './useSession';
 /**
  * Supplies the session to the tree.
  *
- * The `session` prop is the seam, in two directions at once. 004.03 replaces
- * this body with one that derives the session from the token client (ADR-024)
- * and drops the prop; until then the application mounts it with no session, so
- * every protected route redirects — which is correct, because there is no way
- * to sign in yet.
+ * The `session` prop is the seam, in two directions at once. {@link AuthSession}
+ * derives the real session from the token client (ADR-024) and supplies it
+ * here; the prop is what stands in when there is no signed-in user, which is
+ * where `?devSession=` lands.
  *
  * And every component test from here on renders inside this shell, so passing a
  * literal session object is all that mocking a signed-in user ever needs to be.
@@ -31,11 +30,11 @@ export const SessionProvider = ({
  * `replace`, so the protected URL does not stay in the history — otherwise the
  * back button walks straight back into the redirect.
  *
- * The attempted path is carried in location state for 004.02, which returns the
- * user there after signing in. **That prompt must validate it before
- * navigating**: a destination read back out of history is attacker-influenced,
- * and following one unchecked is an open redirect. Nothing here dereferences
- * it, and nothing here should start to.
+ * The attempted path is carried in location state, and the landing page hands it
+ * to sign-in so the user comes back to it. A destination read out of history is
+ * attacker-influenced, so {@link safeRedirectTarget} validates it on the way
+ * back and is the only code that dereferences it. Nothing here does, and
+ * nothing here should start to.
  */
 export const RequireSession = () => {
   const session = useSession();
