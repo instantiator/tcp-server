@@ -6,7 +6,23 @@
 // real browser against a real deployment, queries by role and accessible name,
 // scans with axe, and reports JUnit XML the way the other five tiers do.
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+/**
+ * The identity provider's origin, read from the app's own runtime config
+ * before anything navigates away from it. Once a recovery redirect fires
+ * there is no longer an app page to read `window.__TCP_CONFIG__` from, so
+ * this has to happen first, against a page the app itself served.
+ */
+const identityProviderOrigin = async (page: Page): Promise<string> => {
+  await page.goto('/');
+  const config = await page.evaluate(
+    () =>
+      (window as unknown as { __TCP_CONFIG__: { oidcIssuerUrl: string } })
+        .__TCP_CONFIG__,
+  );
+  return new URL(config.oidcIssuerUrl).origin;
+};
 
 test.describe('the application shell', () => {
   test('serves a page with a top-level heading, free of accessibility violations', async ({
@@ -289,6 +305,26 @@ test.describe('the application shell on an unknown address', () => {
   });
 });
 
+// Reload recovery (004.03) makes a guarded route redirect to the identity
+// provider rather than bounce to the landing page. A full sign-in / reload /
+// sign-out journey against Zitadel is 009.01's; this proves only that the
+// recovery redirect really leaves the app, without needing to complete — or
+// even attempt — a login.
+test.describe('reaching a protected route signed out', () => {
+  test('redirects to the identity provider, with no credentials needed', async ({
+    page,
+  }) => {
+    const providerOrigin = await identityProviderOrigin(page);
+
+    await page.goto('/companies');
+    await page.waitForURL((url) => url.origin === providerOrigin, {
+      timeout: 10_000,
+    });
+
+    expect(new URL(page.url()).origin).toBe(providerOrigin);
+  });
+});
+
 // The one security property of the development sign-in escape hatch, asserted
 // against the artefact that actually ships rather than against the source.
 //
@@ -299,15 +335,25 @@ test.describe('the application shell on an unknown address', () => {
 // with `DEV` true by construction and would report the opposite of production.
 test.describe('the development session escape hatch', () => {
   test('cannot sign anyone in against a production build', async ({ page }) => {
+    const providerOrigin = await identityProviderOrigin(page);
+
     await page.goto('/companies?devSession=someone');
 
-    // Redirected to the landing page: `RequireSession` saw no session, which
-    // is only true if the query string was never read. If this ever fails,
-    // anyone who can put a URL in front of a user can walk them past the
-    // route guard — treat it as a release blocker, not a flaky test.
-    await expect(
-      page.getByRole('heading', { level: 1, name: 'TCP' }),
-    ).toBeVisible();
+    // Since 004.03 a guarded route with no session redirects to the identity
+    // provider rather than bouncing to the landing page — the destination
+    // changed, but the property this test exists to prove did not: a query
+    // string still cannot sign anyone in. Leaving for the provider at all is
+    // the whole proof, because `RequireSession` only does that having found no
+    // session, which is only true if the query string was never read. The
+    // Account assertion is a cheap second look that the app never rendered a
+    // signed-in header on the way past; it carries little weight once the
+    // browser is on the provider's page, and is kept for the case where the
+    // redirect regresses and this stays on the app. If this ever fails, anyone
+    // who can put a URL in front of a user can walk them past the route guard —
+    // treat it as a release blocker, not a flaky test.
+    await page.waitForURL((url) => url.origin === providerOrigin, {
+      timeout: 10_000,
+    });
     await expect(page.getByRole('button', { name: 'Account' })).toHaveCount(0);
   });
 

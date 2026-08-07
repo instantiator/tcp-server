@@ -1,18 +1,23 @@
+import { getUserManager } from './user-manager';
+
 /**
- * Ends the session and returns the user to the landing page.
+ * Ends the session here and at the provider, and returns the user to the
+ * landing page.
  *
- * A placeholder until 004.03, which replaces this body with the real
- * end-session flow — clearing the in-memory session *and* ending it at the
- * provider (ADR-024). It exists as its own module for the same reason
- * `startSignIn` does: that arrival changes one function, not the header and
- * not its tests, and a test can assert the menu item *starts sign-out* rather
- * than only that it is there.
- *
- * Deliberately inert rather than logging a placeholder: `Header.test.tsx`
- * already proves the menu item reaches this function by keyboard, so a
- * `console.info` here would prove nothing further and reads to the slop scanner
- * as a leftover — which it would eventually become.
+ * `signoutRedirect()` removes the local user itself, before it builds the
+ * request — so by the time a provider without an `end_session_endpoint` throws,
+ * the local side is already clean and only the navigation is missing. RP-
+ * initiated logout is optional in OIDC; Zitadel publishes one, so this bites
+ * only an external provider, and it bites as an exception thrown out of a menu
+ * item, leaving the user apparently still signed in.
  */
-export const startSignOut = (): void => {
-  // Intentionally empty: there is no session to end until 004.03 creates one.
+export const startSignOut = async (): Promise<void> => {
+  const userManager = getUserManager();
+
+  try {
+    await userManager.signoutRedirect();
+  } catch {
+    await userManager.removeUser();
+    window.location.assign('/');
+  }
 };

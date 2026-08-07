@@ -277,6 +277,43 @@ rather than unlikely.
 | `/callback` opened directly                 | "This page is part of signing in…", with no retry        |
 | The redirect never started at all           | The landing page says so, beside the sign-in control     |
 
+## Staying signed in
+
+A page reload loses the in-memory tokens, so `RequireSession` recovers the same
+way [signing in](#signing-in) does: it calls `handleUnauthorized()`, which makes
+one deduplicated `signinRedirect()`. Against an active provider session that's a
+few hundred milliseconds and no visible form; against an expired one, the
+provider's login page appears, which is correct rather than a bug. While
+recovery is in flight the guard renders `LoadingState`; if the redirect itself
+never starts, it renders `ErrorState` with a **Try again** control rather than
+leaving the visitor stuck on a blank guard.
+
+`getUserManager()` sets `accessTokenExpiringNotificationTimeInSeconds: 30` and
+subscribes once to `accessTokenExpired`, removing the user when it fires.
+`automaticSilentRenew` is off, so nothing else was watching that event, and
+`react-oidc-context` only recomputes `isAuthenticated` when something
+dispatches — without this the account menu kept rendering against a token that
+had already gone. Thirty seconds ahead of that, `SessionExpiryWarning`
+(rendered in `AppShell`, between the header and `main`) announces the expiry
+assertively through the one announcer
+([ADR-027](ADRs/ADR-027-screen-reader-strategy.md#one-announcer-not-scattered-live-regions))
+and shows a **Stay signed in** control that makes the same redirect on demand —
+that control is what makes the timed session meet WCAG 2.2.1 "Timing
+Adjustable". Nothing here self-dismisses on a timer
+([ADR-026](ADRs/ADR-026-web-ui-accessibility-and-component-library.md), WCAG
+2.2.3); the warning leaves only when the session renews or the user is removed.
+
+## Signing out
+
+`startSignOut()` in `src/auth/sign-out.ts`, called from the account menu, ends
+the session at the provider with `signoutRedirect()` and returns the user to
+the landing page (`${origin}/`, which is unguarded). `signoutRedirect()`
+removes the local user itself, before it builds the provider request — so by
+the time a provider with no `end_session_endpoint` throws (RP-initiated logout
+is optional in OIDC; Zitadel publishes one), the local side is already clean
+and only the navigation is missing. The fallback clears the user again and
+navigates to `/` itself, so sign-out never throws out of the menu item.
+
 ## `?devSession=`: skipping the provider
 
 `?devSession=<id>` on any URL supplies a stand-in signed-in user, so the
@@ -286,6 +323,13 @@ through the identity provider — for example
 
 It is the **fallback**, not an override: `AuthSession` prefers a real OIDC user
 whenever there is one, so signing in for real always wins.
+
+A `Session` is still `{ userId }` and nothing else — 004.03 added reload
+recovery, expiry and sign-out without putting a token in it. That matters here:
+the danger this parameter would pose is minting something that stands in for a
+credential, and it cannot, because there is no credential in a `Session` to
+mint. If that ever changes, re-read `src/dev/dev-session.ts` and decide
+deliberately what it may set.
 
 It is read once at startup (`src/main.tsx`), so it survives in-app navigation
 that drops the query string, but it does **not** survive a manual reload of a
@@ -303,11 +347,12 @@ part that catches people out:
 
 Without `--dev-web`, `tcp-web` serves the **built** bundle out of
 `/usr/share/nginx/html` — a production `vite build`, which is exactly where the
-parameter has been compiled away. A protected route simply redirects to the
-landing page, with nothing in the console to explain why, because the code that
-would have logged it is not there either. That is the guarantee below working,
-not a fault to debug. `start-dev.sh` says which of the two it gave you as its
-last line, for that reason.
+parameter has been compiled away. A protected route leaves for the identity
+provider instead — since 004.03 that is what a guarded route with no session
+does — with nothing in the console to explain why, because the code that would
+have logged it is not there either. That is the guarantee below working, not a
+fault to debug. `start-dev.sh` says which of the two it gave you as its last
+line, for that reason.
 
 `--dev-web` is now the **only** one to use. Since 004.02 mounted `AuthProvider`
 at the root, the OIDC client is constructed on load, and `getRuntimeConfig()`

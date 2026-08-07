@@ -1,6 +1,6 @@
 # ADR-024: Browser OIDC Client and Token Handling
 
-**Status:** Accepted (amended — see [004.01](#amendments-as-implemented-004-01) and [004.02](#amendments-as-implemented-004-02) at the end)
+**Status:** Accepted (amended — see [004.01](#amendments-as-implemented-004-01), [004.02](#amendments-as-implemented-004-02) and [004.03](#amendments-as-implemented-004-03) at the end)
 
 ## Context
 
@@ -74,7 +74,7 @@ Storage is a configuration setting, not a rewrite. If the redirect proves annoyi
 - `002.03.00.prompt - static hosting and runtime configuration (draft).md`
 - `004.01.00.prompt - oidc client (draft).md`
 - `004.02.00.prompt - sign in.md`
-- `004.03.00.prompt - session persistence and sign out (draft).md`
+- `004.03.00.prompt - session persistence and sign out.md`
 - `005.01.00.prompt - generated api client (draft).md`
 - `005.02.00.prompt - sse client and event handling (draft).md`
 
@@ -150,3 +150,17 @@ The sign-in journey now exists end to end: the landing page's control, `/callbac
 (g) **The return address is validated against the route table, not merely against the origin.** `safeRedirectTarget()` parses the saved destination with `URL` and requires both this application's origin and a pathname matching one of the routes behind `RequireSession`. An origin check alone would still allow `/` and `/callback`, both of which return a freshly signed-in user to the sign-in journey — the redirect loop this ADR's flow is most likely to produce. Parsing rather than string-matching is load-bearing: the WHATWG parser folds `\` into `/`, so `/\evil.example` becomes an off-origin URL that a `startsWith('/')` test would have accepted.
 
 (h) **The session is derived here, not in 004.03.** `AuthSession` maps the OIDC user's `sub` onto the `Session` the shell reads. Deferring it would have left the callback navigating to a guarded route with no session, `RequireSession` bouncing it back to `/`, and sign-in returning the user to the sign-in control. 004.03 retains reload recovery, expiry and sign-out. The OIDC user always takes precedence over the `session` prop, which is what keeps `?devSession=` from displacing a real user once the session carries a token.
+
+<a id="amendments-as-implemented-004-03"></a>
+
+## Amendments as implemented (004.03)
+
+The session now survives a page reload, expiry is visible before it happens, and sign-out ends the session at both ends (`apps/frontend/tcp-frontend/src/auth/`, `src/shell/SessionExpiryWarning.tsx`). Four points where the implementation is more specific than the decision above, or diverges from it.
+
+(i) **Reload recovery lives in `RequireSession`, and it replaced the bounce to the landing page rather than sitting beside it.** Tokens are in memory, so a reload arrives at a guarded route indistinguishable from a visitor who was never signed in — and the client does not have to tell them apart, because the one full-page redirect this ADR specifies answers both. What the earlier behaviour did instead was return the user to `/` with a **Sign in** button, which is not "reloading keeps the user signed in"; it is asking them to sign in again for a session that had not ended. `RequireSession` now calls `handleUnauthorized()` — deliberately the same function, not a second path beside it, so recovery shares the deduplication latch and the `{ from }` state shape with the 401 policy. Extending (a): a page that has lost its token and a request that was refused want the same navigation.
+
+(j) **Nothing was watching the token expire, and `isAuthenticated` was stale as a result.** `automaticSilentRenew` is false by decision, so the library takes no action of its own; `react-oidc-context` recomputes `isAuthenticated` only when something dispatches. Between expiry and the next request, therefore, the account menu went on rendering against a token that had gone — the "signed in but nothing works" state this ADR exists to prevent, reached by omission rather than by design. The client now subscribes once, at construction, to `accessTokenExpired` and removes the user, which raises `userUnloaded` and _is_ the dispatch. Expiry is also announced 30 seconds ahead (`accessTokenExpiringNotificationTimeInSeconds`) by a warning carrying a **Stay signed in** control. That control is not a convenience: a session that ends on a timer needs a way to extend it to meet WCAG 2.2.1 ([ADR-026](ADR-026-accessibility-standard-and-scope.md)), and 30 seconds is above the 20 that criterion requires.
+
+(k) **`matchSignoutCallback` and `onSignoutCallback` were not wired, contrary to the prompt that asked for them.** `UserManager._signoutStart()` removes the local user itself, before it builds the request, and the post-logout URI is `/` — which is unguarded and renders correctly against an empty store. The hooks would therefore have done nothing but sweep an abandoned `sessionStorage` entry, behind a predicate that has to guess whether a `state` parameter on `/` is a logout return rather than anything else. `clearStaleState()` at construction does that sweep without the guess. If a genuine post-logout hook is ever needed, adding the props back is a two-line change.
+
+(l) **The open-stream limitation is unchanged, and is now written where an operator will meet it.** [Token expiry during an open stream](#token-expiry-during-an-open-stream) is still accepted for the MVP and still unbuilt — no browser stream client exists until 005.02. What changed is only that revocation not taking effect until a stream drops is now stated in [authentication.md](../authentication.md), rather than only here, because the person revoking a user's access does not read ADRs. The same section records a second limitation this prompt did not resolve: `monitorSession` is off, so signing out in one browser tab leaves another looking signed in until its next request is refused.

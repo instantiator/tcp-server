@@ -1,5 +1,5 @@
 import { User, UserManager } from 'oidc-client-ts';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createUserManagerSettings, getUserManager } from './user-manager';
 
 // Set before anything imports its way to getUserManager(), which memoises on
@@ -48,6 +48,16 @@ describe('createUserManagerSettings', () => {
 
   it('uses the authorization code flow', () => {
     expect(createUserManagerSettings().response_type).toBe('code');
+  });
+
+  it('warns 30 seconds before the access token expires', () => {
+    // WCAG 2.2.1's floor for a timed session the user can extend is 20
+    // seconds; 30 stays comfortably above it while keeping
+    // SessionExpiryWarning close enough to expiry not to be noise. The
+    // library's own default is 60.
+    expect(
+      createUserManagerSettings().accessTokenExpiringNotificationTimeInSeconds,
+    ).toBe(30);
   });
 
   it('never renews through a hidden iframe', () => {
@@ -137,5 +147,37 @@ describe('getUserManager', () => {
     // Two managers would hold two different in-memory users, so the fetch
     // wrapper could present a token React had already replaced.
     expect(getUserManager()).toBe(getUserManager());
+  });
+
+  it('removes an expired user, because nothing else is watching', async () => {
+    // `automaticSilentRenew` is off, so the library takes no action of its
+    // own on expiry, and `react-oidc-context` recomputes `isAuthenticated`
+    // only when something dispatches. The singleton's own
+    // `addAccessTokenExpired` subscription is what stops the account menu
+    // rendering against a token that has gone — this proves that
+    // subscription is actually live, not just declared.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const manager = getUserManager();
+      await manager.storeUser(
+        new User({
+          access_token: 'about-to-expire',
+          token_type: 'Bearer',
+          profile,
+          expires_at: Math.floor(Date.now() / 1000) + 2,
+        }),
+      );
+      // storeUser only persists; getUser() is what hands the user to
+      // AccessTokenEvents and arms its timers — the same call AuthProvider
+      // makes on mount.
+      await manager.getUser();
+
+      await vi.advanceTimersByTimeAsync(3_500);
+
+      expect(await manager.getUser()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+      await getUserManager().removeUser();
+    }
   });
 });

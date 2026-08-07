@@ -23,7 +23,7 @@ import './Header.css';
  */
 const onAccountAction = (key: Key): void => {
   if (key === 'signOut') {
-    startSignOut();
+    void startSignOut();
   }
 };
 

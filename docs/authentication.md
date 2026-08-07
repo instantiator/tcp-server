@@ -143,7 +143,37 @@ hardcoded, so a non-default port never disagrees with what was registered.
 The browser journey built on top of this — the control, the redirect, the `/callback`
 route and the validated return address — is described in
 [the web client guide](web-client.md#signing-in). Session persistence across a reload,
-token expiry while the app is open, and sign-out arrive with prompt 004.03.
+token expiry while the app is open, and sign-out are covered next.
+
+### Sessions, expiry and revocation in the browser
+
+Tokens live in memory only, so nothing survives a page reload on its own.
+`RequireSession` recovers the same way sign-in itself does: it calls
+`handleUnauthorized()`, the one deduplicated `signinRedirect()` above. Against
+an active provider session that's a full-page round trip of a few hundred
+milliseconds and no visible form; against an expired one, the provider's login
+page appears, which is the correct outcome rather than a bug. A visible warning
+appears 30 seconds before the access token expires, with a **Stay signed in**
+control that makes the same redirect on demand — [WCAG 2.2.1](https://www.w3.org/WAI/WCAG22/Understanding/timing-adjustable.html)
+requires a timed session to be extendable, not merely noticed. Ignoring the
+warning removes the signed-in user once the token actually expires, so the
+account menu disappears rather than staying on screen pointing at a token that
+no longer works. Signing out from the account menu ends the session at the
+provider as well as locally.
+
+**Accepted limitation: an open event stream outlives revocation.** tcp-server
+authenticates a stream once, when it opens, and never re-checks it — so
+revoking a user does not take effect until that stream drops, however the
+revocation happened. This is decided in
+[ADR-024](ADRs/ADR-024-browser-oidc-client-and-token-handling.md#token-expiry-during-an-open-stream)
+and accepted for the MVP. There is no browser stream client to observe this in
+yet — it arrives with 005.02 — so an operator revoking a user today isn't
+hunting for behaviour that hasn't shipped; this is recorded here so it isn't a
+surprise once it has.
+
+**Multi-tab caveat.** `monitorSession` is off, so signing out in one tab
+doesn't notify another: a second tab keeps showing a signed-in-looking header
+until its next request is refused with a 401.
 
 ## Using an external OIDC provider
 

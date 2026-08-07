@@ -5,6 +5,7 @@ import { virtual } from '@guidepup/virtual-screen-reader';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
+import { getUserManager } from './auth/user-manager';
 import { t } from './strings';
 import { expectNoA11yViolations } from './test-support/axe';
 import { renderAppAt, TEST_SESSION } from './test-support/render-app';
@@ -44,13 +45,31 @@ describe('App', () => {
     await expectNoA11yViolations(container);
   });
 
-  it('redirects a protected route to the landing page when there is no session', () => {
+  it('recovers rather than bouncing to the landing page when there is no session', () => {
+    // Since 004.03, a guarded route with no session redirects to the identity
+    // provider instead of the landing page (`RequireSession`'s reload
+    // recovery) — `session.test.tsx` is where that redirect and its no-loop
+    // guarantee are exercised in full; this is only the regression gate for
+    // the destination changing under `MemoryRouter`, which never leaves the
+    // app and so never actually reaches the provider.
+    //
+    // The redirect itself is stubbed out and never resolves: this test only
+    // needs the state the component is in before that promise settles, and a
+    // real, unmocked `signinRedirect()` would otherwise reject against a
+    // discovery document jsdom cannot fetch.
+    vi.spyOn(getUserManager(), 'signinRedirect').mockReturnValue(
+      new Promise(() => undefined),
+    );
+
     renderAppAt('/companies');
 
     expect(
-      screen.getByRole('heading', { name: t('app.title') }),
+      screen.getByRole('progressbar', {
+        name: t('state.loading', { label: t('session.recovering') }),
+      }),
     ).toBeInTheDocument();
     expect(screen.queryByText(t('page.companies.title'))).toBeNull();
+    expect(screen.queryByRole('heading', { name: t('app.title') })).toBeNull();
   });
 
   it('renders a protected route when there is a session', () => {

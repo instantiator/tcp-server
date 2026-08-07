@@ -146,15 +146,22 @@ test.describe('static hosting', () => {
     // A full navigation, not in-app routing — the distinction is the entire
     // bug. React Router handles this path fine once loaded; it is only
     // arriving here cold, as a browser refresh does, that reaches nginx.
-    const response = await page.goto('/company/deep-link-probe');
+    //
+    // The probe path is deliberately one no route guards. nginx has no
+    // location block below `/` other than `/api/`, `/assets/` and
+    // `/config.js`, so any multi-segment path exercises the fallback
+    // identically — but since 004.03 a *guarded* one redirects to the identity
+    // provider the moment the app boots, taking the document being asserted on
+    // out of the browser before it can be read. That redirect is this suite's
+    // subject elsewhere; here it is only in the way.
+    const response = await page.goto('/deep-link-probe/nested');
 
     expect(response?.status()).toBe(200);
     expect(response?.headers()['content-type']).toContain('text/html');
 
     // What is asserted is that nginx served the app document — the mount point
     // is there and config.js ran on this path too — not that anything
-    // rendered. Only `/` has a route until 003.02 builds the real shell, so a
-    // heading here would be testing that prompt's work, not nginx's fallback.
+    // particular rendered.
     await expect(page.locator('#root')).toBeAttached();
     expect(await page.evaluate(() => '__TCP_CONFIG__' in window)).toBe(true);
   });

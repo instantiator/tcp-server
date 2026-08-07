@@ -23,11 +23,14 @@ let redirecting: Promise<void> | null = null;
  * would start its own navigation. The first one wins and the rest wait on it.
  *
  * The attempted location travels in `state` for the callback route to return
- * the user to, in the same `{ from }` shape `RequireSession` uses. It is
- * round-tripped through the provider and comes back attacker-influenced;
- * {@link safeRedirectTarget} is what refuses to follow it blindly, and is the
- * only place that should. Note the query string, which `RequireSession`'s does
- * not carry — a validator matching bare route paths would discard it.
+ * the user to. It is round-tripped through the provider and comes back
+ * attacker-influenced; {@link safeRedirectTarget} is what refuses to follow it
+ * blindly, and is the only place that should.
+ *
+ * {@link RequireSession} calls this too, to recover a session lost to a page
+ * reload. A page that has lost its token and a request that was refused want
+ * the same navigation, and routing both through here means one latch, one
+ * `{ from }` shape, and no second policy to keep in step with this one.
  */
 export const handleUnauthorized = (): Promise<void> =>
   (redirecting ??= getUserManager()

@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router';
 import { t } from '../strings';
 import { Header } from './Header';
+import { SessionExpiryWarning } from './SessionExpiryWarning';
 import './AppShell.css';
 
 /**
@@ -14,6 +15,11 @@ import './AppShell.css';
  * `tabIndex={-1}` because several browsers move the caret to a fragment target
  * without moving focus to it unless it is focusable.
  *
+ * {@link SessionExpiryWarning} sits outside `main` for the same reason the
+ * header does: the route replaces `main`'s content, and a warning about the
+ * session belongs to the shell rather than to whichever page happens to be
+ * showing when the token starts expiring.
+ *
  * The landing page renders outside this shell and owns its own `main` — there
  * must never be two on one page.
  */
@@ -23,6 +29,7 @@ export const AppShell = () => (
       {t('shell.skipToContent')}
     </a>
     <Header />
+    <SessionExpiryWarning />
     <main className="app-shell__main" id="main-content" tabIndex={-1}>
       <Outlet />
     </main>

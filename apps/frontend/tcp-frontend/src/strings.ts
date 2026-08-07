@@ -69,6 +69,18 @@ const strings = {
     'Sign-in could not be completed. Try signing in again.',
   'callback.error.direct':
     'This page is part of signing in and cannot be opened on its own.',
+
+  // Session recovery on page load and expiry warnings. `session.recovering` is a
+  // label rather than a sentence: `LoadingState` renders it through `state.loading`,
+  // as "Loading your session…".
+  'session.recovering': 'your session',
+  'session.recovery.failed':
+    'We could not reach the sign-in service. Check your connection and try again.',
+  'session.expiry.label': 'Session expiry',
+  'session.expiring': 'Your session is about to expire.',
+  'session.staySignedIn': 'Stay signed in',
+  'session.expiring.announcement':
+    'Your session is about to expire. Choose "Stay signed in" to continue.',
 } as const;
 
 /** Every key `t` accepts. A typo is a type error, not a blank screen. */

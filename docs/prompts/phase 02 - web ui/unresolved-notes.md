@@ -241,7 +241,8 @@ This is deliberate rather than unfinished: consuming it means validating it, and
 ### A query string can create a session in a development build
 
 **Raised by:** 003.02 · **Condition to revisit:** a `Session` starts carrying a
-token or a permission — which is 004.03 — or 009.04 generalises the build flag
+token or a permission — **004.03 has now passed without this happening** — or
+009.04 generalises the build flag
 
 `?devSession=<id>` supplies a stand-in signed-in user so the shell could be
 tested before sign-in existed. It is guarded by `import.meta.env.DEV`, which
@@ -259,6 +260,15 @@ credentials. The guard protects the artefact, not a developer's own browser, and
 nothing stops a future change to `Session` from making `?devSession=admin` mean
 something. Written into 004.03 and 009.04; recorded in the memory
 `project-dev-session-escape-hatch`.
+
+004.03 was named above as the prompt most likely to trigger this, and it did
+not: reload recovery, expiry handling and sign-out all landed with `Session`
+still `{ userId }`. That is the good outcome, and it is also the reason this
+entry stays open rather than closing. The change that would have broken the
+guarantee has now been made without breaking it, so the next person to touch the
+type will not be approaching it as the dangerous one — and from here the build
+flag is the whole of the defence rather than the second half of it. 009.04 owns
+what remains.
 
 ### `@react-aria/live-announcer` is a one-line shim over a `private` subpath
 
@@ -338,6 +348,26 @@ Deriving both from one shared array is the fix, and it was not worth the indirec
 
 That is a gap in what is proven, not a compromise taken — 009.01 is the prompt that closes it, and both notes are written into it.
 
+### Signing out in one browser tab leaves the others looking signed in
+
+**Raised by:** 004.03 · **Condition to revisit:** `monitorSession` becomes usable without third-party cookies, or someone reports a stale tab. Testable: `check_session_iframe` appears in the provider's discovery document _and_ the browser still delivers the provider's cookie to an iframe on this origin.
+
+Tokens are per-tab, because the store is per-tab: an in-memory user store is not shared, and neither is anything derived from it. So signing out in one tab ends that tab's session and the provider's, but a second tab keeps its own copy of a user the provider no longer recognises. Its header still offers an account menu, and it stays that way until its next request comes back 401 and `handleUnauthorized()` sends it to the provider, which by then has no session to return.
+
+The two mechanisms that would close this are both rejected or unavailable. `monitorSession` is the library's own answer and works by polling a hidden iframe against the provider's `check_session_iframe` — the third-party-cookie mechanism [ADR-024](../../ADRs/ADR-024-browser-oidc-client-and-token-handling.md) rejected for renewal, for the same reason it would fail here. `BroadcastChannel` would work and is a dozen lines, but it broadcasts a sign-out that a tab is free to ignore, and it buys a shorter window rather than a closed one — every tab still ends up correct at its next request either way.
+
+So this is a compromise taken knowingly: the window is bounded by the next request, the failure is a menu that looks live rather than access that is, and no data is reachable through it. It becomes worth revisiting if a user meets it, or if the browser and the provider make the iframe approach honest again.
+
+### Reload recovery has no cross-page-load loop counter
+
+**Raised by:** 004.03 · **Condition to revisit:** a provider is observed returning a user with no `sub`, or one already expired on arrival. Testable: `AuthSession` yields `null` for a user that `react-oidc-context` reports as authenticated.
+
+`RequireSession` redirects to the provider when it has no session, which is the same shape of hazard `/callback` was written to avoid — a page that re-attempts sign-in on mount can bounce forever. Three things stop it here, and none of them is a counter: `handleUnauthorized()`'s module latch absorbs StrictMode's double mount and any second guarded component; the `failed` flag stops the effect re-firing after a rejection, which is the only way that latch reopens; and the provider's return leg always lands on `/callback`, which never redirects on its own.
+
+The gap those three leave is narrow but real. A page load is where the latch resets, so the loop that survives is one that completes a round trip and still arrives with no session — which needs a provider that returns a user the exchange accepts but `AuthSession` maps to nothing. `sub` is mandatory in an ID token and `isAuthenticated` already excludes an expired user, so this is close to unreachable against a conforming provider, and a `sessionStorage` counter to guard it would have to be cleared on a successful sign-in or it would break the legitimate second recovery an hour later.
+
+Left out deliberately, with the reasoning recorded in `session.tsx` beside the code rather than only here. An unreachable provider does **not** produce this: `signinRedirect()` rejects before navigating, and the guard shows an error with a manual retry.
+
 ## Carried into a later prompt
 
 | Note                                                                                                                                                                          | Raised by | Goes to  |
@@ -402,3 +432,9 @@ That is a gap in what is proven, not a compromise taken — 009.01 is the prompt
 | Journey 1 is sign-in's first browser coverage — the jsdom tier intercepts the exchange and proves nothing about the PKCE round trip                                           | 004.02    | `009.01` |
 | Retire `app-shell.spec.ts`'s `/no-such-page` workaround: a signed-in page is browser-reachable now                                                                            | 004.02    | `009.01` |
 | The `/callback` route's loading and error states need the manual pass, and it is a signed-out page the contrast scan can reach                                                | 004.02    | `009.02` |
+| The "a request after token expiry recovers" test — 004.03 was asked for it and had no fetch wrapper to make the request                                                       | 004.03    | `005.01` |
+| Reconnecting a stream after expiry must send the _new_ token on the wire; the failure is a permanent loop after the first blip, not at expiry itself                          | 004.03    | `005.02` |
+| A real-browser journey through sign-in, reload and sign-out — 004.03 proves only that a guarded route leaves for the provider                                                 | 004.03    | `009.01` |
+| The expiry warning interrupts assertively and is the only surface that speaks unprompted; it and the two recovery states need the manual pass                                 | 004.03    | `009.02` |
+| ADR-024 now carries (a)–(l); confirm the deliberately-unwired `matchSignoutCallback` and the two operator-facing limitations survived                                         | 004.03    | `009.03` |
+| `Session` stayed `{ userId }` through 004.03, so the build flag is now the whole of what stops `?devSession=` mattering                                                       | 004.03    | `009.04` |

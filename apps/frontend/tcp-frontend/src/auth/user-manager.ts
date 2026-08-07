@@ -57,6 +57,13 @@ export const createUserManagerSettings = (): UserManagerSettings => {
     automaticSilentRenew: false,
     monitorSession: false,
 
+    // How long before expiry `accessTokenExpiring` is raised, which is the
+    // window SessionExpiryWarning gives the user to extend their session. The
+    // library's default is 60; 30 is still comfortably above the 20 seconds
+    // WCAG 2.2.1 requires of a timed session the user can extend, and keeps
+    // the warning close enough to expiry not to be noise.
+    accessTokenExpiringNotificationTimeInSeconds: 30,
+
     // The one setting here that depends on the provider rather than the
     // protocol, and therefore the one that is configured rather than decided.
     // Zitadel puts `profile` and `email` in the ID token, so the default is a
@@ -85,6 +92,31 @@ let manager: UserManager | undefined;
  * managers would hold two different in-memory users. `main.tsx` gives
  * `AuthProvider` **this** instance rather than a second set of settings, and
  * must keep doing so.
+ *
+ * The two subscriptions below are made here, at construction, rather than by a
+ * component: they are properties of the client's lifetime, not of anything
+ * being on screen, and a mounted component is the wrong thing to depend on for
+ * either.
  */
-export const getUserManager = (): UserManager =>
-  (manager ??= new UserManager(createUserManagerSettings()));
+export const getUserManager = (): UserManager => {
+  if (manager !== undefined) return manager;
+
+  const created = new UserManager(createUserManagerSettings());
+
+  // Nothing else watches the token expire. `automaticSilentRenew` is off, so
+  // the library takes no action of its own, and `react-oidc-context` recomputes
+  // `isAuthenticated` only when something dispatches — so without this the
+  // account menu goes on rendering against a token that has gone, which is the
+  // "signed in but nothing works" state ADR-024 exists to avoid. Removing the
+  // user raises `userUnloaded`, which *is* the dispatch, and leaves
+  // {@link RequireSession} to recover a guarded page.
+  created.events.addAccessTokenExpired(() => void created.removeUser());
+
+  // Sweeps PKCE verifiers and signout state left behind by a flow that started
+  // and never came back — a closed tab, a cancelled login. They are not tokens,
+  // but they accumulate in `sessionStorage` for as long as the tab lives.
+  void created.clearStaleState();
+
+  manager = created;
+  return manager;
+};
