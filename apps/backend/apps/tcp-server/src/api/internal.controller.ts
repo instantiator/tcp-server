@@ -10,7 +10,12 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
+import {
+  ApiOkResponse,
+  ApiOperation,
+  ApiSecurity,
+  ApiTags,
+} from '@nestjs/swagger';
 import {
   buildEnumValidationError,
   CompanyUser,
@@ -30,6 +35,7 @@ import {
   PauseDto,
   UpdateStorageChangesDto,
 } from './dto/internal.dto';
+import { RoleResponseDto } from './dto/entity-response.dto';
 
 /**
  * Internal service-to-service endpoints for agent lifecycle management.
@@ -193,6 +199,7 @@ export class InternalController {
 
   /** Returns all roles belonging to the given company. Used by tcp-mcp-interactions' `list_available_contacts`. */
   @ApiOperation({ summary: 'List roles for a company (internal)' })
+  @ApiOkResponse({ type: RoleResponseDto, isArray: true })
   @Get('company/:companyId/roles')
   async listRoles(@Param('companyId') companyId: UUID): Promise<TcpRole[]> {
     return this.roleRepo.findBy({ companyId });

@@ -17,7 +17,12 @@
       "sourceRoot": "apps/tcp-server/src",
       "compilerOptions": {
         "tsConfigPath": "apps/tcp-server/tsconfig.app.json",
-        "plugins": ["@nestjs/swagger"]
+        "plugins": [
+          {
+            "name": "@nestjs/swagger",
+            "options": { "dtoFileNameSuffix": [".dto.ts", ".model.ts"] }
+          }
+        ]
       }
     },
     "tcp-agent": {

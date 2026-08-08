@@ -4,8 +4,11 @@ import { matchPath } from 'react-router';
  * Where a signed-in user lands when there was no saved destination, or the
  * saved one was not usable.
  *
- * A placeholder page until 006.01 replaces it with the real companies
- * overview; the constant is what that prompt confirms rather than hunts for.
+ * Confirmed in 006.01, which replaced the placeholder at this path with the
+ * real companies overview: it is the right landing point because it is the one
+ * page every signed-in user can always use, including a user who is a member of
+ * nothing — whose empty state is the whole application until someone adds them
+ * to a company.
  */
 export const DEFAULT_SIGNED_IN_PATH = '/companies';
 
@@ -22,6 +25,9 @@ export const DEFAULT_SIGNED_IN_PATH = '/companies';
  * A guarded route added later and not listed here loses the return-to-page
  * behaviour, which is an inconvenience rather than a hole. Derive both from one
  * array if the table outgrows a screenful.
+ *
+ * Re-checked in 006.01: both guarded routes were rebuilt and neither was added,
+ * renamed or moved, so this list is still exactly `App.tsx`'s guarded set.
  */
 const RETURNABLE_ROUTES = ['/companies', '/company/:companyId'];
 

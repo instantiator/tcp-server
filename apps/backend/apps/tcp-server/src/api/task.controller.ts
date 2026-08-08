@@ -26,6 +26,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
   ApiConsumes,
+  ApiOkResponse,
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
@@ -40,6 +41,10 @@ import {
 } from '../auth/company-scope.decorator';
 import { TaskEventService } from '../events/task-event.service';
 import { CreateTaskDto, UpdateTaskDto } from './dto/task.dto';
+import {
+  AuditEventResponseDto,
+  TaskResponseDto,
+} from './dto/entity-response.dto';
 import { SystemShutdownService } from './system-shutdown.service';
 import { TaskMaterialSummary, TaskService } from './task.service';
 
@@ -64,6 +69,7 @@ export class TaskController {
 
   /** Creates a task in the `ready` state. No plan is generated until `POST /api/task/:id/start`. */
   @ApiOperation({ summary: 'Create a task' })
+  @ApiOkResponse({ type: TaskResponseDto })
   @CompanyScope({ from: 'body', key: 'companyId', via: 'company' })
   @Post()
   async createTask(@Body() body: CreateTaskDto): Promise<TcpTask> {
@@ -76,6 +82,7 @@ export class TaskController {
    * editable.
    */
   @ApiOperation({ summary: 'Partially update an unstarted task' })
+  @ApiOkResponse({ type: TaskResponseDto })
   @CompanyScope({ from: 'param', key: 'id', via: 'task' })
   @Put(':id')
   async updateTask(
@@ -113,6 +120,7 @@ export class TaskController {
    * Refused with `503` while the system is draining for shutdown.
    */
   @ApiOperation({ summary: 'Start a task' })
+  @ApiOkResponse({ type: TaskResponseDto })
   @CompanyScope({ from: 'param', key: 'id', via: 'task' })
   @Post(':id/start')
   @HttpCode(202)
@@ -126,6 +134,7 @@ export class TaskController {
    * cascades to its still-non-terminal assignments and their working agents.
    */
   @ApiOperation({ summary: 'Cancel a task' })
+  @ApiOkResponse({ type: TaskResponseDto })
   @CompanyScope({ from: 'param', key: 'id', via: 'task' })
   @Post(':id/cancel')
   @HttpCode(202)
@@ -135,6 +144,7 @@ export class TaskController {
 
   /** Lists a company's tasks. */
   @ApiOperation({ summary: 'List tasks for a company' })
+  @ApiOkResponse({ type: TaskResponseDto, isArray: true })
   @CompanyScope({ from: 'query', key: 'companyId', via: 'company' })
   @CompanyScopeRequired('companyId query parameter is required')
   @Get()
@@ -162,6 +172,7 @@ export class TaskController {
    * {@link TaskService.getHistory}.
    */
   @ApiOperation({ summary: "Get a task's audit history" })
+  @ApiOkResponse({ type: AuditEventResponseDto, isArray: true })
   @CompanyScope({ from: 'param', key: 'id', via: 'task' })
   @Get(':id/history')
   async getTaskHistory(@Param('id') id: UUID): Promise<AuditEvent[]> {

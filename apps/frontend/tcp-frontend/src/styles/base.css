@@ -160,6 +160,38 @@ body {
 }
 
 /*
+ * The company view's tabs, for the third time and the same reason: React Aria
+ * ships no styling. Unstyled, the tab list is a row of plain words in which the
+ * selected one is indistinguishable from the rest and a focused one has no
+ * ring — so the control is operable and unreadable at once.
+ *
+ * The selected state is a border rather than a colour change, because colour
+ * alone cannot carry it (WCAG 1.4.1) and the high-contrast theme may have very
+ * little colour to spend.
+ */
+.react-aria-TabList {
+  display: flex;
+  gap: var(--tcp-space-xs);
+  border-block-end: var(--tcp-border-width) solid var(--tcp-color-border);
+}
+
+.react-aria-Tab {
+  padding: var(--tcp-space-sm) var(--tcp-space-md);
+  border-block-end: var(--tcp-focus-ring-width) solid transparent;
+  cursor: pointer;
+}
+
+.react-aria-Tab[data-selected] {
+  border-block-end-color: var(--tcp-color-accent);
+  color: var(--tcp-color-accent);
+}
+
+.react-aria-Tab[data-focus-visible] {
+  outline: var(--tcp-focus-ring-width) solid var(--tcp-color-focus);
+  outline-offset: var(--tcp-focus-ring-offset);
+}
+
+/*
  * Off-screen until focused, then the first thing on the page. `clip-path`
  * rather than `display: none`, which would take it out of the tab order and
  * leave the link unreachable — the exact failure it exists to prevent.

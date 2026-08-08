@@ -21,10 +21,17 @@ import {
  * the only path that announces is the falling edge of a wait that already
  * started, and on mount no wait has started, so a second invocation reaches
  * the same conclusion as the first.
+ *
+ * **Pass `null` for `completion` when the wait did not end in success.** A
+ * failed request stops loading just as a successful one does, so a caller that
+ * always supplies an announcement gets two for one event: `ErrorState`'s
+ * assertive "Error: …" and a polite "…loaded" that isn't true. The caller knows
+ * the outcome and this hook does not, which is why the decision is theirs —
+ * `error === null ? { … } : null` at the call site.
  */
 export const useLoadingAnnouncement = (
   loading: boolean,
-  completion: Announcement,
+  completion: Announcement | null,
 ): void => {
   // When the current state began. Read before it is overwritten, so a wait
   // is measured from when it started rather than from when it ended.
@@ -41,6 +48,7 @@ export const useLoadingAnnouncement = (
     startedAt.current = Date.now();
 
     if (loading) return;
+    if (latest.current === null) return;
     if (Date.now() - since < ANNOUNCE_LOADING_MIN_MS) return;
 
     announce(latest.current);
