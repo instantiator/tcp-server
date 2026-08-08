@@ -35,7 +35,10 @@ import {
   PauseDto,
   UpdateStorageChangesDto,
 } from './dto/internal.dto';
-import { RoleResponseDto } from './dto/entity-response.dto';
+import {
+  CompanyUserResponseDto,
+  RoleResponseDto,
+} from './dto/entity-response.dto';
 
 /**
  * Internal service-to-service endpoints for agent lifecycle management.
@@ -207,6 +210,7 @@ export class InternalController {
 
   /** Returns all users belonging to the given company. Used by tcp-mcp-interactions' `list_available_contacts`. */
   @ApiOperation({ summary: 'List users for a company (internal)' })
+  @ApiOkResponse({ type: CompanyUserResponseDto, isArray: true })
   @Get('company/:companyId/users')
   async listUsers(@Param('companyId') companyId: UUID): Promise<CompanyUser[]> {
     return this.userRepo.findBy({ companyId });

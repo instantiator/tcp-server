@@ -1344,7 +1344,7 @@ export interface components {
             llmConfig?: components["schemas"]["LlmConfigDto"];
             rolePrompt?: string;
         };
-        CompanyUser: {
+        CompanyUserResponseDto: {
             id: string;
             companyId: string;
             identifier: string;
@@ -1371,7 +1371,7 @@ export interface components {
             roles?: string[];
             knowledgeDomains?: string[];
         };
-        Conversation: {
+        ConversationResponseDto: {
             id: string;
             slug: string;
             companyId: string;
@@ -1541,7 +1541,7 @@ export interface components {
             shortcode: string;
             plannerRoleId?: string | null;
             /** @enum {string} */
-            status: "ready" | "in-progress" | "succeeded" | "failed" | "cancelled" | "planning" | "finalising";
+            status: "ready" | "planning" | "in-progress" | "finalising" | "succeeded" | "failed" | "cancelled";
             materials: Record<string, never>[];
             expected: Record<string, never>[];
             completed: Record<string, never>[] | null;
@@ -1986,7 +1986,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CompanyUser"][];
+                    "application/json": components["schemas"]["CompanyUserResponseDto"][];
                 };
             };
         };
@@ -2006,12 +2006,12 @@ export interface operations {
             };
         };
         responses: {
-            201: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CompanyUser"];
+                    "application/json": components["schemas"]["CompanyUserResponseDto"];
                 };
             };
         };
@@ -2057,7 +2057,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CompanyUser"];
+                    "application/json": components["schemas"]["CompanyUserResponseDto"];
                 };
             };
         };
@@ -2080,7 +2080,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Conversation"][];
+                    "application/json": components["schemas"]["ConversationResponseDto"][];
                 };
             };
         };
@@ -2119,12 +2119,12 @@ export interface operations {
             };
         };
         responses: {
-            201: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Conversation"];
+                    "application/json": components["schemas"]["ConversationResponseDto"];
                 };
             };
         };
@@ -2277,7 +2277,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CompanyUser"][];
+                    "application/json": components["schemas"]["CompanyUserResponseDto"][];
                 };
             };
         };
