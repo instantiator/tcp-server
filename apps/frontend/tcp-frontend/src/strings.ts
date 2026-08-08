@@ -42,6 +42,11 @@ const strings = {
   'announce.routeChange': '{title}',
   'announce.tasksAdded': 'Tasks: {count} added',
   'announce.tasksCompleted': '{count} completed',
+  // `{count}` is reserved: the announcer supplies it as the number of times a
+  // change repeated, and overwrites any value a caller passes under that name.
+  // An announcement that needs a domain number must call it something else.
+  'announce.companiesLoaded': 'Companies loaded',
+  'announce.companyLoaded': '{name} loaded',
 
   'state.loading': 'Loading {label}…',
   'state.error.label': 'Error',
@@ -54,6 +59,31 @@ const strings = {
 
   'page.companies.title': 'Companies',
   'page.company.title': 'Company',
+
+  // The companies overview. `companies.loading` is a label rather than a
+  // sentence: `LoadingState` renders it through `state.loading`, as "Loading
+  // your companies…".
+  'companies.loading': 'your companies',
+  'companies.error.failed': 'Your companies could not be loaded.',
+  'companies.error.forbidden': 'You are not permitted to list companies.',
+  'companies.empty.heading': 'You are not a member of any company',
+  'companies.empty.body':
+    'Companies are created and managed with tcp-cli, the command-line tool — the web client cannot create one yet. Ask whoever runs this system to add you to a company.',
+  'companies.stat.activeAgents': 'Active agents',
+  'companies.stat.activeTasks': 'Active tasks',
+  'companies.stat.openEnquiries': 'Open enquiries',
+
+  // The company view shell. `company.loading` is a label, as above.
+  'company.loading': 'this company',
+  'company.error.failed': 'This company could not be loaded.',
+  'company.unavailable.heading': 'This company is not available',
+  'company.unavailable.body':
+    'You may not be a member of it, or it may no longer exist.',
+  'company.unavailable.back': 'Go to your companies',
+  'company.stream.failed':
+    'Live updates have stopped. Reload the page to reconnect.',
+  'company.tabs.label': 'Company views',
+  'company.tab.activity': 'Live activity',
   'page.notFound.title': 'Page not found',
   'page.notFound.body':
     'That address does not match anything in this application. It may have been mistyped, or the thing it pointed at may no longer exist.',

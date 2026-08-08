@@ -12,7 +12,12 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { UUID } from 'crypto';
 import { Repository } from 'typeorm';
@@ -23,6 +28,7 @@ import {
   CreateCompanyUserDto,
   UpdateCompanyUserDto,
 } from './dto/company-user.dto';
+import { CompanyUserResponseDto } from './dto/entity-response.dto';
 
 /** REST controller for per-company human user management. */
 @ApiTags('company-users')
@@ -37,6 +43,7 @@ export class CompanyUserController {
 
   /** Returns all users belonging to the given company. */
   @ApiOperation({ summary: 'List users in a company' })
+  @ApiOkResponse({ type: CompanyUserResponseDto, isArray: true })
   @CompanyScope({ from: 'param', key: 'companyId', via: 'company' })
   @Get()
   async listUsers(@Param('companyId') companyId: UUID): Promise<CompanyUser[]> {
@@ -48,6 +55,7 @@ export class CompanyUserController {
    * Returns 409 if a user with the same identifier already exists (DB unique constraint).
    */
   @ApiOperation({ summary: 'Add a user to a company' })
+  @ApiOkResponse({ type: CompanyUserResponseDto })
   @CompanyScope({ from: 'param', key: 'companyId', via: 'company' })
   @Post()
   async createUser(
@@ -67,6 +75,7 @@ export class CompanyUserController {
 
   /** Partially updates a user's name, memberType, roles, or knowledgeDomains. */
   @ApiOperation({ summary: 'Update a company user' })
+  @ApiOkResponse({ type: CompanyUserResponseDto })
   @CompanyScope({ from: 'param', key: 'companyId', via: 'company' })
   @Patch(':userId')
   async updateUser(

@@ -1217,7 +1217,36 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        TcpAssignment: Record<string, never>;
+        AssignmentResponseDto: {
+            id: string;
+            taskId?: string | null;
+            companyId: string;
+            /** @enum {string} */
+            mode: "plan" | "implement" | "qa" | "chat" | "consultee" | "finalise";
+            orderIndex?: number | null;
+            prompt: string;
+            shortcode?: string | null;
+            roleId: string;
+            /** @enum {string} */
+            status: "ready" | "in-progress" | "in-qa" | "succeeded" | "failed" | "cancelled";
+            failureReason: string | null;
+            agentId?: string | null;
+            targetAssignmentId?: string | null;
+            parentAssignmentId?: string | null;
+            materials: Record<string, never>[];
+            expected: Record<string, never>[];
+            prepared: Record<string, never>[];
+            approved: Record<string, never>[];
+            summary: string | null;
+            /** @enum {string|null} */
+            qaStatus: "accepted" | "rejected" | null;
+            qaFeedback: string | null;
+            qaAttempts: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
         CompanyStatsDto: {
             /** @description Agents that are idle, running or paused */
             activeAgents: number;
@@ -1264,7 +1293,21 @@ export interface components {
             /** Format: uuid */
             plannerRoleId?: string;
         };
-        TcpCompany: Record<string, never>;
+        CompanyResponseDto: {
+            id: string;
+            slug: string;
+            name: string;
+            description: string;
+            llmConfig?: Record<string, never> | null;
+            systemPromptTemplate?: string | null;
+            mcpServerList: string[];
+            timezone?: string | null;
+            companyContext?: string | null;
+            embeddingConfig?: Record<string, never> | null;
+            runConfig?: Record<string, never> | null;
+            plannerRoleId?: string | null;
+            nextTaskShortcodeIndex: number;
+        };
         UpdateCompanyDto: {
             name?: string;
             description?: string;
@@ -1277,7 +1320,20 @@ export interface components {
             /** Format: uuid */
             plannerRoleId?: string;
         };
-        TcpRole: Record<string, never>;
+        RoleResponseDto: {
+            id: string;
+            companyId: string;
+            slug: string;
+            name: string;
+            description: string;
+            llmConfig?: Record<string, never> | null;
+            systemPromptTemplate?: string | null;
+            rolePrompt?: string | null;
+            knowledgeDomains: string[];
+            mcpServerList: string[];
+            runConfig?: Record<string, never> | null;
+            queryIndex: number;
+        };
         UpdateRoleDto: {
             slug?: string;
             name?: string;
@@ -1288,7 +1344,18 @@ export interface components {
             llmConfig?: components["schemas"]["LlmConfigDto"];
             rolePrompt?: string;
         };
-        CompanyUser: Record<string, never>;
+        CompanyUserResponseDto: {
+            id: string;
+            companyId: string;
+            identifier: string;
+            name: string | null;
+            /** @enum {string} */
+            memberType: "creator" | "owner" | "member";
+            roles: string[];
+            knowledgeDomains: string[];
+            /** Format: date-time */
+            createdAt: string;
+        };
         CreateCompanyUserDto: {
             identifier: string;
             /** @enum {string} */
@@ -1304,7 +1371,25 @@ export interface components {
             roles?: string[];
             knowledgeDomains?: string[];
         };
-        Conversation: Record<string, never>;
+        ConversationResponseDto: {
+            id: string;
+            slug: string;
+            companyId: string;
+            roleName: string;
+            roleId: string | null;
+            agentId: string | null;
+            question: string;
+            context: string | null;
+            /** @enum {string} */
+            status: "awaiting_user" | "closed";
+            routedToIdentifiers: string[];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            closedAt?: string;
+            /** Format: date-time */
+            repliesDeliveredAt?: string;
+        };
         ConversationReplyDto: {
             content: string;
             authorIdentifier?: string;
@@ -1449,7 +1534,23 @@ export interface components {
             expected?: components["schemas"]["TaskExpectedArtifactDto"][];
             materials?: components["schemas"]["InlineTextMaterialDto"][];
         };
-        TcpTask: Record<string, never>;
+        TaskResponseDto: {
+            id: string;
+            companyId: string;
+            request: string;
+            shortcode: string;
+            plannerRoleId?: string | null;
+            /** @enum {string} */
+            status: "ready" | "planning" | "in-progress" | "finalising" | "succeeded" | "failed" | "cancelled";
+            materials: Record<string, never>[];
+            expected: Record<string, never>[];
+            completed: Record<string, never>[] | null;
+            failureReason: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
         UpdateTaskDto: {
             request?: string;
             /** Format: uuid */
@@ -1457,7 +1558,21 @@ export interface components {
             expected?: components["schemas"]["TaskExpectedArtifactDto"][];
             materials?: components["schemas"]["InlineTextMaterialDto"][];
         };
-        AuditEvent: Record<string, never>;
+        AuditEventResponseDto: {
+            id: string;
+            /** Format: date-time */
+            timestamp: string;
+            companyId: string;
+            role: string;
+            agentId: string | null;
+            assignmentId: string | null;
+            taskId: string | null;
+            /** @enum {string} */
+            eventType: "llm_request" | "llm_response" | "tool_call" | "tool_result" | "decision" | "state_change" | "agent_loop_completion" | "compaction" | "input";
+            payload: {
+                [key: string]: unknown;
+            };
+        };
         StartAgentDto: {
             /** Format: uuid */
             companyId: string;
@@ -1465,7 +1580,35 @@ export interface components {
             roleId: string;
             initialPrompt: string;
         };
-        TcpAgent: Record<string, never>;
+        AgentResponseDto: {
+            id: string;
+            companyId: string;
+            roleId: string;
+            assignmentId: string;
+            /** @enum {string} */
+            status: "idle" | "running" | "paused" | "completed" | "failed" | "cancelled";
+            threadId: string | null;
+            initialPrompt: string;
+            /** Format: date-time */
+            createdAt: string;
+            output: string | null;
+            storageChanges?: {
+                created: string[];
+                modified: string[];
+                deleted: string[];
+                moved?: {
+                    from: string;
+                    to: string;
+                }[];
+            };
+            requiredToolCalls?: string[] | null;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            pausedAt?: string;
+            /** @enum {string|null} */
+            pauseReason?: "user_input" | "consultation" | "shutdown" | null;
+        };
         StartChatDto: {
             /** Format: uuid */
             companyId: string;
@@ -1581,7 +1724,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TcpAssignment"][];
+                    "application/json": components["schemas"]["AssignmentResponseDto"][];
                 };
             };
         };
@@ -1602,7 +1745,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TcpAssignment"];
+                    "application/json": components["schemas"]["AssignmentResponseDto"];
                 };
             };
         };
@@ -1642,12 +1785,12 @@ export interface operations {
             };
         };
         responses: {
-            201: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TcpCompany"];
+                    "application/json": components["schemas"]["CompanyResponseDto"];
                 };
             };
         };
@@ -1668,7 +1811,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["CompanyResponseDto"];
                 };
             };
         };
@@ -1693,7 +1836,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TcpCompany"];
+                    "application/json": components["schemas"]["CompanyResponseDto"];
                 };
             };
         };
@@ -1733,7 +1876,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TcpRole"][];
+                    "application/json": components["schemas"]["RoleResponseDto"][];
                 };
             };
         };
@@ -1755,7 +1898,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TcpRole"];
+                    "application/json": components["schemas"]["RoleResponseDto"];
                 };
             };
         };
@@ -1781,7 +1924,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TcpRole"];
+                    "application/json": components["schemas"]["RoleResponseDto"];
                 };
             };
         };
@@ -1843,7 +1986,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CompanyUser"][];
+                    "application/json": components["schemas"]["CompanyUserResponseDto"][];
                 };
             };
         };
@@ -1863,12 +2006,12 @@ export interface operations {
             };
         };
         responses: {
-            201: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CompanyUser"];
+                    "application/json": components["schemas"]["CompanyUserResponseDto"];
                 };
             };
         };
@@ -1914,7 +2057,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CompanyUser"];
+                    "application/json": components["schemas"]["CompanyUserResponseDto"];
                 };
             };
         };
@@ -1937,7 +2080,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Conversation"][];
+                    "application/json": components["schemas"]["ConversationResponseDto"][];
                 };
             };
         };
@@ -1976,12 +2119,12 @@ export interface operations {
             };
         };
         responses: {
-            201: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Conversation"];
+                    "application/json": components["schemas"]["ConversationResponseDto"];
                 };
             };
         };
@@ -2113,7 +2256,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TcpRole"][];
+                    "application/json": components["schemas"]["RoleResponseDto"][];
                 };
             };
         };
@@ -2134,7 +2277,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CompanyUser"][];
+                    "application/json": components["schemas"]["CompanyUserResponseDto"][];
                 };
             };
         };
@@ -2515,12 +2658,12 @@ export interface operations {
             };
         };
         responses: {
-            201: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TcpRole"];
+                    "application/json": components["schemas"]["RoleResponseDto"];
                 };
             };
         };
@@ -2541,7 +2684,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TcpRole"];
+                    "application/json": components["schemas"]["RoleResponseDto"];
                 };
             };
         };
@@ -2566,7 +2709,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TcpRole"];
+                    "application/json": components["schemas"]["RoleResponseDto"];
                 };
             };
         };
@@ -2999,7 +3142,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TcpTask"][];
+                    "application/json": components["schemas"]["TaskResponseDto"][];
                 };
             };
         };
@@ -3017,12 +3160,12 @@ export interface operations {
             };
         };
         responses: {
-            201: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TcpTask"];
+                    "application/json": components["schemas"]["TaskResponseDto"];
                 };
             };
         };
@@ -3066,7 +3209,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TcpTask"];
+                    "application/json": components["schemas"]["TaskResponseDto"];
                 };
             };
         };
@@ -3103,12 +3246,12 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TcpTask"];
+                    "application/json": components["schemas"]["TaskResponseDto"];
                 };
             };
         };
@@ -3124,12 +3267,12 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            202: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TcpTask"];
+                    "application/json": components["schemas"]["TaskResponseDto"];
                 };
             };
         };
@@ -3150,7 +3293,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AuditEvent"][];
+                    "application/json": components["schemas"]["AuditEventResponseDto"][];
                 };
             };
         };
@@ -3189,12 +3332,12 @@ export interface operations {
             };
         };
         responses: {
-            201: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TcpAgent"];
+                    "application/json": components["schemas"]["AgentResponseDto"];
                 };
             };
         };
@@ -3212,12 +3355,12 @@ export interface operations {
             };
         };
         responses: {
-            201: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TcpAgent"];
+                    "application/json": components["schemas"]["AgentResponseDto"];
                 };
             };
         };
@@ -3277,12 +3420,12 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            201: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TcpAgent"];
+                    "application/json": components["schemas"]["AgentResponseDto"];
                 };
             };
         };
@@ -3306,7 +3449,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TcpAgent"][];
+                    "application/json": components["schemas"]["AgentResponseDto"][];
                 };
             };
         };
@@ -3327,7 +3470,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TcpAgent"];
+                    "application/json": components["schemas"]["AgentResponseDto"];
                 };
             };
         };
@@ -3367,7 +3510,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AuditEvent"][];
+                    "application/json": components["schemas"]["AuditEventResponseDto"][];
                 };
             };
         };

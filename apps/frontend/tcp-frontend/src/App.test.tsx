@@ -3,11 +3,12 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { virtual } from '@guidepup/virtual-screen-reader';
 import { MemoryRouter } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { getUserManager } from './auth/user-manager';
 import { t } from './strings';
 import { expectNoA11yViolations } from './test-support/axe';
+import { fetchMock, installFetchMock } from './test-support/fetch-mock';
 import { renderAppAt, TEST_SESSION } from './test-support/render-app';
 import { ThemeProvider } from './theme/ThemeProvider';
 
@@ -23,6 +24,33 @@ const renderApp = () =>
   );
 
 describe('App', () => {
+  beforeEach(() => {
+    // Since 006.01 the guarded pages fetch on mount, so an unstubbed `fetch`
+    // here would reach a real server — slow when there is one and an unhandled
+    // rejection when there is not. This file is about routing, focus and
+    // announcements; what each page does with its data is its own suite's
+    // subject, so the stub answers with the emptiest *valid* body per route.
+    //
+    // Per route, and not one body for all of them: the list route always
+    // returns an array and the detail route returns `null` for a company the
+    // caller cannot see. A single answer would be wrong for one of them, and
+    // wrong in a way that crashes the page rather than emptying it.
+    installFetchMock();
+    fetchMock.mockImplementation((input) => {
+      const url = input instanceof Request ? input.url : String(input);
+      const body = /\/api\/company\/[^/]+$/.test(url) ? 'null' : '[]';
+      return Promise.resolve(
+        new Response(body, {
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('renders the landing page through the full provider stack', () => {
     renderApp();
 
@@ -83,16 +111,20 @@ describe('App', () => {
     ).toBeInTheDocument();
   });
 
-  it('renders a deep link directly, with its route parameter', () => {
+  it('renders a deep link directly, resolving its route parameter', async () => {
     // Arrived at, not navigated to — that distinction is the whole test,
     // because in-app navigation would pass even if the route table could not
     // resolve the URL cold.
     renderAppAt('/company/acme', TEST_SESSION);
 
+    // The stubbed server knows no companies, so the page settles on its
+    // unavailable state. That it settles at all is what proves the parameter
+    // reached the page: with no `companyId` there would be nothing to ask for.
     expect(
-      screen.getByRole('heading', { name: t('page.company.title') }),
+      await screen.findByRole('heading', {
+        name: t('company.unavailable.heading'),
+      }),
     ).toBeInTheDocument();
-    expect(screen.getByText('acme')).toBeInTheDocument();
   });
 
   it('renders the not-found page for an unknown address, signed out', () => {

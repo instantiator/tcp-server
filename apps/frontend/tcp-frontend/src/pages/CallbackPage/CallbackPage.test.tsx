@@ -1,10 +1,11 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ErrorResponse, User } from 'oidc-client-ts';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getUserManager } from '../../auth/user-manager';
 import { t } from '../../strings';
 import { expectNoA11yViolations } from '../../test-support/axe';
+import { fetchMock, installFetchMock } from '../../test-support/fetch-mock';
 import { renderAppAtUrl } from '../../test-support/render-app';
 
 // The real singleton, spied rather than mocked: `AuthProvider` is given this
@@ -48,6 +49,26 @@ describe('CallbackPage', () => {
     // `AuthProvider` falls through to `getUser()` when there was nothing to
     // exchange. Left alone it would find whatever a previous test stored.
     vi.spyOn(manager, 'getUser').mockResolvedValue(null);
+
+    // The page a completed sign-in lands on fetches (006.01). Answering the
+    // company detail route with a named company is what lets the journey test
+    // below assert the *destination* rather than only that some page rendered.
+    installFetchMock();
+    fetchMock.mockImplementation((input) => {
+      const url = input instanceof Request ? input.url : String(input);
+      const body = url.endsWith('/api/company/acme')
+        ? JSON.stringify({ id: 'acme', slug: 'acme', name: 'Acme Corporation' })
+        : '[]';
+      return Promise.resolve(
+        new Response(body, {
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   describe('a successful return', () => {
@@ -58,13 +79,17 @@ describe('CallbackPage', () => {
 
       renderAppAtUrl(RETURNED);
 
-      // The company page renders only behind `RequireSession`, so seeing it is
-      // the whole journey at once: the code was exchanged, the session was
-      // derived from the user, and the saved destination was honoured.
+      // The company page renders only behind `RequireSession`, and it titles
+      // itself from the company the route parameter names — so this one
+      // assertion is the whole journey: the code was exchanged, the session was
+      // derived from the user, the saved destination was honoured, and the
+      // company it pointed at was the one fetched.
       expect(
-        await screen.findByRole('heading', { name: t('page.company.title') }),
+        await screen.findByRole('heading', {
+          name: 'Acme Corporation',
+          level: 1,
+        }),
       ).toBeInTheDocument();
-      expect(screen.getByText('acme')).toBeInTheDocument();
     });
 
     it('lands on the default destination when nothing was saved', async () => {

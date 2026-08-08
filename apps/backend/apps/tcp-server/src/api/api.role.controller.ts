@@ -13,7 +13,12 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { UUID } from 'crypto';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -21,6 +26,7 @@ import { CompanyMembershipGuard } from '../auth/company-membership.guard';
 import { CompanyScope } from '../auth/company-scope.decorator';
 import { DbService } from '../db/db.service';
 import { CreateRoleDto, UpdateRoleDto } from './dto/role.dto';
+import { RoleResponseDto } from './dto/entity-response.dto';
 import { computeRoleWarnings, setWarningsHeader } from './validation-warnings';
 
 /**
@@ -45,6 +51,7 @@ export class RoleController {
    * `X-Tcp-Warnings` response header — the role is still created.
    */
   @ApiOperation({ summary: 'Create a role' })
+  @ApiOkResponse({ type: RoleResponseDto })
   @CompanyScope({ from: 'body', key: 'companyId', via: 'company' })
   @Post()
   async createRole(
@@ -64,6 +71,7 @@ export class RoleController {
    * {@link createRole} for the `X-Tcp-Warnings` header.
    */
   @ApiOperation({ summary: 'Partially update a role' })
+  @ApiOkResponse({ type: RoleResponseDto })
   @CompanyScope({ from: 'param', key: 'id', via: 'role' })
   @Put(':id')
   async updateRole(
@@ -78,6 +86,7 @@ export class RoleController {
 
   /** Retrieves a role by its UUID. Returns 404 when not found. */
   @ApiOperation({ summary: 'Get a role by ID' })
+  @ApiOkResponse({ type: RoleResponseDto })
   @CompanyScope({ from: 'param', key: 'id', via: 'role' })
   @Get(':id')
   async getRole(@Param('id') id: UUID): Promise<TcpRole> {

@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiOkResponse,
   ApiOperation,
   ApiQuery,
   ApiTags,
@@ -27,6 +28,7 @@ import {
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { ConversationService } from './conversation.service';
 import { ConversationReplyDto } from './dto/conversation.dto';
+import { ConversationResponseDto } from './dto/entity-response.dto';
 
 /** REST controller for agent-to-human conversation queries. */
 @ApiTags('conversations')
@@ -53,6 +55,7 @@ export class ConversationController {
   @ApiOperation({ summary: "List a company's conversations" })
   @ApiQuery({ name: 'companyId', required: true, description: 'Company UUID' })
   @ApiQuery({ name: 'status', required: false })
+  @ApiOkResponse({ type: ConversationResponseDto, isArray: true })
   @CompanyScope({ from: 'query', key: 'companyId', via: 'company' })
   @CompanyScopeRequired('companyId query parameter is required')
   @Get()
@@ -86,6 +89,7 @@ export class ConversationController {
    * reply injected as the first message on resume.
    */
   @ApiOperation({ summary: 'Reply to a conversation' })
+  @ApiOkResponse({ type: ConversationResponseDto })
   @CompanyScope({ from: 'param', key: 'slug', via: 'conversation' })
   @Post(':slug/reply')
   async reply(

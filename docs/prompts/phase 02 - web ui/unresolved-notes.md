@@ -392,6 +392,86 @@ Picked as twice HTTP/1.1's six-per-origin ceiling, with headroom for a live view
 
 The client keeps no bookkeeping across a drop: no last-seen id, no replay buffer. A reconnected stream re-renders correctly only because the company and task streams keep priming with current state on every subscribe, and the agent stream keeps synthesising a terminal event for a late subscriber. That coupling is recorded in ADR-025, not enforced by any type the client and server share.
 
+### The generated client was typed against entities the Swagger plugin never read
+
+**Raised by:** 006.01 · **Condition to revisit:** a new entity model is added
+outside `libs/tcp-shared/src/models/*.model.ts`, or `dtoFileNameSuffix` in
+`apps/backend/nest-cli.json` is edited. Testable: `grep -c 'Record<string,
+never>;' apps/frontend/tcp-frontend/src/api/schema.d.ts` returns more than 2.
+
+The `@nestjs/swagger` CLI plugin only synthesises `@ApiProperty` metadata for
+files matching `dtoFileNameSuffix` (default `['.dto.ts', '.entity.ts']`). The
+entities live in `libs/tcp-shared/src/models/*.model.ts`, which matched
+neither default, so eight of them reached the web client as `Record<string,
+never>` — a type with no properties at all — across 29 operations. The
+failure is silent at its cause and surfaces only as a compile error at a call
+site, in another package, whenever someone finally tries to read a field.
+Fixed by adding `.model.ts` to the suffix list.
+
+### The generated schema documents the persistence shape, not the wire shape
+
+**Raised by:** 006.01 · **Condition to revisit:** any API read path starts
+passing `relations:`, or a model gains `eager: true`. Testable: `grep -rn
+'relations:' apps/backend/apps/tcp-server/src/` returns a hit on a route the
+web UI calls.
+
+TypeORM relation properties are declared `!` because they are required _in
+the database_, but no relation is eager-loaded and `relations:` appears in
+only two non-route places (`chat.service.ts`, `system-drain.service.ts`). So
+a response carries the foreign-key columns and not the related objects, and
+the `OmitType` DTOs in `entity-response.dto.ts` encode exactly that, dropping
+each unloaded relation while copying the rest of the model's metadata.
+Nothing fails if it stops being true — the schema just quietly
+under-describes the response.
+
+### `GET /api/company/{id}` answers 200 with `null` for a company the caller cannot see
+
+**Raised by:** 006.01 · **Condition to revisit:** the handler starts
+returning 404, or the response is documented as nullable. Testable:
+`CompanyPage.tsx` no longer needs its `data ?? undefined`.
+
+It is a successful response carrying no company, so it reaches the browser
+as data rather than as an error, and the generated type says a company is
+always present. The `@ApiOkResponse({ type: CompanyResponseDto })` added in
+006.01 does not describe the null case. 404 would be the honest answer, but
+changing it is a behavioural change to a route other callers use, not
+something to fix in passing.
+
+### Most e2e specs still clean up by emptying shared tables
+
+**Raised by:** 006.01 · **Condition to revisit:** a spec fails on data it did
+not create, or the tier's failure rate rises above zero again. Testable:
+`grep -rc 'createQueryBuilder().delete().execute()' apps/backend/test/e2e/`
+returns hits in more than a couple of files.
+
+Every spec in the e2e tier shares one Postgres database, migrated once by
+`global-setup.ts` and never reset between spec files, so each spec is
+responsible for its own rows. About fourteen of them discharge that
+responsibility with `repo.createQueryBuilder().delete().execute()` — no `WHERE`
+clause — which removes every row in the table rather than the ones that spec
+created. `system-shutdown.e2e-spec.ts` was rescoped to its own `companyId` in
+006.01, because its four unqualified deletes over the audit table made it the
+slowest hook in the tier; the rest were left alone.
+
+Under `maxWorkers: 1` this is usually harmless, because files run one at a
+time. What it leaves is no margin: the moment any spec has an async write still
+in flight past its own teardown — a BullMQ job, a fire-and-forget audit post —
+the next spec's first blanket delete removes it, and the symptom lands in a file
+that did nothing wrong. Two specs also collide on genuinely global unique
+constraints: `tcp_company.slug` is hardcoded `'acme'` in both
+`agent.e2e-spec.ts` and `company-role.e2e-spec.ts`, and `Conversation.slug` is
+derived from a role name, so the role `analyst`/`Analyst` in
+`internal-conversation.e2e-spec.ts` and `task-company-events.e2e-spec.ts` both
+produce `analyst-1`.
+
+None of this was observed firing — the tier's actual flake had a different and
+now-fixed cause (see the memory `project-e2e-jwt-flake`: supertest was binding a
+fresh ephemeral port per request, colliding with Docker's dynamic container port
+mappings, so requests were occasionally answered by a container). Scoping the
+remaining deletes and namespacing the two slugs is a tidy-up worth doing on its
+own merits, not a fix for a known failure, which is why it was not bundled into
+006.01.
+
 ## Carried into a later prompt
 
 | Note                                                                                                                                                                          | Raised by | Goes to  |
@@ -477,3 +557,14 @@ The client keeps no bookkeeping across a drop: no last-seen id, no replay buffer
 | Each open chat's `StreamDelta`s belong in that conversation's own local state, kept separate across several open chats                                                        | 005.02    | `008.02` |
 | The browser tier can mint a machine token but not a human one; a real end-user sign-in helper is still unbuilt                                                                | 005.02    | `009.01` |
 | SSE payload summary types are absent from the OpenAPI description; the generated-types drift check can't police the event contract                                            | 005.02    | `009.03` |
+| `CompanyPage`'s tab frame has one empty `<TabPanel id="activity">` — render the live activity view into it, don't restructure the page                                        | 006.01    | `007.01` |
+| `useEventStream(streamUrls.company(id))` and its `ErrorState` on channel `company-stream` already exist on `CompanyPage` — reuse both, don't add a second of either           | 006.01    | `007.01` |
+| `useLoadingAnnouncement`'s second argument is `Announcement \| null` — pass `null` on the failure path, not an announcement                                                   | 006.01    | `007.01` |
+| `{count}` is reserved in announcement strings — `announcer.ts`'s `flush` supplies it and overwrites any caller value under that name                                          | 006.01    | `007.01` |
+| Per-status task counts aren't on the overview; `ACTIVE_TASK_STATUSES` sums four non-terminal statuses into one "Active tasks" figure                                          | 006.01    | `007.01` |
+| Adding the second tab is one line in `CompanyPage.tsx`'s `TabList`/`TabPanel`; the keyboard test then needs real arrow-key navigation assertions                              | 006.01    | `010.01` |
+| `GET /api/company/{id}` answers 200 with `null` for a company the caller cannot see; the generated types don't say so — `CompanyPage.tsx` collapses it to `undefined`         | 006.01    | `010.01` |
+| A `<ul>` styled with `list-style: none` loses its list role in Safari/VoiceOver — check the overview's and 007.01's lists once themes fill the empty rule bodies              | 006.01    | `009.02` |
+| The overview's `403` branch (a non-administrator sending `?all=true`) is proven only in jsdom — needs one browser-tier confirmation                                           | 006.01    | `009.02` |
+| `base.css`'s new `.react-aria-Tab*` rules carry the selected state by border, not colour (WCAG 1.4.1) — cover the tab list in the contrast scan, both themes and modes        | 006.01    | `009.02` |
+| `?all=true` stays administrator-only and the overview never sends it; document its `403` as a refusal, not an empty state                                                     | 006.01    | `009.03` |

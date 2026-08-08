@@ -46,7 +46,8 @@ describe('Task orchestration lifecycle (e2e)', () => {
       imports: [AppModule],
     }).compile();
     app = moduleFixture.createNestApplication();
-    await app.init();
+    // Listening, not just init() — see agent.e2e-spec.ts for why.
+    await app.listen(0);
     companyRepo = moduleFixture.get(getRepositoryToken(TcpCompany));
     roleRepo = moduleFixture.get(getRepositoryToken(TcpRole));
     taskRepo = moduleFixture.get(getRepositoryToken(TcpTask));
@@ -107,9 +108,27 @@ describe('Task orchestration lifecycle (e2e)', () => {
     return taskId;
   }
 
+  /**
+   * The agent working an assignment, waited for rather than assumed.
+   *
+   * `TcpAssignment.agentId` is nullable and is populated when the dispatcher
+   * claims the assignment — which happens asynchronously, after the request
+   * that created it has already returned. Reading it with a `!` therefore
+   * asserts away a real state: on a machine quick enough to get here first,
+   * the helper yields `undefined`, the request below sends no `agentId`, and
+   * the endpoint rejects the body with a 400 that looks nothing like a
+   * timing problem. Polling makes the wait explicit and keeps the eventual
+   * failure honest — if the agent never arrives, this says so.
+   */
   async function agentIdFor(assignmentId: UUID): Promise<UUID> {
-    const a = await assignmentRepo.findOneByOrFail({ id: assignmentId });
-    return a.agentId!;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const a = await assignmentRepo.findOneByOrFail({ id: assignmentId });
+      if (a.agentId) return a.agentId;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error(
+      `Assignment ${assignmentId} still had no agent after 2.5s — the dispatcher never claimed it.`,
+    );
   }
 
   async function planAssignment(taskId: UUID): Promise<TcpAssignment> {

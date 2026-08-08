@@ -14,8 +14,14 @@ const COMPLETION: Announcement = {
   change: 'announce.tasksCompleted',
 };
 
-const Probe = ({ loading }: { readonly loading: boolean }) => {
-  useLoadingAnnouncement(loading, COMPLETION);
+const Probe = ({
+  loading,
+  completion = COMPLETION,
+}: {
+  readonly loading: boolean;
+  readonly completion?: Announcement | null;
+}) => {
+  useLoadingAnnouncement(loading, completion);
   return <p>Companies</p>;
 };
 
@@ -125,6 +131,29 @@ describe('useLoadingAnnouncement', () => {
 
     await vi.advanceTimersByTimeAsync(ANNOUNCE_THROTTLE_MS * 2);
 
+    expect(await virtual.spokenPhraseLog()).toEqual([]);
+  });
+
+  it('announces nothing when the wait did not end in success', async () => {
+    await listen();
+    const { rerender } = render(
+      <StrictMode>
+        <Probe loading={true} completion={null} />
+      </StrictMode>,
+    );
+
+    await vi.advanceTimersByTimeAsync(ANNOUNCE_LOADING_MIN_MS * 2);
+    rerender(
+      <StrictMode>
+        <Probe loading={false} completion={null} />
+      </StrictMode>,
+    );
+    await vi.advanceTimersByTimeAsync(ANNOUNCE_THROTTLE_MS * 2);
+
+    // A failed request stops loading exactly as a successful one does. Without
+    // this the caller gets two announcements for one event — `ErrorState`'s
+    // assertive failure and a polite "loaded" that is not true — and only the
+    // second one is heard as an answer to what the user asked for.
     expect(await virtual.spokenPhraseLog()).toEqual([]);
   });
 });

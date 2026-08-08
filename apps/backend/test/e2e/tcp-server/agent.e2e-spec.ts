@@ -17,6 +17,29 @@ import { AppModule } from '../../../apps/tcp-server/src/app.module';
 import { makeTestJwt } from '../helpers/test-jwt';
 import { seedMembership } from '../helpers/seed-membership';
 
+/**
+ * Every e2e spec that creates a Nest application now calls `app.listen(0)`
+ * rather than only `app.init()`. This is deliberate, and the same reasoning
+ * applies across the whole e2e tier, so it is documented once here.
+ *
+ * supertest's `serverAddress()` only reuses an app's own server if one is
+ * already listening; an app that has merely had `init()` called is not, so
+ * supertest binds a fresh ephemeral port and closes it again for every
+ * single request it sends — thousands of bind/close cycles over a run.
+ *
+ * That churn collides with Docker: testcontainers maps its containers onto
+ * dynamic host ports drawn from the same ephemeral range the OS hands out.
+ * With enough bind/close cycles, one of them eventually lands on a port a
+ * container is using instead of the app, so a test request gets answered by
+ * the container rather than tcp-server (observed in practice as
+ * testcontainers' Ryuk replying with `400 "WebSockets request was
+ * expected"`).
+ *
+ * Listening once, up front, collapses those thousands of ephemeral binds
+ * into a single fixed port and removes the collision window entirely.
+ * `INestApplication#listen` calls `init()` internally, so this is a strict
+ * superset of the previous behaviour, not a change to it.
+ */
 describe('AgentController (e2e)', () => {
   let app: INestApplication<App>;
   let companyRepo: Repository<TcpCompany>;
@@ -34,7 +57,7 @@ describe('AgentController (e2e)', () => {
       imports: [AppModule],
     }).compile();
     app = module.createNestApplication();
-    await app.init();
+    await app.listen(0);
     companyRepo = module.get(getRepositoryToken(TcpCompany));
     roleRepo = module.get(getRepositoryToken(TcpRole));
     agentRepo = module.get(getRepositoryToken(TcpAgent));

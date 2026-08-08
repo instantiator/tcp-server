@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiOkResponse,
   ApiOperation,
   ApiQuery,
   ApiTags,
@@ -24,6 +25,7 @@ import {
   CompanyScope,
   CompanyScopeRequired,
 } from '../auth/company-scope.decorator';
+import { AssignmentResponseDto } from './dto/entity-response.dto';
 
 /** REST controller for observability listing of {@link TcpAssignment} records. */
 @ApiTags('assignments')
@@ -63,6 +65,7 @@ export class AssignmentController {
     description:
       '`?taskId=null&mode=consultee` is the consultations list (ADR-023)',
   })
+  @ApiOkResponse({ type: AssignmentResponseDto, isArray: true })
   @CompanyScope(
     { from: 'query', key: 'companyId', via: 'company' },
     // `taskId=null` is the orphan-assignment sentinel, not an id: skipping it
@@ -99,6 +102,7 @@ export class AssignmentController {
 
   /** Retrieves a single assignment by UUID. */
   @ApiOperation({ summary: 'Get an assignment by ID' })
+  @ApiOkResponse({ type: AssignmentResponseDto })
   @CompanyScope({ from: 'param', key: 'id', via: 'assignment' })
   @Get(':id')
   async get(@Param('id') id: UUID): Promise<TcpAssignment> {

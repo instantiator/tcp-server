@@ -48,6 +48,7 @@ import { CompanyStatsService } from './company-stats.service';
 import { CreateCompanyDto, UpdateCompanyDto } from './dto/company.dto';
 import { CompanyListItemDto } from './dto/company-stats.dto';
 import { UpdateRoleDto } from './dto/role.dto';
+import { CompanyResponseDto, RoleResponseDto } from './dto/entity-response.dto';
 import { isUUID } from '../utils/ObjectUtils';
 import {
   computeCompanyWarnings,
@@ -125,6 +126,7 @@ export class CompanyController {
    * {@link CompanyUser} with `memberType: 'creator'`.
    */
   @ApiOperation({ summary: 'Create or replace a company' })
+  @ApiOkResponse({ type: CompanyResponseDto })
   @NoCompanyScope(
     'any authenticated caller may create a company; becomes its creator',
   )
@@ -164,6 +166,7 @@ export class CompanyController {
    * the `X-Tcp-Warnings` response header — the update still succeeds.
    */
   @ApiOperation({ summary: 'Partially update a company by ID or slug' })
+  @ApiOkResponse({ type: CompanyResponseDto })
   @CompanyScope({ from: 'param', key: 'id', via: 'company' })
   @Put(':id')
   async putCompany(
@@ -181,6 +184,7 @@ export class CompanyController {
    * Returns `null` (serialised as an empty body) when no company matches.
    */
   @ApiOperation({ summary: 'Get a company by ID or slug' })
+  @ApiOkResponse({ type: CompanyResponseDto })
   @CompanyScope({ from: 'param', key: 'id', via: 'company' })
   @Get(':id')
   async getCompany(@Param('id') id: UUID): Promise<TcpCompany | null> {
@@ -206,6 +210,7 @@ export class CompanyController {
    * identified by UUID or slug.
    */
   @ApiOperation({ summary: 'List roles for a company by ID or slug' })
+  @ApiOkResponse({ type: RoleResponseDto, isArray: true })
   @CompanyScope({ from: 'param', key: 'id', via: 'company' })
   @Get(':id/roles')
   async listRoles(@Param('id') id: string): Promise<TcpRole[]> {
@@ -220,6 +225,7 @@ export class CompanyController {
    * scoping the lookup to `companyId` (itself UUID-or-slug).
    */
   @ApiOperation({ summary: 'Get a role by slug (or ID) within a company' })
+  @ApiOkResponse({ type: RoleResponseDto })
   @CompanyScope({ from: 'param', key: 'companyId', via: 'company' })
   @Get(':companyId/roles/by-slug/:slug')
   async getRoleBySlug(
@@ -242,6 +248,7 @@ export class CompanyController {
    * {@link RoleController.createRole} for the `X-Tcp-Warnings` header.
    */
   @ApiOperation({ summary: 'Update a role by slug (or ID) within a company' })
+  @ApiOkResponse({ type: RoleResponseDto })
   @CompanyScope({ from: 'param', key: 'companyId', via: 'company' })
   @Put(':companyId/roles/by-slug/:slug')
   async putRoleBySlug(

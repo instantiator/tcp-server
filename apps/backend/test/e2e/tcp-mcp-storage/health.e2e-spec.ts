@@ -12,7 +12,8 @@ describe('tcp-mcp-storage health (e2e)', () => {
       imports: [AppModule],
     }).compile();
     app = module.createNestApplication();
-    await app.init();
+    // Listening, not just init() — see agent.e2e-spec.ts for why.
+    await app.listen(0);
   });
 
   afterAll(() => app.close());

@@ -22,7 +22,12 @@ import {
   Sse,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { UUID } from 'crypto';
 import { defer, from, merge, Observable } from 'rxjs';
 import { filter, map } from 'rxjs/operators';
@@ -39,6 +44,10 @@ import { AgentOrchestrationService } from './agent-orchestration.service';
 import { ChatService } from './chat.service';
 import { SystemShutdownService } from './system-shutdown.service';
 import { SendMessageDto, StartAgentDto, StartChatDto } from './dto/agent.dto';
+import {
+  AgentResponseDto,
+  AuditEventResponseDto,
+} from './dto/entity-response.dto';
 
 /** REST controller for starting, resuming, chatting with, and inspecting {@link TcpAgent} instances. */
 @ApiTags('agents')
@@ -62,6 +71,7 @@ export class AgentController {
    * Refused with `503` while the system is draining for shutdown.
    */
   @ApiOperation({ summary: 'Start a new agent' })
+  @ApiOkResponse({ type: AgentResponseDto })
   @CompanyScope({ from: 'body', key: 'companyId', via: 'company' })
   @Post('start')
   async startAgent(@Body() body: StartAgentDto): Promise<TcpAgent> {
@@ -77,6 +87,7 @@ export class AgentController {
    * Refused with `503` while the system is draining for shutdown.
    */
   @ApiOperation({ summary: 'Start a chat-mode agent' })
+  @ApiOkResponse({ type: AgentResponseDto })
   @CompanyScope({ from: 'body', key: 'companyId', via: 'company' })
   @Post('chat/start')
   async startChat(@Body() body: StartChatDto): Promise<TcpAgent> {
@@ -191,6 +202,7 @@ export class AgentController {
    * The agent must be in `idle`, `paused`, or `failed` status.
    */
   @ApiOperation({ summary: 'Resume a paused or idle agent' })
+  @ApiOkResponse({ type: AgentResponseDto })
   @CompanyScope({ from: 'param', key: 'id', via: 'agent' })
   @Post('resume/:id')
   async resumeAgent(@Param('id') id: UUID): Promise<TcpAgent> {
@@ -209,6 +221,7 @@ export class AgentController {
    * (`idle`, `running`, `paused`) when `status` is omitted.
    */
   @ApiOperation({ summary: 'List agents' })
+  @ApiOkResponse({ type: AgentResponseDto, isArray: true })
   @CompanyScope(
     { from: 'query', key: 'companyId', via: 'company' },
     { from: 'query', key: 'roleId', via: 'role' },
@@ -234,6 +247,7 @@ export class AgentController {
 
   /** Retrieves the current state of an agent by its UUID. */
   @ApiOperation({ summary: 'Get an agent by ID' })
+  @ApiOkResponse({ type: AgentResponseDto })
   @CompanyScope({ from: 'param', key: 'id', via: 'agent' })
   @Get(':id')
   async getAgent(@Param('id') id: UUID): Promise<TcpAgent> {
@@ -248,6 +262,7 @@ export class AgentController {
    * `state_change`/`agent_loop_completion` row recorded for it.
    */
   @ApiOperation({ summary: "Get an agent's audit history" })
+  @ApiOkResponse({ type: AuditEventResponseDto, isArray: true })
   @CompanyScope({ from: 'param', key: 'id', via: 'agent' })
   @Get(':id/history')
   async getAgentHistory(@Param('id') id: UUID): Promise<AuditEvent[]> {
