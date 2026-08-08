@@ -63,7 +63,8 @@ describe('tcp-mcp-interactions -> tcp-server (cross-service e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    await app.init();
+    // Listening, not just init() — see agent.e2e-spec.ts for why. This spec
+    // needs a real socket regardless: it drives the app over its own base URL.
     await app.listen(0);
     const address: AddressInfo | string | null = (
       app.getHttpServer() as Server

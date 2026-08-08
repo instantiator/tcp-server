@@ -86,7 +86,8 @@ describe('SystemController (e2e)', () => {
       imports: [AppModule],
     }).compile();
     app = module.createNestApplication();
-    await app.init();
+    // Listening, not just init() — see agent.e2e-spec.ts for why.
+    await app.listen(0);
     companyRepo = module.get(getRepositoryToken(TcpCompany));
     roleRepo = module.get(getRepositoryToken(TcpRole));
     agentRepo = module.get(getRepositoryToken(TcpAgent));
@@ -132,17 +133,34 @@ describe('SystemController (e2e)', () => {
     await request(app.getHttpServer())
       .delete('/api/system/shutdown')
       .set('Authorization', `Bearer ${jwt}`);
-    await auditRepo.createQueryBuilder().delete().execute();
-    await agentRepo.createQueryBuilder().delete().execute();
-    await taskRepo.createQueryBuilder().delete().execute();
-    await assignmentRepo.createQueryBuilder().delete().execute();
+    // Scoped to this spec's own company rather than emptying four shared
+    // tables. Every spec in this tier shares one database, so an unqualified
+    // delete removes another spec's rows as readily as its own — and the audit
+    // table in particular is the largest thing here, which made this hook the
+    // slowest in the tier and so the first to be caught by a timeout.
+    await auditRepo.delete({ companyId });
+    await agentRepo.delete({ companyId });
+    await taskRepo.delete({ companyId });
+    await assignmentRepo.delete({ companyId });
   });
 
   afterAll(async () => {
-    await roleRepo.createQueryBuilder().delete().execute();
-    await companyRepo.createQueryBuilder().delete().execute();
-    await publisher.quit().catch(() => undefined);
-    await app.close();
+    // `app.close()` in a `finally`, because it is the only part of this teardown
+    // whose failure is not confined to this spec. The row deletes need the app
+    // alive (a closed app has no DB connection), so they have to come first —
+    // but when this hook was a flat sequence with `app.close()` last, a delete
+    // that threw or ran long left the application open for the rest of the run:
+    // its Postgres pool, its Redis connections and its BullMQ workers all
+    // outlived the spec, and Jest then reported "did not exit one second after
+    // the test run has completed" and hung. Leaving rows behind is a mess the
+    // next spec can survive; leaking the app is not.
+    try {
+      await roleRepo.delete({ companyId });
+      await companyRepo.delete(companyId);
+    } finally {
+      await publisher.quit().catch(() => undefined);
+      await app.close();
+    }
   });
 
   describe('GET /api/system/shutdown', () => {

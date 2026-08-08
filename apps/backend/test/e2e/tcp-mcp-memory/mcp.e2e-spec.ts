@@ -3,11 +3,10 @@
 import { TcpCompany, TcpRole } from '@tcp/shared';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import type { UUID } from 'crypto';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { AppModule } from '../../../apps/tcp-mcp-memory/src/app.module';
 import { requireEnv } from '../../support/require-env';
 
@@ -80,7 +79,8 @@ describe('tcp-mcp-memory MCP endpoint (e2e)', () => {
       imports: [AppModule],
     }).compile();
     app = module.createNestApplication({ rawBody: true });
-    await app.init();
+    // Listening, not just init() — see agent.e2e-spec.ts for why.
+    await app.listen(0);
   });
 
   afterAll(() => app.close());
@@ -109,15 +109,21 @@ describe('tcp-mcp-memory MCP endpoint (e2e)', () => {
       // AddMissingCompanyRoleForeignKeys1783357408218 added a real FK from
       // episodic_memory.roleId to tcp_role.id, so a real row is required —
       // McpModule only registers TcpCompany/EpisodicMemory as forFeature
-      // repositories (TcpRole is connection-only, see app.module.ts), so
-      // TypeOrmModule.forFeature([TcpRole]) is added here purely to expose
-      // its repository for seeding, against the same connection AppModule
-      // already established.
-      const module: TestingModule = await Test.createTestingModule({
-        imports: [AppModule, TypeOrmModule.forFeature([TcpRole])],
-      }).compile();
-      companyRepo = module.get(getRepositoryToken(TcpCompany));
-      roleRepo = module.get(getRepositoryToken(TcpRole));
+      // repositories (TcpRole is connection-only, see app.module.ts).
+      //
+      // Both repositories are taken off the app's own `DataSource` rather than
+      // from a second `Test.createTestingModule({ imports: [AppModule, …] })`.
+      // Compiling a second module graph builds a second connection pool
+      // against the shared Postgres, and this block has no way to close it —
+      // `afterAll` here owns rows, not a module. That pool then stays open for
+      // every spec file Jest runs afterwards, which is both connection
+      // pressure on a shared server and an open handle at the end of the run
+      // ("Jest did not exit one second after the test run has completed").
+      // `getRepository` needs no `forFeature` registration, so one connection
+      // is enough.
+      const dataSource = app.get(DataSource);
+      companyRepo = dataSource.getRepository(TcpCompany);
+      roleRepo = dataSource.getRepository(TcpRole);
 
       const company = await companyRepo.save(
         companyRepo.create({

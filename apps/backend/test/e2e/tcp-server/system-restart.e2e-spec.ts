@@ -40,7 +40,8 @@ async function boot(): Promise<{
     imports: [AppModule],
   }).compile();
   const app = module.createNestApplication<INestApplication<App>>();
-  await app.init();
+  // Listening, not just init() — see agent.e2e-spec.ts for why.
+  await app.listen(0);
   return {
     app,
     repos: {

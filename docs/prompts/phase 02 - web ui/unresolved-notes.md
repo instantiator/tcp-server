@@ -437,6 +437,41 @@ always present. The `@ApiOkResponse({ type: CompanyResponseDto })` added in
 changing it is a behavioural change to a route other callers use, not
 something to fix in passing.
 
+### Most e2e specs still clean up by emptying shared tables
+
+**Raised by:** 006.01 · **Condition to revisit:** a spec fails on data it did
+not create, or the tier's failure rate rises above zero again. Testable:
+`grep -rc 'createQueryBuilder().delete().execute()' apps/backend/test/e2e/`
+returns hits in more than a couple of files.
+
+Every spec in the e2e tier shares one Postgres database, migrated once by
+`global-setup.ts` and never reset between spec files, so each spec is
+responsible for its own rows. About fourteen of them discharge that
+responsibility with `repo.createQueryBuilder().delete().execute()` — no `WHERE`
+clause — which removes every row in the table rather than the ones that spec
+created. `system-shutdown.e2e-spec.ts` was rescoped to its own `companyId` in
+006.01, because its four unqualified deletes over the audit table made it the
+slowest hook in the tier; the rest were left alone.
+
+Under `maxWorkers: 1` this is usually harmless, because files run one at a
+time. What it leaves is no margin: the moment any spec has an async write still
+in flight past its own teardown — a BullMQ job, a fire-and-forget audit post —
+the next spec's first blanket delete removes it, and the symptom lands in a file
+that did nothing wrong. Two specs also collide on genuinely global unique
+constraints: `tcp_company.slug` is hardcoded `'acme'` in both
+`agent.e2e-spec.ts` and `company-role.e2e-spec.ts`, and `Conversation.slug` is
+derived from a role name, so the role `analyst`/`Analyst` in
+`internal-conversation.e2e-spec.ts` and `task-company-events.e2e-spec.ts` both
+produce `analyst-1`.
+
+None of this was observed firing — the tier's actual flake had a different and
+now-fixed cause (see the memory `project-e2e-jwt-flake`: supertest was binding a
+fresh ephemeral port per request, colliding with Docker's dynamic container port
+mappings, so requests were occasionally answered by a container). Scoping the
+remaining deletes and namespacing the two slugs is a tidy-up worth doing on its
+own merits, not a fix for a known failure, which is why it was not bundled into
+006.01.
+
 ## Carried into a later prompt
 
 | Note                                                                                                                                                                          | Raised by | Goes to  |

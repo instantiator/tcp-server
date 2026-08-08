@@ -29,7 +29,8 @@ describe('CompanyController (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    await app.init();
+    // Listening, not just init() — see agent.e2e-spec.ts for why.
+    await app.listen(0);
     companyRepo = moduleFixture.get(getRepositoryToken(TcpCompany));
     roleRepo = moduleFixture.get(getRepositoryToken(TcpRole));
     agentRepo = moduleFixture.get(getRepositoryToken(TcpAgent));
@@ -362,7 +363,7 @@ describe('RoleController (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    await app.init();
+    await app.listen(0);
     companyRepo = moduleFixture.get(getRepositoryToken(TcpCompany));
     roleRepo = moduleFixture.get(getRepositoryToken(TcpRole));
     agentRepo = moduleFixture.get(getRepositoryToken(TcpAgent));

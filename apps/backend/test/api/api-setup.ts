@@ -1,6 +1,9 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadEnvFileWithLocal } from '../support/env-file-parser';
+// Failed status assertions carry the server's own explanation — see the module
+// for why this is patched centrally rather than adopted per call site.
+import '../support/supertest-error-detail';
 
 /**
  * Per-worker setup for the API test tier. Loads env vars from the appropriate

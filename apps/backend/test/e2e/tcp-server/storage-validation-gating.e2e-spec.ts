@@ -34,7 +34,8 @@ describe('Storage write-time validation gating (e2e)', () => {
       imports: [AppModule],
     }).compile();
     app = moduleFixture.createNestApplication();
-    await app.init();
+    // Listening, not just init() — see agent.e2e-spec.ts for why.
+    await app.listen(0);
     companyRepo = moduleFixture.get(getRepositoryToken(TcpCompany));
     roleRepo = moduleFixture.get(getRepositoryToken(TcpRole));
     jwt = makeTestJwt();

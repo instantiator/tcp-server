@@ -53,9 +53,10 @@ describe('Company/Task SSE events (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    await app.init();
     // Real streaming needs a listening socket — supertest's buffered
     // `request(app.getHttpServer())` can't observe a long-lived SSE response.
+    // It is also what every other spec now does, for a second reason:
+    // see agent.e2e-spec.ts.
     await app.listen(0);
 
     companyRepo = moduleFixture.get(getRepositoryToken(TcpCompany));

@@ -55,7 +55,8 @@ describe('knowledge RAG round trip (e2e)', () => {
       imports: [AppModule],
     }).compile();
     app = module.createNestApplication();
-    await app.init();
+    // Listening, not just init() — see agent.e2e-spec.ts for why.
+    await app.listen(0);
     companyRepo = module.get(getRepositoryToken(TcpCompany));
     roleRepo = module.get(getRepositoryToken(TcpRole));
 
