@@ -124,3 +124,25 @@ Assuming ADR-023 resolves these, the scope above stands unchanged. If any of the
 [^sse]: Server-Sent Events — a long-lived HTTP connection the server pushes updates down, so the browser sees changes without polling.
 
 [^cors]: Cross-Origin Resource Sharing — the browser rule that stops a page on one address calling an API on another unless the API explicitly allows it.
+
+---
+
+<a id="amendments-as-implemented-007011"></a>
+
+## Amendments as implemented (007.01.01)
+
+007.01 built the live activity view — the "Company live activity" row's "Agents, tasks, consultations, enquiries; 'add new' FAB" — and narrowed it twice on the way.
+
+### The 'add new' FAB is absent, not stubbed
+
+The scope table names the FAB alongside the four lists as one feature. 007.01 shipped the four lists and nothing that opens a task or a chat: no FAB, no menu, no button. Both actions it would offer — create a task (008.05) and start a chat with a role (008.02) — open dialogs that do not exist yet, and a control whose every item is inert is worse than no control. `CompanyActivity.tsx` renders four lists and stops there.
+
+This is not a smaller version of the row's promise; it is the row's second half, deferred whole to 008.07, which is built last in the 008 series for exactly this reason — it only opens dialogs that already exist by then. Revisiting this is not a condition to watch for: 008.07 is the prompt that closes the gap, on schedule.
+
+### Agent and consultation rows are read-only
+
+The scope table lists "agents" and "consultations" as things the view shows; it says nothing about selecting one, because the design that reached this table assumed selecting either opened an "assignment dialog." No dialog by that name is in the MVP's Decision table above — chat, task, user response, task creation, profile and memberships are the six, and none of them is scoped to a bare assignment.
+
+007.01 chose not to add a seventh. Agent and consultation rows in `AgentsList` and `ConsultationsList` (`src/pages/CompanyPage/activity/lists.tsx`) render as plain `<li>` text, not a link or a button — there is nothing to open. Tasks and enquiries stay non-interactive only for now: their dialogs (008.03, 008.04) land later in this phase and will make their rows interactive when they do. Agents and consultations have no dialog scheduled to do the same.
+
+This would need revisiting if a workflow turns up that only a transcript scoped to one assignment can serve — the task dialog answers "what happened on this task," and nothing answers "what happened on this one consultation" once it closes, since a consultation is by definition an assignment with no task. Until that need is concrete, the narrower surface is the one built.

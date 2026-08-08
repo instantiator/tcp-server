@@ -9,7 +9,9 @@ import { expectNoA11yViolations } from '../../test-support/axe';
 import {
   fetchMock,
   installFetchMock,
-  respondWithJson,
+  requestedUrls,
+  respondByRoute,
+  type RouteResponse,
 } from '../../test-support/fetch-mock';
 import { CompanyPage } from './CompanyPage';
 
@@ -28,6 +30,47 @@ const COMPANY = {
   slug: 'acme',
   name: 'Acme Corporation',
   description: 'A company',
+};
+
+// 007.01 gives the activity panel content: mounting it fires five more
+// queries (roles, agents, tasks, assignments, conversations) alongside the
+// company detail request this suite already made. `respondWithJson`'s
+// call-ordered queue answers exactly one request in the order it arrives, so
+// it stops being the right tool the moment a render fires six — the panel's
+// own coverage lives in `activity/CompanyActivity.test.tsx`, this file only
+// needs every route answered so it does not error.
+const ROLES_ROUTE = /\/api\/company\/[^/]+\/roles/;
+const COMPANY_ROUTE = /\/api\/company\/[^/]+(\?|$)/;
+const AGENTS_ROUTE = /\/api\/agent\?/;
+const TASKS_ROUTE = /\/api\/task\?/;
+const ASSIGNMENTS_ROUTE = /\/api\/assignment\?/;
+const CONVERSATIONS_ROUTE = /\/api\/conversation\?/;
+
+interface CompanyPageRoutes {
+  readonly company?: RouteResponse;
+  readonly roles?: RouteResponse;
+  readonly agents?: RouteResponse;
+  readonly tasks?: RouteResponse;
+  readonly assignments?: RouteResponse;
+  readonly conversations?: RouteResponse;
+}
+
+/**
+ * Answers the company detail request and the activity panel's five, so
+ * every test that reaches a loaded company renders cleanly. `ROLES_ROUTE`
+ * precedes `COMPANY_ROUTE`: both match a naive `/api/company/...` pattern,
+ * and `respondByRoute` takes the first match, so the more specific one has
+ * to come first.
+ */
+const respondCompanyPage = (overrides: CompanyPageRoutes = {}): void => {
+  respondByRoute([
+    [ROLES_ROUTE, overrides.roles ?? { body: [] }],
+    [COMPANY_ROUTE, overrides.company ?? { body: COMPANY }],
+    [AGENTS_ROUTE, overrides.agents ?? { body: [] }],
+    [TASKS_ROUTE, overrides.tasks ?? { body: [] }],
+    [ASSIGNMENTS_ROUTE, overrides.assignments ?? { body: [] }],
+    [CONVERSATIONS_ROUTE, overrides.conversations ?? { body: [] }],
+  ]);
 };
 
 /**
@@ -62,7 +105,7 @@ describe('CompanyPage', () => {
   });
 
   it('names the company in the heading and the document title', async () => {
-    respondWithJson(200, COMPANY);
+    respondCompanyPage();
     renderCompanyPage();
 
     expect(
@@ -75,7 +118,7 @@ describe('CompanyPage', () => {
   });
 
   it('navigates back to the overview through the breadcrumb', async () => {
-    respondWithJson(200, COMPANY);
+    respondCompanyPage();
     const user = userEvent.setup();
     renderCompanyPage();
 
@@ -96,7 +139,7 @@ describe('CompanyPage', () => {
   });
 
   it('renders a labelled tab list with one selected tab and its panel', async () => {
-    respondWithJson(200, COMPANY);
+    respondCompanyPage();
     renderCompanyPage();
 
     const tabList = await screen.findByRole('tablist', {
@@ -110,7 +153,7 @@ describe('CompanyPage', () => {
   });
 
   it('follows the tab pattern from the keyboard, even at one tab', async () => {
-    respondWithJson(200, COMPANY);
+    respondCompanyPage();
     const user = userEvent.setup();
     renderCompanyPage();
 
@@ -132,25 +175,43 @@ describe('CompanyPage', () => {
       expect(tab).toHaveAttribute('aria-selected', 'true');
     }
 
-    // The tab list is one tab stop; the next moves into the panel it controls.
+    // 007.01 gives the panel real content — the task status filter — so it is
+    // no longer empty. React Aria's `TabPanel` is only a tab stop in its own
+    // right (`tabIndex={0}`) while it holds nothing focusable; that is the
+    // ARIA authoring-practices behaviour for tabs, not something this page
+    // opts into. With focusable content inside, the panel itself is skipped
+    // and `Tab` lands on the first focusable descendant instead — here, the
+    // first status checkbox.
     await user.tab();
-    expect(screen.getByRole('tabpanel')).toHaveFocus();
+    expect(
+      screen.getByRole('checkbox', { name: t('activity.status.ready') }),
+    ).toHaveFocus();
   });
 
   it('loads a company from a deep link, without visiting the overview first', async () => {
-    respondWithJson(200, COMPANY);
+    respondCompanyPage();
     renderCompanyPage();
 
     expect(
       await screen.findByRole('heading', { name: COMPANY.name, level: 1 }),
     ).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // The activity panel mounts five queries of its own the moment the
+    // company resolves, so the page no longer makes exactly one request in
+    // total. The point of this test is that a deep link fetches its own
+    // company detail without a prior visit to the overview having primed the
+    // cache — so assert on the company request specifically, not the count
+    // of every request the page happens to make.
+    const companyRequests = requestedUrls().filter((url) =>
+      COMPANY_ROUTE.test(url),
+    );
+    expect(companyRequests).toHaveLength(1);
   });
 
   it('offers a way back when the company is not available', async () => {
     // What a member of nothing gets for a company that exists: a settled,
     // successful request that carries no company.
-    respondWithJson(200, null);
+    respondCompanyPage({ company: { body: null } });
     renderCompanyPage();
 
     expect(
@@ -166,7 +227,7 @@ describe('CompanyPage', () => {
 
   it('shows a stream failure without taking the page down with it', async () => {
     streamReturns.mockReturnValue({ error: new Error('stream gone') });
-    respondWithJson(200, COMPANY);
+    respondCompanyPage();
     renderCompanyPage();
 
     expect(
@@ -194,7 +255,9 @@ describe('CompanyPage', () => {
   });
 
   it('shows a failure message on a 500, and retries on request', async () => {
-    respondWithJson(500, { statusCode: 500, message: 'boom' });
+    respondCompanyPage({
+      company: { status: 500, body: { statusCode: 500, message: 'boom' } },
+    });
     const user = userEvent.setup();
     renderCompanyPage();
 
@@ -202,7 +265,7 @@ describe('CompanyPage', () => {
       await screen.findByText(t('company.error.failed')),
     ).toBeInTheDocument();
 
-    respondWithJson(200, COMPANY);
+    respondCompanyPage();
     await user.click(
       screen.getByRole('button', { name: t('state.error.retry') }),
     );
@@ -213,7 +276,7 @@ describe('CompanyPage', () => {
   });
 
   it('has no accessibility violations', async () => {
-    respondWithJson(200, COMPANY);
+    respondCompanyPage();
     const { container } = renderCompanyPage();
 
     await screen.findByRole('heading', { name: COMPANY.name, level: 1 });

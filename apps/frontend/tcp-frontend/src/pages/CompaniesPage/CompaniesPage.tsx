@@ -2,22 +2,13 @@ import { Link } from 'react-router';
 import { useLoadingAnnouncement } from '../../announce/useLoadingAnnouncement';
 import { ApiError } from '../../api/errors';
 import { useCompanies } from '../../api/queries';
+import { ACTIVE_TASK_STATUSES } from '../../api/statuses';
 import { EmptyState } from '../../components/EmptyState/EmptyState';
 import { ErrorState } from '../../components/ErrorState/ErrorState';
 import { LoadingState } from '../../components/LoadingState/LoadingState';
 import { useDocumentTitle } from '../../shell/useDocumentTitle';
 import { t } from '../../strings';
 import './CompaniesPage.css';
-
-// The non-terminal task statuses. `tasksByStatus` is zero-filled by the
-// server (002.04), so a missing key is a bug rather than an absent count —
-// read it directly and let a `NaN` show rather than defaulting it away.
-const ACTIVE_TASK_STATUSES = [
-  'ready',
-  'planning',
-  'in-progress',
-  'finalising',
-] as const;
 
 /**
  * The companies overview: every company the signed-in user belongs to, with
@@ -88,6 +79,12 @@ export const CompaniesPage = () => {
                   <dd>{company.stats.activeAgents}</dd>
                   <dt>{t('companies.stat.activeTasks')}</dt>
                   <dd>
+                    {/*
+                      `tasksByStatus` is zero-filled by the server (002.04), so
+                      a missing key is a bug rather than an absent count — read
+                      it directly and let a `NaN` show rather than defaulting
+                      it away.
+                    */}
                     {ACTIVE_TASK_STATUSES.reduce(
                       (sum, status) =>
                         sum + company.stats.tasksByStatus[status],

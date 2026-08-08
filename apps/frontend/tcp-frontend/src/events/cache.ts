@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
-import type { WireEvent } from '@tcp/shared/client';
+import type { AuditWireEvent, WireEvent } from '@tcp/shared/client';
 
 import { EVENT_ENTITIES, type EventEntity } from '../api/query-keys';
 
@@ -26,11 +26,41 @@ const isUnknownArray = (value: unknown): value is unknown[] =>
   Array.isArray(value);
 
 /**
+ * Reconstructs the summary a live `agent` row should have carried and doesn't.
+ *
+ * 002.04 widened the company channel's routing predicate to five entities, but
+ * it did not change the eight or so places that write an agent `state_change` —
+ * several of them in tcp-agent, across a process boundary. So a **primed** agent
+ * row carries an `AgentChangeSummary` and a **live** one carries nothing, and
+ * the two disagree about the same entity on the same stream.
+ *
+ * The live row does still carry the only two fields a list needs: `agentId` on
+ * the envelope, and `newStatus` in the payload. Without this, agent status —
+ * the highest-frequency event on the company stream — is the one change that
+ * refetches an entire list instead of patching the row it names.
+ *
+ * Returns `undefined` for every other entity, which falls through to the
+ * invalidate path unchanged. It becomes dead code the day those writers start
+ * sending a summary, and nothing here will notice: the real summary is
+ * preferred whenever one is present.
+ */
+const synthesiseAgentPatch = (
+  event: AuditWireEvent,
+): { id: string; status: string } | undefined => {
+  const { entity, newStatus } = event.payload;
+  if (entity !== 'agent') return undefined;
+  if (typeof event.agentId !== 'string' || typeof newStatus !== 'string')
+    return undefined;
+  return { id: event.agentId, status: newStatus };
+};
+
+/**
  * Folds one {@link WireEvent} into the query cache.
  *
  * A `state_change` payload that carries a `summary` patches the matching
  * cached rows directly, so a list and a detail view both update without a
- * refetch. One with no summary — most `state_change` events, and the many
+ * refetch. So does an agent row with no summary, via
+ * {@link synthesiseAgentPatch}. Anything else with no usable patch — the many
  * audit events (`llm_request`, `tool_call`, …) that carry no `entity` at all —
  * either invalidates the entity's queries or is ignored. A {@link StreamDelta}
  * never reaches any of this: it belongs to one open transcript's local state.
@@ -46,7 +76,11 @@ export const applyEvent = (
   const { entity, summary } = event.event.payload;
   if (!isEventEntity(entity)) return;
 
-  if (!hasStringId(summary)) {
+  const patch = hasStringId(summary)
+    ? summary
+    : synthesiseAgentPatch(event.event);
+
+  if (patch === undefined) {
     // Not awaited: a refetch it triggers happens in its own time, and nothing
     // here depends on it finishing.
     void queryClient.invalidateQueries({ queryKey: [entity] });
@@ -61,9 +95,9 @@ export const applyEvent = (
     if (isUnknownArray(old)) {
       let arrayMatched = false;
       const next = old.map((row: unknown) => {
-        if (!hasStringId(row) || row.id !== summary.id) return row;
+        if (!hasStringId(row) || row.id !== patch.id) return row;
         arrayMatched = true;
-        return { ...row, ...summary };
+        return { ...row, ...patch };
       });
       // Returning the array unchanged when nothing matched keeps identity, so
       // a list with no row for this entity does not re-render for nothing.
@@ -72,8 +106,7 @@ export const applyEvent = (
       return next;
     }
 
-    if (hasStringId(old) && old.id === summary.id)
-      return { ...old, ...summary };
+    if (hasStringId(old) && old.id === patch.id) return { ...old, ...patch };
     return old;
   });
 
