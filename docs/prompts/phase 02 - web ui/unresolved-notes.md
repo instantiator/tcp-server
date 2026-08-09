@@ -572,6 +572,18 @@ subscribed to and no other, which is worse than not patching at all, because
 it looks like it works. `CompaniesPage` refetches on mount instead, and that
 is enough for it.
 
+### Announcing a completed response in full
+
+**Raised by:** 008.01 · **Condition to revisit:** 009.02's manual screen reader pass runs and finds arrival-only insufficient. Testable: `ANNOUNCE_RESPONSE_BODY` in `useTranscript.ts` is still `false`.
+
+An agent's answer can run to several paragraphs. Reading all of it holds the audio channel with no useful way to interrupt, while the text is already on screen and browsable either way. Arrival-only is the provisional answer; announcing the full body is the alternative, and only real listening can judge which is right.
+
+### The transcript misses events between its history snapshot and its subscription
+
+**Raised by:** 008.01 · **Condition to revisit:** an event is observed to be missing in practice, or 008.02/008.03 need the gap closed.
+
+The transcript primes from `GET /api/agent/{id}/history` and only then subscribes, because interleaving the two sources correctly would mean buffering one of them. The agent stream synthesises a terminal event for a late subscriber, which covers the case that matters most. Closing the gap properly means buffering live events until history has been applied.
+
 ## Carried into a later prompt
 
 | Note                                                                                                                                                                                                 | Raised by | Goes to  |
@@ -652,7 +664,7 @@ is enough for it.
 | `useEventStream(streamUrls.company(id))` already subscribes on the company route; build on it, don't open a second connection                                                                        | 005.02    | `006.01` |
 | The hook returns an `error` that nothing renders yet — 006.01 owns giving a stream failure a visible state                                                                                           | 005.02    | `006.01` |
 | The live activity view is the first place `MAX_STREAMS = 12` could plausibly bite; raise it deliberately if a view needs more                                                                        | 005.02    | `007.01` |
-| Token-level `StreamDelta`s reach a transcript via `useEventStream`'s `onDelta` and belong in local state, never the query cache                                                                      | 005.02    | `008.01` |
+| Token-level `StreamDelta`s reach a transcript via `useEventStream`'s `onEvent` callback (widened from `onDelta` to carry every `WireEvent`) and belong in local state, never the query cache         | 005.02    | `008.01` |
 | A `403` on a stream is a permanent `ApiError`, never retried — render it as a refusal, not a spinner that never resolves                                                                             | 005.02    | `008.01` |
 | Each open chat's `StreamDelta`s belong in that conversation's own local state, kept separate across several open chats                                                                               | 005.02    | `008.02` |
 | The browser tier can mint a machine token but not a human one; a real end-user sign-in helper is still unbuilt                                                                                       | 005.02    | `009.01` |
@@ -678,3 +690,10 @@ is enough for it.
 | The two chat hooks exist with no consumer, so their shape is unproven                                                                                                                                | 007.02    | `008.02` |
 | ADR-030's `Live` prefix needs rechecking against `STATIC_ENTITIES`                                                                                                                                   | 007.02    | `009.03` |
 | The four remaining MVP journeys — create a task and watch it progress, chat with a role, answer a user enquiry, sign out and land on the landing page                                                | 007.03    | `009.01` |
+| Minimising unmounts the dialog, so a minimised chat's transcript unmounts and releases its stream — decide deliberately whether it keeps streaming                                                   | 008.01    | `008.02` |
+| The dock (`DockProvider`/`useDock`, `src/components/Dialog/`) already exists and is deliberately minimal — extend it to fit, rather than working around it                                           | 008.01    | `008.02` |
+| Each open conversation needs its own `<Transcript/>`, announcer channel (`transcript:<agentId>`) and stream — never shared across conversations                                                      | 008.01    | `008.02` |
+| One `<Transcript/>` per assignment panel; `MAX_STREAMS` is 12 and `useTranscript` already reports an `at-capacity` status to render, not treat as a failure                                          | 008.01    | `008.03` |
+| `ANNOUNCE_RESPONSE_BODY` in `useTranscript.ts` is `false` (arrival-only); ADR-027 leaves the full-text wording open pending this pass                                                                | 008.01    | `009.02` |
+| The transcript renders each entry's raw event label verbatim, matching the CLI — judge whether that reads well in the manual pass                                                                    | 008.01    | `009.02` |
+| ADR-026 and ADR-027 both need an "as implemented" amendment covering the dialog and transcript surfaces, once 008.x is complete                                                                      | 008.01    | `009.03` |

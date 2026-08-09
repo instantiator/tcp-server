@@ -1,6 +1,6 @@
 # ADR-027: Screen Reader Strategy for Live and Data-Rich Views
 
-**Status:** Accepted (amended — see [002.02](#amendment-as-implemented-00202) and [003.03](#amendment-as-implemented-00303) at the end)
+**Status:** Accepted (amended — see [002.02](#amendment-as-implemented-00202), [003.03](#amendment-as-implemented-00303) and [008.01](#amendment-as-implemented-00801) at the end)
 
 ## Context
 
@@ -201,3 +201,12 @@ The announcer exists. `apps/frontend/tcp-frontend/src/announce/announcer.ts` is 
 6. **`t` gained interpolation.** "Tasks: 2 added" cannot be built from a key alone without inlining a number beside words in JSX, which ADR-021 forbids. `t(key, params)` fills `{placeholder}` slots and does nothing else — no plural rules, so every announcement wording is phrased count-agnostically.
 
 **The deviation: an in-context error is `role="group"` plus an assertive announcement, not `role="alert"`.** `role="alert"` is itself a live region, and this ADR allows one; three failing lists would mount three. Routing the announcement through the announcer also lets two failures in the same tick coalesce into one interruption, which per-component alerts cannot do. The visible half is unchanged — the error still appears beside what failed. **009.02's manual pass owns confirming this reads as well as a native alert**, and one thing it should listen for specifically: two _different_ assertive channels firing in the same tick still truncate each other, because they are separate sentences by design.
+
+## Amendment as implemented (008.01) <a id="amendment-as-implemented-00801"></a>
+
+The transcript component ([008.01](../prompts/phase%2002%20-%20web%20ui/008.01.00.prompt%20-%20dialog%20framework%20and%20event%20transcript%20components.md)) is the streaming surface this ADR's "never announce a partial response" rule was written for. Four things now true:
+
+- **The per-token gate this ADR asks for now exists for the transcript specifically.** `useTranscript.test.tsx` streams a dozen deltas, advances past the throttle, and asserts `spokenPhraseLog()` is empty.
+- **The completed-response question is answered provisionally: arrival only.** Behind `ANNOUNCE_RESPONSE_BODY` in `useTranscript.ts`, currently `false`. Both wordings exist in `strings.ts`, so 009.02's manual pass changes one line rather than building anything new.
+- **History never announces.** Reopening a transcript re-primes it from the history endpoint, and announcing what the user has already seen would make every reopen a burst of speech. The announcement path runs only for live stream events.
+- **Two of the ADR's four focus points are now implemented and asserted: dialog open, and dialog close.**
