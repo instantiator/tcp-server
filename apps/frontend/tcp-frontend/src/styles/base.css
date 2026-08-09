@@ -127,6 +127,53 @@ body {
 }
 
 /*
+ * The same gap the radios above fill, for the same reason: React Aria ships
+ * no styling, so with no rules at all a selected checkbox is indistinguishable
+ * from an unselected one (WCAG 1.4.1).
+ */
+.react-aria-CheckboxGroup {
+  display: flex;
+  /* A row, not a column: seven statuses stacked is a lot of page. */
+  flex-wrap: wrap;
+  gap: var(--tcp-space-sm);
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.react-aria-CheckboxButton {
+  display: flex;
+  align-items: center;
+  gap: var(--tcp-space-sm);
+}
+
+.react-aria-CheckboxButton::before {
+  content: '';
+  display: block;
+  flex: none;
+  inline-size: var(--tcp-space-md);
+  block-size: var(--tcp-space-md);
+  border: var(--tcp-border-width) solid var(--tcp-color-border);
+  border-radius: var(--tcp-radius);
+}
+
+/*
+ * Fill as well as colour, so the selection survives a monochrome rendering
+ * (WCAG 1.4.1): the inset shadow leaves a solid block inside the border, which
+ * an empty box does not have whatever the palette resolves to.
+ */
+.react-aria-CheckboxButton[data-selected]::before {
+  border-color: var(--tcp-color-accent);
+  background-color: var(--tcp-color-accent);
+  box-shadow: inset 0 0 0 var(--tcp-focus-ring-width) var(--tcp-color-bg);
+}
+
+.react-aria-CheckboxButton[data-focus-visible] {
+  outline: var(--tcp-focus-ring-width) solid var(--tcp-color-focus);
+  outline-offset: var(--tcp-focus-ring-offset);
+}
+
+/*
  * The account menu, for the same reason the radios needed rules above: React
  * Aria ships no styling, so an unstyled popover renders as unpositioned,
  * transparent text over the page — unreadable rather than merely plain.

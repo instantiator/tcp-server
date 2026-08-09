@@ -89,6 +89,13 @@ That is acceptable for the MVP list and is why 007.01 must not present it as
 complete. When either a `PendingConsultation` controller or a consultation-level
 audit entity exists, both the query and 007.01's wording change together.
 
+007.01 does not leave the list to speak for itself: `ConsultationsList` passes
+`note={t('activity.consultations.partial')}` to `ActivityList`, which renders
+the caveat as a visible `<p>` above the rows and, deliberately, outside the
+`aria-busy` region — a standing fact about the list, not loading content, so it
+survives all four of the list's states rather than vanishing whenever the list
+is fetching, failed or empty.
+
 ### Every agent state change now reaches every subscriber of that company's stream
 
 **Raised by:** 002.04 · **Condition to revisit:** the live view is reported as noisy, or one company routinely runs enough concurrent agents for the stream to be the bottleneck
@@ -304,6 +311,15 @@ Both were built without a caller, which is normally the wrong thing to do. They 
 
 The shapes are therefore guesses about what 006.01 and 007.01 will want. If either is wrong, changing it there is the right response — working around it, or building a second component beside it, is not.
 
+**`useLoadingAnnouncement` now has consumers** — `CompanyPage.tsx` (006.01) and,
+via `useListChangeAnnouncement`, 007.01's four activity lists. **`Notification`
+still has none.** 007.01 considered wiring it to a new enquiry and decided
+against it: `Notification` requires a `durableHref`/`durableLabel` pair, and an
+enquiry has no URL until 008.04 decides whether its dialog is a route or
+component state. A new enquiry is still announced individually and still
+appears in the enquiries list in the meantime, so nothing perceptible was lost
+by waiting. 008.04 is now the owner of this gap.
+
 ### The renewal and the sign-in are the same redirect
 
 **Raised by:** 004.01 · **Condition to revisit:** the `sessionStorage` fallback in [ADR-024](../../ADRs/ADR-024-browser-oidc-client-and-token-handling.md) is taken, so a refresh token exists. Testable: `offline_access` appears in `createUserManagerSettings().scope`.
@@ -379,6 +395,14 @@ Reasoning: chosen over hand-written conditional types because those are where th
 **Raised by:** 005.02 · **Condition to revisit:** the first time a real view is refused, or when 007.01 establishes an actual per-view stream count
 
 Picked as twice HTTP/1.1's six-per-origin ceiling, with headroom for a live view plus several dialogs — not measured against anything built. No view yet opens more than one stream, so the number has never been tested against real usage.
+
+**007.01 was the first real view, and it opened zero additional streams.** The
+live activity view reuses `CompanyPage`'s single existing company subscription
+and reads the four lists off the TanStack Query cache that subscription
+patches — `CompanyActivity` opens no `useEventStream` of its own. So the
+condition to revisit is still untriggered, and the constant was not raised.
+Recorded explicitly so this reads as "checked, still true" rather than "not
+checked."
 
 ### The browser tier authenticates as a machine client, not a user
 
@@ -472,99 +496,165 @@ remaining deletes and namespacing the two slugs is a tidy-up worth doing on its
 own merits, not a fix for a known failure, which is why it was not bundled into
 006.01.
 
+### The activity view fetches four lists the stream had already primed
+
+**Raised by:** 007.01 · **Condition to revisit:** the mount cost of the four
+requests becomes measurable, or a second view needs the same four lists.
+Testable: the browser network panel shows a list refetched within a second of
+its first response.
+
+The originating prompt said the view should "render from the stream's
+priming, without a separate fetch." It does not: `AgentsList`, `TasksList`,
+`ConsultationsList` and `EnquiriesList` fetch through `useAgents`, `useTasks`,
+`useAssignments` and `useConversations`, and the company stream's events then
+patch what those hooks cached. This is ADR-025's architecture, not a
+deviation from it — `useEventStream` never exposes audit events to a caller,
+it folds every one into the TanStack Query cache via `applyEvent`, and
+priming's documented role there is reconnect recovery, not initial render.
+
+Rendering from priming directly would have needed `useEventStream` widened to
+expose events, a second source of truth beside the cache that 008.x's dialogs
+also read, and — decisively — the event collection lifted out of the activity
+view and into `CompanyPage`, because `CompanyActivity` mounts inside the
+`company !== undefined` branch, _after_ the subscription already opened, and
+would therefore miss its own priming. The alternative was rejected for that
+timing reason, not because it was more effort.
+
+### `TaskChangeSummary` carries fields `TcpTask` does not
+
+**Raised by:** 007.01 · **Condition to revisit:** a view wants to show
+`completedSteps`/`totalSteps`. Testable: `grep -rn 'completedSteps'
+apps/frontend/tcp-frontend/src` matches outside `api/schema.d.ts`.
+
+A stream patch merges whatever fields its summary carries onto the cached
+row, and `TaskChangeSummary` carries `completedSteps`/`totalSteps` that
+`TcpTask` — the REST shape `useTasks` fetches — never had. So such a field is
+absent on first paint and materialises only after the first matching event,
+which is worse than a field that was never shown at all: the row's shape
+changes under a reader for no reason they can see. `TasksList`
+(`src/pages/CompanyPage/activity/lists.tsx`) deliberately renders neither
+field, with a comment at the point they would go.
+
+### Live agent rows are patched from a reconstructed summary
+
+**Raised by:** 007.01 · **Condition to revisit:** the agent `state_change`
+writers start attaching an `AgentChangeSummary`. Testable: `grep -rn "entity:
+'agent'" apps/backend --include=*.ts` shows a `summary` alongside.
+
+`synthesiseAgentPatch` in `src/events/cache.ts` exists because 002.04 widened
+the company channel's routing predicate to include `agent` rows but did not
+change the roughly eight places that write one — several of them in
+`tcp-agent`, across a process boundary. So a **primed** agent row carries an
+`AgentChangeSummary` and a **live** one carries nothing but `event.agentId`
+and `payload.newStatus`. Without the reconstruction, agent status — the
+highest-frequency event on the company stream — would be the one change that
+refetches an entire list instead of patching the row it names.
+
+It becomes dead code silently the day those writers start sending a real
+summary, because `applyEvent` prefers `hasStringId(summary)` and only falls
+back to `synthesiseAgentPatch` when that is absent — nothing needs to notice
+or remove the fallback for the fix to take effect.
+
 ## Carried into a later prompt
 
-| Note                                                                                                                                                                          | Raised by | Goes to  |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | -------- |
-| End-to-end test that more than six simultaneous event streams work — 002.03 proved the transport, not the streams                                                             | 002.03    | `005.02` |
-| `tcp-web` is handed the confidential OIDC client as a stopgap; it needs the public PKCE one, and `https` redirect URIs from `TCP_WEB_URL`                                     | 002.03    | `004.01` |
-| A catch-all route: nginx returns the app document for any deep link, so an unknown path currently renders blank rather than a 404                                             | 002.03    | `003.02` |
-| The browser tier drives the deployment over https with no local-server fallback, and runs inside CI's `api-test` job                                                          | 002.03    | `009.01` |
-| Regenerate the client after 002.04: `GET /api/company` (`?all`, `stats`), `GET /api/assignment` (`?mode`), and four summary types changed                                     | 002.04    | `005.01` |
-| The stat field names: `stats.activeAgents`, `stats.tasksByStatus` (zero-filled per status) and `stats.openEnquiries`, returned with the list                                  | 002.04    | `006.01` |
-| The company stream's five `payload.entity` values, the priming order, the summary shapes, and the exact consultations query                                                   | 002.04    | `007.01` |
-| Live `agent` rows carry no summary — only primed ones do; render from priming and patch by `agentId`                                                                          | 002.04    | `007.01` |
-| Enquiries stream open and close only — no per-message event, so a reply in progress is invisible until it closes                                                              | 002.04    | `007.01` |
-| Memberships come from the scoped `GET /api/company`; 002.04 added to this prompt's **Needs first**                                                                            | 002.04    | `008.06` |
-| SSE streams now refuse a non-member with `403` at connect — a permanent failure the backoff must not retry forever                                                            | 002.05    | `005.02` |
-| `?all=true` is administrator-only; a `403` in the overview is a real error, not an empty state                                                                                | 002.05    | `006.01` |
-| The memberships dialog is authoritative — membership _is_ the access control, so the list is exactly what the user can reach                                                  | 002.05    | `008.06` |
-| The ADR-011 **permission flags** (migration, defaults, `@RequirePermission`, and the UI to set them) — 002.05 enforced membership only                                        | 002.05    | `010.01` |
-| ADR-011's status wording: membership is enforced, flags are not; `route-audit.spec.ts` must stay green and cover every controller                                             | 002.05    | `009.03` |
-| `ThemeControl` already exists and is written for reuse — the header adopts it rather than building a second theme control                                                     | 003.01    | `003.02` |
-| `main` lives inside `LandingPage`; when the shell owns layout there must still be exactly one `main` on the page                                                              | 003.01    | `003.02` |
-| The account menu needs its own token-valued rules in `base.css` — React Aria renders it invisible otherwise                                                                   | 003.01    | `003.02` |
-| The landing page's `h1` is a route-change focus target; making it focusable must not change its name or level                                                                 | 003.01    | `003.02` |
-| `startSignIn()` in `src/auth/sign-in.ts` is the seam — replace the body, don't move the call site                                                                             | 003.01    | `004.02` |
-| Extend the four-combination contrast scan to every page; the component tier cannot check contrast at all                                                                      | 003.01    | `009.02` |
-| Assert what is drawn, not only the `data-*` attribute — jsdom resolves neither pseudo-elements nor shorthands                                                                 | 003.01    | `009.02` |
-| `RequireSession` saves the attempted path as `{ from }`; validate it before navigating, or it is an open redirect                                                             | 003.02    | `004.02` |
-| The OIDC callback route is absent, and must be public — behind the guard it is a redirect loop                                                                                | 003.02    | `004.02` |
-| `startSignOut()` is the seam; sign-out must clear the session, not just the tokens, or the account menu stays                                                                 | 003.02    | `004.03` |
-| `SessionProvider`'s `session` prop must keep working for tests when 004.03 derives the real session                                                                           | 003.02    | `004.03` |
-| `Breadcrumbs` exists and takes `readonly Crumb[]`; `CompaniesPage`/`CompanyPage` are placeholders to replace                                                                  | 003.02    | `006.01` |
-| Decide on React Aria's `RouterProvider` if its links start appearing beyond the breadcrumb                                                                                    | 003.02    | `006.01` |
-| `onAccountAction` in `Header.tsx` is the dialogs' entry point; `MenuTrigger` already restores focus on close                                                                  | 003.02    | `008.06` |
-| Scan `document.body`, not the render container — React Aria's popover portals out of it                                                                                       | 003.02    | `008.06` |
-| A jsdom test can be green while the browser is wrong; the shell's browser coverage runs on an unknown address                                                                 | 003.02    | `009.02` |
-| `?devSession=` builds a `Session` from a URL — when a session carries a token, it must not be able to mint one                                                                | 003.02    | `004.03` |
-| The production build flag, removing dev-only capabilities from the artefact, and query-string feature flags                                                                   | 003.02    | `009.04` |
-| The four state components exist with fixed props; `LoadingState` does not set `aria-busy` — the loading region's owner must                                                   | 003.03    | `006.01` |
-| `useLoadingAnnouncement(loading, completion)` announces a completed wait only; never announce that loading started                                                            | 003.03    | `006.01` |
-| The final announcement wording for all four lists, and the three lists' missing keys — `announce.tasks*` are placeholders                                                     | 003.03    | `007.01` |
-| One announcer channel per list, and never a live region; the announcer counts repeats, so guard on the value that changed                                                     | 003.03    | `007.01` |
-| Where a `Notification` renders is 007.01's layout decision — 003.03 ships the component with no queue, provider or container                                                  | 003.03    | `007.01` |
-| Suppressing per-token announcements is the caller's job — the throttle thins what was announced, it does not decide what to announce                                          | 003.03    | `008.01` |
-| An individually-announced enquiry needs its own channel, not a `throttleMs` override on a shared one                                                                          | 003.03    | `008.04` |
-| Tune `ANNOUNCE_THROTTLE_MS` (10s) and `ANNOUNCE_LOADING_MIN_MS` (1s), and record the values the manual pass lands on                                                          | 003.03    | `009.02` |
-| Confirm `ErrorState`'s `role="group"` plus assertive announcement reads as well as `role="alert"`, and listen for assertive truncation                                        | 003.03    | `009.02` |
-| Only route change has browser-tier announcement coverage; coalescing, throttling and assertive politeness are jsdom-only                                                      | 003.03    | `009.02` |
-| `AuthProvider` must wrap `getUserManager()`'s existing instance, not fresh settings — two managers hold two different users                                                   | 004.01    | `004.02` |
-| `renderAppAt` must mirror whatever `main.tsx` gains, or the component tier asserts a stack that only exists in tests                                                          | 004.01    | `004.02` |
-| ~~The callback route completes the flow with `signinRedirectCallback()`~~ — **wrong**: `AuthProvider` does it, and doing both double-exchanges the code (corrected by 004.02) | 004.01    | `004.02` |
-| `handleUnauthorized()` also sets `state.from`, and its value carries a query string where `RequireSession`'s does not                                                         | 004.01    | `004.02` |
-| Sign-out is `signoutRedirect()` plus clearing the in-memory user; the registered post-logout URI is `${TCP_WEB_URL}/`                                                         | 004.01    | `004.03` |
-| `signoutRedirect()` throws with no `end_session_endpoint` — optional in OIDC, so fall back to clearing locally rather than throwing                                           | 004.01    | `004.03` |
-| The storage assertion must be re-run when the session starts carrying a token, not assumed to still cover it                                                                  | 004.01    | `004.03` |
-| The fetch wrapper calls `getAccessToken()` per request and `handleUnauthorized()` on 401; the policy redirects, it does not renew and return                                  | 004.01    | `005.01` |
-| The stream reader calls `getAccessToken()` on every connection attempt including reconnects, and routes a connect 401 to the shared policy                                    | 004.01    | `005.02` |
-| A profile dialog showing a bare subject has a configuration cause: `OIDC_LOAD_USER_INFO`, not a rebuild                                                                       | 004.01    | `008.06` |
-| Assert against the production bundle that no token reaches browser storage — jsdom proves the configuration, not the artefact                                                 | 004.01    | `009.04` |
-| The session derivation landed in 004.02, not here — `AuthSession` exists, the `session` prop is its fallback, and the OIDC user wins                                          | 004.02    | `004.03` |
-| `AuthProvider` is already mounted; `matchSignoutCallback`/`onSignoutCallback` are the sign-out return hooks — do not add a second route                                       | 004.02    | `004.03` |
-| Adding a guarded route means adding it to `RETURNABLE_ROUTES`; `DEFAULT_SIGNED_IN_PATH` is hardcoded to `/companies` and needs confirming                                     | 004.02    | `006.01` |
-| Journey 1 is sign-in's first browser coverage — the jsdom tier intercepts the exchange and proves nothing about the PKCE round trip                                           | 004.02    | `009.01` |
-| Retire `app-shell.spec.ts`'s `/no-such-page` workaround: a signed-in page is browser-reachable now                                                                            | 004.02    | `009.01` |
-| The `/callback` route's loading and error states need the manual pass, and it is a signed-out page the contrast scan can reach                                                | 004.02    | `009.02` |
-| The "a request after token expiry recovers" test — 004.03 was asked for it and had no fetch wrapper to make the request                                                       | 004.03    | `005.01` |
-| Reconnecting a stream after expiry must send the _new_ token on the wire; the failure is a permanent loop after the first blip, not at expiry itself                          | 004.03    | `005.02` |
-| A real-browser journey through sign-in, reload and sign-out — 004.03 proves only that a guarded route leaves for the provider                                                 | 004.03    | `009.01` |
-| The expiry warning interrupts assertively and is the only surface that speaks unprompted; it and the two recovery states need the manual pass                                 | 004.03    | `009.02` |
-| ADR-024 now carries (a)–(l); confirm the deliberately-unwired `matchSignoutCallback` and the two operator-facing limitations survived                                         | 004.03    | `009.03` |
-| `Session` stayed `{ userId }` through 004.03, so the build flag is now the whole of what stops `?devSession=` mattering                                                       | 004.03    | `009.04` |
-| Query keys are `[entity, scope, …]` keyed on the event's `payload.entity` — conversations key on `'enquiry'`                                                                  | 005.01    | `005.02` |
-| `ApiError` (`src/api/errors.ts`) is the one failure shape; the stream reader throws it too                                                                                    | 005.01    | `005.02` |
-| One redirect across a fetch 401 and a stream 401 together is untested — each side is proven alone                                                                             | 005.01    | `005.02` |
-| `App.tsx`'s boundary-control `<span>` still has no real import to replace it                                                                                                  | 005.01    | `005.02` |
-| SSE payload summary types are absent from the OpenAPI description; the drift check cannot police the event contract                                                           | 005.01    | `005.02` |
-| Mutation hooks are unwritten; the client and error shape they use are built                                                                                                   | 005.01    | `006.01` |
-| The two knowledge file-download GETs have no query hook, by design                                                                                                            | 005.01    | `010.01` |
-| `useEventStream(streamUrls.company(id))` already subscribes on the company route; build on it, don't open a second connection                                                 | 005.02    | `006.01` |
-| The hook returns an `error` that nothing renders yet — 006.01 owns giving a stream failure a visible state                                                                    | 005.02    | `006.01` |
-| The live activity view is the first place `MAX_STREAMS = 12` could plausibly bite; raise it deliberately if a view needs more                                                 | 005.02    | `007.01` |
-| Token-level `StreamDelta`s reach a transcript via `useEventStream`'s `onDelta` and belong in local state, never the query cache                                               | 005.02    | `008.01` |
-| A `403` on a stream is a permanent `ApiError`, never retried — render it as a refusal, not a spinner that never resolves                                                      | 005.02    | `008.01` |
-| Each open chat's `StreamDelta`s belong in that conversation's own local state, kept separate across several open chats                                                        | 005.02    | `008.02` |
-| The browser tier can mint a machine token but not a human one; a real end-user sign-in helper is still unbuilt                                                                | 005.02    | `009.01` |
-| SSE payload summary types are absent from the OpenAPI description; the generated-types drift check can't police the event contract                                            | 005.02    | `009.03` |
-| `CompanyPage`'s tab frame has one empty `<TabPanel id="activity">` — render the live activity view into it, don't restructure the page                                        | 006.01    | `007.01` |
-| `useEventStream(streamUrls.company(id))` and its `ErrorState` on channel `company-stream` already exist on `CompanyPage` — reuse both, don't add a second of either           | 006.01    | `007.01` |
-| `useLoadingAnnouncement`'s second argument is `Announcement \| null` — pass `null` on the failure path, not an announcement                                                   | 006.01    | `007.01` |
-| `{count}` is reserved in announcement strings — `announcer.ts`'s `flush` supplies it and overwrites any caller value under that name                                          | 006.01    | `007.01` |
-| Per-status task counts aren't on the overview; `ACTIVE_TASK_STATUSES` sums four non-terminal statuses into one "Active tasks" figure                                          | 006.01    | `007.01` |
-| Adding the second tab is one line in `CompanyPage.tsx`'s `TabList`/`TabPanel`; the keyboard test then needs real arrow-key navigation assertions                              | 006.01    | `010.01` |
-| `GET /api/company/{id}` answers 200 with `null` for a company the caller cannot see; the generated types don't say so — `CompanyPage.tsx` collapses it to `undefined`         | 006.01    | `010.01` |
-| A `<ul>` styled with `list-style: none` loses its list role in Safari/VoiceOver — check the overview's and 007.01's lists once themes fill the empty rule bodies              | 006.01    | `009.02` |
-| The overview's `403` branch (a non-administrator sending `?all=true`) is proven only in jsdom — needs one browser-tier confirmation                                           | 006.01    | `009.02` |
-| `base.css`'s new `.react-aria-Tab*` rules carry the selected state by border, not colour (WCAG 1.4.1) — cover the tab list in the contrast scan, both themes and modes        | 006.01    | `009.02` |
-| `?all=true` stays administrator-only and the overview never sends it; document its `403` as a refusal, not an empty state                                                     | 006.01    | `009.03` |
+| Note                                                                                                                                                                                                 | Raised by | Goes to  |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | -------- |
+| End-to-end test that more than six simultaneous event streams work — 002.03 proved the transport, not the streams                                                                                    | 002.03    | `005.02` |
+| `tcp-web` is handed the confidential OIDC client as a stopgap; it needs the public PKCE one, and `https` redirect URIs from `TCP_WEB_URL`                                                            | 002.03    | `004.01` |
+| A catch-all route: nginx returns the app document for any deep link, so an unknown path currently renders blank rather than a 404                                                                    | 002.03    | `003.02` |
+| The browser tier drives the deployment over https with no local-server fallback, and runs inside CI's `api-test` job                                                                                 | 002.03    | `009.01` |
+| Regenerate the client after 002.04: `GET /api/company` (`?all`, `stats`), `GET /api/assignment` (`?mode`), and four summary types changed                                                            | 002.04    | `005.01` |
+| The stat field names: `stats.activeAgents`, `stats.tasksByStatus` (zero-filled per status) and `stats.openEnquiries`, returned with the list                                                         | 002.04    | `006.01` |
+| The company stream's five `payload.entity` values, the priming order, the summary shapes, and the exact consultations query                                                                          | 002.04    | `007.01` |
+| Live `agent` rows carry no summary — only primed ones do; render from priming and patch by `agentId`                                                                                                 | 002.04    | `007.01` |
+| Enquiries stream open and close only — no per-message event, so a reply in progress is invisible until it closes                                                                                     | 002.04    | `007.01` |
+| Memberships come from the scoped `GET /api/company`; 002.04 added to this prompt's **Needs first**                                                                                                   | 002.04    | `008.06` |
+| SSE streams now refuse a non-member with `403` at connect — a permanent failure the backoff must not retry forever                                                                                   | 002.05    | `005.02` |
+| `?all=true` is administrator-only; a `403` in the overview is a real error, not an empty state                                                                                                       | 002.05    | `006.01` |
+| The memberships dialog is authoritative — membership _is_ the access control, so the list is exactly what the user can reach                                                                         | 002.05    | `008.06` |
+| The ADR-011 **permission flags** (migration, defaults, `@RequirePermission`, and the UI to set them) — 002.05 enforced membership only                                                               | 002.05    | `010.01` |
+| ADR-011's status wording: membership is enforced, flags are not; `route-audit.spec.ts` must stay green and cover every controller                                                                    | 002.05    | `009.03` |
+| `ThemeControl` already exists and is written for reuse — the header adopts it rather than building a second theme control                                                                            | 003.01    | `003.02` |
+| `main` lives inside `LandingPage`; when the shell owns layout there must still be exactly one `main` on the page                                                                                     | 003.01    | `003.02` |
+| The account menu needs its own token-valued rules in `base.css` — React Aria renders it invisible otherwise                                                                                          | 003.01    | `003.02` |
+| The landing page's `h1` is a route-change focus target; making it focusable must not change its name or level                                                                                        | 003.01    | `003.02` |
+| `startSignIn()` in `src/auth/sign-in.ts` is the seam — replace the body, don't move the call site                                                                                                    | 003.01    | `004.02` |
+| Extend the four-combination contrast scan to every page; the component tier cannot check contrast at all                                                                                             | 003.01    | `009.02` |
+| Assert what is drawn, not only the `data-*` attribute — jsdom resolves neither pseudo-elements nor shorthands                                                                                        | 003.01    | `009.02` |
+| `RequireSession` saves the attempted path as `{ from }`; validate it before navigating, or it is an open redirect                                                                                    | 003.02    | `004.02` |
+| The OIDC callback route is absent, and must be public — behind the guard it is a redirect loop                                                                                                       | 003.02    | `004.02` |
+| `startSignOut()` is the seam; sign-out must clear the session, not just the tokens, or the account menu stays                                                                                        | 003.02    | `004.03` |
+| `SessionProvider`'s `session` prop must keep working for tests when 004.03 derives the real session                                                                                                  | 003.02    | `004.03` |
+| `Breadcrumbs` exists and takes `readonly Crumb[]`; `CompaniesPage`/`CompanyPage` are placeholders to replace                                                                                         | 003.02    | `006.01` |
+| Decide on React Aria's `RouterProvider` if its links start appearing beyond the breadcrumb                                                                                                           | 003.02    | `006.01` |
+| `onAccountAction` in `Header.tsx` is the dialogs' entry point; `MenuTrigger` already restores focus on close                                                                                         | 003.02    | `008.06` |
+| Scan `document.body`, not the render container — React Aria's popover portals out of it                                                                                                              | 003.02    | `008.06` |
+| A jsdom test can be green while the browser is wrong; the shell's browser coverage runs on an unknown address                                                                                        | 003.02    | `009.02` |
+| `?devSession=` builds a `Session` from a URL — when a session carries a token, it must not be able to mint one                                                                                       | 003.02    | `004.03` |
+| The production build flag, removing dev-only capabilities from the artefact, and query-string feature flags                                                                                          | 003.02    | `009.04` |
+| The four state components exist with fixed props; `LoadingState` does not set `aria-busy` — the loading region's owner must                                                                          | 003.03    | `006.01` |
+| `useLoadingAnnouncement(loading, completion)` announces a completed wait only; never announce that loading started                                                                                   | 003.03    | `006.01` |
+| The final announcement wording for all four lists, and the three lists' missing keys — `announce.tasks*` are placeholders                                                                            | 003.03    | `007.01` |
+| One announcer channel per list, and never a live region; the announcer counts repeats, so guard on the value that changed                                                                            | 003.03    | `007.01` |
+| Where a `Notification` renders is 007.01's layout decision — 003.03 ships the component with no queue, provider or container                                                                         | 003.03    | `007.01` |
+| Suppressing per-token announcements is the caller's job — the throttle thins what was announced, it does not decide what to announce                                                                 | 003.03    | `008.01` |
+| An individually-announced enquiry needs its own channel, not a `throttleMs` override on a shared one                                                                                                 | 003.03    | `008.04` |
+| Tune `ANNOUNCE_THROTTLE_MS` (10s) and `ANNOUNCE_LOADING_MIN_MS` (1s), and record the values the manual pass lands on                                                                                 | 003.03    | `009.02` |
+| Confirm `ErrorState`'s `role="group"` plus assertive announcement reads as well as `role="alert"`, and listen for assertive truncation                                                               | 003.03    | `009.02` |
+| Only route change has browser-tier announcement coverage; coalescing, throttling and assertive politeness are jsdom-only                                                                             | 003.03    | `009.02` |
+| `AuthProvider` must wrap `getUserManager()`'s existing instance, not fresh settings — two managers hold two different users                                                                          | 004.01    | `004.02` |
+| `renderAppAt` must mirror whatever `main.tsx` gains, or the component tier asserts a stack that only exists in tests                                                                                 | 004.01    | `004.02` |
+| ~~The callback route completes the flow with `signinRedirectCallback()`~~ — **wrong**: `AuthProvider` does it, and doing both double-exchanges the code (corrected by 004.02)                        | 004.01    | `004.02` |
+| `handleUnauthorized()` also sets `state.from`, and its value carries a query string where `RequireSession`'s does not                                                                                | 004.01    | `004.02` |
+| Sign-out is `signoutRedirect()` plus clearing the in-memory user; the registered post-logout URI is `${TCP_WEB_URL}/`                                                                                | 004.01    | `004.03` |
+| `signoutRedirect()` throws with no `end_session_endpoint` — optional in OIDC, so fall back to clearing locally rather than throwing                                                                  | 004.01    | `004.03` |
+| The storage assertion must be re-run when the session starts carrying a token, not assumed to still cover it                                                                                         | 004.01    | `004.03` |
+| The fetch wrapper calls `getAccessToken()` per request and `handleUnauthorized()` on 401; the policy redirects, it does not renew and return                                                         | 004.01    | `005.01` |
+| The stream reader calls `getAccessToken()` on every connection attempt including reconnects, and routes a connect 401 to the shared policy                                                           | 004.01    | `005.02` |
+| A profile dialog showing a bare subject has a configuration cause: `OIDC_LOAD_USER_INFO`, not a rebuild                                                                                              | 004.01    | `008.06` |
+| Assert against the production bundle that no token reaches browser storage — jsdom proves the configuration, not the artefact                                                                        | 004.01    | `009.04` |
+| The session derivation landed in 004.02, not here — `AuthSession` exists, the `session` prop is its fallback, and the OIDC user wins                                                                 | 004.02    | `004.03` |
+| `AuthProvider` is already mounted; `matchSignoutCallback`/`onSignoutCallback` are the sign-out return hooks — do not add a second route                                                              | 004.02    | `004.03` |
+| Adding a guarded route means adding it to `RETURNABLE_ROUTES`; `DEFAULT_SIGNED_IN_PATH` is hardcoded to `/companies` and needs confirming                                                            | 004.02    | `006.01` |
+| Journey 1 is sign-in's first browser coverage — the jsdom tier intercepts the exchange and proves nothing about the PKCE round trip                                                                  | 004.02    | `009.01` |
+| Retire `app-shell.spec.ts`'s `/no-such-page` workaround: a signed-in page is browser-reachable now                                                                                                   | 004.02    | `009.01` |
+| The `/callback` route's loading and error states need the manual pass, and it is a signed-out page the contrast scan can reach                                                                       | 004.02    | `009.02` |
+| The "a request after token expiry recovers" test — 004.03 was asked for it and had no fetch wrapper to make the request                                                                              | 004.03    | `005.01` |
+| Reconnecting a stream after expiry must send the _new_ token on the wire; the failure is a permanent loop after the first blip, not at expiry itself                                                 | 004.03    | `005.02` |
+| A real-browser journey through sign-in, reload and sign-out — 004.03 proves only that a guarded route leaves for the provider                                                                        | 004.03    | `009.01` |
+| The expiry warning interrupts assertively and is the only surface that speaks unprompted; it and the two recovery states need the manual pass                                                        | 004.03    | `009.02` |
+| ADR-024 now carries (a)–(l); confirm the deliberately-unwired `matchSignoutCallback` and the two operator-facing limitations survived                                                                | 004.03    | `009.03` |
+| `Session` stayed `{ userId }` through 004.03, so the build flag is now the whole of what stops `?devSession=` mattering                                                                              | 004.03    | `009.04` |
+| Query keys are `[entity, scope, …]` keyed on the event's `payload.entity` — conversations key on `'enquiry'`                                                                                         | 005.01    | `005.02` |
+| `ApiError` (`src/api/errors.ts`) is the one failure shape; the stream reader throws it too                                                                                                           | 005.01    | `005.02` |
+| One redirect across a fetch 401 and a stream 401 together is untested — each side is proven alone                                                                                                    | 005.01    | `005.02` |
+| `App.tsx`'s boundary-control `<span>` still has no real import to replace it                                                                                                                         | 005.01    | `005.02` |
+| SSE payload summary types are absent from the OpenAPI description; the drift check cannot police the event contract                                                                                  | 005.01    | `005.02` |
+| Mutation hooks are unwritten; the client and error shape they use are built                                                                                                                          | 005.01    | `006.01` |
+| The two knowledge file-download GETs have no query hook, by design                                                                                                                                   | 005.01    | `010.01` |
+| `useEventStream(streamUrls.company(id))` already subscribes on the company route; build on it, don't open a second connection                                                                        | 005.02    | `006.01` |
+| The hook returns an `error` that nothing renders yet — 006.01 owns giving a stream failure a visible state                                                                                           | 005.02    | `006.01` |
+| The live activity view is the first place `MAX_STREAMS = 12` could plausibly bite; raise it deliberately if a view needs more                                                                        | 005.02    | `007.01` |
+| Token-level `StreamDelta`s reach a transcript via `useEventStream`'s `onDelta` and belong in local state, never the query cache                                                                      | 005.02    | `008.01` |
+| A `403` on a stream is a permanent `ApiError`, never retried — render it as a refusal, not a spinner that never resolves                                                                             | 005.02    | `008.01` |
+| Each open chat's `StreamDelta`s belong in that conversation's own local state, kept separate across several open chats                                                                               | 005.02    | `008.02` |
+| The browser tier can mint a machine token but not a human one; a real end-user sign-in helper is still unbuilt                                                                                       | 005.02    | `009.01` |
+| SSE payload summary types are absent from the OpenAPI description; the generated-types drift check can't police the event contract                                                                   | 005.02    | `009.03` |
+| `CompanyPage`'s tab frame has one empty `<TabPanel id="activity">` — render the live activity view into it, don't restructure the page                                                               | 006.01    | `007.01` |
+| `useEventStream(streamUrls.company(id))` and its `ErrorState` on channel `company-stream` already exist on `CompanyPage` — reuse both, don't add a second of either                                  | 006.01    | `007.01` |
+| `useLoadingAnnouncement`'s second argument is `Announcement \| null` — pass `null` on the failure path, not an announcement                                                                          | 006.01    | `007.01` |
+| `{count}` is reserved in announcement strings — `announcer.ts`'s `flush` supplies it and overwrites any caller value under that name                                                                 | 006.01    | `007.01` |
+| Per-status task counts aren't on the overview; `ACTIVE_TASK_STATUSES` sums four non-terminal statuses into one "Active tasks" figure                                                                 | 006.01    | `007.01` |
+| Adding the second tab is one line in `CompanyPage.tsx`'s `TabList`/`TabPanel`; the keyboard test then needs real arrow-key navigation assertions                                                     | 006.01    | `010.01` |
+| `GET /api/company/{id}` answers 200 with `null` for a company the caller cannot see; the generated types don't say so — `CompanyPage.tsx` collapses it to `undefined`                                | 006.01    | `010.01` |
+| A `<ul>` styled with `list-style: none` loses its list role in Safari/VoiceOver — check the overview's and 007.01's lists once themes fill the empty rule bodies                                     | 006.01    | `009.02` |
+| The overview's `403` branch (a non-administrator sending `?all=true`) is proven only in jsdom — needs one browser-tier confirmation                                                                  | 006.01    | `009.02` |
+| `base.css`'s new `.react-aria-Tab*` rules carry the selected state by border, not colour (WCAG 1.4.1) — cover the tab list in the contrast scan, both themes and modes                               | 006.01    | `009.02` |
+| `?all=true` stays administrator-only and the overview never sends it; document its `403` as a refusal, not an empty state                                                                            | 006.01    | `009.03` |
+| Agent and consultation rows are non-interactive in the MVP; 007.01 decided against adding an assignment dialog, so no assignment-scoped transcript surface is needed                                 | 007.01    | `008.01` |
+| The task dialog is reached from a tasks-list row in the activity view; it needs no `assignmentId` focus parameter, because agent rows deliberately do not open it                                    | 007.01    | `008.03` |
+| The enquiry notification container is 008.04's to build, once it decides whether an enquiry has a URL — `Notification` requires a `durableHref` and nothing renders one yet                          | 007.01    | `008.04` |
+| The 'add new' control is unbuilt — 007.01 deferred it whole, since both its actions open dialogs that did not exist yet                                                                              | 007.01    | `008.07` |
+| `ActivityList` in `pages/CompanyPage/activity/` is the shared four-state frame for a live list (region, heading, count, loading/error/empty/populated) — reuse it rather than repeating the contract | 007.01    | `008.07` |
+| The four activity lists are the first `<ul>`s that a theme will style; check the Safari/VoiceOver `list-style: none` role loss on all of them                                                        | 007.01    | `009.02` |
+| The announcement wordings and the ~10s `ANNOUNCE_THROTTLE_MS` are unverified against a real screen reader — the activity view is the surface to tune them on                                         | 007.01    | `009.02` |

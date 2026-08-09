@@ -5,13 +5,16 @@ import { describe, expect, it } from 'vitest';
 import { applyEvent } from './cache';
 
 /** A minimal `state_change` audit {@link WireEvent} carrying the given payload. */
-const auditEvent = (payload: Record<string, unknown>): WireEvent => ({
+const auditEvent = (
+  payload: Record<string, unknown>,
+  agentId: string | null = null,
+): WireEvent => ({
   type: 'audit',
   event: {
     timestamp: '2026-08-07T00:00:00.000Z',
     companyId: 'company-1',
     role: 'owner',
-    agentId: null,
+    agentId,
     assignmentId: null,
     taskId: null,
     eventType: 'state_change',
@@ -137,5 +140,105 @@ describe('applyEvent', () => {
     // `invalidateQueries({ queryKey: ['task', 'list'] })` matches by prefix,
     // so this reaches the concrete, params-carrying key above.
     expect(isInvalidated(queryClient, listKey)).toBe(true);
+  });
+
+  /**
+   * The live-agent gap 002.04 left: the company channel carries agent rows, but
+   * the writers were never taught to attach a summary. Only the priming path
+   * sends one, so a list that renders correctly on subscribe would then be
+   * refetched wholesale on every subsequent status change.
+   */
+  describe('an agent state change with no summary', () => {
+    it('patches the row it names, without invalidating', () => {
+      const queryClient = newClient();
+      const listKey = ['agent', 'list', { companyId: 'company-1' }];
+      queryClient.setQueryData(listKey, [
+        { id: 'agent-1', status: 'idle', initialPrompt: 'draft the report' },
+        { id: 'agent-2', status: 'running', initialPrompt: 'review it' },
+      ]);
+
+      applyEvent(
+        queryClient,
+        auditEvent({ entity: 'agent', newStatus: 'running' }, 'agent-1'),
+      );
+
+      expect(queryClient.getQueryData(listKey)).toEqual([
+        { id: 'agent-1', status: 'running', initialPrompt: 'draft the report' },
+        { id: 'agent-2', status: 'running', initialPrompt: 'review it' },
+      ]);
+      // The fields the live row could not carry survive the patch — this is a
+      // merge onto the fetched row, not a replacement of it.
+      expect(isInvalidated(queryClient, listKey)).toBe(false);
+    });
+
+    it('still invalidates when it names an agent no list has', () => {
+      const queryClient = newClient();
+      const listKey = ['agent', 'list', { companyId: 'company-1' }];
+      const cached = [{ id: 'agent-1', status: 'idle' }];
+      queryClient.setQueryData(listKey, cached);
+
+      applyEvent(
+        queryClient,
+        auditEvent({ entity: 'agent', newStatus: 'idle' }, 'agent-new'),
+      );
+
+      // An agent started since the fetch has to arrive somehow.
+      expect(queryClient.getQueryData(listKey)).toBe(cached);
+      expect(isInvalidated(queryClient, listKey)).toBe(true);
+    });
+
+    it('prefers a real summary whenever one is present', () => {
+      const queryClient = newClient();
+      const listKey = ['agent', 'list', {}];
+      queryClient.setQueryData(listKey, [{ id: 'agent-1', status: 'idle' }]);
+
+      // `agentId` and the summary disagree. The summary is the richer, and the
+      // one the writers will send once they are fixed, so it must win.
+      applyEvent(
+        queryClient,
+        auditEvent(
+          {
+            entity: 'agent',
+            newStatus: 'running',
+            summary: { id: 'agent-1', status: 'paused', roleId: 'role-1' },
+          },
+          'agent-other',
+        ),
+      );
+
+      expect(queryClient.getQueryData(listKey)).toEqual([
+        { id: 'agent-1', status: 'paused', roleId: 'role-1' },
+      ]);
+    });
+
+    it('falls back to invalidating when the row names no agent', () => {
+      const queryClient = newClient();
+      const listKey = ['agent', 'list', {}];
+      queryClient.setQueryData(listKey, [{ id: 'agent-1', status: 'idle' }]);
+
+      // A `null` agentId is the envelope's default, not a fabricated case —
+      // there is no row to patch, so the old behaviour has to remain.
+      applyEvent(
+        queryClient,
+        auditEvent({ entity: 'agent', newStatus: 'idle' }),
+      );
+
+      expect(isInvalidated(queryClient, listKey)).toBe(true);
+    });
+
+    it('leaves other entities on the invalidate path', () => {
+      const queryClient = newClient();
+      const listKey = ['task', 'list', {}];
+      queryClient.setQueryData(listKey, [{ id: 'task-1', status: 'ready' }]);
+
+      // The same shape, for a task. Only agents are missing their summary, so
+      // only agents get reconstructed — anything wider would guess.
+      applyEvent(
+        queryClient,
+        auditEvent({ entity: 'task', newStatus: 'succeeded' }, 'agent-1'),
+      );
+
+      expect(isInvalidated(queryClient, listKey)).toBe(true);
+    });
   });
 });

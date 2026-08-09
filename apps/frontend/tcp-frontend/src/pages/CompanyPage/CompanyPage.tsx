@@ -10,6 +10,7 @@ import { streamUrls } from '../../events/subscriptions';
 import { useEventStream } from '../../events/useEventStream';
 import { useDocumentTitle } from '../../shell/useDocumentTitle';
 import { t } from '../../strings';
+import { CompanyActivity } from './activity/CompanyActivity';
 import './CompanyPage.css';
 
 /**
@@ -137,8 +138,9 @@ export const CompanyPage = () => {
                 {t('company.tab.activity')}
               </Tab>
             </TabList>
-            {/* 007.01 renders the live activity view into this panel. */}
-            <TabPanel id="activity" className="react-aria-TabPanel" />
+            <TabPanel id="activity" className="react-aria-TabPanel">
+              <CompanyActivity companyId={company.id} />
+            </TabPanel>
           </Tabs>
         )}
       </div>

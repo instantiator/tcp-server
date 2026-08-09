@@ -40,8 +40,18 @@ const strings = {
   // plural rules and reads the same for one as for many.
   'announce.separator': ', ',
   'announce.routeChange': '{title}',
+  // 003.03 wrote these two as placeholders for 007.01 to finalise. They were
+  // right, and are kept — the pair reads correctly at one and at many, and
+  // "added"/"completed" say what happened rather than what the list now holds.
   'announce.tasksAdded': 'Tasks: {count} added',
   'announce.tasksCompleted': '{count} completed',
+  'announce.agentsStarted': 'Agents: {count} started',
+  'announce.agentsFinished': '{count} finished',
+  'announce.consultationsOpened': 'Consultations: {count} opened',
+  'announce.consultationsClosed': '{count} closed',
+  // Its own channel, spoken immediately: an agent waiting on a person is a
+  // request to act, not a change to the furniture (ADR-027).
+  'announce.enquiryNew': 'New enquiries: {count}',
   // `{count}` is reserved: the announcer supplies it as the number of times a
   // change repeated, and overwrites any value a caller passes under that name.
   // An announcement that needs a domain number must call it something else.
@@ -84,6 +94,58 @@ const strings = {
     'Live updates have stopped. Reload the page to reconnect.',
   'company.tabs.label': 'Company views',
   'company.tab.activity': 'Live activity',
+
+  // The live activity view. `activity.loading` is a label, as above — every
+  // list renders it through `state.loading`, as "Loading this list…".
+  'activity.loading': 'this list',
+  'activity.error.failed': 'This list could not be loaded.',
+  // Rendered text rather than an announcement, which is the only reason it may
+  // use `{count}` — the announcer's reservation applies to `announce.*` alone.
+  'activity.count': '{count} shown',
+
+  'activity.agents.heading': 'Active agents',
+  'activity.agents.empty.heading': 'No agents are working',
+  'activity.agents.empty.body':
+    'Agents appear here while they are running. Start a task and the agents working it will show up.',
+
+  'activity.tasks.heading': 'Tasks',
+  'activity.tasks.empty.heading': 'No tasks to show',
+  'activity.tasks.empty.body':
+    'No task has one of the selected statuses. Change the filter to see others.',
+
+  'activity.consultations.heading': 'Consultations',
+  'activity.consultations.empty.heading': 'No consultations are open',
+  'activity.consultations.empty.body':
+    'Consultations appear here when one agent asks another for help.',
+  // ADR-023: the list is consultee assignments, so a consultation that has been
+  // requested but not yet picked up is genuinely absent. Say so on the page —
+  // a list that quietly under-reports is worse than one that admits its limit.
+  'activity.consultations.partial':
+    'A consultation appears once an agent picks it up, so one just requested may not be listed yet.',
+
+  'activity.enquiries.heading': 'Enquiries',
+  'activity.enquiries.empty.heading': 'No agents are waiting on you',
+  'activity.enquiries.empty.body':
+    'When an agent needs an answer from a person, its question appears here.',
+
+  'activity.filter.label': 'Task statuses',
+  'activity.status.ready': 'Ready',
+  'activity.status.planning': 'Planning',
+  'activity.status.in-progress': 'In progress',
+  'activity.status.finalising': 'Finalising',
+  'activity.status.succeeded': 'Succeeded',
+  'activity.status.failed': 'Failed',
+  'activity.status.cancelled': 'Cancelled',
+  // Agent and assignment statuses share this block: the words are the user's,
+  // not the schema's, and several are common to both.
+  'activity.status.idle': 'Idle',
+  'activity.status.running': 'Running',
+  'activity.status.paused': 'Paused',
+  'activity.status.completed': 'Completed',
+  'activity.status.in-qa': 'In QA',
+  'activity.status.unknown': 'Unknown',
+  // Agent and consultation rows carry a role whose name may not have loaded.
+  'activity.role.unknown': 'Unknown role',
   'page.notFound.title': 'Page not found',
   'page.notFound.body':
     'That address does not match anything in this application. It may have been mistyped, or the thing it pointed at may no longer exist.',
