@@ -33,13 +33,25 @@ const signedInUser = () =>
  * `renderAppAtUrl`'s own import of `getUserManager` resolves to the identical
  * singleton this returns — a stale reference to either would watch a
  * `signinRedirect` that never happens to be the one under test.
+ *
+ * The spy is **stubbed, not just observed**. `vi.spyOn` alone calls through,
+ * and the real `signinRedirect` performs OIDC metadata discovery against the
+ * configured authority — `https://identity.test/`, a reserved TLD that
+ * resolves nowhere. Every test here whose guard genuinely redirects therefore
+ * made a real DNS lookup, and its failure surfaced as an unhandled rejection
+ * that failed the whole vitest run while every test still passed. A test that
+ * reaches the network is wrong even when the network happens to answer.
+ * Individual tests still override this with `mockRejectedValue` where the
+ * redirect failing is the subject.
  */
 const freshRecoveryStack = async () => {
   vi.resetModules();
   const { getUserManager } = await import('./user-manager');
   const { renderAppAtUrl } = await import('../test-support/render-app');
   const manager = getUserManager();
-  const signinRedirect = vi.spyOn(manager, 'signinRedirect');
+  const signinRedirect = vi
+    .spyOn(manager, 'signinRedirect')
+    .mockResolvedValue(undefined);
   return { manager, renderAppAtUrl, signinRedirect };
 };
 
