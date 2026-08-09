@@ -1,6 +1,6 @@
 import type { WireEvent } from '@tcp/shared';
+import { EventLogBuffer } from '@tcp/shared';
 import { TextBox } from 'terminal-kit';
-import { EventLogBuffer } from '../../render/event-log';
 import { markupStyle } from '../../render/style';
 import { renderAssignmentPaneHeading } from '../tui-format';
 import { PaneAssignmentInfo } from '../tui-state';

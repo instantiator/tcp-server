@@ -3,11 +3,10 @@
 // after `eavesdrop` connects are picked up too.
 
 import type { AuditWireEvent, TcpAssignment } from '@tcp/shared';
-import { parseWireEvents, readWireStream } from '@tcp/shared';
+import { parseWireEvents, readWireStream, EventLogBuffer } from '@tcp/shared';
 import { TokenManager } from '../auth/token';
 import { apiRequest, ApiOptions } from '../core/api';
 import { GlobalOptions } from '../core/cli-options';
-import { EventLogBuffer } from '../render/event-log';
 import {
   AgentContext,
   buildAgentContext,

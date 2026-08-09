@@ -5,10 +5,14 @@
 // with the (blank) marker — when the next event arrives. Replaces render.ts's
 // createRenderer.
 
-import { isBlankText } from '../core/agent-log-format';
-import { renderEntry, LogEntry } from './entries';
-import { AppendEvent, EventLogBuffer } from './event-log';
-import { HeadingBlockRenderer } from './heading';
+import {
+  isBlankText,
+  renderEntry,
+  LogEntry,
+  AppendEvent,
+  EventLogBuffer,
+  HeadingBlockRenderer,
+} from '@tcp/shared';
 import { StyleBackend } from './style';
 
 /** Placeholder written for a whitespace-only or empty response block. */

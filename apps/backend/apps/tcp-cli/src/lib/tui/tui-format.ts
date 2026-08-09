@@ -4,7 +4,7 @@
 // unit-tested without a live terminal-kit screen.
 
 import type { TaskChangeSummary } from '@tcp/shared';
-import { wrapText } from '../core/text-wrap';
+import { wrapText } from '@tcp/shared';
 import {
   ListEntry,
   ListPosition,
@@ -14,9 +14,9 @@ import {
 } from './tui-state';
 
 // Re-exported for existing callers within this module and its spec — the
-// wrap function itself now lives in core/text-wrap.ts (no terminal-kit
-// dependency) so eavesdrop and render.ts can share it too.
-export { wrapText } from '../core/text-wrap';
+// wrap function itself now lives in @tcp/shared's transcript module (no
+// terminal-kit dependency) so eavesdrop and render.ts can share it too.
+export { wrapText } from '@tcp/shared';
 
 /**
  * Escapes a literal `^` so it survives markup-enabled rendering unchanged.

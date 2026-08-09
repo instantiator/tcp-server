@@ -3,7 +3,7 @@
 // agentId) columns — no client-side joins to decide *when* a heading is due; a
 // HeadingInfoProvider supplies the display fields each surface already fetches.
 
-import { StyleBackend } from './style';
+import type { StyleBackend } from './style';
 
 /** The identity columns a wire event carries — the heading key. */
 export interface Scope {

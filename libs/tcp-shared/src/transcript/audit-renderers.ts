@@ -2,12 +2,9 @@
 // renderers (first `canRender` wins) replaces the three near-duplicate switch
 // blocks the tui/eavesdrop/chat surfaces each carried.
 
-import { AuditWireEvent } from '@tcp/shared';
-import {
-  ASSIGNMENT_COMPLETE_LABEL,
-  parseClockTime,
-} from '../core/agent-log-format';
-import { LogEntry } from './entries';
+import type { AuditWireEvent } from '../events/wire-events';
+import { ASSIGNMENT_COMPLETE_LABEL, parseClockTime } from './format';
+import type { LogEntry } from './entries';
 import {
   compactionSummary,
   eventLabel,

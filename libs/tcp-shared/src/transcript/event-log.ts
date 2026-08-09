@@ -3,17 +3,15 @@
 // (render) and streaming surfaces observe incrementally (onAppend). This
 // replaces the per-surface PaneEntryLog / responseSeen / mapAuditHistoryToEvents.
 
-import { AuditWireEvent, StreamDelta } from '@tcp/shared';
-import { isBlankText, parseClockTime } from '../core/agent-log-format';
-import { renderAuditEvent, TurnState } from './audit-renderers';
-import { LogEntry, renderEntry } from './entries';
-import {
-  HeadingBlockRenderer,
-  HeadingInfo,
-  HeadingInfoProvider,
-  ScopeTracker,
-} from './heading';
-import { StyleBackend } from './style';
+import type { AuditWireEvent, StreamDelta } from '../events/wire-events';
+import { isBlankText, parseClockTime } from './format';
+import { renderAuditEvent } from './audit-renderers';
+import type { TurnState } from './audit-renderers';
+import { renderEntry } from './entries';
+import type { LogEntry } from './entries';
+import { HeadingBlockRenderer, ScopeTracker } from './heading';
+import type { HeadingInfo, HeadingInfoProvider } from './heading';
+import type { StyleBackend } from './style';
 
 /** An incremental change to the log, delivered to {@link EventLogBuffer.onAppend} listeners. */
 export type AppendEvent =

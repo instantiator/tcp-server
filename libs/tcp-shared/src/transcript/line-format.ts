@@ -4,7 +4,8 @@
 // message shapes older rows carry, so pre-migration history still renders
 // best-effort (`docs/prompts/010.5.1` B.7).
 
-import { AuditWireEvent, extractContentText } from '@tcp/shared';
+import type { AuditWireEvent } from '../events/wire-events';
+import { extractContentText } from '../llm/content-text';
 
 /** Reads a string field, defaulting to ''. */
 function str(obj: Record<string, unknown>, key: string): string {

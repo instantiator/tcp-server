@@ -5,9 +5,9 @@
 // line-only and content-bearing — that the old three switch blocks each
 // re-derived differently.
 
-import { isBlankText } from '../core/agent-log-format';
-import { wrapText } from '../core/text-wrap';
-import { EntryStyle, StyleBackend } from './style';
+import { isBlankText } from './format';
+import { wrapText } from './text-wrap';
+import type { EntryStyle, StyleBackend } from './style';
 
 /** Placeholder shown in place of a whitespace-only or empty response. */
 const BLANK_RESPONSE_MARKER = '(blank)';

@@ -112,3 +112,40 @@ export type { TcpTask, TcpTaskStatus } from './models/TcpTask.model';
 export type { VersionedEntity } from './models/VersionedEntity';
 export type { WithLlmConfig } from './models/WithLlmConfig';
 export type { WithEmbeddingConfig } from './models/WithEmbeddingConfig';
+
+// -- Transcript rendering: the CLI's pure event/audit-log formatting --------
+// Every module here imports types only (the wire-event contract above, and
+// each other), so the whole graph is runtime-free and safe as values, same as
+// the wire-event helpers.
+export { renderAuditEvent } from './transcript/audit-renderers';
+export type {
+  AuditEventRenderer,
+  TurnState,
+} from './transcript/audit-renderers';
+export { EventLogBuffer } from './transcript/event-log';
+export type { AppendEvent } from './transcript/event-log';
+export { renderEntry } from './transcript/entries';
+export type { LogEntry } from './transcript/entries';
+export { plainStyle } from './transcript/style';
+export type { EntryStyle, StyleBackend } from './transcript/style';
+export { HeadingBlockRenderer, ScopeTracker } from './transcript/heading';
+export type {
+  HeadingInfo,
+  HeadingInfoProvider,
+  Scope,
+} from './transcript/heading';
+export {
+  inferEntity,
+  toolName,
+  responseText,
+  reasoningText,
+  eventLabel,
+  compactionSummary,
+  stateChangeText,
+} from './transcript/line-format';
+export {
+  isBlankText,
+  parseClockTime,
+  ASSIGNMENT_COMPLETE_LABEL,
+} from './transcript/format';
+export { wrapText } from './transcript/text-wrap';
