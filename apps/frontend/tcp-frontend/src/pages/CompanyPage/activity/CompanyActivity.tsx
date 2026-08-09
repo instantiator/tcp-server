@@ -1,11 +1,9 @@
 import { useMemo } from 'react';
-import { useCompanyRoles } from '../../../api/queries';
-import {
-  AgentsList,
-  ConsultationsList,
-  EnquiriesList,
-  TasksList,
-} from './lists';
+import { useCompanyRolesList } from '../../../api/hooks';
+import { AgentsList } from './AgentsList';
+import { ConsultationsList } from './ConsultationsList';
+import { EnquiriesList } from './EnquiriesList';
+import { TasksList } from './TasksList';
 import './activity.css';
 
 export interface CompanyActivityProps {
@@ -26,7 +24,7 @@ export interface CompanyActivityProps {
  * requests for the same answer.
  */
 export const CompanyActivity = ({ companyId }: CompanyActivityProps) => {
-  const { data: roles } = useCompanyRoles(companyId);
+  const { data: roles } = useCompanyRolesList(companyId);
   const roleNames = useMemo(
     () => new Map((roles ?? []).map((role) => [role.id, role.name])),
     [roles],

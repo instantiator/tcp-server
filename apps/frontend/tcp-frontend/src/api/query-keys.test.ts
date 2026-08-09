@@ -57,6 +57,7 @@ const everyKey: Record<keyof typeof queryKeys, readonly unknown[]> = {
   company: queryKeys.company('company-1'),
   agents: queryKeys.agents(),
   agent: queryKeys.agent('agent-1'),
+  agentByAssignment: queryKeys.agentByAssignment('assignment-1'),
   agentHistory: queryKeys.agentHistory('agent-1'),
   tasks: queryKeys.tasks({ companyId: 'company-1' }),
   task: queryKeys.task('task-1'),

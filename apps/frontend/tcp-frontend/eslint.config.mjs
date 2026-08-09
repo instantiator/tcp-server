@@ -13,6 +13,33 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
+// Lifted into a const because the rule is declared twice below — once for
+// every file, once for `src/api/**` with the endpoints restriction dropped —
+// and a second declaration of a rule replaces the first rather than merging
+// with it. Inlining these twice would let one copy drift from the other.
+const sharedPackageBoundary = {
+  paths: [
+    {
+      name: '@tcp/shared',
+      message:
+        "Import from '@tcp/shared/client' instead. The default export is server-only — it pulls in TypeORM, BullMQ, ioredis and MinIO, none of which run in a browser.",
+    },
+  ],
+  patterns: [
+    {
+      group: ['@tcp/shared/*', '!@tcp/shared/client'],
+      message:
+        "Only '@tcp/shared/client' is browser-safe. Deep imports into @tcp/shared bypass its exports map.",
+    },
+  ],
+};
+
+const endpointsBoundary = {
+  group: ['**/api/endpoints', './endpoints'],
+  message:
+    "Import from 'api/hooks' instead. `endpoints.ts` is one hook per REST route and is internal to src/api/ (ADR-030).",
+};
+
 export default tseslint.config(
   {
     // The import-boundary fixture is deliberately broken and must not fail the
@@ -85,22 +112,18 @@ export default tseslint.config(
       'no-restricted-imports': [
         'error',
         {
-          paths: [
-            {
-              name: '@tcp/shared',
-              message:
-                "Import from '@tcp/shared/client' instead. The default export is server-only — it pulls in TypeORM, BullMQ, ioredis and MinIO, none of which run in a browser.",
-            },
-          ],
-          patterns: [
-            {
-              group: ['@tcp/shared/*', '!@tcp/shared/client'],
-              message:
-                "Only '@tcp/shared/client' is browser-safe. Deep imports into @tcp/shared bypass its exports map.",
-            },
-          ],
+          paths: sharedPackageBoundary.paths,
+          patterns: [...sharedPackageBoundary.patterns, endpointsBoundary],
         },
       ],
+    },
+  },
+  {
+    // `endpoints.ts` is this directory's own module — the restriction above is
+    // about reaching in from outside it.
+    files: ['src/api/**'],
+    rules: {
+      'no-restricted-imports': ['error', sharedPackageBoundary],
     },
   },
   {

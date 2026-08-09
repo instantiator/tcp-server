@@ -11,7 +11,8 @@ import {
 } from './query-keys';
 
 /**
- * The read surface of tcp-server, as TanStack Query hooks (ADR-021).
+ * One hook per REST route, as TanStack Query hooks (ADR-021). Internal to
+ * `src/api/` — components import `hooks.ts`, not this file.
  *
  * Every hook is the same three lines: a key from `query-keys.ts`, and a call
  * through {@link unwrap} so a failure arrives as an `ApiError`. None of them
@@ -43,11 +44,12 @@ export const useAgents = (params: AgentListParams = {}) =>
     queryFn: () => unwrap(api.GET('/api/agent', { params: { query: params } })),
   });
 
-export const useAgent = (id: string) =>
+export const useAgent = (id: string, enabled = true) =>
   useQuery({
     queryKey: queryKeys.agent(id),
     queryFn: () =>
       unwrap(api.GET('/api/agent/{id}', { params: { path: { id } } })),
+    enabled,
   });
 
 export const useAgentHistory = (id: string) =>
@@ -55,6 +57,25 @@ export const useAgentHistory = (id: string) =>
     queryKey: queryKeys.agentHistory(id),
     queryFn: () =>
       unwrap(api.GET('/api/agent/{id}/history', { params: { path: { id } } })),
+  });
+
+/**
+ * The one agent holding an assignment. Agent and assignment are 1:1, so the
+ * list route filtered by `assignmentId` returns at most one row.
+ *
+ * Resolves to `null`, not `undefined`, when there is no such agent — TanStack
+ * Query treats an `undefined` result as a bug and throws.
+ */
+export const useAgentByAssignment = (assignmentId: string, enabled = true) =>
+  useQuery({
+    queryKey: queryKeys.agentByAssignment(assignmentId),
+    queryFn: async () => {
+      const rows = await unwrap(
+        api.GET('/api/agent', { params: { query: { assignmentId } } }),
+      );
+      return rows[0] ?? null;
+    },
+    enabled,
   });
 
 export const useTasks = (params: TaskListParams) =>

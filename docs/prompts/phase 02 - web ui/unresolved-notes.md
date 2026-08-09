@@ -96,6 +96,10 @@ the caveat as a visible `<p>` above the rows and, deliberately, outside the
 survives all four of the list's states rather than vanishing whenever the list
 is fetching, failed or empty.
 
+`useLiveConsultationState` (added in 007.02) inherits the same limit: a
+consultation that has been requested but not yet picked up has no assignment
+row, so there is no id to pass it.
+
 ### Every agent state change now reaches every subscriber of that company's stream
 
 **Raised by:** 002.04 · **Condition to revisit:** the live view is reported as noisy, or one company routinely runs enough concurrent agents for the stream to be the bottleneck
@@ -555,6 +559,19 @@ summary, because `applyEvent` prefers `hasStringId(summary)` and only falls
 back to `synthesiseAgentPatch` when that is absent — nothing needs to notice
 or remove the fallback for the fix to take effect.
 
+### `useCompanies` is not live
+
+**Raised by:** 007.02 · **Condition to revisit:** a view exists that shows more than one company and must reflect a change to any of them without a reload
+
+Every other list hook in `src/api/hooks.ts` patches itself from the company
+SSE channel. `useCompanies` cannot: only per-company channels exist, so there
+is no stream to patch it from. A list-level stream would have to be built.
+
+It would otherwise patch whichever company the current page happens to be
+subscribed to and no other, which is worse than not patching at all, because
+it looks like it works. `CompaniesPage` refetches on mount instead, and that
+is enough for it.
+
 ## Carried into a later prompt
 
 | Note                                                                                                                                                                                                 | Raised by | Goes to  |
@@ -658,3 +675,6 @@ or remove the fallback for the fix to take effect.
 | `ActivityList` in `pages/CompanyPage/activity/` is the shared four-state frame for a live list (region, heading, count, loading/error/empty/populated) — reuse it rather than repeating the contract | 007.01    | `008.07` |
 | The four activity lists are the first `<ul>`s that a theme will style; check the Safari/VoiceOver `list-style: none` role loss on all of them                                                        | 007.01    | `009.02` |
 | The announcement wordings and the ~10s `ANNOUNCE_THROTTLE_MS` are unverified against a real screen reader — the activity view is the surface to tune them on                                         | 007.01    | `009.02` |
+| The two chat hooks exist with no consumer, so their shape is unproven                                                                                                                                | 007.02    | `008.02` |
+| ADR-030's `Live` prefix needs rechecking against `STATIC_ENTITIES`                                                                                                                                   | 007.02    | `009.03` |
+| The four remaining MVP journeys — create a task and watch it progress, chat with a role, answer a user enquiry, sign out and land on the landing page                                                | 007.03    | `009.01` |

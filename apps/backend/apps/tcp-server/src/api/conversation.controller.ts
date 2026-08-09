@@ -1,4 +1,4 @@
-import type { Conversation, ConversationMessage } from '@tcp/shared';
+import type { Conversation } from '@tcp/shared';
 import { AuditEventType, buildEnquiryChangeSummary } from '@tcp/shared';
 import {
   Body,
@@ -28,7 +28,10 @@ import {
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { ConversationService } from './conversation.service';
 import { ConversationReplyDto } from './dto/conversation.dto';
-import { ConversationResponseDto } from './dto/entity-response.dto';
+import {
+  ConversationDetailResponseDto,
+  ConversationResponseDto,
+} from './dto/entity-response.dto';
 
 /** REST controller for agent-to-human conversation queries. */
 @ApiTags('conversations')
@@ -67,19 +70,26 @@ export class ConversationController {
   }
 
   /**
-   * Returns a conversation and its messages identified by slug, along with
-   * the owning company's `timezone` (for client-side display formatting —
+   * Returns a conversation identified by slug, with its messages and the
+   * owning company's `timezone` (for client-side display formatting —
    * timestamps themselves are always UTC).
+   *
+   * The conversation's own fields are at the top level, rather than the
+   * `{ conversation, messages, companyTimezone }` wrapper this returned before
+   * 007.02. A wrapper has no top-level `id`, and the browser patches a cached
+   * entity from a live event by matching `id` — so a wrapper cannot be updated
+   * by an event at all (ADR-030).
    */
   @ApiOperation({ summary: 'Get a conversation by slug' })
+  @ApiOkResponse({ type: ConversationDetailResponseDto })
   @CompanyScope({ from: 'param', key: 'slug', via: 'conversation' })
   @Get(':slug')
-  async get(@Param('slug') slug: string): Promise<{
-    conversation: Conversation;
-    messages: ConversationMessage[];
-    companyTimezone: string | null;
-  }> {
-    return this.service.get(slug);
+  async get(
+    @Param('slug') slug: string,
+  ): Promise<ConversationDetailResponseDto> {
+    const { conversation, messages, companyTimezone } =
+      await this.service.get(slug);
+    return { ...conversation, messages, companyTimezone };
   }
 
   /**

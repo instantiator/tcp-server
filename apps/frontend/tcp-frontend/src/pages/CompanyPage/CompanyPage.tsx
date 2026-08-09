@@ -1,7 +1,7 @@
 import { Tab, TabList, TabPanel, Tabs } from 'react-aria-components';
 import { Link, useParams } from 'react-router';
 import { useLoadingAnnouncement } from '../../announce/useLoadingAnnouncement';
-import { useCompany } from '../../api/queries';
+import { useLiveCompanyState } from '../../api/hooks';
 import { Breadcrumbs } from '../../components/Breadcrumbs/Breadcrumbs';
 import { EmptyState } from '../../components/EmptyState/EmptyState';
 import { ErrorState } from '../../components/ErrorState/ErrorState';
@@ -33,7 +33,9 @@ import './CompanyPage.css';
  */
 export const CompanyPage = () => {
   const { companyId } = useParams();
-  const { data, isPending, error, refetch } = useCompany(companyId ?? '');
+  const { data, isPending, error, refetch } = useLiveCompanyState(
+    companyId ?? '',
+  );
 
   // `GET /api/company/{id}` answers **200 with a JSON `null`** for a company
   // the caller cannot see, so "no such company" arrives as a successful

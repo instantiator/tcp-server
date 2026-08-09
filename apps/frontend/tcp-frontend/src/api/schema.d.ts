@@ -1390,6 +1390,37 @@ export interface components {
             /** Format: date-time */
             repliesDeliveredAt?: string;
         };
+        ConversationMessageResponseDto: {
+            id: string;
+            conversationId: string;
+            /** @enum {string} */
+            author: "user" | "agent";
+            authorIdentifier: string | null;
+            content: string;
+            /** Format: date-time */
+            timestamp: string;
+        };
+        ConversationDetailResponseDto: {
+            id: string;
+            slug: string;
+            companyId: string;
+            roleName: string;
+            roleId: string | null;
+            agentId: string | null;
+            question: string;
+            context: string | null;
+            /** @enum {string} */
+            status: "awaiting_user" | "closed";
+            routedToIdentifiers: string[];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            closedAt?: string;
+            /** Format: date-time */
+            repliesDeliveredAt?: string;
+            messages: components["schemas"]["ConversationMessageResponseDto"][];
+            companyTimezone: string | null;
+        };
         ConversationReplyDto: {
             content: string;
             authorIdentifier?: string;
@@ -1442,6 +1473,38 @@ export interface components {
             /** @enum {string} */
             qa: "accept" | "reject";
             feedback?: string;
+        };
+        KnowledgeDocumentResponseDto: {
+            key: string;
+            name: string;
+            size: number;
+            lastModified: string;
+        };
+        KnowledgeStatusResponseDto: {
+            lastIndexedAt: string | null;
+            lastError: string | null;
+            lastErrorAt: string | null;
+            documentCount: number;
+            totalBytes: number;
+            chunkCount: number;
+            generation: number;
+            indexing: boolean;
+        };
+        KnowledgeChunkResponseDto: {
+            id: string;
+            documentPath: string;
+            chunkIndex: number;
+            content: string;
+            similarity: number;
+        };
+        RoleKnowledgeStatusResponseDto: {
+            roleId: string;
+            roleSlug: string;
+            status: components["schemas"]["KnowledgeStatusResponseDto"];
+        };
+        CompanyKnowledgeStatusResponseDto: {
+            roles: components["schemas"]["RoleKnowledgeStatusResponseDto"][];
+            shared: components["schemas"]["KnowledgeStatusResponseDto"];
         };
         CreateRoleDto: {
             /** Format: uuid */
@@ -1557,6 +1620,24 @@ export interface components {
             plannerRoleId?: string;
             expected?: components["schemas"]["TaskExpectedArtifactDto"][];
             materials?: components["schemas"]["InlineTextMaterialDto"][];
+        };
+        TaskDetailResponseDto: {
+            id: string;
+            companyId: string;
+            request: string;
+            shortcode: string;
+            plannerRoleId?: string | null;
+            /** @enum {string} */
+            status: "ready" | "planning" | "in-progress" | "finalising" | "succeeded" | "failed" | "cancelled";
+            materials: Record<string, never>[];
+            expected: Record<string, never>[];
+            completed: Record<string, never>[] | null;
+            failureReason: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            assignments: components["schemas"]["AssignmentResponseDto"][];
         };
         AuditEventResponseDto: {
             id: string;
@@ -2100,7 +2181,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ConversationDetailResponseDto"];
+                };
             };
         };
     };
@@ -2407,7 +2490,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": components["schemas"]["KnowledgeDocumentResponseDto"][];
                 };
             };
         };
@@ -2449,7 +2532,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["KnowledgeStatusResponseDto"];
                 };
             };
         };
@@ -2474,7 +2557,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": components["schemas"]["KnowledgeChunkResponseDto"][];
                 };
             };
         };
@@ -2537,7 +2620,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": components["schemas"]["KnowledgeDocumentResponseDto"][];
                 };
             };
         };
@@ -2579,7 +2662,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["CompanyKnowledgeStatusResponseDto"];
                 };
             };
         };
@@ -3185,7 +3268,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["TaskDetailResponseDto"];
+                };
             };
         };
     };

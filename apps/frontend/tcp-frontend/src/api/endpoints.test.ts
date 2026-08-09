@@ -15,7 +15,7 @@ import {
   useConversations,
   useRoleKnowledge,
   useTasks,
-} from './queries';
+} from './endpoints';
 
 // One representative hook per entity, not all 21 — the point of this file is
 // that a hook's key and its request agree, not that every filter on every

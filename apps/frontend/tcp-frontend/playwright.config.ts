@@ -2,6 +2,8 @@
 // drives a deployment someone else started and takes its base URL as input
 // (ADR-016). scripts/run-browser-tests.sh is the launcher.
 import { defineConfig, devices } from '@playwright/test';
+// Only the flag: the state path is named by the specs that opt in, not here.
+import { hasSignInCredentials } from './test/browser/auth-state';
 
 // Set by scripts/run-browser-tests.sh from its --base-url. The fallback is the
 // deployment's default EXPOSE_PORT_WEB, for running `playwright test` directly
@@ -43,7 +45,23 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    // Signs in once and saves the provider's session (007.03). Skips itself
+    // when no credentials resolve, and the specs that need a session skip too
+    // — a contributor with no deployment can still run the tier.
+    { name: 'setup', testMatch: /auth\.setup\.ts/ },
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+      // The project stays **signed out**. A spec that wants the session opts
+      // in with `test.use({ storageState: AUTH_STATE_PATH })`.
+      //
+      // The other way round is tempting and wrong: `app-shell.spec.ts` proves
+      // that a guarded route redirects to the provider and that `?devSession=`
+      // cannot sign anyone in against a production build. Both of those pass
+      // trivially, and mean nothing, once the browser arrives already signed
+      // in — and neither would fail to tell you so.
+      dependencies: hasSignInCredentials ? ['setup'] : [],
+    },
     // ponytail: one browser, one binary to install and cache. ADR-026's manual
     // matrix covers Safari and Firefox per release; 009.01 turns these on if
     // six real journeys justify the CI minutes.

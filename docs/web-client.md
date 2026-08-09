@@ -6,10 +6,11 @@ cache and React Aria Components for behaviour
 ([ADR-021](ADRs/ADR-021-web-ui-framework-and-architecture.md),
 [ADR-026](ADRs/ADR-026-web-ui-accessibility-and-component-library.md)).
 
-One journey works end to end — [signing in](#signing-in). Everything behind it
-is still a placeholder route, and what the application mostly has so far is the
-set of seams every later prompt depends on, because retrofitting them once
-components exist is disproportionately expensive.
+One journey works end to end — [signing in](#signing-in). Behind it, the
+companies overview and the company live activity view are real (`006.01`,
+`007.01`); what the rest of the application has is the set of seams every
+later prompt depends on, because retrofitting them once components exist is
+disproportionately expensive.
 
 ## Running it
 
@@ -370,7 +371,9 @@ not appear in the served bundle.
 **What it does not do:** a session today is a user id and nothing else. It
 carries no token, so tcp-server refuses every API call it leads to with a 401,
 exactly as it would for a signed-out visitor. It is a way to see the shell,
-not a way to reach data.
+not a way to reach data. Any API-backed view opened behind it errors for that
+reason — which is why the browser tier does not use it, and signs in for real
+through a real Zitadel login instead ([testing.md](testing.md#signing-in)).
 
 **The constraint on future work:** when 004.03 makes the session hold a
 bearer token, a session built from a query string must not be able to mint
@@ -469,6 +472,127 @@ enforces that at compile time rather than at review time. Nothing here
 self-dismisses.
 
 Nothing consumes these yet: 006.01 and 007.01 are the first views to.
+
+## Reading data: one hook per thing on screen
+
+Every component reads data through `src/api/hooks.ts`, and nowhere else.
+Behind it, `endpoints.ts` holds one hook per REST route, `query-keys.ts` names
+the cache keys, and `client.ts` holds the generated client and its auth
+middleware — all three internal, held there by a `no-restricted-imports`
+eslint rule, the same mechanism that keeps the
+[`@tcp/shared` boundary](#the-tcpshared-boundary) closed.
+[ADR-030](ADRs/ADR-030-component-hooks-for-live-data.md) has the reasoning;
+this is how to use what it decided.
+
+### The hooks
+
+| Hook                                              | What it gives you                                             | Live?                                  |
+| ------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------- |
+| `useCompanies(params?)`                           | Every company the caller can see                              | No — no company-list stream, see below |
+| `useLiveCompanyState(companyId)`                  | One company                                                   | Yes                                    |
+| `useLiveCompanyAgentsList(companyId)`             | A company's agents                                            | Yes                                    |
+| `useLiveCompanyTasksList(companyId)`              | A company's tasks                                             | Yes                                    |
+| `useLiveCompanyChatsList(companyId)`              | A company's chats (assignments in `chat` mode)                | Yes                                    |
+| `useLiveCompanyConsultationsList(companyId)`      | Open consultations (assignments in `consultee` mode, no task) | Yes                                    |
+| `useLiveCompanyEnquiriesList(companyId, status?)` | A company's enquiries                                         | Yes                                    |
+| `useCompanyRolesList(companyId)`                  | A company's roles                                             | No                                     |
+| `useCompanyKnowledgeList(companyId)`              | A company's knowledge index                                   | No                                     |
+| `useLiveAssignmentsList(filter)`                  | Assignments, filtered by any of company/task/role id          | Yes                                    |
+| `useLiveTaskState(taskId)`                        | One task                                                      | Yes, but unreadable — see below        |
+| `useLiveChatState(assignmentId)`                  | One chat, as an assignment (not its messages)                 | Yes                                    |
+| `useLiveConsultationState(assignmentId)`          | One consultation, as an assignment                            | Yes                                    |
+| `useLiveEnquiryState(slug)`                       | One enquiry, by slug                                          | Yes, but unreadable — see below        |
+| `useRoleState(roleId)`                            | One role                                                      | No                                     |
+| `useLiveAgentState({ agentId, assignmentId })`    | One agent, found by either id it can be reached through       | Yes                                    |
+| `useAgentHistory(id)`                             | An agent's audit history                                      | No                                     |
+| `useCompanyKnowledgeStatus(companyId)`            | A company's knowledge indexing status                         | No                                     |
+| `useCompanyUsers(companyId)`                      | A company's members                                           | No                                     |
+| `useRoleBySlug(companyId, slug)`                  | One role, by slug                                             | No                                     |
+| `useRoleKnowledge(roleId)`                        | A role's knowledge index                                      | No                                     |
+| `useRoleKnowledgeSearch(roleId, query)`           | A role's knowledge index, searched                            | No                                     |
+| `useRoleKnowledgeStatus(roleId)`                  | A role's knowledge indexing status                            | No                                     |
+| `useTaskHistory(id)`                              | A task's audit history                                        | No                                     |
+
+The last eight have no facade of their own — `hooks.ts` re-exports them from
+`endpoints.ts` so the door stays complete, and nothing has a reason to reach
+past it.
+
+### `Live` means push-updated
+
+An event arrives over SSE, `applyEvent` folds it into the query cache, and
+every `useLive*` hook reading that cache re-renders. Its absence is a fact
+about the system, not an oversight: `query-keys.ts` names `role`,
+`company-user` and `knowledge` as `STATIC_ENTITIES` — nothing streams them, so
+`useCompanyRolesList`, `useCompanyKnowledgeList` and `useRoleState` carry no
+prefix and answer once, refetching only when asked.
+
+`useCompanies` has no prefix for a different reason. Its entity _is_ live, but
+only per-company channels exist — there is no company-list stream. Patching
+it from whichever company the current page happens to be subscribed to would
+be worse than not patching at all, because it would look like it worked.
+
+### A page opens the stream; a component never does
+
+`CompanyPage.tsx` calls `useEventStream` once — the only call to it anywhere
+in the app. Everything below it, however deeply nested, reads the cache that
+one subscription patches. `MAX_STREAMS` in `subscriptions.ts` is why: a hook
+that opened its own stream would work fine in the first view that tried it,
+and fail only once a busier view called it several times over.
+
+### A worked example
+
+```tsx
+import { useLiveCompanyTasksList } from '../../../api/hooks';
+import { t } from '../../../strings';
+import { ActivityList } from './ActivityList';
+
+const TasksSummary = ({ companyId }: { readonly companyId: string }) => {
+  const query = useLiveCompanyTasksList(companyId);
+  const rows = query.data ?? [];
+
+  return (
+    <ActivityList
+      heading={t('activity.tasks.heading')}
+      query={query}
+      channel="tasks"
+      count={rows.length}
+      emptyHeading={t('activity.tasks.empty.heading')}
+      emptyBody={t('activity.tasks.empty.body')}
+    >
+      <ul className="activity-list__rows">
+        {rows.map((task) => (
+          <li className="activity-list__row" key={task.id}>
+            <p className="activity-list__row-title">{task.shortcode}</p>
+          </li>
+        ))}
+      </ul>
+    </ActivityList>
+  );
+};
+```
+
+`ActivityList` owns loading, error and empty presentation; the component above
+only calls the hook and renders rows. Every visible string goes through `t` —
+[no literals in JSX](#strings-one-lookup-no-literals-in-jsx). The real version
+of this is `src/pages/CompanyPage/activity/TasksList.tsx`.
+
+### Two things to watch for
+
+- **A live-patched row can carry fields the REST type does not have.**
+  `TaskChangeSummary` carries `completedSteps`/`totalSteps` that `TcpTask` —
+  the REST shape `useLiveCompanyTasksList` fetches — never had. Such a field
+  is absent on first paint and appears only after the first matching event,
+  which reads as the row's shape changing under the reader for no reason they
+  can see. Do not render them.
+- **`useLiveTaskState` and `useLiveEnquiryState` return the entity plus
+  extras, not a wrapper.** `GET /api/task/{id}` answers with the task's own
+  fields at the top level plus `assignments`; `GET /api/conversation/{slug}`
+  answers with the conversation's own fields plus `messages` and
+  `companyTimezone`. Flattened deliberately — `applyEvent` patches a cached
+  row by matching its top-level `id`, and a wrapper would have none.
+  `src/api/schema.test.ts` guards every `GET /api/…` route a component reads
+  against shipping unreadable, so this class of gap cannot reach the client
+  silently again.
 
 ## Strings: one lookup, no literals in JSX
 
