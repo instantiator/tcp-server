@@ -98,6 +98,15 @@ export const queryKeys = {
 
   agents: (params: AgentListParams = {}) => ['agent', 'list', params] as const,
   agent: (id: string) => ['agent', 'detail', id] as const,
+
+  /**
+   * Keyed under `detail`, not `list`: this holds one agent, and reusing
+   * `agents({ assignmentId })` would put a scalar and an array under the same
+   * key. Still prefixed `agent`, so live events patch it like any other row.
+   */
+  agentByAssignment: (assignmentId: string) =>
+    ['agent', 'detail', { assignmentId }] as const,
+
   agentHistory: (id: string) => ['agent', 'history', id] as const,
 
   tasks: (params: TaskListParams) => ['task', 'list', params] as const,

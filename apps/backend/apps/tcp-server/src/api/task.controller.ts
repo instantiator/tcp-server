@@ -2,7 +2,6 @@ import {
   AuditEventType,
   buildAssignmentChangeSummary,
   type AuditEvent,
-  type TcpAssignment,
   type TcpTask,
   type WireEvent,
 } from '@tcp/shared';
@@ -43,6 +42,7 @@ import { TaskEventService } from '../events/task-event.service';
 import { CreateTaskDto, UpdateTaskDto } from './dto/task.dto';
 import {
   AuditEventResponseDto,
+  TaskDetailResponseDto,
   TaskResponseDto,
 } from './dto/entity-response.dto';
 import { SystemShutdownService } from './system-shutdown.service';
@@ -155,14 +155,23 @@ export class TaskController {
     return this.tasks.list(companyId);
   }
 
-  /** Retrieves a task with its assignments. */
+  /**
+   * Retrieves a task with the assignments working it.
+   *
+   * The task's own fields are at the top level and `assignments` sits beside
+   * them, rather than the `{ task, assignments }` wrapper this returned before
+   * 007.02. A wrapper has no top-level `id`, and the browser patches a cached
+   * entity from a live event by matching `id` — so a wrapper cannot be updated
+   * by an event at all (ADR-030). The flattening belongs here rather than in
+   * {@link TaskService.getWithAssignments}, which is about persistence.
+   */
   @ApiOperation({ summary: 'Get a task by ID' })
+  @ApiOkResponse({ type: TaskDetailResponseDto })
   @CompanyScope({ from: 'param', key: 'id', via: 'task' })
   @Get(':id')
-  async getTask(
-    @Param('id') id: UUID,
-  ): Promise<{ task: TcpTask; assignments: TcpAssignment[] }> {
-    return this.tasks.getWithAssignments(id);
+  async getTask(@Param('id') id: UUID): Promise<TaskDetailResponseDto> {
+    const { task, assignments } = await this.tasks.getWithAssignments(id);
+    return { ...task, assignments };
   }
 
   /**

@@ -3,6 +3,7 @@ import {
   AuditEvent,
   CompanyUser,
   Conversation,
+  ConversationMessage,
   TcpAgent,
   TcpAssignment,
   TcpCompany,
@@ -10,6 +11,7 @@ import {
   TcpTask,
   type ConversationStatus,
   type MemberType,
+  type MessageAuthor,
   type TcpAssignmentMode,
   type TcpAssignmentStatus,
   type TcpTaskStatus,
@@ -137,6 +139,16 @@ const _conversationStatusesExhaustive: Exhaustive<
 > = true;
 void _conversationStatusesExhaustive;
 
+const MESSAGE_AUTHORS = [
+  'user',
+  'agent',
+] as const satisfies readonly MessageAuthor[];
+const _messageAuthorsExhaustive: Exhaustive<
+  MessageAuthor,
+  (typeof MESSAGE_AUTHORS)[number]
+> = true;
+void _messageAuthorsExhaustive;
+
 const MEMBER_TYPES = [
   'creator',
   'owner',
@@ -212,4 +224,47 @@ export class ConversationResponseDto extends OmitType(
 export class CompanyUserResponseDto extends OmitType(CompanyUser, [] as const) {
   @ApiProperty({ enum: MEMBER_TYPES })
   declare memberType: MemberType;
+}
+
+/** {@link ConversationMessage}, with its `author` enum order pinned. */
+export class ConversationMessageResponseDto extends OmitType(
+  ConversationMessage,
+  [] as const,
+) {
+  @ApiProperty({ enum: MESSAGE_AUTHORS })
+  declare author: MessageAuthor;
+}
+
+/**
+ * The two detail routes below answer with an entity **and** what a caller
+ * would otherwise have to fetch separately.
+ *
+ * They are the entity's own fields at the top level, with the extras beside
+ * them — deliberately not `{ task, assignments }` and
+ * `{ conversation, messages }`, which is what both handlers returned until
+ * 007.02. A wrapper has no top-level `id`, and the browser's live-event cache
+ * patches a cached object by matching `id` (`applyEvent` in the web client, see
+ * [ADR-030](../../../../../../docs/ADRs/ADR-030-component-hooks-for-live-data.md)).
+ * So a wrapper is not merely awkward to read — it silently cannot be updated by
+ * an event, which is the one thing these routes exist to support. Keep the id
+ * at the top.
+ */
+
+/** {@link TaskResponseDto} plus the assignments working it. */
+export class TaskDetailResponseDto extends TaskResponseDto {
+  @ApiProperty({ type: AssignmentResponseDto, isArray: true })
+  assignments!: AssignmentResponseDto[];
+}
+
+/** {@link ConversationResponseDto} plus its messages and display timezone. */
+export class ConversationDetailResponseDto extends ConversationResponseDto {
+  @ApiProperty({ type: ConversationMessageResponseDto, isArray: true })
+  messages!: ConversationMessageResponseDto[];
+
+  /**
+   * The owning company's timezone, for formatting the timestamps below.
+   * Timestamps themselves are always UTC.
+   */
+  @ApiProperty({ type: String, nullable: true })
+  companyTimezone!: string | null;
 }

@@ -1,7 +1,7 @@
 import { Link } from 'react-router';
 import { useLoadingAnnouncement } from '../../announce/useLoadingAnnouncement';
 import { ApiError } from '../../api/errors';
-import { useCompanies } from '../../api/queries';
+import { useCompanies } from '../../api/hooks';
 import { ACTIVE_TASK_STATUSES } from '../../api/statuses';
 import { EmptyState } from '../../components/EmptyState/EmptyState';
 import { ErrorState } from '../../components/ErrorState/ErrorState';

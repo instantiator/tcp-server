@@ -144,6 +144,13 @@ const enquirySummary = (overrides: {
   question: string;
 }) => ({ ...overrides, createdAt: NOW });
 
+/** An `AssignmentChangeSummary`, built from the assignment it patches. */
+const assignmentSummary = (overrides: {
+  id: string;
+  status: string;
+  roleId: string;
+}) => ({ ...overrides, mode: 'consultee', orderIndex: null });
+
 const AGENT_1 = agent({
   id: 'agent-1',
   status: 'running',
@@ -401,6 +408,40 @@ describe('CompanyActivity', () => {
 
       await waitFor(() => {
         expect(screen.queryByText(TASK_1.shortcode)).not.toBeInTheDocument();
+      });
+    });
+
+    it('removes a consultation from the list when a stream event changes it to a terminal status', async () => {
+      respondActivity({ assignments: { body: [ASSIGNMENT_1] } });
+      const { queryClient } = renderActivity();
+
+      const consultationsRegion = await screen.findByRole('region', {
+        name: t('activity.consultations.heading'),
+      });
+      await within(consultationsRegion).findByText(
+        t('activity.count', { count: 1 }),
+      );
+
+      act(() => {
+        applyEvent(
+          queryClient,
+          auditEvent({
+            entity: 'assignment',
+            summary: assignmentSummary({
+              id: ASSIGNMENT_1.id,
+              status: 'succeeded',
+              roleId: ASSIGNMENT_1.roleId,
+            }),
+          }),
+        );
+      });
+
+      await waitFor(() => {
+        expect(
+          within(consultationsRegion).getByText(
+            t('activity.count', { count: 0 }),
+          ),
+        ).toBeInTheDocument();
       });
     });
 

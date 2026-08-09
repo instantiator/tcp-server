@@ -47,6 +47,8 @@ Options:
                              (default: http://localhost:8080/.well-known/openid-configuration)
   --client-id ID             Machine test user client ID (client_credentials)
   --client-secret SECRET     Machine test user client secret
+  --username NAME            Human test user, for the sign-in setup project
+  --password SECRET          That user's password
   --env-file PATH            Env file to read TEST_CLIENT_ID/SECRET from when
                              not otherwise provided (default: .env.dev, else .env.testing)
   -h, --help                 Show this help message and exit
@@ -59,6 +61,8 @@ BASE_URL="${TCP_WEB_URL:-https://localhost:${EXPOSE_PORT_WEB:-5173}}"
 OIDC_URL=""
 CLIENT_ID=""
 CLIENT_SECRET=""
+USERNAME_ARG=""
+PASSWORD_ARG=""
 ENV_FILE=""
 PASSTHROUGH=()
 
@@ -68,6 +72,8 @@ while [[ $# -gt 0 ]]; do
     --oidc-discovery-url)  OIDC_URL="$2";       shift 2 ;;
     --client-id)           CLIENT_ID="$2";      shift 2 ;;
     --client-secret)       CLIENT_SECRET="$2";  shift 2 ;;
+    --username)            USERNAME_ARG="$2";   shift 2 ;;
+    --password)            PASSWORD_ARG="$2";   shift 2 ;;
     --env-file)            ENV_FILE="$2";       shift 2 ;;
     --) shift; PASSTHROUGH+=("$@"); break ;;
     -h|--help) usage; exit 0 ;;
@@ -97,6 +103,29 @@ if [[ -z "$CLIENT_ID" || -z "$CLIENT_SECRET" ]]; then
   done
 fi
 
+# The human test user, for the sign-in setup project (007.03). Unlike the
+# machine credentials these are not generated — start-deployment.sh reads them
+# from the committed env file and provisions that user — but the same override
+# order applies, so a deployment that changed them locally still works.
+if [[ -z "$USERNAME_ARG" || -z "$PASSWORD_ARG" ]]; then
+  if [[ -z "$ENV_FILE" ]]; then
+    if [[ -f "$REPO_ROOT/.env.dev" ]]; then
+      ENV_FILE="$REPO_ROOT/.env.dev"
+    else
+      ENV_FILE="$REPO_ROOT/.env.testing"
+    fi
+  fi
+  for candidate in "$ENV_FILE.local" "$ENV_FILE"; do
+    [[ -f "$candidate" ]] || continue
+    # `|| true`: these live in the committed env file, not the generated
+    # `.local` override, so the first candidate normally has no match — and a
+    # failing grep inside an assignment ends the script under `set -e`, with no
+    # output at all to say why.
+    [[ -n "$USERNAME_ARG" ]] || USERNAME_ARG="$(grep -m1 '^TEST_USERNAME=' "$candidate" | cut -d= -f2- || true)"
+    [[ -n "$PASSWORD_ARG" ]] || PASSWORD_ARG="$(grep -m1 '^TEST_PASSWORD=' "$candidate" | cut -d= -f2- || true)"
+  done
+fi
+
 # Playwright is a no-op if the browser is already present, so this is cheap on
 # every run after the first. --with-deps needs root on Linux and is a no-op on
 # macOS, so it is left to CI, which sets it explicitly.
@@ -110,5 +139,7 @@ export TCP_WEB_URL="$BASE_URL"
 [[ -n "$OIDC_URL" ]]      && export OIDC_DISCOVERY_URL="$OIDC_URL"
 [[ -n "$CLIENT_ID" ]]     && export TEST_CLIENT_ID="$CLIENT_ID"
 [[ -n "$CLIENT_SECRET" ]] && export TEST_CLIENT_SECRET="$CLIENT_SECRET"
+[[ -n "$USERNAME_ARG" ]]  && export TEST_USERNAME="$USERNAME_ARG"
+[[ -n "$PASSWORD_ARG" ]]  && export TEST_PASSWORD="$PASSWORD_ARG"
 
 npm --prefix "$REPO_ROOT" run test:browser -- ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}

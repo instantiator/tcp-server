@@ -20,6 +20,7 @@ import {
 import {
   ApiConsumes,
   ApiBearerAuth,
+  ApiOkResponse,
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
@@ -36,6 +37,12 @@ import {
   ensureOkfFrontMatter,
   convertToMarkdown,
 } from './knowledge-conversion';
+import {
+  CompanyKnowledgeStatusResponseDto,
+  KnowledgeChunkResponseDto,
+  KnowledgeDocumentResponseDto,
+  KnowledgeStatusResponseDto,
+} from './dto/knowledge-response.dto';
 import {
   CompanyKnowledgeStatus,
   DocumentSummary,
@@ -71,6 +78,7 @@ export class KnowledgeController {
 
   /** Lists all OKF documents stored for the role. */
   @ApiOperation({ summary: 'List OKF documents for a role' })
+  @ApiOkResponse({ type: KnowledgeDocumentResponseDto, isArray: true })
   @CompanyScope({ from: 'param', key: 'roleId', via: 'role' })
   @Get('role/:roleId/knowledge')
   async listRoleKnowledge(
@@ -90,6 +98,7 @@ export class KnowledgeController {
    * mistaken for a filename.
    */
   @ApiOperation({ summary: 'Get knowledge index status for a role' })
+  @ApiOkResponse({ type: KnowledgeStatusResponseDto })
   @CompanyScope({ from: 'param', key: 'roleId', via: 'role' })
   @Get('role/:roleId/knowledge/status')
   async getRoleKnowledgeStatus(
@@ -117,6 +126,7 @@ export class KnowledgeController {
    * @throws {@link NotFoundException} when the role does not exist.
    */
   @ApiOperation({ summary: 'Query the RAG index for a role' })
+  @ApiOkResponse({ type: KnowledgeChunkResponseDto, isArray: true })
   @CompanyScope({ from: 'param', key: 'roleId', via: 'role' })
   @Get('role/:roleId/knowledge/query')
   async queryRoleKnowledge(
@@ -204,6 +214,7 @@ export class KnowledgeController {
 
   /** Lists all OKF documents stored in the company's shared knowledge. */
   @ApiOperation({ summary: 'List company-shared OKF documents' })
+  @ApiOkResponse({ type: KnowledgeDocumentResponseDto, isArray: true })
   @CompanyScope({ from: 'param', key: 'companyId', via: 'company' })
   @Get('company/:companyId/knowledge')
   async listCompanyKnowledge(
@@ -224,6 +235,7 @@ export class KnowledgeController {
   @ApiOperation({
     summary: 'Get knowledge index status for a company (shared + every role)',
   })
+  @ApiOkResponse({ type: CompanyKnowledgeStatusResponseDto })
   @CompanyScope({ from: 'param', key: 'companyId', via: 'company' })
   @Get('company/:companyId/knowledge/status')
   async getCompanyKnowledgeStatus(

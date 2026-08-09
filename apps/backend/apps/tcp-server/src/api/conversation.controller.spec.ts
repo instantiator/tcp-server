@@ -68,17 +68,29 @@ describe('ConversationController', () => {
   });
 
   describe('get', () => {
-    it('delegates to service.get with the slug', async () => {
-      const expected = {
-        conversation: { slug: 'cto-1' } as Conversation,
+    it('flattens the conversation onto the response, rather than wrapping it', async () => {
+      const conversation = closedConv();
+      service.get.mockResolvedValue({
+        conversation,
         messages: [] as ConversationMessage[],
         companyTimezone: null,
-      };
-      service.get.mockResolvedValue(expected);
+      });
 
       const result = await ctrl.get('cto-1');
+
       expect(service.get).toHaveBeenCalledWith('cto-1');
-      expect(result).toBe(expected);
+      // The conversation's own fields sit at the top level, with `messages`
+      // and `companyTimezone` beside them — not `{ conversation, … }`. The
+      // browser patches a cached entity from a live event by matching its
+      // top-level `id`, so a wrapper could never be updated by an event
+      // (ADR-030). `toEqual`, not `toBe`: the controller builds this.
+      expect(result).toEqual({
+        ...conversation,
+        messages: [],
+        companyTimezone: null,
+      });
+      // Named explicitly, because `id` at the top level is the whole point.
+      expect(result.id).toBe(conversation.id);
     });
   });
 

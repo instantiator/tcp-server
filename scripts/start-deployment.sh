@@ -435,7 +435,35 @@ EOF
   set_env_var "$LOCAL_ENV_FILE" OIDC_WEB_CLIENT_ID "$OIDC_WEB_CLIENT_ID"
   export OIDC_WEB_CLIENT_ID
 
-  # Human test user — for manually exercising `tcp-cli get-token`'s device-flow login.
+  # No second factors on the org's login policy.
+  #
+  # Zitadel offers a "2-Factor Setup" screen on a human's first sign-in when the
+  # policy lists a second factor and the user has none. It is only an offer —
+  # there is a Skip button, and MFA is not enforced either way — but it stands
+  # between the login form and the application, which breaks the browser tier's
+  # sign-in harness (007.03) on any freshly bootstrapped org. It bit the testing
+  # deployment while the older dev org went straight through, so the two
+  # environments disagreed about what signing in looks like.
+  #
+  # Removing the factors is the fix rather than teaching the harness to click
+  # Skip: a conditional step in a test is a step nobody can tell has stopped
+  # running. This is a local development provider whose password lives in a
+  # committed env file, so an MFA prompt was never protecting anything here.
+  # A real deployment configures its own provider (docs/authentication.md).
+  #
+  # The **instance** default policy, via the admin API: the org carries no
+  # policy of its own (`isDefault: true`), so a management-API delete has
+  # nothing to act on and silently changes nothing. The type is the full enum
+  # name — `OTP` alone is rejected as "not valid".
+  #
+  # Already-absent factors return a non-2xx on later runs, and `zit()` uses
+  # `curl -sf`, so this must not abort the script — hence `|| true`.
+  for factor in SECOND_FACTOR_TYPE_OTP SECOND_FACTOR_TYPE_U2F; do
+    zit DELETE "/admin/v1/policies/login/second_factors/$factor" >/dev/null 2>&1 || true
+  done
+
+  # Human test user — for manually exercising `tcp-cli get-token`'s device-flow
+  # login, and for the browser tier's sign-in harness (007.03).
   TEST_USER="${TEST_USERNAME:-test}"
   TEST_PASS="${TEST_PASSWORD:-test}"
   EXISTING_USER=$(zit POST "/management/v1/users/_search" \

@@ -224,9 +224,9 @@ describe('TaskController (e2e)', () => {
               const updated = await request(app.getHttpServer())
                 .get(`/api/task/${task.id}`)
                 .set('Authorization', `Bearer ${jwt}`);
-              expect(
-                (updated.body as { task: TcpTask }).task.materials,
-              ).toEqual([{ type: 'task-materials-path', value: 'brief.txt' }]);
+              expect((updated.body as TcpTask).materials).toEqual([
+                { type: 'task-materials-path', value: 'brief.txt' },
+              ]);
             });
 
             it('returns 404 for an unknown task', async () => {
@@ -249,9 +249,7 @@ describe('TaskController (e2e)', () => {
               const updated = await request(app.getHttpServer())
                 .get(`/api/task/${task.id}`)
                 .set('Authorization', `Bearer ${jwt}`);
-              expect(
-                (updated.body as { task: TcpTask }).task.materials,
-              ).toEqual([]);
+              expect((updated.body as TcpTask).materials).toEqual([]);
             });
 
             it('returns 409 once the task has left ready', async () => {
@@ -562,11 +560,15 @@ describe('TaskController (e2e)', () => {
                 .get(`/api/task/${task.id}`)
                 .set('Authorization', `Bearer ${jwt}`);
               expect(res.status).toBe(200);
-              const body = res.body as {
-                task: TcpTask;
+              // The task's own fields are at the top level, with
+              // `assignments` beside them — not `{ task, assignments }`. The
+              // browser patches a cached entity from a live event by matching
+              // its top-level `id`, so a wrapper could never be updated by an
+              // event (ADR-030).
+              const body = res.body as TcpTask & {
                 assignments: TcpAssignment[];
               };
-              expect(body.task.id).toBe(task.id);
+              expect(body.id).toBe(task.id);
               expect(body.assignments.map((a) => a.id)).toEqual([
                 step0.id,
                 step1.id,

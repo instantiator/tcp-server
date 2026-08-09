@@ -227,6 +227,35 @@ contributor who never touches the frontend should not pay for them. The script
 installs Chromium on first use; CI caches it keyed on the Playwright version.
 See [scripts/run-browser-tests.sh](../scripts/run-browser-tests.sh).
 
+### Signing in
+
+The app keeps no token anywhere Playwright's `storageState` can capture —
+tokens live only in `InMemoryWebStorage`
+([ADR-024](ADRs/ADR-024-browser-oidc-client-and-token-handling.md)).
+`test/browser/auth.setup.ts` is its own Playwright project, runs first, and
+signs in once through the real Zitadel login form. What `storageState` saves
+is **Zitadel's own session cookie**, not an application token. With that
+cookie present, a spec that lands on a guarded route is silently redirected to
+the provider, recognised without a prompt, and sent back with a fresh
+in-memory token — so every spec signs in for real, and only the setup file
+ever sees the login form.
+
+The `chromium` project is **signed out by default**; a spec opts in with
+`test.use({ storageState: AUTH_STATE_PATH })` (`test/browser/auth-state.ts`).
+That is deliberate — `app-shell.spec.ts` proves a guarded route redirects and
+that `?devSession=` cannot sign anyone in, and both would pass trivially if
+every spec arrived already signed in.
+
+`scripts/run-browser-tests.sh` resolves `TEST_USERNAME`/`TEST_PASSWORD` the
+same way it resolves the machine credentials. When they are absent, the setup
+project and every spec that needs a session skip with a stated reason rather
+than failing, so a contributor with no deployment can still run the rest of
+the tier.
+
+To run the signed-in specs locally, start a deployment that provisions a test
+user — `start-deployment.sh` does, against `.env.dev` — then run the tier as
+above; `run-browser-tests.sh` picks the credentials up automatically.
+
 ## Test infrastructure
 
 The **integration** and **e2e** tiers provision their backing services with

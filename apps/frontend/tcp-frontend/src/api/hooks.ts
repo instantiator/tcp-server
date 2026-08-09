@@ -1,0 +1,183 @@
+/**
+ * The hooks a component uses to read company data (ADR-030).
+ *
+ * This is the only data door for a view. `endpoints.ts` sits behind it, one
+ * hook per REST route, and an eslint rule keeps it there.
+ *
+ * **`Live` means the value is pushed to the browser and updates itself.** An
+ * event arrives over SSE, `applyEvent` patches the shared query cache, and
+ * every `useLive*` hook reading that cache re-renders. A hook without the
+ * prefix answers once and refetches only when asked: `role`, `company-user`
+ * and `knowledge` are `STATIC_ENTITIES` in `query-keys.ts`, and nothing
+ * streams them. `useCompanies` has no prefix for a different reason — there is
+ * no company-list stream, only a channel per company.
+ *
+ * **No hook here opens a stream.** The page owns the one subscription
+ * (`CompanyPage` calls `useEventStream`); these hooks only read what it
+ * patches. An illustrated view could call `useLiveAgentState` once per avatar,
+ * and if each opened a connection that is the `MAX_STREAMS` cap in
+ * `subscriptions.ts`, not a facade.
+ */
+
+import {
+  useAgent,
+  useAgentByAssignment,
+  useAgents,
+  useAssignment,
+  useAssignments,
+  useCompany,
+  useCompanyKnowledge,
+  useCompanyRoles,
+  useConversation,
+  useConversations,
+  useRole,
+  useTask,
+  useTasks,
+} from './endpoints';
+
+export { useCompanies } from './endpoints';
+
+/**
+ * One company.
+ *
+ * Deliberately a plain alias: `GET /api/company/{id}` answers 200 with a JSON
+ * `null` for a company the caller cannot see, and this hook does not fold that
+ * into `undefined` — rewrapping the result would cost the narrowing TanStack
+ * gives (`isSuccess` implying `data` is present) to save one line at the call
+ * site. `CompanyPage` handles it, with a comment.
+ */
+export const useLiveCompanyState = (companyId: string) => useCompany(companyId);
+
+export const useLiveCompanyAgentsList = (companyId: string) =>
+  useAgents({ companyId });
+
+export const useLiveCompanyTasksList = (companyId: string) =>
+  useTasks({ companyId });
+
+/** Chats are assignments in `chat` mode. There is no chat route. */
+export const useLiveCompanyChatsList = (companyId: string) =>
+  useAssignments({ companyId, mode: 'chat' });
+
+/**
+ * Open consultations: assignments in `consultee` mode with no task (ADR-023).
+ *
+ * `taskId` is the literal four-character string `'null'`, not JS `null` — the
+ * server's `AssignmentController` tests for it and maps it to `IsNull()`.
+ * Omitting it would mean "any task" instead of "no task". This looks like a
+ * bug and is not one.
+ *
+ * Incomplete by design: a consultation that has been requested but not yet
+ * picked up has no assignment row, so it cannot appear here. A view using this
+ * must say so — `t('activity.consultations.partial')` is the wording.
+ */
+export const useLiveCompanyConsultationsList = (companyId: string) =>
+  useAssignments({ companyId, taskId: 'null', mode: 'consultee' });
+
+export const useLiveCompanyEnquiriesList = (
+  companyId: string,
+  status?: string,
+) => useConversations({ companyId, status });
+
+/** Not live: nothing streams a role. */
+export const useCompanyRolesList = (companyId: string) =>
+  useCompanyRoles(companyId);
+
+/** Not live: nothing streams a knowledge index. */
+export const useCompanyKnowledgeList = (companyId: string) =>
+  useCompanyKnowledge(companyId);
+
+/** Any combination of the three ids an assignment can be reached through. */
+export interface AssignmentFilter {
+  readonly companyId?: string;
+  readonly taskId?: string;
+  readonly roleId?: string;
+}
+
+export const useLiveAssignmentsList = (filter: AssignmentFilter) =>
+  useAssignments(filter);
+
+/**
+ * One task.
+ *
+ * `data` carries the task's own fields at the top level, plus `assignments`
+ * — the assignments working it. `TaskController.getTask` returns the shape
+ * flattened rather than wrapped, because the live-event cache patches a
+ * cached row by matching its top-level `id`, and a wrapper has none.
+ */
+export const useLiveTaskState = (taskId: string) => useTask(taskId);
+
+/**
+ * A chat, which is an assignment in `chat` mode.
+ *
+ * The value is the assignment, not the conversation: the messages are not on
+ * it. Read the transcript with `useAgentHistory` for the agent holding this
+ * assignment, which `useLiveAgentState({ assignmentId })` will find.
+ */
+export const useLiveChatState = (assignmentId: string) =>
+  useAssignment(assignmentId);
+
+/**
+ * A consultation, which is an assignment in `consultee` mode.
+ *
+ * Only resolves once the consultation has been picked up — before that there
+ * is no assignment row, and so no id to pass here (ADR-023).
+ */
+export const useLiveConsultationState = (assignmentId: string) =>
+  useAssignment(assignmentId);
+
+/**
+ * One enquiry, by slug.
+ *
+ * A slug rather than an id, unlike its siblings: `GET /api/conversation` has
+ * no by-id route, only `/{slug}`. The event summary does carry an id, and
+ * `applyEvent` matches on the cached value rather than the key, so this row is
+ * patched like any other.
+ *
+ * `data` carries the conversation's own fields at the top level, plus
+ * `messages` and `companyTimezone`. `ConversationController.get` returns the
+ * shape flattened, for the same reason as {@link useLiveTaskState}: the cache
+ * patches by top-level `id`.
+ */
+export const useLiveEnquiryState = (slug: string) => useConversation(slug);
+
+/** Not live: nothing streams a role. */
+export const useRoleState = (roleId: string) => useRole(roleId);
+
+/** The two ids an agent can be reached through. */
+export interface AgentLookup {
+  readonly agentId?: string;
+  readonly assignmentId?: string;
+}
+
+/**
+ * One agent, found by either id it can be reached through. Agent and
+ * assignment are 1:1, so both answers are the same agent.
+ *
+ * `agentId` wins if both are given. With neither, the hook stays disabled and
+ * never fetches. Looked up by `assignmentId`, `data` is `null` rather than
+ * `undefined` when no agent holds it.
+ *
+ * Both lookups run every render, because a hook cannot be called
+ * conditionally; the unused one is disabled, so only one request is made.
+ */
+export const useLiveAgentState = ({ agentId, assignmentId }: AgentLookup) => {
+  const byAgentId = useAgent(agentId ?? '', agentId !== undefined);
+  const byAssignmentId = useAgentByAssignment(
+    assignmentId ?? '',
+    agentId === undefined && assignmentId !== undefined,
+  );
+  return agentId === undefined ? byAssignmentId : byAgentId;
+};
+
+// The endpoint hooks with no facade above, re-exported so hooks.ts is a
+// complete door and nothing has a reason to reach past it.
+export {
+  useAgentHistory,
+  useCompanyKnowledgeStatus,
+  useCompanyUsers,
+  useRoleBySlug,
+  useRoleKnowledge,
+  useRoleKnowledgeSearch,
+  useRoleKnowledgeStatus,
+  useTaskHistory,
+} from './endpoints';
