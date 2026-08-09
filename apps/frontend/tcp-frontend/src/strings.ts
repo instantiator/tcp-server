@@ -35,6 +35,13 @@ const strings = {
 
   'breadcrumbs.label': 'Breadcrumb',
 
+  'dialog.close': 'Close',
+  'dialog.minimise': 'Minimise',
+  // Names the bar, not the buttons in it. Each button is labelled by the
+  // dialog it restores, so its visible text and its accessible name match
+  // (WCAG 2.5.3); what the bar is for is said once, here.
+  'dock.label': 'Minimised dialogs',
+
   // Announcements. Every wording here is deliberately count-agnostic —
   // 'Tasks: {count} added', never '{count} tasks added' — because `t` has no
   // plural rules and reads the same for one as for many.

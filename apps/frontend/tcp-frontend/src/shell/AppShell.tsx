@@ -1,4 +1,5 @@
 import { Outlet } from 'react-router';
+import { DockProvider } from '../components/Dialog/DockProvider';
 import { t } from '../strings';
 import { Header } from './Header';
 import { SessionExpiryWarning } from './SessionExpiryWarning';
@@ -22,16 +23,23 @@ import './AppShell.css';
  *
  * The landing page renders outside this shell and owns its own `main` — there
  * must never be two on one page.
+ *
+ * {@link DockProvider} wraps the shell rather than sitting inside `main`,
+ * because a minimised dialog belongs to the session rather than to whichever
+ * route is showing: navigating must not empty the dock. It renders nothing
+ * until a dialog is actually minimised.
  */
 export const AppShell = () => (
-  <div className="app-shell">
-    <a className="skip-link" href="#main-content">
-      {t('shell.skipToContent')}
-    </a>
-    <Header />
-    <SessionExpiryWarning />
-    <main className="app-shell__main" id="main-content" tabIndex={-1}>
-      <Outlet />
-    </main>
-  </div>
+  <DockProvider>
+    <div className="app-shell">
+      <a className="skip-link" href="#main-content">
+        {t('shell.skipToContent')}
+      </a>
+      <Header />
+      <SessionExpiryWarning />
+      <main className="app-shell__main" id="main-content" tabIndex={-1}>
+        <Outlet />
+      </main>
+    </div>
+  </DockProvider>
 );

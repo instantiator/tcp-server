@@ -39,6 +39,15 @@
     system-ui, -apple-system, 'Segoe UI', roboto, helvetica, arial, sans-serif;
   --tcp-font-size-base: 1rem;
   --tcp-line-height: 1.5;
+
+  /* Stacking order for the two surfaces that float above the page. The dock
+     sits below dialogs so an open dialog's overlay covers its own dock entry
+     rather than the bar punching through it. */
+  --tcp-layer-dock: 10;
+  --tcp-layer-dialog: 20;
+
+  --tcp-dialog-max-width: 48rem;
+  --tcp-transcript-max-height: 24rem;
 }
 
 *,
@@ -204,6 +213,42 @@ body {
 .react-aria-MenuItem[data-focused] {
   background-color: var(--tcp-color-accent);
   color: var(--tcp-color-accent-text);
+}
+
+/*
+ * Dialogs, for the same reason again, and more sharply: React Aria positions
+ * nothing and paints nothing, so an unstyled modal renders as transparent text
+ * laid over the page it covers. The page shows through it, and neither is
+ * readable — a WCAG 1.4.1 failure rather than a plain-looking dialog.
+ *
+ * The overlay is what dims the page behind; the modal is the panel itself.
+ */
+.react-aria-ModalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--tcp-layer-dialog);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--tcp-space-md);
+  background-color: var(--tcp-color-scrim);
+}
+
+.react-aria-Modal {
+  max-inline-size: var(--tcp-dialog-max-width);
+  max-block-size: 100%;
+  overflow: auto;
+  border: var(--tcp-border-width) solid var(--tcp-color-border);
+  border-radius: var(--tcp-radius);
+  background-color: var(--tcp-color-surface);
+  color: var(--tcp-color-text);
+}
+
+.react-aria-Dialog {
+  padding: var(--tcp-space-md);
+  /* React Aria focuses the dialog itself when it holds nothing focusable, and
+     the :focus-visible ring is the wrong shape around a whole panel. */
+  outline: none;
 }
 
 /*
