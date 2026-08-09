@@ -28,6 +28,28 @@ all land on the same branch.
    `phase-02` — not into `main`, and not by an agent.
 5. Merge to `phase-02`, then start the next index from step 1.
 
+### A branch is finished once its PR is squash-merged
+
+**Do not keep working on it.** Squashing puts the index's work on `phase-02` as
+one new commit with a new SHA. The branch still holds the originals, and git
+cannot tell the two are the same content — so their common ancestor stays the
+commit before the index began, both sides look like independent edits to the
+same files, and every later PR from that branch conflicts.
+
+It bit 007: `007.01` merged as PR #79, then `007.02` and `007.03` continued on
+the same branch and PR #80 arrived conflicting with content identical to its
+own. Nothing was lost, and the fix was
+`git rebase --onto origin/phase-02 <last-merged-commit>` plus a force-push, but
+the conflict looks alarming and explains itself badly.
+
+If a later prompt in the index has to follow a merge, reset first:
+
+```bash
+git checkout phase-02 && git pull
+git checkout p02/<major>_<short-name>
+git reset --hard phase-02      # only when the branch's work is all merged
+```
+
 ## Closing the phase
 
 When the last major index has merged, a final PR takes `phase-02` into `main`.
