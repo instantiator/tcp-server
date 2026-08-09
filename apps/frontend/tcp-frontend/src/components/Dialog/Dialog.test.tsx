@@ -186,7 +186,10 @@ describe('Dialog', () => {
 
       expect(screen.queryByRole('dialog', { name: INNER_HEADING })).toBeNull();
       expect(screen.getByRole('dialog', { name: HEADING })).toBeTruthy();
-      expect(document.activeElement).toBe(innerTrigger);
+      // Restored after the inner dialog unmounts, not during it.
+      await waitFor(() => {
+        expect(document.activeElement).toBe(innerTrigger);
+      });
     });
   });
 

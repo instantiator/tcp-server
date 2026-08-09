@@ -42,6 +42,27 @@ const strings = {
   // (WCAG 2.5.3); what the bar is for is said once, here.
   'dock.label': 'Minimised dialogs',
 
+  // The transcript. `transcript.loading` is a label rather than a sentence:
+  // `LoadingState` renders it through `state.loading`, as "Loading this
+  // conversation…".
+  'transcript.label': 'Conversation with {role}',
+  'transcript.loading': 'this conversation',
+  'transcript.blank': '(blank)',
+  'transcript.empty.heading': 'Nothing to show yet',
+  'transcript.empty.body': 'This agent has not done anything yet.',
+  'transcript.error.refused': 'You are not permitted to watch this agent.',
+  'transcript.error.atCapacity':
+    'Too many live views are open. Close one and try again.',
+  'transcript.error.failed': 'This conversation could not be loaded.',
+  // `announce.responseBody` is unused while `ANNOUNCE_RESPONSE_BODY` is false;
+  // ADR-027 leaves the choice to 009.02's manual screen reader pass, and both
+  // wordings have to exist for that pass to be a one-line change.
+  'transcript.announce.response': 'Response from {role} received',
+  'transcript.announce.responseBody': '{role} replied: {body}',
+  // The label React Aria's audit-event rows carry after the time. Rendered as
+  // written by the shared renderers, so it is not a translatable string.
+  'transcript.entry.label': '{time}, {label}',
+
   // Announcements. Every wording here is deliberately count-agnostic —
   // 'Tasks: {count} added', never '{count} tasks added' — because `t` has no
   // plural rules and reads the same for one as for many.
