@@ -10,6 +10,8 @@ import {
   ANNOUNCE_THROTTLE_MS,
   resetAnnouncer,
 } from '../../../announce/announcer';
+import { ChatProvider } from '../../../components/ChatDialog/ChatProvider';
+import { DockProvider } from '../../../components/Dialog/DockProvider';
 import { applyEvent } from '../../../events/cache';
 import { t, type StringKey } from '../../../strings';
 import { expectNoA11yViolations } from '../../../test-support/axe';
@@ -22,6 +24,18 @@ import {
 } from '../../../test-support/fetch-mock';
 import { CompanyActivity } from './CompanyActivity';
 
+// The chats list (008.02) opens the chat dialog through `useChat()`, which
+// throws outside a `ChatProvider` — and `ChatProvider` needs a `DockProvider`
+// above it to park a minimised chat. Neither test in this file drives a real
+// event stream (they patch the cache directly through `applyEvent`), so
+// `subscribe` is stubbed rather than mocked in detail: opening a chat row
+// mounts a `Transcript`, which would otherwise try to open a real connection
+// through `connect()` and the auth stack this file never sets up.
+vi.mock('../../../events/subscriptions', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../events/subscriptions')>()),
+  subscribe: vi.fn(() => () => undefined),
+}));
+
 const COMPANY_ID = 'company-1';
 const NOW = '2026-08-08T00:00:00.000Z';
 
@@ -31,8 +45,17 @@ const NOW = '2026-08-08T00:00:00.000Z';
 const ROLES_ROUTE = /\/api\/company\/[^/]+\/roles/;
 const AGENTS_ROUTE = /\/api\/agent\?/;
 const TASKS_ROUTE = /\/api\/task\?/;
+// Chats and consultations are both assignments, so both hit `/api/assignment?…`
+// — `CHATS_ROUTE` has to be more specific and precede `ASSIGNMENTS_ROUTE`
+// wherever the two appear together, the same reasoning as `ROLES_ROUTE` above.
+const CHATS_ROUTE = /\/api\/assignment\?.*mode=chat/;
 const ASSIGNMENTS_ROUTE = /\/api\/assignment\?/;
 const CONVERSATIONS_ROUTE = /\/api\/conversation\?/;
+// The chats list opens the chat dialog on a row's agent, which mounts a
+// `Transcript` and a `MessageInput` for `CHAT_1.agentId` — a detail and a
+// history request neither of `CompanyActivity`'s own five queries make.
+const CHAT_AGENT_ROUTE = /\/api\/agent\/agent-9(\?|$)/;
+const CHAT_AGENT_HISTORY_ROUTE = /\/api\/agent\/agent-9\/history/;
 
 const ROLE = {
   id: 'role-1',
@@ -99,16 +122,23 @@ interface AssignmentOverrides {
   readonly status: string;
   readonly roleId?: string;
   readonly prompt?: string;
+  /** Defaults to `'consultee'` — every fixture before the chats list needed. */
+  readonly mode?: string;
+  /** Omitted (rather than defaulted) so a chat row missing one can be built. */
+  readonly agentId?: string;
+  readonly shortcode?: string;
 }
 
 const assignment = (overrides: AssignmentOverrides) => ({
   id: overrides.id,
   companyId: COMPANY_ID,
-  mode: 'consultee',
+  mode: overrides.mode ?? 'consultee',
   prompt: overrides.prompt ?? `${overrides.id} prompt`,
   roleId: overrides.roleId ?? ROLE.id,
   status: overrides.status,
   taskId: null,
+  agentId: overrides.agentId,
+  shortcode: overrides.shortcode,
 });
 
 interface ConversationOverrides {
@@ -168,6 +198,14 @@ const CONVERSATION_1 = conversation({
   status: 'awaiting_user',
   question: 'Which vendor should get priority?',
 });
+const CHAT_1 = assignment({
+  id: 'chat-1',
+  status: 'in-progress',
+  mode: 'chat',
+  agentId: 'agent-9',
+});
+/** The agent `CHAT_1` names, fetched when a row opens the chat dialog. */
+const CHAT_AGENT = agent({ id: 'agent-9', status: 'idle' });
 
 interface ActivityRoutes {
   readonly roles?: RouteResponse;
@@ -175,19 +213,25 @@ interface ActivityRoutes {
   readonly tasks?: RouteResponse;
   readonly assignments?: RouteResponse;
   readonly conversations?: RouteResponse;
+  readonly chats?: RouteResponse;
 }
 
-/** Answers all five queries `CompanyActivity` mounts. Each is overridable. */
+/** Answers all six queries `CompanyActivity` mounts. Each is overridable. */
 const respondActivity = (overrides: ActivityRoutes = {}): void => {
   respondByRoute([
     [ROLES_ROUTE, overrides.roles ?? { body: [ROLE] }],
     [AGENTS_ROUTE, overrides.agents ?? { body: [AGENT_1] }],
     [TASKS_ROUTE, overrides.tasks ?? { body: [TASK_1] }],
+    [CHATS_ROUTE, overrides.chats ?? { body: [CHAT_1] }],
     [ASSIGNMENTS_ROUTE, overrides.assignments ?? { body: [ASSIGNMENT_1] }],
     [
       CONVERSATIONS_ROUTE,
       overrides.conversations ?? { body: [CONVERSATION_1] },
     ],
+    // Not overridable per test — nothing here exercises more than one chat
+    // agent, so a fixed fixture is enough.
+    [CHAT_AGENT_HISTORY_ROUTE, { body: [] }],
+    [CHAT_AGENT_ROUTE, { body: CHAT_AGENT }],
   ]);
 };
 
@@ -197,6 +241,7 @@ const EMPTY_ROUTES: ActivityRoutes = {
   tasks: { body: [] },
   assignments: { body: [] },
   conversations: { body: [] },
+  chats: { body: [] },
 };
 
 const renderActivity = () => {
@@ -208,7 +253,16 @@ const renderActivity = () => {
     ...render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
-          <CompanyActivity companyId={COMPANY_ID} />
+          {/*
+            The chats list (008.02) calls `useChat()`, which throws outside a
+            `ChatProvider` — and a parked chat needs a `DockProvider` above
+            that. Both wrap here in the same order `AppShell` mounts them.
+          */}
+          <DockProvider>
+            <ChatProvider>
+              <CompanyActivity companyId={COMPANY_ID} />
+            </ChatProvider>
+          </DockProvider>
         </MemoryRouter>
       </QueryClientProvider>,
     ),
@@ -277,7 +331,9 @@ describe('CompanyActivity', () => {
       ).toBeInTheDocument();
     }
 
-    expect(screen.getAllByRole('region')).toHaveLength(4);
+    // Five now, not four: the chats list (008.02) is a fifth region, covered
+    // in its own describe block below rather than in this loop.
+    expect(screen.getAllByRole('region')).toHaveLength(5);
   });
 
   it("renders each row's key fields", async () => {
@@ -635,6 +691,61 @@ describe('CompanyActivity', () => {
     });
   });
 
+  describe('the chats list', () => {
+    it("renders each row as the control that opens that agent's chat", async () => {
+      respondActivity();
+      renderActivity();
+
+      const chatsRegion = await screen.findByRole('region', {
+        name: t('activity.chats.heading'),
+      });
+      expect(
+        await within(chatsRegion).findByRole('button', {
+          name: t('activity.chats.open', { role: ROLE.name }),
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it('opens the chat dialog when a row is pressed', async () => {
+      respondActivity();
+      const user = userEvent.setup();
+      renderActivity();
+
+      const chatsRegion = await screen.findByRole('region', {
+        name: t('activity.chats.heading'),
+      });
+      await user.click(
+        await within(chatsRegion).findByRole('button', {
+          name: t('activity.chats.open', { role: ROLE.name }),
+        }),
+      );
+
+      expect(
+        screen.getByRole('dialog', { name: t('chat.dialog.heading') }),
+      ).toBeInTheDocument();
+    });
+
+    it('does not render, and does not count, a chat assignment with no agent', async () => {
+      // The two are created together server-side, so this is not expected to
+      // happen — but `ChatsList` filters it out rather than rendering a row
+      // whose button could not open anything.
+      const noAgent = assignment({
+        id: 'chat-2',
+        status: 'in-progress',
+        mode: 'chat',
+      });
+      respondActivity({ chats: { body: [CHAT_1, noAgent] } });
+      renderActivity();
+
+      const chatsRegion = await screen.findByRole('region', {
+        name: t('activity.chats.heading'),
+      });
+      expect(
+        await within(chatsRegion).findByText(t('activity.count', { count: 1 })),
+      ).toBeInTheDocument();
+    });
+  });
+
   it('isolates a failing list from the other three', async () => {
     respondActivity({
       tasks: { status: 500, body: { statusCode: 500, message: 'boom' } },
@@ -782,7 +893,8 @@ describe('CompanyActivity', () => {
     renderActivity();
 
     const progressBars = screen.getAllByRole('progressbar');
-    expect(progressBars).toHaveLength(4);
+    // Five lists now that the chats list (008.02) has joined the other four.
+    expect(progressBars).toHaveLength(5);
     for (const progressBar of progressBars) {
       expect(progressBar.closest('.activity-list__body')).toHaveAttribute(
         'aria-busy',

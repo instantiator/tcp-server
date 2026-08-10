@@ -88,3 +88,26 @@ export const unwrap = async <T>(
   if (!response.ok || data === undefined) throw apiError(response, error);
   return data;
 };
+
+/**
+ * Checks a `202 Accepted` call succeeded, without expecting a body.
+ *
+ * `POST /api/agent/{id}/message` answers `202` with no content at all — the
+ * generated type is `content?: never` — so {@link unwrap} would see
+ * `data === undefined` on a perfectly good response and throw on success.
+ * This checks the response, not the body.
+ */
+export const expectAccepted = async (
+  call: Promise<{ error?: unknown; response: Response }>,
+): Promise<void> => {
+  let result: { error?: unknown; response: Response };
+  try {
+    result = await call;
+  } catch (cause) {
+    // The request never landed — same reasoning as `unwrap`'s catch above.
+    throw networkError(cause);
+  }
+
+  const { error, response } = result;
+  if (!response.ok) throw apiError(response, error);
+};

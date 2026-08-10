@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 
-import { api, unwrap } from './client';
+import { api, expectAccepted, unwrap } from './client';
 import {
   queryKeys,
   type AgentListParams,
@@ -221,6 +221,37 @@ export const useCompanyKnowledgeStatus = (companyId: string) =>
       unwrap(
         api.GET('/api/company/{companyId}/knowledge/status', {
           params: { path: { companyId } },
+        }),
+      ),
+  });
+
+// The write half of the file: one mutation hook per REST route that changes
+// something, mirroring the read half above.
+
+/**
+ * Starts a chat-mode agent. The chat *assignment* is created for it
+ * server-side — this only starts the agent that will hold it.
+ */
+export const useStartChatMutation = () =>
+  useMutation({
+    mutationFn: (body: { companyId: string; roleId: string }) =>
+      unwrap(api.POST('/api/agent/chat/start', { body })),
+  });
+
+/**
+ * Sends one message to a chat agent's ongoing conversation.
+ *
+ * The reply does not come back in this response — the turn runs detached and
+ * its output arrives on the agent's event stream, so a caller must already be
+ * watching that stream before calling this.
+ */
+export const useSendMessageMutation = (id: string) =>
+  useMutation({
+    mutationFn: (message: string) =>
+      expectAccepted(
+        api.POST('/api/agent/{id}/message', {
+          params: { path: { id } },
+          body: { message },
         }),
       ),
   });

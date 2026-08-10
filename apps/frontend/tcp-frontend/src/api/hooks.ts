@@ -17,7 +17,13 @@
  * patches. An illustrated view could call `useLiveAgentState` once per avatar,
  * and if each opened a connection that is the `MAX_STREAMS` cap in
  * `subscriptions.ts`, not a facade.
+ *
+ * **The door covers writes too.** A component gets its mutations from here as
+ * well as its queries — `endpoints.ts` is still the only place a request is
+ * described, but a component never imports it directly.
  */
+
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import {
   useAgent,
@@ -31,6 +37,7 @@ import {
   useConversation,
   useConversations,
   useRole,
+  useStartChatMutation,
   useTask,
   useTasks,
 } from './endpoints';
@@ -117,6 +124,32 @@ export const useLiveChatState = (assignmentId: string) =>
   useAssignment(assignmentId);
 
 /**
+ * Starts a chat-mode agent and makes the new chat show up.
+ *
+ * Chat-mode assignments are **not** primed on the company event stream —
+ * only `consultee` ones are (`CompanyPrimingService.prime` in the backend) —
+ * so a freshly started chat would sit invisible in a chats list until
+ * something else happened to refetch it. This wraps
+ * {@link useStartChatMutation} rather than redefining its request — the call
+ * to tcp-server stays described in exactly one place — and invalidates the
+ * assignment queries on success so the new chat appears.
+ */
+export const useStartChat = () => {
+  const queryClient = useQueryClient();
+  const startChat = useStartChatMutation();
+  return useMutation({
+    // Wrapped in an arrow rather than passed by reference: `mutateAsync` takes
+    // a second argument of its own, and handing it straight over would let
+    // TanStack call it with a `MutationFunctionContext` it cannot use.
+    mutationFn: (body: { companyId: string; roleId: string }) =>
+      startChat.mutateAsync(body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['assignment'] });
+    },
+  });
+};
+
+/**
  * A consultation, which is an assignment in `consultee` mode.
  *
  * Only resolves once the consultation has been picked up — before that there
@@ -179,5 +212,6 @@ export {
   useRoleKnowledge,
   useRoleKnowledgeSearch,
   useRoleKnowledgeStatus,
+  useSendMessageMutation as useSendMessage,
   useTaskHistory,
 } from './endpoints';

@@ -584,6 +584,30 @@ An agent's answer can run to several paragraphs. Reading all of it holds the aud
 
 The transcript primes from `GET /api/agent/{id}/history` and only then subscribes, because interleaving the two sources correctly would mean buffering one of them. The agent stream synthesises a terminal event for a late subscriber, which covers the case that matters most. Closing the gap properly means buffering live events until history has been applied.
 
+### A second chat cannot be opened while the dialog is showing
+
+**Raised by:** 008.02 · **Condition to revisit:** 008.07 builds the 'add new' control and has to reach past a chat dialog that is already open
+
+React Aria's `Modal` correctly makes everything behind it inert while a dialog is open, so a `ChatsList` row that would start another conversation is unreachable while a chat is showing. The working route is minimise, then open the next one — both then appear together once the dialog comes back. This is a real limitation of a modal dialog, not a bug: it is what "modal" means.
+
+It matters most for `008.07`, whose 'add new' control lives on the same page the chat dialog covers. Testable: build that control and try to reach a second chat from it while one is open — there is no route that does not first minimise the one showing. The fix is one of two things: give the chat dialog its own 'new chat' entry point that works while it is open, or stop the chat dialog being modal, which reopens [ADR-026](../../ADRs/ADR-026-web-ui-accessibility-and-component-library.md)'s choice of a focus-trapping library and has to be decided as that, not worked around in passing.
+
+### A transcript refused by `MAX_STREAMS` shows "at capacity" while its siblings keep working
+
+**Raised by:** 008.02 · **Condition to revisit:** a user is seen hitting the cap through ordinary use, not through a fan-out bug
+
+No per-surface quota sits on top of `MAX_STREAMS = 12`. That is deliberate: a second cap would have to be kept in step with the real one, for no benefit, and the real one already fails loudly — a refused transcript renders `at-capacity` as its own message, in place, while every other open panel keeps working.
+
+Testable: twelve streams are open at once through ordinary use — not a bug that opens streams nobody asked for — and a thirteenth is refused. If that happens, the change to make is a cap on how many conversations or panels may be open at once, not a larger `MAX_STREAMS`; raising the constant blind would only move the same failure further off, unmeasured.
+
+### The waiting line comes from the agent's status, not from the transcript
+
+**Raised by:** 008.02 · **Condition to revisit:** the line is seen to blink off between the two signals during `009.01`'s browser pass
+
+`MessageInput` shows "waiting" while `send.isPending` or the agent's live status is `running`. The backend sets `running` and records the `state_change` before it answers the send with `202`, so in practice the two signals overlap — but they are two different things, arriving by two different paths (a settled fetch and an SSE event), and nothing in the code guarantees which lands first at the client.
+
+Testable: watch the waiting line through a real send in a real browser. If it drops for even a frame between the request settling and the `state_change` event arriving — or the other way round — that is the trigger, and it needs `MessageInput` to read a combined signal deliberately rather than relying on the two overlapping by luck.
+
 ## Carried into a later prompt
 
 **`008.05` and `008.06` are now sections of the 008.04 prompt**, not files of their own —
@@ -702,3 +726,10 @@ same skeleton. Rows below that name those indices still resolve; read them as th
 | `ANNOUNCE_RESPONSE_BODY` in `useTranscript.ts` is `false` (arrival-only); ADR-027 leaves the full-text wording open pending this pass                                                                | 008.01    | `009.02` |
 | The transcript renders each entry's raw event label verbatim, matching the CLI — judge whether that reads well in the manual pass                                                                    | 008.01    | `009.02` |
 | ADR-026 and ADR-027 both need an "as implemented" amendment covering the dialog and transcript surfaces, once 008.x is complete                                                                      | 008.01    | `009.03` |
+| The connection budget policy — one stream per transcript, parked releases, restored re-primes, twelve stands — beside `MAX_STREAMS` and as an ADR-025 amendment; apply it, don't re-decide it        | 008.02    | `008.03` |
+| The dock's `DockEntry.label` is now a `ReactNode`, plus `remove(id)` (drop an entry without reopening it) and `focusEntry(id)` (move focus to a dock button)                                         | 008.02    | `008.03` |
+| `describe('the connection budget')` in `ChatDialog.test.tsx` is the shape to copy for proving a collapsed panel releases its stream and an expanded one re-primes from history                       | 008.02    | `008.03` |
+| The opener API: `useChat()` gives `startChat({ companyId, roleId, roleName })` and `openChat({ agentId, roleName, reference })`; `ChatProvider` is already mounted in `AppShell`                     | 008.02    | `008.07` |
+| The chat dialog is modal, so a second chat cannot be opened while one is showing — the 'add new' control has to solve this, not just meet it                                                         | 008.02    | `008.07` |
+| `openChat` moves focus into the panel it opens; React Aria returns focus to the opening control on close, so that control must stay mounted                                                          | 008.02    | `008.07` |
+| Judge the arrival-only response announcement with two conversations streaming at once — `describe('speech')` in `ChatDialog.test.tsx` proves two channels produce two sentences                      | 008.02    | `009.02` |

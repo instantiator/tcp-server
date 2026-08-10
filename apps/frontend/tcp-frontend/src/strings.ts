@@ -63,6 +63,20 @@ const strings = {
   // written by the shared renderers, so it is not a translatable string.
   'transcript.entry.label': '{time}, {label}',
 
+  // The chat dialog (008.02). Its panels reuse the transcript above; these
+  // keys are what surrounds it: the dialog's own heading, each panel's
+  // heading and close control, and the message form.
+  'chat.dialog.heading': 'Chats',
+  'chat.conversation.label': 'Chat with {role}',
+  'chat.conversation.labelWithReference': 'Chat with {role} ({reference})',
+  'chat.close': 'Close the chat with {role}',
+  'chat.message.label': 'Message {role}',
+  'chat.send': 'Send',
+  'chat.waiting': 'Waiting for {role} to reply…',
+  'chat.send.failed':
+    'That message could not be sent. Your text is still here — try again.',
+  'chat.dock.label': '{role} — {status}',
+
   // Announcements. Every wording here is deliberately count-agnostic —
   // 'Tasks: {count} added', never '{count} tasks added' — because `t` has no
   // plural rules and reads the same for one as for many.
@@ -80,6 +94,8 @@ const strings = {
   // Its own channel, spoken immediately: an agent waiting on a person is a
   // request to act, not a change to the furniture (ADR-027).
   'announce.enquiryNew': 'New enquiries: {count}',
+  'announce.chatsStarted': 'Chats: {count} started',
+  'announce.chatsEnded': '{count} ended',
   // `{count}` is reserved: the announcer supplies it as the number of times a
   // change repeated, and overwrites any value a caller passes under that name.
   // An announcement that needs a domain number must call it something else.
@@ -155,6 +171,11 @@ const strings = {
   'activity.enquiries.empty.heading': 'No agents are waiting on you',
   'activity.enquiries.empty.body':
     'When an agent needs an answer from a person, its question appears here.',
+
+  'activity.chats.heading': 'Chats',
+  'activity.chats.empty.heading': 'No chats',
+  'activity.chats.empty.body': 'Start a chat with a role to talk to its agent.',
+  'activity.chats.open': 'Open the chat with {role}',
 
   'activity.filter.label': 'Task statuses',
   'activity.status.ready': 'Ready',

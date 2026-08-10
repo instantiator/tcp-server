@@ -7,10 +7,9 @@ import {
 } from 'react-aria-components';
 import { useListChangeAnnouncement } from '../../../announce/useListChangeAnnouncement';
 import { useLiveCompanyTasksList } from '../../../api/hooks';
-import { ACTIVE_TASK_STATUSES } from '../../../api/statuses';
+import { ACTIVE_TASK_STATUSES, statusLabel } from '../../../api/statuses';
 import { t } from '../../../strings';
 import { ActivityList } from './ActivityList';
-import { statusLabel } from './activity-list-utils';
 
 const TASK_STATUSES = [
   'ready',

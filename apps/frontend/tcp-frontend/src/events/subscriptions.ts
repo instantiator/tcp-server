@@ -11,6 +11,30 @@ import { connect, type Connection } from './connect';
  * HTTP/1.1 imposes, which is enough for a live view plus several dialogs. Raise
  * it deliberately when a real view is refused — the refusal is loud precisely
  * so that decision gets taken rather than drifted past.
+ *
+ * **The connection budget, decided in 008.02 and applied by everything after
+ * it** (also recorded as an amendment to ADR-025, so either place finds it):
+ *
+ * 1. **One stream per mounted transcript, and nothing else opens a stream.** A
+ *    page owns at most one — `CompanyPage` and its company stream. A dialog
+ *    owns one per visible conversation or panel. No hook opens a stream
+ *    (ADR-030). There is no per-surface quota: a second cap would have to be
+ *    kept in step with this one, for no benefit.
+ * 2. **A parked stream releases its connection.** Parked means unmounted: a
+ *    minimised chat dialog, a collapsed assignment panel. Nothing holds a
+ *    connection open for a surface the user cannot see.
+ * 3. **A restored one catches up by re-priming, not by replay.** Remounting
+ *    refetches the agent's history, rebuilds the transcript from it, and only
+ *    then subscribes; the server synthesises a terminal event for a late
+ *    subscriber. Token deltas from while it was parked are lost, and that is
+ *    correct — they were never persisted, and the completed response is in the
+ *    history.
+ * 4. **Twelve still stands.** 005.02 picked the number before any view opened
+ *    more than one stream and asked for it to be rechecked here. With rule 2 in
+ *    force the realistic worst case is one company stream plus a handful of
+ *    open panels, so reaching twelve means a fan-out bug — which is what the
+ *    cap is for. HTTP/2 is mandatory (ADR-029), so the browser's own
+ *    six-per-origin HTTP/1.1 ceiling does not bind.
  */
 export const MAX_STREAMS = 12;
 

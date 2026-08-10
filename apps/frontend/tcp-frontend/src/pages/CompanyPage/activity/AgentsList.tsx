@@ -1,9 +1,9 @@
 import { useListChangeAnnouncement } from '../../../announce/useListChangeAnnouncement';
 import { useLiveCompanyAgentsList } from '../../../api/hooks';
-import { ACTIVE_AGENT_STATUSES } from '../../../api/statuses';
+import { ACTIVE_AGENT_STATUSES, statusLabel } from '../../../api/statuses';
 import { t } from '../../../strings';
 import { ActivityList } from './ActivityList';
-import { roleLabel, statusLabel, type ListProps } from './activity-list-utils';
+import { roleLabel, type ListProps } from './activity-list-utils';
 
 /**
  * Agents currently working. Rows are non-interactive — the MVP has no

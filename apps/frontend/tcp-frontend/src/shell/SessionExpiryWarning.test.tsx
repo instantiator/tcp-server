@@ -52,6 +52,21 @@ const armAndAdvanceIntoTheWindow = async () => {
   await vi.advanceTimersByTimeAsync(5_000);
 };
 
+/**
+ * The warning is showing.
+ *
+ * Waited for rather than asserted straight after
+ * {@link armAndAdvanceIntoTheWindow}. `expiring` is raised by the library's own
+ * timer and then has to reach React, and under load — the whole suite running
+ * at once — that had not always happened by the next line. It cannot go in the
+ * helper itself: one test arms the window precisely to show that nothing
+ * appears without a session.
+ */
+const expectWarningShown = () =>
+  waitFor(() => {
+    expect(warning()).not.toBeNull();
+  });
+
 const renderWarning = (session: { userId: string } | null = SIGNED_IN) =>
   render(
     <SessionProvider session={session}>
@@ -86,14 +101,14 @@ describe('SessionExpiryWarning', () => {
 
     await armAndAdvanceIntoTheWindow();
 
-    expect(warning()).not.toBeNull();
+    await expectWarningShown();
     expect(screen.getByText(t('session.expiring'))).toBeInTheDocument();
   });
 
   it('hides again once the session is renewed (userLoaded)', async () => {
     renderWarning();
     await armAndAdvanceIntoTheWindow();
-    expect(warning()).not.toBeNull();
+    await expectWarningShown();
 
     // A fresh, longer-lived user standing in for a renewal — loaded with
     // `raiseEvent`, because `storeUser` alone would not raise `userLoaded`.
@@ -113,7 +128,7 @@ describe('SessionExpiryWarning', () => {
   it('hides again once the session is removed (userUnloaded)', async () => {
     renderWarning();
     await armAndAdvanceIntoTheWindow();
-    expect(warning()).not.toBeNull();
+    await expectWarningShown();
 
     await getUserManager().removeUser();
 

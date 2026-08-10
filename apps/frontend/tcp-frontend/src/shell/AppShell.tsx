@@ -1,4 +1,5 @@
 import { Outlet } from 'react-router';
+import { ChatProvider } from '../components/ChatDialog/ChatProvider';
 import { DockProvider } from '../components/Dialog/DockProvider';
 import { t } from '../strings';
 import { Header } from './Header';
@@ -28,18 +29,26 @@ import './AppShell.css';
  * because a minimised dialog belongs to the session rather than to whichever
  * route is showing: navigating must not empty the dock. It renders nothing
  * until a dialog is actually minimised.
+ *
+ * {@link ChatProvider} sits immediately inside it, for the same reason and one
+ * more: the dock holds a `restore` callback for every parked chat, and a
+ * callback pointing into a page that has since unmounted is a button that does
+ * nothing. Holding the conversations at the dock's own level means the two
+ * cannot fall out of step. It also renders nothing until a chat is opened.
  */
 export const AppShell = () => (
   <DockProvider>
-    <div className="app-shell">
-      <a className="skip-link" href="#main-content">
-        {t('shell.skipToContent')}
-      </a>
-      <Header />
-      <SessionExpiryWarning />
-      <main className="app-shell__main" id="main-content" tabIndex={-1}>
-        <Outlet />
-      </main>
-    </div>
+    <ChatProvider>
+      <div className="app-shell">
+        <a className="skip-link" href="#main-content">
+          {t('shell.skipToContent')}
+        </a>
+        <Header />
+        <SessionExpiryWarning />
+        <main className="app-shell__main" id="main-content" tabIndex={-1}>
+          <Outlet />
+        </main>
+      </div>
+    </ChatProvider>
   </DockProvider>
 );

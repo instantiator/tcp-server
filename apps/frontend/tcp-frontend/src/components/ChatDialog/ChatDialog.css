@@ -1,0 +1,28 @@
+/*
+ * Meaningful class names now, rules filled per theme later (ADR-026). No
+ * literal colour, spacing or border value may appear here — see
+ * Transcript.css for the convention this follows.
+ *
+ * The two rules below are layout, not theme: several conversation panels
+ * stack in one dialog and need visible space between them, and the message
+ * form's field and button have to sit on one row rather than wrap onto their
+ * own lines.
+ */
+.chat-conversation {
+  margin-block-end: var(--tcp-space-lg);
+}
+
+.chat-conversation__heading {
+}
+
+.chat-conversation__close {
+}
+
+.chat-input {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--tcp-space-sm);
+}
+
+.chat-input__waiting {
+}

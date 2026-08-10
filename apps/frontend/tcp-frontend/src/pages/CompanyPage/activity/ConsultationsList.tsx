@@ -1,9 +1,9 @@
 import { useListChangeAnnouncement } from '../../../announce/useListChangeAnnouncement';
 import { useLiveCompanyConsultationsList } from '../../../api/hooks';
-import { ACTIVE_ASSIGNMENT_STATUSES } from '../../../api/statuses';
+import { ACTIVE_ASSIGNMENT_STATUSES, statusLabel } from '../../../api/statuses';
 import { t } from '../../../strings';
 import { ActivityList } from './ActivityList';
-import { roleLabel, statusLabel, type ListProps } from './activity-list-utils';
+import { roleLabel, type ListProps } from './activity-list-utils';
 
 /**
  * Open consultations — assignments in `consultee` mode with no task, per
