@@ -1,6 +1,6 @@
 # ADR-027: Screen Reader Strategy for Live and Data-Rich Views
 
-**Status:** Accepted (amended — see [002.02](#amendment-as-implemented-00202), [003.03](#amendment-as-implemented-00303) and [008.01](#amendment-as-implemented-00801) at the end)
+**Status:** Accepted (amended — see [002.02](#amendment-as-implemented-00202), [003.03](#amendment-as-implemented-00303), [008.01](#amendment-as-implemented-00801) and [008.02.02](#amendment-as-implemented-0080202) at the end)
 
 ## Context
 
@@ -210,3 +210,20 @@ The transcript component ([008.01](../prompts/phase%2002%20-%20web%20ui/008.01.0
 - **The completed-response question is answered provisionally: arrival only.** Behind `ANNOUNCE_RESPONSE_BODY` in `useTranscript.ts`, currently `false`. Both wordings exist in `strings.ts`, so 009.02's manual pass changes one line rather than building anything new.
 - **History never announces.** Reopening a transcript re-primes it from the history endpoint, and announcing what the user has already seen would make every reopen a burst of speech. The announcement path runs only for live stream events.
 - **Two of the ADR's four focus points are now implemented and asserted: dialog open, and dialog close.**
+
+## Amendment as implemented (008.02.02) <a id="amendment-as-implemented-0080202"></a>
+
+**Closing a chat no longer exists, so the "destructive completion" example in [the focus rules above](#focus-is-managed-at-four-points) no longer describes anything real.** The chat dialog's per-conversation control was redesigned from "close" to **complete in place**: pressing it ends the chat on the server (the assignment succeeds, the agent completes) and leaves the panel exactly where it was — heading, transcript and all. Only the message form goes, replaced by a plain line saying the chat is over. Nothing is destroyed and no list shortens, so the rule's answer — move to a stable neighbour — has nothing to apply to here.
+
+The rule itself stands. It is the right answer for any future surface that does remove the thing the user was working in; this feature simply stopped being an example of one.
+
+**There is still a focus question, and it is a narrower one: a focused control disappearing.** The complete button is removed the moment the agent reaches a terminal status — completed, failed or cancelled — and the press that completed the chat is exactly what leaves focus on it. A removed element takes focus to `document.body`, which this ADR forbids leaving it on.
+
+Answered as: **focus lands on the conversation's own `<section>`**, the same `tabIndex={-1}` element labelled by its own heading that the dock's restore path already focuses. Focusing it announces which conversation this is, which is the useful thing to say when the control you just pressed has gone. Its own panel, not a neighbour — the conversation is still on screen and still worth reading.
+
+Two implementation details worth recording, because both are the reason it is safe:
+
+- **The move happens only when focus actually fell to the body.** React Aria's focus scope often catches the removal itself, and when it has, focus is already somewhere deliberate; moving it again would be the "helpfully pull the user somewhere" failure this ADR warns about.
+- **The completion line is not a live region.** It says why the form has gone; it does not narrate an arrival. The single-announcer rule is unchanged, and completing a chat announces nothing.
+
+Focus points now implemented and asserted for this dialog: dialog open, dialog taken off the page (minimise), restore from the dock, and a focused control disappearing.

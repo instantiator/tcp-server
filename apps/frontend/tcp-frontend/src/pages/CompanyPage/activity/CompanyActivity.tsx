@@ -40,7 +40,17 @@ export const CompanyActivity = ({ companyId }: CompanyActivityProps) => {
       <TasksList companyId={companyId} />
       <ConsultationsList companyId={companyId} roleNames={roleNames} />
       <EnquiriesList companyId={companyId} />
-      <ChatsList companyId={companyId} roleNames={roleNames} />
+      {/*
+        `roles`, not just `roleNames`: the chats list's role filter renders
+        one checkbox per role, which needs the roles themselves. No other
+        list here needs more than the id-to-name map, so this is passed to
+        `ChatsList` alone rather than widened onto the shared `ListProps`.
+      */}
+      <ChatsList
+        companyId={companyId}
+        roleNames={roleNames}
+        roles={roles ?? []}
+      />
     </div>
   );
 };

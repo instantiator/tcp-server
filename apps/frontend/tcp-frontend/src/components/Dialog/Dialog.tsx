@@ -22,6 +22,11 @@ export interface DialogProps {
    * cannot be minimised, which is all of them but the chat dialog (008.02).
    */
   readonly onMinimise?: () => void;
+  /**
+   * Suppresses the framework's own close button. Escape and `onOpenChange` are
+   * untouched — this hides a control, it does not remove a dismissal path.
+   */
+  readonly hideClose?: boolean;
 }
 
 /**
@@ -44,6 +49,14 @@ export interface DialogProps {
  * Clicking outside does not close it: a dialog holding a half-typed message
  * should not vanish on a stray click. Escape still does, which is what ADR-026
  * requires.
+ *
+ * **`hideClose` is for a dialog whose Close would be a duplicate of its
+ * Minimise.** A caller that parks rather than closes — the chat dialog — wires
+ * `onOpenChange(false)` to the same thing `onMinimise` does, so both buttons
+ * do exactly one thing under two names. That is a real bug, not a hypothetical:
+ * two controls that look like different outcomes and are not. Hiding the close
+ * button leaves one visible control saying what it does, with escape still
+ * dismissing the dialog as ADR-026 requires.
  */
 export const Dialog = ({
   isOpen,
@@ -51,6 +64,7 @@ export const Dialog = ({
   heading,
   children,
   onMinimise,
+  hideClose = false,
 }: DialogProps) => (
   <ModalOverlay isOpen={isOpen} onOpenChange={onOpenChange}>
     <Modal>
@@ -67,14 +81,16 @@ export const Dialog = ({
               {t('dialog.minimise')}
             </Button>
           )}
-          <Button
-            className="react-aria-Button dialog__close"
-            onPress={() => {
-              onOpenChange(false);
-            }}
-          >
-            {t('dialog.close')}
-          </Button>
+          {!hideClose && (
+            <Button
+              className="react-aria-Button dialog__close"
+              onPress={() => {
+                onOpenChange(false);
+              }}
+            >
+              {t('dialog.close')}
+            </Button>
+          )}
         </div>
         <div className="dialog__body">{children}</div>
       </AriaDialog>

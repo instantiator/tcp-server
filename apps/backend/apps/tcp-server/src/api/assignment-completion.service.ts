@@ -103,6 +103,64 @@ export class AssignmentCompletionService {
   }
 
   /**
+   * Ends a chat because the person having it says it is over.
+   *
+   * Deliberately not a mode added to {@link complete}: almost nothing about
+   * that path applies here. The caller is a **user**, authenticated by JWT and
+   * company membership at the controller, not the agent holding the assignment
+   * — so {@link assertCompletableBy}'s `assignment.agentId !== agentId`
+   * Forbidden check is the wrong question to ask. A chat prepares no artifacts,
+   * writes no summary and has no output gate to satisfy. And the mode
+   * restriction is the exact inverse of that method's: chat only, where it
+   * rejects chat.
+   *
+   * @throws {@link BadRequestException} when the assignment is not a chat.
+   * @throws {@link ConflictException} when the agent is mid-turn, has no agent
+   *   to complete, or the assignment has already been completed.
+   */
+  async completeChat(assignment: TcpAssignment): Promise<void> {
+    if (assignment.mode !== 'chat') {
+      throw new BadRequestException(
+        `Assignment ${assignment.id} is not a chat (mode: ${assignment.mode}).`,
+      );
+    }
+    const agentId = assignment.agentId;
+    if (!agentId) {
+      throw new ConflictException(
+        `Chat ${assignment.id} has no agent to complete.`,
+      );
+    }
+
+    // Read the agent's status now rather than trusting the copy loaded with
+    // the assignment: a turn that started a moment ago must not be completed
+    // out from under. There is necessarily a window between this read and the
+    // claim below — that is acceptable, because this is a courtesy to the user
+    // rather than a security boundary. The claim is what makes the transition
+    // itself safe.
+    const agent = await this.agentRepo.findOneBy({ id: agentId });
+    if (agent?.status === AgentStatus.Running) {
+      throw new ConflictException(
+        `Agent ${agentId} is mid-turn; wait for the reply before completing the chat.`,
+      );
+    }
+
+    await this.claimAndPersist(
+      assignment,
+      'succeeded',
+      [],
+      '',
+      `Assignment ${assignment.id} was already completed.`,
+    );
+
+    // The agent's own last reply is handed back rather than an empty string:
+    // `completeAgent` writes whatever output it is given, and the agent's
+    // `output` is what `GET /api/agent/:id/events` replays to a client that
+    // reconnects to a finished chat.
+    await this.pauseResume.completeAgent(agentId, agent?.output ?? '');
+    this.logger.log(`Chat assignment ${assignment.id} completed by a user`);
+  }
+
+  /**
    * The finalise ending: the task's own expected outputs are checked against
    * the completed/ directory, then the task is handed to the dispatcher to be
    * marked succeeded.

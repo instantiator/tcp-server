@@ -65,16 +65,22 @@ const strings = {
 
   // The chat dialog (008.02). Its panels reuse the transcript above; these
   // keys are what surrounds it: the dialog's own heading, each panel's
-  // heading and close control, and the message form.
+  // heading and completion control, and the message form.
   'chat.dialog.heading': 'Chats',
   'chat.conversation.label': 'Chat with {role}',
   'chat.conversation.labelWithReference': 'Chat with {role} ({reference})',
-  'chat.close': 'Close the chat with {role}',
+  'chat.complete': 'Complete the chat with {role}',
   'chat.message.label': 'Message {role}',
   'chat.send': 'Send',
   'chat.waiting': 'Waiting for {role} to reply…',
+  // One wording for all three terminal statuses. A chat that failed mid-turn
+  // has already said so in its own transcript, and a second, differently
+  // worded sentence beside a form that no longer exists would explain the
+  // failure worse than the transcript does.
+  'chat.done': 'This chat is complete.',
   'chat.send.failed':
     'That message could not be sent. Your text is still here — try again.',
+  'chat.complete.failed': 'This chat could not be completed. Try again.',
   'chat.dock.label': '{role} — {status}',
 
   // Announcements. Every wording here is deliberately count-agnostic —
@@ -151,6 +157,14 @@ const strings = {
   'activity.agents.empty.heading': 'No agents are working',
   'activity.agents.empty.body':
     'Agents appear here while they are running. Start a task and the agents working it will show up.',
+  // A long prompt is shown as an excerpt until it is asked for. The marker is a
+  // string rather than a character appended in JSX, because it is text the user
+  // reads (ADR-021), and because a translation may not mark truncation the same
+  // way. The pair below name the role, so the several expanders a page can hold
+  // at once are told apart (WCAG 2.4.6) — the same shape as `activity.chats.open`.
+  'activity.agents.prompt.truncated': '{excerpt}…',
+  'activity.agents.prompt.expand': 'Show the full prompt for {role}',
+  'activity.agents.prompt.collapse': 'Show less of the prompt for {role}',
 
   'activity.tasks.heading': 'Tasks',
   'activity.tasks.empty.heading': 'No tasks to show',
@@ -176,6 +190,10 @@ const strings = {
   'activity.chats.empty.heading': 'No chats',
   'activity.chats.empty.body': 'Start a chat with a role to talk to its agent.',
   'activity.chats.open': 'Open the chat with {role}',
+  'activity.chats.filter.status.label': 'Chat status',
+  'activity.chats.filter.status.open': 'Open',
+  'activity.chats.filter.status.completed': 'Completed',
+  'activity.chats.filter.role.label': 'Roles',
 
   'activity.filter.label': 'Task statuses',
   'activity.status.ready': 'Ready',

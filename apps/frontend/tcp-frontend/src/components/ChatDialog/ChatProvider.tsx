@@ -108,32 +108,22 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     if (first !== undefined) dock.focusEntry(first.agentId);
   };
 
-  const closeChat = (agentId: string): void => {
-    setConversations((previous) =>
-      previous.filter((c) => c.agentId !== agentId),
-    );
-    // Only reachable while the dialog is open, so this conversation cannot be
-    // parked — but a closed chat must never leave a button behind, and the
-    // cheapest way to be sure of that is to say so.
-    dock.remove(agentId);
-    dockedIds.current = dockedIds.current.filter((id) => id !== agentId);
-  };
-
   return (
     <ChatContext.Provider value={chat}>
       {children}
       {/*
-        The dialog disappears on its own once the last conversation closes:
-        there is no separate "closed" state to keep in step with an empty list.
-        Its own close control therefore always means minimise, and so does
-        escape — a dialog holding a half-typed message should not throw it away.
+        Nothing removes a conversation from this list. Completing a chat leaves
+        its panel showing, so a conversation opened in this session stays open
+        until the session ends — which is also why the dialog has no close
+        control of its own: escape and its one remaining control both mean
+        minimise, and a dialog holding a half-typed message should not throw it
+        away.
       */}
       <ChatDialog
         conversations={conversations}
         isOpen={isOpen && conversations.length > 0}
         focusAgentId={focusAgentId}
         onMinimise={minimise}
-        onCloseConversation={closeChat}
         onFocused={() => {
           setFocusAgentId(null);
         }}

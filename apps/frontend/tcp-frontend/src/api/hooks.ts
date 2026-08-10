@@ -34,6 +34,7 @@ import {
   useCompany,
   useCompanyKnowledge,
   useCompanyRoles,
+  useCompleteChatMutation,
   useConversation,
   useConversations,
   useRole,
@@ -143,6 +144,27 @@ export const useStartChat = () => {
     // TanStack call it with a `MutationFunctionContext` it cannot use.
     mutationFn: (body: { companyId: string; roleId: string }) =>
       startChat.mutateAsync(body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['assignment'] });
+    },
+  });
+};
+
+/**
+ * Ends a chat, and makes every list holding it agree.
+ *
+ * Wraps {@link useCompleteChatMutation} the same way {@link useStartChat}
+ * wraps its own: the request stays described in `endpoints.ts`, and the
+ * invalidation lives here. The agent's own `completed` status arrives on its
+ * event stream and patches the cache without help — but the **assignment**
+ * moving to `succeeded` does not, so a chats list would keep showing this one
+ * as open until something else refetched it.
+ */
+export const useCompleteChat = (agentId: string) => {
+  const queryClient = useQueryClient();
+  const completeChat = useCompleteChatMutation(agentId);
+  return useMutation({
+    mutationFn: () => completeChat.mutateAsync(),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['assignment'] });
     },

@@ -110,8 +110,10 @@ const HISTORY_A_ROUTE = /\/api\/agent\/agent-a\/history/;
 const HISTORY_B_ROUTE = /\/api\/agent\/agent-b\/history/;
 const MESSAGE_A_ROUTE = /\/api\/agent\/agent-a\/message/;
 const MESSAGE_B_ROUTE = /\/api\/agent\/agent-b\/message/;
-// Anchored so neither collides with the `/history` or `/message` routes
-// above — all three share the `/api/agent/agent-a` prefix.
+const COMPLETE_A_ROUTE = /\/api\/agent\/agent-a\/complete/;
+const COMPLETE_B_ROUTE = /\/api\/agent\/agent-b\/complete/;
+// Anchored so neither collides with the `/history`, `/message` or `/complete`
+// routes above — they all share the `/api/agent/agent-a` prefix.
 const AGENT_A_ROUTE = /\/api\/agent\/agent-a(\?|$)/;
 const AGENT_B_ROUTE = /\/api\/agent\/agent-b(\?|$)/;
 
@@ -122,6 +124,8 @@ interface ChatRoutes {
   readonly agentB?: RouteResponse;
   readonly messageA?: RouteResponse;
   readonly messageB?: RouteResponse;
+  readonly completeA?: RouteResponse;
+  readonly completeB?: RouteResponse;
 }
 
 /**
@@ -158,6 +162,17 @@ const respondChat = (overrides: ChatRoutes = {}): void => {
     ],
     [MESSAGE_A_ROUTE, overrides.messageA ?? { status: 202, body: undefined }],
     [MESSAGE_B_ROUTE, overrides.messageB ?? { status: 202, body: undefined }],
+    // The completed agent, as the route answers with — the panel reads its own
+    // status from the event stream, not from this, so the body only has to be
+    // an agent.
+    [
+      COMPLETE_A_ROUTE,
+      overrides.completeA ?? { body: agentFixture(AGENT_A, 'completed') },
+    ],
+    [
+      COMPLETE_B_ROUTE,
+      overrides.completeB ?? { body: agentFixture(AGENT_B, 'completed') },
+    ],
     [
       AGENT_A_ROUTE,
       overrides.agentA ?? { body: agentFixture(AGENT_A, 'idle') },
@@ -354,7 +369,10 @@ describe('ChatDialog', () => {
     ).toBeTruthy();
   });
 
-  it('closes the dialog entirely when the last conversation is closed', async () => {
+  // Asserted as an absence, deliberately. The close button used to do exactly
+  // what minimise does, so its removal is the fix rather than a tidy-up, and an
+  // absence nobody asserts is one a future edit restores by accident.
+  it('has no close control of its own — only minimise', async () => {
     respondChat();
     const user = userEvent.setup();
     renderChat();
@@ -362,17 +380,15 @@ describe('ChatDialog', () => {
     await user.click(screen.getByRole('button', { name: 'Open Sales' }));
     await waitForTranscriptsReady();
 
-    await user.click(
-      screen.getByRole('button', { name: t('chat.close', { role: ROLE_A }) }),
-    );
-
-    expect(screen.queryByRole('dialog')).toBeNull();
     expect(
-      screen.queryByRole('navigation', { name: t('dock.label') }),
+      screen.queryByRole('button', { name: t('dialog.close') }),
     ).toBeNull();
+    expect(
+      screen.getByRole('button', { name: t('dialog.minimise') }),
+    ).toBeTruthy();
   });
 
-  it('closes one of two conversations and leaves the other showing', async () => {
+  it('parks every open conversation when minimised', async () => {
     respondChat();
     const user = userEvent.setup();
     renderChat();
@@ -380,32 +396,8 @@ describe('ChatDialog', () => {
     await openTwoConversations(user);
 
     await user.click(
-      screen.getByRole('button', { name: t('chat.close', { role: ROLE_A }) }),
+      screen.getByRole('button', { name: t('dialog.minimise') }),
     );
-
-    expect(
-      screen.queryByRole('region', {
-        name: t('chat.conversation.label', { role: ROLE_A }),
-      }),
-    ).toBeNull();
-    expect(
-      screen.getByRole('region', {
-        name: t('chat.conversation.label', { role: ROLE_B }),
-      }),
-    ).toBeTruthy();
-    expect(
-      screen.getByRole('dialog', { name: t('chat.dialog.heading') }),
-    ).toBeTruthy();
-  });
-
-  it("minimises rather than closes when the dialog's own close control is pressed", async () => {
-    respondChat();
-    const user = userEvent.setup();
-    renderChat();
-
-    await openTwoConversations(user);
-
-    await user.click(screen.getByRole('button', { name: t('dialog.close') }));
 
     expect(screen.queryByRole('dialog')).toBeNull();
     const dock = screen.getByRole('navigation', { name: t('dock.label') });
@@ -679,7 +671,9 @@ describe('ChatDialog', () => {
     renderChat();
 
     await openTwoConversations(user);
-    await user.click(screen.getByRole('button', { name: t('dialog.close') }));
+    await user.click(
+      screen.getByRole('button', { name: t('dialog.minimise') }),
+    );
 
     // The parked state is a state of this feature, not an absence of one: two
     // buttons in a landmark, each naming a conversation the user still has.
@@ -687,14 +681,226 @@ describe('ChatDialog', () => {
   });
 
   /**
-   * Where focus goes, which for this dialog is four separate decisions.
+   * Completing a chat, which ends the conversation without ending the panel.
    *
-   * ADR-027 manages focus at exactly four points, and three of them happen
-   * here: the dialog opening, a conversation being closed — which the ADR
-   * names as its example of a "destructive completion" — and the dialog being
-   * taken off the page. None of them may leave focus on `document.body`, which
-   * is where it silently lands whenever a focused element is removed and
-   * nobody says where it should go instead.
+   * The distinction is the whole feature: the transcript is a record worth
+   * keeping, so the panel stays and only the form goes. Everything below is an
+   * assertion that the panel survived, as much as that the chat ended.
+   */
+  describe('completing a chat', () => {
+    const completeButton = (role: string) =>
+      screen.getByRole('button', { name: t('chat.complete', { role }) });
+
+    const panelFor = (role: string) =>
+      screen.getByRole('region', {
+        name: t('chat.conversation.label', { role }),
+      });
+
+    /** Opens Sales, presses Complete, and lets the agent's status catch up. */
+    const completeSales = async (
+      user: ReturnType<typeof userEvent.setup>,
+    ): Promise<void> => {
+      await user.click(screen.getByRole('button', { name: 'Open Sales' }));
+      await waitForTranscriptsReady();
+      await user.click(completeButton(ROLE_A));
+      // The panel learns it is over from the agent's own stream, exactly as it
+      // would from a completion someone else made — not from the mutation's
+      // response, which nothing here reads.
+      act(() => {
+        streamFor(AGENT_A).emit(stateChangeEvent(AGENT_A, 'completed'));
+      });
+    };
+
+    it("posts to that agent's own complete endpoint", async () => {
+      respondChat();
+      const user = userEvent.setup();
+      renderChat();
+
+      await completeSales(user);
+
+      await waitFor(() => {
+        expect(
+          fetchMock.mock.calls.some(
+            ([input]) =>
+              input instanceof Request && COMPLETE_A_ROUTE.test(input.url),
+          ),
+        ).toBe(true);
+      });
+      expect(
+        fetchMock.mock.calls.some(
+          ([input]) =>
+            input instanceof Request && COMPLETE_B_ROUTE.test(input.url),
+        ),
+      ).toBe(false);
+    });
+
+    it('keeps the panel and its transcript, and takes the form away', async () => {
+      respondChat();
+      const user = userEvent.setup();
+      renderChat();
+
+      await completeSales(user);
+
+      await waitFor(() => {
+        expect(screen.getByText(t('chat.done'))).toBeInTheDocument();
+      });
+      const panel = panelFor(ROLE_A);
+      expect(
+        within(panel).getByRole('list', {
+          name: t('transcript.label', { role: ROLE_A }),
+        }),
+      ).toBeTruthy();
+      expect(
+        within(panel).queryByRole('textbox', {
+          name: t('chat.message.label', { role: ROLE_A }),
+        }),
+      ).toBeNull();
+      expect(
+        within(panel).queryByRole('button', { name: t('chat.send') }),
+      ).toBeNull();
+    });
+
+    it('hides its own button once the chat is over', async () => {
+      respondChat();
+      const user = userEvent.setup();
+      renderChat();
+
+      await completeSales(user);
+
+      await waitFor(() => {
+        expect(
+          screen.queryByRole('button', {
+            name: t('chat.complete', { role: ROLE_A }),
+          }),
+        ).toBeNull();
+      });
+    });
+
+    // Not only when this button ended it: an agent that failed mid-turn is
+    // just as over, and offering to complete it would be offering nothing.
+    it('hides its own button when the agent fails on its own', async () => {
+      respondChat();
+      const user = userEvent.setup();
+      renderChat();
+
+      await user.click(screen.getByRole('button', { name: 'Open Sales' }));
+      await waitForTranscriptsReady();
+
+      act(() => {
+        streamFor(AGENT_A).emit(stateChangeEvent(AGENT_A, 'failed'));
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.queryByRole('button', {
+            name: t('chat.complete', { role: ROLE_A }),
+          }),
+        ).toBeNull();
+      });
+      expect(screen.getByText(t('chat.done'))).toBeInTheDocument();
+    });
+
+    it('cannot be completed while a turn is in flight', async () => {
+      respondChat();
+      const user = userEvent.setup();
+      renderChat();
+
+      await user.click(screen.getByRole('button', { name: 'Open Sales' }));
+      await waitForTranscriptsReady();
+
+      act(() => {
+        streamFor(AGENT_A).emit(stateChangeEvent(AGENT_A, 'running'));
+      });
+
+      await waitFor(() => {
+        expect(completeButton(ROLE_A)).toBeDisabled();
+      });
+      await user.click(completeButton(ROLE_A));
+      expect(
+        fetchMock.mock.calls.some(
+          ([input]) =>
+            input instanceof Request && COMPLETE_A_ROUTE.test(input.url),
+        ),
+      ).toBe(false);
+    });
+
+    it('completes only the conversation whose button was pressed', async () => {
+      respondChat();
+      const user = userEvent.setup();
+      renderChat();
+
+      await openTwoConversations(user);
+      await user.click(completeButton(ROLE_A));
+      act(() => {
+        streamFor(AGENT_A).emit(stateChangeEvent(AGENT_A, 'completed'));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText(t('chat.done'))).toBeInTheDocument();
+      });
+      // Legal is untouched: still a form, still a button of its own.
+      expect(
+        within(panelFor(ROLE_B)).getByRole('textbox', {
+          name: t('chat.message.label', { role: ROLE_B }),
+        }),
+      ).toBeTruthy();
+      expect(completeButton(ROLE_B)).toBeTruthy();
+    });
+
+    it('shows the failure and leaves the chat usable when completing fails', async () => {
+      respondChat({
+        completeA: { status: 409, body: { statusCode: 409, message: 'busy' } },
+      });
+      const user = userEvent.setup();
+      renderChat();
+
+      await user.click(screen.getByRole('button', { name: 'Open Sales' }));
+      await waitForTranscriptsReady();
+      await user.click(completeButton(ROLE_A));
+
+      expect(
+        await screen.findByText(t('chat.complete.failed')),
+      ).toBeInTheDocument();
+      // Nothing about the panel changed: the chat is not over, so the form and
+      // the button both have to still be there to try again with.
+      expect(
+        screen.getByRole('textbox', {
+          name: t('chat.message.label', { role: ROLE_A }),
+        }),
+      ).not.toBeDisabled();
+      expect(completeButton(ROLE_A)).toBeTruthy();
+    });
+
+    it('has no accessibility violations with one conversation completed', async () => {
+      respondChat();
+      const user = userEvent.setup();
+      renderChat();
+
+      await openTwoConversations(user);
+      await user.click(completeButton(ROLE_A));
+      act(() => {
+        streamFor(AGENT_A).emit(stateChangeEvent(AGENT_A, 'completed'));
+      });
+      await waitFor(() => {
+        expect(screen.getByText(t('chat.done'))).toBeInTheDocument();
+      });
+
+      // A completed panel beside a live one is a state of this feature, and
+      // the one most likely to go wrong: a heading with nothing focusable
+      // under it, next to a form that still works.
+      await expectNoA11yViolations(document.body);
+    });
+  });
+
+  /**
+   * Where focus goes, which for this dialog is several separate decisions.
+   *
+   * ADR-027 manages focus at four points, and three of them happen here: the
+   * dialog opening, the dialog being taken off the page, and a focused control
+   * disappearing — which is what completing a chat does to its own button.
+   * None of them may leave focus on `document.body`, which is where it
+   * silently lands whenever a focused element is removed and nobody says where
+   * it should go instead.
    */
   describe('focus', () => {
     const panelFor = (role: string) =>
@@ -730,7 +936,9 @@ describe('ChatDialog', () => {
       renderChat();
 
       await openTwoConversations(user);
-      await user.click(screen.getByRole('button', { name: t('dialog.close') }));
+      await user.click(
+        screen.getByRole('button', { name: t('dialog.minimise') }),
+      );
       await user.click(
         screen.getByRole('button', { name: dockLabel(ROLE_B, 'idle') }),
       );
@@ -743,37 +951,28 @@ describe('ChatDialog', () => {
       });
     });
 
-    it('moves to a neighbouring conversation when one is closed', async () => {
+    it('lands on the panel when its complete button disappears', async () => {
       respondChat();
       const user = userEvent.setup();
       renderChat();
 
       await openTwoConversations(user);
       await user.click(
-        screen.getByRole('button', { name: t('chat.close', { role: ROLE_A }) }),
+        screen.getByRole('button', {
+          name: t('chat.complete', { role: ROLE_A }),
+        }),
       );
-
-      expect(document.activeElement).toBe(panelFor(ROLE_B));
-      expect(document.activeElement).not.toBe(document.body);
-    });
-
-    it('returns to whatever opened the dialog when the last conversation closes', async () => {
-      respondChat();
-      const user = userEvent.setup();
-      renderChat();
-
-      const opener = screen.getByRole('button', { name: 'Open Sales' });
-      await user.click(opener);
-      await waitForTranscriptsReady();
-      await user.click(
-        screen.getByRole('button', { name: t('chat.close', { role: ROLE_A }) }),
-      );
-
-      // Nothing in the dialog to move to, so React Aria's own focus restore is
-      // the right answer and this asserts it actually happens.
-      await waitFor(() => {
-        expect(document.activeElement).toBe(opener);
+      // The press left focus on the button; the terminal status removes it.
+      act(() => {
+        streamFor(AGENT_A).emit(stateChangeEvent(AGENT_A, 'completed'));
       });
+
+      // Its own panel, not a neighbour: nothing was destroyed, and the
+      // conversation the user was working in is still on screen to be read.
+      await waitFor(() => {
+        expect(document.activeElement).toBe(panelFor(ROLE_A));
+      });
+      expect(document.activeElement).not.toBe(document.body);
     });
   });
 
@@ -901,7 +1100,9 @@ describe('ChatDialog', () => {
       renderChat();
 
       await openTwoConversations(user);
-      await user.click(screen.getByRole('button', { name: t('dialog.close') }));
+      await user.click(
+        screen.getByRole('button', { name: t('dialog.minimise') }),
+      );
 
       // Minimising unmounts the dialog, which unmounts both transcripts. A
       // parked conversation costs nothing; its dock button reports the agent's
@@ -917,7 +1118,9 @@ describe('ChatDialog', () => {
       await openTwoConversations(user);
       const before = historyRequests(HISTORY_A_ROUTE);
 
-      await user.click(screen.getByRole('button', { name: t('dialog.close') }));
+      await user.click(
+        screen.getByRole('button', { name: t('dialog.minimise') }),
+      );
       await user.click(
         screen.getByRole('button', { name: dockLabel(ROLE_A, 'idle') }),
       );

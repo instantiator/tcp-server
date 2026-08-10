@@ -64,6 +64,14 @@ const ROLE = {
   description: 'd',
 };
 
+/** A second role, so two agent rows can be told apart by their control's name. */
+const ROLE_2 = {
+  id: 'role-2',
+  name: 'Auditor',
+  slug: 'auditor',
+  description: 'd',
+};
+
 interface AgentOverrides {
   readonly id: string;
   readonly status: string;
@@ -206,6 +214,21 @@ const CHAT_1 = assignment({
 });
 /** The agent `CHAT_1` names, fetched when a row opens the chat dialog. */
 const CHAT_AGENT = agent({ id: 'agent-9', status: 'idle' });
+/** A completed chat, same role as `CHAT_1` — hidden by the default status filter. */
+const CHAT_COMPLETED = assignment({
+  id: 'chat-completed',
+  status: 'succeeded',
+  mode: 'chat',
+  agentId: 'agent-10',
+});
+/** An open chat under `ROLE_2`, for the role filter's tests. */
+const CHAT_OTHER_ROLE = assignment({
+  id: 'chat-other-role',
+  status: 'in-progress',
+  mode: 'chat',
+  roleId: ROLE_2.id,
+  agentId: 'agent-11',
+});
 
 interface ActivityRoutes {
   readonly roles?: RouteResponse;
@@ -648,6 +671,237 @@ describe('CompanyActivity', () => {
     });
   });
 
+  describe("the agents list's prompt excerpt", () => {
+    // Comfortably under `AgentsList`'s `PROMPT_EXCERPT_LENGTH` (160), so it is
+    // shown whole and gets no control.
+    const SHORT_PROMPT = 'Check last week’s invoices';
+    // Comfortably over it, with plenty of word boundaries near the cut.
+    const LONG_PROMPT =
+      'Investigate the ledger discrepancy reported in the September close, tracing every journal entry back to the source document that raised it, and write up what you find for the finance team before the audit begins.';
+    const OTHER_LONG_PROMPT =
+      'Review the supplier contracts renewed this quarter, list every clause that changed against the previous version, and flag the ones that alter payment terms so the finance team can price them before renewal.';
+
+    const expandName = (role: string) =>
+      t('activity.agents.prompt.expand', { role });
+    const collapseName = (role: string) =>
+      t('activity.agents.prompt.collapse', { role });
+
+    /**
+     * The paragraph an expander controls, resolved the way assistive tech
+     * would — through `aria-controls`, which therefore has to point at
+     * something real for this to work at all.
+     */
+    const controlledPrompt = (control: HTMLElement): HTMLElement => {
+      const id = control.getAttribute('aria-controls');
+      if (id === null) throw new Error('the control has no aria-controls');
+      const target = document.getElementById(id);
+      if (target === null) throw new Error('aria-controls names no element');
+      return target;
+    };
+
+    const agentsRegion = () =>
+      screen.findByRole('region', { name: t('activity.agents.heading') });
+
+    it('renders a short prompt whole, with no control at all', async () => {
+      respondActivity({
+        agents: {
+          body: [
+            agent({
+              id: 'agent-1',
+              status: 'running',
+              initialPrompt: SHORT_PROMPT,
+            }),
+          ],
+        },
+      });
+      renderActivity();
+
+      const region = await agentsRegion();
+      expect(await within(region).findByText(SHORT_PROMPT)).toBeInTheDocument();
+      expect(
+        within(region).queryByRole('button', { name: expandName(ROLE.name) }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('clips a long prompt to a real excerpt, leaving the rest out of the DOM', async () => {
+      respondActivity({
+        agents: {
+          body: [
+            agent({
+              id: 'agent-1',
+              status: 'running',
+              initialPrompt: LONG_PROMPT,
+            }),
+          ],
+        },
+      });
+      renderActivity();
+
+      const region = await agentsRegion();
+      const control = await within(region).findByRole('button', {
+        name: expandName(ROLE.name),
+      });
+      expect(control).toHaveAttribute('aria-expanded', 'false');
+
+      const shown = controlledPrompt(control).textContent ?? '';
+      // An excerpt of this prompt, not a stand-in for it: what is shown is the
+      // prompt's own opening, marked as unfinished.
+      expect(shown.endsWith('…')).toBe(true);
+      expect(LONG_PROMPT.startsWith(shown.slice(0, -1))).toBe(true);
+      expect(shown.length).toBeLessThan(LONG_PROMPT.length);
+      // The saving is only real if the rest is genuinely absent — a screen
+      // reader reads the DOM, not what CSS has clipped.
+      expect(within(region).queryByText(LONG_PROMPT)).not.toBeInTheDocument();
+    });
+
+    it('reveals the full prompt from the keyboard, and reports its new state', async () => {
+      respondActivity({
+        agents: {
+          body: [
+            agent({
+              id: 'agent-1',
+              status: 'running',
+              initialPrompt: LONG_PROMPT,
+            }),
+          ],
+        },
+      });
+      const user = userEvent.setup();
+      renderActivity();
+
+      const region = await agentsRegion();
+      const control = await within(region).findByRole('button', {
+        name: expandName(ROLE.name),
+      });
+
+      control.focus();
+      await user.keyboard('{Enter}');
+
+      expect(within(region).getByText(LONG_PROMPT)).toBeInTheDocument();
+      const collapse = within(region).getByRole('button', {
+        name: collapseName(ROLE.name),
+      });
+      expect(collapse).toHaveAttribute('aria-expanded', 'true');
+      // Still the same control, so focus has not moved out from under anyone.
+      expect(collapse).toHaveFocus();
+
+      await user.click(collapse);
+      expect(within(region).queryByText(LONG_PROMPT)).not.toBeInTheDocument();
+      expect(
+        within(region).getByRole('button', { name: expandName(ROLE.name) }),
+      ).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('names each control after its own role, and expands only that row', async () => {
+      respondActivity({
+        roles: { body: [ROLE, ROLE_2] },
+        agents: {
+          body: [
+            agent({
+              id: 'agent-1',
+              status: 'running',
+              initialPrompt: LONG_PROMPT,
+            }),
+            agent({
+              id: 'agent-2',
+              status: 'running',
+              roleId: ROLE_2.id,
+              initialPrompt: OTHER_LONG_PROMPT,
+            }),
+          ],
+        },
+      });
+      const user = userEvent.setup();
+      renderActivity();
+
+      const region = await agentsRegion();
+      const first = await within(region).findByRole('button', {
+        name: expandName(ROLE.name),
+      });
+      // Two controls on one screen, told apart by name rather than by position
+      // (WCAG 2.4.6).
+      const second = within(region).getByRole('button', {
+        name: expandName(ROLE_2.name),
+      });
+
+      await user.click(first);
+
+      expect(within(region).getByText(LONG_PROMPT)).toBeInTheDocument();
+      expect(
+        within(region).queryByText(OTHER_LONG_PROMPT),
+      ).not.toBeInTheDocument();
+      expect(second).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('keeps an expanded prompt open across a live patch to the same list', async () => {
+      respondActivity({
+        agents: {
+          body: [
+            agent({
+              id: 'agent-1',
+              status: 'running',
+              initialPrompt: LONG_PROMPT,
+            }),
+          ],
+        },
+      });
+      const user = userEvent.setup();
+      const { queryClient } = renderActivity();
+
+      const region = await agentsRegion();
+      await user.click(
+        await within(region).findByRole('button', {
+          name: expandName(ROLE.name),
+        }),
+      );
+      expect(within(region).getByText(LONG_PROMPT)).toBeInTheDocument();
+
+      // The same path `cache.ts` takes for a real agent status change: the row
+      // is patched in place, so the list re-renders with a new array while the
+      // row's key stays put.
+      act(() => {
+        applyEvent(
+          queryClient,
+          auditEvent({ entity: 'agent', newStatus: 'paused' }, 'agent-1'),
+        );
+      });
+
+      await within(region).findByText(t('activity.status.paused'));
+      // Re-queried after the patch, not held from before it: the assertion is
+      // that the row is still expanded, not that the old node survived.
+      expect(within(region).getByText(LONG_PROMPT)).toBeInTheDocument();
+      expect(
+        within(region).getByRole('button', { name: collapseName(ROLE.name) }),
+      ).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('has no accessibility violations collapsed or expanded', async () => {
+      respondActivity({
+        agents: {
+          body: [
+            agent({
+              id: 'agent-1',
+              status: 'running',
+              initialPrompt: LONG_PROMPT,
+            }),
+          ],
+        },
+      });
+      const user = userEvent.setup();
+      const { container } = renderActivity();
+
+      const region = await agentsRegion();
+      const control = await within(region).findByRole('button', {
+        name: expandName(ROLE.name),
+      });
+      await expectNoA11yViolations(container);
+
+      await user.click(control);
+      await within(region).findByText(LONG_PROMPT);
+      await expectNoA11yViolations(container);
+    });
+  });
+
   describe('the task status filter', () => {
     it('checks only the four active statuses by default', async () => {
       respondActivity();
@@ -743,6 +997,199 @@ describe('CompanyActivity', () => {
       expect(
         await within(chatsRegion).findByText(t('activity.count', { count: 1 })),
       ).toBeInTheDocument();
+    });
+
+    describe('the status and role filters', () => {
+      const openChatButtons = (region: HTMLElement) =>
+        within(region).getAllByRole('button', {
+          name: t('activity.chats.open', { role: ROLE.name }),
+        });
+
+      it('shows only open chats by default', async () => {
+        respondActivity({ chats: { body: [CHAT_1, CHAT_COMPLETED] } });
+        renderActivity();
+
+        const chatsRegion = await screen.findByRole('region', {
+          name: t('activity.chats.heading'),
+        });
+        await within(chatsRegion).findByText(t('activity.count', { count: 1 }));
+        // The count is not just a label — it agrees with what actually rendered.
+        expect(openChatButtons(chatsRegion)).toHaveLength(1);
+      });
+
+      it('checking "completed" adds completed chats without hiding open ones', async () => {
+        respondActivity({ chats: { body: [CHAT_1, CHAT_COMPLETED] } });
+        const user = userEvent.setup();
+        renderActivity();
+
+        const chatsRegion = await screen.findByRole('region', {
+          name: t('activity.chats.heading'),
+        });
+        await within(chatsRegion).findByText(t('activity.count', { count: 1 }));
+
+        await user.click(
+          within(chatsRegion).getByRole('checkbox', {
+            name: t('activity.chats.filter.status.completed'),
+          }),
+        );
+
+        await within(chatsRegion).findByText(t('activity.count', { count: 2 }));
+        expect(openChatButtons(chatsRegion)).toHaveLength(2);
+      });
+
+      it('unchecking "open" as well shows chats of every status', async () => {
+        respondActivity({ chats: { body: [CHAT_1, CHAT_COMPLETED] } });
+        const user = userEvent.setup();
+        renderActivity();
+
+        const chatsRegion = await screen.findByRole('region', {
+          name: t('activity.chats.heading'),
+        });
+        const openCheckbox = within(chatsRegion).getByRole('checkbox', {
+          name: t('activity.chats.filter.status.open'),
+        });
+        expect(openCheckbox).toBeChecked();
+        await within(chatsRegion).findByText(t('activity.count', { count: 1 }));
+
+        // Both status options now unchecked — "no options selected" is
+        // permissive, per the product rule, not "match nothing".
+        await user.click(openCheckbox);
+        expect(openCheckbox).not.toBeChecked();
+
+        await within(chatsRegion).findByText(t('activity.count', { count: 2 }));
+        expect(openChatButtons(chatsRegion)).toHaveLength(2);
+      });
+
+      it('the role filter starts empty, matching chats of every role', async () => {
+        respondActivity({
+          roles: { body: [ROLE, ROLE_2] },
+          chats: { body: [CHAT_1, CHAT_OTHER_ROLE] },
+        });
+        renderActivity();
+
+        const chatsRegion = await screen.findByRole('region', {
+          name: t('activity.chats.heading'),
+        });
+        await within(chatsRegion).findByText(t('activity.count', { count: 2 }));
+        expect(
+          within(chatsRegion).getByRole('checkbox', {
+            name: ROLE.name,
+          }),
+        ).not.toBeChecked();
+      });
+
+      it('checking one role hides chats for other roles', async () => {
+        respondActivity({
+          roles: { body: [ROLE, ROLE_2] },
+          chats: { body: [CHAT_1, CHAT_OTHER_ROLE] },
+        });
+        const user = userEvent.setup();
+        renderActivity();
+
+        const chatsRegion = await screen.findByRole('region', {
+          name: t('activity.chats.heading'),
+        });
+        await within(chatsRegion).findByText(t('activity.count', { count: 2 }));
+
+        await user.click(
+          within(chatsRegion).getByRole('checkbox', { name: ROLE.name }),
+        );
+
+        await within(chatsRegion).findByText(t('activity.count', { count: 1 }));
+        expect(
+          within(chatsRegion).getByRole('button', {
+            name: t('activity.chats.open', { role: ROLE.name }),
+          }),
+        ).toBeInTheDocument();
+        expect(
+          within(chatsRegion).queryByRole('button', {
+            name: t('activity.chats.open', { role: ROLE_2.name }),
+          }),
+        ).not.toBeInTheDocument();
+      });
+
+      it('checking multiple roles is a union, not an intersection', async () => {
+        const role3 = {
+          id: 'role-3',
+          name: 'Reviewer',
+          slug: 'reviewer',
+          description: 'd',
+        };
+        const chat3 = assignment({
+          id: 'chat-role-3',
+          status: 'in-progress',
+          mode: 'chat',
+          roleId: role3.id,
+          agentId: 'agent-12',
+        });
+        respondActivity({
+          roles: { body: [ROLE, ROLE_2, role3] },
+          chats: { body: [CHAT_1, CHAT_OTHER_ROLE, chat3] },
+        });
+        const user = userEvent.setup();
+        renderActivity();
+
+        const chatsRegion = await screen.findByRole('region', {
+          name: t('activity.chats.heading'),
+        });
+        await within(chatsRegion).findByText(t('activity.count', { count: 3 }));
+
+        await user.click(
+          within(chatsRegion).getByRole('checkbox', { name: ROLE.name }),
+        );
+        await user.click(
+          within(chatsRegion).getByRole('checkbox', { name: ROLE_2.name }),
+        );
+
+        // A union of the two selected roles (2 chats), not an intersection —
+        // a chat has exactly one `roleId`, so an "every selected role must
+        // match" reading would always find zero once more than one is picked.
+        await within(chatsRegion).findByText(t('activity.count', { count: 2 }));
+        expect(
+          within(chatsRegion).getByRole('button', {
+            name: t('activity.chats.open', { role: ROLE.name }),
+          }),
+        ).toBeInTheDocument();
+        expect(
+          within(chatsRegion).getByRole('button', {
+            name: t('activity.chats.open', { role: ROLE_2.name }),
+          }),
+        ).toBeInTheDocument();
+        expect(
+          within(chatsRegion).queryByRole('button', {
+            name: t('activity.chats.open', { role: role3.name }),
+          }),
+        ).not.toBeInTheDocument();
+      });
+
+      it('has no accessibility violations across default, permissive and narrowed filter states', async () => {
+        respondActivity({
+          roles: { body: [ROLE, ROLE_2] },
+          chats: { body: [CHAT_1, CHAT_COMPLETED, CHAT_OTHER_ROLE] },
+        });
+        const user = userEvent.setup();
+        const { container } = renderActivity();
+
+        const chatsRegion = await screen.findByRole('region', {
+          name: t('activity.chats.heading'),
+        });
+        await within(chatsRegion).findByText(t('activity.count', { count: 2 }));
+        await expectNoA11yViolations(container);
+
+        await user.click(
+          within(chatsRegion).getByRole('checkbox', {
+            name: t('activity.chats.filter.status.completed'),
+          }),
+        );
+        await within(chatsRegion).findByText(t('activity.count', { count: 3 }));
+        await expectNoA11yViolations(container);
+
+        await user.click(
+          within(chatsRegion).getByRole('checkbox', { name: ROLE.name }),
+        );
+        await within(chatsRegion).findByText(t('activity.count', { count: 2 }));
+        await expectNoA11yViolations(container);
+      });
     });
   });
 
@@ -1023,6 +1470,50 @@ describe('CompanyActivity', () => {
       // announcer's own output (its entries carry a politeness prefix): the
       // virtual screen reader also narrates the checkbox the click focused,
       // which is expected AT behaviour and not what this assertion is about.
+      const announced = (await virtual.spokenPhraseLog()).filter(
+        (phrase) =>
+          phrase.startsWith('polite:') || phrase.startsWith('assertive:'),
+      );
+      expect(announced).toEqual([]);
+    });
+
+    it('announces nothing when the chats status or role filter changes', async () => {
+      respondActivity({
+        roles: { body: [ROLE, ROLE_2] },
+        chats: { body: [CHAT_1, CHAT_COMPLETED, CHAT_OTHER_ROLE] },
+      });
+      await listen();
+      const user = userEvent.setup({ delay: null });
+      renderActivity();
+
+      const chatsRegion = await screen.findByRole('region', {
+        name: t('activity.chats.heading'),
+      });
+      await within(chatsRegion).findByText(t('activity.count', { count: 2 }));
+      await settle();
+      await virtual.clearSpokenPhraseLog();
+
+      // Checking "completed" brings a chat that was already there (just
+      // filtered out of view) onto the screen — a filter change, not a chat
+      // actually finishing, so it must not announce as one arriving. Without
+      // `resetKey` reseeding `useListChangeAnnouncement`, this row entering
+      // `rows` would read as an addition.
+      await user.click(
+        within(chatsRegion).getByRole('checkbox', {
+          name: t('activity.chats.filter.status.completed'),
+        }),
+      );
+      await within(chatsRegion).findByText(t('activity.count', { count: 3 }));
+      await settle();
+
+      // Narrowing the role filter removes a row from view the same way — it
+      // must not announce as a chat ending either.
+      await user.click(
+        within(chatsRegion).getByRole('checkbox', { name: ROLE.name }),
+      );
+      await within(chatsRegion).findByText(t('activity.count', { count: 2 }));
+      await settle();
+
       const announced = (await virtual.spokenPhraseLog()).filter(
         (phrase) =>
           phrase.startsWith('polite:') || phrase.startsWith('assertive:'),

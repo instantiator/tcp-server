@@ -255,3 +255,17 @@ export const useSendMessageMutation = (id: string) =>
         }),
       ),
   });
+
+/**
+ * Ends a chat: its assignment succeeds and its agent completes.
+ *
+ * `unwrap`, not `expectAccepted` — nothing is dispatched, so the route answers
+ * with the agent already in its new state rather than a bare `202`.
+ */
+export const useCompleteChatMutation = (id: string) =>
+  useMutation({
+    mutationFn: () =>
+      unwrap(
+        api.POST('/api/agent/{id}/complete', { params: { path: { id } } }),
+      ),
+  });

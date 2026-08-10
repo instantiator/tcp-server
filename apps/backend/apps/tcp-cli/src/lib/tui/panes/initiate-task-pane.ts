@@ -46,6 +46,16 @@ export class InitiateTaskPane extends Pane {
   /** Which field is being raw-captured, if any; the draft text lives in `draft`. */
   editingField: 'prompt' | 'expected' | null = null;
   private draft = '';
+  /**
+   * Whether a submission is in flight for this pane — set the moment Enter
+   * validates and dispatches one (see `dispatchInitiateTaskKey` in
+   * `../tui-keys`), cleared once the async submit settles (wiring.ts's
+   * `onSubmitInitiateTask`, via `clearInitiateTaskBusy`, on both success and
+   * failure). While true, a second Enter on the Submit row is a no-op — see
+   * `dispatchInitiateTaskKey` — which is what stops a duplicate real `POST
+   * /api/task` firing before the first request resolves.
+   */
+  busy = false;
 
   constructor(
     id: string,
@@ -208,7 +218,10 @@ export class InitiateTaskPane extends Pane {
       case 'start-toggle':
         return `[${this.startImmediately ? 'x' : ' '}] Start immediately`;
       case 'submit':
-        return 'Submit';
+        // The only visible "busy" indication this pane has (it has no input
+        // box for Tui.setBusy's usual disable-and-hint treatment to apply
+        // to) — see the `busy` field doc comment.
+        return this.busy ? 'Submitting…' : 'Submit';
     }
   }
 }

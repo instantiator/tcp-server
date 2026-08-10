@@ -11,7 +11,6 @@ export interface ChatDialogProps {
   /** The conversation to move focus into once the dialog is showing, if any. */
   readonly focusAgentId: string | null;
   readonly onMinimise: () => void;
-  readonly onCloseConversation: (agentId: string) => void;
   /** Called once focus has been moved, so the same move does not repeat. */
   readonly onFocused: () => void;
 }
@@ -19,15 +18,19 @@ export interface ChatDialogProps {
 /**
  * The chat dialog: every open conversation, stacked in one modal.
  *
- * **Its own close control and escape both mean minimise, never close.** The
+ * **It has no close control of its own — only minimise (`hideClose`).** The
  * dialog already disappears on its own once `ChatProvider` empties the
- * conversation list — there is no separate "closed" state to keep in step
- * with that. So the one thing left for its close control and escape to mean
- * is "park this, I am not finished": a panel can be holding a half-typed
- * message, and throwing that away because of a stray escape press would be
- * hostile. Closing one specific conversation is `onCloseConversation`, wired
- * to each panel's own close button below — the dialog-level control never
- * calls it.
+ * conversation list, so there is no separate "closed" state for a close button
+ * to reach: it would do exactly what minimise does, under a name suggesting
+ * otherwise. Escape is still wired to minimise, because a panel can be holding
+ * a half-typed message and throwing that away on a stray press would be
+ * hostile.
+ *
+ * **Nothing here removes a conversation.** Completing one (`ChatConversation`)
+ * leaves its panel in place with its transcript intact — so no focus has to be
+ * rehomed to a neighbour, and this component never shortens its own list. The
+ * focus machinery below is for the other direction: bringing a conversation
+ * back from the dock.
  *
  * **A plain vertical stack, not tabs.** React Aria's `Tabs` unmounts every
  * panel but the selected one, and every conversation here needs to keep
@@ -41,7 +44,6 @@ export const ChatDialog = ({
   isOpen,
   focusAgentId,
   onMinimise,
-  onCloseConversation,
   onFocused,
 }: ChatDialogProps) => {
   // Each open conversation's panel element, keyed by agent id, so focus can
@@ -62,24 +64,6 @@ export const ChatDialog = ({
     onFocused();
   }, [focusAgentId, isOpen, onFocused]);
 
-  const handleClose = (agentId: string): void => {
-    const index = conversations.findIndex((c) => c.agentId === agentId);
-    // ADR-027 names closing a chat a "destructive completion": focus must
-    // land on a stable neighbour, never fall back to the page body. The next
-    // conversation in the list is that neighbour, or the previous one if
-    // this was the last.
-    const neighbour = conversations[index + 1] ?? conversations[index - 1];
-
-    onCloseConversation(agentId);
-
-    if (neighbour !== undefined) {
-      panels.current.get(neighbour.agentId)?.focus();
-    }
-    // No neighbour means this was the only open conversation: the dialog is
-    // about to unmount, and React Aria returns focus to whatever opened it —
-    // there is nothing left here to move focus to.
-  };
-
   return (
     <Dialog
       isOpen={isOpen}
@@ -88,14 +72,12 @@ export const ChatDialog = ({
       }}
       heading={t('chat.dialog.heading')}
       onMinimise={onMinimise}
+      hideClose
     >
       {conversations.map((conversation) => (
         <ChatConversation
           key={conversation.agentId}
           conversation={conversation}
-          onClose={() => {
-            handleClose(conversation.agentId);
-          }}
           sectionRef={(element) => {
             if (element === null) {
               panels.current.delete(conversation.agentId);

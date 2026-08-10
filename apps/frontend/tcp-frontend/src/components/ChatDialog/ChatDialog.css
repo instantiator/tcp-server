@@ -15,7 +15,7 @@
 .chat-conversation__heading {
 }
 
-.chat-conversation__close {
+.chat-conversation__complete {
 }
 
 .chat-input {
@@ -25,4 +25,7 @@
 }
 
 .chat-input__waiting {
+}
+
+.chat-input__done {
 }

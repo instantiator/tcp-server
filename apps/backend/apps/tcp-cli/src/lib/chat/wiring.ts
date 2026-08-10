@@ -1,5 +1,6 @@
 import * as readline from 'readline';
 import { Tui } from '../tui/tui';
+import { clearInitiateTaskBusy } from '../tui/tui-keys';
 import { ChatSession } from './session';
 
 /**
@@ -55,6 +56,13 @@ export async function runTuiInteractive(
 ): Promise<void> {
   let resolveQuit!: () => void;
   const quit = new Promise<void>((r) => (resolveQuit = r));
+  /** Pane ids with a `createTask` request in flight — same shape as
+   * `session.isBusy(paneId)` below, guarding `onSubmit`, but independent of
+   * it (task creation isn't a chat turn). This is a second, defence-in-depth
+   * guard: `dispatchInitiateTaskKey` (tui-keys.ts) already stops a second
+   * Enter from reaching this handler at all, but this handler shouldn't rely
+   * solely on its caller to enforce that. */
+  const initiateTaskSubmitting = new Set<string>();
 
   tui.onQuit(() => {
     if (session.hasInFlightTurns) {
@@ -96,6 +104,18 @@ export async function runTuiInteractive(
     void session
       .fetchTaskDetail(task.id)
       .then(({ task: detail, assignments }) => {
+        // fetchTaskDetail trusts the wire shape with no runtime validation
+        // (see session-api.ts) — a malformed/empty success body (e.g. a
+        // transient race around task creation) must be reported like any
+        // other failure, not left to throw an unhandled TypeError into the
+        // render loop.
+        if (!detail) {
+          session.reportPaneError(
+            session.companyId,
+            new Error('Task detail response was missing its task'),
+          );
+          return;
+        }
         tui.addTaskPane({
           id: detail.id,
           label: `Task: ${detail.shortcode}`,
@@ -125,9 +145,16 @@ export async function runTuiInteractive(
   });
 
   tui.onSubmitInitiateTask((paneId, submission) => {
+    if (initiateTaskSubmitting.has(paneId)) return; // a create-task request is already in flight
+    initiateTaskSubmitting.add(paneId);
     void session
       .createTask(submission)
       .then(({ task, assignments }) => {
+        initiateTaskSubmitting.delete(paneId);
+        // Harmless here (the pane is about to be replaced), but keeps
+        // clearInitiateTaskBusy's contract simple: always call it once the
+        // submit settles, on both branches.
+        clearInitiateTaskBusy(paneId);
         tui.replaceWithTaskPane(paneId, {
           id: task.id,
           label: `Task: ${task.shortcode}`,
@@ -137,7 +164,14 @@ export async function runTuiInteractive(
         });
         session.watchTaskEvents(task.id);
       })
-      .catch((err) => session.reportPaneError(paneId, err));
+      .catch((err) => {
+        initiateTaskSubmitting.delete(paneId);
+        // The form stays open after a failure — clear busy so the user can
+        // correct whatever went wrong and try again (see
+        // InitiateTaskPane.busy / dispatchInitiateTaskKey).
+        clearInitiateTaskBusy(paneId);
+        session.reportPaneError(paneId, err);
+      });
   });
 
   tui.onSelectAssignment((_taskId, assignment) => {

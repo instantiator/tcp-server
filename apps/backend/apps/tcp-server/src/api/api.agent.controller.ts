@@ -41,6 +41,8 @@ import { AuditService } from '../audit/audit.service';
 import { DbService } from '../db/db.service';
 import { AgentEventService } from '../events/agent-event.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
+import { AssignmentCompletionService } from './assignment-completion.service';
+import { AssignmentService } from './assignment.service';
 import { ChatService } from './chat.service';
 import { SystemShutdownService } from './system-shutdown.service';
 import { SendMessageDto, StartAgentDto, StartChatDto } from './dto/agent.dto';
@@ -62,6 +64,8 @@ export class AgentController {
     private readonly agentEvents: AgentEventService,
     private readonly audit: AuditService,
     private readonly shutdown: SystemShutdownService,
+    private readonly assignments: AssignmentService,
+    private readonly completion: AssignmentCompletionService,
   ) {}
 
   /**
@@ -138,6 +142,32 @@ export class AgentController {
       if (err instanceof NotFoundException) throw err;
       throw new InternalServerErrorException('Unexpected error during chat');
     }
+  }
+
+  /**
+   * Ends the chat this agent is holding, because the person having it says it
+   * is over: the assignment moves to `succeeded` and the agent to `completed`.
+   *
+   * Synchronous, unlike {@link sendMessage} — nothing is dispatched and no turn
+   * runs, so the completed agent is returned rather than a `202`. Refused with
+   * `409` while a turn is in flight.
+   */
+  @ApiOperation({ summary: 'Complete a chat' })
+  @ApiOkResponse({ type: AgentResponseDto })
+  @CompanyScope({ from: 'param', key: 'id', via: 'agent' })
+  @Post(':id/complete')
+  async completeChat(@Param('id') id: UUID): Promise<TcpAgent> {
+    // No try/catch, unlike `resumeAgent`: everything below throws Nest
+    // exceptions already (404 for an unknown agent, 400 for a non-chat, 409
+    // for a race), and wrapping them would turn each into a 500.
+    const { assignment } = await this.assignments.getAgentAssignment(id);
+    await this.completion.completeChat(assignment);
+
+    // Re-read rather than patch the copy above: the status and output the
+    // client needs were written by the completion service, not here.
+    const agent = await this.db.getAgent(id);
+    if (!agent) throw new NotFoundException(`Agent ${id} not found`);
+    return agent;
   }
 
   /**
