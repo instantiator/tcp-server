@@ -586,6 +586,11 @@ The transcript primes from `GET /api/agent/{id}/history` and only then subscribe
 
 ## Carried into a later prompt
 
+**`008.05` and `008.06` are now sections of the 008.04 prompt**, not files of their own —
+`008.04.00.prompt - response, creation, profile and membership dialogs (draft).md`. They
+were merged once 008.01 had built the dialog framework and what remained in each was the
+same skeleton. Rows below that name those indices still resolve; read them as the section.
+
 | Note                                                                                                                                                                                                 | Raised by | Goes to  |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | -------- |
 | End-to-end test that more than six simultaneous event streams work — 002.03 proved the transport, not the streams                                                                                    | 002.03    | `005.02` |

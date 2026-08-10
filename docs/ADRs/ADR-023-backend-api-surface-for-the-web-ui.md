@@ -82,7 +82,7 @@ Deliberately **not** done: no `/api/me`, and no consultations controller. Both a
 - `005.01.00.prompt - generated api client (draft).md`
 - `006.01.00.prompt - companies overview and company view shell (draft).md`
 - `007.01.00.prompt - company live activity view (draft).md`
-- `008.06.00.prompt - profile and company memberships dialogs (draft).md`
+- `008.04.00.prompt - response, creation, profile and membership dialogs (draft).md` (the `008.06` section)
 
 ## Detail
 
