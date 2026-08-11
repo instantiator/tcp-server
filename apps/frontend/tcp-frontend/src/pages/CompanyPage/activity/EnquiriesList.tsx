@@ -1,6 +1,7 @@
-import { ANNOUNCE_IMMEDIATE_MS } from '../../../announce/announcer';
-import { useListChangeAnnouncement } from '../../../announce/useListChangeAnnouncement';
+import { useState } from 'react';
+import { Button } from 'react-aria-components';
 import { useLiveCompanyEnquiriesList } from '../../../api/hooks';
+import { ResponseDialog } from '../../../components/ResponseDialog/ResponseDialog';
 import { t } from '../../../strings';
 import { ActivityList } from './ActivityList';
 
@@ -10,10 +11,20 @@ export interface EnquiriesListProps {
 }
 
 /**
- * Enquiries an agent is waiting on a person to answer. Rows are
- * non-interactive for now; 008.04 adds the user response dialog.
+ * Enquiries an agent is waiting on a person to answer. Each row opens the
+ * response dialog (008.04) on its own conversation.
+ *
+ * **No announcement here.** `NewEnquiryNotifications` (rendered by
+ * `CompanyActivity`, above this list) is now the single writer on the
+ * `enquiry` announcer channel — `Notification` announces on arrival itself,
+ * and a second writer here would coalesce one arriving enquiry into one
+ * confusing phrase. The `removed`-case announcement this list used to make
+ * (an enquiry leaving because it was answered) went with it: that is
+ * background noise — it means someone else dealt with it — and the list's own
+ * count and `aria-busy` still change to reflect it.
  */
 export const EnquiriesList = ({ companyId }: EnquiriesListProps) => {
+  const [openSlug, setOpenSlug] = useState<string | null>(null);
   const query = useLiveCompanyEnquiriesList(companyId, 'awaiting_user');
   // Filtered again here, client-side, in addition to the `?status=` query: a
   // live event patches a closed enquiry's status in place rather than
@@ -23,37 +34,43 @@ export const EnquiriesList = ({ companyId }: EnquiriesListProps) => {
     (conversation) => conversation.status === 'awaiting_user',
   );
 
-  useListChangeAnnouncement(
-    rows?.map((conversation) => conversation.id),
-    {
-      // Its own channel, spoken immediately: ADR-027 wants a new enquiry
-      // announced individually, and a channel's interval is set by whichever
-      // announcement opens its window — folding this into a shared list channel
-      // would make a new enquiry wait behind ten seconds of that list's chatter.
-      channel: 'enquiry',
-      added: 'announce.enquiryNew',
-      throttleMs: ANNOUNCE_IMMEDIATE_MS,
-    },
-  );
-
   return (
-    <ActivityList
-      heading={t('activity.enquiries.heading')}
-      query={query}
-      channel="enquiry"
-      count={rows?.length ?? 0}
-      emptyHeading={t('activity.enquiries.empty.heading')}
-      emptyBody={t('activity.enquiries.empty.body')}
-    >
-      <ul className="activity-list__rows">
-        {rows?.map((conversation) => (
-          // Non-interactive for now; 008.04 adds the user response dialog.
-          <li className="activity-list__row" key={conversation.id}>
-            <p className="activity-list__row-title">{conversation.roleName}</p>
-            <p className="activity-list__row-detail">{conversation.question}</p>
-          </li>
-        ))}
-      </ul>
-    </ActivityList>
+    <>
+      <ActivityList
+        id="enquiries"
+        heading={t('activity.enquiries.heading')}
+        query={query}
+        channel="enquiry"
+        count={rows?.length ?? 0}
+        emptyHeading={t('activity.enquiries.empty.heading')}
+        emptyBody={t('activity.enquiries.empty.body')}
+      >
+        <ul className="activity-list__rows">
+          {rows?.map((conversation) => (
+            <li className="activity-list__row" key={conversation.id}>
+              <Button
+                className="react-aria-Button activity-list__row-title"
+                onPress={() => {
+                  setOpenSlug(conversation.slug);
+                }}
+              >
+                {t('activity.enquiries.open', { role: conversation.roleName })}
+              </Button>
+              <p className="activity-list__row-detail">
+                {conversation.question}
+              </p>
+            </li>
+          ))}
+        </ul>
+      </ActivityList>
+      {openSlug !== null && (
+        <ResponseDialog
+          slug={openSlug}
+          onClose={() => {
+            setOpenSlug(null);
+          }}
+        />
+      )}
+    </>
   );
 };

@@ -113,6 +113,88 @@ const strings = {
   'task.announce.status': 'Task: {status}',
   'task.announce.assignment': '{role}: {status}',
 
+  // 008.04 — the user response dialog, where an agent's question is answered.
+  // `enquiry.loading` is a label rather than a sentence, as above.
+  'enquiry.dialog.heading': 'Question from {role}',
+  'enquiry.dialog.heading.pending': 'Question',
+  'enquiry.loading': 'this question',
+  'enquiry.error': 'This question could not be loaded. Try again.',
+  'enquiry.question.label': 'The question',
+  'enquiry.context.label': 'Context',
+  'enquiry.messages.label': 'Conversation',
+  'enquiry.messages.empty.heading': 'Nothing said yet',
+  'enquiry.messages.empty.body': 'The question above is all there is so far.',
+  'enquiry.message.author.user': 'You',
+  'enquiry.message.author.agent': '{role}',
+  'enquiry.reply.label': 'Your answer',
+  'enquiry.reply.required': 'Type an answer before sending.',
+  'enquiry.reply.send': 'Send answer',
+  // "Sent", not "resumed". The reply route returns before the agent has picked
+  // up again, so anything stronger would claim more than is known.
+  'enquiry.reply.sent': 'Your answer has been sent.',
+  'enquiry.reply.failed': 'Your answer could not be sent. Try again.',
+  'enquiry.reply.alreadyAnswered':
+    'This question has already been answered somewhere else, so your answer was not sent.',
+  'enquiry.reply.gone': 'This question no longer exists.',
+  'activity.enquiries.open': 'Answer the question from {role}',
+  'activity.enquiries.notification': '{role} has asked a question.',
+  'activity.enquiries.notification.link': 'Go to the enquiries list',
+
+  // 008.05 — the task creation dialog. Neither button says a bare "Cancel":
+  // in a task dialog that word already means cancelling the task itself.
+  'task.create.heading': 'New task',
+  'task.create.request.label': 'What needs doing',
+  'task.create.request.description':
+    'Describe the work in your own words. A planning role turns this into a plan.',
+  'task.create.request.required': 'Describe the work before creating the task.',
+  'task.create.plannerRole.label': 'Planning role',
+  'task.create.plannerRole.any': 'Let the company decide',
+  'task.create.expected.label': 'Expected output {position}',
+  'task.create.expected.description':
+    'A file you expect the task to produce, if you know it.',
+  'task.create.expected.add': 'Add an expected output',
+  'task.create.expected.remove': 'Remove expected output {position}',
+  'task.create.expected.required': 'Name the file, or remove this row.',
+  'task.create.materials.label': 'Files to attach',
+  'task.create.materials.selected': 'Files chosen',
+  'task.create.materials.remove': 'Remove {filename}',
+  'task.create.materials.failed':
+    'The task was created, but these files did not attach: {filenames}. It has not been started.',
+  'task.create.start.label': 'Start this task now',
+  'task.create.submit': 'Create task',
+  'task.create.submit.pending': 'Creating…',
+  'task.create.close': 'Close',
+  'task.create.discard': 'Discard this task',
+  'task.create.failed': 'This task could not be created. Try again.',
+  'task.create.rejected':
+    'The server refused this task. Check the form and try again.',
+  'task.create.warnings.label': 'Worth knowing',
+  'task.create.announce.started': 'Task {shortcode} created and started',
+  'task.create.announce.created':
+    'Task {shortcode} created. It has not started yet.',
+
+  // 008.06 — the two read-only dialogs on the account menu. Both are read-only
+  // by scope decision (ADR-020), not by oversight.
+  'profile.heading': 'My profile',
+  'profile.name.label': 'Name',
+  'profile.email.label': 'Email',
+  'profile.subject.label': 'Account identifier',
+  'profile.claim.missing': 'Not provided by your sign-in provider',
+  // Names the setting, because an otherwise-empty dialog has a configuration
+  // cause and a fix — it is not a fault in the dialog.
+  'profile.claims.none':
+    'Your sign-in provider did not send your name or email. An administrator can set OIDC_LOAD_USER_INFO to true to fetch them.',
+  'profile.readOnly': 'Your details are managed by your sign-in provider.',
+  'memberships.heading': 'My company memberships',
+  // Authoritative, not informational (002.05): membership is the access
+  // control, and a company absent from this list refuses the user with a 403.
+  'memberships.intro': 'The companies you have access to.',
+  'memberships.loading': 'your companies',
+  'memberships.error': 'Your companies could not be loaded. Try again.',
+  'memberships.empty.heading': 'You cannot reach any company yet',
+  'memberships.empty.body':
+    'Ask an administrator to add you to a company. Until then there is nothing here to open.',
+
   // Announcements. Every wording here is deliberately count-agnostic —
   // 'Tasks: {count} added', never '{count} tasks added' — because `t` has no
   // plural rules and reads the same for one as for many.

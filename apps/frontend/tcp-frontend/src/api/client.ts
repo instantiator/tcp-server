@@ -111,3 +111,51 @@ export const expectAccepted = async (
   const { error, response } = result;
   if (!response.ok) throw apiError(response, error);
 };
+
+/**
+ * Posts one file as `multipart/form-data`.
+ *
+ * **The one request that does not go through {@link api}, and why.**
+ * `openapi-typescript` maps `format: binary` to `string`, so the generated
+ * type for an upload body is `{ file: string }` — a `File` cannot be passed to
+ * it without a cast, and this project does not cast at the boundary. Rather
+ * than weaken the type or bend the generator for a single route, this reaches
+ * the same three things `client.ts` exists to own: the token, the 401 policy,
+ * and the `ApiError` shape. `src/events/connect.ts` already does exactly this
+ * for the event stream, for the same kind of reason.
+ *
+ * The path is a plain string rather than a generated one, which is the cost of
+ * the above — it is built by the single caller in `endpoints.ts` and goes
+ * nowhere near a component.
+ *
+ * `Content-Type` is deliberately unset: the browser writes it, including the
+ * multipart boundary, which cannot be guessed here.
+ */
+export const postFile = async (path: string, file: File): Promise<void> => {
+  const body = new FormData();
+  body.append('file', file);
+
+  const token = await getAccessToken();
+  const headers = new Headers();
+  if (token !== null) headers.set('Authorization', `Bearer ${token}`);
+
+  let response: Response;
+  try {
+    response = await fetch(new URL(path, window.location.origin), {
+      method: 'POST',
+      headers,
+      body,
+    });
+  } catch (cause) {
+    throw networkError(cause);
+  }
+
+  if (response.status === 401) void handleUnauthorized();
+  if (!response.ok) {
+    // The body is read here rather than by `apiError`, which takes an
+    // already-parsed one: reading a stream twice throws and hides the real
+    // failure.
+    const parsed: unknown = await response.json().catch(() => null);
+    throw apiError(response, parsed);
+  }
+};

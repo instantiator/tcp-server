@@ -18,6 +18,12 @@ export interface ActivityQuery {
 }
 
 export interface ActivityListProps {
+  /**
+   * An id for the outermost element, so a link elsewhere in the app (a
+   * notification's `durableHref`) has a fragment to point at. Omit for a list
+   * nothing links to directly.
+   */
+  readonly id?: string;
   /** The list's name, already resolved through `t`. */
   readonly heading: string;
   /**
@@ -58,6 +64,7 @@ export interface ActivityListProps {
  * list has to implement.
  */
 export const ActivityList = ({
+  id,
   heading,
   query: { isPending, error, refetch },
   channel,
@@ -71,7 +78,7 @@ export const ActivityList = ({
   const headingId = useId();
 
   return (
-    <section className="activity-list" aria-labelledby={headingId}>
+    <section id={id} className="activity-list" aria-labelledby={headingId}>
       {/*
         `h2`: the page's `h1` is the company name and nothing sits between them,
         so this is the next level. Skipping to `h3` to reflect the tab frame's

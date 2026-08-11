@@ -38,11 +38,16 @@ import {
   useCompleteChatMutation,
   useConversation,
   useConversations,
+  useCreateTaskMutation,
+  useReplyToEnquiryMutation,
   useRole,
   useStartChatMutation,
+  useStartTaskMutation,
   useTask,
   useTasks,
+  useUploadMaterialMutation,
 } from './endpoints';
+import type { components } from './schema';
 
 export { useCompanies } from './endpoints';
 
@@ -192,6 +197,113 @@ export const useCancelTask = (taskId: string) => {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['task'] });
       void queryClient.invalidateQueries({ queryKey: ['assignment'] });
+    },
+  });
+};
+
+/** What the creation dialog collects, before any of it reaches a route. */
+export interface CreateTaskInput {
+  readonly companyId: string;
+  readonly request: string;
+  readonly plannerRoleId?: string;
+  /** Filenames the task is expected to produce. */
+  readonly expected?: readonly string[];
+  /** Files to attach. Uploaded one at a time, after the task exists. */
+  readonly files: readonly File[];
+  /** Whether to start the task once it is created and its files are on it. */
+  readonly start: boolean;
+}
+
+/** What happened, in enough detail for the dialog to say so honestly. */
+export interface CreateTaskResult {
+  readonly task: components['schemas']['TaskResponseDto'];
+  readonly warnings: readonly string[];
+  /** Names of files that did not attach. Empty when everything landed. */
+  readonly failedUploads: readonly string[];
+  readonly started: boolean;
+}
+
+/**
+ * Creates a task, attaches its files, and optionally starts it.
+ *
+ * One facade over three routes rather than three hooks, because the calls are
+ * ordered and a later one is meaningless without the earlier: the server
+ * refuses a material once the task has left `ready`, so every file has to land
+ * before the start.
+ *
+ * **A failed upload does not fail the mutation and does not undo the task.**
+ * There is no way to un-create it, so pretending the whole thing failed would
+ * be a lie the user then has to discover. It resolves with the names that did
+ * not attach, and skips the start — a task that was meant to have its files is
+ * better left in `ready`, where they can still be added, than started without
+ * them.
+ *
+ * Uploads run one at a time. A parallel burst against a single task is load
+ * nobody asked for, and it makes "which ones failed" depend on timing.
+ */
+export const useCreateTask = () => {
+  const queryClient = useQueryClient();
+  const createTask = useCreateTaskMutation();
+  const uploadMaterial = useUploadMaterialMutation();
+  const startTask = useStartTaskMutation();
+
+  return useMutation({
+    mutationFn: async (input: CreateTaskInput): Promise<CreateTaskResult> => {
+      const { task, warnings } = await createTask.mutateAsync({
+        companyId: input.companyId,
+        request: input.request,
+        ...(input.plannerRoleId === undefined
+          ? {}
+          : { plannerRoleId: input.plannerRoleId }),
+        ...(input.expected === undefined || input.expected.length === 0
+          ? {}
+          : {
+              expected: input.expected.map((value) => ({
+                type: 'task-completed-path' as const,
+                value,
+              })),
+            }),
+      });
+
+      const failedUploads: string[] = [];
+      for (const file of input.files) {
+        try {
+          await uploadMaterial.mutateAsync({ id: task.id, file });
+        } catch {
+          // Collected rather than thrown: the task exists either way, and the
+          // dialog has to be able to name every file that did not make it.
+          failedUploads.push(file.name);
+        }
+      }
+
+      const started = input.start && failedUploads.length === 0;
+      if (started) await startTask.mutateAsync(task.id);
+
+      return { task, warnings, failedUploads, started };
+    },
+    onSuccess: () => {
+      // Both keys, as {@link useCancelTask} does: starting a task fans it out
+      // into assignments, and the lists holding either have to agree.
+      void queryClient.invalidateQueries({ queryKey: ['task'] });
+      void queryClient.invalidateQueries({ queryKey: ['assignment'] });
+    },
+  });
+};
+
+/**
+ * Answers an enquiry, and makes every list holding it agree.
+ *
+ * Only `['enquiry']` is invalidated. The agent resuming arrives on the
+ * company's event stream and patches the cache without help — invalidating
+ * `['agent']` too would be a second, slower source of the same truth.
+ */
+export const useReplyToEnquiry = (slug: string) => {
+  const queryClient = useQueryClient();
+  const reply = useReplyToEnquiryMutation(slug);
+  return useMutation({
+    mutationFn: (content: string) => reply.mutateAsync(content),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['enquiry'] });
     },
   });
 };

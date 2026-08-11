@@ -403,8 +403,12 @@ describe('CompanyActivity', () => {
     const enquiriesRegion = screen.getByRole('region', {
       name: t('activity.enquiries.heading'),
     });
+    // 008.04: the row is the button that opens the response dialog, not a
+    // bare role name — the same shape 008.03 gave `TasksList`'s rows.
     expect(
-      within(enquiriesRegion).getByText(CONVERSATION_1.roleName),
+      within(enquiriesRegion).getByRole('button', {
+        name: t('activity.enquiries.open', { role: CONVERSATION_1.roleName }),
+      }),
     ).toBeInTheDocument();
     expect(
       within(enquiriesRegion).getByText(CONVERSATION_1.question),
@@ -1438,6 +1442,13 @@ describe('CompanyActivity', () => {
     });
 
     it('announces a new enquiry immediately, not behind the list throttle window', async () => {
+      // 008.04: `EnquiriesList` no longer announces arrivals itself —
+      // `NewEnquiryNotifications` does, rendered above the five lists in
+      // `CompanyActivity`, and it is now the single writer on the `enquiry`
+      // channel. `Notification` announces immediately on appearance
+      // (`ANNOUNCE_IMMEDIATE_MS`), which is what keeps this assertion's
+      // point — a new enquiry is not held behind the list's own throttle
+      // window — true under the new writer.
       await listen();
       respondActivity({ conversations: { body: [] } });
       const { queryClient } = renderActivity();
@@ -1471,13 +1482,15 @@ describe('CompanyActivity', () => {
       await within(enquiriesRegion).findByText(CONVERSATION_1.question);
 
       // Deliberately far shorter than the default list window
-      // (`ANNOUNCE_THROTTLE_MS`, 10s): the enquiry channel uses
+      // (`ANNOUNCE_THROTTLE_MS`, 10s): `Notification` uses
       // `ANNOUNCE_IMMEDIATE_MS` (0), so it must already be spoken.
       expect(ANNOUNCE_IMMEDIATE_MS).toBe(0);
       await vi.advanceTimersByTimeAsync(1);
 
       expect(await virtual.spokenPhraseLog()).toEqual([
-        'polite: New enquiries: 1',
+        `polite: ${t('activity.enquiries.notification', {
+          role: CONVERSATION_1.roleName,
+        })}`,
       ]);
     });
 

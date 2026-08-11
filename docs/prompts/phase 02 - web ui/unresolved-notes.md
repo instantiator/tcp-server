@@ -632,13 +632,81 @@ Testable: a task is open, the planner adds an assignment to it, and nothing is s
 
 Testable: `npm run api:generate` produces a real type for `materials`/`expected`/`completed` instead of `Record<string, never>[]`. When it does, the task dialog is the first place worth rendering them.
 
-### Nothing in the task dialog shows a date
+### A closed enquiry keeps its row in the cached list, and every reader has to re-filter
 
-**Raised by:** 008.03 · **Condition to revisit:** any surface needs a formatted timestamp
+**Raised by:** 008.04 · **Condition to revisit:** `applyEvent` learns to remove a row from a cached list
 
-The task and its assignments both carry `createdAt`/`updatedAt`, but there is no date formatter anywhere in the web client and `t()` has no date handling — so the task dialog omits them rather than rendering a raw ISO-8601 string. A single shared formatter is the fix, not a one-off for this surface.
+`applyEvent` (`src/events/cache.ts`) patches a cached list row in place when an event's `summary` matches an id it already holds. Every backend publisher of an `enquiry` state change — `conversation.controller.ts`, `pause-and-resume.service.ts`, `company-priming.service.ts` — sends a `summary` carrying the same id. So when an enquiry is answered, the cached `awaiting_user` list gets its `status` updated to `closed` and **keeps the row**; the invalidate-and-refetch path that would have dropped it is skipped precisely because the patch succeeded.
 
-Testable: a second surface needs a formatted date. Build the shared formatter then, and have the task dialog pick it up rather than inventing its own first.
+The query's `status=awaiting_user` filter therefore only describes what was true when it was fetched. `EnquiriesList` already knew this and re-filters client-side. `NewEnquiryNotifications` did not, and shipped in this prompt with a comment claiming it dropped notifications for enquiries that had left the list while doing nothing of the sort — a stale notification for a question someone else had already answered would sit there until dismissed by hand. Found by writing the test, fixed with the same client-side filter, and covered by a test that fails without it.
+
+The general shape is the problem: this is the second reader of that list, and the second to need the same guard. A third will need it too, and nothing warns them.
+
+Testable: `applyEvent` drops a row whose patched status leaves the filter its list was fetched under. Until then, **every** reader of a status-filtered live list must re-filter, and the two that do should be the examples a third copies.
+
+### An enquiry leaving the awaiting list is no longer announced
+
+**Raised by:** 008.04 · **Condition to revisit:** a user reports not knowing an enquiry was answered elsewhere, or 009.02's manual pass finds the gap
+
+`Notification` always announces, immediately, on whichever channel it is given. Rendering one for a new enquiry on the `enquiry` channel while `EnquiriesList` still called `useListChangeAnnouncement` on that same channel produced two announcements for one arrival, coalesced by the announcer into a single phrase that said the same thing twice. One writer per channel is the convention, so the notification became that writer and the list's call was removed.
+
+The cost is the `removed` half of what that call did: nobody is now told when an enquiry leaves the awaiting list because someone else answered it. That is background noise rather than a request to act, and the list's item count and `aria-busy` still change — but it is a real loss, taken knowingly rather than overlooked.
+
+Testable: a user answers an enquiry in `tcp-cli` while another has the activity view open, and the second user is not told the question is gone. If that reads badly in 009.02, the fix is a second channel for departures, not restoring the doubled announcement on the shared one.
+
+### The client reads soft warnings that no task route ever sends
+
+**Raised by:** 008.04 · **Condition to revisit:** a `computeTaskWarnings` appears, or a data-quality check for tasks is asked for
+
+The creation dialog surfaces `X-Tcp-Warnings` from the create response, because the prompt asked for soft warnings to be shown rather than dropped. On the server, `setWarningsHeader` is called only by `api.company.controller.ts`, `api.role.controller.ts` and `knowledge.controller.ts` — **never by `task.controller.ts`**. So the path is real, tested against a mocked header, and dead in production.
+
+It was built anyway rather than left out: the reading costs a few lines, and a warning the server starts sending would otherwise be silently dropped by a client that never looked. No backend change was made to start sending task warnings — what is worth warning about on a task is a data-quality decision, not this prompt's.
+
+Testable: `grep -rn setWarningsHeader apps/backend/apps/tcp-server/src/api/task.controller.ts` returns a hit. Until then the dialog's warnings panel is unreachable in a real deployment.
+
+### A task whose files failed to upload cannot be retried from the UI
+
+**Raised by:** 008.04 · **Condition to revisit:** uploads fail often enough for someone to notice
+
+Creating a task with attachments is three ordered calls: create, upload each file, then start. The server refuses a material once the task has left `ready`, so the uploads must land before the start. When one fails, `useCreateTask` does not throw and does not start the task — the task exists in `ready` with some of its files, and the dialog names the ones that did not attach.
+
+There is no retry. Offering one means plumbing the created task's id back through a form that has already succeeded at its main job, and the recovery path that exists — `tcp-cli`, or `PUT /api/task/{id}` while it is still `ready` — is not discoverable from the dialog. The alternative considered and rejected was failing the whole creation, which would be a lie: the task is really there.
+
+Testable: someone hits this and has to ask what to do. The fix then is a retry on the dialog's failure panel, not a change to the ordering.
+
+### An empty profile dialog is a configuration state, and nothing will prompt anyone to check it
+
+**Raised by:** 008.04 (carrying 004.01) · **Condition to revisit:** an identity provider other than Zitadel is put in front of this application
+
+The profile dialog reads `name`, `email` and `sub` from the ID token's claims through `getUserManager()`'s stored user — there is deliberately no `/api/me` (ADR-023). Whether the client also calls the provider's userinfo endpoint is the runtime setting `OIDC_LOAD_USER_INFO`, `false` by default because Zitadel puts `profile` and `email` in the ID token.
+
+A provider that returns a minimal ID token therefore produces a dialog with two "not provided by your sign-in provider" rows and an account identifier. That is a variable nobody set, not a bug in the dialog — so the dialog says so in its own text, naming the setting. Changing it needs no rebuild.
+
+This one **also has a memory**, because it is conditional on a provider swap that nothing in this repository will ever raise.
+
+Testable: `OIDC_LOAD_USER_INFO=false` against a provider whose ID token omits `profile`/`email` shows the fallback. Setting it to `true` fills the dialog without a rebuild.
+
+### Nothing in the task dialog shows a date, and the second surface has now arrived
+
+**Raised by:** 008.03 · **Updated by:** 008.04 · **Condition to revisit:** now met — a third surface needs a timestamp, or the response dialog's formatter is copied once
+
+The task and its assignments both carry `createdAt`/`updatedAt`, but there is no date formatter anywhere in the web client and `t()` has no date handling — so the task dialog omits them rather than rendering a raw ISO-8601 string.
+
+008.03 said the trigger was "a second surface needs a formatted date". **That has happened.** The response dialog renders each message's timestamp, and it does so in the _company's_ timezone rather than the browser's — `ConversationDetailResponseDto` carries `companyTimezone`, and using the browser's zone would misreport when an agent asked its question. It has its own local `formatTime` in `ResponseDialog.tsx`, which is now the only date formatting in the application.
+
+So the shared formatter is genuinely owed and was not built here: extracting it correctly means deciding whose timezone each surface uses, and only one surface has an answer so far. The honest state is one local formatter with a known home to move to, not a shared one nobody has designed.
+
+Testable: a third surface needs a timestamp, or someone copies `formatTime` out of `ResponseDialog.tsx`. Either is the moment to extract it — and the extraction has to carry the timezone question, not just the formatting.
+
+### An invalid company timezone silently falls back to the browser's
+
+**Raised by:** 008.04 · **Condition to revisit:** a company can set its timezone through the UI
+
+`Intl.DateTimeFormat` throws `RangeError` on a timezone string it does not recognise, and a throw while rendering the conversation would blank the whole dialog over a formatting detail. So `formatTime` catches it and re-formats in the browser's zone instead.
+
+That is the right trade for reading a conversation, but it is silent: a company with a misconfigured timezone shows plausible times in the wrong zone, and nothing says so. Nothing validates `timezone` on the way in either — `companyTimezone` is a free string on the company record.
+
+Testable: the company configuration view (010.01) lets someone type a timezone. Validate it there, where the mistake is made and can be reported, rather than at every surface that reads it.
 
 ## Carried into a later prompt
 
@@ -772,3 +840,9 @@ same skeleton. Rows below that name those indices still resolve; read them as th
 | Journey 3 should also cover cancelling a task — the confirmation and its focus behaviour are proven only in jsdom against a mocked stream                                                            | 008.03    | `009.01` |
 | Several named regions inside one modal, one per assignment — judge whether stepping through them to find a transcript reads as navigable or as noise                                                 | 008.03    | `009.02` |
 | Assignment panels open collapsed by choice — judge whether a task's work being one keypress away reads as tidy or as hidden                                                                          | 008.03    | `009.02` |
+| `CreateTaskDialog` is built and tested but has no trigger anywhere, deliberately — wiring it is one `useState` and one conditional mount                                                             | 008.04    | `008.07` |
+| Journey 3 needs a real file upload (`setInputFiles`) and the create → upload → start ordering; jsdom fakes both the `File` and the multipart request                                                 | 008.04    | `009.01` |
+| Journey 5 should include the already-answered race — answer from `tcp-cli` first, then submit from the UI and confirm the `409` reads correctly                                                      | 008.04    | `009.01` |
+| The MVP's two forms are proven only in jsdom; confirm a real screen reader announces a field error on focus, and says why focus moved after a failed submit                                          | 008.04    | `009.02` |
+| Every reader of a status-filtered live list must re-filter client-side — `applyEvent` patches a closed row in place and never removes it                                                             | 008.04    | `009.01` |
+| Judge the native file input's selected-files list — adding and removing a file changes a list that nothing announces                                                                                 | 008.04    | `009.02` |

@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 
-import { api, expectAccepted, unwrap } from './client';
+import { api, expectAccepted, postFile, unwrap } from './client';
+import { apiError, networkError } from './errors';
 import {
   queryKeys,
   type AgentListParams,
@@ -9,6 +10,8 @@ import {
   type ConversationListParams,
   type TaskListParams,
 } from './query-keys';
+import type { components } from './schema';
+import { readWarnings } from './warnings';
 
 /**
  * One hook per REST route, as TanStack Query hooks (ADR-021). Internal to
@@ -282,4 +285,77 @@ export const useCancelTaskMutation = (id: string) =>
   useMutation({
     mutationFn: () =>
       unwrap(api.POST('/api/task/{id}/cancel', { params: { path: { id } } })),
+  });
+
+/**
+ * Creates a task in the `ready` state. Starting it is a separate call, and
+ * materials can only be uploaded before it is started.
+ *
+ * The one mutation here that does not go through {@link unwrap}: it has to
+ * reach the response's headers for the soft warnings, and `unwrap` returns the
+ * body alone. The failure path is `unwrap`'s, so an error still arrives as an
+ * `ApiError` like every other.
+ */
+export const useCreateTaskMutation = () =>
+  useMutation({
+    mutationFn: async (body: components['schemas']['CreateTaskDto']) => {
+      let result;
+      try {
+        result = await api.POST('/api/task', { body });
+      } catch (cause) {
+        // The request never landed — same reasoning as `unwrap`'s catch.
+        throw networkError(cause);
+      }
+
+      const { data, error, response } = result;
+      if (!response.ok || data === undefined) throw apiError(response, error);
+
+      return { task: data, warnings: readWarnings(response) };
+    },
+  });
+
+/**
+ * Starts a task: the planner runs and assignments are fanned out from it.
+ *
+ * `unwrap`, not `expectAccepted` — the route answers `202` but with the task
+ * as its body, the same shape as cancel above.
+ */
+export const useStartTaskMutation = () =>
+  useMutation({
+    mutationFn: (id: string) =>
+      unwrap(api.POST('/api/task/{id}/start', { params: { path: { id } } })),
+  });
+
+/**
+ * Uploads one file to a task. Refused once the task has left `ready`.
+ *
+ * Goes through {@link postFile} rather than {@link api} — see its own note for
+ * why a `File` cannot travel through the generated body type.
+ */
+export const useUploadMaterialMutation = () =>
+  useMutation({
+    mutationFn: ({ id, file }: { id: string; file: File }) =>
+      postFile(`/api/task/${id}/materials`, file),
+  });
+
+/**
+ * Answers an enquiry, which closes it and resumes the agent that asked.
+ *
+ * The resume is a side effect the server fires and forgets, so this returning
+ * does not mean the agent has picked up again — only that the answer was
+ * recorded. Refused with a `409` when the conversation is already closed.
+ *
+ * `authorIdentifier` is deliberately not sent. The server knows who the caller
+ * is from the bearer token, and a client-supplied identifier beside it is a
+ * second answer to the same question that can disagree.
+ */
+export const useReplyToEnquiryMutation = (slug: string) =>
+  useMutation({
+    mutationFn: (content: string) =>
+      unwrap(
+        api.POST('/api/conversation/{slug}/reply', {
+          params: { path: { slug } },
+          body: { content },
+        }),
+      ),
   });

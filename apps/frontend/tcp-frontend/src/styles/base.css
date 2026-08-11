@@ -183,6 +183,77 @@ body {
 }
 
 /*
+ * Text fields, and the same reason a fourth time: React Aria ships no styling,
+ * so an unstyled input has no border and is indistinguishable from the page it
+ * sits on.
+ *
+ * The label is stacked above its control rather than beside it, so a long
+ * label wraps without squeezing the field, and so the pairing survives a
+ * narrow viewport and a large text size (WCAG 1.4.4, 1.4.10).
+ */
+.react-aria-TextField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tcp-space-xs);
+}
+
+.react-aria-Label {
+  font-weight: 600;
+}
+
+.react-aria-Input,
+.react-aria-TextArea {
+  padding: var(--tcp-space-sm);
+  border: var(--tcp-border-width) solid var(--tcp-color-border);
+  border-radius: var(--tcp-radius);
+  background-color: var(--tcp-color-bg);
+  color: var(--tcp-color-text);
+  font: inherit;
+}
+
+.react-aria-TextArea {
+  min-block-size: calc(var(--tcp-space-xl) * 2);
+  resize: vertical;
+}
+
+/* Standing help text, quieter than the label but not below AA contrast. */
+.react-aria-Text[slot='description'] {
+  color: var(--tcp-color-text-muted);
+}
+
+/*
+ * The invalid state carries a heavier border as well as a colour, so it
+ * survives a monochrome rendering (WCAG 1.4.1) — the same reasoning as the
+ * radio and checkbox marks above.
+ */
+.react-aria-Input[data-invalid],
+.react-aria-TextArea[data-invalid] {
+  border-width: var(--tcp-focus-ring-width);
+  border-color: var(--tcp-color-danger);
+}
+
+/*
+ * Weight as well as colour, for the same reason. The association a screen
+ * reader relies on is `aria-describedby`, which React Aria wires from
+ * `isInvalid` plus this element — it is not carried by any of this styling.
+ */
+.react-aria-FieldError {
+  color: var(--tcp-color-danger);
+  font-weight: 600;
+}
+
+/*
+ * A `Select`, stacked like `.react-aria-TextField` above: its trigger button
+ * already picks up `.react-aria-Button`'s styling, so the field itself only
+ * needs the label-above-control layout.
+ */
+.react-aria-Select {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tcp-space-xs);
+}
+
+/*
  * The account menu, for the same reason the radios needed rules above: React
  * Aria ships no styling, so an unstyled popover renders as unpositioned,
  * transparent text over the page — unreadable rather than merely plain.
@@ -211,6 +282,29 @@ body {
  * `data-focused` state, so this single rule is the highlight for both.
  */
 .react-aria-MenuItem[data-focused] {
+  background-color: var(--tcp-color-accent);
+  color: var(--tcp-color-accent-text);
+}
+
+/*
+ * A `Select`'s own popover list. Same shape as the menu above — React Aria's
+ * `ListBox` is unstyled the same way — so the rules mirror it exactly rather
+ * than inventing a second visual language for "a list of options in a
+ * popover".
+ */
+.react-aria-ListBox {
+  margin: 0;
+  padding: var(--tcp-space-xs);
+  outline: none;
+}
+
+.react-aria-ListBoxItem {
+  padding: var(--tcp-space-sm) var(--tcp-space-md);
+  border-radius: var(--tcp-radius);
+  cursor: default;
+}
+
+.react-aria-ListBoxItem[data-focused] {
   background-color: var(--tcp-color-accent);
   color: var(--tcp-color-accent-text);
 }

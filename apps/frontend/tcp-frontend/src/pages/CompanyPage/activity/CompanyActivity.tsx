@@ -4,6 +4,7 @@ import { AgentsList } from './AgentsList';
 import { ChatsList } from './ChatsList';
 import { ConsultationsList } from './ConsultationsList';
 import { EnquiriesList } from './EnquiriesList';
+import { NewEnquiryNotifications } from './NewEnquiryNotifications';
 import { TasksList } from './TasksList';
 import './activity.css';
 
@@ -35,6 +36,13 @@ export const CompanyActivity = ({ companyId }: CompanyActivityProps) => {
 
   return (
     <div className="company-activity">
+      {/*
+        First, and rendered unconditionally: it reads the same enquiries
+        query `EnquiriesList` does, so it costs no extra request, and it is
+        now the single writer on the `enquiry` announcer channel (see the
+        comment in `EnquiriesList`).
+      */}
+      <NewEnquiryNotifications companyId={companyId} />
       <AgentsList companyId={companyId} roleNames={roleNames} />
       {/* No `roleNames`: a task belongs to a company, not to a role. */}
       <TasksList companyId={companyId} />
