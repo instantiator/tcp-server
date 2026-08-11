@@ -31,6 +31,13 @@ const TASKS_HEADING = 'Tasks';
 const CONSULTATIONS_HEADING = 'Consultations';
 const ENQUIRIES_HEADING = 'Enquiries';
 
+/**
+ * A task row's accessible name (008.03): the button that opens its dialog,
+ * copied from `activity.tasks.open` in `strings.ts` by hand for the same
+ * reason the headings above are — keep it in step if the copy there changes.
+ */
+const taskRowName = (shortcode: string) => `Open task ${shortcode}`;
+
 interface TokenEndpoint {
   token_endpoint: string;
 }
@@ -170,7 +177,7 @@ test.describe('company activity', () => {
     await expect(
       page
         .getByRole('region', { name: TASKS_HEADING })
-        .getByText(taskShortcode, { exact: true }),
+        .getByRole('button', { name: taskRowName(taskShortcode) }),
     ).toBeVisible();
 
     const { violations } = await new AxeBuilder({ page }).analyze();
@@ -205,7 +212,7 @@ test.describe('company activity', () => {
     await expect(
       page
         .getByRole('region', { name: TASKS_HEADING })
-        .getByText(taskShortcode, { exact: true }),
+        .getByRole('button', { name: taskRowName(taskShortcode) }),
     ).toBeVisible();
 
     // Exactly one, not "at least one": ADR-030 states `CompanyActivity`'s
@@ -223,7 +230,7 @@ test.describe('company activity', () => {
 
     const taskRow = page
       .getByRole('region', { name: TASKS_HEADING })
-      .getByText(taskShortcode, { exact: true });
+      .getByRole('button', { name: taskRowName(taskShortcode) });
     await expect(taskRow).toBeVisible();
 
     // Driving the change through the real API, not the cache: this is the

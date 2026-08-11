@@ -31,6 +31,7 @@ import {
   useAgents,
   useAssignment,
   useAssignments,
+  useCancelTaskMutation,
   useCompany,
   useCompanyKnowledge,
   useCompanyRoles,
@@ -166,6 +167,30 @@ export const useCompleteChat = (agentId: string) => {
   return useMutation({
     mutationFn: () => completeChat.mutateAsync(),
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['assignment'] });
+    },
+  });
+};
+
+/**
+ * Cancels a task, and makes every list holding it agree.
+ *
+ * Both keys are invalidated because the server cascades: the task moves to
+ * `cancelled` and so does every assignment still working it. The task's own
+ * change arrives on its event stream, but the assignments' do not all carry a
+ * summary, so a refetch is what keeps the panels honest.
+ *
+ * The server refuses a task that is already terminal with a `409`. The
+ * control is hidden for those statuses, so this is a race rather than an
+ * ordinary path — it still surfaces through `isError`.
+ */
+export const useCancelTask = (taskId: string) => {
+  const queryClient = useQueryClient();
+  const cancelTask = useCancelTaskMutation(taskId);
+  return useMutation({
+    mutationFn: () => cancelTask.mutateAsync(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['task'] });
       void queryClient.invalidateQueries({ queryKey: ['assignment'] });
     },
   });

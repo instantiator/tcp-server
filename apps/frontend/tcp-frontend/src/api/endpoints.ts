@@ -269,3 +269,17 @@ export const useCompleteChatMutation = (id: string) =>
         api.POST('/api/agent/{id}/complete', { params: { path: { id } } }),
       ),
   });
+
+/**
+ * Cancels a task: it moves to `cancelled`, and the server cascades that to its
+ * still-running assignments and their agents.
+ *
+ * `unwrap`, not `expectAccepted` — the route answers `202` but with the
+ * cancelled task as its body, and `unwrap` accepts any `ok` response that
+ * carries one.
+ */
+export const useCancelTaskMutation = (id: string) =>
+  useMutation({
+    mutationFn: () =>
+      unwrap(api.POST('/api/task/{id}/cancel', { params: { path: { id } } })),
+  });

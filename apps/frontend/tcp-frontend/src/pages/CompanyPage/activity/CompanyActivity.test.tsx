@@ -318,6 +318,15 @@ const listen = async () => {
 /** Long enough for any open announcement window to have flushed. */
 const settle = () => vi.advanceTimersByTimeAsync(ANNOUNCE_THROTTLE_MS * 2);
 
+/**
+ * A task row's accessible name (008.03): the button that opens its dialog,
+ * not the bare shortcode. `TasksList` no longer renders the shortcode as its
+ * own text node, so queries that used to look it up by text find this button
+ * by role and name instead.
+ */
+const taskRowName = (shortcode: string) =>
+  t('activity.tasks.open', { shortcode });
+
 const ACTIVE_FILTER_LABELS: readonly StringKey[] = [
   'activity.status.ready',
   'activity.status.planning',
@@ -377,7 +386,11 @@ describe('CompanyActivity', () => {
     const tasksRegion = screen.getByRole('region', {
       name: t('activity.tasks.heading'),
     });
-    expect(within(tasksRegion).getByText(TASK_1.shortcode)).toBeInTheDocument();
+    expect(
+      within(tasksRegion).getByRole('button', {
+        name: taskRowName(TASK_1.shortcode),
+      }),
+    ).toBeInTheDocument();
     expect(within(tasksRegion).getByText(TASK_1.request)).toBeInTheDocument();
 
     const consultationsRegion = screen.getByRole('region', {
@@ -442,8 +455,16 @@ describe('CompanyActivity', () => {
     const tasksRegion = screen.getByRole('region', {
       name: t('activity.tasks.heading'),
     });
-    expect(within(tasksRegion).getByText(TASK_1.shortcode)).toBeInTheDocument();
-    expect(within(tasksRegion).queryByText('TASK-2')).not.toBeInTheDocument();
+    expect(
+      within(tasksRegion).getByRole('button', {
+        name: taskRowName(TASK_1.shortcode),
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(tasksRegion).queryByRole('button', {
+        name: taskRowName('TASK-2'),
+      }),
+    ).not.toBeInTheDocument();
 
     const consultationsRegion = screen.getByRole('region', {
       name: t('activity.consultations.heading'),
@@ -468,7 +489,9 @@ describe('CompanyActivity', () => {
       respondActivity({ tasks: { body: [TASK_1] } });
       const { queryClient } = renderActivity();
 
-      await screen.findByText(TASK_1.shortcode);
+      await screen.findByRole('button', {
+        name: taskRowName(TASK_1.shortcode),
+      });
 
       act(() => {
         applyEvent(
@@ -486,7 +509,9 @@ describe('CompanyActivity', () => {
       });
 
       await waitFor(() => {
-        expect(screen.queryByText(TASK_1.shortcode)).not.toBeInTheDocument();
+        expect(
+          screen.queryByRole('button', { name: taskRowName(TASK_1.shortcode) }),
+        ).not.toBeInTheDocument();
       });
     });
 
@@ -534,8 +559,12 @@ describe('CompanyActivity', () => {
       respondActivity({ tasks: { body: [TASK_1, hidden] } });
       const { queryClient } = renderActivity();
 
-      await screen.findByText(TASK_1.shortcode);
-      expect(screen.queryByText(hidden.shortcode)).not.toBeInTheDocument();
+      await screen.findByRole('button', {
+        name: taskRowName(TASK_1.shortcode),
+      });
+      expect(
+        screen.queryByRole('button', { name: taskRowName(hidden.shortcode) }),
+      ).not.toBeInTheDocument();
 
       act(() => {
         applyEvent(
@@ -555,10 +584,10 @@ describe('CompanyActivity', () => {
       const tasksRegion = screen.getByRole('region', {
         name: t('activity.tasks.heading'),
       });
-      const shortcodeCell = await within(tasksRegion).findByText(
-        hidden.shortcode,
-      );
-      const row = shortcodeCell.closest('li');
+      const rowButton = await within(tasksRegion).findByRole('button', {
+        name: taskRowName(hidden.shortcode),
+      });
+      const row = rowButton.closest('li');
       if (row === null) throw new Error('row not found');
       // `TASK_1` is also `ready`, so scope to this row rather than asserting
       // the status text exists anywhere in the list.
@@ -637,10 +666,12 @@ describe('CompanyActivity', () => {
       const tasksRegion = await screen.findByRole('region', {
         name: t('activity.tasks.heading'),
       });
-      await within(tasksRegion).findByText('TASK-1');
+      await within(tasksRegion).findByRole('button', {
+        name: taskRowName('TASK-1'),
+      });
 
       const before = within(tasksRegion)
-        .getAllByText(/^TASK-\d$/)
+        .getAllByRole('button', { name: /^Open task TASK-\d$/ })
         .map((el) => el.textContent);
 
       // The middle task's status changes but stays inside the default
@@ -665,7 +696,7 @@ describe('CompanyActivity', () => {
       await within(tasksRegion).findByText(t('activity.status.planning'));
 
       const after = within(tasksRegion)
-        .getAllByText(/^TASK-\d$/)
+        .getAllByRole('button', { name: /^Open task TASK-\d$/ })
         .map((el) => el.textContent);
       expect(after).toEqual(before);
     });
@@ -930,18 +961,26 @@ describe('CompanyActivity', () => {
       const user = userEvent.setup();
       renderActivity();
 
-      await screen.findByText(TASK_1.shortcode);
-      expect(screen.queryByText(hidden.shortcode)).not.toBeInTheDocument();
+      await screen.findByRole('button', {
+        name: taskRowName(TASK_1.shortcode),
+      });
+      expect(
+        screen.queryByRole('button', { name: taskRowName(hidden.shortcode) }),
+      ).not.toBeInTheDocument();
 
       const succeededCheckbox = screen.getByRole('checkbox', {
         name: t('activity.status.succeeded'),
       });
 
       await user.click(succeededCheckbox);
-      expect(screen.getByText(hidden.shortcode)).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: taskRowName(hidden.shortcode) }),
+      ).toBeInTheDocument();
 
       await user.click(succeededCheckbox);
-      expect(screen.queryByText(hidden.shortcode)).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: taskRowName(hidden.shortcode) }),
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -1455,14 +1494,18 @@ describe('CompanyActivity', () => {
       const user = userEvent.setup({ delay: null });
       renderActivity();
 
-      await screen.findByText(TASK_1.shortcode);
+      await screen.findByRole('button', {
+        name: taskRowName(TASK_1.shortcode),
+      });
       await settle();
       await virtual.clearSpokenPhraseLog();
 
       await user.click(
         screen.getByRole('checkbox', { name: t('activity.status.succeeded') }),
       );
-      await screen.findByText(hidden.shortcode);
+      await screen.findByRole('button', {
+        name: taskRowName(hidden.shortcode),
+      });
       await settle();
 
       // The user narrowed a filter; the list's own hook reseeds silently
@@ -1526,7 +1569,9 @@ describe('CompanyActivity', () => {
       respondActivity();
       renderActivity();
 
-      await screen.findByText(TASK_1.shortcode);
+      await screen.findByRole('button', {
+        name: taskRowName(TASK_1.shortcode),
+      });
       await settle();
 
       // Nine tasks already in flight on arrival is one page load, not nine

@@ -83,6 +83,36 @@ const strings = {
   'chat.complete.failed': 'This chat could not be completed. Try again.',
   'chat.dock.label': '{role} — {status}',
 
+  // The task dialog (008.03): its own heading, the task's details, one
+  // collapsible panel per assignment, and the confirmed cancel control.
+  'task.dialog.heading': 'Task {shortcode}',
+  'task.dialog.heading.pending': 'Task',
+  'task.loading': 'this task',
+  'task.error': 'This task could not be loaded. Try again.',
+  'task.details.label': 'Task details',
+  'task.details.request': 'Request',
+  'task.details.status': 'Status',
+  'task.details.failureReason': 'Why it failed',
+  'task.assignments.heading': 'Work on this task',
+  'task.assignments.empty.heading': 'No work has started yet',
+  'task.assignments.empty.body':
+    'Roles appear here once the task has been planned.',
+  'task.assignment.label': '{role} — {status}',
+  'task.assignment.expand': 'Show what {role} has done',
+  'task.assignment.collapse': 'Hide what {role} has done',
+  'task.assignment.noAgent.heading': 'Not started',
+  'task.assignment.noAgent.body': 'No agent has picked this up yet.',
+  'task.cancel': 'Cancel this task',
+  'task.cancel.confirm.heading': 'Cancel this task?',
+  'task.cancel.confirm.body':
+    'This stops the task and every agent working on it. A cancelled task cannot be restarted.',
+  'task.cancel.confirm.accept': 'Cancel the task',
+  'task.cancel.confirm.reject': 'Keep the task running',
+  'task.cancel.failed': 'This task could not be cancelled. Try again.',
+  'task.announce.loaded': 'Task {shortcode} loaded',
+  'task.announce.status': 'Task: {status}',
+  'task.announce.assignment': '{role}: {status}',
+
   // Announcements. Every wording here is deliberately count-agnostic —
   // 'Tasks: {count} added', never '{count} tasks added' — because `t` has no
   // plural rules and reads the same for one as for many.
@@ -170,6 +200,7 @@ const strings = {
   'activity.tasks.empty.heading': 'No tasks to show',
   'activity.tasks.empty.body':
     'No task has one of the selected statuses. Change the filter to see others.',
+  'activity.tasks.open': 'Open task {shortcode}',
 
   'activity.consultations.heading': 'Consultations',
   'activity.consultations.empty.heading': 'No consultations are open',

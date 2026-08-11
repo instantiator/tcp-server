@@ -608,6 +608,38 @@ Testable: twelve streams are open at once through ordinary use — not a bug tha
 
 Testable: watch the waiting line through a real send in a real browser. If it drops for even a frame between the request settling and the `state_change` event arriving — or the other way round — that is the trigger, and it needs `MessageInput` to read a combined signal deliberately rather than relying on the two overlapping by luck.
 
+### The task dialog cannot be parked, and the dock features built for it are unused
+
+**Raised by:** 008.03 · **Condition to revisit:** a user is seen wanting to keep a long-running task open while working elsewhere in the application
+
+008.02 added three things to the dock partly with a future task dialog in mind: `DockEntry.label` as a `ReactNode` (so a parked entry can show live state), `dock.remove(id)` (drop an entry without reopening it) and `dock.focusEntry(id)` (move focus to a dock button directly). 008.03 chose a plain modal instead — one task at a time, closed by its Close button or Escape — because a task dialog holds nothing the user has authored, unlike a chat's half-typed message. All three dock features remain correct and tested; they are exercised only by the chat dialog today.
+
+Testable: a user is observed wanting to watch a task progress while doing something else in the application, rather than leaving the tab open and idle. If that happens, the fix is a `TaskProvider` beside `ChatProvider` in `AppShell`, following the shape 008.02 already built — not a redesign of the dock.
+
+### A new assignment appearing on an open task is not announced
+
+**Raised by:** 008.03 · **Condition to revisit:** a user reports missing that the planner fanned a task out into new work while its dialog was open
+
+`TaskDialog` announces a status _change_ on an assignment already seen, seeded silently on the first render so opening the dialog is not read out as several changes at once. An assignment appearing for the first time is recorded into that seed silently too, by the same mechanism — deliberately, since the two paths share one effect and telling them apart would mean tracking which ids were "already there" separately from which ids exist. `useListChangeAnnouncement` (003.03) is the existing hook that announces list membership changes and would do this, but it expects one channel per list; sharing `` `task:${taskId}` `` with the status-change announcements would violate the announcer's one-writer-per-channel rule, so it would need a channel of its own.
+
+Testable: a task is open, the planner adds an assignment to it, and nothing is said. If that is judged worth announcing, add a second channel — do not widen the existing one.
+
+### The task's materials, expected outputs and completed outputs are not shown
+
+**Raised by:** 008.03 · **Condition to revisit:** the generated schema stops typing `materials`, `expected` and `completed` as `Record<string, never>[]`
+
+`TaskDetailResponseDto` and `AssignmentResponseDto` both carry these fields, but the Swagger plugin never described the artifact union backing them, so the generated client types each as an array of empty objects. Nothing can be read out of one without an `any` cast, so the task dialog shows only the request, the status and the failure reason. See the existing entry on the generated schema documenting the persistence shape rather than the wire shape, above.
+
+Testable: `npm run api:generate` produces a real type for `materials`/`expected`/`completed` instead of `Record<string, never>[]`. When it does, the task dialog is the first place worth rendering them.
+
+### Nothing in the task dialog shows a date
+
+**Raised by:** 008.03 · **Condition to revisit:** any surface needs a formatted timestamp
+
+The task and its assignments both carry `createdAt`/`updatedAt`, but there is no date formatter anywhere in the web client and `t()` has no date handling — so the task dialog omits them rather than rendering a raw ISO-8601 string. A single shared formatter is the fix, not a one-off for this surface.
+
+Testable: a second surface needs a formatted date. Build the shared formatter then, and have the task dialog pick it up rather than inventing its own first.
+
 ## Carried into a later prompt
 
 **`008.05` and `008.06` are now sections of the 008.04 prompt**, not files of their own —
@@ -733,3 +765,10 @@ same skeleton. Rows below that name those indices still resolve; read them as th
 | The chat dialog is modal, so a second chat cannot be opened while one is showing — the 'add new' control has to solve this, not just meet it                                                         | 008.02    | `008.07` |
 | `openChat` moves focus into the panel it opens; React Aria returns focus to the opening control on close, so that control must stay mounted                                                          | 008.02    | `008.07` |
 | Judge the arrival-only response announcement with two conversations streaming at once — `describe('speech')` in `ChatDialog.test.tsx` proves two channels produce two sentences                      | 008.02    | `009.02` |
+| The confirmation pattern for a destructive control: a second stacked `<Dialog>`, a body that says what will happen, no button that says a bare "Cancel", and a focus-recovery effect                 | 008.03    | `008.04` |
+| The task dialog has no provider of its own — `TasksList` mounts it from local state; a caller reaching in from elsewhere is what would justify a `TaskProvider`                                      | 008.03    | `008.04` |
+| The two-layer mutation shape: `useCancelTaskMutation` describes the request once, `useCancelTask` wraps it and owns cache invalidation across `['task']` and `['assignment']`                        | 008.03    | `008.04` |
+| The task dialog shares the chat dialog's modal-inert limitation but has no minimise to route around it — it only closes                                                                              | 008.03    | `008.07` |
+| Journey 3 should also cover cancelling a task — the confirmation and its focus behaviour are proven only in jsdom against a mocked stream                                                            | 008.03    | `009.01` |
+| Several named regions inside one modal, one per assignment — judge whether stepping through them to find a transcript reads as navigable or as noise                                                 | 008.03    | `009.02` |
+| Assignment panels open collapsed by choice — judge whether a task's work being one keypress away reads as tidy or as hidden                                                                          | 008.03    | `009.02` |
