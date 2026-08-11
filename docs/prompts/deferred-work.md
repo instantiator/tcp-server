@@ -47,3 +47,39 @@ At the moment, there's an "account" menu in the UI. We should add a "system" men
 We ought to show a connection indicator in the CLI - ie. noting whether the backend is reachable. This is _probably_ easiest done by monitoring for at least 1x SSE connection. (Is there an SSE connection from the )
 
 At current time there's no need for an automatic reconnect (unless that's easy to implement). If not implemented now, we should plan it into future work. We track the very basics of this as notes in `deferred-phases.md`
+
+Interactive features that would invoke the API should be disabled until connection is resumed, although navigation should still be permitted - ie. it should be possible to show cached data about tasks, conversations, the company, etc. but "Send message" buttons, or "Complete conversation" buttons, etc. should be disabled.
+
+Caveat: When re-enabling items, their component should have final say on whether they are really enabled. eg.
+
+- Send message button in a conversation: may be disabled already because the agent is busy responding
+- Connectivity switches to offline, all connection-sensitive buttons (including this) are disabled
+- Connectivity resumes: Send message button should only be enabled if it would be ordinarily (ie. if the conversation has completed)
+
+The best approach is still an open question:
+
+We should find a way to do this consistently and as DRY as possible. Ideally we wouldn't write extra code for every component with an interaction element - and instead we can mark components that need to do this (eg. with a CSS class or custom property) and have the rules applied for us. That may mean tracking "logically enabled" and "connectivity sensitive" on each affected element, and then calculating the real enabled value for each affected element based on that.
+
+### Rich failure messages
+
+If a chat cannot be opened, the message shown is: "This conversation could not be loaded."
+
+It would be helpful to offer slightly more context, as bullets explaining the initial failure. Some examples might be:
+
+> This conversation could not be loaded.
+>
+> - The database was not reachable.
+> - No audit data exists in the database for agent with id: ${agentId}
+> - No assignment exists in the database with id: ${assignmentId}
+
+Similarly, on attempting to complete the same conversation: "This chat could not be completed. Try again."
+
+Again, slightly more context would be helpful, as bullets after the error. Some examples: eg.
+
+> This chat could not be completed. Try again.
+>
+> - The database was not reachable.
+> - No assignment exists in the database with id: ${assignmentId}
+> - You do not have permission to alter assignment with id: ${assignmentId}
+
+(I appreciate there probably isn't a "no permission" scenario yet for this. It's illustrative.)
