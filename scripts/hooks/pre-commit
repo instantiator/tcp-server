@@ -16,7 +16,11 @@ cd "$TOP"
 # Paths format/licenses:generate/schema:generate can touch — scoping `git add`
 # to these avoids sweeping up unrelated tracked-file changes sitting dirty
 # elsewhere in the working tree.
-GENERATED_PATHS=(apps libs test docs schemas '*.md')
+GENERATED_PATHS=(apps libs docs schemas '*.md')
+
+# First, because everything below inherits the invoking shell's Node and a
+# mismatch surfaces as ~200 unrelated test failures rather than as itself.
+bash "$TOP/scripts/check-node-version.sh"
 
 echo "→ pre-commit: regenerating licenses..."
 npm run licenses:generate --silent
@@ -45,7 +49,7 @@ git add -u -- "${GENERATED_PATHS[@]}"
 echo "✓ pre-commit checks passed."
 
 echo "→ pre-commit: running unit tests (best-effort — failures won't block the commit)..."
-if npm test --silent; then
+if bash "$TOP/scripts/run-unit-tests.sh"; then
   echo "✓ unit tests passed."
 else
   echo ""

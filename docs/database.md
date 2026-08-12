@@ -36,7 +36,7 @@ The SQLite fallback does not run migrations and does not support pgvector or JSO
 
 Migrations run automatically on tcp-server startup when connecting to Postgres (`migrationsRun: true`). tcp-agent and tcp-mcp-memory set `migrationsRun: false` — they assume tcp-server has already applied all migrations.
 
-The integration and e2e test tiers apply the same ownership rule: each tier's Jest `global-setup.ts` migrates the shared Postgres container once (`test/support/migrate-database.ts`) before any spec runs, so no spec builds or owns the schema. A spec must not point a `synchronize: true` connection at the tier's `DATABASE_URL` — that leaves the database carrying TypeORM's generated constraint names and unmigratable for whichever spec boots a real `AppModule` next.
+The integration and e2e test tiers apply the same ownership rule: each tier's Jest `global-setup.ts` migrates the shared Postgres container once (`apps/backend/test/support/migrate-database.ts`) before any spec runs, so no spec builds or owns the schema. A spec must not point a `synchronize: true` connection at the tier's `DATABASE_URL` — that leaves the database carrying TypeORM's generated constraint names and unmigratable for whichever spec boots a real `AppModule` next.
 
 See [db-migrations.md](db-migrations.md) for how to generate, review, register
 and run one — including the hand-registration step in `migrations-list.ts` that

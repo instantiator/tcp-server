@@ -1,0 +1,28 @@
+/*
+ * Meaningful class names now, rules filled per theme later (ADR-026). No
+ * literal colour, spacing or border value may appear here.
+ *
+ * The bar's position is not a theme choice: a dock that does not sit at the
+ * bottom of the view is not a dock. Position and layout are here; colour is
+ * left to the theme, as everywhere else.
+ */
+.dialog-dock {
+  position: fixed;
+  inset-block-end: 0;
+  inset-inline: 0;
+  z-index: var(--tcp-layer-dock);
+  padding: var(--tcp-space-sm);
+  border-block-start: var(--tcp-border-width) solid var(--tcp-color-border);
+  background-color: var(--tcp-color-surface);
+}
+
+.dialog-dock__list {
+  display: flex;
+  gap: var(--tcp-space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dialog-dock__item {
+}

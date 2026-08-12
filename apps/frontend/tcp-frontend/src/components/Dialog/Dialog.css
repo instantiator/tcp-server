@@ -1,0 +1,29 @@
+/*
+ * Meaningful class names now, rules filled per theme later (ADR-026). No
+ * literal colour, spacing or border value may appear here — React Aria's own
+ * defaults, including the modal panel and its overlay, live in
+ * `styles/base.css`.
+ *
+ * The title bar has real rules because the heading and its controls have to
+ * sit on one line to read as a title bar at all; that is layout, not theme.
+ */
+.dialog__bar {
+  display: flex;
+  align-items: baseline;
+  gap: var(--tcp-space-sm);
+  margin-block-end: var(--tcp-space-md);
+}
+
+.dialog__heading {
+  flex: 1;
+  margin: 0;
+}
+
+.dialog__minimise {
+}
+
+.dialog__close {
+}
+
+.dialog__body {
+}

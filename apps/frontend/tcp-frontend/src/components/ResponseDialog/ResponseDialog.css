@@ -1,0 +1,56 @@
+/*
+ * Meaningful class names now, rules filled per theme later (ADR-026). No
+ * literal colour, spacing or border value may appear here — use a
+ * `--tcp-*` token, matching `TaskDialog.css` and `ChatDialog.css`.
+ *
+ * The two rules below are layout, not theme: messages stack top to bottom,
+ * and the reply field and its send button sit on one row rather than
+ * wrapping onto their own lines, matching `.chat-input` in `ChatDialog.css`.
+ */
+.response-dialog__details {
+}
+
+.response-dialog__details-heading {
+}
+
+.response-dialog__question {
+}
+
+.response-dialog__field {
+}
+
+.response-dialog__field-label {
+}
+
+.response-dialog__messages-heading {
+}
+
+.response-dialog__messages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tcp-space-sm);
+}
+
+.response-dialog__message {
+}
+
+.response-dialog__message-author {
+}
+
+.response-dialog__message-time {
+}
+
+.response-dialog__message-content {
+}
+
+.response-dialog__sent {
+}
+
+.response-dialog__reply {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--tcp-space-sm);
+}
+
+.response-dialog__send {
+}

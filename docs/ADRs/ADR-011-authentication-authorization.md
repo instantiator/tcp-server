@@ -1,6 +1,6 @@
 # ADR-011: Authentication and Authorization
 
-Status: Partially Implemented
+Status: Partially Implemented (amended)
 
 ## Context
 
@@ -87,7 +87,7 @@ The `CompanyMembership` entity described here was simplified. The implemented en
 
 ### Deferred
 
-- Full `CompanyMembership` permission flag system (`create_tasks`, `initiate_conversations`, etc.) — no decorator or per-endpoint enforcement exists yet; `JwtAuthGuard` only proves _who_ the caller is, not what they're allowed to do
+- Full `CompanyMembership` permission flag system (`create_tasks`, `initiate_conversations`, etc.) — no decorator or per-flag enforcement exists; **membership itself is enforced since 002.05** (see the [amendment](#amendments-as-implemented-00205)), so a caller reaches only companies they belong to, but any member may take any action within one
 - `POST /users` and `PATCH /users/:id/status` Keycloak proxy endpoints — deferred
 
 <a id="amendments-as-implemented-0107"></a>
@@ -165,11 +165,72 @@ match both. Matching on `sub` alone silently denies users whose membership rows
 were created with an email — a failure that looks like a permissions bug and is
 a data-shape bug.
 
+<a id="amendments-as-implemented-00205"></a>
+
+## Amendments as implemented (002.05) — membership is enforced
+
+_2026-08-05._ The gate the amendment above names is now closed. **Membership**
+is enforced on every user-facing route; the five permission **flags** are not,
+and remain deferred (see below).
+
+**How it works.** `CompanyMembershipGuard` runs alongside `JwtAuthGuard` on
+every user-facing controller. Each route declares how its company is found:
+
+| Declaration                         | Meaning                                                                                                                                                    |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@CompanyScope({ from, key, via })` | Resolve the company from a param, query value or body field — directly, or through the task, agent, assignment, role, conversation or storage key it names |
+| `@CompanyScopeRequired(message)`    | The 400 to raise when a request carries none of those handles, preserving each list route's existing wording                                               |
+| `@NoCompanyScope(reason)`           | Reachable by any authenticated caller because it names no company; the reason is mandatory                                                                 |
+| `@AdminOnly()`                      | Restricted to the configured administrators                                                                                                                |
+
+**Deny by default.** A route on a guarded controller that declares none of
+these is refused at request time, and `route-audit.spec.ts` fails the build for
+it. That spec walks the module graph statically and asserts the status of every
+route, so the enumeration this work required cannot go stale — a route added
+later cannot open by omission.
+
+**Administrators are a configured list, not a group.** `TCP_ADMIN_IDENTIFIERS`
+holds comma-separated `sub` claims and/or email addresses. It gates `?all=true`
+on `GET /api/company` and the `/api/system` routes, and it lets the `tcp-cli`
+operator administer companies they were never added to. **The default is empty
+— nobody is an administrator**, so a deployment that forgets to set it loses an
+administrative view rather than granting one. `start-deployment.sh` writes the
+bootstrapped human and machine user ids to the `.local` override, so local
+development and the api test tier keep working unchanged. This is the interim
+answer; permission groups replace it.
+
+**Refusals are 403, uniformly.** A non-member asking for a company gets
+`403 Forbidden`, never an empty list — quietly degrading one request into a
+different one hides the fact that the caller lacks the access. A handle naming
+nothing is a 404, kept distinct from a membership failure so a permissions
+problem never reads as a missing record. The trade-off is that a 403 confirms
+an id exists; recorded in phase 02's unresolved notes.
+
+**Two error codes changed as a consequence.** Guards run before validation
+pipes, and the guard resolves the company before the handler runs:
+`GET /api/company/:id` for an unknown id is now 404 rather than 200 with an
+empty body (which the e2e suite already carried a TODO asking for), and
+`POST /api/role` with a malformed `companyId` is 404 rather than 400 — a
+company handle is UUID-or-slug, so a malformed one is simply a slug naming
+nothing. `GET /api/conversation` now requires `companyId`: an unfiltered list
+spans every company.
+
+**Out of scope, deliberately.** `/internal/*` keeps `InternalApiKeyGuard` and
+no membership check — a different trust boundary, since tcp-agent has no
+membership and needs none.
+
+**Still deferred: the permission flags.** `CompanyUser` has no permission
+columns, only `memberType`. Enforcing `create_tasks`, `initiate_conversations`,
+`access_storage`, `modify_company` and `define_agent_roles` needs a migration,
+a defaulting policy, `@RequirePermission()`, and a surface to set them — carried
+into `002.01` (company configuration view). Until then, **any member of a
+company may take any action within it**.
+
 ## Consequences
 
 - `JwtAuthGuard` is applied to every user-facing controller (see Implemented above)
-- `CompanyUser` entity is used for conversation routing (matching user `knowledgeDomains` and `roles` to query content)
-- Fine-grained authorization (permission flags per endpoint) remains a gap — any authenticated user can currently call any user-facing endpoint their token is valid for, with no per-action permission check
+- `CompanyUser` entity is used for conversation routing (matching user `knowledgeDomains` and `roles` to query content), and since 002.05 it is also the access control: membership decides who may reach a company at all
+- Fine-grained authorization (permission flags per endpoint) remains a gap — a member of a company can take any action within it, with no per-action permission check. Membership itself is enforced (see the 002.05 amendment)
 
 ## Open Questions / Assumptions
 

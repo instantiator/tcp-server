@@ -23,9 +23,9 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
     ports:
-      - "${EXPOSE_PORT_DB:-5432}:5432"
+      - '${EXPOSE_PORT_DB:-5432}:5432'
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${DB_USER:-tcp}"]
+      test: ['CMD', 'pg_isready', '-U', '${DB_USER:-tcp}']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -38,7 +38,7 @@ services:
       - redis_data:/data
     # Redis is internal-only — not exposed to the host.
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -53,10 +53,10 @@ services:
     volumes:
       - minio_data:/data
     ports:
-      - "${EXPOSE_PORT_MINIO:-9000}:9000"
-      - "${EXPOSE_PORT_MINIO_CONSOLE:-9001}:9001"
+      - '${EXPOSE_PORT_MINIO:-9000}:9000'
+      - '${EXPOSE_PORT_MINIO_CONSOLE:-9001}:9001'
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -69,7 +69,7 @@ services:
     profiles: [integration]
     # Internal-only by default (see docker-compose.dev-ports.yml to publish).
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3002/health || exit 1"]
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3002/health || exit 1']
       interval: 5s
       timeout: 2s
       retries: 5
@@ -92,14 +92,14 @@ services:
       ZITADEL_MASTERKEY: ${ZITADEL_MASTERKEY}
       ZITADEL_EXTERNALDOMAIN: localhost
       ZITADEL_EXTERNALPORT: 8080
-      ZITADEL_EXTERNALSECURE: "false"
+      ZITADEL_EXTERNALSECURE: 'false'
       # The `zitadel ready` healthcheck below is a separate process invocation
       # that doesn't see the `--tlsMode disabled` start-from-init flag above —
       # it reads this env var independently to decide HTTP vs HTTPS for its
       # own self-check, and defaults to HTTPS (failing against our plain-HTTP
       # server) without it.
-      ZITADEL_TLS_ENABLED: "false"
-      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "false"
+      ZITADEL_TLS_ENABLED: 'false'
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: 'false'
       ZITADEL_FIRSTINSTANCE_ORG_NAME: tcp
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: admin
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${ZITADEL_ADMIN_PASSWORD}
@@ -109,7 +109,7 @@ services:
       # obtain an admin session token the way kcadm.sh does for Keycloak.
       ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: tcp-bootstrap
       ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: TCP Bootstrap
-      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2100-01-01T00:00:00Z"
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: '2100-01-01T00:00:00Z'
       ZITADEL_FIRSTINSTANCE_PATPATH: /machinekey/pat.txt
     volumes:
       # Bind mount (not a named volume): the zitadel process runs as uid 1000
@@ -137,11 +137,11 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "${EXPOSE_PORT_ZITADEL:-8080}:8080"
+      - '${EXPOSE_PORT_ZITADEL:-8080}:8080'
     healthcheck:
       # No shell or curl in this image (single static Go binary) — use the
       # CLI's own readiness subcommand instead of a curl/wget healthcheck.
-      test: ["CMD", "/app/zitadel", "ready"]
+      test: ['CMD', '/app/zitadel', 'ready']
       interval: 10s
       timeout: 5s
       retries: 10
@@ -163,6 +163,9 @@ services:
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-http://localhost:${EXPOSE_PORT_ZITADEL:-8080}}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+      # Who may use `?all=true` and the system routes. Empty means nobody —
+      # see docs/authentication.md#administrators.
+      TCP_ADMIN_IDENTIFIERS: ${TCP_ADMIN_IDENTIFIERS:-}
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
@@ -193,13 +196,50 @@ services:
         condition: service_healthy
         required: false
     ports:
-      - "${EXPOSE_PORT_API:-3000}:3000"
+      - '${EXPOSE_PORT_API:-3000}:3000'
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ['CMD', 'curl', '-f', 'http://localhost:3000/health']
       start_period: 120s
       interval: 15s
       timeout: 5s
       retries: 10
+
+  tcp-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: tcp-web
+    image: tcp-web:latest
+    restart: unless-stopped
+    environment:
+      # Mirrors tcp-server's OIDC_ISSUER_URL derivation above: explicit value
+      # wins, else derive from the Zitadel host port.
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-http://localhost:${EXPOSE_PORT_ZITADEL:-8080}}
+      # The public PKCE client start-deployment.sh registers for the browser
+      # (ADR-024) — not tcp-server's confidential one above. The container's
+      # own variable keeps the generic name; only the source changes.
+      OIDC_CLIENT_ID: ${OIDC_WEB_CLIENT_ID}
+      # Providers that omit profile/email from the ID token need this true.
+      # Zitadel does not, so the bundled stack never sets it.
+      OIDC_LOAD_USER_INFO: ${OIDC_LOAD_USER_INFO:-false}
+    depends_on:
+      tcp-server:
+        condition: service_healthy
+    ports:
+      # Published as 443: HTTP/2 requires TLS, and no browser negotiates it
+      # over plain HTTP, so the host port has to be the TLS one.
+      - '${EXPOSE_PORT_WEB:-5173}:443'
+    healthcheck:
+      # busybox wget (nginx:alpine's only HTTP client) with --no-check-certificate:
+      # the default certificate is self-signed until a real one is mounted.
+      test:
+        [
+          'CMD-SHELL',
+          'wget --no-check-certificate -qO- https://localhost/config.js >/dev/null || exit 1',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   tcp-agent:
     build:
@@ -235,7 +275,7 @@ services:
     # publish here would also collide with tcp-server whenever EXPOSE_PORT_API is
     # set to 3001, as the testing env does.)
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      test: ['CMD', 'curl', '-f', 'http://localhost:3001/health']
       interval: 15s
       timeout: 5s
       retries: 5
@@ -255,7 +295,7 @@ services:
         condition: service_healthy
     # Internal-only by default (see docker-compose.dev-ports.yml to publish).
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3010/health"]
+      test: ['CMD', 'curl', '-f', 'http://localhost:3010/health']
       interval: 15s
       timeout: 5s
       retries: 5
@@ -279,7 +319,7 @@ services:
         condition: service_healthy
     # Internal-only by default (see docker-compose.dev-ports.yml to publish).
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3011/health"]
+      test: ['CMD', 'curl', '-f', 'http://localhost:3011/health']
       interval: 15s
       timeout: 5s
       retries: 5
@@ -299,7 +339,7 @@ services:
         condition: service_healthy
     # Internal-only by default (see docker-compose.dev-ports.yml to publish).
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3012/health"]
+      test: ['CMD', 'curl', '-f', 'http://localhost:3012/health']
       interval: 15s
       timeout: 5s
       retries: 5
@@ -319,7 +359,7 @@ services:
         condition: service_healthy
     # Internal-only by default (see docker-compose.dev-ports.yml to publish).
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3013/health"]
+      test: ['CMD', 'curl', '-f', 'http://localhost:3013/health']
       interval: 15s
       timeout: 5s
       retries: 5

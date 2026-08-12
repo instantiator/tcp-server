@@ -1,0 +1,435 @@
+/*
+ * The minimal base stylesheet. React Aria Components ships no styling at all,
+ * so without this there is no focus ring and no border and early screens
+ * cannot be reviewed by a sighted tester (ADR-026).
+ *
+ * Two rules hold for every stylesheet in this application:
+ *   1. No literal colour, spacing or border value — use a `--tcp-*` token.
+ *   2. Component stylesheets carry meaningful class names with empty rule
+ *      bodies, to be filled per theme later.
+ * This file is the one place the tokens themselves are declared, and the one
+ * place React Aria's own defaults are given values — the library ships none,
+ * and a control with no focus ring or no visible selected state is an
+ * accessibility failure, not a cosmetic gap.
+ *
+ * It also carries two off-screen-but-audible utilities, the skip link and the
+ * live region: neither may become `display: none` or `visibility: hidden`,
+ * because both remove an element from the accessibility tree entirely.
+ */
+
+/*
+ * Non-colour tokens are theme-independent, so they are declared once here
+ * rather than repeated across the four theme blocks. A theme may still
+ * override any of them.
+ */
+:root {
+  --tcp-space-xs: 0.25rem;
+  --tcp-space-sm: 0.5rem;
+  --tcp-space-md: 1rem;
+  --tcp-space-lg: 1.5rem;
+  --tcp-space-xl: 2.5rem;
+
+  --tcp-border-width: 1px;
+  --tcp-radius: 0.25rem;
+
+  --tcp-focus-ring-width: 2px;
+  --tcp-focus-ring-offset: 2px;
+
+  --tcp-font-family:
+    system-ui, -apple-system, 'Segoe UI', roboto, helvetica, arial, sans-serif;
+  --tcp-font-size-base: 1rem;
+  --tcp-line-height: 1.5;
+
+  /* Stacking order for the two surfaces that float above the page. The dock
+     sits below dialogs so an open dialog's overlay covers its own dock entry
+     rather than the bar punching through it. */
+  --tcp-layer-dock: 10;
+  --tcp-layer-dialog: 20;
+
+  --tcp-dialog-max-width: 48rem;
+  --tcp-transcript-max-height: 24rem;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: var(--tcp-space-md);
+  background-color: var(--tcp-color-bg);
+  color: var(--tcp-color-text);
+  font-family: var(--tcp-font-family);
+  font-size: var(--tcp-font-size-base);
+  line-height: var(--tcp-line-height);
+}
+
+/*
+ * The single most important rule in this file: React Aria's components are
+ * keyboard-operable from the start, but invisible to a sighted keyboard user
+ * without a focus indicator.
+ */
+:focus-visible {
+  outline: var(--tcp-focus-ring-width) solid var(--tcp-color-focus);
+  outline-offset: var(--tcp-focus-ring-offset);
+}
+
+/*
+ * The minimum React Aria Components needs to be usable, in tokens.
+ *
+ * RAC renders a RadioButton as a visually hidden <input> inside a <label>,
+ * exposing state as data attributes on that label. With no rules at all, a
+ * radio group shows its option text with nothing marking the chosen option
+ * (WCAG 1.4.1), and the :focus-visible rule above lands on an input the user
+ * cannot see (WCAG 2.4.7). Both are fixed here rather than deferred to a
+ * theme.
+ *
+ * Component stylesheets still ship with empty rule bodies (ADR-026) — this
+ * file is where the library's own defaults belong.
+ */
+.react-aria-RadioGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tcp-space-xs);
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.react-aria-RadioButton {
+  display: flex;
+  align-items: center;
+  gap: var(--tcp-space-sm);
+}
+
+.react-aria-RadioButton::before {
+  content: '';
+  display: block;
+  flex: none;
+  inline-size: var(--tcp-space-md);
+  block-size: var(--tcp-space-md);
+  border: var(--tcp-border-width) solid var(--tcp-color-border);
+  border-radius: 50%;
+}
+
+/* Shape as well as colour, so the selection survives a monochrome rendering. */
+.react-aria-RadioButton[data-selected]::before {
+  border-color: var(--tcp-color-accent);
+  background-color: var(--tcp-color-accent);
+  box-shadow: inset 0 0 0 var(--tcp-focus-ring-width) var(--tcp-color-bg);
+}
+
+.react-aria-RadioButton[data-focus-visible] {
+  outline: var(--tcp-focus-ring-width) solid var(--tcp-color-focus);
+  outline-offset: var(--tcp-focus-ring-offset);
+}
+
+.react-aria-Button {
+  padding: var(--tcp-space-sm) var(--tcp-space-md);
+  border: var(--tcp-border-width) solid var(--tcp-color-accent);
+  border-radius: var(--tcp-radius);
+  background-color: var(--tcp-color-accent);
+  color: var(--tcp-color-accent-text);
+  font: inherit;
+}
+
+/*
+ * The same gap the radios above fill, for the same reason: React Aria ships
+ * no styling, so with no rules at all a selected checkbox is indistinguishable
+ * from an unselected one (WCAG 1.4.1).
+ */
+.react-aria-CheckboxGroup {
+  display: flex;
+  /* A row, not a column: seven statuses stacked is a lot of page. */
+  flex-wrap: wrap;
+  gap: var(--tcp-space-sm);
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.react-aria-CheckboxButton {
+  display: flex;
+  align-items: center;
+  gap: var(--tcp-space-sm);
+}
+
+.react-aria-CheckboxButton::before {
+  content: '';
+  display: block;
+  flex: none;
+  inline-size: var(--tcp-space-md);
+  block-size: var(--tcp-space-md);
+  border: var(--tcp-border-width) solid var(--tcp-color-border);
+  border-radius: var(--tcp-radius);
+}
+
+/*
+ * Fill as well as colour, so the selection survives a monochrome rendering
+ * (WCAG 1.4.1): the inset shadow leaves a solid block inside the border, which
+ * an empty box does not have whatever the palette resolves to.
+ */
+.react-aria-CheckboxButton[data-selected]::before {
+  border-color: var(--tcp-color-accent);
+  background-color: var(--tcp-color-accent);
+  box-shadow: inset 0 0 0 var(--tcp-focus-ring-width) var(--tcp-color-bg);
+}
+
+.react-aria-CheckboxButton[data-focus-visible] {
+  outline: var(--tcp-focus-ring-width) solid var(--tcp-color-focus);
+  outline-offset: var(--tcp-focus-ring-offset);
+}
+
+/*
+ * Text fields, and the same reason a fourth time: React Aria ships no styling,
+ * so an unstyled input has no border and is indistinguishable from the page it
+ * sits on.
+ *
+ * The label is stacked above its control rather than beside it, so a long
+ * label wraps without squeezing the field, and so the pairing survives a
+ * narrow viewport and a large text size (WCAG 1.4.4, 1.4.10).
+ */
+.react-aria-TextField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tcp-space-xs);
+}
+
+.react-aria-Label {
+  font-weight: 600;
+}
+
+.react-aria-Input,
+.react-aria-TextArea {
+  padding: var(--tcp-space-sm);
+  border: var(--tcp-border-width) solid var(--tcp-color-border);
+  border-radius: var(--tcp-radius);
+  background-color: var(--tcp-color-bg);
+  color: var(--tcp-color-text);
+  font: inherit;
+}
+
+.react-aria-TextArea {
+  min-block-size: calc(var(--tcp-space-xl) * 2);
+  resize: vertical;
+}
+
+/* Standing help text, quieter than the label but not below AA contrast. */
+.react-aria-Text[slot='description'] {
+  color: var(--tcp-color-text-muted);
+}
+
+/*
+ * The invalid state carries a heavier border as well as a colour, so it
+ * survives a monochrome rendering (WCAG 1.4.1) — the same reasoning as the
+ * radio and checkbox marks above.
+ */
+.react-aria-Input[data-invalid],
+.react-aria-TextArea[data-invalid] {
+  border-width: var(--tcp-focus-ring-width);
+  border-color: var(--tcp-color-danger);
+}
+
+/*
+ * Weight as well as colour, for the same reason. The association a screen
+ * reader relies on is `aria-describedby`, which React Aria wires from
+ * `isInvalid` plus this element — it is not carried by any of this styling.
+ */
+.react-aria-FieldError {
+  color: var(--tcp-color-danger);
+  font-weight: 600;
+}
+
+/*
+ * A `Select`, stacked like `.react-aria-TextField` above: its trigger button
+ * already picks up `.react-aria-Button`'s styling, so the field itself only
+ * needs the label-above-control layout.
+ */
+.react-aria-Select {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tcp-space-xs);
+}
+
+/*
+ * The account menu, for the same reason the radios needed rules above: React
+ * Aria ships no styling, so an unstyled popover renders as unpositioned,
+ * transparent text over the page — unreadable rather than merely plain.
+ */
+.react-aria-Popover {
+  border: var(--tcp-border-width) solid var(--tcp-color-border);
+  border-radius: var(--tcp-radius);
+  background-color: var(--tcp-color-surface);
+  color: var(--tcp-color-text);
+}
+
+.react-aria-Menu {
+  margin: 0;
+  padding: var(--tcp-space-xs);
+  outline: none;
+}
+
+.react-aria-MenuItem {
+  padding: var(--tcp-space-sm) var(--tcp-space-md);
+  border-radius: var(--tcp-radius);
+  cursor: default;
+}
+
+/*
+ * React Aria drives menu items from the keyboard *and* the pointer through one
+ * `data-focused` state, so this single rule is the highlight for both.
+ */
+.react-aria-MenuItem[data-focused] {
+  background-color: var(--tcp-color-accent);
+  color: var(--tcp-color-accent-text);
+}
+
+/*
+ * A `Select`'s own popover list. Same shape as the menu above — React Aria's
+ * `ListBox` is unstyled the same way — so the rules mirror it exactly rather
+ * than inventing a second visual language for "a list of options in a
+ * popover".
+ */
+.react-aria-ListBox {
+  margin: 0;
+  padding: var(--tcp-space-xs);
+  outline: none;
+}
+
+.react-aria-ListBoxItem {
+  padding: var(--tcp-space-sm) var(--tcp-space-md);
+  border-radius: var(--tcp-radius);
+  cursor: default;
+}
+
+.react-aria-ListBoxItem[data-focused] {
+  background-color: var(--tcp-color-accent);
+  color: var(--tcp-color-accent-text);
+}
+
+/*
+ * Dialogs, for the same reason again, and more sharply: React Aria positions
+ * nothing and paints nothing, so an unstyled modal renders as transparent text
+ * laid over the page it covers. The page shows through it, and neither is
+ * readable — a WCAG 1.4.1 failure rather than a plain-looking dialog.
+ *
+ * The overlay is what dims the page behind; the modal is the panel itself.
+ */
+.react-aria-ModalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--tcp-layer-dialog);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--tcp-space-md);
+  background-color: var(--tcp-color-scrim);
+}
+
+.react-aria-Modal {
+  max-inline-size: var(--tcp-dialog-max-width);
+  max-block-size: 100%;
+  overflow: auto;
+  border: var(--tcp-border-width) solid var(--tcp-color-border);
+  border-radius: var(--tcp-radius);
+  background-color: var(--tcp-color-surface);
+  color: var(--tcp-color-text);
+}
+
+.react-aria-Dialog {
+  padding: var(--tcp-space-md);
+  /* React Aria focuses the dialog itself when it holds nothing focusable, and
+     the :focus-visible ring is the wrong shape around a whole panel. */
+  outline: none;
+}
+
+/*
+ * The company view's tabs, for the third time and the same reason: React Aria
+ * ships no styling. Unstyled, the tab list is a row of plain words in which the
+ * selected one is indistinguishable from the rest and a focused one has no
+ * ring — so the control is operable and unreadable at once.
+ *
+ * The selected state is a border rather than a colour change, because colour
+ * alone cannot carry it (WCAG 1.4.1) and the high-contrast theme may have very
+ * little colour to spend.
+ */
+.react-aria-TabList {
+  display: flex;
+  gap: var(--tcp-space-xs);
+  border-block-end: var(--tcp-border-width) solid var(--tcp-color-border);
+}
+
+.react-aria-Tab {
+  padding: var(--tcp-space-sm) var(--tcp-space-md);
+  border-block-end: var(--tcp-focus-ring-width) solid transparent;
+  cursor: pointer;
+}
+
+.react-aria-Tab[data-selected] {
+  border-block-end-color: var(--tcp-color-accent);
+  color: var(--tcp-color-accent);
+}
+
+.react-aria-Tab[data-focus-visible] {
+  outline: var(--tcp-focus-ring-width) solid var(--tcp-color-focus);
+  outline-offset: var(--tcp-focus-ring-offset);
+}
+
+/*
+ * Off-screen until focused, then the first thing on the page. `clip-path`
+ * rather than `display: none`, which would take it out of the tab order and
+ * leave the link unreachable — the exact failure it exists to prevent.
+ */
+.skip-link {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.skip-link:focus {
+  position: static;
+  inline-size: auto;
+  block-size: auto;
+  clip-path: none;
+  padding: var(--tcp-space-sm) var(--tcp-space-md);
+  background-color: var(--tcp-color-surface);
+  color: var(--tcp-color-text);
+}
+
+/*
+ * Text present in the accessibility tree and absent from the page: a label a
+ * screen reader needs and a sighted user reads from context instead.
+ *
+ * Never reach for `display: none` or `visibility: hidden` to get this — both
+ * remove the element from that tree entirely, so it is read by nobody. The
+ * announcer's own regions are styled this way by react-aria, for the same
+ * reason.
+ */
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/*
+ * Honoured from the start. There is little motion in an unstyled MVP, which
+ * is exactly why establishing the convention now is cheap (ADR-026).
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

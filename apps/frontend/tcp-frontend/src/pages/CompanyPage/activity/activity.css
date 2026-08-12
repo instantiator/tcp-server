@@ -1,0 +1,44 @@
+/*
+ * Empty by design (ADR-026): meaningful class names now, rules filled per
+ * theme later. No literal colour, spacing or border value may appear here —
+ * React Aria's own defaults live in `styles/base.css`.
+ */
+.company-activity {
+}
+
+.activity-list {
+}
+
+.activity-list__heading {
+}
+
+.activity-list__count {
+}
+
+.activity-list__note {
+}
+
+.activity-list__body {
+}
+
+.activity-list__rows {
+}
+
+.activity-list__row {
+}
+
+.activity-list__row-title {
+}
+
+.activity-list__row-detail {
+}
+
+/* The control that reveals the rest of a clipped agent prompt. */
+.activity-list__row-expand {
+}
+
+.activity-filter {
+}
+
+.activity-filter__group {
+}

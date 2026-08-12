@@ -5,22 +5,53 @@ starts when the `auth` profile is active (`docker compose --profile auth up`).
 
 ## Summary
 
-| Service              | Container name         | Exposed ports              | Description                                              |
-| -------------------- | ---------------------- | -------------------------- | -------------------------------------------------------- |
-| tcp-server           | `tcp-server`           | 3000                       | REST API and orchestration layer                         |
-| tcp-agent            | `tcp-agent`            | 3001                       | Agent loop runner                                        |
-| tcp-mcp-storage      | `tcp-mcp-storage`      | 3010¹                      | Storage MCP server                                       |
-| tcp-mcp-memory       | `tcp-mcp-memory`       | 3011¹                      | Memory MCP server                                        |
-| tcp-mcp-interactions | `tcp-mcp-interactions` | 3012¹                      | Interactions MCP server                                  |
-| tcp-mcp-tasks        | `tcp-mcp-tasks`        | 3013¹                      | Tasks MCP server                                         |
-| stub-llm             | `stub-llm`             | 3002¹                      | Configurable stub LLM for tests (profile: `integration`) |
-| PostgreSQL           | `postgres`             | 5432                       | Primary relational store (pgvector extension enabled)    |
-| Redis                | `redis`                | 6379                       | BullMQ broker and pub/sub transport for SSE and shutdown |
-| MinIO                | `minio`                | 9000 (API), 9001 (console) | S3-compatible object storage                             |
-| Zitadel              | `zitadel`              | 8080                       | OIDC identity provider (profile: auth)                   |
+| Service              | Container name         | Exposed ports                        | Description                                              |
+| -------------------- | ---------------------- | ------------------------------------ | -------------------------------------------------------- |
+| tcp-server           | `tcp-server`           | 3000                                 | REST API and orchestration layer                         |
+| tcp-agent            | `tcp-agent`            | 3001 in-container, 3003¹ on the host | Agent loop runner                                        |
+| tcp-mcp-storage      | `tcp-mcp-storage`      | 3010¹                                | Storage MCP server                                       |
+| tcp-mcp-memory       | `tcp-mcp-memory`       | 3011¹                                | Memory MCP server                                        |
+| tcp-mcp-interactions | `tcp-mcp-interactions` | 3012¹                                | Interactions MCP server                                  |
+| tcp-mcp-tasks        | `tcp-mcp-tasks`        | 3013¹                                | Tasks MCP server                                         |
+| stub-llm             | `stub-llm`             | 3002¹                                | Configurable stub LLM for tests (profile: `integration`) |
+| PostgreSQL           | `postgres`             | 5432                                 | Primary relational store (pgvector extension enabled)    |
+| Redis                | `redis`                | 6379                                 | BullMQ broker and pub/sub transport for SSE and shutdown |
+| MinIO                | `minio`                | 9000 (API), 9001 (console)           | S3-compatible object storage                             |
+| Zitadel              | `zitadel`              | 8080                                 | OIDC identity provider (profile: auth)                   |
 
 ¹ Internal-only by default. `start-deployment.sh --dev-ports` publishes these
 to the host (needed by the smoke tier and for direct `curl` access).
+
+tcp-agent is the one service whose host port differs from its container port:
+it listens on 3001 inside the network, and `--dev-ports` publishes it on
+`EXPOSE_PORT_AGENT` (3003 by default, 3004 under `.env.testing`). Publishing it
+as 3001 would collide with tcp-server, which `.env.testing` puts on the host's
+3001 — and a collision that "works" is worse than one that fails, because the
+smoke tier then health-checks tcp-server while reporting it as tcp-agent.
+
+Every TCP service's `GET /health` names itself, under both `info.service.name`
+and `details.service.name`:
+
+```json
+{
+  "status": "ok",
+  "info": {
+    "service": { "status": "up", "name": "tcp-agent" },
+    "database": { "status": "up" }
+  },
+  "error": {},
+  "details": {
+    "service": { "status": "up", "name": "tcp-agent" },
+    "database": { "status": "up" }
+  }
+}
+```
+
+It is an indicator rather than a field beside `status` so it survives the 503
+path too — Terminus throws its document when a check fails, which is when
+identifying the responder matters most. The smoke tier asserts it per service,
+so a probe aimed at the wrong port fails instead of quietly passing against a
+healthy neighbour.
 
 ## TCP services
 
@@ -37,7 +68,7 @@ enqueues agent tasks via BullMQ, and validates JWT tokens issued by Zitadel.
 
 NestJS agent loop runner. Consumes BullMQ jobs from Redis, executes agent steps, and persists results to PostgreSQL and MinIO. Connects to MCP servers over HTTP to load tools for each agent run. See [tcp-agent.md](tcp-agent.md) for configuration and usage.
 
-- **Health:** `GET http://localhost:3001/health`
+- **Health:** `GET http://localhost:3003/health` from the host (with `--dev-ports`); `http://tcp-agent:3001/health` inside the network
 - **Depends on:** postgres, redis
 - **Built from:** the root `Dockerfile`, target `tcp-agent`
 

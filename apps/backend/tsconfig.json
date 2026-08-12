@@ -1,0 +1,18 @@
+{
+  // Base config for the backend workspace. Every app's tsconfig.app.json
+  // extends this, and ts-jest uses it directly for the unit tier.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@tcp/shared": ["../../libs/tcp-shared/src/index.ts"],
+      "@tcp/shared/*": ["../../libs/tcp-shared/src/*"]
+    },
+    // Explicit for the same reason as tsconfig.spec.json/tsconfig.app.json:
+    // TS6 won't infer a rootDir spanning this app and the @tcp/shared
+    // sources pulled in via the paths alias above. No build or test config
+    // uses this outDir/rootDir pair directly (each extender overrides both),
+    // so this only fixes editor/tsserver validation of the file itself.
+    "rootDir": "../..",
+    "outDir": "./dist"
+  }
+}

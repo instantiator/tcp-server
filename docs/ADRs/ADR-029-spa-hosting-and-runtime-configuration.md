@@ -1,6 +1,6 @@
 # ADR-029: SPA Hosting and Runtime Configuration
 
-**Status:** Accepted (2026-08-03)
+**Status:** Accepted (amended — see [002.03](#amendments-as-implemented-002031) and [004.01](#amendments-as-implemented-004-01) at the end)
 
 ## Context
 
@@ -73,7 +73,7 @@ Three further points: [HTTP/2 is needed in development too](#http2-in-developmen
 - `002.04.00.prompt - backend api enablement for the web ui (draft).md`
 - `004.01.00.prompt - oidc client (draft).md`
 - `005.01.00.prompt - generated api client (draft).md`
-- `009.01.00.prompt - browser test suite for mvp journeys (draft).md`
+- `phase 04 - web ui quality/001.01.00.prompt - browser test suite for mvp journeys (draft).md`
 
 ## Detail
 
@@ -128,3 +128,68 @@ Note that `.env.example`'s comment claiming other ports are derived arithmetical
 nginx falls back to `index.html` for any path that isn't a file and isn't `/api`, so React Router's deep links survive a page refresh.
 
 Without it, loading `/company/acme` directly returns 404 — a classic and easily-missed deployment fault that only shows up on refresh, never during navigation.
+
+<a id="amendments-as-implemented-002031"></a>
+
+## Amendments as implemented (002.03) — HTTP/2 forced TLS at the edge
+
+- **The web service is HTTPS-only, and the Vite option was struck.** This ADR
+  offered two routes to HTTP/2 in development: "enable HTTP/2 on the Vite
+  development server" or "run the same nginx image in front of it". The first
+  does not exist. Vite's development server has no HTTP/2 implementation —
+  `server.https` gives TLS over HTTP/1.1 — and, more fundamentally, **no
+  browser negotiates HTTP/2 over cleartext**: there is no h2c support in
+  Chrome, Firefox or Safari. Requiring HTTP/2 therefore requires TLS, in
+  development as much as in a deployment. `tcp-web` listens on 443 with
+  `http2 on` and nothing else; `EXPOSE_PORT_WEB` publishes to that.
+- **Certificates.** `docker/nginx/10-tcp-init.sh` generates a self-signed
+  `localhost` certificate at container start unless one is mounted at
+  `/etc/nginx/certs`, so a first run needs no setup. mkcert is the documented
+  route to a trusted one ([web-client.md](../web-client.md#a-trusted-certificate-with-mkcert)).
+  This is the one cost the decision carries that the ADR did not anticipate: a
+  browser warning on first use, per machine.
+- **A fourth wiring site: `EXPOSE_PORT_WEB_DEV`.** The ADR named three places
+  `EXPOSE_PORT_WEB` had to reach. Because nginx now owns that port, the Vite
+  development server needs one of its own — `EXPOSE_PORT_WEB_DEV` (4173),
+  read by `vite.config.ts` and by `docker-compose.dev-web.yml`. It is
+  deliberately **not** in `check-ports.sh`: it is a host process the deployment
+  never publishes, and pre-flighting it would refuse to start a stack whenever
+  a development server was legitimately already running.
+- **The dev-web overlay.** `docker-compose.dev-web.yml` plus
+  `start-deployment.sh --dev-web` swaps nginx from serving the built bundle to
+  proxying that Vite server. Hot module replacement survives: nginx does not
+  implement WebSockets over HTTP/2 (RFC 8441), so the browser opens a separate
+  HTTP/1.1 connection for the HMR socket while page loads and API calls stay on
+  HTTP/2.
+- **`proxy_buffering off` on `/api`.** Not mentioned in the decision, and
+  load-bearing for [ADR-025](ADR-025-browser-event-stream-consumption.md):
+  nginx buffers proxied responses by default, which would hold each SSE event
+  until a buffer filled. In a live view that is indistinguishable from the
+  server having stopped.
+- **HTTP/2 is asserted, not assumed.** `hosting.spec.ts` in the browser tier
+  reads the browser's own `nextHopProtocol` for both an asset and an `/api`
+  request, and proves multiplexing by firing eight simultaneous requests and
+  asserting none of them opened a connection. The end-to-end ">6 simultaneous
+  event streams" test the prompt asked for needs long-lived authenticated SSE
+  connections, which arrive with the stream client in 005.02.
+- **The browser tier moved into the api-test CI job**, which already starts a
+  deployment — the tier now drives `tcp-web` rather than a `vite preview` it
+  started itself, and a second job would have paid for a second full stack.
+
+<a id="amendments-as-implemented-004-01"></a>
+
+## Amendments as implemented (004.01)
+
+[ADR-024](ADR-024-browser-oidc-client-and-token-handling.md) needed a third value in `config.js`, and one of the two consequences below is what makes it fit the "generated `config.js`" decision without weakening it.
+
+(a) **`config.js` carries a third value, `oidcLoadUserInfo`.** Still nothing about the API address, and still only identity — it tells the OIDC client whether to read `profile`/`email` from the userinfo endpoint rather than the ID token, which is a provider difference, not an application one. The shape [above](#configjs-carries-only-what-remains) is now:
+
+```js
+window.__TCP_CONFIG__ = {
+  oidcIssuerUrl: '…',
+  oidcClientId: '…',
+  oidcLoadUserInfo: false,
+};
+```
+
+(b) **Unlike the other two, it is optional and does not stop the container.** `oidcIssuerUrl` and `oidcClientId` are required — a missing one silently points the app at the wrong identity provider, which is why the entrypoint fails loudly rather than serving a blank value. A missing `oidcLoadUserInfo` has a correct default (`false`), so refusing to start over its absence would be the opposite of a fix. It is still emitted unquoted and validated in the shell (`docker/nginx/10-tcp-init.sh`), because `config.js` is JavaScript and the string `'false'` is truthy — a quoted literal would satisfy the type and invert the default at the one place it's read.

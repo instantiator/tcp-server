@@ -1,0 +1,26 @@
+{
+  "verbose": true,
+  "rootDir": "..",
+  "testMatch": ["<rootDir>/test/smoke/*.spec.ts"],
+  "testEnvironment": "node",
+  "transform": {
+    "^.+\\.(t|j)s$": [
+      "ts-jest",
+      {
+        "tsconfig": "<rootDir>/tsconfig.spec.json"
+      }
+    ]
+  },
+  "testTimeout": 60000,
+  "reporters": [
+    "default",
+    [
+      "jest-junit",
+      {
+        "outputDirectory": "<rootDir>/../../test-results",
+        "outputName": "smoke.xml"
+      }
+    ]
+  ],
+  "transformIgnorePatterns": ["node_modules/(?!(pgvector)/)"]
+}

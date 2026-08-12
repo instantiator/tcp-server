@@ -1,0 +1,13 @@
+/*
+ * Layout only (ADR-026) — token spacing, no literal colour. A simple stacked
+ * list of companies, matching `.companies-page__companies` in
+ * CompaniesPage.css.
+ */
+.memberships-dialog__intro {
+}
+
+.memberships-dialog__companies {
+}
+
+.memberships-dialog__company {
+}

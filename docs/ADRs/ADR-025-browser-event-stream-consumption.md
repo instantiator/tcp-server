@@ -1,6 +1,6 @@
 # ADR-025: Browser Event Stream Consumption
 
-**Status:** Accepted (2026-08-03)
+**Status:** Accepted (2026-08-03; amended — see [008.02](#amendment-as-implemented-00802) at the end)
 
 > [!NOTE]
 > **This supersedes the "use a native `EventSource`" recommendation in `docs/prompts/phase 02 - web ui/001.01.00.prompt - mvp planning.md`.** That recommendation cannot be implemented — see below.
@@ -21,7 +21,7 @@ That decision isn't re-opened. This ADR covers the browser end of the same pipe.
 
 **The obvious approach doesn't work.** Browsers have a built-in SSE client called `EventSource`, but it can only be given a URL — there is no way to attach an `Authorization` header. All three streams require one. So `EventSource` is unusable here, and the planning prompt's recommendation predates that discovery.
 
-1. **A working reader already exists.** `apps/tcp-cli/src/lib/core/sse.ts` (30 lines) and `sse-reader.ts` (43 lines) read these exact endpoints and are unit-tested. What they lack is reconnection.
+1. **A working reader already exists.** `apps/backend/apps/tcp-cli/src/lib/core/sse.ts` (30 lines) and `sse-reader.ts` (43 lines) read these exact endpoints and are unit-tested. What they lack is reconnection.
 2. **Connection count is a real limit.** Agent transcripts only ever reach the agent stream, so every open chat and every assignment panel needs its own connection. A task dialog with four assignments plus the live activity view is already five — and browsers cap concurrent connections at six per address under HTTP/1.1.
 
 ## Options considered
@@ -89,7 +89,7 @@ Every stream carries the same union, `WireEvent`:
 
 Which entity an event concerns is discriminated at runtime on `payload.entity`. There are no separate agent, company and task event types to model.
 
-`parseWireEvents` (in `apps/tcp-cli/src/lib/core/sse.ts`) imports only a _type_ from `@tcp/shared`, so it moves to the client export verbatim.
+`parseWireEvents` (in `apps/backend/apps/tcp-cli/src/lib/core/sse.ts`) imports only a _type_ from `@tcp/shared`, so it moves to the client export verbatim.
 
 ### Why not the Microsoft library
 
@@ -138,3 +138,57 @@ Events carrying an entity summary — a `state_change` with a `TaskChangeSummary
 Events without a usable summary invalidate their query key instead, and the cache refetches.
 
 `StreamDelta`s don't touch the cache at all. They're high-frequency, append-only, and belong to one open transcript, so they go to local component state ([ADR-021](ADR-021-web-ui-framework-and-architecture.md)).
+
+---
+
+## Amendment as implemented (008.02) <a id="amendment-as-implemented-00802"></a>
+
+This ADR said the connection budget mattered but left the number of streams a
+surface may hold to whoever first opened more than one. That was the chat dialog
+([008.02](../prompts/phase%2002%20-%20web%20ui/008.02.00.prompt%20-%20chat%20dialog.md)),
+and this is the policy it settled. **008.03 and everything after it apply this
+rather than deciding again.** The same four rules are written beside
+`MAX_STREAMS` in `apps/frontend/tcp-frontend/src/events/subscriptions.ts`, so
+either place finds them.
+
+### One stream per mounted transcript, and nothing else opens a stream
+
+A page owns at most one — `CompanyPage` and its company stream. A dialog owns
+one per visible conversation or panel. No hook opens a stream
+([ADR-030](ADR-030-component-hooks-for-live-data.md)).
+
+There is deliberately **no per-surface quota**. A second cap would have to be
+kept in step with the real one, and the real one already fails loudly: a
+transcript refused by `MAX_STREAMS` renders `at-capacity` as its own message, in
+place, while its siblings keep working.
+
+### A parked stream releases its connection
+
+Parked means unmounted: a minimised chat dialog, a collapsed assignment panel.
+Nothing holds a connection open for a surface the user cannot see.
+
+This is what makes minimising free, and it is why the dock button for a parked
+chat can still name its agent's status — that value comes from the query cache
+some other open stream is patching, not from a connection of its own.
+
+### A restored one catches up by re-priming, not by replay
+
+Remounting refetches the agent's history, rebuilds the transcript from it, and
+only then subscribes; the server synthesises a terminal event for a late
+subscriber. Nothing is held across the park.
+
+Token deltas that arrived while it was parked are lost, and that is correct —
+they were never persisted, and the completed response they were building is in
+the history.
+
+### `MAX_STREAMS = 12` still stands
+
+005.02 picked the number before any view opened more than one stream, and asked
+for it to be rechecked at this point. With parked streams released, the
+realistic worst case is one company stream plus a handful of open panels, so
+reaching twelve means a fan-out bug — which is what the cap is for. HTTP/2 is
+mandatory ([ADR-029](ADR-029-spa-hosting-and-runtime-configuration.md)), so the browser's
+own six-per-origin HTTP/1.1 ceiling does not bind.
+
+This closes the open consequence above: whether a minimised chat keeps streaming
+is decided, and the answer is that it does not.

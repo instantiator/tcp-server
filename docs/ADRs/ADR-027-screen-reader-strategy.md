@@ -1,6 +1,6 @@
 # ADR-027: Screen Reader Strategy for Live and Data-Rich Views
 
-**Status:** Accepted (2026-08-03)
+**Status:** Accepted (amended — see [002.02](#amendment-as-implemented-00202), [003.03](#amendment-as-implemented-00303), [008.01](#amendment-as-implemented-00801) and [008.02.02](#amendment-as-implemented-0080202) at the end)
 
 ## Context
 
@@ -81,8 +81,8 @@ Two supporting decisions: [focus is managed at exactly four points](#focus-is-ma
 - `008.02.00.prompt - chat dialog (draft).md`
 - `008.03.00.prompt - task dialog (draft).md`
 - `008.04.00.prompt - user response dialog (draft).md`
-- `008.07.00.prompt - add new FAB and role menu (draft).md`
-- `009.02.00.prompt - accessibility audit and remediation (draft).md`
+- `phase 03 - web visualisation/001.01.00.prompt - add new FAB and role menu (draft).md`
+- `phase 04 - web ui quality/001.02.00.prompt - accessibility audit and remediation (draft).md`
 
 ## Detail
 
@@ -158,3 +158,72 @@ Moving focus anywhere else — including "helpfully" onto newly arrived content 
 A list that re-sorts as items change status moves content out from under someone mid-read.
 
 Lists keep a stable sort: new items append, and status changes update in place.
+
+## Amendment as implemented (002.02) <a id="amendment-as-implemented-00202"></a>
+
+**The spike passed: `@guidepup/virtual-screen-reader` 0.32.1 works under Vitest 4 and jsdom**, with no Jest present. The proof was a throwaway announcer streaming six tokens into a transcript and one completion into a `role="status"` region, asserting that `spokenPhraseLog()` holds one phrase and no per-token entries. It was stable over repeated runs. 003.03 superseded it with the real gate, `apps/frontend/tcp-frontend/src/announce/announcer.test.tsx`, and deleted the spike.
+
+Three corrections to [the snippet above](#automated-tests-for-announcement-behaviour), which was written from the library's documentation rather than from a run:
+
+1. **`spokenPhraseLog()` returns a Promise.** So do `lastSpokenPhrase()`, `start()`, `stop()` and `clearSpokenPhraseLog()`. Without `await`, the snippet's `expect(...).toEqual([...])` compares a Promise to an array and fails for the wrong reason — or, with `toHaveLength`, passes for the wrong reason.
+
+2. **`start()` seeds the log.** It announces the container itself, so the log opens with `'document'`. Call `await virtual.clearSpokenPhraseLog()` immediately after starting, or every assertion carries an entry the announcer did not produce.
+
+3. **Phrases are prefixed with the region's politeness** — `'polite: Reply from Sales received'`, not `'Reply from Sales received'`. This is an improvement on what the ADR assumed: the [per-surface policy table](#per-surface-policy)'s politeness column becomes assertable in the same expression as the wording.
+
+Corrected:
+
+```ts
+await virtual.start({ container: document.body });
+await virtual.clearSpokenPhraseLog();
+// ...dispatch WireEvents, advance fake timers past the throttle interval...
+expect(await virtual.spokenPhraseLog()).toEqual([
+  'polite: Tasks: 2 added, 1 completed',
+]);
+```
+
+**Fake timers need `shouldAdvanceTime`.** The throttle must be driven deterministically (`vi.advanceTimersByTimeAsync`), but the simulator has its own awaits that never settle under a frozen clock. `vi.useFakeTimers({ shouldAdvanceTime: true })` keeps real time moving underneath, and is what makes the two coexist.
+
+## Amendment as implemented (003.03) <a id="amendment-as-implemented-00303"></a>
+
+The announcer exists. `apps/frontend/tcp-frontend/src/announce/announcer.ts` is the single application-level announcer this ADR asks for, and `announcer.test.tsx` is the gate. Six things the ADR did not know, and one deliberate deviation.
+
+1. **The primitive is `@react-aria/live-announcer`, not React Aria Components.** [ADR-026](ADR-026-web-ui-accessibility-and-component-library.md) chose React Aria partly for its live announcer, which is true but not reachable the obvious way: `announce` is absent from `react-aria-components`' index, and that package's exports map contains `"./private/*": null`, deliberately blocking the subpath the function actually lives at. The public route is the sibling package `@react-aria/live-announcer` (3.5.1, Apache-2.0), a one-line re-export whose own `react-aria: ^3.48.0` dependency dedupes onto the copy `react-aria-components` already pins — a manifest, and no second implementation.
+
+2. **`announce()` defaults to `assertive`.** Every call site must pass politeness explicitly, and the announcer's `Announcement` type therefore defaults it to `polite` itself rather than letting the library's default through. A missed politeness argument would otherwise interrupt on every list update.
+
+3. **It creates its regions lazily, on first call, and mitigates that with a delay.** Outside a test environment it waits 100ms after building the regions before speaking the first message, because a region that appears at the same moment as its content is announced by nothing. The announcer therefore **primes at import** — one empty polite message, immediately cleared — so no real announcement ever depends on that delay, and jsdom (where the delay is skipped) exercises the same path as the browser.
+
+4. **It uses `role="log"` with a new child node per message**, not one node whose text is replaced. That fixes a defect the interim implementation had: two consecutive routes sharing a title now announce twice, correctly, where a single mutated node would have looked unchanged and said nothing.
+
+5. **Coalescing counts changes; it does not join strings.** Fifty additions become `t('announce.tasksAdded', { count: 50 })` → "Tasks: 50 added". Joining pre-built phrases would have produced "Tasks: 1 added, Tasks: 1 added, …" — one announcement, still a flood, and a test asserting only the log's _length_ would have passed it. The gate asserts the phrase.
+
+6. **`t` gained interpolation.** "Tasks: 2 added" cannot be built from a key alone without inlining a number beside words in JSX, which ADR-021 forbids. `t(key, params)` fills `{placeholder}` slots and does nothing else — no plural rules, so every announcement wording is phrased count-agnostically.
+
+**The deviation: an in-context error is `role="group"` plus an assertive announcement, not `role="alert"`.** `role="alert"` is itself a live region, and this ADR allows one; three failing lists would mount three. Routing the announcement through the announcer also lets two failures in the same tick coalesce into one interruption, which per-component alerts cannot do. The visible half is unchanged — the error still appears beside what failed. **001.02's manual pass owns confirming this reads as well as a native alert**, and one thing it should listen for specifically: two _different_ assertive channels firing in the same tick still truncate each other, because they are separate sentences by design.
+
+## Amendment as implemented (008.01) <a id="amendment-as-implemented-00801"></a>
+
+The transcript component ([008.01](../prompts/phase%2002%20-%20web%20ui/008.01.00.prompt%20-%20dialog%20framework%20and%20event%20transcript%20components.md)) is the streaming surface this ADR's "never announce a partial response" rule was written for. Four things now true:
+
+- **The per-token gate this ADR asks for now exists for the transcript specifically.** `useTranscript.test.tsx` streams a dozen deltas, advances past the throttle, and asserts `spokenPhraseLog()` is empty.
+- **The completed-response question is answered provisionally: arrival only.** Behind `ANNOUNCE_RESPONSE_BODY` in `useTranscript.ts`, currently `false`. Both wordings exist in `strings.ts`, so 001.02's manual pass changes one line rather than building anything new.
+- **History never announces.** Reopening a transcript re-primes it from the history endpoint, and announcing what the user has already seen would make every reopen a burst of speech. The announcement path runs only for live stream events.
+- **Two of the ADR's four focus points are now implemented and asserted: dialog open, and dialog close.**
+
+## Amendment as implemented (008.02.02) <a id="amendment-as-implemented-0080202"></a>
+
+**Closing a chat no longer exists, so the "destructive completion" example in [the focus rules above](#focus-is-managed-at-four-points) no longer describes anything real.** The chat dialog's per-conversation control was redesigned from "close" to **complete in place**: pressing it ends the chat on the server (the assignment succeeds, the agent completes) and leaves the panel exactly where it was — heading, transcript and all. Only the message form goes, replaced by a plain line saying the chat is over. Nothing is destroyed and no list shortens, so the rule's answer — move to a stable neighbour — has nothing to apply to here.
+
+The rule itself stands. It is the right answer for any future surface that does remove the thing the user was working in; this feature simply stopped being an example of one.
+
+**There is still a focus question, and it is a narrower one: a focused control disappearing.** The complete button is removed the moment the agent reaches a terminal status — completed, failed or cancelled — and the press that completed the chat is exactly what leaves focus on it. A removed element takes focus to `document.body`, which this ADR forbids leaving it on.
+
+Answered as: **focus lands on the conversation's own `<section>`**, the same `tabIndex={-1}` element labelled by its own heading that the dock's restore path already focuses. Focusing it announces which conversation this is, which is the useful thing to say when the control you just pressed has gone. Its own panel, not a neighbour — the conversation is still on screen and still worth reading.
+
+Two implementation details worth recording, because both are the reason it is safe:
+
+- **The move happens only when focus actually fell to the body.** React Aria's focus scope often catches the removal itself, and when it has, focus is already somewhere deliberate; moving it again would be the "helpfully pull the user somewhere" failure this ADR warns about.
+- **The completion line is not a live region.** It says why the form has gone; it does not narrate an arrival. The single-announcer rule is unchanged, and completing a chat announces nothing.
+
+Focus points now implemented and asserted for this dialog: dialog open, dialog taken off the page (minimise), restore from the dock, and a focused control disappearing.

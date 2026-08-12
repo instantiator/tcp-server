@@ -2,12 +2,12 @@
 
 ## Strategy
 
-The project uses five test tiers that run in increasing order of scope and
+The project uses six test tiers that run in increasing order of scope and
 infrastructure requirement. CI runs them in this order — a failure at any tier
 gates the next:
 
 ```
-unit → integration → api + smoke + e2e
+unit → integration → api + smoke + e2e + browser
 ```
 
 | Tier        | What it proves                                                               | Infrastructure                            |
@@ -17,6 +17,7 @@ unit → integration → api + smoke + e2e
 | E2E         | HTTP API workflows produce the right responses end-to-end                    | Docker (postgres, redis, minio)           |
 | API         | Requests and responses through the tcp-server API with a real JWT            | A running stack, with Zitadel             |
 | Smoke       | Every service in a deployed stack is up, healthy, and serving its Swagger UI | A running stack                           |
+| Browser     | The web app works in a real browser, and is free of axe violations           | Something serving the web app             |
 
 The api and smoke tiers run against the same stack in CI's `api-test` job,
 which is why they are often referred to together.
@@ -50,6 +51,47 @@ testcontainers from Jest's global setup. They test full request/response cycles
 including middleware, guards, and TypeORM queries. Zitadel is not required —
 auth is mocked (jwks-rsa).
 
+### Two runners
+
+The backend, `libs/tcp-shared` and `scripts/setup-wizard` use **Jest**. The
+frontend workspace (`apps/frontend/tcp-frontend`) uses **Vitest** for its unit
+and component tests, and **Playwright** for the browser tier
+([ADR-028](ADRs/ADR-028-frontend-testing-strategy.md)).
+
+The split exists because the frontend is a Vite application: testing it with
+Jest would mean a second compilation of the same source, with its own answers
+for JSX, CSS imports and asset handling — and "passes in tests, breaks in the
+browser" is what that divergence produces. The rule is simply **which workspace
+the file is in**; nothing else changes, since Vitest's test API is
+Jest-compatible.
+
+All three emit JUnit XML into `test-results/`, so CI reporting is uniform.
+
+### Accessibility is enforced by the tests
+
+Accessibility is checked at three points
+([ADR-026](ADRs/ADR-026-web-ui-accessibility-and-component-library.md)), two of
+them automated here:
+
+- **Edit time** — `eslint-plugin-jsx-a11y`, as a lint error.
+- **Component tests** — every component test calls `expectNoA11yViolations` from
+  `src/test-support/axe.ts`. Contrast is disabled there, because jsdom has no
+  layout engine to measure it with.
+- **Browser tests** — every journey scans its rendered pages with
+  `@axe-core/playwright`, which _can_ measure contrast.
+
+Component tests also query by role and accessible name rather than by test id
+wherever possible. That is the accessibility check, not a style preference: a
+control that cannot be found that way is one a screen reader cannot describe.
+
+**Announcements have their own gate.** `@guidepup/virtual-screen-reader`
+simulates a screen reader against jsdom and reports what would be spoken, in
+order — so the coalescing and "never word by word" rules from
+[ADR-027](ADRs/ADR-027-screen-reader-strategy.md) fail the build when they
+regress. `src/test-support/screen-reader.test.tsx` is the worked example, and
+[ADR-027's 002.02 amendment](ADRs/ADR-027-screen-reader-strategy.md#amendment-as-implemented-00202)
+records the three API details its documentation gets wrong.
+
 ## Running the tests
 
 The integration and e2e suites start their own ephemeral Docker services from
@@ -77,6 +119,14 @@ automatically). See [scripts/run-all-tests.sh](../scripts/run-all-tests.sh).
 
 No external services. Safe to run at any time. See
 [scripts/run-unit-tests.sh](../scripts/run-unit-tests.sh).
+
+This runs **both** runners: the backend's Jest suites and the frontend's Vitest
+unit and component tests. To run only the frontend's, and to keep it watching:
+
+```bash
+npm test --workspace apps/frontend/tcp-frontend       # once
+cd apps/frontend/tcp-frontend && npx vitest           # watch
+```
 
 ### Integration tests
 
@@ -142,22 +192,86 @@ global setup provisions the infrastructure, `npm run test:e2e` (bare jest) works
 directly too — it no longer hangs on an unreachable Redis. See
 [scripts/run-e2e-tests.sh](../scripts/run-e2e-tests.sh).
 
+### Browser tests
+
+Like the api and smoke tiers, this one is a black-box client: it drives
+whatever is serving at `--base-url` and provisions nothing
+([ADR-016](ADRs/ADR-016-test-infrastructure-orchestration.md)).
+
+**What needs to be running first:** a deployment. Its `tcp-web` service serves
+the app, and there is no `webServer` fallback in `playwright.config.ts` — one
+that started `vite preview` would also serve HTTP/1.1, quietly hiding the
+protocol regression `hosting.spec.ts` exists to catch.
+
+```bash
+./scripts/start-deployment.sh --project tcp-dev --env-file .env.dev
+./scripts/run-browser-tests.sh
+./scripts/run-browser-tests.sh --base-url https://localhost:5174  # the testing stack
+./scripts/run-browser-tests.sh -- --headed --grep "heading"
+```
+
+`hosting.spec.ts` covers what nginx has to get right
+([ADR-029](ADRs/ADR-029-spa-hosting-and-runtime-configuration.md)): HTTP/2 is
+actually negotiated (asserted from the browser's own `nextHopProtocol`, not
+inferred from the config file), eight simultaneous requests share one
+connection rather than hitting the HTTP/1.1 six-connection ceiling, `config.js`
+is `no-store` while hashed assets are `immutable`, a deep link survives a cold
+load, and `/api` reaches tcp-server on the same origin.
+
+Chromium is the only browser configured; Firefox and WebKit are commented out
+in `playwright.config.ts` for a later prompt to enable. Safari and Firefox are
+covered per release by ADR-026's manual matrix regardless.
+
+**Browser binaries are not installed by `npm ci`** — they are ~180 MB, and a
+contributor who never touches the frontend should not pay for them. The script
+installs Chromium on first use; CI caches it keyed on the Playwright version.
+See [scripts/run-browser-tests.sh](../scripts/run-browser-tests.sh).
+
+### Signing in
+
+The app keeps no token anywhere Playwright's `storageState` can capture —
+tokens live only in `InMemoryWebStorage`
+([ADR-024](ADRs/ADR-024-browser-oidc-client-and-token-handling.md)).
+`test/browser/auth.setup.ts` is its own Playwright project, runs first, and
+signs in once through the real Zitadel login form. What `storageState` saves
+is **Zitadel's own session cookie**, not an application token. With that
+cookie present, a spec that lands on a guarded route is silently redirected to
+the provider, recognised without a prompt, and sent back with a fresh
+in-memory token — so every spec signs in for real, and only the setup file
+ever sees the login form.
+
+The `chromium` project is **signed out by default**; a spec opts in with
+`test.use({ storageState: AUTH_STATE_PATH })` (`test/browser/auth-state.ts`).
+That is deliberate — `app-shell.spec.ts` proves a guarded route redirects and
+that `?devSession=` cannot sign anyone in, and both would pass trivially if
+every spec arrived already signed in.
+
+`scripts/run-browser-tests.sh` resolves `TEST_USERNAME`/`TEST_PASSWORD` the
+same way it resolves the machine credentials. When they are absent, the setup
+project and every spec that needs a session skip with a stated reason rather
+than failing, so a contributor with no deployment can still run the rest of
+the tier.
+
+To run the signed-in specs locally, start a deployment that provisions a test
+user — `start-deployment.sh` does, against `.env.dev` — then run the tier as
+above; `run-browser-tests.sh` picks the credentials up automatically.
+
 ## Test infrastructure
 
 The **integration** and **e2e** tiers provision their backing services with
 [testcontainers](https://node.testcontainers.org/), driven from Jest
-`globalSetup`/`globalTeardown` (`test/integration/global-*.ts`,
-`test/e2e/global-*.ts`). The shared helper `test/support/testcontainers-env.ts`
+`globalSetup`/`globalTeardown` (`apps/backend/test/integration/global-*.ts`,
+`apps/backend/test/e2e/global-*.ts`). The shared helper `apps/backend/test/support/testcontainers-env.ts`
 starts the services from the project's own `docker-compose.yml`, so there is one
 source of truth for how they are configured.
 
-A small test-only overlay, `test/support/docker-compose.dynamic-ports.yml`,
+A small test-only overlay, `apps/backend/test/support/docker-compose.dynamic-ports.yml`,
 replaces the fixed host-port bindings with random ones (via the Compose Spec's
 `!override` tag). This is what lets a test run coexist with a dev stack — and is
 why the runner scripts no longer pause a dev container or probe for
 already-running infrastructure.
 
-Required env vars are read via `test/support/require-env.ts`, which throws if a
+Required env vars are read via `apps/backend/test/support/require-env.ts`, which throws if a
 value is missing rather than letting a spec silently skip. If a container fails
 to start, the helper writes each service's logs to
 `test-results/<tier>-compose-logs/` (uploaded as a CI artifact on failure) and
@@ -170,13 +284,24 @@ clients against an already-running instance.
 
 ## Test file locations
 
-| Suite       | Pattern                                         | Jest config                  |
-| ----------- | ----------------------------------------------- | ---------------------------- |
-| Unit        | `apps/**/src/**/*.spec.ts`, `libs/**/*.spec.ts` | `jest.config.js` (root)      |
-| E2E         | `test/e2e/*.e2e-spec.ts`                        | `test/jest-e2e.json`         |
-| Integration | `test/integration/**/*.integration-spec.ts`     | `test/jest-integration.json` |
-| Smoke       | `test/smoke/**/*.spec.ts`                       | `test/jest-smoke.json`       |
-| API         | `test/api/**/*.spec.ts`                         | `test/jest-api.json`         |
+All paths are relative to the repository root. The unit tier is configured in
+the `jest` block of `apps/backend/package.json`; its `roots` reach out to
+`libs/tcp-shared` and `scripts/setup-wizard`, which sit outside that workspace.
+
+| Suite            | Pattern                                                      | Config                                               |
+| ---------------- | ------------------------------------------------------------ | ---------------------------------------------------- |
+| Unit             | `apps/backend/apps/**/src/**/*.spec.ts`, `libs/**/*.spec.ts` | `apps/backend/package.json` (`jest` block)           |
+| E2E              | `apps/backend/test/e2e/**/*.e2e-spec.ts`                     | `apps/backend/test/jest-e2e.json`                    |
+| Integration      | `apps/backend/test/integration/**/*.integration-spec.ts`     | `apps/backend/test/jest-integration.json`            |
+| Smoke            | `apps/backend/test/smoke/**/*.spec.ts`                       | `apps/backend/test/jest-smoke.json`                  |
+| API              | `apps/backend/test/api/**/*.spec.ts`                         | `apps/backend/test/jest-api.json`                    |
+| Unit + component | `apps/frontend/tcp-frontend/src/**/*.test.{ts,tsx}`          | `apps/frontend/tcp-frontend/vite.config.ts` (`test`) |
+| Browser          | `apps/frontend/tcp-frontend/test/browser/**/*.spec.ts`       | `apps/frontend/tcp-frontend/playwright.config.ts`    |
+
+Frontend tests are **colocated** with the code they cover (`.test.tsx` next to
+the component), unlike the backend's container-backed tiers, which live under
+`apps/backend/test/`. The browser tier is the exception, sitting in its own
+directory because it belongs to no single component.
 
 ## CI pipeline
 
@@ -185,6 +310,14 @@ lint run in parallel first; each subsequent tier only runs if the previous
 passed.
 
 ```
-verify (build + lint + typecheck) → unit-test → integration-test ─┬─→ api-test (includes smoke)
+verify (build + lint + typecheck) → unit-test → integration-test ─┬─→ api-test (includes smoke + browser)
                                                                    └─→ e2e-test
 ```
+
+The browser tier shares the `api-test` job rather than having one of its own:
+from 002.03 it drives the deployment's `tcp-web` service, and `api-test` is the
+job that starts a deployment. A separate job would pay for a second full stack
+to reach the same state.
+
+`unit-test` publishes two reports — `unit.xml` from Jest and `frontend.xml`
+from Vitest — because one job runs both runners.

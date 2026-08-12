@@ -27,6 +27,13 @@ test('encodeEmbedding base64-encodes when asked', () => {
   const vector = embed('x');
   const encoded = encodeEmbedding(vector, 'base64');
   if (typeof encoded !== 'string') throw new Error('expected a base64 string');
-  const decoded = new Float32Array(Buffer.from(encoded, 'base64').buffer);
+  const bytes = Buffer.from(encoded, 'base64');
+  // Node hands small buffers out of a shared pool, so `bytes.buffer` is the
+  // whole pool rather than just these bytes — slice to the buffer's own window
+  // before reading it as floats.
+  const decoded = new Float32Array(
+    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+  );
   assert.equal(decoded.length, EMBEDDING_DIM);
+  assert.deepEqual(decoded, Float32Array.from(vector));
 });

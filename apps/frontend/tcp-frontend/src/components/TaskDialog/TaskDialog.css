@@ -1,0 +1,44 @@
+/*
+ * Meaningful class names now, rules filled per theme later (ADR-026). No
+ * literal colour, spacing or border value may appear here — see
+ * Transcript.css for the convention this follows.
+ *
+ * The rules below are layout, not theme: the confirmation dialog's two
+ * buttons sit on one row, and the assignment panels stack with visible space
+ * between them, matching `.chat-conversation` in ChatDialog.css.
+ */
+.task-dialog__details {
+}
+
+.task-dialog__details-heading {
+}
+
+.task-dialog__field {
+}
+
+.task-dialog__field-label {
+}
+
+.task-dialog__cancel {
+}
+
+.task-dialog__confirm-actions {
+  display: flex;
+  gap: var(--tcp-space-sm);
+}
+
+.task-dialog__assignments-heading {
+}
+
+.task-assignment {
+  margin-block-end: var(--tcp-space-lg);
+}
+
+.task-assignment__heading {
+}
+
+.task-assignment__toggle {
+}
+
+.task-assignment__body {
+}

@@ -6,9 +6,33 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Job graph — a block of cheap checks, then the three heavy tiers. Parallel
+# within each block, gated between them:
+#
+#   build ─────┐                    ┌─ integration
+#   lint ──────┤                    │
+#   typecheck ─┼─ all must pass ──→ ├─ api/smoke/browser
+#   unit ──────┘                    └─ e2e
+#
+# Everything in the first block is parallel because nothing in it consumes
+# anything else's output: no artefacts pass between jobs, every job checks out
+# and runs `npm ci` for itself, and `@tcp/shared` resolves through its `exports`
+# map to *source* (`./src/index.ts`) rather than to `dist`. That last point is
+# what makes lint and typecheck independent of build — verified by running both
+# against a tree with every `dist/` removed.
+#
+# The gate between the blocks is deliberate and strict: every cheap signal must
+# be green before anything starts a Docker stack. A broken build, a lint error,
+# a type error or a failing unit test each halt the run before the expensive
+# tiers begin, which is where nearly all of the CI budget goes.
+#
+# The cost of the split is one extra `npm ci` per job (they are parallel, so it
+# costs runner-minutes, not wall clock). The benefit is that the heavy tiers now
+# start when the slowest *single* check finishes rather than after all four run
+# back to back.
 jobs:
-  verify:
-    name: Build, lint & typecheck
+  build:
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -16,16 +40,50 @@ jobs:
           submodules: true
       - uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          # Pinned exactly in .nvmrc so CI and developer machines move together.
+          # A floating "24" let CI drift onto a patch release that changed
+          # Buffer.poolSize, failing a unit test that passed locally.
+          node-version-file: .nvmrc
           cache: npm
+          # Explicit: the default hashes **/package-lock.json, and the
+          # workspace members add package.json files that would otherwise
+          # churn the key. Only the root lockfile is authoritative (ADR-022).
+          cache-dependency-path: package-lock.json
       - run: npm ci
       - run: npm run build
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
       - run: npm run lint:check
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
       - run: npm run typecheck
 
   unit-test:
     name: Unit tests
-    needs: [verify]
     runs-on: ubuntu-latest
     permissions:
       checks: write
@@ -36,9 +94,19 @@ jobs:
           submodules: true
       - uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          # Pinned exactly in .nvmrc so CI and developer machines move together.
+          # A floating "24" let CI drift onto a patch release that changed
+          # Buffer.poolSize, failing a unit test that passed locally.
+          node-version-file: .nvmrc
           cache: npm
+          # Explicit: the default hashes **/package-lock.json, and the
+          # workspace members add package.json files that would otherwise
+          # churn the key. Only the root lockfile is authoritative (ADR-022).
+          cache-dependency-path: package-lock.json
       - run: npm ci
+      # Fans out to every workspace: Jest for the backend, Vitest for the
+      # frontend's unit and component tests (ADR-028). Two XML files, two
+      # reporter steps below.
       - run: ./scripts/run-unit-tests.sh
       - name: Publish test results
         uses: dorny/test-reporter@v3
@@ -48,10 +116,19 @@ jobs:
           path: test-results/unit.xml
           reporter: jest-junit
           fail-on-error: false
+      - name: Publish frontend test results
+        uses: dorny/test-reporter@v3
+        if: ${{ !cancelled() }}
+        with:
+          name: Frontend unit & component tests
+          # Vitest's junit reporter emits the same schema jest-junit does.
+          path: test-results/frontend.xml
+          reporter: jest-junit
+          fail-on-error: false
 
   integration-test:
     name: Integration tests
-    needs: [unit-test]
+    needs: [build, lint, typecheck, unit-test]
     runs-on: ubuntu-latest
     permissions:
       checks: write
@@ -62,8 +139,15 @@ jobs:
           submodules: true
       - uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          # Pinned exactly in .nvmrc so CI and developer machines move together.
+          # A floating "24" let CI drift onto a patch release that changed
+          # Buffer.poolSize, failing a unit test that passed locally.
+          node-version-file: .nvmrc
           cache: npm
+          # Explicit: the default hashes **/package-lock.json, and the
+          # workspace members add package.json files that would otherwise
+          # churn the key. Only the root lockfile is authoritative (ADR-022).
+          cache-dependency-path: package-lock.json
       - run: npm ci
       # Diagnostic: testcontainers drives the `docker compose` CLI, whose
       # behaviour is version-sensitive. Surface the version to catch drift early.
@@ -90,8 +174,8 @@ jobs:
           if-no-files-found: ignore
 
   api-test:
-    name: API & smoke tests
-    needs: [integration-test]
+    name: API, smoke & browser tests
+    needs: [build, lint, typecheck, unit-test]
     runs-on: ubuntu-latest
     permissions:
       checks: write
@@ -102,14 +186,54 @@ jobs:
           submodules: true
       - uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          # Pinned exactly in .nvmrc so CI and developer machines move together.
+          # A floating "24" let CI drift onto a patch release that changed
+          # Buffer.poolSize, failing a unit test that passed locally.
+          node-version-file: .nvmrc
           cache: npm
+          # Explicit: the default hashes **/package-lock.json, and the
+          # workspace members add package.json files that would otherwise
+          # churn the key. Only the root lockfile is authoritative (ADR-022).
+          cache-dependency-path: package-lock.json
       - uses: docker/setup-buildx-action@v4
-      # One bake build for all six service images. They share the `builder`
+      # Keyed on the resolved Playwright version rather than the whole
+      # lockfile, so an unrelated dependency bump doesn't re-download ~180 MB
+      # of browser. Read straight from the lockfile — this runs before npm ci.
+      - name: Resolve Playwright version
+        run: |
+          version="$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")"
+          echo "PLAYWRIGHT_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}
+      # Started here and awaited after the bake, rather than run in sequence
+      # after it: neither touches anything the Docker build reads. .dockerignore
+      # excludes node_modules, dist and the caches from the build context, and
+      # Playwright writes to ~/.cache. The bake is the long pole at ~6m, so this
+      # is ~1m of otherwise idle sequential time reclaimed.
+      #
+      # No --with-deps. The apt install it performs is *not* covered by the
+      # browser cache above and cost ~1m20s on every run even when that cache
+      # hit; ubuntu-latest already carries the system libraries headless
+      # Chromium needs. If that stops being true, the browser tier fails at
+      # launch — restore --with-deps here rather than anywhere else.
+      - name: Install host dependencies (background)
+        run: |
+          nohup bash -c '
+            npm ci && npm exec --workspace apps/frontend/tcp-frontend -- playwright install chromium
+            echo $? > /tmp/host-deps.status
+          ' > /tmp/host-deps.log 2>&1 &
+      # One bake build for all seven service images. They share the `builder`
       # (npm ci + build:apps) and `prod-deps` stages of the root Dockerfile, so
       # bake resolves those once across the whole graph. Targets/tags come from
       # docker-compose.yml's build config; `output=type=docker` loads them into
       # the local image store for start-deployment.sh to reuse.
+      #
+      # A target missing from this list is never built, and the deployment then
+      # fails to start on an image that does not exist — so tcp-web belongs here
+      # as much as it belongs in docker-compose.yml.
       - name: Build service images
         uses: docker/bake-action@v7
         with:
@@ -121,22 +245,68 @@ jobs:
             tcp-mcp-memory
             tcp-mcp-interactions
             tcp-mcp-tasks
+            tcp-web
           set: |
             *.cache-from=type=gha,scope=monorepo-build
             *.cache-to=type=gha,scope=monorepo-build,mode=max
             *.output=type=docker
-      - run: npm ci
-      # .env.testing sets EXPOSE_PORT_API=3001 (testing uses non-default ports
-      # to coexist with a dev stack), so target that, not a hardcoded 3000.
-      # --dev-ports publishes the MCP host ports the smoke tier reaches directly.
-      # The Zitadel bootstrap writes generated OIDC/test client creds to the
-      # gitignored .env.testing.local, which run-api-tests.sh then reads.
-      - name: Derive API base URL from .env.testing
+      # Echoes the backgrounded install's output into the log either way, so a
+      # failure there is diagnosable, and exits with its status so the job fails
+      # on it rather than limping on to a missing node_modules.
+      - name: Wait for host dependencies
+        run: |
+          for _ in $(seq 1 600); do
+            [ -f /tmp/host-deps.status ] && break
+            sleep 1
+          done
+          cat /tmp/host-deps.log || true
+          if [ ! -f /tmp/host-deps.status ]; then
+            echo "::error::Host dependency install did not finish within 10 minutes."
+            exit 1
+          fi
+          exit "$(cat /tmp/host-deps.status)"
+      # .env.testing sets EXPOSE_PORT_API=3001 and EXPOSE_PORT_WEB=5174 (testing
+      # uses non-default ports to coexist with a dev stack), so target those, not
+      # hardcoded defaults. --dev-ports publishes the MCP host ports the smoke
+      # tier reaches directly. The Zitadel bootstrap writes generated OIDC/test
+      # client creds to the gitignored .env.testing.local, which
+      # run-api-tests.sh then reads.
+      #
+      # The web URL is https: tcp-web is TLS-only because HTTP/2 is (ADR-025).
+      #
+      # tcp-agent is derived for the same reason as the other two, and it is the
+      # one that bites hardest: --dev-ports publishes it on EXPOSE_PORT_AGENT
+      # (3004 under .env.testing) precisely so it cannot collide with
+      # tcp-server's 3001, and the smoke tier's own default is 3003 — the *dev*
+      # stack's port. Leave it underived and the tier does not fall back to
+      # something harmless, it probes a port nothing in this deployment is on.
+      # Mirrors run-all-tests.sh, which derives all three.
+      - name: Derive base URLs from .env.testing
         run: |
           port="$(grep -E '^EXPOSE_PORT_API=' .env.testing | tail -1 | cut -d= -f2)"
           echo "API_BASE_URL=http://localhost:${port:-3000}" >> "$GITHUB_ENV"
+          agent_port="$(grep -E '^EXPOSE_PORT_AGENT=' .env.testing | tail -1 | cut -d= -f2)"
+          echo "AGENT_BASE_URL=http://localhost:${agent_port:-3003}" >> "$GITHUB_ENV"
+          web_port="$(grep -E '^EXPOSE_PORT_WEB=' .env.testing | tail -1 | cut -d= -f2)"
+          echo "WEB_BASE_URL=https://localhost:${web_port:-5173}" >> "$GITHUB_ENV"
       - name: Start deployment stack
         run: ./scripts/start-deployment.sh --project tcp-api --env-file .env.testing --dev-ports
+      # apps/frontend/tcp-frontend/src/api/schema.d.ts is generated from
+      # tcp-server's OpenAPI description, which is produced at runtime from
+      # controller metadata (ADR-014). A controller change makes the committed
+      # types stale in a way nothing else notices — the frontend keeps
+      # typechecking against a contract the server no longer honours.
+      #
+      # This lives inside api-test rather than in a job of its own because the
+      # check needs a running tcp-server and this job has already booted one.
+      # It runs before the test tiers so the cheap failure is reported first.
+      - name: Check the generated API types are current
+        run: |
+          ./scripts/generate-api-types.sh --base-url "$API_BASE_URL"
+          if ! git diff --exit-code -- apps/frontend/tcp-frontend/src/api/schema.d.ts; then
+            echo "::error::Generated API types are stale. Run 'npm run api:generate' against a running tcp-server and commit the result."
+            exit 1
+          fi
       - name: Run API tests
         run: ./scripts/run-api-tests.sh --base-url "$API_BASE_URL" --env-file .env.testing
       - name: Publish API test results
@@ -148,7 +318,7 @@ jobs:
           reporter: jest-junit
           fail-on-error: false
       - name: Run smoke tests
-        run: ./scripts/run-smoke-tests.sh --base-url "$API_BASE_URL"
+        run: ./scripts/run-smoke-tests.sh --base-url "$API_BASE_URL" --agent-url "$AGENT_BASE_URL"
       - name: Publish smoke test results
         uses: dorny/test-reporter@v3
         if: ${{ !cancelled() }}
@@ -157,12 +327,36 @@ jobs:
           path: test-results/smoke.xml
           reporter: jest-junit
           fail-on-error: false
+      # The browser tier runs here rather than in a job of its own: from 002.03
+      # it drives the deployment's tcp-web service, and this job is the one that
+      # has a deployment. A separate job would pay for a second full stack
+      # startup to reach the same state. The order mirrors run-all-tests.sh.
+      - name: Run browser tests
+        run: ./scripts/run-browser-tests.sh --base-url "$WEB_BASE_URL"
+      - name: Publish browser test results
+        uses: dorny/test-reporter@v3
+        if: ${{ !cancelled() }}
+        with:
+          name: Browser tests
+          # Playwright's junit reporter emits the same schema jest-junit does.
+          path: test-results/browser.xml
+          reporter: jest-junit
+          fail-on-error: false
+      # Traces and failure screenshots, for diagnosing a failure that did not
+      # reproduce locally.
+      - name: Upload Playwright artefacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-artifacts
+          path: test-results/browser-artifacts/
+          if-no-files-found: ignore
       - if: always()
         run: docker compose -p tcp-api --profile auth down -v
 
   e2e-test:
     name: E2E tests
-    needs: [integration-test]
+    needs: [build, lint, typecheck, unit-test]
     runs-on: ubuntu-latest
     permissions:
       checks: write
@@ -173,8 +367,15 @@ jobs:
           submodules: true
       - uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          # Pinned exactly in .nvmrc so CI and developer machines move together.
+          # A floating "24" let CI drift onto a patch release that changed
+          # Buffer.poolSize, failing a unit test that passed locally.
+          node-version-file: .nvmrc
           cache: npm
+          # Explicit: the default hashes **/package-lock.json, and the
+          # workspace members add package.json files that would otherwise
+          # churn the key. Only the root lockfile is authoritative (ADR-022).
+          cache-dependency-path: package-lock.json
       - run: npm ci
       # Diagnostic: testcontainers drives the `docker compose` CLI, whose
       # behaviour is version-sensitive. Surface the version to catch drift early.

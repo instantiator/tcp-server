@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    // Explicit because TypeScript 6 refuses to infer a rootDir that contains
+    // both this app and the @tcp/shared *sources* it consumes (ADR-022), failing
+    // with TS5011/TS6059. Emit layout is unaffected: nest builds through webpack,
+    // which decides the bundle path, so dist/apps/<app>/main.js is unchanged.
+    "rootDir": "../../../..",
+    "declaration": false,
+    "outDir": "../../dist/apps/tcp-mcp-interactions",
+    "paths": {
+      "@tcp/shared": ["../../../../libs/tcp-shared/src/index.ts"],
+      "@tcp/shared/*": ["../../../../libs/tcp-shared/src/*"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "test", "**/*spec.ts"]
+}

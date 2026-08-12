@@ -1,0 +1,21 @@
+/*
+ * The form field's own layout. React Aria's defaults — the stacked label,
+ * the control's border, the invalid state — are in `styles/base.css`, which is
+ * where this application gives the library the styling it ships without.
+ *
+ * Meaningful class names with empty rule bodies, to be filled per theme later
+ * (ADR-026). No literal colour, spacing or border value: use a `--tcp-*` token.
+ */
+
+.tcp-field {
+  margin-block-end: var(--tcp-space-md);
+}
+
+.tcp-field__label {
+}
+
+.tcp-field__hint {
+}
+
+.tcp-field__error {
+}

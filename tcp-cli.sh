@@ -66,7 +66,7 @@ if [[ -n "$EXPLICIT_ENV" ]]; then
     2>/dev/null || echo "[tcp-cli] Docker sync skipped (not running)." >&2
 fi
 
-DIST="$ROOT/dist/apps/tcp-cli/main.js"
+DIST="$ROOT/apps/backend/dist/apps/tcp-cli/main.js"
 
 if [ "$REBUILD" = "true" ] || [ ! -f "$DIST" ]; then
   echo "[tcp-cli] Building tcp-cli..." >&2
@@ -84,8 +84,9 @@ fi
 HALT_AFTER=false
 if [[ "${NODE_ARGS[0]:-}" == "shutdown" ]]; then
   HALT_AFTER=true
+  # --help/-h exits 0 without draining, so we must not halt the stack in that case.
   for arg in "${NODE_ARGS[@]}"; do
-    [[ "$arg" == "--no-stop" ]] && HALT_AFTER=false
+    [[ "$arg" == "--no-stop" || "$arg" == "--help" || "$arg" == "-h" ]] && HALT_AFTER=false
   done
 fi
 
