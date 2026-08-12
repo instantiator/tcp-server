@@ -223,7 +223,7 @@ membership and needs none.
 columns, only `memberType`. Enforcing `create_tasks`, `initiate_conversations`,
 `access_storage`, `modify_company` and `define_agent_roles` needs a migration,
 a defaulting policy, `@RequirePermission()`, and a surface to set them — carried
-into `010.01` (company configuration view). Until then, **any member of a
+into `002.01` (company configuration view). Until then, **any member of a
 company may take any action within it**.
 
 ## Consequences

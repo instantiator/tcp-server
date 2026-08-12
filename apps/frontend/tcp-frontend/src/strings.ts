@@ -55,7 +55,7 @@ const strings = {
     'Too many live views are open. Close one and try again.',
   'transcript.error.failed': 'This conversation could not be loaded.',
   // `announce.responseBody` is unused while `ANNOUNCE_RESPONSE_BODY` is false;
-  // ADR-027 leaves the choice to 009.02's manual screen reader pass, and both
+  // ADR-027 leaves the choice to 001.02 (phase 04)'s manual screen reader pass, and both
   // wordings have to exist for that pass to be a one-line change.
   'transcript.announce.response': 'Response from {role} received',
   'transcript.announce.responseBody': '{role} replied: {body}',

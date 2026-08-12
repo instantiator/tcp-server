@@ -20,7 +20,7 @@ import './CompanyPage.css';
  * **The tab list has one tab, deliberately** ([ADR-020](../../../../../docs/ADRs/ADR-020-web-ui-mvp-scope.md)).
  * This looks like over-building and is the opposite. The alternative is a
  * single-view layout that has to be dismantled and rebuilt as tabs when the
- * configuration view lands (010.01) — in a release that also has to get that
+ * configuration view lands (002.01, phase 04) — in a release that also has to get that
  * view right. The tab component is small; the retrofit is not, and it would be
  * paid at the worst moment. Do not "simplify" this into a bare panel.
  *

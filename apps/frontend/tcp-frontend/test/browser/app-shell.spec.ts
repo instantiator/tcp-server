@@ -1,4 +1,4 @@
-// The browser tier's proving journey. Deliberately thin: 009.01 owns the six
+// The browser tier's proving journey. Deliberately thin: 001.01 (phase 04) owns the six
 // MVP journeys, and most of what they need — sign-in, live activity, a task
 // reaching completion — does not exist until 004 and later.
 //
@@ -172,7 +172,7 @@ test.describe('the landing page', () => {
 // renders the not-found page, and would do so silently.
 //
 // Opened with no authorization parameters, which is the case a person can
-// actually reach by hand. The signed-in journey through here is 009.01's.
+// actually reach by hand. The signed-in journey through here is 001.01's (phase 04).
 test.describe('the sign-in callback route', () => {
   test('renders its own page, not the not-found page', async ({ page }) => {
     await page.goto('/callback');
@@ -204,7 +204,7 @@ test.describe('the sign-in callback route', () => {
 // The application shell (skip link, header, `main`) renders on every
 // signed-in page and on the not-found page. Sign-in exists as of 004.02, so a
 // signed-in page IS reachable in a real browser now — but nothing in this tier
-// drives it yet, which is 009.01's journey 1. Until then an unknown address is
+// drives it yet, which is 001.01's (phase 04) journey 1. Until then an unknown address is
 // still the only shell-bearing route these tests use, and the choice will read
 // as odd otherwise.
 test.describe('the application shell on an unknown address', () => {
@@ -307,7 +307,7 @@ test.describe('the application shell on an unknown address', () => {
 
 // Reload recovery (004.03) makes a guarded route redirect to the identity
 // provider rather than bounce to the landing page. A full sign-in / reload /
-// sign-out journey against Zitadel is 009.01's; this proves only that the
+// sign-out journey against Zitadel is 001.01's (phase 04); this proves only that the
 // recovery redirect really leaves the app, without needing to complete — or
 // even attempt — a login.
 test.describe('reaching a protected route signed out', () => {

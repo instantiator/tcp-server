@@ -63,7 +63,7 @@ export default defineConfig({
       dependencies: hasSignInCredentials ? ['setup'] : [],
     },
     // ponytail: one browser, one binary to install and cache. ADR-026's manual
-    // matrix covers Safari and Firefox per release; 009.01 turns these on if
+    // matrix covers Safari and Firefox per release; 001.01 (phase 04) turns these on if
     // six real journeys justify the CI minutes.
     // { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
     // { name: 'webkit', use: { ...devices['Desktop Safari'] } },

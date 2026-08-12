@@ -184,7 +184,7 @@ describe('CompanyPage', () => {
 
     // A single tab has nowhere to go, so every navigation key is a no-op that
     // leaves it focused and selected. Asserting the degenerate case is what
-    // makes 010.01's second tab a one-line change rather than a redesign: if
+    // makes 002.01's (phase 04) second tab a one-line change rather than a redesign: if
     // this were a hand-rolled panel, none of these keys would do anything at
     // all and nothing here would notice.
     for (const key of ['{ArrowRight}', '{ArrowLeft}', '{Home}', '{End}']) {
