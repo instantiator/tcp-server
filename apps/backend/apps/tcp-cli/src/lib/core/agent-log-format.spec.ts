@@ -1,6 +1,5 @@
 import {
   agentHeading,
-  isBlankText,
   JsonDeltaFormatter,
   LogHeadingTracker,
   shortId,
@@ -9,17 +8,6 @@ import {
 describe('shortId', () => {
   it('returns the first 8 hex characters of a UUID', () => {
     expect(shortId('12345678-90ab-cdef-1234-567890abcdef')).toBe('12345678');
-  });
-});
-
-describe('isBlankText', () => {
-  it('is true for empty and whitespace-only text', () => {
-    expect(isBlankText('')).toBe(true);
-    expect(isBlankText('   \n\t')).toBe(true);
-  });
-
-  it('is false for non-blank text', () => {
-    expect(isBlankText('hello')).toBe(false);
   });
 });
 

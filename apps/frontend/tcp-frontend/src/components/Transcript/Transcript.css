@@ -1,0 +1,64 @@
+/*
+ * Meaningful class names now, rules filled per theme later (ADR-026). No
+ * literal colour, spacing or border value may appear here.
+ *
+ * The list rules are layout rather than theme: a transcript with list markers
+ * and default indentation does not read as a conversation, and one that grows
+ * without a scroll box pushes its dialog off the screen.
+ */
+.transcript {
+  max-block-size: var(--tcp-transcript-max-height);
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.transcript__entry {
+  margin-block-end: var(--tcp-space-md);
+}
+
+.transcript__meta {
+  margin: 0;
+  color: var(--tcp-color-text-muted);
+}
+
+/*
+ * Long words and unbroken URLs in an agent's answer must wrap rather than
+ * widen the dialog. This is the browser's job, and the reason the shared
+ * fixed-width wrapper is not used here.
+ */
+.transcript__text {
+  margin: 0;
+  overflow-wrap: break-word;
+}
+
+/*
+ * Already pretty-printed by the shared renderer, so it keeps its own line
+ * breaks and scrolls sideways rather than being reflowed.
+ */
+.transcript__json {
+  margin: 0;
+  overflow-x: auto;
+}
+
+.transcript__entry--user {
+}
+
+.transcript__entry--llm {
+}
+
+.transcript__entry--reasoning {
+}
+
+.transcript__entry--response {
+}
+
+.transcript__entry--json {
+}
+
+.transcript__entry--state {
+}
+
+.transcript__entry--heading {
+}

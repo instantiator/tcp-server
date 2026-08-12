@@ -30,6 +30,21 @@ const streamDelta: WireEvent = {
   timestamp: '2026-08-07T00:00:00.000Z',
 };
 
+const auditEvent: WireEvent = {
+  type: 'audit',
+  event: {
+    id: 'audit-1',
+    timestamp: '2026-08-07T00:00:01.000Z',
+    companyId: 'company-1',
+    role: 'sales',
+    agentId: 'agent-1',
+    assignmentId: null,
+    taskId: null,
+    eventType: 'llm_response',
+    payload: { responseText: 'hello' },
+  },
+};
+
 describe('useEventStream', () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -81,7 +96,7 @@ describe('useEventStream', () => {
     expect(result.current.error?.message).toContain('MAX_STREAMS');
   });
 
-  it('passes a stream delta to onDelta, and nowhere else', () => {
+  it('passes every event to onEvent, deltas included', () => {
     let handleEvent: ((event: WireEvent) => void) | undefined;
     subscribeMock.mockImplementation(
       (_url, onEvent: (event: WireEvent) => void) => {
@@ -89,16 +104,16 @@ describe('useEventStream', () => {
         return vi.fn();
       },
     );
-    const onDelta = vi.fn();
+    const onEvent = vi.fn();
 
-    renderHook(() => useEventStream('/api/company/company-1/events', onDelta), {
+    renderHook(() => useEventStream('/api/company/company-1/events', onEvent), {
       wrapper,
     });
 
     act(() => handleEvent?.(streamDelta));
+    act(() => handleEvent?.(auditEvent));
 
-    expect(onDelta).toHaveBeenCalledTimes(1);
-    expect(onDelta).toHaveBeenCalledWith(streamDelta);
+    expect(onEvent.mock.calls).toEqual([[streamDelta], [auditEvent]]);
   });
 
   it('never calls onError as a side effect of a normal event', () => {

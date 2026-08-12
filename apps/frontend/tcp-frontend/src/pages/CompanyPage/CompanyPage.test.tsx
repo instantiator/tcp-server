@@ -3,6 +3,8 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ChatProvider } from '../../components/ChatDialog/ChatProvider';
+import { DockProvider } from '../../components/Dialog/DockProvider';
 import { useEventStream } from '../../events/useEventStream';
 import { t } from '../../strings';
 import { expectNoA11yViolations } from '../../test-support/axe';
@@ -43,6 +45,10 @@ const ROLES_ROUTE = /\/api\/company\/[^/]+\/roles/;
 const COMPANY_ROUTE = /\/api\/company\/[^/]+(\?|$)/;
 const AGENTS_ROUTE = /\/api\/agent\?/;
 const TASKS_ROUTE = /\/api\/task\?/;
+// Chats and consultations are both assignments, so both hit
+// `/api/assignment?…` — `CHATS_ROUTE` has to be more specific and precede
+// `ASSIGNMENTS_ROUTE`, the same reasoning as `ROLES_ROUTE` above.
+const CHATS_ROUTE = /\/api\/assignment\?.*mode=chat/;
 const ASSIGNMENTS_ROUTE = /\/api\/assignment\?/;
 const CONVERSATIONS_ROUTE = /\/api\/conversation\?/;
 
@@ -53,10 +59,11 @@ interface CompanyPageRoutes {
   readonly tasks?: RouteResponse;
   readonly assignments?: RouteResponse;
   readonly conversations?: RouteResponse;
+  readonly chats?: RouteResponse;
 }
 
 /**
- * Answers the company detail request and the activity panel's five, so
+ * Answers the company detail request and the activity panel's six, so
  * every test that reaches a loaded company renders cleanly. `ROLES_ROUTE`
  * precedes `COMPANY_ROUTE`: both match a naive `/api/company/...` pattern,
  * and `respondByRoute` takes the first match, so the more specific one has
@@ -68,6 +75,7 @@ const respondCompanyPage = (overrides: CompanyPageRoutes = {}): void => {
     [COMPANY_ROUTE, overrides.company ?? { body: COMPANY }],
     [AGENTS_ROUTE, overrides.agents ?? { body: [] }],
     [TASKS_ROUTE, overrides.tasks ?? { body: [] }],
+    [CHATS_ROUTE, overrides.chats ?? { body: [] }],
     [ASSIGNMENTS_ROUTE, overrides.assignments ?? { body: [] }],
     [CONVERSATIONS_ROUTE, overrides.conversations ?? { body: [] }],
   ]);
@@ -86,10 +94,20 @@ const renderCompanyPage = () =>
       }
     >
       <MemoryRouter initialEntries={['/company/company-1']}>
-        <Routes>
-          <Route path="/companies" element={<h1>Overview stub</h1>} />
-          <Route path="/company/:companyId" element={<CompanyPage />} />
-        </Routes>
+        {/*
+          The activity panel's chats list (008.02) calls `useChat()`, which
+          throws outside a `ChatProvider` — and a parked chat needs a
+          `DockProvider` above that. Both wrap here in the same order
+          `AppShell` mounts them.
+        */}
+        <DockProvider>
+          <ChatProvider>
+            <Routes>
+              <Route path="/companies" element={<h1>Overview stub</h1>} />
+              <Route path="/company/:companyId" element={<CompanyPage />} />
+            </Routes>
+          </ChatProvider>
+        </DockProvider>
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -166,7 +184,7 @@ describe('CompanyPage', () => {
 
     // A single tab has nowhere to go, so every navigation key is a no-op that
     // leaves it focused and selected. Asserting the degenerate case is what
-    // makes 010.01's second tab a one-line change rather than a redesign: if
+    // makes 002.01's (phase 04) second tab a one-line change rather than a redesign: if
     // this were a hand-rolled panel, none of these keys would do anything at
     // all and nothing here would notice.
     for (const key of ['{ArrowRight}', '{ArrowLeft}', '{Home}', '{End}']) {

@@ -1,0 +1,73 @@
+/*
+ * Layout only, no literal colour or spacing values — see TaskDialog.css for
+ * the convention this follows. Meaningful class names now, themed later
+ * (ADR-026).
+ */
+.create-task-dialog__field {
+  margin-block-end: var(--tcp-space-md);
+}
+
+.create-task-dialog__role-field {
+}
+
+.create-task-dialog__expected {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tcp-space-sm);
+  margin-block-end: var(--tcp-space-md);
+}
+
+.create-task-dialog__expected-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--tcp-space-sm);
+}
+
+.create-task-dialog__expected-row .react-aria-TextField {
+  flex: 1;
+}
+
+.create-task-dialog__expected-remove {
+}
+
+.create-task-dialog__expected-add {
+}
+
+.create-task-dialog__materials {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tcp-space-xs);
+  margin-block-end: var(--tcp-space-md);
+}
+
+.create-task-dialog__materials-label {
+  font-weight: 600;
+}
+
+.create-task-dialog__materials-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tcp-space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.create-task-dialog__materials-row {
+  display: flex;
+  align-items: center;
+  gap: var(--tcp-space-sm);
+}
+
+.create-task-dialog__start {
+  margin-block-end: var(--tcp-space-md);
+}
+
+.create-task-dialog__actions {
+  display: flex;
+  gap: var(--tcp-space-sm);
+}
+
+.create-task-dialog__warnings {
+  margin-block-end: var(--tcp-space-md);
+}

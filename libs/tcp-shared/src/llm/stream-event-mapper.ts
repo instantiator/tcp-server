@@ -1,5 +1,6 @@
 import { AuditEventType } from '../models/AuditEvent.model';
 import type { StreamDelta } from '../events/wire-events';
+import { extractContentText } from './content-text';
 
 /**
  * The subset of a LangGraph `streamEvents(..., { version: 'v2' })` event that
@@ -28,25 +29,9 @@ function asText(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
-/** Extracts a content block's `.text` field, or `''` if it isn't shaped that way. */
-function blockText(block: unknown): string {
-  if (!block || typeof block !== 'object') return '';
-  const text = (block as Record<string, unknown>)['text'];
-  return typeof text === 'string' ? text : '';
-}
-
-/**
- * Extracts plain text from a chat message's `content` field: a plain string,
- * or an array of content blocks (each with a `.text` field), joined. Shared
- * by tcp-agent (reading a turn's final output text) and tcp-cli (mapping an
- * agent's audit history back into displayable text) — both need to read a
- * chat model message's content from the same shape.
- */
-export function extractContentText(content: unknown): string {
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) return content.map(blockText).join('');
-  return '';
-}
+// Re-exported from its own import-free module so the browser-safe surface can
+// export it too — see `content-text.ts` for why it had to move out of here.
+export { extractContentText } from './content-text';
 
 /**
  * Translates one LangGraph `on_chat_model_stream` event into zero or more

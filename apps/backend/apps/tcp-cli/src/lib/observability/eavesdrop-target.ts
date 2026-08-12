@@ -2,9 +2,14 @@
 // the given --agent-id/--assignment-id/--task-id, where their history lives,
 // and whether there is anything left to follow.
 
-import type { TcpAgent, TcpAssignment, TcpRole, TcpTask } from '@tcp/shared';
+import type {
+  TcpAgent,
+  TcpAssignment,
+  TcpRole,
+  TcpTask,
+  HeadingInfoProvider,
+} from '@tcp/shared';
 import { apiRequest, ApiOptions } from '../core/api';
-import { HeadingInfoProvider } from '../render/heading';
 
 /** The three mutually-exclusive ways to name an eavesdrop target; exactly one is set. */
 export interface TargetRef {

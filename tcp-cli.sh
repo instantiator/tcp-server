@@ -84,8 +84,9 @@ fi
 HALT_AFTER=false
 if [[ "${NODE_ARGS[0]:-}" == "shutdown" ]]; then
   HALT_AFTER=true
+  # --help/-h exits 0 without draining, so we must not halt the stack in that case.
   for arg in "${NODE_ARGS[@]}"; do
-    [[ "$arg" == "--no-stop" ]] && HALT_AFTER=false
+    [[ "$arg" == "--no-stop" || "$arg" == "--help" || "$arg" == "-h" ]] && HALT_AFTER=false
   done
 fi
 

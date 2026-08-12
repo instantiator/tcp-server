@@ -17,7 +17,13 @@
  * patches. An illustrated view could call `useLiveAgentState` once per avatar,
  * and if each opened a connection that is the `MAX_STREAMS` cap in
  * `subscriptions.ts`, not a facade.
+ *
+ * **The door covers writes too.** A component gets its mutations from here as
+ * well as its queries — `endpoints.ts` is still the only place a request is
+ * described, but a component never imports it directly.
  */
+
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import {
   useAgent,
@@ -25,15 +31,23 @@ import {
   useAgents,
   useAssignment,
   useAssignments,
+  useCancelTaskMutation,
   useCompany,
   useCompanyKnowledge,
   useCompanyRoles,
+  useCompleteChatMutation,
   useConversation,
   useConversations,
+  useCreateTaskMutation,
+  useReplyToEnquiryMutation,
   useRole,
+  useStartChatMutation,
+  useStartTaskMutation,
   useTask,
   useTasks,
+  useUploadMaterialMutation,
 } from './endpoints';
+import type { components } from './schema';
 
 export { useCompanies } from './endpoints';
 
@@ -117,6 +131,184 @@ export const useLiveChatState = (assignmentId: string) =>
   useAssignment(assignmentId);
 
 /**
+ * Starts a chat-mode agent and makes the new chat show up.
+ *
+ * Chat-mode assignments are **not** primed on the company event stream —
+ * only `consultee` ones are (`CompanyPrimingService.prime` in the backend) —
+ * so a freshly started chat would sit invisible in a chats list until
+ * something else happened to refetch it. This wraps
+ * {@link useStartChatMutation} rather than redefining its request — the call
+ * to tcp-server stays described in exactly one place — and invalidates the
+ * assignment queries on success so the new chat appears.
+ */
+export const useStartChat = () => {
+  const queryClient = useQueryClient();
+  const startChat = useStartChatMutation();
+  return useMutation({
+    // Wrapped in an arrow rather than passed by reference: `mutateAsync` takes
+    // a second argument of its own, and handing it straight over would let
+    // TanStack call it with a `MutationFunctionContext` it cannot use.
+    mutationFn: (body: { companyId: string; roleId: string }) =>
+      startChat.mutateAsync(body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['assignment'] });
+    },
+  });
+};
+
+/**
+ * Ends a chat, and makes every list holding it agree.
+ *
+ * Wraps {@link useCompleteChatMutation} the same way {@link useStartChat}
+ * wraps its own: the request stays described in `endpoints.ts`, and the
+ * invalidation lives here. The agent's own `completed` status arrives on its
+ * event stream and patches the cache without help — but the **assignment**
+ * moving to `succeeded` does not, so a chats list would keep showing this one
+ * as open until something else refetched it.
+ */
+export const useCompleteChat = (agentId: string) => {
+  const queryClient = useQueryClient();
+  const completeChat = useCompleteChatMutation(agentId);
+  return useMutation({
+    mutationFn: () => completeChat.mutateAsync(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['assignment'] });
+    },
+  });
+};
+
+/**
+ * Cancels a task, and makes every list holding it agree.
+ *
+ * Both keys are invalidated because the server cascades: the task moves to
+ * `cancelled` and so does every assignment still working it. The task's own
+ * change arrives on its event stream, but the assignments' do not all carry a
+ * summary, so a refetch is what keeps the panels honest.
+ *
+ * The server refuses a task that is already terminal with a `409`. The
+ * control is hidden for those statuses, so this is a race rather than an
+ * ordinary path — it still surfaces through `isError`.
+ */
+export const useCancelTask = (taskId: string) => {
+  const queryClient = useQueryClient();
+  const cancelTask = useCancelTaskMutation(taskId);
+  return useMutation({
+    mutationFn: () => cancelTask.mutateAsync(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['task'] });
+      void queryClient.invalidateQueries({ queryKey: ['assignment'] });
+    },
+  });
+};
+
+/** What the creation dialog collects, before any of it reaches a route. */
+export interface CreateTaskInput {
+  readonly companyId: string;
+  readonly request: string;
+  readonly plannerRoleId?: string;
+  /** Filenames the task is expected to produce. */
+  readonly expected?: readonly string[];
+  /** Files to attach. Uploaded one at a time, after the task exists. */
+  readonly files: readonly File[];
+  /** Whether to start the task once it is created and its files are on it. */
+  readonly start: boolean;
+}
+
+/** What happened, in enough detail for the dialog to say so honestly. */
+export interface CreateTaskResult {
+  readonly task: components['schemas']['TaskResponseDto'];
+  readonly warnings: readonly string[];
+  /** Names of files that did not attach. Empty when everything landed. */
+  readonly failedUploads: readonly string[];
+  readonly started: boolean;
+}
+
+/**
+ * Creates a task, attaches its files, and optionally starts it.
+ *
+ * One facade over three routes rather than three hooks, because the calls are
+ * ordered and a later one is meaningless without the earlier: the server
+ * refuses a material once the task has left `ready`, so every file has to land
+ * before the start.
+ *
+ * **A failed upload does not fail the mutation and does not undo the task.**
+ * There is no way to un-create it, so pretending the whole thing failed would
+ * be a lie the user then has to discover. It resolves with the names that did
+ * not attach, and skips the start — a task that was meant to have its files is
+ * better left in `ready`, where they can still be added, than started without
+ * them.
+ *
+ * Uploads run one at a time. A parallel burst against a single task is load
+ * nobody asked for, and it makes "which ones failed" depend on timing.
+ */
+export const useCreateTask = () => {
+  const queryClient = useQueryClient();
+  const createTask = useCreateTaskMutation();
+  const uploadMaterial = useUploadMaterialMutation();
+  const startTask = useStartTaskMutation();
+
+  return useMutation({
+    mutationFn: async (input: CreateTaskInput): Promise<CreateTaskResult> => {
+      const { task, warnings } = await createTask.mutateAsync({
+        companyId: input.companyId,
+        request: input.request,
+        ...(input.plannerRoleId === undefined
+          ? {}
+          : { plannerRoleId: input.plannerRoleId }),
+        ...(input.expected === undefined || input.expected.length === 0
+          ? {}
+          : {
+              expected: input.expected.map((value) => ({
+                type: 'task-completed-path' as const,
+                value,
+              })),
+            }),
+      });
+
+      const failedUploads: string[] = [];
+      for (const file of input.files) {
+        try {
+          await uploadMaterial.mutateAsync({ id: task.id, file });
+        } catch {
+          // Collected rather than thrown: the task exists either way, and the
+          // dialog has to be able to name every file that did not make it.
+          failedUploads.push(file.name);
+        }
+      }
+
+      const started = input.start && failedUploads.length === 0;
+      if (started) await startTask.mutateAsync(task.id);
+
+      return { task, warnings, failedUploads, started };
+    },
+    onSuccess: () => {
+      // Both keys, as {@link useCancelTask} does: starting a task fans it out
+      // into assignments, and the lists holding either have to agree.
+      void queryClient.invalidateQueries({ queryKey: ['task'] });
+      void queryClient.invalidateQueries({ queryKey: ['assignment'] });
+    },
+  });
+};
+
+/**
+ * Answers an enquiry, and makes every list holding it agree.
+ *
+ * Only `['enquiry']` is invalidated. The agent resuming arrives on the
+ * company's event stream and patches the cache without help — invalidating
+ * `['agent']` too would be a second, slower source of the same truth.
+ */
+export const useReplyToEnquiry = (slug: string) => {
+  const queryClient = useQueryClient();
+  const reply = useReplyToEnquiryMutation(slug);
+  return useMutation({
+    mutationFn: (content: string) => reply.mutateAsync(content),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['enquiry'] });
+    },
+  });
+};
+
+/**
  * A consultation, which is an assignment in `consultee` mode.
  *
  * Only resolves once the consultation has been picked up — before that there
@@ -179,5 +371,6 @@ export {
   useRoleKnowledge,
   useRoleKnowledgeSearch,
   useRoleKnowledgeStatus,
+  useSendMessageMutation as useSendMessage,
   useTaskHistory,
 } from './endpoints';

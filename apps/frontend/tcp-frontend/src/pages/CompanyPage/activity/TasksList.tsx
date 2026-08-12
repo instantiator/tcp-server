@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  Button,
   CheckboxButton,
   CheckboxField,
   CheckboxGroup,
@@ -7,10 +8,10 @@ import {
 } from 'react-aria-components';
 import { useListChangeAnnouncement } from '../../../announce/useListChangeAnnouncement';
 import { useLiveCompanyTasksList } from '../../../api/hooks';
-import { ACTIVE_TASK_STATUSES } from '../../../api/statuses';
+import { ACTIVE_TASK_STATUSES, statusLabel } from '../../../api/statuses';
+import { TaskDialog } from '../../../components/TaskDialog/TaskDialog';
 import { t } from '../../../strings';
 import { ActivityList } from './ActivityList';
-import { statusLabel } from './activity-list-utils';
 
 const TASK_STATUSES = [
   'ready',
@@ -59,11 +60,12 @@ const TaskStatusFilter = ({ selected, onChange }: TaskStatusFilterProps) => (
 );
 
 /**
- * Tasks in flight, narrowed by {@link TaskStatusFilter}. Rows are
- * non-interactive for now; 008.03 adds the task dialog.
+ * Tasks in flight, narrowed by {@link TaskStatusFilter}. Each row opens the
+ * task dialog (008.03).
  */
 export const TasksList = ({ companyId }: { readonly companyId: string }) => {
   const [selected, setSelected] = useState<string[]>([...ACTIVE_TASK_STATUSES]);
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const query = useLiveCompanyTasksList(companyId);
   const rows = query.data?.filter((task) => selected.includes(task.status));
 
@@ -82,37 +84,62 @@ export const TasksList = ({ companyId }: { readonly companyId: string }) => {
   );
 
   return (
-    <ActivityList
-      heading={t('activity.tasks.heading')}
-      query={query}
-      channel="tasks"
-      count={rows?.length ?? 0}
-      emptyHeading={t('activity.tasks.empty.heading')}
-      emptyBody={t('activity.tasks.empty.body')}
-      // Inside the region, above the rows: the filter belongs to this list, and
-      // rendering it as a sibling would leave that relationship to proximity
-      // alone. It stays outside the busy area — a control over the content is
-      // not part of it, and must not be replaced by the spinner.
-      controls={<TaskStatusFilter selected={selected} onChange={setSelected} />}
-    >
-      <ul className="activity-list__rows">
-        {rows?.map((task) => (
-          // Non-interactive for now; 008.03 adds the task dialog.
-          <li className="activity-list__row" key={task.id}>
-            <p className="activity-list__row-title">{task.shortcode}</p>
-            <p className="activity-list__row-detail">{task.request}</p>
-            <p className="activity-list__row-detail">
-              {statusLabel(task.status)}
-            </p>
-            {/*
-              Deliberately no `completedSteps`/`totalSteps`: they exist on the
-              stream summary, not on this REST row, so they would be absent on
-              first paint and only materialise after the first event. Do not
-              add them here.
-            */}
-          </li>
-        ))}
-      </ul>
-    </ActivityList>
+    <>
+      <ActivityList
+        heading={t('activity.tasks.heading')}
+        query={query}
+        channel="tasks"
+        count={rows?.length ?? 0}
+        emptyHeading={t('activity.tasks.empty.heading')}
+        emptyBody={t('activity.tasks.empty.body')}
+        // Inside the region, above the rows: the filter belongs to this list, and
+        // rendering it as a sibling would leave that relationship to proximity
+        // alone. It stays outside the busy area — a control over the content is
+        // not part of it, and must not be replaced by the spinner.
+        controls={
+          <TaskStatusFilter selected={selected} onChange={setSelected} />
+        }
+      >
+        <ul className="activity-list__rows">
+          {rows?.map((task) => (
+            <li className="activity-list__row" key={task.id}>
+              {/*
+                The button is the row's title, and its visible text is its
+                whole accessible name — no `aria-label`. A `<button>` may only
+                hold phrasing content, so the request and status stay siblings
+                rather than nested inside it, the same shape `ChatsList` uses.
+              */}
+              <Button
+                className="react-aria-Button activity-list__row-title"
+                onPress={() => {
+                  setOpenTaskId(task.id);
+                }}
+              >
+                {t('activity.tasks.open', { shortcode: task.shortcode })}
+              </Button>
+              <p className="activity-list__row-detail">{task.request}</p>
+              <p className="activity-list__row-detail">
+                {statusLabel(task.status)}
+              </p>
+              {/*
+                Deliberately no `completedSteps`/`totalSteps`: they exist on the
+                stream summary, not on this REST row, so they would be absent on
+                first paint and only materialise after the first event. Do not
+                add them here.
+              */}
+            </li>
+          ))}
+        </ul>
+      </ActivityList>
+      {openTaskId !== null && (
+        <TaskDialog
+          taskId={openTaskId}
+          companyId={companyId}
+          onClose={() => {
+            setOpenTaskId(null);
+          }}
+        />
+      )}
+    </>
   );
 };

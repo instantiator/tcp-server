@@ -9,27 +9,6 @@ export function shortId(uuid: string): string {
   return uuid.slice(0, 8);
 }
 
-/** Whether response text should be displayed as the `(blank)` placeholder. */
-export function isBlankText(text: string): boolean {
-  return text.trim().length === 0;
-}
-
-/**
- * Fixed header label used wherever an `agent_loop_completion` event/audit row
- * is rendered — the deterministic completion text is one loop run's (i.e. one
- * assignment's) completion, not the whole task's, so the header names that
- * explicitly rather than echoing the payload's own leading line (which reads
- * as "Task completed.").
- */
-export const ASSIGNMENT_COMPLETE_LABEL = 'assignment complete';
-
-/** Parses `timestamp` as `hh:mm:ss`, or `null` if it's missing/unparsable. */
-export function parseClockTime(timestamp: string | undefined): string | null {
-  if (!timestamp) return null;
-  const date = new Date(timestamp);
-  return Number.isNaN(date.getTime()) ? null : date.toTimeString().slice(0, 8);
-}
-
 /** Identifying context for one agent, printed as a heading whenever the active agent changes. */
 export interface AgentHeadingContext {
   assignmentId: string;

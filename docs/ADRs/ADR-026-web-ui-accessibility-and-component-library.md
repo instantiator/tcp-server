@@ -1,6 +1,6 @@
 # ADR-026: Accessibility Standards, Component Library and Auditing
 
-**Status:** Accepted (2026-08-03)
+**Status:** Accepted (amended — see [008.01](#amendment-as-implemented-00801) at the end)
 
 ## Context
 
@@ -78,8 +78,9 @@ React Aria Components wins on the two criteria that matter: its accessibility wo
 - `003.01.00.prompt - landing page (draft).md`
 - `003.02.00.prompt - application shell, routing and header (draft).md`
 - `003.03.00.prompt - shared ui states, notifications and accessibility primitives (draft).md`
-- `008.01.00` – `008.07.00` (all dialog prompts)
-- `009.02.00.prompt - accessibility audit and remediation (draft).md`
+- `008.01.00` – `008.06.00` (all dialog prompts)
+- `phase 03 - web visualisation/001.01.00.prompt - add new FAB and role menu (draft).md`
+- `phase 04 - web ui quality/001.02.00.prompt - accessibility audit and remediation (draft).md`
 
 ## Detail
 
@@ -130,3 +131,12 @@ The manual pass is therefore not optional, and needs a named matrix:
 Run against the MVP journeys, before release.
 
 [^axe]: An open-source accessibility testing engine that inspects a rendered page and reports violations. It runs inside both component tests and browser tests.
+
+## Amendment as implemented (008.01) <a id="amendment-as-implemented-00801"></a>
+
+The dialog framework and the transcript components ([008.01](../prompts/phase%2002%20-%20web%20ui/008.01.00.prompt%20-%20dialog%20framework%20and%20event%20transcript%20components.md)) are the first real use of React Aria's dialog and this ADR's library choice. Four things worth recording:
+
+- **React Aria's dialog behaved as chosen.** Wrapping `ModalOverlay`/`Modal`/`Dialog` gave the focus trap, the scroll lock, the escape handling and the stacked-dialog behaviour with nothing hand-written. `<Heading slot="title">` is what supplies the dialog's accessible name; a plain `<h2>` would leave it unnamed.
+- **The ADR names "the minimise-to-bar pattern" as one of the reasons for choosing a library. As built, minimising unmounts the dialog rather than hiding it**, because a mounted modal keeps its focus trap and keeps the rest of the page inert. So the library supplies the modal, and the dock (`DockProvider`/`useDock`, `src/components/Dialog/`) is ours: about sixty lines.
+- **React Aria restores focus after the dialog unmounts, not during it.** A test asserting focus return has to wait for that, or it reads the focus of a moment too early. Both focus-return tests in `Dialog.test.tsx` use `waitFor` for this reason.
+- **A modal marks everything outside itself `aria-hidden`**, so a test cannot find the trigger by role while the dialog is open. That is correct behaviour, and worth knowing before it looks like a bug.

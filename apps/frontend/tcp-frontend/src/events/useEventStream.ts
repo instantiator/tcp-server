@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { StreamDelta, WireEvent } from '@tcp/shared/client';
+import type { WireEvent } from '@tcp/shared/client';
 
 import { applyEvent } from './cache';
 import { subscribe } from './subscriptions';
@@ -9,16 +9,18 @@ import { subscribe } from './subscriptions';
  * Subscribes to one event stream for as long as the calling component is
  * mounted, folding every event into the query cache via {@link applyEvent}.
  *
- * `onDelta`, when given, additionally receives each {@link StreamDelta} — for
- * a caller holding token deltas in its own local state, which is where they
- * belong (never the query cache).
+ * `onEvent`, when given, additionally receives every {@link WireEvent} — for a
+ * caller keeping its own local view of the stream, which is where token deltas
+ * belong (never the query cache). 005.02 offered only the deltas; the
+ * transcript (008.01) needs the audit events too, and one callback for the
+ * whole stream is a smaller surface than two for its halves.
  *
  * `null` unsubscribes (or never subscribes), which is what lets a caller
  * express "no company selected yet" without a separate guard.
  */
 export const useEventStream = (
   url: string | null,
-  onDelta?: (delta: StreamDelta) => void,
+  onEvent?: (event: WireEvent) => void,
 ): { error: Error | null } => {
   const queryClient = useQueryClient();
   const [error, setError] = useState<Error | null>(null);
@@ -27,8 +29,8 @@ export const useEventStream = (
   // passes fresh on every render would otherwise resubscribe the stream on
   // every render. The ref itself never changes, so exhaustive-deps needs
   // nothing added for it.
-  const onDeltaRef = useRef(onDelta);
-  onDeltaRef.current = onDelta;
+  const onEventRef = useRef(onEvent);
+  onEventRef.current = onEvent;
 
   useEffect(() => {
     if (url === null) {
@@ -38,7 +40,7 @@ export const useEventStream = (
 
     const handleEvent = (event: WireEvent): void => {
       applyEvent(queryClient, event);
-      if (event.type === 'stream') onDeltaRef.current?.(event);
+      onEventRef.current?.(event);
     };
 
     try {

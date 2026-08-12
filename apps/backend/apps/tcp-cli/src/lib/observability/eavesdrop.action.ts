@@ -1,8 +1,8 @@
+import { EventLogBuffer } from '@tcp/shared';
 import { apiOptions, GlobalOptions } from '../core/cli-options';
 import { apiRequest } from '../core/api';
 import { runCommand } from '../core/run-command';
 import { AuditRow, toWire } from '../render/audit-wire';
-import { EventLogBuffer } from '../render/event-log';
 import { StreamPresenter } from '../render/stream-presenter';
 import { ansiStyle, plainStyle } from '../render/style';
 import { resolveSession, TokenManager } from '../auth/token';

@@ -57,7 +57,7 @@ const exposePorts = loadEnv('dev', repoRoot, 'EXPOSE_PORT_');
  * `ioredis`. It does not: Vite externalises Node built-ins with a *warning*
  * and builds successfully, turning a 250 kB bundle into a 4.5 MB one carrying
  * express, multer and busboy — code that then fails at runtime, in a browser,
- * with no clue where it came from. Verified in 002.01.
+ * with no clue where it came from. Verified in 002.01 (phase 02).
  *
  * So the layer is made explicit. Failing at resolve time also covers the
  * development server, which the ADR's version never would have.

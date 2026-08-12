@@ -225,6 +225,33 @@ function dispatchTaskKey(
   }
 }
 
+/**
+ * The initiate-task pane a dispatched submission is pending on, keyed by
+ * pane id.
+ *
+ * {@link dispatchInitiateTaskKey} holds the live pane reference at the exact
+ * moment Enter fires a real submission and records it here; wiring.ts's
+ * `onSubmitInitiateTask` handler only ever receives the pane id (not the
+ * pane object — see `TuiHandlers.submitInitiateTask`), so this is how it
+ * reaches back in to clear `busy` once the async submit settles — see
+ * {@link clearInitiateTaskBusy}.
+ */
+const pendingInitiateTaskSubmits = new Map<string, InitiateTaskPane>();
+
+/**
+ * Clears the busy flag a dispatched submission set (see
+ * {@link dispatchInitiateTaskKey}) — the caller (wiring.ts's
+ * `onSubmitInitiateTask`) must call this once the submit handler's promise
+ * settles, on both success (harmless — the pane is about to be replaced by
+ * `Tui.replaceWithTaskPane`) and failure (required — the form stays open on
+ * failure and must accept another attempt).
+ */
+export function clearInitiateTaskBusy(paneId: string): void {
+  const pane = pendingInitiateTaskSubmits.get(paneId);
+  if (pane) pane.busy = false;
+  pendingInitiateTaskSubmits.delete(paneId);
+}
+
 function dispatchInitiateTaskKey(
   pane: InitiateTaskPane,
   name: string,
@@ -233,8 +260,18 @@ function dispatchInitiateTaskKey(
 ): void {
   // Reached only when no field is being edited — see dispatchInitiateTaskEdit.
   if (name === 'ENTER') {
+    // A submission is already in flight: ignore the repeat press outright,
+    // without even re-validating the row — this is what stops a second
+    // Enter, pressed before wiring.ts's async submit settles, from firing a
+    // second real POST /api/task (see the module-level doc above and
+    // InitiateTaskPane.busy).
+    if (pane.busy) return;
     const submission = pane.activateRow();
-    if (submission) handlers.submitInitiateTask?.(pane.id, submission);
+    if (submission) {
+      pane.busy = true;
+      pendingInitiateTaskSubmits.set(pane.id, pane);
+      handlers.submitInitiateTask?.(pane.id, submission);
+    }
     effects.redrawActivePane();
     return;
   }

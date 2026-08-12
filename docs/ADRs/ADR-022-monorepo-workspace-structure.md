@@ -1,6 +1,6 @@
 # ADR-022: Monorepo Workspace Structure
 
-**Status:** Implemented (amended — see [Amendments](#amendments-as-implemented-00200) at the end)
+**Status:** Implemented (amended — see [Amendments](#amendments-as-implemented-00200) and [008.01](#amendment-as-implemented-00801) at the end)
 
 ## Context
 
@@ -182,3 +182,11 @@ fires identically. Both halves were checked.
    old `apps/tcp-server/…` location.
 
 Re-run both after any change to the hook — and run `npm run hooks:install` first.
+
+## Amendment as implemented (008.01) <a id="amendment-as-implemented-00801"></a>
+
+[008.01](../prompts/phase%2002%20-%20web%20ui/008.01.00.prompt%20-%20dialog%20framework%20and%20event%20transcript%20components.md) moved code across the `./client` boundary for the first time since it was built, and it forced a change rather than just confirming one.
+
+- **The shared package gained `src/transcript/`** — the CLI's audit-event renderers and their state machine, now reached by the browser through `@tcp/shared/client`. The logic was already pure, the browser needed the same behaviour, and one implementation means the two clients cannot disagree about what an event means.
+- **`client.ts`'s stated rule — a value may only be exported if its whole import graph is runtime-free — is what shaped the move.** `extractContentText` had to be split into `llm/content-text.ts` first, because its old module imports `AuditEventType` as a value and that module imports TypeORM. This is the first time that rule forced a change rather than just being observed, and it is worth recording as the working example.
+- **The frontend's `tsconfig` sets `verbatimModuleSyntax`, which the backend's does not.** Code moving from an app into `libs/tcp-shared` therefore has to use `import type` for every type-only import, or it compiles in the backend and fails in the frontend.

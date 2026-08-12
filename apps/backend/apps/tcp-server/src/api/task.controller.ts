@@ -24,6 +24,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
+  ApiBody,
   ApiConsumes,
   ApiOkResponse,
   ApiOperation,
@@ -98,6 +99,18 @@ export class TaskController {
    */
   @ApiOperation({ summary: 'Upload a task material' })
   @ApiConsumes('multipart/form-data')
+  // `@ApiConsumes` alone names the encoding and describes no body, so the
+  // route generates into the client's `schema.d.ts` as `requestBody?: never`
+  // and no typed caller can upload to it. The shape is declared by hand
+  // because the file arrives through `FileInterceptor`, not through a DTO the
+  // Swagger plugin could read.
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
   @CompanyScope({ from: 'param', key: 'id', via: 'task' })
   @Post(':id/materials')
   @UseInterceptors(FileInterceptor('file'))

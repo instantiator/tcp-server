@@ -33,6 +33,10 @@
 .activity-list__row-detail {
 }
 
+/* The control that reveals the rest of a clipped agent prompt. */
+.activity-list__row-expand {
+}
+
 .activity-filter {
 }
 

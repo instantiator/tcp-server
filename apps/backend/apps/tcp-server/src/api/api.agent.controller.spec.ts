@@ -7,6 +7,7 @@ import {
 } from '@tcp/shared';
 import {
   BadRequestException,
+  ConflictException,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -16,6 +17,8 @@ import { DbService } from '../db/db.service';
 import { AgentEventService } from '../events/agent-event.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { AgentController } from './api.agent.controller';
+import { AssignmentCompletionService } from './assignment-completion.service';
+import { AssignmentService } from './assignment.service';
 import { ChatService } from './chat.service';
 import { SystemShutdownService } from './system-shutdown.service';
 
@@ -52,6 +55,10 @@ describe('AgentController', () => {
   >;
   let auditService: { record: jest.Mock };
   let shutdown: SystemShutdownService;
+  let assignments: jest.Mocked<Pick<AssignmentService, 'getAgentAssignment'>>;
+  let completion: jest.Mocked<
+    Pick<AssignmentCompletionService, 'completeChat'>
+  >;
   let controller: AgentController;
 
   beforeEach(() => {
@@ -70,6 +77,8 @@ describe('AgentController', () => {
     auditService = { record: jest.fn().mockResolvedValue(undefined) };
     // Real instance: in-memory state only, so a spec can drive it directly.
     shutdown = new SystemShutdownService();
+    assignments = { getAgentAssignment: jest.fn() };
+    completion = { completeChat: jest.fn() };
     controller = new AgentController(
       db as unknown as DbService,
       orchestration as unknown as AgentOrchestrationService,
@@ -77,6 +86,8 @@ describe('AgentController', () => {
       agentEvents as unknown as AgentEventService,
       auditService as never,
       shutdown,
+      assignments as unknown as AssignmentService,
+      completion as unknown as AssignmentCompletionService,
     );
   });
 
@@ -232,6 +243,65 @@ describe('AgentController', () => {
       await expect(
         controller.sendMessage(randomUUID(), { message: 'Hi' }),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('completeChat', () => {
+    /** The `{ assignment, task }` shape `AssignmentService` answers with. */
+    const assignmentFor = (agent: TcpAgent) => ({
+      assignment: { id: agent.assignmentId, mode: 'chat' } as never,
+      task: null,
+    });
+
+    it('completes the chat and returns the agent in its new state', async () => {
+      const agent = makeAgent();
+      assignments.getAgentAssignment.mockResolvedValue(assignmentFor(agent));
+      completion.completeChat.mockResolvedValue(undefined);
+      db.getAgent.mockResolvedValue(
+        makeAgent({ ...agent, status: AgentStatus.Completed }),
+      );
+
+      const result = await controller.completeChat(agent.id);
+
+      expect(completion.completeChat).toHaveBeenCalledWith(
+        expect.objectContaining({ id: agent.assignmentId }),
+      );
+      expect(result.status).toBe(AgentStatus.Completed);
+    });
+
+    it('propagates a BadRequestException for an assignment that is not a chat', async () => {
+      const agent = makeAgent();
+      assignments.getAgentAssignment.mockResolvedValue(assignmentFor(agent));
+      completion.completeChat.mockRejectedValue(
+        new BadRequestException('not a chat'),
+      );
+
+      await expect(controller.completeChat(agent.id)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('propagates a ConflictException while a turn is in flight', async () => {
+      const agent = makeAgent();
+      assignments.getAgentAssignment.mockResolvedValue(assignmentFor(agent));
+      completion.completeChat.mockRejectedValue(
+        new ConflictException('mid-turn'),
+      );
+
+      await expect(controller.completeChat(agent.id)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('throws NotFoundException for an unknown agent', async () => {
+      assignments.getAgentAssignment.mockRejectedValue(
+        new NotFoundException('Agent xyz not found'),
+      );
+
+      await expect(controller.completeChat(randomUUID())).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(completion.completeChat).not.toHaveBeenCalled();
     });
   });
 

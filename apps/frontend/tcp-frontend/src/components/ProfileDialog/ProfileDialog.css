@@ -1,0 +1,15 @@
+/*
+ * Layout only (ADR-026) — token spacing, no literal colour or size. Stacked
+ * label-above-value rows, matching `.task-dialog__field` in TaskDialog.css.
+ */
+.profile-dialog__field {
+}
+
+.profile-dialog__field-label {
+}
+
+.profile-dialog__claims-note {
+}
+
+.profile-dialog__read-only {
+}

@@ -1364,6 +1364,29 @@ describe('Tui initiate-task panel', () => {
     );
   });
 
+  it('a second Enter on the Submit row before the first submission settles is a no-op', () => {
+    // Regression coverage for the double-submit bug: without this pane
+    // marking itself busy, pressing Enter twice fired two identical
+    // InitiateTaskSubmissions (and, in the real wiring, two real POST
+    // /api/task calls) before the first request ever resolved.
+    const { tui, text, pressKey, type } = makeTui();
+    openFromRoster(tui);
+    const onSubmit = jest.fn();
+    tui.onSubmitInitiateTask(onSubmit);
+
+    pressKey('ENTER');
+    type('Write a report');
+    pressKey('ENTER');
+    for (let i = 0; i < 5; i++) pressKey('DOWN'); // to the Submit row
+
+    pressKey('ENTER'); // first press — dispatches the submission
+    pressKey('ENTER'); // second press before wiring.ts would ever resolve it
+    pressKey('ENTER'); // and a third, for good measure
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(text()).toContain('Submitting…');
+  });
+
   it('replaceWithTaskPane hands off to the task panel in the same tab slot', () => {
     const { tui, rows } = makeTui();
     openFromRoster(tui);

@@ -378,7 +378,7 @@ through a real Zitadel login instead ([testing.md](testing.md#signing-in)).
 **The constraint on future work:** when 004.03 makes the session hold a
 bearer token, a session built from a query string must not be able to mint
 one. Today it sets `AuthSession`'s `fallback` and nothing else, which is why a
-real user always displaces it — that ordering is the thing to preserve. [prompts/phase 02 - web ui/009.04.00.prompt - production build flag and development feature flags (draft).md](<prompts/phase 02 - web ui/009.04.00.prompt - production build flag and development feature flags (draft).md>)
+real user always displaces it — that ordering is the thing to preserve. [prompts/phase 04 - web ui quality/001.04.00.prompt - production build flag and development feature flags (draft).md](<prompts/phase 04 - web ui quality/001.04.00.prompt - production build flag and development feature flags (draft).md>)
 owns the general production-build-flag rule this capability is the first case
 of.
 
@@ -438,7 +438,7 @@ const hasRun = useRef(false);
 | Empty states  | —           | Never — they are reached by browsing                        |
 
 `ANNOUNCE_THROTTLE_MS` (10s) and `ANNOUNCE_LOADING_MIN_MS` (1s) are provisional
-guesses that 009.02's manual screen reader pass tunes.
+guesses that 001.02's manual screen reader pass tunes.
 
 The gate is `src/announce/announcer.test.tsx`, which asserts on
 `spokenPhraseLog()` from `@guidepup/virtual-screen-reader` — the ordered

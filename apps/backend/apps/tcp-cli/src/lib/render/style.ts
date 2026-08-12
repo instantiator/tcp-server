@@ -1,27 +1,17 @@
-// The one place colour codes live. Every surface renders LogEntries through a
-// StyleBackend, so the entry/format logic stays colour-agnostic and the same
-// lines can be produced as terminal-kit markup (TUI), raw ANSI (a TTY stdout),
-// or plain text (piped stdout and byte-exact tests).
+// The one place terminal colour codes live. A surface renders LogEntries
+// through a StyleBackend, so the entry/format logic stays colour-agnostic and
+// the same lines can be produced as terminal-kit markup (TUI) or raw ANSI (a
+// TTY stdout).
 
 import { escapeMarkup } from '../tui/tui-format';
+import type { EntryStyle, StyleBackend } from '@tcp/shared';
 
-/** The visual role of a rendered line, mapped to a colour by the backend. */
-export type EntryStyle =
-  'heading' | 'state' | 'llm' | 'json' | 'reasoning' | 'response' | 'user';
-
-/** Paints and escapes text for one output surface. The only home for colour codes. */
-export interface StyleBackend {
-  /** Wraps `text` in this style's colour codes. */
-  paint(style: EntryStyle, text: string): string;
-  /** Escapes text so the surface renders it literally (`^`→`^^` for markup; identity otherwise). */
-  escape(text: string): string;
-}
-
-/** No colour, no escaping — used for non-TTY stdout and byte-exact tests. */
-export const plainStyle: StyleBackend = {
-  paint: (_style, text) => text,
-  escape: (text) => text,
-};
+// The style model and the plain backend now live in @tcp/shared alongside the
+// entry renderer that consumes them; only these two terminal backends are
+// specific to the CLI. Re-exported so this file stays the one place a terminal
+// surface asks for a style backend.
+export type { EntryStyle, StyleBackend } from '@tcp/shared';
+export { plainStyle } from '@tcp/shared';
 
 /** Raw-ANSI backend for a colour TTY (mirrors the old `render.ts` constants). */
 const ANSI: Record<EntryStyle, string> = {

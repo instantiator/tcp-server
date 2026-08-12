@@ -4,8 +4,7 @@
 // control flow stays identical between piped-output and TUI modes; only which
 // Renderer is constructed differs (see tuiRenderer in tui.ts).
 
-import { WireEvent } from '@tcp/shared';
-import { EventLogBuffer } from '../render/event-log';
+import { WireEvent, EventLogBuffer } from '@tcp/shared';
 import { StreamPresenter } from '../render/stream-presenter';
 import { ansiStyle, plainStyle } from '../render/style';
 

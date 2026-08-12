@@ -72,9 +72,10 @@ This scope assumes [ADR-023](ADR-023-backend-api-surface-for-the-web-ui.md) reso
 
 - `006.01.00.prompt - companies overview and company view shell (draft).md`
 - `007.01.00.prompt - company live activity view (draft).md`
-- `008.01.00` – `008.07.00` (all dialog prompts)
-- `009.02.00.prompt - accessibility audit and remediation (draft).md`
-- `010.01.00.prompt - company configuration view (draft).md`
+- `008.01.00` – `008.06.00` (all dialog prompts)
+- `phase 03 - web visualisation/001.01.00.prompt - add new FAB and role menu (draft).md`
+- `phase 04 - web ui quality/001.02.00.prompt - accessibility audit and remediation (draft).md`
+- `phase 04 - web ui quality/002.01.00.prompt - company configuration view (draft).md`
 
 ## Detail
 
@@ -137,7 +138,7 @@ Assuming ADR-023 resolves these, the scope above stands unchanged. If any of the
 
 The scope table names the FAB alongside the four lists as one feature. 007.01 shipped the four lists and nothing that opens a task or a chat: no FAB, no menu, no button. Both actions it would offer — create a task (008.05) and start a chat with a role (008.02) — open dialogs that do not exist yet, and a control whose every item is inert is worse than no control. `CompanyActivity.tsx` renders four lists and stops there.
 
-This is not a smaller version of the row's promise; it is the row's second half, deferred whole to 008.07, which is built last in the 008 series for exactly this reason — it only opens dialogs that already exist by then. Revisiting this is not a condition to watch for: 008.07 is the prompt that closes the gap, on schedule.
+This is not a smaller version of the row's promise; it is the row's second half, deferred whole to 001.01, which is built last for exactly this reason — it only opens dialogs that already exist by then. Revisiting this is not a condition to watch for: 001.01 is the prompt that closes the gap, on schedule.
 
 ### Agent and consultation rows are read-only
 

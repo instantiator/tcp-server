@@ -1,8 +1,10 @@
 import { useMemo } from 'react';
 import { useCompanyRolesList } from '../../../api/hooks';
 import { AgentsList } from './AgentsList';
+import { ChatsList } from './ChatsList';
 import { ConsultationsList } from './ConsultationsList';
 import { EnquiriesList } from './EnquiriesList';
+import { NewEnquiryNotifications } from './NewEnquiryNotifications';
 import { TasksList } from './TasksList';
 import './activity.css';
 
@@ -11,16 +13,18 @@ export interface CompanyActivityProps {
 }
 
 /**
- * The live activity view: agents, tasks, consultations and enquiries for one
- * company, in one tab panel.
+ * The live activity view: agents, tasks, consultations, enquiries and chats
+ * for one company, in one tab panel.
  *
  * **This opens no event stream of its own.** `CompanyPage` already subscribes
  * to `streamUrls.company(companyId)`, and every event patches the TanStack
- * Query cache these lists read (ADR-025) — so the four lists below stay live
- * without a second subscription, and `MAX_STREAMS` is untouched.
+ * Query cache these lists read (ADR-025) — so the five lists below stay live
+ * without a second subscription, and `MAX_STREAMS` is untouched. The chats
+ * list is no exception: opening a chat's own stream belongs to the chat
+ * *dialog* (008.02), and only while a conversation is showing in it.
  *
- * Role names are fetched once here, rather than once per list, because four
- * lists each fetching the same company's roles would be four identical
+ * Role names are fetched once here, rather than once per list, because five
+ * lists each fetching the same company's roles would be five identical
  * requests for the same answer.
  */
 export const CompanyActivity = ({ companyId }: CompanyActivityProps) => {
@@ -32,11 +36,29 @@ export const CompanyActivity = ({ companyId }: CompanyActivityProps) => {
 
   return (
     <div className="company-activity">
+      {/*
+        First, and rendered unconditionally: it reads the same enquiries
+        query `EnquiriesList` does, so it costs no extra request, and it is
+        now the single writer on the `enquiry` announcer channel (see the
+        comment in `EnquiriesList`).
+      */}
+      <NewEnquiryNotifications companyId={companyId} />
       <AgentsList companyId={companyId} roleNames={roleNames} />
       {/* No `roleNames`: a task belongs to a company, not to a role. */}
       <TasksList companyId={companyId} />
       <ConsultationsList companyId={companyId} roleNames={roleNames} />
       <EnquiriesList companyId={companyId} />
+      {/*
+        `roles`, not just `roleNames`: the chats list's role filter renders
+        one checkbox per role, which needs the roles themselves. No other
+        list here needs more than the id-to-name map, so this is passed to
+        `ChatsList` alone rather than widened onto the shared `ListProps`.
+      */}
+      <ChatsList
+        companyId={companyId}
+        roleNames={roleNames}
+        roles={roles ?? []}
+      />
     </div>
   );
 };

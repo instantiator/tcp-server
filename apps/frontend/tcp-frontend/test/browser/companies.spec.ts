@@ -1,7 +1,7 @@
 // The first pages this tier has ever reached signed in (007.03).
 //
 // Deliberately thin: it proves the harness carries a session and that the two
-// pages behind the gate are reachable and accessible. `009.01` owns the MVP
+// pages behind the gate are reachable and accessible. `001.01` (phase 04) owns the MVP
 // journeys themselves.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';

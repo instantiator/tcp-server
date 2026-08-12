@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   Button,
   Menu,
@@ -8,24 +9,10 @@ import {
 } from 'react-aria-components';
 import { startSignOut } from '../auth/sign-out';
 import { useSession } from '../auth/useSession';
+import { MembershipsDialog } from '../components/MembershipsDialog/MembershipsDialog';
+import { ProfileDialog } from '../components/ProfileDialog/ProfileDialog';
 import { t } from '../strings';
 import './Header.css';
-
-/**
- * Handles a choice from the account menu.
- *
- * Two of the three destinations do not exist yet: the profile and memberships
- * dialogs are 008.06, and reach the user through the dialog framework 008.01
- * builds. Sign-out goes through the seam in `auth/sign-out.ts`, which 004.03
- * replaces. The point of this prompt is the shell, not the destinations, so the
- * two dialog items are inert — the menu itself is what this prompt has to get
- * right, and it is asserted by role, name and keyboard operation either way.
- */
-const onAccountAction = (key: Key): void => {
-  if (key === 'signOut') {
-    void startSignOut();
-  }
-};
 
 /**
  * The header on every page except the landing page (ADR-020).
@@ -43,9 +30,28 @@ const onAccountAction = (key: Key): void => {
  * No `className` is passed to any React Aria component here — passing one
  * *replaces* the library's default class, and `styles/base.css` styles these by
  * exactly those defaults.
+ *
+ * **`MenuTrigger` is not moved or replaced for the dialogs.** It already
+ * returns focus to the account button when the menu closes, and a dialog
+ * mounted after that returns with focus already on that button — which is
+ * exactly what makes "focus returns to the opener" work without any code of
+ * ours.
  */
 export const Header = () => {
   const session = useSession();
+  const [openDialog, setOpenDialog] = useState<
+    'profile' | 'memberships' | null
+  >(null);
+
+  const onAccountAction = (key: Key): void => {
+    if (key === 'signOut') {
+      void startSignOut();
+    } else if (key === 'profile') {
+      setOpenDialog('profile');
+    } else if (key === 'memberships') {
+      setOpenDialog('memberships');
+    }
+  };
 
   return (
     <header className="app-header">
@@ -68,6 +74,21 @@ export const Header = () => {
             </Menu>
           </Popover>
         </MenuTrigger>
+      )}
+
+      {openDialog === 'profile' && (
+        <ProfileDialog
+          onClose={() => {
+            setOpenDialog(null);
+          }}
+        />
+      )}
+      {openDialog === 'memberships' && (
+        <MembershipsDialog
+          onClose={() => {
+            setOpenDialog(null);
+          }}
+        />
       )}
     </header>
   );

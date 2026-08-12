@@ -342,7 +342,7 @@ afterwards.
 
 The concurrent-stream test (`test/browser/event-streams.spec.ts`) needs a
 token to open several event streams at once, and there is no signed-in-human
-helper yet ([009.01](<prompts/phase 02 - web ui/009.01.00.prompt - browser test suite for mvp journeys (draft).md>)
+helper yet ([001.01](<prompts/phase 04 - web ui quality/001.01.00.prompt - browser test suite for mvp journeys (draft).md>)
 builds that). So this script mints one the same way `run-api-tests.sh` does —
 a `client_credentials` grant for the Zitadel machine test user — and accepts
 the same credential flags for it: `--client-id`/`--client-secret`, an
