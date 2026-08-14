@@ -24,16 +24,19 @@ export default function CompanyVisualisation({
   const { data: agents } = useLiveCompanyAgentsList(companyId);
   const { data: tasks } = useLiveCompanyTasksList(companyId);
 
-  const onAgentClick = useCallback((agentId: string) => {
-    console.log(`Agent clicked: ${agentId}`);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const onAgentClick = useCallback((_agentId: string) => {
+    // TODO(000.01): show the task details dialog, opened at this agent's assignment
   }, []);
 
-  const onRoleClick = useCallback((roleId: string) => {
-    console.log(`Role clicked: ${roleId}`);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const onRoleClick = useCallback((_roleId: string) => {
+    // TODO(000.01): show a new chat dialog for this role
   }, []);
 
-  const onTaskClick = useCallback((taskId: string) => {
-    console.log(`Task clicked: ${taskId}`);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const onTaskClick = useCallback((_taskId: string) => {
+    // TODO(000.01): show the task details dialog
   }, []);
 
   return (

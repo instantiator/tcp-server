@@ -41,7 +41,7 @@ export class TcpCompanyScene extends Scene {
   }
 
   private createAgent(agent: AgentDTO) {
-    console.log('Creating agent in Phaser scene:', agent);
+    // TODO(000.01): set game object properties based on agent properties
     const agentSprite = this.add.rectangle(
       Math.random() * 800,
       Math.random() * 600,
@@ -57,40 +57,23 @@ export class TcpCompanyScene extends Scene {
       });
     });
     this.tcpAgents.push({ agent, object: agentSprite });
-    // TODO: review the agent, set agent properties
   }
 
   private updateAgent(patch: PatchOf<AgentDTO>) {
+    // TODO(000.01): update the game agent properies based on patch properties
     const existingAgent = this.tcpAgents.find((a) => a.agent.id === patch.id);
     if (existingAgent) {
-      console.log('Updating agent in Phaser scene:', patch);
       existingAgent.agent = { ...existingAgent.agent, ...patch };
     }
-    // TODO: review the patch, update the agent by properties
   }
 
   private removeAgent(agent: AgentDTO) {
     const index = this.tcpAgents.findIndex((a) => a.agent.id === agent.id);
     if (index !== -1) {
-      console.log('Removing agent from Phaser scene:', agent);
       this.tcpAgents[index].object.destroy();
       this.tcpAgents.splice(index, 1);
     }
   }
-
-  // 4. REACT -> PHASER: Listen for state changes (e.g., pathfinding targets)
-  // TcpPhaserEventBus.on(
-  //   'move-npc-command',
-  //   (targetCoords: { x: number; y: number }) => {
-  //     // In a real app, you'd trigger your pathfinding here.
-  //     this.tweens.add({
-  //       targets: this.tcpAgents[0],
-  //       x: targetCoords.x,
-  //       y: targetCoords.y,
-  //       duration: 1000,
-  //     });
-  //   },
-  // );
 
   shutdown() {
     offTcpEvent({ event: 'create-agents' });

@@ -1,6 +1,6 @@
+import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
 import { afterEach, vi } from 'vitest';
-import '@testing-library/jest-dom/vitest';
 import { resetAnnouncer } from './announce/announcer';
 
 // Testing Library auto-registers this only when the runner exposes `afterEach`
@@ -86,7 +86,7 @@ vi.mock('phaser', () => {
     emit(event: string | symbol, ...args: unknown[]) {
       const set = this.listeners.get(event);
       if (!set || set.size === 0) return false;
-      for (const listener of [...set]) listener(...args);
+      for (const listener of set) listener(...args);
       return true;
     }
   }
