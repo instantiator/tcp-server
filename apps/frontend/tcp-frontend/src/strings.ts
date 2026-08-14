@@ -255,7 +255,8 @@ const strings = {
   'company.stream.failed':
     'Live updates have stopped. Reload the page to reconnect.',
   'company.tabs.label': 'Company views',
-  'company.tab.activity': 'Live activity',
+  'company.tab.visualisation': 'Company view',
+  'company.tab.activity': 'Activity',
 
   // The live activity view. `activity.loading` is a label, as above — every
   // list renders it through `state.loading`, as "Loading this list…".

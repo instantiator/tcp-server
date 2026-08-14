@@ -23,8 +23,22 @@
  * described, but a component never imports it directly.
  */
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQueryClient,
+  type UseQueryResult,
+} from '@tanstack/react-query';
 
+import type {
+  AgentDTO,
+  AssignmentDTO,
+  ConversationDetailDTO,
+  ConversationDTO,
+  KnowledgeDocumentDTO,
+  RoleDTO,
+  TaskDetailDTO,
+  TaskDTO,
+} from './dtos';
 import {
   useAgent,
   useAgentByAssignment,
@@ -62,14 +76,18 @@ export { useCompanies } from './endpoints';
  */
 export const useLiveCompanyState = (companyId: string) => useCompany(companyId);
 
-export const useLiveCompanyAgentsList = (companyId: string) =>
-  useAgents({ companyId });
+export const useLiveCompanyAgentsList = (
+  companyId: string,
+): UseQueryResult<AgentDTO[], Error> => useAgents({ companyId });
 
-export const useLiveCompanyTasksList = (companyId: string) =>
-  useTasks({ companyId });
+export const useLiveCompanyTasksList = (
+  companyId: string,
+): UseQueryResult<TaskDTO[], Error> => useTasks({ companyId });
 
 /** Chats are assignments in `chat` mode. There is no chat route. */
-export const useLiveCompanyChatsList = (companyId: string) =>
+export const useLiveCompanyChatsList = (
+  companyId: string,
+): UseQueryResult<AssignmentDTO[], Error> =>
   useAssignments({ companyId, mode: 'chat' });
 
 /**
@@ -84,20 +102,26 @@ export const useLiveCompanyChatsList = (companyId: string) =>
  * picked up has no assignment row, so it cannot appear here. A view using this
  * must say so — `t('activity.consultations.partial')` is the wording.
  */
-export const useLiveCompanyConsultationsList = (companyId: string) =>
+export const useLiveCompanyConsultationsList = (
+  companyId: string,
+): UseQueryResult<AssignmentDTO[], Error> =>
   useAssignments({ companyId, taskId: 'null', mode: 'consultee' });
 
 export const useLiveCompanyEnquiriesList = (
   companyId: string,
   status?: string,
-) => useConversations({ companyId, status });
+): UseQueryResult<ConversationDTO[], Error> =>
+  useConversations({ companyId, status });
 
 /** Not live: nothing streams a role. */
-export const useCompanyRolesList = (companyId: string) =>
-  useCompanyRoles(companyId);
+export const useCompanyRolesList = (
+  companyId: string,
+): UseQueryResult<RoleDTO[], Error> => useCompanyRoles(companyId);
 
 /** Not live: nothing streams a knowledge index. */
-export const useCompanyKnowledgeList = (companyId: string) =>
+export const useCompanyKnowledgeList = (
+  companyId: string,
+): UseQueryResult<KnowledgeDocumentDTO[], Error> =>
   useCompanyKnowledge(companyId);
 
 /** Any combination of the three ids an assignment can be reached through. */
@@ -107,8 +131,9 @@ export interface AssignmentFilter {
   readonly roleId?: string;
 }
 
-export const useLiveAssignmentsList = (filter: AssignmentFilter) =>
-  useAssignments(filter);
+export const useLiveAssignmentsList = (
+  filter: AssignmentFilter,
+): UseQueryResult<AssignmentDTO[], Error> => useAssignments(filter);
 
 /**
  * One task.
@@ -118,7 +143,9 @@ export const useLiveAssignmentsList = (filter: AssignmentFilter) =>
  * flattened rather than wrapped, because the live-event cache patches a
  * cached row by matching its top-level `id`, and a wrapper has none.
  */
-export const useLiveTaskState = (taskId: string) => useTask(taskId);
+export const useLiveTaskState = (
+  taskId: string,
+): UseQueryResult<TaskDetailDTO, Error> => useTask(taskId);
 
 /**
  * A chat, which is an assignment in `chat` mode.
@@ -127,8 +154,9 @@ export const useLiveTaskState = (taskId: string) => useTask(taskId);
  * it. Read the transcript with `useAgentHistory` for the agent holding this
  * assignment, which `useLiveAgentState({ assignmentId })` will find.
  */
-export const useLiveChatState = (assignmentId: string) =>
-  useAssignment(assignmentId);
+export const useLiveChatState = (
+  assignmentId: string,
+): UseQueryResult<AssignmentDTO, Error> => useAssignment(assignmentId);
 
 /**
  * Starts a chat-mode agent and makes the new chat show up.
@@ -314,8 +342,9 @@ export const useReplyToEnquiry = (slug: string) => {
  * Only resolves once the consultation has been picked up — before that there
  * is no assignment row, and so no id to pass here (ADR-023).
  */
-export const useLiveConsultationState = (assignmentId: string) =>
-  useAssignment(assignmentId);
+export const useLiveConsultationState = (
+  assignmentId: string,
+): UseQueryResult<AssignmentDTO, Error> => useAssignment(assignmentId);
 
 /**
  * One enquiry, by slug.
@@ -330,10 +359,13 @@ export const useLiveConsultationState = (assignmentId: string) =>
  * shape flattened, for the same reason as {@link useLiveTaskState}: the cache
  * patches by top-level `id`.
  */
-export const useLiveEnquiryState = (slug: string) => useConversation(slug);
+export const useLiveEnquiryState = (
+  slug: string,
+): UseQueryResult<ConversationDetailDTO, Error> => useConversation(slug);
 
 /** Not live: nothing streams a role. */
-export const useRoleState = (roleId: string) => useRole(roleId);
+export const useRoleState = (roleId: string): UseQueryResult<RoleDTO, Error> =>
+  useRole(roleId);
 
 /** The two ids an agent can be reached through. */
 export interface AgentLookup {
@@ -352,7 +384,10 @@ export interface AgentLookup {
  * Both lookups run every render, because a hook cannot be called
  * conditionally; the unused one is disabled, so only one request is made.
  */
-export const useLiveAgentState = ({ agentId, assignmentId }: AgentLookup) => {
+export const useLiveAgentState = ({
+  agentId,
+  assignmentId,
+}: AgentLookup): UseQueryResult<AgentDTO | null, Error> => {
   const byAgentId = useAgent(agentId ?? '', agentId !== undefined);
   const byAssignmentId = useAgentByAssignment(
     assignmentId ?? '',

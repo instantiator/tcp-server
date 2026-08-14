@@ -10,6 +10,7 @@ import { streamUrls } from '../../events/subscriptions';
 import { useEventStream } from '../../events/useEventStream';
 import { useDocumentTitle } from '../../shell/useDocumentTitle';
 import { t } from '../../strings';
+import CompanyVisualisation from '../../visualisation/isometric/company/CompanyVisualisation';
 import { CompanyActivity } from './activity/CompanyActivity';
 import './CompanyPage.css';
 
@@ -136,12 +137,24 @@ export const CompanyPage = () => {
               aria-label={t('company.tabs.label')}
               className="react-aria-TabList"
             >
+              <Tab id="visualisation" className="react-aria-Tab">
+                {t('company.tab.visualisation')}
+              </Tab>
               <Tab id="activity" className="react-aria-Tab">
                 {t('company.tab.activity')}
               </Tab>
             </TabList>
-            <TabPanel id="activity" className="react-aria-TabPanel">
+            <TabPanel
+              id="activity"
+              className="react-aria-TabPanel company-page__tab"
+            >
               <CompanyActivity companyId={company.id} />
+            </TabPanel>
+            <TabPanel
+              id="visualisation"
+              className="react-aria-TabPanel company-page__tab"
+            >
+              <CompanyVisualisation companyId={company.id} />
             </TabPanel>
           </Tabs>
         )}
