@@ -25,6 +25,12 @@ vi.mock('../../events/useEventStream', () => ({
   useEventStream: vi.fn(() => ({ error: null })),
 }));
 
+// The visualisation tab mounts `TcpPhaserVisualisation`, which reaches real
+// Phaser at module load. Real Phaser cannot even be imported under jsdom, so
+// `phaser` is mocked globally in `test-setup.ts` rather than here — this
+// suite doesn't exercise anything Phaser-specific, it only needs the page to
+// render without crashing.
+
 const streamReturns = vi.mocked(useEventStream);
 
 const COMPANY = {
@@ -165,41 +171,60 @@ describe('CompanyPage', () => {
     });
     expect(tabList).toBeInTheDocument();
 
-    const tab = screen.getByRole('tab', { name: t('company.tab.activity') });
+    // The visualisation tab is first in the tab list, so it is the one
+    // React Aria selects by default with no `defaultSelectedKey` given.
+    const tab = screen.getByRole('tab', {
+      name: t('company.tab.visualisation'),
+    });
     expect(tab).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tabpanel')).toBeInTheDocument();
   });
 
-  it('follows the tab pattern from the keyboard, even at one tab', async () => {
+  it('moves selection and focus between the two tabs from the keyboard', async () => {
     respondCompanyPage();
     const user = userEvent.setup();
     renderCompanyPage();
 
-    const tab = await screen.findByRole('tab', {
+    const visualisationTab = await screen.findByRole('tab', {
+      name: t('company.tab.visualisation'),
+    });
+    const activityTab = screen.getByRole('tab', {
       name: t('company.tab.activity'),
     });
 
-    tab.focus();
-    expect(tab).toHaveFocus();
+    visualisationTab.focus();
+    expect(visualisationTab).toHaveFocus();
+    expect(visualisationTab).toHaveAttribute('aria-selected', 'true');
 
-    // A single tab has nowhere to go, so every navigation key is a no-op that
-    // leaves it focused and selected. Asserting the degenerate case is what
-    // makes 002.01's (phase 04) second tab a one-line change rather than a redesign: if
-    // this were a hand-rolled panel, none of these keys would do anything at
-    // all and nothing here would notice.
-    for (const key of ['{ArrowRight}', '{ArrowLeft}', '{Home}', '{End}']) {
-      await user.keyboard(key);
-      expect(tab).toHaveFocus();
-      expect(tab).toHaveAttribute('aria-selected', 'true');
-    }
+    await user.keyboard('{ArrowRight}');
+    expect(activityTab).toHaveFocus();
+    expect(activityTab).toHaveAttribute('aria-selected', 'true');
+    expect(visualisationTab).toHaveAttribute('aria-selected', 'false');
+
+    await user.keyboard('{ArrowLeft}');
+    expect(visualisationTab).toHaveFocus();
+    expect(visualisationTab).toHaveAttribute('aria-selected', 'true');
+
+    await user.keyboard('{End}');
+    expect(activityTab).toHaveFocus();
+    expect(activityTab).toHaveAttribute('aria-selected', 'true');
+
+    await user.keyboard('{Home}');
+    expect(visualisationTab).toHaveFocus();
+    expect(visualisationTab).toHaveAttribute('aria-selected', 'true');
+
+    // Land back on activity to check `Tab` moves into its content. The
+    // visualisation panel holds nothing focusable (`#game-container` alone),
+    // so this assertion needs the tab with real content underneath it.
+    await user.keyboard('{End}');
+    expect(activityTab).toHaveAttribute('aria-selected', 'true');
 
     // 007.01 gives the panel real content — the task status filter — so it is
     // no longer empty. React Aria's `TabPanel` is only a tab stop in its own
     // right (`tabIndex={0}`) while it holds nothing focusable; that is the
-    // ARIA authoring-practices behaviour for tabs, not something this page
-    // opts into. With focusable content inside, the panel itself is skipped
-    // and `Tab` lands on the first focusable descendant instead — here, the
-    // first status checkbox.
+    // ARIA authoring-practices behaviour for tabs. With focusable content
+    // inside, the panel itself is skipped and `Tab` lands on the first
+    // focusable descendant instead — here, the first status checkbox.
     await user.tab();
     expect(
       screen.getByRole('checkbox', { name: t('activity.status.ready') }),

@@ -3,6 +3,7 @@ import type { AgentDTO, RoleDTO, TaskDTO } from '../../../api/dtos';
 import type { PatchOf } from '../../../util/diffs';
 import { emitTcpEvent, offTcpEvent, onTcpEvent } from './TcpPhaserEventBus';
 
+/** A Phaser scene representing agents, roles, and tasks within a company. */
 export class TcpCompanyScene extends Scene {
   tcpRoles: { role: RoleDTO; object: Phaser.GameObjects.GameObject }[] = [];
   tcpAgents: { agent: AgentDTO; object: Phaser.GameObjects.GameObject }[] = [];
@@ -13,12 +14,6 @@ export class TcpCompanyScene extends Scene {
   }
 
   create() {
-    // `init`/`preload`/`create`/`update` are the only methods Phaser calls
-    // automatically. `shutdown()` below is not one of them — it only runs
-    // because it's wired to these two scene-lifecycle events explicitly.
-    // Without this, every scene instance's listeners below pile up forever
-    // on the shared `TcpPhaserEventBus` singleton, including instances
-    // React has already discarded.
     this.events.once(Scenes.Events.DESTROY, () => this.shutdown());
 
     onTcpEvent({

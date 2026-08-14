@@ -4,7 +4,7 @@ import {
   useLiveCompanyAgentsList,
   useLiveCompanyTasksList,
 } from '../../../api/hooks';
-import './companyVisualisation.css';
+import './CompanyVisualisation.css';
 import TcpPhaserVisualisation from './TcpPhaserVisualisation';
 
 export interface CompanyVisualisationProps {

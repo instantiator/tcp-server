@@ -83,3 +83,7 @@ Again, slightly more context would be helpful, as bullets after the error. Some 
 > - You do not have permission to alter assignment with id: ${assignmentId}
 
 (I appreciate there probably isn't a "no permission" scenario yet for this. It's illustrative.)
+
+### Theme controls
+
+The theme controls should be available on every page. Currently they're available on the landing page only. As they're required for accessibility, we should ensure they're available on every page.
