@@ -8,7 +8,12 @@
 // same as the api/smoke tiers), so `getMachineToken` below is a deliberate
 // duplicate of that file's, not a shared import.
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type APIRequestContext } from '@playwright/test';
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type Page,
+} from '@playwright/test';
 import { AUTH_STATE_PATH, hasSignInCredentials } from './auth-state';
 
 const OIDC_DISCOVERY_URL =
@@ -37,6 +42,21 @@ const ENQUIRIES_HEADING = 'Enquiries';
  * reason the headings above are — keep it in step if the copy there changes.
  */
 const taskRowName = (shortcode: string) => `Open task ${shortcode}`;
+
+/**
+ * Navigates to a company and switches to the activity tab — the
+ * visualisation tab is first in the list and is selected by default, so
+ * every test in this file needs this rather than a bare `page.goto`.
+ * `'Activity'` is `company.tab.activity` from `strings.ts`, copied by hand
+ * for the same reason the headings above are.
+ */
+const gotoCompanyActivity = async (
+  page: Page,
+  companyId: string,
+): Promise<void> => {
+  await page.goto(`/company/${companyId}`);
+  await page.getByRole('tab', { name: 'Activity' }).click();
+};
 
 interface TokenEndpoint {
   token_endpoint: string;
@@ -148,7 +168,7 @@ test.describe('company activity', () => {
   test('renders all four activity lists as labelled regions', async ({
     page,
   }) => {
-    await page.goto(`/company/${companyId}`);
+    await gotoCompanyActivity(page, companyId);
     await expect(
       page.getByRole('heading', { level: 1, name: companyName }),
     ).toBeVisible();
@@ -170,7 +190,7 @@ test.describe('company activity', () => {
   test('has no accessibility violations on the activity view', async ({
     page,
   }) => {
-    await page.goto(`/company/${companyId}`);
+    await gotoCompanyActivity(page, companyId);
     // Waiting for the fixture row, not just the region: a scan that ran
     // against the loading skeleton would miss whatever the populated rows
     // themselves introduce.
@@ -203,7 +223,7 @@ test.describe('company activity', () => {
       }
     });
 
-    await page.goto(`/company/${companyId}`);
+    await gotoCompanyActivity(page, companyId);
 
     // The fixture row is the signal that the whole view — every list's own
     // query, not just the shell — has settled, which is as long as
@@ -226,7 +246,7 @@ test.describe('company activity', () => {
     page,
     request,
   }) => {
-    await page.goto(`/company/${companyId}`);
+    await gotoCompanyActivity(page, companyId);
 
     const taskRow = page
       .getByRole('region', { name: TASKS_HEADING })
