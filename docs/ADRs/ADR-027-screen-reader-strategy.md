@@ -1,6 +1,6 @@
 # ADR-027: Screen Reader Strategy for Live and Data-Rich Views
 
-**Status:** Accepted (amended — see [002.02](#amendment-as-implemented-00202), [003.03](#amendment-as-implemented-00303), [008.01](#amendment-as-implemented-00801) and [008.02.02](#amendment-as-implemented-0080202) at the end)
+**Status:** Accepted (amended — see [002.02](#amendment-as-implemented-00202), [003.03](#amendment-as-implemented-00303), [008.01](#amendment-as-implemented-00801), [008.02.02](#amendment-as-implemented-0080202) and [000.01](#amendment-as-implemented-00001) at the end)
 
 ## Context
 
@@ -227,3 +227,16 @@ Two implementation details worth recording, because both are the reason it is sa
 - **The completion line is not a live region.** It says why the form has gone; it does not narrate an arrival. The single-announcer rule is unchanged, and completing a chat announces nothing.
 
 Focus points now implemented and asserted for this dialog: dialog open, dialog taken off the page (minimise), restore from the dock, and a focused control disappearing.
+
+## Amendment as implemented (000.01) <a id="amendment-as-implemented-00001"></a>
+
+**The office view ([000.01](<../prompts/phase 03 - web visualisation/000.01.01.plan - set up isometric display elements.md>)) is the first surface this ADR governs that has no accessible DOM of its own** — a canvas exposes nothing to assistive technology, so everything a screen reader or keyboard user needs has to come from outside it. Four things now do that:
+
+- **A labelled stage.** The canvas sits inside a `role="group"` element named "Office view", whose accessible description is two joined paragraphs: a live-computed summary ("Roles: 2. Task rooms: 1. Agents: 3.") and the key help ("Use the arrow keys or W, A, S and D to move the view. Double-click an empty space for full screen."). The description updates itself as the office changes, with nothing announced — this is exposure, not the coalesced-announcement channel the rest of this ADR is about.
+- **A keyboard route to every clickable object.** The canvas's own hover and click are pointer-only. The toolbar's "Show details for…" picker (a React Aria `Select` over the snapshot's roles, unfinished tasks and active agents) is the keyboard equivalent (WCAG 2.1.1), and choosing an entry opens the same tray a click would.
+- **A non-modal tray.** `VisualisationTray` is an `<aside aria-labelledby>` named by its own heading. Opening it moves no focus: it is not a dialog, and nothing traps focus in it. Closing it removes the Close button the user just pressed, so focus goes to the stage — the answer [008.02.02](#amendment-as-implemented-0080202) gave for a focused control disappearing: a stable, labelled element, never `document.body`. No new focus point is added to [the four](#focus-is-managed-at-four-points).
+- **A pointer tooltip dismissible with Escape.** `VisualisationTooltip` is `role="tooltip"`, placed at the pointer, and meets WCAG 1.4.13: Escape dismisses it, and its content — a role or agent's name, or a task's step count and request — is also in the tray, so nothing shown only in the tooltip is lost by dismissing it.
+
+**Nothing announces avatar movement, on purpose.** Walking, arriving, starting or finishing a consultation — none of it is announced, because movement is decoration, and narrating it would bury everything else. The Activity tab (007.01) stays the browsable equivalent: the same tasks, agents and consultations, as a real list rather than positions on a canvas.
+
+**Two `jsx-a11y` disables, both on the stage `div`, both for one reason.** `no-noninteractive-element-interactions` and `no-noninteractive-tabindex` are suppressed with the same comment: "the stage is a labelled pan surface; its toolbar buttons are the non-pointer route (ADR-026)". No choice of role avoids them — `jsx-a11y` flags every non-widget role paired with a `tabIndex` and key handlers, `application` and `region` included, so switching the role away from `group` would not have satisfied the rule and would have picked a less accurate one. `group` names what the stage actually is: a labelled collection of visual objects, not a widget with its own interaction model. It takes `tabIndex={0}` and reads arrow keys and WASD only while it holds focus (WCAG 2.1.4). The toolbar's pan buttons do the same job for anyone who never focuses the stage.

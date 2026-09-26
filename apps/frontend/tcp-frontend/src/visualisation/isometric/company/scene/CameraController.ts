@@ -1,4 +1,4 @@
-import type { Cameras, GameObjects, Scene } from 'phaser';
+import type { Cameras, GameObjects, Scene, Structs } from 'phaser';
 import { TILE_HEIGHT, TILE_WIDTH, tileToScreen } from '../motion/iso';
 import type { Bounds, Tile } from '../world/types';
 
@@ -24,10 +24,29 @@ export class CameraController {
     scene.scale.on('resize', this.handleResize);
   }
 
-  private readonly handleResize = (): void => {
+  /**
+   * Keeps the view's centre where it was when the canvas changes size. The
+   * tray opening or closing changes the stage's width, and a plain resize
+   * keeps the camera's left edge, so the whole office would jump sideways by
+   * half the change and a centred object would drift off centre.
+   */
+  private readonly handleResize = (
+    gameSize: Structs.Size,
+    _baseSize: Structs.Size,
+    _displaySize: Structs.Size,
+    previousWidth: number,
+    previousHeight: number,
+  ): void => {
+    const centreX = this.camera.scrollX + previousWidth / 2;
+    const centreY = this.camera.scrollY + previousHeight / 2;
+    // Phaser's own camera manager resizes the main camera on this same event,
+    // in an order we don't control. Setting the size here first means the
+    // re-centring below always works from the new size.
+    this.camera.setSize(gameSize.width, gameSize.height);
     if (this.lastBounds !== null) {
       this.fitMap(this.lastBounds);
     }
+    this.camera.centerOn(centreX, centreY);
   };
 
   /**

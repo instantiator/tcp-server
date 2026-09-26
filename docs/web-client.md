@@ -746,6 +746,98 @@ target Node, with CommonJS and decorators. Prettier is shared with the root.
 > clean `npm ci` fails outright. The root `overrides` entry pinning that peer
 > is what prevents it. Don't remove it until the plugin widens its range.
 
+## The office view (company visualisation)
+
+`CompanyPage`'s first tab draws the company as an isometric office
+([000.01](<prompts/phase 03 - web visualisation/000.01.01.plan - set up isometric display elements.md>)).
+Code lives under `src/visualisation/isometric/company/`.
+
+### What it shows
+
+- **Rooms**, in fixed-size slots along one corridor: the **rec room** (one spot
+  per role, always present), the **mail room** (chat and enquiry avatars,
+  always present), the **corridor** with the **office door**, one **task room**
+  per unfinished task, and one **1:1 room** per open consultation.
+- **Avatars.** A role avatar stands still at its spot in the rec room. An agent
+  avatar walks: to its desk while idle, to the whiteboard while working,
+  beside the avatar it is reviewing, to the 1:1 table while consulting, or to
+  the mail room's pigeonholes while messaging the user. An avatar whose agent
+  has finished — an idle desk, waiting for the next one — still shows and
+  still opens, now as its role.
+- **The tray, tooltip, picker, pan keys and full screen.** Hovering a role,
+  task or agent shows a tooltip; clicking opens a side tray with its live
+  details. The toolbar's "Show details for…" picker is the keyboard route to
+  the same tray (WCAG 2.1.1), and also how a keyboard user follows an object
+  to the centre of the view. Arrow keys, WASD and the toolbar's pan buttons
+  scroll the stage; double-clicking empty space, or the toolbar's full-screen
+  button, toggles full screen.
+
+### The layers
+
+```
+live hooks (roles, agents, tasks, assignments, awaiting_user enquiries)
+   │ buildCompanySnapshot()                      rules/companySnapshot.ts   (pure)
+   ▼
+officeReducer(state, action) → applyRules()      world/officeReducer.ts, rules/*  (pure)
+   │ OfficeWorld (rooms, furniture, avatars + targets)
+   ▼  bus: 'world-changed'
+TcpCompanyScene draws the static map, then hands   scene/*         (thin, Phaser-bound)
+each frame to a Crowd, which plans routes, walks   motion/crowd.ts (pure — no scene logic)
+avatars and reports arrivals
+   │  bus: 'avatar-arrived' | 'avatar-exited' → reducer
+   │  bus: 'hover' | 'select' | 'follow-stopped' → CompanyVisualisation (tooltip, tray, picker)
+```
+
+React owns _where each avatar should be_ (its target); the scene, through
+`Crowd`, owns _where it is now_ (live position, route, occupancy) and reports
+back only on arrival or exit.
+
+### Directory layout
+
+| Folder    | Holds                                                                                                                                                                           |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `world/`  | The office model: rooms, furniture, avatars, tiles.                                                                                                                             |
+| `rules/`  | Turns live company data into world changes: `companySnapshot.ts`'s activity mapping, then one rule per concern (roles, task rooms, 1:1 rooms, agent avatars, targets, cleanup). |
+| `motion/` | Walking maths, and the `Crowd` that plans routes, moves walkers and reports arrivals.                                                                                           |
+| `scene/`  | The Phaser-bound layer: draws the static map and furniture, and asks the crowd where each avatar is.                                                                            |
+| `ui/`     | The toolbar, details picker, tooltip and tray — everything a keyboard or screen-reader user needs that the canvas alone can't give.                                             |
+
+### The rules that keep it sound
+
+- **`world/`, `rules/` and `motion/` import neither React nor Phaser.** They
+  are pure: React works the office out from live company data, and the Phaser
+  scene draws it.
+- **Only `TcpPhaserVisualisation` registers bus listeners on the React side.**
+  `CompanyVisualisation` may emit onto `TcpPhaserEventBus` but never listens
+  directly.
+- **Every `offTcpEvent` passes its exact `fn`.** The bus is a module
+  singleton, and under React StrictMode two games can briefly exist at once —
+  an omitted `fn` removes every listener for the event, including one the
+  other mounted game just registered.
+- **Any Phaser _value_ React-side code reads must be added to the
+  `test-setup.ts` mock.** Real Phaser cannot run under jsdom at all, so the
+  mock's job is to stand in for exactly the runtime values the React side
+  touches — a construction argument, an event round-trip — not to reimplement
+  Phaser.
+- **Consultation and "messaging the user" are read from the consultee
+  assignment and the enquiry, never from `agent.pauseReason`.** A live agent
+  event patches only `status` into the cached row, so `pauseReason` goes
+  stale — see `synthesiseAgentPatch` in `src/events/cache.ts`.
+
+### Testing
+
+Unit tests cover the pure layers (`world/`, `rules/`, `motion/`) directly.
+Component tests drive the bus end to end, including a pipeline test in
+`useOfficeWorld.test.tsx` that runs a real sequence of live events through the
+hook. The browser spec, `test/browser/company-visualisation.spec.ts`, uses
+`page.emulateMedia({ reducedMotion: 'reduce' })` so avatar and camera
+positions are exact rather than mid-animation.
+
+**Not covered:** agent avatars in the browser tier. The browser-tier
+deployment has no LLM, so no agent ever runs there — only roles, task rooms
+and every interaction are proven against real Phaser. See phase 03's
+[unresolved notes](<prompts/phase 03 - web visualisation/unresolved-notes.md>).
+
 ## Tests
 
 Vitest and Testing Library, colocated as `src/**/*.test.{ts,tsx}`. The test
