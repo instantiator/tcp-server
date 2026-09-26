@@ -17,14 +17,15 @@ export interface UseFullscreenResult {
 export const useFullscreen = (
   ref: RefObject<HTMLElement | null>,
 ): UseFullscreenResult => {
-  const [isFullscreen, setIsFullscreen] = useState(
-    () => document.fullscreenElement === ref.current,
-  );
+  // Starts false: on the first render the ref is still empty, and "nothing is
+  // fullscreen" would otherwise equal "our empty ref" and read as true.
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
     const onChange = (): void => {
-      setIsFullscreen(document.fullscreenElement === ref.current);
+      setIsFullscreen(isShownFullscreen(ref.current));
     };
+    onChange();
     document.addEventListener('fullscreenchange', onChange);
     return () => {
       document.removeEventListener('fullscreenchange', onChange);
@@ -32,7 +33,7 @@ export const useFullscreen = (
   }, [ref]);
 
   const toggle = useCallback(() => {
-    if (document.fullscreenElement === ref.current) {
+    if (isShownFullscreen(ref.current)) {
       // ponytail: a refused exit just leaves the view fullscreen. There is
       // nothing more useful to do with the rejection than swallow it.
       void document.exitFullscreen().catch(() => undefined);
@@ -45,3 +46,7 @@ export const useFullscreen = (
 
   return { isFullscreen, toggle };
 };
+
+/** True only when `element` exists and is the page's fullscreen element. */
+const isShownFullscreen = (element: HTMLElement | null): boolean =>
+  element !== null && document.fullscreenElement === element;

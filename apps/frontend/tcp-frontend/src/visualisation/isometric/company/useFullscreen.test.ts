@@ -54,6 +54,15 @@ describe('useFullscreen', () => {
     expect(result.current.isFullscreen).toBe(false);
   });
 
+  it('starts false while the ref is still empty, as it is on a first render', () => {
+    // A component's ref is only filled after its first render. "No
+    // fullscreen element" and "no element yet" are both null, and must not
+    // be read as "this element is fullscreen".
+    const { result } = renderHook(() => useFullscreen({ current: null }));
+
+    expect(result.current.isFullscreen).toBe(false);
+  });
+
   it('requests fullscreen on the ref element when toggled while not fullscreen', () => {
     const { result } = renderHook(() => useFullscreen(ref));
 

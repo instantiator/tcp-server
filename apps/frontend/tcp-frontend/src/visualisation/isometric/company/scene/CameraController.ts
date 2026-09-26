@@ -1,18 +1,22 @@
-import type { Cameras, Scene } from 'phaser';
+import type { Cameras, GameObjects, Scene } from 'phaser';
 import { TILE_HEIGHT, TILE_WIDTH, tileToScreen } from '../motion/iso';
 import type { Bounds, Tile } from '../world/types';
 
+/** `startFollow`'s lerp for a smooth follow; reduced motion uses `1` (instant) instead. */
+const FOLLOW_LERP = 0.1;
+
 /**
- * Wraps the scene's main camera: fits its scroll bounds to the map, and
- * centres on a tile. Re-fits on every resize, so the padding in
- * {@link fitMap} always matches the current viewport. Panning and following
- * are later steps.
+ * Wraps the scene's main camera: fits its scroll bounds to the map, centres
+ * on a tile, pans by a screen offset, and follows a game object. Re-fits on
+ * every resize, so the padding in {@link fitMap} always matches the current
+ * viewport.
  */
 export class CameraController {
   private readonly scene: Scene;
   private readonly camera: Cameras.Scene2D.Camera;
   private lastBounds: Bounds | null = null;
   private listenerRemoved = false;
+  private following = false;
 
   constructor(scene: Scene) {
     this.scene = scene;
@@ -65,6 +69,45 @@ export class CameraController {
   centreOnTile(tile: Tile): void {
     const { x, y } = tileToScreen(tile);
     this.camera.centerOn(x, y);
+  }
+
+  /**
+   * Manual panning and following are mutually exclusive: a follow would just
+   * fight the scroll this sets. Returns whether a follow was actually
+   * running, so the caller knows whether to tell React it stopped.
+   */
+  pan(dx: number, dy: number): boolean {
+    const wasFollowing = this.following;
+    this.stopFollow();
+    this.camera.scrollX += dx;
+    this.camera.scrollY += dy;
+    return wasFollowing;
+  }
+
+  /**
+   * Follows `target`, smoothly under ordinary motion and instantly
+   * (`lerp` 1) when `reduced` is true — the same reduced-motion rule the
+   * crowd's own walking uses.
+   */
+  follow(
+    target: GameObjects.Components.Transform & GameObjects.GameObject,
+    reduced: boolean,
+  ): void {
+    const lerp = reduced ? 1 : FOLLOW_LERP;
+    this.camera.startFollow(target, false, lerp, lerp);
+    this.following = true;
+  }
+
+  stopFollow(): void {
+    if (!this.following) {
+      return;
+    }
+    this.following = false;
+    this.camera.stopFollow();
+  }
+
+  isFollowing(): boolean {
+    return this.following;
   }
 
   /** Removes the resize listener. Safe to call more than once. */

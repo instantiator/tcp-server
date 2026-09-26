@@ -26,17 +26,24 @@ const hasMachineCredentials = Boolean(TEST_CLIENT_ID && TEST_CLIENT_SECRET);
 
 /*
  * Copied from `apps/frontend/tcp-frontend/src/strings.ts`
- * (`visualisation.stage.label`, `company.tab.visualisation` and
- * `visualisation.summary`). `strings.ts` is app source, not something a
- * browser spec can import, so these are literals — keep them in step by hand
- * if the copy there ever changes.
+ * (`visualisation.stage.label`, `company.tab.visualisation`,
+ * `visualisation.summary` and `visualisation.keys`). `strings.ts` is app
+ * source, not something a browser spec can import, so these are literals —
+ * keep them in step by hand if the copy there ever changes.
  */
 const OFFICE_VIEW_LABEL = 'Office view';
 const COMPANY_VIEW_TAB = 'Company view';
+const KEYS_HELP =
+  'Use the arrow keys or W, A, S and D to move the view. Double-click an empty space for full screen.';
 
-/** The visualisation's hidden summary, built the same way `t('visualisation.summary', …)` does. */
+/**
+ * The visualisation's hidden accessible description, built the way
+ * `t('visualisation.summary', …)` and `t('visualisation.keys')` are (000.01
+ * Stage D): the stage's `aria-describedby` names both paragraphs, so its
+ * accessible description is their text joined with a space.
+ */
 const summary = (roles: number, taskRooms: number, agents: number): string =>
-  `Roles: ${roles}. Task rooms: ${taskRooms}. Agents: ${agents}.`;
+  `Roles: ${roles}. Task rooms: ${taskRooms}. Agents: ${agents}. ${KEYS_HELP}`;
 
 interface TokenEndpoint {
   token_endpoint: string;
@@ -112,7 +119,12 @@ test.describe('company visualisation', () => {
   // under test.
   test.beforeAll(async ({ request }) => {
     token = await getMachineToken(request);
-    const suffix = Date.now().toString(36);
+    // `fullyParallel` (playwright.config.ts) can run this file's tests in
+    // separate worker processes that each call their own `beforeAll` at
+    // essentially the same instant, so `Date.now()` alone collides on its
+    // own slug (discovered running this spec for 000.01 Stage D) — the
+    // random half is what actually makes two workers' suffixes differ.
+    const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
     const company = await request.post('/api/company', {
       headers: { Authorization: `Bearer ${token}` },

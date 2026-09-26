@@ -103,6 +103,7 @@ export const DetailsPicker = ({
         if (item !== undefined) onSelect(item.target);
       }}
       isDisabled={snapshot === null || items.length === 0}
+      placeholder={t('visualisation.picker.placeholder')}
     >
       <Label>{t('visualisation.picker.label')}</Label>
       <Button>

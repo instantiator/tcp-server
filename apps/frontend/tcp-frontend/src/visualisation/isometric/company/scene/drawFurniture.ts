@@ -24,13 +24,15 @@ const FURNITURE_SIZES: Record<FurnitureKind, FurnitureSize> = {
 
 /**
  * Draws one placeholder `IsoBox` per piece of furniture, keyed by furniture
- * id so the scene can find and destroy an individual piece later.
+ * id so the scene can find and destroy an individual piece later. Typed as
+ * `IsoBox` rather than the base `GameObject`, so a caller (a camera follow
+ * onto a whiteboard) gets the `Transform` component it needs with no cast.
  */
 export function drawFurniture(
   scene: Scene,
   furniture: readonly Furniture[],
-): Map<string, GameObjects.GameObject> {
-  const objects = new Map<string, GameObjects.GameObject>();
+): Map<string, GameObjects.IsoBox> {
+  const objects = new Map<string, GameObjects.IsoBox>();
 
   for (const item of furniture) {
     const { x: cx, y: cy } = tileToScreen(item.tile);

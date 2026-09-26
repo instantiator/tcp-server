@@ -262,6 +262,8 @@ const strings = {
   'visualisation.stage.label': 'Office view',
   'visualisation.summary':
     'Roles: {roles}. Task rooms: {taskRooms}. Agents: {agents}.',
+  'visualisation.keys':
+    'Use the arrow keys or W, A, S and D to move the view. Double-click an empty space for full screen.',
 
   // Stage D (000.01): the toolbar, the details picker, the hover tooltip and
   // the side tray. Wiring these into the canvas is a later step.
@@ -273,6 +275,7 @@ const strings = {
   'visualisation.fullscreen': 'Full screen',
 
   'visualisation.picker.label': 'Show details for',
+  'visualisation.picker.placeholder': 'Choose a role, task or agent',
   'visualisation.picker.role': 'Role: {name}',
   'visualisation.picker.task': 'Task: {shortcode}',
   'visualisation.picker.agent': 'Agent: {role}',

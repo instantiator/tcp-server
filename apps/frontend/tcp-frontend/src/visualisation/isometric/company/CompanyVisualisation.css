@@ -1,8 +1,19 @@
 .company-visualisation {
 }
 
+/* The stage and the tray side by side; the stage takes whatever the tray doesn't. */
+.company-visualisation__main {
+  display: flex;
+  gap: var(--tcp-space-md);
+}
+
 .company-visualisation__stage {
   position: relative;
+  flex: 1;
+  /* Without this, a flex item's default `min-inline-size: auto` refuses to
+     shrink below the canvas's own content size, and the tray gets pushed
+     off instead of the stage narrowing for it. */
+  min-inline-size: 0;
   block-size: var(--tcp-visualisation-height);
 }
 
@@ -19,9 +30,33 @@
 }
 
 .company-visualisation__tray {
+  flex: none;
   inline-size: var(--tcp-visualisation-tray-width);
+  overflow: auto;
   padding: var(--tcp-space-md);
   border-inline-start: var(--tcp-border-width) solid var(--tcp-color-border);
+}
+
+/*
+ * Full screen is the whole visualisation — toolbar, stage and tray — not
+ * just the canvas, so the pan and full-screen controls stay reachable while
+ * it's active. The stage's height token only fits the page's normal flow;
+ * here it grows to fill whatever the display offers instead.
+ */
+.company-visualisation:fullscreen {
+  display: flex;
+  flex-direction: column;
+  background: var(--tcp-color-bg);
+  padding: var(--tcp-space-md);
+}
+
+.company-visualisation:fullscreen .company-visualisation__main {
+  flex: 1;
+}
+
+.company-visualisation:fullscreen .company-visualisation__stage {
+  flex: 1;
+  block-size: auto;
 }
 
 /*
@@ -33,7 +68,7 @@
 .company-visualisation__tooltip {
   position: absolute;
   z-index: var(--tcp-layer-dock);
-  max-inline-size: 16rem;
+  max-inline-size: var(--tcp-visualisation-tooltip-max-width);
   padding: var(--tcp-space-sm);
   border: var(--tcp-border-width) solid var(--tcp-color-border);
   border-radius: var(--tcp-radius);
