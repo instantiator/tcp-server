@@ -51,4 +51,7 @@ if [[ ! -f node_modules/.package-lock.json || package-lock.json -nt node_modules
   npm ci
 fi
 
-exec npx --yes tsx "$REPO_ROOT/scripts/setup-wizard/index.ts" "$@"
+# The wizard's own tsconfig maps @tcp/shared/* onto the library's sources;
+# without it, Node's package exports reject the subpath imports.
+exec npx --yes tsx --tsconfig "$REPO_ROOT/scripts/setup-wizard/tsconfig.json" \
+  "$REPO_ROOT/scripts/setup-wizard/index.ts" "$@"
