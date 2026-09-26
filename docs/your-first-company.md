@@ -47,7 +47,9 @@ The `tcp` org gets a default test account:
 > For a quicker start with a fixed, non-generated password instead of the
 > wizard, run `cp .env.testing .env.dev && ./scripts/start-dev.sh`. The test
 > password is then `Testing123!` — see `.env.testing` for the rest of that
-> config.
+> config. That file uses different ports so it can run beside a dev stack:
+> the API is on 3001, tcp-agent on 3004 and the web app on 5174. Adjust the
+> URLs below to match.
 
 For more about working with Zitadel, see:
 
