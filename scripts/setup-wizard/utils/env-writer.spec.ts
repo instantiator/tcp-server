@@ -113,4 +113,53 @@ describe('writeEnvFile — committed base vs gitignored .local split', () => {
     expect(valueOf(local, 'TEST_CLIENT_ID')).toBe('machine-123');
     expect(valueOf(local, 'TEST_CLIENT_SECRET')).toBe('kept-secret');
   });
+
+  it('generates the bundled Zitadel secrets once and keeps them on re-run', () => {
+    const first = readFileSync(
+      writeEnvFile(makeConfig(), dir).localFile,
+      'utf8',
+    );
+    expect(valueOf(first, 'ZITADEL_MASTERKEY')).toMatch(/^[0-9a-f]{32}$/);
+    expect(valueOf(first, 'ZITADEL_ADMIN_PASSWORD')).toMatch(
+      /[A-Z].*[a-z].*\d.*!$/,
+    );
+    expect(valueOf(first, 'TEST_PASSWORD')).toBeTruthy();
+
+    const second = readFileSync(
+      writeEnvFile(makeConfig(), dir).localFile,
+      'utf8',
+    );
+    for (const key of [
+      'ZITADEL_MASTERKEY',
+      'ZITADEL_ADMIN_PASSWORD',
+      'TEST_PASSWORD',
+    ]) {
+      expect(valueOf(second, key)).toBe(valueOf(first, key));
+    }
+  });
+
+  it('writes no Zitadel secrets for an external OIDC provider', () => {
+    const config = makeConfig({
+      oidc: {
+        issuerUrl: 'https://idp.example.com',
+        clientId: 'c',
+        clientSecret: 's',
+      },
+    });
+    const local = readFileSync(writeEnvFile(config, dir).localFile, 'utf8');
+    expect(uncommentedKeys(local).has('ZITADEL_MASTERKEY')).toBe(false);
+  });
+
+  it('keeps keys it does not manage (e.g. TCP_ADMIN_IDENTIFIERS) on re-run', () => {
+    writeFileSync(
+      join(dir, '.env.testinstance.local'),
+      'TCP_ADMIN_IDENTIFIERS=u1,u2\n',
+      'utf8',
+    );
+    const local = readFileSync(
+      writeEnvFile(makeConfig(), dir).localFile,
+      'utf8',
+    );
+    expect(valueOf(local, 'TCP_ADMIN_IDENTIFIERS')).toBe('u1,u2');
+  });
 });
