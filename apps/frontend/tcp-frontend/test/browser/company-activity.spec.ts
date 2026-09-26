@@ -128,13 +128,17 @@ test.describe('company activity', () => {
   // under test.
   test.beforeAll(async ({ request }) => {
     token = await getMachineToken(request);
-    companyName = `company-activity browser test ${Date.now().toString(36)}`;
+    // `fullyParallel` runs this hook once per test, often in the same
+    // millisecond on different workers, so a timestamp alone collides on the
+    // slug's unique constraint (a 500). The random half keeps them apart.
+    const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    companyName = `company-activity browser test ${suffix}`;
 
     const company = await request.post('/api/company', {
       headers: { Authorization: `Bearer ${token}` },
       data: {
         name: companyName,
-        slug: `company-activity-${Date.now().toString(36)}`,
+        slug: `company-activity-${suffix}`,
         description: 'Created by company-activity.spec.ts',
       },
     });

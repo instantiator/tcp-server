@@ -148,6 +148,14 @@ This is not a regression from 000.01; it is a standing fact for anyone running
 the browser tier this way. The full browser tier must run against a built
 deployment.
 
+### Browser tier: an occasional redirect to Zitadel's login form
+
+**Raised by:** 000.01 · **Condition to revisit:** it happens again, in any spec.
+
+Once in about thirteen runs of `company-visualisation.spec.ts`, three tests failed together: their pages were sent to Zitadel's login form (`/ui/login/login?authRequestID=…`) instead of back into the app, so no data loaded. The signed-in state comes from Zitadel's session cookie, which the setup project saves; every page load goes through a silent redirect. It could not be reproduced on demand, and the same period also had a real, now fixed slug collision in `company-activity.spec.ts` that made failures look more common than they were.
+
+Testable: run the whole browser tier ten times. Any failure whose call log shows `ui/login/login` is this.
+
 ## Carried into a later prompt
 
 | Note                                                                                                                                                | Raised by | Goes to             |
