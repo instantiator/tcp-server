@@ -6,6 +6,9 @@
  * Run via: `npm run setup` or `./scripts/setup-wizard.sh`
  */
 
+import { spawnSync } from 'node:child_process';
+import { join } from 'node:path';
+import inquirer from 'inquirer';
 import type { WizardConfig } from './types';
 import { promptInstance } from './prompts/instance';
 import { promptPorts } from './prompts/ports';
@@ -95,7 +98,25 @@ async function main(): Promise<void> {
       `     generated OIDC/test client credentials to ${config.envFileName}.local`,
     );
   }
-  console.log('  3. Run: ./scripts/start-dev.sh');
+  const startCommand = `./scripts/start-dev.sh --env ${config.envFileName} --project ${config.instanceName}`;
+  console.log(`  3. Run: ${startCommand}`);
+  console.log();
+
+  const { start } = await inquirer.prompt<{ start: boolean }>({
+    type: 'confirm',
+    name: 'start',
+    message: 'Start the stack now?',
+    default: true,
+  });
+  if (!start) return;
+
+  // The project name keeps each instance's containers and volumes apart.
+  const result = spawnSync(
+    join(__dirname, '..', 'start-dev.sh'),
+    ['--env', envFile, '--project', config.instanceName],
+    { stdio: 'inherit' },
+  );
+  process.exitCode = result.status ?? 1;
 }
 
 main().catch((err: unknown) => {

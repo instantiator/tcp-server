@@ -5,7 +5,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [-h|--help] [-e|--env <path>] [--rebuild] [--dev-web] [--reset]
+Usage: $(basename "$0") [-h|--help] [-e|--env <path>] [-p|--project <name>] [--rebuild] [--dev-web] [--reset]
 
 Start a full local development environment and configure it for first-time use.
 
@@ -24,13 +24,17 @@ Environment file precedence (first match wins):
 
 Options:
   -e, --env <path>   Environment file to use
+  -p, --project <name>
+                     Docker Compose project name (default: tcp-dev). Each
+                     project has its own containers, volumes and Zitadel
+                     bootstrap, so a second instance never touches the first.
   --rebuild          Force a Docker image rebuild (passes --build to docker compose up)
   --dev-web          Serve the web client from a Vite dev server instead of the
                      built bundle: starts it on the host and points tcp-web at
                      it. Gives HMR, and is the only mode in which
                      development-only capabilities exist at all — they are
                      compiled out of a production build (docs/web-client.md).
-  --reset            Tear down the tcp-dev project first (containers AND
+  --reset            Tear down the project first (containers AND
                      volumes — every database is wiped), then, once the fresh
                      stack is up, seed it with a couple of basic test
                      companies and roles via tcp-cli.sh. Use this for a known
@@ -41,6 +45,7 @@ EOF
 }
 
 ENV_FILE=""
+PROJECT="tcp-dev"
 REBUILD=false
 DEV_WEB=false
 RESET=false
@@ -51,6 +56,9 @@ while [[ $# -gt 0 ]]; do
     -e|--env)
       [[ -n "${2:-}" ]] || { echo "ERROR: --env requires a path" >&2; exit 1; }
       ENV_FILE="$2"; shift 2 ;;
+    -p|--project)
+      [[ -n "${2:-}" ]] || { echo "ERROR: --project requires a name" >&2; exit 1; }
+      PROJECT="$2"; shift 2 ;;
     --rebuild) REBUILD=true; shift ;;
     --dev-web) DEV_WEB=true; shift ;;
     --reset) RESET=true; shift ;;
@@ -74,12 +82,12 @@ fi
 # anything else, so what follows always starts from an empty database —
 # reusing stop-dev.sh rather than duplicating its compose invocation.
 if [[ "$RESET" == true ]]; then
-  echo "Resetting: removing the tcp-dev project's containers and volumes..."
-  "$REPO_ROOT/scripts/stop-dev.sh" --env "$PRIMARY_ENV" --volumes
+  echo "Resetting: removing the $PROJECT project's containers and volumes..."
+  "$REPO_ROOT/scripts/stop-dev.sh" --env "$PRIMARY_ENV" --project "$PROJECT" --volumes
   echo ""
 fi
 
-ARGS=(--project tcp-dev --env-files "$PRIMARY_ENV" --dev-ports)
+ARGS=(--project "$PROJECT" --env-files "$PRIMARY_ENV" --dev-ports)
 [[ "$REBUILD" == true ]] && ARGS+=(--rebuild)
 
 # The Vite dev server, when --dev-web asks for one.
@@ -164,6 +172,14 @@ read_env_var() {
   return 1
 }
 
+# The issuer as the host sees it — the same rule as derive_host_urls
+# (scripts/lib/derive-urls.sh): an explicit OIDC_ISSUER_URL, else the bundled
+# Zitadel on EXPOSE_PORT_ZITADEL. The wizard leaves OIDC_ISSUER_URL unset.
+resolve_issuer() {
+  read_env_var OIDC_ISSUER_URL "$1" \
+    || echo "http://localhost:$(read_env_var EXPOSE_PORT_ZITADEL "$1" || echo 8080)"
+}
+
 # Obtains a token via the client_credentials grant against Zitadel directly,
 # using the machine test user start-deployment.sh's own Zitadel bootstrap
 # creates (see TEST_CLIENT_ID/TEST_CLIENT_SECRET there) — the same grant
@@ -175,7 +191,7 @@ get_machine_token() {
   local client_id client_secret issuer
   client_id="$(read_env_var TEST_CLIENT_ID "$env_file")" || client_id=""
   client_secret="$(read_env_var TEST_CLIENT_SECRET "$env_file")" || client_secret=""
-  issuer="$(read_env_var OIDC_ISSUER_URL "$env_file")" || issuer="http://localhost:8080"
+  issuer="$(resolve_issuer "$env_file")"
 
   if [[ -z "$client_id" || -z "$client_secret" ]]; then
     echo "ERROR: TEST_CLIENT_ID/TEST_CLIENT_SECRET not found in $env_file(.local) — the Zitadel bootstrap above should have written them." >&2
@@ -212,14 +228,16 @@ get_machine_token() {
 # the only identifier form guaranteed present.
 lookup_test_user_id() {
   local username="$1"
-  local pat_file="$REPO_ROOT/docker/zitadel-machinekey/tcp-dev/pat.txt"
+  local pat_file="$REPO_ROOT/docker/zitadel-machinekey/$PROJECT/pat.txt"
   if [[ ! -s "$pat_file" ]]; then
     echo "ERROR: no Zitadel bootstrap PAT at $pat_file" >&2
     return 1
   fi
   local pat
   pat="$(cat "$pat_file")"
-  curl -sf "http://localhost:8080/management/v1/users/_search" \
+  local issuer
+  issuer="$(resolve_issuer "$PRIMARY_ENV")"
+  curl -sf "$issuer/management/v1/users/_search" \
     -H "Authorization: Bearer $pat" \
     -H 'Content-Type: application/json' \
     -d "$(jq -n --arg u "$username" '{queries:[{userNameQuery:{userName:$u,method:"TEXT_QUERY_METHOD_EQUALS"}}]}')" \

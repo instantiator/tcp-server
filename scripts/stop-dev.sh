@@ -5,7 +5,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [-h|--help] [-e|--env <path>] [-v|--volumes]
+Usage: $(basename "$0") [-h|--help] [-e|--env <path>] [-p|--project <name>] [-v|--volumes]
 
 Stop the local development environment started by start-dev.sh.
 
@@ -20,6 +20,8 @@ Environment file precedence (first match wins):
 
 Options:
   -e, --env <path>    Environment file to use
+  -p, --project <name>
+                      Docker Compose project name (default: tcp-dev)
   -v, --volumes       Also remove volumes (resets all data)
   -h, --help          Show this help message and exit
 EOF
@@ -28,6 +30,7 @@ EOF
 # Argument parsing
 
 ENV_FILE=""
+PROJECT="tcp-dev"
 REMOVE_VOLUMES=false
 
 while [[ $# -gt 0 ]]; do
@@ -36,6 +39,9 @@ while [[ $# -gt 0 ]]; do
     -e|--env)
       [[ -n "${2:-}" ]] || { echo "ERROR: --env requires a path" >&2; exit 1; }
       ENV_FILE="$2"; shift 2 ;;
+    -p|--project)
+      [[ -n "${2:-}" ]] || { echo "ERROR: --project requires a name" >&2; exit 1; }
+      PROJECT="$2"; shift 2 ;;
     -v|--volumes) REMOVE_VOLUMES=true; shift ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
   esac
@@ -70,7 +76,7 @@ fi
 
 # Stop services
 
-DC="docker compose -p tcp-dev --profile auth --env-file $ENV_FILE"
+DC="docker compose -p $PROJECT --profile auth --env-file $ENV_FILE"
 
 if [[ "$REMOVE_VOLUMES" == true ]]; then
   echo "Stopping services and removing volumes..."
