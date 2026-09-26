@@ -35,7 +35,7 @@ services:
   tcp-mcp-interactions:   Interactions MCP server — port 3012
   tcp-mcp-tasks:          Tasks MCP server (added 010.2.5) — port 3013
   postgres:               PostgreSQL 16 + pgvector (pgvector/pgvector image)
-  minio:                  MinIO object storage (minio/minio image)
+  minio:                  MinIO-compatible object storage (pgsty/silo image — see amendment below)
   redis:                  Redis 7 (BullMQ queue backend)
 ```
 
@@ -51,6 +51,10 @@ MCP servers run as **permanent Docker Compose services**, not as child processes
 tcp-agent connects to MCP servers over HTTP using the MCP Streamable HTTP transport. The `McpClientService` resolves server URLs from `MCP_{NAME}_URL` environment variables set in Docker Compose. Tool loading is per-agent-run, scoped to the server names listed in `role.mcpServerList`.
 
 The three standard TCP MCP servers (storage, memory, interactions) are NestJS applications in `apps/tcp-mcp-*/` using `@modelcontextprotocol/sdk`. Additional per-company MCP servers are a future extension.
+
+<a id="amendments-as-implemented-p03-001-01-00"></a>
+
+> **Note (phase 03, 001.01.00):** The `minio` service now runs `pgsty/silo`, the community-maintained fork of MinIO, because `minio/minio` was withdrawn from Docker Hub. It is a drop-in: same S3 API, `MINIO_ROOT_*` variables and `/minio/health/live` endpoint. The service name and the app's `MINIO_*` config keep the MinIO name. Silo's bundled client is `mcli` rather than `mc`; TCP never used `mc`.
 
 ### Revisit trigger
 
