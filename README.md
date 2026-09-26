@@ -4,6 +4,8 @@ TCP manages one or more companies of AI agents that collaborate to complete task
 
 [![CI](https://github.com/instantiator/tcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/instantiator/tcp-server/actions/workflows/ci.yml)
 
+![Isometric view](docs/screenshots/000.browser.company.isometric-view.png)
+
 ## Quick start
 
 ```bash
