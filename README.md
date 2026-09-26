@@ -4,6 +4,18 @@ TCP manages one or more companies of AI agents that collaborate to complete task
 
 [![CI](https://github.com/instantiator/tcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/instantiator/tcp-server/actions/workflows/ci.yml)
 
+## Quick start
+
+```bash
+git clone https://github.com/instantiator/tcp-server.git && cd tcp-server
+./scripts/setup-wizard.sh
+```
+
+The wizard checks your prerequisites, installs dependencies, asks a few
+configuration questions, and starts the stack — then prints the service URLs
+and sign-in credentials. See **[Your first company](docs/your-first-company.md)**
+for what to do next.
+
 ## Key concepts
 
 | Entity     | Definition                                                                     |
@@ -91,28 +103,7 @@ flowchart LR
 
 ## Getting started
 
-Follow the steps in **[Your first company](docs/your-first-company.md)** to populate and interact with a simple agent in a company.
-
-### Quick start (very)
-
-> Prerequisites: Docker, Node.js 26
-
-> [!NOTE]
-> The `start-dev.sh` script builds and launches TCP with an instance of Zitadel to manage authorisation. It configures an `tcp` org with a project, an API application, and the test users read from your env file. It can take several minutes to launch.
->
-> - **Username / Password:** set via `TEST_USERNAME` / `TEST_PASSWORD` in your env file.
-
-```bash
-git clone --recurse-submodules https://github.com/instantiator/tcp-server.git && cd tcp-server
-cp .env.example .env
-```
-
-You will need an LLM service to provide inference. Once you've settled on one, update `.env` with the service details.
-
-```bash
-npm install
-scripts/start-dev.sh
-```
+Follow the steps in **[Your first company](docs/your-first-company.md)** to populate and interact with a simple agent in a company. See the [Quick start](#quick-start) above to get a stack running first.
 
 ---
 
@@ -122,16 +113,16 @@ See **[Developer setup checklist](docs/setup-checklist.md)** for a step-by-step 
 
 ## System architecture
 
-| Concern               | Technology                    |
-| --------------------- | ----------------------------- |
-| Framework             | NestJS 11                     |
-| ORM                   | TypeORM                       |
-| Database (production) | PostgreSQL 16 + pgvector      |
-| Database (unit tests) | better-sqlite3 (in-memory)    |
-| Auth                  | OAuth2/OIDC (Zitadel default) |
-| Object storage        | MinIO                         |
-| Task queue            | Redis (BullMQ)                |
-| Schema export         | ts-json-schema-generator      |
+| Concern               | Technology                                                                 |
+| --------------------- | -------------------------------------------------------------------------- |
+| Framework             | NestJS 11                                                                  |
+| ORM                   | TypeORM                                                                    |
+| Database (production) | PostgreSQL 16 + pgvector                                                   |
+| Database (unit tests) | better-sqlite3 (in-memory)                                                 |
+| Auth                  | OAuth2/OIDC (Zitadel default)                                              |
+| Object storage        | MinIO (via [Silo](https://github.com/pgsty/silo), a MinIO-compatible fork) |
+| Task queue            | Redis (BullMQ)                                                             |
+| Schema export         | ts-json-schema-generator                                                   |
 
 See [docs/ADRs/](docs/ADRs/) for system design decisions.
 
@@ -297,22 +288,22 @@ Quick reference:
 
 ## Commands reference
 
-| Command                      | Purpose                                                                                      |
-| ---------------------------- | -------------------------------------------------------------------------------------------- |
-| `npm run build`              | Compile all apps to `dist/`, then regenerate the schema and license report                   |
-| `npm run build tcp-server`   | Compile tcp-server only                                                                      |
-| `npm run build tcp-agent`    | Compile tcp-agent only                                                                       |
-| `npm run start:dev`          | Start tcp-server with hot reload                                                             |
-| `npm run lint`               | ESLint with auto-fix                                                                         |
-| `npm run format`             | Prettier over `apps/`, `libs/`, `test/`, and `docs/`                                         |
-| `npm test`                   | Unit tests                                                                                   |
-| `npm run test:e2e`           | E2E tests                                                                                    |
-| `npm run test:integration`   | Integration tests (needs Docker)                                                             |
-| `npm run test:api`           | API contract tests (needs `docker compose up --profile auth`)                                |
-| `npm run test:smoke`         | Smoke tests (needs `docker compose up --profile auth`)                                       |
-| `npm run schema:generate`    | Regenerate [schemas/schema.json](schemas/schema.json)                                        |
-| `npm run licenses:generate`  | Regenerate [docs/licenses.md](docs/licenses.md)                                              |
-| `npm run migration:generate` | Generate a new TypeORM migration                                                             |
-| `npm run migration:run`      | Run pending migrations                                                                       |
-| `npm run migration:revert`   | Revert the last migration                                                                    |
-| `npm run setup`              | Interactive environment setup wizard (see [docs/scripts.md](docs/scripts.md#setup-wizardsh)) |
+| Command                      | Purpose                                                                                                    |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `npm run build`              | Compile all apps to `dist/`, then regenerate the schema and license report                                 |
+| `npm run build tcp-server`   | Compile tcp-server only                                                                                    |
+| `npm run build tcp-agent`    | Compile tcp-agent only                                                                                     |
+| `npm run start:dev`          | Start tcp-server with hot reload                                                                           |
+| `npm run lint`               | ESLint with auto-fix                                                                                       |
+| `npm run format`             | Prettier over `apps/`, `libs/`, `test/`, and `docs/`                                                       |
+| `npm test`                   | Unit tests                                                                                                 |
+| `npm run test:e2e`           | E2E tests                                                                                                  |
+| `npm run test:integration`   | Integration tests (needs Docker)                                                                           |
+| `npm run test:api`           | API contract tests (needs `docker compose up --profile auth`)                                              |
+| `npm run test:smoke`         | Smoke tests (needs `docker compose up --profile auth`)                                                     |
+| `npm run schema:generate`    | Regenerate [schemas/schema.json](schemas/schema.json)                                                      |
+| `npm run licenses:generate`  | Regenerate [docs/licenses.md](docs/licenses.md)                                                            |
+| `npm run migration:generate` | Generate a new TypeORM migration                                                                           |
+| `npm run migration:run`      | Run pending migrations                                                                                     |
+| `npm run migration:revert`   | Revert the last migration                                                                                  |
+| `npm run setup`              | Wizard: installs, configures, and starts the stack (see [docs/scripts.md](docs/scripts.md#setup-wizardsh)) |

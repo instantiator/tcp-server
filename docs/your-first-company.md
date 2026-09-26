@@ -6,36 +6,48 @@ Once you have prepared your deployment with the [setup checklist](setup-checklis
 
 ### 0.0 Prerequisites
 
-You need **Docker** and **Node.js 26**, and a `bash` shell (macOS or Linux —
-every script in this repository assumes one). Then:
+You need **git**, **Docker** (running), **jq**, **curl**, and **Node.js 26.6.0**
+(nvm recommended — the setup wizard picks it up automatically), and a `bash`
+shell (macOS or Linux — every script in this repository assumes one). Then:
 
 ```bash
-git clone --recurse-submodules https://github.com/instantiator/tcp-server.git
+git clone https://github.com/instantiator/tcp-server.git
 cd tcp-server
-npm install
 ```
 
 > [!NOTE]
 > This is the bare minimum to follow this walkthrough. If you are going to work
 > on the code, follow the [Developer setup checklist](./setup-checklist.md)
-> instead — it covers git hooks, environment configuration, and the test tiers.
+> instead — it covers a full checkout (with the `dev-environment` submodule),
+> git hooks, and the test tiers.
 
 ### 0.1 Launch a dev instance
 
-The dev instance is much like a production instance. It's launched with docker compose and has all services, including an OIDC provider (Zitadel). This is configured to have an `admin` user for the org, and a test user in the `tcp` org.
+Run the setup wizard. It checks your prerequisites, installs dependencies,
+asks a few configuration questions — every one has a default, and `?` shows
+help — then writes `.env.dev` (plus a gitignored `.env.dev.local` for
+secrets):
 
 ```bash
-scripts/start-dev.sh
+./scripts/setup-wizard.sh
 ```
 
-The `tcp` org is created with a default account, if not already available:
+When it asks "Start the stack now?", say yes (the default). It runs
+`./scripts/start-dev.sh --env .env.dev --project tcp-dev`, which starts every
+service, bootstraps an OIDC provider (Zitadel) with a `tcp` org, project, and
+test users, and prints the service URLs and sign-in credentials.
 
-| Org   | Username | Password      |
-| ----- | -------- | ------------- |
-| `tcp` | `test`   | `Testing123!` |
+The `tcp` org gets a default test account:
+
+| Org   | Username | Password                                                           |
+| ----- | -------- | ------------------------------------------------------------------ |
+| `tcp` | `test`   | generated — printed once the stack starts, and in `.env.dev.local` |
 
 > [!TIP]
-> These values come from the `.env.testing` config file, where you'll find other configuration options, too.
+> For a quicker start with a fixed, non-generated password instead of the
+> wizard, run `cp .env.testing .env.dev && ./scripts/start-dev.sh`. The test
+> password is then `Testing123!` — see `.env.testing` for the rest of that
+> config.
 
 For more about working with Zitadel, see:
 
@@ -46,7 +58,7 @@ For more about working with Zitadel, see:
 To confirm that the system is in a good state, you can check the `/health` pages for the tcp-server, and tcp-agent applications:
 
 - http://localhost:3000/health
-- http://localhost:3001/health
+- http://localhost:3003/health
 
 Alternatively, you can run the smoke tests with:
 
@@ -78,23 +90,13 @@ export TCP_TOKEN=$(./tcp-cli.sh get-token)
 > [!TIP]
 > If you need to use a different variable, pass the `--access-token-env-var` option to tcp-cli.
 
-### 0.4 Set up your environment config
+### 0.4 Set LLM configuration
 
-The easiest way is the setup wizard, which writes a `.env.<instance>` file (and a gitignored `.env.<instance>.local` for secrets) with commented guidance:
-
-```bash
-npm run setup
-```
-
-Or, for a quick start, copy the committed test config to the dev env file that `start-dev.sh` uses:
-
-```bash
-cp .env.testing .env.dev
-```
-
-Most of the defaults are sufficient for a dev or testing environment. You don't set the OIDC/test client credentials by hand: when you start the stack, `start-dev.sh` bootstraps Zitadel and writes the generated `OIDC_CLIENT_ID/SECRET` and `TEST_CLIENT_ID/SECRET` to the gitignored `<env-file>.local` override (e.g. `.env.dev.local`) — never the committed file.
-
-### 0.5 Set LLM configuration
+> [!NOTE]
+> If you didn't configure a real inference model in the wizard, it defaults
+> to running a stub LLM (canned replies, no real model needed) so chat works
+> out of the box. The stub is a placeholder — agents can chat but can't do
+> real work with it. Set a real model below to do real work.
 
 The LLM used for each role is determined by checking, in order:
 

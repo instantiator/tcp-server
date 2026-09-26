@@ -5,12 +5,13 @@ the relevant documentation where more detail is available.
 
 ## 1. Prerequisites
 
-- [ ] **Docker** and **Docker Compose** installed
-      ([Docker Desktop](https://docs.docker.com/get-docker/) includes both)
-- [ ] **Node.js 26** and npm installed ([nodejs.org](https://nodejs.org/)) —
-      `.nvmrc` pins the exact patch release CI uses, so `nvm use` in the repo
-      root is the surest way to match it
 - [ ] **Git** with submodule support (any recent version)
+- [ ] **Docker**, running ([Docker Desktop](https://docs.docker.com/get-docker/)
+      includes Docker Compose)
+- [ ] **jq** and **curl**
+- [ ] **Node.js 26.6.0** — `.nvmrc` pins the exact patch release CI uses. With
+      [nvm](https://github.com/nvm-sh/nvm) installed, the setup wizard (step 3)
+      runs `nvm install` and selects it for you automatically.
 
 ## 2. Clone the repository
 
@@ -28,14 +29,56 @@ If you already cloned without it:
 git submodule update --init --recursive
 ```
 
-## 3. Install dependencies and git hooks
+## 3. Run the setup wizard
 
 ```bash
-npm install
+./scripts/setup-wizard.sh
+```
+
+It installs packages (`npm ci`) when `node_modules` is missing or older than
+`package-lock.json`, then asks a few configuration questions — every one has
+a default, and `?` shows help. It writes `.env.<instance>` (the default
+instance is `dev`, so `.env.dev`) plus a gitignored `.env.<instance>.local`
+for the generated secrets (`ZITADEL_MASTERKEY`, `ZITADEL_ADMIN_PASSWORD`,
+`TEST_PASSWORD`, and later the OIDC/test client credentials from the Zitadel
+bootstrap). See [ADR-018 §7](ADRs/ADR-018-system-configuration-setup-wizard.md)
+for the full list.
+
+Manual `.env` editing remains a supported fallback — the wizard is a
+convenience, not a gate.
+
+When it asks "Start the stack now?", say yes (the default). It runs
+`./scripts/start-dev.sh --env .env.dev --project tcp-dev`, which starts every
+service and bootstraps Zitadel with a `tcp` org, project, application, and
+test users. On first boot, Docker pulls the base images and npm installs
+inside the build — expect this to take several minutes.
+
+Check it's healthy:
+
+```bash
+curl http://localhost:3000/health
+./scripts/run-smoke-tests.sh
+docker compose -p tcp-dev ps
+```
+
+| Service         | URL                              |
+| --------------- | -------------------------------- |
+| tcp-server API  | http://localhost:3000            |
+| Swagger UI      | http://localhost:3000/swagger    |
+| MinIO console   | http://localhost:9001            |
+| Web app         | https://localhost:5173           |
+| Zitadel console | http://localhost:8080/ui/console |
+
+tcp-agent and the MCP servers are internal-only by default; start with
+`./scripts/start-deployment.sh --dev-ports` to publish them.
+
+## 4. Install git hooks
+
+```bash
 npm run hooks:install
 ```
 
-The second command copies `scripts/hooks/pre-commit` and `scripts/hooks/pre-push`
+This copies `scripts/hooks/pre-commit` and `scripts/hooks/pre-push`
 into `.git/hooks/`. Pre-commit formats, regenerates `schemas/schema.json` and
 `docs/licenses.md`, and stages the results into the commit; pre-push re-checks
 typecheck/lint/build and migration drift, then runs the unit, integration, and
@@ -45,79 +88,15 @@ e2e test tiers — it does not regenerate anything itself. See
 A failing hook is reporting a real problem — fix what it says rather than
 passing `--no-verify`.
 
-## 4. Configure environment variables
+## 5. (Optional) Set up authentication with Zitadel
 
-```bash
-cp .env.example .env
-```
+`start-dev.sh` (step 3) already bootstraps Zitadel automatically — you get a
+working `tcp` org, project, application, and test users with no extra steps.
 
-Open `.env` and review each value. The defaults work out of the box for local
-development with Docker Compose. Values you may want to change:
+See [docs/zitadel-setup.md](zitadel-setup.md) if you need an external OIDC
+provider, or want to do the setup by hand.
 
-| Variable                                | Default        | When to change                                |
-| --------------------------------------- | -------------- | --------------------------------------------- |
-| `DB_PASSWORD`                           | `dev-password` | Any shared or non-local environment           |
-| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | stub values    | Any shared or non-local environment           |
-| `ZITADEL_MASTERKEY`                     | (32-char key)  | Required — encrypts Zitadel's secrets at rest |
-| `ZITADEL_ADMIN_PASSWORD`                | `admin`        | Required when running Zitadel (step 7)        |
-
-`OIDC_ISSUER_URL` defaults to the bundled Zitadel and rarely needs changing for
-local development. You do **not** set `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` (or
-`TEST_CLIENT_ID`/`TEST_CLIENT_SECRET`) by hand: the Zitadel bootstrap in
-`start-dev.sh` generates them and writes them to the gitignored
-`<env-file>.local` override. For an external OIDC provider, put its fixed client
-id/secret in that same `.local` file. See [ADR-018 §7](ADRs/ADR-018-system-configuration-setup-wizard.md).
-
-## 5. Start all services
-
-```bash
-docker compose up -d
-```
-
-This starts PostgreSQL, Redis, and MinIO, then builds and starts tcp-server,
-tcp-agent, and the four MCP servers. See [docs/services.md](services.md) for
-the full list.
-
-On first boot, Docker pulls the base images and npm installs inside the build —
-expect this to take several minutes.
-
-## 6. Verify services are healthy
-
-```bash
-curl http://localhost:3000/health   # tcp-server: database + Redis + MinIO + OIDC
-docker compose exec tcp-agent curl -s http://localhost:3001/health   # tcp-agent: database + Redis
-```
-
-tcp-agent is a worker and is not published to the host, so its health endpoint
-is reached from inside the container (or from another service on the Compose
-network).
-
-Both should return HTTP 200. If tcp-server returns 503, check
-`docker compose logs tcp-server` — the most common cause is a dependency
-(PostgreSQL or MinIO) that hasn't finished starting yet. Wait 10–20 seconds
-and retry.
-
-| Service        | URL                           |
-| -------------- | ----------------------------- |
-| tcp-server API | http://localhost:3000         |
-| Swagger UI     | http://localhost:3000/swagger |
-| MinIO console  | http://localhost:9001         |
-
-tcp-agent and the MCP servers are internal-only by default; start with
-`./scripts/start-deployment.sh --dev-ports` to publish them.
-
-## 7. (Optional) Set up authentication with Zitadel
-
-Skip this step for development work that doesn't require authenticated endpoints.
-
-```bash
-docker compose --profile auth up -d
-```
-
-Then follow [docs/zitadel-setup.md](zitadel-setup.md) to create the project,
-application, and initial users.
-
-## 8. (Optional) Set up for local development without Docker apps
+## 6. (Optional) Set up for local development without Docker apps
 
 If you want to run tcp-server outside Docker (e.g. for hot reload during
 development), start only the infrastructure services:
@@ -130,7 +109,7 @@ npm run start:dev
 tcp-server falls back to in-memory SQLite when `DATABASE_URL` is absent or
 not a postgres URL — useful for quick iteration without any Docker services.
 
-## 9. Run the tests
+## 7. Run the tests
 
 Confirm your environment is working correctly:
 
@@ -144,7 +123,7 @@ Confirm your environment is working correctly:
 All tests should pass. See [docs/testing.md](testing.md) for the full testing
 strategy and tier descriptions.
 
-## 10. Adding entities and schema changes
+## 8. Adding entities and schema changes
 
 When you add or modify a TypeORM entity, you need to create a migration.
 See [docs/db-migrations.md](db-migrations.md) for the step-by-step workflow.
