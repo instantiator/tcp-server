@@ -35,7 +35,10 @@ async function main(): Promise<void> {
   const llm = await promptLlm();
   const oidc = await promptOidc();
   const resources = await promptResources();
-  const docker = await promptDocker();
+  const docker = await promptDocker(
+    llm.inferenceModel !== undefined,
+    oidc.oidc !== undefined,
+  );
 
   // Assemble config
   const config: WizardConfig = {
@@ -47,7 +50,7 @@ async function main(): Promise<void> {
     oidc: oidc.oidc,
     agentIterations: resources.agentIterations,
     agentConcurrency: resources.agentConcurrency,
-    docker: docker.docker,
+    stubLlm: docker.stubLlm,
   };
 
   // Display summary
@@ -69,12 +72,7 @@ async function main(): Promise<void> {
   );
   console.log(`  Iterations:    ${config.agentIterations}`);
   console.log(`  Concurrency:   ${config.agentConcurrency}`);
-  console.log(
-    `  Docker services: ${Object.entries(config.docker)
-      .filter(([, v]) => v)
-      .map(([k]) => k)
-      .join(', ')}`,
-  );
+  console.log(`  Stub LLM:      ${config.stubLlm ? 'yes' : 'no'}`);
   console.log();
 
   // Write env files (committed base + gitignored .local override)

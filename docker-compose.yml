@@ -69,6 +69,12 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     profiles: [integration]
+    # A dev stack (STUB_LLM=true) loads canned replies from the mounted file;
+    # tests leave STUB_LLM_CONFIG_FILE empty and push their own config.
+    environment:
+      STUB_LLM_CONFIG_FILE: ${STUB_LLM_CONFIG_FILE:-}
+    volumes:
+      - ./docker/stub-llm:/config:ro
     # Internal-only by default (see docker-compose.dev-ports.yml to publish).
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://localhost:3002/health || exit 1']

@@ -76,7 +76,9 @@ fi
 
 # Stop services
 
-DC="docker compose -p $PROJECT --profile auth --env-file $ENV_FILE"
+# Every optional profile, so whatever start-dev.sh started (Zitadel, the stub
+# LLM) comes down too.
+DC="docker compose -p $PROJECT --profile auth --profile integration --env-file $ENV_FILE"
 
 if [[ "$REMOVE_VOLUMES" == true ]]; then
   echo "Stopping services and removing volumes..."

@@ -49,6 +49,9 @@ Zitadel setup reads from the env file:
   ZITADEL_ADMIN_PASSWORD   Org admin (human) password (presence enables auth profile)
   TEST_USERNAME            Human test user to create (default: test)
   TEST_PASSWORD            That user's password (default: test)
+
+Optional services:
+  STUB_LLM=true            Also run the stub LLM (canned replies; see docs/stub-llm.md)
 EOF
 }
 
@@ -136,6 +139,13 @@ if [[ -n "${ZITADEL_ADMIN_PASSWORD:-}" ]]; then
   AUTH_PROFILE="--profile auth"
 fi
 
+# Stub LLM: runs in this stack only when asked (the setup wizard's "no real
+# model" option). The test tiers start it themselves.
+STUB_PROFILE=""
+if [[ "${STUB_LLM:-}" == "true" ]]; then
+  STUB_PROFILE="--profile integration"
+fi
+
 # Pre-flight: verify all required variables are non-empty.
 # DATABASE_URL, MINIO_ENDPOINT, OIDC_ISSUER_URL, and TCP_SERVER_URL are
 # derived above from EXPOSE_PORT_* and DB_* — they don't need to be in the env file.
@@ -172,7 +182,7 @@ fi
 
 # Both env files feed Compose interpolation; the .local override is passed last
 # so its generated OIDC_CLIENT_* win over any base-file placeholder.
-DC="docker compose -p $PROJECT $COMPOSE_FILES $AUTH_PROFILE --env-file $ENV_FILE --env-file $LOCAL_ENV_FILE"
+DC="docker compose -p $PROJECT $COMPOSE_FILES $AUTH_PROFILE $STUB_PROFILE --env-file $ENV_FILE --env-file $LOCAL_ENV_FILE"
 
 wait_for() {
   local name="$1" cmd="$2" max="${3:-120}"

@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { WizardConfig } from '../types';
+import type { LlmProviderConfig, WizardConfig } from '../types';
 import {
   DEFAULT_DB_USER,
   DEFAULT_DB_PASSWORD,
@@ -113,11 +113,18 @@ export function writeEnvFile(
   b.set('INTERNAL_API_KEY', DEFAULT_INTERNAL_API_KEY);
   b.blank();
 
+  if (config.stubLlm) {
+    b.comment('Stub LLM — canned replies from docker/stub-llm/dev.jsonc');
+    b.set('STUB_LLM', 'true');
+    b.set('STUB_LLM_CONFIG_FILE', '/config/dev.jsonc');
+    b.blank();
+  }
+
   writeModelSection(
     b,
     'LLM inference (chat completions)',
     'LLM',
-    config.inferenceModel,
+    config.inferenceModel ?? (config.stubLlm ? STUB_LLM_MODEL : undefined),
     'set per-role or per-company',
   );
   writeModelSection(
@@ -149,6 +156,14 @@ export function writeEnvFile(
   );
   return { envFile: filePath, localFile: localFilePath };
 }
+
+/** The default LLM when the stub runs and no real model was configured. */
+const STUB_LLM_MODEL: LlmProviderConfig = {
+  provider: 'lm-studio', // any OpenAI-compatible server
+  model: 'stub',
+  baseUrl: 'http://stub-llm:3002/v1', // in-network: the agents call it
+  apiKey: 'stub',
+};
 
 /**
  * Writes an LLM/embedding provider block: the collected `<PREFIX>_*` vars when a
