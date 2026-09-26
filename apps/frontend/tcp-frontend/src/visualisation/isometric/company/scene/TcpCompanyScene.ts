@@ -1,4 +1,6 @@
 import { Scene, Scenes, type GameObjects } from 'phaser';
+import type { CrowdEvent } from '../motion/crowd';
+import { Crowd } from '../motion/crowd';
 import { emitTcpEvent, offTcpEvent, onTcpEvent } from '../TcpPhaserEventBus';
 import { mapBounds, REC_ROOM_SLOT, slotBounds } from '../world/layout';
 import { renderRegion } from '../world/renderRegion';
@@ -11,14 +13,16 @@ import { drawWalls } from './drawWalls';
 
 /**
  * The isometric office scene. React works out the whole office and sends it
- * over on `world-changed`; this scene's only job is to draw it and keep the
- * avatars' game objects in step with it by id. Walking comes in a later
- * step — for now every avatar is placed straight at its `location`.
+ * over on `world-changed`; this scene draws it, and a {@link Crowd} walks
+ * the avatars through it. The scene itself holds no walking logic — it
+ * builds the static map's walkability, hands frames to the crowd, and draws
+ * wherever the crowd says an avatar is.
  */
 export class TcpCompanyScene extends Scene {
   private cameraController!: CameraController;
   private staticObjects: GameObjects.GameObject[] = [];
   private readonly avatarSprites = new Map<string, AvatarSprite>();
+  private readonly crowd = new Crowd();
   private lastLayoutVersion: number | null = null;
   private reducedMotion = false;
   private listenersRemoved = false;
@@ -73,7 +77,44 @@ export class TcpCompanyScene extends Scene {
     ) {
       this.redrawStatic(world);
     }
-    this.syncAvatars(world.avatars);
+
+    const isWalkable = buildIsWalkable(world);
+    const events = this.crowd.sync(world, isWalkable, this.reducedMotion);
+
+    this.syncAvatarSprites(world.avatars);
+
+    for (const event of events) {
+      this.emitCrowdEvent(event);
+    }
+  }
+
+  update(_time: number, delta: number): void {
+    const events = this.crowd.tick(delta);
+
+    for (const [id, sprite] of this.avatarSprites) {
+      const position = this.crowd.positionOf(id);
+      if (position !== undefined) {
+        sprite.setTilePosition(position);
+      }
+    }
+
+    for (const event of events) {
+      this.emitCrowdEvent(event);
+    }
+  }
+
+  private emitCrowdEvent(event: CrowdEvent): void {
+    if (event.kind === 'arrived') {
+      emitTcpEvent({
+        event: 'avatar-arrived',
+        value: { avatarId: event.avatarId, tile: event.tile },
+      });
+    } else {
+      emitTcpEvent({
+        event: 'avatar-exited',
+        value: { avatarId: event.avatarId },
+      });
+    }
   }
 
   private redrawStatic(world: OfficeWorld): void {
@@ -105,13 +146,18 @@ export class TcpCompanyScene extends Scene {
     this.lastLayoutVersion = world.layoutVersion;
   }
 
-  private syncAvatars(avatars: readonly Avatar[]): void {
+  /**
+   * Creates a sprite for each new avatar and destroys one for each avatar
+   * gone from the world. Positioning is the crowd's job from here: a new
+   * sprite starts at the avatar's last known location only until the next
+   * `update` places it where the crowd says it actually is.
+   */
+  private syncAvatarSprites(avatars: readonly Avatar[]): void {
     const seen = new Set<string>();
 
     for (const avatar of avatars) {
       seen.add(avatar.id);
-      const existing = this.avatarSprites.get(avatar.id);
-      if (existing === undefined) {
+      if (!this.avatarSprites.has(avatar.id)) {
         this.avatarSprites.set(
           avatar.id,
           new AvatarSprite(
@@ -122,8 +168,6 @@ export class TcpCompanyScene extends Scene {
             avatar.location,
           ),
         );
-      } else {
-        existing.setTilePosition(avatar.location);
       }
     }
 
@@ -143,4 +187,19 @@ function recRoomCentre(): Tile {
     x: bounds.x + Math.floor(bounds.width / 2),
     y: bounds.y + Math.floor(bounds.height / 2),
   };
+}
+
+/** The static map's walkability, read from a region spanning the whole map. */
+function buildIsWalkable(world: OfficeWorld): (tile: Tile) => boolean {
+  const bounds = mapBounds(world);
+  const region = renderRegion(
+    world,
+    bounds.x,
+    bounds.y,
+    bounds.x + bounds.width - 1,
+    bounds.y + bounds.height - 1,
+  );
+  return (tile: Tile): boolean =>
+    region.cells[tile.y - region.origin.y]?.[tile.x - region.origin.x]
+      ?.walkable ?? false;
 }

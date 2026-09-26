@@ -10,3 +10,35 @@
   inline-size: 100%;
   block-size: 100%;
 }
+
+.company-visualisation__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--tcp-space-sm);
+  padding: var(--tcp-space-sm);
+}
+
+.company-visualisation__tray {
+  inline-size: var(--tcp-visualisation-tray-width);
+  padding: var(--tcp-space-md);
+  border-inline-start: var(--tcp-border-width) solid var(--tcp-color-border);
+}
+
+/*
+ * Placed at the pointer (`hover.x`/`hover.y`, runtime inline styles) and
+ * nudged clear of it with `translate`, so the cursor never sits over its own
+ * text. `pointer-events: none` keeps it from ever being what a click lands
+ * on — the avatar or whiteboard underneath is.
+ */
+.company-visualisation__tooltip {
+  position: absolute;
+  z-index: var(--tcp-layer-dock);
+  max-inline-size: 16rem;
+  padding: var(--tcp-space-sm);
+  border: var(--tcp-border-width) solid var(--tcp-color-border);
+  border-radius: var(--tcp-radius);
+  background-color: var(--tcp-color-surface);
+  color: var(--tcp-color-text);
+  pointer-events: none;
+  translate: var(--tcp-space-sm) var(--tcp-space-sm);
+}

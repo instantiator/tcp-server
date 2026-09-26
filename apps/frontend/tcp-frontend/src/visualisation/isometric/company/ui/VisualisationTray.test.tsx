@@ -1,0 +1,285 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import type { WireEvent } from '@tcp/shared/client';
+import type { ComponentProps } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { statusLabel } from '../../../../api/statuses';
+import { applyEvent } from '../../../../events/cache';
+import { t } from '../../../../strings';
+import { expectNoA11yViolations } from '../../../../test-support/axe';
+import {
+  installFetchMock,
+  respondByRoute,
+  type RouteResponse,
+} from '../../../../test-support/fetch-mock';
+import { modeLabel } from './modeLabel';
+import { VisualisationTray } from './VisualisationTray';
+
+const COMPANY_ID = 'company-1';
+const NOW = '2026-09-01T00:00:00.000Z';
+
+const ROLE_ID = 'role-1';
+const ROLE_NAME = 'Sales';
+const AGENT_ID = 'agent-1';
+const ASSIGNMENT_ID = 'assign-1';
+const TASK_ID = 'task-1';
+
+const roleFixture = () => ({
+  id: ROLE_ID,
+  companyId: COMPANY_ID,
+  slug: 'sales',
+  name: ROLE_NAME,
+  description: 'Sells things',
+  knowledgeDomains: [],
+  mcpServerList: [],
+  queryIndex: 0,
+});
+
+const agentFixture = (status = 'running') => ({
+  id: AGENT_ID,
+  companyId: COMPANY_ID,
+  roleId: ROLE_ID,
+  assignmentId: ASSIGNMENT_ID,
+  status,
+  threadId: null,
+  initialPrompt: 'go',
+  createdAt: NOW,
+  output: null,
+  updatedAt: NOW,
+});
+
+const assignmentFixture = (status = 'in-progress') => ({
+  id: ASSIGNMENT_ID,
+  taskId: TASK_ID,
+  companyId: COMPANY_ID,
+  mode: 'implement',
+  orderIndex: 0,
+  prompt: 'Reconcile the Q3 accounts',
+  shortcode: 'A1',
+  roleId: ROLE_ID,
+  status,
+  failureReason: null,
+  agentId: AGENT_ID,
+  targetAssignmentId: null,
+  parentAssignmentId: null,
+  materials: [],
+  expected: [],
+  prepared: [],
+  approved: [],
+  summary: null,
+  qaStatus: null,
+  qaFeedback: null,
+  qaAttempts: 0,
+  createdAt: NOW,
+  updatedAt: NOW,
+});
+
+const taskFixture = (status = 'in-progress') => ({
+  id: TASK_ID,
+  companyId: COMPANY_ID,
+  request: 'Reconcile accounts',
+  shortcode: 'TASK-1',
+  plannerRoleId: null,
+  status,
+  materials: [],
+  expected: [],
+  completed: null,
+  failureReason: null,
+  createdAt: NOW,
+  updatedAt: NOW,
+});
+
+const AGENT_ROUTE = /\/api\/agent\/agent-1(\?|$)/;
+const ASSIGNMENTS_ROUTE = /\/api\/assignment\?/;
+const ROLES_ROUTE = /\/api\/company\/company-1\/roles/;
+const TASKS_ROUTE = /\/api\/task\?/;
+
+interface Routes {
+  readonly agent?: RouteResponse;
+  readonly assignments?: RouteResponse;
+  readonly roles?: RouteResponse;
+  readonly tasks?: RouteResponse;
+}
+
+/** Answers every route any of the three detail panels can reach. */
+const respond = (overrides: Routes = {}): void => {
+  respondByRoute([
+    [AGENT_ROUTE, overrides.agent ?? { body: agentFixture() }],
+    [
+      ASSIGNMENTS_ROUTE,
+      overrides.assignments ?? { body: [assignmentFixture()] },
+    ],
+    [ROLES_ROUTE, overrides.roles ?? { body: [roleFixture()] }],
+    [TASKS_ROUTE, overrides.tasks ?? { body: [taskFixture()] }],
+  ]);
+};
+
+const renderTray = (
+  overrides: Partial<ComponentProps<typeof VisualisationTray>> = {},
+) => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const onToggleFollow = vi.fn();
+  const onClose = vi.fn();
+  const utils = render(
+    <QueryClientProvider client={queryClient}>
+      <VisualisationTray
+        companyId={COMPANY_ID}
+        selection={{ kind: 'agent', id: AGENT_ID }}
+        following={false}
+        onToggleFollow={onToggleFollow}
+        onClose={onClose}
+        {...overrides}
+      />
+    </QueryClientProvider>,
+  );
+  return { ...utils, queryClient, onToggleFollow, onClose };
+};
+
+/** A live `agent` `state_change`, in the shape the company stream sends it. */
+const agentStateChangeEvent = (status: string): WireEvent => ({
+  type: 'audit',
+  event: {
+    id: `state-agent-${status}`,
+    timestamp: NOW,
+    companyId: COMPANY_ID,
+    role: 'orchestrator',
+    agentId: AGENT_ID,
+    assignmentId: null,
+    taskId: null,
+    eventType: 'state_change',
+    payload: { entity: 'agent', newStatus: status },
+  },
+});
+
+describe('VisualisationTray', () => {
+  beforeEach(() => {
+    installFetchMock();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("shows an agent's heading and live details", async () => {
+    respond();
+    renderTray();
+
+    const aside = await screen.findByRole('complementary', {
+      name: t('visualisation.tray.agentHeading', { role: ROLE_NAME }),
+    });
+    expect(within(aside).getByText(statusLabel('running'))).toBeInTheDocument();
+    expect(within(aside).getByText(modeLabel('implement'))).toBeInTheDocument();
+    expect(
+      within(aside).getByText(statusLabel('in-progress')),
+    ).toBeInTheDocument();
+    expect(
+      within(aside).getByText('Reconcile the Q3 accounts'),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a task's heading and live details, including its assignments", async () => {
+    respond();
+    renderTray({ selection: { kind: 'task', id: TASK_ID } });
+
+    const aside = await screen.findByRole('complementary', {
+      name: t('visualisation.tray.taskHeading', { shortcode: 'TASK-1' }),
+    });
+    expect(within(aside).getByText('Reconcile accounts')).toBeInTheDocument();
+    expect(
+      within(aside).getByText(statusLabel('in-progress')),
+    ).toBeInTheDocument();
+    expect(
+      within(aside).getByText(
+        t('visualisation.tray.assignmentRow', {
+          role: ROLE_NAME,
+          mode: modeLabel('implement'),
+          status: statusLabel('in-progress'),
+        }),
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a role's heading and description", async () => {
+    respond();
+    renderTray({ selection: { kind: 'role', id: ROLE_ID } });
+
+    const aside = await screen.findByRole('complementary', {
+      name: t('visualisation.tray.roleHeading', { name: ROLE_NAME }),
+    });
+    expect(within(aside).getByText('Sells things')).toBeInTheDocument();
+  });
+
+  it('shows "gone" for an agent id the company no longer has', async () => {
+    respond({ agent: { status: 404, body: { message: 'not found' } } });
+    renderTray();
+
+    // Loading and gone share the same generic heading, so waiting on the
+    // heading alone would pass while the query is still pending. Waiting on
+    // the "gone" text itself is what actually proves the error was reached.
+    await screen.findByText(t('visualisation.tray.gone'));
+    expect(
+      screen.getByRole('complementary', {
+        name: t('visualisation.tray.heading'),
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('reflects a live agent status patch applied to the query cache', async () => {
+    respond();
+    const { queryClient } = renderTray();
+
+    await screen.findByText(statusLabel('running'));
+
+    act(() => {
+      applyEvent(queryClient, agentStateChangeEvent('paused'));
+    });
+
+    expect(await screen.findByText(statusLabel('paused'))).toBeInTheDocument();
+    expect(screen.queryByText(statusLabel('running'))).toBeNull();
+  });
+
+  it('reflects `following` on the Follow toggle, and calls onToggleFollow when pressed', async () => {
+    respond();
+    const user = userEvent.setup();
+    const { onToggleFollow } = renderTray({ following: true });
+
+    await screen.findByRole('complementary', {
+      name: t('visualisation.tray.agentHeading', { role: ROLE_NAME }),
+    });
+    const followButton = screen.getByRole('button', {
+      name: t('visualisation.tray.follow'),
+    });
+    expect(followButton).toHaveAttribute('aria-pressed', 'true');
+
+    await user.click(followButton);
+    expect(onToggleFollow).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls onClose when Close details is pressed', async () => {
+    respond();
+    const user = userEvent.setup();
+    const { onClose } = renderTray();
+
+    await screen.findByRole('complementary', {
+      name: t('visualisation.tray.agentHeading', { role: ROLE_NAME }),
+    });
+    await user.click(
+      screen.getByRole('button', { name: t('visualisation.tray.close') }),
+    );
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('has no accessibility violations', async () => {
+    respond();
+    renderTray();
+
+    await screen.findByRole('complementary', {
+      name: t('visualisation.tray.agentHeading', { role: ROLE_NAME }),
+    });
+    await expectNoA11yViolations(document.body);
+  });
+});
