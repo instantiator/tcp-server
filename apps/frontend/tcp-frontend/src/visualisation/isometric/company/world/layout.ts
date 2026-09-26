@@ -31,6 +31,8 @@ export const FIRST_SLOT_X = 2;
 export const DOOR_OFFSET_X = 4;
 /** The column of tiles outside the office door, on both corridor rows. */
 export const OUTSIDE_X = 0;
+/** Just outside the office door: where a new agent avatar appears. */
+export const SPAWN_TILE: Tile = { x: OUTSIDE_X, y: CORRIDOR_Y };
 /** The office door. The tile beside it, `(1, CORRIDOR_Y + 1)`, is wall. */
 export const OFFICE_DOOR_TILE: Tile = { x: 1, y: CORRIDOR_Y };
 

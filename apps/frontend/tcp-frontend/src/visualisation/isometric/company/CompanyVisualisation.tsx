@@ -1,55 +1,53 @@
-import { useCallback } from 'react';
-import {
-  useCompanyRolesList,
-  useLiveCompanyAgentsList,
-  useLiveCompanyTasksList,
-} from '../../../api/hooks';
+import { useId } from 'react';
+import { t } from '../../../strings';
 import './CompanyVisualisation.css';
 import TcpPhaserVisualisation from './TcpPhaserVisualisation';
+import { useOfficeWorld } from './useOfficeWorld';
 
 export interface CompanyVisualisationProps {
   readonly companyId: string;
 }
 
 /**
- * Live company visualisation - provides roles, agents, and tasks to the
- * {@link TcpPhaserVisualisation} component, which renders them in a
- * Phaser scene, tracking changes to these lists, passing back clicks
- * on game objects.
+ * The company's office, drawn as an isometric scene. `useOfficeWorld` turns
+ * the company's live roles, agents, tasks, assignments and enquiries into an
+ * office world; `TcpPhaserVisualisation` draws it and reports back when an
+ * avatar arrives at, or leaves, its target.
+ *
+ * Hover, selection, follow and keyboard panning are later steps — this stage
+ * is the office itself, and a summary for anyone not looking at the canvas.
  */
 export default function CompanyVisualisation({
   companyId,
 }: CompanyVisualisationProps) {
-  const { data: roles } = useCompanyRolesList(companyId);
-  const { data: agents } = useLiveCompanyAgentsList(companyId);
-  const { data: tasks } = useLiveCompanyTasksList(companyId);
+  const { world, avatarArrived, avatarExited } = useOfficeWorld(companyId);
+  const summaryId = useId();
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const onAgentClick = useCallback((_agentId: string) => {
-    // TODO(000.01): show the task details dialog, opened at this agent's assignment
-  }, []);
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const onRoleClick = useCallback((_roleId: string) => {
-    // TODO(000.01): show a new chat dialog for this role
-  }, []);
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const onTaskClick = useCallback((_taskId: string) => {
-    // TODO(000.01): show the task details dialog
-  }, []);
+  const roles = world.avatars.filter((avatar) => avatar.kind === 'role').length;
+  const taskRooms = world.rooms.filter(
+    (room) => room.purpose === 'task',
+  ).length;
+  const agents = world.avatars.filter(
+    (avatar) => avatar.kind === 'agent',
+  ).length;
 
   return (
-    <div className="company-visualisation__container">
-      <TcpPhaserVisualisation
-        companyId={companyId}
-        roles={roles ?? []}
-        agents={agents ?? []}
-        tasks={tasks ?? []}
-        onAgentClick={onAgentClick}
-        onRoleClick={onRoleClick}
-        onTaskClick={onTaskClick}
-      />
-    </div>
+    <section className="company-visualisation">
+      <div
+        className="company-visualisation__stage"
+        role="group"
+        aria-label={t('visualisation.stage.label')}
+        aria-describedby={summaryId}
+      >
+        <TcpPhaserVisualisation
+          world={world}
+          onAvatarArrived={avatarArrived}
+          onAvatarExited={avatarExited}
+        />
+      </div>
+      <p id={summaryId} className="visually-hidden">
+        {t('visualisation.summary', { roles, taskRooms, agents })}
+      </p>
+    </section>
   );
 }

@@ -48,8 +48,9 @@ window.matchMedia ??= ((query: string) => ({
 // `auth/session.test.tsx` all render the full route tree through
 // `render-app.tsx` and have nothing to do with Phaser themselves — they only
 // need the import not to crash. Replaces the minimal shapes
-// `TcpPhaserEventBus.ts`, `TcpCompanyScene.ts` and `TcpPhaserVisualisation.tsx`
-// need at import time; a suite that asserts on Phaser-specific behaviour
+// `TcpPhaserEventBus.ts`, `scene/TcpCompanyScene.ts` and
+// `TcpPhaserVisualisation.tsx` need at import time; a suite that asserts on
+// Phaser-specific behaviour
 // (construction args, event round-trips) reads the same mocked exports back
 // via `import { Game } from 'phaser'` — `vi.mock` here doesn't prevent that,
 // it only replaces what the import resolves to.
@@ -114,6 +115,7 @@ vi.mock('phaser', () => {
   return {
     AUTO: 0,
     Game,
+    Scale: { RESIZE: 5 },
     Scene: MockScene,
     Scenes: { Events: { SHUTDOWN: 'shutdown', DESTROY: 'destroy' } },
     Events: { EventEmitter: MockEventEmitter },

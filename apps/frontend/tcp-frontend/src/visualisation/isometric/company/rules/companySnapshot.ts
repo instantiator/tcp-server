@@ -5,6 +5,11 @@ import type {
   RoleDTO,
   TaskDTO,
 } from '../../../../api/dtos';
+import {
+  ACTIVE_AGENT_STATUSES,
+  ACTIVE_ASSIGNMENT_STATUSES,
+  ACTIVE_TASK_STATUSES,
+} from '../../../../api/statuses';
 
 /**
  * What an agent is doing, as far as the office cares. {@link buildCompanySnapshot}
@@ -87,7 +92,113 @@ export interface CompanyData {
 
 /** Reduces the company's live lists to a {@link CompanySnapshot}. Pure. */
 export function buildCompanySnapshot(data: CompanyData): CompanySnapshot {
-  throw new Error(
-    `Step 5/6: buildCompanySnapshot(${String(data.roles.length)} roles)`,
+  const assignmentsById = new Map(data.assignments.map((a) => [a.id, a]));
+
+  // One pass each, so a company with a long history costs a scan rather than
+  // a scan per task or per agent: the list endpoints return every row ever.
+  const planByTask = new Map<string, AssignmentDTO[]>();
+  const consultationByParent = new Map<string, string>();
+  for (const assignment of data.assignments) {
+    if (assignment.mode === 'implement' && assignment.taskId) {
+      const plan = planByTask.get(assignment.taskId) ?? [];
+      plan.push(assignment);
+      planByTask.set(assignment.taskId, plan);
+    }
+    if (
+      assignment.mode === 'consultee' &&
+      assignment.parentAssignmentId &&
+      isOneOf(ACTIVE_ASSIGNMENT_STATUSES, assignment.status)
+    ) {
+      consultationByParent.set(assignment.parentAssignmentId, assignment.id);
+    }
+  }
+
+  const awaitingUser = new Set(
+    data.enquiries
+      .filter((enquiry) => enquiry.status === 'awaiting_user')
+      .map((enquiry) => enquiry.agentId),
   );
+
+  const tasks = data.tasks.map((task): SnapshotTask => {
+    const plan = planByTask.get(task.id) ?? [];
+    return {
+      id: task.id,
+      shortcode: task.shortcode,
+      request: task.request,
+      finished: !isOneOf(ACTIVE_TASK_STATUSES, task.status),
+      step: plan.filter((step) => step.status === 'succeeded').length,
+      steps: plan.length,
+    };
+  });
+
+  const agents = data.agents.flatMap((agent): SnapshotAgent[] => {
+    const assignment = assignmentsById.get(agent.assignmentId);
+    if (assignment === undefined) {
+      return [];
+    }
+    return [
+      {
+        id: agent.id,
+        roleId: agent.roleId,
+        assignmentId: assignment.id,
+        taskId: assignment.taskId ?? null,
+        activity: activityOf(
+          agent,
+          assignment,
+          consultationByParent,
+          awaitingUser,
+        ),
+      },
+    ];
+  });
+
+  return {
+    roles: data.roles.map((role) => ({ id: role.id, name: role.name })),
+    tasks,
+    agents,
+  };
+}
+
+/** The mapping table on {@link AgentActivity}, one row per `if`, in order. */
+function activityOf(
+  agent: AgentDTO,
+  assignment: AssignmentDTO,
+  consultationByParent: ReadonlyMap<string, string>,
+  awaitingUser: ReadonlySet<string | null>,
+): AgentActivity {
+  if (
+    !isOneOf(ACTIVE_AGENT_STATUSES, agent.status) ||
+    !isOneOf(ACTIVE_ASSIGNMENT_STATUSES, assignment.status)
+  ) {
+    return { kind: 'finished' };
+  }
+  if (awaitingUser.has(agent.id) || assignment.mode === 'chat') {
+    return { kind: 'messagingUser' };
+  }
+  if (assignment.mode === 'consultee') {
+    return { kind: 'consulting', oneToOneId: assignment.id };
+  }
+  const consultation = consultationByParent.get(assignment.id);
+  if (consultation !== undefined) {
+    return { kind: 'consulting', oneToOneId: consultation };
+  }
+  if (
+    assignment.mode === 'qa' &&
+    agent.status === 'running' &&
+    assignment.targetAssignmentId
+  ) {
+    return {
+      kind: 'reviewing',
+      reviewedAssignmentId: assignment.targetAssignmentId,
+    };
+  }
+  if (agent.status === 'running') {
+    return { kind: 'working' };
+  }
+  return { kind: 'atDesk' };
+}
+
+/** Widens a status tuple so a DTO's status can be looked up in it. */
+function isOneOf(list: readonly string[], value: string): boolean {
+  return list.includes(value);
 }

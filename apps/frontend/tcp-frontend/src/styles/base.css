@@ -48,6 +48,8 @@
 
   --tcp-dialog-max-width: 48rem;
   --tcp-transcript-max-height: 24rem;
+  /* The isometric office canvas's block size; its inline size is always 100%. */
+  --tcp-visualisation-height: 32rem;
 }
 
 *,

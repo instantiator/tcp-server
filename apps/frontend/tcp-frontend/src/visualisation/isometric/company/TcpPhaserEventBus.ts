@@ -1,10 +1,22 @@
 // EventBus.js
 import { Events } from 'phaser';
 
-import type { AgentDTO, RoleDTO, TaskDTO } from '../../../api/dtos';
-import type { PatchOf } from '../../../util/diffs';
+import type { OfficeWorld, Tile } from './world/types';
 
 export const TcpPhaserEventBus = new Events.EventEmitter();
+
+/** What a hover or a click landed on. */
+export interface SelectionTarget {
+  readonly kind: 'role' | 'agent' | 'task';
+  readonly id: string;
+}
+
+/** A hover over something selectable. `x`/`y` are canvas-relative pixels. */
+export interface HoverEvent {
+  readonly target: SelectionTarget;
+  readonly x: number;
+  readonly y: number;
+}
 
 /**
  * The one source of truth: every event {@link TcpPhaserEventBus} carries,
@@ -13,24 +25,27 @@ export const TcpPhaserEventBus = new Events.EventEmitter();
  * type over its own keys — the standard way to turn one map into several
  * matching discriminated unions, so a new event is one line here rather than
  * one case in each of three unions.
+ *
+ * React → scene: `world-changed`, `camera-pan`, `camera-follow`,
+ * `motion-preference`. Scene → React: `scene-ready`, `avatar-arrived`,
+ * `avatar-exited`, `hover`, `select`, `follow-stopped`. Listeners on the
+ * React side live only in `TcpPhaserVisualisation`; `CompanyVisualisation`
+ * may emit but never listens directly.
  */
 export interface TcpPhaserEventMap {
   'scene-ready': void;
 
-  'create-roles': RoleDTO[];
-  'update-roles': PatchOf<RoleDTO>[];
-  'remove-roles': RoleDTO[];
-  'role-click': string;
+  'world-changed': OfficeWorld;
+  /** Screen pixels, not tiles: how far to scroll the camera. */
+  'camera-pan': { readonly dx: number; readonly dy: number };
+  'camera-follow': SelectionTarget | null;
+  'motion-preference': { readonly reduced: boolean };
 
-  'create-agents': AgentDTO[];
-  'update-agents': PatchOf<AgentDTO>[];
-  'remove-agents': AgentDTO[];
-  'agent-click': string;
-
-  'create-tasks': TaskDTO[];
-  'update-tasks': PatchOf<TaskDTO>[];
-  'remove-tasks': TaskDTO[];
-  'task-click': string;
+  'avatar-arrived': { readonly avatarId: string; readonly tile: Tile };
+  'avatar-exited': { readonly avatarId: string };
+  hover: HoverEvent | null;
+  select: SelectionTarget;
+  'follow-stopped': void;
 }
 
 export type TcpPhaserEmission = {
@@ -52,7 +67,14 @@ export type TcpPhaserOn = {
 export type TcpPhaserOff = {
   [K in keyof TcpPhaserEventMap]: {
     event: K;
-    fn?: (value: TcpPhaserEventMap[K]) => void;
+    /**
+     * The exact function passed to {@link onTcpEvent}. The bus is a module
+     * singleton: under React StrictMode two games can briefly exist, and
+     * Phaser destroys a game on the next frame rather than at once. An
+     * omitted `fn` removes every listener for the event — including one a
+     * different mounted game just registered — so every caller must pass it.
+     */
+    fn: (value: TcpPhaserEventMap[K]) => void;
     context?: unknown;
     once?: boolean;
   };

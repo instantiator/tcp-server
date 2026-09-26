@@ -1,4 +1,12 @@
-.company-visualisation__container {
-  min-height: 250px;
-  margin: 5px;
+.company-visualisation {
+}
+
+.company-visualisation__stage {
+  position: relative;
+  block-size: var(--tcp-visualisation-height);
+}
+
+.company-visualisation__canvas {
+  inline-size: 100%;
+  block-size: 100%;
 }

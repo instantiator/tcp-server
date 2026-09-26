@@ -258,6 +258,11 @@ const strings = {
   'company.tab.visualisation': 'Company view',
   'company.tab.activity': 'Activity',
 
+  // The isometric office view.
+  'visualisation.stage.label': 'Office view',
+  'visualisation.summary':
+    'Roles: {roles}. Task rooms: {taskRooms}. Agents: {agents}.',
+
   // The live activity view. `activity.loading` is a label, as above — every
   // list renders it through `state.loading`, as "Loading this list…".
   'activity.loading': 'this list',
