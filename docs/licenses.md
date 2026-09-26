@@ -50,7 +50,7 @@
 | turndown                                 | MIT          | git+https://github.com/mixmark-io/turndown.git                 | Dom Christie                                                           | 7.2.4     | ^7.2.4    |
 | turndown-plugin-gfm                      | MIT          | git+https://github.com/domchristie/turndown-plugin-gfm.git     | Dom Christie                                                           | 1.0.2     | ^1.0.2    |
 | typeorm                                  | MIT          | git+https://github.com/typeorm/typeorm.git                     | TypeORM maintainers@typeorm.io                                         | 1.1.0     | ^1.1.0    |
-| undici                                   | MIT          | git+https://github.com/nodejs/undici.git                       | n/a                                                                    | 8.8.0     | ^8.8.0    |
+| undici                                   | MIT          | git+https://github.com/nodejs/undici.git                       | n/a                                                                    | 8.11.2    | ^8.11.2   |
 | zod                                      | MIT          | git+https://github.com/colinhacks/zod.git                      | Colin McDonnell <zod@colinhacks.com>                                   | 4.4.3     | ^4.4.3    |
 
 
