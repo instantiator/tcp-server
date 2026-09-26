@@ -206,7 +206,10 @@ survives container restarts.
 
 ### MinIO
 
-Image: `minio/minio:latest`
+Image: `pgsty/silo:latest` — [Silo](https://github.com/pgsty/silo), the
+community fork of MinIO. `minio/minio` was withdrawn from Docker Hub. Silo
+keeps the MinIO API, `MINIO_*` variables and health endpoint, so nothing else
+changed. Its bundled client is `mcli`, not `mc`.
 
 S3-compatible object storage for agent artefacts (uploaded files, generated
 documents). The web console at port 9001 is useful for inspecting bucket

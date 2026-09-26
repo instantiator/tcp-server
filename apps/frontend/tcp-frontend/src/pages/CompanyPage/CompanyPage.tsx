@@ -10,6 +10,7 @@ import { streamUrls } from '../../events/subscriptions';
 import { useEventStream } from '../../events/useEventStream';
 import { useDocumentTitle } from '../../shell/useDocumentTitle';
 import { t } from '../../strings';
+import CompanyVisualisation from '../../visualisation/isometric/company/CompanyVisualisation';
 import { CompanyActivity } from './activity/CompanyActivity';
 import './CompanyPage.css';
 
@@ -17,12 +18,8 @@ import './CompanyPage.css';
  * The frame every company view sits inside: where you are, the way back up,
  * and the tabs the views themselves are reached through.
  *
- * **The tab list has one tab, deliberately** ([ADR-020](../../../../../docs/ADRs/ADR-020-web-ui-mvp-scope.md)).
- * This looks like over-building and is the opposite. The alternative is a
- * single-view layout that has to be dismantled and rebuilt as tabs when the
- * configuration view lands (002.01, phase 04) — in a release that also has to get that
- * view right. The tab component is small; the retrofit is not, and it would be
- * paid at the worst moment. Do not "simplify" this into a bare panel.
+ * The tab list holds the isometric visualisation and the activity view;
+ * the visualisation tab is first, and is selected by default.
  *
  * **React Aria's `RouterProvider` is not adopted, and that is a decision rather
  * than an omission** (003.02 asked for it to be taken here). `Tabs` renders
@@ -136,12 +133,24 @@ export const CompanyPage = () => {
               aria-label={t('company.tabs.label')}
               className="react-aria-TabList"
             >
+              <Tab id="visualisation" className="react-aria-Tab">
+                {t('company.tab.visualisation')}
+              </Tab>
               <Tab id="activity" className="react-aria-Tab">
                 {t('company.tab.activity')}
               </Tab>
             </TabList>
-            <TabPanel id="activity" className="react-aria-TabPanel">
+            <TabPanel
+              id="activity"
+              className="react-aria-TabPanel company-page__tab"
+            >
               <CompanyActivity companyId={company.id} />
+            </TabPanel>
+            <TabPanel
+              id="visualisation"
+              className="react-aria-TabPanel company-page__tab"
+            >
+              <CompanyVisualisation companyId={company.id} />
             </TabPanel>
           </Tabs>
         )}

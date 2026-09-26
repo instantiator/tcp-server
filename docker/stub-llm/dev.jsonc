@@ -1,0 +1,14 @@
+// Canned replies for a dev stack's stub LLM (the setup wizard's "no real
+// model" option). Mounted at /config/dev.jsonc; the stack uses it only when
+// the env file sets STUB_LLM_CONFIG_FILE. Format: docs/stub-llm.md.
+{
+  "defaults": {
+    "mode": "loop",
+    "responses": [
+      {
+        "text": "Hello from the stub LLM. No real model is configured, so this is a canned reply. Set LLM_* in your env file, or an llmConfig on the company or role, to use a real model.",
+        "tools": []
+      }
+    ]
+  }
+}

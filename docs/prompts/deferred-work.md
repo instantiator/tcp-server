@@ -83,3 +83,35 @@ Again, slightly more context would be helpful, as bullets after the error. Some 
 > - You do not have permission to alter assignment with id: ${assignmentId}
 
 (I appreciate there probably isn't a "no permission" scenario yet for this. It's illustrative.)
+
+### Theme controls
+
+The theme controls should be available on every page. Currently they're available on the landing page only. As they're required for accessibility, we should ensure they're available on every page.
+
+### Office view: real art and taller walls
+
+The office view (000.01) draws placeholder shapes — Phaser `isobox`es and polygons, no asset files. Two follow-ups:
+
+- Real sprite art for rooms, furniture and avatars, replacing the placeholder shapes.
+- Tall walls with a cut-away view, so a room reads as a room rather than a low kerb. Walls are short today specifically so they never hide a walking avatar; a cut-away (showing the near walls but not the far ones, as in most isometric games) would let walls be tall without that problem.
+
+### Office view: tray actions
+
+The tray's role, task and agent panels are read-only. They should let the user act on what they are looking at:
+
+- Open the task dialog from the task panel.
+- Start a chat with a role from the role panel, via `useChat().startChat`.
+
+These replace the `TODO(000.01)` handlers the old placeholder visualisation had for opening a task and starting a chat.
+
+### Office view: lazy-load Phaser
+
+The web client's main bundle is about 2 MB, and Phaser is imported statically through `CompanyPage`, so every page pays for it even when the office view is never opened. Phaser should load lazily, only when the visualisation tab is shown.
+
+### Office view: drag-to-pan and zoom
+
+Panning is toolbar buttons and arrow keys only. Dragging the canvas to pan, and zooming in and out, would make a large office easier to navigate.
+
+### Office view: rooms that outgrow their slot
+
+Every room occupies one fixed-size slot (`ROOM_WIDTH = 9`, `ROOM_HEIGHT = 7`). A room with more going on than the slot can furnish — more roles than the rec room's spots, more concurrent avatars than a task room's desks — has no way to grow. See phase 03's [unresolved notes](<phase 03 - web visualisation/unresolved-notes.md>) for the two ceilings this hits today.

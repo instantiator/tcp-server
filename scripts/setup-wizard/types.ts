@@ -33,17 +33,6 @@ export interface OidcConfig {
 }
 
 /**
- * Docker Compose service selection.
- */
-export interface DockerConfig {
-  postgres: boolean;
-  redis: boolean;
-  minio: boolean;
-  zitadel: boolean;
-  stubLlm: boolean;
-}
-
-/**
  * Complete wizard output — all configuration collected from prompts.
  */
 export interface WizardConfig {
@@ -55,5 +44,6 @@ export interface WizardConfig {
   oidc?: OidcConfig;
   agentIterations: number;
   agentConcurrency: number;
-  docker: DockerConfig;
+  /** Run the stub LLM in the stack (see prompts/docker.ts). */
+  stubLlm: boolean;
 }

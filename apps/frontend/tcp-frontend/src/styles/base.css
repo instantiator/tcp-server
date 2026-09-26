@@ -48,6 +48,11 @@
 
   --tcp-dialog-max-width: 48rem;
   --tcp-transcript-max-height: 24rem;
+  /* The isometric office canvas's block size; its inline size is always 100%. */
+  --tcp-visualisation-height: 32rem;
+  /* The side tray's fixed inline size (Stage D, 000.01). */
+  --tcp-visualisation-tray-width: 20rem;
+  --tcp-visualisation-tooltip-max-width: 16rem;
 }
 
 *,
@@ -133,6 +138,34 @@ body {
   background-color: var(--tcp-color-accent);
   color: var(--tcp-color-accent-text);
   font: inherit;
+}
+
+/*
+ * A `ToggleButton` (the office view's full-screen and Follow controls): the
+ * same look as a plain `Button` unpressed, but its pressed (`[data-selected]`)
+ * state needs its own rule — with no styling at all, a pressed toggle is
+ * visually identical to an unpressed one, which is an accessibility failure
+ * on its own (ADR-026), not merely a cosmetic gap. Fill as well as colour
+ * carries the state, for the same WCAG 1.4.1 reason the radio and checkbox
+ * marks above do.
+ */
+.react-aria-ToggleButton {
+  padding: var(--tcp-space-sm) var(--tcp-space-md);
+  border: var(--tcp-border-width) solid var(--tcp-color-accent);
+  border-radius: var(--tcp-radius);
+  background-color: var(--tcp-color-bg);
+  color: var(--tcp-color-text);
+  font: inherit;
+}
+
+.react-aria-ToggleButton[data-selected] {
+  background-color: var(--tcp-color-accent);
+  color: var(--tcp-color-accent-text);
+}
+
+.react-aria-ToggleButton[data-focus-visible] {
+  outline: var(--tcp-focus-ring-width) solid var(--tcp-color-focus);
+  outline-offset: var(--tcp-focus-ring-offset);
 }
 
 /*

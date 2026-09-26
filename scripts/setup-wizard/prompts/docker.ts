@@ -1,69 +1,29 @@
-import inquirer from 'inquirer';
-import type { DockerConfig } from '../types';
+import { promptWithHelp } from '../utils/prompt-with-help';
 
-export interface DockerAnswers {
-  docker: DockerConfig;
-}
+/**
+ * Tells the user which Docker services always run, and asks about the one that
+ * is optional: the stub LLM. Offered by default only when no real inference
+ * model was configured, since then agents have nothing else to talk to.
+ */
+export async function promptDocker(
+  inferenceConfigured: boolean,
+  externalOidc: boolean,
+): Promise<{ stubLlm: boolean }> {
+  console.log();
+  console.log(
+    `Docker services: PostgreSQL, Redis and MinIO always run${externalOidc ? '' : ', and Zitadel (the bundled sign-in provider)'}.`,
+  );
 
-const DOCKER_HELP = `
-Docker Compose services your local environment needs.
-
-PostgreSQL: Primary database (required for data persistence)
-Redis: Caching and session storage
-MinIO: Object storage (S3-compatible) for documents and files
-Zitadel: OIDC identity provider (only needed if not using external OIDC)
-Stub LLM: Local mock LLM server for testing without API keys
-`.trim();
-
-const SERVICES: Array<{ name: keyof DockerConfig; label: string }> = [
-  { name: 'postgres', label: 'PostgreSQL' },
-  { name: 'redis', label: 'Redis' },
-  { name: 'minio', label: 'MinIO (object storage)' },
-  { name: 'zitadel', label: 'Zitadel (OIDC provider)' },
-  { name: 'stubLlm', label: 'Stub LLM server' },
-];
-
-/** Prompts for Docker Compose service selection. */
-export async function promptDocker(): Promise<DockerAnswers> {
-  const { wantHelp } = await inquirer.prompt<{ wantHelp: string }>({
-    type: 'input',
-    name: 'wantHelp',
-    message:
-      'Which Docker Compose services do you want to run? — need more info first? (y/n)',
-    default: 'n',
-    validate: (input: string) => {
-      const lower = input.trim().toLowerCase();
-      if (['y', 'yes', 'n', 'no', ''].includes(lower)) return true;
-      return 'Please enter y or n.';
-    },
-  });
-
-  if (
-    wantHelp.trim().toLowerCase() === 'y' ||
-    wantHelp.trim().toLowerCase() === 'yes'
-  ) {
-    console.log(`\n${DOCKER_HELP}\n`);
-  }
-
-  const answers = await inquirer.prompt<{ selected: string[] }>([
+  return promptWithHelp<{ stubLlm: boolean }>([
     {
-      type: 'checkbox',
-      name: 'selected',
-      message: 'Which Docker Compose services do you want to run?',
-      choices: SERVICES.map((s) => ({ name: s.label, checked: true })),
-      validate: (input: string[]) =>
-        input.length > 0 || 'Select at least one service',
+      type: 'confirm',
+      name: 'stubLlm',
+      message: 'Also run the stub LLM (canned replies, no real model needed)?',
+      default: !inferenceConfigured,
+      help: `The stub LLM answers every prompt with a fixed message from
+docker/stub-llm/dev.jsonc, so you can try TCP without a real model.
+Agents can chat, but they can't do real work with it.
+If you configured no inference model, TCP's default LLM points at the stub.`,
     },
   ]);
-
-  const selected = new Set(answers.selected);
-  const docker: DockerConfig = {
-    postgres: selected.has('PostgreSQL'),
-    redis: selected.has('Redis'),
-    minio: selected.has('MinIO (object storage)'),
-    zitadel: selected.has('Zitadel (OIDC provider)'),
-    stubLlm: selected.has('Stub LLM server'),
-  };
-
-  return { docker };
 }

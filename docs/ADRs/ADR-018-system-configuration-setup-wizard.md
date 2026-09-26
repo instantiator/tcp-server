@@ -141,7 +141,7 @@ A standalone Node/TypeScript script using `inquirer`, invoked via:
    - "Maximum number of iterations an agent can perform? (default: 40)"
    - "Maximum number of concurrent agents? (default: 1)"
 
-6. **Docker Compose configuration**
+6. **Docker Compose configuration** _(amended — see [below](#amendments-as-implemented-p03-001-01-00))_
    - "Which services do you want to run? (default: all)"
    - Options: PostgreSQL, Redis, MinIO, Zitadel (OIDC), stub-llm
 
@@ -243,6 +243,14 @@ See [010.8.4 - config resolution plan](../prompts/phase%2001%20-%20service/010.8
 
 - Wizard may not cover edge cases in initial version (mitigate: allow manual `.env` editing as fallback)
 - Auto-migration could fail on large datasets (mitigate: confirmation prompt, manual fallback instructions)
+
+<a id="amendments-as-implemented-p03-001-01-00"></a>
+
+## Amendments as implemented (phase 03, 001.01.00) — from clone to running stack
+
+- **The wrapper installs and starts.** `scripts/setup-wizard.sh` (and `npm run setup`, which now runs it) selects the `.nvmrc` Node via nvm, checks for `node`, `docker`, `jq` and `curl`, runs `npm ci` when packages are missing or stale, runs the wizard, and ends by offering to start the stack with `start-dev.sh --env <file> --project tcp-<instance>`. `start-dev.sh`/`stop-dev.sh` gained `--project` (default `tcp-dev`), so each instance has its own containers, volumes and Zitadel bootstrap.
+- **The Docker question (step 6) was never wired up** — its answers reached no file. It is now honest about what can vary. PostgreSQL, Redis and MinIO always run (the app containers use fixed in-network hostnames and wait on them). Zitadel follows the OIDC answer (step 4). The one real choice is a yes/no for the stub LLM. It defaults to yes when no inference model was configured. Yes writes `STUB_LLM=true` (start-deployment.sh adds the `integration` profile) and `STUB_LLM_CONFIG_FILE`, which loads canned replies from `docker/stub-llm/dev.jsonc`. With no inference model, the default `LLM_*` also points at the stub. Running PostgreSQL/Redis/MinIO externally was considered and deferred: it needs env-driven internal URLs and optional compose dependencies.
+- **The bundled Zitadel's secrets are generated.** The wizard never wrote `ZITADEL_MASTERKEY`/`ZITADEL_ADMIN_PASSWORD`, so a wizard env file left the auth profile off and could not start. They (and `TEST_PASSWORD`) are now generated into `<env>.local` once and kept on re-runs, since a new masterkey would lock Zitadel out of its data. A re-run also keeps any `.local` key the wizard doesn't manage (e.g. the bootstrap's `TCP_ADMIN_IDENTIFIERS`).
 
 ## Implementation Notes
 

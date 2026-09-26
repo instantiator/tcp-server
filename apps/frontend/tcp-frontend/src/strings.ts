@@ -255,7 +255,64 @@ const strings = {
   'company.stream.failed':
     'Live updates have stopped. Reload the page to reconnect.',
   'company.tabs.label': 'Company views',
-  'company.tab.activity': 'Live activity',
+  'company.tab.visualisation': 'Company view',
+  'company.tab.activity': 'Activity',
+
+  // The isometric office view.
+  'visualisation.stage.label': 'Office view',
+  'visualisation.summary':
+    'Roles: {roles}. Task rooms: {taskRooms}. Agents: {agents}.',
+  'visualisation.keys':
+    'Use the arrow keys or W, A, S and D to move the view. Double-click an empty space for full screen.',
+
+  // Stage D (000.01): the toolbar, the details picker, the hover tooltip and
+  // the side tray. Wiring these into the canvas is a later step.
+  'visualisation.toolbar.label': 'Office view controls',
+  'visualisation.pan.left': 'Scroll left',
+  'visualisation.pan.right': 'Scroll right',
+  'visualisation.pan.up': 'Scroll up',
+  'visualisation.pan.down': 'Scroll down',
+  'visualisation.fullscreen': 'Full screen',
+
+  'visualisation.picker.label': 'Show details for',
+  'visualisation.picker.placeholder': 'Choose a role, task or agent',
+  'visualisation.picker.role': 'Role: {name}',
+  'visualisation.picker.task': 'Task: {shortcode}',
+  'visualisation.picker.agent': 'Agent: {role}',
+  'visualisation.picker.agentWithTask': 'Agent: {role} (task {shortcode})',
+
+  'visualisation.tooltip.agent': 'Agent: {role}',
+  'visualisation.tooltip.role': 'Role: {role}',
+  'visualisation.tooltip.task': 'Task: ({step}/{steps})',
+
+  // The side tray (`ui/VisualisationTray.tsx` and its per-kind panels). Not a
+  // dialog: nothing here is announced, and the tray's body is read by
+  // browsing rather than spoken.
+  'visualisation.tray.heading': 'Details',
+  'visualisation.tray.loading': 'Loading…',
+  'visualisation.tray.gone': 'This is no longer in the office.',
+  'visualisation.tray.agentHeading': 'Agent: {role}',
+  'visualisation.tray.taskHeading': 'Task {shortcode}',
+  'visualisation.tray.roleHeading': 'Role: {name}',
+  'visualisation.tray.status': 'Status',
+  'visualisation.tray.mode': 'Mode',
+  'visualisation.tray.assignmentStatus': 'Assignment status',
+  'visualisation.tray.prompt': 'Prompt',
+  'visualisation.tray.assignments': 'Assignments',
+  'visualisation.tray.assignmentRow': '{role} — {mode} — {status}',
+  'visualisation.tray.follow': 'Follow',
+  'visualisation.tray.close': 'Close details',
+
+  // Assignment modes, the office's word for each — `modeLabel` in
+  // `visualisation/isometric/company/ui/modeLabel.ts`, mirroring
+  // `statusLabel` in `api/statuses.ts`.
+  'visualisation.mode.plan': 'Planning',
+  'visualisation.mode.implement': 'Implementing',
+  'visualisation.mode.qa': 'Reviewing',
+  'visualisation.mode.chat': 'Chatting',
+  'visualisation.mode.consultee': 'Consulting',
+  'visualisation.mode.finalise': 'Finalising',
+  'visualisation.mode.unknown': 'Unknown',
 
   // The live activity view. `activity.loading` is a label, as above — every
   // list renders it through `state.loading`, as "Loading this list…".

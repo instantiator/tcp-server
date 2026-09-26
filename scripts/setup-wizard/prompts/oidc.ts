@@ -16,7 +16,7 @@ export async function promptOidc(): Promise<OidcAnswers> {
       default: false,
       help: `OpenID Connect (OIDC) provides user authentication.
 Third-party providers include Zitadel, Auth0, and Keycloak.
-If you skip OIDC, the system uses a stub provider for local development.`,
+Answer no to run the bundled Zitadel, which start-dev.sh sets up for you.`,
     },
   ]);
 

@@ -54,12 +54,13 @@ therefore run alongside a dev stack (or each other) without conflict.
 
 ## setup-wizard.sh
 
-Interactive first-time configuration (`npm run setup` runs the same wizard
-directly). Asks about the instance name, ports, LLM and embedding providers,
-OIDC, and resource limits, then writes a commented `.env.<instance>` plus a
-gitignored `.env.<instance>.local` for the secrets. Probes the chosen embedding
-model for its dimension, and generates a Docker Compose override when the
-answers need one.
+Takes a fresh clone to a running stack (`npm run setup` runs the same script):
+
+1. If [nvm](https://github.com/nvm-sh/nvm) is installed, runs `nvm install`, which reads `.nvmrc` and selects that Node version.
+2. Checks for `node`, `docker`, `jq`, and `curl`, then checks the Node version against `.nvmrc` and that Docker is running. Each failure prints a clear error.
+3. Runs `npm ci` when `node_modules` is missing or older than `package-lock.json`.
+4. Asks the configuration questions — instance name, ports, LLM and embedding providers (or the bundled stub LLM), OIDC, resource limits, and which Docker services to run. Every question has a default, and `?` shows help. Probes the chosen embedding model for its dimension, and generates a Docker Compose override when the answers need one. Writes a commented `.env.<instance>` plus a gitignored `.env.<instance>.local` for the secrets.
+5. Asks "Start the stack now?" (default yes) and, if you agree, runs `./scripts/start-dev.sh --env .env.<instance> --project tcp-<instance>` — the default instance is `dev`, so this is `.env.dev` and project `tcp-dev`.
 
 ```bash
 npm run setup              # or: ./scripts/setup-wizard.sh
@@ -121,24 +122,28 @@ browser over HTTP/2 and the same `/api` origin as a deployment. See
 
 ## start-dev.sh
 
-Thin wrapper around `start-deployment.sh` that fixes the project name to
-`tcp-dev` and resolves the env file automatically.
+Thin wrapper around `start-deployment.sh` that defaults the project name to
+`tcp-dev` and resolves the env file automatically. This is what the setup
+wizard runs once it's written your `.env.<instance>` file.
 
 ```bash
-./scripts/start-dev.sh                  # uses .env or .env.testing
-./scripts/start-dev.sh -e .env.local    # custom env file
-./scripts/start-dev.sh --rebuild        # rebuild images first
+./scripts/start-dev.sh                                 # uses .env.dev, else .env.testing
+./scripts/start-dev.sh --env .env.dev --project tcp-dev
+./scripts/start-dev.sh --rebuild                        # rebuild images first
 ```
 
 **Options:**
 
-| Flag                 | Description      | Default                                |
-| -------------------- | ---------------- | -------------------------------------- |
-| `-e`, `--env <path>` | Environment file | `.env` if present, else `.env.testing` |
-| `--rebuild`          | Rebuild images   | off                                    |
+| Flag                     | Description                                                                                                                                    | Default                                    |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `-e`, `--env <path>`     | Environment file                                                                                                                               | `.env.dev` if present, else `.env.testing` |
+| `-p`, `--project <name>` | Docker Compose project name. Each project has its own containers, volumes and Zitadel bootstrap, so a second instance never touches the first. | `tcp-dev`                                  |
+| `--rebuild`              | Force a Docker image rebuild                                                                                                                   | off                                        |
+| `--dev-web`              | Serve the web client from a Vite dev server on the host instead of the built bundle (HMR)                                                      | off                                        |
+| `--reset`                | Tear down the project first (containers **and** volumes — every database is wiped), then seed the fresh stack with test companies and roles    | off                                        |
 
-Credentials for the Zitadel org admin and test users are read from the env
-file (`ZITADEL_ADMIN_PASSWORD`, `TEST_USERNAME`, `TEST_PASSWORD`).
+Credentials for the Zitadel org and test users are read from the env file
+(`TEST_USERNAME`, `TEST_PASSWORD`). Add or override them there.
 
 See also: [docs/zitadel-setup.md](zitadel-setup.md) for manual Zitadel
 configuration and external IdP setup.
@@ -150,17 +155,18 @@ data (databases, Zitadel configuration) persists across restarts. Pass
 `--volumes` to reset everything to a clean state.
 
 ```bash
-./scripts/stop-dev.sh              # stop, keep data
-./scripts/stop-dev.sh --volumes    # stop and reset all data
-./scripts/stop-dev.sh -e .env.local --volumes
+./scripts/stop-dev.sh                                    # stop, keep data
+./scripts/stop-dev.sh --volumes                          # stop and reset all data
+./scripts/stop-dev.sh --env .env.dev --project tcp-dev --volumes
 ```
 
 **Options:**
 
-| Flag                 | Description                      | Default                                |
-| -------------------- | -------------------------------- | -------------------------------------- |
-| `-e`, `--env <path>` | Environment file                 | `.env` if present, else `.env.testing` |
-| `-v`, `--volumes`    | Remove volumes (resets all data) | off                                    |
+| Flag                     | Description                           | Default                                    |
+| ------------------------ | ------------------------------------- | ------------------------------------------ |
+| `-e`, `--env <path>`     | Environment file                      | `.env.dev` if present, else `.env.testing` |
+| `-p`, `--project <name>` | Docker Compose project name           | `tcp-dev`                                  |
+| `-v`, `--volumes`        | Also remove volumes (resets all data) | off                                        |
 
 `stop-dev.sh` stops the containers immediately, without asking the simulation
 to wind down first — an agent mid-LLM-call loses the tokens it has already
