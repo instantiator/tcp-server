@@ -202,6 +202,21 @@ describe('VisualisationTray', () => {
     ).toBeInTheDocument();
   });
 
+  it("clips a long task request to an excerpt with a '…' that reveals the rest", async () => {
+    const longRequest =
+      'Reconcile every account in the September ledger against the bank statements, tracing each discrepancy back to the journal entry that raised it, and write up what you find for the finance team.';
+    respond({ tasks: { body: [{ ...taskFixture(), request: longRequest }] } });
+    renderTray({ selection: { kind: 'task', id: TASK_ID } });
+
+    const more = await screen.findByRole('button', {
+      name: t('visualisation.tray.prompt.expand'),
+    });
+    expect(screen.queryByText(longRequest)).not.toBeInTheDocument();
+
+    await userEvent.click(more);
+    expect(screen.getByText(longRequest)).toBeInTheDocument();
+  });
+
   it("shows a role's heading and description", async () => {
     respond();
     renderTray({ selection: { kind: 'role', id: ROLE_ID } });

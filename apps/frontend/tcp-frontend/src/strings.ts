@@ -258,6 +258,10 @@ const strings = {
   'company.tab.visualisation': 'Company view',
   'company.tab.activity': 'Activity',
 
+  // `components/ExpandableText`: a long text clipped to its opening.
+  'expandableText.truncated': '{excerpt}…',
+  'expandableText.showLess': 'Show less',
+
   // The isometric office view.
   'visualisation.stage.label': 'Office view',
   'visualisation.summary':
@@ -347,6 +351,8 @@ const strings = {
   'visualisation.tray.mode': 'Mode',
   'visualisation.tray.assignmentStatus': 'Assignment status',
   'visualisation.tray.prompt': 'Prompt',
+  'visualisation.tray.prompt.expand': 'Show the full prompt',
+  'visualisation.tray.prompt.collapse': 'Show less of the prompt',
   'visualisation.tray.assignments': 'Assignments',
   'visualisation.tray.assignmentRow': '{role} — {mode} — {status}',
   'visualisation.tray.follow': 'Follow',
@@ -380,7 +386,6 @@ const strings = {
   // reads (ADR-021), and because a translation may not mark truncation the same
   // way. The pair below name the role, so the several expanders a page can hold
   // at once are told apart (WCAG 2.4.6) — the same shape as `activity.chats.open`.
-  'activity.agents.prompt.truncated': '{excerpt}…',
   'activity.agents.prompt.expand': 'Show the full prompt for {role}',
   'activity.agents.prompt.collapse': 'Show less of the prompt for {role}',
 

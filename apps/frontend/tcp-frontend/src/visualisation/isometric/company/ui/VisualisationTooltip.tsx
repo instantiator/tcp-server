@@ -1,3 +1,4 @@
+import { shortened } from '../../../../components/ExpandableText/excerpt';
 import { t } from '../../../../strings';
 import type { CompanySnapshot } from '../rules/companySnapshot';
 import type { HoverEvent } from '../TcpPhaserEventBus';
@@ -90,7 +91,7 @@ export const VisualisationTooltip = ({
           steps: task.steps,
         })}
       </p>
-      <p>{task.request}</p>
+      <p>{shortened(task.request)}</p>
     </div>
   );
 };

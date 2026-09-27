@@ -4,6 +4,7 @@ import {
   useLiveAssignmentsList,
 } from '../../../../api/hooks';
 import { statusLabel } from '../../../../api/statuses';
+import { ExpandableText } from '../../../../components/ExpandableText/ExpandableText';
 import { t } from '../../../../strings';
 import { modeLabel } from './modeLabel';
 
@@ -73,7 +74,14 @@ export const AgentDetails = ({
             <dt>{t('visualisation.tray.assignmentStatus')}</dt>
             <dd>{statusLabel(assignment.status)}</dd>
             <dt>{t('visualisation.tray.prompt')}</dt>
-            <dd>{assignment.prompt}</dd>
+            <dd>
+              <ExpandableText
+                text={assignment.prompt}
+                variant="ellipsis"
+                expandLabel={t('visualisation.tray.prompt.expand')}
+                collapseLabel={t('visualisation.tray.prompt.collapse')}
+              />
+            </dd>
           </>
         )}
       </dl>
