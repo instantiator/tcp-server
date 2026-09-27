@@ -64,6 +64,12 @@ export default function CompanyVisualisation({
   );
   const stageRef = useRef<HTMLDivElement | null>(null);
   const { isFullscreen, toggle } = useFullscreen(containerRef);
+  // Stable, so React attaches it once rather than detaching and re-attaching
+  // it — and setting state — on every render.
+  const attachContainer = useCallback((element: HTMLElement | null) => {
+    containerRef.current = element;
+    setPortalContainer(element);
+  }, []);
   useStageTop(stageRef);
 
   const [selection, setSelection] = useState<SelectionTarget | null>(null);
@@ -173,13 +179,7 @@ export default function CompanyVisualisation({
   }, []);
 
   return (
-    <section
-      ref={(element) => {
-        containerRef.current = element;
-        setPortalContainer(element);
-      }}
-      className="company-visualisation"
-    >
+    <section ref={attachContainer} className="company-visualisation">
       <VisualisationToolbar
         snapshot={snapshot}
         selection={selection}
