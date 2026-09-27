@@ -41,6 +41,19 @@ export const FURNITURE_COLOURS: Record<FurnitureKind, number> = {
 /** The pale block of pages on top of a role's book. */
 export const BOOK_PAGES_COLOUR = 0xf4f1e8;
 
+/**
+ * Canvas label text: small, dark on a pale translucent backing so it reads
+ * over any floor. Drawn at the display's pixel ratio so it stays crisp.
+ */
+export const LABEL_STYLE = {
+  fontFamily: 'system-ui, sans-serif',
+  fontSize: '11px',
+  color: '#1a2a1f',
+  backgroundColor: '#ffffffd9',
+  padding: { x: 3, y: 1 },
+  resolution: typeof window === 'undefined' ? 1 : window.devicePixelRatio,
+} as const;
+
 /** The floor grid's line colour. Drawn faint, at a low alpha, by the caller. */
 export const GRID_LINE_COLOUR = 0x1a2a1f;
 

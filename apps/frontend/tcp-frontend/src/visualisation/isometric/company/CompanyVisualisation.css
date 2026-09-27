@@ -77,3 +77,9 @@
   pointer-events: none;
   translate: var(--tcp-space-sm) var(--tcp-space-sm);
 }
+
+/* The label checkboxes: their own row under the toolbar, inset to match it. */
+.company-visualisation__labels {
+  padding-inline: var(--tcp-space-sm);
+  padding-block-end: var(--tcp-space-sm);
+}

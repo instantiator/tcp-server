@@ -2,13 +2,14 @@ import { Scene, Scenes, type GameObjects } from 'phaser';
 import { TILE_HEIGHT, TILE_WIDTH, depthOf, tileToScreen } from '../motion/iso';
 import type { CrowdEvent } from '../motion/crowd';
 import { Crowd } from '../motion/crowd';
-import type { SelectionTarget } from '../TcpPhaserEventBus';
+import type { OfficeLabel, SelectionTarget } from '../TcpPhaserEventBus';
 import { emitTcpEvent, offTcpEvent, onTcpEvent } from '../TcpPhaserEventBus';
 import { mapBounds } from '../world/layout';
 import { renderRegion } from '../world/renderRegion';
 import type { Avatar, Bounds, OfficeWorld, Tile } from '../world/types';
 import { AvatarSprite } from './AvatarSprite';
 import { CameraController } from './CameraController';
+import { LabelLayer } from './LabelLayer';
 import { drawFloors } from './drawFloors';
 import { FURNITURE_SIZES, drawFurniture } from './drawFurniture';
 import { drawWalls } from './drawWalls';
@@ -36,6 +37,7 @@ const DOOR_ZONE_DEPTH_OFFSET = 0.5;
  */
 export class TcpCompanyScene extends Scene {
   private cameraController!: CameraController;
+  private labelLayer!: LabelLayer;
   private staticObjects: GameObjects.GameObject[] = [];
   private readonly avatarSprites = new Map<string, AvatarSprite>();
   private whiteboardsByTaskId = new Map<string, GameObjects.IsoBox>();
@@ -51,6 +53,7 @@ export class TcpCompanyScene extends Scene {
 
   create(): void {
     this.cameraController = new CameraController(this);
+    this.labelLayer = new LabelLayer(this);
 
     onTcpEvent({ event: 'world-changed', fn: this.handleWorldChanged });
     onTcpEvent({
@@ -59,6 +62,7 @@ export class TcpCompanyScene extends Scene {
     });
     onTcpEvent({ event: 'camera-pan', fn: this.handleCameraPan });
     onTcpEvent({ event: 'camera-follow', fn: this.handleCameraFollow });
+    onTcpEvent({ event: 'labels-changed', fn: this.handleLabelsChanged });
 
     this.events.once(Scenes.Events.SHUTDOWN, this.removeListeners);
     this.events.once(Scenes.Events.DESTROY, this.removeListeners);
@@ -68,6 +72,13 @@ export class TcpCompanyScene extends Scene {
 
   private readonly handleWorldChanged = (world: OfficeWorld): void => {
     this.syncWorld(world);
+  };
+
+  private readonly handleLabelsChanged = (
+    labels: readonly OfficeLabel[],
+  ): void => {
+    this.labelLayer.sync(labels);
+    this.labelLayer.follow((id) => this.crowd.positionOf(id));
   };
 
   private readonly handleMotionPreference = (value: {
@@ -106,7 +117,9 @@ export class TcpCompanyScene extends Scene {
     });
     offTcpEvent({ event: 'camera-pan', fn: this.handleCameraPan });
     offTcpEvent({ event: 'camera-follow', fn: this.handleCameraFollow });
+    offTcpEvent({ event: 'labels-changed', fn: this.handleLabelsChanged });
     this.cameraController.destroy();
+    this.labelLayer.destroy();
   };
 
   private syncWorld(world: OfficeWorld): void {
@@ -141,6 +154,7 @@ export class TcpCompanyScene extends Scene {
         sprite.setTilePosition(position);
       }
     }
+    this.labelLayer.follow((id) => this.crowd.positionOf(id));
 
     for (const event of events) {
       this.emitCrowdEvent(event);

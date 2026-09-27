@@ -1,13 +1,22 @@
 import { AUTO, Game, Scale } from 'phaser';
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { TcpCompanyScene } from './scene/TcpCompanyScene';
-import type { HoverEvent, SelectionTarget } from './TcpPhaserEventBus';
+import type {
+  HoverEvent,
+  OfficeLabel,
+  SelectionTarget,
+} from './TcpPhaserEventBus';
 import { emitTcpEvent, offTcpEvent, onTcpEvent } from './TcpPhaserEventBus';
 import type { OfficeWorld, Tile } from './world/types';
+
+/** One shared empty list, so an absent `labels` prop is stable across renders. */
+const NO_LABELS: readonly OfficeLabel[] = [];
 
 export interface TcpPhaserVisualisationProps {
   readonly world: OfficeWorld;
   readonly reducedMotion?: boolean;
+  /** The canvas labels to show; none by default. */
+  readonly labels?: readonly OfficeLabel[];
   readonly followTarget?: SelectionTarget | null;
   readonly onAvatarArrived?: (avatarId: string, tile: Tile) => void;
   readonly onAvatarExited?: (avatarId: string) => void;
@@ -26,6 +35,7 @@ export interface TcpPhaserVisualisationProps {
 export default function TcpPhaserVisualisation({
   world,
   reducedMotion,
+  labels,
   followTarget,
   onAvatarArrived,
   onAvatarExited,
@@ -43,6 +53,8 @@ export default function TcpPhaserVisualisation({
   reducedMotionRef.current = reducedMotion;
   const followTargetRef = useRef(followTarget);
   followTargetRef.current = followTarget;
+  const labelsRef = useRef(labels);
+  labelsRef.current = labels;
 
   const onAvatarArrivedRef = useRef(onAvatarArrived);
   onAvatarArrivedRef.current = onAvatarArrived;
@@ -71,6 +83,10 @@ export default function TcpPhaserVisualisation({
       emitTcpEvent({
         event: 'camera-follow',
         value: followTargetRef.current ?? null,
+      });
+      emitTcpEvent({
+        event: 'labels-changed',
+        value: labelsRef.current ?? NO_LABELS,
       });
     };
     const handleAvatarArrived = (value: { avatarId: string; tile: Tile }) => {
@@ -139,6 +155,10 @@ export default function TcpPhaserVisualisation({
   useEffect(() => {
     emitTcpEvent({ event: 'camera-follow', value: followTarget ?? null });
   }, [followTarget]);
+
+  useEffect(() => {
+    emitTcpEvent({ event: 'labels-changed', value: labels ?? NO_LABELS });
+  }, [labels]);
 
   return <div ref={parentRef} className="company-visualisation__canvas" />;
 }

@@ -285,6 +285,22 @@ const strings = {
   'visualisation.tooltip.role': 'Role: {role}',
   'visualisation.tooltip.task': 'Task: ({step}/{steps})',
 
+  // Canvas labels (`ui/officeLabels.ts`), each kind behind a checkbox.
+  'visualisation.labels.label': 'Labels',
+  'visualisation.labels.agents': 'Agents',
+  'visualisation.labels.roles': 'Roles',
+  'visualisation.labels.furniture': 'Furniture',
+  'visualisation.labels.rooms': 'Rooms',
+  'visualisation.label.agent': 'Agent: {role} ({activity})',
+  'visualisation.label.role': 'Role: {role}',
+  'visualisation.activity.atDesk': 'at desk',
+  'visualisation.activity.working': 'working',
+  'visualisation.activity.reviewing': 'reviewing',
+  'visualisation.activity.consulting': 'consulting',
+  'visualisation.activity.messagingUser': 'messaging a user',
+  'visualisation.activity.finished': 'finished',
+  'visualisation.activity.waiting': 'waiting',
+
   // Furniture and room titles double as their canvas labels; the
   // descriptions are the tooltip's second line.
   'visualisation.furniture.desk': 'Desk: {role}',

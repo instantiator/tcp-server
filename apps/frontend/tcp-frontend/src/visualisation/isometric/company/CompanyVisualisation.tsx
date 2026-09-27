@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
@@ -15,6 +16,8 @@ import type {
   SelectionTarget,
 } from './TcpPhaserEventBus';
 import TcpPhaserVisualisation from './TcpPhaserVisualisation';
+import { LabelTogglesControl } from './ui/LabelToggles';
+import { buildOfficeLabels, type LabelToggles } from './ui/officeLabels';
 import { PAN_STEP_PX, VisualisationToolbar } from './ui/VisualisationToolbar';
 import { VisualisationTooltip } from './ui/VisualisationTooltip';
 import { VisualisationTray } from './ui/VisualisationTray';
@@ -59,6 +62,11 @@ export default function CompanyVisualisation({
   const [selection, setSelection] = useState<SelectionTarget | null>(null);
   const [hover, setHover] = useState<HoverEvent | null>(null);
   const [following, setFollowing] = useState(false);
+  const [labelToggles, setLabelToggles] = useState<LabelToggles>([]);
+  const labels = useMemo(
+    () => buildOfficeLabels(world, snapshot, labelToggles),
+    [world, snapshot, labelToggles],
+  );
   /** The target a tooltip was showing for when Escape last dismissed it. */
   const [dismissedHover, setDismissedHover] = useState<HoverTarget | null>(
     null,
@@ -167,6 +175,7 @@ export default function CompanyVisualisation({
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggle}
       />
+      <LabelTogglesControl value={labelToggles} onChange={setLabelToggles} />
       <div className="company-visualisation__main">
         {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the stage is a labelled pan surface; its toolbar buttons are the non-pointer route (ADR-026) */}
         <div
@@ -183,6 +192,7 @@ export default function CompanyVisualisation({
           <TcpPhaserVisualisation
             world={world}
             reducedMotion={reducedMotion}
+            labels={labels}
             followTarget={followTarget}
             onAvatarArrived={avatarArrived}
             onAvatarExited={avatarExited}
