@@ -14,7 +14,17 @@
      shrink below the canvas's own content size, and the tray gets pushed
      off instead of the stage narrowing for it. */
   min-inline-size: 0;
-  block-size: var(--tcp-visualisation-height);
+  /*
+   * Fill the viewport below the stage (its page offset comes from
+   * `useStageTop`), but never drop below the fixed height: when the content
+   * above is tall, or the window is short, the stage keeps that height and the
+   * page scrolls to it instead. Before the first measurement the fallback
+   * leaves only the fixed height.
+   */
+  block-size: max(
+    var(--tcp-visualisation-height),
+    calc(100dvh - var(--tcp-visualisation-top, 100dvh) - var(--tcp-space-md))
+  );
 }
 
 .company-visualisation__canvas {

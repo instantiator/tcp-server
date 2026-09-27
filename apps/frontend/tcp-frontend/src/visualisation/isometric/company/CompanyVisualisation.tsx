@@ -24,6 +24,7 @@ import { VisualisationTray } from './ui/VisualisationTray';
 import { useFullscreen } from './useFullscreen';
 import { useOfficeWorld } from './useOfficeWorld';
 import { useReducedMotion } from './useReducedMotion';
+import { useStageTop } from './useStageTop';
 
 export interface CompanyVisualisationProps {
   readonly companyId: string;
@@ -58,6 +59,7 @@ export default function CompanyVisualisation({
   const containerRef = useRef<HTMLElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const { isFullscreen, toggle } = useFullscreen(containerRef);
+  useStageTop(stageRef);
 
   const [selection, setSelection] = useState<SelectionTarget | null>(null);
   const [hover, setHover] = useState<HoverEvent | null>(null);
