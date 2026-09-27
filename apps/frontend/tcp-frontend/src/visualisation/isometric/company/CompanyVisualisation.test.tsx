@@ -13,6 +13,7 @@ import {
 } from 'vitest';
 import { statusLabel } from '../../../api/statuses';
 import { applyEvent } from '../../../events/cache';
+import { ChatContext } from '../../../components/ChatDialog/useChat';
 import { t } from '../../../strings';
 import { expectNoA11yViolations } from '../../../test-support/axe';
 import {
@@ -55,7 +56,9 @@ const renderCompanyVisualisation = () => {
   });
   const utils = render(
     <QueryClientProvider client={queryClient}>
-      <CompanyVisualisation companyId={COMPANY_ID} />
+      <ChatContext.Provider value={{ openChat: vi.fn(), startChat: vi.fn() }}>
+        <CompanyVisualisation companyId={COMPANY_ID} />
+      </ChatContext.Provider>
     </QueryClientProvider>,
   );
   return { ...utils, queryClient };

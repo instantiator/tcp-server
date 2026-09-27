@@ -3,7 +3,9 @@ import {
   useLiveAgentState,
   useLiveAssignmentsList,
 } from '../../../../api/hooks';
-import { statusLabel } from '../../../../api/statuses';
+import { Button } from 'react-aria-components';
+import { ACTIVE_AGENT_STATUSES, statusLabel } from '../../../../api/statuses';
+import { useChat } from '../../../../components/ChatDialog/useChat';
 import { ExpandableText } from '../../../../components/ExpandableText/ExpandableText';
 import { t } from '../../../../strings';
 import { modeLabel } from './modeLabel';
@@ -29,6 +31,7 @@ export const AgentDetails = ({
   headingId,
 }: AgentDetailsProps) => {
   const agentQuery = useLiveAgentState({ agentId });
+  const { openChat } = useChat();
   const { data: roles } = useCompanyRolesList(companyId);
   const { data: assignments } = useLiveAssignmentsList({ companyId });
 
@@ -85,6 +88,26 @@ export const AgentDetails = ({
           </>
         )}
       </dl>
+      {/*
+        Only while the agent is active: a finished agent has nothing more to
+        say, and its whole history is in the task dialog. The name carries the
+        role so it reads on its own in the tray (WCAG 2.4.6).
+      */}
+      {ACTIVE_AGENT_STATUSES.some((active) => active === agent.status) && (
+        <Button
+          className="react-aria-Button"
+          onPress={() => {
+            openChat({
+              agentId,
+              roleName,
+              reference: assignment?.shortcode ?? null,
+              readOnly: true,
+            });
+          }}
+        >
+          {t('visualisation.tray.listenIn', { role: roleName })}
+        </Button>
+      )}
     </>
   );
 };

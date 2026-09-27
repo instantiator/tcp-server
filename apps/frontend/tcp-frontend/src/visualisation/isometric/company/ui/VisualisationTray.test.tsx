@@ -6,6 +6,7 @@ import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { statusLabel } from '../../../../api/statuses';
 import { applyEvent } from '../../../../events/cache';
+import { ChatContext } from '../../../../components/ChatDialog/useChat';
 import { t } from '../../../../strings';
 import { expectNoA11yViolations } from '../../../../test-support/axe';
 import {
@@ -123,19 +124,22 @@ const renderTray = (
   });
   const onToggleFollow = vi.fn();
   const onClose = vi.fn();
+  const openChat = vi.fn();
   const utils = render(
     <QueryClientProvider client={queryClient}>
-      <VisualisationTray
-        companyId={COMPANY_ID}
-        selection={{ kind: 'agent', id: AGENT_ID }}
-        following={false}
-        onToggleFollow={onToggleFollow}
-        onClose={onClose}
-        {...overrides}
-      />
+      <ChatContext.Provider value={{ openChat, startChat: vi.fn() }}>
+        <VisualisationTray
+          companyId={COMPANY_ID}
+          selection={{ kind: 'agent', id: AGENT_ID }}
+          following={false}
+          onToggleFollow={onToggleFollow}
+          onClose={onClose}
+          {...overrides}
+        />
+      </ChatContext.Provider>
     </QueryClientProvider>,
   );
-  return { ...utils, queryClient, onToggleFollow, onClose };
+  return { ...utils, queryClient, onToggleFollow, onClose, openChat };
 };
 
 /** A live `agent` `state_change`, in the shape the company stream sends it. */
@@ -178,6 +182,36 @@ describe('VisualisationTray', () => {
     expect(
       within(aside).getByText('Reconcile the Q3 accounts'),
     ).toBeInTheDocument();
+  });
+
+  it('listens in on an active agent through the chat dialog, read-only', async () => {
+    respond();
+    const { openChat } = renderTray();
+
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: t('visualisation.tray.listenIn', { role: ROLE_NAME }),
+      }),
+    );
+
+    expect(openChat).toHaveBeenCalledWith({
+      agentId: AGENT_ID,
+      roleName: ROLE_NAME,
+      reference: 'A1',
+      readOnly: true,
+    });
+  });
+
+  it('offers no listening in once the agent has finished', async () => {
+    respond({ agent: { body: agentFixture('completed') } });
+    renderTray();
+
+    await screen.findByText(statusLabel('completed'));
+    expect(
+      screen.queryByRole('button', {
+        name: t('visualisation.tray.listenIn', { role: ROLE_NAME }),
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows a task's heading and live details, including its assignments", async () => {

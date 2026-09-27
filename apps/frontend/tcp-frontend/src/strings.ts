@@ -69,6 +69,9 @@ const strings = {
   'chat.dialog.heading': 'Chats',
   'chat.conversation.label': 'Chat with {role}',
   'chat.conversation.labelWithReference': 'Chat with {role} ({reference})',
+  'chat.conversation.listening': 'Listening in: {role}',
+  'chat.conversation.listeningWithReference':
+    'Listening in: {role} ({reference})',
   'chat.complete': 'Complete the chat with {role}',
   'chat.message.label': 'Message {role}',
   'chat.send': 'Send',
@@ -356,6 +359,7 @@ const strings = {
   'visualisation.tray.assignments': 'Assignments',
   'visualisation.tray.assignmentRow': '{role} — {mode} — {status}',
   'visualisation.tray.follow': 'Follow',
+  'visualisation.tray.listenIn': 'Listen in to {role}',
   'visualisation.tray.close': 'Close details',
 
   // Assignment modes, the office's word for each — `modeLabel` in

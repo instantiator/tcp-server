@@ -227,6 +227,14 @@ const Opener = () => {
       >
         Open Sales (CHAT-1)
       </Button>
+      <Button
+        className="react-aria-Button"
+        onPress={() => {
+          openChat({ ...OPEN_A, readOnly: true });
+        }}
+      >
+        Listen in to Sales
+      </Button>
     </>
   );
 };
@@ -367,6 +375,68 @@ describe('ChatDialog', () => {
         }),
       }),
     ).toBeTruthy();
+  });
+
+  describe('listening in', () => {
+    it('shows the live transcript with nothing to send and nothing to complete', async () => {
+      respondChat();
+      const user = userEvent.setup();
+      renderChat();
+
+      await user.click(
+        screen.getByRole('button', { name: 'Listen in to Sales' }),
+      );
+      await waitForTranscriptsReady();
+
+      const panel = screen.getByRole('region', {
+        name: t('chat.conversation.listening', { role: ROLE_A }),
+      });
+      expect(
+        within(panel).getByRole('list', {
+          name: t('transcript.label', { role: ROLE_A }),
+        }),
+      ).toBeTruthy();
+      expect(within(panel).queryByRole('textbox')).toBeNull();
+      expect(
+        within(panel).queryByRole('button', {
+          name: t('chat.complete', { role: ROLE_A }),
+        }),
+      ).toBeNull();
+    });
+
+    it('never takes the message field away from a chat already open', async () => {
+      respondChat();
+      const user = userEvent.setup();
+      renderChat();
+
+      await user.click(screen.getByRole('button', { name: 'Open Sales' }));
+      await waitForTranscriptsReady();
+      await user.click(
+        screen.getByRole('button', { name: t('dialog.minimise') }),
+      );
+      await user.click(
+        screen.getByRole('button', { name: 'Listen in to Sales' }),
+      );
+      await waitForTranscriptsReady();
+
+      const panel = screen.getByRole('region', {
+        name: t('chat.conversation.label', { role: ROLE_A }),
+      });
+      expect(within(panel).getByRole('textbox')).toBeTruthy();
+    });
+
+    it('has no accessibility violations', async () => {
+      respondChat();
+      const user = userEvent.setup();
+      renderChat();
+
+      await user.click(
+        screen.getByRole('button', { name: 'Listen in to Sales' }),
+      );
+      await waitForTranscriptsReady();
+
+      await expectNoA11yViolations(document.body);
+    });
   });
 
   // Asserted as an absence, deliberately. The close button used to do exactly
