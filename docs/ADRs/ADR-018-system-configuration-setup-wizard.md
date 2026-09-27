@@ -274,7 +274,7 @@ See [010.8.4 - config resolution plan](../prompts/phase%2001%20-%20service/010.8
 
 - `libs/tcp-shared/src/config/defaults.ts` — single source of truth for all defaults
 - `libs/tcp-shared/src/config/resolve-embedding-dimension.ts` — re-exports DEFAULT_EMBEDDING_DIMENSION from defaults.ts
-- `docker-compose.yml` — INTERNAL_URL_* via YAML anchors, EXPOSE_PORT_* port mappings
+- `docker-compose.yml` — `INTERNAL_URL_*` via YAML anchors, `EXPOSE_PORT_*` port mappings
 - `scripts/start-deployment.sh` — URL derivation, port checks, updated required vars
 - `scripts/start-dev.sh` — removed .env.defaults reference
 - `scripts/check-migrations.sh` — uses derive_host_urls

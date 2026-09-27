@@ -238,7 +238,7 @@ Returns `"File not found: {path}"` if the key does not exist.
 
 Paths are object keys relative to the bucket root. They follow the ADR-007 structure:
 
-```
+```text
 {company_slug}/{area}/{...}
 ```
 

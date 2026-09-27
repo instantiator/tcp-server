@@ -35,7 +35,7 @@ MinIO is S3-compatible, lightweight, and self-hostable. Per-company S3 buckets p
 
 ### Bucket structure
 
-```
+```text
 {company_slug}/          ← one MinIO bucket per company
   tasks/
     {task_id}/

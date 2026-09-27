@@ -55,7 +55,7 @@ Everything in `client.ts` must survive type erasure with no runtime import — s
 
 ## Source layout
 
-```
+```text
 package.json                # workspaces + cross-cutting scripts
 tsconfig.base.json          # compilerOptions shared by the Node-side workspaces
 eslint.config.mjs           # one lint entry point for every workspace

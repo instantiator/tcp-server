@@ -6,7 +6,7 @@ The project uses six test tiers that run in increasing order of scope and
 infrastructure requirement. CI runs them in this order — a failure at any tier
 gates the next:
 
-```
+```text
 unit → integration → api + smoke + e2e + browser
 ```
 
@@ -309,7 +309,7 @@ Tests run in the same order in CI (see `.github/workflows/ci.yml`). Build and
 lint run in parallel first; each subsequent tier only runs if the previous
 passed.
 
-```
+```text
 verify (build + lint + typecheck) → unit-test → integration-test ─┬─→ api-test (includes smoke + browser)
                                                                    └─→ e2e-test
 ```

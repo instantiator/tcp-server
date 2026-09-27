@@ -1076,7 +1076,7 @@ combined (history prints first, then the tail follows).
   heading block is printed whenever the active `(task, assignment, agent)`
   scope changes (a `--task-id` view spans several):
 
-  ```
+  ```text
   Task id:              <id>
   Task shortcode:       <shortcode>
   Assignment id:        <id>

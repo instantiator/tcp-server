@@ -12,7 +12,7 @@ See [tcp-mcp-interactions.md](tcp-mcp-interactions.md) for the MCP tool referenc
 
 The agent calls `request_agent_consultation(agentId, companyId, roleId, question, context?, roleName?)`. `roleId` is the unambiguous lookup key — get it from `list_available_contacts` first. Role names aren't unique within a company, so a name-only lookup can target the wrong role; `roleName` is accepted only as an optional label for friendlier logs and error messages.
 
-```
+```text
 Calling Agent ──► interactions__request_agent_consultation
                     │
                     └──► POST /internal/pause (tcp-server)
@@ -28,7 +28,7 @@ Calling Agent ──► interactions__request_agent_consultation
 
 The consultation agent runs as a normal agent job, created with `requiredToolCalls: ['complete_assignment']` — its answer is only delivered via `complete_assignment`, so tcp-agent will not accept a narrated (text-only) ending. If the stream ends without the call, the agent is reminded up to `AGENT_REQUIRED_TOOL_RETRIES` times (default 2) before the run is failed. When it calls `complete_assignment(agentId, summary, prepared)`:
 
-```
+```text
 Consulting Agent ──► tasks__complete_assignment
                        │
                        └──► POST /internal/agent/:agentId/complete
@@ -48,7 +48,7 @@ Once the calling agent has no other outstanding requests (see below), it resumes
 
 If the consultation agent fails — an LLM error, a timeout or max-iterations abort, or exhausting its required-tool reminders without calling `complete_assignment` — the failure propagates instead of leaving the caller paused forever:
 
-```
+```text
 tcp-agent (failing run) ──► POST /internal/agent/:agentId/fail { reason }
                               │
                               ├── Sets failing agent status = failed (never clobbers Completed)
@@ -125,7 +125,7 @@ Consultations are dispatched and resolved entirely through the internal endpoint
 
 What there is, since 002.04, is an approximation good enough to list them:
 
-```
+```http
 GET /api/assignment?companyId=<id>&taskId=null&mode=consultee
 ```
 

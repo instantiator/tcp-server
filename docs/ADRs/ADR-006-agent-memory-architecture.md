@@ -14,7 +14,7 @@ Both systems are accessed by agents through a dedicated **memory MCP server** ra
 ## Knowledge base format
 
 All knowledge base documents use **Open Knowledge Format (OKF)**:
-https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md
+<https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md>
 
 OKF provides a consistent schema for structured knowledge documents. Knowledge base files are stored in the company's shared storage (MinIO — see [ADR-007](./ADR-007-shared-company-storage.md)) and indexed into the vector store on ingest.
 

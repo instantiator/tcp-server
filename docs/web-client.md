@@ -774,7 +774,7 @@ Code lives under `src/visualisation/isometric/company/`.
 
 ### The layers
 
-```
+```text
 live hooks (roles, agents, tasks, assignments, awaiting_user enquiries)
    │ buildCompanySnapshot()                      rules/companySnapshot.ts   (pure)
    ▼

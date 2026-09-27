@@ -194,7 +194,7 @@ calls — only the caller that actually flips a status runs the side effects.
 Each task and assignment transition is recorded as an
 `AuditEventType.StateChange` event.
 
-```
+```text
 user creates task ──▶ POST /start ──▶ planner agent (plan mode)
                                           │ create_plan
                                           ▼
