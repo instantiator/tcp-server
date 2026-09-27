@@ -1,10 +1,11 @@
 import type { GameObjects, Input, Scene } from 'phaser';
 import { emitTcpEvent } from '../TcpPhaserEventBus';
-import type { SelectionTarget } from '../TcpPhaserEventBus';
+import type { HoverTarget } from '../TcpPhaserEventBus';
 
 /**
  * Wires one interactive zone to the bus: `hover` on over and move, `hover`
- * null on out, `select` on pointerdown. `getTarget` is read on every event
+ * null on out, and `select` on pointerdown for anything selectable —
+ * furniture and doorways are hover-only. `getTarget` is read on every event
  * rather than captured once, so a caller can repoint an existing zone at a
  * new selection (an avatar sprite does this on every `world-changed`)
  * without recreating it.
@@ -19,7 +20,7 @@ export function createHitZone(
   y: number,
   width: number,
   height: number,
-  getTarget: () => SelectionTarget,
+  getTarget: () => HoverTarget,
 ): GameObjects.Zone {
   const zone = scene.add
     .zone(x, y, width, height)
@@ -38,7 +39,11 @@ export function createHitZone(
     emitTcpEvent({ event: 'hover', value: null });
   });
   zone.on('pointerdown', () => {
-    emitTcpEvent({ event: 'select', value: getTarget() });
+    const target = getTarget();
+    // Furniture and doorways only explain themselves; they open no tray.
+    if (target.kind !== 'furniture' && target.kind !== 'room') {
+      emitTcpEvent({ event: 'select', value: target });
+    }
   });
 
   return zone;

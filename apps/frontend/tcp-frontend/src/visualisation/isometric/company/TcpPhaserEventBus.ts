@@ -18,7 +18,8 @@ export interface SelectionTarget {
  */
 export type HoverTarget =
   | SelectionTarget
-  | { readonly kind: 'furniture' | 'room'; readonly id: string };
+  | { readonly kind: 'furniture'; readonly id: string }
+  | { readonly kind: 'room'; readonly id: string };
 
 /** A hover over something in the office. `x`/`y` are canvas-relative pixels. */
 export interface HoverEvent {

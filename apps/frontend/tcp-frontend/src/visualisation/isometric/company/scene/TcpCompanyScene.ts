@@ -1,5 +1,5 @@
 import { Scene, Scenes, type GameObjects } from 'phaser';
-import { depthOf, tileToScreen } from '../motion/iso';
+import { TILE_HEIGHT, TILE_WIDTH, depthOf, tileToScreen } from '../motion/iso';
 import type { CrowdEvent } from '../motion/crowd';
 import { Crowd } from '../motion/crowd';
 import type { SelectionTarget } from '../TcpPhaserEventBus';
@@ -10,13 +10,18 @@ import type { Avatar, Bounds, OfficeWorld, Tile } from '../world/types';
 import { AvatarSprite } from './AvatarSprite';
 import { CameraController } from './CameraController';
 import { drawFloors } from './drawFloors';
-import { drawFurniture } from './drawFurniture';
+import { FURNITURE_SIZES, drawFurniture } from './drawFurniture';
 import { drawWalls } from './drawWalls';
 import { createHitZone } from './hitZone';
 
 /** A whiteboard's hit zone: footprint and lift above the tile centre, in pixels. */
 const WHITEBOARD_ZONE_SIZE = 44;
 const WHITEBOARD_ZONE_LIFT = 15;
+/**
+ * How far below its tile's depth a doorway's zone sits, so an avatar
+ * standing in the doorway takes the pointer rather than the door.
+ */
+const DOOR_ZONE_DEPTH_OFFSET = 0.5;
 
 /**
  * The isometric office scene. React works out the whole office and sends it
@@ -182,6 +187,7 @@ export class TcpCompanyScene extends Scene {
       ...drawWalls(this, region),
       ...furniture.values(),
       ...zones,
+      ...this.buildDescriptionZones(world),
     ];
 
     if (isFirstDraw) {
@@ -243,6 +249,53 @@ export class TcpCompanyScene extends Scene {
     }
 
     return { zones, whiteboardsByTaskId };
+  }
+
+  /**
+   * Hover-only zones that let furniture and doorways explain themselves in
+   * a tooltip. Whiteboards are left out: their own zone opens the task.
+   */
+  private buildDescriptionZones(world: OfficeWorld): GameObjects.Zone[] {
+    const zones: GameObjects.Zone[] = [];
+
+    for (const item of world.furniture) {
+      if (item.kind === 'whiteboard') {
+        continue;
+      }
+      const { size, height } = FURNITURE_SIZES[item.kind];
+      const { x, y } = tileToScreen(item.tile);
+      const target = { kind: 'furniture', id: item.id } as const;
+      const zone = createHitZone(
+        this,
+        x,
+        y - height / 2,
+        size,
+        size / 2 + height,
+        () => target,
+      );
+      zone.setDepth(depthOf(item.tile));
+      zones.push(zone);
+    }
+
+    for (const room of world.rooms) {
+      if (room.door === null) {
+        continue;
+      }
+      const { x, y } = tileToScreen(room.door);
+      const target = { kind: 'room', id: room.id } as const;
+      const zone = createHitZone(
+        this,
+        x,
+        y,
+        TILE_WIDTH,
+        TILE_HEIGHT,
+        () => target,
+      );
+      zone.setDepth(depthOf(room.door) - DOOR_ZONE_DEPTH_OFFSET);
+      zones.push(zone);
+    }
+
+    return zones;
   }
 
   /**

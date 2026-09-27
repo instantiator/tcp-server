@@ -192,7 +192,11 @@ export default function CompanyVisualisation({
               setFollowing(false);
             }}
           />
-          <VisualisationTooltip hover={shownHover} snapshot={snapshot} />
+          <VisualisationTooltip
+            hover={shownHover}
+            snapshot={snapshot}
+            world={world}
+          />
         </div>
         {selection !== null && (
           <VisualisationTray

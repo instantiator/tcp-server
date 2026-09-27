@@ -285,6 +285,39 @@ const strings = {
   'visualisation.tooltip.role': 'Role: {role}',
   'visualisation.tooltip.task': 'Task: ({step}/{steps})',
 
+  // Furniture and room titles double as their canvas labels; the
+  // descriptions are the tooltip's second line.
+  'visualisation.furniture.desk': 'Desk: {role}',
+  'visualisation.furniture.deskUnowned': 'Desk',
+  'visualisation.furniture.desk.description':
+    'An agent of this role works here, and waits here between steps.',
+  'visualisation.furniture.whiteboard': 'Whiteboard',
+  'visualisation.furniture.sofa': 'Sofa',
+  'visualisation.furniture.sofa.description':
+    "Part of the rec room, where the company's roles are kept.",
+  'visualisation.furniture.pigeonholes': 'Pigeon holes',
+  'visualisation.furniture.pigeonholes.description':
+    'Agents come here while they wait for an answer from a user.',
+  'visualisation.furniture.table': 'Meeting table',
+  'visualisation.furniture.table.description':
+    'Two agents sit here to consult each other.',
+  'visualisation.furniture.officeDoor': 'Office door',
+  'visualisation.furniture.officeDoor.description':
+    'Agents arrive and leave here.',
+  'visualisation.room.task': 'Task room: {shortcode}',
+  'visualisation.room.task.description':
+    'Agents work on task {shortcode} here.',
+  'visualisation.room.oneToOne': '1:1 room',
+  'visualisation.room.oneToOne.description':
+    "Used for a conversation between '{roleA}' and '{roleB}'.",
+  'visualisation.room.oneToOne.descriptionUnknown':
+    'Used for a conversation between two agents.',
+  'visualisation.room.rec': 'Rec room',
+  'visualisation.room.rec.description':
+    "The company's roles are kept here. New agents collect their role here.",
+  'visualisation.room.mail': 'Mail room',
+  'visualisation.room.mail.description': "Agents wait here for a user's reply.",
+
   // The side tray (`ui/VisualisationTray.tsx` and its per-kind panels). Not a
   // dialog: nothing here is announced, and the tray's body is read by
   // browsing rather than spoken.

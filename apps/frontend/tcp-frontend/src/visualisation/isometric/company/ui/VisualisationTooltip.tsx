@@ -1,10 +1,14 @@
 import { t } from '../../../../strings';
 import type { CompanySnapshot } from '../rules/companySnapshot';
 import type { HoverEvent } from '../TcpPhaserEventBus';
+import type { OfficeWorld } from '../world/types';
+import { describeTarget } from './officeDescriptions';
 
 export interface VisualisationTooltipProps {
   readonly hover: HoverEvent | null;
   readonly snapshot: CompanySnapshot | null;
+  /** Needed for furniture and doorway hovers, which name world objects. */
+  readonly world: OfficeWorld;
 }
 
 /**
@@ -18,10 +22,26 @@ export interface VisualisationTooltipProps {
 export const VisualisationTooltip = ({
   hover,
   snapshot,
+  world,
 }: VisualisationTooltipProps) => {
   if (hover === null || snapshot === null) return null;
 
   const { target, x, y } = hover;
+
+  if (target.kind === 'furniture' || target.kind === 'room') {
+    const described = describeTarget(target, world, snapshot);
+    if (described === null) return null;
+    return (
+      <div
+        role="tooltip"
+        className="company-visualisation__tooltip"
+        style={{ left: x, top: y }}
+      >
+        <strong>{described.title}</strong>
+        {described.description !== undefined && <p>{described.description}</p>}
+      </div>
+    );
+  }
 
   if (target.kind === 'role') {
     const role = snapshot.roles.find((candidate) => candidate.id === target.id);
@@ -55,8 +75,6 @@ export const VisualisationTooltip = ({
       </div>
     );
   }
-
-  if (target.kind !== 'task') return null;
 
   const task = snapshot.tasks.find((candidate) => candidate.id === target.id);
   if (task === undefined) return null;
