@@ -86,6 +86,20 @@ describe('VisualisationToolbar', () => {
     expect(onToggleFullscreen).toHaveBeenCalledTimes(1);
   });
 
+  it('names each icon-only control in a tooltip on focus, keeping the icon decorative', async () => {
+    renderToolbar();
+
+    await userEvent.tab();
+    const left = screen.getByRole('button', {
+      name: t('visualisation.pan.left'),
+    });
+    expect(left).toHaveFocus();
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      t('visualisation.pan.left'),
+    );
+    expect(left.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+  });
+
   it('has no accessibility violations', async () => {
     const { container } = renderToolbar();
 
