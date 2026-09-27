@@ -299,7 +299,7 @@ leaves the server. This is what `tcp-cli get-token` uses.
 
 Starts a device authorization flow. No request body.
 
-```
+```http
 POST /api/auth/device
 ```
 
@@ -323,7 +323,7 @@ a human, who completes login in a browser.
 
 Polls for the outcome of a device authorization started above.
 
-```
+```http
 POST /api/auth/device/token
 Content-Type: application/json
 
@@ -348,7 +348,7 @@ finished logging in yet, or the token response once they have:
 Exchanges a refresh token for a new access token — unchanged, still proxies the standard
 `refresh_token` grant.
 
-```
+```http
 POST /api/auth/refresh
 Content-Type: application/json
 

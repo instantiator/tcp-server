@@ -1,0 +1,17 @@
+// markdownlint config: dev-qual's defaults, plus this repo's exceptions.
+// check.sh and the editor extension both read this file.
+{
+  "extends": "dev-qual/configs/markdownlint.json",
+  // Adjacent blockquotes are kept apart on purpose: GitHub alerts
+  // ([!NOTE], [!TIP]) and quoted prompts only render as separate blocks.
+  "MD028": false,
+  // Numbered steps continue across code blocks and notes (6. … 18.);
+  // renumbering from 1 would break the sequence.
+  "MD029": false,
+  // Bold and italic lines are used as labels and asides in plans and
+  // prompts, not as headings in disguise.
+  "MD036": false,
+  // Code spans here often quote a prefix or suffix whose spaces are the
+  // point (`> `, `# `, ` (draft)`); the rule's fix would strip them.
+  "MD038": false
+}

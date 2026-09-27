@@ -11,9 +11,9 @@
 # its own `npm run format`, not the root one.
 apps/tcp-stub-llm
 
-# The dev-environment submodule is a separate repository with its own tooling.
-# Formatting it here would produce a diff this repo cannot commit.
-dev-environment
+# Submodules are separate repositories with their own tooling: formatting them
+# here would produce a diff this repo cannot commit. dev-qual's installer keeps
+# them listed in the block at the end — don't list them by hand.
 
 # Generated artefacts. Their generator's output is authoritative; reformatting
 # them means the gate fails after every build that regenerates them.
@@ -21,3 +21,7 @@ docs/licenses.md
 .license-report.json
 schemas/schema.json
 apps/frontend/tcp-frontend/src/api/schema.d.ts
+
+# <!-- dev-qual:submodules:start -->
+dev-qual
+# <!-- dev-qual:submodules:end -->

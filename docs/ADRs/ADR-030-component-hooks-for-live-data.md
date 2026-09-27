@@ -104,7 +104,7 @@ Three parts:
 
 ### One door
 
-```
+```text
 src/api/
   hooks.ts        The only module a component imports.
   endpoints.ts    One hook per REST route. Internal.

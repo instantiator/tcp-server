@@ -83,7 +83,7 @@ The Microsoft library is the strongest alternative and is [rejected on maintenan
 
 Every stream carries the same union, `WireEvent`:
 
-```
+```text
 { type: 'audit', event: AuditWireEvent } | StreamDelta
 ```
 

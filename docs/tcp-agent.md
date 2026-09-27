@@ -24,7 +24,7 @@ The `tcp-agent` service runs the LangGraph agent loop. It consumes jobs from the
 
 All `tcp-server` API endpoints (`/api/*`) require a Bearer token from your OIDC provider. Obtain one from Zitadel via `tcp-cli get-token` (device-flow login; see [zitadel-setup.md](zitadel-setup.md)) and pass it in every request:
 
-```
+```text
 -H "Authorization: Bearer <token>"
 ```
 

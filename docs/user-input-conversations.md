@@ -12,7 +12,7 @@ See [tcp-mcp-interactions.md](tcp-mcp-interactions.md) for the MCP tool referenc
 
 The agent calls `request_user_input(agentId, companyId, question, context?, userIds?)` on tcp-mcp-interactions. `userIds` (from `list_available_contacts`) targets specific company users directly; if omitted, the question is auto-routed based on its content.
 
-```
+```text
 Agent ──► interactions__request_user_input
             │
             └──► POST /internal/pause (tcp-server)

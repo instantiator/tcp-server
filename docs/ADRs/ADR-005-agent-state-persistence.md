@@ -31,7 +31,7 @@ Each checkpoint contains:
 
 Each task step row in the database has a `status` column. The agent loop checks this column before entering the next graph node:
 
-```
+```text
 graph node → poll status → if CANCELLED: call interrupt() → exit
 ```
 

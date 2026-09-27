@@ -26,7 +26,7 @@ All companies share the same PostgreSQL, MinIO, Redis, tcp-server, and tcp-agent
 
 ### Docker Compose services
 
-```
+```text
 services:
   tcp-server:             NestJS API + orchestration
   tcp-agent:              LangGraph agent loop runner

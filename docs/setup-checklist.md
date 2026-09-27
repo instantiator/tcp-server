@@ -61,13 +61,13 @@ curl http://localhost:3000/health
 docker compose -p tcp-dev ps
 ```
 
-| Service         | URL                              |
-| --------------- | -------------------------------- |
-| tcp-server API  | http://localhost:3000            |
-| Swagger UI      | http://localhost:3000/swagger    |
-| MinIO console   | http://localhost:9001            |
-| Web app         | https://localhost:5173           |
-| Zitadel console | http://localhost:8080/ui/console |
+| Service         | URL                                |
+| --------------- | ---------------------------------- |
+| tcp-server API  | <http://localhost:3000>            |
+| Swagger UI      | <http://localhost:3000/swagger>    |
+| MinIO console   | <http://localhost:9001>            |
+| Web app         | <https://localhost:5173>           |
+| Zitadel console | <http://localhost:8080/ui/console> |
 
 tcp-agent and the MCP servers are internal-only by default; start with
 `./scripts/start-deployment.sh --dev-ports` to publish them.

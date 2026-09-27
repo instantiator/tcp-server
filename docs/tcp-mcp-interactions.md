@@ -127,7 +127,7 @@ Pauses the current agent and dispatches a consultation job to another agent role
 
 ## Pause and resume flow
 
-```
+```text
 Agent calls request_user_input / request_agent_consultation
   → tcp-agent POSTs /internal/pause
   → tcp-server creates Conversation or PendingConsultation record

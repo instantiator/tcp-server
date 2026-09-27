@@ -59,8 +59,8 @@ For more about working with Zitadel, see:
 
 To confirm that the system is in a good state, you can check the `/health` pages for the tcp-server, and tcp-agent applications:
 
-- http://localhost:3000/health
-- http://localhost:3003/health
+- <http://localhost:3000/health>
+- <http://localhost:3003/health>
 
 Alternatively, you can run the smoke tests with:
 
@@ -320,7 +320,7 @@ The agent will be invoked, should respond to the query, and your session will th
 
 <summary><b>Reasoning and tool calls...</b> (stderr)</summary>
 
-```
+```text
 Agent state: running
 
 LLM state: request_started
@@ -427,7 +427,7 @@ Agent state: idle
 
 <summary><b>Response...</b> (stdout)</summary>
 
-```
+```text
 **CLUCK CLUCK HONK!** 🐔
 
 You want to know about me? Well, *peck-peck*! Let me introduce myself with some proper chicken enthusiasm!

@@ -17,7 +17,7 @@ Key requirements:
 
 ## Task lifecycle
 
-```
+```text
 created → planning → in_progress → reviewing → completed
                                               → failed
                                               → cancelled
@@ -127,7 +127,7 @@ An agent can propose plan revisions via a `revise_plan` event containing the pro
 
 Task: "Add a secure login feature to the webapp"
 
-```
+```text
 planning:    [product-owner]   → generates plan
 in_progress: [architect]       → designs the approach
 in_progress: [security-consultant] → reviews the design (consultation triggered by architect)

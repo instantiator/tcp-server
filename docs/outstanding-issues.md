@@ -14,7 +14,7 @@ When the finalisation assignment of a task completes, the task moves to state `s
 
 The `start-dev.sh` script prints some guidance at the end, including:
 
-```
+```text
 Get a token (opens a browser for login):
   npx tcp-cli get-token
 ```
@@ -23,14 +23,14 @@ This doesn't work - as `tcp-cli` isn't in the registry.npmjs.org registry.
 
 It's easier just to use `tcp-cli.sh` in the guidance for now and, in fact, probably even better to give guidance like this:
 
-```
+```text
 Put a token into TCP_TOKEN to use it in subsequent calls. (This will open a browser for login.)
   export TCP_TOKEN=$(./tcp-cli.sh get-token)
 ```
 
 It would also be nice to print this advice right at the end, but only if there are 0 companies already configured:
 
-```
+```text
 See `your-first-company.md` to get started.
 ```
 

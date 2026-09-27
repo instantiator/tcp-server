@@ -71,7 +71,7 @@ Safe to re-run — existing Zitadel resources are left untouched on subsequent s
 
 Open the Zitadel admin console:
 
-```
+```text
 http://localhost:8080/ui/console
 ```
 

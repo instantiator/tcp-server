@@ -52,7 +52,7 @@ These are set in your `.env` file and injected into Docker Compose services at s
 
 Each company's data lives under a top-level prefix derived from the company's `slug`. The structure follows [ADR-007](ADRs/ADR-007-shared-company-storage.md):
 
-```
+```text
 {company_slug}/
   tasks/
     {task_id}/
@@ -92,7 +92,7 @@ Each company's data lives under a top-level prefix derived from the company's `s
 
 When incoming data (RAG results, MCP responses) still exceeds the context budget after compaction, the original content is written to a temporary overflow path and a reference summary is injected into the prompt in its place:
 
-```
+```text
 {company_slug}/tasks/{agent_id}/context-overflow/{timestamp}.txt
 ```
 
