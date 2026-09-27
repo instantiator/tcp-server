@@ -305,4 +305,113 @@ describe('useOfficeWorld — the live pipeline (agent E2E stand-in)', () => {
       ).toBe(false);
     });
   });
+
+  it("walks a live agent added after the first snapshot through its role's pickup, then to its desk", async () => {
+    const AGENT_2_ID = 'g2';
+    const ASSIGNMENT_2_ID = 'assignment-2';
+    // Both assignments are loaded from the start — 002.01's pickup rule
+    // works off the office model, not the fetch order, and only the agent
+    // list gets a live update below, so the new agent's assignment has to
+    // already be there for `buildCompanySnapshot` to pick it up.
+    const assignment2: AssignmentDTO = {
+      ...assignment({ status: 'in-progress' }),
+      id: ASSIGNMENT_2_ID,
+      agentId: AGENT_2_ID,
+    };
+    const agent2 = (overrides: { status: AgentDTO['status'] }): AgentDTO => ({
+      ...agent(overrides),
+      id: AGENT_2_ID,
+      assignmentId: ASSIGNMENT_2_ID,
+    });
+
+    respondByRoute([
+      [ROLES_ROUTE, { body: [ROLE] }],
+      [AGENTS_ROUTE, { body: [agent({ status: 'idle' })] }],
+      [TASKS_ROUTE, { body: [task({ status: 'in-progress' })] }],
+      [
+        ASSIGNMENTS_ROUTE,
+        { body: [assignment({ status: 'in-progress' }), assignment2] },
+      ],
+      [CONVERSATIONS_ROUTE, { body: [] }],
+    ]);
+
+    const { result, queryClient } = renderWithClient();
+
+    // Initial load: agent-1 lands straight at its desk, as the previous
+    // test covers — `placeAtTarget` and `hasRole` both start true.
+    await waitFor(() => {
+      expect(
+        result.current.world.avatars.some((avatar) => avatar.kind === 'agent'),
+      ).toBe(true);
+    });
+
+    // A second agent of the same role joins live. Its `state_change` carries
+    // a full summary — `cache.ts` has no cached row for its id, so it
+    // invalidates the agents list rather than patching one in place, and the
+    // list refetch below is what actually adds it to the snapshot.
+    respondByRoute([
+      [ROLES_ROUTE, { body: [ROLE] }],
+      [
+        AGENTS_ROUTE,
+        { body: [agent({ status: 'idle' }), agent2({ status: 'idle' })] },
+      ],
+      [TASKS_ROUTE, { body: [task({ status: 'in-progress' })] }],
+      [
+        ASSIGNMENTS_ROUTE,
+        { body: [assignment({ status: 'in-progress' }), assignment2] },
+      ],
+      [CONVERSATIONS_ROUTE, { body: [] }],
+    ]);
+    act(() => {
+      applyEvent(
+        queryClient,
+        auditEvent(
+          {
+            entity: 'agent',
+            summary: {
+              id: AGENT_2_ID,
+              status: 'idle',
+              roleId: ROLE.id,
+              assignmentId: ASSIGNMENT_2_ID,
+            },
+          },
+          AGENT_2_ID,
+          null,
+        ),
+      );
+    });
+
+    // It joined after the first snapshot, so it hasn't collected its role
+    // yet: it heads for the role avatar first, not straight to a desk.
+    let secondAvatarId = '';
+    await waitFor(() => {
+      const avatar = result.current.world.avatars.find(
+        (a) => a.kind === 'agent' && a.agentId === AGENT_2_ID,
+      );
+      if (avatar === undefined) throw new Error('expected the second avatar');
+      secondAvatarId = avatar.id;
+      expect(avatar.hasRole).toBe(false);
+      expect(avatar.target).toEqual({
+        kind: 'avatar',
+        avatarId: `role:${ROLE.id}`,
+      });
+    });
+
+    // The scene reports it reached the role avatar: `hasRole` flips, and
+    // the rules — run straight after — re-target it to its own desk.
+    act(() => {
+      result.current.avatarArrived(secondAvatarId, { x: 0, y: 0 });
+    });
+    await waitFor(() => {
+      const avatar = result.current.world.avatars.find(
+        (a) => a.id === secondAvatarId,
+      );
+      expect(avatar?.hasRole).toBe(true);
+      expect(avatar?.deskId).not.toBeNull();
+      expect(avatar?.target).toEqual({
+        kind: 'furniture',
+        furnitureId: avatar?.deskId,
+      });
+    });
+  });
 });

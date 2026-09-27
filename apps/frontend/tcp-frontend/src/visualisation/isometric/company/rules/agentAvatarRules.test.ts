@@ -242,4 +242,59 @@ describe('applyAgentAvatarRules', () => {
     const again = applyAgentAvatarRules(world, snapshot([agent()]), ctxLater);
     expect(again).toBe(world);
   });
+
+  it('gives a first-snapshot avatar hasRole true, straight away', () => {
+    const world = applyAgentAvatarRules(
+      worldWithTaskRoom(),
+      snapshot([agent()]),
+      ctxFirst,
+    );
+    expect(requireAvatar(world, (a) => a.agentId === 'agent-1').hasRole).toBe(
+      true,
+    );
+  });
+
+  it('gives a later-snapshot avatar hasRole false, so it collects its role first', () => {
+    const world = applyAgentAvatarRules(
+      worldWithTaskRoom(),
+      snapshot([agent()]),
+      ctxLater,
+    );
+    expect(requireAvatar(world, (a) => a.agentId === 'agent-1').hasRole).toBe(
+      false,
+    );
+  });
+
+  it("keeps a reused waiting avatar's hasRole, rather than resetting it", () => {
+    // The waiting avatar was created on the first snapshot, so it already
+    // carries its role; a role-mate taking it over shouldn't lose that.
+    let world = applyAgentAvatarRules(
+      worldWithTaskRoom(),
+      snapshot([agent({ id: 'agent-1', roleId: 'role-a' })]),
+      ctxFirst,
+    );
+    const before = requireAvatar(world, (a) => a.agentId === 'agent-1');
+    expect(before.hasRole).toBe(true);
+
+    world = applyAgentAvatarRules(
+      world,
+      snapshot([
+        agent({
+          id: 'agent-1',
+          roleId: 'role-a',
+          activity: { kind: 'finished' },
+        }),
+        agent({
+          id: 'agent-2',
+          roleId: 'role-a',
+          assignmentId: 'assignment-2',
+        }),
+      ]),
+      ctxLater,
+    );
+
+    const after = requireAvatar(world, (a) => a.id === before.id);
+    expect(after.agentId).toBe('agent-2');
+    expect(after.hasRole).toBe(true);
+  });
 });

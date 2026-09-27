@@ -110,7 +110,7 @@ function attachTaskAgent(
     location: SPAWN_TILE,
     target: { kind: 'tile', tile: SPAWN_TILE },
     placeAtTarget: ctx.firstSnapshot,
-    hasRole: true,
+    hasRole: ctx.firstSnapshot,
   });
   const claim = claimDesk(created.world, roomId, created.avatarId);
   const target: AvatarTarget = {
@@ -135,7 +135,7 @@ function attachNoTaskAgent(
     location: SPAWN_TILE,
     target: { kind: 'tile', tile: SPAWN_TILE },
     placeAtTarget: ctx.firstSnapshot,
-    hasRole: true,
+    hasRole: ctx.firstSnapshot,
   });
   return next;
 }
