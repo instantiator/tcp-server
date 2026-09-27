@@ -17,6 +17,8 @@ export interface DetailsPickerProps {
   readonly snapshot: CompanySnapshot | null;
   readonly selection: SelectionTarget | null;
   readonly onSelect: (target: SelectionTarget) => void;
+  /** Where the list pops up; see `VisualisationToolbarProps.portalContainer`. */
+  readonly portalContainer?: Element | undefined;
 }
 
 /** One flattened row in the picker: its key, its label, and what choosing it selects. */
@@ -81,6 +83,7 @@ export const DetailsPicker = ({
   snapshot,
   selection,
   onSelect,
+  portalContainer,
 }: DetailsPickerProps) => {
   const items = useMemo(
     () => (snapshot === null ? [] : buildItems(snapshot)),
@@ -109,7 +112,10 @@ export const DetailsPicker = ({
       <Button>
         <SelectValue />
       </Button>
-      <Popover>
+      <Popover
+        // eslint-disable-next-line @typescript-eslint/no-deprecated -- the provider that replaces it isn't exported by react-aria-components; see `WithTooltip` in VisualisationToolbar.tsx
+        UNSTABLE_portalContainer={portalContainer}
+      >
         <ListBox>
           {items.map((item) => (
             <ListBoxItem key={item.key} id={item.key}>

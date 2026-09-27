@@ -36,6 +36,13 @@ export interface VisualisationToolbarProps {
   readonly onPan: (dx: number, dy: number) => void;
   readonly isFullscreen: boolean;
   readonly onToggleFullscreen: () => void;
+  /**
+   * Where the toolbar's tooltips and the picker's list are portalled: the
+   * office view itself, rather than `document.body`. In full screen only the
+   * full-screen element is drawn, so an overlay on the body would never
+   * show; and inside the view it stays within the page's landmarks.
+   */
+  readonly portalContainer?: Element | undefined;
 }
 
 /** An icon drawn inside a control. Decorative: the control carries the name. */
@@ -50,27 +57,49 @@ const Icon = ({ icon: Glyph }: { readonly icon: LucideIcon }) => (
  */
 const WithTooltip = ({
   label,
+  portalContainer,
   children,
 }: {
   readonly label: string;
+  readonly portalContainer: Element | undefined;
   readonly children: ReactNode;
 }) => (
   <TooltipTrigger>
     {children}
-    <Tooltip className="react-aria-Tooltip">{label}</Tooltip>
+    {/*
+      `UNSTABLE_portalContainer` is deprecated in favour of react-aria's
+      `UNSAFE_PortalProvider`, which react-aria-components doesn't re-export.
+      Importing it from react-aria directly would need a second dependency
+      pinned in step with the one react-aria-components pins, and it fails
+      silently when they drift. This prop fails loudly, at compile time, if
+      it is ever removed.
+    */}
+    <Tooltip
+      className="react-aria-Tooltip"
+      // eslint-disable-next-line @typescript-eslint/no-deprecated -- deliberate; see the comment above
+      UNSTABLE_portalContainer={portalContainer}
+    >
+      {label}
+    </Tooltip>
   </TooltipTrigger>
 );
 
 interface PanButtonProps {
   readonly direction: 'left' | 'right' | 'up' | 'down';
+  readonly portalContainer: Element | undefined;
   readonly icon: LucideIcon;
   readonly onPress: () => void;
 }
 
-const PanButton = ({ direction, icon, onPress }: PanButtonProps) => {
+const PanButton = ({
+  direction,
+  portalContainer,
+  icon,
+  onPress,
+}: PanButtonProps) => {
   const label = t(`visualisation.pan.${direction}`);
   return (
-    <WithTooltip label={label}>
+    <WithTooltip label={label} portalContainer={portalContainer}>
       <Button
         className={`react-aria-Button company-visualisation__pan-button company-visualisation__pan-button--${direction}`}
         aria-label={label}
@@ -97,6 +126,7 @@ export const VisualisationToolbar = ({
   onPan,
   isFullscreen,
   onToggleFullscreen,
+  portalContainer,
 }: VisualisationToolbarProps) => {
   const fullscreenLabel = t('visualisation.fullscreen');
   return (
@@ -106,6 +136,7 @@ export const VisualisationToolbar = ({
     >
       <div className="company-visualisation__pan">
         <PanButton
+          portalContainer={portalContainer}
           direction="left"
           icon={ArrowLeft}
           onPress={() => {
@@ -113,6 +144,7 @@ export const VisualisationToolbar = ({
           }}
         />
         <PanButton
+          portalContainer={portalContainer}
           direction="right"
           icon={ArrowRight}
           onPress={() => {
@@ -120,6 +152,7 @@ export const VisualisationToolbar = ({
           }}
         />
         <PanButton
+          portalContainer={portalContainer}
           direction="up"
           icon={ArrowUp}
           onPress={() => {
@@ -127,6 +160,7 @@ export const VisualisationToolbar = ({
           }}
         />
         <PanButton
+          portalContainer={portalContainer}
           direction="down"
           icon={ArrowDown}
           onPress={() => {
@@ -134,7 +168,7 @@ export const VisualisationToolbar = ({
           }}
         />
       </div>
-      <WithTooltip label={fullscreenLabel}>
+      <WithTooltip label={fullscreenLabel} portalContainer={portalContainer}>
         <ToggleButton
           className="react-aria-ToggleButton company-visualisation__icon-button"
           aria-label={fullscreenLabel}
@@ -148,6 +182,7 @@ export const VisualisationToolbar = ({
         snapshot={snapshot}
         selection={selection}
         onSelect={onSelect}
+        portalContainer={portalContainer}
       />
     </Toolbar>
   );

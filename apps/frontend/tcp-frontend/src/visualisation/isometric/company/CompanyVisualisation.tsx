@@ -57,6 +57,11 @@ export default function CompanyVisualisation({
   const reducedMotion = useReducedMotion();
 
   const containerRef = useRef<HTMLElement | null>(null);
+  // The same element as state too: overlays portal into it, and a ref alone
+  // wouldn't re-render them once it exists.
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(
+    null,
+  );
   const stageRef = useRef<HTMLDivElement | null>(null);
   const { isFullscreen, toggle } = useFullscreen(containerRef);
   useStageTop(stageRef);
@@ -168,7 +173,13 @@ export default function CompanyVisualisation({
   }, []);
 
   return (
-    <section ref={containerRef} className="company-visualisation">
+    <section
+      ref={(element) => {
+        containerRef.current = element;
+        setPortalContainer(element);
+      }}
+      className="company-visualisation"
+    >
       <VisualisationToolbar
         snapshot={snapshot}
         selection={selection}
@@ -176,6 +187,7 @@ export default function CompanyVisualisation({
         onPan={pan}
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggle}
+        portalContainer={portalContainer ?? undefined}
       />
       <LabelTogglesControl value={labelToggles} onChange={setLabelToggles} />
       <div className="company-visualisation__main">

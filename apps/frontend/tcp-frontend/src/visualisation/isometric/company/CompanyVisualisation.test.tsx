@@ -578,6 +578,72 @@ describe('CompanyVisualisation', () => {
         // examine a tree with no options in it and pass vacuously.
         await expectNoA11yViolations(document.body);
       });
+
+      it('has no violations with every label on and a doorway tooltip showing', async () => {
+        const user = userEvent.setup();
+        const { container } = renderCompanyVisualisation();
+        await findStage();
+
+        for (const kind of ['agents', 'roles', 'furniture', 'rooms'] as const) {
+          await user.click(
+            screen.getByRole('checkbox', {
+              name: t(`visualisation.labels.${kind}`),
+            }),
+          );
+        }
+        act(() => {
+          emitTcpEvent({
+            event: 'hover',
+            value: { target: { kind: 'room', id: 'rec' }, x: 1, y: 1 },
+          });
+        });
+        await screen.findByRole('tooltip');
+
+        await expectNoA11yViolations(container);
+      });
+
+      it('shows a pan button tooltip inside the office view, with no violations', async () => {
+        const user = userEvent.setup();
+        const { container } = renderCompanyVisualisation();
+        await findStage();
+
+        await user.tab();
+        const tooltip = await screen.findByRole('tooltip');
+
+        // Portalled into the view, not onto the body: in full screen only the
+        // full-screen element is drawn, and on the page it stays inside the
+        // landmarks the view sits in.
+        expect(container).toContainElement(tooltip);
+        await expectNoA11yViolations(container);
+      });
+
+      it('tabs through the controls in reading order, ending on the stage', async () => {
+        const user = userEvent.setup();
+        renderCompanyVisualisation();
+        const stage = await findStage();
+
+        const expected = [
+          screen.getByRole('button', { name: t('visualisation.pan.left') }),
+          screen.getByRole('button', { name: t('visualisation.pan.right') }),
+          screen.getByRole('button', { name: t('visualisation.pan.up') }),
+          screen.getByRole('button', { name: t('visualisation.pan.down') }),
+          screen.getByRole('button', { name: t('visualisation.fullscreen') }),
+          screen.getByRole('button', {
+            name: new RegExp(t('visualisation.picker.label')),
+          }),
+          ...(['agents', 'roles', 'furniture', 'rooms'] as const).map((kind) =>
+            screen.getByRole('checkbox', {
+              name: t(`visualisation.labels.${kind}`),
+            }),
+          ),
+          stage,
+        ];
+
+        for (const element of expected) {
+          await user.tab();
+          expect(element).toHaveFocus();
+        }
+      });
     });
   });
 });
