@@ -1,6 +1,10 @@
-import { LlmConfig } from '@tcp/shared';
 import { Body, Controller, Post, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiCreatedResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import {
   ModelCompatibilityResult,
   ModelCompatibilityService,
@@ -8,6 +12,10 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CompanyMembershipGuard } from '../auth/company-membership.guard';
 import { NoCompanyScope } from '../auth/company-scope.decorator';
+import {
+  ModelCheckDto,
+  ModelCompatibilityResultDto,
+} from './dto/model-check.dto';
 
 /** REST controller for checking LLM model compatibility with the agent loop. */
 @ApiTags('model')
@@ -32,8 +40,9 @@ export class ModelController {
     'LLM reachability probe; carries its own credentials, names no company',
   )
   @Post('check')
+  @ApiCreatedResponse({ type: ModelCompatibilityResultDto, isArray: true })
   async checkCompatibility(
-    @Body() body: { models: LlmConfig[] },
+    @Body() body: ModelCheckDto,
   ): Promise<ModelCompatibilityResult[]> {
     return this.checker.check(body.models ?? []);
   }

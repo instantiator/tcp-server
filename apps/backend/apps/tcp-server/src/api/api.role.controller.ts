@@ -15,6 +15,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -51,7 +52,7 @@ export class RoleController {
    * `X-Tcp-Warnings` response header — the role is still created.
    */
   @ApiOperation({ summary: 'Create a role' })
-  @ApiOkResponse({ type: RoleResponseDto })
+  @ApiCreatedResponse({ type: RoleResponseDto })
   @CompanyScope({ from: 'body', key: 'companyId', via: 'company' })
   @Post()
   async createRole(

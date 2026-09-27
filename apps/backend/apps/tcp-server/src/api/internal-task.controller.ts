@@ -8,7 +8,18 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
+import {
+  ApiCreatedResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiSecurity,
+  ApiTags,
+} from '@nestjs/swagger';
+import {
+  AgentAssignmentResponseDto,
+  PlanCreatedResponseDto,
+  StorageScopeResponseDto,
+} from './dto/internal-response.dto';
 import { InternalApiKeyGuard, TcpAssignment, TcpTask } from '@tcp/shared';
 import type { UUID } from 'crypto';
 import { AssignmentService } from './assignment.service';
@@ -37,6 +48,7 @@ export class InternalTaskController {
    * MCP tool handlers use this to mode-gate each tool.
    */
   @ApiOperation({ summary: "Get an agent's assignment (internal)" })
+  @ApiOkResponse({ type: AgentAssignmentResponseDto })
   @Get('agent/:agentId/assignment')
   async getAssignment(
     @Param('agentId') agentId: UUID,
@@ -51,6 +63,7 @@ export class InternalTaskController {
    * read-only.
    */
   @ApiOperation({ summary: "Get an agent's storage scope (internal)" })
+  @ApiOkResponse({ type: StorageScopeResponseDto })
   @Get('agent/:agentId/storage-scope')
   async getStorageScope(
     @Param('agentId') agentId: UUID,
@@ -60,6 +73,7 @@ export class InternalTaskController {
 
   /** Creates a task's plan from a planning agent's `create_plan` call. */
   @ApiOperation({ summary: 'Create a task plan (internal)' })
+  @ApiCreatedResponse({ type: PlanCreatedResponseDto })
   @Post('task/:taskId/plan')
   @HttpCode(201)
   async planTask(

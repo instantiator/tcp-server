@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -55,7 +56,7 @@ export class CompanyUserController {
    * Returns 409 if a user with the same identifier already exists (DB unique constraint).
    */
   @ApiOperation({ summary: 'Add a user to a company' })
-  @ApiOkResponse({ type: CompanyUserResponseDto })
+  @ApiCreatedResponse({ type: CompanyUserResponseDto })
   @CompanyScope({ from: 'param', key: 'companyId', via: 'company' })
   @Post()
   async createUser(

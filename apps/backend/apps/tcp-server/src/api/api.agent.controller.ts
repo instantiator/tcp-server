@@ -23,7 +23,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiAcceptedResponse,
   ApiBearerAuth,
+  ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -45,7 +47,12 @@ import { AssignmentCompletionService } from './assignment-completion.service';
 import { AssignmentService } from './assignment.service';
 import { ChatService } from './chat.service';
 import { SystemShutdownService } from './system-shutdown.service';
-import { SendMessageDto, StartAgentDto, StartChatDto } from './dto/agent.dto';
+import {
+  MessageAcceptedResponseDto,
+  SendMessageDto,
+  StartAgentDto,
+  StartChatDto,
+} from './dto/agent.dto';
 import {
   AgentResponseDto,
   AuditEventResponseDto,
@@ -75,7 +82,7 @@ export class AgentController {
    * Refused with `503` while the system is draining for shutdown.
    */
   @ApiOperation({ summary: 'Start a new agent' })
-  @ApiOkResponse({ type: AgentResponseDto })
+  @ApiCreatedResponse({ type: AgentResponseDto })
   @CompanyScope({ from: 'body', key: 'companyId', via: 'company' })
   @Post('start')
   async startAgent(@Body() body: StartAgentDto): Promise<TcpAgent> {
@@ -91,7 +98,7 @@ export class AgentController {
    * Refused with `503` while the system is draining for shutdown.
    */
   @ApiOperation({ summary: 'Start a chat-mode agent' })
-  @ApiOkResponse({ type: AgentResponseDto })
+  @ApiCreatedResponse({ type: AgentResponseDto })
   @CompanyScope({ from: 'body', key: 'companyId', via: 'company' })
   @Post('chat/start')
   async startChat(@Body() body: StartChatDto): Promise<TcpAgent> {
@@ -128,6 +135,7 @@ export class AgentController {
   @CompanyScope({ from: 'param', key: 'id', via: 'agent' })
   @Post(':id/message')
   @HttpCode(HttpStatus.ACCEPTED)
+  @ApiAcceptedResponse({ type: MessageAcceptedResponseDto })
   async sendMessage(
     @Param('id') id: UUID,
     @Body() body: SendMessageDto,
@@ -153,7 +161,7 @@ export class AgentController {
    * `409` while a turn is in flight.
    */
   @ApiOperation({ summary: 'Complete a chat' })
-  @ApiOkResponse({ type: AgentResponseDto })
+  @ApiCreatedResponse({ type: AgentResponseDto })
   @CompanyScope({ from: 'param', key: 'id', via: 'agent' })
   @Post(':id/complete')
   async completeChat(@Param('id') id: UUID): Promise<TcpAgent> {
@@ -232,7 +240,7 @@ export class AgentController {
    * The agent must be in `idle`, `paused`, or `failed` status.
    */
   @ApiOperation({ summary: 'Resume a paused or idle agent' })
-  @ApiOkResponse({ type: AgentResponseDto })
+  @ApiCreatedResponse({ type: AgentResponseDto })
   @CompanyScope({ from: 'param', key: 'id', via: 'agent' })
   @Post('resume/:id')
   async resumeAgent(@Param('id') id: UUID): Promise<TcpAgent> {

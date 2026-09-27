@@ -220,7 +220,7 @@ describe('getTaskAction', () => {
   });
 
   it('fetches the task by id', async () => {
-    mockedApiRequest.mockResolvedValueOnce({ task, assignments: [] });
+    mockedApiRequest.mockResolvedValueOnce({ ...task, assignments: [] });
 
     await getTaskAction(opts, { taskId: task.id });
 
@@ -365,7 +365,8 @@ describe('setPlannerAction', () => {
 
   it('sets the planner on a task target, scoping the role to the task company', async () => {
     mockedApiRequest.mockResolvedValueOnce({
-      task: { ...task, companyId: company.id },
+      ...task,
+      companyId: company.id,
       assignments: [],
     }); // GET task
     mockedApiRequest.mockResolvedValueOnce({

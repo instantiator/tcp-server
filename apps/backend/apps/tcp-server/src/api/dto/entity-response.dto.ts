@@ -101,7 +101,7 @@ const _taskStatusesExhaustive: Exhaustive<
 > = true;
 void _taskStatusesExhaustive;
 
-const ASSIGNMENT_MODES = [
+export const ASSIGNMENT_MODES = [
   'plan',
   'implement',
   'qa',

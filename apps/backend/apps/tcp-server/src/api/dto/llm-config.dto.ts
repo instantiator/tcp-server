@@ -18,4 +18,9 @@ export class LlmConfigDto {
   @IsOptional()
   @IsNumber()
   contextWindow?: number;
+
+  /** Per-request timeout in milliseconds for LLM API calls. */
+  @IsOptional()
+  @IsNumber()
+  timeoutMs?: number;
 }

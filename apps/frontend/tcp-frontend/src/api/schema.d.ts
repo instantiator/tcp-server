@@ -1234,6 +1234,34 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        DeviceAuthorizationResponseDto: {
+            device_code: string;
+            user_code: string;
+            verification_uri: string;
+            verification_uri_complete?: string;
+            expires_in: number;
+            interval: number;
+        };
+        DeviceTokenRequestDto: {
+            device_code: string;
+        };
+        DeviceTokenPollResponseDto: {
+            /** @enum {string} */
+            status: "pending" | "slow_down" | "complete";
+            access_token?: string;
+            token_type?: string;
+            expires_in?: number;
+            refresh_token?: string;
+        };
+        RefreshRequestDto: {
+            refresh_token: string;
+        };
+        OidcTokenResponseDto: {
+            access_token: string;
+            token_type: string;
+            expires_in: number;
+            refresh_token?: string;
+        };
         AssignmentResponseDto: {
             id: string;
             taskId?: string | null;
@@ -1280,6 +1308,7 @@ export interface components {
             baseUrl?: string;
             apiKey?: string;
             contextWindow?: number;
+            timeoutMs?: number;
         };
         CompanyListItemDto: {
             /** Format: uuid */
@@ -1442,6 +1471,19 @@ export interface components {
             content: string;
             authorIdentifier?: string;
         };
+        StorageChangesDto: {
+            moved: {
+                from: string;
+                to: string;
+            }[];
+            created: string[];
+            modified: string[];
+            deleted: string[];
+        };
+        InternalAgentResponseDto: {
+            storageChanges?: components["schemas"]["StorageChangesDto"] | null;
+            id: string;
+        };
         PauseDto: {
             /** @enum {string} */
             type: "user_input" | "agent_consultation";
@@ -1458,6 +1500,11 @@ export interface components {
             roleName?: string;
             userIds?: string[];
         };
+        PauseResponseDto: {
+            slug?: string;
+            consultationId?: string;
+            roleName?: string;
+        };
         CompleteDto: {
             output: string;
         };
@@ -1473,10 +1520,46 @@ export interface components {
                 to: string;
             }[];
         };
+        TaskResponseDto: {
+            id: string;
+            companyId: string;
+            request: string;
+            shortcode: string;
+            plannerRoleId?: string | null;
+            /** @enum {string} */
+            status: "ready" | "planning" | "in-progress" | "finalising" | "succeeded" | "failed" | "cancelled";
+            materials: Record<string, never>[];
+            expected: Record<string, never>[];
+            completed: Record<string, never>[] | null;
+            failureReason: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        AgentAssignmentResponseDto: {
+            task: components["schemas"]["TaskResponseDto"] | null;
+            assignment: components["schemas"]["AssignmentResponseDto"];
+        };
+        ResolvedMaterialDto: {
+            key: string | null;
+            name: string;
+            inlineText?: string;
+        };
+        StorageScopeResponseDto: {
+            /** @enum {string} */
+            mode: "plan" | "implement" | "qa" | "chat" | "consultee" | "finalise";
+            materials: components["schemas"]["ResolvedMaterialDto"][];
+            readOnly: boolean;
+            workingPrefix: string;
+        };
         PlanTaskDto: {
             /** Format: uuid */
             agentId: string;
             assignments: Record<string, never>[];
+        };
+        PlanCreatedResponseDto: {
+            created: number;
         };
         CompleteAssignmentDto: {
             /** Format: uuid */
@@ -1523,6 +1606,10 @@ export interface components {
             roles: components["schemas"]["RoleKnowledgeStatusResponseDto"][];
             shared: components["schemas"]["KnowledgeStatusResponseDto"];
         };
+        KnowledgeReindexResponseDto: {
+            /** @enum {boolean} */
+            reindexing: true;
+        };
         CreateRoleDto: {
             /** Format: uuid */
             companyId: string;
@@ -1538,8 +1625,22 @@ export interface components {
         ListFilesDto: {
             prefix?: string;
         };
+        StorageObjectDto: {
+            key: string;
+            name: string;
+            size: number;
+            /** Format: date-time */
+            lastModified: string;
+            etag?: string;
+        };
+        StorageEntriesResponseDto: {
+            entries: components["schemas"]["StorageObjectDto"][];
+        };
         ReadFileDto: {
             path: string;
+        };
+        FileContentResponseDto: {
+            content: string;
         };
         OriginatorsDto: {
             user?: string | null;
@@ -1552,24 +1653,45 @@ export interface components {
             overwrite?: boolean;
             originators?: components["schemas"]["OriginatorsDto"];
         };
+        StoredObjectResponseDto: {
+            key: string;
+            size: number;
+        };
         DeleteFileDto: {
             path: string;
             originators?: components["schemas"]["OriginatorsDto"];
         };
+        FileDeletedResponseDto: {
+            /** @enum {boolean} */
+            restorable: true;
+        };
         RestoreFileDto: {
             path: string;
             originators?: components["schemas"]["OriginatorsDto"];
+        };
+        FileRestoredResponseDto: {
+            /** @enum {boolean} */
+            restored: true;
         };
         AppendFileDto: {
             path: string;
             content: string;
             originators?: components["schemas"]["OriginatorsDto"];
         };
+        AppendFileResponseDto: {
+            key: string;
+            size: number;
+            created: boolean;
+        };
         ReplaceFileDto: {
             path: string;
             find: string;
             replace: string;
             originators?: components["schemas"]["OriginatorsDto"];
+        };
+        ReplaceFileResponseDto: {
+            key: string;
+            count: number;
         };
         SearchFilesDto: {
             prefix?: string;
@@ -1578,22 +1700,62 @@ export interface components {
         GetFilePropertiesDto: {
             path: string;
         };
+        FilePropertiesResponseDto: {
+            key: string;
+            exists: boolean;
+            size?: number;
+            contentType?: string;
+            /** Format: date-time */
+            lastModified?: string;
+        };
         CopyFileDto: {
             source: string;
             destination: string;
             originators?: components["schemas"]["OriginatorsDto"];
+        };
+        FileCopiedResponseDto: {
+            /** @enum {boolean} */
+            copied: true;
         };
         MoveFileDto: {
             source: string;
             destination: string;
             originators?: components["schemas"]["OriginatorsDto"];
         };
+        FileMovedResponseDto: {
+            /** @enum {boolean} */
+            moved: true;
+        };
         GetFileSummaryDto: {
             path: string;
+        };
+        MissingFilesResponseDto: {
+            missing: string[];
         };
         ValidateSharedDocumentDto: {
             path: string;
             recursive?: boolean;
+        };
+        ValidationEntryDto: {
+            path: string;
+            found: boolean;
+            size: number;
+            valid: boolean;
+            errors: string[];
+        };
+        ValidateSharedDocumentQueryDto: {
+            path: string;
+            recursive: boolean;
+        };
+        ValidateSharedDocumentResponseDto: {
+            validations: components["schemas"]["ValidationEntryDto"][];
+            query: components["schemas"]["ValidateSharedDocumentQueryDto"];
+        };
+        ShutdownStatusResponseDto: {
+            /** @enum {string} */
+            state: "idle" | "draining" | "quiesced";
+            forced: boolean;
+            agentsRunning: number;
         };
         TaskExpectedArtifactDto: {
             /** @enum {string} */
@@ -1614,29 +1776,17 @@ export interface components {
             expected?: components["schemas"]["TaskExpectedArtifactDto"][];
             materials?: components["schemas"]["InlineTextMaterialDto"][];
         };
-        TaskResponseDto: {
-            id: string;
-            companyId: string;
-            request: string;
-            shortcode: string;
-            plannerRoleId?: string | null;
-            /** @enum {string} */
-            status: "ready" | "planning" | "in-progress" | "finalising" | "succeeded" | "failed" | "cancelled";
-            materials: Record<string, never>[];
-            expected: Record<string, never>[];
-            completed: Record<string, never>[] | null;
-            failureReason: string | null;
-            /** Format: date-time */
-            createdAt: string;
-            /** Format: date-time */
-            updatedAt: string;
-        };
         UpdateTaskDto: {
             request?: string;
             /** Format: uuid */
             plannerRoleId?: string;
             expected?: components["schemas"]["TaskExpectedArtifactDto"][];
             materials?: components["schemas"]["InlineTextMaterialDto"][];
+        };
+        TaskMaterialResponseDto: {
+            key: string;
+            name: string;
+            size: number;
         };
         TaskDetailResponseDto: {
             id: string;
@@ -1716,6 +1866,21 @@ export interface components {
         SendMessageDto: {
             message: string;
         };
+        MessageAcceptedResponseDto: {
+            /** @enum {boolean} */
+            accepted: true;
+        };
+        ModelCheckDto: {
+            models: components["schemas"]["LlmConfigDto"][];
+        };
+        ModelCompatibilityResultDto: {
+            provider: string;
+            model: string;
+            supportsTools: boolean;
+            supportsStructuredOutput: boolean;
+            compatible: boolean;
+            error?: string;
+        };
         CreateAuditEventDto: {
             /** Format: uuid */
             companyId: string;
@@ -1755,7 +1920,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["DeviceAuthorizationResponseDto"];
                 };
             };
         };
@@ -1767,14 +1932,18 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceTokenRequestDto"];
+            };
+        };
         responses: {
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["DeviceTokenPollResponseDto"];
                 };
             };
         };
@@ -1786,14 +1955,18 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefreshRequestDto"];
+            };
+        };
         responses: {
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["OidcTokenResponseDto"];
                 };
             };
         };
@@ -1883,7 +2056,7 @@ export interface operations {
             };
         };
         responses: {
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2104,7 +2277,7 @@ export interface operations {
             };
         };
         responses: {
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2219,7 +2392,7 @@ export interface operations {
             };
         };
         responses: {
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2245,7 +2418,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["InternalAgentResponseDto"];
                 };
             };
         };
@@ -2267,7 +2440,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["PauseResponseDto"];
+                };
             };
         };
     };
@@ -2397,7 +2572,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["AgentAssignmentResponseDto"];
+                };
             };
         };
     };
@@ -2417,7 +2594,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["StorageScopeResponseDto"];
                 };
             };
         };
@@ -2441,7 +2618,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["PlanCreatedResponseDto"];
+                };
             };
         };
     };
@@ -2521,14 +2700,23 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                    /** @description Stored name. Defaults to the upload's name with a .md extension; giving one also allows overwriting an existing document. */
+                    filename?: string;
+                };
+            };
+        };
         responses: {
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["KnowledgeDocumentResponseDto"];
                 };
             };
         };
@@ -2651,14 +2839,23 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                    /** @description Stored name. Defaults to the upload's name with a .md extension; giving one also allows overwriting an existing document. */
+                    filename?: string;
+                };
+            };
+        };
         responses: {
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["KnowledgeDocumentResponseDto"];
                 };
             };
         };
@@ -2741,7 +2938,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["KnowledgeReindexResponseDto"];
+                };
             };
         };
     };
@@ -2758,7 +2957,7 @@ export interface operations {
             };
         };
         responses: {
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2850,7 +3049,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["StorageEntriesResponseDto"];
+                };
             };
         };
     };
@@ -2871,7 +3072,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["FileContentResponseDto"];
+                };
             };
         };
     };
@@ -2892,7 +3095,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["StoredObjectResponseDto"];
+                };
             };
         };
     };
@@ -2913,7 +3118,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["FileDeletedResponseDto"];
+                };
             };
         };
     };
@@ -2934,7 +3141,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["FileRestoredResponseDto"];
+                };
             };
         };
     };
@@ -2955,7 +3164,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["AppendFileResponseDto"];
+                };
             };
         };
     };
@@ -2976,7 +3187,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ReplaceFileResponseDto"];
+                };
             };
         };
     };
@@ -2997,7 +3210,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["StorageEntriesResponseDto"];
+                };
             };
         };
     };
@@ -3018,7 +3233,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["FilePropertiesResponseDto"];
+                };
             };
         };
     };
@@ -3039,7 +3256,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["FileCopiedResponseDto"];
+                };
             };
         };
     };
@@ -3060,7 +3279,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["FileMovedResponseDto"];
+                };
             };
         };
     };
@@ -3082,7 +3303,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": {
+                        path: string;
+                        size?: number;
+                        contentType: string;
+                        /** @description csv, csv-invalid, markdown, text, typescript, yaml, json-array, json-object or json-invalid */
+                        format?: string;
+                    } & {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
@@ -3090,7 +3319,8 @@ export interface operations {
     StorageActionsController_exists: {
         parameters: {
             query?: {
-                path?: unknown;
+                /** @description Repeat to ask about several paths */
+                path?: string[];
             };
             header?: never;
             path?: never;
@@ -3102,7 +3332,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MissingFilesResponseDto"];
+                };
             };
         };
     };
@@ -3134,13 +3366,22 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
         responses: {
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["StoredObjectResponseDto"];
+                };
             };
         };
     };
@@ -3162,7 +3403,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["ValidateSharedDocumentResponseDto"];
                 };
             };
         };
@@ -3181,7 +3422,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["ShutdownStatusResponseDto"];
                 };
             };
         };
@@ -3202,7 +3443,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["ShutdownStatusResponseDto"];
                 };
             };
         };
@@ -3221,7 +3462,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["ShutdownStatusResponseDto"];
                 };
             };
         };
@@ -3260,7 +3501,7 @@ export interface operations {
             };
         };
         responses: {
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3339,7 +3580,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["TaskMaterialResponseDto"];
                 };
             };
         };
@@ -3355,7 +3596,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3376,7 +3617,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3441,7 +3682,7 @@ export interface operations {
             };
         };
         responses: {
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3464,7 +3705,7 @@ export interface operations {
             };
         };
         responses: {
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3493,7 +3734,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MessageAcceptedResponseDto"];
+                };
             };
         };
     };
@@ -3508,7 +3751,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3550,7 +3793,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3652,14 +3895,18 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelCheckDto"];
+            };
+        };
         responses: {
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": components["schemas"]["ModelCompatibilityResultDto"][];
                 };
             };
         };

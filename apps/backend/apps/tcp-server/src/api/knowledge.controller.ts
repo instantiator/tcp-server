@@ -18,8 +18,11 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import {
+  ApiAcceptedResponse,
+  ApiBody,
   ApiConsumes,
   ApiBearerAuth,
+  ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -41,6 +44,7 @@ import {
   CompanyKnowledgeStatusResponseDto,
   KnowledgeChunkResponseDto,
   KnowledgeDocumentResponseDto,
+  KnowledgeReindexResponseDto,
   KnowledgeStatusResponseDto,
 } from './dto/knowledge-response.dto';
 import {
@@ -173,8 +177,24 @@ export class KnowledgeController {
    */
   @ApiOperation({ summary: 'Upload a document for a role' })
   @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        filename: {
+          type: 'string',
+          description:
+            "Stored name. Defaults to the upload's name with a .md extension; " +
+            'giving one also allows overwriting an existing document.',
+        },
+      },
+    },
+  })
   @CompanyScope({ from: 'param', key: 'roleId', via: 'role' })
   @Post('role/:roleId/knowledge')
+  @ApiCreatedResponse({ type: KnowledgeDocumentResponseDto })
   @UseInterceptors(FileInterceptor('file'))
   async storeRoleKnowledgeFile(
     @Param('roleId') roleId: UUID,
@@ -270,8 +290,24 @@ export class KnowledgeController {
    */
   @ApiOperation({ summary: 'Upload a company-shared document' })
   @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        filename: {
+          type: 'string',
+          description:
+            "Stored name. Defaults to the upload's name with a .md extension; " +
+            'giving one also allows overwriting an existing document.',
+        },
+      },
+    },
+  })
   @CompanyScope({ from: 'param', key: 'companyId', via: 'company' })
   @Post('company/:companyId/knowledge')
+  @ApiCreatedResponse({ type: KnowledgeDocumentResponseDto })
   @UseInterceptors(FileInterceptor('file'))
   async storeCompanyKnowledgeFile(
     @Param('companyId') companyId: string,
@@ -298,6 +334,7 @@ export class KnowledgeController {
   @CompanyScope({ from: 'param', key: 'companyId', via: 'company' })
   @Post('company/:companyId/knowledge/reindex')
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: KnowledgeReindexResponseDto })
   async reindexCompanyKnowledge(
     @Param('companyId') companyId: string,
     @Res({ passthrough: true }) res: Response,

@@ -77,11 +77,13 @@ export function readQueryAction(
     const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
 
-    const { conversation, messages, companyTimezone } = await apiRequest<{
-      conversation: Conversation;
-      messages: ConversationMessage[];
-      companyTimezone: string | null;
-    }>(api, 'GET', `/api/conversation/${slug}`);
+    // The conversation's own fields sit at the top level, beside its messages.
+    const { messages, companyTimezone, ...conversation } = await apiRequest<
+      Conversation & {
+        messages: ConversationMessage[];
+        companyTimezone: string | null;
+      }
+    >(api, 'GET', `/api/conversation/${slug}`);
 
     process.stdout.write(
       formatConversation(conversation, messages, companyTimezone),

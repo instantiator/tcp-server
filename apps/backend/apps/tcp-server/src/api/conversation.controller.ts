@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
   ApiQuery,
@@ -99,7 +100,7 @@ export class ConversationController {
    * reply injected as the first message on resume.
    */
   @ApiOperation({ summary: 'Reply to a conversation' })
-  @ApiOkResponse({ type: ConversationResponseDto })
+  @ApiCreatedResponse({ type: ConversationResponseDto })
   @CompanyScope({ from: 'param', key: 'slug', via: 'conversation' })
   @Post(':slug/reply')
   async reply(

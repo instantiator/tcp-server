@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import type { UUID } from 'crypto';
 import { IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 
@@ -30,4 +31,10 @@ export class SendMessageDto {
 export class CheckModelsDto {
   @IsOptional()
   models?: unknown[];
+}
+
+/** `POST /api/agent/:id/message`: the turn was queued; watch the agent's SSE stream. */
+export class MessageAcceptedResponseDto {
+  @ApiProperty({ enum: [true] })
+  accepted!: true;
 }

@@ -1,20 +1,18 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { ApiOkResponse } from '@nestjs/swagger';
 import {
   AuthTokenService,
   DeviceAuthorizationResponse,
   DeviceTokenPollResult,
   OidcTokenResponse,
 } from './auth-token.service';
-
-/** Request body for {@link AuthTokenController.pollDeviceToken}. */
-interface DeviceTokenRequest {
-  device_code: string;
-}
-
-/** Request body for {@link AuthTokenController.refreshToken}. */
-interface RefreshRequest {
-  refresh_token: string;
-}
+import {
+  DeviceAuthorizationResponseDto,
+  DeviceTokenPollResponseDto,
+  DeviceTokenRequestDto,
+  OidcTokenResponseDto,
+  RefreshRequestDto,
+} from './auth-token.dto';
 
 /**
  * Issues OIDC access tokens on behalf of callers.
@@ -35,6 +33,7 @@ export class AuthTokenController {
    */
   @Post('device')
   @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({ type: DeviceAuthorizationResponseDto })
   async startDeviceAuthorization(): Promise<DeviceAuthorizationResponse> {
     return this.authTokenService.startDeviceAuthorization();
   }
@@ -46,8 +45,9 @@ export class AuthTokenController {
    */
   @Post('device/token')
   @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({ type: DeviceTokenPollResponseDto })
   async pollDeviceToken(
-    @Body() body: DeviceTokenRequest,
+    @Body() body: DeviceTokenRequestDto,
   ): Promise<DeviceTokenPollResult> {
     return this.authTokenService.pollDeviceToken(body.device_code);
   }
@@ -58,7 +58,10 @@ export class AuthTokenController {
    */
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  async refreshToken(@Body() body: RefreshRequest): Promise<OidcTokenResponse> {
+  @ApiOkResponse({ type: OidcTokenResponseDto })
+  async refreshToken(
+    @Body() body: RefreshRequestDto,
+  ): Promise<OidcTokenResponse> {
     return this.authTokenService.refreshToken(body.refresh_token);
   }
 }

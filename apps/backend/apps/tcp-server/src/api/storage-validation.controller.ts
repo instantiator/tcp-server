@@ -6,29 +6,23 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CompanyMembershipGuard } from '../auth/company-membership.guard';
 import { CompanyScope } from '../auth/company-scope.decorator';
 import { StorageObject, StorageService } from '../storage/storage.service';
 import { ValidateSharedDocumentDto } from './dto/validate-shared-document.dto';
+import {
+  ValidateSharedDocumentResponseDto,
+  ValidationEntryDto,
+} from './dto/storage-response.dto';
 
 const GLOB_CHARS = /[*?]/;
-
-/** Result for a single document checked by {@link StorageValidationController.validate}. */
-interface ValidationEntry {
-  path: string;
-  found: boolean;
-  size: number;
-  valid: boolean;
-  errors: string[];
-}
-
-/** Response shape for `POST /api/storage/validate`. */
-interface ValidateSharedDocumentResponse {
-  query: { path: string; recursive: boolean };
-  validations: ValidationEntry[];
-}
 
 /** Splits a glob path into its literal (pre-wildcard) prefix, up to the last `/`. */
 function extractLiteralPrefix(path: string): string {
@@ -69,14 +63,15 @@ export class StorageValidationController {
   @CompanyScope({ from: 'body', key: 'path', via: 'storagePath' })
   @Post()
   @HttpCode(200)
+  @ApiOkResponse({ type: ValidateSharedDocumentResponseDto })
   async validate(
     @Body() body: ValidateSharedDocumentDto,
-  ): Promise<ValidateSharedDocumentResponse> {
+  ): Promise<ValidateSharedDocumentResponseDto> {
     const recursive = body.recursive ?? false;
     const paths = await this.resolvePaths(body.path, recursive);
 
     const validations = await Promise.all(
-      paths.map(async (path): Promise<ValidationEntry> => {
+      paths.map(async (path): Promise<ValidationEntryDto> => {
         const result = await this.storage.validateExisting(path);
         return { path, ...result };
       }),

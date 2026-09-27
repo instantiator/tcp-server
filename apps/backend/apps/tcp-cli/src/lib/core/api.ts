@@ -6,7 +6,11 @@
  * whether to crash or continue.
  */
 
+import type { TcpAssignment, TcpTask } from '@tcp/shared';
 import { printWarning } from './warn';
+
+/** `GET /api/task/:id`: the task's own fields at the top level, plus its assignments. */
+export type TaskDetailBody = TcpTask & { assignments: TcpAssignment[] };
 
 /** Header the server uses to report soft data-quality warnings (see `validation-warnings.ts` in tcp-server). */
 const WARNINGS_HEADER = 'X-Tcp-Warnings';
