@@ -38,6 +38,9 @@ export const FURNITURE_COLOURS: Record<FurnitureKind, number> = {
   officeDoor: 0x5c5148,
 };
 
+/** The pale block of pages on top of a role's book. */
+export const BOOK_PAGES_COLOUR = 0xf4f1e8;
+
 /** The floor grid's line colour. Drawn faint, at a low alpha, by the caller. */
 export const GRID_LINE_COLOUR = 0x1a2a1f;
 
