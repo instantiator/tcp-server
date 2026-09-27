@@ -9,7 +9,11 @@ import {
 import { t } from '../../../strings';
 import './CompanyVisualisation.css';
 import { emitTcpEvent } from './TcpPhaserEventBus';
-import type { HoverEvent, SelectionTarget } from './TcpPhaserEventBus';
+import type {
+  HoverEvent,
+  HoverTarget,
+  SelectionTarget,
+} from './TcpPhaserEventBus';
 import TcpPhaserVisualisation from './TcpPhaserVisualisation';
 import { PAN_STEP_PX, VisualisationToolbar } from './ui/VisualisationToolbar';
 import { VisualisationTooltip } from './ui/VisualisationTooltip';
@@ -22,11 +26,9 @@ export interface CompanyVisualisationProps {
   readonly companyId: string;
 }
 
-/** Whether `a` and `b` name the same role, task or agent. */
-const sameTarget = (
-  a: SelectionTarget | null,
-  b: SelectionTarget | null,
-): boolean => a !== null && b !== null && a.kind === b.kind && a.id === b.id;
+/** Whether `a` and `b` name the same thing in the office. */
+const sameTarget = (a: HoverTarget | null, b: HoverTarget | null): boolean =>
+  a !== null && b !== null && a.kind === b.kind && a.id === b.id;
 
 /**
  * The company's office, drawn as an isometric scene. `useOfficeWorld` turns
@@ -58,7 +60,7 @@ export default function CompanyVisualisation({
   const [hover, setHover] = useState<HoverEvent | null>(null);
   const [following, setFollowing] = useState(false);
   /** The target a tooltip was showing for when Escape last dismissed it. */
-  const [dismissedHover, setDismissedHover] = useState<SelectionTarget | null>(
+  const [dismissedHover, setDismissedHover] = useState<HoverTarget | null>(
     null,
   );
 

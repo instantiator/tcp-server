@@ -56,6 +56,8 @@ export const VisualisationTooltip = ({
     );
   }
 
+  if (target.kind !== 'task') return null;
+
   const task = snapshot.tasks.find((candidate) => candidate.id === target.id);
   if (task === undefined) return null;
   return (

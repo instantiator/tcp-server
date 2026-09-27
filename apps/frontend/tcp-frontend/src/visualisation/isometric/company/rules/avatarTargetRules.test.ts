@@ -49,6 +49,7 @@ function worldWithTaskAvatar(): { world: OfficeWorld; avatarId: string } {
     location: { x: 3, y: 3 },
     target: { kind: 'tile', tile: { x: 3, y: 3 } },
     placeAtTarget: false,
+    hasRole: true,
   });
   const claimed = claimDesk(
     created.world,
@@ -83,6 +84,7 @@ describe('applyAvatarTargetRules', () => {
       location: { x: 4, y: 4 },
       target: { kind: 'tile', tile: { x: 4, y: 4 } },
       placeAtTarget: false,
+      hasRole: true,
     });
 
     const next = applyAvatarTargetRules(

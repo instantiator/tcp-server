@@ -56,6 +56,7 @@ describe('closeTaskRooms', () => {
       location: { x: 3, y: 3 },
       target: { kind: 'tile', tile: { x: 3, y: 3 } },
       placeAtTarget: false,
+      hasRole: true,
     });
     world = created.world;
 

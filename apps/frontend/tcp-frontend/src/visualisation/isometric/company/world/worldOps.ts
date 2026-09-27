@@ -315,6 +315,7 @@ export function updateAvatar(
     merged.taskId === avatar.taskId &&
     merged.deskId === avatar.deskId &&
     merged.placeAtTarget === avatar.placeAtTarget &&
+    merged.hasRole === avatar.hasRole &&
     sameTile(merged.location, avatar.location) &&
     sameTarget(merged.target, avatar.target);
   if (unchanged) {

@@ -82,6 +82,7 @@ describe('applyAgentAvatarRules', () => {
       location: SPAWN_TILE,
       target: { kind: 'tile', tile: SPAWN_TILE },
       placeAtTarget: false,
+      hasRole: true,
     });
     const claimed = claimDesk(
       created.world,

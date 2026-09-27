@@ -54,6 +54,7 @@ describe('officeReducer', () => {
       location: { x: 0, y: 7 },
       target: { kind: 'exit' },
       placeAtTarget: false,
+      hasRole: true,
     });
     const claim = claimDesk(withAvatar, 'task:t1', avatarId);
     const state = { world: claim.world, snapshot: null };

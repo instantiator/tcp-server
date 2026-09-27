@@ -50,6 +50,7 @@ function makeAvatar(
     location,
     target,
     placeAtTarget: false,
+    hasRole: true,
     ...overrides,
   };
 }
