@@ -45,6 +45,8 @@
      rather than the bar punching through it. */
   --tcp-layer-dock: 10;
   --tcp-layer-dialog: 20;
+  /* Above a dialog, since a dialog's own controls can carry a tooltip. */
+  --tcp-layer-tooltip: 30;
 
   --tcp-dialog-max-width: 48rem;
   --tcp-transcript-max-height: 24rem;
@@ -53,6 +55,8 @@
   /* The side tray's fixed inline size (Stage D, 000.01). */
   --tcp-visualisation-tray-width: 20rem;
   --tcp-visualisation-tooltip-max-width: 16rem;
+  /* An icon inside a control, drawn at the control's text size or a little over. */
+  --tcp-icon-size: 1.25rem;
 }
 
 *,
@@ -465,4 +469,19 @@ body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/*
+ * React Aria ships tooltips unstyled, and one with no backing is text
+ * floating over whatever lies beneath it. It names an icon-only control, so
+ * it must read as clearly as the control's own text would.
+ */
+.react-aria-Tooltip {
+  z-index: var(--tcp-layer-tooltip);
+  max-inline-size: var(--tcp-visualisation-tooltip-max-width);
+  padding: var(--tcp-space-xs) var(--tcp-space-sm);
+  border: var(--tcp-border-width) solid var(--tcp-color-border);
+  border-radius: var(--tcp-radius);
+  background-color: var(--tcp-color-surface);
+  color: var(--tcp-color-text);
 }

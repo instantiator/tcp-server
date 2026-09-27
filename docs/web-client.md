@@ -749,8 +749,11 @@ target Node, with CommonJS and decorators. Prettier is shared with the root.
 ## The office view (company visualisation)
 
 `CompanyPage`'s first tab draws the company as an isometric office
-([000.01](<prompts/phase 03 - web visualisation/000.01.01.plan - set up isometric display elements.md>)).
-Code lives under `src/visualisation/isometric/company/`.
+([000.01](<prompts/phase 03 - web visualisation/000.01.01.plan - set up isometric display elements.md>),
+revised in [002.01](<prompts/phase 03 - web visualisation/002.01.01.plan - isometric display elements.md>)).
+Code lives under `src/visualisation/isometric/company/`. The stage fills the
+window below it, but never drops below `--tcp-visualisation-height`
+(`useStageTop.ts` measures where it starts).
 
 ### What it shows
 
@@ -758,19 +761,32 @@ Code lives under `src/visualisation/isometric/company/`.
   per role, always present), the **mail room** (chat and enquiry avatars,
   always present), the **corridor** with the **office door**, one **task room**
   per unfinished task, and one **1:1 room** per open consultation.
-- **Avatars.** A role avatar stands still at its spot in the rec room. An agent
-  avatar walks: to its desk while idle, to the whiteboard while working,
-  beside the avatar it is reviewing, to the 1:1 table while consulting, or to
-  the mail room's pigeonholes while messaging the user. An avatar whose agent
-  has finished — an idle desk, waiting for the next one — still shows and
-  still opens, now as its role.
-- **The tray, tooltip, picker, pan keys and full screen.** Hovering a role,
+- **Roles, as books.** Each role is a small book in its colour, at its spot in
+  the rec room, so a role never looks like an agent.
+- **Agent avatars.** A new avatar comes in at the office door, walks to its
+  role's book to collect it (`Avatar.hasRole`), then carries a small copy at
+  its side. From there it walks to its desk while idle, to the whiteboard while
+  working, beside the avatar it is reviewing, to the 1:1 table while
+  consulting, or to the mail room's pigeonholes while messaging the user. An
+  avatar whose agent has finished waits at its desk, still carrying its role,
+  for the next agent of that role in the same task, which reuses it rather
+  than walking in anew. It still opens, now as its role.
+- **Labels.** The "Labels" checkboxes under the toolbar turn on canvas labels
+  for agents, roles, furniture and rooms. `ui/officeLabels.ts` works out the
+  text and `scene/LabelLayer.ts` draws it. They are a visual aid; the picker
+  and tray give a screen reader the same facts.
+- **The tray, tooltips, picker, pan keys and full screen.** Hovering a role,
   task or agent shows a tooltip; clicking opens a side tray with its live
-  details. The toolbar's "Show details for…" picker is the keyboard route to
+  details. Furniture and doorways have hover-only tooltips saying what they
+  are for (`ui/officeDescriptions.ts`). The tray clips a long prompt with a
+  "…" that reveals the rest (`components/ExpandableText`). An active agent's
+  tray has a "Listen in" button, which opens the chat dialog read-only on its
+  live transcript. The toolbar's "Show details for…" picker is the keyboard route to
   the same tray (WCAG 2.1.1), and also how a keyboard user follows an object
   to the centre of the view. Arrow keys, WASD and the toolbar's pan buttons
-  scroll the stage; double-clicking empty space, or the toolbar's full-screen
-  button, toggles full screen.
+  (icons from `lucide-react`, laid out like arrow keys, each named and with a
+  tooltip) scroll the stage. Double-clicking empty space, or the toolbar's
+  full-screen button, toggles full screen.
 
 ### The layers
 
@@ -819,6 +835,11 @@ back only on arrival or exit.
   mock's job is to stand in for exactly the runtime values the React side
   touches — a construction argument, an event round-trip — not to reimplement
   Phaser.
+- **Overlays portal into the view, not the body.** The toolbar's tooltips and
+  the picker's popover pass `UNSTABLE_portalContainer` the view's own section:
+  in full screen only the full-screen element is drawn, and on the page they
+  stay inside its landmarks. React Aria's replacement, `UNSAFE_PortalProvider`,
+  isn't exported by react-aria-components.
 - **Consultation and "messaging the user" are read from the consultee
   assignment and the enquiry, never from `agent.pauseReason`.** A live agent
   event patches only `status` into the cached row, so `pauseReason` goes

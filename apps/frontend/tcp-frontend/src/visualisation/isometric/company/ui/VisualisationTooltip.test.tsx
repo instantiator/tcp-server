@@ -4,7 +4,10 @@ import { t } from '../../../../strings';
 import { expectNoA11yViolations } from '../../../../test-support/axe';
 import type { CompanySnapshot } from '../rules/companySnapshot';
 import type { HoverEvent } from '../TcpPhaserEventBus';
+import { createInitialWorld } from '../world/layout';
 import { VisualisationTooltip } from './VisualisationTooltip';
+
+const WORLD = createInitialWorld();
 
 const SNAPSHOT: CompanySnapshot = {
   roles: [{ id: 'role-1', name: 'Sales' }],
@@ -38,7 +41,7 @@ const hoverOn = (target: HoverEvent['target'], x = 10, y = 20): HoverEvent => ({
 describe('VisualisationTooltip', () => {
   it('renders nothing when hover is null', () => {
     const { container } = render(
-      <VisualisationTooltip hover={null} snapshot={SNAPSHOT} />,
+      <VisualisationTooltip hover={null} snapshot={SNAPSHOT} world={WORLD} />,
     );
 
     expect(container).toBeEmptyDOMElement();
@@ -47,6 +50,7 @@ describe('VisualisationTooltip', () => {
   it('renders nothing when the snapshot is null', () => {
     const { container } = render(
       <VisualisationTooltip
+        world={WORLD}
         hover={hoverOn({ kind: 'role', id: 'role-1' })}
         snapshot={null}
       />,
@@ -58,6 +62,7 @@ describe('VisualisationTooltip', () => {
   it('renders nothing when the target is not in the snapshot', () => {
     const { container } = render(
       <VisualisationTooltip
+        world={WORLD}
         hover={hoverOn({ kind: 'role', id: 'gone' })}
         snapshot={SNAPSHOT}
       />,
@@ -69,6 +74,7 @@ describe('VisualisationTooltip', () => {
   it("shows a role's tooltip text", () => {
     render(
       <VisualisationTooltip
+        world={WORLD}
         hover={hoverOn({ kind: 'role', id: 'role-1' })}
         snapshot={SNAPSHOT}
       />,
@@ -82,6 +88,7 @@ describe('VisualisationTooltip', () => {
   it("shows an agent's tooltip text, naming its role", () => {
     render(
       <VisualisationTooltip
+        world={WORLD}
         hover={hoverOn({ kind: 'agent', id: 'agent-1' })}
         snapshot={SNAPSHOT}
       />,
@@ -95,6 +102,7 @@ describe('VisualisationTooltip', () => {
   it("shows a task's step count and its request", () => {
     render(
       <VisualisationTooltip
+        world={WORLD}
         hover={hoverOn({ kind: 'task', id: 'task-1' })}
         snapshot={SNAPSHOT}
       />,
@@ -107,9 +115,67 @@ describe('VisualisationTooltip', () => {
     expect(tooltip).toHaveTextContent('Reconcile accounts');
   });
 
+  it("shows a doorway's room title and what the room is for", () => {
+    render(
+      <VisualisationTooltip
+        world={WORLD}
+        hover={hoverOn({ kind: 'room', id: 'mail' })}
+        snapshot={SNAPSHOT}
+      />,
+    );
+
+    const tooltip = screen.getByRole('tooltip');
+    expect(tooltip).toHaveTextContent(t('visualisation.room.mail'));
+    expect(tooltip).toHaveTextContent(t('visualisation.room.mail.description'));
+  });
+
+  it("shows a piece of furniture's title and purpose", () => {
+    const pigeonholes = WORLD.furniture.find(
+      (item) => item.kind === 'pigeonholes',
+    );
+    render(
+      <VisualisationTooltip
+        world={WORLD}
+        hover={hoverOn({ kind: 'furniture', id: pigeonholes?.id ?? '' })}
+        snapshot={SNAPSHOT}
+      />,
+    );
+
+    const tooltip = screen.getByRole('tooltip');
+    expect(tooltip).toHaveTextContent(t('visualisation.furniture.pigeonholes'));
+    expect(tooltip).toHaveTextContent(
+      t('visualisation.furniture.pigeonholes.description'),
+    );
+  });
+
+  it('renders nothing for furniture that has gone', () => {
+    const { container } = render(
+      <VisualisationTooltip
+        world={WORLD}
+        hover={hoverOn({ kind: 'furniture', id: 'gone' })}
+        snapshot={SNAPSHOT}
+      />,
+    );
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('has no accessibility violations while describing furniture', async () => {
+    const { container } = render(
+      <VisualisationTooltip
+        world={WORLD}
+        hover={hoverOn({ kind: 'room', id: 'rec' })}
+        snapshot={SNAPSHOT}
+      />,
+    );
+
+    await expectNoA11yViolations(container);
+  });
+
   it('is positioned at the pointer', () => {
     render(
       <VisualisationTooltip
+        world={WORLD}
         hover={hoverOn({ kind: 'role', id: 'role-1' }, 42, 99)}
         snapshot={SNAPSHOT}
       />,
@@ -123,6 +189,7 @@ describe('VisualisationTooltip', () => {
   it('has no accessibility violations while shown', async () => {
     const { container } = render(
       <VisualisationTooltip
+        world={WORLD}
         hover={hoverOn({ kind: 'task', id: 'task-1' })}
         snapshot={SNAPSHOT}
       />,

@@ -56,7 +56,12 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         // already on screen is an ordinary thing to do.
         if (index === -1) return [...previous, conversation];
         const next = [...previous];
-        next[index] = conversation;
+        // Listening in never takes the message field away from a chat that
+        // already has one open: it stays read-only only if both are.
+        const readOnly =
+          (previous[index]?.readOnly ?? false) &&
+          (conversation.readOnly ?? false);
+        next[index] = { ...conversation, readOnly };
         return next;
       });
 

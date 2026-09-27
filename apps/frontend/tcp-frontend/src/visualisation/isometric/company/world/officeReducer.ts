@@ -1,8 +1,8 @@
 import { applyRules } from '../rules/applyRules';
 import type { CompanySnapshot } from '../rules/companySnapshot';
 import { createInitialWorld } from './layout';
-import type { OfficeWorld, Tile } from './types';
-import { removeAvatar, updateAvatar } from './worldOps';
+import type { Avatar, OfficeWorld, Tile } from './types';
+import { avatarById, removeAvatar, updateAvatar } from './worldOps';
 
 /** The office reducer's state: the world, and the snapshot the rules last saw. */
 export interface OfficeState {
@@ -27,6 +27,26 @@ export function createInitialOfficeState(): OfficeState {
 }
 
 /**
+ * `{ hasRole: true }` when the arriving avatar's target was its own role's
+ * book — the pickup stop `avatarTargetRules` sends an unrolled avatar to —
+ * so it now carries its role. `{}` otherwise, so an arrival anywhere else
+ * leaves `hasRole` as it was.
+ */
+function arrivedAtRolePatch(
+  world: OfficeWorld,
+  avatarId: string,
+): Partial<Pick<Avatar, 'hasRole'>> {
+  const avatar = avatarById(world, avatarId);
+  if (avatar === undefined) {
+    return {};
+  }
+  const target = avatar.target;
+  return target.kind === 'avatar' && target.avatarId === `role:${avatar.roleId}`
+    ? { hasRole: true }
+    : {};
+}
+
+/**
  * Applies one action, then re-runs the rules so the world catches up with
  * whatever changed. Returns the same state object when nothing did.
  */
@@ -46,7 +66,10 @@ export function officeReducer(
 
   const worldAfterAction =
     action.type === 'avatarArrived'
-      ? updateAvatar(state.world, action.avatarId, { location: action.tile })
+      ? updateAvatar(state.world, action.avatarId, {
+          location: action.tile,
+          ...arrivedAtRolePatch(state.world, action.avatarId),
+        })
       : removeAvatar(state.world, action.avatarId);
 
   const world =

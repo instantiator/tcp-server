@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
@@ -9,24 +10,29 @@ import {
 import { t } from '../../../strings';
 import './CompanyVisualisation.css';
 import { emitTcpEvent } from './TcpPhaserEventBus';
-import type { HoverEvent, SelectionTarget } from './TcpPhaserEventBus';
+import type {
+  HoverEvent,
+  HoverTarget,
+  SelectionTarget,
+} from './TcpPhaserEventBus';
 import TcpPhaserVisualisation from './TcpPhaserVisualisation';
+import { LabelTogglesControl } from './ui/LabelToggles';
+import { buildOfficeLabels, type LabelToggles } from './ui/officeLabels';
 import { PAN_STEP_PX, VisualisationToolbar } from './ui/VisualisationToolbar';
 import { VisualisationTooltip } from './ui/VisualisationTooltip';
 import { VisualisationTray } from './ui/VisualisationTray';
 import { useFullscreen } from './useFullscreen';
 import { useOfficeWorld } from './useOfficeWorld';
 import { useReducedMotion } from './useReducedMotion';
+import { useStageTop } from './useStageTop';
 
 export interface CompanyVisualisationProps {
   readonly companyId: string;
 }
 
-/** Whether `a` and `b` name the same role, task or agent. */
-const sameTarget = (
-  a: SelectionTarget | null,
-  b: SelectionTarget | null,
-): boolean => a !== null && b !== null && a.kind === b.kind && a.id === b.id;
+/** Whether `a` and `b` name the same thing in the office. */
+const sameTarget = (a: HoverTarget | null, b: HoverTarget | null): boolean =>
+  a !== null && b !== null && a.kind === b.kind && a.id === b.id;
 
 /**
  * The company's office, drawn as an isometric scene. `useOfficeWorld` turns
@@ -51,14 +57,31 @@ export default function CompanyVisualisation({
   const reducedMotion = useReducedMotion();
 
   const containerRef = useRef<HTMLElement | null>(null);
+  // The same element as state too: overlays portal into it, and a ref alone
+  // wouldn't re-render them once it exists.
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(
+    null,
+  );
   const stageRef = useRef<HTMLDivElement | null>(null);
   const { isFullscreen, toggle } = useFullscreen(containerRef);
+  // Stable, so React attaches it once rather than detaching and re-attaching
+  // it — and setting state — on every render.
+  const attachContainer = useCallback((element: HTMLElement | null) => {
+    containerRef.current = element;
+    setPortalContainer(element);
+  }, []);
+  useStageTop(stageRef);
 
   const [selection, setSelection] = useState<SelectionTarget | null>(null);
   const [hover, setHover] = useState<HoverEvent | null>(null);
   const [following, setFollowing] = useState(false);
+  const [labelToggles, setLabelToggles] = useState<LabelToggles>([]);
+  const labels = useMemo(
+    () => buildOfficeLabels(world, snapshot, labelToggles),
+    [world, snapshot, labelToggles],
+  );
   /** The target a tooltip was showing for when Escape last dismissed it. */
-  const [dismissedHover, setDismissedHover] = useState<SelectionTarget | null>(
+  const [dismissedHover, setDismissedHover] = useState<HoverTarget | null>(
     null,
   );
 
@@ -156,7 +179,7 @@ export default function CompanyVisualisation({
   }, []);
 
   return (
-    <section ref={containerRef} className="company-visualisation">
+    <section ref={attachContainer} className="company-visualisation">
       <VisualisationToolbar
         snapshot={snapshot}
         selection={selection}
@@ -164,7 +187,9 @@ export default function CompanyVisualisation({
         onPan={pan}
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggle}
+        portalContainer={portalContainer ?? undefined}
       />
+      <LabelTogglesControl value={labelToggles} onChange={setLabelToggles} />
       <div className="company-visualisation__main">
         {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the stage is a labelled pan surface; its toolbar buttons are the non-pointer route (ADR-026) */}
         <div
@@ -181,6 +206,7 @@ export default function CompanyVisualisation({
           <TcpPhaserVisualisation
             world={world}
             reducedMotion={reducedMotion}
+            labels={labels}
             followTarget={followTarget}
             onAvatarArrived={avatarArrived}
             onAvatarExited={avatarExited}
@@ -190,7 +216,11 @@ export default function CompanyVisualisation({
               setFollowing(false);
             }}
           />
-          <VisualisationTooltip hover={shownHover} snapshot={snapshot} />
+          <VisualisationTooltip
+            hover={shownHover}
+            snapshot={snapshot}
+            world={world}
+          />
         </div>
         {selection !== null && (
           <VisualisationTray

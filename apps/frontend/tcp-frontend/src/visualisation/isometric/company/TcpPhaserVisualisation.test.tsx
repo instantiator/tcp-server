@@ -112,6 +112,28 @@ describe('TcpPhaserVisualisation', () => {
     offTcpEvent({ event: 'camera-follow', fn: onCameraFollow });
   });
 
+  it('emits labels-changed on scene-ready and when the labels change', () => {
+    const labels = [
+      {
+        id: 'room:rec',
+        text: 'Rec room',
+        anchor: { kind: 'tile', tile: { x: 1, y: 1 } },
+      } as const,
+    ];
+    const { rerender } = renderVisualisation();
+
+    const onLabels = vi.fn();
+    onTcpEvent({ event: 'labels-changed', fn: onLabels });
+
+    emitTcpEvent({ event: 'scene-ready', value: undefined });
+    expect(lastValue(onLabels)).toEqual([]);
+
+    rerender(<TcpPhaserVisualisation world={WORLD} labels={labels} />);
+    expect(lastValue(onLabels)).toEqual(labels);
+
+    offTcpEvent({ event: 'labels-changed', fn: onLabels });
+  });
+
   it('emits world-changed when the world prop changes', () => {
     const { rerender } = renderVisualisation();
 

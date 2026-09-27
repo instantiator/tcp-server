@@ -1,0 +1,8 @@
+/*
+ * Meaningful class names now, rules filled per theme later (ADR-026). No
+ * literal colour, spacing or border value may appear here.
+ */
+
+/* The control that reveals, or hides again, the rest of a clipped text. */
+.expandable-text__toggle {
+}

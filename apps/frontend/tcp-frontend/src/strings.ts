@@ -69,6 +69,9 @@ const strings = {
   'chat.dialog.heading': 'Chats',
   'chat.conversation.label': 'Chat with {role}',
   'chat.conversation.labelWithReference': 'Chat with {role} ({reference})',
+  'chat.conversation.listening': 'Listening in: {role}',
+  'chat.conversation.listeningWithReference':
+    'Listening in: {role} ({reference})',
   'chat.complete': 'Complete the chat with {role}',
   'chat.message.label': 'Message {role}',
   'chat.send': 'Send',
@@ -258,6 +261,10 @@ const strings = {
   'company.tab.visualisation': 'Company view',
   'company.tab.activity': 'Activity',
 
+  // `components/ExpandableText`: a long text clipped to its opening.
+  'expandableText.truncated': '{excerpt}…',
+  'expandableText.showLess': 'Show less',
+
   // The isometric office view.
   'visualisation.stage.label': 'Office view',
   'visualisation.summary':
@@ -285,6 +292,55 @@ const strings = {
   'visualisation.tooltip.role': 'Role: {role}',
   'visualisation.tooltip.task': 'Task: ({step}/{steps})',
 
+  // Canvas labels (`ui/officeLabels.ts`), each kind behind a checkbox.
+  'visualisation.labels.label': 'Labels',
+  'visualisation.labels.agents': 'Agents',
+  'visualisation.labels.roles': 'Roles',
+  'visualisation.labels.furniture': 'Furniture',
+  'visualisation.labels.rooms': 'Rooms',
+  'visualisation.label.agent': 'Agent: {role} ({activity})',
+  'visualisation.label.role': 'Role: {role}',
+  'visualisation.activity.atDesk': 'at desk',
+  'visualisation.activity.working': 'working',
+  'visualisation.activity.reviewing': 'reviewing',
+  'visualisation.activity.consulting': 'consulting',
+  'visualisation.activity.messagingUser': 'messaging a user',
+  'visualisation.activity.finished': 'finished',
+  'visualisation.activity.waiting': 'waiting',
+
+  // Furniture and room titles double as their canvas labels; the
+  // descriptions are the tooltip's second line.
+  'visualisation.furniture.desk': 'Desk: {role}',
+  'visualisation.furniture.deskUnowned': 'Desk',
+  'visualisation.furniture.desk.description':
+    'An agent of this role works here, and waits here between steps.',
+  'visualisation.furniture.whiteboard': 'Whiteboard',
+  'visualisation.furniture.sofa': 'Sofa',
+  'visualisation.furniture.sofa.description':
+    "Part of the rec room, where the company's roles are kept.",
+  'visualisation.furniture.pigeonholes': 'Pigeon holes',
+  'visualisation.furniture.pigeonholes.description':
+    'Agents come here while they wait for an answer from a user.',
+  'visualisation.furniture.table': 'Meeting table',
+  'visualisation.furniture.table.description':
+    'Two agents sit here to consult each other.',
+  'visualisation.furniture.officeDoor': 'Office door',
+  'visualisation.furniture.officeDoor.description':
+    'Agents arrive and leave here.',
+  'visualisation.room.task': 'Task room: {shortcode}',
+  'visualisation.room.task.description':
+    'Agents work on task {shortcode} here.',
+  'visualisation.room.oneToOne': '1:1 room',
+  'visualisation.room.oneToOne.description':
+    "Used for a conversation between '{roleA}' and '{roleB}'.",
+  'visualisation.room.oneToOne.descriptionUnknown':
+    'Used for a conversation between two agents.',
+  'visualisation.room.rec': 'Rec room',
+  'visualisation.room.rec.description':
+    "The company's roles are kept here. New agents collect their role here.",
+  'visualisation.room.mail': 'Mail room',
+  'visualisation.room.mail.description': "Agents wait here for a user's reply.",
+
   // The side tray (`ui/VisualisationTray.tsx` and its per-kind panels). Not a
   // dialog: nothing here is announced, and the tray's body is read by
   // browsing rather than spoken.
@@ -298,9 +354,12 @@ const strings = {
   'visualisation.tray.mode': 'Mode',
   'visualisation.tray.assignmentStatus': 'Assignment status',
   'visualisation.tray.prompt': 'Prompt',
+  'visualisation.tray.prompt.expand': 'Show the full prompt',
+  'visualisation.tray.prompt.collapse': 'Show less of the prompt',
   'visualisation.tray.assignments': 'Assignments',
   'visualisation.tray.assignmentRow': '{role} — {mode} — {status}',
   'visualisation.tray.follow': 'Follow',
+  'visualisation.tray.listenIn': 'Listen in to {role}',
   'visualisation.tray.close': 'Close details',
 
   // Assignment modes, the office's word for each — `modeLabel` in
@@ -331,7 +390,6 @@ const strings = {
   // reads (ADR-021), and because a translation may not mark truncation the same
   // way. The pair below name the role, so the several expanders a page can hold
   // at once are told apart (WCAG 2.4.6) — the same shape as `activity.chats.open`.
-  'activity.agents.prompt.truncated': '{excerpt}…',
   'activity.agents.prompt.expand': 'Show the full prompt for {role}',
   'activity.agents.prompt.collapse': 'Show less of the prompt for {role}',
 

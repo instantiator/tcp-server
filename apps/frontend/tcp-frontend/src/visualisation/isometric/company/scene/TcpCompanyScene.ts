@@ -1,22 +1,28 @@
 import { Scene, Scenes, type GameObjects } from 'phaser';
-import { depthOf, tileToScreen } from '../motion/iso';
+import { TILE_HEIGHT, TILE_WIDTH, depthOf, tileToScreen } from '../motion/iso';
 import type { CrowdEvent } from '../motion/crowd';
 import { Crowd } from '../motion/crowd';
-import type { SelectionTarget } from '../TcpPhaserEventBus';
+import type { OfficeLabel, SelectionTarget } from '../TcpPhaserEventBus';
 import { emitTcpEvent, offTcpEvent, onTcpEvent } from '../TcpPhaserEventBus';
 import { mapBounds } from '../world/layout';
 import { renderRegion } from '../world/renderRegion';
 import type { Avatar, Bounds, OfficeWorld, Tile } from '../world/types';
 import { AvatarSprite } from './AvatarSprite';
 import { CameraController } from './CameraController';
+import { LabelLayer } from './LabelLayer';
 import { drawFloors } from './drawFloors';
-import { drawFurniture } from './drawFurniture';
+import { FURNITURE_SIZES, drawFurniture } from './drawFurniture';
 import { drawWalls } from './drawWalls';
 import { createHitZone } from './hitZone';
 
 /** A whiteboard's hit zone: footprint and lift above the tile centre, in pixels. */
 const WHITEBOARD_ZONE_SIZE = 44;
 const WHITEBOARD_ZONE_LIFT = 15;
+/**
+ * How far below its tile's depth a doorway's zone sits, so an avatar
+ * standing in the doorway takes the pointer rather than the door.
+ */
+const DOOR_ZONE_DEPTH_OFFSET = 0.5;
 
 /**
  * The isometric office scene. React works out the whole office and sends it
@@ -31,6 +37,7 @@ const WHITEBOARD_ZONE_LIFT = 15;
  */
 export class TcpCompanyScene extends Scene {
   private cameraController!: CameraController;
+  private labelLayer!: LabelLayer;
   private staticObjects: GameObjects.GameObject[] = [];
   private readonly avatarSprites = new Map<string, AvatarSprite>();
   private whiteboardsByTaskId = new Map<string, GameObjects.IsoBox>();
@@ -46,6 +53,7 @@ export class TcpCompanyScene extends Scene {
 
   create(): void {
     this.cameraController = new CameraController(this);
+    this.labelLayer = new LabelLayer(this);
 
     onTcpEvent({ event: 'world-changed', fn: this.handleWorldChanged });
     onTcpEvent({
@@ -54,6 +62,7 @@ export class TcpCompanyScene extends Scene {
     });
     onTcpEvent({ event: 'camera-pan', fn: this.handleCameraPan });
     onTcpEvent({ event: 'camera-follow', fn: this.handleCameraFollow });
+    onTcpEvent({ event: 'labels-changed', fn: this.handleLabelsChanged });
 
     this.events.once(Scenes.Events.SHUTDOWN, this.removeListeners);
     this.events.once(Scenes.Events.DESTROY, this.removeListeners);
@@ -63,6 +72,13 @@ export class TcpCompanyScene extends Scene {
 
   private readonly handleWorldChanged = (world: OfficeWorld): void => {
     this.syncWorld(world);
+  };
+
+  private readonly handleLabelsChanged = (
+    labels: readonly OfficeLabel[],
+  ): void => {
+    this.labelLayer.sync(labels);
+    this.labelLayer.follow((id) => this.crowd.positionOf(id));
   };
 
   private readonly handleMotionPreference = (value: {
@@ -101,7 +117,9 @@ export class TcpCompanyScene extends Scene {
     });
     offTcpEvent({ event: 'camera-pan', fn: this.handleCameraPan });
     offTcpEvent({ event: 'camera-follow', fn: this.handleCameraFollow });
+    offTcpEvent({ event: 'labels-changed', fn: this.handleLabelsChanged });
     this.cameraController.destroy();
+    this.labelLayer.destroy();
   };
 
   private syncWorld(world: OfficeWorld): void {
@@ -136,6 +154,7 @@ export class TcpCompanyScene extends Scene {
         sprite.setTilePosition(position);
       }
     }
+    this.labelLayer.follow((id) => this.crowd.positionOf(id));
 
     for (const event of events) {
       this.emitCrowdEvent(event);
@@ -182,6 +201,7 @@ export class TcpCompanyScene extends Scene {
       ...drawWalls(this, region),
       ...furniture.values(),
       ...zones,
+      ...this.buildDescriptionZones(world),
     ];
 
     if (isFirstDraw) {
@@ -246,6 +266,53 @@ export class TcpCompanyScene extends Scene {
   }
 
   /**
+   * Hover-only zones that let furniture and doorways explain themselves in
+   * a tooltip. Whiteboards are left out: their own zone opens the task.
+   */
+  private buildDescriptionZones(world: OfficeWorld): GameObjects.Zone[] {
+    const zones: GameObjects.Zone[] = [];
+
+    for (const item of world.furniture) {
+      if (item.kind === 'whiteboard') {
+        continue;
+      }
+      const { size, height } = FURNITURE_SIZES[item.kind];
+      const { x, y } = tileToScreen(item.tile);
+      const target = { kind: 'furniture', id: item.id } as const;
+      const zone = createHitZone(
+        this,
+        x,
+        y - height / 2,
+        size,
+        size / 2 + height,
+        () => target,
+      );
+      zone.setDepth(depthOf(item.tile));
+      zones.push(zone);
+    }
+
+    for (const room of world.rooms) {
+      if (room.door === null) {
+        continue;
+      }
+      const { x, y } = tileToScreen(room.door);
+      const target = { kind: 'room', id: room.id } as const;
+      const zone = createHitZone(
+        this,
+        x,
+        y,
+        TILE_WIDTH,
+        TILE_HEIGHT,
+        () => target,
+      );
+      zone.setDepth(depthOf(room.door) - DOOR_ZONE_DEPTH_OFFSET);
+      zones.push(zone);
+    }
+
+    return zones;
+  }
+
+  /**
    * Creates a sprite for each new avatar and destroys one for each avatar
    * gone from the world. Positioning is the crowd's job from here: a new
    * sprite starts at the avatar's last known location only until the next
@@ -270,6 +337,7 @@ export class TcpCompanyScene extends Scene {
         );
         this.avatarSprites.set(avatar.id, sprite);
       }
+      sprite.setHasRole(avatar.hasRole);
       sprite.setSelection(
         avatar.agentId !== null
           ? { kind: 'agent', id: avatar.agentId }

@@ -4,7 +4,7 @@ NestJS monorepo for the TCP simulation: `tcp-server` (REST API + orchestration),
 
 ## Mandatory instructions
 
-Follow `AGENTS.md` in this repo — it contains the dev-environment rules (mandatory, overriding defaults) and the skills routing table. Route to further guidance via `dev-environment/guidance/index.md`, loading only what the task needs.
+Follow `AGENTS.md` in this repo — it contains the dev-qual rules (mandatory, overriding defaults) and the skills routing table. Route to further guidance via `dev-qual/guidance/index.md`, loading only what the task needs.
 
 ## Project knowledge (lazy-load as needed)
 
@@ -17,7 +17,7 @@ Follow `AGENTS.md` in this repo — it contains the dev-environment rules (manda
 - Skills are installed at `.claude/skills/` — prefer invoking them over improvising the same workflow.
 - **Sub-agents are granted standing, without asking each time.** Phase prompts allocate work across models (`docs/prompts/*/model-allocation.md`), so delegating a step is the working method here, not an escalation. The allocation rules still apply: a delegated step needs its files, decisions, done-condition and boundary written out first, and Opus keeps security, authorisation, accessibility, concurrency and lifecycle work.
 - Git hooks run the quality gate: pre-commit runs `check.sh --fast`, pre-push runs the full gate plus schema/licence/migration drift checks. A failing hook means fix the reported problems — never `--no-verify`.
-- After every change, run `./dev-environment/scripts/check.sh` and fix what it reports.
+- After every change, run `./dev-qual/scripts/check.sh` and fix what it reports.
 
 <!-- dev-qual:start -->
 

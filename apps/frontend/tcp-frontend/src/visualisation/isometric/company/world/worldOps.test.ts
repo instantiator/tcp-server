@@ -38,6 +38,7 @@ function makeAvatar(overrides: Partial<Avatar> = {}): Avatar {
     location: { x: 0, y: 7 },
     target: { kind: 'exit' },
     placeAtTarget: false,
+    hasRole: true,
     ...overrides,
   };
 }
@@ -321,6 +322,7 @@ describe('addAgentAvatar', () => {
       location: { x: 0, y: 7 },
       target: { kind: 'exit' },
       placeAtTarget: false,
+      hasRole: true,
     });
     expect(avatarId).toBe('agent-avatar:1');
     expect(avatarById(next, avatarId)?.kind).toBe('agent');

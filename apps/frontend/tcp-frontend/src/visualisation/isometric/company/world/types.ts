@@ -107,6 +107,12 @@ export interface Avatar {
    * page load doesn't show everyone walking in from the door.
    */
   readonly placeAtTarget: boolean;
+  /**
+   * The avatar carries its role. A new agent avatar walks to its role in
+   * the rec room to collect it before heading anywhere else. Role avatars,
+   * and avatars placed from the first snapshot, start with it.
+   */
+  readonly hasRole: boolean;
 }
 
 /** The whole office. The reducer produces a new one, and the scene draws it. */

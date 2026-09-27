@@ -83,8 +83,15 @@ export const ChatConversation = ({
     section.current?.focus();
   }, [finished]);
 
-  const heading =
-    conversation.reference === null
+  const readOnly = conversation.readOnly ?? false;
+  const heading = readOnly
+    ? conversation.reference === null
+      ? t('chat.conversation.listening', { role: roleName })
+      : t('chat.conversation.listeningWithReference', {
+          role: roleName,
+          reference: conversation.reference,
+        })
+    : conversation.reference === null
       ? t('chat.conversation.label', { role: roleName })
       : t('chat.conversation.labelWithReference', {
           role: roleName,
@@ -112,7 +119,7 @@ export const ChatConversation = ({
         open panel has one of these buttons, and several identically-named
         controls on one screen fail WCAG 2.4.6.
       */}
-      {!finished && (
+      {!finished && !readOnly && (
         <Button
           className="react-aria-Button chat-conversation__complete"
           // Disabled rather than queued: a turn is in flight, and completing
@@ -126,7 +133,10 @@ export const ChatConversation = ({
         </Button>
       )}
       <Transcript agentId={agentId} roleName={roleName} />
-      <MessageInput agentId={agentId} roleName={roleName} status={status} />
+      {/* Listening in is not a conversation: nothing to send. */}
+      {!readOnly && (
+        <MessageInput agentId={agentId} roleName={roleName} status={status} />
+      )}
       {/*
         Its own announcer channel, not the `chat:` one the message form uses:
         two failures on one channel coalesce into a single phrase, and a failed

@@ -6,6 +6,7 @@ import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { statusLabel } from '../../../../api/statuses';
 import { applyEvent } from '../../../../events/cache';
+import { ChatContext } from '../../../../components/ChatDialog/useChat';
 import { t } from '../../../../strings';
 import { expectNoA11yViolations } from '../../../../test-support/axe';
 import {
@@ -123,19 +124,22 @@ const renderTray = (
   });
   const onToggleFollow = vi.fn();
   const onClose = vi.fn();
+  const openChat = vi.fn();
   const utils = render(
     <QueryClientProvider client={queryClient}>
-      <VisualisationTray
-        companyId={COMPANY_ID}
-        selection={{ kind: 'agent', id: AGENT_ID }}
-        following={false}
-        onToggleFollow={onToggleFollow}
-        onClose={onClose}
-        {...overrides}
-      />
+      <ChatContext.Provider value={{ openChat, startChat: vi.fn() }}>
+        <VisualisationTray
+          companyId={COMPANY_ID}
+          selection={{ kind: 'agent', id: AGENT_ID }}
+          following={false}
+          onToggleFollow={onToggleFollow}
+          onClose={onClose}
+          {...overrides}
+        />
+      </ChatContext.Provider>
     </QueryClientProvider>,
   );
-  return { ...utils, queryClient, onToggleFollow, onClose };
+  return { ...utils, queryClient, onToggleFollow, onClose, openChat };
 };
 
 /** A live `agent` `state_change`, in the shape the company stream sends it. */
@@ -180,6 +184,36 @@ describe('VisualisationTray', () => {
     ).toBeInTheDocument();
   });
 
+  it('listens in on an active agent through the chat dialog, read-only', async () => {
+    respond();
+    const { openChat } = renderTray();
+
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: t('visualisation.tray.listenIn', { role: ROLE_NAME }),
+      }),
+    );
+
+    expect(openChat).toHaveBeenCalledWith({
+      agentId: AGENT_ID,
+      roleName: ROLE_NAME,
+      reference: 'A1',
+      readOnly: true,
+    });
+  });
+
+  it('offers no listening in once the agent has finished', async () => {
+    respond({ agent: { body: agentFixture('completed') } });
+    renderTray();
+
+    await screen.findByText(statusLabel('completed'));
+    expect(
+      screen.queryByRole('button', {
+        name: t('visualisation.tray.listenIn', { role: ROLE_NAME }),
+      }),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows a task's heading and live details, including its assignments", async () => {
     respond();
     renderTray({ selection: { kind: 'task', id: TASK_ID } });
@@ -200,6 +234,21 @@ describe('VisualisationTray', () => {
         }),
       ),
     ).toBeInTheDocument();
+  });
+
+  it("clips a long task request to an excerpt with a '…' that reveals the rest", async () => {
+    const longRequest =
+      'Reconcile every account in the September ledger against the bank statements, tracing each discrepancy back to the journal entry that raised it, and write up what you find for the finance team.';
+    respond({ tasks: { body: [{ ...taskFixture(), request: longRequest }] } });
+    renderTray({ selection: { kind: 'task', id: TASK_ID } });
+
+    const more = await screen.findByRole('button', {
+      name: t('visualisation.tray.prompt.expand'),
+    });
+    expect(screen.queryByText(longRequest)).not.toBeInTheDocument();
+
+    await userEvent.click(more);
+    expect(screen.getByText(longRequest)).toBeInTheDocument();
   });
 
   it("shows a role's heading and description", async () => {

@@ -13,7 +13,7 @@ interface FurnitureSize {
  * Every kind's placeholder size. The office door is drawn almost flat, as a
  * doormat rather than a box, because it is walkable.
  */
-const FURNITURE_SIZES: Record<FurnitureKind, FurnitureSize> = {
+export const FURNITURE_SIZES: Record<FurnitureKind, FurnitureSize> = {
   desk: { size: 44, height: 14 },
   whiteboard: { size: 40, height: 30 },
   sofa: { size: 56, height: 12 },

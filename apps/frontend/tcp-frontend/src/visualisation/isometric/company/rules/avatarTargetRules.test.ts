@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import { createInitialWorld, MAIL_ROOM_ID, taskRoomId } from '../world/layout';
 import type { Avatar, OfficeWorld } from '../world/types';
-import { addAgentAvatar, addRoom, claimDesk } from '../world/worldOps';
+import {
+  addAgentAvatar,
+  addAvatar,
+  addRoom,
+  claimDesk,
+} from '../world/worldOps';
 import { applyAvatarTargetRules } from './avatarTargetRules';
 import type { CompanySnapshot, SnapshotAgent } from './companySnapshot';
 
@@ -33,7 +38,10 @@ function requireAvatar(
 }
 
 /** A task room with one avatar in it, holding a desk but with no target set by any rule yet. */
-function worldWithTaskAvatar(): { world: OfficeWorld; avatarId: string } {
+function worldWithTaskAvatar(overrides: { hasRole?: boolean } = {}): {
+  world: OfficeWorld;
+  avatarId: string;
+} {
   const withRoom = addRoom(
     createInitialWorld(),
     'task',
@@ -49,6 +57,7 @@ function worldWithTaskAvatar(): { world: OfficeWorld; avatarId: string } {
     location: { x: 3, y: 3 },
     target: { kind: 'tile', tile: { x: 3, y: 3 } },
     placeAtTarget: false,
+    hasRole: overrides.hasRole ?? true,
   });
   const claimed = claimDesk(
     created.world,
@@ -56,6 +65,23 @@ function worldWithTaskAvatar(): { world: OfficeWorld; avatarId: string } {
     created.avatarId,
   );
   return { world: claimed.world, avatarId: created.avatarId };
+}
+
+/** Adds a role avatar (the rec-room book) for `roleId`, standing wherever. */
+function withRoleAvatar(world: OfficeWorld, roleId: string): OfficeWorld {
+  return addAvatar(world, {
+    id: `role:${roleId}`,
+    kind: 'role',
+    roleId,
+    agentId: null,
+    assignmentId: null,
+    taskId: null,
+    deskId: null,
+    location: { x: 0, y: 0 },
+    target: { kind: 'tile', tile: { x: 0, y: 0 } },
+    placeAtTarget: true,
+    hasRole: true,
+  });
 }
 
 describe('applyAvatarTargetRules', () => {
@@ -83,6 +109,7 @@ describe('applyAvatarTargetRules', () => {
       location: { x: 4, y: 4 },
       target: { kind: 'tile', tile: { x: 4, y: 4 } },
       placeAtTarget: false,
+      hasRole: true,
     });
 
     const next = applyAvatarTargetRules(
@@ -166,5 +193,50 @@ describe('applyAvatarTargetRules', () => {
     const once = applyAvatarTargetRules(world, snap);
     const again = applyAvatarTargetRules(once, snap);
     expect(again).toBe(once);
+  });
+
+  it("sends an avatar without its role to the role's book, ahead of its activity", () => {
+    const { world, avatarId } = worldWithTaskAvatar({ hasRole: false });
+    const withRole = withRoleAvatar(world, 'role-1');
+    const next = applyAvatarTargetRules(
+      withRole,
+      snapshot([agent({ activity: { kind: 'atDesk' } })]),
+    );
+    const avatar = requireAvatar(next, (a) => a.id === avatarId);
+    expect(avatar.target).toEqual({ kind: 'avatar', avatarId: 'role:role-1' });
+  });
+
+  it('sends an avatar that already has its role to its activity target, not the role avatar', () => {
+    const { world, avatarId } = worldWithTaskAvatar({ hasRole: true });
+    const withRole = withRoleAvatar(world, 'role-1');
+    const next = applyAvatarTargetRules(
+      withRole,
+      snapshot([agent({ activity: { kind: 'atDesk' } })]),
+    );
+    const avatar = requireAvatar(next, (a) => a.id === avatarId);
+    expect(avatar.target).toEqual({
+      kind: 'furniture',
+      furnitureId: avatar.deskId,
+    });
+  });
+
+  it('falls through to the activity target when the role avatar is missing (the rec room ceiling)', () => {
+    const { world, avatarId } = worldWithTaskAvatar({ hasRole: false });
+    // No `withRoleAvatar` call: the role's rec-room spot never got one.
+    const next = applyAvatarTargetRules(
+      world,
+      snapshot([agent({ activity: { kind: 'atDesk' } })]),
+    );
+    const avatar = requireAvatar(next, (a) => a.id === avatarId);
+    expect(avatar.target).toEqual({
+      kind: 'furniture',
+      furnitureId: avatar.deskId,
+    });
+  });
+
+  it('leaves a role avatar alone — it has no agentId, so the pickup rule never touches it', () => {
+    const world = withRoleAvatar(createInitialWorld(), 'role-1');
+    const next = applyAvatarTargetRules(world, snapshot([]));
+    expect(next).toBe(world);
   });
 });

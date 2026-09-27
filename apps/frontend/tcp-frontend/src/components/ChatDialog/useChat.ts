@@ -16,6 +16,12 @@ export interface Conversation {
    * assignment together, and only the assignment list carries the shortcode.
    */
   readonly reference: string | null;
+  /**
+   * Listening in on an agent that isn't a chat — a task agent, say — rather
+   * than talking to it: the panel shows its live transcript with no message
+   * field and no Complete control. Absent means a normal chat.
+   */
+  readonly readOnly?: boolean;
 }
 
 /** What a role needs to be talked to for the first time. */

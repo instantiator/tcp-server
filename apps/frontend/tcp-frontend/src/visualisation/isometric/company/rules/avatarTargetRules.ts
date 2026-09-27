@@ -1,6 +1,6 @@
 import { MAIL_ROOM_ID, oneToOneRoomId, taskRoomId } from '../world/layout';
 import type { Avatar, AvatarTarget, OfficeWorld } from '../world/types';
-import { furnitureById, updateAvatar } from '../world/worldOps';
+import { avatarById, furnitureById, updateAvatar } from '../world/worldOps';
 import type {
   AgentActivity,
   CompanySnapshot,
@@ -29,6 +29,22 @@ function deskTarget(avatar: Avatar): AvatarTarget | undefined {
   return avatar.deskId === null
     ? undefined
     : { kind: 'furniture', furnitureId: avatar.deskId };
+}
+
+/**
+ * An avatar that hasn't collected its role yet heads for the role's book in
+ * the rec room first. `undefined` when there's no such role avatar to
+ * collect from — the rec room's spot ceiling (`roleRules`) can leave a role
+ * without one — so the caller falls through to the normal activity target.
+ */
+function pickupTarget(
+  world: OfficeWorld,
+  avatar: Avatar,
+): AvatarTarget | undefined {
+  const roleAvatarId = `role:${avatar.roleId}`;
+  return avatarById(world, roleAvatarId) === undefined
+    ? undefined
+    : { kind: 'avatar', avatarId: roleAvatarId };
 }
 
 /** The target for one activity, trying each fallback in order until one exists. */
@@ -95,7 +111,12 @@ export function applyAvatarTargetRules(
       continue;
     }
 
-    const target = targetFor(next, avatar, agent.activity);
+    // An avatar without its role heads for the role's book first. If the
+    // role avatar doesn't exist (the rec room's spot ceiling), treat the
+    // role as collected and fall through to the normal activity target.
+    const target = avatar.hasRole
+      ? targetFor(next, avatar, agent.activity)
+      : (pickupTarget(next, avatar) ?? targetFor(next, avatar, agent.activity));
     if (target !== undefined) {
       next = updateAvatar(next, avatar.id, { target });
     }

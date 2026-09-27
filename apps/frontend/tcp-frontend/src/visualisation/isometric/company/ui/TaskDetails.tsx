@@ -5,6 +5,7 @@ import {
 } from '../../../../api/hooks';
 import type { AssignmentDTO } from '../../../../api/dtos';
 import { statusLabel } from '../../../../api/statuses';
+import { ExpandableText } from '../../../../components/ExpandableText/ExpandableText';
 import { t } from '../../../../strings';
 import { modeLabel } from './modeLabel';
 
@@ -73,7 +74,12 @@ export const TaskDetails = ({
       <h2 id={headingId}>
         {t('visualisation.tray.taskHeading', { shortcode: task.shortcode })}
       </h2>
-      <p>{task.request}</p>
+      <ExpandableText
+        text={task.request}
+        variant="ellipsis"
+        expandLabel={t('visualisation.tray.prompt.expand')}
+        collapseLabel={t('visualisation.tray.prompt.collapse')}
+      />
       <p>{statusLabel(task.status)}</p>
       <ul aria-label={t('visualisation.tray.assignments')}>
         {ordered.map((assignment) => (

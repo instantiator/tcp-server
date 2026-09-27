@@ -1,4 +1,20 @@
-import { Button, ToggleButton, Toolbar } from 'react-aria-components';
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  Maximize,
+  Minimize,
+  type LucideIcon,
+} from 'lucide-react';
+import type { ReactNode } from 'react';
+import {
+  Button,
+  ToggleButton,
+  Toolbar,
+  Tooltip,
+  TooltipTrigger,
+} from 'react-aria-components';
 import { t } from '../../../../strings';
 import type { CompanySnapshot } from '../rules/companySnapshot';
 import type { SelectionTarget } from '../TcpPhaserEventBus';
@@ -20,13 +36,88 @@ export interface VisualisationToolbarProps {
   readonly onPan: (dx: number, dy: number) => void;
   readonly isFullscreen: boolean;
   readonly onToggleFullscreen: () => void;
+  /**
+   * Where the toolbar's tooltips and the picker's list are portalled: the
+   * office view itself, rather than `document.body`. In full screen only the
+   * full-screen element is drawn, so an overlay on the body would never
+   * show; and inside the view it stays within the page's landmarks.
+   */
+  readonly portalContainer?: Element | undefined;
 }
+
+/** An icon drawn inside a control. Decorative: the control carries the name. */
+const Icon = ({ icon: Glyph }: { readonly icon: LucideIcon }) => (
+  <Glyph className="company-visualisation__icon" aria-hidden="true" />
+);
+
+/**
+ * A control whose face is only an icon, so its name is also shown as a
+ * tooltip on hover or focus: a sighted user sees what the icon means, and
+ * voice control and screen readers use the same words (WCAG 2.5.3).
+ */
+const WithTooltip = ({
+  label,
+  portalContainer,
+  children,
+}: {
+  readonly label: string;
+  readonly portalContainer: Element | undefined;
+  readonly children: ReactNode;
+}) => (
+  <TooltipTrigger>
+    {children}
+    {/*
+      `UNSTABLE_portalContainer` is deprecated in favour of react-aria's
+      `UNSAFE_PortalProvider`, which react-aria-components doesn't re-export.
+      Importing it from react-aria directly would need a second dependency
+      pinned in step with the one react-aria-components pins, and it fails
+      silently when they drift. This prop fails loudly, at compile time, if
+      it is ever removed.
+    */}
+    <Tooltip
+      className="react-aria-Tooltip"
+      // eslint-disable-next-line @typescript-eslint/no-deprecated -- deliberate; see the comment above
+      UNSTABLE_portalContainer={portalContainer}
+    >
+      {label}
+    </Tooltip>
+  </TooltipTrigger>
+);
+
+interface PanButtonProps {
+  readonly direction: 'left' | 'right' | 'up' | 'down';
+  readonly portalContainer: Element | undefined;
+  readonly icon: LucideIcon;
+  readonly onPress: () => void;
+}
+
+const PanButton = ({
+  direction,
+  portalContainer,
+  icon,
+  onPress,
+}: PanButtonProps) => {
+  const label = t(`visualisation.pan.${direction}`);
+  return (
+    <WithTooltip label={label} portalContainer={portalContainer}>
+      <Button
+        className={`react-aria-Button company-visualisation__pan-button company-visualisation__pan-button--${direction}`}
+        aria-label={label}
+        onPress={onPress}
+      >
+        <Icon icon={icon} />
+      </Button>
+    </WithTooltip>
+  );
+};
 
 /**
  * The office view's on-screen controls: pan, full screen, and the keyboard
  * route into the tray (`DetailsPicker`). Keyboard panning itself is handled
  * by the stage that hosts this toolbar, not here — these buttons are a
- * pointer-friendly duplicate of the same four directions.
+ * pointer-friendly duplicate of the same four directions, laid out like a
+ * keyboard's arrow keys. Their source order stays left, right, up, down, so
+ * the toolbar's arrow-key movement between controls is unchanged.
  */
 export const VisualisationToolbar = ({
   snapshot,
@@ -35,46 +126,64 @@ export const VisualisationToolbar = ({
   onPan,
   isFullscreen,
   onToggleFullscreen,
-}: VisualisationToolbarProps) => (
-  <Toolbar
-    aria-label={t('visualisation.toolbar.label')}
-    className="react-aria-Toolbar company-visualisation__toolbar"
-  >
-    <Button
-      onPress={() => {
-        onPan(-PAN_STEP_PX, 0);
-      }}
+  portalContainer,
+}: VisualisationToolbarProps) => {
+  const fullscreenLabel = t('visualisation.fullscreen');
+  return (
+    <Toolbar
+      aria-label={t('visualisation.toolbar.label')}
+      className="react-aria-Toolbar company-visualisation__toolbar"
     >
-      {t('visualisation.pan.left')}
-    </Button>
-    <Button
-      onPress={() => {
-        onPan(PAN_STEP_PX, 0);
-      }}
-    >
-      {t('visualisation.pan.right')}
-    </Button>
-    <Button
-      onPress={() => {
-        onPan(0, -PAN_STEP_PX);
-      }}
-    >
-      {t('visualisation.pan.up')}
-    </Button>
-    <Button
-      onPress={() => {
-        onPan(0, PAN_STEP_PX);
-      }}
-    >
-      {t('visualisation.pan.down')}
-    </Button>
-    <ToggleButton isSelected={isFullscreen} onChange={onToggleFullscreen}>
-      {t('visualisation.fullscreen')}
-    </ToggleButton>
-    <DetailsPicker
-      snapshot={snapshot}
-      selection={selection}
-      onSelect={onSelect}
-    />
-  </Toolbar>
-);
+      <div className="company-visualisation__pan">
+        <PanButton
+          portalContainer={portalContainer}
+          direction="left"
+          icon={ArrowLeft}
+          onPress={() => {
+            onPan(-PAN_STEP_PX, 0);
+          }}
+        />
+        <PanButton
+          portalContainer={portalContainer}
+          direction="right"
+          icon={ArrowRight}
+          onPress={() => {
+            onPan(PAN_STEP_PX, 0);
+          }}
+        />
+        <PanButton
+          portalContainer={portalContainer}
+          direction="up"
+          icon={ArrowUp}
+          onPress={() => {
+            onPan(0, -PAN_STEP_PX);
+          }}
+        />
+        <PanButton
+          portalContainer={portalContainer}
+          direction="down"
+          icon={ArrowDown}
+          onPress={() => {
+            onPan(0, PAN_STEP_PX);
+          }}
+        />
+      </div>
+      <WithTooltip label={fullscreenLabel} portalContainer={portalContainer}>
+        <ToggleButton
+          className="react-aria-ToggleButton company-visualisation__icon-button"
+          aria-label={fullscreenLabel}
+          isSelected={isFullscreen}
+          onChange={onToggleFullscreen}
+        >
+          <Icon icon={isFullscreen ? Minimize : Maximize} />
+        </ToggleButton>
+      </WithTooltip>
+      <DetailsPicker
+        snapshot={snapshot}
+        selection={selection}
+        onSelect={onSelect}
+        portalContainer={portalContainer}
+      />
+    </Toolbar>
+  );
+};

@@ -14,7 +14,17 @@
      shrink below the canvas's own content size, and the tray gets pushed
      off instead of the stage narrowing for it. */
   min-inline-size: 0;
-  block-size: var(--tcp-visualisation-height);
+  /*
+   * Fill the viewport below the stage (its page offset comes from
+   * `useStageTop`), but never drop below the fixed height: when the content
+   * above is tall, or the window is short, the stage keeps that height and the
+   * page scrolls to it instead. Before the first measurement the fallback
+   * leaves only the fixed height.
+   */
+  block-size: max(
+    var(--tcp-visualisation-height),
+    calc(100dvh - var(--tcp-visualisation-top, 100dvh) - var(--tcp-space-md))
+  );
 }
 
 .company-visualisation__canvas {
@@ -35,6 +45,49 @@
   overflow: auto;
   padding: var(--tcp-space-md);
   border-inline-start: var(--tcp-border-width) solid var(--tcp-color-border);
+}
+
+/*
+ * The pan buttons, laid out like a keyboard's arrow keys: up above, left and
+ * right either side, down below. Placed by grid area, so their source order —
+ * and with it the toolbar's arrow-key movement — stays left, right, up, down.
+ */
+.company-visualisation__pan {
+  display: grid;
+  grid-template-areas:
+    '. up .'
+    'left . right'
+    '. down .';
+  gap: var(--tcp-space-xs);
+}
+
+.company-visualisation__pan-button,
+.company-visualisation__icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--tcp-space-xs);
+}
+
+.company-visualisation__pan-button--up {
+  grid-area: up;
+}
+
+.company-visualisation__pan-button--left {
+  grid-area: left;
+}
+
+.company-visualisation__pan-button--right {
+  grid-area: right;
+}
+
+.company-visualisation__pan-button--down {
+  grid-area: down;
+}
+
+.company-visualisation__icon {
+  inline-size: var(--tcp-icon-size);
+  block-size: var(--tcp-icon-size);
 }
 
 /*
@@ -76,4 +129,10 @@
   color: var(--tcp-color-text);
   pointer-events: none;
   translate: var(--tcp-space-sm) var(--tcp-space-sm);
+}
+
+/* The label checkboxes: their own row under the toolbar, inset to match it. */
+.company-visualisation__labels {
+  padding-inline: var(--tcp-space-sm);
+  padding-block-end: var(--tcp-space-sm);
 }

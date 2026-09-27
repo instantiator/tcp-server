@@ -11,11 +11,35 @@ export interface SelectionTarget {
   readonly id: string;
 }
 
-/** A hover over something selectable. `x`/`y` are canvas-relative pixels. */
+/**
+ * What a hover landed on. Roles, agents and tasks can also be selected;
+ * furniture and rooms (by their doorway) only explain themselves in a
+ * tooltip. `id` is the furniture or room id from the office world.
+ */
+export type HoverTarget =
+  | SelectionTarget
+  | { readonly kind: 'furniture'; readonly id: string }
+  | { readonly kind: 'room'; readonly id: string };
+
+/** A hover over something in the office. `x`/`y` are canvas-relative pixels. */
 export interface HoverEvent {
-  readonly target: SelectionTarget;
+  readonly target: HoverTarget;
   readonly x: number;
   readonly y: number;
+}
+
+/**
+ * A text label the scene draws above something in the office. React works
+ * out the text, so the scene never needs names or strings. An avatar anchor
+ * follows the avatar as it walks; a tile anchor stays put.
+ */
+export interface OfficeLabel {
+  /** Stable across updates, so the scene can change a label's text in place. */
+  readonly id: string;
+  readonly text: string;
+  readonly anchor:
+    | { readonly kind: 'avatar'; readonly avatarId: string }
+    | { readonly kind: 'tile'; readonly tile: Tile };
 }
 
 /**
@@ -27,7 +51,7 @@ export interface HoverEvent {
  * one case in each of three unions.
  *
  * React → scene: `world-changed`, `camera-pan`, `camera-follow`,
- * `motion-preference`. Scene → React: `scene-ready`, `avatar-arrived`,
+ * `motion-preference`, `labels-changed`. Scene → React: `scene-ready`, `avatar-arrived`,
  * `avatar-exited`, `hover`, `select`, `follow-stopped`. Listeners on the
  * React side live only in `TcpPhaserVisualisation`; `CompanyVisualisation`
  * may emit but never listens directly.
@@ -40,6 +64,8 @@ export interface TcpPhaserEventMap {
   'camera-pan': { readonly dx: number; readonly dy: number };
   'camera-follow': SelectionTarget | null;
   'motion-preference': { readonly reduced: boolean };
+  /** Every label to show now. An empty list clears them all. */
+  'labels-changed': readonly OfficeLabel[];
 
   'avatar-arrived': { readonly avatarId: string; readonly tile: Tile };
   'avatar-exited': { readonly avatarId: string };

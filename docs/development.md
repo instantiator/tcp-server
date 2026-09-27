@@ -198,7 +198,7 @@ docs/
   ADRs/                        # Architectural Decision Records
   zitadel-setup.md             # Zitadel setup guide
   licenses.md                  # Auto-generated — do not edit by hand
-dev-environment/                # Git submodule — agent guidance, skills, and quality-gate scripts
+dev-qual/                       # Git submodule — agent guidance, skills, and quality-gate scripts
 schemas/                        # Auto-generated JSON Schema — do not edit by hand
 ```
 
@@ -225,8 +225,8 @@ npm run build --workspace apps/frontend/tcp-frontend   # static bundle into dist
 npm test --workspace apps/frontend/tcp-frontend        # Vitest + the import-boundary check
 
 # Quality gate (also run by the git hooks)
-./dev-environment/scripts/check.sh          # Full: lint, typecheck, build, unit tests, aislop
-./dev-environment/scripts/check.sh --fast   # Fast: lint, typecheck, shellcheck only
+./dev-qual/scripts/check.sh          # Full: lint, typecheck, build, unit tests, aislop
+./dev-qual/scripts/check.sh --fast   # Fast: lint, typecheck, shellcheck only
 
 # Testing
 npm test                      # Unit tests (no external services, SQLite in-memory)

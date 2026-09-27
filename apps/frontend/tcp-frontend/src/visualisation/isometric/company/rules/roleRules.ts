@@ -65,6 +65,7 @@ export function applyRoleRules(
       location: spot,
       target: { kind: 'tile', tile: spot },
       placeAtTarget: true,
+      hasRole: true,
     });
   }
 

@@ -76,6 +76,22 @@ const taskTooltipProgress = (step: number, steps: number): string =>
 const ROLE_A_NAME = 'Visualisation role a';
 
 /**
+ * How far above its base tile a role's book takes the pointer, in pixels —
+ * `BOOK_ZONE_LIFT` in `AvatarSprite.ts`. A role is drawn as a small book
+ * (002.01), so its hit zone sits just above the floor, not over a body.
+ */
+const ROLE_HOVER_LIFT = 4;
+
+/*
+ * 002.01 literals, copied from `strings.ts` the same way
+ * (`visualisation.labels.roles`, `visualisation.tray.prompt.expand`).
+ */
+const ROLES_LABEL_TOGGLE = 'Roles';
+const SHOW_FULL_PROMPT_LABEL = 'Show the full prompt';
+/** `--tcp-visualisation-height` in `styles/base.css` (32rem at 16px). */
+const FIXED_STAGE_HEIGHT_PX = 512;
+
+/**
  * The visualisation's hidden accessible description, built the way
  * `t('visualisation.summary', …)` and `t('visualisation.keys')` are (000.01
  * Stage D): the stage's `aria-describedby` names both paragraphs, so its
@@ -350,10 +366,9 @@ test.describe('company visualisation', () => {
       const cx = box!.x + box!.width / 2;
       const cy = box!.y + box!.height / 2;
 
-      // Follow centres the camera on the avatar's base tile, so the canvas's
-      // own centre — 20px up, onto its body (AvatarSprite's hit zone is
-      // lifted 22px above the base) — is where the pointer meets it.
-      await page.mouse.move(cx, cy - 20);
+      // Follow centres the camera on the role's base tile, so the canvas's
+      // own centre, lifted onto the book, is where the pointer meets it.
+      await page.mouse.move(cx, cy - ROLE_HOVER_LIFT);
       await expect(page.getByRole('tooltip')).toHaveText(
         roleLabel(ROLE_A_NAME),
       );
@@ -361,7 +376,7 @@ test.describe('company visualisation', () => {
 
       // Clicking the same, still-centred spot re-selects the same role —
       // the pointer route to a selection that's already open.
-      await page.mouse.click(cx, cy - 20);
+      await page.mouse.click(cx, cy - ROLE_HOVER_LIFT);
       await expect(tray).toBeVisible();
 
       await page.getByRole('button', { name: CLOSE_DETAILS_LABEL }).click();
@@ -379,7 +394,7 @@ test.describe('company visualisation', () => {
       expect(wider).not.toBeNull();
       await page.mouse.click(
         wider!.x + wider!.width / 2,
-        wider!.y + wider!.height / 2 - 20,
+        wider!.y + wider!.height / 2 - ROLE_HOVER_LIFT,
       );
       await expect(tray).toBeVisible();
     });
@@ -494,11 +509,11 @@ test.describe('company visualisation', () => {
       const cx = box!.x + box!.width / 2;
       const cy = box!.y + box!.height / 2;
 
-      await page.mouse.move(cx, cy - 20);
+      await page.mouse.move(cx, cy - ROLE_HOVER_LIFT);
       // Confirms the hover state has actually landed before the double-click
       // races it — there is no other observable for "hover is now set".
       await expect(page.getByRole('tooltip')).toBeVisible();
-      await page.mouse.dblclick(cx, cy - 20);
+      await page.mouse.dblclick(cx, cy - ROLE_HOVER_LIFT);
 
       // Asserting a negative has no observable to poll for, so this is a
       // short, commented wait rather than `expect.poll`: long enough for a
@@ -507,6 +522,100 @@ test.describe('company visualisation', () => {
       expect(
         await page.evaluate(() => document.fullscreenElement !== null),
       ).toBe(false);
+    });
+
+    test('the Roles label toggle draws and clears labels on the canvas', async ({
+      page,
+    }) => {
+      await page.goto(`/company/${companyId}`);
+      const stage = officeSummary(page);
+      const canvas = stage.locator('canvas');
+      // See the pan test above for why this goes first.
+      await expect(stage).toHaveAccessibleDescription(summary(2, 0, 0));
+      await expect(canvas).toBeVisible();
+
+      const toggle = page.getByRole('checkbox', { name: ROLES_LABEL_TOGGLE });
+      const unlabelled = await canvas.screenshot();
+
+      // By keyboard: React Aria's label sits over the visually hidden input,
+      // so Playwright's `check()` can't click the input itself.
+      await toggle.focus();
+      await page.keyboard.press('Space');
+      await expect(toggle).toBeChecked();
+      // The labels are canvas pixels, with no DOM of their own to query.
+      await expect
+        .poll(async () => Buffer.compare(await canvas.screenshot(), unlabelled))
+        .not.toBe(0);
+
+      // Not compared with the unlabelled shot: the canvas is not guaranteed
+      // to repaint pixel-for-pixel, so this checks the labels went away.
+      const labelled = await canvas.screenshot();
+      await page.keyboard.press('Space');
+      await expect(toggle).not.toBeChecked();
+      await expect
+        .poll(async () => Buffer.compare(await canvas.screenshot(), labelled))
+        .not.toBe(0);
+    });
+
+    test('the stage fills the window below it, never shorter than its fixed height', async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1280, height: 1400 });
+      await page.goto(`/company/${companyId}`);
+      const stage = officeSummary(page);
+      await expect(stage).toHaveAccessibleDescription(summary(2, 0, 0));
+
+      // A tall window: the stage reaches (almost) to its bottom edge.
+      await expect
+        .poll(() =>
+          stage.evaluate(
+            (element) =>
+              window.innerHeight - element.getBoundingClientRect().bottom,
+          ),
+        )
+        .toBeLessThan(32);
+
+      // A short window: the fixed height is the floor, and the page scrolls.
+      await page.setViewportSize({ width: 1280, height: 400 });
+      await expect
+        .poll(async () => (await stage.boundingBox())?.height)
+        .toBeGreaterThanOrEqual(FIXED_STAGE_HEIGHT_PX);
+    });
+
+    test("a long task request is clipped in the tray, with a '…' that reveals it", async ({
+      page,
+      request,
+    }) => {
+      const longRequest =
+        'Created by company-visualisation.spec.ts to check clipping: reconcile every account in the ledger against the bank statements, tracing each discrepancy to its journal entry, and write it all up.';
+      const createdTask = await request.post('/api/task', {
+        headers: { Authorization: `Bearer ${token}` },
+        data: { companyId, request: longRequest },
+      });
+      expect(createdTask.status()).toBe(201);
+      const { id: taskId, shortcode } =
+        (await createdTask.json()) as CreatedTask;
+
+      await page.goto(`/company/${companyId}`);
+      const stage = officeSummary(page);
+      await expect(stage).toHaveAccessibleDescription(summary(2, 1, 0));
+
+      await page.getByRole('button', { name: SHOW_DETAILS_LABEL }).click();
+      await page
+        .getByRole('option', { name: taskPickerLabel(shortcode) })
+        .click();
+      const tray = page.getByRole('complementary', {
+        name: taskTrayHeading(shortcode),
+      });
+      await expect(tray).not.toContainText(longRequest);
+
+      await tray.getByRole('button', { name: SHOW_FULL_PROMPT_LABEL }).click();
+      await expect(tray).toContainText(longRequest);
+
+      const cancelled = await request.post(`/api/task/${taskId}/cancel`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      expect(cancelled.status()).toBe(202);
     });
   });
 });
