@@ -61,6 +61,7 @@
 | :------------------------- | :--------- | :------------------------------------------------------- | :----------------------------------------------------- | :-------- | :------- |
 | @react-aria/live-announcer | Apache-2.0 | git+https://github.com/adobe/react-spectrum.git          | n/a                                                    | 3.5.1     | ^3.5.1   |
 | @tanstack/react-query      | MIT        | git+https://github.com/TanStack/query.git                | tannerlinsley                                          | 5.101.4   | ^5.101.4 |
+| lucide-react               | ISC        | https://github.com/lucide-icons/lucide.git               | Eric Fennis                                            | 1.48.0    | ^1.48.0  |
 | oidc-client-ts             | Apache-2.0 | git+https://github.com/authts/oidc-client-ts.git         | n/a                                                    | 3.5.0     | ^3.5.0   |
 | openapi-fetch              | MIT        | git+https://github.com/openapi-ts/openapi-typescript.git | Drew Powers drew@pow.rs                                | 0.17.0    | ^0.17.0  |
 | phaser                     | MIT        | git+https://phaserjs@github.com/phaserjs/phaser.git      | Richard Davey <rich@phaser.io> (https://www.phaser.io) | 4.2.1     | ^4.2.1   |

@@ -56,6 +56,9 @@ one component-tier pipeline test in `useOfficeWorld.test.tsx` that drives a
 full agent lifecycle (created, running, completed, task cancelled, arrival
 and exit) through fetch-mock and `applyEvent`. This was a decision taken
 before planning, not an oversight: see 000.01's plan.
+002.01's role pickup (door, then the role's book, then the desk) is covered
+the same way: unit tests on the rules and one pipeline case in
+`useOfficeWorld.test.tsx`.
 
 Testable: the browser-tier deployment's compose services include an LLM.
 
@@ -138,6 +141,36 @@ today's placeholder shapes.
 Testable: real sprite art for desks and avatars exists, and the overlap is
 now visible.
 
+### Canvas labels aren't laid out
+
+**Raised by:** 002.01 · **Condition to revisit:** labels in a busy room become unreadable in ordinary use
+
+`scene/LabelLayer.ts` puts each label above its anchor and does nothing when
+two overlap. A task room with several avatars at neighbouring desks, with
+Agents and Furniture both on, will stack labels on top of each other. Marked
+`ponytail:` in the file; the upgrade is nudging overlapping labels apart, or
+showing furniture labels only on hover.
+
+Testable: turn on every label in a task room with three or more avatars and
+read them.
+
+### Overlays use a deprecated portal prop
+
+**Raised by:** 002.01 · **Condition to revisit:** react-aria-components exports `UNSAFE_PortalProvider`, or drops `UNSTABLE_portalContainer`
+
+The office view's toolbar tooltips and the picker's popover portal into the
+view's own section through `UNSTABLE_portalContainer` (deprecated), so they
+show in full screen and stay inside the page's landmarks. Its replacement,
+`UNSAFE_PortalProvider`, lives in `react-aria`, which react-aria-components
+pins at an exact version and doesn't re-export; importing it directly would
+need a second dependency kept in lock-step, which fails silently when the
+two drift. The deprecated prop fails loudly — a type error — if it is ever
+removed. Both uses carry an `eslint-disable` for `no-deprecated` that points
+here.
+
+Testable: `grep -c UNSAFE_PortalProvider node_modules/react-aria-components/dist/types/exports/index.d.ts`
+prints more than 0.
+
 ### `hosting.spec.ts` fails under `--dev-web`
 
 **Raised by:** 000.01 · **Condition to revisit:** none — standing note
@@ -166,5 +199,7 @@ Testable: run the whole browser tier ten times. Any failure whose call log shows
 | The picker's list can change while it is open                                                                                                       | 000.01    | `001.02` (phase 04) |
 | The office stage's focus and description, checked with a real screen reader                                                                         | 000.01    | `001.02` (phase 04) |
 | The tooltip against WCAG 1.4.13                                                                                                                     | 000.01    | `001.02` (phase 04) |
+| Furniture and doorway tooltips are pointer-only                                                                                                     | 002.01    | `001.02` (phase 04) |
+| The icon-only pan and full-screen controls, checked with voice control                                                                              | 002.01    | `001.02` (phase 04) |
 | The office view's documentation (`web-client.md`) and its ADR-027 amendment                                                                         | 000.01    | `001.03` (phase 04) |
 | A fuller reduced-motion design for the office view                                                                                                  | 000.01    | `000.02`            |
