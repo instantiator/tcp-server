@@ -27,6 +27,8 @@ export interface DialogProps {
    * untouched — this hides a control, it does not remove a dismissal path.
    */
   readonly hideClose?: boolean;
+  /** Extra controls for the title bar, placed before minimise and close. */
+  readonly actions?: ReactNode;
 }
 
 /**
@@ -65,6 +67,7 @@ export const Dialog = ({
   children,
   onMinimise,
   hideClose = false,
+  actions,
 }: DialogProps) => (
   <ModalOverlay isOpen={isOpen} onOpenChange={onOpenChange}>
     <Modal>
@@ -73,6 +76,7 @@ export const Dialog = ({
           <Heading slot="title" className="react-aria-Heading dialog__heading">
             {heading}
           </Heading>
+          {actions}
           {onMinimise !== undefined && (
             <Button
               className="react-aria-Button dialog__minimise"

@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react';
+import { useMatch } from 'react-router';
+import { AddNewMenu } from '../AddNew/AddNewMenu';
 import { Dialog } from '../Dialog/Dialog';
 import { t } from '../../strings';
 import { ChatConversation } from './ChatConversation';
@@ -41,6 +43,12 @@ export interface ChatDialogProps {
  * to its own event stream, receiving the agent's reply whether or not that
  * panel happens to be in view. Unmounting a hidden panel would drop its
  * stream and lose whatever arrived while another conversation had the focus.
+ *
+ * **Its title bar carries the "Add new" menu (003.01).** The dialog is modal,
+ * so the page's own control is unreachable while it shows. From here, a new
+ * chat joins this stack as another panel, and a new task opens as a dialog
+ * stacked on top. The dialog outlives the company page it was opened from, so
+ * the menu shows only while a company is the current route.
  */
 export const ChatDialog = ({
   conversations,
@@ -53,6 +61,7 @@ export const ChatDialog = ({
   // be moved to one by id without a DOM query. Populated by the ref callback
   // handed down to each `ChatConversation` below.
   const panels = useRef(new Map<string, HTMLElement>());
+  const companyId = useMatch('/company/:companyId/*')?.params.companyId;
 
   useEffect(() => {
     // A plain `useEffect`, not `useLayoutEffect` — deliberately. React
@@ -76,6 +85,7 @@ export const ChatDialog = ({
       heading={t('chat.dialog.heading')}
       onMinimise={onMinimise}
       hideClose
+      actions={companyId !== undefined && <AddNewMenu companyId={companyId} />}
     >
       {conversations.map((conversation) => (
         <ChatConversation

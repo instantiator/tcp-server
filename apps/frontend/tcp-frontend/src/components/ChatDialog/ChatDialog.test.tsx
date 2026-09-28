@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import type { AuditWireEvent, WireEvent } from '@tcp/shared/client';
 import { StrictMode } from 'react';
 import { Button } from 'react-aria-components';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { statusLabel } from '../../api/statuses';
 import { streamUrls, subscribe } from '../../events/subscriptions';
@@ -136,8 +137,12 @@ interface ChatRoutes {
  * shows an empty-state heading instead when there is nothing to show, and
  * several assertions below need the real list role.
  */
-const respondChat = (overrides: ChatRoutes = {}): void => {
+const respondChat = (
+  overrides: ChatRoutes = {},
+  extra: readonly (readonly [RegExp, RouteResponse])[] = [],
+): void => {
   respondByRoute([
+    ...extra,
     [
       HISTORY_A_ROUTE,
       overrides.historyA ?? {
@@ -239,7 +244,12 @@ const Opener = () => {
   );
 };
 
-const renderChat = () => {
+/**
+ * `path` is the route the dialog opens over. The dialog's "Add new" menu shows
+ * only on a company route, so the default `/` keeps it out of every test that
+ * isn't about it.
+ */
+const renderChat = (path = '/') => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -247,13 +257,15 @@ const renderChat = () => {
     queryClient,
     ...render(
       <StrictMode>
-        <QueryClientProvider client={queryClient}>
-          <DockProvider>
-            <ChatProvider>
-              <Opener />
-            </ChatProvider>
-          </DockProvider>
-        </QueryClientProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <QueryClientProvider client={queryClient}>
+            <DockProvider>
+              <ChatProvider>
+                <Opener />
+              </ChatProvider>
+            </DockProvider>
+          </QueryClientProvider>
+        </MemoryRouter>
       </StrictMode>,
     ),
   };
@@ -1407,6 +1419,142 @@ describe('ChatDialog', () => {
       // asking the server again. No `staleTime` anywhere in `endpoints.ts` is
       // what makes a remount refetch.
       expect(historyRequests(HISTORY_A_ROUTE)).toBeGreaterThan(before);
+    });
+  });
+
+  describe('the "Add new" menu (003.01)', () => {
+    const ROLES_ROUTE = /\/api\/company\/company-1\/roles/;
+    const START_ROUTE = /\/api\/agent\/chat\/start/;
+    const role = (id: string, name: string) => ({
+      id,
+      companyId: COMPANY_ID,
+      slug: id,
+      name,
+      description: 'd',
+      knowledgeDomains: [],
+      mcpServerList: [],
+      queryIndex: 0,
+    });
+    const respondWithMenu = () => {
+      respondChat({}, [
+        [
+          ROLES_ROUTE,
+          { body: [role('role-a', ROLE_A), role('role-b', ROLE_B)] },
+        ],
+        [START_ROUTE, { body: agentFixture(AGENT_B, 'idle') }],
+      ]);
+    };
+    const addNew = () =>
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: t('addNew.trigger'),
+      });
+
+    it('is absent away from a company route', async () => {
+      respondChat();
+      const user = userEvent.setup();
+      renderChat();
+
+      await user.click(screen.getByRole('button', { name: 'Open Sales' }));
+      await waitForTranscriptsReady();
+
+      expect(
+        within(screen.getByRole('dialog')).queryByRole('button', {
+          name: t('addNew.trigger'),
+        }),
+      ).toBeNull();
+    });
+
+    it('starts a new chat as another panel in the same dialog, and focuses it', async () => {
+      respondWithMenu();
+      const user = userEvent.setup();
+      renderChat('/company/company-1');
+
+      await user.click(screen.getByRole('button', { name: 'Open Sales' }));
+      await waitForTranscriptsReady();
+
+      await user.click(addNew());
+      await user.click(
+        await screen.findByRole('menuitem', { name: t('addNew.newChat') }),
+      );
+      await user.click(await screen.findByRole('menuitem', { name: ROLE_B }));
+
+      const panelB = await screen.findByRole('region', {
+        name: t('chat.conversation.label', { role: ROLE_B }),
+      });
+      expect(
+        screen.getByRole('region', {
+          name: t('chat.conversation.label', { role: ROLE_A }),
+        }),
+      ).toBeTruthy();
+      await waitFor(() => {
+        expect(panelB).toHaveFocus();
+      });
+      expect(screen.queryByRole('menu')).toBeNull();
+    });
+
+    it('opens the task form over the chat; closing it returns to the menu with the draft intact', async () => {
+      respondWithMenu();
+      const user = userEvent.setup();
+      renderChat('/company/company-1');
+
+      await user.click(screen.getByRole('button', { name: 'Open Sales' }));
+      await waitForTranscriptsReady();
+      const field = screen.getByRole('textbox', {
+        name: t('chat.message.label', { role: ROLE_A }),
+      });
+      await user.type(field, 'half a thought');
+
+      await user.click(addNew());
+      await user.click(
+        await screen.findByRole('menuitem', { name: t('addNew.createTask') }),
+      );
+
+      const taskDialog = await screen.findByRole('dialog', {
+        name: t('task.create.heading'),
+      });
+      await waitFor(() => {
+        expect(taskDialog).toContainElement(
+          document.activeElement as HTMLElement,
+        );
+      });
+
+      await user.keyboard('{Escape}');
+
+      await waitFor(() => {
+        expect(
+          screen.queryByRole('dialog', { name: t('task.create.heading') }),
+        ).toBeNull();
+      });
+      // Escape closed only the top dialog: the chat is still open beneath it.
+      expect(
+        screen.getByRole('dialog', { name: t('chat.dialog.heading') }),
+      ).toBeTruthy();
+      await waitFor(() => {
+        expect(addNew()).toHaveFocus();
+      });
+      expect(
+        screen.getByRole('textbox', {
+          name: t('chat.message.label', { role: ROLE_A }),
+        }),
+      ).toHaveValue('half a thought');
+    });
+
+    it('has no accessibility violations with the menu and its submenu open', async () => {
+      respondWithMenu();
+      const user = userEvent.setup();
+      renderChat('/company/company-1');
+
+      await user.click(screen.getByRole('button', { name: 'Open Sales' }));
+      await waitForTranscriptsReady();
+      await user.click(addNew());
+      await screen.findByRole('menu');
+      await expectNoA11yViolations(document.body);
+
+      await user.click(
+        screen.getByRole('menuitem', { name: t('addNew.newChat') }),
+      );
+      await screen.findByRole('menuitem', { name: ROLE_B });
+      await expectNoA11yViolations(document.body);
     });
   });
 });
