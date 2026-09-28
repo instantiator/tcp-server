@@ -308,6 +308,18 @@ body {
   outline: none;
 }
 
+/*
+ * React Aria's `Popover` computes its own `max-height` inline style from the
+ * viewport and the chosen placement (`useOverlayPosition`/`calculatePosition`
+ * in `react-aria`'s overlay code), so a tall menu — many roles in the "New
+ * chat" submenu, say — would otherwise overflow the popover's edge instead of
+ * scrolling within it.
+ */
+.react-aria-Popover > .react-aria-Menu {
+  max-height: inherit;
+  overflow: auto;
+}
+
 .react-aria-MenuItem {
   padding: var(--tcp-space-sm) var(--tcp-space-md);
   border-radius: var(--tcp-radius);
