@@ -35,6 +35,8 @@ const AGENTS_HEADING = 'Active agents';
 const TASKS_HEADING = 'Tasks';
 const CONSULTATIONS_HEADING = 'Consultations';
 const ENQUIRIES_HEADING = 'Enquiries';
+/** `activity.chats.heading` — the fifth list, added 002.02 stage 7/9. */
+const CHATS_HEADING = 'Chats';
 
 /**
  * A task row's accessible name (008.03): the button that opens its dialog,
@@ -42,6 +44,24 @@ const ENQUIRIES_HEADING = 'Enquiries';
  * reason the headings above are — keep it in step if the copy there changes.
  */
 const taskRowName = (shortcode: string) => `Open task ${shortcode}`;
+
+/*
+ * 002.02 stage 7 literals, copied the same way from `strings.ts`
+ * (`activity.chats.open`, `chat.dialog.heading`, `chat.conversation.label`,
+ * `dialog.minimise`, `chat.close`, `chat.dock.label`, `activity.status.idle`).
+ * `POST /api/agent/chat/start` creates an orphan assignment
+ * (`AgentDbService.create`) with no shortcode — only a task's plan,
+ * implement, QA and finalise assignments get one, from
+ * `buildAssignmentShortcode` — so `ChatsList.tsx` passes `reference: null`
+ * for this fixture, and the panel heading carries no reference suffix.
+ */
+const chatRowName = (role: string) => `Open the chat with ${role}`;
+const chatPanelHeading = (role: string) => `Chat with ${role}`;
+const chatCloseName = (role: string) => `Close the chat with ${role}`;
+/** A freshly created chat agent never runs, so its status stays `idle` throughout. */
+const chatDockLabel = (role: string) => `${role} — Idle`;
+const CHAT_DIALOG_HEADING = 'Chats';
+const MINIMISE_LABEL = 'Minimise';
 
 /**
  * Navigates to a company and switches to the activity tab — the
@@ -73,6 +93,14 @@ interface CreatedCompany {
 interface CreatedTask {
   id: string;
   shortcode: string;
+}
+
+interface CreatedRole {
+  id: string;
+}
+
+interface CreatedAgent {
+  id: string;
 }
 
 /**
@@ -274,5 +302,90 @@ test.describe('company activity', () => {
     // auto-waiting, not a sleep: this polls until the row is gone or the
     // test's own timeout is reached.
     await expect(taskRow).toBeHidden();
+  });
+
+  // 002.02 stage 7/11: minimise, restore, close and reopen a chat.
+  //
+  // Fixture: `POST /api/agent/chat/start` creates the chat's agent and its
+  // `in-progress` assignment (`AgentDbService.create`) with no LLM turn — a
+  // turn only runs once `POST /api/agent/:id/message` is called
+  // (`api.agent.controller.ts`'s own doc comment on `startChat`/`sendMessage`
+  // says so directly). A task's plan/implement/QA/finalise stages, by
+  // contrast, each dispatch a live agent job the moment they're created
+  // (`TaskOrchestrationService.dispatchAgentFor`), which is why this file's
+  // task fixture never drives a task past `ready` — this spec deliberately
+  // never sends a message, so the agent stays `idle` throughout and its dock
+  // label is stable.
+  test('minimises, restores, closes and reopens a chat from Activity → Chats', async ({
+    page,
+    request,
+  }) => {
+    const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const roleName = `Chat role ${suffix}`;
+    const role = await request.post('/api/role', {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {
+        companyId,
+        slug: `chat-role-${suffix}`,
+        name: roleName,
+        description: 'Created by company-activity.spec.ts',
+        knowledgeDomains: [],
+        mcpServerList: [],
+      },
+    });
+    expect(role.status()).toBe(201);
+    const roleId = ((await role.json()) as CreatedRole).id;
+
+    const chatAgent = await request.post('/api/agent/chat/start', {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { companyId, roleId },
+    });
+    expect(chatAgent.status()).toBe(201);
+    void ((await chatAgent.json()) as CreatedAgent).id;
+
+    await gotoCompanyActivity(page, companyId);
+    const chatRow = page
+      .getByRole('region', { name: CHATS_HEADING })
+      .getByRole('button', { name: chatRowName(roleName) });
+    await expect(chatRow).toBeVisible();
+    await chatRow.click();
+
+    const dialog = page.getByRole('dialog', { name: CHAT_DIALOG_HEADING });
+    const panel = page.getByRole('heading', {
+      level: 3,
+      name: chatPanelHeading(roleName),
+    });
+    await expect(dialog).toBeVisible();
+    await expect(panel).toBeVisible();
+
+    // Minimise: the dialog unmounts and a dock entry takes its place.
+    await page.getByRole('button', { name: MINIMISE_LABEL }).click();
+    await expect(dialog).toBeHidden();
+    const dockButton = page.getByRole('button', {
+      name: chatDockLabel(roleName),
+    });
+    await expect(dockButton).toBeVisible();
+
+    // Restore: the dock entry is gone, the dialog and panel are back.
+    await dockButton.click();
+    await expect(dialog).toBeVisible();
+    await expect(panel).toBeVisible();
+    await expect(dockButton).toBeHidden();
+
+    // Close: the one open panel is the only one, so closing it empties the
+    // dialog's conversation list and the dialog closes with it — there is no
+    // separate close control for the dialog itself (`Dialog.tsx`'s
+    // `hideClose`).
+    await page.getByRole('button', { name: chatCloseName(roleName) }).click();
+    await expect(panel).toBeHidden();
+    await expect(dialog).toBeHidden();
+    await expect(dockButton).toBeHidden();
+
+    // The chat is untouched on the server (`useChat().closeChat` only drops
+    // it from this screen), so Activity → Chats is still the way back in.
+    await expect(chatRow).toBeVisible();
+    await chatRow.click();
+    await expect(dialog).toBeVisible();
+    await expect(panel).toBeVisible();
   });
 });

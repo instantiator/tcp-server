@@ -91,6 +91,34 @@ const SHOW_FULL_PROMPT_LABEL = 'Show the full prompt';
 /** `--tcp-visualisation-height` in `styles/base.css` (32rem at 16px). */
 const FIXED_STAGE_HEIGHT_PX = 512;
 
+/*
+ * 002.02 stage 8/9 literals, copied the same way from `strings.ts`
+ * (`visualisation.picker.archive`, `visualisation.archive.heading`,
+ * `visualisation.furniture.bookshelf` and its `.description`,
+ * `visualisation.archive.empty` and `visualisation.archive.unconfigured`).
+ * The picker option and the tray heading happen to read the same word —
+ * they are still two different keys, kept as two constants so a future edit
+ * to either doesn't silently desync the other.
+ */
+const ARCHIVE_PICKER_LABEL = 'Archive';
+const ARCHIVE_TRAY_HEADING = 'Archive';
+const BOOKSHELF_TITLE = 'Bookshelf';
+const BOOKSHELF_DESCRIPTION =
+  'Holds the outputs of completed tasks. Select it to see them.';
+const ARCHIVE_EMPTY_TEXT = 'No completed tasks yet.';
+const ARCHIVE_UNCONFIGURED_TEXT =
+  'The storage browser is not configured, so these are shown as text only.';
+
+/**
+ * How far above its tile centre the bookshelf's hit zone sits, in pixels —
+ * `FURNITURE_SIZES.bookshelf.height / 2` in `scene/drawFurniture.ts`
+ * (`height: 34`), the same offset `buildArchiveZone` in
+ * `scene/TcpCompanyScene.ts` centres the zone on. Derived the same way the
+ * whiteboard test below derives its own `15` from `WHITEBOARD_ZONE_LIFT`,
+ * not copied as an unexplained magic number.
+ */
+const BOOKSHELF_ZONE_LIFT = 17;
+
 /**
  * The visualisation's hidden accessible description, built the way
  * `t('visualisation.summary', …)` and `t('visualisation.keys')` are (000.01
@@ -616,6 +644,73 @@ test.describe('company visualisation', () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       expect(cancelled.status()).toBe(202);
+    });
+
+    // 002.02 stage 8/9: the archive room and its bookshelf. There is no
+    // succeeded-task fixture here — see the note above `describe('company
+    // visualisation')` for why driving a task to `succeeded` needs a real
+    // LLM turn this tier cannot supply. The empty state still proves the
+    // tray opens from both routes and reads its live config correctly.
+    test('an archive tray opens from the picker and the bookshelf, with a tooltip', async ({
+      page,
+    }) => {
+      await page.goto(`/company/${companyId}`);
+      const stage = officeSummary(page);
+      const canvas = stage.locator('canvas');
+      // See the pan test above for why this goes first (the dev-only
+      // StrictMode double-mount race).
+      await expect(stage).toHaveAccessibleDescription(summary(2, 0, 0));
+
+      await page.getByRole('button', { name: SHOW_DETAILS_LABEL }).click();
+      await page.getByRole('option', { name: ARCHIVE_PICKER_LABEL }).click();
+
+      const tray = page.getByRole('complementary', {
+        name: ARCHIVE_TRAY_HEADING,
+      });
+      await expect(tray).toBeVisible();
+      // No succeeded task exists for this company, so the tray reads its
+      // empty state. The absence of the "not configured" note is the
+      // positive half of that check: it proves `MINIO_CONSOLE_URL` and
+      // `MINIO_BUCKET_PREFIX` (docker-compose.yml's `tcp-web`) actually
+      // reached this deployment's runtime config — a succeeded row would
+      // otherwise render as plain text instead of a Silo link.
+      await expect(tray).toContainText(ARCHIVE_EMPTY_TEXT);
+      await expect(tray).not.toContainText(ARCHIVE_UNCONFIGURED_TEXT);
+
+      await page.getByRole('button', { name: FOLLOW_LABEL }).click();
+
+      const box = await canvas.boundingBox();
+      expect(box).not.toBeNull();
+      const cx = box!.x + box!.width / 2;
+      const cy = box!.y + box!.height / 2;
+
+      // Follow centres the camera on the bookshelf's tile centre, so the
+      // canvas's own centre, lifted onto the bookshelf's hit zone, is where
+      // the pointer meets it — the same derivation the whiteboard test above
+      // gives its own `15`.
+      await page.mouse.move(cx, cy - BOOKSHELF_ZONE_LIFT);
+      const tooltip = page.getByRole('tooltip');
+      await expect(tooltip).toContainText(BOOKSHELF_TITLE);
+      await expect(tooltip).toContainText(BOOKSHELF_DESCRIPTION);
+
+      await page.getByRole('button', { name: CLOSE_DETAILS_LABEL }).click();
+      await expect(tray).toBeHidden();
+
+      // Closing the tray widens the canvas, same as the role tray test
+      // above — recompute before clicking, or the click lands off the
+      // resized bookshelf.
+      await expect
+        .poll(async () => (await canvas.boundingBox())?.width)
+        .toBeGreaterThan(box!.width);
+      const wider = await canvas.boundingBox();
+      expect(wider).not.toBeNull();
+
+      // The second way in: clicking the bookshelf directly, with no picker.
+      await page.mouse.click(
+        wider!.x + wider!.width / 2,
+        wider!.y + wider!.height / 2 - BOOKSHELF_ZONE_LIFT,
+      );
+      await expect(tray).toBeVisible();
     });
   });
 });
