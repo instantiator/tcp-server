@@ -20,6 +20,7 @@ const SNAPSHOT: CompanySnapshot = {
       shortcode: 'TASK-1',
       request: 'Reconcile accounts',
       finished: false,
+      succeeded: false,
       step: 0,
       steps: 1,
     },
@@ -78,6 +79,8 @@ const OWNER: Avatar = {
   target: { kind: 'exit' },
   placeAtTarget: false,
   hasRole: true,
+  carrying: null,
+  dissociatedSeq: null,
 };
 
 const WORLD: OfficeWorld = {
@@ -107,7 +110,7 @@ describe('describeFurniture', () => {
     );
   });
 
-  it.each(['sofa', 'pigeonholes', 'table', 'officeDoor'] as const)(
+  it.each(['sofa', 'pigeonholes', 'table', 'officeDoor', 'bookshelf'] as const)(
     'describes a %s',
     (kind) => {
       expect(describeFurniture(furniture(kind), WORLD, SNAPSHOT)).toEqual({
@@ -151,12 +154,15 @@ describe('describeRoom', () => {
     ).toBe(t('visualisation.room.oneToOne.descriptionUnknown'));
   });
 
-  it.each(['rec', 'mail'] as const)('describes the %s room', (purpose) => {
-    expect(describeRoom(room(purpose, purpose), SNAPSHOT)).toEqual({
-      title: t(`visualisation.room.${purpose}`),
-      description: t(`visualisation.room.${purpose}.description`),
-    });
-  });
+  it.each(['rec', 'mail', 'archive'] as const)(
+    'describes the %s room',
+    (purpose) => {
+      expect(describeRoom(room(purpose, purpose), SNAPSHOT)).toEqual({
+        title: t(`visualisation.room.${purpose}`),
+        description: t(`visualisation.room.${purpose}.description`),
+      });
+    },
+  );
 
   it('does not describe the corridor', () => {
     expect(describeRoom(room('corridor', 'corridor'), SNAPSHOT)).toBeNull();

@@ -38,12 +38,16 @@ export const OFFICE_DOOR_TILE: Tile = { x: 1, y: CORRIDOR_Y };
 
 export const REC_ROOM_SLOT = 0;
 export const MAIL_ROOM_SLOT = 1;
+export const ARCHIVE_ROOM_SLOT = 2;
 /** Task and 1:1 rooms take the first free slot from here. */
-export const FIRST_DYNAMIC_SLOT = 2;
+export const FIRST_DYNAMIC_SLOT = 3;
 
 export const REC_ROOM_ID = 'rec';
 export const MAIL_ROOM_ID = 'mail';
+export const ARCHIVE_ROOM_ID = 'archive';
 export const CORRIDOR_ID = 'corridor';
+/** The archive's bookshelf, by the plan's `<roomId>:<kind>` furniture-id convention. */
+export const ARCHIVE_BOOKSHELF_ID = `${ARCHIVE_ROOM_ID}:bookshelf`;
 
 /** The id of the room for a task. */
 export const taskRoomId = (taskId: string): string => `task:${taskId}`;
@@ -126,9 +130,11 @@ export function mapBounds(world: OfficeWorld): Bounds {
 }
 
 /**
- * The starting office: the rec room in slot 0 and the mail room in slot 1,
- * each furnished; the corridor, one column long; the office door. No
- * avatars, `layoutVersion` 0, `nextAvatarNumber` 1, `corridorColumns` 1.
+ * The starting office: the rec room in slot 0, the mail room in slot 1 and
+ * the archive in slot 2, each furnished; the corridor spans both of slot
+ * 2's column and slot 0/1's; the office door. No avatars, `layoutVersion`
+ * 0, `nextAvatarNumber` 1, `seq` 0, `corridorColumns` 2 — slot 2 is already
+ * in column 1.
  */
 export function createInitialWorld(): OfficeWorld {
   const rec: Room = {
@@ -147,7 +153,15 @@ export function createInitialWorld(): OfficeWorld {
     door: doorTile(MAIL_ROOM_SLOT),
     closing: false,
   };
-  const corridorColumns = 1;
+  const archive: Room = {
+    id: ARCHIVE_ROOM_ID,
+    purpose: 'archive',
+    slot: ARCHIVE_ROOM_SLOT,
+    bounds: slotBounds(ARCHIVE_ROOM_SLOT),
+    door: doorTile(ARCHIVE_ROOM_SLOT),
+    closing: false,
+  };
+  const corridorColumns = columnOfSlot(ARCHIVE_ROOM_SLOT) + 1;
   const corridor: Room = {
     id: CORRIDOR_ID,
     purpose: 'corridor',
@@ -164,11 +178,17 @@ export function createInitialWorld(): OfficeWorld {
   };
 
   return {
-    rooms: [rec, mail, corridor],
-    furniture: [...furnishRoom(rec), ...furnishRoom(mail), officeDoor],
+    rooms: [rec, mail, archive, corridor],
+    furniture: [
+      ...furnishRoom(rec),
+      ...furnishRoom(mail),
+      ...furnishRoom(archive),
+      officeDoor,
+    ],
     avatars: [],
     layoutVersion: 0,
     nextAvatarNumber: 1,
     corridorColumns,
+    seq: 0,
   };
 }

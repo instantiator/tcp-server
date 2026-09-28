@@ -24,6 +24,7 @@ function taskSnap(overrides: Partial<SnapshotTask> = {}): SnapshotTask {
     shortcode: 'T1',
     request: 'Do the thing',
     finished: false,
+    succeeded: false,
     step: 0,
     steps: 0,
     ...overrides,

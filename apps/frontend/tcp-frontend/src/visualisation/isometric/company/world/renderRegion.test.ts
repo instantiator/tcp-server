@@ -112,10 +112,11 @@ describe('renderRegion', () => {
   });
 
   it('walls the corridor edge rows above an empty column', () => {
-    // corridorColumns 3, but only column 0 has rooms: column 1's edge rows
-    // have no room to claim them, so they fall to the corridor-edge rule.
+    // corridorColumns 3, but only columns 0 (rec/mail) and 1 (archive) have
+    // rooms: column 2's edge rows have no room to claim them, so they fall
+    // to the corridor-edge rule.
     const world = { ...createInitialWorld(), corridorColumns: 3 };
-    const region = renderRegion(world, 11, CORRIDOR_Y - 1, 11, CORRIDOR_Y + 2);
+    const region = renderRegion(world, 20, CORRIDOR_Y - 1, 20, CORRIDOR_Y + 2);
     expect(region.cells[0]?.[0]).toEqual({
       floor: 'corridor',
       wall: true,

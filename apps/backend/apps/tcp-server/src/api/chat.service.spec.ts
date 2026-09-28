@@ -597,6 +597,49 @@ describe('ChatService', () => {
     );
   });
 
+  // 002.02 stage 2: recordTurnFailure used to publish the failed state_change
+  // before writing the agent row, so a client that refetched on the event
+  // could still read the pre-failure status.
+  it('publishes the failed state_change only after the agent row (and assignment) are written', async () => {
+    const agent = makeAgent({ threadId: null });
+    const role = makeRole();
+    agentRepo.findOneBy.mockResolvedValue(agent);
+    roleRepo.findOneBy.mockResolvedValue(role);
+    compiledGraph.streamEvents.mockReturnValue(
+      streamOf([], new Error('LLM down')),
+    );
+
+    await sendAndCollect(agent.id, 'Hello');
+    // Let the finally-block cleanup (and any trailing microtasks) settle.
+    await new Promise((r) => setImmediate(r));
+
+    const updateCallIndex = (
+      agentRepo.update.mock.calls as [string, { status?: string }][]
+    ).findIndex(([, patch]) => patch.status === AgentStatus.Failed);
+    expect(updateCallIndex).toBeGreaterThanOrEqual(0);
+
+    const publishCallIndex = (
+      auditService.record.mock.calls as [
+        string,
+        string,
+        string | null,
+        AuditEventType,
+        { newStatus?: string },
+      ][]
+    ).findIndex(
+      ([, , , eventType, payload]) =>
+        eventType === AuditEventType.StateChange &&
+        payload.newStatus === AgentStatus.Failed,
+    );
+    expect(publishCallIndex).toBeGreaterThanOrEqual(0);
+
+    expect(
+      agentRepo.update.mock.invocationCallOrder[updateCallIndex],
+    ).toBeLessThan(
+      auditService.record.mock.invocationCallOrder[publishCallIndex],
+    );
+  });
+
   it('returns early without a terminal event when a tool paused the agent mid-turn', async () => {
     const agent = makeAgent({ threadId: null });
     const role = makeRole();

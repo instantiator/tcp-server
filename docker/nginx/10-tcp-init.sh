@@ -76,6 +76,39 @@ case "${OIDC_LOAD_USER_INFO:-false}" in
     ;;
 esac
 
+# ---- storage console (optional) --------------------------------------------
+# MINIO_CONSOLE_URL and MINIO_BUCKET_PREFIX name the object store's browser
+# console, for the archive tray's Silo links (002.02, docs/shared-storage.md).
+# Both optional: with either unset, the corresponding config.js field is
+# omitted and the tray falls back to plain text rather than a broken link.
+# Same escaping rule as the required values above — these reach config.js
+# verbatim, and storageConsoleUrl is used in an href, so anything that could
+# close the string or inject a scheme is refused rather than silently emitted.
+STORAGE_LINES=""
+for var in MINIO_CONSOLE_URL MINIO_BUCKET_PREFIX; do
+  eval "value=\${$var:-}"
+  if [ -z "$value" ]; then
+    continue
+  fi
+  case "$value" in
+    *[\'\"\\]* | *'<'* | *'>'*)
+      echo "tcp-web: $var contains a quote, backslash or angle bracket." >&2
+      echo "tcp-web: it is embedded in config.js verbatim — refusing to start." >&2
+      exit 1
+      ;;
+  esac
+  case "$var" in
+    MINIO_CONSOLE_URL)
+      STORAGE_LINES="${STORAGE_LINES}  storageConsoleUrl: '${value}',
+"
+      ;;
+    MINIO_BUCKET_PREFIX)
+      STORAGE_LINES="${STORAGE_LINES}  storageBucket: '${value}',
+"
+      ;;
+  esac
+done
+
 cat > "$HTML_DIR/config.js" <<EOF
 // Generated at container start by docker/nginx/10-tcp-init.sh. Served with
 // Cache-Control: no-store, and loaded ahead of the bundle. Not built, not
@@ -84,7 +117,7 @@ window.__TCP_CONFIG__ = {
   oidcIssuerUrl: '${OIDC_ISSUER_URL}',
   oidcClientId: '${OIDC_CLIENT_ID}',
   oidcLoadUserInfo: ${LOAD_USER_INFO},
-};
+${STORAGE_LINES}};
 EOF
 
 # ---- Pick the configuration ------------------------------------------------

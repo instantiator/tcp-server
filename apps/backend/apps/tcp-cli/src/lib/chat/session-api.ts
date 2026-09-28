@@ -84,31 +84,66 @@ export async function fetchTasks(
   }));
 }
 
+/** Plain shape of a `GET /api/agent` row — just what seeding a task pane's live agent status needs. */
+interface AgentSummary {
+  id: string;
+  status: string;
+}
+
+/**
+ * Fetches the company's currently active agents (idle/running/paused — the
+ * default status filter, see `DbService.listAgents`), keyed by id. Used to
+ * seed a freshly opened (or re-fetched) task pane's assignment rows with
+ * their agent's live status.
+ *
+ * ponytail: a terminal agent (completed/failed/cancelled) on an
+ * already-complete assignment isn't covered by this list — the assignment's
+ * own status already conveys that outcome, and the narrow race of a pane
+ * opened between an agent finishing and its assignment recording the same
+ * outcome is corrected live by the next agent event anyway
+ * (`ChatSession.watchCompanyEvents`). Promote to a per-agent fetch (there's
+ * no "all statuses" filter on the list endpoint) only if that gap is ever
+ * seen to matter.
+ */
+async function fetchActiveAgentStatusById(
+  tokens: TokenManager,
+  companyId: string,
+): Promise<Map<string, string>> {
+  const agents = await tokens.request<AgentSummary[]>(
+    'GET',
+    `/api/agent?companyId=${companyId}`,
+  );
+  return new Map(agents.map((a) => [a.id, a.status]));
+}
+
 /**
  * Fetches a task with its assignments, resolving each assignment's role id to
- * its display name for the task panel's Assignments list.
+ * its display name for the task panel's Assignments list, and seeding each
+ * assignment's `agentStatus` from the company's active agents (see
+ * {@link fetchActiveAgentStatusById}).
  *
- * NB. the two fetches are independent — a session's tasks always belong to its
- * own `companyId` — so they run in parallel rather than waiting for the task
- * fetch to learn its companyId.
+ * NB. the three fetches are independent — a session's tasks always belong to
+ * its own `companyId` — so they run in parallel rather than serially.
  */
 export async function fetchTaskDetail(
   tokens: TokenManager,
   companyId: string,
   taskId: string,
 ): Promise<TaskDetail> {
-  const [{ assignments, ...task }, roles] = await Promise.all([
+  const [{ assignments, ...task }, roles, agentStatusById] = await Promise.all([
     tokens.request<TaskDetailBody>('GET', `/api/task/${taskId}`),
     tokens.request<{ id: string; name: string; slug: string }[]>(
       'GET',
       `/api/company/${companyId}/roles`,
     ),
+    fetchActiveAgentStatusById(tokens, companyId),
   ]);
   const roleById = new Map(roles.map((r) => [r.id, r]));
   return {
     task,
     assignments: assignments.map((a) => {
       const shortcode = a.shortcode ?? null;
+      const agentId = a.agentId ?? null;
       return {
         id: a.id,
         role: roleById.get(a.roleId)?.name ?? a.roleId,
@@ -118,7 +153,8 @@ export async function fetchTaskDetail(
         prompt: a.prompt,
         shortcode,
         planIndex: planIndexFromShortcode(shortcode),
-        agentId: a.agentId ?? null,
+        agentId,
+        agentStatus: agentId ? (agentStatusById.get(agentId) ?? null) : null,
         failureReason: a.failureReason ?? null,
       };
     }),

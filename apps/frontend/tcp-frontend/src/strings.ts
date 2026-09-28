@@ -73,6 +73,10 @@ const strings = {
   'chat.conversation.listeningWithReference':
     'Listening in: {role} ({reference})',
   'chat.complete': 'Complete the chat with {role}',
+  // Closing (002.02) is not completing: it only takes the panel off screen.
+  // The chat stays open on the server, and Activity → Chats is how it's
+  // found again.
+  'chat.close': 'Close the chat with {role}',
   'chat.message.label': 'Message {role}',
   'chat.send': 'Send',
   'chat.waiting': 'Waiting for {role} to reply…',
@@ -287,6 +291,7 @@ const strings = {
   'visualisation.picker.task': 'Task: {shortcode}',
   'visualisation.picker.agent': 'Agent: {role}',
   'visualisation.picker.agentWithTask': 'Agent: {role} (task {shortcode})',
+  'visualisation.picker.archive': 'Archive',
 
   'visualisation.tooltip.agent': 'Agent: {role}',
   'visualisation.tooltip.role': 'Role: {role}',
@@ -306,7 +311,7 @@ const strings = {
   'visualisation.activity.consulting': 'consulting',
   'visualisation.activity.messagingUser': 'messaging a user',
   'visualisation.activity.finished': 'finished',
-  'visualisation.activity.waiting': 'waiting',
+  'visualisation.activity.waiting': 'waiting to start',
 
   // Furniture and room titles double as their canvas labels; the
   // descriptions are the tooltip's second line.
@@ -327,6 +332,9 @@ const strings = {
   'visualisation.furniture.officeDoor': 'Office door',
   'visualisation.furniture.officeDoor.description':
     'Agents arrive and leave here.',
+  'visualisation.furniture.bookshelf': 'Bookshelf',
+  'visualisation.furniture.bookshelf.description':
+    'Holds the outputs of completed tasks. Select it to see them.',
   'visualisation.room.task': 'Task room: {shortcode}',
   'visualisation.room.task.description':
     'Agents work on task {shortcode} here.',
@@ -340,6 +348,9 @@ const strings = {
     "The company's roles are kept here. New agents collect their role here.",
   'visualisation.room.mail': 'Mail room',
   'visualisation.room.mail.description': "Agents wait here for a user's reply.",
+  'visualisation.room.archive': 'Archive',
+  'visualisation.room.archive.description':
+    "Finished tasks' outputs are filed here.",
 
   // The side tray (`ui/VisualisationTray.tsx` and its per-kind panels). Not a
   // dialog: nothing here is announced, and the tray's body is read by
@@ -361,6 +372,17 @@ const strings = {
   'visualisation.tray.follow': 'Follow',
   'visualisation.tray.listenIn': 'Listen in to {role}',
   'visualisation.tray.close': 'Close details',
+
+  // The archive panel (`ui/ArchiveDetails.tsx`): the bookshelf's tray, a list
+  // of completed tasks linking out to Silo. A link's accessible name is its
+  // visible `.row` followed by the visually hidden `.linkSuffix`, so what is
+  // seen is what is said (WCAG 2.5.3).
+  'visualisation.archive.heading': 'Archive',
+  'visualisation.archive.empty': 'No completed tasks yet.',
+  'visualisation.archive.row': '{shortcode} — {request}',
+  'visualisation.archive.linkSuffix': '(outputs in Silo, opens in a new tab)',
+  'visualisation.archive.unconfigured':
+    'The storage browser is not configured, so these are shown as text only.',
 
   // Assignment modes, the office's word for each — `modeLabel` in
   // `visualisation/isometric/company/ui/modeLabel.ts`, mirroring

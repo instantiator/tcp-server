@@ -3,6 +3,7 @@ import { Button, ToggleButton } from 'react-aria-components';
 import { t } from '../../../../strings';
 import type { SelectionTarget } from '../TcpPhaserEventBus';
 import { AgentDetails } from './AgentDetails';
+import { ArchiveDetails } from './ArchiveDetails';
 import { RoleDetails } from './RoleDetails';
 import { TaskDetails } from './TaskDetails';
 
@@ -56,6 +57,9 @@ export const VisualisationTray = forwardRef<
           roleId={selection.id}
           headingId={headingId}
         />
+      )}
+      {selection.kind === 'archive' && (
+        <ArchiveDetails companyId={companyId} headingId={headingId} />
       )}
       <ToggleButton isSelected={following} onChange={onToggleFollow}>
         {t('visualisation.tray.follow')}

@@ -4,8 +4,8 @@ import type { OfficeLabel } from '../TcpPhaserEventBus';
 import type { Tile } from '../world/types';
 import { LABEL_STYLE } from './palette';
 
-/** How far above its anchor a label sits, in pixels: clear of a figure's head, or of furniture. */
-const AVATAR_LABEL_LIFT = 44;
+/** How far above its anchor a label sits, in pixels: clear of a figure's head and the role book above it, or of furniture. */
+const AVATAR_LABEL_LIFT = 54;
 const TILE_LABEL_LIFT = 36;
 /** Above every avatar and piece of furniture, whose depth is their screen `y`. */
 const LABEL_DEPTH = 1_000_000;

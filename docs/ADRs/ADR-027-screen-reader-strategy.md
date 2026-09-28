@@ -1,6 +1,6 @@
 # ADR-027: Screen Reader Strategy for Live and Data-Rich Views
 
-**Status:** Accepted (amended — see [002.02](#amendment-as-implemented-00202), [003.03](#amendment-as-implemented-00303), [008.01](#amendment-as-implemented-00801), [008.02.02](#amendment-as-implemented-0080202) and [000.01](#amendment-as-implemented-00001) at the end)
+**Status:** Accepted (amended — see [002.02](#amendment-as-implemented-00202), [003.03](#amendment-as-implemented-00303), [008.01](#amendment-as-implemented-00801), [008.02.02](#amendment-as-implemented-0080202), [000.01](#amendment-as-implemented-00001) and [002.02 (phase 03)](#amendment-as-implemented-p03-002-02) at the end)
 
 ## Context
 
@@ -240,3 +240,51 @@ Focus points now implemented and asserted for this dialog: dialog open, dialog t
 **Nothing announces avatar movement, on purpose.** Walking, arriving, starting or finishing a consultation — none of it is announced, because movement is decoration, and narrating it would bury everything else. The Activity tab (007.01) stays the browsable equivalent: the same tasks, agents and consultations, as a real list rather than positions on a canvas.
 
 **Two `jsx-a11y` disables, both on the stage `div`, both for one reason.** `no-noninteractive-element-interactions` and `no-noninteractive-tabindex` are suppressed with the same comment: "the stage is a labelled pan surface; its toolbar buttons are the non-pointer route (ADR-026)". No choice of role avoids them — `jsx-a11y` flags every non-widget role paired with a `tabIndex` and key handlers, `application` and `region` included, so switching the role away from `group` would not have satisfied the rule and would have picked a less accurate one. `group` names what the stage actually is: a labelled collection of visual objects, not a widget with its own interaction model. It takes `tabIndex={0}` and reads arrow keys and WASD only while it holds focus (WCAG 2.1.4). The toolbar's pan buttons do the same job for anyone who never focuses the stage.
+
+## Amendment as implemented (002.02, phase 03) <a id="amendment-as-implemented-p03-002-02"></a>
+
+The office view's accessibility pass (002.02 stage 10) found one real
+problem, closed a question about the office view's two new avatar states,
+and gave a chat panel's Close button the focus answer the 008.02.02
+amendment already worked out for a different removal.
+
+### An `aria-label` replaced the archive links' visible text (WCAG 2.5.3)
+
+Each archive tray row (`ArchiveDetails.tsx`) linked to a task's outputs in
+Silo. The first version named each link with an `aria-label` — "Open the
+outputs of T12 in Silo (new tab)" — which **replaces** the accessible name
+rather than adding to it, so a speech-input user saying what they see on
+screen ("click T12 — a short report on…") would not match. WCAG 2.5.3
+(Label in Name) requires the visible text to be part of the accessible
+name, not just related to it.
+
+Fixed the general way: the row's own visible text leads the name, and a
+visually-hidden `<span>` appends what the `aria-label` used to say alone —
+"(outputs in Silo, opens in a new tab)". The shortcode at the start of
+every row keeps each name unique (2.4.4) even though several tasks can
+share a shortened request. Without a link (`storageConsoleUrl`/
+`storageBucket` unset), a row is plain text — nothing to name.
+
+### Two new avatar states, and neither is announced
+
+002.02 added a "waiting to start" state (an avatar idle by its role's book
+in the rec room, instead of the whiteboard) and a "carrying outputs to the
+archive" state (a small box, on the way to the bookshelf). Both are covered
+by the [000.01 amendment](#amendment-as-implemented-00001)'s existing rule
+that nothing announces avatar movement — they're new positions and a new
+prop on an avatar, not a new kind of change. A pipeline test walking a task
+through its full lifecycle, including waiting and carrying, asserts the
+announcer is never called across any of it.
+
+### Chat panel Close: the same focus answer as a disappearing control
+
+The chat dialog gained a per-panel **Close** button (`web-client.md`'s
+[Chat dialog](../web-client.md#chat-dialog) section), alongside the
+existing Complete. Closing removes the panel outright — unlike Complete,
+which the [008.02.02 amendment](#amendment-as-implemented-0080202) above
+covers, this **is** the "destructive completion" case
+[the focus rules](#focus-is-managed-at-four-points) originally described,
+now that something real fills it again: closing the dialog's **last**
+panel returns focus to whatever opened the dialog, and closing any other
+panel moves focus to a stable neighbour — the panel after it, or the one
+before if it was last. Axe and a focus assertion cover both paths.

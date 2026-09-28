@@ -51,6 +51,8 @@ function makeAvatar(
     target,
     placeAtTarget: false,
     hasRole: true,
+    carrying: null,
+    dissociatedSeq: null,
     ...overrides,
   };
 }

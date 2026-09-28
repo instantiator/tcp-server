@@ -17,6 +17,7 @@ import {
 } from '@tcp/shared';
 import { randomUUID, type UUID } from 'crypto';
 import { Repository } from 'typeorm';
+import { AuditService } from '../audit/audit.service';
 import { DbService } from '../db/db.service';
 import { StorageService } from '../storage/storage.service';
 import { AssignmentCompletionService } from './assignment-completion.service';
@@ -119,9 +120,15 @@ describe('AssignmentService', () => {
         agentRepo,
         assignmentRepo,
         taskRepo,
+        roleRepo,
         dispatcher as unknown as TaskDispatcher,
         pauseResume as unknown as PauseAndResumeService,
         gate,
+        // The QA hand-off path publishes an agent state_change through this;
+        // no test here asserts its call shape.
+        {
+          record: jest.fn().mockResolvedValue(undefined),
+        } as unknown as AuditService,
       ),
       new PlanValidationService(dbService),
       new StorageScopeService(assignmentRepo, dbService),

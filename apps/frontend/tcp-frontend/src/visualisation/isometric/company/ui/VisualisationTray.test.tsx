@@ -95,15 +95,26 @@ const AGENT_ROUTE = /\/api\/agent\/agent-1(\?|$)/;
 const ASSIGNMENTS_ROUTE = /\/api\/assignment\?/;
 const ROLES_ROUTE = /\/api\/company\/company-1\/roles/;
 const TASKS_ROUTE = /\/api\/task\?/;
+const COMPANY_ROUTE = /\/api\/company\/company-1(\?|$)/;
+
+const companyFixture = () => ({
+  id: COMPANY_ID,
+  slug: 'acme-co',
+  name: 'Acme Co',
+  description: 'A company',
+  mcpServerList: [],
+  nextTaskShortcodeIndex: 1,
+});
 
 interface Routes {
   readonly agent?: RouteResponse;
   readonly assignments?: RouteResponse;
   readonly roles?: RouteResponse;
   readonly tasks?: RouteResponse;
+  readonly company?: RouteResponse;
 }
 
-/** Answers every route any of the three detail panels can reach. */
+/** Answers every route any of the four detail panels can reach. */
 const respond = (overrides: Routes = {}): void => {
   respondByRoute([
     [AGENT_ROUTE, overrides.agent ?? { body: agentFixture() }],
@@ -113,6 +124,7 @@ const respond = (overrides: Routes = {}): void => {
     ],
     [ROLES_ROUTE, overrides.roles ?? { body: [roleFixture()] }],
     [TASKS_ROUTE, overrides.tasks ?? { body: [taskFixture()] }],
+    [COMPANY_ROUTE, overrides.company ?? { body: companyFixture() }],
   ]);
 };
 
@@ -127,7 +139,9 @@ const renderTray = (
   const openChat = vi.fn();
   const utils = render(
     <QueryClientProvider client={queryClient}>
-      <ChatContext.Provider value={{ openChat, startChat: vi.fn() }}>
+      <ChatContext.Provider
+        value={{ openChat, closeChat: vi.fn(), startChat: vi.fn() }}
+      >
         <VisualisationTray
           companyId={COMPANY_ID}
           selection={{ kind: 'agent', id: AGENT_ID }}
@@ -202,6 +216,29 @@ describe('VisualisationTray', () => {
     });
   });
 
+  it('reads "waiting to start" for an idle task agent on an in-progress assignment', async () => {
+    // 002.02 stage 4 (decision 4): idle only ever means "created, not
+    // started" for a task agent, most often queued behind the worker slot.
+    respond({ agent: { body: agentFixture('idle') } });
+    renderTray();
+
+    const aside = await screen.findByRole('complementary', {
+      name: t('visualisation.tray.agentHeading', { role: ROLE_NAME }),
+    });
+    expect(
+      within(aside).getByText(t('visualisation.activity.waiting')),
+    ).toBeInTheDocument();
+    expect(within(aside).queryByText(statusLabel('idle'))).toBeNull();
+  });
+
+  it('has no accessibility violations reading "waiting to start"', async () => {
+    respond({ agent: { body: agentFixture('idle') } });
+    renderTray();
+
+    await screen.findByText(t('visualisation.activity.waiting'));
+    await expectNoA11yViolations(document.body);
+  });
+
   it('offers no listening in once the agent has finished', async () => {
     respond({ agent: { body: agentFixture('completed') } });
     renderTray();
@@ -259,6 +296,39 @@ describe('VisualisationTray', () => {
       name: t('visualisation.tray.roleHeading', { name: ROLE_NAME }),
     });
     expect(within(aside).getByText('Sells things')).toBeInTheDocument();
+  });
+
+  it('renders ArchiveDetails for an archive selection', async () => {
+    respond({ tasks: { body: [taskFixture('succeeded')] } });
+    renderTray({ selection: { kind: 'archive' } });
+
+    await screen.findByText(/TASK-1/);
+    expect(
+      screen.getByRole('complementary', {
+        name: t('visualisation.archive.heading'),
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('has no accessibility violations for the archive, with its links', async () => {
+    window.__TCP_CONFIG__ = {
+      oidcIssuerUrl: 'https://idp.example.com',
+      oidcClientId: 'tcp-web-test',
+      storageConsoleUrl: 'http://localhost:9001',
+      storageBucket: 'tcp',
+    };
+    try {
+      respond({ tasks: { body: [taskFixture('succeeded')] } });
+      renderTray({ selection: { kind: 'archive' } });
+
+      await screen.findByRole('link', { name: /^TASK-1 — / });
+      await expectNoA11yViolations(document.body);
+    } finally {
+      window.__TCP_CONFIG__ = {
+        oidcIssuerUrl: 'https://idp.example.com',
+        oidcClientId: 'tcp-web-test',
+      };
+    }
   });
 
   it('shows "gone" for an agent id the company no longer has', async () => {

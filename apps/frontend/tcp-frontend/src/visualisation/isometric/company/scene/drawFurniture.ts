@@ -20,6 +20,8 @@ export const FURNITURE_SIZES: Record<FurnitureKind, FurnitureSize> = {
   pigeonholes: { size: 48, height: 36 },
   table: { size: 40, height: 12 },
   officeDoor: { size: 64, height: 2 },
+  // Tall and shallow: a shelving unit against the wall, not a floor piece.
+  bookshelf: { size: 28, height: 34 },
 };
 
 /**

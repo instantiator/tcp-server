@@ -3,6 +3,7 @@ import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import {
   AgentStatus,
   AuditEventType,
+  buildAgentChangeSummary,
   ContextManagerService,
   DEFAULT_LLM_CONTEXT_WINDOW,
   TcpAgent,
@@ -319,6 +320,10 @@ export class ChatService {
    * The turn is detached — a failure is recorded as a terminal state_change
    * rather than rethrown (there is no caller left to catch it), and the chat
    * agent's orphan assignment is failed alongside it.
+   *
+   * Writes first, publishes after (002.02 stage 2): this used to publish
+   * before the agent row was updated, so a client that refetched on the
+   * event could still read the pre-failure status.
    */
   private async recordTurnFailure(
     ctx: TurnContext,
@@ -330,13 +335,6 @@ export class ChatService {
         ? err.message
         : 'unexpected LLM failure';
     this.logger.error(`Chat agent ${agent.id} error: ${msg}`);
-    await this.audit.record(
-      agent.companyId,
-      role.name,
-      agent.id,
-      AuditEventType.StateChange,
-      { entity: 'agent', newStatus: 'failed', reason: msg },
-    );
     await this.agentRepo.update(agent.id, { status: AgentStatus.Failed });
     if (agent.assignmentId) {
       await claimStatus(
@@ -347,5 +345,20 @@ export class ChatService {
         { failureReason: msg },
       );
     }
+    await this.audit.record(
+      agent.companyId,
+      role.name,
+      agent.id,
+      AuditEventType.StateChange,
+      {
+        entity: 'agent',
+        newStatus: AgentStatus.Failed,
+        reason: msg,
+        summary: buildAgentChangeSummary({
+          ...agent,
+          status: AgentStatus.Failed,
+        }),
+      },
+    );
   }
 }

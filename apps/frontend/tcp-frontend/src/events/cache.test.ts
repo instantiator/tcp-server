@@ -1,6 +1,6 @@
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, QueryObserver } from '@tanstack/react-query';
 import type { WireEvent } from '@tcp/shared/client';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { applyEvent } from './cache';
 
@@ -148,6 +148,44 @@ describe('applyEvent', () => {
    * sends one, so a list that renders correctly on subscribe would then be
    * refetched wholesale on every subsequent status change.
    */
+  it('keeps a patch when a fetch that started before it lands after it', async () => {
+    const queryClient = newClient();
+    const listKey = ['agent', 'list', { companyId: 'company-1' }];
+    queryClient.setQueryData(listKey, [{ id: 'agent-1', status: 'idle' }]);
+
+    // The first fetch read the database before the write; any later one reads
+    // it after.
+    let calls = 0;
+    let releaseStale: () => void = () => undefined;
+    const observer = new QueryObserver(queryClient, {
+      queryKey: listKey,
+      queryFn: () => {
+        calls += 1;
+        if (calls > 1)
+          return Promise.resolve([{ id: 'agent-1', status: 'running' }]);
+        return new Promise<unknown[]>((resolve) => {
+          releaseStale = () => resolve([{ id: 'agent-1', status: 'idle' }]);
+        });
+      },
+    });
+    const unsubscribe = observer.subscribe(() => undefined);
+    expect(queryClient.isFetching({ queryKey: listKey })).toBe(1);
+
+    applyEvent(
+      queryClient,
+      auditEvent({ entity: 'agent', newStatus: 'running' }, 'agent-1'),
+    );
+    releaseStale();
+    await vi.waitFor(() => {
+      expect(queryClient.isFetching({ queryKey: listKey })).toBe(0);
+    });
+    unsubscribe();
+
+    expect(queryClient.getQueryData(listKey)).toEqual([
+      { id: 'agent-1', status: 'running' },
+    ]);
+  });
+
   describe('an agent state change with no summary', () => {
     it('patches the row it names, without invalidating', () => {
       const queryClient = newClient();

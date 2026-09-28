@@ -28,7 +28,17 @@ interface PickerItem {
   readonly target: SelectionTarget;
 }
 
-/** Every role, every unfinished task, then every agent still doing something. */
+/** There is only ever one archive, so it needs no id of its own. */
+const ARCHIVE_ITEM: PickerItem = {
+  key: 'archive',
+  label: t('visualisation.picker.archive'),
+  target: { kind: 'archive' },
+};
+
+/**
+ * Every role, every unfinished task, every agent still doing something, then
+ * the archive — always present, since the archive room always exists.
+ */
 const buildItems = (snapshot: CompanySnapshot): readonly PickerItem[] => {
   const roleName = (roleId: string): string =>
     snapshot.roles.find((role) => role.id === roleId)?.name ??
@@ -67,7 +77,7 @@ const buildItems = (snapshot: CompanySnapshot): readonly PickerItem[] => {
       };
     });
 
-  return [...roleItems, ...taskItems, ...agentItems];
+  return [...roleItems, ...taskItems, ...agentItems, ARCHIVE_ITEM];
 };
 
 /**
@@ -95,7 +105,11 @@ export const DetailsPicker = ({
   );
 
   const value: Key | null =
-    selection === null ? null : `${selection.kind}:${selection.id}`;
+    selection === null
+      ? null
+      : selection.kind === 'archive'
+        ? 'archive'
+        : `${selection.kind}:${selection.id}`;
 
   return (
     <Select

@@ -3,6 +3,7 @@ import {
   AssignmentRow,
   dateTimeSeconds,
   escapeMarkup,
+  formatAgentStatusLabel,
   formatTaskState,
   makeAssignmentEntry,
   makeRoleEntry,
@@ -348,6 +349,73 @@ describe('renderAssignmentListEntry', () => {
       4,
     );
     expect(lines[0]).not.toContain('did not pass QA');
+  });
+
+  it('omits the agent segment entirely when no agent status has been seen (e.g. not yet seeded)', () => {
+    const lines = renderAssignmentListEntry(row(), false, 70, 4);
+    expect(lines[0]).not.toContain('[agent:');
+  });
+
+  it('appends the live agent status as an "[agent: ...]" segment', () => {
+    const lines = renderAssignmentListEntry(
+      row({ agentStatus: 'running' }),
+      false,
+      70,
+      4,
+    );
+    expect(lines[0]).toContain('[agent: running]');
+  });
+});
+
+describe('formatAgentStatusLabel', () => {
+  const row = (overrides: Partial<AssignmentRow> = {}): AssignmentRow => ({
+    id: 'a1',
+    index: 1,
+    role: 'Implementer',
+    mode: 'implement',
+    status: 'in-progress',
+    prompt: 'Write the report',
+    agentId: 'agent-1',
+    failureReason: null,
+    ...overrides,
+  });
+
+  it('reads "no agent yet" when the assignment has no agent at all', () => {
+    expect(formatAgentStatusLabel(row({ agentId: null }))).toBe('no agent yet');
+  });
+
+  it('reads "waiting to start" for decision 4: idle on an in-progress, non-chat assignment', () => {
+    expect(
+      formatAgentStatusLabel(
+        row({ agentStatus: 'idle', status: 'in-progress' }),
+      ),
+    ).toBe('waiting to start');
+  });
+
+  it('does not read "waiting to start" for an idle agent on a not-yet-in-progress assignment', () => {
+    expect(
+      formatAgentStatusLabel(row({ agentStatus: 'idle', status: 'ready' })),
+    ).toBe('idle');
+  });
+
+  it('does not read "waiting to start" for an idle chat-mode agent', () => {
+    expect(
+      formatAgentStatusLabel(
+        row({ agentStatus: 'idle', status: 'in-progress', mode: 'chat' }),
+      ),
+    ).toBe('idle');
+  });
+
+  it.each(['running', 'paused', 'completed', 'failed', 'cancelled'])(
+    'passes a non-idle agent status straight through: %s',
+    (status) => {
+      expect(formatAgentStatusLabel(row({ agentStatus: status }))).toBe(status);
+    },
+  );
+
+  it('shows nothing when an agent is dispatched but its status is unknown', () => {
+    expect(formatAgentStatusLabel(row({ agentStatus: null }))).toBe('');
+    expect(formatAgentStatusLabel(row({}))).toBe('');
   });
 });
 

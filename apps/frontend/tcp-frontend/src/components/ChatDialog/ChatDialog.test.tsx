@@ -439,10 +439,17 @@ describe('ChatDialog', () => {
     });
   });
 
-  // Asserted as an absence, deliberately. The close button used to do exactly
-  // what minimise does, so its removal is the fix rather than a tidy-up, and an
-  // absence nobody asserts is one a future edit restores by accident.
-  it('has no close control of its own — only minimise', async () => {
+  // Asserted as an absence, deliberately. The dialog's own close button used
+  // to do exactly what minimise does, so its removal is the fix rather than a
+  // tidy-up, and an absence nobody asserts is one a future edit restores by
+  // accident.
+  //
+  // CHANGED (002.02 stage 7): renamed from "has no close control of its own —
+  // only minimise" to say "dialog chrome" — a per-panel Close button now
+  // exists (`ChatConversation`), so the old title read as false. The
+  // assertions are unchanged: `t('dialog.close')` is still the framework's
+  // own chrome control (`Dialog.tsx`'s `hideClose`), not any panel's Close.
+  it('has no dialog-chrome close control of its own — only minimise', async () => {
     respondChat();
     const user = userEvent.setup();
     renderChat();
@@ -963,11 +970,156 @@ describe('ChatDialog', () => {
   });
 
   /**
+   * Closing a chat (002.02 stage 7): the fix for chats piling up in the dock
+   * with no way to drop them. Unlike Complete, Close removes the panel
+   * itself — but the chat stays open on the server, and `ChatsList` (Activity
+   * → Chats) is how it is found again, so nothing here talks to the network.
+   */
+  describe('closing a chat', () => {
+    const closeButton = (role: string) =>
+      screen.getByRole('button', { name: t('chat.close', { role }) });
+
+    const panelFor = (role: string) =>
+      screen.queryByRole('region', {
+        name: t('chat.conversation.label', { role }),
+      });
+
+    it('removes only the panel that was closed', async () => {
+      respondChat();
+      const user = userEvent.setup();
+      renderChat();
+
+      await openTwoConversations(user);
+      await user.click(closeButton(ROLE_A));
+
+      expect(panelFor(ROLE_A)).toBeNull();
+      expect(panelFor(ROLE_B)).toBeTruthy();
+    });
+
+    it('closes the dialog once its last panel is closed', async () => {
+      respondChat();
+      const user = userEvent.setup();
+      renderChat();
+
+      await user.click(screen.getByRole('button', { name: 'Open Sales' }));
+      await waitForTranscriptsReady();
+      await user.click(closeButton(ROLE_A));
+
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
+    // The dock has no reachable path to a panel that is also open (opening
+    // any docked conversation un-parks every docked one — see
+    // `openTwoConversations`), so this exercises the defensive cleanup in
+    // `ChatProvider.closeChat` rather than a state the UI can otherwise
+    // reach: the bar must not come back empty-handed just because a
+    // conversation that used to be docked was later closed.
+    it('removes its dock entry, if it had one, once restored and closed', async () => {
+      respondChat();
+      const user = userEvent.setup();
+      renderChat();
+
+      await openTwoConversations(user);
+      await user.click(
+        screen.getByRole('button', { name: t('dialog.minimise') }),
+      );
+      await user.click(
+        screen.getByRole('button', { name: dockLabel(ROLE_B, 'idle') }),
+      );
+      await waitForTranscriptsReady();
+
+      await user.click(closeButton(ROLE_A));
+
+      expect(
+        screen.queryByRole('navigation', { name: t('dock.label') }),
+      ).toBeNull();
+    });
+
+    it("releases the closed panel's stream, leaving the other open", async () => {
+      respondChat();
+      const user = userEvent.setup();
+      renderChat();
+
+      await openTwoConversations(user);
+      await user.click(closeButton(ROLE_A));
+
+      expect(openCounts.get(streamUrls.agent(AGENT_A))).toBe(0);
+      expect(openCounts.get(streamUrls.agent(AGENT_B))).toBe(1);
+    });
+
+    it('is on a read-only listening-in panel too', async () => {
+      respondChat();
+      const user = userEvent.setup();
+      renderChat();
+
+      await user.click(
+        screen.getByRole('button', { name: 'Listen in to Sales' }),
+      );
+      await waitForTranscriptsReady();
+
+      await user.click(closeButton(ROLE_A));
+
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
+    it('stays available after the chat completes', async () => {
+      respondChat();
+      const user = userEvent.setup();
+      renderChat();
+
+      await user.click(screen.getByRole('button', { name: 'Open Sales' }));
+      await waitForTranscriptsReady();
+      act(() => {
+        streamFor(AGENT_A).emit(stateChangeEvent(AGENT_A, 'completed'));
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText(t('chat.done'))).toBeInTheDocument();
+      });
+      expect(closeButton(ROLE_A)).toBeTruthy();
+    });
+
+    it("names each panel's Close button by its own role", async () => {
+      respondChat();
+      const user = userEvent.setup();
+      renderChat();
+
+      await openTwoConversations(user);
+
+      expect(
+        within(panelFor(ROLE_A) as HTMLElement).getByRole('button', {
+          name: t('chat.close', { role: ROLE_A }),
+        }),
+      ).toBeTruthy();
+      expect(
+        within(panelFor(ROLE_B) as HTMLElement).getByRole('button', {
+          name: t('chat.close', { role: ROLE_B }),
+        }),
+      ).toBeTruthy();
+    });
+
+    it('has no accessibility violations with two panels, each with its close control', async () => {
+      respondChat();
+      const user = userEvent.setup();
+      renderChat();
+
+      await openTwoConversations(user);
+      // Two Close buttons, so the scan covers the pair (distinct names, no
+      // duplicate-id or nesting problem between panels), not just one.
+      expect(closeButton(ROLE_A)).toBeTruthy();
+      expect(closeButton(ROLE_B)).toBeTruthy();
+
+      await expectNoA11yViolations(document.body);
+    });
+  });
+
+  /**
    * Where focus goes, which for this dialog is several separate decisions.
    *
-   * ADR-027 manages focus at four points, and three of them happen here: the
-   * dialog opening, the dialog being taken off the page, and a focused control
-   * disappearing — which is what completing a chat does to its own button.
+   * ADR-027 manages focus at four points, and four of them happen here: the
+   * dialog opening, the dialog being taken off the page, a focused control
+   * disappearing — which is what completing a chat does to its own button —
+   * and closing a panel, which is the newest of the four (002.02 stage 7).
    * None of them may leave focus on `document.body`, which is where it
    * silently lands whenever a focused element is removed and nobody says where
    * it should go instead.
@@ -1043,6 +1195,58 @@ describe('ChatDialog', () => {
         expect(document.activeElement).toBe(panelFor(ROLE_A));
       });
       expect(document.activeElement).not.toBe(document.body);
+    });
+
+    const closeButton = (role: string) =>
+      screen.getByRole('button', { name: t('chat.close', { role }) });
+
+    it('moves focus to the following panel when it is closed', async () => {
+      respondChat();
+      const user = userEvent.setup();
+      renderChat();
+
+      await openTwoConversations(user);
+      await user.click(closeButton(ROLE_A));
+
+      // Sales was first; Legal took its place. The panel that follows, not a
+      // fixed "first remaining panel" — `openTwoConversations` happens to
+      // leave Legal there either way, but `closeChat` computes this from the
+      // closed panel's own index, not from being "whatever's left".
+      await waitFor(() => {
+        expect(document.activeElement).toBe(panelFor(ROLE_B));
+      });
+    });
+
+    it('moves focus to the previous panel when the last one is closed', async () => {
+      respondChat();
+      const user = userEvent.setup();
+      renderChat();
+
+      await openTwoConversations(user);
+      await user.click(closeButton(ROLE_B));
+
+      await waitFor(() => {
+        expect(document.activeElement).toBe(panelFor(ROLE_A));
+      });
+    });
+
+    it('returns focus to the trigger once the last panel closes', async () => {
+      respondChat();
+      const user = userEvent.setup();
+      renderChat();
+
+      const opener = screen.getByRole('button', { name: 'Open Sales' });
+      await user.click(opener);
+      await waitForTranscriptsReady();
+      await user.click(closeButton(ROLE_A));
+
+      expect(screen.queryByRole('dialog')).toBeNull();
+      // React Aria's `Modal` returns focus to whatever opened it once the
+      // overlay unmounts — the same mechanism a plain `Escape` relies on,
+      // exercised here by the dialog closing itself once its last panel goes.
+      await waitFor(() => {
+        expect(document.activeElement).toBe(opener);
+      });
     });
   });
 

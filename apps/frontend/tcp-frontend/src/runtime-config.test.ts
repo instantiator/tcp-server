@@ -75,4 +75,47 @@ describe('getRuntimeConfig', () => {
 
     expect(() => getRuntimeConfig()).not.toThrow();
   });
+
+  it('keeps a valid http(s) storageConsoleUrl', () => {
+    window.__TCP_CONFIG__ = {
+      oidcIssuerUrl: 'https://idp.example.com',
+      oidcClientId: 'tcp-web',
+      storageConsoleUrl: 'https://minio.example.com:9001',
+      storageBucket: 'tcp',
+    };
+
+    expect(getRuntimeConfig().storageConsoleUrl).toBe(
+      'https://minio.example.com:9001',
+    );
+  });
+
+  it('drops a javascript: storageConsoleUrl rather than trusting it into an href', () => {
+    window.__TCP_CONFIG__ = {
+      oidcIssuerUrl: 'https://idp.example.com',
+      oidcClientId: 'tcp-web',
+      storageConsoleUrl: "javascript:alert('x')",
+      storageBucket: 'tcp',
+    };
+
+    expect(getRuntimeConfig().storageConsoleUrl).toBeUndefined();
+  });
+
+  it('drops a storageConsoleUrl that is not a parseable URL', () => {
+    window.__TCP_CONFIG__ = {
+      oidcIssuerUrl: 'https://idp.example.com',
+      oidcClientId: 'tcp-web',
+      storageConsoleUrl: 'not a url',
+    };
+
+    expect(getRuntimeConfig().storageConsoleUrl).toBeUndefined();
+  });
+
+  it('leaves storageConsoleUrl undefined when absent', () => {
+    window.__TCP_CONFIG__ = {
+      oidcIssuerUrl: 'https://idp.example.com',
+      oidcClientId: 'tcp-web',
+    };
+
+    expect(getRuntimeConfig().storageConsoleUrl).toBeUndefined();
+  });
 });

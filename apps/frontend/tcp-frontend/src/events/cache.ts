@@ -110,6 +110,14 @@ export const applyEvent = (
     return old;
   });
 
+  // A fetch already in flight read the database before this write, so its
+  // response would land on top of the patch and undo it. Invalidating cancels
+  // that fetch and refetches after the write (002.02).
+  if (queryClient.isFetching({ queryKey: [entity] }) > 0) {
+    void queryClient.invalidateQueries({ queryKey: [entity] });
+    return;
+  }
+
   // No cached list held a row for this id, so the entity is new to every list
   // that's cached — without this, a newly created row never appears in one.
   // Nothing cached at all is a harmless no-op through the same call.

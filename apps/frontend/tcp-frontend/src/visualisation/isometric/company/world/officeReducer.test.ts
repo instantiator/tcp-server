@@ -56,6 +56,8 @@ describe('officeReducer', () => {
       target: { kind: 'exit' },
       placeAtTarget: false,
       hasRole: true,
+      carrying: null,
+      dissociatedSeq: null,
     });
     const claim = claimDesk(withAvatar, 'task:t1', avatarId);
     const state = { world: claim.world, snapshot: null };
@@ -97,6 +99,8 @@ describe('officeReducer', () => {
       target: { kind: 'avatar', avatarId: 'role:role-1' },
       placeAtTarget: false,
       hasRole: false,
+      carrying: null,
+      dissociatedSeq: null,
     });
     const claimed = claimDesk(
       created.world,
@@ -111,6 +115,7 @@ describe('officeReducer', () => {
           shortcode: 'T1',
           request: 'Do the thing',
           finished: false,
+          succeeded: false,
           step: 0,
           steps: 0,
         },
@@ -160,6 +165,8 @@ describe('officeReducer', () => {
       target: { kind: 'tile', tile: { x: 3, y: 3 } },
       placeAtTarget: false,
       hasRole: false,
+      carrying: null,
+      dissociatedSeq: null,
     });
     const state = { world: created.world, snapshot: null };
 

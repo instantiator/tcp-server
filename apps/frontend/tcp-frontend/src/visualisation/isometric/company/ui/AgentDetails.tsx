@@ -8,6 +8,7 @@ import { ACTIVE_AGENT_STATUSES, statusLabel } from '../../../../api/statuses';
 import { useChat } from '../../../../components/ChatDialog/useChat';
 import { ExpandableText } from '../../../../components/ExpandableText/ExpandableText';
 import { t } from '../../../../strings';
+import { isWaitingToStart } from '../rules/companySnapshot';
 import { modeLabel } from './modeLabel';
 
 export interface AgentDetailsProps {
@@ -61,6 +62,14 @@ export const AgentDetails = ({
     roles?.find((role) => role.id === agent.roleId)?.name ??
     t('activity.role.unknown');
   const assignment = assignments?.find((row) => row.id === agent.assignmentId);
+  // The raw status reads "idle" even while the office shows the avatar
+  // waiting by its role's book (decision 4, 002.02 stage 4) — same reading
+  // as the office, from the same condition, so the tray doesn't call this a
+  // bug.
+  const statusText =
+    assignment !== undefined && isWaitingToStart(agent.status, assignment)
+      ? t('visualisation.activity.waiting')
+      : statusLabel(agent.status);
 
   return (
     <>
@@ -69,7 +78,7 @@ export const AgentDetails = ({
       </h2>
       <dl>
         <dt>{t('visualisation.tray.status')}</dt>
-        <dd>{statusLabel(agent.status)}</dd>
+        <dd>{statusText}</dd>
         {assignment !== undefined && (
           <>
             <dt>{t('visualisation.tray.mode')}</dt>

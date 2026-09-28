@@ -25,6 +25,7 @@ function task(overrides: Partial<SnapshotTask> = {}): SnapshotTask {
     shortcode: 'T1',
     request: 'Do the thing',
     finished: false,
+    succeeded: false,
     step: 0,
     steps: 0,
     ...overrides,
@@ -66,7 +67,7 @@ describe('removeClosedRooms', () => {
       type: 'snapshot',
       snapshot: { roles: [], tasks: [task({ id: 't2' })], agents: [] },
     });
-    expect(roomById(state.world, taskRoomId('t2'))?.slot).toBe(2); // the freed slot, reused
+    expect(roomById(state.world, taskRoomId('t2'))?.slot).toBe(3); // the freed slot, reused
   });
 
   it('removes a finished task room only after its last avatar has exited', () => {

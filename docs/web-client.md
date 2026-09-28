@@ -134,19 +134,32 @@ For a real deployment, mount a real certificate the same way.
 
 ### Runtime configuration
 
-The bundle is built once and runs in several environments, so three values
+The bundle is built once and runs in several environments, so several values
 reach it at startup rather than at build time — the identity provider's
-address, the client ID, and whether to load the user's profile from the
-userinfo endpoint. `docker/nginx/10-tcp-init.sh` writes them into `/config.js`
-when the container starts, and `index.html` loads it ahead of the bundle:
+address, the client ID, whether to load the user's profile from the userinfo
+endpoint, and (both optional) the object store's console URL and bucket
+prefix, for the office view's archive tray. `docker/nginx/10-tcp-init.sh`
+writes them into `/config.js` when the container starts, and `index.html`
+loads it ahead of the bundle:
 
 ```js
 window.__TCP_CONFIG__ = {
   oidcIssuerUrl: '…',
   oidcClientId: '…',
   oidcLoadUserInfo: false,
+  storageConsoleUrl: '…',
+  storageBucket: '…',
 };
 ```
+
+`storageConsoleUrl` and `storageBucket` come from `MINIO_CONSOLE_URL` and
+`MINIO_BUCKET_PREFIX` (`docker-compose.yml`). Either can be absent — the
+archive tray then lists completed tasks as plain text instead of links.
+`getRuntimeConfig()` also drops `storageConsoleUrl` unless it parses as an
+`http:`/`https:` URL: it reaches an `href` unchecked otherwise, so a bad
+scheme is a trust boundary, not a typo to shrug off. See
+[shared-storage.md](shared-storage.md#links-from-the-web-clients-archive-tray)
+for the confirmed link format.
 
 `oidcClientId` carries the public PKCE client `start-deployment.sh` registers
 for the browser ([ADR-024](ADRs/ADR-024-browser-oidc-client-and-token-handling.md))
@@ -717,6 +730,14 @@ remembers. That coupling is load-bearing, not incidental — ADR-025 records it,
 and changing how any of the three streams prime is a client-behaviour change
 even though no client file moves.
 
+**A patch never loses to a stale in-flight fetch (002.02).** After `applyEvent`
+patches a cached row, it checks `queryClient.isFetching({ queryKey: [entity] })`
+— if a list fetch for that entity is still in flight, it invalidates the
+entity too, so the default `cancelRefetch` drops the stale request and a fresh
+one runs after the write instead of overwriting the just-applied patch with
+older data. See [ADR-025's amendment](ADRs/ADR-025-browser-event-stream-consumption.md#amendment-as-implemented-p03-002-02)
+for the two narrower replay races this doesn't close.
+
 ## Tooling
 
 The workspace has its own eslint and TypeScript configuration — the root ones
@@ -746,11 +767,42 @@ target Node, with CommonJS and decorators. Prettier is shared with the root.
 > clean `npm ci` fails outright. The root `overrides` entry pinning that peer
 > is what prevents it. Don't remove it until the plugin widens its range.
 
+## Chat dialog
+
+`src/components/ChatDialog/` holds one or more conversations at once, each
+with its own agent, transcript and message form. `ChatProvider` (in
+`AppShell`) holds the open conversations above the dialog itself, because the
+dialog unmounts on minimise and anything that must survive that has to live
+above it — the same reason `DockProvider` sits beside it.
+
+Every panel gets two controls, not one:
+
+- **Complete** ends the chat on the server (the assignment succeeds, the
+  agent completes) and leaves the panel exactly where it is — only the
+  message form goes, replaced by a line saying the chat is over. The
+  transcript stays, so there is still something to read.
+- **Close** (`t('chat.close', { role })`, 002.02) removes the panel from the
+  dialog and releases its stream. The chat itself is untouched on the
+  server — closing only takes it off this screen. Closing the last panel
+  closes the dialog and returns focus to whatever opened it; closing any
+  other panel moves focus to its neighbour (the one after it, or the one
+  before if it was last). The dialog's own chrome still has no close of its
+  own — minimise (and Escape) are what it offers, so a half-typed message in
+  another open panel is never lost by one keystroke.
+
+**Activity → Chats is the way back.** A closed chat is still a real
+assignment, so it still shows in the company's Chats list
+(`src/pages/CompanyPage/activity/ChatsList.tsx`), filterable by status and
+role. Clicking a row calls the same `openChat` the office view's "Listen in"
+button does, which reopens it in the dialog — read-write if it's the same
+conversation reopening, read-only if it's a fresh listen-in on someone else's.
+
 ## The office view (company visualisation)
 
 `CompanyPage`'s first tab draws the company as an isometric office
 ([000.01](<prompts/phase 03 - web visualisation/000.01.01.plan - set up isometric display elements.md>),
-revised in [002.01](<prompts/phase 03 - web visualisation/002.01.01.plan - isometric display elements.md>)).
+revised in [002.01](<prompts/phase 03 - web visualisation/002.01.01.plan - isometric display elements.md>)
+and [002.02](<prompts/phase 03 - web visualisation/002.02.01.plan - isometric display elements.md>)).
 Code lives under `src/visualisation/isometric/company/`. The stage fills the
 window below it, but never drops below `--tcp-visualisation-height`
 (`useStageTop.ts` measures where it starts).
@@ -759,34 +811,72 @@ window below it, but never drops below `--tcp-visualisation-height`
 
 - **Rooms**, in fixed-size slots along one corridor: the **rec room** (one spot
   per role, always present), the **mail room** (chat and enquiry avatars,
-  always present), the **corridor** with the **office door**, one **task room**
-  per unfinished task, and one **1:1 room** per open consultation.
+  always present), the **archive room** (fixed slot 2, always present — a
+  bookshelf of completed tasks), the **corridor** with the **office door**,
+  one **task room** per unfinished task, and one **1:1 room** per open
+  consultation. Dynamic rooms (task and 1:1) start at slot 3
+  (`FIRST_DYNAMIC_SLOT`), after the three fixed ones.
 - **Roles, as books.** Each role is a small book in its colour, at its spot in
   the rec room, so a role never looks like an agent.
 - **Agent avatars.** A new avatar comes in at the office door, walks to its
-  role's book to collect it (`Avatar.hasRole`), then carries a small copy at
-  its side. From there it walks to its desk while idle, to the whiteboard while
-  working, beside the avatar it is reviewing, to the 1:1 table while
-  consulting, or to the mail room's pigeonholes while messaging the user. An
-  avatar whose agent has finished waits at its desk, still carrying its role,
-  for the next agent of that role in the same task, which reuses it rather
-  than walking in anew. It still opens, now as its role.
+  role's book to collect it (`Avatar.hasRole`), then carries a small copy
+  floating just above its head — at the body's side it read as a bump, not a
+  book (002.02). From there it walks to its desk while idle, to the
+  whiteboard while working, beside the avatar it is reviewing, to the 1:1
+  table while consulting, or to the mail room's pigeonholes while messaging
+  the user. A newly created agent that is queued behind the worker pool
+  (`agent.status === 'idle'` on an `in-progress` task assignment) waits by
+  its role's book in the rec room, reading "waiting to start" — it hasn't
+  stalled, there just isn't a free worker slot yet (002.02; see the fixed
+  bug this replaced, below). An avatar whose agent has finished waits at its
+  desk, still carrying its role, for the next agent of that role in the same
+  task, which reuses it rather than walking in anew. It still opens, now as
+  its role.
+- **The archive room and carrying outputs.** When a task succeeds, the avatar
+  that most recently left it — tracked by a world-wide sequence counter, not
+  assignment order — carries a small box of the task's outputs to the
+  archive bookshelf, then leaves. Failed or cancelled tasks don't carry
+  anything; if nobody is left in the room, nobody carries. The bookshelf's
+  tray lists every succeeded task, newest first, each linking out to its
+  outputs folder in Silo — see
+  [shared-storage.md](shared-storage.md#links-from-the-web-clients-archive-tray)
+  for the link format and the runtime config it depends on. Without that
+  config, rows still list, just as plain text.
 - **Labels.** The "Labels" checkboxes under the toolbar turn on canvas labels
   for agents, roles, furniture and rooms. `ui/officeLabels.ts` works out the
   text and `scene/LabelLayer.ts` draws it. They are a visual aid; the picker
   and tray give a screen reader the same facts.
 - **The tray, tooltips, picker, pan keys and full screen.** Hovering a role,
-  task or agent shows a tooltip; clicking opens a side tray with its live
-  details. Furniture and doorways have hover-only tooltips saying what they
-  are for (`ui/officeDescriptions.ts`). The tray clips a long prompt with a
-  "…" that reveals the rest (`components/ExpandableText`). An active agent's
-  tray has a "Listen in" button, which opens the chat dialog read-only on its
-  live transcript. The toolbar's "Show details for…" picker is the keyboard route to
-  the same tray (WCAG 2.1.1), and also how a keyboard user follows an object
-  to the centre of the view. Arrow keys, WASD and the toolbar's pan buttons
-  (icons from `lucide-react`, laid out like arrow keys, each named and with a
-  tooltip) scroll the stage. Double-clicking empty space, or the toolbar's
-  full-screen button, toggles full screen.
+  task, agent or the bookshelf shows a tooltip; clicking opens a side tray
+  with its live details. Furniture and doorways have hover-only tooltips
+  saying what they are for (`ui/officeDescriptions.ts`). The tray clips a
+  long prompt with a "…" that reveals the rest
+  (`components/ExpandableText`). An active agent's tray has a "Listen in"
+  button, which opens the chat dialog read-only on its live transcript. The
+  toolbar's "Show details for…" picker is the keyboard route to the same
+  tray (WCAG 2.1.1), including the archive, and also how a keyboard user
+  follows an object to the centre of the view. Arrow keys, WASD and the
+  toolbar's pan buttons (icons from `lucide-react`, laid out like arrow
+  keys, each named and with a tooltip) scroll the stage. Double-clicking
+  empty space, or the toolbar's full-screen button, toggles full screen.
+
+### The queued-agent bug (002.02)
+
+A new task's agent used to appear late, then look idle at its desk with an
+empty listen-in, while the task itself read "planning" — as if the office
+was a step behind the server. It wasn't: `AGENT_WORKER_CONCURRENCY` caps the
+worker pool (at 1 by default), so a second task's agent really does sit idle
+until a slot frees up, and the listen-in really is empty because nothing has
+called the LLM yet. Confirmed by recording both the SSE streams and the DB
+state side by side — see the plan's [stage 1 "As found"
+note](<prompts/phase 03 - web visualisation/002.02.01.plan - isometric display elements.md#as-found-stage-1>).
+Two real gaps came out of the same investigation and were fixed alongside
+it: no event was published when an agent was created or linked to its
+assignment (so a client only learned of it at its first `running` event),
+and `AGENT_WORKER_CONCURRENCY` was never actually passed to the `tcp-agent`
+container in `docker-compose.yml`, so the setting in `.env.dev` had no
+effect. "Waiting to start", above, is the fix: the office now shows the true
+state instead of a stale one.
 
 ### The layers
 
@@ -854,9 +944,13 @@ hook. The browser spec, `test/browser/company-visualisation.spec.ts`, uses
 `page.emulateMedia({ reducedMotion: 'reduce' })` so avatar and camera
 positions are exact rather than mid-animation.
 
-**Not covered:** agent avatars in the browser tier. The browser-tier
-deployment has no LLM, so no agent ever runs there — only roles, task rooms
-and every interaction are proven against real Phaser. See phase 03's
+**Not covered:** agent avatars in the browser tier, including a succeeded
+task's archive link. The browser-tier deployment has no LLM, so no agent ever
+runs there and no task can be driven to `succeeded` without racing a real
+worker job — only roles, task rooms and every interaction are proven against
+real Phaser; the bookshelf tray's browser spec covers its empty state
+instead (002.02 stage 11), which still proves the tray reads its live
+`storageConsoleUrl`/`storageBucket` config. See phase 03's
 [unresolved notes](<prompts/phase 03 - web visualisation/unresolved-notes.md>).
 
 ## Tests

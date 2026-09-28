@@ -230,6 +230,11 @@ services:
       # Providers that omit profile/email from the ID token need this true.
       # Zitadel does not, so the bundled stack never sets it.
       OIDC_LOAD_USER_INFO: ${OIDC_LOAD_USER_INFO:-false}
+      # The archive tray's Silo links (002.02, docs/shared-storage.md).
+      # Same derive-or-explicit pattern as OIDC_ISSUER_URL above — explicit
+      # value wins, else derive from the MinIO console's host port.
+      MINIO_CONSOLE_URL: ${MINIO_CONSOLE_URL:-http://localhost:${EXPOSE_PORT_MINIO_CONSOLE:-9001}}
+      MINIO_BUCKET_PREFIX: ${MINIO_BUCKET_PREFIX:-tcp}
     depends_on:
       tcp-server:
         condition: service_healthy
@@ -262,6 +267,10 @@ services:
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
       # No MINIO credentials: tcp-agent reaches storage through tcp-server's
       # /internal/storage/* endpoints, so it has no S3 client to authenticate.
+      # Parallel agent jobs — defaults to 1 (DEFAULT_AGENT_WORKER_CONCURRENCY)
+      # when unset. Was never passed through before 002.02, so .env.dev's own
+      # setting had no effect on the running container.
+      AGENT_WORKER_CONCURRENCY: ${AGENT_WORKER_CONCURRENCY:-}
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}

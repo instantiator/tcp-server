@@ -1,6 +1,6 @@
 # ADR-025: Browser Event Stream Consumption
 
-**Status:** Accepted (2026-08-03; amended — see [008.02](#amendment-as-implemented-00802) at the end)
+**Status:** Accepted (2026-08-03; amended — see [008.02](#amendment-as-implemented-00802) and [002.02 (phase 03)](#amendment-as-implemented-p03-002-02) at the end)
 
 > [!NOTE]
 > **This supersedes the "use a native `EventSource`" recommendation in `docs/prompts/phase 02 - web ui/001.01.00.prompt - mvp planning.md`.** That recommendation cannot be implemented — see below.
@@ -192,3 +192,73 @@ own six-per-origin HTTP/1.1 ceiling does not bind.
 
 This closes the open consequence above: whether a minimised chat keeps streaming
 is decided, and the answer is that it does not.
+
+## Amendment as implemented (002.02, phase 03) <a id="amendment-as-implemented-p03-002-02"></a>
+
+A user report — a new task's agent avatar appeared late, then looked idle
+with an empty listen-in while the task read "planning" — turned into a
+reproduction with recorded SSE streams and DB state side by side (the
+plan's stage 1 "As found" note). The office wasn't behind the server: the
+agent really was idle, queued behind `AGENT_WORKER_CONCURRENCY`'s one
+worker slot. But the reproduction also found a real gap this ADR's
+[cache-mapping rule](#how-events-map-to-the-cache) didn't cover, and
+confirmed two of its own open questions were narrow enough to leave open.
+
+### Every agent status change now publishes an event, after its write
+
+Before this, several writers changed an agent's status with no
+`state_change` at all, or published one before the row was actually
+written:
+
+- **Silent:** creating an agent, linking an assignment's `agentId` back to
+  it, the QA hand-off pause, and cancel.
+- **Early:** resume published `running` as soon as the job was enqueued,
+  which could read `running` on a client while the database still said
+  `paused` if the one worker slot was occupied. Chat failure published
+  before its write landed.
+
+A client's only way to learn an agent existed at all was its first
+`running` event — instant on an idle system, but up to the length of
+whatever was ahead of it in the worker queue otherwise. All of the above
+now publish an agent (or assignment, for the back-link) `state_change`
+**after** its write, reusing the `recordStatus` pattern
+`pause-and-resume.service.ts` already had. Resume's early `running` publish
+is deleted outright — the worker's own `running` write already covers it,
+and publishing twice was strictly worse than publishing once, correctly
+timed.
+
+### A patch no longer loses to a fetch that started before it
+
+`applyEvent` (`cache.ts`) patches the matching cached row, but didn't
+account for a list fetch already in flight — one that read the database
+_before_ the write landed. That response could arrive after the patch and
+silently overwrite it with stale data. `applyEvent` now checks
+`queryClient.isFetching` for the entity after patching, and invalidates if
+one is in flight; the default `cancelRefetch` drops the stale request and
+triggers a fresh one after the write. This is
+[web-client.md](../web-client.md#event-client)'s "C2" guard, confirmed by a
+test where a list fetch in flight when a patch lands ends with the fresh
+status rather than the stale one.
+
+### Two narrower replay races, confirmed but not seen, left open
+
+The reproduction went looking for two more candidates this ADR's
+[reconnection](#reconnection) design could in principle allow, and found
+neither occurred in either recorded run:
+
+- **A subscribe-time `idle` replay landing after a live `running`.** The
+  agent stream's replay-on-subscribe (`api.agent.controller.ts`) reads the
+  database at subscribe time; if that read raced a live event, the stale
+  reading could in principle land after the real one. Both recorded runs
+  subscribed to a genuinely idle agent, so the replay and the database
+  agreed throughout.
+- **An event lost between company-stream priming and the live
+  subscription.** The company stream did not reconnect in either run, so
+  the gap this would depend on never opened.
+
+Neither is disproven — they're narrow windows that this reproduction's two
+runs didn't happen to hit, not races that were ruled out. Reworking the
+agent-stream replay or the priming order to close them stayed out of scope
+rather than being taken on speculatively; both are tracked as unresolved
+notes with a testable recheck condition (phase 03's
+[unresolved notes](<../prompts/phase 03 - web visualisation/unresolved-notes.md>)).

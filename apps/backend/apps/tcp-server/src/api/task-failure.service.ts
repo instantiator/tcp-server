@@ -1,14 +1,18 @@
 import {
   AgentStatus,
+  AuditEventType,
+  buildAgentChangeSummary,
   TcpAgent,
   TcpAssignment,
   TcpAssignmentStatus,
+  TcpRole,
   TcpTask,
 } from '@tcp/shared';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { UUID } from 'crypto';
 import { Repository } from 'typeorm';
+import { AuditService } from '../audit/audit.service';
 import { claimStatus } from './claim-status';
 import { TaskDeliverablesService } from './task-deliverables.service';
 import { TaskStateService } from './task-state.service';
@@ -31,8 +35,11 @@ export class TaskFailureService {
     private readonly assignmentRepo: Repository<TcpAssignment>,
     @InjectRepository(TcpAgent)
     private readonly agentRepo: Repository<TcpAgent>,
+    @InjectRepository(TcpRole)
+    private readonly roleRepo: Repository<TcpRole>,
     private readonly deliverables: TaskDeliverablesService,
     private readonly state: TaskStateService,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -217,9 +224,14 @@ export class TaskFailureService {
     );
   }
 
-  /** Moves a still-live agent to `Cancelled`; a no-op once it is terminal. */
+  /**
+   * Moves a still-live agent to `Cancelled`; a no-op once it is terminal.
+   * Publishes a `state_change` with a summary after the write (002.02 stage
+   * 2) — this used to write silently, so a client watching a cancelled
+   * task's agents saw no cancellation at all.
+   */
   private async cancelAgent(agentId: UUID): Promise<void> {
-    await this.agentRepo
+    const result = await this.agentRepo
       .createQueryBuilder()
       .update(TcpAgent)
       .set({ status: AgentStatus.Cancelled })
@@ -232,6 +244,26 @@ export class TaskFailureService {
         ],
       })
       .execute();
+    if ((result.affected ?? 0) === 0) return;
+
+    const agent = await this.agentRepo.findOneBy({ id: agentId });
+    if (!agent) return;
+    const role = await this.roleRepo.findOneBy({ id: agent.roleId });
+    await this.audit.record(
+      agent.companyId,
+      role?.name ?? 'agent',
+      agentId,
+      AuditEventType.StateChange,
+      {
+        entity: 'agent',
+        newStatus: AgentStatus.Cancelled,
+        reason: 'task cancelled',
+        summary: buildAgentChangeSummary({
+          ...agent,
+          status: AgentStatus.Cancelled,
+        }),
+      },
+    );
   }
 
   /** The assignment an agent is working, or null if it has none. */

@@ -2,20 +2,30 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { WireEvent } from '@tcp/shared/client';
 import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   AgentDTO,
   AssignmentDTO,
   RoleDTO,
   TaskDTO,
 } from '../../../api/dtos';
+import { announce } from '../../../announce/announcer';
 import { applyEvent } from '../../../events/cache';
 import {
   installFetchMock,
   respondByRoute,
 } from '../../../test-support/fetch-mock';
-import { taskRoomId } from './world/layout';
+import { ARCHIVE_BOOKSHELF_ID, taskRoomId } from './world/layout';
 import { useOfficeWorld } from './useOfficeWorld';
+
+// A spy over the real announcer, so the walks below can prove the office
+// says nothing as avatars move (ADR-027's canvas rule: movement is decoration,
+// and the Activity tab is the browsable equivalent).
+vi.mock('../../../announce/announcer', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../announce/announcer')>();
+  return { ...actual, announce: vi.fn(actual.announce) };
+});
 
 // `phaser` is mocked globally in `test-setup.ts`, but this hook never
 // touches Phaser at all — it only builds the office model that the scene
@@ -209,12 +219,15 @@ describe('useOfficeWorld — the live pipeline (agent E2E stand-in)', () => {
     ]);
   });
 
-  it('walks one agent from its desk to the whiteboard, back to its desk, and out through a cancelled task', async () => {
+  it('walks one agent from waiting in the rec room to the whiteboard, back to its desk, and out through a cancelled task', async () => {
     const { result, queryClient } = renderWithClient();
 
     // Initial load: a task room opens, and the agent's avatar is placed
-    // straight at its desk rather than walked in — `placeAtTarget` is only
-    // true on the very first snapshot.
+    // straight at its role's book in the rec room rather than walked in —
+    // `placeAtTarget` is only true on the very first snapshot. The fixture
+    // agent is `idle` on an `in-progress` assignment, decision 4's "waiting
+    // to start" (002.02 stage 4), not the desk a finished or paused agent
+    // waits at.
     await waitFor(() => {
       expect(
         result.current.world.avatars.some((avatar) => avatar.kind === 'agent'),
@@ -229,7 +242,10 @@ describe('useOfficeWorld — the live pipeline (agent E2E stand-in)', () => {
     const deskId = initial.deskId;
     expect(initial.agentId).toBe(AGENT_ID);
     expect(deskId).not.toBeNull();
-    expect(initial.target).toEqual({ kind: 'furniture', furnitureId: deskId });
+    expect(initial.target).toEqual({
+      kind: 'avatar',
+      avatarId: `role:${ROLE.id}`,
+    });
     expect(initial.placeAtTarget).toBe(true);
     expect(
       result.current.world.rooms.some((room) => room.purpose === 'task'),
@@ -306,7 +322,7 @@ describe('useOfficeWorld — the live pipeline (agent E2E stand-in)', () => {
     });
   });
 
-  it("walks a live agent added after the first snapshot through its role's pickup, then to its desk", async () => {
+  it("walks a live agent added after the first snapshot through its role's pickup, then waits at the role book alongside it", async () => {
     const AGENT_2_ID = 'g2';
     const ASSIGNMENT_2_ID = 'assignment-2';
     // Both assignments are loaded from the start — 002.01's pickup rule
@@ -337,8 +353,9 @@ describe('useOfficeWorld — the live pipeline (agent E2E stand-in)', () => {
 
     const { result, queryClient } = renderWithClient();
 
-    // Initial load: agent-1 lands straight at its desk, as the previous
-    // test covers — `placeAtTarget` and `hasRole` both start true.
+    // Initial load: agent-1 lands straight at its role's book, as the
+    // previous test covers — `placeAtTarget` and `hasRole` both start true,
+    // but it's still `idle` on an `in-progress` assignment.
     await waitFor(() => {
       expect(
         result.current.world.avatars.some((avatar) => avatar.kind === 'agent'),
@@ -397,8 +414,10 @@ describe('useOfficeWorld — the live pipeline (agent E2E stand-in)', () => {
       });
     });
 
-    // The scene reports it reached the role avatar: `hasRole` flips, and
-    // the rules — run straight after — re-target it to its own desk.
+    // The scene reports it reached the role avatar: `hasRole` flips, but the
+    // agent is still `waiting` (idle, in-progress, not chat — decision 4), so
+    // the rules leave it right where it is rather than sending it on to its
+    // desk.
     act(() => {
       result.current.avatarArrived(secondAvatarId, { x: 0, y: 0 });
     });
@@ -409,9 +428,561 @@ describe('useOfficeWorld — the live pipeline (agent E2E stand-in)', () => {
       expect(avatar?.hasRole).toBe(true);
       expect(avatar?.deskId).not.toBeNull();
       expect(avatar?.target).toEqual({
+        kind: 'avatar',
+        avatarId: `role:${ROLE.id}`,
+      });
+    });
+  });
+
+  /**
+   * Table-driven: walks one task's whole lifecycle — a planner, a worker and
+   * a QA reviewer, each in its own role — asserting the avatar's target and
+   * the snapshot's activity after every step (002.02 stage 4). Every
+   * assignment is dispatched from the start — as the previous test notes,
+   * the pickup rule works off the office model, not fetch order — but the
+   * task itself doesn't exist until row 2, so row 1 has nothing to show.
+   * Agent-creation events carry a summary throughout, as stage 2 made every
+   * writer do; a plain status change alternates with and without one, to
+   * prove `cache.ts`'s `synthesiseAgentPatch` fallback still works.
+   */
+  it('walks a task through planner, worker and QA — waiting, working, and out', async () => {
+    const ROLE_PLANNER: RoleDTO = {
+      id: 'role-planner',
+      companyId: COMPANY_ID,
+      slug: 'planner',
+      name: 'Planner',
+      description: 'Plans the work',
+      knowledgeDomains: [],
+      mcpServerList: [],
+      queryIndex: 0,
+    };
+    const ROLE_WORKER: RoleDTO = {
+      ...ROLE_PLANNER,
+      id: 'role-worker',
+      slug: 'worker',
+      name: 'Worker',
+      description: 'Does the work',
+    };
+    const ROLE_QA: RoleDTO = {
+      ...ROLE_PLANNER,
+      id: 'role-qa',
+      slug: 'qa',
+      name: 'Reviewer',
+      description: 'Reviews the work',
+    };
+    const ROLES3 = [ROLE_PLANNER, ROLE_WORKER, ROLE_QA];
+
+    const PLAN_ASSIGNMENT_ID = 'assignment-plan';
+    const IMPLEMENT_ASSIGNMENT_ID = 'assignment-implement';
+    const QA_ASSIGNMENT_ID = 'assignment-qa';
+    const PLANNER_AGENT_ID = 'agent-planner';
+    const WORKER_AGENT_ID = 'agent-worker';
+    const QA_AGENT_ID = 'agent-qa';
+
+    const allAssignments: AssignmentDTO[] = [
+      {
+        ...assignment({ status: 'in-progress' }),
+        id: PLAN_ASSIGNMENT_ID,
+        mode: 'plan',
+        roleId: ROLE_PLANNER.id,
+      },
+      {
+        ...assignment({ status: 'in-progress' }),
+        id: IMPLEMENT_ASSIGNMENT_ID,
+        mode: 'implement',
+        roleId: ROLE_WORKER.id,
+      },
+      {
+        ...assignment({ status: 'in-progress' }),
+        id: QA_ASSIGNMENT_ID,
+        mode: 'qa',
+        roleId: ROLE_QA.id,
+        targetAssignmentId: IMPLEMENT_ASSIGNMENT_ID,
+      },
+    ];
+
+    const plannerAgent = (status: AgentDTO['status']): AgentDTO => ({
+      ...agent({ status }),
+      id: PLANNER_AGENT_ID,
+      roleId: ROLE_PLANNER.id,
+      assignmentId: PLAN_ASSIGNMENT_ID,
+    });
+    const workerAgent = (status: AgentDTO['status']): AgentDTO => ({
+      ...agent({ status }),
+      id: WORKER_AGENT_ID,
+      roleId: ROLE_WORKER.id,
+      assignmentId: IMPLEMENT_ASSIGNMENT_ID,
+    });
+    const qaAgent = (status: AgentDTO['status']): AgentDTO => ({
+      ...agent({ status }),
+      id: QA_AGENT_ID,
+      roleId: ROLE_QA.id,
+      assignmentId: QA_ASSIGNMENT_ID,
+    });
+
+    /** Re-answers every route; only tasks and agents change row to row. */
+    const setCompany = (tasks: TaskDTO[], agents: AgentDTO[]): void => {
+      respondByRoute([
+        [ROLES_ROUTE, { body: ROLES3 }],
+        [AGENTS_ROUTE, { body: agents }],
+        [TASKS_ROUTE, { body: tasks }],
+        [ASSIGNMENTS_ROUTE, { body: allAssignments }],
+        [CONVERSATIONS_ROUTE, { body: [] }],
+      ]);
+    };
+
+    // Row 1 — ready: no task exists yet, so there's no room and no avatar,
+    // even though every assignment is already sitting in the DB.
+    setCompany([], []);
+    const { result, queryClient } = renderWithClient();
+    await waitFor(() => {
+      expect(result.current.snapshot?.roles).toHaveLength(3);
+    });
+    expect(result.current.world.rooms.some((r) => r.purpose === 'task')).toBe(
+      false,
+    );
+    expect(result.current.world.avatars.some((a) => a.kind === 'agent')).toBe(
+      false,
+    );
+
+    // Row 2 — planning: the planner's agent is created `idle`, with a
+    // summary, so it waits by its own role's book (decision 4).
+    setCompany([task({ status: 'planning' })], [plannerAgent('idle')]);
+    act(() => {
+      applyEvent(
+        queryClient,
+        auditEvent(
+          { entity: 'task', summary: taskSummary({ status: 'planning' }) },
+          null,
+          TASK_ID,
+        ),
+      );
+      applyEvent(
+        queryClient,
+        auditEvent(
+          {
+            entity: 'agent',
+            summary: {
+              id: PLANNER_AGENT_ID,
+              status: 'idle',
+              roleId: ROLE_PLANNER.id,
+              assignmentId: PLAN_ASSIGNMENT_ID,
+            },
+          },
+          PLANNER_AGENT_ID,
+          TASK_ID,
+        ),
+      );
+    });
+    let plannerAvatarId = '';
+    await waitFor(() => {
+      const avatar = result.current.world.avatars.find(
+        (a) => a.kind === 'agent' && a.agentId === PLANNER_AGENT_ID,
+      );
+      if (avatar === undefined) throw new Error('expected the planner avatar');
+      plannerAvatarId = avatar.id;
+      expect(avatar.target).toEqual({
+        kind: 'avatar',
+        avatarId: `role:${ROLE_PLANNER.id}`,
+      });
+    });
+    expect(
+      result.current.snapshot?.agents.find((a) => a.id === PLANNER_AGENT_ID)
+        ?.activity.kind,
+    ).toBe('waiting');
+
+    // Live-added avatars start without their role (002.01's pickup rule);
+    // the scene reports arrival at the role book it was already heading
+    // for. `hasRole` flips, and — still `waiting` — the target doesn't move.
+    act(() => {
+      result.current.avatarArrived(plannerAvatarId, { x: 0, y: 0 });
+    });
+    await waitFor(() => {
+      const avatar = result.current.world.avatars.find(
+        (a) => a.id === plannerAvatarId,
+      );
+      expect(avatar?.hasRole).toBe(true);
+    });
+
+    // Row 3 — the planner starts: no summary this time, the shape
+    // tcp-agent's own `running` write still sends — `cache.ts` rebuilds the
+    // patch itself via `synthesiseAgentPatch`. The whiteboard replaces the
+    // role book.
+    setCompany([task({ status: 'planning' })], [plannerAgent('running')]);
+    act(() => {
+      applyEvent(
+        queryClient,
+        auditEvent(
+          { entity: 'agent', newStatus: 'running' },
+          PLANNER_AGENT_ID,
+          null,
+        ),
+      );
+    });
+    await waitFor(() => {
+      const avatar = result.current.world.avatars.find(
+        (a) => a.id === plannerAvatarId,
+      );
+      expect(avatar?.target).toEqual({
+        kind: 'furniture',
+        furnitureId: `${taskRoomId(TASK_ID)}:whiteboard`,
+      });
+    });
+    expect(
+      result.current.snapshot?.agents.find((a) => a.id === PLANNER_AGENT_ID)
+        ?.activity,
+    ).toEqual({ kind: 'working' });
+
+    // Row 4 — the planner completes: dissociated, back at its own desk.
+    setCompany([task({ status: 'planning' })], [plannerAgent('completed')]);
+    act(() => {
+      applyEvent(
+        queryClient,
+        auditEvent(
+          { entity: 'agent', newStatus: 'completed' },
+          PLANNER_AGENT_ID,
+          null,
+        ),
+      );
+    });
+    await waitFor(() => {
+      const avatar = result.current.world.avatars.find(
+        (a) => a.id === plannerAvatarId,
+      );
+      expect(avatar?.agentId).toBeNull();
+      expect(avatar?.deskId).not.toBeNull();
+      expect(avatar?.target).toEqual({
         kind: 'furniture',
         furnitureId: avatar?.deskId,
       });
     });
+
+    // Row 5 — the plan is in: the task moves to `in-progress`, and the
+    // worker's agent is created `idle` — waiting by its own role's book,
+    // not the planner's, and not the desk it will later work at.
+    setCompany(
+      [task({ status: 'in-progress' })],
+      [plannerAgent('completed'), workerAgent('idle')],
+    );
+    act(() => {
+      applyEvent(
+        queryClient,
+        auditEvent(
+          { entity: 'task', summary: taskSummary({ status: 'in-progress' }) },
+          null,
+          TASK_ID,
+        ),
+      );
+      applyEvent(
+        queryClient,
+        auditEvent(
+          {
+            entity: 'agent',
+            summary: {
+              id: WORKER_AGENT_ID,
+              status: 'idle',
+              roleId: ROLE_WORKER.id,
+              assignmentId: IMPLEMENT_ASSIGNMENT_ID,
+            },
+          },
+          WORKER_AGENT_ID,
+          TASK_ID,
+        ),
+      );
+    });
+    let workerAvatarId = '';
+    await waitFor(() => {
+      const avatar = result.current.world.avatars.find(
+        (a) => a.kind === 'agent' && a.agentId === WORKER_AGENT_ID,
+      );
+      if (avatar === undefined) throw new Error('expected the worker avatar');
+      workerAvatarId = avatar.id;
+      expect(avatar.target).toEqual({
+        kind: 'avatar',
+        avatarId: `role:${ROLE_WORKER.id}`,
+      });
+    });
+    expect(
+      result.current.snapshot?.agents.find((a) => a.id === WORKER_AGENT_ID)
+        ?.activity.kind,
+    ).toBe('waiting');
+
+    // The scene reports arrival at the role book, same as the planner above.
+    act(() => {
+      result.current.avatarArrived(workerAvatarId, { x: 0, y: 0 });
+    });
+    await waitFor(() => {
+      const avatar = result.current.world.avatars.find(
+        (a) => a.id === workerAvatarId,
+      );
+      expect(avatar?.hasRole).toBe(true);
+    });
+
+    // Row 5, continued — the worker starts: the whiteboard replaces the
+    // role book, exactly as the planner's did in row 3.
+    setCompany(
+      [task({ status: 'in-progress' })],
+      [plannerAgent('completed'), workerAgent('running')],
+    );
+    act(() => {
+      applyEvent(
+        queryClient,
+        auditEvent(
+          { entity: 'agent', newStatus: 'running' },
+          WORKER_AGENT_ID,
+          null,
+        ),
+      );
+    });
+    await waitFor(() => {
+      const avatar = result.current.world.avatars.find(
+        (a) => a.id === workerAvatarId,
+      );
+      expect(avatar?.target).toEqual({
+        kind: 'furniture',
+        furnitureId: `${taskRoomId(TASK_ID)}:whiteboard`,
+      });
+    });
+
+    // Row 6 — the worker pauses for QA hand-off: it waits at its own desk.
+    // With a summary this time — stage 2 makes the hand-off publish one too.
+    setCompany(
+      [task({ status: 'in-progress' })],
+      [plannerAgent('completed'), workerAgent('paused')],
+    );
+    act(() => {
+      applyEvent(
+        queryClient,
+        auditEvent(
+          {
+            entity: 'agent',
+            summary: {
+              id: WORKER_AGENT_ID,
+              status: 'paused',
+              roleId: ROLE_WORKER.id,
+              assignmentId: IMPLEMENT_ASSIGNMENT_ID,
+            },
+          },
+          WORKER_AGENT_ID,
+          null,
+        ),
+      );
+    });
+    await waitFor(() => {
+      const avatar = result.current.world.avatars.find(
+        (a) => a.id === workerAvatarId,
+      );
+      expect(avatar?.target).toEqual({
+        kind: 'furniture',
+        furnitureId: avatar?.deskId,
+      });
+    });
+    expect(
+      result.current.snapshot?.agents.find((a) => a.id === WORKER_AGENT_ID)
+        ?.activity,
+    ).toEqual({ kind: 'atDesk' });
+
+    // Row 7 — the reviewer arrives: created `idle`, waiting by its own role's
+    // book like the planner and the worker before it (rows 2 and 5).
+    setCompany(
+      [task({ status: 'in-progress' })],
+      [plannerAgent('completed'), workerAgent('paused'), qaAgent('idle')],
+    );
+    act(() => {
+      applyEvent(
+        queryClient,
+        auditEvent(
+          {
+            entity: 'agent',
+            summary: {
+              id: QA_AGENT_ID,
+              status: 'idle',
+              roleId: ROLE_QA.id,
+              assignmentId: QA_ASSIGNMENT_ID,
+            },
+          },
+          QA_AGENT_ID,
+          TASK_ID,
+        ),
+      );
+    });
+    let qaAvatarId = '';
+    await waitFor(() => {
+      const avatar = result.current.world.avatars.find(
+        (a) => a.kind === 'agent' && a.agentId === QA_AGENT_ID,
+      );
+      if (avatar === undefined) throw new Error('expected the QA avatar');
+      qaAvatarId = avatar.id;
+      expect(avatar.target).toEqual({
+        kind: 'avatar',
+        avatarId: `role:${ROLE_QA.id}`,
+      });
+    });
+    act(() => {
+      result.current.avatarArrived(qaAvatarId, { x: 0, y: 0 });
+    });
+    await waitFor(() => {
+      const avatar = result.current.world.avatars.find(
+        (a) => a.id === qaAvatarId,
+      );
+      expect(avatar?.hasRole).toBe(true);
+    });
+
+    // Row 7, continued — the reviewer starts, no summary this time, and
+    // reviews the worker directly — the avatar it targets, not the
+    // whiteboard.
+    setCompany(
+      [task({ status: 'in-progress' })],
+      [plannerAgent('completed'), workerAgent('paused'), qaAgent('running')],
+    );
+    act(() => {
+      applyEvent(
+        queryClient,
+        auditEvent(
+          { entity: 'agent', newStatus: 'running' },
+          QA_AGENT_ID,
+          null,
+        ),
+      );
+    });
+    await waitFor(() => {
+      const avatar = result.current.world.avatars.find(
+        (a) => a.id === qaAvatarId,
+      );
+      expect(avatar?.target).toEqual({
+        kind: 'avatar',
+        avatarId: workerAvatarId,
+      });
+    });
+    expect(
+      result.current.snapshot?.agents.find((a) => a.id === QA_AGENT_ID)
+        ?.activity,
+    ).toEqual({
+      kind: 'reviewing',
+      reviewedAssignmentId: IMPLEMENT_ASSIGNMENT_ID,
+    });
+
+    // Row 8 — finalising: not finished yet, so the room stays open.
+    setCompany(
+      [task({ status: 'finalising' })],
+      [plannerAgent('completed'), workerAgent('paused'), qaAgent('running')],
+    );
+    act(() => {
+      applyEvent(
+        queryClient,
+        auditEvent(
+          { entity: 'task', summary: taskSummary({ status: 'finalising' }) },
+          null,
+          TASK_ID,
+        ),
+      );
+    });
+    await waitFor(() => {
+      expect(
+        result.current.snapshot?.tasks.find((t) => t.id === TASK_ID)?.finished,
+      ).toBe(false);
+      expect(result.current.world.rooms.some((r) => r.purpose === 'task')).toBe(
+        true,
+      );
+    });
+
+    // Row 8, continued — the reviewer finishes too, after the planner:
+    // dissociating stamps a higher `dissociatedSeq` than the planner's own
+    // (row 4), so when the task later succeeds, the QA avatar — not the
+    // planner's, despite dissociating first — carries the outputs out.
+    setCompany(
+      [task({ status: 'finalising' })],
+      [plannerAgent('completed'), workerAgent('paused'), qaAgent('completed')],
+    );
+    act(() => {
+      applyEvent(
+        queryClient,
+        auditEvent(
+          { entity: 'agent', newStatus: 'completed' },
+          QA_AGENT_ID,
+          null,
+        ),
+      );
+    });
+    await waitFor(() => {
+      const avatar = result.current.world.avatars.find(
+        (a) => a.id === qaAvatarId,
+      );
+      expect(avatar?.agentId).toBeNull();
+    });
+
+    // Row 9 — succeeded: the room starts closing. The planner and worker —
+    // neither the most recently dissociated — head for the exit; the QA
+    // avatar, the last to let go of its agent, carries the task's outputs to
+    // the archive bookshelf instead.
+    setCompany(
+      [task({ status: 'succeeded' })],
+      [plannerAgent('completed'), workerAgent('paused'), qaAgent('completed')],
+    );
+    act(() => {
+      applyEvent(
+        queryClient,
+        auditEvent(
+          { entity: 'task', summary: taskSummary({ status: 'succeeded' }) },
+          null,
+          TASK_ID,
+        ),
+      );
+    });
+    await waitFor(() => {
+      const room = result.current.world.rooms.find((r) => r.purpose === 'task');
+      expect(room?.closing).toBe(true);
+      for (const id of [plannerAvatarId, workerAvatarId]) {
+        const avatar = result.current.world.avatars.find((a) => a.id === id);
+        expect(avatar?.target).toEqual({ kind: 'exit' });
+      }
+      const carrier = result.current.world.avatars.find(
+        (a) => a.id === qaAvatarId,
+      );
+      expect(carrier?.carrying).toBe('outputs');
+      expect(carrier?.target).toEqual({
+        kind: 'furniture',
+        furnitureId: ARCHIVE_BOOKSHELF_ID,
+      });
+    });
+
+    // The scene reports the carrier has reached the bookshelf: it lets go of
+    // the outputs and heads for the exit like everyone else.
+    const bookshelf = result.current.world.furniture.find(
+      (item) => item.id === ARCHIVE_BOOKSHELF_ID,
+    );
+    if (bookshelf === undefined) throw new Error('expected the bookshelf');
+    act(() => {
+      result.current.avatarArrived(qaAvatarId, bookshelf.tile);
+    });
+    await waitFor(() => {
+      const avatar = result.current.world.avatars.find(
+        (a) => a.id === qaAvatarId,
+      );
+      expect(avatar?.carrying).toBeNull();
+      expect(avatar?.target).toEqual({ kind: 'exit' });
+    });
+
+    // The scene reports every avatar has left: they disappear, and the room
+    // — with nobody left holding the task — is removed only now, after its
+    // carrier has actually exited.
+    act(() => {
+      result.current.avatarExited(plannerAvatarId);
+      result.current.avatarExited(workerAvatarId);
+      result.current.avatarExited(qaAvatarId);
+    });
+    await waitFor(() => {
+      const ids = [plannerAvatarId, workerAvatarId, qaAvatarId];
+      expect(result.current.world.avatars.some((a) => ids.includes(a.id))).toBe(
+        false,
+      );
+      expect(
+        result.current.world.rooms.some((room) => room.purpose === 'task'),
+      ).toBe(false);
+    });
+
+    // Waiting, working, carrying to the archive and leaving: none of it is
+    // announced.
+    expect(announce).not.toHaveBeenCalled();
   });
 });

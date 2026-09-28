@@ -6,7 +6,7 @@ import { ErrorState } from '../ErrorState/ErrorState';
 import { Transcript } from '../Transcript/Transcript';
 import { isTerminalAgentStatus } from './agentStatus';
 import { MessageInput } from './MessageInput';
-import type { Conversation } from './useChat';
+import { useChat, type Conversation } from './useChat';
 
 export interface ChatConversationProps {
   readonly conversation: Conversation;
@@ -19,8 +19,8 @@ export interface ChatConversationProps {
 }
 
 /**
- * One open conversation: its heading, a control to complete it, its transcript
- * and its message form.
+ * One open conversation: its heading, a control to complete it, a control to
+ * close it, its transcript and its message form.
  *
  * **Completing leaves the panel exactly where it is.** The chat is over, not
  * hidden: its transcript is still there to read and scroll, and only the
@@ -28,6 +28,14 @@ export interface ChatConversationProps {
  * vanished on completion would take the record of the conversation with it,
  * and would move focus out from under whoever pressed the button.
  *
+ * **Closing is the opposite of completing: it removes the panel, not the
+ * form.** The chat itself is untouched on the server — closing only takes it
+ * off this screen, so a long session can open many chats without the dialog
+ * growing without bound. Every panel gets one, finished or not, read-only or
+ * not: `useChat().closeChat` moves focus to a neighbouring panel and cleans
+ * up the panel's dock entry, so this component only has to call it.
+ *
+
  * **The agent's live status is read once, here, and passed down.** Both the
  * complete button and the message form depend on it — one is disabled mid-turn,
  * the other is disabled for good once the agent is terminal — and a panel with
@@ -59,6 +67,7 @@ export const ChatConversation = ({
   // needs its own heading id to label its own section correctly.
   const headingId = useId();
 
+  const { closeChat } = useChat();
   const complete = useCompleteChat(agentId);
   const { data: agent } = useLiveAgentState({ agentId });
   const status = agent?.status;
@@ -111,27 +120,44 @@ export const ChatConversation = ({
       <h3 id={headingId} className="chat-conversation__heading">
         {heading}
       </h3>
-      {/*
-        Gone once the agent is terminal: there is nothing left to complete,
-        whether it ended here or failed mid-turn on its own.
+      <div className="chat-conversation__actions">
+        {/*
+          Gone once the agent is terminal: there is nothing left to complete,
+          whether it ended here or failed mid-turn on its own.
 
-        Its own accessible name naming the role, not a bare "Complete": every
-        open panel has one of these buttons, and several identically-named
-        controls on one screen fail WCAG 2.4.6.
-      */}
-      {!finished && !readOnly && (
+          Its own accessible name naming the role, not a bare "Complete": every
+          open panel has one of these buttons, and several identically-named
+          controls on one screen fail WCAG 2.4.6.
+        */}
+        {!finished && !readOnly && (
+          <Button
+            className="react-aria-Button chat-conversation__complete"
+            // Disabled rather than queued: a turn is in flight, and completing
+            // the chat out from under it is a real race the server refuses too.
+            isDisabled={status === 'running' || complete.isPending}
+            onPress={() => {
+              complete.mutate();
+            }}
+          >
+            {t('chat.complete', { role: roleName })}
+          </Button>
+        )}
+        {/*
+          On every panel, finished or not, read-only or not — the only
+          control this dialog has for taking a chat off screen. Closing is
+          not completing: the chat stays open on the server, and Activity →
+          Chats is how it's found again. Its own accessible name for the same
+          WCAG 2.4.6 reason as Complete above.
+        */}
         <Button
-          className="react-aria-Button chat-conversation__complete"
-          // Disabled rather than queued: a turn is in flight, and completing
-          // the chat out from under it is a real race the server refuses too.
-          isDisabled={status === 'running' || complete.isPending}
+          className="react-aria-Button chat-conversation__close"
           onPress={() => {
-            complete.mutate();
+            closeChat(agentId);
           }}
         >
-          {t('chat.complete', { role: roleName })}
+          {t('chat.close', { role: roleName })}
         </Button>
-      )}
+      </div>
       <Transcript agentId={agentId} roleName={roleName} />
       {/* Listening in is not a conversation: nothing to send. */}
       {!readOnly && (

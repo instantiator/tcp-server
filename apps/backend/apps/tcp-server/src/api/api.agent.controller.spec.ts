@@ -47,7 +47,10 @@ describe('AgentController', () => {
     Pick<DbService, 'getAgent' | 'createAgent' | 'deleteAgent'>
   >;
   let orchestration: jest.Mocked<
-    Pick<AgentOrchestrationService, 'startAgent' | 'resumeAgent'>
+    Pick<
+      AgentOrchestrationService,
+      'startAgent' | 'resumeAgent' | 'createAgent'
+    >
   >;
   let chat: jest.Mocked<Pick<ChatService, 'sendMessage'>>;
   let agentEvents: jest.Mocked<
@@ -67,7 +70,11 @@ describe('AgentController', () => {
       createAgent: jest.fn(),
       deleteAgent: jest.fn(),
     };
-    orchestration = { startAgent: jest.fn(), resumeAgent: jest.fn() };
+    orchestration = {
+      startAgent: jest.fn(),
+      resumeAgent: jest.fn(),
+      createAgent: jest.fn(),
+    };
     chat = { sendMessage: jest.fn() };
     agentEvents = {
       observe: jest.fn().mockReturnValue(EMPTY),
@@ -127,7 +134,31 @@ describe('AgentController', () => {
       await expect(
         controller.startChat({ companyId: randomUUID(), roleId: randomUUID() }),
       ).rejects.toThrow(ServiceUnavailableException);
-      expect(db.createAgent).not.toHaveBeenCalled();
+      expect(orchestration.createAgent).not.toHaveBeenCalled();
+    });
+
+    // 002.02 stage 2: startChat used to call db.createAgent directly and
+    // write its own (entity-less) audit record. It now delegates to
+    // orchestration.createAgent, whose publish — with entity:'agent' and a
+    // summary — is the single agent-creation event; there is no longer a
+    // separate one here to assert on.
+    it('delegates to orchestration.createAgent in chat mode and returns the agent', async () => {
+      const agent = makeAgent({ initialPrompt: '' });
+      orchestration.createAgent.mockResolvedValue(agent);
+
+      const result = await controller.startChat({
+        companyId: agent.companyId,
+        roleId: agent.roleId,
+      });
+
+      expect(orchestration.createAgent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          companyId: agent.companyId,
+          roleId: agent.roleId,
+          mode: 'chat',
+        }),
+      );
+      expect(result.id).toBe(agent.id);
     });
   });
 
@@ -190,33 +221,6 @@ describe('AgentController', () => {
       await expect(controller.deleteAgent(randomUUID())).rejects.toThrow(
         NotFoundException,
       );
-    });
-  });
-
-  describe('startChat', () => {
-    it('creates a chat agent without dispatching to BullMQ and records an audit event', async () => {
-      const agent = makeAgent({ initialPrompt: '' });
-      db.createAgent.mockResolvedValue(agent);
-
-      const result = await controller.startChat({
-        companyId: agent.companyId,
-        roleId: agent.roleId,
-      });
-
-      expect(db.createAgent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          companyId: agent.companyId,
-          roleId: agent.roleId,
-        }),
-      );
-      expect(auditService.record).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.any(String),
-        expect.any(String),
-        AuditEventType.StateChange,
-        expect.any(Object),
-      );
-      expect(result.id).toBe(agent.id);
     });
   });
 

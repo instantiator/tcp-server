@@ -1231,6 +1231,82 @@ describe('Tui task panel', () => {
     expect(rows()[term.height - 1]).not.toContain('s start');
     expect(rows()[term.height - 1]).toContain('c cancel');
   });
+
+  describe('updateTaskPaneAgentStatus', () => {
+    // a2 (Implementer, in-progress, agentId 'agent-2') is the row every
+    // status case below patches; a3 (QA, ready, agentId null) is the fixture
+    // that already covers "no agent yet" without any patch at all.
+
+    it('shows "no agent yet" for an assignment with no dispatched agent', () => {
+      const { tui, text } = makeTui();
+      addTask(tui);
+      expect(text()).toContain('[agent: no agent yet]');
+    });
+
+    it('shows "waiting to start" for decision 4 — idle on an in-progress assignment', () => {
+      const { tui, text } = makeTui();
+      addTask(tui);
+
+      tui.updateTaskPaneAgentStatus('agent-2', 'idle');
+
+      expect(text()).toContain('[agent: waiting to start]');
+    });
+
+    it('shows a running agent', () => {
+      const { tui, text } = makeTui();
+      addTask(tui);
+
+      tui.updateTaskPaneAgentStatus('agent-2', 'running');
+
+      expect(text()).toContain('[agent: running]');
+    });
+
+    it('shows a paused agent', () => {
+      const { tui, text } = makeTui();
+      addTask(tui);
+
+      tui.updateTaskPaneAgentStatus('agent-2', 'paused');
+
+      expect(text()).toContain('[agent: paused]');
+    });
+
+    it('shows a completed agent', () => {
+      const { tui, text } = makeTui();
+      addTask(tui);
+
+      tui.updateTaskPaneAgentStatus('agent-2', 'completed');
+
+      expect(text()).toContain('[agent: completed]');
+    });
+
+    it('shows a failed agent', () => {
+      const { tui, text } = makeTui();
+      addTask(tui);
+
+      tui.updateTaskPaneAgentStatus('agent-2', 'failed');
+
+      expect(text()).toContain('[agent: failed]');
+    });
+
+    it('shows a cancelled agent', () => {
+      const { tui, text } = makeTui();
+      addTask(tui);
+
+      tui.updateTaskPaneAgentStatus('agent-2', 'cancelled');
+
+      expect(text()).toContain('[agent: cancelled]');
+    });
+
+    it('is a no-op for an agent this pane holds no assignment for', () => {
+      const { tui, text } = makeTui();
+      addTask(tui);
+      const before = text();
+
+      tui.updateTaskPaneAgentStatus('agent-nobody-has', 'running');
+
+      expect(text()).toBe(before);
+    });
+  });
 });
 
 describe('Tui initiate-task panel', () => {

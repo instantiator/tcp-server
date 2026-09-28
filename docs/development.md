@@ -261,17 +261,18 @@ npm run migration:revert      # Revert last migration
 
 Beyond the database/Redis/MinIO/OIDC connection strings (see `.env.example`), a few app-specific ones are easy to miss:
 
-| Variable                     | App(s)                | Purpose                                                                           |
-| ---------------------------- | --------------------- | --------------------------------------------------------------------------------- |
-| `MCP_STORAGE_URL`            | tcp-server, tcp-agent | `tcp-mcp-storage` base URL; omit to disable that server                           |
-| `MCP_MEMORY_URL`             | tcp-server, tcp-agent | `tcp-mcp-memory` base URL; omit to disable that server                            |
-| `MCP_INTERACTIONS_URL`       | tcp-server, tcp-agent | `tcp-mcp-interactions` base URL; omit to disable that server                      |
-| `MCP_TASKS_URL`              | tcp-server, tcp-agent | `tcp-mcp-tasks` base URL; omit to disable that server                             |
-| `INTERNAL_API_KEY`           | all apps              | Shared secret for internal service-to-service calls (`X-Internal-Api-Key`)        |
-| `KNOWLEDGE_POLL_INTERVAL_MS` | tcp-server            | Reconciliation-poll interval for the `knowledge-reindex` sync (default `60000`)   |
-| `TASK_MAX_QA_ATTEMPTS`       | tcp-server            | Env-level fallback for `runConfig.maxQaAttempts` (role/company override it first) |
-| `RAG_THRESHOLD`              | tcp-server, tcp-agent | Env-level fallback for `runConfig.ragThreshold` (role/company override it first)  |
-| `TCP_MASK_API_KEYS`          | tcp-server            | Masks `LlmConfig.apiKey` in API responses (default `true`)                        |
+| Variable                     | App(s)                | Purpose                                                                                                                                                                                                                                                |
+| ---------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `MCP_STORAGE_URL`            | tcp-server, tcp-agent | `tcp-mcp-storage` base URL; omit to disable that server                                                                                                                                                                                                |
+| `MCP_MEMORY_URL`             | tcp-server, tcp-agent | `tcp-mcp-memory` base URL; omit to disable that server                                                                                                                                                                                                 |
+| `MCP_INTERACTIONS_URL`       | tcp-server, tcp-agent | `tcp-mcp-interactions` base URL; omit to disable that server                                                                                                                                                                                           |
+| `MCP_TASKS_URL`              | tcp-server, tcp-agent | `tcp-mcp-tasks` base URL; omit to disable that server                                                                                                                                                                                                  |
+| `INTERNAL_API_KEY`           | all apps              | Shared secret for internal service-to-service calls (`X-Internal-Api-Key`)                                                                                                                                                                             |
+| `KNOWLEDGE_POLL_INTERVAL_MS` | tcp-server            | Reconciliation-poll interval for the `knowledge-reindex` sync (default `60000`)                                                                                                                                                                        |
+| `TASK_MAX_QA_ATTEMPTS`       | tcp-server            | Env-level fallback for `runConfig.maxQaAttempts` (role/company override it first)                                                                                                                                                                      |
+| `RAG_THRESHOLD`              | tcp-server, tcp-agent | Env-level fallback for `runConfig.ragThreshold` (role/company override it first)                                                                                                                                                                       |
+| `TCP_MASK_API_KEYS`          | tcp-server            | Masks `LlmConfig.apiKey` in API responses (default `true`)                                                                                                                                                                                             |
+| `AGENT_WORKER_CONCURRENCY`   | tcp-agent             | Parallel agent jobs (default 1). Set to `1` when agents share one capacity-limited model, e.g. a single local LLM. `docker-compose.yml` passes it through as of 002.02 — before that, setting it in `.env.dev` had no effect on the running container. |
 
 ### Tuning RAG retrieval
 

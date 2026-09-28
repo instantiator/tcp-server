@@ -15,7 +15,16 @@
 .chat-conversation__heading {
 }
 
+/* Complete and Close sit on one row, beside the heading they belong to. */
+.chat-conversation__actions {
+  display: flex;
+  gap: var(--tcp-space-sm);
+}
+
 .chat-conversation__complete {
+}
+
+.chat-conversation__close {
 }
 
 .chat-input {

@@ -76,8 +76,32 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       setFocusAgentId(conversation.agentId);
     };
 
+    const closeChat = (agentId: string): void => {
+      const index = conversations.findIndex((c) => c.agentId === agentId);
+      if (index === -1) return;
+
+      const next = conversations.filter((c) => c.agentId !== agentId);
+      setConversations(next);
+
+      if (next.length === 0) {
+        setIsOpen(false);
+      } else {
+        // The panel that takes the closed one's place: the conversation
+        // after it, or the one before if this was the last panel.
+        const neighbour = next[index] ?? next[index - 1];
+        if (neighbour !== undefined) setFocusAgentId(neighbour.agentId);
+      }
+
+      // Defensive: a rendered panel's own Close button is only reachable
+      // while its conversation is on screen, never while it is parked — but
+      // this keeps the dock and `dockedIds` honest if that ever changes.
+      dock.remove(agentId);
+      dockedIds.current = dockedIds.current.filter((id) => id !== agentId);
+    };
+
     return {
       openChat,
+      closeChat,
       startChat: async ({ companyId, roleId, roleName }: NewChat) => {
         const agent = await startChatMutation.mutateAsync({
           companyId,
@@ -86,7 +110,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         openChat({ agentId: agent.id, roleName, reference: null });
       },
     };
-  }, [dock, startChatMutation]);
+  }, [dock, startChatMutation, conversations]);
 
   const minimise = (): void => {
     for (const conversation of conversations) {
@@ -117,12 +141,15 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     <ChatContext.Provider value={chat}>
       {children}
       {/*
-        Nothing removes a conversation from this list. Completing a chat leaves
-        its panel showing, so a conversation opened in this session stays open
-        until the session ends — which is also why the dialog has no close
-        control of its own: escape and its one remaining control both mean
-        minimise, and a dialog holding a half-typed message should not throw it
-        away.
+        `closeChat` above is what removes a conversation from this list now —
+        each panel's own Close button (`ChatConversation`), not the dialog's
+        chrome. Completing a chat still leaves its panel showing; closing is
+        the separate, explicit way to drop it once the user is done with it
+        for this session. The chat itself is untouched on the server, so it
+        stays reachable from Activity → Chats. The dialog's own chrome still
+        has no close control of its own: escape and its one remaining chrome
+        control (minimise) both mean minimise, for the same half-typed-message
+        reason as before — only the per-panel Close is new.
       */}
       <ChatDialog
         conversations={conversations}

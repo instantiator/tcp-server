@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import {
   AgentStatus,
+  AuditEventType,
   TcpAgent,
   TcpAssignment,
   TcpCompany,
@@ -11,6 +12,7 @@ import {
 } from '@tcp/shared';
 import { randomUUID, type UUID } from 'crypto';
 import { Repository } from 'typeorm';
+import { AuditService } from '../audit/audit.service';
 import { AssignmentCompletionService } from './assignment-completion.service';
 import { OutputGateService } from './output-gate.service';
 import { PauseAndResumeService } from './pause-and-resume.service';
@@ -65,11 +67,16 @@ describe('AssignmentCompletionService.completeChat', () => {
       agentRepo,
       assignmentRepo,
       moduleRef.get(getRepositoryToken(TcpTask)),
+      roleRepo,
       // Nothing this path takes reaches the dispatcher or the gate: a chat has
       // no task to advance and no expected outputs to check.
       {} as unknown as TaskDispatcher,
       pauseResume as unknown as PauseAndResumeService,
       {} as unknown as OutputGateService,
+      // completeChat never pauses an agent for QA, so no event needs publishing.
+      {
+        record: jest.fn().mockResolvedValue(undefined),
+      } as unknown as AuditService,
     );
   });
 
@@ -177,5 +184,169 @@ describe('AssignmentCompletionService.completeChat', () => {
       ConflictException,
     );
     expect(pauseResume.completeAgent).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Covers the QA hand-off half of {@link AssignmentCompletionService.complete}
+ * (002.02 stage 2): pausing the agent used to write silently, so a client
+ * watching it never saw the pause until the QA agent's own activity implied
+ * it. Against the same kind of in-memory database as the suite above, for
+ * the same reason — a mock proves nothing about write-then-publish ordering.
+ */
+describe('AssignmentCompletionService.complete — QA hand-off', () => {
+  let moduleRef: TestingModule;
+  let service: AssignmentCompletionService;
+  let agentRepo: Repository<TcpAgent>;
+  let assignmentRepo: Repository<TcpAssignment>;
+  let taskRepo: Repository<TcpTask>;
+  let companyRepo: Repository<TcpCompany>;
+  let roleRepo: Repository<TcpRole>;
+  let dispatcher: {
+    assignmentReadyForQa: jest.Mock;
+    taskPlanned: jest.Mock;
+    assignmentAssured: jest.Mock;
+    assignmentFinalised: jest.Mock;
+  };
+  let audit: { record: jest.Mock };
+
+  beforeAll(async () => {
+    moduleRef = await Test.createTestingModule({
+      imports: [
+        TypeOrmModule.forRoot({
+          type: 'better-sqlite3',
+          database: ':memory:',
+          entities: ENTITIES,
+          synchronize: true,
+        }),
+        TypeOrmModule.forFeature(ENTITIES),
+      ],
+    }).compile();
+
+    agentRepo = moduleRef.get(getRepositoryToken(TcpAgent));
+    assignmentRepo = moduleRef.get(getRepositoryToken(TcpAssignment));
+    taskRepo = moduleRef.get(getRepositoryToken(TcpTask));
+    companyRepo = moduleRef.get(getRepositoryToken(TcpCompany));
+    roleRepo = moduleRef.get(getRepositoryToken(TcpRole));
+  });
+
+  afterAll(async () => {
+    await moduleRef.close();
+  });
+
+  beforeEach(() => {
+    dispatcher = {
+      assignmentReadyForQa: jest.fn().mockResolvedValue(undefined),
+      taskPlanned: jest.fn().mockResolvedValue(undefined),
+      assignmentAssured: jest.fn().mockResolvedValue(undefined),
+      assignmentFinalised: jest.fn().mockResolvedValue(undefined),
+    };
+    audit = { record: jest.fn().mockResolvedValue(undefined) };
+    service = new AssignmentCompletionService(
+      agentRepo,
+      assignmentRepo,
+      taskRepo,
+      roleRepo,
+      dispatcher as unknown as TaskDispatcher,
+      // completeChat's collaborator only — the QA path never calls it.
+      {} as unknown as PauseAndResumeService,
+      {
+        checkAssignmentOutputs: jest.fn().mockResolvedValue([]),
+      } as unknown as OutputGateService,
+      audit as unknown as AuditService,
+    );
+  });
+
+  function randomSlug(): string {
+    return randomUUID().slice(0, 8);
+  }
+
+  it('publishes the agent paused state_change, with a summary, only after the agent row is written', async () => {
+    const company = await companyRepo.save(
+      companyRepo.create({
+        slug: `qa-${randomSlug()}`,
+        name: 'QA Co',
+        description: 'x',
+      }),
+    );
+    const role = await roleRepo.save(
+      roleRepo.create({
+        companyId: company.id,
+        slug: `role-${randomSlug()}`,
+        name: 'analyst',
+        description: 'x',
+      }),
+    );
+    const task = await taskRepo.save(
+      taskRepo.create({
+        companyId: company.id,
+        request: 'do it',
+        shortcode: '000',
+        status: 'in-progress',
+      }),
+    );
+    const assignment = await assignmentRepo.save(
+      assignmentRepo.create({
+        companyId: company.id,
+        roleId: role.id,
+        taskId: task.id,
+        mode: 'implement',
+        status: 'in-progress',
+        orderIndex: 0,
+        prompt: 'work',
+        materials: [],
+        expected: [],
+        prepared: [],
+        approved: [],
+      }),
+    );
+    const agent = await agentRepo.save(
+      agentRepo.create({
+        companyId: company.id,
+        roleId: role.id,
+        assignmentId: assignment.id,
+        initialPrompt: '',
+        status: AgentStatus.Running,
+      }),
+    );
+    assignment.agentId = agent.id;
+    await assignmentRepo.save(assignment);
+
+    const updateSpy = jest.spyOn(agentRepo, 'update');
+
+    await service.complete(assignment, agent.id, 'done', []);
+
+    const pausedCallIndex = (
+      updateSpy.mock.calls as [string, { status?: string }][]
+    ).findIndex(([, patch]) => patch.status === AgentStatus.Paused);
+    expect(pausedCallIndex).toBeGreaterThanOrEqual(0);
+
+    const recordCalls = audit.record.mock.calls as [
+      string,
+      string,
+      string,
+      AuditEventType,
+      { entity?: string; newStatus?: string },
+    ][];
+    const publishCallIndex = recordCalls.findIndex(
+      ([, , , eventType, payload]) =>
+        eventType === AuditEventType.StateChange &&
+        payload.entity === 'agent' &&
+        payload.newStatus === AgentStatus.Paused,
+    );
+    expect(publishCallIndex).toBeGreaterThanOrEqual(0);
+    expect(recordCalls[publishCallIndex][4]).toMatchObject({
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      summary: expect.objectContaining({
+        id: agent.id,
+        status: AgentStatus.Paused,
+      }),
+    });
+
+    expect(updateSpy.mock.invocationCallOrder[pausedCallIndex]).toBeLessThan(
+      audit.record.mock.invocationCallOrder[publishCallIndex],
+    );
+
+    updateSpy.mockRestore();
   });
 });

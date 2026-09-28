@@ -101,14 +101,24 @@ export class ChatSession {
   }
 
   /**
-   * Opens `GET /api/company/:id/events` in the background and keeps the roster
-   * pane's Tasks list live.
+   * Opens `GET /api/company/:id/events` in the background and keeps the
+   * roster pane's Tasks list live, and every open task pane's assignment
+   * rows live with their agent's status.
    *
-   * `task_changed` upserts the one task named. Every other entity is ignored:
-   * `company` is just a signal (no company-detail view to refresh yet), and
-   * since 002.04 the stream also carries `agent`, `assignment` and `enquiry`
-   * rows for the web UI's live activity view, none of which the roster
-   * renders. Aborted on {@link cleanup}.
+   * `task_changed` upserts the one task named. `agent` (`entity:'agent'`)
+   * patches the one assignment row across every open task pane whose
+   * `agentId` matches — with no refetch, straight from the event's own
+   * summary (`AgentChangeSummary`) when present, else its `newStatus`
+   * (tcp-agent's own `running` write carries no summary — see
+   * `AgentRunStatusService.updateStatus`). This is the only place a task
+   * pane can learn an agent's live status from: an agent row never reaches
+   * the per-task stream (`ChatSession.watchTaskEvents`) — the publisher only
+   * routes `entity:'task'|'assignment'` rows to the task channel.
+   * `assignment` rows are left alone here: an open task pane already gets
+   * those (with a full refetch) via its own per-task stream, so there's
+   * nothing left for this one to do with them. `company` is just a signal
+   * (no company-detail view to refresh yet), and `enquiry` has no TUI view.
+   * Aborted on {@link cleanup}.
    */
   watchCompanyEvents(): void {
     this.companyEventsAbort = new AbortController();
@@ -118,17 +128,32 @@ export class ChatSession {
       this.tokenManager.current,
       this.companyEventsAbort.signal,
       (wire) => {
-        if (wire.type !== 'audit' || wire.event.payload['entity'] !== 'task') {
+        if (wire.type !== 'audit') return;
+        const entity = wire.event.payload['entity'];
+        if (entity === 'task') {
+          const summary = parseTaskChangeSummary(
+            wire.event.payload['summary'] as
+              Record<string, unknown> | undefined,
+          );
+          if (!summary) return;
+          this.tasksById.set(summary.id, summary);
+          this.tui?.updateRosterTasks(this.companyId, [
+            ...this.tasksById.values(),
+          ]);
           return;
         }
-        const summary = parseTaskChangeSummary(
-          wire.event.payload['summary'] as Record<string, unknown> | undefined,
-        );
-        if (!summary) return;
-        this.tasksById.set(summary.id, summary);
-        this.tui?.updateRosterTasks(this.companyId, [
-          ...this.tasksById.values(),
-        ]);
+        if (entity === 'agent') {
+          const agentId = wire.event.agentId;
+          if (!agentId) return;
+          const summary = wire.event.payload['summary'] as
+            { status?: unknown } | undefined;
+          const status =
+            typeof summary?.status === 'string'
+              ? summary.status
+              : str(wire.event.payload, 'newStatus');
+          if (!status) return;
+          this.tui?.updateTaskPaneAgentStatus(agentId, status);
+        }
       },
     );
   }

@@ -17,6 +17,7 @@ const SNAPSHOT: CompanySnapshot = {
       shortcode: 'TASK-1',
       request: 'Reconcile accounts',
       finished: false,
+      succeeded: false,
       step: 1,
       steps: 2,
     },
@@ -25,6 +26,7 @@ const SNAPSHOT: CompanySnapshot = {
       shortcode: 'TASK-2',
       request: 'Archive old records',
       finished: true,
+      succeeded: true,
       step: 2,
       steps: 2,
     },
@@ -122,9 +124,21 @@ describe('DetailsPicker', () => {
         name: t('visualisation.picker.agent', { role: 'Legal' }),
       }),
     ).toBeInTheDocument();
-    // 2 roles + 1 unfinished task + 2 non-finished agents: agent-3 has
-    // finished and must not appear at all, under either wording.
-    expect(screen.getAllByRole('option')).toHaveLength(5);
+    // 2 roles + 1 unfinished task + 2 non-finished agents + 1 archive:
+    // agent-3 has finished and must not appear at all, under either wording.
+    expect(screen.getAllByRole('option')).toHaveLength(6);
+  });
+
+  it('always lists the Archive item, since there is only ever one archive', async () => {
+    const user = userEvent.setup();
+    render(
+      <DetailsPicker snapshot={SNAPSHOT} selection={null} onSelect={vi.fn()} />,
+    );
+    await openPicker(user);
+
+    expect(
+      screen.getByRole('option', { name: t('visualisation.picker.archive') }),
+    ).toBeInTheDocument();
   });
 
   it('calls onSelect with the chosen role', async () => {
@@ -190,6 +204,25 @@ describe('DetailsPicker', () => {
     expect(onSelect).toHaveBeenCalledWith({ kind: 'agent', id: 'agent-2' });
   });
 
+  it('calls onSelect with the archive target', async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(
+      <DetailsPicker
+        snapshot={SNAPSHOT}
+        selection={null}
+        onSelect={onSelect}
+      />,
+    );
+    await openPicker(user);
+
+    await user.click(
+      screen.getByRole('option', { name: t('visualisation.picker.archive') }),
+    );
+
+    expect(onSelect).toHaveBeenCalledWith({ kind: 'archive' });
+  });
+
   it('is disabled with no snapshot', () => {
     render(
       <DetailsPicker snapshot={null} selection={null} onSelect={vi.fn()} />,
@@ -198,7 +231,12 @@ describe('DetailsPicker', () => {
     expect(pickerButton()).toBeDisabled();
   });
 
-  it('is disabled when the snapshot has no items', () => {
+  // Deliberate change (002.02 stage 9): the archive is now always in the
+  // list — the archive room always exists, unlike a role, a task or an
+  // agent — so an otherwise-empty snapshot no longer leaves the picker with
+  // nothing to offer. Only a `null` snapshot (still loading) disables it.
+  it('is enabled with the Archive item even when the snapshot has no other items', async () => {
+    const user = userEvent.setup();
     render(
       <DetailsPicker
         snapshot={{ roles: [], tasks: [], agents: [] }}
@@ -207,7 +245,12 @@ describe('DetailsPicker', () => {
       />,
     );
 
-    expect(pickerButton()).toBeDisabled();
+    expect(pickerButton()).not.toBeDisabled();
+    await openPicker(user);
+    expect(screen.getAllByRole('option')).toHaveLength(1);
+    expect(
+      screen.getByRole('option', { name: t('visualisation.picker.archive') }),
+    ).toBeInTheDocument();
   });
 
   it('has no accessibility violations with the popover open', async () => {
@@ -216,6 +259,10 @@ describe('DetailsPicker', () => {
       <DetailsPicker snapshot={SNAPSHOT} selection={null} onSelect={vi.fn()} />,
     );
     await openPicker(user);
+    // The scan covers the Archive entry as well as the snapshot's items.
+    expect(
+      screen.getByRole('option', { name: t('visualisation.picker.archive') }),
+    ).toBeInTheDocument();
 
     // document.body, not container: React Aria's Popover portals the listbox
     // out of the render container, so scanning container would examine a

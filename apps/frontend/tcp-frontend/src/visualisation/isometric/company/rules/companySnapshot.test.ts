@@ -154,6 +154,23 @@ describe('buildCompanySnapshot', () => {
     },
   );
 
+  it.each(['failed', 'cancelled', 'ready', 'planning'] as const)(
+    'marks a %s task not succeeded',
+    (status) => {
+      const snapshot = buildCompanySnapshot(
+        data({ tasks: [task({ status })], assignments: [] }),
+      );
+      expect(snapshot.tasks[0]?.succeeded).toBe(false);
+    },
+  );
+
+  it('marks a succeeded task succeeded', () => {
+    const snapshot = buildCompanySnapshot(
+      data({ tasks: [task({ status: 'succeeded' })], assignments: [] }),
+    );
+    expect(snapshot.tasks[0]?.succeeded).toBe(true);
+  });
+
   it.each(['completed', 'failed', 'cancelled'] as const)(
     'row 1: marks a %s agent finished',
     (status) => {
@@ -280,13 +297,17 @@ describe('buildCompanySnapshot', () => {
     expect(snapshot.agents[0]?.activity).toEqual({ kind: 'working' });
   });
 
-  it('row 7: is working when the agent is running and nothing else applies', () => {
+  it('row 8: is working when the agent is running and nothing else applies', () => {
     const snapshot = buildCompanySnapshot(data());
     expect(snapshot.agents[0]?.activity).toEqual({ kind: 'working' });
   });
 
-  it.each(['idle', 'paused'] as const)(
-    'row 8: is atDesk when the agent is %s',
+  // 002.02 stage 4: row 9 used to cover `idle` too, but that read as a bug
+  // (the avatar sat at its desk with an empty listen-in while its task was
+  // already `planning`). It now narrows to `paused` — row 7 catches `idle`
+  // on an in-progress, non-chat assignment first.
+  it.each(['paused'] as const)(
+    'row 9: is atDesk when the agent is %s',
     (status) => {
       const snapshot = buildCompanySnapshot(
         data({ agents: [agent({ status })] }),
@@ -294,6 +315,41 @@ describe('buildCompanySnapshot', () => {
       expect(snapshot.agents[0]?.activity).toEqual({ kind: 'atDesk' });
     },
   );
+
+  // 002.02 stage 1 (cause Q): a task agent queued behind the one worker slot
+  // stayed `idle` for 52 s while its task read `planning`, and sat at its desk.
+  // For a task agent, `idle` means only "created, not started" (decision 4),
+  // so stage 4 shows it waiting. Row 9's `idle` case above changes with it.
+  it('is waiting when a task agent is idle on an in-progress assignment', () => {
+    const snapshot = buildCompanySnapshot(
+      data({
+        agents: [agent({ status: 'idle', threadId: null })],
+        assignments: [assignment({ mode: 'plan' })],
+        tasks: [task({ status: 'planning' })],
+      }),
+    );
+    expect(snapshot.agents[0]?.activity.kind).toBe('waiting');
+  });
+
+  it('row 7: a chat agent that is idle is messagingUser, not waiting', () => {
+    const snapshot = buildCompanySnapshot(
+      data({
+        agents: [agent({ status: 'idle', threadId: null })],
+        assignments: [assignment({ mode: 'chat', taskId: null })],
+      }),
+    );
+    expect(snapshot.agents[0]?.activity).toEqual({ kind: 'messagingUser' });
+  });
+
+  it('row 9: a paused agent on an in-progress assignment is atDesk, not waiting', () => {
+    const snapshot = buildCompanySnapshot(
+      data({
+        agents: [agent({ status: 'paused' })],
+        assignments: [assignment({ mode: 'plan', status: 'in-progress' })],
+      }),
+    );
+    expect(snapshot.agents[0]?.activity).toEqual({ kind: 'atDesk' });
+  });
 
   it('drops an agent whose assignment is not loaded', () => {
     const snapshot = buildCompanySnapshot(

@@ -396,21 +396,28 @@ itself; see `chat` above and `tui` below for what each verb starts it with.
   lines indented under the opening quote), then an **Assignments** list split
   into two groups — **Incomplete** (`ready`/`in-progress`/`in-qa`) and
   **Complete** (`succeeded`/`failed`/`cancelled`) — one row per
-  plan/implement/qa/finalise assignment, `n. <role> (<status>) "<prompt>"`,
-  the status colour-coded (grey `ready`, cyan while active, green
-  `succeeded`, red `failed`, yellow `cancelled`), and word-wrapping the full
-  prompt when highlighted (up to `--task-list-max-lines` lines), same as the
-  roster's own task list. `n` is the assignment's position in the task's
-  plan (`0` for the planning assignment, an implement step's 1-based
-  position, or — for a qa row — the step it reviews) and stays fixed even
-  once the row moves from Incomplete to Complete. Updates live from the
-  task's SSE stream. **Up/Down** moves the highlight, skipping assignments
-  that haven't begun yet (nothing to open) and cycling across both groups;
-  **Enter** opens the assignment panel (below) for a highlighted, begun
-  assignment; **c** cancels the task (shown/active only while it's
-  `planning`/`in-progress`/`finalising`); **s** starts it (shown/active only
-  while it's `ready`) — the panel updates from the SSE stream after either, no
-  manual refresh needed.
+  plan/implement/qa/finalise assignment,
+  `n. <role> (<status>) [agent: <live status>] "<prompt>"`, the status
+  colour-coded (grey `ready`, cyan while active, green `succeeded`, red
+  `failed`, yellow `cancelled`), and word-wrapping the full prompt when
+  highlighted (up to `--task-list-max-lines` lines), same as the roster's own
+  task list. `n` is the assignment's position in the task's plan (`0` for the
+  planning assignment, an implement step's 1-based position, or — for a qa
+  row — the step it reviews) and stays fixed even once the row moves from
+  Incomplete to Complete. The `[agent: …]` segment shows the assignment's
+  working agent's own live status — `no agent yet` before one is dispatched,
+  `waiting to start` for an `idle` agent queued behind the worker pool on an
+  `in-progress` assignment (it hasn't stalled — it's waiting for a worker
+  slot), or its raw status (`running`/`paused`/`completed`/`failed`/
+  `cancelled`) otherwise — seeded when the panel opens and kept live from the
+  company's SSE stream (agent `state_change` rows), no refetch. The rest of
+  the panel updates live from the task's SSE stream. **Up/Down** moves the
+  highlight, skipping assignments that haven't begun yet (nothing to open)
+  and cycling across both groups; **Enter** opens the assignment panel
+  (below) for a highlighted, begun assignment; **c** cancels the task
+  (shown/active only while it's `planning`/`in-progress`/`finalising`); **s**
+  starts it (shown/active only while it's `ready`) — the panel updates from
+  the SSE stream after either, no manual refresh needed.
 - **The assignment panel** (Enter on a begun assignment in a task panel) is a
   read-only scrollback of that assignment's working agent — no input box.
   Labelled `Assignment: <shortcode>` in the tab bar when the assignment has

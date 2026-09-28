@@ -83,6 +83,15 @@ export function furnishRoom(room: Room): Furniture[] {
           tile: roomTile(room, 4, 3),
         },
       ];
+    case 'archive':
+      return [
+        {
+          id: `${room.id}:bookshelf`,
+          kind: 'bookshelf',
+          roomId: room.id,
+          tile: roomTile(room, 4, 1),
+        },
+      ];
     case 'corridor':
       return [];
   }

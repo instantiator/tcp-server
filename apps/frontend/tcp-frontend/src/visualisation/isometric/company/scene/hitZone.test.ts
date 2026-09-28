@@ -43,6 +43,28 @@ describe('createHitZone', () => {
     });
   });
 
+  it('hovers and selects the archive bookshelf zone, which carries no id', () => {
+    // The bookshelf's zone (`buildArchiveZone` in TcpCompanyScene) is built
+    // exactly this way: `{kind:'archive'}` is neither `furniture` nor `room`,
+    // so it is selectable like a task or role zone, while still emitting a
+    // `hover` first — the tooltip that shows on hover is unaffected.
+    const { scene, handlers } = sceneWithZone();
+    const target: HoverTarget = { kind: 'archive' };
+    createHitZone(scene, 0, 0, 10, 10, () => target);
+
+    handlers.get('pointerover')?.({ x: 5, y: 6 });
+    handlers.get('pointerdown')?.();
+
+    expect(emitTcpEvent).toHaveBeenCalledWith({
+      event: 'hover',
+      value: { target, x: 5, y: 6 },
+    });
+    expect(emitTcpEvent).toHaveBeenCalledWith({
+      event: 'select',
+      value: target,
+    });
+  });
+
   it.each([
     { kind: 'furniture', id: 'rec:sofa:0' },
     { kind: 'room', id: 'mail' },

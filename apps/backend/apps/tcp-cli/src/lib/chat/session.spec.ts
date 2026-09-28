@@ -50,6 +50,7 @@ function fakeTui() {
     updateRosterTasks: jest.fn(),
     updateTaskPaneStatus: jest.fn(),
     updateTaskPaneAssignments: jest.fn(),
+    updateTaskPaneAgentStatus: jest.fn(),
     setBusy: jest.fn(),
   } as unknown as Tui;
 }
@@ -65,7 +66,7 @@ describe('ChatSession', () => {
   });
 
   describe('fetchTaskDetail', () => {
-    it('resolves each assignment role id to its display name', async () => {
+    it('resolves each assignment role id to its display name, and seeds its agent status from the company agent list', async () => {
       mockedApiRequest
         .mockResolvedValueOnce({
           id: 'task-1',
@@ -96,7 +97,9 @@ describe('ChatSession', () => {
         .mockResolvedValueOnce([
           { id: 'role-1', name: 'Planner', slug: 'planner' },
           { id: 'role-2', name: 'Implementer', slug: 'implementer' },
-        ]);
+        ])
+        // GET /api/agent?companyId= — a1's agent is active; a2 has none.
+        .mockResolvedValueOnce([{ id: 'agent-1', status: 'running' }]);
 
       const session = makeSession();
       const { task, assignments } = await session.fetchTaskDetail('task-1');
@@ -113,6 +116,7 @@ describe('ChatSession', () => {
           shortcode: '000-000-plan',
           planIndex: 0,
           agentId: 'agent-1',
+          agentStatus: 'running',
           failureReason: null,
         },
         {
@@ -125,6 +129,7 @@ describe('ChatSession', () => {
           shortcode: '000-001-implement',
           planIndex: 1,
           agentId: null,
+          agentStatus: null,
           failureReason: null,
         },
       ]);
@@ -133,6 +138,13 @@ describe('ChatSession', () => {
         expect.anything(),
         'GET',
         '/api/company/company-1/roles',
+        undefined,
+      );
+      expect(mockedApiRequest).toHaveBeenNthCalledWith(
+        3,
+        expect.anything(),
+        'GET',
+        '/api/agent?companyId=company-1',
         undefined,
       );
     });
@@ -173,7 +185,8 @@ describe('ChatSession', () => {
           status: 'ready',
           assignments: [],
         })
-        .mockResolvedValueOnce([]);
+        .mockResolvedValueOnce([]) // roles
+        .mockResolvedValueOnce([]); // agents
       const session = makeSession();
 
       const { task } = await session.createTask(submission);
@@ -202,7 +215,8 @@ describe('ChatSession', () => {
           status: 'ready',
           assignments: [],
         })
-        .mockResolvedValueOnce([]);
+        .mockResolvedValueOnce([]) // roles
+        .mockResolvedValueOnce([]); // agents
       const session = makeSession();
 
       await session.createTask({ ...submission, expected: ['out.md'] });
@@ -229,7 +243,8 @@ describe('ChatSession', () => {
           status: 'planning',
           assignments: [],
         })
-        .mockResolvedValueOnce([]);
+        .mockResolvedValueOnce([]) // roles
+        .mockResolvedValueOnce([]); // agents
       const session = makeSession();
 
       const { task } = await session.createTask({
@@ -284,7 +299,9 @@ describe('ChatSession', () => {
         })
         .mockResolvedValueOnce([
           { id: 'role-1', name: 'Implementer', slug: 'implementer' },
-        ]);
+        ])
+        // GET /api/agent?companyId= — agent-1 is mid-run.
+        .mockResolvedValueOnce([{ id: 'agent-1', status: 'running' }]);
 
       const tui = fakeTui();
       const session = makeSession(tui);
@@ -312,9 +329,86 @@ describe('ChatSession', () => {
           shortcode: '000-000-implement',
           planIndex: 0,
           agentId: 'agent-1',
+          agentStatus: 'running',
           failureReason: null,
         },
       ]);
+    });
+  });
+
+  describe('watchCompanyEvents', () => {
+    /** An agent `state_change` WireEvent, as the company stream carries it —
+     * top-level `agentId`, and (unlike a task/assignment row) usually a
+     * `summary` (`AgentChangeSummary`) except tcp-agent's own `running`
+     * write (`AgentRunStatusService.updateStatus`), which carries none. */
+    function agentEvent(
+      agentId: string | null,
+      payload: Record<string, unknown>,
+    ): WireEvent {
+      return {
+        type: 'audit',
+        event: {
+          timestamp: 't',
+          companyId: 'company-1',
+          role: 'r',
+          agentId,
+          assignmentId: null,
+          taskId: null,
+          eventType: 'state_change',
+          payload: { entity: 'agent', ...payload },
+        },
+      };
+    }
+
+    it("patches the matching task pane's agent status from the event's summary, with no refetch", () => {
+      const tui = fakeTui();
+      const session = makeSession(tui);
+      session.watchCompanyEvents();
+
+      const onEvent = mockedReadWireStream.mock.calls[0][3];
+      onEvent(
+        agentEvent('agent-2', {
+          newStatus: 'paused',
+          summary: {
+            id: 'agent-2',
+            status: 'paused',
+            roleId: 'r',
+            assignmentId: 'a2',
+          },
+        }),
+      );
+
+      expect(tui.updateTaskPaneAgentStatus).toHaveBeenCalledWith(
+        'agent-2',
+        'paused',
+      );
+      expect(mockedApiRequest).not.toHaveBeenCalled();
+    });
+
+    it("falls back to newStatus with no refetch when the event carries no summary (tcp-agent's own running write)", () => {
+      const tui = fakeTui();
+      const session = makeSession(tui);
+      session.watchCompanyEvents();
+
+      const onEvent = mockedReadWireStream.mock.calls[0][3];
+      onEvent(agentEvent('agent-2', { newStatus: 'running' }));
+
+      expect(tui.updateTaskPaneAgentStatus).toHaveBeenCalledWith(
+        'agent-2',
+        'running',
+      );
+      expect(mockedApiRequest).not.toHaveBeenCalled();
+    });
+
+    it('ignores an agent event with no agentId', () => {
+      const tui = fakeTui();
+      const session = makeSession(tui);
+      session.watchCompanyEvents();
+
+      const onEvent = mockedReadWireStream.mock.calls[0][3];
+      onEvent(agentEvent(null, { newStatus: 'running' }));
+
+      expect(tui.updateTaskPaneAgentStatus).not.toHaveBeenCalled();
     });
   });
 

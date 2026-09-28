@@ -17,6 +17,7 @@ const SNAPSHOT: CompanySnapshot = {
       shortcode: 'TASK-1',
       request: 'Reconcile accounts',
       finished: false,
+      succeeded: false,
       step: 1,
       steps: 3,
     },
@@ -145,6 +146,22 @@ describe('VisualisationTooltip', () => {
     expect(tooltip).toHaveTextContent(t('visualisation.furniture.pigeonholes'));
     expect(tooltip).toHaveTextContent(
       t('visualisation.furniture.pigeonholes.description'),
+    );
+  });
+
+  it("shows the archive bookshelf's furniture description on hover, same as before it became selectable", () => {
+    render(
+      <VisualisationTooltip
+        world={WORLD}
+        hover={hoverOn({ kind: 'archive' })}
+        snapshot={SNAPSHOT}
+      />,
+    );
+
+    const tooltip = screen.getByRole('tooltip');
+    expect(tooltip).toHaveTextContent(t('visualisation.furniture.bookshelf'));
+    expect(tooltip).toHaveTextContent(
+      t('visualisation.furniture.bookshelf.description'),
     );
   });
 

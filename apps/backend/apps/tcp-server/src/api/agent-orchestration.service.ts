@@ -2,6 +2,7 @@ import {
   AgentStatus,
   assertRedisReachable,
   AuditEventType,
+  buildAgentChangeSummary,
   Conversation,
   ConversationMessage,
   TcpAgent,
@@ -125,7 +126,7 @@ export class AgentOrchestrationService
    * to tcp-agent via the BullMQ queue.
    */
   async startAgent(template: TcpAgentTemplate): Promise<TcpAgent> {
-    const agent = await this.db.createAgent(template);
+    const agent = await this.createAgent(template);
     await this.dispatchStartJob(agent.id);
     return agent;
   }
@@ -136,9 +137,32 @@ export class AgentOrchestrationService
    * {@link PendingConsultation}) must be committed before the worker can
    * pick up the job — otherwise the worker may complete and call back
    * before those records exist.
+   *
+   * Publishes the new agent as an `idle` `state_change` once its row is
+   * written — every creation path (dispatch, recovery, chat start) goes
+   * through here, so a client never has to wait for the agent's first
+   * `running` event to learn it exists (002.02 stage 1, cause C1: without
+   * this, an agent queued behind another job could sit unannounced for as
+   * long as the queue took to free up).
    */
   async createAgent(template: TcpAgentTemplate): Promise<TcpAgent> {
-    return this.db.createAgent(template);
+    const agent = await this.db.createAgent(template);
+    await this.audit.record(
+      agent.companyId,
+      'agent',
+      agent.id,
+      AuditEventType.StateChange,
+      {
+        entity: 'agent',
+        newStatus: AgentStatus.Idle,
+        reason: 'agent created',
+        summary: buildAgentChangeSummary({
+          ...agent,
+          status: AgentStatus.Idle,
+        }),
+      },
+    );
+    return agent;
   }
 
   /**
@@ -231,15 +255,12 @@ export class AgentOrchestrationService
     // Only once the job is safely queued: a failure above must leave these
     // undelivered, so the next resume picks them up rather than losing them.
     if (replies) await this.markDelivered(replies);
-    // Let any client observing the calling agent see it come back to life —
-    // one state_change row, streamed live by the persist-then-publish path.
-    await this.audit.record(
-      agent.companyId,
-      agent.role?.name ?? 'agent',
-      agent.id,
-      AuditEventType.StateChange,
-      { entity: 'agent', newStatus: AgentStatus.Running, reason: 'resumed' },
-    );
+    // No event published here (002.02 stage 2): the DB still reads `paused`
+    // until the worker actually picks the job up, and with one worker slot
+    // that can be tens of seconds away. Publishing `running` at enqueue time
+    // told clients something the database didn't yet agree with. The
+    // worker's own `running` write (`agent-loop.service.ts` `run()`, via
+    // `RunStatusService`) is the persist-then-publish source of truth.
     this.logger.log(`Dispatched resume job for agent ${agent.id}`);
     return agent;
   }

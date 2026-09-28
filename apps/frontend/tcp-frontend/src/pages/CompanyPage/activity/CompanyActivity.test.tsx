@@ -1022,6 +1022,39 @@ describe('CompanyActivity', () => {
       ).toBeInTheDocument();
     });
 
+    it('reopens a chat that was closed, from its row', async () => {
+      // Closing only takes a chat off screen (002.02): it stays open on the
+      // server, so its row is still here and still opens it.
+      respondActivity();
+      const user = userEvent.setup();
+      renderActivity();
+
+      const chatsRegion = await screen.findByRole('region', {
+        name: t('activity.chats.heading'),
+      });
+      const row = await within(chatsRegion).findByRole('button', {
+        name: t('activity.chats.open', { role: ROLE.name }),
+      });
+      await user.click(row);
+      await user.click(
+        screen.getByRole('button', {
+          name: t('chat.close', { role: ROLE.name }),
+        }),
+      );
+      expect(
+        screen.queryByRole('dialog', { name: t('chat.dialog.heading') }),
+      ).not.toBeInTheDocument();
+
+      await user.click(
+        within(chatsRegion).getByRole('button', {
+          name: t('activity.chats.open', { role: ROLE.name }),
+        }),
+      );
+      expect(
+        screen.getByRole('dialog', { name: t('chat.dialog.heading') }),
+      ).toBeInTheDocument();
+    });
+
     it('does not render, and does not count, a chat assignment with no agent', async () => {
       // The two are created together server-side, so this is not expected to
       // happen — but `ChatsList` filters it out rather than rendering a row

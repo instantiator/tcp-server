@@ -4,7 +4,12 @@ import type { SelectionTarget } from '../TcpPhaserEventBus';
 import { emitTcpEvent } from '../TcpPhaserEventBus';
 import type { Tile } from '../world/types';
 import { createHitZone } from './hitZone';
-import { BOOK_PAGES_COLOUR, roleColour, shadesOf } from './palette';
+import {
+  BOOK_PAGES_COLOUR,
+  CARRIED_OUTPUTS_COLOUR,
+  roleColour,
+  shadesOf,
+} from './palette';
 
 /** The body's footprint and height, in pixels. */
 const BODY_SIZE = 22;
@@ -15,11 +20,24 @@ const HEAD_RADIUS = 7;
 const BOOK_SIZE = 16;
 const BOOK_HEIGHT = 6;
 const PAGES_HEIGHT = 2;
-/** The copy an agent carries once it has collected its role: size and offset beside the body, in pixels. */
+/**
+ * The copy an agent holds once it has collected its role: size, and offset in
+ * pixels. It floats just above the head, since at the body's side it read as a
+ * bump rather than a book (002.02).
+ */
 const CARRIED_BOOK_SIZE = 8;
 const CARRIED_BOOK_HEIGHT = 4;
-const CARRIED_BOOK_X = 12;
-const CARRIED_BOOK_Y = -10;
+const CARRIED_BOOK_X = 0;
+const CARRIED_BOOK_Y = -44;
+/**
+ * The box of a finished task's outputs, carried to the archive bookshelf:
+ * size, and offset in pixels. Sits low, in front of the body, so it doesn't
+ * compete with the role's book floating above the head.
+ */
+const CARRIED_OUTPUTS_SIZE = 10;
+const CARRIED_OUTPUTS_HEIGHT = 8;
+const CARRIED_OUTPUTS_X = 0;
+const CARRIED_OUTPUTS_Y = -12;
 /** The hit zone's footprint and its lift above the base tile, in pixels. */
 const ZONE_WIDTH = 28;
 const ZONE_HEIGHT = 48;
@@ -49,6 +67,8 @@ export class AvatarSprite {
   private readonly zoneLift: number;
   /** Agents only: the role's copy, shown once the avatar carries it. */
   private readonly carriedBook: GameObjects.IsoBox | null;
+  /** Agents only: the finished task's outputs, shown on the walk to the archive. */
+  private readonly carriedOutputs: GameObjects.IsoBox | null;
 
   constructor(
     scene: Scene,
@@ -91,6 +111,7 @@ export class AvatarSprite {
         ),
       );
       this.carriedBook = null;
+      this.carriedOutputs = null;
       this.zoneLift = BOOK_ZONE_LIFT;
       zoneSize = { width: BOOK_ZONE_SIZE, height: BOOK_ZONE_SIZE };
     } else {
@@ -104,6 +125,16 @@ export class AvatarSprite {
         shades.right,
       );
       this.carriedBook.setVisible(false);
+      this.carriedOutputs = scene.add.isobox(
+        CARRIED_OUTPUTS_X,
+        CARRIED_OUTPUTS_Y,
+        CARRIED_OUTPUTS_SIZE,
+        CARRIED_OUTPUTS_HEIGHT,
+        CARRIED_OUTPUTS_COLOUR,
+        CARRIED_OUTPUTS_COLOUR,
+        CARRIED_OUTPUTS_COLOUR,
+      );
+      this.carriedOutputs.setVisible(false);
       parts.push(
         scene.add.isobox(
           0,
@@ -116,6 +147,7 @@ export class AvatarSprite {
         ),
         scene.add.circle(0, -BODY_HEIGHT, HEAD_RADIUS, shades.top),
         this.carriedBook,
+        this.carriedOutputs,
       );
       this.zoneLift = ZONE_LIFT;
       zoneSize = { width: ZONE_WIDTH, height: ZONE_HEIGHT };
@@ -156,6 +188,14 @@ export class AvatarSprite {
   /** Shows or hides the role's copy an agent carries. Role avatars ignore it. */
   setHasRole(hasRole: boolean): void {
     this.carriedBook?.setVisible(hasRole);
+  }
+
+  /**
+   * Shows or hides the box of a finished task's outputs, carried to the
+   * archive bookshelf. Role avatars ignore it.
+   */
+  setCarrying(carrying: boolean): void {
+    this.carriedOutputs?.setVisible(carrying);
   }
 
   /** Moves the whole figure, and its hit zone, to a tile. */
