@@ -306,7 +306,7 @@ const strings = {
   'visualisation.activity.consulting': 'consulting',
   'visualisation.activity.messagingUser': 'messaging a user',
   'visualisation.activity.finished': 'finished',
-  'visualisation.activity.waiting': 'waiting',
+  'visualisation.activity.waiting': 'waiting to start',
 
   // Furniture and room titles double as their canvas labels; the
   // descriptions are the tooltip's second line.

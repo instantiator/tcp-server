@@ -79,6 +79,13 @@ function targetFor(
         : { kind: 'furniture', furnitureId: PIGEONHOLES_ID };
     case 'atDesk':
       return deskTarget(avatar) ?? whiteboardTarget(world, avatar);
+    case 'waiting':
+      // Waits by its role's book in the rec room. `pickupTarget` returns the
+      // same target a not-yet-rolled avatar heads for anyway, so arriving
+      // here doesn't move it again while it stays `waiting`. With no role
+      // avatar to wait by (the rec room's spot ceiling), it waits at its
+      // desk instead.
+      return pickupTarget(world, avatar) ?? deskTarget(avatar);
     case 'finished':
       // Dissociated already, by agentAvatarRules; this avatar is skipped
       // before reaching here because its `agentId` is already null.
@@ -89,9 +96,10 @@ function targetFor(
 /**
  * Points every agent avatar at the place its activity belongs: the
  * whiteboard while working, the avatar it reviews, the 1:1 table while
- * consulting, the pigeonholes while messaging the user, or its own desk.
- * When the right place doesn't exist yet, the avatar keeps its last target
- * rather than being sent somewhere wrong.
+ * consulting, the pigeonholes while messaging the user, its role's book in
+ * the rec room while waiting to start, or its own desk. When the right place
+ * doesn't exist yet, the avatar keeps its last target rather than being sent
+ * somewhere wrong.
  */
 export function applyAvatarTargetRules(
   world: OfficeWorld,

@@ -24,8 +24,9 @@ import {
  * | 4 | the assignment's mode is `consultee` | `consulting`, keyed by its own assignment id |
  * | 5 | an active `consultee` assignment has this agent's assignment as its parent | `consulting`, keyed by that assignment's id |
  * | 6 | the mode is `qa` and the agent is running | `reviewing` the assignment's `targetAssignmentId` |
- * | 7 | the agent is running | `working` |
- * | 8 | anything else: idle, or paused for another reason | `atDesk` |
+ * | 7 | the agent is idle, its assignment isn't `chat`, and the assignment is `in-progress` | `waiting` |
+ * | 8 | the agent is running | `working` |
+ * | 9 | anything else: paused, or idle on an assignment that isn't yet `in-progress` | `atDesk` |
  *
  * Rows 2 and 5 deliberately don't use `agent.pauseReason`. A live agent event
  * patches only `status` into the cached row, so `pauseReason` goes stale; the
@@ -34,6 +35,13 @@ import {
  * Rows 1, 4 and 5 test statuses against `ACTIVE_*_STATUSES` from
  * `api/statuses.ts`. Row 2 re-checks the enquiry's status too: a live patch
  * can close an enquiry that is still in the list fetched for `awaiting_user`.
+ *
+ * Row 7 is decision 4 of the 002.02 plan: stage 1 confirmed `idle` means only
+ * "created, not started yet" for a non-chat agent, most often because it's
+ * queued behind the single worker slot. Row 9 used to cover `idle` too, but
+ * that read as a bug — the avatar sat at its desk with an empty listen-in
+ * while its task was already `planning` — so it now narrows to `paused` and
+ * any other non-running status.
  */
 export type AgentActivity =
   | { readonly kind: 'atDesk' }
@@ -42,7 +50,9 @@ export type AgentActivity =
   /** `oneToOneId` is the consultee's assignment id, shared by both sides of the consultation. */
   | { readonly kind: 'consulting'; readonly oneToOneId: string }
   | { readonly kind: 'messagingUser' }
-  | { readonly kind: 'finished' };
+  | { readonly kind: 'finished' }
+  /** Created, not started: an `idle` task agent, most often queued behind the worker slot. */
+  | { readonly kind: 'waiting' };
 
 export interface SnapshotRole {
   readonly id: string;
@@ -192,10 +202,31 @@ function activityOf(
       reviewedAssignmentId: assignment.targetAssignmentId,
     };
   }
+  if (isWaitingToStart(agent.status, assignment)) {
+    return { kind: 'waiting' };
+  }
   if (agent.status === 'running') {
     return { kind: 'working' };
   }
   return { kind: 'atDesk' };
+}
+
+/**
+ * True for a non-chat agent that's `idle` on an `in-progress` assignment —
+ * decision 4 of the 002.02 plan: on a task agent, `idle` means only "created,
+ * not started yet" (stage 1 checked every writer). Exported so the tray
+ * (`AgentDetails.tsx`) can show the same "waiting to start" reading the
+ * office does, without duplicating the condition.
+ */
+export function isWaitingToStart(
+  agentStatus: AgentDTO['status'],
+  assignment: Pick<AssignmentDTO, 'mode' | 'status'>,
+): boolean {
+  return (
+    agentStatus === 'idle' &&
+    assignment.mode !== 'chat' &&
+    assignment.status === 'in-progress'
+  );
 }
 
 /** Widens a status tuple so a DTO's status can be looked up in it. */

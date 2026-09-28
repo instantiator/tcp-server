@@ -234,6 +234,60 @@ describe('applyAvatarTargetRules', () => {
     });
   });
 
+  it('sends a waiting avatar to its role book, whether or not it already has its role', () => {
+    const { world, avatarId } = worldWithTaskAvatar({ hasRole: true });
+    const withRole = withRoleAvatar(world, 'role-1');
+    const next = applyAvatarTargetRules(
+      withRole,
+      snapshot([agent({ activity: { kind: 'waiting' } })]),
+    );
+    const avatar = requireAvatar(next, (a) => a.id === avatarId);
+    expect(avatar.target).toEqual({ kind: 'avatar', avatarId: 'role:role-1' });
+  });
+
+  it('a waiting avatar stays at the role book on the next pass — arriving does not re-target it', () => {
+    const { world, avatarId } = worldWithTaskAvatar({ hasRole: true });
+    const withRole = withRoleAvatar(world, 'role-1');
+    const snap = snapshot([agent({ activity: { kind: 'waiting' } })]);
+    const once = applyAvatarTargetRules(withRole, snap);
+    const again = applyAvatarTargetRules(once, snap);
+    expect(again).toBe(once);
+    const avatar = requireAvatar(again, (a) => a.id === avatarId);
+    expect(avatar.target).toEqual({ kind: 'avatar', avatarId: 'role:role-1' });
+  });
+
+  it('a waiting avatar falls back to its own desk when the role avatar is missing (the rec room ceiling)', () => {
+    const { world, avatarId } = worldWithTaskAvatar({ hasRole: true });
+    // No `withRoleAvatar` call: the role's rec-room spot never got one.
+    const next = applyAvatarTargetRules(
+      world,
+      snapshot([agent({ activity: { kind: 'waiting' } })]),
+    );
+    const avatar = requireAvatar(next, (a) => a.id === avatarId);
+    expect(avatar.target).toEqual({
+      kind: 'furniture',
+      furnitureId: avatar.deskId,
+    });
+  });
+
+  it('sends a waiting avatar on to the whiteboard once its agent starts running', () => {
+    const { world, avatarId } = worldWithTaskAvatar({ hasRole: true });
+    const withRole = withRoleAvatar(world, 'role-1');
+    const waiting = applyAvatarTargetRules(
+      withRole,
+      snapshot([agent({ activity: { kind: 'waiting' } })]),
+    );
+    const running = applyAvatarTargetRules(
+      waiting,
+      snapshot([agent({ activity: { kind: 'working' } })]),
+    );
+    const avatar = requireAvatar(running, (a) => a.id === avatarId);
+    expect(avatar.target).toEqual({
+      kind: 'furniture',
+      furnitureId: `${taskRoomId('task-1')}:whiteboard`,
+    });
+  });
+
   it('leaves a role avatar alone — it has no agentId, so the pickup rule never touches it', () => {
     const world = withRoleAvatar(createInitialWorld(), 'role-1');
     const next = applyAvatarTargetRules(world, snapshot([]));

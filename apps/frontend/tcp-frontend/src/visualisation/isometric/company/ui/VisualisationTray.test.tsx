@@ -202,6 +202,21 @@ describe('VisualisationTray', () => {
     });
   });
 
+  it('reads "waiting to start" for an idle task agent on an in-progress assignment', async () => {
+    // 002.02 stage 4 (decision 4): idle only ever means "created, not
+    // started" for a task agent, most often queued behind the worker slot.
+    respond({ agent: { body: agentFixture('idle') } });
+    renderTray();
+
+    const aside = await screen.findByRole('complementary', {
+      name: t('visualisation.tray.agentHeading', { role: ROLE_NAME }),
+    });
+    expect(
+      within(aside).getByText(t('visualisation.activity.waiting')),
+    ).toBeInTheDocument();
+    expect(within(aside).queryByText(statusLabel('idle'))).toBeNull();
+  });
+
   it('offers no listening in once the agent has finished', async () => {
     respond({ agent: { body: agentFixture('completed') } });
     renderTray();
