@@ -95,6 +95,11 @@ export class AgentController {
    * The agent starts in `idle` status and is driven by calls to
    * {@link sendMessage} instead of the BullMQ pipeline.
    *
+   * Goes through {@link AgentOrchestrationService.createAgent} (not
+   * `db.createAgent` directly), so its `state_change` — with `entity:'agent'`
+   * and a summary — is published the same way every other agent creation is
+   * (002.02 stage 2). A separate record here would duplicate that event.
+   *
    * Refused with `503` while the system is draining for shutdown.
    */
   @ApiOperation({ summary: 'Start a chat-mode agent' })
@@ -103,23 +108,12 @@ export class AgentController {
   @Post('chat/start')
   async startChat(@Body() body: StartChatDto): Promise<TcpAgent> {
     this.shutdown.assertAccepting();
-    const agent = await this.db.createAgent({
+    return this.orchestration.createAgent({
       companyId: body.companyId,
       roleId: body.roleId,
       initialPrompt: '',
       mode: 'chat',
     });
-    await this.audit.record(
-      agent.companyId,
-      body.roleId,
-      agent.id,
-      AuditEventType.StateChange,
-      {
-        newStatus: AgentStatus.Idle,
-        reason: 'chat session created',
-      },
-    );
-    return agent;
   }
 
   /**

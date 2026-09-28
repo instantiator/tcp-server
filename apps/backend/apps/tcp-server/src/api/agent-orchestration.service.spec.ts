@@ -299,23 +299,18 @@ describe('AgentOrchestrationService', () => {
       });
     });
 
-    it('records a running (resumed) state_change after enqueueing', async () => {
+    // 002.02 stage 2: an early `running` here raced ahead of the database,
+    // which still read `paused` until the worker actually picked the job
+    // up — with one worker slot, that could be tens of seconds later. The
+    // worker's own `running` write (persist-then-publish) is the only
+    // `running` event now; enqueueing publishes nothing.
+    it('publishes no state_change at enqueue — the worker records its own running', async () => {
       const agent = makeAgent({ status: AgentStatus.Paused });
       mockDb.getAgent.mockResolvedValue(agent);
 
       await service.resumeAgent(agent.id);
 
-      expect(recordAudit).toHaveBeenCalledWith(
-        agent.companyId,
-        expect.any(String),
-        agent.id,
-        AuditEventType.StateChange,
-        expect.objectContaining({
-          entity: 'agent',
-          newStatus: AgentStatus.Running,
-          reason: 'resumed',
-        }),
-      );
+      expect(recordAudit).not.toHaveBeenCalled();
     });
 
     it('enqueues a resume job for a failed agent', async () => {

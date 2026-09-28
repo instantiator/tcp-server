@@ -432,6 +432,124 @@ describe('Company/Task SSE events (e2e)', () => {
         },
       });
     }, 20000);
+
+    // 002.02 stage 2 (cause C1): starting a task used to create its planner
+    // agent with no event at all — a client only learned of it from its
+    // first `running`, which (queued behind another job) could be tens of
+    // seconds later. Now the company stream sees `idle` immediately.
+    it('sees a new agent as idle, before it runs', async () => {
+      const taskRes = await request(app.getHttpServer())
+        .post('/api/task')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({
+          companyId: company.id,
+          request: 'Write a report',
+          plannerRoleId: role.id,
+        });
+      const task = taskRes.body as TcpTask;
+
+      // Priming: company + task (ready). Starting the task then writes: task
+      // (planning), assignment (dispatched plan), agent (idle — the fix),
+      // assignment (linked to its agent). A simulated `running` write (below)
+      // stands in for the worker, which this suite never actually runs.
+      const events$ = consumeSse<WireEvent>(
+        app,
+        `/api/company/${company.id}/events`,
+        { Authorization: `Bearer ${jwt}` },
+        7,
+        10000,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      await request(app.getHttpServer())
+        .post(`/api/task/${task.id}/start`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(202);
+
+      const planRes = await request(app.getHttpServer())
+        .get(`/api/assignment?taskId=${task.id}&mode=plan`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(200);
+      const agentId = (planRes.body as TcpAssignment[])[0]?.agentId;
+      expect(agentId).toBeTruthy();
+
+      // Stands in for AgentRunStatusService's own write in tcp-agent (a
+      // separate process this suite doesn't run) — the same
+      // persist-then-publish path, reached the same way: POST /internal/audit.
+      await request(app.getHttpServer())
+        .post('/internal/audit')
+        .set('X-Internal-Api-Key', INTERNAL_KEY)
+        .send({
+          companyId: company.id,
+          role: 'analyst',
+          agentId,
+          eventType: 'state_change',
+          payload: { entity: 'agent', newStatus: 'running' },
+        })
+        .expect(204);
+
+      const events = await events$;
+
+      const agentStatuses = events
+        .filter((e) => e.type === 'audit' && e.event.payload.entity === 'agent')
+        .map((e) => (e.type === 'audit' ? e.event.payload.newStatus : null));
+      expect(agentStatuses).toEqual(['idle', 'running']);
+    }, 20000);
+
+    // 002.02 stage 2: cancelling a task's agents used to write silently — no
+    // event at all — so a client watching a cancelled task's agent never
+    // saw it stop.
+    it('produces an agent cancelled event when the task it was working is cancelled', async () => {
+      const taskRes = await request(app.getHttpServer())
+        .post('/api/task')
+        .set('Authorization', `Bearer ${jwt}`)
+        .send({
+          companyId: company.id,
+          request: 'Write a report',
+          plannerRoleId: role.id,
+        });
+      const task = taskRes.body as TcpTask;
+      await request(app.getHttpServer())
+        .post(`/api/task/${task.id}/start`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(202);
+
+      // Priming: company + task (planning) + agent (idle — the planner,
+      // still queued). Cancelling then writes: the plan assignment
+      // (cancelled), its agent (cancelled — the fix), the task (cancelled).
+      const events$ = consumeSse<WireEvent>(
+        app,
+        `/api/company/${company.id}/events`,
+        { Authorization: `Bearer ${jwt}` },
+        6,
+        10000,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      await request(app.getHttpServer())
+        .post(`/api/task/${task.id}/cancel`)
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(202);
+
+      const events = await events$;
+
+      const agentCancelled = events.find(
+        (e) =>
+          e.type === 'audit' &&
+          e.event.payload.entity === 'agent' &&
+          e.event.payload.newStatus === 'cancelled',
+      );
+      expect(agentCancelled).toMatchObject({
+        type: 'audit',
+        event: {
+          payload: {
+            entity: 'agent',
+            newStatus: 'cancelled',
+            reason: 'task cancelled',
+          },
+        },
+      });
+    }, 20000);
   });
 
   // NestJS's @Sse() writes the 200 + text/event-stream response headers as

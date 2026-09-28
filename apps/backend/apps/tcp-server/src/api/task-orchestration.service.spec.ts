@@ -136,8 +136,10 @@ describe('TaskOrchestrationService', () => {
       taskRepo,
       assignmentRepo,
       agentRepo,
+      roleRepo,
       deliverables,
       state,
+      audit as unknown as AuditService,
     );
     service = new TaskOrchestrationService(
       taskRepo,

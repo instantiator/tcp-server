@@ -262,6 +262,10 @@ services:
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
       # No MINIO credentials: tcp-agent reaches storage through tcp-server's
       # /internal/storage/* endpoints, so it has no S3 client to authenticate.
+      # Parallel agent jobs — defaults to 1 (DEFAULT_AGENT_WORKER_CONCURRENCY)
+      # when unset. Was never passed through before 002.02, so .env.dev's own
+      # setting had no effect on the running container.
+      AGENT_WORKER_CONCURRENCY: ${AGENT_WORKER_CONCURRENCY:-}
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}

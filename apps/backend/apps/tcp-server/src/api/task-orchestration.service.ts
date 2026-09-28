@@ -351,6 +351,13 @@ export class TaskOrchestrationService extends TaskDispatcher {
    * `DbService.createAgent`, which only links auto-created orphan assignments)
    * so the assignment knows which agent is working it — the completion,
    * accept/reject, and QA paths all resolve the working agent through it.
+   *
+   * Publishes the assignment's `state_change` again once the back-link is
+   * written (002.02 stage 2, cause C1): the assignment's own dispatch event
+   * was recorded before the agent existed, so without this a client never
+   * learns which agent is working it until that agent's own first event.
+   * Shared by every dispatch path — planner, worker assignments, QA, and
+   * finalise all call this one helper, so all four get the fix together.
    */
   private async dispatchAgentFor(
     assignment: TcpAssignment,
@@ -365,6 +372,11 @@ export class TaskOrchestrationService extends TaskDispatcher {
       requiredToolCalls: [requiredTool],
     });
     await this.assignmentRepo.update(assignment.id, { agentId: agent.id });
+    assignment.agentId = agent.id;
+    await this.state.recordAssignmentState(
+      assignment,
+      'assignment linked to its agent',
+    );
     await this.agents.dispatchStartJob(agent.id);
     return agent.id;
   }

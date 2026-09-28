@@ -1,5 +1,7 @@
 import {
   AgentStatus,
+  AuditEventType,
+  buildAgentChangeSummary,
   buildEnumValidationError,
   canonicaliseArtifacts,
   deriveTaskStatus,
@@ -7,6 +9,7 @@ import {
   TcpAssignment,
   TcpAssignmentStatus,
   TcpAssignmentWorkingArtifact,
+  TcpRole,
   TcpTask,
   stripControlChars,
 } from '@tcp/shared';
@@ -21,6 +24,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import type { UUID } from 'crypto';
 import { Repository } from 'typeorm';
+import { AuditService } from '../audit/audit.service';
 import {
   invalidArtifactTypeErrors,
   WORKING_ARTIFACT_TYPES,
@@ -50,9 +54,12 @@ export class AssignmentCompletionService {
     private readonly assignmentRepo: Repository<TcpAssignment>,
     @InjectRepository(TcpTask)
     private readonly taskRepo: Repository<TcpTask>,
+    @InjectRepository(TcpRole)
+    private readonly roleRepo: Repository<TcpRole>,
     private readonly dispatcher: TaskDispatcher,
     private readonly pauseResume: PauseAndResumeService,
     private readonly gate: OutputGateService,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -235,6 +242,10 @@ export class AssignmentCompletionService {
       status: AgentStatus.Paused,
       pausedAt: new Date(),
     });
+    // Persist-then-publish (002.02 stage 2): the QA hand-off pause wrote no
+    // event before, so a client watching this agent only learned it had
+    // paused once the QA agent's own activity implied it.
+    await this.publishAgentPaused(agentId, 'handed to QA');
 
     await this.dispatcher.assignmentReadyForQa(assignment);
     await this.recomputeTaskStatus(assignment.taskId!);
@@ -340,5 +351,34 @@ export class AssignmentCompletionService {
     if (next !== task.status) {
       await this.taskRepo.update(taskId, { status: next });
     }
+  }
+
+  /**
+   * Publishes an agent `state_change` to `paused`, with a summary, for a
+   * write already made. Called after the write, never before — a client that
+   * refetches on the event must find the row already updated.
+   */
+  private async publishAgentPaused(
+    agentId: UUID,
+    reason: string,
+  ): Promise<void> {
+    const agent = await this.agentRepo.findOneBy({ id: agentId });
+    if (!agent) return;
+    const role = await this.roleRepo.findOneBy({ id: agent.roleId });
+    await this.audit.record(
+      agent.companyId,
+      role?.name ?? 'agent',
+      agentId,
+      AuditEventType.StateChange,
+      {
+        entity: 'agent',
+        newStatus: AgentStatus.Paused,
+        reason,
+        summary: buildAgentChangeSummary({
+          ...agent,
+          status: AgentStatus.Paused,
+        }),
+      },
+    );
   }
 }

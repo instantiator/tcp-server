@@ -24,7 +24,11 @@ export const configSchema = Joi.object({
   /** Overrides {@link DEFAULT_REQUIRED_TOOL_RETRIES} when set — reminder rounds before a run missing its required tool calls is failed. */
   AGENT_REQUIRED_TOOL_RETRIES: Joi.number().integer().min(0).optional(),
   /** Overrides {@link DEFAULT_AGENT_WORKER_CONCURRENCY} — parallel agent jobs. Set to 1 when sharing one local model. */
-  AGENT_WORKER_CONCURRENCY: Joi.number().integer().positive().optional(),
+  AGENT_WORKER_CONCURRENCY: Joi.number()
+    .integer()
+    .positive()
+    .empty('')
+    .optional(),
   // Environment-level LLM fallback — used when neither a role's llmConfig nor a company's llmConfig is set.
   // Both LLM_PROVIDER and LLM_MODEL must be present to activate the fallback; all other fields are optional.
   LLM_PROVIDER: Joi.string().empty('').optional(),
