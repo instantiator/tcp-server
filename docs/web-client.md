@@ -797,6 +797,33 @@ role. Clicking a row calls the same `openChat` the office view's "Listen in"
 button does, which reopens it in the dialog — read-write if it's the same
 conversation reopening, read-only if it's a fresh listen-in on someone else's.
 
+## "Add new": starting a task or a chat
+
+`src/components/AddNew/AddNewMenu.tsx` (003.01) is a React Aria menu button
+with two items: **Create a new task**, which opens `CreateTaskDialog`, and
+**New chat**, a submenu of the company's roles sorted by name. Choosing a role
+calls `useChat().startChat`.
+
+It appears in two places:
+
+- **The company page**, floating at the bottom-right. It sits straight after
+  the `h1` in the DOM, so it comes early in the tab order, and rises above the
+  dock when one is showing.
+- **The chat dialog's title bar**, while a company is the current route. The
+  dialog is modal, so the page's own control is out of reach while it shows.
+  From here a new chat joins the dialog as another panel, and a new task
+  opens as a dialog stacked on top of the chat. The task dialog has no such
+  menu: it holds nothing the user typed, so they close it and use the page's
+  control.
+
+While a chat starts, the chosen role reads "Starting chat with…" and keeps
+focus, the other roles are disabled, and the change is announced. On success
+the menu closes and the chat opens. On failure the menu closes, focus returns
+to the trigger, and an error beside the trigger is announced and linked with
+`aria-describedby`. `useStartChatAction` holds this pending and error logic.
+The office view's role tray uses the same hook for its "Chat with {role}"
+button.
+
 ## The office view (company visualisation)
 
 `CompanyPage`'s first tab draws the company as an isometric office

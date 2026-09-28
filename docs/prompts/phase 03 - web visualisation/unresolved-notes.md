@@ -294,6 +294,17 @@ Testable: open a task pane for an assignment whose agent is currently
 `running`, `paused` or `in-qa` and check the `[agent: …]` label is never
 blank.
 
+### The "Add new" button is hidden in full screen
+
+**Raised by:** 003.01 · **Condition to revisit:** a user in the office view's full-screen mode wants to create a task
+
+Full screen shows only the office view's own section, so the page's floating
+"Add new" button isn't in it. Starting a chat is still possible there from a
+role's tray ("Chat with {role}"). Creating a task is not.
+
+Testable: enter full screen on the office view and look for a way to create a
+task without leaving it.
+
 ## Carried into a later prompt
 
 | Note                                                                                                                                                | Raised by | Goes to             |
