@@ -199,6 +199,43 @@ describe('AgentOrchestrationService', () => {
     });
   });
 
+  describe('createAgent', () => {
+    // 002.02 stage 1 (cause C1): a new agent row was written with no event, so
+    // a client only learned of it from its first `running` — which, queued
+    // behind another job, came 52 s later. Stage 2 publishes it on create.
+    it('publishes the new agent as idle, with a summary, after its row is written', async () => {
+      const agent = makeAgent({ status: AgentStatus.Idle });
+      mockDb.createAgent.mockResolvedValue(agent);
+
+      await service.createAgent({
+        companyId: agent.companyId,
+        roleId: agent.roleId,
+        initialPrompt: 'Do something.',
+        assignmentId: agent.assignmentId,
+      });
+
+      expect(recordAudit).toHaveBeenCalledWith(
+        agent.companyId,
+        expect.any(String),
+        agent.id,
+        AuditEventType.StateChange,
+        expect.objectContaining({
+          entity: 'agent',
+          newStatus: AgentStatus.Idle,
+          summary: expect.objectContaining({
+            id: agent.id,
+            status: AgentStatus.Idle,
+          }) as unknown,
+        }),
+      );
+      // Persist, then publish: a client that refetches on this event must
+      // find the row.
+      expect(mockDb.createAgent.mock.invocationCallOrder[0]).toBeLessThan(
+        recordAudit.mock.invocationCallOrder[0],
+      );
+    });
+  });
+
   describe('while the system is draining', () => {
     beforeEach(() => {
       shutdown.begin(false);

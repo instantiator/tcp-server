@@ -295,6 +295,21 @@ describe('buildCompanySnapshot', () => {
     },
   );
 
+  // 002.02 stage 1 (cause Q): a task agent queued behind the one worker slot
+  // stayed `idle` for 52 s while its task read `planning`, and sat at its desk.
+  // For a task agent, `idle` means only "created, not started" (decision 4),
+  // so stage 4 shows it waiting. Row 8's `idle` case above changes with it.
+  it('is waiting when a task agent is idle on an in-progress assignment', () => {
+    const snapshot = buildCompanySnapshot(
+      data({
+        agents: [agent({ status: 'idle', threadId: null })],
+        assignments: [assignment({ mode: 'plan' })],
+        tasks: [task({ status: 'planning' })],
+      }),
+    );
+    expect(snapshot.agents[0]?.activity.kind).toBe('waiting');
+  });
+
   it('drops an agent whose assignment is not loaded', () => {
     const snapshot = buildCompanySnapshot(
       data({

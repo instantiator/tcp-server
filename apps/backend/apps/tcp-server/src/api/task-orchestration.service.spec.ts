@@ -271,6 +271,35 @@ describe('TaskOrchestrationService', () => {
       });
     });
 
+    // 002.02 stage 1 (cause C1): the only assignment event is recorded before
+    // the agent exists, and the agentId back-link publishes nothing, so no
+    // client learns which agent works the plan until that agent next changes.
+    it('publishes the plan assignment again once its agentId is back-linked', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, { plannerRoleId: role.id });
+
+      await service.dispatchPlanner(task);
+
+      const plan = await assignmentRepo.findOneBy({
+        taskId: task.id,
+        mode: 'plan',
+      });
+      const linkedCall = (audit.record.mock.calls as unknown[][]).find(
+        (c) =>
+          c[3] === AuditEventType.StateChange &&
+          (c[4] as { entity?: string }).entity === 'assignment' &&
+          c[2] === plan!.agentId,
+      );
+      expect(linkedCall).toBeDefined();
+      expect(linkedCall![4]).toMatchObject({
+        assignmentId: plan!.id,
+        newStatus: 'in-progress',
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        summary: expect.objectContaining({ id: plan!.id }),
+      });
+    });
+
     it('falls back to the company planner role', async () => {
       const company = await seedCompany();
       const role = await seedRole(company.id);
