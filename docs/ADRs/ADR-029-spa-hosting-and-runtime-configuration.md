@@ -1,6 +1,6 @@
 # ADR-029: SPA Hosting and Runtime Configuration
 
-**Status:** Accepted (amended — see [002.03](#amendments-as-implemented-002031) and [004.01](#amendments-as-implemented-004-01) at the end)
+**Status:** Accepted (amended — see [002.03](#amendments-as-implemented-002031), [004.01](#amendments-as-implemented-004-01) and [002.02 (phase 03)](#amendments-as-implemented-p03-002-02) at the end)
 
 ## Context
 
@@ -193,3 +193,39 @@ window.__TCP_CONFIG__ = {
 ```
 
 (b) **Unlike the other two, it is optional and does not stop the container.** `oidcIssuerUrl` and `oidcClientId` are required — a missing one silently points the app at the wrong identity provider, which is why the entrypoint fails loudly rather than serving a blank value. A missing `oidcLoadUserInfo` has a correct default (`false`), so refusing to start over its absence would be the opposite of a fix. It is still emitted unquoted and validated in the shell (`docker/nginx/10-tcp-init.sh`), because `config.js` is JavaScript and the string `'false'` is truthy — a quoted literal would satisfy the type and invert the default at the one place it's read.
+
+<a id="amendments-as-implemented-p03-002-02"></a>
+
+## Amendments as implemented (002.02, phase 03)
+
+The office view's archive room needed a link out to the object store's
+console, so `config.js` gained a fourth and fifth value — the first pair
+that aren't about identity.
+
+```js
+window.__TCP_CONFIG__ = {
+  oidcIssuerUrl: '…',
+  oidcClientId: '…',
+  oidcLoadUserInfo: false,
+  storageConsoleUrl: '…',
+  storageBucket: '…',
+};
+```
+
+`storageConsoleUrl` and `storageBucket` come from `MINIO_CONSOLE_URL` and
+`MINIO_BUCKET_PREFIX` — the same variables `tcp-cli`'s `open-document-store`
+already reads (`shared-storage.md`), now also reaching `tcp-web`. Both are
+**optional, like `oidcLoadUserInfo`**: with either absent, the archive tray
+lists completed tasks as plain text, not links, and the container still
+starts.
+
+**`storageConsoleUrl` gets a validation the other four don't need.** It
+reaches an `href` unchecked in the archive tray (`ArchiveDetails.tsx`), so
+unlike a malformed issuer URL — which fails at sign-in, later and loudly — a
+non-`http:`/`https:` value here (`javascript:`, `data:`, anything else) is a
+live injection vector, not a typo. `getRuntimeConfig()` parses it with `URL`
+and drops it silently on any other scheme, falling back to the plain-text
+tray rather than trusting it. The shell side carries the same intent: `docker/nginx/10-tcp-init.sh`
+refuses to start `tcp-web` if either value contains a quote, backslash or
+angle bracket, the same escaping rule the three identity values already
+follow.

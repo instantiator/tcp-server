@@ -1,6 +1,6 @@
 # ADR-020: A Window on a Running Company, Not a Control Panel
 
-**Status:** Accepted (2026-07-30)
+**Status:** Accepted (2026-07-30; amended — see [007.01.01](#amendments-as-implemented-007011) and [002.02 (phase 03)](#amendments-as-implemented-p03-002-02) at the end)
 
 ## Context
 
@@ -147,3 +147,20 @@ The scope table lists "agents" and "consultations" as things the view shows; it 
 007.01 chose not to add a seventh. Agent and consultation rows in `AgentsList` and `ConsultationsList` (`src/pages/CompanyPage/activity/lists.tsx`) render as plain `<li>` text, not a link or a button — there is nothing to open. Tasks and enquiries stay non-interactive only for now: their dialogs (008.03, 008.04) land later in this phase and will make their rows interactive when they do. Agents and consultations have no dialog scheduled to do the same.
 
 This would need revisiting if a workflow turns up that only a transcript scoped to one assignment can serve — the task dialog answers "what happened on this task," and nothing answers "what happened on this one consultation" once it closes, since a consultation is by definition an assignment with no task. Until that need is concrete, the narrower surface is the one built.
+
+<a id="amendments-as-implemented-p03-002-02"></a>
+
+## Amendments as implemented (002.02, phase 03)
+
+### Chat dialog: "minimise-to-bar" gains a second, real removal
+
+The scope table's Chat dialog row describes "minimise-to-bar" as the panel's
+only way off the screen. 002.02 added a per-panel **Close** button alongside
+the existing minimise, following user feedback that a long session's chats
+had no way to leave the dialog except by ending them. Closing removes the
+panel and releases its stream; the underlying chat is untouched on the
+server and stays reachable from the company's Chats list. This doesn't
+widen the row's scope — the dialog is still exactly the "multi-conversation,
+interactive" surface described — it corrects "minimise-to-bar" as the whole
+answer to "how does a panel leave the screen." See
+[web-client.md](../web-client.md#chat-dialog).

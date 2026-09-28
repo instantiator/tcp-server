@@ -89,8 +89,12 @@ export class AgentWorkerService implements OnModuleInit, OnModuleDestroy {
         // AGENT_WORKER_CONCURRENCY) when agents share one capacity-limited
         // model endpoint, e.g. a single local LLM, so parallel runs don't
         // starve each other of model time.
+        //
+        // `Number(…) ||`, not `??`: compose passes the variable as '' when it
+        // is unset, and Joi's `.empty('')` leaves nothing validated, so
+        // ConfigService falls back to the raw '' — which BullMQ rejects.
         concurrency:
-          this.config.get<number>('AGENT_WORKER_CONCURRENCY') ??
+          Number(this.config.get<string>('AGENT_WORKER_CONCURRENCY')) ||
           DEFAULT_AGENT_WORKER_CONCURRENCY,
         // BullMQ's own default (30s) is far shorter than a single LLM turn can
         // take with a slow local model — the worker auto-renews the lock well

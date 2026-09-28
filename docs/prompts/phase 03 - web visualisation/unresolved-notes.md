@@ -58,7 +58,13 @@ and exit) through fetch-mock and `applyEvent`. This was a decision taken
 before planning, not an oversight: see 000.01's plan.
 002.01's role pickup (door, then the role's book, then the desk) is covered
 the same way: unit tests on the rules and one pipeline case in
-`useOfficeWorld.test.tsx`.
+`useOfficeWorld.test.tsx`. 002.02's carry-to-archive is the same gap by the
+same cause: no browser test covers a succeeded task's archive link, because
+driving a task to `succeeded` by hand would race the real BullMQ job each
+stage dispatches the moment its assignment is created — see 002.02's plan,
+stage 11. The bookshelf tray's browser spec covers its empty state instead,
+which still proves the tray reads its live `storageConsoleUrl`/
+`storageBucket` config.
 
 Testable: the browser-tier deployment's compose services include an LLM.
 
@@ -188,6 +194,105 @@ deployment.
 Once in about thirteen runs of `company-visualisation.spec.ts`, three tests failed together: their pages were sent to Zitadel's login form (`/ui/login/login?authRequestID=…`) instead of back into the app, so no data loaded. The signed-in state comes from Zitadel's session cookie, which the setup project saves; every page load goes through a silent redirect. It could not be reproduced on demand, and the same period also had a real, now fixed slug collision in `company-activity.spec.ts` that made failures look more common than they were.
 
 Testable: run the whole browser tier ten times. Any failure whose call log shows `ui/login/login` is this.
+
+### The agent stream's subscribe-time replay can race a live event (C3)
+
+**Raised by:** 002.02 · **Condition to revisit:** a stale `idle` is ever seen after a listen-in starts
+
+`api.agent.controller.ts`'s agent stream reads the agent's status from the
+database at subscribe time and replays it as a synthetic event, so a late
+subscriber sees where things stand rather than nothing. If that read races a
+real `state_change` landing at the same moment, the stale reading could in
+principle arrive after the live one and read backwards. 002.02's
+reproduction (recorded SSE streams and DB state side by side, twice) didn't
+hit this — both replays agreed with the database throughout — so it's
+recorded rather than fixed speculatively. See
+[ADR-025's amendment](../../ADRs/ADR-025-browser-event-stream-consumption.md#amendment-as-implemented-p03-002-02).
+
+Testable: open a listen-in on an agent at the exact moment it changes
+status, and check whether the tray or transcript ever shows the older
+status after the newer one.
+
+### An event between company-stream priming and the live subscription can be lost on reconnect (C4)
+
+**Raised by:** 002.02 · **Condition to revisit:** a status is reported missing after a reconnect
+
+`api.company.controller.ts` awaits `prime()` — sending one row per current
+task, active agent, open consultation and open enquiry — before it starts
+forwarding live events. A `state_change` published in the gap between the
+primed snapshot being read and the live subscription starting would reach
+neither. 002.02's reproduction didn't see the company stream reconnect at
+all, so this gap never opened in either recorded run. See
+[ADR-025's amendment](../../ADRs/ADR-025-browser-event-stream-consumption.md#amendment-as-implemented-p03-002-02).
+
+Testable: force a company-stream reconnect (network drop, tab backgrounded
+then foregrounded) at the same moment a status changes server-side, and
+check whether the office view or activity lists ever miss it.
+
+### The archive's "finishing agent" is a recency rule, not the true finisher
+
+**Raised by:** 002.02 · **Condition to revisit:** the wrong avatar is visibly seen carrying a task's outputs
+
+The avatar that carries a succeeded task's outputs to the bookshelf is
+whichever avatar in the room most recently dissociated from the task
+(tracked by a world-wide sequence counter), falling back to one that still
+holds a live agent if none has left yet. This is a deliberate proxy, not the
+"true" finishing agent by assignment order — a QA reviewer who leaves last
+would carry outputs from work an earlier implementer actually finished. It
+reads correctly in the ordinary case (the last avatar in the room really did
+just finish something), and was accepted as good enough rather than plumbing
+through which assignment closed the task.
+
+Testable: watch which avatar picks up the box on a task with several
+avatars, and check whether it's the one that actually completed the
+task-closing assignment.
+
+### Silo's console link format was confirmed against one image tag
+
+**Raised by:** 002.02 · **Condition to revisit:** the `pgsty/silo` image is bumped, or an archive link ever lands on the bucket root instead of the task's folder
+
+The archive tray's Silo links use `{consoleUrl}/browser/{bucket}/{encodeURIComponent(prefix)}`
+— percent-encoded, not MinIO's classic base64-encoded console format. This
+was confirmed by hand against a running `pgsty/silo` container on
+2026-09-28: a base64 prefix left the browser on the bucket root, reading the
+encoded string as a literal folder name, while the percent-encoded form
+round-tripped correctly. Nothing pins the image tag this was checked
+against, so a future Silo release could silently change the format again.
+See [shared-storage.md](../../shared-storage.md#links-from-the-web-clients-archive-tray).
+
+Testable: click an archive tray link after a Silo image bump, and check it
+opens the task's `completed/` folder rather than the bucket root.
+
+### The Chats list has no concept of "my chats"
+
+**Raised by:** 002.02 · **Condition to revisit:** a user asks to see only chats they started
+
+`ChatsList` (Activity → Chats) shows every chat in the company, filterable
+by status and role, because the backend records no chat owner — a
+chat-mode assignment carries no `createdBy`/`userId` field to filter on.
+This matches how every other activity list works today (company-wide, not
+per-viewer), so it wasn't treated as a gap to close in 002.02.
+
+Testable: a user with several colleagues in the same company asks to filter
+the Chats list down to just their own.
+
+### The TUI seeds active agents only, so a finished agent's task pane starts blank
+
+**Raised by:** 002.02 · **Condition to revisit:** a task pane shows a blank agent status for an assignment with a live (non-terminal) agent
+
+The TUI's task panel seeds each assignment's `[agent: …]` label from
+`GET /api/agent?companyId=`, which lists active agents only — an agent whose
+assignment is already `succeeded`/`failed`/`cancelled` isn't in that list,
+so its pane opens with no agent label. This wasn't treated as a gap: the
+assignment's own status already shows the outcome, and every state after
+that point is covered live from the company's SSE stream. The condition
+above is deliberately narrower than "any finished agent" — it only needs
+revisiting if a pane ever shows blank for an agent that's actually still
+running, which seeding-from-the-active-list would not explain.
+
+Testable: open a task pane for an assignment whose agent is currently
+`running`, `paused` or `in-qa` and check the `[agent: …]` label is never
+blank.
 
 ## Carried into a later prompt
 

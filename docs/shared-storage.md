@@ -22,6 +22,38 @@ The URL is read from the `MINIO_CONSOLE_URL` environment variable, defaulting to
 
 See [`tcp-cli.md` → `open-document-store`](tcp-cli.md#open-document-store) for full flag reference.
 
+### Links from the web client's archive tray
+
+The office view's archive room links each succeeded task straight to its
+outputs folder in the console (`ArchiveDetails.tsx`, 002.02). Two of the same
+environment variables reach `tcp-web` too, through `docker-compose.yml` and
+`docker/nginx/10-tcp-init.sh`:
+
+| Environment variable  | Runtime config field | Used for                            |
+| --------------------- | -------------------- | ----------------------------------- |
+| `MINIO_CONSOLE_URL`   | `storageConsoleUrl`  | The console's origin                |
+| `MINIO_BUCKET_PREFIX` | `storageBucket`      | The bucket the company data sits in |
+
+Both are optional. With either unset, the archive tray still lists completed
+tasks — just as plain text, with no link.
+
+**Confirmed link format** (002.02 stage 9, against a running `pgsty/silo`
+container — the MinIO fork this stack bundles):
+
+```text
+{storageConsoleUrl}/browser/{storageBucket}/{encodeURIComponent(prefix)}
+```
+
+`prefix` is the task's `completed/` folder (`{company_slug}/tasks/{task_id}/completed/`),
+kept as a single percent-encoded path segment — its slashes become `%2F`. This
+is **not** MinIO's classic console format, which base64-encodes the prefix
+instead. A base64 prefix was tried against the same container and left the
+browser on the bucket root, reading the encoded string as a literal
+(non-existent) folder name; the percent-encoded form round-trips correctly.
+See the [Silo link format drift](<prompts/phase 03 - web visualisation/unresolved-notes.md#silo-link-format-drift>)
+unresolved note — this is confirmed against one image tag, not guaranteed
+across every future Silo release.
+
 ## Authentication
 
 ### Console login

@@ -94,6 +94,44 @@ describe('AgentWorkerService', () => {
     expect(opts.concurrency).toBe(DEFAULT_AGENT_WORKER_CONCURRENCY);
   });
 
+  it.each([
+    [
+      'empty, as compose passes it when unset',
+      '',
+      DEFAULT_AGENT_WORKER_CONCURRENCY,
+    ],
+    ['a string from the environment', '3', 3],
+  ])(
+    'reads AGENT_WORKER_CONCURRENCY when it is %s',
+    async (_label, raw, expected) => {
+      const { Worker } = jest.requireMock<{ Worker: jest.Mock }>('bullmq');
+      const other = await Test.createTestingModule({
+        providers: [
+          AgentWorkerService,
+          AgentRegistryService,
+          ShutdownListenerService,
+          { provide: AgentLoopService, useValue: { run: loopRun } },
+          {
+            provide: ConfigService,
+            useValue: {
+              getOrThrow: () => 'redis://localhost:6379',
+              // Only this key: any other (REDIS_URL) must stay unset, or the
+              // real shutdown listener tries to connect.
+              get: (key: string) =>
+                key === 'AGENT_WORKER_CONCURRENCY' ? raw : undefined,
+            },
+          },
+        ],
+      }).compile();
+      await other.init();
+      const calls = Worker.mock.calls as Array<
+        [string, unknown, { concurrency?: unknown }]
+      >;
+      expect(calls[calls.length - 1][2].concurrency).toBe(expected);
+      await other.close();
+    },
+  );
+
   it('calls loop.run when the agent is not already running', async () => {
     await processor({ data: { agentId: 'agent-a', type: 'start' } });
 
