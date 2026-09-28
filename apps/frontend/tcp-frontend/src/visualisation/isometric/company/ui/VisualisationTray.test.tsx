@@ -1,12 +1,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { WireEvent } from '@tcp/shared/client';
 import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { statusLabel } from '../../../../api/statuses';
 import { applyEvent } from '../../../../events/cache';
-import { ChatContext } from '../../../../components/ChatDialog/useChat';
+import {
+  ChatContext,
+  type NewChat,
+} from '../../../../components/ChatDialog/useChat';
 import { t } from '../../../../strings';
 import { expectNoA11yViolations } from '../../../../test-support/axe';
 import {
@@ -130,6 +133,9 @@ const respond = (overrides: Routes = {}): void => {
 
 const renderTray = (
   overrides: Partial<ComponentProps<typeof VisualisationTray>> = {},
+  startChat: (chat: NewChat) => Promise<void> = vi
+    .fn()
+    .mockResolvedValue(undefined),
 ) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -139,9 +145,7 @@ const renderTray = (
   const openChat = vi.fn();
   const utils = render(
     <QueryClientProvider client={queryClient}>
-      <ChatContext.Provider
-        value={{ openChat, closeChat: vi.fn(), startChat: vi.fn() }}
-      >
+      <ChatContext.Provider value={{ openChat, closeChat: vi.fn(), startChat }}>
         <VisualisationTray
           companyId={COMPANY_ID}
           selection={{ kind: 'agent', id: AGENT_ID }}
@@ -153,7 +157,14 @@ const renderTray = (
       </ChatContext.Provider>
     </QueryClientProvider>,
   );
-  return { ...utils, queryClient, onToggleFollow, onClose, openChat };
+  return {
+    ...utils,
+    queryClient,
+    onToggleFollow,
+    onClose,
+    openChat,
+    startChat,
+  };
 };
 
 /** A live `agent` `state_change`, in the shape the company stream sends it. */
@@ -296,6 +307,84 @@ describe('VisualisationTray', () => {
       name: t('visualisation.tray.roleHeading', { name: ROLE_NAME }),
     });
     expect(within(aside).getByText('Sells things')).toBeInTheDocument();
+  });
+
+  describe('chatting with a role (003.01 stage 4)', () => {
+    const findChatButton = () =>
+      screen.findByRole('button', {
+        name: t('visualisation.tray.chatWithRole', { role: ROLE_NAME }),
+      });
+
+    it('starts a chat with the selected role on press', async () => {
+      respond();
+      const startChat = vi.fn().mockResolvedValue(undefined);
+      const user = userEvent.setup();
+      renderTray({ selection: { kind: 'role', id: ROLE_ID } }, startChat);
+
+      await user.click(await findChatButton());
+
+      expect(startChat).toHaveBeenCalledWith({
+        companyId: COMPANY_ID,
+        roleId: ROLE_ID,
+        roleName: ROLE_NAME,
+      });
+    });
+
+    it('shows the button pending while the attempt is in flight, then clears', async () => {
+      respond();
+      let resolveStart: (() => void) | undefined;
+      const startChat = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveStart = resolve;
+          }),
+      );
+      const user = userEvent.setup();
+      renderTray({ selection: { kind: 'role', id: ROLE_ID } }, startChat);
+
+      const button = await findChatButton();
+      await user.click(button);
+
+      await waitFor(() => {
+        expect(button).toHaveAttribute('data-pending', 'true');
+      });
+      expect(button).toHaveAttribute('aria-disabled', 'true');
+
+      await act(async () => {
+        resolveStart?.();
+        await Promise.resolve();
+      });
+
+      await waitFor(() => {
+        expect(button).not.toHaveAttribute('data-pending');
+      });
+    });
+
+    it('shows an error the button points to when starting fails', async () => {
+      respond();
+      const startChat = vi.fn().mockRejectedValue(new Error('network down'));
+      const user = userEvent.setup();
+      renderTray({ selection: { kind: 'role', id: ROLE_ID } }, startChat);
+
+      await user.click(await findChatButton());
+
+      const message = t('addNew.error', { role: ROLE_NAME });
+      // Scoped to a `<p>`: `useStartChatAction` also speaks the same text into
+      // the announcer's live region, and an unscoped query would match both.
+      const errorText = await screen.findByText(message, { selector: 'p' });
+      expect(await findChatButton()).toHaveAttribute(
+        'aria-describedby',
+        errorText.id,
+      );
+    });
+
+    it('has no accessibility violations with a role selected', async () => {
+      respond();
+      renderTray({ selection: { kind: 'role', id: ROLE_ID } });
+
+      await findChatButton();
+      await expectNoA11yViolations(document.body);
+    });
   });
 
   it('renders ArchiveDetails for an archive selection', async () => {

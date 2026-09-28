@@ -380,6 +380,7 @@ const strings = {
   'visualisation.tray.assignmentRow': '{role} — {mode} — {status}',
   'visualisation.tray.follow': 'Follow',
   'visualisation.tray.listenIn': 'Listen in to {role}',
+  'visualisation.tray.chatWithRole': 'Chat with {role}',
   'visualisation.tray.close': 'Close details',
 
   // The archive panel (`ui/ArchiveDetails.tsx`): the bookshelf's tray, a list
