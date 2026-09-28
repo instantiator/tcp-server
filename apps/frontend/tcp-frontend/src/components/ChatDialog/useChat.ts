@@ -45,6 +45,14 @@ export interface ChatContextValue {
    */
   readonly openChat: (conversation: Conversation) => void;
   /**
+   * Drops a conversation from the dialog for good — its panel, its dock entry
+   * if it happened to be parked, and its stream. The chat itself is untouched
+   * on the server, so it stays reachable from Activity → Chats; this only
+   * forgets it here, which is what lets a long session open many chats
+   * without the dialog growing without bound.
+   */
+  readonly closeChat: (agentId: string) => void;
+  /**
    * Creates a chat-mode agent for a role, then opens it.
    *
    * The promise settles when the chat is open, or rejects with the `ApiError`

@@ -73,6 +73,10 @@ const strings = {
   'chat.conversation.listeningWithReference':
     'Listening in: {role} ({reference})',
   'chat.complete': 'Complete the chat with {role}',
+  // Closing (002.02) is not completing: it only takes the panel off screen.
+  // The chat stays open on the server, and Activity → Chats is how it's
+  // found again.
+  'chat.close': 'Close the chat with {role}',
   'chat.message.label': 'Message {role}',
   'chat.send': 'Send',
   'chat.waiting': 'Waiting for {role} to reply…',

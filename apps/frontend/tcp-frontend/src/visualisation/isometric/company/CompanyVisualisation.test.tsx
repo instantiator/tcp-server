@@ -56,7 +56,9 @@ const renderCompanyVisualisation = () => {
   });
   const utils = render(
     <QueryClientProvider client={queryClient}>
-      <ChatContext.Provider value={{ openChat: vi.fn(), startChat: vi.fn() }}>
+      <ChatContext.Provider
+        value={{ openChat: vi.fn(), closeChat: vi.fn(), startChat: vi.fn() }}
+      >
         <CompanyVisualisation companyId={COMPANY_ID} />
       </ChatContext.Provider>
     </QueryClientProvider>,

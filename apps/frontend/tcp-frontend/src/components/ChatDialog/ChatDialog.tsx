@@ -26,11 +26,14 @@ export interface ChatDialogProps {
  * a half-typed message and throwing that away on a stray press would be
  * hostile.
  *
- * **Nothing here removes a conversation.** Completing one (`ChatConversation`)
- * leaves its panel in place with its transcript intact — so no focus has to be
- * rehomed to a neighbour, and this component never shortens its own list. The
- * focus machinery below is for the other direction: bringing a conversation
- * back from the dock.
+ * **This component never shortens its own list.** Completing a conversation
+ * (`ChatConversation`) leaves its panel in place with its transcript intact,
+ * so no focus has to be rehomed to a neighbour. Closing one does shorten the
+ * list — but that happens in `ChatProvider`, which owns `conversations` and
+ * decides where focus goes next; this component only renders whatever it is
+ * handed and moves focus to `focusAgentId` when told to. The focus machinery
+ * below serves both directions: bringing a conversation back from the dock,
+ * and landing on the neighbour of one that was just closed.
  *
  * **A plain vertical stack, not tabs.** React Aria's `Tabs` unmounts every
  * panel but the selected one, and every conversation here needs to keep
