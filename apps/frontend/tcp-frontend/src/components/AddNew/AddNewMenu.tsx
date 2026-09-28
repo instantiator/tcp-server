@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import {
   Button,
   Menu,
@@ -75,6 +75,7 @@ export const AddNewMenu = ({ companyId }: AddNewMenuProps) => {
 
   const onOpenChange = (open: boolean): void => {
     setIsOpen(open);
+    if (!open) setFocusFirstRole(false);
     if (open) {
       clearError();
       setFailedRole(null);
@@ -105,6 +106,20 @@ export const AddNewMenu = ({ companyId }: AddNewMenuProps) => {
   // Every role but the pending one. Disabling the focused item would drop
   // focus to the menu itself, losing the user's place; a second press on it
   // is ignored above instead.
+  // A keyboard user can open the submenu before the roles arrive, landing on
+  // "Loading roles…". React Aria leaves focus on the menu container once the
+  // roles replace that item, so the menu is remounted to focus the first
+  // role. Only when focus was inside it: a hover-opened submenu keeps
+  // React Aria's own behaviour.
+  const rolesMenu = useRef<HTMLDivElement>(null);
+  const rolesLoaded = !rolesQuery.isPending;
+  const [focusFirstRole, setFocusFirstRole] = useState(false);
+  useEffect(() => {
+    if (rolesLoaded && rolesMenu.current?.contains(document.activeElement)) {
+      setFocusFirstRole(true);
+    }
+  }, [rolesLoaded]);
+
   const disabledRoleKeys =
     pendingRoleId === null
       ? []
@@ -126,12 +141,19 @@ export const AddNewMenu = ({ companyId }: AddNewMenuProps) => {
               <MenuItem id="new-chat">{t('addNew.newChat')}</MenuItem>
               <Popover>
                 <Menu
+                  ref={rolesMenu}
+                  key={focusFirstRole ? 'refocused' : 'initial'}
+                  // eslint-disable-next-line jsx-a11y/no-autofocus -- only returns focus the user already had inside this menu (see above)
+                  autoFocus={focusFirstRole ? 'first' : undefined}
                   shouldCloseOnSelect={false}
                   disabledKeys={disabledRoleKeys}
                   onAction={onRoleAction}
                 >
                   {rolesQuery.isPending ? (
-                    <MenuItem id="loading-roles" isDisabled>
+                    // Focusable, not disabled: a keyboard user who opens this
+                    // before the roles arrive lands here and hears it, and
+                    // focus moves on to a role when they replace it.
+                    <MenuItem id="loading-roles">
                       {t('addNew.loadingRoles')}
                     </MenuItem>
                   ) : sortedRoles.length === 0 ? (

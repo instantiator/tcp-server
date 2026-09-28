@@ -7,6 +7,7 @@ import type { RoleDTO } from '../../api/dtos';
 import { t } from '../../strings';
 import { expectNoA11yViolations } from '../../test-support/axe';
 import {
+  fetchMock,
   installFetchMock,
   respondByRoute,
   type RouteResponse,
@@ -285,6 +286,41 @@ describe('AddNewMenu', () => {
     // where focus must land for its `aria-describedby` error to be heard.
     await waitFor(() => {
       expect(trigger()).toHaveFocus();
+    });
+  });
+
+  it('moves focus to the first role when the roles arrive after the submenu opened', async () => {
+    // Hold the roles response until the submenu is already open by keyboard.
+    let releaseRoles: (() => void) | undefined;
+    fetchMock.mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          releaseRoles = () => {
+            resolve(
+              new Response(JSON.stringify([ROLE_LEGAL, ROLE_SALES]), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            );
+          };
+        }),
+    );
+    const user = userEvent.setup();
+    renderAddNewMenu();
+
+    await user.tab();
+    await user.keyboard('{Enter}{ArrowDown}{ArrowRight}');
+    await screen.findByText(t('addNew.loadingRoles'));
+
+    await act(async () => {
+      releaseRoles?.();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('menuitem', { name: ROLE_LEGAL.name }),
+      ).toHaveFocus();
     });
   });
 
