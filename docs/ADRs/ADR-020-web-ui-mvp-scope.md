@@ -73,7 +73,7 @@ This scope assumes [ADR-023](ADR-023-backend-api-surface-for-the-web-ui.md) reso
 - `006.01.00.prompt - companies overview and company view shell (draft).md`
 - `007.01.00.prompt - company live activity view (draft).md`
 - `008.01.00` – `008.06.00` (all dialog prompts)
-- `phase 03 - web visualisation/001.01.00.prompt - add new FAB and role menu (draft).md`
+- `phase 03 - web visualisation/003.01.00.prompt - add new FAB and role menu.md`
 - `phase 04 - web ui quality/001.02.00.prompt - accessibility audit and remediation (draft).md`
 - `phase 04 - web ui quality/002.01.00.prompt - company configuration view (draft).md`
 
