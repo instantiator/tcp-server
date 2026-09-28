@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { WireEvent } from '@tcp/shared/client';
 import {
@@ -40,6 +40,7 @@ const AGENTS_ROUTE = /\/api\/agent\?/;
 const TASKS_ROUTE = /\/api\/task\?/;
 const ASSIGNMENTS_ROUTE = /\/api\/assignment\?/;
 const CONVERSATIONS_ROUTE = /\/api\/conversation\?/;
+const COMPANY_ROUTE = /\/api\/company\/company-1(\?|$)/;
 
 /**
  * `emitTcpEvent` always forwards its (usually absent) `context` as a second
@@ -248,6 +249,60 @@ describe('CompanyVisualisation', () => {
     const findStage = () =>
       screen.findByRole('group', { name: t('visualisation.stage.label') });
 
+    /**
+     * The archive tray's extra needs: a succeeded task to list, the company
+     * (for its slug), and storage config so each row is a link. Reset in
+     * `afterEach` below.
+     */
+    const withArchive = (): void => {
+      window.__TCP_CONFIG__ = {
+        oidcIssuerUrl: 'https://idp.example.com',
+        oidcClientId: 'tcp-web-test',
+        storageConsoleUrl: 'http://localhost:9001',
+        storageBucket: 'tcp',
+      };
+      respondByRoute([
+        [AGENT_ROUTE, { body: agentFixture() }],
+        [AGENTS_ROUTE, { body: [agentFixture()] }],
+        [
+          TASKS_ROUTE,
+          {
+            body: [
+              taskFixture(),
+              {
+                ...taskFixture('succeeded'),
+                id: 'task-done',
+                shortcode: 'TASK-DONE',
+              },
+            ],
+          },
+        ],
+        [ASSIGNMENTS_ROUTE, { body: [assignmentFixture()] }],
+        [ROLES_ROUTE, { body: [roleFixture()] }],
+        [CONVERSATIONS_ROUTE, { body: [] }],
+        [
+          COMPANY_ROUTE,
+          {
+            body: {
+              id: COMPANY_ID,
+              slug: 'acme-co',
+              name: 'Acme Co',
+              description: 'A company',
+              mcpServerList: [],
+              nextTaskShortcodeIndex: 1,
+            },
+          },
+        ],
+      ]);
+    };
+
+    afterEach(() => {
+      window.__TCP_CONFIG__ = {
+        oidcIssuerUrl: 'https://idp.example.com',
+        oidcClientId: 'tcp-web-test',
+      };
+    });
+
     it('opens the tray with live data on a select event, and reflects a live patch', async () => {
       const { queryClient } = renderCompanyVisualisation();
       await findStage();
@@ -362,6 +417,50 @@ describe('CompanyVisualisation', () => {
           shortcode: TASK_SHORTCODE,
         }),
       });
+    });
+
+    // The same route as every other kind: the tray opens beside the stage,
+    // focus stays where the picker left it (on its own button, as for a
+    // task), and the tray's links follow the stage in the Tab order.
+    it('opens the archive tray from the picker like any other kind, with its links next in the Tab order', async () => {
+      withArchive();
+      const user = userEvent.setup();
+      renderCompanyVisualisation();
+      const stage = await findStage();
+
+      const picker = screen.getByRole('button', {
+        name: new RegExp(t('visualisation.picker.label')),
+      });
+      await user.click(picker);
+      await user.click(
+        screen.getByRole('option', { name: t('visualisation.picker.archive') }),
+      );
+
+      const tray = await screen.findByRole('complementary', {
+        name: t('visualisation.archive.heading'),
+      });
+      const link = await within(tray).findByRole('link', {
+        name: /^TASK-DONE — /,
+      });
+      await waitFor(() => {
+        expect(picker).toHaveFocus();
+      });
+
+      stage.focus();
+      await user.tab();
+      expect(link).toHaveFocus();
+      await user.tab();
+      expect(
+        within(tray).getByRole('button', {
+          name: t('visualisation.tray.follow'),
+        }),
+      ).toHaveFocus();
+      await user.tab();
+      expect(
+        within(tray).getByRole('button', {
+          name: t('visualisation.tray.close'),
+        }),
+      ).toHaveFocus();
     });
 
     it('emits camera-follow with the selection from the Follow toggle, and follow-stopped un-presses it', async () => {
@@ -600,6 +699,35 @@ describe('CompanyVisualisation', () => {
           });
         });
         await screen.findByRole('tooltip');
+
+        await expectNoA11yViolations(container);
+      });
+
+      it('has no violations with every label on, the bookshelf tooltip showing and the archive tray open', async () => {
+        withArchive();
+        const user = userEvent.setup();
+        const { container } = renderCompanyVisualisation();
+        await findStage();
+
+        for (const kind of ['agents', 'roles', 'furniture', 'rooms'] as const) {
+          await user.click(
+            screen.getByRole('checkbox', {
+              name: t(`visualisation.labels.${kind}`),
+            }),
+          );
+        }
+        act(() => {
+          emitTcpEvent({ event: 'select', value: { kind: 'archive' } });
+          emitTcpEvent({
+            event: 'hover',
+            value: { target: { kind: 'archive' }, x: 1, y: 1 },
+          });
+        });
+        const tooltip = await screen.findByRole('tooltip');
+        expect(tooltip).toHaveTextContent(
+          t('visualisation.furniture.bookshelf'),
+        );
+        await screen.findByRole('link', { name: /^TASK-DONE — / });
 
         await expectNoA11yViolations(container);
       });

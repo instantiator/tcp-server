@@ -259,6 +259,10 @@ describe('DetailsPicker', () => {
       <DetailsPicker snapshot={SNAPSHOT} selection={null} onSelect={vi.fn()} />,
     );
     await openPicker(user);
+    // The scan covers the Archive entry as well as the snapshot's items.
+    expect(
+      screen.getByRole('option', { name: t('visualisation.picker.archive') }),
+    ).toBeInTheDocument();
 
     // document.body, not container: React Aria's Popover portals the listbox
     // out of the render container, so scanning container would examine a

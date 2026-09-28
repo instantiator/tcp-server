@@ -374,13 +374,13 @@ const strings = {
   'visualisation.tray.close': 'Close details',
 
   // The archive panel (`ui/ArchiveDetails.tsx`): the bookshelf's tray, a list
-  // of completed tasks linking out to Silo. `.row` is plain layout text, not
-  // a link's accessible name — `.open` is that, said once per link.
+  // of completed tasks linking out to Silo. A link's accessible name is its
+  // visible `.row` followed by the visually hidden `.linkSuffix`, so what is
+  // seen is what is said (WCAG 2.5.3).
   'visualisation.archive.heading': 'Archive',
   'visualisation.archive.empty': 'No completed tasks yet.',
-  'visualisation.archive.row': '{shortcode} — {excerpt}',
-  'visualisation.archive.open':
-    'Open the outputs of {shortcode} in Silo (new tab)',
+  'visualisation.archive.row': '{shortcode} — {request}',
+  'visualisation.archive.linkSuffix': '(outputs in Silo, opens in a new tab)',
   'visualisation.archive.unconfigured':
     'The storage browser is not configured, so these are shown as text only.',
 

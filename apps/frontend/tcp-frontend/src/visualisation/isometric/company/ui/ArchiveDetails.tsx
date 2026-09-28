@@ -4,7 +4,7 @@ import {
 } from '../../../../api/hooks';
 import type { TaskDTO } from '../../../../api/dtos';
 import { taskOutputsUrl } from '../../../../api/storageLink';
-import { excerptOf } from '../../../../components/ExpandableText/excerpt';
+import { shortened } from '../../../../components/ExpandableText/excerpt';
 import { getRuntimeConfig } from '../../../../runtime-config';
 import { t } from '../../../../strings';
 
@@ -78,22 +78,23 @@ export const ArchiveDetails = ({
             const url = taskOutputsUrl(config, company.slug, task.id);
             const row = t('visualisation.archive.row', {
               shortcode: task.shortcode,
-              excerpt: excerptOf(task.request),
+              request: shortened(task.request),
             });
             return (
               <li key={task.id}>
                 {url === null ? (
                   row
                 ) : (
-                  <a
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={t('visualisation.archive.open', {
-                      shortcode: task.shortcode,
-                    })}
-                  >
-                    {row}
+                  // The visible row leads the accessible name, and a hidden
+                  // suffix says where it goes. An `aria-label` would replace
+                  // the row instead, so a speech-input user saying what they
+                  // see would miss (WCAG 2.5.3). The shortcode keeps each
+                  // name unique (2.4.4); the suffix warns of the new tab.
+                  <a href={url} target="_blank" rel="noopener noreferrer">
+                    {row}{' '}
+                    <span className="visually-hidden">
+                      {t('visualisation.archive.linkSuffix')}
+                    </span>
                   </a>
                 )}
               </li>

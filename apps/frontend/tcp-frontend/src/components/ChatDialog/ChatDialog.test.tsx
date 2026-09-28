@@ -1098,13 +1098,16 @@ describe('ChatDialog', () => {
       ).toBeTruthy();
     });
 
-    it('has no accessibility violations with the close control present', async () => {
+    it('has no accessibility violations with two panels, each with its close control', async () => {
       respondChat();
       const user = userEvent.setup();
       renderChat();
 
-      await user.click(screen.getByRole('button', { name: 'Open Sales' }));
-      await waitForTranscriptsReady();
+      await openTwoConversations(user);
+      // Two Close buttons, so the scan covers the pair (distinct names, no
+      // duplicate-id or nesting problem between panels), not just one.
+      expect(closeButton(ROLE_A)).toBeTruthy();
+      expect(closeButton(ROLE_B)).toBeTruthy();
 
       await expectNoA11yViolations(document.body);
     });

@@ -231,6 +231,14 @@ describe('VisualisationTray', () => {
     expect(within(aside).queryByText(statusLabel('idle'))).toBeNull();
   });
 
+  it('has no accessibility violations reading "waiting to start"', async () => {
+    respond({ agent: { body: agentFixture('idle') } });
+    renderTray();
+
+    await screen.findByText(t('visualisation.activity.waiting'));
+    await expectNoA11yViolations(document.body);
+  });
+
   it('offers no listening in once the agent has finished', async () => {
     respond({ agent: { body: agentFixture('completed') } });
     renderTray();
@@ -300,6 +308,27 @@ describe('VisualisationTray', () => {
         name: t('visualisation.archive.heading'),
       }),
     ).toBeInTheDocument();
+  });
+
+  it('has no accessibility violations for the archive, with its links', async () => {
+    window.__TCP_CONFIG__ = {
+      oidcIssuerUrl: 'https://idp.example.com',
+      oidcClientId: 'tcp-web-test',
+      storageConsoleUrl: 'http://localhost:9001',
+      storageBucket: 'tcp',
+    };
+    try {
+      respond({ tasks: { body: [taskFixture('succeeded')] } });
+      renderTray({ selection: { kind: 'archive' } });
+
+      await screen.findByRole('link', { name: /^TASK-1 — / });
+      await expectNoA11yViolations(document.body);
+    } finally {
+      window.__TCP_CONFIG__ = {
+        oidcIssuerUrl: 'https://idp.example.com',
+        oidcClientId: 'tcp-web-test',
+      };
+    }
   });
 
   it('shows "gone" for an agent id the company no longer has', async () => {

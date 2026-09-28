@@ -2,13 +2,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { WireEvent } from '@tcp/shared/client';
 import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   AgentDTO,
   AssignmentDTO,
   RoleDTO,
   TaskDTO,
 } from '../../../api/dtos';
+import { announce } from '../../../announce/announcer';
 import { applyEvent } from '../../../events/cache';
 import {
   installFetchMock,
@@ -16,6 +17,15 @@ import {
 } from '../../../test-support/fetch-mock';
 import { ARCHIVE_BOOKSHELF_ID, taskRoomId } from './world/layout';
 import { useOfficeWorld } from './useOfficeWorld';
+
+// A spy over the real announcer, so the walks below can prove the office
+// says nothing as avatars move (ADR-027's canvas rule: movement is decoration,
+// and the Activity tab is the browsable equivalent).
+vi.mock('../../../announce/announcer', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../announce/announcer')>();
+  return { ...actual, announce: vi.fn(actual.announce) };
+});
 
 // `phaser` is mocked globally in `test-setup.ts`, but this hook never
 // touches Phaser at all — it only builds the office model that the scene
@@ -970,5 +980,9 @@ describe('useOfficeWorld — the live pipeline (agent E2E stand-in)', () => {
         result.current.world.rooms.some((room) => room.purpose === 'task'),
       ).toBe(false);
     });
+
+    // Waiting, working, carrying to the archive and leaving: none of it is
+    // announced.
+    expect(announce).not.toHaveBeenCalled();
   });
 });

@@ -40,6 +40,10 @@ const taskFixture = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+/** A link's full accessible name: its visible row, then the hidden suffix. */
+const linkName = (shortcode: string, request: string): string =>
+  `${t('visualisation.archive.row', { shortcode, request })} ${t('visualisation.archive.linkSuffix')}`;
+
 const COMPANY_ROUTE = /\/api\/company\/company-1(\?|$)/;
 const TASKS_ROUTE = /\/api\/task\?/;
 
@@ -144,7 +148,7 @@ describe('ArchiveDetails', () => {
     renderArchive();
 
     const link = await screen.findByRole('link', {
-      name: t('visualisation.archive.open', { shortcode: 'TASK-1' }),
+      name: linkName('TASK-1', 'Reconcile the September accounts'),
     });
 
     expect(link).toHaveAttribute(
@@ -153,6 +157,64 @@ describe('ArchiveDetails', () => {
     );
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  /**
+   * WCAG 2.5.3 (label in name): the visible row leads the accessible name, so
+   * a speech-input user saying what they see reaches the link. An
+   * `aria-label` naming the shortcode alone would replace the row and fail
+   * this. The hidden rest of the name says where the link goes and that it
+   * opens a new tab, and the shortcode keeps every name distinct (2.4.4).
+   */
+  it('names each link by its visible row first, then where it goes, uniquely', async () => {
+    withStorageConfig();
+    respond({
+      tasks: {
+        body: [
+          taskFixture({ id: 'task-a', shortcode: 'TASK-A', updatedAt: NOW }),
+          taskFixture({ id: 'task-b', shortcode: 'TASK-B' }),
+        ],
+      },
+    });
+    renderArchive();
+
+    const list = await screen.findByRole('list');
+    const links = await within(list).findAllByRole('link');
+    expect(links).toHaveLength(2);
+
+    for (const shortcode of ['TASK-A', 'TASK-B']) {
+      const row = t('visualisation.archive.row', {
+        shortcode,
+        request: 'Reconcile the September accounts',
+      });
+      // The exact name, so the visible row is its start, not merely in it.
+      const link = within(list).getByRole('link', {
+        name: `${row} ${t('visualisation.archive.linkSuffix')}`,
+      });
+      // Only the suffix is hidden; everything else is what a sighted user
+      // reads.
+      const hidden = link.querySelector('.visually-hidden');
+      expect(hidden?.textContent?.trim()).toBe(
+        t('visualisation.archive.linkSuffix'),
+      );
+      expect(
+        link.textContent?.replace(hidden?.textContent ?? '', '').trim(),
+      ).toBe(row);
+    }
+    // The same request on two tasks: the names still differ.
+    const names = links.map((link) => link.textContent);
+    expect(new Set(names).size).toBe(names.length);
+    expect(t('visualisation.archive.linkSuffix')).toMatch(/new tab/);
+  });
+
+  it("marks a clipped request with '…', so the row doesn't read as the whole of it", async () => {
+    const longRequest = `Reconcile every account in the ledger. ${'Trace each discrepancy back to its journal entry. '.repeat(4)}`;
+    respond({ tasks: { body: [taskFixture({ request: longRequest })] } });
+    renderArchive();
+
+    const item = await screen.findByRole('listitem');
+    expect(item.textContent).toMatch(/…$/);
+    expect(item.textContent).not.toContain(longRequest);
   });
 
   it('renders no links, and a note, without storage configuration', async () => {
@@ -196,15 +258,23 @@ describe('ArchiveDetails', () => {
     ).toBeInTheDocument();
   });
 
-  it('has no accessibility violations, configured or not', async () => {
+  it('has no accessibility violations with links', async () => {
     withStorageConfig();
     respond();
-    const { unmount } = renderArchive();
+    renderArchive();
 
     await screen.findByRole('link', {
-      name: t('visualisation.archive.open', { shortcode: 'TASK-1' }),
+      name: linkName('TASK-1', 'Reconcile the September accounts'),
     });
     await expectNoA11yViolations(document.body);
-    unmount();
+  });
+
+  it('has no accessibility violations without storage configuration', async () => {
+    respond();
+    renderArchive();
+
+    await screen.findByText(t('visualisation.archive.unconfigured'));
+    await screen.findByRole('list');
+    await expectNoA11yViolations(document.body);
   });
 });
