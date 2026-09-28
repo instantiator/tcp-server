@@ -41,7 +41,7 @@ function fakeScene() {
       zone: vi.fn(() => fakeObject()),
     },
   };
-  return { scene: scene as unknown as Scene, made, isoboxes };
+  return { scene: scene as unknown as Scene, add: scene.add, made, isoboxes };
 }
 
 describe('AvatarSprite', () => {
@@ -67,5 +67,15 @@ describe('AvatarSprite', () => {
 
     sprite.setHasRole(false);
     expect(carried?.visible).toBe(false);
+  });
+
+  it('floats the carried book above the head', () => {
+    const { scene, add } = fakeScene();
+    new AvatarSprite(scene, 'agent-avatar:1', 'agent', 'r1', { x: 1, y: 1 });
+    const [bookX, bookY] = (add.isobox.mock.calls[0] ?? []) as number[];
+    const [headX, headY, headRadius] = (add.circle.mock.calls[0] ??
+      []) as number[];
+    expect(bookX).toBe(headX);
+    expect(bookY).toBeLessThan((headY ?? 0) - (headRadius ?? 0));
   });
 });

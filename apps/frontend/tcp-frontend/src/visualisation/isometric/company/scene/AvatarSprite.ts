@@ -15,11 +15,15 @@ const HEAD_RADIUS = 7;
 const BOOK_SIZE = 16;
 const BOOK_HEIGHT = 6;
 const PAGES_HEIGHT = 2;
-/** The copy an agent carries once it has collected its role: size and offset beside the body, in pixels. */
+/**
+ * The copy an agent holds once it has collected its role: size, and offset in
+ * pixels. It floats just above the head, since at the body's side it read as a
+ * bump rather than a book (002.02).
+ */
 const CARRIED_BOOK_SIZE = 8;
 const CARRIED_BOOK_HEIGHT = 4;
-const CARRIED_BOOK_X = 12;
-const CARRIED_BOOK_Y = -10;
+const CARRIED_BOOK_X = 0;
+const CARRIED_BOOK_Y = -44;
 /** The hit zone's footprint and its lift above the base tile, in pixels. */
 const ZONE_WIDTH = 28;
 const ZONE_HEIGHT = 48;
