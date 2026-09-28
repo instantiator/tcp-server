@@ -278,17 +278,57 @@ export interface AssignmentRow {
   prompt: string;
   /** The assignment's working agent, once dispatched — null before it begins. */
   agentId: string | null;
+  /** The working agent's own live status — see {@link AssignmentInfo.agentStatus}. */
+  agentStatus?: string | null;
   /** Why the assignment failed — set only when `status` is `failed`. */
   failureReason: string | null;
 }
 
 /**
+ * True for a non-chat agent that's `idle` on an `in-progress` assignment —
+ * decision 4 of the 002.02 plan: on a task agent, `idle` means only
+ * "created, not started yet" (a queued worker slot, not a stall). Mirrors
+ * the web client's `isWaitingToStart` (`FE/visualisation/isometric/company/
+ * rules/companySnapshot.ts`) without importing frontend code.
+ */
+function isWaitingToStart(
+  agentStatus: string,
+  mode: string,
+  assignmentStatus: string,
+): boolean {
+  return (
+    agentStatus === 'idle' &&
+    mode !== 'chat' &&
+    assignmentStatus === 'in-progress'
+  );
+}
+
+/**
+ * The live-status label appended to a task-panel assignment row: "no agent
+ * yet" before one is dispatched, "waiting to start" for decision 4's queued
+ * case, the agent's own status otherwise, or '' when nothing useful is known
+ * yet (an agent is dispatched but its status hasn't been seeded/seen live).
+ */
+export function formatAgentStatusLabel(
+  row: Pick<AssignmentRow, 'agentId' | 'agentStatus' | 'mode' | 'status'>,
+): string {
+  if (!row.agentId) return 'no agent yet';
+  if (!row.agentStatus) return '';
+  if (isWaitingToStart(row.agentStatus, row.mode, row.status)) {
+    return 'waiting to start';
+  }
+  return row.agentStatus;
+}
+
+/**
  * Renders one task-panel assignment row: `n. <role> (<mode>: <status>)
- * "<prompt>"`, truncated with an ellipsis when not highlighted; word-wrapped
- * up to `maxLines` (with spacing) when highlighted — mirroring
- * {@link renderTaskListEntry}'s truncate/expand behaviour. The status word is
- * colourised via {@link statusColor} without perturbing the width budget (the
- * budget is computed from the plain, uncoloured meta text).
+ * [agent: <live agent status>] "<prompt>"` (the agent segment omitted when
+ * {@link formatAgentStatusLabel} has nothing to show), truncated with an
+ * ellipsis when not highlighted; word-wrapped up to `maxLines` (with
+ * spacing) when highlighted — mirroring {@link renderTaskListEntry}'s
+ * truncate/expand behaviour. The status word is colourised via
+ * {@link statusColor} without perturbing the width budget (the budget is
+ * computed from the plain, uncoloured meta text).
  */
 export function renderAssignmentListEntry(
   row: AssignmentRow,
@@ -302,8 +342,10 @@ export function renderAssignmentListEntry(
     row.status === 'failed' && row.failureReason
       ? ` — ${row.failureReason}`
       : '';
-  const plainMeta = `${row.index}. ${row.role} (${row.mode}: ${row.status}${reasonSuffix})`;
-  const colouredMeta = `${row.index}. ${escapeMarkup(row.role)} (${escapeMarkup(row.mode)}: ${statusColor(row.status)}${escapeMarkup(row.status)}^:${escapeMarkup(reasonSuffix)})`;
+  const agentLabel = formatAgentStatusLabel(row);
+  const agentSuffix = agentLabel ? ` [agent: ${agentLabel}]` : '';
+  const plainMeta = `${row.index}. ${row.role} (${row.mode}: ${row.status}${reasonSuffix})${agentSuffix}`;
+  const colouredMeta = `${row.index}. ${escapeMarkup(row.role)} (${escapeMarkup(row.mode)}: ${statusColor(row.status)}${escapeMarkup(row.status)}^:${escapeMarkup(reasonSuffix)})${escapeMarkup(agentSuffix)}`;
   // Budget for the prompt text: total width minus the marker, the (plain,
   // uncoloured) meta, a separating space, and the two quote characters.
   const promptBudget = Math.max(w - mark.length - plainMeta.length - 3, 0);

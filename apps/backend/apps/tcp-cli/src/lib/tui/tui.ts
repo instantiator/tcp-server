@@ -425,6 +425,24 @@ export class Tui {
     this.redrawIfActive(paneId);
   }
 
+  /**
+   * Patches one assignment's live agent status, in every open task pane that
+   * holds it — from an agent `state_change` on the company stream
+   * (`ChatSession.watchCompanyEvents`). No refetch: unlike `task`/
+   * `assignment` rows, an agent row never reaches a task's own per-task
+   * stream (the publisher only routes `entity:'task'|'assignment'` to the
+   * task channel), so the company stream is the only place a task pane can
+   * learn its agents' live status from.
+   */
+  updateTaskPaneAgentStatus(agentId: string, status: string): void {
+    for (const pane of this.registry.all) {
+      if (!(pane instanceof TaskPane)) continue;
+      if (pane.updateAgentStatus(agentId, status)) {
+        this.redrawIfActive(pane.id);
+      }
+    }
+  }
+
   /** Updates a task pane's own status (drives the cancel/start hint and shortcut gating). */
   updateTaskPaneStatus(paneId: string, status: string): void {
     const pane = this.registry.get(paneId);

@@ -54,6 +54,15 @@ export interface AssignmentInfo {
   planIndex: number | null;
   /** The assignment's working agent, once dispatched — null before it begins. */
   agentId: string | null;
+  /**
+   * The working agent's own live status (`idle`/`running`/`paused`/
+   * `completed`/`failed`/`cancelled`), kept live by `ChatSession`'s company
+   * stream (agent `state_change` rows patch it directly — see
+   * `Tui.updateTaskPaneAgentStatus`) and seeded from `GET /api/agent` when
+   * the pane opens. Optional/nullable: absent on fixtures that don't care
+   * about it, null while it hasn't been seen yet or `agentId` is null.
+   */
+  agentStatus?: string | null;
   /** Why the assignment failed — set only when `status` is `failed`. */
   failureReason: string | null;
 }

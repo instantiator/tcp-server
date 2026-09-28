@@ -57,7 +57,31 @@ export class TaskPane extends MultiListPane {
   setAssignments(assignments: AssignmentInfo[]): void {
     this.assignments = assignments;
     this.errorMessage = null;
-    const rows = assignments.map((a, i) => ({
+    this.rebuildLists();
+  }
+
+  /**
+   * Patches one assignment's live agent status in place, from an agent
+   * `state_change` on the company stream (`ChatSession.watchCompanyEvents`,
+   * routed here via `Tui.updateTaskPaneAgentStatus`) — no refetch, and
+   * (unlike {@link setAssignments}) the pane's error banner is left alone,
+   * since this isn't a response to any pane-triggered action. Returns
+   * whether this pane held that agent, so the caller can skip a redraw when
+   * it doesn't.
+   */
+  updateAgentStatus(agentId: string, status: string): boolean {
+    const index = this.assignments.findIndex((a) => a.agentId === agentId);
+    if (index === -1) return false;
+    this.assignments = this.assignments.map((a, i) =>
+      i === index ? { ...a, agentStatus: status } : a,
+    );
+    this.rebuildLists();
+    return true;
+  }
+
+  /** Re-derives {@link lists} (and the selection) from {@link assignments} — the Incomplete/Complete split described on {@link setAssignments}. */
+  private rebuildLists(): void {
+    const rows = this.assignments.map((a, i) => ({
       id: a.id,
       index: a.planIndex ?? i,
       role: a.role,
@@ -65,6 +89,7 @@ export class TaskPane extends MultiListPane {
       status: a.status,
       prompt: a.prompt,
       agentId: a.agentId,
+      agentStatus: a.agentStatus,
       failureReason: a.failureReason,
     }));
     const byIndex = (a: { index: number }, b: { index: number }) =>
