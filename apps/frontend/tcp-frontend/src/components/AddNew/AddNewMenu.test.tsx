@@ -203,7 +203,8 @@ describe('AddNewMenu', () => {
     const startingItem = await screen.findByRole('menuitem', {
       name: t('addNew.starting', { role: ROLE_SALES.name }),
     });
-    expect(startingItem).toHaveAttribute('aria-disabled', 'true');
+    // Left enabled so it keeps focus; see the keyboard-only test below.
+    expect(startingItem).not.toHaveAttribute('aria-disabled');
     const otherItem = screen.getByRole('menuitem', { name: ROLE_LEGAL.name });
     expect(otherItem).toHaveAttribute('aria-disabled', 'true');
     // Both the top menu and the roles submenu are open — and both carry
@@ -243,6 +244,48 @@ describe('AddNewMenu', () => {
     // unscoped query matches both.
     const errorText = await screen.findByText(message, { selector: 'p' });
     expect(trigger()).toHaveAttribute('aria-describedby', errorText.id);
+  });
+
+  it('keeps focus on the chosen role while pending, and returns it to the trigger after a failure (keyboard only)', async () => {
+    let rejectStart: ((error: Error) => void) | undefined;
+    const startChat = vi.fn(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectStart = reject;
+        }),
+    );
+    respond();
+    const user = userEvent.setup();
+    renderAddNewMenu(startChat);
+
+    await user.tab();
+    await user.keyboard('{Enter}');
+    await user.keyboard('{ArrowDown}{ArrowRight}');
+    await waitForRolesLoaded();
+    await waitFor(() => {
+      expect(
+        screen.getByRole('menuitem', { name: ROLE_LEGAL.name }),
+      ).toHaveFocus();
+    });
+    await user.keyboard('{Enter}');
+
+    // The item disables itself, but keeps focus: a screen reader user stays
+    // on the item that now reads "Starting chat with…".
+    const starting = await screen.findByRole('menuitem', {
+      name: t('addNew.starting', { role: ROLE_LEGAL.name }),
+    });
+    expect(starting).toHaveFocus();
+
+    await act(async () => {
+      rejectStart?.(new Error('network down'));
+      await Promise.resolve();
+    });
+
+    // The menu closed itself rather than being dismissed, so the trigger is
+    // where focus must land for its `aria-describedby` error to be heard.
+    await waitFor(() => {
+      expect(trigger()).toHaveFocus();
+    });
   });
 
   it('shows "no roles" in the submenu when the company has none', async () => {

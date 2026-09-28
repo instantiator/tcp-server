@@ -1539,6 +1539,39 @@ describe('ChatDialog', () => {
       ).toHaveValue('half a thought');
     });
 
+    it('peels one layer per Escape: submenu, menu, then the dialog itself', async () => {
+      respondWithMenu();
+      const user = userEvent.setup();
+      renderChat('/company/company-1');
+
+      await user.click(screen.getByRole('button', { name: 'Open Sales' }));
+      await waitForTranscriptsReady();
+      addNew().focus();
+      await user.keyboard('{Enter}{ArrowDown}{ArrowRight}');
+      await screen.findByRole('menuitem', { name: ROLE_B });
+
+      await user.keyboard('{Escape}');
+      await waitFor(() => {
+        expect(
+          screen.getByRole('menuitem', { name: t('addNew.newChat') }),
+        ).toHaveFocus();
+      });
+
+      await user.keyboard('{Escape}');
+      await waitFor(() => {
+        expect(addNew()).toHaveFocus();
+      });
+      expect(screen.queryByRole('menu')).toBeNull();
+      expect(
+        screen.getByRole('dialog', { name: t('chat.dialog.heading') }),
+      ).toBeTruthy();
+
+      await user.keyboard('{Escape}');
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog')).toBeNull();
+      });
+    });
+
     it('has no accessibility violations with the menu and its submenu open', async () => {
       respondWithMenu();
       const user = userEvent.setup();

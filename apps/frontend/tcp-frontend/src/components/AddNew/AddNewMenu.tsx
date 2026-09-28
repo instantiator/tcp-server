@@ -8,6 +8,7 @@ import {
   SubmenuTrigger,
   type Key,
 } from 'react-aria-components';
+import { ANNOUNCE_IMMEDIATE_MS, announce } from '../../announce/announcer';
 import { useCompanyRolesList } from '../../api/hooks';
 import { t } from '../../strings';
 import { CreateTaskDialog } from '../CreateTaskDialog/CreateTaskDialog';
@@ -89,13 +90,25 @@ export const AddNewMenu = ({ companyId }: AddNewMenuProps) => {
   // below already has a name to show.
   const onRoleAction = (key: Key): void => {
     const role = sortedRoles.find((candidate) => candidate.id === key);
-    if (role === undefined) return;
+    if (role === undefined || pendingRoleId !== null) return;
     setFailedRole(role);
     start(role);
+    // The focused item's new text is not reliably read out, so say it.
+    announce({
+      channel: 'add-new',
+      change: 'addNew.starting',
+      params: { role: role.name },
+      throttleMs: ANNOUNCE_IMMEDIATE_MS,
+    });
   };
 
+  // Every role but the pending one. Disabling the focused item would drop
+  // focus to the menu itself, losing the user's place; a second press on it
+  // is ignored above instead.
   const disabledRoleKeys =
-    pendingRoleId === null ? [] : sortedRoles.map((role) => role.id);
+    pendingRoleId === null
+      ? []
+      : sortedRoles.map((role) => role.id).filter((id) => id !== pendingRoleId);
 
   return (
     <div className="add-new">
