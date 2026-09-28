@@ -4,7 +4,7 @@ import type { CrowdEvent } from '../motion/crowd';
 import { Crowd } from '../motion/crowd';
 import type { OfficeLabel, SelectionTarget } from '../TcpPhaserEventBus';
 import { emitTcpEvent, offTcpEvent, onTcpEvent } from '../TcpPhaserEventBus';
-import { mapBounds } from '../world/layout';
+import { ARCHIVE_BOOKSHELF_ID, mapBounds } from '../world/layout';
 import { renderRegion } from '../world/renderRegion';
 import type { Avatar, Bounds, OfficeWorld, Tile } from '../world/types';
 import { AvatarSprite } from './AvatarSprite';
@@ -41,6 +41,8 @@ export class TcpCompanyScene extends Scene {
   private staticObjects: GameObjects.GameObject[] = [];
   private readonly avatarSprites = new Map<string, AvatarSprite>();
   private whiteboardsByTaskId = new Map<string, GameObjects.IsoBox>();
+  /** The archive bookshelf's game object, for follow — there is only ever one. */
+  private archiveBookshelf: GameObjects.IsoBox | undefined;
   private readonly crowd = new Crowd();
   private lastLayoutVersion: number | null = null;
   private reducedMotion = false;
@@ -201,6 +203,7 @@ export class TcpCompanyScene extends Scene {
       ...drawWalls(this, region),
       ...furniture.values(),
       ...zones,
+      ...this.buildArchiveZone(world, furniture),
       ...this.buildDescriptionZones(world),
     ];
 
@@ -266,14 +269,52 @@ export class TcpCompanyScene extends Scene {
   }
 
   /**
+   * The archive bookshelf's own hit zone: selectable, targeting the one
+   * archive (there is only ever one). Sized exactly like the hover-only zone
+   * {@link buildDescriptionZones} gives every other piece of furniture — the
+   * bookshelf is left out of that loop and gets this instead, so its
+   * tooltip still describes it on hover (`ui/officeDescriptions.ts` reads
+   * `{kind:'furniture', id}` the same as before) while a click opens the
+   * tray on `{kind:'archive'}` rather than doing nothing.
+   */
+  private buildArchiveZone(
+    world: OfficeWorld,
+    furniture: ReadonlyMap<string, GameObjects.IsoBox>,
+  ): GameObjects.Zone[] {
+    const item = world.furniture.find(
+      (candidate) => candidate.id === ARCHIVE_BOOKSHELF_ID,
+    );
+    const board = item === undefined ? undefined : furniture.get(item.id);
+    this.archiveBookshelf = board;
+    if (item === undefined || board === undefined) {
+      return [];
+    }
+
+    const { size, height } = FURNITURE_SIZES[item.kind];
+    const { x, y } = tileToScreen(item.tile);
+    const zone = createHitZone(
+      this,
+      x,
+      y - height / 2,
+      size,
+      size / 2 + height,
+      () => ({ kind: 'archive' }),
+    );
+    zone.setDepth(depthOf(item.tile));
+    return [zone];
+  }
+
+  /**
    * Hover-only zones that let furniture and doorways explain themselves in
-   * a tooltip. Whiteboards are left out: their own zone opens the task.
+   * a tooltip. Whiteboards are left out: their own zone opens the task. The
+   * archive bookshelf is left out too: {@link buildArchiveZone} gives it a
+   * selectable zone instead.
    */
   private buildDescriptionZones(world: OfficeWorld): GameObjects.Zone[] {
     const zones: GameObjects.Zone[] = [];
 
     for (const item of world.furniture) {
-      if (item.kind === 'whiteboard') {
+      if (item.kind === 'whiteboard' || item.id === ARCHIVE_BOOKSHELF_ID) {
         continue;
       }
       const { size, height } = FURNITURE_SIZES[item.kind];
@@ -387,6 +428,9 @@ export class TcpCompanyScene extends Scene {
     }
     if (target.kind === 'role') {
       return this.avatarSprites.get(`role:${target.id}`)?.followable;
+    }
+    if (target.kind === 'archive') {
+      return this.archiveBookshelf;
     }
     for (const sprite of this.avatarSprites.values()) {
       if (

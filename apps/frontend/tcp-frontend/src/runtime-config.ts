@@ -18,6 +18,17 @@ export interface RuntimeConfig {
    * two are — the string `'false'` would satisfy this type and be truthy.
    */
   oidcLoadUserInfo?: boolean;
+  /**
+   * The object-store console's origin (`MINIO_CONSOLE_URL`), for the archive
+   * tray's Silo links. Optional: with either this or {@link storageBucket}
+   * absent, the archive tray shows completed tasks as plain text instead of
+   * links. Validated as an `http:`/`https:` URL by {@link getRuntimeConfig}
+   * — it reaches an `href` unchecked otherwise, and `javascript:` or any
+   * other scheme there is a trust boundary, not a typo to shrug off.
+   */
+  storageConsoleUrl?: string;
+  /** The object store's bucket prefix (`MINIO_BUCKET_PREFIX`), e.g. `tcp`. */
+  storageBucket?: string;
 }
 
 declare global {
@@ -56,5 +67,31 @@ export const getRuntimeConfig = (): RuntimeConfig => {
         'and load the nginx port (EXPOSE_PORT_WEB), not the Vite port.',
     );
   }
-  return config;
+  return { ...config, storageConsoleUrl: validatedStorageConsoleUrl(config) };
+};
+
+/**
+ * `storageConsoleUrl` reaches an `href` unchecked (`ArchiveDetails`), so a
+ * non-`http:`/`https:` value — `javascript:`, `data:`, anything else — is
+ * dropped rather than trusted. This is the one runtime-config field that
+ * isn't merely malformed-or-not: a bad scheme here is a live injection
+ * vector, not a typo, so it's silently ignored (falls back to the
+ * plain-text archive tray) rather than failing the whole app the way a
+ * missing `oidcIssuerUrl` does.
+ */
+const validatedStorageConsoleUrl = (
+  config: RuntimeConfig,
+): string | undefined => {
+  const value = config.storageConsoleUrl;
+  if (value === undefined) {
+    return undefined;
+  }
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:'
+      ? value
+      : undefined;
+  } catch {
+    return undefined;
+  }
 };

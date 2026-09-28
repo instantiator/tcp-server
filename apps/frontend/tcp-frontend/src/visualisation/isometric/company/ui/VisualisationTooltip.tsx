@@ -2,6 +2,7 @@ import { shortened } from '../../../../components/ExpandableText/excerpt';
 import { t } from '../../../../strings';
 import type { CompanySnapshot } from '../rules/companySnapshot';
 import type { HoverEvent } from '../TcpPhaserEventBus';
+import { ARCHIVE_BOOKSHELF_ID } from '../world/layout';
 import type { OfficeWorld } from '../world/types';
 import { describeTarget } from './officeDescriptions';
 
@@ -54,6 +55,28 @@ export const VisualisationTooltip = ({
         style={{ left: x, top: y }}
       >
         {t('visualisation.tooltip.role', { role: role.name })}
+      </div>
+    );
+  }
+
+  if (target.kind === 'archive') {
+    // The bookshelf's own selectable zone reports `{kind:'archive'}` on
+    // hover as well as on select; its tooltip is still the furniture
+    // description `describeTarget` already gives the bookshelf by id.
+    const described = describeTarget(
+      { kind: 'furniture', id: ARCHIVE_BOOKSHELF_ID },
+      world,
+      snapshot,
+    );
+    if (described === null) return null;
+    return (
+      <div
+        role="tooltip"
+        className="company-visualisation__tooltip"
+        style={{ left: x, top: y }}
+      >
+        <strong>{described.title}</strong>
+        {described.description !== undefined && <p>{described.description}</p>}
       </div>
     );
   }

@@ -95,15 +95,26 @@ const AGENT_ROUTE = /\/api\/agent\/agent-1(\?|$)/;
 const ASSIGNMENTS_ROUTE = /\/api\/assignment\?/;
 const ROLES_ROUTE = /\/api\/company\/company-1\/roles/;
 const TASKS_ROUTE = /\/api\/task\?/;
+const COMPANY_ROUTE = /\/api\/company\/company-1(\?|$)/;
+
+const companyFixture = () => ({
+  id: COMPANY_ID,
+  slug: 'acme-co',
+  name: 'Acme Co',
+  description: 'A company',
+  mcpServerList: [],
+  nextTaskShortcodeIndex: 1,
+});
 
 interface Routes {
   readonly agent?: RouteResponse;
   readonly assignments?: RouteResponse;
   readonly roles?: RouteResponse;
   readonly tasks?: RouteResponse;
+  readonly company?: RouteResponse;
 }
 
-/** Answers every route any of the three detail panels can reach. */
+/** Answers every route any of the four detail panels can reach. */
 const respond = (overrides: Routes = {}): void => {
   respondByRoute([
     [AGENT_ROUTE, overrides.agent ?? { body: agentFixture() }],
@@ -113,6 +124,7 @@ const respond = (overrides: Routes = {}): void => {
     ],
     [ROLES_ROUTE, overrides.roles ?? { body: [roleFixture()] }],
     [TASKS_ROUTE, overrides.tasks ?? { body: [taskFixture()] }],
+    [COMPANY_ROUTE, overrides.company ?? { body: companyFixture() }],
   ]);
 };
 
@@ -276,6 +288,18 @@ describe('VisualisationTray', () => {
       name: t('visualisation.tray.roleHeading', { name: ROLE_NAME }),
     });
     expect(within(aside).getByText('Sells things')).toBeInTheDocument();
+  });
+
+  it('renders ArchiveDetails for an archive selection', async () => {
+    respond({ tasks: { body: [taskFixture('succeeded')] } });
+    renderTray({ selection: { kind: 'archive' } });
+
+    await screen.findByText(/TASK-1/);
+    expect(
+      screen.getByRole('complementary', {
+        name: t('visualisation.archive.heading'),
+      }),
+    ).toBeInTheDocument();
   });
 
   it('shows "gone" for an agent id the company no longer has', async () => {

@@ -30,9 +30,13 @@ export interface CompanyVisualisationProps {
   readonly companyId: string;
 }
 
+/** A target's id, or `null` for `archive` — there is only ever one. */
+const targetId = (target: HoverTarget): string | null =>
+  'id' in target ? target.id : null;
+
 /** Whether `a` and `b` name the same thing in the office. */
 const sameTarget = (a: HoverTarget | null, b: HoverTarget | null): boolean =>
-  a !== null && b !== null && a.kind === b.kind && a.id === b.id;
+  a !== null && b !== null && a.kind === b.kind && targetId(a) === targetId(b);
 
 /**
  * The company's office, drawn as an isometric scene. `useOfficeWorld` turns

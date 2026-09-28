@@ -149,6 +149,22 @@ describe('VisualisationTooltip', () => {
     );
   });
 
+  it("shows the archive bookshelf's furniture description on hover, same as before it became selectable", () => {
+    render(
+      <VisualisationTooltip
+        world={WORLD}
+        hover={hoverOn({ kind: 'archive' })}
+        snapshot={SNAPSHOT}
+      />,
+    );
+
+    const tooltip = screen.getByRole('tooltip');
+    expect(tooltip).toHaveTextContent(t('visualisation.furniture.bookshelf'));
+    expect(tooltip).toHaveTextContent(
+      t('visualisation.furniture.bookshelf.description'),
+    );
+  });
+
   it('renders nothing for furniture that has gone', () => {
     const { container } = render(
       <VisualisationTooltip

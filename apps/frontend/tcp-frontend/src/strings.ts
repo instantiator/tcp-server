@@ -291,6 +291,7 @@ const strings = {
   'visualisation.picker.task': 'Task: {shortcode}',
   'visualisation.picker.agent': 'Agent: {role}',
   'visualisation.picker.agentWithTask': 'Agent: {role} (task {shortcode})',
+  'visualisation.picker.archive': 'Archive',
 
   'visualisation.tooltip.agent': 'Agent: {role}',
   'visualisation.tooltip.role': 'Role: {role}',
@@ -371,6 +372,17 @@ const strings = {
   'visualisation.tray.follow': 'Follow',
   'visualisation.tray.listenIn': 'Listen in to {role}',
   'visualisation.tray.close': 'Close details',
+
+  // The archive panel (`ui/ArchiveDetails.tsx`): the bookshelf's tray, a list
+  // of completed tasks linking out to Silo. `.row` is plain layout text, not
+  // a link's accessible name — `.open` is that, said once per link.
+  'visualisation.archive.heading': 'Archive',
+  'visualisation.archive.empty': 'No completed tasks yet.',
+  'visualisation.archive.row': '{shortcode} — {excerpt}',
+  'visualisation.archive.open':
+    'Open the outputs of {shortcode} in Silo (new tab)',
+  'visualisation.archive.unconfigured':
+    'The storage browser is not configured, so these are shown as text only.',
 
   // Assignment modes, the office's word for each — `modeLabel` in
   // `visualisation/isometric/company/ui/modeLabel.ts`, mirroring
