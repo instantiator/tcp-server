@@ -2,6 +2,7 @@ import { Tab, TabList, TabPanel, Tabs } from 'react-aria-components';
 import { Link, useParams } from 'react-router';
 import { useLoadingAnnouncement } from '../../announce/useLoadingAnnouncement';
 import { useLiveCompanyState } from '../../api/hooks';
+import { AddNewMenu } from '../../components/AddNew/AddNewMenu';
 import { Breadcrumbs } from '../../components/Breadcrumbs/Breadcrumbs';
 import { EmptyState } from '../../components/EmptyState/EmptyState';
 import { ErrorState } from '../../components/ErrorState/ErrorState';
@@ -78,6 +79,16 @@ export const CompanyPage = () => {
         ]}
       />
       <h1>{company?.name ?? t('page.company.title')}</h1>
+
+      {/*
+        Floats at the bottom-right (003.01), but sits here in the DOM so it
+        comes straight after the heading in the tab order.
+      */}
+      {companyId !== undefined && (
+        <div className="company-page__add-new">
+          <AddNewMenu companyId={companyId} />
+        </div>
+      )}
 
       {/*
         Outside the busy region on purpose. A dead live connection is not a page

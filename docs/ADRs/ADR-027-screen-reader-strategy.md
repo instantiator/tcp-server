@@ -81,7 +81,7 @@ Two supporting decisions: [focus is managed at exactly four points](#focus-is-ma
 - `008.02.00.prompt - chat dialog (draft).md`
 - `008.03.00.prompt - task dialog (draft).md`
 - `008.04.00.prompt - user response dialog (draft).md`
-- `phase 03 - web visualisation/001.01.00.prompt - add new FAB and role menu (draft).md`
+- `phase 03 - web visualisation/003.01.00.prompt - add new FAB and role menu.md`
 - `phase 04 - web ui quality/001.02.00.prompt - accessibility audit and remediation (draft).md`
 
 ## Detail
@@ -288,3 +288,10 @@ now that something real fills it again: closing the dialog's **last**
 panel returns focus to whatever opened the dialog, and closing any other
 panel moves focus to a stable neighbour — the panel after it, or the one
 before if it was last. Axe and a focus assertion cover both paths.
+
+## Amendment as implemented (003.01, phase 03) <a id="amendment-as-implemented-p03-003-01"></a>
+
+**The FAB and role submenu row understated what the menu needs to say.** The menu-button pattern does announce opening, moving and closing by itself. But [003.01](../prompts/phase%2003%20-%20web%20visualisation/003.01.00.prompt%20-%20add%20new%20FAB%20and%20role%20menu.md) added two states the pattern doesn't cover:
+
+- **A chat starting.** The chosen role's text changes to "Starting chat with {role}…" while it keeps focus. A screen reader doesn't reliably read a focused item's new text, so the change is also announced (`polite`, immediate).
+- **A chat failing to start.** The menu closes and focus returns to the trigger. The error sits beside the trigger, linked by `aria-describedby`, and is announced (`assertive`, immediate), in line with the "Errors, in context" row.

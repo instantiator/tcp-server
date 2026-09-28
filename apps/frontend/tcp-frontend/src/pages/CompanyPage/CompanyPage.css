@@ -3,11 +3,32 @@
  * theme later. No literal colour, spacing or border value may appear here —
  * React Aria's own defaults live in `styles/base.css`.
  */
+/*
+ * Clear of the floating "Add new" control, so it never covers the last of the
+ * page's content (WCAG 2.4.11).
+ */
 .company-page__body {
+  padding-block-end: var(--tcp-fab-clearance);
 }
 
 .company-page__tabs {
 }
 
 .company-page__tab {
+}
+
+/*
+ * A floating control, like the dock, so its position is layout rather than
+ * theme. It shares the dock's layer and rises above the dock when one is
+ * showing.
+ */
+.company-page__add-new {
+  position: fixed;
+  inset-block-end: var(--tcp-space-lg);
+  inset-inline-end: var(--tcp-space-lg);
+  z-index: var(--tcp-layer-dock);
+}
+
+body:has(.dialog-dock) .company-page__add-new {
+  inset-block-end: calc(var(--tcp-dock-block-size) + var(--tcp-space-lg));
 }

@@ -79,7 +79,7 @@ React Aria Components wins on the two criteria that matter: its accessibility wo
 - `003.02.00.prompt - application shell, routing and header (draft).md`
 - `003.03.00.prompt - shared ui states, notifications and accessibility primitives (draft).md`
 - `008.01.00` – `008.06.00` (all dialog prompts)
-- `phase 03 - web visualisation/001.01.00.prompt - add new FAB and role menu (draft).md`
+- `phase 03 - web visualisation/003.01.00.prompt - add new FAB and role menu.md`
 - `phase 04 - web ui quality/001.02.00.prompt - accessibility audit and remediation (draft).md`
 
 ## Detail
@@ -140,3 +140,12 @@ The dialog framework and the transcript components ([008.01](../prompts/phase%20
 - **The ADR names "the minimise-to-bar pattern" as one of the reasons for choosing a library. As built, minimising unmounts the dialog rather than hiding it**, because a mounted modal keeps its focus trap and keeps the rest of the page inert. So the library supplies the modal, and the dock (`DockProvider`/`useDock`, `src/components/Dialog/`) is ours: about sixty lines.
 - **React Aria restores focus after the dialog unmounts, not during it.** A test asserting focus return has to wait for that, or it reads the focus of a moment too early. Both focus-return tests in `Dialog.test.tsx` use `waitFor` for this reason.
 - **A modal marks everything outside itself `aria-hidden`**, so a test cannot find the trigger by role while the dialog is open. That is correct behaviour, and worth knowing before it looks like a bug.
+
+## Amendment as implemented (003.01, phase 03) <a id="amendment-as-implemented-p03-003-01"></a>
+
+The "Add new" control ([003.01](../prompts/phase%2003%20-%20web%20visualisation/003.01.00.prompt%20-%20add%20new%20FAB%20and%20role%20menu.md)) was the first control that had to reach past an open dialog. Dialogs are modal, so the page behind one, including this control, is inert. Two ways out were weighed: make the dialogs non-modal, or start new work from inside the dialog.
+
+- **Dialogs stay modal.** Making them non-modal would have meant giving up the library's focus trap, which is one of the reasons this ADR chose a library. The decision above stands unchanged.
+- **The chat dialog carries its own "Add new" menu** in its title bar, through a new `actions` slot on `Dialog`. A new chat joins the dialog as another panel. A new task opens as a second modal stacked on top, which React Aria handles with nothing hand-written: Escape closes only the top one.
+- **The task dialog has no such menu, by decision.** It holds nothing the user typed, so closing it to reach the page's control loses nothing.
+- **Disabling a focused menu item drops focus to the menu itself.** A menu that marks its pending item disabled loses the user's place. The roles submenu disables only the other items and ignores a second press on the pending one.

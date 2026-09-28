@@ -180,6 +180,15 @@ const strings = {
   'task.create.announce.created':
     'Task {shortcode} created. It has not started yet.',
 
+  // 003.01 — the "Add new" menu: create a task, or start a chat with a role.
+  'addNew.trigger': 'Add new',
+  'addNew.createTask': 'Create a new task',
+  'addNew.newChat': 'New chat',
+  'addNew.starting': 'Starting chat with {role}…',
+  'addNew.noRoles': 'This company has no roles yet',
+  'addNew.loadingRoles': 'Loading roles…',
+  'addNew.error': 'Could not start a chat with {role}. Try again.',
+
   // 008.06 — the two read-only dialogs on the account menu. Both are read-only
   // by scope decision (ADR-020), not by oversight.
   'profile.heading': 'My profile',
@@ -371,6 +380,7 @@ const strings = {
   'visualisation.tray.assignmentRow': '{role} — {mode} — {status}',
   'visualisation.tray.follow': 'Follow',
   'visualisation.tray.listenIn': 'Listen in to {role}',
+  'visualisation.tray.chatWithRole': 'Chat with {role}',
   'visualisation.tray.close': 'Close details',
 
   // The archive panel (`ui/ArchiveDetails.tsx`): the bookshelf's tray, a list

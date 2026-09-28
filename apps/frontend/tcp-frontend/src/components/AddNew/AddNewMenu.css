@@ -1,0 +1,14 @@
+/*
+ * Empty by design (ADR-026): meaningful class names now, rules filled per
+ * theme later. No literal colour, spacing or border value may appear here —
+ * React Aria's own defaults live in `styles/base.css`. `.add-new` is
+ * deliberately unpositioned — a later stage places this control.
+ */
+.add-new {
+}
+
+.add-new__trigger {
+}
+
+.add-new__error {
+}

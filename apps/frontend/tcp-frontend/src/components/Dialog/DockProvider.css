@@ -10,6 +10,7 @@
   position: fixed;
   inset-block-end: 0;
   inset-inline: 0;
+  min-block-size: var(--tcp-dock-block-size);
   z-index: var(--tcp-layer-dock);
   padding: var(--tcp-space-sm);
   border-block-start: var(--tcp-border-width) solid var(--tcp-color-border);
