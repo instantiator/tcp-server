@@ -55,6 +55,11 @@
   /* The side tray's fixed inline size (Stage D, 000.01). */
   --tcp-visualisation-tray-width: 20rem;
   --tcp-visualisation-tooltip-max-width: 16rem;
+  /* The dock's minimum block size, so a floating control can rise clear of it.
+     ponytail: one row of dock entries; a dock that wraps would overlap. */
+  --tcp-dock-block-size: 3.5rem;
+  /* Room left under page content for the floating "Add new" control. */
+  --tcp-fab-clearance: 5rem;
   /* An icon inside a control, drawn at the control's text size or a little over. */
   --tcp-icon-size: 1.25rem;
 }

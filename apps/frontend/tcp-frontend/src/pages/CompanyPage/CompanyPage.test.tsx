@@ -141,6 +141,28 @@ describe('CompanyPage', () => {
     expect(document.title).toBe(COMPANY.name);
   });
 
+  it('offers "Add new" straight after the heading in the tab order', async () => {
+    respondCompanyPage();
+    renderCompanyPage();
+    const user = userEvent.setup();
+
+    const heading = await screen.findByRole('heading', {
+      name: COMPANY.name,
+      level: 1,
+    });
+    const addNew = screen.getByRole('button', { name: t('addNew.trigger') });
+    // Everything focusable between the heading and the control would come
+    // first in the tab order; there should be nothing.
+    expect(
+      heading.compareDocumentPosition(addNew) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    heading.tabIndex = -1;
+    heading.focus();
+    await user.tab();
+    expect(addNew).toHaveFocus();
+  });
+
   it('navigates back to the overview through the breadcrumb', async () => {
     respondCompanyPage();
     const user = userEvent.setup();
