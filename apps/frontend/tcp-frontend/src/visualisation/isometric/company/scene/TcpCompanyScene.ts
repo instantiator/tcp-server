@@ -338,6 +338,7 @@ export class TcpCompanyScene extends Scene {
         this.avatarSprites.set(avatar.id, sprite);
       }
       sprite.setHasRole(avatar.hasRole);
+      sprite.setCarrying(avatar.carrying === 'outputs');
       sprite.setSelection(
         avatar.agentId !== null
           ? { kind: 'agent', id: avatar.agentId }

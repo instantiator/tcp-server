@@ -38,6 +38,10 @@ function dissociatedTarget(world: OfficeWorld, avatar: Avatar): AvatarTarget {
  * A task avatar waits by its desk (or the whiteboard, with none free) for
  * the next agent of its role; anyone else — a role has no agent to lose, so
  * this only ever touches consultee, chat and task avatars — walks out.
+ *
+ * Stamps `dissociatedSeq` from the world's counter and bumps it, so
+ * `closeTaskRooms` can later tell which avatar in a task room let go of its
+ * agent most recently — that one carries the task's outputs to the archive.
  */
 function dissociateFinishedAgents(
   world: OfficeWorld,
@@ -58,8 +62,10 @@ function dissociateFinishedAgents(
 
     next = updateAvatar(next, avatar.id, {
       agentId: null,
+      dissociatedSeq: next.seq,
       target: dissociatedTarget(next, avatar),
     });
+    next = { ...next, seq: next.seq + 1 };
   }
   return next;
 }
@@ -95,9 +101,14 @@ function attachTaskAgent(
 
   const waiting = findWaitingAvatar(world, agent, taskId);
   if (waiting !== undefined) {
+    // Reattaching clears a leftover `dissociatedSeq` from whichever earlier
+    // agent this avatar last let go of — it holds a live agent again now,
+    // so it must not still look like the most recently dissociated one if
+    // the room closes before it naturally dissociates from this one.
     return updateAvatar(world, waiting.id, {
       agentId: agent.id,
       assignmentId: agent.assignmentId,
+      dissociatedSeq: null,
     });
   }
 
@@ -111,6 +122,8 @@ function attachTaskAgent(
     target: { kind: 'tile', tile: SPAWN_TILE },
     placeAtTarget: ctx.firstSnapshot,
     hasRole: ctx.firstSnapshot,
+    carrying: null,
+    dissociatedSeq: null,
   });
   const claim = claimDesk(created.world, roomId, created.avatarId);
   const target: AvatarTarget = {
@@ -136,6 +149,8 @@ function attachNoTaskAgent(
     target: { kind: 'tile', tile: SPAWN_TILE },
     placeAtTarget: ctx.firstSnapshot,
     hasRole: ctx.firstSnapshot,
+    carrying: null,
+    dissociatedSeq: null,
   });
   return next;
 }

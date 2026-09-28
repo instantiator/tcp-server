@@ -1,5 +1,6 @@
 import { furnishRoom, MAX_DESKS_PER_ROOM, nextDeskTile } from './furnishing';
 import {
+  ARCHIVE_ROOM_ID,
   columnOfSlot,
   CORRIDOR_ID,
   corridorBounds,
@@ -22,6 +23,7 @@ import type {
 const FIXED_ROOM_IDS: readonly string[] = [
   REC_ROOM_ID,
   MAIL_ROOM_ID,
+  ARCHIVE_ROOM_ID,
   CORRIDOR_ID,
 ];
 
@@ -316,6 +318,8 @@ export function updateAvatar(
     merged.deskId === avatar.deskId &&
     merged.placeAtTarget === avatar.placeAtTarget &&
     merged.hasRole === avatar.hasRole &&
+    merged.carrying === avatar.carrying &&
+    merged.dissociatedSeq === avatar.dissociatedSeq &&
     sameTile(merged.location, avatar.location) &&
     sameTarget(merged.target, avatar.target);
   if (unchanged) {

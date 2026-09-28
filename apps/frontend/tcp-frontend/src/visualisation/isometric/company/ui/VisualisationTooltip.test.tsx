@@ -17,6 +17,7 @@ const SNAPSHOT: CompanySnapshot = {
       shortcode: 'TASK-1',
       request: 'Reconcile accounts',
       finished: false,
+      succeeded: false,
       step: 1,
       steps: 3,
     },

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { MAX_DESKS_PER_ROOM } from './furnishing';
 import {
+  ARCHIVE_ROOM_ID,
   CORRIDOR_ID,
   createInitialWorld,
   MAIL_ROOM_ID,
@@ -39,6 +40,8 @@ function makeAvatar(overrides: Partial<Avatar> = {}): Avatar {
     target: { kind: 'exit' },
     placeAtTarget: false,
     hasRole: true,
+    carrying: null,
+    dissociatedSeq: null,
     ...overrides,
   };
 }
@@ -104,7 +107,7 @@ describe('addRoom', () => {
   it('adds a task room in the first free slot, furnished with a whiteboard', () => {
     const world = addRoom(createInitialWorld(), 'task', 'task:t1');
     const room = roomById(world, 'task:t1');
-    expect(room?.slot).toBe(2);
+    expect(room?.slot).toBe(3); // slots 0, 1 and 2 are the rec, mail and archive rooms
     expect(room?.closing).toBe(false);
     expect(
       world.furniture.some(
@@ -133,14 +136,17 @@ describe('addRoom', () => {
 
   it('grows corridorColumns, and the corridor bounds, into a new column', () => {
     let world = createInitialWorld();
-    expect(world.corridorColumns).toBe(1);
+    expect(world.corridorColumns).toBe(2); // the archive already fills column 1
 
-    world = addRoom(world, 'task', 'task:t1'); // slot 2, column 1
+    world = addRoom(world, 'task', 'task:t1'); // slot 3, still column 1
     expect(world.corridorColumns).toBe(2);
+
+    world = addRoom(world, 'task', 'task:t2'); // slot 4, column 2
+    expect(world.corridorColumns).toBe(3);
     expect(roomById(world, CORRIDOR_ID)?.bounds).toEqual({
       x: 1,
       y: 7,
-      width: 19,
+      width: 28,
       height: 2,
     });
   });
@@ -171,14 +177,17 @@ describe('removeRoom', () => {
     expect(removeRoom(world, 'nope')).toBe(world);
   });
 
-  it('is unchanged for the fixed rooms', () => {
+  it('is unchanged for the fixed rooms, including the archive', () => {
     const world = createInitialWorld();
     expect(removeRoom(world, REC_ROOM_ID)).toBe(world);
     expect(removeRoom(world, MAIL_ROOM_ID)).toBe(world);
+    expect(removeRoom(world, ARCHIVE_ROOM_ID)).toBe(world);
     expect(removeRoom(world, CORRIDOR_ID)).toBe(world);
   });
 
   it('never shrinks corridorColumns', () => {
+    // task:t1 lands in slot 3, still column 1, so corridorColumns starts and
+    // stays at the initial world's 2 — this only checks it doesn't shrink.
     let world = addRoom(createInitialWorld(), 'task', 'task:t1');
     expect(world.corridorColumns).toBe(2);
     world = removeRoom(world, 'task:t1');
@@ -323,6 +332,8 @@ describe('addAgentAvatar', () => {
       target: { kind: 'exit' },
       placeAtTarget: false,
       hasRole: true,
+      carrying: null,
+      dissociatedSeq: null,
     });
     expect(avatarId).toBe('agent-avatar:1');
     expect(avatarById(next, avatarId)?.kind).toBe('agent');

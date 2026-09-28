@@ -24,7 +24,8 @@ export interface Bounds {
 }
 
 /** What a room is for. It decides the room's furniture and its floor style. */
-export type RoomPurpose = 'rec' | 'mail' | 'corridor' | 'task' | 'oneToOne';
+export type RoomPurpose =
+  'rec' | 'mail' | 'archive' | 'corridor' | 'task' | 'oneToOne';
 
 /** A room. Every room except the corridor sits in a slot along the corridor. */
 export interface Room {
@@ -49,7 +50,13 @@ export interface Room {
 
 /** The kinds of furniture. Each is drawn as its own placeholder shape. */
 export type FurnitureKind =
-  'desk' | 'whiteboard' | 'sofa' | 'pigeonholes' | 'table' | 'officeDoor';
+  | 'desk'
+  | 'whiteboard'
+  | 'sofa'
+  | 'pigeonholes'
+  | 'table'
+  | 'officeDoor'
+  | 'bookshelf';
 
 /** One piece of furniture, standing on one tile. */
 export interface Furniture {
@@ -113,6 +120,19 @@ export interface Avatar {
    * and avatars placed from the first snapshot, start with it.
    */
   readonly hasRole: boolean;
+  /**
+   * `'outputs'` while this avatar is carrying its finished task's outputs to
+   * the archive bookshelf, `null` otherwise. Set by {@link closeTaskRooms}
+   * on the one avatar picked as the finishing agent, and cleared on arrival.
+   */
+  readonly carrying: 'outputs' | null;
+  /**
+   * When this avatar last let go of an agent — a rising count from
+   * {@link OfficeWorld.seq}, or `null` if it never has. `closeTaskRooms`
+   * picks the highest as the task's finishing agent, the one to carry its
+   * outputs.
+   */
+  readonly dissociatedSeq: number | null;
 }
 
 /** The whole office. The reducer produces a new one, and the scene draws it. */
@@ -129,6 +149,12 @@ export interface OfficeWorld {
   readonly nextAvatarNumber: number;
   /** How many slot columns the corridor runs past. It grows and never shrinks during a session. */
   readonly corridorColumns: number;
+  /**
+   * Rises by one every time an avatar dissociates from its agent. Stamped
+   * onto {@link Avatar.dissociatedSeq} so `closeTaskRooms` can tell which
+   * avatar let go of its task most recently.
+   */
+  readonly seq: number;
 }
 
 /** One tile of a rendered region: its static parts only. */

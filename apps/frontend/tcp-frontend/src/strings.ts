@@ -331,6 +331,9 @@ const strings = {
   'visualisation.furniture.officeDoor': 'Office door',
   'visualisation.furniture.officeDoor.description':
     'Agents arrive and leave here.',
+  'visualisation.furniture.bookshelf': 'Bookshelf',
+  'visualisation.furniture.bookshelf.description':
+    'Holds the outputs of completed tasks. Select it to see them.',
   'visualisation.room.task': 'Task room: {shortcode}',
   'visualisation.room.task.description':
     'Agents work on task {shortcode} here.',
@@ -344,6 +347,9 @@ const strings = {
     "The company's roles are kept here. New agents collect their role here.",
   'visualisation.room.mail': 'Mail room',
   'visualisation.room.mail.description': "Agents wait here for a user's reply.",
+  'visualisation.room.archive': 'Archive',
+  'visualisation.room.archive.description':
+    "Finished tasks' outputs are filed here.",
 
   // The side tray (`ui/VisualisationTray.tsx` and its per-kind panels). Not a
   // dialog: nothing here is announced, and the tray's body is read by

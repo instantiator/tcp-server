@@ -47,6 +47,7 @@ export function describeFurniture(
     case 'pigeonholes':
     case 'table':
     case 'officeDoor':
+    case 'bookshelf':
       return {
         title: t(`visualisation.furniture.${item.kind}`),
         description: t(`visualisation.furniture.${item.kind}.description`),
@@ -68,6 +69,7 @@ export function describeRoom(
       return null;
     case 'rec':
     case 'mail':
+    case 'archive':
       return {
         title: t(`visualisation.room.${room.purpose}`),
         description: t(`visualisation.room.${room.purpose}.description`),

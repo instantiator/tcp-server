@@ -66,6 +66,8 @@ export function applyRoleRules(
       target: { kind: 'tile', tile: spot },
       placeAtTarget: true,
       hasRole: true,
+      carrying: null,
+      dissociatedSeq: null,
     });
   }
 

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { createInitialWorld, SPAWN_TILE, taskRoomId } from '../world/layout';
+import {
+  ARCHIVE_BOOKSHELF_ID,
+  createInitialWorld,
+  SPAWN_TILE,
+  taskRoomId,
+} from '../world/layout';
 import type { Avatar, OfficeWorld } from '../world/types';
 import {
   addAgentAvatar,
@@ -8,6 +13,7 @@ import {
   claimDesk,
   desksInRoom,
   removeAvatar,
+  setRoomClosing,
 } from '../world/worldOps';
 import { applyAgentAvatarRules } from './agentAvatarRules';
 import type { RuleContext } from './applyRules';
@@ -83,6 +89,8 @@ describe('applyAgentAvatarRules', () => {
       target: { kind: 'tile', tile: SPAWN_TILE },
       placeAtTarget: false,
       hasRole: true,
+      carrying: null,
+      dissociatedSeq: null,
     });
     const claimed = claimDesk(
       created.world,
@@ -296,5 +304,41 @@ describe('applyAgentAvatarRules', () => {
     const after = requireAvatar(world, (a) => a.id === before.id);
     expect(after.agentId).toBe('agent-2');
     expect(after.hasRole).toBe(true);
+  });
+
+  it('never reuses the carrier of a closing room for a new agent of the same role', () => {
+    // A carrier looks like a waiting avatar (agentId null, target not
+    // 'exit'), so it's the room's `closing` flag — not the target — that
+    // must stop `attachTaskAgent` from handing it a new agent.
+    const withRoom = worldWithTaskRoom();
+    const created = addAgentAvatar(withRoom, {
+      roleId: 'role-1',
+      agentId: null,
+      assignmentId: 'old-assignment',
+      taskId: 'task-1',
+      deskId: null,
+      location: SPAWN_TILE,
+      target: { kind: 'furniture', furnitureId: ARCHIVE_BOOKSHELF_ID },
+      placeAtTarget: false,
+      hasRole: true,
+      carrying: 'outputs',
+      dissociatedSeq: 3,
+    });
+    const closing = setRoomClosing(created.world, taskRoomId('task-1'));
+
+    const world = applyAgentAvatarRules(
+      closing,
+      snapshot([agent({ id: 'new-agent', roleId: 'role-1' })]),
+      ctxLater,
+    );
+
+    const carrier = requireAvatar(world, (a) => a.id === created.avatarId);
+    expect(carrier.agentId).toBeNull();
+    expect(carrier.carrying).toBe('outputs');
+    expect(carrier.target).toEqual({
+      kind: 'furniture',
+      furnitureId: ARCHIVE_BOOKSHELF_ID,
+    });
+    expect(world.avatars.some((a) => a.agentId === 'new-agent')).toBe(false);
   });
 });

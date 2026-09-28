@@ -10,6 +10,7 @@ import type { FurnitureKind, RoomPurpose } from '../world/types';
 export const FLOOR_COLOURS: Record<RoomPurpose | 'outside', number> = {
   rec: 0xd8e6d0,
   mail: 0xe6ddc8,
+  archive: 0xdcd6c8,
   corridor: 0xcfd3d6,
   task: 0xd6e2ea,
   oneToOne: 0xe6d8e0,
@@ -23,6 +24,7 @@ export const WALL_COLOURS: Record<
 > = {
   rec: { top: 0xb7c9ac, left: 0x8fa384, right: 0xa2b797 },
   mail: { top: 0xc9bd9f, left: 0x9c9276, right: 0xb2a688 },
+  archive: { top: 0xbcb6a4, left: 0x928d7e, right: 0xa8a293 },
   corridor: { top: 0xaeb4b8, left: 0x868c8f, right: 0x9aa0a3 },
   task: { top: 0xacc0cc, left: 0x8496a1, right: 0x99adb8 },
   oneToOne: { top: 0xc9b6c1, left: 0x9c8b95, right: 0xb2a0ab },
@@ -36,10 +38,15 @@ export const FURNITURE_COLOURS: Record<FurnitureKind, number> = {
   pigeonholes: 0xa68a5f,
   table: 0x8a6f4e,
   officeDoor: 0x5c5148,
+  // Wood-brown, close to a desk's tone but distinct enough beside it.
+  bookshelf: 0x6b4a30,
 };
 
 /** The pale block of pages on top of a role's book. */
 export const BOOK_PAGES_COLOUR = 0xf4f1e8;
+
+/** The box of a finished task's outputs, carried to the archive bookshelf. */
+export const CARRIED_OUTPUTS_COLOUR = 0xd9b06c;
 
 /**
  * Canvas label text: small, dark on a pale translucent backing so it reads

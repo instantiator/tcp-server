@@ -1,6 +1,6 @@
 import { applyRules } from '../rules/applyRules';
 import type { CompanySnapshot } from '../rules/companySnapshot';
-import { createInitialWorld } from './layout';
+import { ARCHIVE_BOOKSHELF_ID, createInitialWorld } from './layout';
 import type { Avatar, OfficeWorld, Tile } from './types';
 import { avatarById, removeAvatar, updateAvatar } from './worldOps';
 
@@ -47,6 +47,26 @@ function arrivedAtRolePatch(
 }
 
 /**
+ * `{ carrying: null, target: { kind: 'exit' } }` when the arriving avatar
+ * was carrying a task's outputs to the archive bookshelf and has now
+ * reached it — its job done, it heads for the door. `{}` otherwise.
+ */
+function arrivedAtBookshelfPatch(
+  world: OfficeWorld,
+  avatarId: string,
+): Partial<Pick<Avatar, 'carrying' | 'target'>> {
+  const avatar = avatarById(world, avatarId);
+  if (avatar === undefined || avatar.carrying !== 'outputs') {
+    return {};
+  }
+  const target = avatar.target;
+  return target.kind === 'furniture' &&
+    target.furnitureId === ARCHIVE_BOOKSHELF_ID
+    ? { carrying: null, target: { kind: 'exit' } }
+    : {};
+}
+
+/**
  * Applies one action, then re-runs the rules so the world catches up with
  * whatever changed. Returns the same state object when nothing did.
  */
@@ -69,6 +89,7 @@ export function officeReducer(
       ? updateAvatar(state.world, action.avatarId, {
           location: action.tile,
           ...arrivedAtRolePatch(state.world, action.avatarId),
+          ...arrivedAtBookshelfPatch(state.world, action.avatarId),
         })
       : removeAvatar(state.world, action.avatarId);
 

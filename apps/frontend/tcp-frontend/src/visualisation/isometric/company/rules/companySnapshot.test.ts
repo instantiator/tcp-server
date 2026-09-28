@@ -154,6 +154,23 @@ describe('buildCompanySnapshot', () => {
     },
   );
 
+  it.each(['failed', 'cancelled', 'ready', 'planning'] as const)(
+    'marks a %s task not succeeded',
+    (status) => {
+      const snapshot = buildCompanySnapshot(
+        data({ tasks: [task({ status })], assignments: [] }),
+      );
+      expect(snapshot.tasks[0]?.succeeded).toBe(false);
+    },
+  );
+
+  it('marks a succeeded task succeeded', () => {
+    const snapshot = buildCompanySnapshot(
+      data({ tasks: [task({ status: 'succeeded' })], assignments: [] }),
+    );
+    expect(snapshot.tasks[0]?.succeeded).toBe(true);
+  });
+
   it.each(['completed', 'failed', 'cancelled'] as const)(
     'row 1: marks a %s agent finished',
     (status) => {

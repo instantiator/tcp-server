@@ -58,6 +58,8 @@ function worldWithTaskAvatar(overrides: { hasRole?: boolean } = {}): {
     target: { kind: 'tile', tile: { x: 3, y: 3 } },
     placeAtTarget: false,
     hasRole: overrides.hasRole ?? true,
+    carrying: null,
+    dissociatedSeq: null,
   });
   const claimed = claimDesk(
     created.world,
@@ -81,6 +83,8 @@ function withRoleAvatar(world: OfficeWorld, roleId: string): OfficeWorld {
     target: { kind: 'tile', tile: { x: 0, y: 0 } },
     placeAtTarget: true,
     hasRole: true,
+    carrying: null,
+    dissociatedSeq: null,
   });
 }
 
@@ -110,6 +114,8 @@ describe('applyAvatarTargetRules', () => {
       target: { kind: 'tile', tile: { x: 4, y: 4 } },
       placeAtTarget: false,
       hasRole: true,
+      carrying: null,
+      dissociatedSeq: null,
     });
 
     const next = applyAvatarTargetRules(

@@ -30,6 +30,8 @@ function avatar(fields: Partial<Avatar> & Pick<Avatar, 'id' | 'kind'>): Avatar {
     target: { kind: 'exit' },
     placeAtTarget: true,
     hasRole: true,
+    carrying: null,
+    dissociatedSeq: null,
     ...fields,
   };
 }
@@ -103,6 +105,7 @@ describe('buildOfficeLabels', () => {
     expect(textsOf(labels)).toEqual([
       t('visualisation.room.rec'),
       t('visualisation.room.mail'),
+      t('visualisation.room.archive'),
     ]);
     const rec = WORLD.rooms.find((room) => room.id === 'rec');
     expect(labels[0]?.anchor).toEqual({ kind: 'tile', tile: rec?.door });

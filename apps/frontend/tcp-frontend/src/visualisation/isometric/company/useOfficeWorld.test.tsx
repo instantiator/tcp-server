@@ -14,7 +14,7 @@ import {
   installFetchMock,
   respondByRoute,
 } from '../../../test-support/fetch-mock';
-import { taskRoomId } from './world/layout';
+import { ARCHIVE_BOOKSHELF_ID, taskRoomId } from './world/layout';
 import { useOfficeWorld } from './useOfficeWorld';
 
 // `phaser` is mocked globally in `test-setup.ts`, but this hook never
@@ -876,14 +876,38 @@ describe('useOfficeWorld — the live pipeline (agent E2E stand-in)', () => {
       );
     });
 
-    // Row 9 — succeeded: the room starts closing and every avatar still
-    // holding the task — including the two already dissociated and waiting
-    // at their desks — heads for the exit. (Their own assignments stay
-    // `in-progress` throughout this test; the exit here is driven by the
-    // room closing, not each avatar's own finished check.)
+    // Row 8, continued — the reviewer finishes too, after the planner:
+    // dissociating stamps a higher `dissociatedSeq` than the planner's own
+    // (row 4), so when the task later succeeds, the QA avatar — not the
+    // planner's, despite dissociating first — carries the outputs out.
+    setCompany(
+      [task({ status: 'finalising' })],
+      [plannerAgent('completed'), workerAgent('paused'), qaAgent('completed')],
+    );
+    act(() => {
+      applyEvent(
+        queryClient,
+        auditEvent(
+          { entity: 'agent', newStatus: 'completed' },
+          QA_AGENT_ID,
+          null,
+        ),
+      );
+    });
+    await waitFor(() => {
+      const avatar = result.current.world.avatars.find(
+        (a) => a.id === qaAvatarId,
+      );
+      expect(avatar?.agentId).toBeNull();
+    });
+
+    // Row 9 — succeeded: the room starts closing. The planner and worker —
+    // neither the most recently dissociated — head for the exit; the QA
+    // avatar, the last to let go of its agent, carries the task's outputs to
+    // the archive bookshelf instead.
     setCompany(
       [task({ status: 'succeeded' })],
-      [plannerAgent('completed'), workerAgent('paused'), qaAgent('running')],
+      [plannerAgent('completed'), workerAgent('paused'), qaAgent('completed')],
     );
     act(() => {
       applyEvent(
@@ -898,14 +922,40 @@ describe('useOfficeWorld — the live pipeline (agent E2E stand-in)', () => {
     await waitFor(() => {
       const room = result.current.world.rooms.find((r) => r.purpose === 'task');
       expect(room?.closing).toBe(true);
-      for (const id of [plannerAvatarId, workerAvatarId, qaAvatarId]) {
+      for (const id of [plannerAvatarId, workerAvatarId]) {
         const avatar = result.current.world.avatars.find((a) => a.id === id);
         expect(avatar?.target).toEqual({ kind: 'exit' });
       }
+      const carrier = result.current.world.avatars.find(
+        (a) => a.id === qaAvatarId,
+      );
+      expect(carrier?.carrying).toBe('outputs');
+      expect(carrier?.target).toEqual({
+        kind: 'furniture',
+        furnitureId: ARCHIVE_BOOKSHELF_ID,
+      });
+    });
+
+    // The scene reports the carrier has reached the bookshelf: it lets go of
+    // the outputs and heads for the exit like everyone else.
+    const bookshelf = result.current.world.furniture.find(
+      (item) => item.id === ARCHIVE_BOOKSHELF_ID,
+    );
+    if (bookshelf === undefined) throw new Error('expected the bookshelf');
+    act(() => {
+      result.current.avatarArrived(qaAvatarId, bookshelf.tile);
+    });
+    await waitFor(() => {
+      const avatar = result.current.world.avatars.find(
+        (a) => a.id === qaAvatarId,
+      );
+      expect(avatar?.carrying).toBeNull();
+      expect(avatar?.target).toEqual({ kind: 'exit' });
     });
 
     // The scene reports every avatar has left: they disappear, and the room
-    // — with nobody left holding the task — is removed too.
+    // — with nobody left holding the task — is removed only now, after its
+    // carrier has actually exited.
     act(() => {
       result.current.avatarExited(plannerAvatarId);
       result.current.avatarExited(workerAvatarId);

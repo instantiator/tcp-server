@@ -69,6 +69,22 @@ describe('AvatarSprite', () => {
     expect(carried?.visible).toBe(false);
   });
 
+  it('hides the carried outputs box until told to show it', () => {
+    const { scene, isoboxes } = fakeScene();
+    const sprite = new AvatarSprite(scene, 'agent-avatar:1', 'agent', 'r1', {
+      x: 1,
+      y: 1,
+    });
+    const outputs = isoboxes[1];
+    expect(outputs?.visible).toBe(false);
+
+    sprite.setCarrying(true);
+    expect(outputs?.visible).toBe(true);
+
+    sprite.setCarrying(false);
+    expect(outputs?.visible).toBe(false);
+  });
+
   it('floats the carried book above the head', () => {
     const { scene, add } = fakeScene();
     new AvatarSprite(scene, 'agent-avatar:1', 'agent', 'r1', { x: 1, y: 1 });

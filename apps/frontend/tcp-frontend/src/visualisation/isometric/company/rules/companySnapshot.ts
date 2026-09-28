@@ -66,6 +66,8 @@ export interface SnapshotTask {
   readonly request: string;
   /** The task's status is succeeded, failed or cancelled. */
   readonly finished: boolean;
+  /** The task's status is specifically succeeded, not failed or cancelled. */
+  readonly succeeded: boolean;
   /** How many of the task's `implement` assignments have succeeded. */
   readonly step: number;
   /** How many `implement` assignments the task has: its plan's length. */
@@ -136,6 +138,7 @@ export function buildCompanySnapshot(data: CompanyData): CompanySnapshot {
       shortcode: task.shortcode,
       request: task.request,
       finished: !isOneOf(ACTIVE_TASK_STATUSES, task.status),
+      succeeded: task.status === 'succeeded',
       step: plan.filter((step) => step.status === 'succeeded').length,
       steps: plan.length,
     };
