@@ -6,10 +6,9 @@ import type {
   TcpAgent,
   TcpAssignment,
   TcpRole,
-  TcpTask,
   HeadingInfoProvider,
 } from '@tcp/shared';
-import { apiRequest, ApiOptions } from '../core/api';
+import { apiRequest, ApiOptions, TaskDetailBody } from '../core/api';
 
 /** The three mutually-exclusive ways to name an eavesdrop target; exactly one is set. */
 export interface TargetRef {
@@ -161,10 +160,11 @@ export async function resolveTarget(
   // --task-id: follow every assignment's working agent (plan, implement, qa,
   // finalise) — not any consultation spawned mid-assignment, which has no FK
   // back to the task (see the `010.3.1` plan's implementation notes).
-  const { task, assignments } = await apiRequest<{
-    task: TcpTask;
-    assignments: TcpAssignment[];
-  }>(api, 'GET', `/api/task/${cmdOpts.taskId}`);
+  const { assignments, ...task } = await apiRequest<TaskDetailBody>(
+    api,
+    'GET',
+    `/api/task/${cmdOpts.taskId}`,
+  );
   const roles = await apiRequest<TcpRole[]>(
     api,
     'GET',

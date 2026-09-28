@@ -68,12 +68,10 @@ describe('ChatSession', () => {
     it('resolves each assignment role id to its display name', async () => {
       mockedApiRequest
         .mockResolvedValueOnce({
-          task: {
-            id: 'task-1',
-            companyId: 'company-1',
-            request: 'Do the thing',
-            status: 'in-progress',
-          },
+          id: 'task-1',
+          companyId: 'company-1',
+          request: 'Do the thing',
+          status: 'in-progress',
           assignments: [
             {
               id: 'a1',
@@ -169,12 +167,10 @@ describe('ChatSession', () => {
       mockedApiRequest
         .mockResolvedValueOnce({ id: 'task-1' }) // POST /api/task
         .mockResolvedValueOnce({
-          task: {
-            id: 'task-1',
-            companyId: 'company-1',
-            request: 'Write a report',
-            status: 'ready',
-          },
+          id: 'task-1',
+          companyId: 'company-1',
+          request: 'Write a report',
+          status: 'ready',
           assignments: [],
         })
         .mockResolvedValueOnce([]);
@@ -200,12 +196,10 @@ describe('ChatSession', () => {
       mockedApiRequest
         .mockResolvedValueOnce({ id: 'task-1' })
         .mockResolvedValueOnce({
-          task: {
-            id: 'task-1',
-            companyId: 'company-1',
-            request: 'x',
-            status: 'ready',
-          },
+          id: 'task-1',
+          companyId: 'company-1',
+          request: 'x',
+          status: 'ready',
           assignments: [],
         })
         .mockResolvedValueOnce([]);
@@ -229,12 +223,10 @@ describe('ChatSession', () => {
         .mockResolvedValueOnce({ id: 'task-1' }) // POST /api/task
         .mockResolvedValueOnce({ id: 'task-1', status: 'planning' }) // POST /api/task/:id/start
         .mockResolvedValueOnce({
-          task: {
-            id: 'task-1',
-            companyId: 'company-1',
-            request: 'x',
-            status: 'planning',
-          },
+          id: 'task-1',
+          companyId: 'company-1',
+          request: 'x',
+          status: 'planning',
           assignments: [],
         })
         .mockResolvedValueOnce([]);
@@ -274,12 +266,10 @@ describe('ChatSession', () => {
     it('re-fetches and updates the assignment list on assignment_changed', async () => {
       mockedApiRequest
         .mockResolvedValueOnce({
-          task: {
-            id: 'task-1',
-            companyId: 'company-1',
-            request: 'x',
-            status: 'in-progress',
-          },
+          id: 'task-1',
+          companyId: 'company-1',
+          request: 'x',
+          status: 'in-progress',
           assignments: [
             {
               id: 'a1',

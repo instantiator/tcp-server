@@ -11,11 +11,16 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
   ApiSecurity,
   ApiTags,
 } from '@nestjs/swagger';
+import {
+  InternalAgentResponseDto,
+  PauseResponseDto,
+} from './dto/internal-response.dto';
 import {
   buildEnumValidationError,
   CompanyUser,
@@ -69,6 +74,7 @@ export class InternalController {
    * Currently exposes `storageChanges` for `complete_task` file validation.
    */
   @ApiOperation({ summary: 'Get agent record (internal)' })
+  @ApiOkResponse({ type: InternalAgentResponseDto })
   @Get('agent/:agentId')
   async getAgent(@Param('agentId') agentId: UUID): Promise<Partial<TcpAgent>> {
     const agent = await this.agentRepo.findOneBy({ id: agentId });
@@ -84,6 +90,7 @@ export class InternalController {
   @ApiOperation({
     summary: 'Pause an agent for user input or consultation (internal)',
   })
+  @ApiCreatedResponse({ type: PauseResponseDto })
   @Post('pause')
   async pause(
     @Body() body: PauseDto,

@@ -1,8 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type { TcpAssignment, TcpCompany, TcpTask } from '@tcp/shared';
+import type { TcpCompany, TcpTask } from '@tcp/shared';
 import { apiOptions, GlobalOptions } from '../core/cli-options';
-import { apiRequest, apiUpload } from '../core/api';
+import { apiRequest, apiUpload, TaskDetailBody } from '../core/api';
 import {
   EntityRefOpts,
   resolveCompanyId,
@@ -131,10 +131,11 @@ export function getTaskAction(
     const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
 
-    const result = await apiRequest<{
-      task: TcpTask;
-      assignments: TcpAssignment[];
-    }>(api, 'GET', `/api/task/${cmdOpts.taskId}`);
+    const result = await apiRequest<TaskDetailBody>(
+      api,
+      'GET',
+      `/api/task/${cmdOpts.taskId}`,
+    );
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
   });
 }
@@ -248,10 +249,11 @@ export function setPlannerAction(
       return;
     }
 
-    const { task } = await apiRequest<{
-      task: TcpTask;
-      assignments: TcpAssignment[];
-    }>(api, 'GET', `/api/task/${cmdOpts.taskId!}`);
+    const task = await apiRequest<TaskDetailBody>(
+      api,
+      'GET',
+      `/api/task/${cmdOpts.taskId!}`,
+    );
     const roleId = await resolveRoleIdFrom(
       api,
       { id: cmdOpts.roleId, slug: cmdOpts.roleSlug, value: cmdOpts.role },

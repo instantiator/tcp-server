@@ -9,7 +9,13 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiSecurity, ApiTags } from '@nestjs/swagger';
+import {
+  ApiCreatedResponse,
+  ApiOkResponse,
+  ApiQuery,
+  ApiSecurity,
+  ApiTags,
+} from '@nestjs/swagger';
 import {
   AppendFileDto,
   CopyFileDto,
@@ -25,6 +31,19 @@ import {
   SearchFilesDto,
   WriteFileDto,
 } from './dto/storage-actions.dto';
+import {
+  AppendFileResponseDto,
+  FileContentResponseDto,
+  FileCopiedResponseDto,
+  FileDeletedResponseDto,
+  FileMovedResponseDto,
+  FilePropertiesResponseDto,
+  FileRestoredResponseDto,
+  MissingFilesResponseDto,
+  ReplaceFileResponseDto,
+  StorageEntriesResponseDto,
+  StoredObjectResponseDto,
+} from './dto/storage-response.dto';
 import {
   Originators,
   StorageObject,
@@ -55,6 +74,7 @@ function toOriginators(dto?: OriginatorsDto): Originators | undefined {
 export class StorageActionsController {
   constructor(private readonly storage: StorageService) {}
 
+  @ApiCreatedResponse({ type: StorageEntriesResponseDto })
   @Post('list')
   async list(
     @Body() body: ListFilesDto,
@@ -63,6 +83,7 @@ export class StorageActionsController {
     return { entries };
   }
 
+  @ApiCreatedResponse({ type: FileContentResponseDto })
   @Post('read')
   async read(@Body() body: ReadFileDto): Promise<{ content: string }> {
     const content = await this.storage.readFile(body.path);
@@ -72,6 +93,7 @@ export class StorageActionsController {
     return { content };
   }
 
+  @ApiCreatedResponse({ type: StoredObjectResponseDto })
   @Post('write')
   async write(
     @Body() body: WriteFileDto,
@@ -84,12 +106,14 @@ export class StorageActionsController {
     );
   }
 
+  @ApiCreatedResponse({ type: FileDeletedResponseDto })
   @Post('delete')
   async delete(@Body() body: DeleteFileDto): Promise<{ restorable: true }> {
     await this.storage.deleteFile(body.path, toOriginators(body.originators));
     return { restorable: true };
   }
 
+  @ApiCreatedResponse({ type: FileRestoredResponseDto })
   @Post('restore')
   async restore(@Body() body: RestoreFileDto): Promise<{ restored: true }> {
     await this.storage.restoreFile(body.path, toOriginators(body.originators));
@@ -101,6 +125,7 @@ export class StorageActionsController {
    * variant of `write` — the combined document is validated exactly as a
    * direct write, so an append that breaks the document's format is rejected.
    */
+  @ApiCreatedResponse({ type: AppendFileResponseDto })
   @Post('append')
   async append(
     @Body() body: AppendFileDto,
@@ -121,6 +146,7 @@ export class StorageActionsController {
    * writes the result back (validated as a normal write). Fails if the file is
    * missing or `find` occurs zero times; returns the replacement count.
    */
+  @ApiCreatedResponse({ type: ReplaceFileResponseDto })
   @Post('replace')
   async replace(
     @Body() body: ReplaceFileDto,
@@ -150,6 +176,7 @@ export class StorageActionsController {
     return { key: result.key, count };
   }
 
+  @ApiCreatedResponse({ type: StorageEntriesResponseDto })
   @Post('search')
   async search(
     @Body() body: SearchFilesDto,
@@ -158,6 +185,7 @@ export class StorageActionsController {
     return { entries };
   }
 
+  @ApiCreatedResponse({ type: FilePropertiesResponseDto })
   @Post('properties')
   async properties(@Body() body: GetFilePropertiesDto): Promise<{
     key: string;
@@ -169,6 +197,7 @@ export class StorageActionsController {
     return this.storage.getFileProperties(body.path);
   }
 
+  @ApiCreatedResponse({ type: FileCopiedResponseDto })
   @Post('copy')
   async copy(@Body() body: CopyFileDto): Promise<{ copied: true }> {
     await this.storage.copyFile(
@@ -179,6 +208,7 @@ export class StorageActionsController {
     return { copied: true };
   }
 
+  @ApiCreatedResponse({ type: FileMovedResponseDto })
   @Post('move')
   async move(@Body() body: MoveFileDto): Promise<{ moved: true }> {
     await this.storage.moveFile(
@@ -189,6 +219,27 @@ export class StorageActionsController {
     return { moved: true };
   }
 
+  // The common fields are fixed; each format adds its own (`columns` and
+  // `rowCount` for CSV, `headings` for Markdown, …; see
+  // storage/content-analysis/). A raw schema, because a class can't say "and
+  // any other properties".
+  @ApiCreatedResponse({
+    schema: {
+      type: 'object',
+      required: ['path', 'contentType'],
+      properties: {
+        path: { type: 'string' },
+        size: { type: 'number' },
+        contentType: { type: 'string' },
+        format: {
+          type: 'string',
+          description:
+            'csv, csv-invalid, markdown, text, typescript, yaml, json-array, json-object or json-invalid',
+        },
+      },
+      additionalProperties: true,
+    },
+  })
   @Post('summary')
   async summary(
     @Body() body: GetFileSummaryDto,
@@ -196,6 +247,14 @@ export class StorageActionsController {
     return this.storage.getFileSummary(body.path);
   }
 
+  @ApiOkResponse({ type: MissingFilesResponseDto })
+  @ApiQuery({
+    name: 'path',
+    type: String,
+    isArray: true,
+    required: false,
+    description: 'Repeat to ask about several paths',
+  })
   @Get('exists')
   async exists(
     @Query('path') paths: string | string[] | undefined,

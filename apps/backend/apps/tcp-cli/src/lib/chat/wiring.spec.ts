@@ -236,38 +236,5 @@ describe('runTuiInteractive', () => {
 
       await quit();
     });
-
-    it('reports a pane error instead of throwing when fetchTaskDetail resolves with no task', async () => {
-      const tui = fakeTui();
-      const session = fakeSession();
-      // The exact malformed shape session-api.ts's fetchTaskDetail would
-      // pass through untouched — a success response with no `task` field.
-      (session.fetchTaskDetail as jest.Mock).mockResolvedValue({
-        task: undefined,
-        assignments: [],
-      });
-      const quit = start(session, tui);
-
-      const onSelectTask = registeredHandler<(task: TaskChangeSummary) => void>(
-        tui.onSelectTask,
-      );
-
-      expect(() => {
-        onSelectTask(taskSummary);
-      }).not.toThrow();
-      await flush();
-
-      expect(session.reportPaneError).toHaveBeenCalledWith(
-        'company-1',
-        expect.objectContaining({
-          message: expect.stringContaining('missing its task') as string,
-        }),
-      );
-      expect(tui.addTaskPane).not.toHaveBeenCalled();
-      expect(tui.switchToPane).not.toHaveBeenCalled();
-      expect(session.watchTaskEvents).not.toHaveBeenCalled();
-
-      await quit();
-    });
   });
 });

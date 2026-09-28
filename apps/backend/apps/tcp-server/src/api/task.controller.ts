@@ -23,13 +23,16 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
+  ApiAcceptedResponse,
   ApiBearerAuth,
   ApiBody,
   ApiConsumes,
+  ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { TaskMaterialResponseDto } from './dto/storage-response.dto';
 import type { UUID } from 'crypto';
 import { defer, from, merge, mergeMap, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -70,7 +73,7 @@ export class TaskController {
 
   /** Creates a task in the `ready` state. No plan is generated until `POST /api/task/:id/start`. */
   @ApiOperation({ summary: 'Create a task' })
-  @ApiOkResponse({ type: TaskResponseDto })
+  @ApiCreatedResponse({ type: TaskResponseDto })
   @CompanyScope({ from: 'body', key: 'companyId', via: 'company' })
   @Post()
   async createTask(@Body() body: CreateTaskDto): Promise<TcpTask> {
@@ -112,6 +115,7 @@ export class TaskController {
     },
   })
   @CompanyScope({ from: 'param', key: 'id', via: 'task' })
+  @ApiCreatedResponse({ type: TaskMaterialResponseDto })
   @Post(':id/materials')
   @UseInterceptors(FileInterceptor('file'))
   async uploadMaterial(
@@ -133,7 +137,7 @@ export class TaskController {
    * Refused with `503` while the system is draining for shutdown.
    */
   @ApiOperation({ summary: 'Start a task' })
-  @ApiOkResponse({ type: TaskResponseDto })
+  @ApiAcceptedResponse({ type: TaskResponseDto })
   @CompanyScope({ from: 'param', key: 'id', via: 'task' })
   @Post(':id/start')
   @HttpCode(202)
@@ -147,7 +151,7 @@ export class TaskController {
    * cascades to its still-non-terminal assignments and their working agents.
    */
   @ApiOperation({ summary: 'Cancel a task' })
-  @ApiOkResponse({ type: TaskResponseDto })
+  @ApiAcceptedResponse({ type: TaskResponseDto })
   @CompanyScope({ from: 'param', key: 'id', via: 'task' })
   @Post(':id/cancel')
   @HttpCode(202)

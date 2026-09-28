@@ -3,10 +3,11 @@
 // orchestration — which call, in what order, and what it does with the
 // result — rather than a list of URLs.
 
-import type { TcpAssignment, TcpTask, TaskChangeSummary } from '@tcp/shared';
+import type { TcpTask, TaskChangeSummary } from '@tcp/shared';
 import { planIndexFromShortcode } from '@tcp/shared';
 import type { UUID } from 'crypto';
 import { TokenManager } from '../auth/token';
+import type { TaskDetailBody } from '../core/api';
 import { AuditRow } from '../render/audit-wire';
 import { AssignmentInfo, InitiateTaskSubmission, RoleOption } from '../tui/tui';
 
@@ -96,11 +97,8 @@ export async function fetchTaskDetail(
   companyId: string,
   taskId: string,
 ): Promise<TaskDetail> {
-  const [{ task, assignments }, roles] = await Promise.all([
-    tokens.request<{ task: TcpTask; assignments: TcpAssignment[] }>(
-      'GET',
-      `/api/task/${taskId}`,
-    ),
+  const [{ assignments, ...task }, roles] = await Promise.all([
+    tokens.request<TaskDetailBody>('GET', `/api/task/${taskId}`),
     tokens.request<{ id: string; name: string; slug: string }[]>(
       'GET',
       `/api/company/${companyId}/roles`,

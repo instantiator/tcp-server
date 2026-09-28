@@ -124,7 +124,12 @@ const operationsWithNoBody = (source: string): string[] => {
   return undeclared;
 };
 
-/** Operations whose 200 body is an object type with no properties. */
+/**
+ * Operations with any 2xx body that is an object type with no properties.
+ *
+ * Every success code, not just 200: a POST documented as 201 or 202 is just as
+ * unreadable when its DTO is empty.
+ */
 const operationsWithEmptyBody = (source: string): string[] => {
   const operations = members(
     blockAt(source, source.indexOf('export interface operations')),
@@ -136,8 +141,31 @@ const operationsWithEmptyBody = (source: string): string[] => {
     const responses = members(body).get('responses');
     if (responses === undefined) continue;
 
-    const success = members(responses).get('200');
-    if (success !== undefined && success.includes('Record<string, never>')) {
+    for (const [code, response] of members(responses)) {
+      if (code.startsWith('2') && response.includes('Record<string, never>')) {
+        empty.push(routes.get(name) ?? name);
+        break;
+      }
+    }
+  }
+  return empty;
+};
+
+/**
+ * Operations whose request body is an object type with no properties — a
+ * handler taking an interface (or an inline type) as its `@Body()`, which the
+ * plugin can't read any more than it can read an interface it returns.
+ */
+const operationsWithEmptyRequestBody = (source: string): string[] => {
+  const operations = members(
+    blockAt(source, source.indexOf('export interface operations')),
+  );
+  const routes = routesByOperation(source);
+  const empty: string[] = [];
+
+  for (const [name, body] of operations) {
+    const request = members(body).get('requestBody');
+    if (request?.includes('Record<string, never>')) {
       empty.push(routes.get(name) ?? name);
     }
   }
@@ -162,10 +190,6 @@ const NOT_READ_AS_JSON: readonly string[] = [
   'GET /api/agent/{id}/events',
   // Streams a stored object straight through to the caller.
   'GET /api/storage',
-  // Admin-only, and nothing in the web client reads it. Genuinely undescribed
-  // rather than deliberately so — give it an `@ApiOkResponse` if a view ever
-  // needs it.
-  'GET /api/system/shutdown',
 ];
 
 /** Only the routes a component could read through a hook. */
@@ -186,6 +210,9 @@ export interface paths {
     };
     "/api/bad/{id}": {
         get: operations["Thing_bad"];
+    };
+    "/internal/empty": {
+        post: operations["Thing_empty"];
     };
 }
 export interface operations {
@@ -211,9 +238,30 @@ export interface operations {
             };
         };
     };
+    Thing_empty: {
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
 }
 `;
     expect(operationsWithNoBody(sample)).toEqual(['GET /api/bad/{id}']);
+    expect(operationsWithEmptyBody(sample)).toEqual(['POST /internal/empty']);
+    expect(operationsWithEmptyRequestBody(sample)).toEqual([
+      'POST /internal/empty',
+    ]);
   });
 
   it('reads the real schema, so a generator change fails loudly', () => {
@@ -244,6 +292,17 @@ export interface operations {
     expect(operationsWithEmptyBody(schemaSource).filter(isBrowserRead)).toEqual(
       [],
     );
+  });
+
+  it('never publishes an empty object on any route, request or response', () => {
+    // Wider than the two tests above: every method, `/internal/*` included,
+    // because other tools are built from this description and not only the web
+    // client. Same fix — a DTO class (with class-validator decorators, for a
+    // request body) — then `npm run api:generate`.
+    const notJson = (route: string): boolean =>
+      !NOT_READ_AS_JSON.includes(route);
+    expect(operationsWithEmptyBody(schemaSource).filter(notJson)).toEqual([]);
+    expect(operationsWithEmptyRequestBody(schemaSource)).toEqual([]);
   });
 
   it('keeps the allowlist honest', () => {

@@ -8,11 +8,18 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiAcceptedResponse,
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CompanyMembershipGuard } from '../auth/company-membership.guard';
 import { AdminOnly } from '../auth/company-scope.decorator';
 import { ShutdownStatus, SystemDrainService } from './system-drain.service';
+import { ShutdownStatusResponseDto } from './dto/system.dto';
 
 /**
  * Fleet-level lifecycle control — the only endpoints that act on the whole
@@ -46,6 +53,7 @@ export class SystemController {
   @AdminOnly()
   @Post('shutdown')
   @HttpCode(HttpStatus.ACCEPTED)
+  @ApiAcceptedResponse({ type: ShutdownStatusResponseDto })
   async beginShutdown(@Query('force') force?: string): Promise<ShutdownStatus> {
     // Present-but-empty (`?force`) counts as true, so the flag reads naturally
     // as a bare query parameter; `?force=false` opts back out.
@@ -56,6 +64,7 @@ export class SystemController {
   @ApiOperation({ summary: 'Get the current shutdown state' })
   @AdminOnly()
   @Get('shutdown')
+  @ApiOkResponse({ type: ShutdownStatusResponseDto })
   async getShutdown(): Promise<ShutdownStatus> {
     return this.drain.status();
   }
@@ -70,6 +79,7 @@ export class SystemController {
   @ApiOperation({ summary: 'Cancel a shutdown in progress' })
   @AdminOnly()
   @Delete('shutdown')
+  @ApiOkResponse({ type: ShutdownStatusResponseDto })
   async cancelShutdown(): Promise<ShutdownStatus> {
     return (await this.drain.cancel()) ?? this.drain.status();
   }

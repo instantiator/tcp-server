@@ -19,6 +19,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
   ApiQuery,
@@ -126,7 +127,7 @@ export class CompanyController {
    * {@link CompanyUser} with `memberType: 'creator'`.
    */
   @ApiOperation({ summary: 'Create or replace a company' })
-  @ApiOkResponse({ type: CompanyResponseDto })
+  @ApiCreatedResponse({ type: CompanyResponseDto })
   @NoCompanyScope(
     'any authenticated caller may create a company; becomes its creator',
   )

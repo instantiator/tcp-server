@@ -206,7 +206,9 @@ describe('eavesdropAction', () => {
     it('prints the heading block once per agent change across a task history, not per row', async () => {
       mockedApiRequest
         .mockResolvedValueOnce({
-          task: { id: 'task-1', companyId: 'company-1', status: 'in-progress' },
+          id: 'task-1',
+          companyId: 'company-1',
+          status: 'in-progress',
           assignments: [
             { id: 'assignment-1', agentId: 'agent-1', roleId: 'role-1' },
             { id: 'assignment-2', agentId: 'agent-2', roleId: 'role-1' },
@@ -291,7 +293,9 @@ describe('eavesdropAction', () => {
     it('picks up a new assignment appearing on the task after an SSE assignment_changed event', async () => {
       mockedApiRequest
         .mockResolvedValueOnce({
-          task: { id: 'task-1', companyId: 'company-1', status: 'in-progress' },
+          id: 'task-1',
+          companyId: 'company-1',
+          status: 'in-progress',
           assignments: [
             { id: 'assignment-1', agentId: 'agent-1', roleId: 'role-1' },
           ],

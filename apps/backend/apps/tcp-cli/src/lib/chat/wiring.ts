@@ -104,18 +104,6 @@ export async function runTuiInteractive(
     void session
       .fetchTaskDetail(task.id)
       .then(({ task: detail, assignments }) => {
-        // fetchTaskDetail trusts the wire shape with no runtime validation
-        // (see session-api.ts) — a malformed/empty success body (e.g. a
-        // transient race around task creation) must be reported like any
-        // other failure, not left to throw an unhandled TypeError into the
-        // render loop.
-        if (!detail) {
-          session.reportPaneError(
-            session.companyId,
-            new Error('Task detail response was missing its task'),
-          );
-          return;
-        }
         tui.addTaskPane({
           id: detail.id,
           label: `Task: ${detail.shortcode}`,

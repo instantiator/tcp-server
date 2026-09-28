@@ -15,6 +15,8 @@ import {
 import {
   ApiConsumes,
   ApiBearerAuth,
+  ApiBody,
+  ApiCreatedResponse,
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
@@ -26,6 +28,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CompanyMembershipGuard } from '../auth/company-membership.guard';
 import { CompanyScope } from '../auth/company-scope.decorator';
 import { StorageService } from '../storage/storage.service';
+import { StoredObjectResponseDto } from './dto/storage-response.dto';
 
 /** Maximum upload size accepted by {@link StorageProxyController.upload}. */
 // eslint-disable-next-line no-useless-assignment -- read inside a parameter decorator's argument, which this rule's flow analysis doesn't see as a use.
@@ -88,7 +91,15 @@ export class StorageProxyController {
   @ApiOperation({ summary: 'Upload a file to shared storage' })
   @ApiConsumes('multipart/form-data')
   @CompanyScope({ from: 'query', key: 'path', via: 'storagePath' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
   @Post()
+  @ApiCreatedResponse({ type: StoredObjectResponseDto })
   @UseInterceptors(FileInterceptor('file'))
   async upload(
     @Query('path') objectPath: string,

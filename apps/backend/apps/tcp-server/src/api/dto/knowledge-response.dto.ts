@@ -87,3 +87,9 @@ export class KnowledgeChunkResponseDto {
   /** Cosine similarity score — 1.0 is identical, 0.0 is orthogonal. */
   similarity!: number;
 }
+
+/** `POST /api/company/:companyId/knowledge/reindex`: rebuilds were queued. */
+export class KnowledgeReindexResponseDto {
+  @ApiProperty({ enum: [true] })
+  reindexing!: true;
+}
