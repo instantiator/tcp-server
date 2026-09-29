@@ -37,7 +37,20 @@ The wizard checks your prerequisites, installs dependencies, asks a few configur
 
 ### How it fits together
 
-Create a company, and add some roles. Give each role an identity and some knowledge. When ready, create a new Task. The planning Agent will pick it up, create a Plan, and agents will start taking assignments. When all Assignments in the Plan are complete, a finalisation Agent runs - checking and preparing the final Task outputs. When this is done, they'll store the result in the company's shared document store, ready for you to retrieve.
+Your part...
+
+1. Create a new Company with a mission.
+2. Add some Roles, and give each role an identity and some knowledge.
+3. When ready, create a new Task for the Company.
+
+The automated part...
+
+4. An Agent with the assigned planning role will pick it up and create a Plan.
+5. Agents start taking assignments.
+6. When all Assignments in the Plan are complete, a finalisation Agent runs - checking and preparing the final outputs.
+
+> [!NOTE]
+> You'll find the result in the company's shared document store.
 
 ## Documentation
 
@@ -66,4 +79,3 @@ The code is written to be readable.
 * Pre-existing frameworks are used wherever possible
 * Libraries are selected for maturity and maintenance tells
 * Code quality is enforced by pre-commit, pre-push hooks, CI workflow and branch protections
-
