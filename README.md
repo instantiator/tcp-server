@@ -45,3 +45,25 @@ Good starting points...
 
 * [Documentation index](docs/index.md)
 * [Development](docs/development.md)
+
+## AI assisted coding
+
+This project is not vibe-coded, nor is it a fully human endeavour.
+
+The code in this repository was created with a prompt / planning / implementation cycle, and partially human reviewed. Design and development prompts are documented in [docs/prompts](./docs/prompts/).
+
+> [!NOTE]
+> Some work required repeated development cycles, and many plans were refined multiple times until ready - so the prompt sequence here is not the full story.
+
+### Coding standards
+
+Code quality properties are enforced by [dev-qual](https://github.com/instantiator/dev-qual), a collation of tools, scripts, skills, and guidance to help AI assisted coding agents produce high quality, reliable code.
+
+The code is written to be readable.
+
+* All code is required to meet quality standards and guidance
+* All code must be tested (with few exceptions)
+* Pre-existing frameworks are used wherever possible
+* Libraries are selected for maturity and maintenance tells
+* Code quality is enforced by pre-commit, pre-push hooks, CI workflow and branch protections
+
