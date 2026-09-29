@@ -1,4 +1,4 @@
-# TCP server
+# Tiny Computer People
 
 TCP manages one or more companies of AI agents that collaborate to complete tasks.
 
@@ -8,15 +8,21 @@ TCP manages one or more companies of AI agents that collaborate to complete task
 
 ## Quick start
 
+Get started by cloning this repository and launching the setup wizard.
+
 ```bash
-git clone https://github.com/instantiator/tcp-server.git && cd tcp-server
-./scripts/setup-wizard.sh
+git clone https://github.com/instantiator/tcp-server.git
+cd tcp-server ./scripts/setup-wizard.sh
 ```
 
-The wizard checks your prerequisites, installs dependencies, asks a few
-configuration questions, and starts the stack — then prints the service URLs
-and sign-in credentials. See **[Your first company](docs/your-first-company.md)**
-for what to do next.
+The wizard checks your prerequisites, installs dependencies, asks a few configuration questions, and starts the stack — then prints the service URLs and sign-in credentials. See **[Your first company](docs/your-first-company.md)** for what to do next.
+
+> [!TIP]
+> To clear down your database and use pre-existing test data, use:
+> 
+> ```bash
+> ./scripts/start-dev.sh --reset
+> ```
 
 ## Key concepts
 
@@ -29,283 +35,13 @@ for what to do next.
 | Plan       | A series of Assignments designed to complete a task.                           |
 | Assignment | A smaller piece of a Task, given to an Agent with a specific Role to complete. |
 
-### Common usage
+### How it fits together
 
-A task for the Company is initiated by the user. This is handed to a planner Agent, which creates a Plan - with Assignments for specific Agents.
+Create a company, and add some roles. Give each role an identity and some knowledge. When ready, create a new Task. The planning Agent will pick it up, create a Plan, and agents will start taking assignments. When all Assignments in the Plan are complete, a finalisation Agent runs - checking and preparing the final Task outputs. When this is done, they'll store the result in the company's shared document store, ready for you to retrieve.
 
-Each Assignment is handed to its Agent, which completes the Assignment. A QA Agent reviews the Assignment outputs. If approved, the Assignment is completed, and the next Assignment begins.
+## Documentation
 
-When all Assignments in the Plan are complete, a finalisation Agent runs - checking and preparing the final Task outputs.
+Good starting points...
 
-### Simplified architecture
-
-```mermaid
-flowchart LR
-  User(["User"])
-  CLI["tcp-cli"]
-
-  subgraph TCP["TCP"]
-    subgraph Server["TCP Server"]
-      API["API"]
-      subgraph DB["Database"]
-        Company["Company"]
-        Role["Role"]
-        Assignment["Assignment"]
-        Agent["Agent"]
-        Task["Task"]
-        Company -.->|belongs to| Role
-        Role -.->|has| Assignment
-        Task -.->|belongs to| Assignment
-        Assignment -.->|has| Agent
-      end
-      API --> Orchestration
-      Orchestration --> DB
-    end
-
-    subgraph AgentSvc["TCP Agent"]
-      AgentLoop["Agent loop"]
-    end
-
-    subgraph Services["MCP Services"]
-      direction TB
-      Storage[("Storage")]
-      Memory[("Memory")]
-      Tasks["Tasks"]
-      Interactions["Interactions"]
-      Storage ~~~ Memory ~~~ Tasks ~~~ Interactions
-    end
-
-    AgentLoop --> Services
-      Agent --> Queue[("Queue")]
-  end
-
-  User --> CLI
-  CLI -->|request| API
-  Queue --> AgentLoop
-```
-
-> ### Simplified summary
->
-> - A user talks to TCP using **TCP CLI**, which calls **TCP Server**'s API.
-> - Companies, Roles, Agents, Tasks, and Assignments are persisted in the database.
-> - An agent is a running instance combining a role and assignment, executing in **TCP Agent**.
-> - Agents have access to **MCP Services** administering shared storage, individual knowledge, tasks and assignments.
-
-### Applications
-
-| Application          | Purpose                                                                                           |
-| -------------------- | ------------------------------------------------------------------------------------------------- |
-| tcp-cli              | User-facing CLI interface to simplify interactions with tcp-server.                               |
-| tcp-server           | API and orchestration service for the system.                                                     |
-| tcp-agent            | Manages agents and the agent loop. Interacts with tcp-server to receive and complete assignments. |
-| tcp-mcp-interactions | MCP tools allowing agents to ask users questions and consult other agent roles.                   |
-| tcp-mcp-tasks        | MCP tools allowing agents to complete their assignment — plan, submit work, or assure QA.         |
-| tcp-mcp-memory       | MCP tools allowing agents to retrieve memory from their stored expertise.                         |
-| tcp-mcp-storage      | MCP tools allowing agents interact with shared storage.                                           |
-
-## Getting started
-
-Follow the steps in **[Your first company](docs/your-first-company.md)** to populate and interact with a simple agent in a company. See the [Quick start](#quick-start) above to get a stack running first.
-
----
-
-# Developer notes
-
-See **[Developer setup checklist](docs/setup-checklist.md)** for a step-by-step first-time setup guide.
-
-## System architecture
-
-| Concern               | Technology                                                                 |
-| --------------------- | -------------------------------------------------------------------------- |
-| Framework             | NestJS 11                                                                  |
-| ORM                   | TypeORM                                                                    |
-| Database (production) | PostgreSQL 16 + pgvector                                                   |
-| Database (unit tests) | better-sqlite3 (in-memory)                                                 |
-| Auth                  | OAuth2/OIDC (Zitadel default)                                              |
-| Object storage        | MinIO (via [Silo](https://github.com/pgsty/silo), a MinIO-compatible fork) |
-| Task queue            | Redis (BullMQ)                                                             |
-| Schema export         | ts-json-schema-generator                                                   |
-
-See [docs/ADRs/](docs/ADRs/) for system design decisions.
-
-### Main service
-
-The main service topology.
-
-```mermaid
-flowchart TD
-  User["User / Browser"]
-  TcpServer["tcp-server\n(NestJS)"]
-  TcpAgent["tcp-agent\n(NestJS) :3001"]
-  Redis[(Redis :6379)]
-  Zitadel["Zitadel :8080\n(optional --profile auth)"]
-  Postgres[(PostgreSQL\n+ pgvector :5432)]
-  MinIO[(MinIO :9000\nconsole :9001)]
-  McpStorage["tcp-mcp-storage\n:3010"]
-  McpMemory["tcp-mcp-memory\n:3011"]
-  McpInteract["tcp-mcp-interactions\n:3012"]
-  McpTasks["tcp-mcp-tasks\n:3013"]
-
-  subgraph TCP["TCP (containers)"]
-      Server ~~~ Dbs ~~~ Agent ~~~ ThirdParty
-  end
-
-  subgraph Server["Server"]
-      TcpServer
-  end
-
-  subgraph Dbs["Persistence"]
-      Postgres ~~~ Redis
-  end
-
-
-  subgraph Agent["Agent"]
-      TcpAgent
-      subgraph MCP
-        McpStorage ~~~ McpMemory ~~~ McpInteract ~~~ McpTasks
-      end
-  end
-
-  subgraph ThirdParty["3rd-party services"]
-      MinIO ~~~ Zitadel
-  end
-
-  User -->|REST API :3000| TcpServer
-  TcpServer -->|OIDC token\nvalidation| Zitadel
-  TcpServer -->|S3 API| MinIO
-  TcpServer -->|BullMQ jobs| Redis
-  TcpAgent -->|BullMQ results| Redis
-  TcpServer -->|TypeORM| Postgres
-  TcpAgent -->|TypeORM| Postgres
-  TcpAgent -->|HTTP /mcp| McpStorage
-  TcpAgent -->|HTTP /mcp| McpMemory
-  TcpAgent -->|HTTP /mcp| McpInteract
-  TcpAgent -->|HTTP /mcp| McpTasks
-  McpStorage -->|HTTP /internal/storage/*\nX-Internal-Api-Key| TcpServer
-  McpTasks -->|HTTP /internal/*\nX-Internal-Api-Key| TcpServer
-```
-
-> #### Service overview
->
-> - **tcp-server** is the REST API and orchestration layer
-> - **tcp-server** communicates directly with the authorisation service, and storage service
-> - **tcp-server** and **tcp-agent** use Postgres to store and manage state, and Redis with BullMQ queues to communicate
-> - **tcp-agent** consumes BullMQ jobs and runs the LangGraph agent loop.
-> - Four MCP servers provide tool access to agents:
->   - **tcp-mcp-storage** proxies file operations to tcp-server's internal storage endpoints
->   - **tcp-mcp-memory** manages RAG access to embeddings from role-knowledge and company-knowledge, and memories
->   - **tcp-mcp-interactions** lets agents ask users questions and consult other agent roles
->   - **tcp-mcp-tasks** lets agents complete their assignment — plan a task, submit finished work, or assure another agent's work (mode-gated)
-> - **PostgreSQL** (with pgvector) stores entities, agent checkpoints, and knowledge embeddings
-> - **MinIO** stores knowledge documents, task files, and context-overflow data
-> - **Zitadel** is an optional auth service, which starts if the `auth` profile is specified (ie. with `--profile auth`)
-
-### Agent loop
-
-How a single agent turn flows through the system.
-
-```mermaid
-sequenceDiagram
-  participant U as User / BullMQ
-  participant S as tcp-server / tcp-agent
-  participant DB as PostgreSQL
-  participant E as Embedding Model
-  participant MCP as MCP Servers
-  participant LLM as LLM Provider
-
-  U->>S: message or dispatched job
-  S->>DB: load LangGraph checkpoint + role/company
-  S->>E: embed query → cosine search
-  DB-->>S: RAG chunks (prompt part 5)
-  S->>MCP: loadTools() for role.mcpServerList
-  MCP-->>S: DynamicStructuredTool[]
-  S->>LLM: invoke (system + role + company + services + task + RAG)
-  LLM-->>S: response or tool_call
-  alt tool call
-    S->>MCP: callTool(name, args)
-    MCP-->>S: result
-    S->>LLM: invoke with tool result
-    LLM-->>S: final response
-  end
-  S->>DB: save checkpoint + audit events
-  S-->>U: response text
-```
-
-> #### Agent turn flow
->
-> The agent receives a message or is dispatched as a background job. The system loads the LangGraph checkpoint (conversation history) from PostgreSQL, retrieves relevant RAG chunks via pgvector, and loads MCP tools for the role. The LLM is invoked with the assembled prompt. If the model requests a tool call, the tool is executed via the appropriate MCP server and the result is fed back. The final response and checkpoint are persisted.
-
-### RAG subsystem
-
-How knowledge documents flow from upload to retrieval.
-
-```mermaid
-flowchart TD
-  subgraph Upload
-    CLI[tcp-cli store-knowledge] -->|POST /api/role/:id/knowledge| API[tcp-server]
-    API -->|store raw file| MinIO2[(MinIO\nknowledge/role_slug/)]
-    API -->|chunk 800 tokens| Chunker[Chunker]
-    Chunker -->|embed /v1/embeddings| Embed[Embedding Model]
-    Embed -->|INSERT vector| PG[(pgvector\nknowledge_chunk)]
-  end
-  subgraph Retrieval
-    Query[Agent initial prompt] -->|embed| Embed2[Embedding Model]
-    Embed2 -->|cosine similarity ≥ threshold| PG
-    PG -->|top-k chunks| Part5[Prompt part 5]
-  end
-```
-
-> RAG subsystem: knowledge documents are uploaded via the CLI, chunked into ~800-token segments, embedded using the company's embedding model, and stored as vectors in PostgreSQL (pgvector). When an agent runs, the initial prompt is embedded and the most similar chunks above the role's cosine threshold (`runConfig.ragThreshold`, default `0.35`) are retrieved and injected into the prompt. The right threshold depends on the embedding model — see [Tuning RAG retrieval](docs/development.md#tuning-rag-retrieval). The embedding model is configured separately from the chat LLM via `company.embeddingConfig`.
-
-### Documentation
-
-[docs/index.md](docs/index.md) lists every document with a one-line description
-— start there. The ones you are most likely to want directly:
-
-| Document                                 | For                                                 |
-| ---------------------------------------- | --------------------------------------------------- |
-| [Development](docs/development.md)       | Tech stack, source layout, everyday commands        |
-| [tcp-cli reference](docs/tcp-cli.md)     | Every CLI verb and flag                             |
-| [Authentication](docs/authentication.md) | OIDC setup, tokens, external identity providers     |
-| [Tasks and Assignments](docs/tasks.md)   | The task/assignment model and orchestration flow    |
-| [Testing](docs/testing.md)               | The six test tiers and how to run each              |
-| [ADRs](docs/ADRs/)                       | Architectural decisions, with implementation status |
-
-## Testing
-
-See **[Testing](docs/testing.md)** for the testing strategy and full tier descriptions.
-See **[Scripts](docs/scripts.md)** for all available scripts.
-
-Quick reference:
-
-```bash
-./scripts/run-unit-tests.sh         # no services required
-./scripts/run-integration-tests.sh  # starts postgres, redis, minio, stub-llm
-./scripts/run-e2e-tests.sh          # starts postgres, redis, minio
-./scripts/run-api-tests.sh          # starts full stack including Zitadel
-./scripts/run-smoke-tests.sh        # starts full stack including Zitadel
-./scripts/run-browser-tests.sh      # drives the built web app in Chromium
-./scripts/run-all-tests.sh          # all six tiers
-```
-
-## Commands reference
-
-| Command                      | Purpose                                                                                                    |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `npm run build`              | Compile all apps to `dist/`, then regenerate the schema and license report                                 |
-| `npm run build tcp-server`   | Compile tcp-server only                                                                                    |
-| `npm run build tcp-agent`    | Compile tcp-agent only                                                                                     |
-| `npm run start:dev`          | Start tcp-server with hot reload                                                                           |
-| `npm run lint`               | ESLint with auto-fix                                                                                       |
-| `npm run format`             | Prettier over `apps/`, `libs/`, `test/`, and `docs/`                                                       |
-| `npm test`                   | Unit tests                                                                                                 |
-| `npm run test:e2e`           | E2E tests                                                                                                  |
-| `npm run test:integration`   | Integration tests (needs Docker)                                                                           |
-| `npm run test:api`           | API contract tests (needs `docker compose up --profile auth`)                                              |
-| `npm run test:smoke`         | Smoke tests (needs `docker compose up --profile auth`)                                                     |
-| `npm run schema:generate`    | Regenerate [schemas/schema.json](schemas/schema.json)                                                      |
-| `npm run licenses:generate`  | Regenerate [docs/licenses.md](docs/licenses.md)                                                            |
-| `npm run migration:generate` | Generate a new TypeORM migration                                                                           |
-| `npm run migration:run`      | Run pending migrations                                                                                     |
-| `npm run migration:revert`   | Revert the last migration                                                                                  |
-| `npm run setup`              | Wizard: installs, configures, and starts the stack (see [docs/scripts.md](docs/scripts.md#setup-wizardsh)) |
+* [Documentation index](docs/index.md)
+* [Development](docs/development.md)
