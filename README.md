@@ -63,7 +63,7 @@ Good starting points...
 
 This project is not vibe-coded, nor is it a fully human endeavour.
 
-The code in this repository was created with a prompt / planning / implementation cycle, and partially human reviewed. Design and development prompts are documented in [docs/prompts](./docs/prompts/).
+The code in this repository was created with a prompt / planning / implementation cycle, with human review points. Design and development prompts are documented in [docs/prompts](./docs/prompts/).
 
 > [!NOTE]
 > Some work required repeated development cycles, and many plans were refined multiple times until ready - so the prompt sequence here is not the full story.
