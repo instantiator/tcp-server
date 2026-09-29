@@ -1,3 +1,5 @@
+* `setup-wizard.sh` offers a connectivity check for the LLM provider - it'd be good to break that out into an independent tool
+
 * create `CONTRIBUTING.md`
 
 * setup wizard should offer configurations for popular inference providers out of the box
