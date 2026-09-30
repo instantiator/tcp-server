@@ -97,3 +97,15 @@ So the run pays full export cost for a cache that cannot hit on the layer that
 matters. Worth measuring `mode=min` against the current setting, and worth
 checking whether the branch scoping of the Actions cache means a PR ever reads
 what its base branch wrote in the first place.
+
+## Remote LLM providers are untested against a real key
+
+The provider catalogue (`libs/tcp-shared/src/llm/provider-catalogue.ts`, 004.01) offers OpenAI, Anthropic, Google, Azure, Bedrock, Mistral and OpenRouter through their OpenAI-compatible APIs. Their base URLs and starter models were checked against each provider's documentation on 2026-09-30, but only LM Studio has ever run TCP's agents. Tool calling and structured output through a compatibility layer (Anthropic's especially) may not behave like the native API.
+
+**Act when:** someone first uses a real key for one of these providers — run `./scripts/setup-wizard.sh --test-config`, then a chat and a task with tools, and correct that catalogue entry. Before any release, do this for at least OpenAI and Anthropic.
+
+## A second instance with the bundled Zitadel can't run alongside the first
+
+The wizard's port question derives DB, MinIO and Zitadel ports from the API port (API+2432, +6000, +5080) and says so, but writes them to the env file only when overridden, and nothing derives them at runtime. So `.env.<second>` still binds 5432, 9000, 9001, 8080, 3003 and 5173, and `start-deployment.sh`'s port check refuses to start while `tcp-dev` runs. Writing the derived ports isn't enough on its own: `start-deployment.sh`'s `zit()` calls Zitadel on a hardcoded `localhost:8080`, and `docker-compose.yml` sets `ZITADEL_EXTERNALPORT: 8080`, so a Zitadel on any other port would fail its bootstrap in a less obvious way. Found in 004.01 and left, because fixing it means designing the Zitadel port through compose, the bootstrap and the issuer URL.
+
+**Act when:** someone needs two stacks running at once (a second wizard instance, or the test tiers beside `tcp-dev`). Until then, stop one stack before starting another (`./scripts/stop-dev.sh --project <name>`), which the port check's message now says.

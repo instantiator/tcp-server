@@ -109,7 +109,7 @@ The LLM used for each role is determined by checking, in order:
 _The first found is used._ This allows you to individualise the configuration for your agents (eg. coding agents might need a more powerful, coding-capable model, and others may be able to work with lighter, simpler models).
 
 > [!TIP]
-> For the simplest configuration, set the `LLM_*` variables in your `.env` file.
+> The simplest route is the setup wizard (`./scripts/setup-wizard.sh`): pick a provider from its list, give it your API key (or, for a local server, follow its install steps), and it writes the `LLM_*` and `EMBEDDING_*` variables for you. Check them afterwards with `./scripts/setup-wizard.sh --test-config`. To set them by hand instead, see below.
 
 > [!NOTE]
 > See `.env.example` for the available environment variables.
@@ -124,13 +124,13 @@ Here are some of the popular choices:
 <details>
 <summary><b>LM Studio example...</b></summary>
 
-These parameters are an example that you can set in `.env.dev` - they match an LM Studio installation that has downloaded the `qwen3.5-9b` model.
+These parameters are an example that you can set in `.env.dev` - they match an LM Studio installation that has downloaded the `gemma-4-e4b` model (the wizard's suggested starter model).
 
-LM Studio also allows you to set an API key through its configuration, and you can provide that to TCP with with the `LLM_API_KEY` parameter.
+LM Studio also allows you to set an API key through its configuration, and you can provide that to TCP with the `LLM_API_KEY` parameter.
 
 ```env
 LLM_PROVIDER=lm-studio
-LLM_MODEL=qwen/qwen3.5-9b
+LLM_MODEL=google/gemma-4-e4b
 LLM_BASE_URL=http://host.docker.internal:1234/v1
 LLM_API_KEY=<your API key goes here>
 ```

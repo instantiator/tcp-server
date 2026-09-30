@@ -59,12 +59,26 @@ Takes a fresh clone to a running stack (`npm run setup` runs the same script):
 1. If [nvm](https://github.com/nvm-sh/nvm) is installed, runs `nvm install`, which reads `.nvmrc` and selects that Node version.
 2. Checks for `node`, `docker`, `jq`, and `curl`, then checks the Node version against `.nvmrc` and that Docker is running. Each failure prints a clear error.
 3. Runs `npm ci` when `node_modules` is missing or older than `package-lock.json`.
-4. Asks the configuration questions — instance name, ports, LLM and embedding providers (or the bundled stub LLM), OIDC, resource limits, and which Docker services to run. Every question has a default, and `?` shows help. Probes the chosen embedding model for its dimension, and generates a Docker Compose override when the answers need one. Writes a commented `.env.<instance>` plus a gitignored `.env.<instance>.local` for the secrets.
+4. Asks the configuration questions — instance name, ports, the chat and embedding models (or the bundled stub LLM), OIDC, resource limits, and which Docker services to run. Every question has a default, and `?` shows help. Writes a commented `.env.<instance>` plus a gitignored `.env.<instance>.local` for the secrets.
+   - **Models** start from a list of providers (OpenAI, Anthropic, Google, Azure, Bedrock, Mistral, OpenRouter, LM Studio, Ollama, or any OpenAI-compatible server). A remote provider needs only its API key (plus a region or resource name for Bedrock and Azure). For a local one, the wizard offers install steps and a starter model, and turns a `localhost` URL into `host.docker.internal`, which is how the containers reach your machine.
+   - Each model is tested with a real request. The context size is read from LM Studio or Ollama, or from [models.dev](https://models.dev) for a remote model; the embedding dimension comes from the test request.
 5. Asks "Start the stack now?" (default yes) and, if you agree, runs `./scripts/start-dev.sh --env .env.<instance> --project tcp-<instance>` — the default instance is `dev`, so this is `.env.dev` and project `tcp-dev`.
+6. Asks "Test the configuration now?" (default yes) — the same checks as `--test-config`, below.
 
 ```bash
 npm run setup              # or: ./scripts/setup-wizard.sh
 ```
+
+### --test-config
+
+Checks an existing instance's connections instead of running the wizard, one line per check, and exits non-zero if any fail:
+
+```bash
+./scripts/setup-wizard.sh --test-config                      # .env.dev (else .env.testing), project tcp-dev
+./scripts/setup-wizard.sh --test-config --env .env.staging --project tcp-staging
+```
+
+It checks the env file's required values, Docker, tcp-server's own checks (database, Redis, MinIO, OIDC), the OIDC issuer from your machine, tcp-agent and the four MCP servers, the web client, and the chat and embedding models. The model requests are sent from inside tcp-agent, with its environment, because that's the address the agents use: a `localhost` URL that works on your machine points at the container itself there. A stopped stack skips the checks that need it.
 
 Manual `.env` editing remains a supported fallback — the wizard is a
 convenience, not a gate. See

@@ -24,6 +24,8 @@ The spec requires that each `TcpAgent` can use "whichever LLM service is specifi
 
 ### LM Studio compatibility
 
+_(Generalised to every provider — see [below](#amendments-as-implemented-p03-004-01-00).)_
+
 LM Studio exposes an OpenAI-compatible chat completions endpoint. Configure it as:
 
 ```typescript
@@ -61,3 +63,13 @@ tcp-agent resolves the `BaseChatModel` instance at task step startup using this 
 
 - Tool calling support varies by provider and model. ADR-002's LangGraph loop depends on tool calling (function calling). Verify that any configured model supports it before assigning it to a role that uses tools.
 - LM Studio models that lack structured output support may require prompt-engineering workarounds. Note this in role documentation when a local model is used.
+
+<a id="amendments-as-implemented-p03-004-01-00"></a>
+
+## Amendments as implemented (phase 03, 004.01.00) — every provider through its OpenAI-compatible API
+
+- **Provider ids come from one catalogue.** `libs/tcp-shared/src/llm/provider-catalogue.ts` lists the providers TCP supports, with each one's base URL, the fields a user supplies (API key, AWS region, Azure resource), starter chat and embedding models, and setup steps for local servers. The ids are `openai`, `anthropic`, `google`, `azure`, `amazon-bedrock`, `mistral`, `openrouter`, `lm-studio`, `ollama` and `openai-compatible`. It is plain data, so the setup wizard, CLI, TUI and web client can share it.
+- **Every provider is a `ChatOpenAI` pointed at `baseUrl`.** `buildChatModel` accepts any catalogue id and passes `baseUrl` through. Before this, `openai` silently ignored `baseUrl`, and anything other than `openai` or `lm-studio` threw. An unknown id still throws. Local servers get a placeholder key when none is set. "Adding a new provider" (Consequences, above) is now a catalogue entry, not a factory case.
+- **No native clients.** Anthropic, Google, Azure and Bedrock are reached through their OpenAI-compatible endpoints rather than `@langchain/anthropic` and similar, so no dependencies were added. The cost: Anthropic describes its compatibility layer as meant for testing, not production, and provider-specific features (prompt caching, for example) aren't available. Revisit if a provider's compatibility layer blocks real use.
+- **Embeddings are limited to 2000 dimensions.** The vector indexes are pgvector `ivfflat`, which can't index wider vectors, so the catalogue lists no wider embedding model (`MAX_EMBEDDING_DIMENSION`). Anthropic, Bedrock's compatible API and OpenRouter offer no embedding models, and Gemini's are 3072 wide by default.
+- **Only LM Studio has been run for real.** The other providers' URLs were checked against their documentation on 2026-09-30, not against a live key. See [outstanding issues](../outstanding-issues.md).
