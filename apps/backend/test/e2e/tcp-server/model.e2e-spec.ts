@@ -38,23 +38,28 @@ describe('ModelController (e2e)', () => {
           expect(Array.isArray(body)).toBe(true);
         }));
 
-    it('returns 201 for a model list (reachability result reflects whether LM Studio is up)', () =>
+    // No network: an unknown provider fails in buildChatModel, before any
+    // request. A real endpoint here would make the test depend on what's
+    // running on the machine (and a refused connection is retried for longer
+    // than the test timeout).
+    it('returns 201 with a per-model result, reporting a failure as incompatible', () =>
       request(app.getHttpServer())
         .post('/api/model/check')
         .set('Authorization', `Bearer ${jwt}`)
         .send({
           models: [
-            {
-              provider: 'openai',
-              model: 'gpt-4o',
-              apiKey: 'stub-key',
-              baseUrl: 'http://localhost:1234/v1',
-            },
+            { provider: 'no-such-provider', model: 'any', apiKey: 'stub-key' },
           ],
         })
         .expect(201)
         .expect(({ body }) => {
-          expect(Array.isArray(body)).toBe(true);
+          expect(body).toEqual([
+            expect.objectContaining({
+              provider: 'no-such-provider',
+              compatible: false,
+              error: 'Unsupported LLM provider: no-such-provider',
+            }),
+          ]);
         }));
   });
 });
