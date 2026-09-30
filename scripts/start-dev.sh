@@ -31,7 +31,9 @@ Options:
   -p, --project <name>
                      Docker Compose project name (default: tcp-dev). Each
                      project has its own containers, volumes and Zitadel
-                     bootstrap, so a second instance never touches the first.
+                     bootstrap, so a second instance never touches the first's
+                     data. Stop one before starting another: the bundled
+                     Zitadel always uses port 8080.
   --rebuild          Force a Docker image rebuild (passes --build to docker compose up)
   --dev-web          Serve the web client from a Vite dev server instead of the
                      built bundle: starts it on the host and points tcp-web at

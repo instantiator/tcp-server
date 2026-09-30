@@ -88,7 +88,7 @@ async function main(): Promise<void> {
   console.log(`  Instance:      ${config.instanceName}`);
   console.log(`  Env file:      ${config.envFileName}`);
   console.log(
-    `  Ports:         API=${config.ports.api}, DB=${config.ports.db}, MinIO=${config.ports.minio}, Zitadel=${config.ports.zitadel}`,
+    `  Ports:         API=${config.ports.api}, DB=${config.ports.db}, MinIO=${config.ports.minio}/${config.ports.minioConsole}, web=${config.ports.web}, agent=${config.ports.agent}`,
   );
   console.log(
     `  Embedding:     ${config.embeddingModel ? `${config.embeddingModel.provider}/${config.embeddingModel.model}` : 'not configured'}`,

@@ -49,24 +49,24 @@ Joi schemas in each app import defaults from `defaults.ts` via `@tcp/shared/conf
 
 **User-configurable variables** (in `.env.*` files):
 
-| Variable                                | Default                 | Notes                                              |
-| --------------------------------------- | ----------------------- | -------------------------------------------------- |
-| `EXPOSE_PORT_API`                       | 3000                    | Base port; others derived via offsets              |
-| `EXPOSE_PORT_DB`                        | 5432                    | Formula: API + 2432                                |
-| `EXPOSE_PORT_MINIO`                     | 9000                    | Formula: API + 6000                                |
-| `EXPOSE_PORT_ZITADEL`                   | 8080                    | Formula: API + 5080                                |
-| `DB_USER`                               | tcp                     |                                                    |
-| `DB_PASSWORD`                           | dev-password            | Renamed from `POSTGRES_PASSWORD`                   |
-| `DB_NAME`                               | tcp                     | New variable                                       |
-| `MINIO_ACCESS_KEY`                      | tcp-access-key          |                                                    |
-| `MINIO_SECRET_KEY`                      | tcp-secret-key          |                                                    |
-| `MINIO_BUCKET_PREFIX`                   | tcp                     |                                                    |
-| `INTERNAL_API_KEY`                      | change-me-in-production |                                                    |
-| `OIDC_ISSUER_URL`                       | —                       | Absent = derives from `EXPOSE_PORT_ZITADEL`        |
-| `OIDC_CLIENT_ID`                        | —                       | Generated/provider-issued → `<env>.local` (see §7) |
-| `OIDC_CLIENT_SECRET`                    | —                       | Generated/provider-issued → `<env>.local` (see §7) |
-| `TEST_CLIENT_ID` / `TEST_CLIENT_SECRET` | —                       | Machine test user → `<env>.local` (see §7)         |
-| `EMBEDDING_DIMENSION`                   | 768                     |                                                    |
+| Variable                                | Default                 | Notes                                                               |
+| --------------------------------------- | ----------------------- | ------------------------------------------------------------------- |
+| `EXPOSE_PORT_API`                       | 3000                    | Independent ([corrected](#amendments-as-implemented-p03-004-01-00)) |
+| `EXPOSE_PORT_DB`                        | 5432                    | Independent                                                         |
+| `EXPOSE_PORT_MINIO`                     | 9000                    | Independent                                                         |
+| `EXPOSE_PORT_ZITADEL`                   | 8080                    | Fixed at 8080 for the bundled Zitadel                               |
+| `DB_USER`                               | tcp                     |                                                                     |
+| `DB_PASSWORD`                           | dev-password            | Renamed from `POSTGRES_PASSWORD`                                    |
+| `DB_NAME`                               | tcp                     | New variable                                                        |
+| `MINIO_ACCESS_KEY`                      | tcp-access-key          |                                                                     |
+| `MINIO_SECRET_KEY`                      | tcp-secret-key          |                                                                     |
+| `MINIO_BUCKET_PREFIX`                   | tcp                     |                                                                     |
+| `INTERNAL_API_KEY`                      | change-me-in-production |                                                                     |
+| `OIDC_ISSUER_URL`                       | —                       | Absent = derives from `EXPOSE_PORT_ZITADEL`                         |
+| `OIDC_CLIENT_ID`                        | —                       | Generated/provider-issued → `<env>.local` (see §7)                  |
+| `OIDC_CLIENT_SECRET`                    | —                       | Generated/provider-issued → `<env>.local` (see §7)                  |
+| `TEST_CLIENT_ID` / `TEST_CLIENT_SECRET` | —                       | Machine test user → `<env>.local` (see §7)                          |
+| `EMBEDDING_DIMENSION`                   | 768                     |                                                                     |
 
 **Docker-internal variables** (defined in `docker-compose.yml` via YAML anchors):
 
@@ -260,6 +260,7 @@ See [010.8.4 - config resolution plan](../prompts/phase%2001%20-%20service/010.8
 - **Context size is looked up.** From LM Studio's or Ollama's own API for a local model, else from models.dev. The user is asked only when neither answers. Skipping the embedding model warns that knowledge documents can't be uploaded without one.
 - **`--test-config`.** `scripts/setup-wizard.sh --test-config [--env <file>] [--project <name>]` checks an existing configuration instead of running the wizard. It covers tcp-server's database, Redis, MinIO and OIDC checks, the OIDC issuer from the host, tcp-agent and the MCP servers, the web client, and a real chat and embedding request made from inside tcp-agent. The wizard offers it after starting the stack.
 - **Failures explain themselves.** The wizard maps Ctrl+C, permission errors and anything else to a one-line message, and says how to re-run a failed start. `scripts/lib/errors.sh` gives `start-dev.sh` and `start-deployment.sh` a named step and a hint for every failure, and `json_field` in place of bare `jq`. The unexplained `jq: parse error` a fresh machine produced came from `tcp-cli.sh` building itself onto stdout, which the seeding read as JSON; the build now writes to stderr.
+- **Ports are independent, and the wizard now says so.** The table above once gave formulas (DB = API + 2432, MinIO = API + 6000, Zitadel = API + 5080). The wizard printed them and wrote a derived port only when it was overridden, but nothing ever derived one at runtime, so every instance quietly used 5432, 9000 and 8080. Each port now has its own default in `defaults.ts`, the wizard shows them all and writes them all (API, DB, MinIO, MinIO console, web, agent), and it asks only whether to change any. The bundled Zitadel can't move off 8080 (`ZITADEL_EXTERNALPORT` and the bootstrap's `zit()` both assume it), so the wizard says that, and `start-deployment.sh` refuses any other `EXPOSE_PORT_ZITADEL` while the auth profile is on. Two stacks with the bundled Zitadel still can't run at once — see [outstanding issues](../outstanding-issues.md).
 - **Compose.** tcp-server, tcp-agent and tcp-mcp-memory map `host.docker.internal` to the host (needed on Linux), and `EMBEDDING_DIMENSION` now reaches the containers; the wizard's value never did before.
 
 ## Implementation Notes

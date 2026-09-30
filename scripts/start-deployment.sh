@@ -143,6 +143,19 @@ if [[ -n "${ZITADEL_ADMIN_PASSWORD:-}" ]]; then
   AUTH_PROFILE="--profile auth"
 fi
 
+# The bundled Zitadel only works on host port 8080: its external port
+# (ZITADEL_EXTERNALPORT in docker-compose.yml) and the bootstrap below (zit())
+# both assume it, and a different EXPOSE_PORT_ZITADEL would publish it where
+# neither looks. Refuse it here rather than fail halfway through the bootstrap.
+if [[ -n "$AUTH_PROFILE" && "${EXPOSE_PORT_ZITADEL:-8080}" != 8080 ]]; then
+  cat >&2 <<EOF
+ERROR: EXPOSE_PORT_ZITADEL is ${EXPOSE_PORT_ZITADEL}, but the bundled Zitadel only works on port 8080.
+Remove EXPOSE_PORT_ZITADEL from $ENV_FILE. If another stack holds 8080, stop it
+first: ./scripts/stop-dev.sh --project <name>
+EOF
+  exit 1
+fi
+
 # Stub LLM: runs in this stack only when asked (the setup wizard's "no real
 # model" option). The test tiers start it themselves.
 STUB_PROFILE=""

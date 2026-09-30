@@ -148,13 +148,13 @@ wizard runs once it's written your `.env.<instance>` file.
 
 **Options:**
 
-| Flag                     | Description                                                                                                                                    | Default                                    |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| `-e`, `--env <path>`     | Environment file                                                                                                                               | `.env.dev` if present, else `.env.testing` |
-| `-p`, `--project <name>` | Docker Compose project name. Each project has its own containers, volumes and Zitadel bootstrap, so a second instance never touches the first. | `tcp-dev`                                  |
-| `--rebuild`              | Force a Docker image rebuild                                                                                                                   | off                                        |
-| `--dev-web`              | Serve the web client from a Vite dev server on the host instead of the built bundle (HMR)                                                      | off                                        |
-| `--reset`                | Tear down the project first (containers **and** volumes — every database is wiped), then seed the fresh stack with test companies and roles    | off                                        |
+| Flag                     | Description                                                                                                                                                                                                                     | Default                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `-e`, `--env <path>`     | Environment file                                                                                                                                                                                                                | `.env.dev` if present, else `.env.testing` |
+| `-p`, `--project <name>` | Docker Compose project name. Each project has its own containers, volumes and Zitadel bootstrap, so a second instance never touches the first's data. Two can't run at once, though: the bundled Zitadel always uses port 8080. | `tcp-dev`                                  |
+| `--rebuild`              | Force a Docker image rebuild                                                                                                                                                                                                    | off                                        |
+| `--dev-web`              | Serve the web client from a Vite dev server on the host instead of the built bundle (HMR)                                                                                                                                       | off                                        |
+| `--reset`                | Tear down the project first (containers **and** volumes — every database is wiped), then seed the fresh stack with test companies and roles                                                                                     | off                                        |
 
 Credentials for the Zitadel org and test users are read from the env file
 (`TEST_USERNAME`, `TEST_PASSWORD`). Add or override them there.
