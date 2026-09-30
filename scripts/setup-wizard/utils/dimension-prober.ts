@@ -1,54 +1,82 @@
 import type { LlmProviderConfig } from '../types';
 
 /**
- * Result of probing an embedding model for its vector dimension.
+ * How long a probe waits. Generous because a local server (LM Studio, Ollama)
+ * loads the model on the first request, which took 28s for a 4B model here.
+ */
+export const PROBE_TIMEOUT_MS = 60_000;
+
+/**
+ * Result of probing an embedding endpoint for its vector width. On failure
+ * this carries the raw diagnostic (status/body, or the thrown error) rather
+ * than a formatted message — {@link describeProbeError} in `model-validator`
+ * turns it into the one the wizard shows.
  */
 export interface DimensionProbeResult {
-  /** The detected vector dimension, or null if the probe failed. */
+  /** The detected width, or `null` if the probe failed. */
   dimension: number | null;
-  /** Human-readable error message if the probe failed. */
-  error?: string;
+  /** The HTTP status, when the server responded but not with 2xx. */
+  status?: number;
+  /** The response body, or a description of what was wrong with it. */
+  body?: string;
+  /** The thrown error, when the request itself failed (network, timeout). */
+  error?: unknown;
 }
 
 /**
- * Sends a test embedding request to the configured endpoint and returns the
- * vector dimension from the response. Uses the OpenAI-compatible
- * `POST /v1/embeddings` API.
+ * Sends a test embedding request to `<baseUrl>/embeddings` — the same
+ * OpenAI-compatible path the backend calls — and returns the vector width
+ * from the response. Never appends `/v1`: the base URL already includes it,
+ * exactly as the backend treats it.
  */
 export async function probeDimension(
   config: LlmProviderConfig,
+  fetchFn: typeof fetch = fetch,
 ): Promise<DimensionProbeResult> {
-  const url = `${config.baseUrl.replace(/\/+$/, '')}/v1/embeddings`;
+  const url = `${config.baseUrl.replace(/\/+$/, '')}/embeddings`;
 
   try {
-    const res = await fetch(url, {
+    const res = await fetchFn(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${config.apiKey}`,
       },
-      body: JSON.stringify({
-        model: config.model,
-        input: 'test',
-      }),
+      body: JSON.stringify({ model: config.model, input: 'test' }),
+      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
 
     if (!res.ok) {
-      const text = await res.text();
-      return { dimension: null, error: `HTTP ${res.status}: ${text}` };
+      return { dimension: null, status: res.status, body: await res.text() };
     }
 
-    const data = (await res.json()) as {
-      data?: Array<{ embedding?: number[] }>;
-    };
-    const embedding = data.data?.[0]?.embedding;
-    if (!embedding || !Array.isArray(embedding)) {
-      return { dimension: null, error: 'Response missing embedding array' };
+    const embedding = firstEmbedding((await res.json()) as unknown);
+    if (!embedding) {
+      return { dimension: null, body: 'Response had no embedding array.' };
     }
-
     return { dimension: embedding.length };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { dimension: null, error: message };
+  } catch (error: unknown) {
+    return { dimension: null, error };
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isNumberArray(value: unknown): value is number[] {
+  return (
+    Array.isArray(value) &&
+    value.every((item: unknown) => typeof item === 'number')
+  );
+}
+
+/** The first embedding vector in an OpenAI-style `{ data: [{ embedding }] }` body. */
+function firstEmbedding(body: unknown): number[] | undefined {
+  if (!isRecord(body)) return undefined;
+  const data = body.data;
+  if (!Array.isArray(data)) return undefined;
+  const first: unknown = data[0];
+  if (!isRecord(first)) return undefined;
+  return isNumberArray(first.embedding) ? first.embedding : undefined;
 }

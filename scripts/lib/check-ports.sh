@@ -16,6 +16,9 @@ check_exposed_ports() {
     for port in "${in_use[@]}"; do
       echo "  port $port — check: lsof -i :$port" >&2
     done
+    echo "Often that's another TCP stack: list them with 'docker compose ls' and stop one" >&2
+    echo "with ./scripts/stop-dev.sh --project <name>. Or give this one different ports" >&2
+    echo "(EXPOSE_PORT_*) in its env file." >&2
     exit 1
   fi
 }
