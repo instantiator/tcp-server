@@ -45,20 +45,38 @@ export const DEFAULT_KNOWLEDGE_POLL_INTERVAL_MS = 60_000;
 
 // ── Exposed Ports ────────────────────────────────────────────────────────────
 
-/**
- * Default API port on the host.
- * Other `EXPOSE_PORT_*` values are derived using offsets when not set:
- * DB = API + 2432, MinIO = API + 6000, Zitadel = API + 5080.
+/*
+ * Host ports. Each has its own default, matching docker-compose.yml's
+ * `${EXPOSE_PORT_*:-<default>}`; none is derived from another. An instance
+ * that must run beside another changes them in its env file.
  */
+
+/** Default API port on the host. Overridden by `EXPOSE_PORT_API`. */
 export const DEFAULT_EXPOSE_PORT_API = 3000;
 
-/** Default Postgres port on the host (API + 2432). Overridden by `EXPOSE_PORT_DB` env var. */
+/** Default Postgres port on the host. Overridden by `EXPOSE_PORT_DB`. */
 export const DEFAULT_EXPOSE_PORT_DB = 5432;
 
-/** Default MinIO port on the host (API + 6000). Overridden by `EXPOSE_PORT_MINIO` env var. */
+/** Default MinIO API port on the host. Overridden by `EXPOSE_PORT_MINIO`. */
 export const DEFAULT_EXPOSE_PORT_MINIO = 9000;
 
-/** Default Zitadel port on the host (API + 5080). Overridden by `EXPOSE_PORT_ZITADEL` env var. */
+/** Default MinIO console port on the host. Overridden by `EXPOSE_PORT_MINIO_CONSOLE`. */
+export const DEFAULT_EXPOSE_PORT_MINIO_CONSOLE = 9001;
+
+/** Default web client (HTTPS) port on the host. Overridden by `EXPOSE_PORT_WEB`. */
+export const DEFAULT_EXPOSE_PORT_WEB = 5173;
+
+/**
+ * Default tcp-agent port on the host, published only with `--dev-ports`
+ * (start-dev.sh always passes it). Overridden by `EXPOSE_PORT_AGENT`.
+ */
+export const DEFAULT_EXPOSE_PORT_AGENT = 3003;
+
+/**
+ * The bundled Zitadel's host port. Fixed: Zitadel's external port and
+ * start-deployment.sh's bootstrap both assume it, so `EXPOSE_PORT_ZITADEL`
+ * can't move it (start-deployment.sh refuses any other value).
+ */
 export const DEFAULT_EXPOSE_PORT_ZITADEL = 8080;
 
 // ── Embedding ────────────────────────────────────────────────────────────────

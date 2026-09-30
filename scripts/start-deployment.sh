@@ -89,6 +89,10 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/lib/load-env.sh
 # shellcheck disable=SC1091 # source path resolved at runtime
 source "$REPO_ROOT/scripts/lib/load-env.sh"
+# shellcheck source=scripts/lib/errors.sh
+# shellcheck disable=SC1091 # source path resolved at runtime
+source "$REPO_ROOT/scripts/lib/errors.sh"
+enable_error_report
 
 if [[ -n "$ENV_FILES" ]]; then
   # Convert comma-separated list to array, validate files exist
@@ -137,6 +141,19 @@ derive_host_urls
 AUTH_PROFILE=""
 if [[ -n "${ZITADEL_ADMIN_PASSWORD:-}" ]]; then
   AUTH_PROFILE="--profile auth"
+fi
+
+# The bundled Zitadel only works on host port 8080: its external port
+# (ZITADEL_EXTERNALPORT in docker-compose.yml) and the bootstrap below (zit())
+# both assume it, and a different EXPOSE_PORT_ZITADEL would publish it where
+# neither looks. Refuse it here rather than fail halfway through the bootstrap.
+if [[ -n "$AUTH_PROFILE" && "${EXPOSE_PORT_ZITADEL:-8080}" != 8080 ]]; then
+  cat >&2 <<EOF
+ERROR: EXPOSE_PORT_ZITADEL is ${EXPOSE_PORT_ZITADEL}, but the bundled Zitadel only works on port 8080.
+Remove EXPOSE_PORT_ZITADEL from $ENV_FILE. If another stack holds 8080, stop it
+first: ./scripts/stop-dev.sh --project <name>
+EOF
+  exit 1
 fi
 
 # Stub LLM: runs in this stack only when asked (the setup wizard's "no real
@@ -193,6 +210,8 @@ wait_for() {
     if [[ "$waited" -ge "$max" ]]; then
       echo "ERROR: Timed out waiting for $name after ${max}s" >&2
       $DC logs --tail=20
+      echo "" >&2
+      echo "Check '$DC logs <service>' — a service that exits on startup usually names the bad setting there." >&2
       exit 1
     fi
   done
@@ -271,6 +290,8 @@ fi
 source "$REPO_ROOT/scripts/lib/check-ports.sh"
 check_exposed_ports
 
+step "starting the infrastructure containers (${INFRA_SERVICES[*]})" \
+  "Docker's own error is above. A failed image pull usually means no network; 'port is already allocated' means another stack holds the port."
 if [[ "$REBUILD" = "true" ]]; then
   $DC up -d --build "${INFRA_SERVICES[@]}"
 else
@@ -308,13 +329,25 @@ if [[ -n "$AUTH_PROFILE" ]]; then
     wait_for "Zitadel bootstrap PAT" "[[ -s '$PAT_FILE' ]]"
   fi
 
-  # Wrapper around curl for authenticated Zitadel API calls.
+  # Wrapper around curl for authenticated Zitadel API calls. Prints the body
+  # on success; on failure returns non-zero and says what Zitadel answered on
+  # stderr (callers that expect failure silence it with 2>/dev/null).
   zit() {
-    local method="$1" path="$2" body="${3:-}"
-    curl -sf -X "$method" "http://localhost:8080${path}" \
+    local method="$1" path="$2" body="${3:-}" response status
+    if ! response=$(curl -s -w '\n%{http_code}' -X "$method" "http://localhost:8080${path}" \
       -H "Authorization: Bearer $ZITADEL_PAT" \
       -H "Content-Type: application/json" \
-      ${body:+-d "$body"}
+      ${body:+-d "$body"}); then
+      echo "  Zitadel $method $path: no response — is Zitadel still running? ($DC logs zitadel)" >&2
+      return 1
+    fi
+    status="${response##*$'\n'}"
+    response="${response%$'\n'*}"
+    if [[ "$status" != 2* ]]; then
+      echo "  Zitadel $method $path → HTTP $status: ${response:0:500}" >&2
+      return 1
+    fi
+    printf '%s\n' "$response"
   }
 
   # Re-read the PAT on each attempt, and gate on a real authenticated call:
@@ -351,12 +384,15 @@ EOF
     exit 1
   fi
 
+  step "setting up the Zitadel project, applications and test users" \
+    "Zitadel's answer is printed above. If it rejects the admin token, the PAT is stale: run '$DC down -v', delete '$PAT_FILE', and re-run."
+
   # Project — realm-equivalent grouping for the OIDC application.
   PROJECT_ID=$(zit POST "/management/v1/projects/_search" \
     "$(jq -n --arg n "$PROJECT_NAME" '{queries:[{nameQuery:{name:$n,method:"TEXT_QUERY_METHOD_EQUALS"}}]}')" \
-    | jq -r '.result[0].id // empty')
+    | json_field "a Zitadel search" '.result[0].id // empty')
   if [[ -z "$PROJECT_ID" ]]; then
-    PROJECT_ID=$(zit POST "/management/v1/projects" "$(jq -n --arg n "$PROJECT_NAME" '{name:$n}')" | jq -r '.id')
+    PROJECT_ID=$(zit POST "/management/v1/projects" "$(jq -n --arg n "$PROJECT_NAME" '{name:$n}')" | json_field "creating the Zitadel project" '.id')
     echo "  Created project: $PROJECT_NAME"
   else
     echo "  Project $PROJECT_NAME: already exists"
@@ -371,6 +407,8 @@ EOF
   # env file). Rather than trust the file, (re)generate the secret every run
   # and write it back — the env file and Zitadel are then guaranteed to agree.
   APP_LIST=$(zit POST "/management/v1/projects/$PROJECT_ID/apps/_search" '{}')
+  # Checked once here, so the lookups below can use jq's --arg directly.
+  json_field "the Zitadel application list" . <<<"$APP_LIST" >/dev/null
   APP_ID=$(echo "$APP_LIST" | jq -r --arg n "$APP_NAME" '.result[]? | select(.name == $n) | .id // empty')
   if [[ -z "$APP_ID" ]]; then
     APP=$(zit POST "/management/v1/projects/$PROJECT_ID/apps/oidc" "$(jq -n --arg name "$APP_NAME" --arg cb "http://localhost:${EXPOSE_PORT_API:-3000}/auth/callback" '{
@@ -382,12 +420,12 @@ EOF
       authMethodType: "OIDC_AUTH_METHOD_TYPE_BASIC",
       accessTokenType: "OIDC_TOKEN_TYPE_JWT"
     }')")
-    APP_CLIENT_ID=$(echo "$APP" | jq -r '.clientId')
-    APP_CLIENT_SECRET=$(echo "$APP" | jq -r '.clientSecret')
+    APP_CLIENT_ID=$(json_field "creating the tcp-server application" '.clientId' <<<"$APP")
+    APP_CLIENT_SECRET=$(json_field "creating the tcp-server application" '.clientSecret' <<<"$APP")
     echo "  Created application: $APP_NAME (client secret written to $LOCAL_ENV_FILE)"
   else
     APP_CLIENT_ID=$(echo "$APP_LIST" | jq -r --arg n "$APP_NAME" '.result[]? | select(.name == $n) | .oidcConfig.clientId // empty')
-    APP_CLIENT_SECRET=$(zit POST "/management/v1/projects/$PROJECT_ID/apps/$APP_ID/oidc_config/_generate_client_secret" '{}' | jq -r '.clientSecret')
+    APP_CLIENT_SECRET=$(zit POST "/management/v1/projects/$PROJECT_ID/apps/$APP_ID/oidc_config/_generate_client_secret" '{}' | json_field "regenerating the tcp-server client secret" '.clientSecret')
     echo "  Application $APP_NAME: already exists (client secret regenerated → $LOCAL_ENV_FILE)"
   fi
   set_env_var "$LOCAL_ENV_FILE" OIDC_CLIENT_ID "$APP_CLIENT_ID"
@@ -423,7 +461,7 @@ EOF
   if [[ -z "$WEB_APP_ID" ]]; then
     OIDC_WEB_CLIENT_ID=$(zit POST "/management/v1/projects/$PROJECT_ID/apps/oidc" \
       "$(echo "$WEB_APP_CONFIG" | jq --arg name "$WEB_APP_NAME" '. + {name: $name}')" \
-      | jq -r '.clientId')
+      | json_field "creating the tcp-web application" '.clientId')
     echo "  Created application: $WEB_APP_NAME (public PKCE client, no secret)"
   else
     OIDC_WEB_CLIENT_ID=$(echo "$APP_LIST" | jq -r --arg n "$WEB_APP_NAME" '.result[]? | select(.name == $n) | .oidcConfig.clientId // empty')
@@ -478,7 +516,7 @@ EOF
   TEST_PASS="${TEST_PASSWORD:-test}"
   EXISTING_USER=$(zit POST "/management/v1/users/_search" \
     "$(jq -n --arg u "$TEST_USER" '{queries:[{userNameQuery:{userName:$u,method:"TEXT_QUERY_METHOD_EQUALS"}}]}')" \
-    | jq -r '.result[0].id // empty')
+    | json_field "a Zitadel search" '.result[0].id // empty')
   if [[ -z "$EXISTING_USER" ]]; then
     TEST_USER_ID=$(zit POST "/v2/users/new" "$(jq -n --arg org "$ORG_ID" --arg u "$TEST_USER" --arg p "$TEST_PASS" '{
       organizationId: $org,
@@ -488,7 +526,7 @@ EOF
         email: {email: ($u + "@tcp.local"), isVerified: true},
         password: {password: $p}
       }
-    }')" | jq -r '.id')
+    }')" | json_field "creating the test user" '.id')
     echo "  Created user: $TEST_USER"
   else
     TEST_USER_ID="$EXISTING_USER"
@@ -501,20 +539,20 @@ EOF
   # write it back, so the api tier's TEST_CLIENT_SECRET always matches Zitadel.
   MACHINE_ID=$(zit POST "/management/v1/users/_search" \
     "$(jq -n --arg u "$TEST_MACHINE_USERNAME" '{queries:[{userNameQuery:{userName:$u,method:"TEXT_QUERY_METHOD_EQUALS"}}]}')" \
-    | jq -r '.result[0].id // empty')
+    | json_field "a Zitadel search" '.result[0].id // empty')
   if [[ -z "$MACHINE_ID" ]]; then
     MACHINE_ID=$(zit POST "/v2/users/new" "$(jq -n --arg org "$ORG_ID" --arg u "$TEST_MACHINE_USERNAME" '{
       organizationId: $org,
       username: $u,
       machine: {name: "TCP API Test Machine", accessTokenType: "ACCESS_TOKEN_TYPE_JWT"}
-    }')" | jq -r '.id')
+    }')" | json_field "creating the machine test user" '.id')
     echo "  Created machine user: $TEST_MACHINE_USERNAME (client secret written to $LOCAL_ENV_FILE)"
   else
     echo "  Machine user $TEST_MACHINE_USERNAME: already exists (client secret regenerated → $LOCAL_ENV_FILE)"
   fi
   SECRET=$(zit PUT "/management/v1/users/$MACHINE_ID/secret" '{}')
-  MACHINE_CLIENT_ID=$(echo "$SECRET" | jq -r '.clientId')
-  MACHINE_CLIENT_SECRET=$(echo "$SECRET" | jq -r '.clientSecret')
+  MACHINE_CLIENT_ID=$(json_field "the machine user's new secret" '.clientId' <<<"$SECRET")
+  MACHINE_CLIENT_SECRET=$(json_field "the machine user's new secret" '.clientSecret' <<<"$SECRET")
   set_env_var "$LOCAL_ENV_FILE" TEST_CLIENT_ID "$MACHINE_CLIENT_ID"
   set_env_var "$LOCAL_ENV_FILE" TEST_CLIENT_SECRET "$MACHINE_CLIENT_SECRET"
   export TEST_CLIENT_ID="$MACHINE_CLIENT_ID"
@@ -533,12 +571,16 @@ fi
 
 echo ""
 echo "Starting application services (project: $PROJECT)..."
+step "starting the application containers" \
+  "Docker's own error is above. A build failure names the Dockerfile step; re-run with --rebuild after fixing it."
 if [[ "$REBUILD" = "true" ]]; then
   $DC up -d --build
 else
   $DC up -d
 fi
 
+step "waiting for the services to report healthy" \
+  "The logs above name the service that didn't come up."
 wait_for tcp-server           "curl -sf http://localhost:${EXPOSE_PORT_API:-3000}/health"
 # tcp-agent and the MCP servers are internal-only by default (no published
 # host port unless --dev-ports) — poll via `exec` into the container instead

@@ -97,3 +97,15 @@ So the run pays full export cost for a cache that cannot hit on the layer that
 matters. Worth measuring `mode=min` against the current setting, and worth
 checking whether the branch scoping of the Actions cache means a PR ever reads
 what its base branch wrote in the first place.
+
+## Remote LLM providers are untested against a real key
+
+The provider catalogue (`libs/tcp-shared/src/llm/provider-catalogue.ts`, 004.01) offers OpenAI, Anthropic, Google, Azure, Bedrock, Mistral and OpenRouter through their OpenAI-compatible APIs. Their base URLs and starter models were checked against each provider's documentation on 2026-09-30, but only LM Studio has ever run TCP's agents. Tool calling and structured output through a compatibility layer (Anthropic's especially) may not behave like the native API.
+
+**Act when:** someone first uses a real key for one of these providers — run `./scripts/setup-wizard.sh --test-config`, then a chat and a task with tools, and correct that catalogue entry. Before any release, do this for at least OpenAI and Anthropic.
+
+## Two stacks with the bundled Zitadel can't run at once
+
+The bundled Zitadel only works on host port 8080: `docker-compose.yml` sets `ZITADEL_EXTERNALPORT: 8080` (the port in its issuer URLs), and `start-deployment.sh`'s `zit()` bootstrap calls `localhost:8080`. `start-deployment.sh` therefore refuses any other `EXPOSE_PORT_ZITADEL`, and the wizard says the port is fixed. The other host ports can be changed per instance in the wizard (004.01), but a second bundled-Zitadel stack still collides on 8080, so it can't run while `tcp-dev` does — the test tiers included.
+
+**Act when:** someone needs two stacks running at once. The fix is to carry one Zitadel port through `ZITADEL_EXTERNALPORT`, the bootstrap's `zit()`, the issuer URL and the port check. Until then, stop one stack before starting another (`./scripts/stop-dev.sh --project <name>`), which the port check's message says.

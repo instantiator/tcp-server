@@ -1,5 +1,7 @@
+import { findProvider } from '@tcp/shared/llm/provider-catalogue';
 import type { LlmProviderConfig } from '../types';
-import { probeDimension } from './dimension-prober';
+import { PROBE_TIMEOUT_MS, probeDimension } from './dimension-prober';
+import type { DimensionProbeResult } from './dimension-prober';
 
 /**
  * Result of validating an LLM provider configuration.
@@ -11,40 +13,101 @@ export interface ModelValidationResult {
   dimension?: number;
 }
 
+/** What {@link describeProbeError} needs to explain a failed probe. */
+export interface ProbeErrorInput {
+  url: string;
+  providerName: string;
+  model: string;
+  /** The HTTP status, when the server responded but not with 2xx. */
+  status?: number;
+  /** The response body (or a description of what was wrong with it). */
+  body?: string;
+  /** The thrown error, when the request itself failed (network, timeout). */
+  error?: unknown;
+}
+
 /**
- * Tests connectivity to an LLM provider and validates the configuration.
- *
- * - For embedding models (those with a `dimension` hint or when `purpose` is
- *   `'embedding'`): sends a test embedding and returns the detected dimension.
- * - For chat/inference models: sends a test completion request.
+ * Turns a failed probe into the message the wizard (and `--test-config`)
+ * show: what went wrong, in terms the user can act on. Never echoes the API
+ * key — nothing here reads `config.apiKey`.
+ */
+export function describeProbeError(input: ProbeErrorInput): string {
+  if (input.status !== undefined) {
+    if (input.status === 401 || input.status === 403) {
+      return 'The API key was rejected.';
+    }
+    if (input.status === 404) {
+      return `Model '${input.model}' wasn't found. Check the name, or that it's loaded.`;
+    }
+    const detail = input.body ? `: ${input.body.slice(0, 300)}` : '';
+    return `HTTP ${input.status}${detail}`;
+  }
+
+  if (isTimeout(input.error)) {
+    return `No reply within ${PROBE_TIMEOUT_MS / 1000}s. A local server may still be loading the model — try again.`;
+  }
+
+  const code = causeCode(input.error);
+  if (code === 'ECONNREFUSED' || code === 'ENOTFOUND') {
+    return `Nothing is answering at ${input.url}. Is ${input.providerName} running?`;
+  }
+
+  return input.error instanceof Error
+    ? input.error.message
+    : String(input.error);
+}
+
+function isTimeout(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === 'TimeoutError' || error.name === 'AbortError')
+  );
+}
+
+/** The `code` on a fetch failure's `cause` (e.g. `ECONNREFUSED`), if there is one. */
+function causeCode(error: unknown): string | undefined {
+  if (!(error instanceof Error) || !('cause' in error)) return undefined;
+  const cause = error.cause;
+  if (typeof cause !== 'object' || cause === null || !('code' in cause)) {
+    return undefined;
+  }
+  return typeof cause.code === 'string' ? cause.code : undefined;
+}
+
+/**
+ * Tests connectivity to an LLM provider: a chat completion for an inference
+ * model, a test embedding for an embedding model (which also reports the
+ * vector width).
  */
 export async function validateModel(
   config: LlmProviderConfig,
   purpose: 'embedding' | 'chat' = 'chat',
+  fetchFn: typeof fetch = fetch,
 ): Promise<ModelValidationResult> {
-  if (purpose === 'embedding') {
-    return validateEmbeddingModel(config);
-  }
-  return validateChatModel(config);
+  return purpose === 'embedding'
+    ? validateEmbeddingModel(config, fetchFn)
+    : validateChatModel(config, fetchFn);
 }
 
 async function validateEmbeddingModel(
   config: LlmProviderConfig,
+  fetchFn: typeof fetch,
 ): Promise<ModelValidationResult> {
-  const probe = await probeDimension(config);
+  const probe = await probeDimension(config, fetchFn);
   if (probe.dimension === null) {
-    return { success: false, error: probe.error };
+    return { success: false, error: probeErrorMessage(config, probe) };
   }
   return { success: true, dimension: probe.dimension };
 }
 
 async function validateChatModel(
   config: LlmProviderConfig,
+  fetchFn: typeof fetch,
 ): Promise<ModelValidationResult> {
-  const url = `${config.baseUrl.replace(/\/+$/, '')}/v1/chat/completions`;
+  const url = `${config.baseUrl.replace(/\/+$/, '')}/chat/completions`;
 
   try {
-    const res = await fetch(url, {
+    const res = await fetchFn(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -55,23 +118,64 @@ async function validateChatModel(
         messages: [{ role: 'user', content: 'Say "ok"' }],
         max_tokens: 5,
       }),
+      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
 
     if (!res.ok) {
-      const text = await res.text();
-      return { success: false, error: `HTTP ${res.status}: ${text}` };
+      return {
+        success: false,
+        error: describeProbeError({
+          url,
+          providerName: providerName(config),
+          model: config.model,
+          status: res.status,
+          body: await res.text(),
+        }),
+      };
     }
 
-    const data = (await res.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    if (!data.choices?.length) {
-      return { success: false, error: 'Response missing choices' };
+    if (!hasChoice((await res.json()) as unknown)) {
+      return { success: false, error: 'Response had no completion choices.' };
     }
-
     return { success: true };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { success: false, error: message };
+  } catch (error: unknown) {
+    return {
+      success: false,
+      error: describeProbeError({
+        url,
+        providerName: providerName(config),
+        model: config.model,
+        error,
+      }),
+    };
   }
+}
+
+function probeErrorMessage(
+  config: LlmProviderConfig,
+  probe: DimensionProbeResult,
+): string {
+  return describeProbeError({
+    url: `${config.baseUrl.replace(/\/+$/, '')}/embeddings`,
+    providerName: providerName(config),
+    model: config.model,
+    status: probe.status,
+    body: probe.body,
+    error: probe.error,
+  });
+}
+
+/** The catalogue's display name for `config.provider`, or the raw id if it isn't listed. */
+function providerName(config: LlmProviderConfig): string {
+  return findProvider(config.provider)?.name ?? config.provider;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function hasChoice(body: unknown): boolean {
+  return (
+    isRecord(body) && Array.isArray(body.choices) && body.choices.length > 0
+  );
 }

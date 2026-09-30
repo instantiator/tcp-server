@@ -1,12 +1,14 @@
 /**
- * Exposed port configuration — each port is independently configurable.
+ * Host ports — each independent, with its own default. The bundled Zitadel
+ * is always on 8080, so it has no entry here.
  */
 export interface PortConfig {
   api: number;
   db: number;
   minio: number;
   minioConsole: number;
-  zitadel: number;
+  web: number;
+  agent: number;
 }
 
 /**

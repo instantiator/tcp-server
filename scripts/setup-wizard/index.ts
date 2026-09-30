@@ -7,6 +7,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import inquirer from 'inquirer';
 import type { WizardConfig } from './types';
@@ -17,8 +18,36 @@ import { promptOidc } from './prompts/oidc';
 import { promptResources } from './prompts/resources';
 import { promptDocker } from './prompts/docker';
 import { writeEnvFile } from './utils/env-writer';
+import { describeWizardError } from './utils/describe-wizard-error';
+import { testConfig } from './test-config';
+
+/** The env file, once written — so a cancelled run can say it was kept. */
+let writtenTo: string | undefined;
+
+/**
+ * `--test-config [--env <file>] [--project <name>]`: check an existing
+ * configuration's connections instead of running the wizard. The defaults
+ * match start-dev.sh's.
+ */
+async function runTestConfig(args: readonly string[]): Promise<number> {
+  const valueOf = (flag: string): string | undefined => {
+    const i = args.indexOf(flag);
+    return i === -1 ? undefined : args[i + 1];
+  };
+  const repoRoot = join(__dirname, '..', '..');
+  const envFile =
+    valueOf('--env') ??
+    (existsSync(join(repoRoot, '.env.dev')) ? '.env.dev' : '.env.testing');
+  return testConfig({ envFile, project: valueOf('--project') ?? 'tcp-dev' });
+}
 
 async function main(): Promise<void> {
+  const args = process.argv.slice(2);
+  if (args.includes('--test-config')) {
+    process.exitCode = await runTestConfig(args);
+    return;
+  }
+
   console.log('TCP Server Setup Wizard');
   console.log('=======================');
   console.log();
@@ -59,7 +88,7 @@ async function main(): Promise<void> {
   console.log(`  Instance:      ${config.instanceName}`);
   console.log(`  Env file:      ${config.envFileName}`);
   console.log(
-    `  Ports:         API=${config.ports.api}, DB=${config.ports.db}, MinIO=${config.ports.minio}, Zitadel=${config.ports.zitadel}`,
+    `  Ports:         API=${config.ports.api}, DB=${config.ports.db}, MinIO=${config.ports.minio}/${config.ports.minioConsole}, web=${config.ports.web}, agent=${config.ports.agent}`,
   );
   console.log(
     `  Embedding:     ${config.embeddingModel ? `${config.embeddingModel.provider}/${config.embeddingModel.model}` : 'not configured'}`,
@@ -77,6 +106,7 @@ async function main(): Promise<void> {
 
   // Write env files (committed base + gitignored .local override)
   const { envFile, localFile } = writeEnvFile(config);
+  writtenTo = envFile;
   console.log(`Config written to:   ${envFile}`);
   console.log(
     `Secret overrides:    ${localFile}  (gitignored — never committed)`,
@@ -109,15 +139,45 @@ async function main(): Promise<void> {
   if (!start) return;
 
   // The project name keeps each instance's containers and volumes apart.
+  const startScript = join(__dirname, '..', 'start-dev.sh');
   const result = spawnSync(
-    join(__dirname, '..', 'start-dev.sh'),
+    startScript,
     ['--env', envFile, '--project', config.instanceName],
     { stdio: 'inherit' },
   );
-  process.exitCode = result.status ?? 1;
+  if (result.error) {
+    console.error(
+      `\nCouldn't run ${startScript}: ${result.error.message}. Check the file exists and is executable (chmod +x).`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+  if (result.status !== 0) {
+    console.error(
+      `\nThe stack didn't start. The error above says which step failed.\nFix it and re-run: ${startCommand}\nYour configuration is saved in ${config.envFileName}.`,
+    );
+    process.exitCode = result.status ?? 1;
+    return;
+  }
+
+  const { test } = await inquirer.prompt<{ test: boolean }>({
+    type: 'confirm',
+    name: 'test',
+    message: 'Test the configuration now?',
+    default: true,
+  });
+  if (test) {
+    console.log();
+    process.exitCode = await testConfig({
+      envFile: config.envFileName,
+      project: config.instanceName,
+    });
+  }
 }
 
 main().catch((err: unknown) => {
-  console.error('Wizard failed:', err);
-  process.exit(1);
+  const { message, exitCode } = describeWizardError(err, writtenTo);
+  console.error(`\n${message}`);
+  if (process.env['DEBUG']) console.error(err);
+  process.exit(exitCode);
 });

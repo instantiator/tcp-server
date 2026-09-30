@@ -15,7 +15,8 @@ function makeConfig(overrides: Partial<WizardConfig> = {}): WizardConfig {
       db: 5432,
       minio: 9000,
       minioConsole: 9001,
-      zitadel: 8080,
+      web: 5173,
+      agent: 3003,
     },
     agentIterations: 40,
     agentConcurrency: 1,
@@ -54,6 +55,23 @@ describe('writeEnvFile — committed base vs gitignored .local split', () => {
   });
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('writes every host port, since nothing derives them at runtime', () => {
+    const { envFile } = writeEnvFile(makeConfig(), dir);
+    const base = readFileSync(envFile, 'utf8');
+    for (const line of [
+      'EXPOSE_PORT_API=3000',
+      'EXPOSE_PORT_DB=5432',
+      'EXPOSE_PORT_MINIO=9000',
+      'EXPOSE_PORT_MINIO_CONSOLE=9001',
+      'EXPOSE_PORT_WEB=5173',
+      'EXPOSE_PORT_AGENT=3003',
+    ]) {
+      expect(base).toContain(`\n${line}\n`);
+    }
+    // The bundled Zitadel's port is fixed; writing it would suggest otherwise.
+    expect(base).not.toMatch(/^EXPOSE_PORT_ZITADEL=/m);
   });
 
   it('never writes the local-only (client credential) keys into the committed base file', () => {
