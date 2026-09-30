@@ -2,6 +2,10 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/errors.sh
+# shellcheck disable=SC1091 # source path resolved at runtime
+source "$REPO_ROOT/scripts/lib/errors.sh"
+enable_error_report
 
 usage() {
   cat <<EOF
@@ -302,11 +306,14 @@ seed_test_companies() {
   # actually created rather than assumed from the JSON filename —
   # scripts/test-data/companies/simple-company.json's `slug` field is
   # "test-company", not "simple-company".
+  local hint="tcp-cli's error is above. The stack is up; once it's fixed, seed again with --reset (it wipes this project's data first)."
   local hm_company hm_id hm_slug
+  step "creating the home-maintenance test company" "$hint"
   hm_company="$("$cli" -t "$token" --tcp-server "$tcp_server_url" set-company < "$data/companies/home-maintenance.json")"
-  hm_id="$(jq -r '.id' <<< "$hm_company")"
-  hm_slug="$(jq -r '.slug' <<< "$hm_company")"
+  hm_id="$(json_field "tcp-cli set-company" '.id' <<< "$hm_company")"
+  hm_slug="$(json_field "tcp-cli set-company" '.slug' <<< "$hm_company")"
   echo "  Company: $hm_slug"
+  step "adding the diy-assistant role and its knowledge" "$hint"
   "$cli" -t "$token" --tcp-server "$tcp_server_url" set-role --company-slug "$hm_slug" \
     < "$data/roles/diy-assistant.json" >/dev/null
   echo "    Role: diy-assistant"
@@ -320,9 +327,10 @@ seed_test_companies() {
   fi
 
   local simple_company simple_id simple_slug
+  step "creating the simple test company and its roles" "$hint"
   simple_company="$("$cli" -t "$token" --tcp-server "$tcp_server_url" set-company < "$data/companies/simple-company.json")"
-  simple_id="$(jq -r '.id' <<< "$simple_company")"
-  simple_slug="$(jq -r '.slug' <<< "$simple_company")"
+  simple_id="$(json_field "tcp-cli set-company" '.id' <<< "$simple_company")"
+  simple_slug="$(json_field "tcp-cli set-company" '.slug' <<< "$simple_company")"
   echo "  Company: $simple_slug"
   "$cli" -t "$token" --tcp-server "$tcp_server_url" set-role --company-slug "$simple_slug" \
     < "$data/roles/chicken-assistant.json" >/dev/null

@@ -70,7 +70,9 @@ DIST="$ROOT/apps/backend/dist/apps/tcp-cli/main.js"
 
 if [ "$REBUILD" = "true" ] || [ ! -f "$DIST" ]; then
   echo "[tcp-cli] Building tcp-cli..." >&2
-  npm --prefix "$ROOT" run build:tcp-cli
+  # Build output goes to stderr: stdout carries only the CLI's own output,
+  # which callers capture and parse (start-dev.sh reads it as JSON).
+  npm --prefix "$ROOT" run build:tcp-cli >&2
 fi
 
 # The `shutdown` verb drains through the API, then this wrapper halts the stack.

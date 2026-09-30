@@ -34,3 +34,6 @@ npm test -- ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}
 # are Jest-specific and don't apply to its node:test runner, so it gets its own
 # unconditional invocation rather than sharing the line above.
 npm --prefix apps/tcp-stub-llm test
+
+# Shell helpers with logic worth pinning down.
+"$(dirname "$0")/lib/errors.test.sh"
