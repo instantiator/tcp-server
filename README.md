@@ -12,7 +12,8 @@ Get started by cloning this repository and launching the setup wizard.
 
 ```bash
 git clone https://github.com/instantiator/tcp-server.git
-cd tcp-server ./scripts/setup-wizard.sh
+cd tcp-server
+./scripts/setup-wizard.sh
 ```
 
 The wizard checks your prerequisites, installs dependencies, asks a few configuration questions, and starts the stack — then prints the service URLs and sign-in credentials. See **[Your first company](docs/your-first-company.md)** for what to do next.
