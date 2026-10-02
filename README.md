@@ -19,11 +19,14 @@ cd tcp-server
 The wizard checks your prerequisites, installs dependencies, asks a few configuration questions, and starts the stack — then prints the service URLs and sign-in credentials. See **[Your first company](docs/your-first-company.md)** for what to do next.
 
 > [!TIP]
-> To clear down your database and use pre-existing test data, use:
+> To clear down your database and load the test data, use:
 >
 > ```bash
-> ./scripts/start-dev.sh --reset
+> ./scripts/start-dev.sh --reset --seed
 > ```
+>
+> `--reset` alone starts from an empty database; `--seed` alone adds the test
+> companies to your existing setup, skipping any that are already there.
 
 ## Key concepts
 

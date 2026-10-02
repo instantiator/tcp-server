@@ -17,7 +17,8 @@ import { promptLlm } from './prompts/llm';
 import { promptOidc } from './prompts/oidc';
 import { promptResources } from './prompts/resources';
 import { promptDocker } from './prompts/docker';
-import { writeEnvFile } from './utils/env-writer';
+import { willGenerateMasterkey, writeEnvFile } from './utils/env-writer';
+import { hasZitadelData, resetZitadelData } from './utils/zitadel-data';
 import { describeWizardError } from './utils/describe-wizard-error';
 import { testConfig } from './test-config';
 
@@ -104,6 +105,11 @@ async function main(): Promise<void> {
   console.log(`  Stub LLM:      ${config.stubLlm ? 'yes' : 'no'}`);
   console.log();
 
+  if (!(await confirmMasterkey(config))) {
+    process.exitCode = 1;
+    return;
+  }
+
   // Write env files (committed base + gitignored .local override)
   const { envFile, localFile } = writeEnvFile(config);
   writtenTo = envFile;
@@ -173,6 +179,51 @@ async function main(): Promise<void> {
       project: config.instanceName,
     });
   }
+}
+
+/**
+ * Guards against the one way a re-run breaks sign-in: generating a new
+ * `ZITADEL_MASTERKEY` while a Zitadel database made with the old one still
+ * exists. Zitadel can't decrypt that data with a new key, so the bootstrap's
+ * PAT is rejected. Asks whether to reset the database or stop so the old key
+ * can be put back. Returns false to stop without writing anything.
+ */
+async function confirmMasterkey(config: WizardConfig): Promise<boolean> {
+  const project = config.instanceName;
+  if (!willGenerateMasterkey(config) || !hasZitadelData(project)) return true;
+
+  console.log();
+  console.log(
+    `Project '${project}' already has a Zitadel database, but ${config.envFileName}`,
+  );
+  console.log(
+    `and ${config.envFileName}.local have no ZITADEL_MASTERKEY. A new key can't read`,
+  );
+  console.log('that database, so sign-in would fail.');
+  const { action } = await inquirer.prompt<{ action: 'reset' | 'stop' }>({
+    type: 'select',
+    name: 'action',
+    message: 'What should the wizard do?',
+    choices: [
+      {
+        name: 'Stop, so I can add the old ZITADEL_MASTERKEY to the env file',
+        value: 'stop',
+      },
+      {
+        name: `Reset: delete the '${project}' database (Zitadel and app data) and start fresh`,
+        value: 'reset',
+      },
+    ],
+  });
+  if (action === 'stop') {
+    console.log(
+      `\nNothing was written. Add ZITADEL_MASTERKEY=<old key> to ${config.envFileName}.local, then re-run the wizard.`,
+    );
+    return false;
+  }
+  resetZitadelData(project);
+  console.log(`Deleted the '${project}' database.`);
+  return true;
 }
 
 main().catch((err: unknown) => {
