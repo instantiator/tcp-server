@@ -12,14 +12,15 @@ Get started by cloning this repository and launching the setup wizard.
 
 ```bash
 git clone https://github.com/instantiator/tcp-server.git
-cd tcp-server ./scripts/setup-wizard.sh
+cd tcp-server
+./scripts/setup-wizard.sh
 ```
 
 The wizard checks your prerequisites, installs dependencies, asks a few configuration questions, and starts the stack — then prints the service URLs and sign-in credentials. See **[Your first company](docs/your-first-company.md)** for what to do next.
 
 > [!TIP]
 > To clear down your database and use pre-existing test data, use:
-> 
+>
 > ```bash
 > ./scripts/start-dev.sh --reset
 > ```
@@ -56,8 +57,8 @@ The automated part...
 
 Good starting points...
 
-* [Documentation index](docs/index.md)
-* [Development](docs/development.md)
+- [Documentation index](docs/index.md)
+- [Development](docs/development.md)
 
 ## AI assisted coding
 
@@ -74,8 +75,8 @@ Code quality properties are enforced by [dev-qual](https://github.com/instantiat
 
 The code is written to be readable.
 
-* All code is required to meet quality standards and guidance
-* All code must be tested (with few exceptions)
-* Pre-existing frameworks are used wherever possible
-* Libraries are selected for maturity and maintenance tells
-* Code quality is enforced by pre-commit, pre-push hooks, CI workflow and branch protections
+- All code is required to meet quality standards and guidance
+- All code must be tested (with few exceptions)
+- Pre-existing frameworks are used wherever possible
+- Libraries are selected for maturity and maintenance tells
+- Code quality is enforced by pre-commit, pre-push hooks, CI workflow and branch protections

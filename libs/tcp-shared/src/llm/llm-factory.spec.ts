@@ -47,6 +47,40 @@ describe('buildChatModel', () => {
     expect(model).toBeInstanceOf(ChatOpenAI);
   });
 
+  it('points a catalogue provider at its baseUrl', () => {
+    const model = buildChatModel({
+      provider: 'anthropic',
+      model: 'claude-haiku-4-5',
+      baseUrl: 'https://api.anthropic.com/v1',
+      apiKey: 'sk-test',
+    }) as ChatOpenAI;
+    expect(model.clientConfig.baseURL).toBe('https://api.anthropic.com/v1');
+  });
+
+  it('honours baseUrl for the openai provider', () => {
+    const model = buildChatModel({
+      provider: 'openai',
+      model: 'gpt-5-mini',
+      baseUrl: 'https://proxy.example/v1',
+      apiKey: 'sk-test',
+    }) as ChatOpenAI;
+    expect(model.clientConfig.baseURL).toBe('https://proxy.example/v1');
+  });
+
+  it('leaves the base URL to the SDK when none is set', () => {
+    const model = buildChatModel({
+      provider: 'openai',
+      model: 'gpt-5-mini',
+      apiKey: 'sk-test',
+    }) as ChatOpenAI;
+    expect(model.clientConfig.baseURL).toBeUndefined();
+  });
+
+  it('gives a local provider a placeholder key when none is set', () => {
+    const model = buildChatModel({ ...baseConfig, provider: 'ollama' });
+    expect((model as ChatOpenAI).apiKey).toBe('ollama');
+  });
+
   it('resolves apiKey as the name of an environment variable', () => {
     process.env['TEST_LLM_KEY'] = 'test-secret';
     expect(() =>

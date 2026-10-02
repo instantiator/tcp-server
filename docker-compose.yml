@@ -162,6 +162,11 @@ services:
       target: tcp-server
     image: tcp-server:latest
     restart: unless-stopped
+    # LLM and embedding servers on the host (LM Studio, Ollama) are reached as
+    # host.docker.internal. Docker Desktop resolves that already; Linux needs
+    # this line.
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     environment:
       <<: *internal-urls
       # External-facing issuer (the `iss` claim tokens carry, validated literally);
@@ -184,6 +189,7 @@ services:
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
       EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
@@ -261,6 +267,11 @@ services:
       target: tcp-agent
     image: tcp-agent:latest
     restart: unless-stopped
+    # LLM and embedding servers on the host (LM Studio, Ollama) are reached as
+    # host.docker.internal. Docker Desktop resolves that already; Linux needs
+    # this line.
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     environment:
       <<: *internal-urls
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
@@ -281,6 +292,7 @@ services:
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
       EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
     depends_on:
       postgres:
@@ -324,12 +336,18 @@ services:
       target: tcp-mcp-memory
     image: tcp-mcp-memory:latest
     restart: unless-stopped
+    # LLM and embedding servers on the host (LM Studio, Ollama) are reached as
+    # host.docker.internal. Docker Desktop resolves that already; Linux needs
+    # this line.
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     environment:
       <<: *internal-urls
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
       EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
     depends_on:
       postgres:

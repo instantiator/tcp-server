@@ -15,7 +15,6 @@ import {
   DEFAULT_TCP_MASK_API_KEYS,
   LOCAL_ONLY_ENV_KEYS,
 } from '../utils/app-defaults';
-import { derivePorts } from '../utils/ports';
 
 const REPO_ROOT = join(__dirname, '..', '..', '..');
 
@@ -74,17 +73,18 @@ export function writeEnvFile(
   b.blank();
 
   b.comment(
-    'Exposed ports (base port; others derived: DB=API+2432, MinIO=API+6000, Zitadel=API+5080)',
+    'Host ports. Each is independent; change one if something else uses it.',
   );
+  b.comment('The bundled Zitadel always uses 8080 (not configurable).');
   b.set('EXPOSE_PORT_API', String(config.ports.api));
-  // Only emit the derived ports when the user overrode the offset default.
-  const derived = derivePorts(config.ports.api);
-  if (config.ports.db !== derived.db)
-    b.set('EXPOSE_PORT_DB', String(config.ports.db));
-  if (config.ports.minio !== derived.minio)
-    b.set('EXPOSE_PORT_MINIO', String(config.ports.minio));
-  if (config.ports.zitadel !== derived.zitadel)
-    b.set('EXPOSE_PORT_ZITADEL', String(config.ports.zitadel));
+  b.set('EXPOSE_PORT_DB', String(config.ports.db));
+  b.set('EXPOSE_PORT_MINIO', String(config.ports.minio));
+  b.set('EXPOSE_PORT_MINIO_CONSOLE', String(config.ports.minioConsole));
+  b.set('EXPOSE_PORT_WEB', String(config.ports.web));
+  b.comment(
+    'tcp-agent, published only with --dev-ports (start-dev.sh passes it).',
+  );
+  b.set('EXPOSE_PORT_AGENT', String(config.ports.agent));
   b.blank();
 
   b.comment('MinIO object storage');

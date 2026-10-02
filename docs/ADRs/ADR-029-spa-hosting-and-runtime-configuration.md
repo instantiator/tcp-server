@@ -121,7 +121,7 @@ It is added in three places:
 - `derive_host_urls` in `scripts/lib/derive-urls.sh`
 - `scripts/lib/check-ports.sh` — which pre-flight-checks only API, DB, MinIO and Zitadel today, so a new service isn't covered unless it's added there
 
-Note that `.env.example`'s comment claiming other ports are derived arithmetically from `EXPOSE_PORT_API` is stale — no code implements it. The web port is an independent variable, like the others.
+Note that `.env.example`'s comment claiming other ports are derived arithmetically from `EXPOSE_PORT_API` is stale — no code implements it. The web port is an independent variable, like the others. _(Corrected in phase 03, 004.01: the comment, the wizard and `defaults.ts` now say ports are independent — see [ADR-018](ADR-018-system-configuration-setup-wizard.md#amendments-as-implemented-p03-004-01-00).)_
 
 ### SPA routing
 
