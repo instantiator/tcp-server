@@ -56,7 +56,7 @@ const PanButton = ({
   return (
     <WithTooltip label={label} portalContainer={portalContainer}>
       <Button
-        className={`react-aria-Button company-visualisation__pan-button company-visualisation__pan-button--${direction}`}
+        className={`react-aria-Button tcp-icon-button company-visualisation__pan-button company-visualisation__pan-button--${direction}`}
         aria-label={label}
         onPress={onPress}
       >
@@ -73,6 +73,11 @@ const PanButton = ({
  * pointer-friendly duplicate of the same four directions, laid out like a
  * keyboard's arrow keys. Their source order stays left, right, up, down, so
  * the toolbar's arrow-key movement between controls is unchanged.
+ *
+ * Floats over the bottom-left of the stage (005.01) rather than sitting
+ * above it in the page's flow — `.tcp-floating` gives it its surface, and
+ * `CompanyVisualisation.css` positions it against the office view's own
+ * `position: relative`, since this renders before the stage in the DOM.
  */
 export const VisualisationToolbar = ({
   snapshot,
@@ -87,7 +92,7 @@ export const VisualisationToolbar = ({
   return (
     <Toolbar
       aria-label={t('visualisation.toolbar.label')}
-      className="react-aria-Toolbar company-visualisation__toolbar"
+      className="react-aria-Toolbar tcp-floating company-visualisation__toolbar"
     >
       <div className="company-visualisation__pan">
         <PanButton
@@ -125,7 +130,7 @@ export const VisualisationToolbar = ({
       </div>
       <WithTooltip label={fullscreenLabel} portalContainer={portalContainer}>
         <ToggleButton
-          className="react-aria-ToggleButton company-visualisation__icon-button"
+          className="react-aria-ToggleButton tcp-icon-button"
           aria-label={fullscreenLabel}
           isSelected={isFullscreen}
           onChange={onToggleFullscreen}

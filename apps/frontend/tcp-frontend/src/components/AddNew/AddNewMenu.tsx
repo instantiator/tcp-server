@@ -1,3 +1,4 @@
+import { Plus } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import {
   Button,
@@ -11,6 +12,7 @@ import {
 import { ANNOUNCE_IMMEDIATE_MS, announce } from '../../announce/announcer';
 import { useCompanyRolesList } from '../../api/hooks';
 import { t } from '../../strings';
+import { Icon, WithTooltip } from '../Icon/Icon';
 import { CreateTaskDialog } from '../CreateTaskDialog/CreateTaskDialog';
 import { rolesForMenu } from './rolesForMenu';
 import { useStartChatAction, type StartChatRole } from './useStartChatAction';
@@ -18,6 +20,15 @@ import './AddNewMenu.css';
 
 export interface AddNewMenuProps {
   readonly companyId: string;
+  /**
+   * An icon-only, circular trigger (the company page's floating action
+   * button) instead of today's text button. The accessible name stays
+   * "Add new" either way — `aria-label` carries it when there's no visible
+   * text to derive it from. Defaults to `false` for the chat dialog's
+   * in-dialog trigger, which keeps its text (it needs no `portalContainer`:
+   * unlike the office view, nothing there clips an unportalled tooltip).
+   */
+  readonly fab?: boolean;
 }
 
 /**
@@ -43,7 +54,7 @@ export interface AddNewMenuProps {
  * **Not positioned here.** The `add-new` wrapper is a hook for a later stage
  * to place this control; this component only builds the menu.
  */
-export const AddNewMenu = ({ companyId }: AddNewMenuProps) => {
+export const AddNewMenu = ({ companyId, fab = false }: AddNewMenuProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [showCreateTask, setShowCreateTask] = useState(false);
   // The role a chat attempt most recently failed for, so the error paragraph
@@ -128,12 +139,24 @@ export const AddNewMenu = ({ companyId }: AddNewMenuProps) => {
   return (
     <div className="add-new">
       <MenuTrigger isOpen={isOpen} onOpenChange={onOpenChange}>
-        <Button
-          className="react-aria-Button add-new__trigger"
-          aria-describedby={error !== null ? errorId : undefined}
-        >
-          {t('addNew.trigger')}
-        </Button>
+        {fab ? (
+          <WithTooltip label={t('addNew.trigger')}>
+            <Button
+              className="react-aria-Button tcp-icon-button tcp-icon-button--fab add-new__trigger"
+              aria-label={t('addNew.trigger')}
+              aria-describedby={error !== null ? errorId : undefined}
+            >
+              <Icon icon={Plus} />
+            </Button>
+          </WithTooltip>
+        ) : (
+          <Button
+            className="react-aria-Button add-new__trigger"
+            aria-describedby={error !== null ? errorId : undefined}
+          >
+            {t('addNew.trigger')}
+          </Button>
+        )}
         <Popover>
           <Menu onAction={onTopAction}>
             <MenuItem id="create-task">{t('addNew.createTask')}</MenuItem>

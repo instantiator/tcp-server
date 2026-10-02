@@ -126,3 +126,7 @@ export function shadesOf(base: number): {
     right: shift(base, -15),
   };
 }
+
+/** A working agent's thought bubble: a pale fill, outlined so it reads on any floor. */
+export const THOUGHT_BUBBLE_COLOUR = 0xffffff;
+export const THOUGHT_BUBBLE_OUTLINE = 0x57606a;

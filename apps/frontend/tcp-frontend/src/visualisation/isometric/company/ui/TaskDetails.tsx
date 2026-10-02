@@ -4,15 +4,19 @@ import {
   useLiveCompanyTasksList,
 } from '../../../../api/hooks';
 import type { AssignmentDTO } from '../../../../api/dtos';
+import type { ReactNode } from 'react';
 import { statusLabel } from '../../../../api/statuses';
 import { ExpandableText } from '../../../../components/ExpandableText/ExpandableText';
 import { t } from '../../../../strings';
 import { modeLabel } from './modeLabel';
+import { TrayHeading } from './TrayHeading';
 
 export interface TaskDetailsProps {
   readonly companyId: string;
   readonly taskId: string;
   readonly headingId: string;
+  /** The follow toggle, shown beside this panel's own heading. */
+  readonly headingAction?: ReactNode;
 }
 
 /** Ascending `orderIndex`, with a `null` (not yet planned into a step) last. */
@@ -37,6 +41,7 @@ export const TaskDetails = ({
   companyId,
   taskId,
   headingId,
+  headingAction,
 }: TaskDetailsProps) => {
   const tasksQuery = useLiveCompanyTasksList(companyId);
   const { data: roles } = useCompanyRolesList(companyId);
@@ -45,7 +50,9 @@ export const TaskDetails = ({
   if (tasksQuery.isPending) {
     return (
       <>
-        <h2 id={headingId}>{t('visualisation.tray.heading')}</h2>
+        <TrayHeading id={headingId} action={headingAction}>
+          {t('visualisation.tray.heading')}
+        </TrayHeading>
         <p>{t('visualisation.tray.loading')}</p>
       </>
     );
@@ -55,7 +62,9 @@ export const TaskDetails = ({
   if (task === undefined) {
     return (
       <>
-        <h2 id={headingId}>{t('visualisation.tray.heading')}</h2>
+        <TrayHeading id={headingId} action={headingAction}>
+          {t('visualisation.tray.heading')}
+        </TrayHeading>
         <p>{t('visualisation.tray.gone')}</p>
       </>
     );
@@ -71,9 +80,9 @@ export const TaskDetails = ({
 
   return (
     <>
-      <h2 id={headingId}>
+      <TrayHeading id={headingId} action={headingAction}>
         {t('visualisation.tray.taskHeading', { shortcode: task.shortcode })}
-      </h2>
+      </TrayHeading>
       <ExpandableText
         text={task.request}
         variant="ellipsis"
