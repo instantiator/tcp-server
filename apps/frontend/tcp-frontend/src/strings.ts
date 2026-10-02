@@ -260,6 +260,13 @@ const strings = {
   'companies.stat.activeAgents': 'Active agents',
   'companies.stat.activeTasks': 'Active tasks',
   'companies.stat.openEnquiries': 'Open enquiries',
+  // Counted phrases, picked by `tCount`: each needs both forms.
+  'companies.count.activeAgents.one': '{count} active agent',
+  'companies.count.activeAgents.other': '{count} active agents',
+  'companies.count.activeTasks.one': '{count} active task',
+  'companies.count.activeTasks.other': '{count} active tasks',
+  'companies.count.openEnquiries.one': '{count} open enquiry',
+  'companies.count.openEnquiries.other': '{count} open enquiries',
 
   // The company view shell. `company.loading` is a label, as above.
   'company.loading': 'this company',
@@ -527,3 +534,31 @@ export const t = (key: StringKey, params?: StringParams): string =>
     : strings[key].replace(/\{(\w+)\}/g, (placeholder, name: string) =>
         name in params ? String(params[name]) : placeholder,
       );
+
+/**
+ * A key whose string has both an `.one` and an `.other` form, named without
+ * the suffix — what `tCount` accepts.
+ */
+export type CountKey = {
+  [K in StringKey]: K extends `${infer Base}.one`
+    ? `${Base}.other` extends StringKey
+      ? Base
+      : never
+    : never;
+}[StringKey];
+
+/** English plural rules, from the platform rather than a library. */
+const pluralRules = new Intl.PluralRules('en');
+
+/**
+ * Resolves a counted phrase such as "1 active task" or "2 active tasks",
+ * picking the form by the platform's plural rules and filling `{count}`.
+ *
+ * Only for phrases shown on the page. An announcement is still worded to read
+ * at any count ("Tasks: {count} added"), so it stays one string and one
+ * channel phrase however many items it covers.
+ */
+export const tCount = (key: CountKey, count: number): string =>
+  t(`${key}.${pluralRules.select(count) === 'one' ? 'one' : 'other'}`, {
+    count,
+  });

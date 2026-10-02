@@ -85,11 +85,6 @@
   grid-area: down;
 }
 
-.company-visualisation__icon {
-  inline-size: var(--tcp-icon-size);
-  block-size: var(--tcp-icon-size);
-}
-
 /*
  * Full screen is the whole visualisation — toolbar, stage and tray — not
  * just the canvas, so the pan and full-screen controls stay reachable while

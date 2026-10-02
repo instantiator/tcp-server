@@ -7,14 +7,8 @@ import {
   Minimize,
   type LucideIcon,
 } from 'lucide-react';
-import type { ReactNode } from 'react';
-import {
-  Button,
-  ToggleButton,
-  Toolbar,
-  Tooltip,
-  TooltipTrigger,
-} from 'react-aria-components';
+import { Button, ToggleButton, Toolbar } from 'react-aria-components';
+import { Icon, WithTooltip } from '../../../../components/Icon/Icon';
 import { t } from '../../../../strings';
 import type { CompanySnapshot } from '../rules/companySnapshot';
 import type { SelectionTarget } from '../TcpPhaserEventBus';
@@ -44,45 +38,6 @@ export interface VisualisationToolbarProps {
    */
   readonly portalContainer?: Element | undefined;
 }
-
-/** An icon drawn inside a control. Decorative: the control carries the name. */
-const Icon = ({ icon: Glyph }: { readonly icon: LucideIcon }) => (
-  <Glyph className="company-visualisation__icon" aria-hidden="true" />
-);
-
-/**
- * A control whose face is only an icon, so its name is also shown as a
- * tooltip on hover or focus: a sighted user sees what the icon means, and
- * voice control and screen readers use the same words (WCAG 2.5.3).
- */
-const WithTooltip = ({
-  label,
-  portalContainer,
-  children,
-}: {
-  readonly label: string;
-  readonly portalContainer: Element | undefined;
-  readonly children: ReactNode;
-}) => (
-  <TooltipTrigger>
-    {children}
-    {/*
-      `UNSTABLE_portalContainer` is deprecated in favour of react-aria's
-      `UNSAFE_PortalProvider`, which react-aria-components doesn't re-export.
-      Importing it from react-aria directly would need a second dependency
-      pinned in step with the one react-aria-components pins, and it fails
-      silently when they drift. This prop fails loudly, at compile time, if
-      it is ever removed.
-    */}
-    <Tooltip
-      className="react-aria-Tooltip"
-      // eslint-disable-next-line @typescript-eslint/no-deprecated -- deliberate; see the comment above
-      UNSTABLE_portalContainer={portalContainer}
-    >
-      {label}
-    </Tooltip>
-  </TooltipTrigger>
-);
 
 interface PanButtonProps {
   readonly direction: 'left' | 'right' | 'up' | 'down';

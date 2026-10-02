@@ -127,7 +127,7 @@ export const DetailsPicker = ({
         <SelectValue />
       </Button>
       <Popover
-        // eslint-disable-next-line @typescript-eslint/no-deprecated -- the provider that replaces it isn't exported by react-aria-components; see `WithTooltip` in VisualisationToolbar.tsx
+        // eslint-disable-next-line @typescript-eslint/no-deprecated -- the provider that replaces it isn't exported by react-aria-components; see `WithTooltip` in components/Icon/Icon.tsx
         UNSTABLE_portalContainer={portalContainer}
       >
         <ListBox>
