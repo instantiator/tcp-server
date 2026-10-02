@@ -45,7 +45,7 @@ const COMPANY = {
 // company detail request this suite already made. `respondWithJson`'s
 // call-ordered queue answers exactly one request in the order it arrives, so
 // it stops being the right tool the moment a render fires six — the panel's
-// own coverage lives in `activity/CompanyActivity.test.tsx`, this file only
+// own coverage lives in `CompanyTabs.test.tsx`, this file only
 // needs every route answered so it does not error.
 const ROLES_ROUTE = /\/api\/company\/[^/]+\/roles/;
 const COMPANY_ROUTE = /\/api\/company\/[^/]+(\?|$)/;
@@ -202,16 +202,25 @@ describe('CompanyPage', () => {
     expect(screen.getByRole('tabpanel')).toBeInTheDocument();
   });
 
-  it('moves selection and focus between the two tabs from the keyboard', async () => {
+  it('moves selection and focus between the tabs from the keyboard', async () => {
     respondCompanyPage();
     const user = userEvent.setup();
     renderCompanyPage();
 
+    // 005.01: one tab per activity list replaced the single Activity tab. A
+    // name pattern, because each activity tab's name ends with its count
+    // badge once the list has loaded.
     const visualisationTab = await screen.findByRole('tab', {
       name: t('company.tab.visualisation'),
     });
-    const activityTab = screen.getByRole('tab', {
-      name: t('company.tab.activity'),
+    const agentsTab = screen.getByRole('tab', {
+      name: new RegExp(`^${t('activity.agents.heading')}`),
+    });
+    const tasksTab = screen.getByRole('tab', {
+      name: new RegExp(`^${t('activity.tasks.heading')}`),
+    });
+    const chatsTab = screen.getByRole('tab', {
+      name: new RegExp(`^${t('activity.chats.heading')}`),
     });
 
     visualisationTab.focus();
@@ -219,8 +228,8 @@ describe('CompanyPage', () => {
     expect(visualisationTab).toHaveAttribute('aria-selected', 'true');
 
     await user.keyboard('{ArrowRight}');
-    expect(activityTab).toHaveFocus();
-    expect(activityTab).toHaveAttribute('aria-selected', 'true');
+    expect(agentsTab).toHaveFocus();
+    expect(agentsTab).toHaveAttribute('aria-selected', 'true');
     expect(visualisationTab).toHaveAttribute('aria-selected', 'false');
 
     await user.keyboard('{ArrowLeft}');
@@ -228,25 +237,24 @@ describe('CompanyPage', () => {
     expect(visualisationTab).toHaveAttribute('aria-selected', 'true');
 
     await user.keyboard('{End}');
-    expect(activityTab).toHaveFocus();
-    expect(activityTab).toHaveAttribute('aria-selected', 'true');
+    expect(chatsTab).toHaveFocus();
+    expect(chatsTab).toHaveAttribute('aria-selected', 'true');
 
     await user.keyboard('{Home}');
     expect(visualisationTab).toHaveFocus();
     expect(visualisationTab).toHaveAttribute('aria-selected', 'true');
 
-    // Land back on activity to check `Tab` moves into its content. The
-    // visualisation panel holds nothing focusable (`#game-container` alone),
-    // so this assertion needs the tab with real content underneath it.
-    await user.keyboard('{End}');
-    expect(activityTab).toHaveAttribute('aria-selected', 'true');
+    // Land on Tasks to check `Tab` moves into its content. The visualisation
+    // panel holds nothing focusable (`#game-container` alone), so this
+    // assertion needs a tab with real content underneath it.
+    await user.keyboard('{ArrowRight}{ArrowRight}');
+    expect(tasksTab).toHaveAttribute('aria-selected', 'true');
 
-    // 007.01 gives the panel real content — the task status filter — so it is
-    // no longer empty. React Aria's `TabPanel` is only a tab stop in its own
-    // right (`tabIndex={0}`) while it holds nothing focusable; that is the
-    // ARIA authoring-practices behaviour for tabs. With focusable content
-    // inside, the panel itself is skipped and `Tab` lands on the first
-    // focusable descendant instead — here, the first status checkbox.
+    // React Aria's `TabPanel` is only a tab stop in its own right
+    // (`tabIndex={0}`) while it holds nothing focusable; that is the ARIA
+    // authoring-practices behaviour for tabs. With focusable content inside,
+    // the panel itself is skipped and `Tab` lands on the first focusable
+    // descendant instead — here, the first status checkbox.
     await user.tab();
     expect(
       screen.getByRole('checkbox', { name: t('activity.status.ready') }),

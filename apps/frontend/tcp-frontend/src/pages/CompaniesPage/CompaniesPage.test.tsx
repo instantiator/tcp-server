@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -104,9 +104,54 @@ describe('CompaniesPage', () => {
 
     await screen.findByRole('link', { name: 'Acme' });
 
-    expect(screen.getByText('3')).toBeInTheDocument();
-    expect(screen.getByText('7')).toBeInTheDocument();
-    expect(screen.getByText('4')).toBeInTheDocument();
+    expect(screen.getByText('3 active agents')).toBeInTheDocument();
+    expect(screen.getByText('7 active tasks')).toBeInTheDocument();
+    expect(screen.getByText('4 open enquiries')).toBeInTheDocument();
+  });
+
+  it('uses the singular form at a count of one, and shows zero rather than hiding it', async () => {
+    respondWithJson(200, [
+      company({
+        id: 'company-1',
+        name: 'Acme',
+        activeAgents: 1,
+        tasksByStatus: { ready: 1 },
+        openEnquiries: 0,
+      }),
+    ]);
+    renderCompaniesPage();
+
+    await screen.findByRole('link', { name: 'Acme' });
+
+    expect(screen.getByText('1 active agent')).toBeInTheDocument();
+    expect(screen.getByText('1 active task')).toBeInTheDocument();
+    expect(screen.getByText('0 open enquiries')).toBeInTheDocument();
+  });
+
+  it('makes the whole card a single link to the company, not just its name', async () => {
+    respondWithJson(200, [
+      company({
+        id: 'company-1',
+        name: 'Acme',
+        activeAgents: 3,
+        openEnquiries: 4,
+      }),
+    ]);
+    renderCompaniesPage();
+
+    const link = await screen.findByRole('link', { name: 'Acme' });
+    const card = link.closest<HTMLElement>('.companies-page__company');
+    expect(card).not.toBeNull();
+
+    // The stretched-link pattern (`tcp-card__link`'s `::after` covering the
+    // card) is CSS, which jsdom doesn't render — so a click on a stat line
+    // can't be simulated as a navigation here. Instead this asserts the
+    // precondition the CSS relies on: exactly one link in the card, named by
+    // the company and pointing at its route, so stretching it covers the
+    // whole clickable area without adding a second destination.
+    const links = card === null ? [] : within(card).getAllByRole('link');
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute('href', '/company/company-1');
   });
 
   it('shows a progress bar while loading, and marks the region busy', () => {

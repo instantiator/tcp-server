@@ -38,6 +38,7 @@
   --tcp-font-family:
     system-ui, -apple-system, 'Segoe UI', roboto, helvetica, arial, sans-serif;
   --tcp-font-size-base: 1rem;
+  --tcp-font-size-small: 0.875rem;
   --tcp-line-height: 1.5;
 
   /* Stacking order for the two surfaces that float above the page. The dock
@@ -73,12 +74,21 @@
   --tcp-card-width: 18rem;
   /* How long a surface takes to slide into place. Reduced motion cancels it. */
   --tcp-motion-duration: 200ms;
+  /* The sticky header's approximate block size, so `scroll-padding-block-start`
+     below can keep focused content clear of it (WCAG 2.4.11). */
+  --tcp-header-block-size: 4rem;
 }
 
 *,
 *::before,
 *::after {
   box-sizing: border-box;
+}
+
+/* A focus target that scrolls into view stops short of the sticky header
+   rather than landing underneath it (WCAG 2.4.11). */
+html {
+  scroll-padding-block-start: var(--tcp-header-block-size);
 }
 
 body {
@@ -596,4 +606,54 @@ body {
   border: var(--tcp-border-width) solid var(--tcp-color-border);
   border-radius: var(--tcp-radius);
   background-color: var(--tcp-color-bg);
+}
+
+/*
+ * The page header (005.01): stays on screen while the page scrolls, rather
+ * than being carried away with it, so the title and the account menu stay
+ * reachable. `html`'s `scroll-padding-block-start` above keeps a focused
+ * element from landing underneath it.
+ */
+.app-header {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: var(--tcp-layer-header);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--tcp-space-md);
+  padding-block: var(--tcp-space-sm);
+  background-color: var(--tcp-color-bg);
+  border-block-end: var(--tcp-border-width) solid var(--tcp-color-border);
+}
+
+/*
+ * The breadcrumb trail (005.01): a horizontal, wrapping list rather than the
+ * browser's default stacked one, with a `›` between crumbs. The separator is
+ * `content`'s alt-text form (`'›' / ''`), which keeps it out of the
+ * accessibility tree — a screen reader already hears each crumb in order from
+ * the list markup, and would otherwise read the glyph as if it were a crumb.
+ */
+.breadcrumbs__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--tcp-space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--tcp-font-size-small);
+}
+
+.breadcrumbs__item + .breadcrumbs__item::before {
+  content: '›' / '';
+  margin-inline-end: var(--tcp-space-xs);
+}
+
+/*
+ * A tab panel kept mounted while its tab is not selected (`shouldForceMount`,
+ * 005.01), so its list keeps its filters. React Aria already makes it
+ * `inert`; this takes it off screen too.
+ */
+.react-aria-TabPanel[data-inert] {
+  display: none;
 }

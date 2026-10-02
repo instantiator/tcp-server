@@ -40,7 +40,7 @@ const NOW = '2026-08-09T00:00:00.000Z';
 
 /**
  * `renderHook`, wrapped in a real `QueryClient` — modelled on `renderActivity`
- * in `CompanyActivity.test.tsx`. Returns the client alongside the render
+ * in `CompanyTabs.test.tsx`. Returns the client alongside the render
  * result so a test can hand it straight to `applyEvent`.
  */
 const renderHookWithClient = <T,>(callback: () => T) => {

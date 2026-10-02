@@ -11,7 +11,7 @@ import { roleLabel, type ListProps } from './activity-list-utils';
  * assignment dialog for a row to open — apart from the prompt's own expander,
  * which acts on the row's text rather than opening anything.
  */
-export const AgentsList = ({ companyId, roleNames }: ListProps) => {
+export const AgentsList = ({ companyId, roleNames, onCount }: ListProps) => {
   const query = useLiveCompanyAgentsList(companyId);
   // `some` rather than `includes`, so the literal-union constant needs no
   // widening cast to be compared against the schema's `string`.
@@ -30,6 +30,7 @@ export const AgentsList = ({ companyId, roleNames }: ListProps) => {
 
   return (
     <ActivityList
+      onCount={onCount}
       heading={t('activity.agents.heading')}
       query={query}
       channel="agents"

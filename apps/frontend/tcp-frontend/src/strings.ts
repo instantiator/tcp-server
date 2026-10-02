@@ -10,6 +10,8 @@
  */
 const strings = {
   'app.title': 'TCP',
+  /** The header's title inside a company. */
+  'app.titleWithCompany': 'TCP: {company}',
 
   'landing.intro':
     'TCP manages one or more companies of AI agents that collaborate to complete tasks. Sign in to watch a company work, and to take part.',
@@ -257,9 +259,6 @@ const strings = {
   'companies.empty.heading': 'You are not a member of any company',
   'companies.empty.body':
     'Companies are created and managed with tcp-cli, the command-line tool — the web client cannot create one yet. Ask whoever runs this system to add you to a company.',
-  'companies.stat.activeAgents': 'Active agents',
-  'companies.stat.activeTasks': 'Active tasks',
-  'companies.stat.openEnquiries': 'Open enquiries',
   // Counted phrases, picked by `tCount`: each needs both forms.
   'companies.count.activeAgents.one': '{count} active agent',
   'companies.count.activeAgents.other': '{count} active agents',
@@ -279,7 +278,6 @@ const strings = {
     'Live updates have stopped. Reload the page to reconnect.',
   'company.tabs.label': 'Company views',
   'company.tab.visualisation': 'Company view',
-  'company.tab.activity': 'Activity',
 
   // `components/ExpandableText`: a long text clipped to its opening.
   'expandableText.truncated': '{excerpt}…',

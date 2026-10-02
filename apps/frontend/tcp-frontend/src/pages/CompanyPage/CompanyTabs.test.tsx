@@ -3,26 +3,26 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { WireEvent } from '@tcp/shared/client';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ANNOUNCE_IMMEDIATE_MS,
   ANNOUNCE_THROTTLE_MS,
   resetAnnouncer,
-} from '../../../announce/announcer';
-import { ChatProvider } from '../../../components/ChatDialog/ChatProvider';
-import { DockProvider } from '../../../components/Dialog/DockProvider';
-import { applyEvent } from '../../../events/cache';
-import { t, type StringKey } from '../../../strings';
-import { expectNoA11yViolations } from '../../../test-support/axe';
+} from '../../announce/announcer';
+import { ChatProvider } from '../../components/ChatDialog/ChatProvider';
+import { DockProvider } from '../../components/Dialog/DockProvider';
+import { applyEvent } from '../../events/cache';
+import { t, type StringKey } from '../../strings';
+import { expectNoA11yViolations } from '../../test-support/axe';
 import {
   fetchMock,
   installFetchMock,
   requestedUrls,
   respondByRoute,
   type RouteResponse,
-} from '../../../test-support/fetch-mock';
-import { CompanyActivity } from './CompanyActivity';
+} from '../../test-support/fetch-mock';
+import { CompanyTabs } from './CompanyTabs';
 
 // The chats list (008.02) opens the chat dialog through `useChat()`, which
 // throws outside a `ChatProvider` — and `ChatProvider` needs a `DockProvider`
@@ -31,8 +31,8 @@ import { CompanyActivity } from './CompanyActivity';
 // `subscribe` is stubbed rather than mocked in detail: opening a chat row
 // mounts a `Transcript`, which would otherwise try to open a real connection
 // through `connect()` and the auth stack this file never sets up.
-vi.mock('../../../events/subscriptions', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../events/subscriptions')>()),
+vi.mock('../../events/subscriptions', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../events/subscriptions')>()),
   subscribe: vi.fn(() => () => undefined),
 }));
 
@@ -53,7 +53,7 @@ const ASSIGNMENTS_ROUTE = /\/api\/assignment\?/;
 const CONVERSATIONS_ROUTE = /\/api\/conversation\?/;
 // The chats list opens the chat dialog on a row's agent, which mounts a
 // `Transcript` and a `MessageInput` for `CHAT_1.agentId` — a detail and a
-// history request neither of `CompanyActivity`'s own five queries make.
+// history request neither of `CompanyTabs`'s own five queries make.
 const CHAT_AGENT_ROUTE = /\/api\/agent\/agent-9(\?|$)/;
 const CHAT_AGENT_HISTORY_ROUTE = /\/api\/agent\/agent-9\/history/;
 
@@ -239,7 +239,7 @@ interface ActivityRoutes {
   readonly chats?: RouteResponse;
 }
 
-/** Answers all six queries `CompanyActivity` mounts. Each is overridable. */
+/** Answers all six queries `CompanyTabs` mounts. Each is overridable. */
 const respondActivity = (overrides: ActivityRoutes = {}): void => {
   respondByRoute([
     [ROLES_ROUTE, overrides.roles ?? { body: [ROLE] }],
@@ -267,7 +267,12 @@ const EMPTY_ROUTES: ActivityRoutes = {
   chats: { body: [] },
 };
 
-const renderActivity = () => {
+/** Shows the router's current hash, which is the selected tab (005.01). */
+const HashProbe = () => (
+  <output data-testid="hash">{useLocation().hash}</output>
+);
+
+const renderActivity = (initialEntry = '/') => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -275,7 +280,8 @@ const renderActivity = () => {
     queryClient,
     ...render(
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter>
+        <MemoryRouter initialEntries={[initialEntry]}>
+          <HashProbe />
           {/*
             The chats list (008.02) calls `useChat()`, which throws outside a
             `ChatProvider` — and a parked chat needs a `DockProvider` above
@@ -283,7 +289,7 @@ const renderActivity = () => {
           */}
           <DockProvider>
             <ChatProvider>
-              <CompanyActivity companyId={COMPANY_ID} />
+              <CompanyTabs companyId={COMPANY_ID} visualisation={null} />
             </ChatProvider>
           </DockProvider>
         </MemoryRouter>
@@ -334,7 +340,7 @@ const ACTIVE_FILTER_LABELS: readonly StringKey[] = [
   'activity.status.finalising',
 ];
 
-describe('CompanyActivity', () => {
+describe('CompanyTabs', () => {
   beforeEach(() => {
     installFetchMock();
   });
@@ -937,6 +943,108 @@ describe('CompanyActivity', () => {
     });
   });
 
+  describe('the tabs (005.01)', () => {
+    /** An activity tab, by the start of its name: the end is its count. */
+    const tabNamed = (key: StringKey) =>
+      screen.getByRole('tab', { name: new RegExp(`^${t(key)}`) });
+
+    it("titles each activity tab with its list's shown count", async () => {
+      respondActivity();
+      renderActivity();
+
+      for (const key of [
+        'activity.agents.heading',
+        'activity.tasks.heading',
+        'activity.consultations.heading',
+        'activity.enquiries.heading',
+        'activity.chats.heading',
+      ] as const) {
+        expect(
+          await screen.findByRole('tab', { name: `${t(key)} 1` }),
+        ).toBeInTheDocument();
+      }
+    });
+
+    it("updates a tab's count when its list's filter changes", async () => {
+      const hidden = task({
+        id: 'task-2',
+        status: 'succeeded',
+        shortcode: 'TASK-2',
+      });
+      respondActivity({ tasks: { body: [TASK_1, hidden] } });
+      const user = userEvent.setup();
+      renderActivity('/#tasks');
+
+      expect(
+        await screen.findByRole('tab', {
+          name: `${t('activity.tasks.heading')} 1`,
+        }),
+      ).toBeInTheDocument();
+
+      await user.click(
+        screen.getByRole('checkbox', { name: t('activity.status.succeeded') }),
+      );
+      expect(
+        await screen.findByRole('tab', {
+          name: `${t('activity.tasks.heading')} 2`,
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it('keeps a filter when the user switches to another tab and back', async () => {
+      respondActivity();
+      const user = userEvent.setup();
+      renderActivity();
+
+      await user.click(tabNamed('activity.tasks.heading'));
+      const succeeded = await screen.findByRole('checkbox', {
+        name: t('activity.status.succeeded'),
+      });
+      await user.click(succeeded);
+      expect(succeeded).toBeChecked();
+
+      await user.click(tabNamed('activity.chats.heading'));
+      await user.click(tabNamed('activity.tasks.heading'));
+
+      expect(
+        screen.getByRole('checkbox', { name: t('activity.status.succeeded') }),
+      ).toBeChecked();
+    });
+
+    it('opens the tab named by the URL hash, as a notification link does', () => {
+      respondActivity();
+      renderActivity('/#enquiries');
+
+      expect(tabNamed('activity.enquiries.heading')).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+    });
+
+    it('falls back to the office view for no hash or an unknown one', () => {
+      respondActivity();
+      renderActivity('/#nonsense');
+
+      expect(
+        screen.getByRole('tab', { name: t('company.tab.visualisation') }),
+      ).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('writes the selected tab into the hash, and clears it for the office view', async () => {
+      respondActivity();
+      const user = userEvent.setup();
+      renderActivity();
+
+      await user.click(tabNamed('activity.chats.heading'));
+      expect(screen.getByTestId('hash')).toHaveTextContent('#chats');
+
+      await user.click(
+        screen.getByRole('tab', { name: t('company.tab.visualisation') }),
+      );
+      expect(screen.getByTestId('hash')).toBeEmptyDOMElement();
+    });
+  });
+
   describe('the task status filter', () => {
     it('checks only the four active statuses by default', async () => {
       respondActivity();
@@ -1477,7 +1585,7 @@ describe('CompanyActivity', () => {
     it('announces a new enquiry immediately, not behind the list throttle window', async () => {
       // 008.04: `EnquiriesList` no longer announces arrivals itself —
       // `NewEnquiryNotifications` does, rendered above the five lists in
-      // `CompanyActivity`, and it is now the single writer on the `enquiry`
+      // `CompanyTabs`, and it is now the single writer on the `enquiry`
       // channel. `Notification` announces immediately on appearance
       // (`ANNOUNCE_IMMEDIATE_MS`), which is what keeps this assertion's
       // point — a new enquiry is not held behind the list's own throttle
