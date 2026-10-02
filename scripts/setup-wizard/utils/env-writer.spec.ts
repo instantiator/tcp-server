@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { writeEnvFile } from './env-writer';
+import { willGenerateMasterkey, writeEnvFile } from './env-writer';
 import { LOCAL_ONLY_ENV_KEYS } from './app-defaults';
 import type { WizardConfig } from '../types';
 
@@ -148,6 +148,39 @@ describe('writeEnvFile — committed base vs gitignored .local split', () => {
     ]) {
       expect(valueOf(second, key)).toBe(valueOf(first, key));
     }
+  });
+
+  it('keeps a master key found only in the base env file, moving it to .local', () => {
+    // A hand-written or .env.example-style file keeps it in the base file;
+    // dropping it for a new key locks Zitadel out of its own data.
+    writeFileSync(
+      join(dir, '.env.testinstance'),
+      'ZITADEL_MASTERKEY=fromthebasefile0123456789abcdef\n',
+      'utf8',
+    );
+    expect(willGenerateMasterkey(makeConfig(), dir)).toBe(false);
+
+    const { envFile, localFile } = writeEnvFile(makeConfig(), dir);
+    expect(valueOf(readFileSync(localFile, 'utf8'), 'ZITADEL_MASTERKEY')).toBe(
+      'fromthebasefile0123456789abcdef',
+    );
+    expect(
+      uncommentedKeys(readFileSync(envFile, 'utf8')).has('ZITADEL_MASTERKEY'),
+    ).toBe(false);
+  });
+
+  it('reports when a new master key would be generated', () => {
+    expect(willGenerateMasterkey(makeConfig(), dir)).toBe(true);
+    writeEnvFile(makeConfig(), dir);
+    expect(willGenerateMasterkey(makeConfig(), dir)).toBe(false);
+    const external = makeConfig({
+      oidc: {
+        issuerUrl: 'https://idp.example.com',
+        clientId: 'c',
+        clientSecret: 's',
+      },
+    });
+    expect(willGenerateMasterkey(external, dir)).toBe(false);
   });
 
   it('writes no Zitadel secrets for an external OIDC provider', () => {
