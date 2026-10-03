@@ -380,6 +380,12 @@ first two from when they aren't passed or exported (checking that file's
 gitignored `<env-file>.local` override first, where `start-deployment.sh`'s
 bootstrap writes them).
 
+**Failed runs keep their traces.** Playwright empties
+`test-results/browser-artifacts/` at the start of every run, so rerunning a
+failure would delete its traces. When a run fails, the script copies them to
+`.tmp/browser-failures/<timestamp>/` (gitignored) first. Open one with
+`npx playwright show-trace <path>/trace.zip`. Delete old copies by hand.
+
 ```bash
 ./scripts/start-deployment.sh --project tcp-dev --env-file .env.dev
 ./scripts/run-browser-tests.sh --env-file .env.dev

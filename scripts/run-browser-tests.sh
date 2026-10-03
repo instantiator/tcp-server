@@ -142,4 +142,19 @@ export TCP_WEB_URL="$BASE_URL"
 [[ -n "$USERNAME_ARG" ]]  && export TEST_USERNAME="$USERNAME_ARG"
 [[ -n "$PASSWORD_ARG" ]]  && export TEST_PASSWORD="$PASSWORD_ARG"
 
-npm --prefix "$REPO_ROOT" run test:browser -- ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}
+status=0
+npm --prefix "$REPO_ROOT" run test:browser -- ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"} || status=$?
+
+# Playwright empties its output folder at the start of every run, so a rerun
+# would destroy the traces of the failure it is meant to investigate. Keep a
+# copy of each failed run's traces in the gitignored .tmp/.
+ARTIFACTS="$REPO_ROOT/test-results/browser-artifacts"
+# Plain `ls`, not `-A`: Playwright writes `.last-run.json` even when no test
+# ran, and that alone is not worth keeping.
+if [[ $status -ne 0 && -n "$(ls "$ARTIFACTS" 2>/dev/null)" ]]; then
+  KEEP="$REPO_ROOT/.tmp/browser-failures/$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "$KEEP"
+  cp -R "$ARTIFACTS/." "$KEEP/"
+  echo "Traces from this failed run kept in ${KEEP#"$REPO_ROOT"/}" >&2
+fi
+exit "$status"
