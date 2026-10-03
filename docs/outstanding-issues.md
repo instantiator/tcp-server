@@ -24,6 +24,32 @@ writes a Node diagnostic report of the handles still open to
 names the open handle; fix the code that leaves it open. Don't add
 `--forceExit`, which would hide real leaks.
 
+## Office view browser tests fail intermittently
+
+On 2026-10-03, `company-visualisation.spec.ts` failed in 4 runs: once in the
+full `run-all-tests.sh` (2 of 54 browser tests), then 3 times when run alone
+against a newly rebuilt stack (2, 1 and 5 of 13). The failing runs took
+1.3–1.5 minutes. The same stack then passed 3 runs out of 3 about 15 minutes
+later, in about 30 seconds each.
+
+Every failure was the same: `officeSummary(page)` (the `group` named for the
+office view) was not found within the 5 second `expect` timeout. The element
+was missing, not wrong. Which tests failed changed from run to run, so it's not
+one test's logic.
+
+It didn't reproduce afterwards, in 7 runs: the spec 3 times straight after
+`start-deployment.sh --rebuild`, the full browser tier twice, and the full tier
+twice with every CPU core busy (as slow as the failing runs). So it isn't a
+cold stack, the other specs running alongside, or CPU load alone. The cause is
+unknown. The traces that would show what the page displayed instead were
+overwritten by the next run: Playwright clears its output folder every time.
+
+**Act when:** the browser tier fails this way again. `run-browser-tests.sh`
+now keeps each failed run's traces in `.tmp/browser-failures/<timestamp>/`.
+Open the failing test's trace with `npx playwright show-trace`. It will show whether the page was
+loading, showing an error or redirecting to sign-in. Don't add retries;
+`playwright.config.ts` explains why.
+
 ## Finalisation assignment status
 
 When the finalisation assignment of a task completes, the task moves to state `succeeded` but the finalisation task remains `in-progress`.

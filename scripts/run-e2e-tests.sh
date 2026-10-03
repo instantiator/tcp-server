@@ -55,6 +55,7 @@ PASSTHROUGH=()
 for arg in "$@"; do
   case "$arg" in
     -h|--help) usage; exit 0 ;;
+    --) ;; # the separator itself, not an argument
     *) PASSTHROUGH+=("$arg") ;;
   esac
 done

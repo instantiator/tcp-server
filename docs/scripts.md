@@ -3,8 +3,10 @@
 All scripts live in [`scripts/`](../scripts/). Each accepts `-h` / `--help`
 for full usage.
 
-Testing scripts also accept `-- <jest options>` to pass
-arguments through to Jest (e.g. `--testNamePattern`, `--testPathPattern`).
+Testing scripts also accept `-- <options>` to pass arguments through to the
+test runner (e.g. `--testNamePattern`, or Jest's `--testPathPatterns`).
+`run-unit-tests.sh` passes them to both Jest and the frontend's Vitest, so use
+options both understand there.
 
 ## Docker Compose project isolation
 
@@ -230,7 +232,7 @@ during development.
 ```bash
 ./scripts/run-unit-tests.sh
 ./scripts/run-unit-tests.sh -- --testNamePattern="company"
-./scripts/run-unit-tests.sh -- --testPathPattern="api"
+./scripts/run-unit-tests.sh -- api   # only test files whose path matches "api"
 ```
 
 See also: [docs/testing.md](testing.md) for the full testing strategy.
@@ -379,6 +381,12 @@ the same credential flags for it: `--client-id`/`--client-secret`, an
 first two from when they aren't passed or exported (checking that file's
 gitignored `<env-file>.local` override first, where `start-deployment.sh`'s
 bootstrap writes them).
+
+**Failed runs keep their traces.** Playwright empties
+`test-results/browser-artifacts/` at the start of every run, so rerunning a
+failure would delete its traces. When a run fails, the script copies them to
+`.tmp/browser-failures/<timestamp>/` (gitignored) first. Open one with
+`npx playwright show-trace <path>/trace.zip`. Delete old copies by hand.
 
 ```bash
 ./scripts/start-deployment.sh --project tcp-dev --env-file .env.dev
