@@ -662,6 +662,20 @@ test.describe('company visualisation', () => {
         )
         .toBeLessThan(32);
 
+      // And the canvas fills the stage. Phaser sized it once at boot, before
+      // the stage had grown, and stayed at the fixed height (005.01); the
+      // stage's own size alone never showed it.
+      const canvasHeight = () =>
+        stage
+          .locator('canvas')
+          .evaluate((element) => element.getBoundingClientRect().height);
+      const stageHeight = async () => (await stage.boundingBox())?.height ?? 0;
+      await expect
+        .poll(async () =>
+          Math.abs((await stageHeight()) - (await canvasHeight())),
+        )
+        .toBeLessThan(2);
+
       // A short window: the fixed height is the floor, and the page scrolls.
       await page.setViewportSize({ width: 1280, height: 400 });
       await expect

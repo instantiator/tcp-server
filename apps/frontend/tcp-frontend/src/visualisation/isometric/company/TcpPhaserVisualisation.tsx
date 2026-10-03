@@ -145,7 +145,22 @@ export default function TcpPhaserVisualisation({
     });
     gameRef.current = game;
 
+    // Phaser sizes the canvas when it boots, before `useStageTop` has grown
+    // the stage to fill the window, and its own 500ms parent check misses
+    // that change: the canvas stayed at the stage's fixed height (005.01).
+    // The dock appearing or full screen changes the stage the same way, with
+    // no window resize. Watching the parent catches every case. jsdom has no
+    // ResizeObserver.
+    const observer =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(() => {
+            game.scale.refresh();
+          });
+    observer?.observe(parent);
+
     return () => {
+      observer?.disconnect();
       offTcpEvent({ event: 'scene-ready', fn: handleSceneReady });
       offTcpEvent({ event: 'avatar-arrived', fn: handleAvatarArrived });
       offTcpEvent({ event: 'avatar-exited', fn: handleAvatarExited });
