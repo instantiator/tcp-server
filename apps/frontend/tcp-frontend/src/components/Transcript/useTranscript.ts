@@ -17,7 +17,7 @@ import { useEventStream } from '../../events/useEventStream';
  * Whether a completed response is announced in full, or only as having
  * arrived.
  *
- * ADR-027 leaves this open until the manual screen reader pass (001.02, phase 04). An
+ * ADR-027 leaves this open until the manual screen reader pass (001.02, phase 05). An
  * agent's answer can run to several paragraphs, and reading all of it holds
  * the audio channel for a long time with no useful way to interrupt — while
  * the text is on screen and browsable either way. So it is `false` for now,

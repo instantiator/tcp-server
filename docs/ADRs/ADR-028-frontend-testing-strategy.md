@@ -68,7 +68,7 @@ The decisive argument for Vitest is the transform pipeline. The frontend is a Vi
 ## Prompts to update when this is decided
 
 - `002.02.00.prompt - testing infrastructure (draft).md`
-- `phase 04 - web ui quality/001.01.00.prompt - browser test suite for mvp journeys (draft).md`
+- `phase 05 - web ui quality/001.01.00.prompt - browser test suite for mvp journeys (draft).md`
 - The testing section of every feature prompt (`003.*` – `008.*`)
 
 ## Detail

@@ -73,7 +73,7 @@ Three further points: [HTTP/2 is needed in development too](#http2-in-developmen
 - `002.04.00.prompt - backend api enablement for the web ui (draft).md`
 - `004.01.00.prompt - oidc client (draft).md`
 - `005.01.00.prompt - generated api client (draft).md`
-- `phase 04 - web ui quality/001.01.00.prompt - browser test suite for mvp journeys (draft).md`
+- `phase 05 - web ui quality/001.01.00.prompt - browser test suite for mvp journeys (draft).md`
 
 ## Detail
 
