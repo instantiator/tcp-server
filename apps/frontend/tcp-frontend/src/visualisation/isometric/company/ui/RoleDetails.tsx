@@ -1,13 +1,16 @@
-import { useId } from 'react';
+import { useId, type ReactNode } from 'react';
 import { Button } from 'react-aria-components';
 import { useCompanyRolesList } from '../../../../api/hooks';
 import { useStartChatAction } from '../../../../components/AddNew/useStartChatAction';
 import { t } from '../../../../strings';
+import { TrayHeading } from './TrayHeading';
 
 export interface RoleDetailsProps {
   readonly companyId: string;
   readonly roleId: string;
   readonly headingId: string;
+  /** The follow toggle, shown beside this panel's own heading. */
+  readonly headingAction?: ReactNode;
 }
 
 /**
@@ -25,6 +28,7 @@ export const RoleDetails = ({
   companyId,
   roleId,
   headingId,
+  headingAction,
 }: RoleDetailsProps) => {
   const rolesQuery = useCompanyRolesList(companyId);
   const errorId = useId();
@@ -33,7 +37,9 @@ export const RoleDetails = ({
   if (rolesQuery.isPending) {
     return (
       <>
-        <h2 id={headingId}>{t('visualisation.tray.heading')}</h2>
+        <TrayHeading id={headingId} action={headingAction}>
+          {t('visualisation.tray.heading')}
+        </TrayHeading>
         <p>{t('visualisation.tray.loading')}</p>
       </>
     );
@@ -43,7 +49,9 @@ export const RoleDetails = ({
   if (role === undefined) {
     return (
       <>
-        <h2 id={headingId}>{t('visualisation.tray.heading')}</h2>
+        <TrayHeading id={headingId} action={headingAction}>
+          {t('visualisation.tray.heading')}
+        </TrayHeading>
         <p>{t('visualisation.tray.gone')}</p>
       </>
     );
@@ -51,9 +59,9 @@ export const RoleDetails = ({
 
   return (
     <>
-      <h2 id={headingId}>
+      <TrayHeading id={headingId} action={headingAction}>
         {t('visualisation.tray.roleHeading', { name: role.name })}
-      </h2>
+      </TrayHeading>
       <p>{role.description}</p>
       <Button
         className="react-aria-Button"

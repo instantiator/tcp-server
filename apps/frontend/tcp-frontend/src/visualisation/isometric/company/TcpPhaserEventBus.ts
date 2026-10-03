@@ -53,8 +53,9 @@ export interface OfficeLabel {
  * one case in each of three unions.
  *
  * React → scene: `world-changed`, `camera-pan`, `camera-follow`,
- * `motion-preference`, `labels-changed`. Scene → React: `scene-ready`, `avatar-arrived`,
- * `avatar-exited`, `hover`, `select`, `follow-stopped`. Listeners on the
+ * `motion-preference`, `labels-changed`, `thinking-changed`. Scene → React:
+ * `scene-ready`, `avatar-arrived`, `avatar-exited`, `hover`, `select`,
+ * `follow-stopped`, `listen-in`. Listeners on the
  * React side live only in `TcpPhaserVisualisation`; `CompanyVisualisation`
  * may emit but never listens directly.
  */
@@ -68,12 +69,16 @@ export interface TcpPhaserEventMap {
   'motion-preference': { readonly reduced: boolean };
   /** Every label to show now. An empty list clears them all. */
   'labels-changed': readonly OfficeLabel[];
+  /** The agents that are working now, each shown with a thought bubble (005.01). */
+  'thinking-changed': readonly string[];
 
   'avatar-arrived': { readonly avatarId: string; readonly tile: Tile };
   'avatar-exited': { readonly avatarId: string };
   hover: HoverEvent | null;
   select: SelectionTarget;
   'follow-stopped': void;
+  /** A thought bubble was clicked: open that agent's chat read-only. */
+  'listen-in': { readonly agentId: string };
 }
 
 export type TcpPhaserEmission = {

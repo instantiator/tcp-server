@@ -1,3 +1,4 @@
+import { Bot, ListTodo, MessageCircleQuestion } from 'lucide-react';
 import { Link } from 'react-router';
 import { useLoadingAnnouncement } from '../../announce/useLoadingAnnouncement';
 import { ApiError } from '../../api/errors';
@@ -5,9 +6,10 @@ import { useCompanies } from '../../api/hooks';
 import { ACTIVE_TASK_STATUSES } from '../../api/statuses';
 import { EmptyState } from '../../components/EmptyState/EmptyState';
 import { ErrorState } from '../../components/ErrorState/ErrorState';
+import { Icon } from '../../components/Icon/Icon';
 import { LoadingState } from '../../components/LoadingState/LoadingState';
 import { useDocumentTitle } from '../../shell/useDocumentTitle';
-import { t } from '../../strings';
+import { t, tCount } from '../../strings';
 import './CompaniesPage.css';
 
 /**
@@ -71,31 +73,53 @@ export const CompaniesPage = () => {
 
         {!isPending && error === null && data.length > 0 && (
           <ul className="companies-page__companies">
-            {data.map((company) => (
-              <li className="companies-page__company" key={company.id}>
-                <Link to={`/company/${company.id}`}>{company.name}</Link>
-                <dl className="companies-page__stats">
-                  <dt>{t('companies.stat.activeAgents')}</dt>
-                  <dd>{company.stats.activeAgents}</dd>
-                  <dt>{t('companies.stat.activeTasks')}</dt>
-                  <dd>
-                    {/*
-                      `tasksByStatus` is zero-filled by the server (002.04), so
-                      a missing key is a bug rather than an absent count — read
-                      it directly and let a `NaN` show rather than defaulting
-                      it away.
-                    */}
-                    {ACTIVE_TASK_STATUSES.reduce(
-                      (sum, status) =>
-                        sum + company.stats.tasksByStatus[status],
-                      0,
-                    )}
-                  </dd>
-                  <dt>{t('companies.stat.openEnquiries')}</dt>
-                  <dd>{company.stats.openEnquiries}</dd>
-                </dl>
-              </li>
-            ))}
+            {data.map((company) => {
+              // `tasksByStatus` is zero-filled by the server (002.04), so a
+              // missing key is a bug rather than an absent count — read it
+              // directly and let a `NaN` show rather than defaulting it away.
+              const activeTasks = ACTIVE_TASK_STATUSES.reduce(
+                (sum, status) => sum + company.stats.tasksByStatus[status],
+                0,
+              );
+              return (
+                <li
+                  className="companies-page__company tcp-card"
+                  key={company.id}
+                >
+                  {/*
+                    `tcp-card__link` stretches over the whole card (its
+                    `::after` covers the card's full area), so the whole card
+                    is clickable even though only the name is a link.
+                  */}
+                  <Link
+                    className="tcp-card__link"
+                    to={`/company/${company.id}`}
+                  >
+                    {company.name}
+                  </Link>
+                  <ul className="companies-page__stats">
+                    <li>
+                      <Icon icon={Bot} />
+                      {tCount(
+                        'companies.count.activeAgents',
+                        company.stats.activeAgents,
+                      )}
+                    </li>
+                    <li>
+                      <Icon icon={ListTodo} />
+                      {tCount('companies.count.activeTasks', activeTasks)}
+                    </li>
+                    <li>
+                      <Icon icon={MessageCircleQuestion} />
+                      {tCount(
+                        'companies.count.openEnquiries',
+                        company.stats.openEnquiries,
+                      )}
+                    </li>
+                  </ul>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

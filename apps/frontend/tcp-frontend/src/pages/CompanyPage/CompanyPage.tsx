@@ -1,4 +1,3 @@
-import { Tab, TabList, TabPanel, Tabs } from 'react-aria-components';
 import { Link, useParams } from 'react-router';
 import { useLoadingAnnouncement } from '../../announce/useLoadingAnnouncement';
 import { useLiveCompanyState } from '../../api/hooks';
@@ -12,15 +11,15 @@ import { useEventStream } from '../../events/useEventStream';
 import { useDocumentTitle } from '../../shell/useDocumentTitle';
 import { t } from '../../strings';
 import CompanyVisualisation from '../../visualisation/isometric/company/CompanyVisualisation';
-import { CompanyActivity } from './activity/CompanyActivity';
+import { CompanyTabs } from './CompanyTabs';
 import './CompanyPage.css';
 
 /**
  * The frame every company view sits inside: where you are, the way back up,
  * and the tabs the views themselves are reached through.
  *
- * The tab list holds the isometric visualisation and the activity view;
- * the visualisation tab is first, and is selected by default.
+ * The tabs (`CompanyTabs`) hold the isometric visualisation and one tab per
+ * activity list; the visualisation tab is first, and is selected by default.
  *
  * **React Aria's `RouterProvider` is not adopted, and that is a decision rather
  * than an omission** (003.02 asked for it to be taken here). `Tabs` renders
@@ -78,7 +77,14 @@ export const CompanyPage = () => {
           { label: company?.name ?? t('page.company.title') },
         ]}
       />
-      <h1>{company?.name ?? t('page.company.title')}</h1>
+      {/*
+        Visually hidden (005.01): the header and the breadcrumb already show the
+        company's name on screen. It stays as the page's heading and as where
+        focus lands on arriving here (`useRouteChange`).
+      */}
+      <h1 className="visually-hidden">
+        {company?.name ?? t('page.company.title')}
+      </h1>
 
       {/*
         Floats at the bottom-right (003.01), but sits here in the DOM so it
@@ -86,7 +92,7 @@ export const CompanyPage = () => {
       */}
       {companyId !== undefined && (
         <div className="company-page__add-new">
-          <AddNewMenu companyId={companyId} />
+          <AddNewMenu companyId={companyId} fab />
         </div>
       )}
 
@@ -132,38 +138,10 @@ export const CompanyPage = () => {
         )}
 
         {!isPending && error === null && company !== undefined && (
-          <Tabs className="react-aria-Tabs company-page__tabs">
-            {/*
-              Every `className` here repeats React Aria's own default class
-              name, because passing `className` *replaces* the default rather
-              than composing with it — the trap `ThemeControl` and `Header`
-              both carry a note about. Drop the prefix and every rule in
-              `base.css` stops applying, with nothing in jsdom to notice.
-            */}
-            <TabList
-              aria-label={t('company.tabs.label')}
-              className="react-aria-TabList"
-            >
-              <Tab id="visualisation" className="react-aria-Tab">
-                {t('company.tab.visualisation')}
-              </Tab>
-              <Tab id="activity" className="react-aria-Tab">
-                {t('company.tab.activity')}
-              </Tab>
-            </TabList>
-            <TabPanel
-              id="activity"
-              className="react-aria-TabPanel company-page__tab"
-            >
-              <CompanyActivity companyId={company.id} />
-            </TabPanel>
-            <TabPanel
-              id="visualisation"
-              className="react-aria-TabPanel company-page__tab"
-            >
-              <CompanyVisualisation companyId={company.id} />
-            </TabPanel>
-          </Tabs>
+          <CompanyTabs
+            companyId={company.id}
+            visualisation={<CompanyVisualisation companyId={company.id} />}
+          />
         )}
       </div>
     </>

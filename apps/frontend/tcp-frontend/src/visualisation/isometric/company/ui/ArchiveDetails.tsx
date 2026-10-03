@@ -3,14 +3,18 @@ import {
   useLiveCompanyTasksList,
 } from '../../../../api/hooks';
 import type { TaskDTO } from '../../../../api/dtos';
+import type { ReactNode } from 'react';
 import { taskOutputsUrl } from '../../../../api/storageLink';
 import { shortened } from '../../../../components/ExpandableText/excerpt';
 import { getRuntimeConfig } from '../../../../runtime-config';
 import { t } from '../../../../strings';
+import { TrayHeading } from './TrayHeading';
 
 export interface ArchiveDetailsProps {
   readonly companyId: string;
   readonly headingId: string;
+  /** The follow toggle, shown beside this panel's own heading. */
+  readonly headingAction?: ReactNode;
 }
 
 /** Newest first, by `updatedAt`. */
@@ -31,6 +35,7 @@ const byUpdatedAtDescending = (a: TaskDTO, b: TaskDTO): number =>
 export const ArchiveDetails = ({
   companyId,
   headingId,
+  headingAction,
 }: ArchiveDetailsProps) => {
   const tasksQuery = useLiveCompanyTasksList(companyId);
   const companyQuery = useLiveCompanyState(companyId);
@@ -38,7 +43,9 @@ export const ArchiveDetails = ({
   if (tasksQuery.isPending || companyQuery.isPending) {
     return (
       <>
-        <h2 id={headingId}>{t('visualisation.archive.heading')}</h2>
+        <TrayHeading id={headingId} action={headingAction}>
+          {t('visualisation.archive.heading')}
+        </TrayHeading>
         <p>{t('visualisation.tray.loading')}</p>
       </>
     );
@@ -51,7 +58,9 @@ export const ArchiveDetails = ({
   if (tasksQuery.isError || companyQuery.isError || company === undefined) {
     return (
       <>
-        <h2 id={headingId}>{t('visualisation.archive.heading')}</h2>
+        <TrayHeading id={headingId} action={headingAction}>
+          {t('visualisation.archive.heading')}
+        </TrayHeading>
         <p>{t('visualisation.tray.gone')}</p>
       </>
     );
@@ -68,7 +77,9 @@ export const ArchiveDetails = ({
 
   return (
     <>
-      <h2 id={headingId}>{t('visualisation.archive.heading')}</h2>
+      <TrayHeading id={headingId} action={headingAction}>
+        {t('visualisation.archive.heading')}
+      </TrayHeading>
       {!configured && <p>{t('visualisation.archive.unconfigured')}</p>}
       {succeeded.length === 0 ? (
         <p>{t('visualisation.archive.empty')}</p>

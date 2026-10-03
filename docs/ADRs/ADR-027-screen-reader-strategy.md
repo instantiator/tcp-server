@@ -295,3 +295,12 @@ before if it was last. Axe and a focus assertion cover both paths.
 
 - **A chat starting.** The chosen role's text changes to "Starting chat with {role}…" while it keeps focus. A screen reader doesn't reliably read a focused item's new text, so the change is also announced (`polite`, immediate).
 - **A chat failing to start.** The menu closes and focus returns to the trigger. The error sits beside the trigger, linked by `aria-describedby`, and is announced (`assertive`, immediate), in line with the "Errors, in context" row.
+
+## Amendment as implemented (005.01, phase 03) <a id="amendment-as-implemented-p03-005-01"></a>
+
+[005.01](../prompts/phase%2003%20-%20web%20visualisation/005.01.00.prompt%20-%20ui%20improvements.md) split the activity view into one tab per list, and added two pointer interactions to the office view.
+
+- **Tabs replace the activity regions, and nothing they announce changed.** Each list keeps its own `section` and channel; its `h2` is now visually hidden, because the tab shows its name, but still names the region and serves heading navigation. Hidden panels stay mounted (`inert` and `display: none`), so a list keeps its filters and its announcements while another tab is showing. A tab's count badge is part of the tab's name and is never announced on its own. The "Activity tab stays the browsable equivalent" line in the 000.01 amendment above now means these tabs.
+- **The URL hash selects a tab.** This is what lets the new-enquiry notification's durable link land: `#enquiries` opens the Enquiries tab. A hash change moves no focus, because the route-change rule watches only the pathname.
+- **The company page `h1` is visually hidden.** The header and the breadcrumb show the name on screen; the heading is still the focus target on arrival.
+- **Thought bubbles are pointer-only, and announce nothing.** A bubble over a working agent is decoration, like movement. Clicking it listens in on that agent, and the keyboard route to the same chat is the picker, then the tray, then "Listen in". Dragging the canvas pans it, and a press that becomes a drag selects nothing; the pan buttons and keys remain the non-pointer route.

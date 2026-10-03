@@ -63,19 +63,25 @@ const chatDockLabel = (role: string) => `${role} — Idle`;
 const CHAT_DIALOG_HEADING = 'Chats';
 const MINIMISE_LABEL = 'Minimise';
 
+/** `activity.filter.label`: the tasks list's status checkbox group. */
+const TASK_STATUSES_FILTER_LABEL = 'Task statuses';
+/** `activity.status.succeeded`, via `statusLabel` in `api/statuses.ts`. */
+const SUCCEEDED_STATUS_LABEL = 'Succeeded';
+
 /**
- * Navigates to a company and switches to the activity tab — the
- * visualisation tab is first in the list and is selected by default, so
- * every test in this file needs this rather than a bare `page.goto`.
- * `'Activity'` is `company.tab.activity` from `strings.ts`, copied by hand
- * for the same reason the headings above are.
+ * Navigates straight to a company's Tasks tab via its URL hash (005.01: the
+ * single "Activity" tab is gone — there is now one tab per activity list,
+ * selected by `#agents`/`#tasks`/`#consultations`/`#enquiries`/`#chats`, and
+ * the visualisation tab, selected by default, is first in the list). Most of
+ * this file's tests live under Tasks or Chats, so this is the shared
+ * default; a test that needs a different tab navigates to its own hash
+ * directly instead (see the deep-link test below).
  */
-const gotoCompanyActivity = async (
+const gotoCompanyTasks = async (
   page: Page,
   companyId: string,
 ): Promise<void> => {
-  await page.goto(`/company/${companyId}`);
-  await page.getByRole('tab', { name: 'Activity' }).click();
+  await page.goto(`/company/${companyId}#tasks`);
 };
 
 interface TokenEndpoint {
@@ -197,24 +203,29 @@ test.describe('company activity', () => {
     });
   });
 
-  test('renders all four activity lists as labelled regions', async ({
+  test('renders each activity list as a labelled region behind its own tab', async ({
     page,
   }) => {
-    await gotoCompanyActivity(page, companyId);
+    await page.goto(`/company/${companyId}`);
     await expect(
       page.getByRole('heading', { level: 1, name: companyName }),
     ).toBeVisible();
 
-    // By role and accessible name (ADR-028), the same contract
-    // `ActivityList` promises in the component tier — this is that promise
-    // checked against a real browser's accessibility tree rather than
-    // jsdom's approximation of one.
+    // 005.01: the single "Activity" tab is gone — each list is now its own
+    // tab, selected one at a time, so this walks all four rather than
+    // checking them simultaneously. By role and accessible name (ADR-028),
+    // the same contract `ActivityList` promises in the component tier — this
+    // is that promise checked against a real browser's accessibility tree
+    // rather than jsdom's approximation of one. The tab's own name gets a
+    // trailing count badge once its list loads, so it is matched by a regex
+    // anchored at the start rather than an exact string.
     for (const heading of [
       AGENTS_HEADING,
       TASKS_HEADING,
       CONSULTATIONS_HEADING,
       ENQUIRIES_HEADING,
     ]) {
+      await page.getByRole('tab', { name: new RegExp(`^${heading}`) }).click();
       await expect(page.getByRole('region', { name: heading })).toBeVisible();
     }
   });
@@ -222,7 +233,7 @@ test.describe('company activity', () => {
   test('has no accessibility violations on the activity view', async ({
     page,
   }) => {
-    await gotoCompanyActivity(page, companyId);
+    await gotoCompanyTasks(page, companyId);
     // Waiting for the fixture row, not just the region: a scan that ran
     // against the loading skeleton would miss whatever the populated rows
     // themselves introduce.
@@ -255,7 +266,7 @@ test.describe('company activity', () => {
       }
     });
 
-    await gotoCompanyActivity(page, companyId);
+    await gotoCompanyTasks(page, companyId);
 
     // The fixture row is the signal that the whole view — every list's own
     // query, not just the shell — has settled, which is as long as
@@ -278,7 +289,7 @@ test.describe('company activity', () => {
     page,
     request,
   }) => {
-    await gotoCompanyActivity(page, companyId);
+    await gotoCompanyTasks(page, companyId);
 
     const taskRow = page
       .getByRole('region', { name: TASKS_HEADING })
@@ -302,6 +313,85 @@ test.describe('company activity', () => {
     // auto-waiting, not a sleep: this polls until the row is gone or the
     // test's own timeout is reached.
     await expect(taskRow).toBeHidden();
+  });
+
+  // 005.01: activity panels stay mounted while hidden (`shouldForceMount`),
+  // which is what lets a list's filter survive the user switching away and
+  // back — no filter state is lifted out of the lists into `CompanyTabs`.
+  test('a filter survives switching away to another tab and back', async ({
+    page,
+  }) => {
+    await gotoCompanyTasks(page, companyId);
+    const filterGroup = page
+      .getByRole('region', { name: TASKS_HEADING })
+      .getByRole('group', { name: TASK_STATUSES_FILTER_LABEL });
+    // `Succeeded` is off by default (`ACTIVE_TASK_STATUSES` is
+    // ready/planning/in-progress/finalising), so checking it is an
+    // unambiguous, deliberate change rather than un-checking one of the
+    // defaults. React Aria's label sits over the visually hidden input
+    // (`base.css`), so this focuses it and toggles by keyboard, the same way
+    // `company-visualisation.spec.ts`'s Roles toggle test does.
+    const succeededCheckbox = filterGroup.getByRole('checkbox', {
+      name: SUCCEEDED_STATUS_LABEL,
+    });
+    await succeededCheckbox.focus();
+    await page.keyboard.press('Space');
+    await expect(succeededCheckbox).toBeChecked();
+
+    await page.getByRole('tab', { name: CHATS_HEADING }).click();
+    await expect(
+      page.getByRole('region', { name: CHATS_HEADING }),
+    ).toBeVisible();
+
+    await page
+      .getByRole('tab', { name: new RegExp(`^${TASKS_HEADING}`) })
+      .click();
+    await expect(succeededCheckbox).toBeChecked();
+  });
+
+  // 005.01: the selected tab is the URL hash, so a notification link (or any
+  // other deep link) that names a tab opens straight onto it, and switching
+  // tabs keeps the address bar in step rather than leaving it pointing at a
+  // tab that isn't shown any more.
+  test('a hash deep-links to a tab, and switching tabs updates the hash', async ({
+    page,
+  }) => {
+    await page.goto(`/company/${companyId}#enquiries`);
+    await expect(
+      page.getByRole('tab', { name: new RegExp(`^${ENQUIRIES_HEADING}`) }),
+    ).toHaveAttribute('aria-selected', 'true');
+    await expect(
+      page.getByRole('region', { name: ENQUIRIES_HEADING }),
+    ).toBeVisible();
+
+    await page.goto(`/company/${companyId}#tasks`);
+    await expect(
+      page.getByRole('tab', { name: new RegExp(`^${TASKS_HEADING}`) }),
+    ).toHaveAttribute('aria-selected', 'true');
+    await expect(
+      page.getByRole('region', { name: TASKS_HEADING }),
+    ).toBeVisible();
+
+    // Selecting a tab replaces the history entry with its own hash
+    // (`CompanyTabs`'s `onSelectionChange`) rather than leaving the URL
+    // behind — this is the write half of the same contract the reads above
+    // check.
+    await page
+      .getByRole('tab', { name: new RegExp(`^${CONSULTATIONS_HEADING}`) })
+      .click();
+    await expect(page).toHaveURL(/#consultations$/);
+  });
+
+  test('shows "TCP: <company name>" in the header on the company page', async ({
+    page,
+  }) => {
+    await page.goto(`/company/${companyId}`);
+    // `app.titleWithCompany` from `strings.ts` — a plain `<span>` inside the
+    // page's `<header>` (`app-header__logo`), not its own landmark or
+    // heading, so this is scoped to the banner rather than queried by role.
+    await expect(
+      page.getByRole('banner').getByText(`TCP: ${companyName}`),
+    ).toBeVisible();
   });
 
   // 002.02 stage 7/11: minimise, restore, close and reopen a chat.
@@ -343,7 +433,9 @@ test.describe('company activity', () => {
     expect(chatAgent.status()).toBe(201);
     void ((await chatAgent.json()) as CreatedAgent).id;
 
-    await gotoCompanyActivity(page, companyId);
+    // Straight to the Chats tab: this fixture's agent lives there, not under
+    // Tasks, so `gotoCompanyTasks` would not do.
+    await page.goto(`/company/${companyId}#chats`);
     const chatRow = page
       .getByRole('region', { name: CHATS_HEADING })
       .getByRole('button', { name: chatRowName(roleName) });

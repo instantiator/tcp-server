@@ -11,18 +11,24 @@ import type { OfficeWorld, Tile } from './world/types';
 
 /** One shared empty list, so an absent `labels` prop is stable across renders. */
 const NO_LABELS: readonly OfficeLabel[] = [];
+/** Likewise for an absent `thinkingAgentIds`. */
+const NO_AGENTS: readonly string[] = [];
 
 export interface TcpPhaserVisualisationProps {
   readonly world: OfficeWorld;
   readonly reducedMotion?: boolean;
   /** The canvas labels to show; none by default. */
   readonly labels?: readonly OfficeLabel[];
+  /** Agents shown with a thought bubble (005.01); none by default. */
+  readonly thinkingAgentIds?: readonly string[];
   readonly followTarget?: SelectionTarget | null;
   readonly onAvatarArrived?: (avatarId: string, tile: Tile) => void;
   readonly onAvatarExited?: (avatarId: string) => void;
   readonly onHover?: (hover: HoverEvent | null) => void;
   readonly onSelect?: (target: SelectionTarget) => void;
   readonly onFollowStopped?: () => void;
+  /** A thought bubble was clicked: listen in on that agent. */
+  readonly onListenIn?: (agentId: string) => void;
 }
 
 /**
@@ -36,12 +42,14 @@ export default function TcpPhaserVisualisation({
   world,
   reducedMotion,
   labels,
+  thinkingAgentIds,
   followTarget,
   onAvatarArrived,
   onAvatarExited,
   onHover,
   onSelect,
   onFollowStopped,
+  onListenIn,
 }: TcpPhaserVisualisationProps) {
   const parentRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -55,6 +63,8 @@ export default function TcpPhaserVisualisation({
   followTargetRef.current = followTarget;
   const labelsRef = useRef(labels);
   labelsRef.current = labels;
+  const thinkingRef = useRef(thinkingAgentIds);
+  thinkingRef.current = thinkingAgentIds;
 
   const onAvatarArrivedRef = useRef(onAvatarArrived);
   onAvatarArrivedRef.current = onAvatarArrived;
@@ -66,6 +76,8 @@ export default function TcpPhaserVisualisation({
   onSelectRef.current = onSelect;
   const onFollowStoppedRef = useRef(onFollowStopped);
   onFollowStoppedRef.current = onFollowStopped;
+  const onListenInRef = useRef(onListenIn);
+  onListenInRef.current = onListenIn;
 
   /** Game mount and unmount. Runs once; every prop change is handled below instead. */
   useLayoutEffect(() => {
@@ -88,6 +100,10 @@ export default function TcpPhaserVisualisation({
         event: 'labels-changed',
         value: labelsRef.current ?? NO_LABELS,
       });
+      emitTcpEvent({
+        event: 'thinking-changed',
+        value: thinkingRef.current ?? NO_AGENTS,
+      });
     };
     const handleAvatarArrived = (value: { avatarId: string; tile: Tile }) => {
       onAvatarArrivedRef.current?.(value.avatarId, value.tile);
@@ -104,6 +120,9 @@ export default function TcpPhaserVisualisation({
     const handleFollowStopped = () => {
       onFollowStoppedRef.current?.();
     };
+    const handleListenIn = (value: { agentId: string }) => {
+      onListenInRef.current?.(value.agentId);
+    };
 
     onTcpEvent({ event: 'scene-ready', fn: handleSceneReady });
     onTcpEvent({ event: 'avatar-arrived', fn: handleAvatarArrived });
@@ -111,6 +130,7 @@ export default function TcpPhaserVisualisation({
     onTcpEvent({ event: 'hover', fn: handleHover });
     onTcpEvent({ event: 'select', fn: handleSelect });
     onTcpEvent({ event: 'follow-stopped', fn: handleFollowStopped });
+    onTcpEvent({ event: 'listen-in', fn: handleListenIn });
 
     const game = new Game({
       type: AUTO,
@@ -125,13 +145,29 @@ export default function TcpPhaserVisualisation({
     });
     gameRef.current = game;
 
+    // Phaser sizes the canvas when it boots, before `useStageTop` has grown
+    // the stage to fill the window, and its own 500ms parent check misses
+    // that change: the canvas stayed at the stage's fixed height (005.01).
+    // The dock appearing or full screen changes the stage the same way, with
+    // no window resize. Watching the parent catches every case. jsdom has no
+    // ResizeObserver.
+    const observer =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(() => {
+            game.scale.refresh();
+          });
+    observer?.observe(parent);
+
     return () => {
+      observer?.disconnect();
       offTcpEvent({ event: 'scene-ready', fn: handleSceneReady });
       offTcpEvent({ event: 'avatar-arrived', fn: handleAvatarArrived });
       offTcpEvent({ event: 'avatar-exited', fn: handleAvatarExited });
       offTcpEvent({ event: 'hover', fn: handleHover });
       offTcpEvent({ event: 'select', fn: handleSelect });
       offTcpEvent({ event: 'follow-stopped', fn: handleFollowStopped });
+      offTcpEvent({ event: 'listen-in', fn: handleListenIn });
       game.destroy(true);
       gameRef.current = null;
     };
@@ -159,6 +195,13 @@ export default function TcpPhaserVisualisation({
   useEffect(() => {
     emitTcpEvent({ event: 'labels-changed', value: labels ?? NO_LABELS });
   }, [labels]);
+
+  useEffect(() => {
+    emitTcpEvent({
+      event: 'thinking-changed',
+      value: thinkingAgentIds ?? NO_AGENTS,
+    });
+  }, [thinkingAgentIds]);
 
   return <div ref={parentRef} className="company-visualisation__canvas" />;
 }

@@ -33,15 +33,19 @@ import { Header } from './Header';
 
 const SIGNED_IN = { userId: 'test-user' };
 
-/** Renders the header with the given session, or signed out when omitted. */
-const renderHeader = (session: { userId: string } | null = null) =>
+/**
+ * Renders the header with the given session, or signed out when omitted, at
+ * the given route (the plain root route unless a test is exercising the
+ * company title, which needs `useMatch` to see a `/company/:id` location).
+ */
+const renderHeader = (session: { userId: string } | null = null, route = '/') =>
   render(
     <QueryClientProvider
       client={
         new QueryClient({ defaultOptions: { queries: { retry: false } } })
       }
     >
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[route]}>
         <SessionProvider session={session}>
           <Header />
         </SessionProvider>
@@ -214,6 +218,38 @@ describe('Header', () => {
       await waitFor(() => {
         expect(document.activeElement).toBe(accountButton);
       });
+    });
+  });
+
+  describe('the title (005.01)', () => {
+    it('shows the plain title off a company route', () => {
+      renderHeader();
+
+      expect(
+        screen.getByText(t('app.title'), { selector: '.app-header__logo' }),
+      ).toBeInTheDocument();
+    });
+
+    it('shows the plain title on a company route while the name loads', () => {
+      renderHeader(null, '/company/company-1');
+
+      expect(
+        screen.getByText(t('app.title'), { selector: '.app-header__logo' }),
+      ).toBeInTheDocument();
+    });
+
+    it('shows the company name on a company route once it has loaded', async () => {
+      respondWithJson(200, { id: 'company-1', name: 'Acme' });
+      renderHeader(null, '/company/company-1');
+
+      expect(
+        await screen.findByText(
+          t('app.titleWithCompany', { company: 'Acme' }),
+          {
+            selector: '.app-header__logo',
+          },
+        ),
+      ).toBeInTheDocument();
     });
   });
 });

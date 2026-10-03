@@ -9,7 +9,11 @@ import { roleLabel, type ListProps } from './activity-list-utils';
  * Open consultations — assignments in `consultee` mode with no task, per
  * ADR-023. Rows are non-interactive: no assignment dialog exists in the MVP.
  */
-export const ConsultationsList = ({ companyId, roleNames }: ListProps) => {
+export const ConsultationsList = ({
+  companyId,
+  roleNames,
+  onCount,
+}: ListProps) => {
   const query = useLiveCompanyConsultationsList(companyId);
   const rows = query.data?.filter((assignment) =>
     ACTIVE_ASSIGNMENT_STATUSES.some((active) => active === assignment.status),
@@ -26,6 +30,7 @@ export const ConsultationsList = ({ companyId, roleNames }: ListProps) => {
 
   return (
     <ActivityList
+      onCount={onCount}
       heading={t('activity.consultations.heading')}
       query={query}
       channel="consultations"

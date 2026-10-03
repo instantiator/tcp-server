@@ -89,7 +89,7 @@ describe('useOfficeWorld', () => {
  * agent's whole life in a task, over the same `applyEvent` path a live
  * event stream uses. The browser tier has no LLM to run a real agent against
  * (see the plan's decision 1), so this is the agreed stand-in for agent
- * end-to-end coverage: `CompanyActivity.test.tsx` drives `applyEvent` the same
+ * end-to-end coverage: `CompanyTabs.test.tsx` drives `applyEvent` the same
  * way for its own live-event tests, and this mirrors that pattern here.
  */
 describe('useOfficeWorld — the live pipeline (agent E2E stand-in)', () => {

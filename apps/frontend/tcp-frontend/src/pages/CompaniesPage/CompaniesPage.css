@@ -2,15 +2,35 @@
  * Empty by design (ADR-026): meaningful class names now, rules filled per
  * theme later. No literal colour, spacing or border value may appear here —
  * React Aria's own defaults live in `styles/base.css`.
+ *
+ * The two rules below are the exception: this page's own layout (a wrapping
+ * row of cards, and a reset list of stat lines), not shared with any other
+ * page, so there is no shared class in `base.css` to carry them. Only
+ * `--tcp-*` tokens are used, per ADR-026.
  */
 .companies-page__list {
 }
 
 .companies-page__companies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--tcp-space-md);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .companies-page__company {
 }
 
 .companies-page__stats {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.companies-page__stats li {
+  display: flex;
+  align-items: center;
+  gap: var(--tcp-space-xs);
 }
