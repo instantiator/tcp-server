@@ -10,9 +10,10 @@ Run the unit test suite.
 No external services required — tests use an in-memory SQLite database.
 Mirrors the 'unit-test' CI job.
 
-Any extra arguments are passed through to Jest, for example:
+Any extra arguments are passed through to both the backend's Jest and the
+frontend's Vitest, so use options they share, for example:
   $(basename "$0") -- --testNamePattern="company"
-  $(basename "$0") -- --testPathPattern="api"
+  $(basename "$0") -- api          # only test files whose path matches "api"
 
 Options:
   -h, --help    Show this help message and exit
@@ -23,6 +24,7 @@ PASSTHROUGH=()
 for arg in "$@"; do
   case "$arg" in
     -h|--help) usage; exit 0 ;;
+    --) ;; # the separator itself, not an argument
     *) PASSTHROUGH+=("$arg") ;;
   esac
 done

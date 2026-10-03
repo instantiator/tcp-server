@@ -12,7 +12,7 @@
     "lint": "eslint . --fix",
     "lint:check": "eslint .",
     "typecheck": "tsc --noemit -p tsconfig.json && tsc --noemit -p src/tsconfig.json && tsc --noemit -p test/browser/tsconfig.json",
-    "test": "vitest run && npm run test:import-boundary",
+    "test": "npm run test:import-boundary && vitest run",
     "test:browser": "playwright test",
     "test:import-boundary": "eslint --no-ignore -f json test/fixtures/server-import-must-fail.ts | grep -q '\"ruleId\":\"no-restricted-imports\"'"
   },
