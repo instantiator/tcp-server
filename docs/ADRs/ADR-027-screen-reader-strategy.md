@@ -82,7 +82,7 @@ Two supporting decisions: [focus is managed at exactly four points](#focus-is-ma
 - `008.03.00.prompt - task dialog (draft).md`
 - `008.04.00.prompt - user response dialog (draft).md`
 - `phase 03 - web visualisation/003.01.00.prompt - add new FAB and role menu.md`
-- `phase 04 - web ui quality/001.02.00.prompt - accessibility audit and remediation (draft).md`
+- `phase 05 - web ui quality/001.02.00.prompt - accessibility audit and remediation (draft).md`
 
 ## Detail
 
