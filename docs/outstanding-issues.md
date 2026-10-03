@@ -6,6 +6,24 @@ knowingly left, so they stay visible instead of being rediscovered.
 
 Resolve an entry by deleting it, in the change that resolves it.
 
+## Integration tier hangs on exit
+
+Rarely (about one run in six on 2026-10-03), the integration tier hangs after
+every test has passed: `Jest did not exit one second after the test run has
+completed`, then nothing. The cause is unknown. The earlier one, a native
+thread from `pdf-parse`, was fixed on 2026-08-06 by loading it lazily, and no
+integration spec loads it now. `--detectOpenHandles` didn't reproduce it in
+three runs, probably because it changes the timing.
+
+`run-integration-tests.sh` now catches it: after `INTEGRATION_HANG_SECONDS` it
+writes a Node diagnostic report of the handles still open to
+`test-results/integration-diagnostics/` and stops Jest. In CI that report is the
+`integration-hang-diagnostics` artifact.
+
+**Act when:** a diagnostic report from a real hang exists. Its `libuv` section
+names the open handle; fix the code that leaves it open. Don't add
+`--forceExit`, which would hide real leaks.
+
 ## Finalisation assignment status
 
 When the finalisation assignment of a task completes, the task moves to state `succeeded` but the finalisation task remains `in-progress`.

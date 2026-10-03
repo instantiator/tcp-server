@@ -250,6 +250,14 @@ backing service.
 
 **Requires:** Docker and Docker Compose, `.env.testing` in the repo root.
 
+**Hang watchdog.** The tier has sometimes hung on exit after every test passed.
+If Jest is still running after `INTEGRATION_HANG_SECONDS` (default 600; a
+normal run takes 2–3 minutes), the script asks it for a Node diagnostic report,
+which lists the sockets, timers and threads still open, then stops it, so the
+run fails rather than hangs. Reports land in `test-results/integration-diagnostics/`,
+and CI uploads them as the `integration-hang-diagnostics` artifact. See
+[outstanding-issues.md](outstanding-issues.md#integration-tier-hangs-on-exit).
+
 See also: [docs/testing.md](testing.md).
 
 ## run-smoke-tests.sh
