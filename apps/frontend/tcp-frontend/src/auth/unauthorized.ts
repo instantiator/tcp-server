@@ -35,7 +35,14 @@ let redirecting: Promise<void> | null = null;
 export const handleUnauthorized = (): Promise<void> =>
   (redirecting ??= getUserManager()
     .signinRedirect({
-      state: { from: window.location.pathname + window.location.search },
+      // The hash too (005.01): it selects a company page tab, such as the
+      // `#enquiries` a new-enquiry notification links to.
+      state: {
+        from:
+          window.location.pathname +
+          window.location.search +
+          window.location.hash,
+      },
     })
     .catch((error: unknown) => {
       // The navigation never started — a misconfigured authority, or an

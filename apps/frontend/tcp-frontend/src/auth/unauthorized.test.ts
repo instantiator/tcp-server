@@ -61,6 +61,19 @@ describe('handleUnauthorized', () => {
     );
   });
 
+  it('carries the hash, which selects a company page tab (005.01)', async () => {
+    signinRedirect.mockResolvedValue(undefined);
+    history.replaceState({}, '', '/company/abc#enquiries');
+
+    await handleUnauthorized();
+
+    expect(signinRedirect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        state: { from: '/company/abc#enquiries' },
+      }),
+    );
+  });
+
   it('does not latch when the navigation never started', async () => {
     // A misconfigured authority rejects before the browser leaves the page.
     // Holding the failed promise would make every later 401 resolve instantly

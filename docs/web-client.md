@@ -234,6 +234,16 @@ The landing page and `/callback` render outside the shell and own their own
 `main`. Every other page's `main` comes from `AppShell`. There must never be two
 on one page.
 
+**The company page's tabs follow the URL hash** (005.01): `#agents`, `#tasks`,
+`#consultations`, `#enquiries` and `#chats` select the activity tabs, and no
+hash (or an unknown one) selects the office view. Choosing a tab replaces the
+history entry rather than pushing one. `useRouteChange` watches only the
+pathname, so a hash change moves no focus. This is what lets the new-enquiry
+notification's link to `#enquiries` open that tab. The activity panels stay
+mounted while hidden (`shouldForceMount`, then `inert` and `display: none`), so
+a list keeps its filters across a tab switch, and each tab's count badge stays
+current.
+
 ## Signing in
 
 Four hops, and nothing in between them is a decision this application makes:
@@ -631,9 +641,19 @@ t('announce.tasksAdded', { count: 2 }); // 'Tasks: 2 added'
 
 That is the whole of it — no pluralisation, no number or date formatting, no
 nesting. An unmatched placeholder is left in the output rather than blanked, so
-a missing value is visible instead of reading as though it worked. Because
-there are no plural rules, announcement wordings are phrased count-agnostically
+a missing value is visible instead of reading as though it worked. Announcement wordings are phrased count-agnostically
 (`'Tasks: {count} added'`, never `'{count} tasks added'`).
+
+A counted phrase shown on the page uses `tCount` instead (005.01). It picks a
+key's `.one` or `.other` form with the platform's `Intl.PluralRules`, so no
+library is involved:
+
+```ts
+tCount('companies.count.activeTasks', 1); // '1 active task'
+tCount('companies.count.activeTasks', 2); // '2 active tasks'
+```
+
+Only keys that have both forms type-check.
 
 ## Theme: tokens, never literal values
 
@@ -655,6 +675,22 @@ literal colour in a component stylesheet is invisible to linting and breaks
 theming silently, so it is a review matter.
 
 `prefers-reduced-motion` is honoured in `base.css` from the start.
+
+**Shared presentation classes** live at the end of `base.css` (005.01), the
+start of a design system. Each is applied beside a component's own class, and
+none changes what a component is to assistive technology:
+
+| Class                                   | For                                                                                                      |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `.tcp-icon-button` (`--small`, `--fab`) | A circular icon-only button. Pair it with `WithTooltip` (`components/Icon/Icon.tsx`) and an `aria-label` |
+| `.tcp-icon`                             | An icon's size; the `Icon` component applies it                                                          |
+| `.tcp-badge`                            | A count beside a label, in `--tcp-color-highlight`                                                       |
+| `.tcp-card`, `.tcp-card__link`          | A fixed-width card, made clickable by its one link's stretched `::after`                                 |
+| `.tcp-floating`                         | A surface floating over other content, such as the office view's controls                                |
+
+On a React Aria component, repeat its default class too:
+`className="react-aria-Button tcp-icon-button"`. Passing `className` replaces
+the default class rather than adding to it.
 
 ### How the choice is made and kept
 
@@ -790,7 +826,7 @@ Every panel gets two controls, not one:
   own — minimise (and Escape) are what it offers, so a half-typed message in
   another open panel is never lost by one keystroke.
 
-**Activity → Chats is the way back.** A closed chat is still a real
+**The Chats tab is the way back.** A closed chat is still a real
 assignment, so it still shows in the company's Chats list
 (`src/pages/CompanyPage/activity/ChatsList.tsx`), filterable by status and
 role. Clicking a row calls the same `openChat` the office view's "Listen in"
@@ -806,9 +842,11 @@ calls `useChat().startChat`.
 
 It appears in two places:
 
-- **The company page**, floating at the bottom-right. It sits straight after
-  the `h1` in the DOM, so it comes early in the tab order, and rises above the
-  dock when one is showing.
+- **The company page**, as a round "+" button floating at the bottom-right
+  (005.01; its name and tooltip are "Add new"). It sits straight after the
+  `h1` in the DOM, so it comes early in the tab order. It rises above the dock
+  when one is showing, and slides left of the office view's tray while that is
+  open.
 - **The chat dialog's title bar**, while a company is the current route. The
   dialog is modal, so the page's own control is out of reach while it shows.
   From here a new chat joins the dialog as another panel, and a new task
@@ -831,8 +869,13 @@ button.
 revised in [002.01](<prompts/phase 03 - web visualisation/002.01.01.plan - isometric display elements.md>)
 and [002.02](<prompts/phase 03 - web visualisation/002.02.01.plan - isometric display elements.md>)).
 Code lives under `src/visualisation/isometric/company/`. The stage fills the
-window below it, but never drops below `--tcp-visualisation-height`
-(`useStageTop.ts` measures where it starts).
+window from the tabs down, less the dock when one is showing, but never drops
+below `--tcp-visualisation-height` (`useStageTop.ts` measures where it starts).
+Since 005.01 its controls float over it: the pan buttons, full screen and the
+"Show details for…" picker at the bottom-left, and the label checkboxes at the
+top-left. Only CSS moved them, so their tab order is unchanged. The section has
+`isolation: isolate`, so its floating layers never paint over the sticky
+header.
 
 ### What it shows
 
@@ -869,14 +912,23 @@ window below it, but never drops below `--tcp-visualisation-height`
   [shared-storage.md](shared-storage.md#links-from-the-web-clients-archive-tray)
   for the link format and the runtime config it depends on. Without that
   config, rows still list, just as plain text.
-- **Labels.** The "Labels" checkboxes under the toolbar turn on canvas labels
+- **Thought bubbles** (005.01). A working or reviewing agent shows a bubble up
+  and to the right of its head, clear of the book it carries: two dots, then
+  a cloud, cleared and drawn again (`scene/ThoughtBubbleLayer.ts`). Under
+  reduced motion it is drawn whole and still. Clicking it listens in, the
+  same as the tray's "Listen in" button (`ui/useListenIn.ts`). It is
+  pointer-only; the keyboard route is the picker, then the tray.
+- **Labels.** The "Labels" checkboxes at the top-left turn on canvas labels
   for agents, roles, furniture and rooms. `ui/officeLabels.ts` works out the
   text and `scene/LabelLayer.ts` draws it. They are a visual aid; the picker
   and tray give a screen reader the same facts.
 - **The tray, tooltips, picker, pan keys and full screen.** Hovering a role,
   task, agent or the bookshelf shows a tooltip; clicking opens a side tray
   with its live details. Furniture and doorways have hover-only tooltips
-  saying what they are for (`ui/officeDescriptions.ts`). The tray clips a
+  saying what they are for (`ui/officeDescriptions.ts`). The tray slides in
+  over the canvas's right edge (005.01), so the canvas doesn't resize. Its
+  Close and Follow buttons are round icon buttons, Follow beside the heading.
+  The tray clips a
   long prompt with a "…" that reveals the rest
   (`components/ExpandableText`). An active agent's tray has a "Listen in"
   button, which opens the chat dialog read-only on its live transcript. The
@@ -886,6 +938,9 @@ window below it, but never drops below `--tcp-visualisation-height`
   toolbar's pan buttons (icons from `lucide-react`, laid out like arrow
   keys, each named and with a tooltip) scroll the stage. Double-clicking
   empty space, or the toolbar's full-screen button, toggles full screen.
+  Dragging the canvas pans it too (005.01, `scene/dragPan.ts`). A press that
+  moves 6px or more is a drag and selects nothing, so objects select on
+  release, not on press.
 
 ### The queued-agent bug (002.02)
 

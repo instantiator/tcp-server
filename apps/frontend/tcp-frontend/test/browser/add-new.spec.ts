@@ -41,7 +41,6 @@ const TASK_START_LABEL = 'Start this task now';
 const TASK_SUBMIT_LABEL = 'Create task';
 const CHAT_DIALOG_HEADING = 'Chats';
 const TASKS_HEADING = 'Tasks';
-const ACTIVITY_TAB = 'Activity';
 
 /** `chat.conversation.label` and `visualisation.tray.chatWithRole` both read this. */
 const chatWithRole = (role: string): string => `Chat with ${role}`;
@@ -215,7 +214,12 @@ test.describe('add new', () => {
     // Cheap to check: the row appears without needing its server-issued
     // shortcode — this is the only test in the file that creates a task, so
     // exactly one row is unambiguous.
-    await page.getByRole('tab', { name: ACTIVITY_TAB }).click();
+    // 005.01: the single "Activity" tab is gone — each activity list is now
+    // its own tab, named with a trailing count badge once it has loaded, so
+    // this matches by a regex anchored at the start rather than an exact name.
+    await page
+      .getByRole('tab', { name: new RegExp(`^${TASKS_HEADING}`) })
+      .click();
     const tasksRegion = page.getByRole('region', { name: TASKS_HEADING });
     await expect(
       tasksRegion.getByRole('button', { name: /^Open task / }),

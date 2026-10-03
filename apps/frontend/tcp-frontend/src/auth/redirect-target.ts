@@ -66,10 +66,12 @@ export const safeRedirectTarget = (state: unknown): string => {
 
   if (url.origin !== window.location.origin) return DEFAULT_SIGNED_IN_PATH;
 
-  // The query string travels with the path: `handleUnauthorized()` saves
-  // `pathname + search`, so a validator returning bare paths would silently
-  // discard half of what it was given.
+  // The query string and hash travel with the path: `handleUnauthorized()`
+  // saves `pathname + search + hash`, so a validator returning bare paths
+  // would silently discard what it was given. The hash selects a company page
+  // tab (005.01); it never reaches a server, and the origin and route checks
+  // above and below are what make the target safe, not its absence.
   return RETURNABLE_ROUTES.some((route) => matchPath(route, url.pathname))
-    ? url.pathname + url.search
+    ? url.pathname + url.search + url.hash
     : DEFAULT_SIGNED_IN_PATH;
 };

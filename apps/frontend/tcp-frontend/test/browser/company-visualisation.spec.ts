@@ -366,7 +366,55 @@ test.describe('company visualisation', () => {
         .not.toBe(0);
     });
 
-    test('a role tray follows, hovers and closes to the stage', async ({
+    // 005.01: pressing on the canvas and dragging ≥ `DRAG_THRESHOLD_PX` (6px)
+    // pans the camera and selects nothing; a plain click still selects on
+    // pointer *up* (dragPan.ts). This presses over an empty corner rather
+    // than an avatar — the same spot the full-screen test below uses to
+    // guarantee nothing is hovered — because every other test in this file
+    // that needs a deterministic on-screen avatar position gets one via
+    // `Follow` first (the camera isn't centred on anything in particular on
+    // a fresh load). Starting empty still exercises exactly the code path
+    // this guards: `isClick`/`DragPan` don't look at what's under the
+    // pointer, only at how far it moved, so a drag that starts empty and one
+    // that starts on an avatar take the same branch.
+    test('dragging the canvas pans the camera and selects nothing', async ({
+      page,
+    }) => {
+      await page.goto(`/company/${companyId}`);
+      const stage = officeSummary(page);
+      const canvas = stage.locator('canvas');
+      await expect(stage).toHaveAccessibleDescription(summary(2, 0, 0));
+      await expect(canvas).toBeVisible();
+
+      const box = await canvas.boundingBox();
+      expect(box).not.toBeNull();
+      const startX = box!.x + 10;
+      const startY = box!.y + 10;
+
+      // "The view moved" is observed the same way the pan-button test above
+      // observes it: the canvas has no DOM for its drawn content, so its own
+      // pixels are the only thing that can tell a pan happened from a no-op.
+      const beforeDrag = await canvas.screenshot();
+      await page.mouse.move(startX, startY);
+      await page.mouse.down();
+      // Well past the 6px threshold, and in several `steps` so Phaser's
+      // pointer sees a stream of moves rather than one jump — the same shape
+      // a real drag arrives in.
+      await page.mouse.move(startX + 80, startY + 60, { steps: 10 });
+      await page.mouse.up();
+
+      // "Selects nothing": a drag this long starting on empty space would
+      // never have selected anything anyway, so the meaningful half of this
+      // assertion is that *no* tray exists at all — proving the drag didn't
+      // fall through to a click handler that selected whatever was under the
+      // pointer at mouse-up.
+      await expect(page.getByRole('complementary')).toHaveCount(0);
+      await expect
+        .poll(async () => Buffer.compare(await canvas.screenshot(), beforeDrag))
+        .not.toBe(0);
+    });
+
+    test('a role tray overlays the stage without resizing the canvas, follows, hovers and closes', async ({
       page,
     }) => {
       await page.goto(`/company/${companyId}`);
@@ -377,6 +425,9 @@ test.describe('company visualisation', () => {
       // the canvas.
       await expect(stage).toHaveAccessibleDescription(summary(2, 0, 0));
 
+      const beforeOpen = await canvas.boundingBox();
+      expect(beforeOpen).not.toBeNull();
+
       await page.getByRole('button', { name: SHOW_DETAILS_LABEL }).click();
       await page.getByRole('option', { name: roleLabel(ROLE_A_NAME) }).click();
 
@@ -385,14 +436,27 @@ test.describe('company visualisation', () => {
       });
       await expect(tray).toBeVisible();
 
+      // 005.01: the tray is now an absolutely-positioned overlay on the
+      // stage's right edge rather than a flex sibling sharing `__main`'s row
+      // with the canvas, so opening it must leave the canvas's own size
+      // alone (the old layout narrowed it to make room) — and the tray's own
+      // box should sit flush against the canvas's right edge, not beside it.
+      const openBox = await canvas.boundingBox();
+      expect(openBox).not.toBeNull();
+      expect(openBox!.width).toBeCloseTo(beforeOpen!.width, 0);
+      const trayBox = await tray.boundingBox();
+      expect(trayBox).not.toBeNull();
+      expect(trayBox!.x + trayBox!.width).toBeCloseTo(
+        openBox!.x + openBox!.width,
+        0,
+      );
+
       const followButton = page.getByRole('button', { name: FOLLOW_LABEL });
       await followButton.click();
       await expect(followButton).toHaveAttribute('aria-pressed', 'true');
 
-      const box = await canvas.boundingBox();
-      expect(box).not.toBeNull();
-      const cx = box!.x + box!.width / 2;
-      const cy = box!.y + box!.height / 2;
+      const cx = openBox!.x + openBox!.width / 2;
+      const cy = openBox!.y + openBox!.height / 2;
 
       // Follow centres the camera on the role's base tile, so the canvas's
       // own centre, lifted onto the book, is where the pointer meets it.
@@ -411,19 +475,14 @@ test.describe('company visualisation', () => {
       await expect(tray).toBeHidden();
       await expect(stage).toBeFocused();
 
-      // Closing the tray widens the canvas (912px → 1248px in this layout),
-      // and following has stopped. The camera keeps the view's centre across
-      // a resize, so the avatar is still at the centre of the wider canvas.
-      // Before that fix it drifted about 180px left and this click missed.
-      await expect
-        .poll(async () => (await canvas.boundingBox())?.width)
-        .toBeGreaterThan(box!.width);
-      const wider = await canvas.boundingBox();
-      expect(wider).not.toBeNull();
-      await page.mouse.click(
-        wider!.x + wider!.width / 2,
-        wider!.y + wider!.height / 2 - ROLE_HOVER_LIFT,
-      );
+      // Closing the tray no longer widens the canvas either (005.01: it was
+      // never narrowed to begin with) — the camera and the canvas box are
+      // both exactly where they were, so the same screen position still
+      // lands on the avatar.
+      const closedBox = await canvas.boundingBox();
+      expect(closedBox).not.toBeNull();
+      expect(closedBox!.width).toBeCloseTo(beforeOpen!.width, 0);
+      await page.mouse.click(cx, cy - ROLE_HOVER_LIFT);
       await expect(tray).toBeVisible();
     });
 
@@ -661,6 +720,9 @@ test.describe('company visualisation', () => {
       // StrictMode double-mount race).
       await expect(stage).toHaveAccessibleDescription(summary(2, 0, 0));
 
+      const beforeOpen = await canvas.boundingBox();
+      expect(beforeOpen).not.toBeNull();
+
       await page.getByRole('button', { name: SHOW_DETAILS_LABEL }).click();
       await page.getByRole('option', { name: ARCHIVE_PICKER_LABEL }).click();
 
@@ -677,10 +739,19 @@ test.describe('company visualisation', () => {
       await expect(tray).toContainText(ARCHIVE_EMPTY_TEXT);
       await expect(tray).not.toContainText(ARCHIVE_UNCONFIGURED_TEXT);
 
-      await page.getByRole('button', { name: FOLLOW_LABEL }).click();
-
+      // 005.01: the tray overlays the stage's right edge now, rather than
+      // sharing a row with the canvas, so opening it leaves the canvas's own
+      // size alone — and the tray's box sits flush against the canvas's
+      // right edge, same check the role tray test above makes.
       const box = await canvas.boundingBox();
       expect(box).not.toBeNull();
+      expect(box!.width).toBeCloseTo(beforeOpen!.width, 0);
+      const trayBox = await tray.boundingBox();
+      expect(trayBox).not.toBeNull();
+      expect(trayBox!.x + trayBox!.width).toBeCloseTo(box!.x + box!.width, 0);
+
+      await page.getByRole('button', { name: FOLLOW_LABEL }).click();
+
       const cx = box!.x + box!.width / 2;
       const cy = box!.y + box!.height / 2;
 
@@ -696,20 +767,15 @@ test.describe('company visualisation', () => {
       await page.getByRole('button', { name: CLOSE_DETAILS_LABEL }).click();
       await expect(tray).toBeHidden();
 
-      // Closing the tray widens the canvas, same as the role tray test
-      // above — recompute before clicking, or the click lands off the
-      // resized bookshelf.
-      await expect
-        .poll(async () => (await canvas.boundingBox())?.width)
-        .toBeGreaterThan(box!.width);
-      const wider = await canvas.boundingBox();
-      expect(wider).not.toBeNull();
+      // Closing no longer widens the canvas either (005.01: it was never
+      // narrowed to begin with), so the same screen position still lands on
+      // the bookshelf with no need to recompute its box.
+      const closedBox = await canvas.boundingBox();
+      expect(closedBox).not.toBeNull();
+      expect(closedBox!.width).toBeCloseTo(beforeOpen!.width, 0);
 
       // The second way in: clicking the bookshelf directly, with no picker.
-      await page.mouse.click(
-        wider!.x + wider!.width / 2,
-        wider!.y + wider!.height / 2 - BOOKSHELF_ZONE_LIFT,
-      );
+      await page.mouse.click(cx, cy - BOOKSHELF_ZONE_LIFT);
       await expect(tray).toBeVisible();
     });
   });
