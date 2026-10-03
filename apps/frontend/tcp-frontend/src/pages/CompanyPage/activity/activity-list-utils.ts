@@ -13,11 +13,19 @@ import { t } from '../../../strings';
  * shared component must not import from a page's own directory.
  */
 
+/**
+ * Receives a list's shown count, or `null` while it has no answer (loading
+ * or failed). Must be stable across renders: it is an effect dependency.
+ */
+export type CountListener = (count: number | null) => void;
+
 /** Props shared by the lists that show a role name. */
 export interface ListProps {
   readonly companyId: string;
   /** Role id to display name. Agent and assignment rows carry only a `roleId`. */
   readonly roleNames: ReadonlyMap<string, string>;
+  /** Told how many rows the list shows, for its tab's badge. */
+  readonly onCount?: CountListener;
 }
 
 /** A role's display name. Agent and assignment rows carry only a `roleId`. */

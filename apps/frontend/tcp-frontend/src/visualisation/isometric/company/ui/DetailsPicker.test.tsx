@@ -231,6 +231,22 @@ describe('DetailsPicker', () => {
     expect(pickerButton()).toBeDisabled();
   });
 
+  // 005.01: the trigger became icon-only (a magnifying glass); its name must
+  // still come from the label text, exactly, even with no visible text of its
+  // own — `SelectValue` no longer renders at all.
+  it('names the icon-only trigger exactly after its label, with no text content of its own', () => {
+    render(
+      <DetailsPicker snapshot={SNAPSHOT} selection={null} onSelect={vi.fn()} />,
+    );
+
+    const button = screen.getByRole('button', {
+      name: t('visualisation.picker.label'),
+    });
+    expect(button).toHaveAccessibleName(t('visualisation.picker.label'));
+    expect(button.textContent).toBe('');
+    expect(button.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+  });
+
   // Deliberate change (002.02 stage 9): the archive is now always in the
   // list — the archive room always exists, unlike a role, a task or an
   // agent — so an otherwise-empty snapshot no longer leaves the picker with

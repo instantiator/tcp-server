@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { t } from './strings';
+import { t, tCount } from './strings';
 
 describe('the strings seam', () => {
   it('resolves a known key', () => {
@@ -27,5 +27,16 @@ describe('the strings seam', () => {
     // an error — which is how this assertion is enforced.
     // @ts-expect-error 'nope' is not a StringKey
     expect(() => t('nope')).not.toThrow();
+  });
+
+  it('picks the singular form at one and the plural otherwise', () => {
+    expect(tCount('companies.count.activeTasks', 0)).toBe('0 active tasks');
+    expect(tCount('companies.count.activeTasks', 1)).toBe('1 active task');
+    expect(tCount('companies.count.activeTasks', 2)).toBe('2 active tasks');
+  });
+
+  it('rejects a counted key without both forms at compile time', () => {
+    // @ts-expect-error 'app.title' has no .one/.other forms
+    expect(() => tCount('app.title', 1)).toThrow();
   });
 });

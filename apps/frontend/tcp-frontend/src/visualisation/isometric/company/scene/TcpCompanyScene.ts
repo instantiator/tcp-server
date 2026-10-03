@@ -1,4 +1,4 @@
-import { Scene, Scenes, type GameObjects } from 'phaser';
+import { Input, Scene, Scenes, type GameObjects } from 'phaser';
 import { TILE_HEIGHT, TILE_WIDTH, depthOf, tileToScreen } from '../motion/iso';
 import type { CrowdEvent } from '../motion/crowd';
 import { Crowd } from '../motion/crowd';
@@ -9,7 +9,9 @@ import { renderRegion } from '../world/renderRegion';
 import type { Avatar, Bounds, OfficeWorld, Tile } from '../world/types';
 import { AvatarSprite } from './AvatarSprite';
 import { CameraController } from './CameraController';
+import { DragPan, type DragPointer } from './dragPan';
 import { LabelLayer } from './LabelLayer';
+import { ThoughtBubbleLayer } from './ThoughtBubbleLayer';
 import { drawFloors } from './drawFloors';
 import { FURNITURE_SIZES, drawFurniture } from './drawFurniture';
 import { drawWalls } from './drawWalls';
@@ -34,10 +36,16 @@ const DOOR_ZONE_DEPTH_OFFSET = 0.5;
  * It is also where hover, selection and camera control live: avatars and
  * task whiteboards carry hit zones that emit `hover`/`select`, and
  * `camera-pan`/`camera-follow` from React drive the {@link CameraController}.
+ * Dragging the canvas pans it too (005.01), through the same path a pan
+ * button takes, so a drag stops a follow exactly as a button press does.
  */
 export class TcpCompanyScene extends Scene {
   private cameraController!: CameraController;
   private labelLayer!: LabelLayer;
+  private bubbleLayer!: ThoughtBubbleLayer;
+  /** The working agents (`thinking-changed`), matched to avatars on each sync. */
+  private thinkingAgentIds: ReadonlySet<string> = new Set();
+  private avatars: readonly Avatar[] = [];
   private staticObjects: GameObjects.GameObject[] = [];
   private readonly avatarSprites = new Map<string, AvatarSprite>();
   private whiteboardsByTaskId = new Map<string, GameObjects.IsoBox>();
@@ -48,6 +56,7 @@ export class TcpCompanyScene extends Scene {
   private reducedMotion = false;
   private followTarget: SelectionTarget | null = null;
   private listenersRemoved = false;
+  private readonly dragPan = new DragPan();
 
   constructor() {
     super({ key: 'TcpCompanyScene' });
@@ -56,6 +65,7 @@ export class TcpCompanyScene extends Scene {
   create(): void {
     this.cameraController = new CameraController(this);
     this.labelLayer = new LabelLayer(this);
+    this.bubbleLayer = new ThoughtBubbleLayer(this);
 
     onTcpEvent({ event: 'world-changed', fn: this.handleWorldChanged });
     onTcpEvent({
@@ -65,6 +75,15 @@ export class TcpCompanyScene extends Scene {
     onTcpEvent({ event: 'camera-pan', fn: this.handleCameraPan });
     onTcpEvent({ event: 'camera-follow', fn: this.handleCameraFollow });
     onTcpEvent({ event: 'labels-changed', fn: this.handleLabelsChanged });
+    onTcpEvent({ event: 'thinking-changed', fn: this.handleThinkingChanged });
+
+    // Registered on the scene's own input plugin, which drops every listener
+    // when the scene shuts down, so `removeListeners` has nothing to undo.
+    this.input.setDefaultCursor('grab');
+    this.input.on(Input.Events.POINTER_MOVE, this.handlePointerMove);
+    this.input.on(Input.Events.POINTER_UP, this.endDrag);
+    this.input.on(Input.Events.POINTER_UP_OUTSIDE, this.endDrag);
+    this.input.on(Input.Events.GAME_OUT, this.endDrag);
 
     this.events.once(Scenes.Events.SHUTDOWN, this.removeListeners);
     this.events.once(Scenes.Events.DESTROY, this.removeListeners);
@@ -83,6 +102,13 @@ export class TcpCompanyScene extends Scene {
     this.labelLayer.follow((id) => this.crowd.positionOf(id));
   };
 
+  private readonly handleThinkingChanged = (
+    agentIds: readonly string[],
+  ): void => {
+    this.thinkingAgentIds = new Set(agentIds);
+    this.syncBubbles();
+  };
+
   private readonly handleMotionPreference = (value: {
     reduced: boolean;
   }): void => {
@@ -97,6 +123,20 @@ export class TcpCompanyScene extends Scene {
     if (stoppedAFollow) {
       emitTcpEvent({ event: 'follow-stopped', value: undefined });
     }
+  };
+
+  private readonly handlePointerMove = (pointer: DragPointer): void => {
+    const scroll = this.dragPan.move(pointer, this.cameras.main.zoom);
+    if (scroll === null) {
+      return;
+    }
+    this.input.setDefaultCursor('grabbing');
+    this.handleCameraPan(scroll);
+  };
+
+  private readonly endDrag = (): void => {
+    this.dragPan.end();
+    this.input.setDefaultCursor('grab');
   };
 
   private readonly handleCameraFollow = (
@@ -120,8 +160,10 @@ export class TcpCompanyScene extends Scene {
     offTcpEvent({ event: 'camera-pan', fn: this.handleCameraPan });
     offTcpEvent({ event: 'camera-follow', fn: this.handleCameraFollow });
     offTcpEvent({ event: 'labels-changed', fn: this.handleLabelsChanged });
+    offTcpEvent({ event: 'thinking-changed', fn: this.handleThinkingChanged });
     this.cameraController.destroy();
     this.labelLayer.destroy();
+    this.bubbleLayer.destroy();
   };
 
   private syncWorld(world: OfficeWorld): void {
@@ -136,6 +178,8 @@ export class TcpCompanyScene extends Scene {
     const events = this.crowd.sync(world, isWalkable, this.reducedMotion);
 
     this.syncAvatarSprites(world.avatars);
+    this.avatars = world.avatars;
+    this.syncBubbles();
 
     for (const event of events) {
       this.emitCrowdEvent(event);
@@ -147,7 +191,7 @@ export class TcpCompanyScene extends Scene {
     this.applyFollow();
   }
 
-  update(_time: number, delta: number): void {
+  update(time: number, delta: number): void {
     const events = this.crowd.tick(delta);
 
     for (const [id, sprite] of this.avatarSprites) {
@@ -157,6 +201,11 @@ export class TcpCompanyScene extends Scene {
       }
     }
     this.labelLayer.follow((id) => this.crowd.positionOf(id));
+    this.bubbleLayer.update(
+      time,
+      (id) => this.crowd.positionOf(id),
+      this.reducedMotion,
+    );
 
     for (const event of events) {
       this.emitCrowdEvent(event);
@@ -362,6 +411,17 @@ export class TcpCompanyScene extends Scene {
    * Every surviving sprite's selection is refreshed too: an agent's avatar
    * selects that agent while it has one, and its role once it doesn't.
    */
+  /** One thought bubble per avatar whose agent is working. */
+  private syncBubbles(): void {
+    this.bubbleLayer.sync(
+      this.avatars.flatMap((avatar) =>
+        avatar.agentId !== null && this.thinkingAgentIds.has(avatar.agentId)
+          ? [{ avatarId: avatar.id, agentId: avatar.agentId }]
+          : [],
+      ),
+    );
+  }
+
   private syncAvatarSprites(avatars: readonly Avatar[]): void {
     const seen = new Set<string>();
 

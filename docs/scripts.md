@@ -154,7 +154,8 @@ wizard runs once it's written your `.env.<instance>` file.
 | `-p`, `--project <name>` | Docker Compose project name. Each project has its own containers, volumes and Zitadel bootstrap, so a second instance never touches the first's data. Two can't run at once, though: the bundled Zitadel always uses port 8080. | `tcp-dev`                                  |
 | `--rebuild`              | Force a Docker image rebuild                                                                                                                                                                                                    | off                                        |
 | `--dev-web`              | Serve the web client from a Vite dev server on the host instead of the built bundle (HMR)                                                                                                                                       | off                                        |
-| `--reset`                | Tear down the project first (containers **and** volumes — every database is wiped), then seed the fresh stack with test companies and roles                                                                                     | off                                        |
+| `--reset`                | Tear down the project first (containers **and** volumes — every database is wiped), so the stack starts empty                                                                                                                   | off                                        |
+| `--seed`                 | Once the stack is up, add the test companies and roles. Companies that already exist are skipped, so it's safe on an existing setup. Combine with `--reset` for a clean start                                                   | off                                        |
 
 Credentials for the Zitadel org and test users are read from the env file
 (`TEST_USERNAME`, `TEST_PASSWORD`). Add or override them there.
@@ -248,6 +249,14 @@ backing service.
 ```
 
 **Requires:** Docker and Docker Compose, `.env.testing` in the repo root.
+
+**Hang watchdog.** The tier has sometimes hung on exit after every test passed.
+If Jest is still running after `INTEGRATION_HANG_SECONDS` (default 600; a
+normal run takes 2–3 minutes), the script asks it for a Node diagnostic report,
+which lists the sockets, timers and threads still open, then stops it, so the
+run fails rather than hangs. Reports land in `test-results/integration-diagnostics/`,
+and CI uploads them as the `integration-hang-diagnostics` artifact. See
+[outstanding-issues.md](outstanding-issues.md#integration-tier-hangs-on-exit).
 
 See also: [docs/testing.md](testing.md).
 

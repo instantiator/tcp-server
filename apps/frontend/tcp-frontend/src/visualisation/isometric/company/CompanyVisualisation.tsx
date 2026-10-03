@@ -21,6 +21,7 @@ import { buildOfficeLabels, type LabelToggles } from './ui/officeLabels';
 import { PAN_STEP_PX, VisualisationToolbar } from './ui/VisualisationToolbar';
 import { VisualisationTooltip } from './ui/VisualisationTooltip';
 import { VisualisationTray } from './ui/VisualisationTray';
+import { useListenIn } from './ui/useListenIn';
 import { useFullscreen } from './useFullscreen';
 import { useOfficeWorld } from './useOfficeWorld';
 import { useReducedMotion } from './useReducedMotion';
@@ -80,6 +81,31 @@ export default function CompanyVisualisation({
   const [hover, setHover] = useState<HoverEvent | null>(null);
   const [following, setFollowing] = useState(false);
   const [labelToggles, setLabelToggles] = useState<LabelToggles>([]);
+  // The agents shown thinking (005.01): working on an assignment, or reviewing
+  // one. Joined by id at click time too, so a bubble never listens in on a
+  // stale agent.
+  const thinkingAgentIds = useMemo(
+    () =>
+      (snapshot?.agents ?? [])
+        .filter(
+          (agent) =>
+            agent.activity.kind === 'working' ||
+            agent.activity.kind === 'reviewing',
+        )
+        .map((agent) => agent.id),
+    [snapshot],
+  );
+  const listenIn = useListenIn(companyId);
+  const onListenIn = useCallback(
+    (agentId: string) => {
+      const agent = snapshot?.agents.find((row) => row.id === agentId);
+      if (agent !== undefined) {
+        listenIn(agent);
+      }
+    },
+    [snapshot, listenIn],
+  );
+
   const labels = useMemo(
     () => buildOfficeLabels(world, snapshot, labelToggles),
     [world, snapshot, labelToggles],
@@ -211,6 +237,8 @@ export default function CompanyVisualisation({
             world={world}
             reducedMotion={reducedMotion}
             labels={labels}
+            thinkingAgentIds={thinkingAgentIds}
+            onListenIn={onListenIn}
             followTarget={followTarget}
             onAvatarArrived={avatarArrived}
             onAvatarExited={avatarExited}
@@ -235,6 +263,7 @@ export default function CompanyVisualisation({
               setFollowing((f) => !f);
             }}
             onClose={closeTray}
+            portalContainer={portalContainer ?? undefined}
           />
         )}
       </div>

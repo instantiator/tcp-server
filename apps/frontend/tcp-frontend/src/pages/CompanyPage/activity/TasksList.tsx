@@ -12,6 +12,7 @@ import { ACTIVE_TASK_STATUSES, statusLabel } from '../../../api/statuses';
 import { TaskDialog } from '../../../components/TaskDialog/TaskDialog';
 import { t } from '../../../strings';
 import { ActivityList } from './ActivityList';
+import type { CountListener } from './activity-list-utils';
 
 const TASK_STATUSES = [
   'ready',
@@ -63,7 +64,13 @@ const TaskStatusFilter = ({ selected, onChange }: TaskStatusFilterProps) => (
  * Tasks in flight, narrowed by {@link TaskStatusFilter}. Each row opens the
  * task dialog (008.03).
  */
-export const TasksList = ({ companyId }: { readonly companyId: string }) => {
+export const TasksList = ({
+  companyId,
+  onCount,
+}: {
+  readonly companyId: string;
+  readonly onCount?: CountListener;
+}) => {
   const [selected, setSelected] = useState<string[]>([...ACTIVE_TASK_STATUSES]);
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const query = useLiveCompanyTasksList(companyId);
@@ -86,6 +93,7 @@ export const TasksList = ({ companyId }: { readonly companyId: string }) => {
   return (
     <>
       <ActivityList
+        onCount={onCount}
         heading={t('activity.tasks.heading')}
         query={query}
         channel="tasks"

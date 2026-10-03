@@ -19,10 +19,14 @@ const isLabelKind = (value: string): value is LabelKind =>
  * One checkbox per kind of canvas label. The labels repeat what the details
  * picker and the tray already give a screen reader, so they are a visual
  * aid only. `CheckboxField` + `CheckboxButton`, as in `ChatsList.tsx`.
+ *
+ * Floats over the top-left of the stage (005.01), on its own `.tcp-floating`
+ * surface above the toolbar's — same reasoning as there, since this also
+ * renders before the stage in the DOM.
  */
 export const LabelTogglesControl = ({ value, onChange }: LabelTogglesProps) => (
   <CheckboxGroup
-    className="react-aria-CheckboxGroup company-visualisation__labels"
+    className="react-aria-CheckboxGroup tcp-floating company-visualisation__labels"
     value={[...value]}
     onChange={(next) => {
       onChange(next.filter(isLabelKind));

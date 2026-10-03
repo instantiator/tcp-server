@@ -38,6 +38,7 @@
   --tcp-font-family:
     system-ui, -apple-system, 'Segoe UI', roboto, helvetica, arial, sans-serif;
   --tcp-font-size-base: 1rem;
+  --tcp-font-size-small: 0.875rem;
   --tcp-line-height: 1.5;
 
   /* Stacking order for the two surfaces that float above the page. The dock
@@ -62,12 +63,32 @@
   --tcp-fab-clearance: 5rem;
   /* An icon inside a control, drawn at the control's text size or a little over. */
   --tcp-icon-size: 1.25rem;
+  /* Square sizes of the circular icon-only buttons: every one clears WCAG 2.5.8's
+     24px target, and the floating "Add new" button clears 2.5.5's 44px. */
+  --tcp-icon-button-size: 2.5rem;
+  --tcp-icon-button-size-small: 1.75rem;
+  --tcp-icon-button-size-fab: 3.5rem;
+  /* Above the page, below the dock, so a minimised chat stays reachable. */
+  --tcp-layer-header: 5;
+  /* A card's fixed inline size, so cards line up in a wrapping row. */
+  --tcp-card-width: 18rem;
+  /* How long a surface takes to slide into place. Reduced motion cancels it. */
+  --tcp-motion-duration: 200ms;
+  /* The sticky header's approximate block size, so `scroll-padding-block-start`
+     below can keep focused content clear of it (WCAG 2.4.11). */
+  --tcp-header-block-size: 4rem;
 }
 
 *,
 *::before,
 *::after {
   box-sizing: border-box;
+}
+
+/* A focus target that scrolls into view stops short of the sticky header
+   rather than landing underneath it (WCAG 2.4.11). */
+html {
+  scroll-padding-block-start: var(--tcp-header-block-size);
 }
 
 body {
@@ -501,4 +522,138 @@ body {
   border-radius: var(--tcp-radius);
   background-color: var(--tcp-color-surface);
   color: var(--tcp-color-text);
+}
+
+/*
+ * Shared presentation classes: the start of a design system. Each is applied
+ * alongside a component's own class (React Aria's `className` replaces its
+ * default class rather than adding to it), and none changes what a component
+ * is to assistive technology — only how it looks.
+ */
+
+/*
+ * A circular button whose face is only an icon. Its name comes from text or an
+ * `aria-label`, and it is paired with a tooltip showing the same words
+ * (`WithTooltip`), so what is seen, spoken and said by voice control agree
+ * (WCAG 2.5.3).
+ */
+.tcp-icon-button {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  inline-size: var(--tcp-icon-button-size);
+  block-size: var(--tcp-icon-button-size);
+  padding: 0;
+  border-radius: 50%;
+}
+
+.tcp-icon-button--small {
+  inline-size: var(--tcp-icon-button-size-small);
+  block-size: var(--tcp-icon-button-size-small);
+}
+
+.tcp-icon-button--fab {
+  inline-size: var(--tcp-icon-button-size-fab);
+  block-size: var(--tcp-icon-button-size-fab);
+}
+
+.tcp-icon {
+  inline-size: var(--tcp-icon-size);
+  block-size: var(--tcp-icon-size);
+}
+
+/* A count beside a label, such as a tab's number of items. */
+.tcp-badge {
+  display: inline-block;
+  min-inline-size: 1.5em;
+  margin-inline-start: var(--tcp-space-xs);
+  padding: 0 var(--tcp-space-xs);
+  border-radius: 0.75em;
+  background-color: var(--tcp-color-highlight);
+  color: var(--tcp-color-highlight-text);
+  font-size: 0.875em;
+  text-align: center;
+}
+
+/*
+ * A fixed-width card. The whole card is clickable through its one link's
+ * stretched `::after`, so a keyboard or screen reader user meets a single
+ * link rather than a card-sized one wrapping every line of its content.
+ */
+.tcp-card {
+  position: relative;
+  inline-size: var(--tcp-card-width);
+  padding: var(--tcp-space-md);
+  border: var(--tcp-border-width) solid var(--tcp-color-border);
+  border-radius: var(--tcp-radius);
+  background-color: var(--tcp-color-surface);
+}
+
+.tcp-card:hover {
+  border-color: var(--tcp-color-accent);
+}
+
+.tcp-card__link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+/* A surface floating over other content, such as controls over the canvas. */
+.tcp-floating {
+  position: absolute;
+  padding: var(--tcp-space-xs);
+  border: var(--tcp-border-width) solid var(--tcp-color-border);
+  border-radius: var(--tcp-radius);
+  background-color: var(--tcp-color-bg);
+}
+
+/*
+ * The page header (005.01): stays on screen while the page scrolls, rather
+ * than being carried away with it, so the title and the account menu stay
+ * reachable. `html`'s `scroll-padding-block-start` above keeps a focused
+ * element from landing underneath it.
+ */
+.app-header {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: var(--tcp-layer-header);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--tcp-space-md);
+  padding-block: var(--tcp-space-sm);
+  background-color: var(--tcp-color-bg);
+  border-block-end: var(--tcp-border-width) solid var(--tcp-color-border);
+}
+
+/*
+ * The breadcrumb trail (005.01): a horizontal, wrapping list rather than the
+ * browser's default stacked one, with a `›` between crumbs. The separator is
+ * `content`'s alt-text form (`'›' / ''`), which keeps it out of the
+ * accessibility tree — a screen reader already hears each crumb in order from
+ * the list markup, and would otherwise read the glyph as if it were a crumb.
+ */
+.breadcrumbs__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--tcp-space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--tcp-font-size-small);
+}
+
+.breadcrumbs__item + .breadcrumbs__item::before {
+  content: '›' / '';
+  margin-inline-end: var(--tcp-space-xs);
+}
+
+/*
+ * A tab panel kept mounted while its tab is not selected (`shouldForceMount`,
+ * 005.01), so its list keeps its filters. React Aria already makes it
+ * `inert`; this takes it off screen too.
+ */
+.react-aria-TabPanel[data-inert] {
+  display: none;
 }

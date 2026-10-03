@@ -44,6 +44,12 @@ for the generated secrets (`ZITADEL_MASTERKEY`, `ZITADEL_ADMIN_PASSWORD`,
 bootstrap). See [ADR-018 §7](ADRs/ADR-018-system-configuration-setup-wizard.md)
 for the full list.
 
+Re-running the wizard keeps an existing `ZITADEL_MASTERKEY`, wherever it is set
+(`.env.<instance>` or `.local`), because Zitadel can't read its database with
+a different key. If it finds no key but the instance already has a database,
+it asks first: stop, so you can restore the old key, or delete that database
+and start fresh.
+
 Manual `.env` editing remains a supported fallback — the wizard is a
 convenience, not a gate.
 

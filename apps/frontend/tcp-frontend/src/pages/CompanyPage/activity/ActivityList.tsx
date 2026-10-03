@@ -1,8 +1,9 @@
-import { useId, type ReactNode } from 'react';
+import { useEffect, useId, type ReactNode } from 'react';
 import { EmptyState } from '../../../components/EmptyState/EmptyState';
 import { ErrorState } from '../../../components/ErrorState/ErrorState';
 import { LoadingState } from '../../../components/LoadingState/LoadingState';
 import { t } from '../../../strings';
+import type { CountListener } from './activity-list-utils';
 
 /**
  * The state of the query behind a list.
@@ -18,12 +19,6 @@ export interface ActivityQuery {
 }
 
 export interface ActivityListProps {
-  /**
-   * An id for the outermost element, so a link elsewhere in the app (a
-   * notification's `durableHref`) has a fragment to point at. Omit for a list
-   * nothing links to directly.
-   */
-  readonly id?: string;
   /** The list's name, already resolved through `t`. */
   readonly heading: string;
   /**
@@ -35,6 +30,8 @@ export interface ActivityListProps {
   readonly channel: string;
   /** How many rows `children` renders. Shown to everyone, not just assistive tech. */
   readonly count: number;
+  /** Told the shown count whenever it changes, or `null` while there is none. */
+  readonly onCount?: CountListener | undefined;
   readonly emptyHeading: string;
   readonly emptyBody: string;
   /** A standing caveat about what the list cannot show. Rendered above the rows. */
@@ -64,11 +61,11 @@ export interface ActivityListProps {
  * list has to implement.
  */
 export const ActivityList = ({
-  id,
   heading,
   query: { isPending, error, refetch },
   channel,
   count,
+  onCount,
   emptyHeading,
   emptyBody,
   note,
@@ -76,15 +73,22 @@ export const ActivityList = ({
   children,
 }: ActivityListProps) => {
   const headingId = useId();
+  // The tab badge shows the same figure as the count line below, and the
+  // same absence of one while loading or failed.
+  const shown = isPending || error !== null ? null : count;
+  useEffect(() => {
+    onCount?.(shown);
+  }, [onCount, shown]);
 
   return (
-    <section id={id} className="activity-list" aria-labelledby={headingId}>
+    <section className="activity-list" aria-labelledby={headingId}>
       {/*
         `h2`: the page's `h1` is the company name and nothing sits between them,
-        so this is the next level. Skipping to `h3` to reflect the tab frame's
-        visual nesting would break the outline — the tab is not a heading.
+        so this is the next level. Visually hidden, because the list's tab
+        (005.01) already shows its name on screen; it stays for heading
+        navigation and to name the region.
       */}
-      <h2 id={headingId} className="activity-list__heading">
+      <h2 id={headingId} className="activity-list__heading visually-hidden">
         {heading}
       </h2>
       {/*

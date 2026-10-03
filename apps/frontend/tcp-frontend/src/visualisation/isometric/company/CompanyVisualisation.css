@@ -1,10 +1,26 @@
+/*
+ * Positioning context for the toolbar and the label toggles (005.01): both
+ * render before `__main` in the DOM — so React Aria's own order, and the
+ * page's tab order, stay as they are — but they float visually over the
+ * stage, which is the section's only real content now. Still the fullscreen
+ * element (`useFullscreen`'s container), so this holds there too.
+ */
 .company-visualisation {
+  position: relative;
+  /* Its own stacking context: the floating controls and the tray layer above
+     the canvas without competing with the sticky header or the dock. */
+  isolation: isolate;
 }
 
-/* The stage and the tray side by side; the stage takes whatever the tray doesn't. */
+/*
+ * The stage fills whatever the section has; the tray (when open) overlays its
+ * right edge instead of sharing this row with it. `overflow: hidden` clips
+ * the tray's slide-in.
+ */
 .company-visualisation__main {
+  position: relative;
+  overflow: hidden;
   display: flex;
-  gap: var(--tcp-space-md);
 }
 
 .company-visualisation__stage {
@@ -27,24 +43,79 @@
   );
 }
 
+/*
+ * The dock is fixed to the viewport and would otherwise cover the toolbar's
+ * floating controls at the bottom-left; shrinking the stage by the dock's
+ * height lifts the section's own bottom edge — and the controls pinned to
+ * it — clear of it.
+ */
+body:has(.dialog-dock) .company-visualisation__stage {
+  block-size: max(
+    var(--tcp-visualisation-height),
+    calc(
+      100dvh - var(--tcp-visualisation-top, 100dvh) - var(--tcp-space-md) -
+        var(--tcp-dock-block-size)
+    )
+  );
+}
+
 .company-visualisation__canvas {
   inline-size: 100%;
   block-size: 100%;
 }
 
+/*
+ * Floats over the bottom-left of the stage. `.tcp-floating` gives it its
+ * surface (position, padding, border, background); this only places it and
+ * lays out its own row of controls.
+ */
 .company-visualisation__toolbar {
+  inset-block-end: var(--tcp-space-md);
+  inset-inline-start: var(--tcp-space-md);
+  z-index: var(--tcp-layer-dock);
   display: flex;
   align-items: center;
   gap: var(--tcp-space-sm);
-  padding: var(--tcp-space-sm);
 }
 
+/*
+ * The tray overlays the stage's right edge (005.01) instead of sharing
+ * `__main`'s row with it, and slides in from off-screen on mount —
+ * `__main`'s `overflow: hidden` clips the slide.
+ *
+ * ponytail: no exit animation; the tray unmounts on close. Keep it mounted
+ * with a closing state if a slide-out is wanted.
+ */
 .company-visualisation__tray {
-  flex: none;
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  z-index: var(--tcp-layer-dock);
   inline-size: var(--tcp-visualisation-tray-width);
   overflow: auto;
   padding: var(--tcp-space-md);
   border-inline-start: var(--tcp-border-width) solid var(--tcp-color-border);
+  background-color: var(--tcp-color-bg);
+  transition: translate var(--tcp-motion-duration);
+}
+
+@starting-style {
+  .company-visualisation__tray {
+    translate: 100% 0;
+  }
+}
+
+/* A details panel's heading and the action beside it (the follow toggle). */
+.company-visualisation__tray-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--tcp-space-sm);
+}
+
+.company-visualisation__tray-close {
+  position: absolute;
+  inset-block-start: var(--tcp-space-sm);
+  inset-inline-end: var(--tcp-space-sm);
 }
 
 /*
@@ -59,14 +130,6 @@
     'left . right'
     '. down .';
   gap: var(--tcp-space-xs);
-}
-
-.company-visualisation__pan-button,
-.company-visualisation__icon-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--tcp-space-xs);
 }
 
 .company-visualisation__pan-button--up {
@@ -85,16 +148,13 @@
   grid-area: down;
 }
 
-.company-visualisation__icon {
-  inline-size: var(--tcp-icon-size);
-  block-size: var(--tcp-icon-size);
-}
-
 /*
  * Full screen is the whole visualisation — toolbar, stage and tray — not
  * just the canvas, so the pan and full-screen controls stay reachable while
  * it's active. The stage's height token only fits the page's normal flow;
- * here it grows to fill whatever the display offers instead.
+ * here it grows to fill whatever the display offers instead. The toolbar and
+ * label toggles need no override here: they stay positioned against the
+ * section itself, which is the fullscreen element too.
  */
 .company-visualisation:fullscreen {
   display: flex;
@@ -131,8 +191,9 @@
   translate: var(--tcp-space-sm) var(--tcp-space-sm);
 }
 
-/* The label checkboxes: their own row under the toolbar, inset to match it. */
+/* The label checkboxes: float over the top-left of the stage, inset to match the toolbar. */
 .company-visualisation__labels {
-  padding-inline: var(--tcp-space-sm);
-  padding-block-end: var(--tcp-space-sm);
+  inset-block-start: var(--tcp-space-md);
+  inset-inline-start: var(--tcp-space-md);
+  z-index: var(--tcp-layer-dock);
 }

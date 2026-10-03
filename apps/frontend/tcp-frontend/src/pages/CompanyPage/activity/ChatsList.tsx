@@ -152,7 +152,12 @@ const ChatFilters = ({
  * each opens the chat dialog on the agent it names. Every other list here has
  * no dialog yet to open.
  */
-export const ChatsList = ({ companyId, roleNames, roles }: ChatsListProps) => {
+export const ChatsList = ({
+  companyId,
+  roleNames,
+  roles,
+  onCount,
+}: ChatsListProps) => {
   const query = useLiveCompanyChatsList(companyId);
   const { openChat } = useChat();
 
@@ -191,6 +196,7 @@ export const ChatsList = ({ companyId, roleNames, roles }: ChatsListProps) => {
 
   return (
     <ActivityList
+      onCount={onCount}
       heading={t('activity.chats.heading')}
       query={query}
       channel="chats"

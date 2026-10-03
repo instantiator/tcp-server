@@ -148,12 +148,11 @@ export function writeEnvFile(
   );
   b.blank();
 
+  // Read before the base file is rewritten: a Zitadel secret kept there (as
+  // .env.example does) moves to .local instead of being dropped and replaced.
+  const existingLocal = readExistingSecrets(filePath);
   writeFileSync(filePath, b.render(), 'utf8');
-  writeFileSync(
-    localFilePath,
-    buildLocalFile(config, readExistingEnv(localFilePath)),
-    'utf8',
-  );
+  writeFileSync(localFilePath, buildLocalFile(config, existingLocal), 'utf8');
   return { envFile: filePath, localFile: localFilePath };
 }
 
@@ -272,6 +271,34 @@ function buildLocalFile(
     if (!written.has(key) && value) lines.push(`${key}=${value}`);
   }
   return `${lines.join('\n')}\n`;
+}
+
+/**
+ * The `.local` file's values, plus any {@link ZITADEL_SECRET_KEYS} found only
+ * in the base env file. `.local` wins, as it does when the stack starts.
+ */
+function readExistingSecrets(envFilePath: string): Map<string, string> {
+  const base = readExistingEnv(envFilePath);
+  const values = readExistingEnv(`${envFilePath}.local`);
+  for (const key of ZITADEL_SECRET_KEYS) {
+    const value = base.get(key);
+    if (value && !values.get(key)) values.set(key, value);
+  }
+  return values;
+}
+
+/**
+ * Whether {@link writeEnvFile} would generate a new `ZITADEL_MASTERKEY` for
+ * this config — the bundled Zitadel is in use and neither env file has one.
+ * A new key can't decrypt a Zitadel database made with the old one.
+ */
+export function willGenerateMasterkey(
+  config: WizardConfig,
+  outputDir: string = REPO_ROOT,
+): boolean {
+  if (config.oidc) return false;
+  const existing = readExistingSecrets(join(outputDir, config.envFileName));
+  return !existing.get('ZITADEL_MASTERKEY');
 }
 
 /**

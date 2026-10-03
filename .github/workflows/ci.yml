@@ -130,6 +130,11 @@ jobs:
     name: Integration tests
     needs: [build, lint, typecheck, unit-test]
     runs-on: ubuntu-latest
+    # A hang would otherwise run to GitHub's 6-hour default. The script's own
+    # watchdog stops Jest at 10 minutes and writes a diagnostic report; this
+    # leaves room for that, `npm ci` and the uploads, and is the backstop if
+    # anything else hangs.
+    timeout-minutes: 20
     permissions:
       checks: write
       contents: read
@@ -171,6 +176,15 @@ jobs:
         with:
           name: integration-compose-logs
           path: test-results/integration-compose-logs/
+          if-no-files-found: ignore
+      # Written by run-integration-tests.sh's watchdog when Jest hangs: the
+      # live handles that kept it running.
+      - name: Upload hang diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: integration-hang-diagnostics
+          path: test-results/integration-diagnostics/
           if-no-files-found: ignore
 
   api-test:

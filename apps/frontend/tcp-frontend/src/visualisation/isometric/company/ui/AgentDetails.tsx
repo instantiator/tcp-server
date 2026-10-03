@@ -3,18 +3,22 @@ import {
   useLiveAgentState,
   useLiveAssignmentsList,
 } from '../../../../api/hooks';
+import type { ReactNode } from 'react';
 import { Button } from 'react-aria-components';
 import { ACTIVE_AGENT_STATUSES, statusLabel } from '../../../../api/statuses';
-import { useChat } from '../../../../components/ChatDialog/useChat';
 import { ExpandableText } from '../../../../components/ExpandableText/ExpandableText';
 import { t } from '../../../../strings';
 import { isWaitingToStart } from '../rules/companySnapshot';
 import { modeLabel } from './modeLabel';
+import { TrayHeading } from './TrayHeading';
+import { useListenIn } from './useListenIn';
 
 export interface AgentDetailsProps {
   readonly companyId: string;
   readonly agentId: string;
   readonly headingId: string;
+  /** The follow toggle, shown beside this panel's own heading. */
+  readonly headingAction?: ReactNode;
 }
 
 /**
@@ -30,16 +34,19 @@ export const AgentDetails = ({
   companyId,
   agentId,
   headingId,
+  headingAction,
 }: AgentDetailsProps) => {
   const agentQuery = useLiveAgentState({ agentId });
-  const { openChat } = useChat();
+  const listenIn = useListenIn(companyId);
   const { data: roles } = useCompanyRolesList(companyId);
   const { data: assignments } = useLiveAssignmentsList({ companyId });
 
   if (agentQuery.isPending) {
     return (
       <>
-        <h2 id={headingId}>{t('visualisation.tray.heading')}</h2>
+        <TrayHeading id={headingId} action={headingAction}>
+          {t('visualisation.tray.heading')}
+        </TrayHeading>
         <p>{t('visualisation.tray.loading')}</p>
       </>
     );
@@ -52,7 +59,9 @@ export const AgentDetails = ({
   if (agentQuery.isError || agent === null || agent === undefined) {
     return (
       <>
-        <h2 id={headingId}>{t('visualisation.tray.heading')}</h2>
+        <TrayHeading id={headingId} action={headingAction}>
+          {t('visualisation.tray.heading')}
+        </TrayHeading>
         <p>{t('visualisation.tray.gone')}</p>
       </>
     );
@@ -73,9 +82,9 @@ export const AgentDetails = ({
 
   return (
     <>
-      <h2 id={headingId}>
+      <TrayHeading id={headingId} action={headingAction}>
         {t('visualisation.tray.agentHeading', { role: roleName })}
-      </h2>
+      </TrayHeading>
       <dl>
         <dt>{t('visualisation.tray.status')}</dt>
         <dd>{statusText}</dd>
@@ -106,11 +115,10 @@ export const AgentDetails = ({
         <Button
           className="react-aria-Button"
           onPress={() => {
-            openChat({
-              agentId,
-              roleName,
-              reference: assignment?.shortcode ?? null,
-              readOnly: true,
+            listenIn({
+              id: agentId,
+              roleId: agent.roleId,
+              assignmentId: agent.assignmentId,
             });
           }}
         >

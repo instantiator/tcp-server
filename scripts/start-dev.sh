@@ -9,7 +9,7 @@ enable_error_report
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [-h|--help] [-e|--env <path>] [-p|--project <name>] [--rebuild] [--dev-web] [--reset]
+Usage: $(basename "$0") [-h|--help] [-e|--env <path>] [-p|--project <name>] [--rebuild] [--dev-web] [--reset] [--seed]
 
 Start a full local development environment and configure it for first-time use.
 
@@ -41,11 +41,13 @@ Options:
                      development-only capabilities exist at all — they are
                      compiled out of a production build (docs/web-client.md).
   --reset            Tear down the project first (containers AND
-                     volumes — every database is wiped), then, once the fresh
-                     stack is up, seed it with a couple of basic test
-                     companies and roles via tcp-cli.sh. Use this for a known
-                     clean starting point; without it, start-dev.sh never
-                     touches existing data.
+                     volumes — every database is wiped), so the stack starts
+                     empty. Without it, start-dev.sh never touches existing
+                     data.
+  --seed             Once the stack is up, add a couple of basic test
+                     companies and roles via tcp-cli.sh. Companies that
+                     already exist are skipped, so it is safe on an existing
+                     setup. Combine with --reset for a known clean start.
   -h, --help         Show this help message and exit
 EOF
 }
@@ -55,6 +57,7 @@ PROJECT="tcp-dev"
 REBUILD=false
 DEV_WEB=false
 RESET=false
+SEED=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -68,6 +71,7 @@ while [[ $# -gt 0 ]]; do
     --rebuild) REBUILD=true; shift ;;
     --dev-web) DEV_WEB=true; shift ;;
     --reset) RESET=true; shift ;;
+    --seed) SEED=true; shift ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
   esac
 done
@@ -190,7 +194,7 @@ resolve_issuer() {
 # using the machine test user start-deployment.sh's own Zitadel bootstrap
 # creates (see TEST_CLIENT_ID/TEST_CLIENT_SECRET there) — the same grant
 # apps/backend/test/api/helpers/ApiHelper.ts and the browser tier use.
-# get-token's device-flow login needs a human in a browser, which --reset,
+# get-token's device-flow login needs a human in a browser, which --seed,
 # running unattended, cannot assume.
 get_machine_token() {
   local env_file="$1"
@@ -226,7 +230,7 @@ get_machine_token() {
 # admin credential of our own. The PAT lives outside any Docker volume
 # (docker/zitadel-machinekey/), so --reset's volume wipe doesn't touch it —
 # only a genuinely fresh Zitadel instance (which --reset always produces)
-# rewrites it, which is exactly when we need the new one.
+# rewrites it, and start-deployment.sh has just checked it still works.
 #
 # get-token's own device-flow scope (auth-token.service.ts) is
 # `openid profile offline_access`, with no `email` — so this human user's
@@ -267,12 +271,12 @@ add_test_user_membership() {
     >/dev/null
 }
 
-# --reset's seed data: two small companies to poke at right after a fresh
-# start, rather than an empty "you are not a member of any company" screen.
-# Only ever called against a database --reset just wiped, so every
+# --seed's data: two small companies to poke at right after a fresh start,
+# rather than an empty "you are not a member of any company" screen. Every
 # `set-company`/`set-role` below is a create (no --company-id/--role-id given
-# and the JSON carries no `id`) — safe here, but NOT safe to call again
-# without wiping first, since a second create would collide on the slug.
+# and the JSON carries no `id`), and a second create would collide on the
+# slug — so a company whose slug already exists is skipped whole, roles,
+# knowledge and membership included.
 seed_test_companies() {
   echo "Setting up test companies..."
 
@@ -308,41 +312,55 @@ seed_test_companies() {
   # actually created rather than assumed from the JSON filename —
   # scripts/test-data/companies/simple-company.json's `slug` field is
   # "test-company", not "simple-company".
-  local hint="tcp-cli's error is above. The stack is up; once it's fixed, seed again with --reset (it wipes this project's data first)."
+  local hint="tcp-cli's error is above. The stack is up; once it's fixed, run with --seed again (companies already created are skipped)."
+  local existing
+  step "listing existing companies" "$hint"
+  existing="$("$cli" -t "$token" --tcp-server "$tcp_server_url" list-companies | jq -r '.[].slug')"
+  # Whether the company in $1 (a seed JSON file) was already created.
+  already_seeded() {
+    local slug
+    slug="$(jq -r .slug "$1")"
+    grep -qxF "$slug" <<< "$existing" && echo "  Company: $slug (already exists — skipped)"
+  }
+
   local hm_company hm_id hm_slug
-  step "creating the home-maintenance test company" "$hint"
-  hm_company="$("$cli" -t "$token" --tcp-server "$tcp_server_url" set-company < "$data/companies/home-maintenance.json")"
-  hm_id="$(json_field "tcp-cli set-company" '.id' <<< "$hm_company")"
-  hm_slug="$(json_field "tcp-cli set-company" '.slug' <<< "$hm_company")"
-  echo "  Company: $hm_slug"
-  step "adding the diy-assistant role and its knowledge" "$hint"
-  "$cli" -t "$token" --tcp-server "$tcp_server_url" set-role --company-slug "$hm_slug" \
-    < "$data/roles/diy-assistant.json" >/dev/null
-  echo "    Role: diy-assistant"
-  "$cli" -t "$token" --tcp-server "$tcp_server_url" store-knowledge \
-    --company-slug "$hm_slug" --role diy-assistant \
-    --source "$data/knowledge/diy-manual.pdf" >/dev/null
-  echo "    Knowledge: diy-manual.pdf"
-  if [[ -n "$test_user_id" ]]; then
-    add_test_user_membership "$token" "$tcp_server_url" "$hm_id" "$test_user_id"
-    echo "    Shared with: $test_username"
+  if ! already_seeded "$data/companies/home-maintenance.json"; then
+    step "creating the home-maintenance test company" "$hint"
+    hm_company="$("$cli" -t "$token" --tcp-server "$tcp_server_url" set-company < "$data/companies/home-maintenance.json")"
+    hm_id="$(json_field "tcp-cli set-company" '.id' <<< "$hm_company")"
+    hm_slug="$(json_field "tcp-cli set-company" '.slug' <<< "$hm_company")"
+    echo "  Company: $hm_slug"
+    step "adding the diy-assistant role and its knowledge" "$hint"
+    "$cli" -t "$token" --tcp-server "$tcp_server_url" set-role --company-slug "$hm_slug" \
+      < "$data/roles/diy-assistant.json" >/dev/null
+    echo "    Role: diy-assistant"
+    "$cli" -t "$token" --tcp-server "$tcp_server_url" store-knowledge \
+      --company-slug "$hm_slug" --role diy-assistant \
+      --source "$data/knowledge/diy-manual.pdf" >/dev/null
+    echo "    Knowledge: diy-manual.pdf"
+    if [[ -n "$test_user_id" ]]; then
+      add_test_user_membership "$token" "$tcp_server_url" "$hm_id" "$test_user_id"
+      echo "    Shared with: $test_username"
+    fi
   fi
 
   local simple_company simple_id simple_slug
-  step "creating the simple test company and its roles" "$hint"
-  simple_company="$("$cli" -t "$token" --tcp-server "$tcp_server_url" set-company < "$data/companies/simple-company.json")"
-  simple_id="$(json_field "tcp-cli set-company" '.id' <<< "$simple_company")"
-  simple_slug="$(json_field "tcp-cli set-company" '.slug' <<< "$simple_company")"
-  echo "  Company: $simple_slug"
-  "$cli" -t "$token" --tcp-server "$tcp_server_url" set-role --company-slug "$simple_slug" \
-    < "$data/roles/chicken-assistant.json" >/dev/null
-  echo "    Role: chicken-assistant"
-  "$cli" -t "$token" --tcp-server "$tcp_server_url" set-role --company-slug "$simple_slug" \
-    < "$data/roles/cat-assistant.json" >/dev/null
-  echo "    Role: cat-assistant"
-  if [[ -n "$test_user_id" ]]; then
-    add_test_user_membership "$token" "$tcp_server_url" "$simple_id" "$test_user_id"
-    echo "    Shared with: $test_username"
+  if ! already_seeded "$data/companies/simple-company.json"; then
+    step "creating the simple test company and its roles" "$hint"
+    simple_company="$("$cli" -t "$token" --tcp-server "$tcp_server_url" set-company < "$data/companies/simple-company.json")"
+    simple_id="$(json_field "tcp-cli set-company" '.id' <<< "$simple_company")"
+    simple_slug="$(json_field "tcp-cli set-company" '.slug' <<< "$simple_company")"
+    echo "  Company: $simple_slug"
+    "$cli" -t "$token" --tcp-server "$tcp_server_url" set-role --company-slug "$simple_slug" \
+      < "$data/roles/chicken-assistant.json" >/dev/null
+    echo "    Role: chicken-assistant"
+    "$cli" -t "$token" --tcp-server "$tcp_server_url" set-role --company-slug "$simple_slug" \
+      < "$data/roles/cat-assistant.json" >/dev/null
+    echo "    Role: cat-assistant"
+    if [[ -n "$test_user_id" ]]; then
+      add_test_user_membership "$token" "$tcp_server_url" "$simple_id" "$test_user_id"
+      echo "    Shared with: $test_username"
+    fi
   fi
 
   echo ""
@@ -356,13 +374,16 @@ fi
 
 # Not `exec`: the closing note below has to outlive start-deployment.sh, and a
 # failed start must not leave an orphaned dev server behind.
-if ! "$REPO_ROOT/scripts/start-deployment.sh" "${ARGS[@]}"; then
-  status=$?
+# `|| status=$?`, not `if ! ...; then status=$?`: inside that branch `$?` is
+# the negation's 0, so a failed start exited 0 and the wizard carried on.
+status=0
+"$REPO_ROOT/scripts/start-deployment.sh" "${ARGS[@]}" || status=$?
+if ((status != 0)); then
   [[ "$DEV_WEB" == true ]] && stop_dev_web
   exit "$status"
 fi
 
-if [[ "$RESET" == true ]]; then
+if [[ "$SEED" == true ]]; then
   seed_test_companies
 fi
 
