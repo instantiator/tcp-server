@@ -10,6 +10,10 @@ describe('safeRedirectTarget', () => {
       // validator matching bare route paths would drop the query string and
       // return the user to an unfiltered view of the page they were on.
       ['/company/acme?tab=activity', '/company/acme?tab=activity'],
+      // The hash too (005.01): it selects a company page tab, and is what a
+      // new-enquiry notification's link to `#enquiries` relies on.
+      ['/company/acme#enquiries', '/company/acme#enquiries'],
+      ['/company/acme?x=1#tasks', '/company/acme?x=1#tasks'],
     ])('returns %s', (from, expected) => {
       expect(safeRedirectTarget({ from })).toBe(expected);
     });
@@ -21,6 +25,10 @@ describe('safeRedirectTarget', () => {
       // backslash and the leading-tab forms are the ones a `startsWith('/')`
       // check waves through: the URL parser folds both into `//evil.example`.
       ['an absolute URL elsewhere', 'https://evil.example/companies'],
+      [
+        'an absolute URL elsewhere, with a hash',
+        'https://evil.example/company/a#tasks',
+      ],
       ['a protocol-relative URL', '//evil.example'],
       ['a backslash-folded URL', '/\\evil.example'],
       ['a whitespace-prefixed URL', '\t/\\/evil.example'],

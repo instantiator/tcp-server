@@ -19,7 +19,8 @@ export interface Crumb {
  * doing full page loads. Four lines of native markup against a router-wide
  * integration.
  *
- * First used by the company view (006.01); nothing renders it yet.
+ * Used by the company page (006.01) to show the way back to the companies
+ * list.
  */
 export const Breadcrumbs = ({ items }: { items: readonly Crumb[] }) => (
   <nav className="breadcrumbs" aria-label={t('breadcrumbs.label')}>

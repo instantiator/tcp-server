@@ -55,16 +55,17 @@ const renderCompanyVisualisation = () => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  const openChat = vi.fn();
   const utils = render(
     <QueryClientProvider client={queryClient}>
       <ChatContext.Provider
-        value={{ openChat: vi.fn(), closeChat: vi.fn(), startChat: vi.fn() }}
+        value={{ openChat, closeChat: vi.fn(), startChat: vi.fn() }}
       >
         <CompanyVisualisation companyId={COMPANY_ID} />
       </ChatContext.Provider>
     </QueryClientProvider>,
   );
-  return { ...utils, queryClient };
+  return { ...utils, queryClient, openChat };
 };
 
 describe('CompanyVisualisation', () => {
@@ -303,6 +304,30 @@ describe('CompanyVisualisation', () => {
       };
     });
 
+    it('marks a working agent as thinking, and listens in when its bubble is clicked (005.01)', async () => {
+      const thinking = vi.fn();
+      onTcpEvent({ event: 'thinking-changed', fn: thinking });
+      try {
+        const { openChat } = renderCompanyVisualisation();
+        await findStage();
+
+        // A running agent on an in-progress assignment is `working`.
+        await waitFor(() => expect(lastValue(thinking)).toEqual([AGENT_ID]));
+
+        act(() => {
+          emitTcpEvent({ event: 'listen-in', value: { agentId: AGENT_ID } });
+        });
+        expect(openChat).toHaveBeenCalledWith({
+          agentId: AGENT_ID,
+          roleName: ROLE_NAME,
+          reference: 'A1',
+          readOnly: true,
+        });
+      } finally {
+        offTcpEvent({ event: 'thinking-changed', fn: thinking });
+      }
+    });
+
     it('opens the tray with live data on a select event, and reflects a live patch', async () => {
       const { queryClient } = renderCompanyVisualisation();
       await findStage();
@@ -421,8 +446,14 @@ describe('CompanyVisualisation', () => {
 
     // The same route as every other kind: the tray opens beside the stage,
     // focus stays where the picker left it (on its own button, as for a
-    // task), and the tray's links follow the stage in the Tab order.
-    it('opens the archive tray from the picker like any other kind, with its links next in the Tab order', async () => {
+    // task), and the tray's own controls follow the stage in the Tab order.
+    //
+    // Deliberate change (005.01): Follow now renders beside the panel's own
+    // heading (`TrayHeading`), ahead of the archive's list of links, rather
+    // than after all of a panel's content as a tray-level control — so it
+    // comes before the link here, not after it. Close stays last in the
+    // tray's markup; its top-right position is CSS only.
+    it('opens the archive tray from the picker like any other kind, with Follow before its links in the Tab order', async () => {
       withArchive();
       const user = userEvent.setup();
       renderCompanyVisualisation();
@@ -448,13 +479,13 @@ describe('CompanyVisualisation', () => {
 
       stage.focus();
       await user.tab();
-      expect(link).toHaveFocus();
-      await user.tab();
       expect(
         within(tray).getByRole('button', {
           name: t('visualisation.tray.follow'),
         }),
       ).toHaveFocus();
+      await user.tab();
+      expect(link).toHaveFocus();
       await user.tab();
       expect(
         within(tray).getByRole('button', {

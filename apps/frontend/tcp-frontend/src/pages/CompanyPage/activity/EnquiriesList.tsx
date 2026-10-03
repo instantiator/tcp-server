@@ -4,10 +4,12 @@ import { useLiveCompanyEnquiriesList } from '../../../api/hooks';
 import { ResponseDialog } from '../../../components/ResponseDialog/ResponseDialog';
 import { t } from '../../../strings';
 import { ActivityList } from './ActivityList';
+import type { CountListener } from './activity-list-utils';
 
 /** Conversations awaiting a person's reply. */
 export interface EnquiriesListProps {
   readonly companyId: string;
+  readonly onCount?: CountListener;
 }
 
 /**
@@ -15,7 +17,7 @@ export interface EnquiriesListProps {
  * response dialog (008.04) on its own conversation.
  *
  * **No announcement here.** `NewEnquiryNotifications` (rendered by
- * `CompanyActivity`, above this list) is now the single writer on the
+ * `CompanyTabs`, above the tab list) is now the single writer on the
  * `enquiry` announcer channel — `Notification` announces on arrival itself,
  * and a second writer here would coalesce one arriving enquiry into one
  * confusing phrase. The `removed`-case announcement this list used to make
@@ -23,7 +25,7 @@ export interface EnquiriesListProps {
  * background noise — it means someone else dealt with it — and the list's own
  * count and `aria-busy` still change to reflect it.
  */
-export const EnquiriesList = ({ companyId }: EnquiriesListProps) => {
+export const EnquiriesList = ({ companyId, onCount }: EnquiriesListProps) => {
   const [openSlug, setOpenSlug] = useState<string | null>(null);
   const query = useLiveCompanyEnquiriesList(companyId, 'awaiting_user');
   // Filtered again here, client-side, in addition to the `?status=` query: a
@@ -37,7 +39,7 @@ export const EnquiriesList = ({ companyId }: EnquiriesListProps) => {
   return (
     <>
       <ActivityList
-        id="enquiries"
+        onCount={onCount}
         heading={t('activity.enquiries.heading')}
         query={query}
         channel="enquiry"

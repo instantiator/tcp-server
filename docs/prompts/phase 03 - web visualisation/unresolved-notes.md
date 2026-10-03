@@ -34,13 +34,13 @@ kept for the record is an entry nobody trusts is current.
 `TaskService.create` saves the task row and records nothing, so an open page
 sees a new task only once it is started (`planning` is published) or on
 reload. This affects the office view — its browser spec creates a task before
-opening the page, and tests live _removal_ only — and the Activity tab for
+opening the page, and tests live _removal_ only — and the Tasks tab for
 every other viewer too, not just this one.
 
 No prompt owns this backend fix yet.
 
 Testable: create a task through the API while a page showing the office view
-or the activity tab is open. The task does not appear until it is started or
+or the Tasks tab is open. The task does not appear until it is started or
 the page is reloaded.
 
 ### No browser-tier coverage of agent avatars
@@ -64,7 +64,10 @@ driving a task to `succeeded` by hand would race the real BullMQ job each
 stage dispatches the moment its assignment is created — see 002.02's plan,
 stage 11. The bookshelf tray's browser spec covers its empty state instead,
 which still proves the tray reads its live `storageConsoleUrl`/
-`storageBucket` config.
+`storageBucket` config. 005.01's thought bubbles are the same gap by the same
+cause: they show only over a working agent, so they are covered by unit tests
+on the layer and its animation steps, and by one `CompanyVisualisation`
+pipeline test from a running agent to `openChat`.
 
 Testable: the browser-tier deployment's compose services include an LLM.
 
@@ -153,7 +156,8 @@ now visible.
 
 `scene/LabelLayer.ts` puts each label above its anchor and does nothing when
 two overlap. A task room with several avatars at neighbouring desks, with
-Agents and Furniture both on, will stack labels on top of each other. Marked
+Agents and Furniture both on, will stack labels on top of each other. Since
+005.01 an agent label can also overlap its own thought bubble's cloud. Marked
 `ponytail:` in the file; the upgrade is nudging overlapping labels apart, or
 showing furniture labels only on hover.
 
@@ -267,7 +271,7 @@ opens the task's `completed/` folder rather than the bucket root.
 
 **Raised by:** 002.02 · **Condition to revisit:** a user asks to see only chats they started
 
-`ChatsList` (Activity → Chats) shows every chat in the company, filterable
+`ChatsList` (the Chats tab) shows every chat in the company, filterable
 by status and role, because the backend records no chat owner — a
 chat-mode assignment carries no `createdBy`/`userId` field to filter on.
 This matches how every other activity list works today (company-wide, not
@@ -305,6 +309,17 @@ role's tray ("Chat with {role}"). Creating a task is not.
 Testable: enter full screen on the office view and look for a way to create a
 task without leaving it.
 
+### The office view's tray has no exit animation
+
+**Raised by:** 005.01 · **Condition to revisit:** a user asks for the tray to slide out as well as in
+
+The tray slides in over the canvas with `@starting-style`, but it unmounts on
+close, so it vanishes rather than sliding out. Marked `ponytail:` in
+`CompanyVisualisation.css`; the upgrade is keeping it mounted in a closing
+state until its transition ends.
+
+Testable: open and close the tray, and watch whether it slides out.
+
 ## Carried into a later prompt
 
 | Note                                                                                                                                                | Raised by | Goes to             |
@@ -318,4 +333,6 @@ task without leaving it.
 | Furniture and doorway tooltips are pointer-only                                                                                                     | 002.01    | `001.02` (phase 04) |
 | The icon-only pan and full-screen controls, checked with voice control                                                                              | 002.01    | `001.02` (phase 04) |
 | The office view's documentation (`web-client.md`) and its ADR-027 amendment                                                                         | 000.01    | `001.03` (phase 04) |
+| The office view's floating controls: focus order and the new icon buttons, checked with voice control                                               | 005.01    | `001.02` (phase 04) |
+| The office view's thought bubbles are pointer-only; confirm the picker → tray → "Listen in" route                                                   | 005.01    | `001.02` (phase 04) |
 | A fuller reduced-motion design for the office view                                                                                                  | 000.01    | `000.02`            |

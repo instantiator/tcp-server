@@ -1,3 +1,4 @@
+import { Search } from 'lucide-react';
 import { useMemo } from 'react';
 import {
   Button,
@@ -6,9 +7,9 @@ import {
   ListBoxItem,
   Popover,
   Select,
-  SelectValue,
   type Key,
 } from 'react-aria-components';
+import { Icon, WithTooltip } from '../../../../components/Icon/Icon';
 import { t } from '../../../../strings';
 import type { CompanySnapshot } from '../rules/companySnapshot';
 import type { SelectionTarget } from '../TcpPhaserEventBus';
@@ -111,6 +112,8 @@ export const DetailsPicker = ({
         ? 'archive'
         : `${selection.kind}:${selection.id}`;
 
+  const label = t('visualisation.picker.label');
+
   return (
     <Select
       value={value}
@@ -122,12 +125,21 @@ export const DetailsPicker = ({
       isDisabled={snapshot === null || items.length === 0}
       placeholder={t('visualisation.picker.placeholder')}
     >
-      <Label>{t('visualisation.picker.label')}</Label>
-      <Button>
-        <SelectValue />
-      </Button>
+      {/*
+        Visually hidden rather than dropped: the trigger carries no visible
+        text of its own (it's icon-only, like the toolbar's other controls),
+        so this is still what gives it its accessible name — React Aria wires
+        the trigger's `aria-labelledby` to it regardless of whether
+        `SelectValue` is rendered alongside it.
+      */}
+      <Label className="react-aria-Label visually-hidden">{label}</Label>
+      <WithTooltip label={label} portalContainer={portalContainer}>
+        <Button className="react-aria-Button tcp-icon-button">
+          <Icon icon={Search} />
+        </Button>
+      </WithTooltip>
       <Popover
-        // eslint-disable-next-line @typescript-eslint/no-deprecated -- the provider that replaces it isn't exported by react-aria-components; see `WithTooltip` in VisualisationToolbar.tsx
+        // eslint-disable-next-line @typescript-eslint/no-deprecated -- the provider that replaces it isn't exported by react-aria-components; see `WithTooltip` in components/Icon/Icon.tsx
         UNSTABLE_portalContainer={portalContainer}
       >
         <ListBox>

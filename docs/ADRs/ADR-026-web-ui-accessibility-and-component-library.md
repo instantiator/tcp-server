@@ -149,3 +149,12 @@ The "Add new" control ([003.01](../prompts/phase%2003%20-%20web%20visualisation/
 - **The chat dialog carries its own "Add new" menu** in its title bar, through a new `actions` slot on `Dialog`. A new chat joins the dialog as another panel. A new task opens as a second modal stacked on top, which React Aria handles with nothing hand-written: Escape closes only the top one.
 - **The task dialog has no such menu, by decision.** It holds nothing the user typed, so closing it to reach the page's control loses nothing.
 - **Disabling a focused menu item drops focus to the menu itself.** A menu that marks its pending item disabled loses the user's place. The roles submenu disables only the other items and ignores a second press on the pending one.
+
+## Amendment as implemented (005.01, phase 03) <a id="amendment-as-implemented-p03-005-01"></a>
+
+[005.01](../prompts/phase%2003%20-%20web%20visualisation/005.01.00.prompt%20-%20ui%20improvements.md) was a visual pass: a sticky header, company cards, one tab per activity list, and an office view whose controls float over the canvas. It added the first shared presentation classes, and changed nothing about the decisions above.
+
+- **Shared classes, beside the empty-rule-body convention.** `base.css` now ends with `.tcp-icon-button`, `.tcp-badge`, `.tcp-card` and `.tcp-floating`: the start of a design system. Component stylesheets still carry class names only, except where a page's own layout has no shared class to use (the company card row, the office view's overlays).
+- **Icon-only controls are named twice, the same way.** Every round icon button (Account, Add new, Show details for…, Close details, Follow, pan, full screen) has an `aria-label` and a tooltip with the same words, through `WithTooltip` in `components/Icon/Icon.tsx` (WCAG 2.5.3). Sizes come from tokens that clear the 24px target minimum; the floating "Add new" clears 44px.
+- **A highlight colour joined both themes** (`--tcp-color-highlight` and its text colour), at 4.5:1 in the default theme and 7:1 in high contrast, for the tabs' count badges.
+- **Only CSS moved the office view's controls.** Their DOM order, and so the tab order, is unchanged. The new slides (tray, "Add new") are CSS transitions, which the existing reduced-motion rule already cancels.

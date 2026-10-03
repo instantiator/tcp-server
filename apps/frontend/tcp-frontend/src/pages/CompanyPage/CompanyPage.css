@@ -11,6 +11,16 @@
   padding-block-end: var(--tcp-fab-clearance);
 }
 
+/*
+ * The visualisation tab's canvas should reach the bottom of the viewport
+ * (005.01), not stop short to leave the FAB's usual clearance — it floats
+ * over the stage instead. Scoped to `:has()` rather than the tab index, since
+ * the visualisation is only ever mounted while its own tab is selected.
+ */
+.company-page__body:has(.company-visualisation) {
+  padding-block-end: 0;
+}
+
 .company-page__tabs {
 }
 
@@ -27,8 +37,25 @@
   inset-block-end: var(--tcp-space-lg);
   inset-inline-end: var(--tcp-space-lg);
   z-index: var(--tcp-layer-dock);
+  transition:
+    inset-inline-end var(--tcp-motion-duration),
+    inset-block-end var(--tcp-motion-duration);
 }
 
 body:has(.dialog-dock) .company-page__add-new {
   inset-block-end: calc(var(--tcp-dock-block-size) + var(--tcp-space-lg));
+}
+
+/*
+ * The tray overlays the stage's right edge at a fixed width; slide the FAB
+ * clear of it rather than letting the tray cover it. One `--tcp-space-md`
+ * matches the body's own padding (so the FAB lines up with its usual inset
+ * from the viewport edge, carried over to the tray's edge instead); the other
+ * is the gap left between the tray and the FAB.
+ */
+body:has(.company-visualisation__tray) .company-page__add-new {
+  inset-inline-end: calc(
+    var(--tcp-visualisation-tray-width) + var(--tcp-space-md) +
+      var(--tcp-space-md)
+  );
 }

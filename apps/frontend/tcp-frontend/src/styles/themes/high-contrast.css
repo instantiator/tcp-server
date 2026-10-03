@@ -14,6 +14,8 @@
   --tcp-color-border: #000000;
   --tcp-color-accent: #0000cc;
   --tcp-color-accent-text: #ffffff;
+  --tcp-color-highlight: #5a1fa8;
+  --tcp-color-highlight-text: #ffffff;
   --tcp-color-focus: #0000cc;
   --tcp-color-danger: #a00000;
   --tcp-color-scrim: rgb(0 0 0 / 70%);
@@ -27,6 +29,8 @@
   --tcp-color-border: #ffffff;
   --tcp-color-accent: #66ccff;
   --tcp-color-accent-text: #000000;
+  --tcp-color-highlight: #ffb3ff;
+  --tcp-color-highlight-text: #000000;
   --tcp-color-focus: #ffff00;
   --tcp-color-danger: #ff8080;
   --tcp-color-scrim: rgb(0 0 0 / 80%);
