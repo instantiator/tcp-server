@@ -85,3 +85,7 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # container start. Machine-local by definition — a mkcert certificate is only
 # trusted by the machine whose CA signed it (see docs/web-client.md).
 /docker/nginx/certs/
+
+# scripts/backup.sh's output: tarballs of a running stack's Postgres and
+# MinIO data — never committed.
+backups/
