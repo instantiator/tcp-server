@@ -10,12 +10,14 @@ import {
   TcpTask,
 } from '@tcp/shared';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken, TypeOrmModule } from '@nestjs/typeorm';
 import { randomUUID, UUID } from 'crypto';
 import { EntityManager, QueryFailedError, Repository } from 'typeorm';
 import { AgentDbService } from './agent-db.service';
 import { CompanyDbService } from './company-db.service';
+import { LlmDestinationPolicy } from './llm-destination-policy';
 import { DbService } from './db.service';
 import { RoleDbService } from './role-db.service';
 
@@ -52,7 +54,18 @@ describe('DbService', () => {
         }),
         TypeOrmModule.forFeature(ALL_ENTITIES),
       ],
-      providers: [DbService, CompanyDbService, RoleDbService, AgentDbService],
+      providers: [
+        DbService,
+        CompanyDbService,
+        RoleDbService,
+        AgentDbService,
+        {
+          provide: LlmDestinationPolicy,
+          useValue: new LlmDestinationPolicy(
+            new ConfigService({ LLM_ALLOWED_HOSTS: 'gpu-box.lan' }),
+          ),
+        },
+      ],
     }).compile();
 
     dbService = testingModule.get(DbService);
@@ -389,6 +402,129 @@ describe('DbService', () => {
       expect(updated.llmConfig!.model).toBe('gpt-4o-mini');
       expect(updated.llmConfig!.provider).toBe('openai');
       expect(updated.llmConfig!.apiKey).toBe('test-api-key');
+    });
+
+    // The stored key must not follow the config to a new address, or the
+    // next call hands it to whoever answers there.
+    it.each([
+      ['baseUrl', { baseUrl: 'http://gpu-box.lan:1234/v1' }],
+      ['provider', { provider: 'lm-studio' }],
+    ])(
+      'drops the stored apiKey when a patch changes %s without sending one',
+      async (_field, patch) => {
+        const created = await dbService.setCompany({
+          slug: 'moved-co',
+          name: 'Moved Co',
+          description: 'Moved Company',
+          llmConfig: {
+            provider: 'openai-compatible',
+            model: 'm',
+            baseUrl: 'http://gpu-box.lan:8080/v1',
+            apiKey: 'test-api-key',
+          },
+        });
+
+        const updated = await dbService.setCompany(
+          { llmConfig: patch },
+          { id: created.id },
+        );
+
+        expect(updated.llmConfig!.apiKey).toBeUndefined();
+      },
+    );
+
+    it('keeps a new apiKey sent with a changed baseUrl', async () => {
+      const created = await dbService.setCompany({
+        slug: 'rekeyed-co',
+        name: 'Rekeyed Co',
+        description: 'Rekeyed Company',
+        llmConfig: { provider: 'lm-studio', model: 'm', apiKey: 'old-key' },
+      });
+
+      const updated = await dbService.setCompany(
+        {
+          llmConfig: {
+            baseUrl: 'http://gpu-box.lan:1234/v1',
+            apiKey: 'new-key',
+          },
+        },
+        { id: created.id },
+      );
+
+      expect(updated.llmConfig!.apiKey).toBe('new-key');
+    });
+
+    it.each([
+      [
+        'llmConfig',
+        {
+          provider: 'openai-compatible',
+          model: 'm',
+          baseUrl: 'http://169.254.169.254/v1',
+        },
+      ],
+      [
+        'embeddingConfig',
+        { provider: 'openai', model: 'm', baseUrl: 'https://evil.example/v1' },
+      ],
+    ])(
+      'refuses a %s pointed outside the allowed hosts',
+      async (field, config) => {
+        await expect(
+          dbService.setCompany({
+            slug: 'ssrf-co',
+            name: 'SSRF Co',
+            description: 'SSRF Company',
+            [field]: config,
+          }),
+        ).rejects.toThrow(BadRequestException);
+      },
+    );
+
+    it('refuses a patch that moves a stored baseUrl under a remote provider', async () => {
+      const created = await dbService.setCompany({
+        slug: 'switch-co',
+        name: 'Switch Co',
+        description: 'Switch Company',
+        llmConfig: {
+          provider: 'openai-compatible',
+          model: 'm',
+          baseUrl: 'http://gpu-box.lan:8080/v1',
+        },
+      });
+
+      // Checked against the merged config, so the allowed host doesn't carry
+      // over to a provider that must use its own URL.
+      await expect(
+        dbService.setCompany(
+          { llmConfig: { provider: 'openai' } },
+          { id: created.id },
+        ),
+      ).rejects.toThrow(/must use its own URL/);
+    });
+
+    it('refuses a role llmConfig pointed outside the allowed hosts', async () => {
+      const company = await dbService.setCompany({
+        slug: 'ssrf-role-co',
+        name: 'SSRF Role Co',
+        description: 'SSRF Role Company',
+      });
+
+      await expect(
+        dbService.setRole({
+          companyId: company.id,
+          slug: 'ssrf-role',
+          name: 'SSRF Role',
+          description: 'r',
+          knowledgeDomains: [],
+          mcpServerList: [],
+          llmConfig: {
+            provider: 'lm-studio',
+            model: 'm',
+            baseUrl: 'http://10.0.0.5:22/v1',
+          },
+        }),
+      ).rejects.toThrow(/not allowed/);
     });
 
     it('allows removing llmConfig when all roles have their own llmConfig', async () => {

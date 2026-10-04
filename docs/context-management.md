@@ -16,7 +16,7 @@ The model's context window is configured via `LlmConfig.contextWindow` (tokens).
 {
   "provider": "lm-studio",
   "model": "qwen3-14b",
-  "baseUrl": "http://localhost:1234/v1",
+  "baseUrl": "http://host.docker.internal:1234/v1",
   "contextWindow": 32768
 }
 ```

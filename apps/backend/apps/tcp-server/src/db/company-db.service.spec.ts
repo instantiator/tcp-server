@@ -1,9 +1,11 @@
 import { CompanyUser, TcpCompany, TcpRole } from '@tcp/shared';
+import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken, TypeOrmModule } from '@nestjs/typeorm';
 import type { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { CompanyDbService } from './company-db.service';
+import { LlmDestinationPolicy } from './llm-destination-policy';
 
 const ENTITIES = [TcpCompany, TcpRole, CompanyUser];
 
@@ -30,7 +32,7 @@ describe('CompanyDbService.list', () => {
         }),
         TypeOrmModule.forFeature(ENTITIES),
       ],
-      providers: [CompanyDbService],
+      providers: [CompanyDbService, LlmDestinationPolicy, ConfigService],
     }).compile();
 
     service = testingModule.get(CompanyDbService);

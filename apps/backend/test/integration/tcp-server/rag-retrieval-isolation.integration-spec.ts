@@ -38,7 +38,7 @@ describe('KnowledgeRetrievalService scoped-retrieval isolation (integration)', (
   let roleB: TcpRole;
 
   const embeddingConfig = {
-    provider: 'openai' as const,
+    provider: 'openai-compatible' as const,
     model: 'stub-embed',
     baseUrl: STUB_LLM_URL,
     apiKey: 'test',

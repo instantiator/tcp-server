@@ -1874,6 +1874,8 @@ export interface components {
             models: components["schemas"]["LlmConfigDto"][];
         };
         ModelCompatibilityResultDto: {
+            /** @enum {string} */
+            errorCode?: "unsupported_provider" | "destination_refused" | "unreachable" | "timeout" | "auth_rejected" | "forbidden" | "model_not_found" | "rate_limited" | "provider_error" | "failed";
             provider: string;
             model: string;
             supportsTools: boolean;

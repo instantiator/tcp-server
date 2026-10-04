@@ -179,6 +179,8 @@ services:
       # Who may use `?all=true` and the system routes. Empty means nobody —
       # see docs/authentication.md#administrators.
       TCP_ADMIN_IDENTIFIERS: ${TCP_ADMIN_IDENTIFIERS:-}
+      # Hosts a company or role's LLM baseUrl may point at — see .env.example.
+      LLM_ALLOWED_HOSTS: ${LLM_ALLOWED_HOSTS:-}
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}

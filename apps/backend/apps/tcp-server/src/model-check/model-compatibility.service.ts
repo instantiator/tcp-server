@@ -1,7 +1,14 @@
-import { LlmConfig } from '@tcp/shared';
+import { LlmConfig, buildChatModel, findProvider } from '@tcp/shared';
 import { Injectable, Logger } from '@nestjs/common';
 import { z } from 'zod';
-import { buildChatModel } from '@tcp/shared';
+import { LlmDestinationPolicy } from '../db/llm-destination-policy';
+import {
+  ProbeError,
+  ProbeErrorCode,
+  classifyProbeError,
+  isCapabilityRefusal,
+  unsupportedProvider,
+} from './probe-error';
 
 /** Compatibility report for a single model. */
 export interface ModelCompatibilityResult {
@@ -13,8 +20,10 @@ export interface ModelCompatibilityResult {
   supportsStructuredOutput: boolean;
   /** `true` iff both capabilities are confirmed. */
   compatible: boolean;
-  /** Set when the live check could not be completed (network error, bad config, etc.). */
+  /** What went wrong, and what to check. Set when the check couldn't be completed. */
   error?: string;
+  /** {@link error}'s category, for a client to act on. */
+  errorCode?: ProbeErrorCode;
 }
 
 /** Minimal tool definition used for the capability probe. */
@@ -27,16 +36,25 @@ const PROBE_TOOL = {
 /** Minimal structured-output schema used for the capability probe. */
 const PROBE_SCHEMA = z.object({ ok: z.boolean() });
 
+/** One probe's outcome: whether the capability is there, or why it couldn't tell. */
+interface ProbeOutcome {
+  supported: boolean;
+  error?: unknown;
+}
+
 /**
  * Probes one or more LLM configurations to determine whether they support
  * tool calling and structured output — the two capabilities required by the
  * tcp-agent loop.
  *
- * Each check makes a live network call to the configured provider.
+ * Each check makes a live network call to the configured provider, so each
+ * config must first pass {@link LlmDestinationPolicy}.
  */
 @Injectable()
 export class ModelCompatibilityService {
   private readonly logger = new Logger(ModelCompatibilityService.name);
+
+  constructor(private readonly policy: LlmDestinationPolicy) {}
 
   /** Runs compatibility probes for each config in the list. */
   async check(configs: LlmConfig[]): Promise<ModelCompatibilityResult[]> {
@@ -44,37 +62,70 @@ export class ModelCompatibilityService {
   }
 
   private async checkOne(config: LlmConfig): Promise<ModelCompatibilityResult> {
-    let supportsTools = false;
-    let supportsStructuredOutput = false;
-    let error: string | undefined;
+    const result: ModelCompatibilityResult = {
+      provider: config.provider,
+      model: config.model,
+      supportsTools: false,
+      supportsStructuredOutput: false,
+      compatible: false,
+    };
+    // The raw cause goes only to the log; the caller gets the fixed message.
+    const fail = (error: ProbeError, cause?: unknown, base = result) => {
+      const detail = cause instanceof Error ? cause.message : error.message;
+      this.logger.warn(
+        `Compatibility check failed for ${config.provider}/${config.model} (${error.code}): ${detail}`,
+      );
+      return { ...base, error: error.message, errorCode: error.code };
+    };
 
+    if (!findProvider(config.provider)) {
+      return fail(unsupportedProvider(config.provider));
+    }
+    const refusal = this.policy.refusal(config);
+    if (refusal) {
+      return fail({ code: 'destination_refused', message: refusal });
+    }
+
+    let tools: ProbeOutcome;
+    let structured: ProbeOutcome;
     try {
       const model = buildChatModel(config);
-      [supportsTools, supportsStructuredOutput] = await Promise.all([
+      [tools, structured] = await Promise.all([
         this.probeTools(model),
         this.probeStructuredOutput(model),
       ]);
     } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
-      this.logger.warn(
-        `Compatibility check failed for ${config.provider}/${config.model}: ${error}`,
-      );
+      return fail(classifyProbeError(err, config), err);
     }
 
-    return {
-      provider: config.provider,
-      model: config.model,
-      supportsTools,
-      supportsStructuredOutput,
-      compatible: supportsTools && supportsStructuredOutput,
-      ...(error && { error }),
+    const checked = {
+      ...result,
+      supportsTools: tools.supported,
+      supportsStructuredOutput: structured.supported,
+      compatible: tools.supported && structured.supported,
     };
+    // Both probes hit the same endpoint, so one error explains the failure.
+    const error = tools.error ?? structured.error;
+    return error === undefined
+      ? checked
+      : fail(classifyProbeError(error, config), error, checked);
   }
 
-  private async probeTools(
-    model: ReturnType<typeof buildChatModel>,
-  ): Promise<boolean> {
+  /** Runs `probe`, treating a capability refusal as "unsupported" rather than an error. */
+  private async attempt(probe: () => Promise<boolean>): Promise<ProbeOutcome> {
     try {
+      return { supported: await probe() };
+    } catch (error) {
+      return isCapabilityRefusal(error)
+        ? { supported: false }
+        : { supported: false, error };
+    }
+  }
+
+  private probeTools(
+    model: ReturnType<typeof buildChatModel>,
+  ): Promise<ProbeOutcome> {
+    return this.attempt(async () => {
       if (!model.bindTools) return false;
       const bound = model.bindTools([PROBE_TOOL]);
       const response = await bound.invoke([
@@ -84,22 +135,18 @@ export class ModelCompatibilityService {
       return (
         Array.isArray(response.tool_calls) && response.tool_calls.length > 0
       );
-    } catch {
-      return false;
-    }
+    });
   }
 
-  private async probeStructuredOutput(
+  private probeStructuredOutput(
     model: ReturnType<typeof buildChatModel>,
-  ): Promise<boolean> {
-    try {
+  ): Promise<ProbeOutcome> {
+    return this.attempt(async () => {
       const structured = model.withStructuredOutput(PROBE_SCHEMA);
       const result = await structured.invoke([
         { role: 'user', content: 'Reply with {"ok": true}.' },
       ]);
       return typeof result === 'object' && result !== null && 'ok' in result;
-    } catch {
-      return false;
-    }
+    });
   }
 }

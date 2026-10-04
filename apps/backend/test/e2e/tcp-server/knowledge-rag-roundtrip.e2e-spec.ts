@@ -44,7 +44,7 @@ describe('knowledge RAG round trip (e2e)', () => {
   let roleId: UUID;
 
   const embeddingConfig = {
-    provider: 'openai' as const,
+    provider: 'openai-compatible' as const,
     model: 'stub-embed',
     baseUrl: STUB_LLM_URL,
     apiKey: 'test',

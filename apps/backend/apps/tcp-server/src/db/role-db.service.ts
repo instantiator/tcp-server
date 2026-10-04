@@ -9,6 +9,7 @@ import { UUID } from 'crypto';
 import { DeepPartial, Repository } from 'typeorm';
 import { SHARED_KNOWLEDGE_ROLE_SLUG } from '../storage/storage-keys';
 import { isUUID } from '../utils/ObjectUtils';
+import { LlmDestinationPolicy, mergeLlmConfig } from './llm-destination-policy';
 
 /** TypeORM operations for {@link TcpRole}, behind {@link DbService}. */
 @Injectable()
@@ -18,6 +19,7 @@ export class RoleDbService {
     private readonly roleRepo: Repository<TcpRole>,
     @InjectRepository(TcpCompany)
     private readonly companyRepo: Repository<TcpCompany>,
+    private readonly llmPolicy: LlmDestinationPolicy,
   ) {}
 
   /**
@@ -88,14 +90,13 @@ export class RoleDbService {
       ? {
           ...existing,
           ...role,
-          llmConfig:
-            role.llmConfig !== undefined
-              ? role.llmConfig !== null && existing.llmConfig != null
-                ? { ...existing.llmConfig, ...role.llmConfig }
-                : role.llmConfig
-              : existing.llmConfig,
+          llmConfig: mergeLlmConfig(existing.llmConfig, role.llmConfig),
         }
       : role;
+    // As in CompanyDbService.set: only when this write touches it.
+    if (role.llmConfig !== undefined) {
+      this.llmPolicy.assertAllowed(merged.llmConfig, 'llmConfig');
+    }
 
     return this.roleRepo.save(this.roleRepo.create(merged));
   }

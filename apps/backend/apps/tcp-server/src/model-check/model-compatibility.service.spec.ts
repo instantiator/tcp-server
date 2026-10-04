@@ -1,4 +1,6 @@
+import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
+import { LlmDestinationPolicy } from '../db/llm-destination-policy';
 import { ModelCompatibilityService } from './model-compatibility.service';
 import * as factory from '@tcp/shared/llm/llm-factory';
 
@@ -17,7 +19,15 @@ describe('ModelCompatibilityService', () => {
 
   beforeEach(async () => {
     const testingModule: TestingModule = await Test.createTestingModule({
-      providers: [ModelCompatibilityService],
+      providers: [
+        ModelCompatibilityService,
+        {
+          provide: LlmDestinationPolicy,
+          useValue: new LlmDestinationPolicy(
+            new ConfigService({ LLM_ALLOWED_HOSTS: 'localhost' }),
+          ),
+        },
+      ],
     }).compile();
 
     service = testingModule.get(ModelCompatibilityService);
@@ -71,28 +81,69 @@ describe('ModelCompatibilityService', () => {
     expect(result.supportsTools).toBe(false);
   });
 
-  it('returns supportsStructuredOutput:false when the probe throws', async () => {
+  it('reports an unclassified probe failure without its message', async () => {
     mockBindTools.mockReturnValue({ invoke: mockInvoke });
     mockInvoke.mockResolvedValueOnce({ tool_calls: [{ name: 'echo' }] });
     mockWithStructuredOutput.mockImplementation(() => {
-      throw new Error('not supported');
+      throw new Error('secret internal detail');
     });
 
     const [result] = await service.check([lmStudioConfig]);
 
+    expect(result.supportsTools).toBe(true);
     expect(result.supportsStructuredOutput).toBe(false);
     expect(result.compatible).toBe(false);
+    expect(result.errorCode).toBe('failed');
+    expect(result.error).not.toContain('secret internal detail');
   });
 
-  it('sets error and returns compatible:false when buildChatModel throws', async () => {
-    jest.spyOn(factory, 'buildChatModel').mockImplementationOnce(() => {
-      throw new Error('Unsupported LLM provider: unknown');
-    });
+  // A 400 means the model refused the tools or schema: it's incapable, not
+  // misconfigured, so no error is reported.
+  it('treats a 400 from a probe as an unsupported capability', async () => {
+    mockBindTools.mockReturnValue({ invoke: mockInvoke });
+    mockInvoke.mockRejectedValueOnce(
+      Object.assign(new Error('tools not supported'), { status: 400 }),
+    );
+    mockWithStructuredOutput.mockReturnValue({ invoke: mockInvoke });
+    mockInvoke.mockResolvedValueOnce({ ok: true });
 
+    const [result] = await service.check([lmStudioConfig]);
+
+    expect(result.supportsTools).toBe(false);
+    expect(result.supportsStructuredOutput).toBe(true);
+    expect(result.errorCode).toBeUndefined();
+  });
+
+  it('reports a rejected key as auth_rejected', async () => {
+    const unauthorised = Object.assign(new Error('401 bad key'), {
+      status: 401,
+    });
+    mockBindTools.mockReturnValue({ invoke: mockInvoke });
+    mockWithStructuredOutput.mockReturnValue({ invoke: mockInvoke });
+    mockInvoke.mockRejectedValue(unauthorised);
+
+    const [result] = await service.check([lmStudioConfig]);
+
+    expect(result.compatible).toBe(false);
+    expect(result.errorCode).toBe('auth_rejected');
+  });
+
+  it('reports an unknown provider without building a model', async () => {
     const [result] = await service.check([{ provider: 'unknown', model: 'x' }]);
 
     expect(result.compatible).toBe(false);
-    expect(result.error).toContain('Unsupported LLM provider');
+    expect(result.errorCode).toBe('unsupported_provider');
+    expect(factory.buildChatModel).not.toHaveBeenCalled();
+  });
+
+  it('refuses a destination outside the allowed hosts without calling it', async () => {
+    const [result] = await service.check([
+      { ...lmStudioConfig, baseUrl: 'http://169.254.169.254/v1' },
+    ]);
+
+    expect(result.errorCode).toBe('destination_refused');
+    expect(result.error).toContain('LLM_ALLOWED_HOSTS');
+    expect(factory.buildChatModel).not.toHaveBeenCalled();
   });
 
   it('processes multiple configs independently', async () => {
