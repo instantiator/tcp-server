@@ -1,12 +1,13 @@
 import {
   AuditEvent,
   KnowledgeChunk,
+  makeTypeOrmConfig,
+  SpendCapState,
   TcpAgent,
   TcpAssignment,
   TcpCompany,
   TcpRole,
   TcpTask,
-  makeTypeOrmConfig,
 } from '@tcp/shared';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
@@ -39,6 +40,8 @@ import { AgentWorkerModule } from './worker/agent-worker.module';
       TcpAssignment,
       AuditEvent,
       KnowledgeChunk,
+      // Read by SpendGateService before every LLM call.
+      SpendCapState,
     ]),
     HealthModule,
     AgentWorkerModule,

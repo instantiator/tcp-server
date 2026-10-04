@@ -40,9 +40,11 @@ export enum AgentStatus {
  * `user_input` and `consultation` pauses resolve themselves — a reply or a
  * consultation result arrives and the agent is re-dispatched automatically. A
  * `shutdown` pause has nothing outstanding to wait on, so it stays paused
- * until a user resumes it explicitly.
+ * until a user resumes it explicitly. A `spend_cap` pause is lifted when the
+ * provider's cap resets or is dismissed, or by an explicit task/company resume.
  */
-export type PauseReason = 'user_input' | 'consultation' | 'shutdown';
+export type PauseReason =
+  'user_input' | 'consultation' | 'shutdown' | 'spend_cap';
 
 /**
  * A running instance of an {@link TcpRole} within an {@link TcpCompany}.

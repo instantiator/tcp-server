@@ -1,4 +1,5 @@
 import {
+  AuditEvent,
   CompanyUser,
   Conversation,
   ConversationMessage,
@@ -18,6 +19,7 @@ import { AuthModule } from '../auth/auth.module';
 import { DbModule } from '../db/db.module';
 import { McpClientModule } from '../mcp/mcp-client.module';
 import { NotificationModule } from '../notifications/notification.module';
+import { SpendModule } from '../spend/spend.module';
 import { ModelCheckModule } from '../model-check/model-check.module';
 import { ContextModule } from '../context/context.module';
 import { RagModule } from '../rag/rag.module';
@@ -38,6 +40,8 @@ import { RoleController } from './api.role.controller';
 import { StorageActionsController } from './storage-actions.controller';
 import { StorageProxyController } from './storage-proxy.controller';
 import { StorageValidationController } from './storage-validation.controller';
+import { SpendController } from './spend.controller';
+import { SpendResumeService } from './spend-resume.service';
 import { SystemController } from './system.controller';
 import { TaskController } from './task.controller';
 import { AgentOrchestrationService } from './agent-orchestration.service';
@@ -74,10 +78,12 @@ import { TaskService } from './task.service';
     ModelCheckModule,
     // Company priming replays the active notifications.
     NotificationModule,
+    SpendModule,
     ContextModule,
     RagModule,
     StorageModule,
     TypeOrmModule.forFeature([
+      AuditEvent,
       TcpAgent,
       TcpAssignment,
       TcpRole,
@@ -103,6 +109,7 @@ import { TaskService } from './task.service';
     StorageActionsController,
     StorageProxyController,
     StorageValidationController,
+    SpendController,
     SystemController,
     TaskController,
     AgentController,
@@ -128,6 +135,8 @@ import { TaskService } from './task.service';
     // intake path guards on.
     SystemShutdownService,
     SystemDrainService,
+    // Resumes cap-paused work: on reset, dismissal, or an explicit resume.
+    SpendResumeService,
     // The orchestration stack: TaskOrchestrationService drives a task forward,
     // delegating status writes, artifact promotion, QA verdicts, failure
     // propagation and startup repair to the collaborators below.

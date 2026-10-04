@@ -96,9 +96,11 @@ export function enrichedAuditForEvent(
     case 'on_chat_model_end': {
       const output = event.data?.output;
       // Token usage is only attributable with the caller's provider/model
-      // identity in hand; a provider that reports none leaves the key out
-      // entirely (decision: no `usage: undefined` placeholder in payloads).
+      // identity in hand. A provider that reports none is named instead, so
+      // tcp-server can warn that its spend isn't being tracked.
       const usage = llm ? usageFromMessage(output, llm) : undefined;
+      const untracked =
+        llm && !usage ? { untrackedProvider: llm.provider } : {};
       return {
         eventType,
         payload: {
@@ -108,6 +110,7 @@ export function enrichedAuditForEvent(
             field(field(output, 'additional_kwargs'), 'reasoning_content'),
           ),
           ...(usage ? { usage } : {}),
+          ...untracked,
         },
       };
     }

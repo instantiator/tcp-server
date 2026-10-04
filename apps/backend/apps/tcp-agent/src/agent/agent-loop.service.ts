@@ -39,6 +39,7 @@ import {
   describeRunFailure,
   describeAbort,
 } from './run-status.service';
+import { SpendGateService } from './spend-gate.service';
 import {
   SupervisedRunContext,
   SupervisedTurnService,
@@ -99,6 +100,7 @@ export class AgentLoopService {
     private readonly initialState: InitialStateService,
     private readonly status: AgentRunStatusService,
     private readonly turns: SupervisedTurnService,
+    private readonly spendGate: SpendGateService,
     @InjectRepository(TcpAgent)
     private readonly agentRepo: Repository<TcpAgent>,
   ) {
@@ -251,6 +253,7 @@ export class AgentLoopService {
       timeoutMs: limits.timeoutMs,
       buildGraph: env.buildGraph,
       llm,
+      holdSpending: this.spendGate.forRun(agent, llm.provider, isFirstMessage),
     };
 
     await this.driveToTerminal(ctx, input, tracker, env.langchainTools);

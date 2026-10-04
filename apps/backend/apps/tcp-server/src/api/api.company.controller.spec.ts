@@ -12,6 +12,7 @@ import type { Request, Response } from 'express';
 import { MembershipService } from '../auth/membership.service';
 import { DbService } from '../db/db.service';
 import { CompanyEventService } from '../events/company-event.service';
+import { SpendResumeService } from './spend-resume.service';
 import { CompanyController } from './api.company.controller';
 import { CompanyPrimingService } from './company-priming.service';
 import { CompanyStatsService } from './company-stats.service';
@@ -111,6 +112,7 @@ describe('CompanyController', () => {
       priming as unknown as CompanyPrimingService,
       companyEvents as unknown as CompanyEventService,
       membership as unknown as MembershipService,
+      {} as SpendResumeService,
     );
   });
 

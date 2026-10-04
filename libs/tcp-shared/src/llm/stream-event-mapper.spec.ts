@@ -175,15 +175,17 @@ describe('enrichedAuditForEvent', () => {
       inputTokens: 12,
       outputTokens: 4,
     });
+    expect(result?.payload).not.toHaveProperty('untrackedProvider');
   });
 
-  it('omits usage when the provider reports none, even with an llm identity given', () => {
+  it('names the provider instead of usage when it reports none, so the gap can be flagged', () => {
     const output = new AIMessage({ content: 'the answer' });
     const result = enrichedAuditForEvent(
       { event: 'on_chat_model_end', data: { output } },
       { provider: 'lm-studio', model: 'qwen3-5b' },
     );
     expect(result?.payload).not.toHaveProperty('usage');
+    expect(result?.payload.untrackedProvider).toBe('lm-studio');
   });
 
   it('omits usage when no llm identity is passed, even if the provider reported it', () => {
@@ -196,5 +198,6 @@ describe('enrichedAuditForEvent', () => {
       data: { output },
     });
     expect(result?.payload).not.toHaveProperty('usage');
+    expect(result?.payload).not.toHaveProperty('untrackedProvider');
   });
 });

@@ -41,6 +41,8 @@ export interface SupervisedRunContext {
   ) => ReturnType<typeof buildAgentGraph>;
   /** The run's resolved provider/model, for attributing recorded token usage. */
   llm: LlmIdentity;
+  /** Asked before every LLM call; true means a spend cap has paused the agent. */
+  holdSpending: () => Promise<boolean>;
 }
 
 /**
@@ -89,6 +91,7 @@ export class SupervisedTurnService {
             : null;
         },
         maxIterations: ctx.maxIterations,
+        holdSpending: ctx.holdSpending,
       },
     });
   }

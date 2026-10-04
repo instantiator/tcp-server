@@ -1,6 +1,7 @@
 import {
   AgentStatus,
   assertRedisReachable,
+  AuditEvent,
   AuditEventType,
   buildAgentChangeSummary,
   Conversation,
@@ -55,6 +56,15 @@ const SHUTDOWN_RESUME_PROMPT =
   'Continue from where you left off.';
 
 /**
+ * The first message a resumed agent sees after a spend cap paused it
+ * mid-run. An agent the cap held back before its first LLM call has no
+ * checkpoint to continue, so it is restarted with no message instead.
+ */
+const SPEND_CAP_RESUME_PROMPT =
+  'Your work was paused because a spending limit was reached, and has now ' +
+  'been allowed to continue. Continue from where you left off.';
+
+/**
  * Creates and resumes agents by enqueuing jobs to the `agent-jobs` BullMQ queue,
  * which tcp-agent workers consume.
  *
@@ -79,6 +89,8 @@ export class AgentOrchestrationService
     private readonly convRepo: Repository<Conversation>,
     @InjectRepository(ConversationMessage)
     private readonly msgRepo: Repository<ConversationMessage>,
+    @InjectRepository(AuditEvent)
+    private readonly auditRepo: Repository<AuditEvent>,
     private readonly audit: AuditService,
     private readonly shutdown: SystemShutdownService,
   ) {}
@@ -178,6 +190,28 @@ export class AgentOrchestrationService
   }
 
   /**
+   * The message a resume carries when nothing was asked of the user: a
+   * prompt explaining the pause for shutdown and spend-cap pauses. A
+   * spend-cap pause that struck before the agent's first LLM call gets none
+   * — a resume with no message restarts the agent, which is what an agent
+   * with no checkpoint needs.
+   */
+  private async pauseResumePrompt(
+    agent: TcpAgent,
+  ): Promise<string | undefined> {
+    if (agent.pauseReason === 'shutdown') return SHUTDOWN_RESUME_PROMPT;
+    if (agent.pauseReason !== 'spend_cap') return undefined;
+    const started = await this.auditRepo.exists({
+      where: {
+        companyId: agent.companyId,
+        agentId: agent.id,
+        eventType: AuditEventType.LlmResponse,
+      },
+    });
+    return started ? SPEND_CAP_RESUME_PROMPT : undefined;
+  }
+
+  /**
    * Validates that the agent exists and is in a resumable state, then
    * dispatches a `resume` job — unless the agent has other outstanding
    * consultations or user-input requests, in which case it stays paused
@@ -248,9 +282,7 @@ export class AgentOrchestrationService
       agentId: agent.id,
       type: 'resume',
       replyContent:
-        replies?.text ??
-        replyContent ??
-        (agent.pauseReason === 'shutdown' ? SHUTDOWN_RESUME_PROMPT : undefined),
+        replies?.text ?? replyContent ?? (await this.pauseResumePrompt(agent)),
     });
     // Only once the job is safely queued: a failure above must leave these
     // undelivered, so the next resume picks them up rather than losing them.

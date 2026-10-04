@@ -1,6 +1,8 @@
-import { AuditEvent } from '@tcp/shared';
+import { AuditEvent, TokenUsage } from '@tcp/shared';
 import { Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import type { InsertResult, Repository } from 'typeorm';
+import { SpendCapService } from './spend-cap.service';
 import { UsageService } from './usage.service';
 
 function makeEvent(payload: Record<string, unknown>): AuditEvent {
@@ -12,52 +14,75 @@ function makeEvent(payload: Record<string, unknown>): AuditEvent {
   return event;
 }
 
+const usage = {
+  provider: 'lm-studio',
+  model: 'qwen3-5b',
+  inputTokens: 100,
+  outputTokens: 20,
+};
+
 describe('UsageService', () => {
-  let insert: jest.Mock;
+  const createdAt = new Date('2026-10-04T12:00:00.000Z');
+  let insert: jest.Mock<Promise<InsertResult>, [Partial<TokenUsage>]>;
+  let caps: jest.Mocked<Pick<SpendCapService, 'onUsage' | 'onUntracked'>>;
   let service: UsageService;
 
   beforeEach(() => {
-    insert = jest.fn().mockResolvedValue(undefined);
-    service = new UsageService({ insert } as never);
+    insert = jest.fn((_row: Partial<TokenUsage>) =>
+      Promise.resolve({
+        identifiers: [],
+        generatedMaps: [{ createdAt }],
+        raw: [],
+      }),
+    );
+    caps = {
+      onUsage: jest.fn().mockResolvedValue(undefined),
+      onUntracked: jest.fn().mockResolvedValue(undefined),
+    };
+    service = new UsageService(
+      { insert } as unknown as Repository<TokenUsage>,
+      caps as unknown as SpendCapService,
+    );
   });
 
   it('inserts a token_usage row with the audit row ids when payload.usage is valid', async () => {
-    const event = makeEvent({
-      usage: {
-        provider: 'lm-studio',
-        model: 'qwen3-5b',
-        inputTokens: 100,
-        outputTokens: 20,
-      },
-    });
+    const event = makeEvent({ usage });
 
     await service.record(event);
 
-    expect(insert).toHaveBeenCalledTimes(1);
     expect(insert).toHaveBeenCalledWith({
       companyId: event.companyId,
       taskId: event.taskId,
       agentId: event.agentId,
-      provider: 'lm-studio',
-      model: 'qwen3-5b',
-      inputTokens: 100,
-      outputTokens: 20,
+      ...usage,
     });
   });
 
-  it('inserts nothing when the payload has no usage', async () => {
-    const event = makeEvent({ responseText: 'hi' });
+  it('hands the row to cap evaluation with its own timestamp and total tokens', async () => {
+    await service.record(makeEvent({ usage }));
 
-    await service.record(event);
+    expect(caps.onUsage).toHaveBeenCalledWith('lm-studio', createdAt, 120);
+  });
+
+  it('inserts nothing when the payload has no usage', async () => {
+    await service.record(makeEvent({ responseText: 'hi' }));
+
+    expect(insert).not.toHaveBeenCalled();
+    expect(caps.onUsage).not.toHaveBeenCalled();
+  });
+
+  it('inserts nothing when payload.usage is malformed', async () => {
+    await service.record(makeEvent({ usage: { provider: 'lm-studio' } }));
 
     expect(insert).not.toHaveBeenCalled();
   });
 
-  it('inserts nothing when payload.usage is malformed', async () => {
-    const event = makeEvent({ usage: { provider: 'lm-studio' } });
+  it('reports a provider that sent no usage, once per provider', async () => {
+    await service.record(makeEvent({ untrackedProvider: 'ollama' }));
+    await service.record(makeEvent({ untrackedProvider: 'ollama' }));
+    await service.record(makeEvent({ untrackedProvider: 'lm-studio' }));
 
-    await service.record(event);
-
+    expect(caps.onUntracked.mock.calls).toEqual([['ollama'], ['lm-studio']]);
     expect(insert).not.toHaveBeenCalled();
   });
 
@@ -66,16 +91,9 @@ describe('UsageService', () => {
       .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => undefined);
     insert.mockRejectedValue(new Error('insert failed'));
-    const event = makeEvent({
-      usage: {
-        provider: 'lm-studio',
-        model: 'qwen3-5b',
-        inputTokens: 1,
-        outputTokens: 1,
-      },
-    });
 
-    await expect(service.record(event)).resolves.toBeUndefined();
+    await expect(service.record(makeEvent({ usage }))).resolves.toBeUndefined();
     expect(loggerError).toHaveBeenCalledTimes(1);
+    expect(caps.onUsage).not.toHaveBeenCalled();
   });
 });

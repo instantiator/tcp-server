@@ -18,6 +18,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiAcceptedResponse,
   ApiBearerAuth,
   ApiCreatedResponse,
   ApiOkResponse,
@@ -48,6 +49,8 @@ import { CompanyPrimingService } from './company-priming.service';
 import { CompanyStatsService } from './company-stats.service';
 import { CreateCompanyDto, UpdateCompanyDto } from './dto/company.dto';
 import { CompanyListItemDto } from './dto/company-stats.dto';
+import { ResumeResultDto } from './dto/spend.dto';
+import { ResumeResult, SpendResumeService } from './spend-resume.service';
 import { UpdateRoleDto } from './dto/role.dto';
 import { CompanyResponseDto, RoleResponseDto } from './dto/entity-response.dto';
 import { isUUID } from '../utils/ObjectUtils';
@@ -70,6 +73,7 @@ export class CompanyController {
     private readonly priming: CompanyPrimingService,
     private readonly companyEvents: CompanyEventService,
     private readonly membership: MembershipService,
+    private readonly spend: SpendResumeService,
   ) {}
 
   /**
@@ -318,6 +322,21 @@ export class CompanyController {
     const company = await this.resolveCompanyOrThrow(id);
     const primed = await this.priming.prime(company.id);
     return merge(from(primed), this.companyEvents.observe(company.id));
+  }
+
+  /**
+   * Resumes every task in the company with agents paused by a spend cap or a
+   * shutdown, exempting those tasks from spend caps until they end. Does not
+   * lift the cap for anyone else. Refused with `503` while draining.
+   */
+  @ApiOperation({ summary: "Resume a company's paused tasks" })
+  @ApiAcceptedResponse({ type: ResumeResultDto })
+  @CompanyScope({ from: 'param', key: 'id', via: 'company' })
+  @Post(':id/resume')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async resumeCompany(@Param('id') id: string): Promise<ResumeResult> {
+    const company = await this.resolveCompanyOrThrow(id);
+    return this.spend.resumeCompany(company.id);
   }
 
   /** Resolves a company by UUID or slug, throwing 404 if no match. */

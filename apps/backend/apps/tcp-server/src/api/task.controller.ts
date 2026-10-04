@@ -49,6 +49,8 @@ import {
   TaskDetailResponseDto,
   TaskResponseDto,
 } from './dto/entity-response.dto';
+import { ResumeResultDto } from './dto/spend.dto';
+import { ResumeResult, SpendResumeService } from './spend-resume.service';
 import { SystemShutdownService } from './system-shutdown.service';
 import { TaskMaterialSummary, TaskService } from './task.service';
 
@@ -69,6 +71,7 @@ export class TaskController {
     private readonly tasks: TaskService,
     private readonly taskEvents: TaskEventService,
     private readonly shutdown: SystemShutdownService,
+    private readonly spend: SpendResumeService,
   ) {}
 
   /** Creates a task in the `ready` state. No plan is generated until `POST /api/task/:id/start`. */
@@ -143,7 +146,22 @@ export class TaskController {
   @HttpCode(202)
   async startTask(@Param('id') id: UUID): Promise<TcpTask> {
     this.shutdown.assertAccepting();
+    await this.spend.exemptIfCapped(id);
     return this.tasks.start(id);
+  }
+
+  /**
+   * Resumes a task's agents paused by a spend cap or a shutdown, and exempts
+   * the task from spend caps until it ends — resuming is the user choosing to
+   * spend. Refused with `503` while the system is draining.
+   */
+  @ApiOperation({ summary: 'Resume a paused task' })
+  @ApiAcceptedResponse({ type: ResumeResultDto })
+  @CompanyScope({ from: 'param', key: 'id', via: 'task' })
+  @Post(':id/resume')
+  @HttpCode(202)
+  resumeTask(@Param('id') id: UUID): Promise<ResumeResult> {
+    return this.spend.resumeTask(id);
   }
 
   /**
