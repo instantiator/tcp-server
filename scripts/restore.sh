@@ -206,7 +206,9 @@ $DC exec -T minio sh -c '
     mc mb --ignore-existing "local/$bucket" >/dev/null
     mc mirror --quiet --overwrite --remove "$dir" "local/$bucket"
   done
-  for bucket in $(mc ls local | awk "{print \$NF}" | tr -d /); do
+  # No awk in this image: the bucket name is the last field of each line.
+  mc ls local | while read -r line; do
+    bucket="${line##* }"; bucket="${bucket%/}"
     [ -d "/tmp/tcp-restore-objects/$bucket" ] || echo "WARNING: bucket $bucket is not in the archive; left as it was." >&2
   done
 '
