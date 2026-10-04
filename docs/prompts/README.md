@@ -19,6 +19,17 @@ Prompts are grouped into phase directories, each with its own numbering starting
 
 [`unresolved-notes.md`](unresolved-notes.md) holds what the completed phases (01–03) left open: compromises, outside constraints, and decisions waiting on something else. A phase still running keeps its own `unresolved-notes.md` in its directory. [`deferred-work.md`](deferred-work.md) is a separate list of things noticed in use.
 
+## Branches
+
+From phase 03 on, each prompt gets its own branch: `NN/<major>-<minor>_<name>` off `phase-NN`, where `NN` is the phase number (for example `06/001-02_accessibility-audit` off `phase-06`). Each prompt names its branch in its `> **Branch:**` header.
+
+1. Create `phase-NN` from `main` when the phase starts.
+2. Branch each prompt from an up-to-date `phase-NN`.
+3. The user opens the PR into `phase-NN` and merges it. Agents never merge.
+4. When the phase is done, one PR takes `phase-NN` into `main`.
+
+The prefix is `NN/`, not `phase-NN/`, because git can't hold a branch `phase-NN` and a branch `phase-NN/…` at once. Phase 02 used one branch per major index instead; [its README](<phase 02 - web ui/README.md>) records that workflow, including what to do with a branch after its PR is squash-merged.
+
 ## Numbering
 
 Every document is numbered `xxx.yy.zz.prompt` or `xxx.yy.zz.plan` (e.g. `001.01.00.prompt - initial planning and ADRs.md`), so both its place in the history and its kind are visible right after the number:
