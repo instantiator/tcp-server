@@ -16,6 +16,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { AUTH_STATE_PATH, hasSignInCredentials } from './auth-state';
+import { gotoSignedIn } from './signed-in';
 
 const OIDC_DISCOVERY_URL =
   process.env.OIDC_DISCOVERY_URL ??
@@ -258,7 +259,7 @@ test.describe('company visualisation', () => {
       pageErrors.push(err);
     });
 
-    await page.goto(`/company/${companyId}`);
+    await gotoSignedIn(page, `/company/${companyId}`);
 
     await expect(
       page.getByRole('tab', { name: COMPANY_VIEW_TAB }),
@@ -281,7 +282,7 @@ test.describe('company visualisation', () => {
   test('has no accessibility violations on the office view', async ({
     page,
   }) => {
-    await page.goto(`/company/${companyId}`);
+    await gotoSignedIn(page, `/company/${companyId}`);
 
     await expect(officeSummary(page)).toHaveAccessibleDescription(
       summary(2, 0, 0),
@@ -308,7 +309,7 @@ test.describe('company visualisation', () => {
     expect(createdTask.status()).toBe(201);
     const taskId = ((await createdTask.json()) as CreatedTask).id;
 
-    await page.goto(`/company/${companyId}`);
+    await gotoSignedIn(page, `/company/${companyId}`);
 
     const office = officeSummary(page);
     await expect(office).toHaveAccessibleDescription(summary(2, 1, 0));
@@ -337,7 +338,7 @@ test.describe('company visualisation', () => {
     test('a pan button and an arrow key both move the view', async ({
       page,
     }) => {
-      await page.goto(`/company/${companyId}`);
+      await gotoSignedIn(page, `/company/${companyId}`);
       const stage = officeSummary(page);
       const canvas = stage.locator('canvas');
       // Waiting for the snapshot to reach the stage (not just `goto`
@@ -380,7 +381,7 @@ test.describe('company visualisation', () => {
     test('dragging the canvas pans the camera and selects nothing', async ({
       page,
     }) => {
-      await page.goto(`/company/${companyId}`);
+      await gotoSignedIn(page, `/company/${companyId}`);
       const stage = officeSummary(page);
       const canvas = stage.locator('canvas');
       await expect(stage).toHaveAccessibleDescription(summary(2, 0, 0));
@@ -417,7 +418,7 @@ test.describe('company visualisation', () => {
     test('a role tray overlays the stage without resizing the canvas, follows, hovers and closes', async ({
       page,
     }) => {
-      await page.goto(`/company/${companyId}`);
+      await gotoSignedIn(page, `/company/${companyId}`);
       const stage = officeSummary(page);
       const canvas = stage.locator('canvas');
       // See the pan test above for why this goes first: it also clears the
@@ -503,7 +504,7 @@ test.describe('company visualisation', () => {
       const { id: taskId, shortcode } =
         (await createdTask.json()) as CreatedTask;
 
-      await page.goto(`/company/${companyId}`);
+      await gotoSignedIn(page, `/company/${companyId}`);
       const stage = officeSummary(page);
       const canvas = stage.locator('canvas');
       // See the pan test above for why this goes first (the dev-only
@@ -552,7 +553,7 @@ test.describe('company visualisation', () => {
     test('full screen toggles on an empty corner but not on an avatar', async ({
       page,
     }) => {
-      await page.goto(`/company/${companyId}`);
+      await gotoSignedIn(page, `/company/${companyId}`);
       const stage = officeSummary(page);
       const canvas = stage.locator('canvas');
       // See the pan test above for why this goes first (the dev-only
@@ -614,7 +615,7 @@ test.describe('company visualisation', () => {
     test('the Roles label toggle draws and clears labels on the canvas', async ({
       page,
     }) => {
-      await page.goto(`/company/${companyId}`);
+      await gotoSignedIn(page, `/company/${companyId}`);
       const stage = officeSummary(page);
       const canvas = stage.locator('canvas');
       // See the pan test above for why this goes first.
@@ -648,7 +649,7 @@ test.describe('company visualisation', () => {
       page,
     }) => {
       await page.setViewportSize({ width: 1280, height: 1400 });
-      await page.goto(`/company/${companyId}`);
+      await gotoSignedIn(page, `/company/${companyId}`);
       const stage = officeSummary(page);
       await expect(stage).toHaveAccessibleDescription(summary(2, 0, 0));
 
@@ -697,7 +698,7 @@ test.describe('company visualisation', () => {
       const { id: taskId, shortcode } =
         (await createdTask.json()) as CreatedTask;
 
-      await page.goto(`/company/${companyId}`);
+      await gotoSignedIn(page, `/company/${companyId}`);
       const stage = officeSummary(page);
       await expect(stage).toHaveAccessibleDescription(summary(2, 1, 0));
 
@@ -727,7 +728,7 @@ test.describe('company visualisation', () => {
     test('an archive tray opens from the picker and the bookshelf, with a tooltip', async ({
       page,
     }) => {
-      await page.goto(`/company/${companyId}`);
+      await gotoSignedIn(page, `/company/${companyId}`);
       const stage = officeSummary(page);
       const canvas = stage.locator('canvas');
       // See the pan test above for why this goes first (the dev-only
