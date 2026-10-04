@@ -50,6 +50,24 @@ function toolCallJson(tool: StubTool) {
   };
 }
 
+/** Deterministic completion-token estimate: ⌈(text + JSON of tool calls).length / 4⌉. */
+function completionTokens(response: StubResponse): number {
+  const toolsJson = response.tools?.length
+    ? JSON.stringify(response.tools.map(toolCallJson))
+    : '';
+  return Math.ceil((response.text + toolsJson).length / 4);
+}
+
+/** Builds the OpenAI `usage` object for a chosen response, given its prompt-token estimate. */
+function usageJson(response: StubResponse, promptTokens: number) {
+  const completion = completionTokens(response);
+  return {
+    prompt_tokens: promptTokens,
+    completion_tokens: completion,
+    total_tokens: promptTokens + completion,
+  };
+}
+
 function openAiError(
   status: number,
   message: string,
@@ -70,28 +88,34 @@ export const openAiFormat: ApiFormat = {
   },
 
   parsePrompt(body: unknown): ParsedPrompt {
-    const messages =
+    const record =
       typeof body === 'object' && body !== null
-        ? (body as Record<string, unknown>).messages
+        ? (body as Record<string, unknown>)
         : undefined;
+    const messages = record?.messages;
     const promptText = Array.isArray(messages)
       ? messages
           .filter(isChatMessage)
           .map((m) => extractText(m.content))
           .join('\n')
       : '';
-    const wantsStream =
-      typeof body === 'object' &&
-      body !== null &&
-      (body as Record<string, unknown>).stream === true;
-    return { promptText, wantsStream };
+    const wantsStream = record?.stream === true;
+    const promptTokens = Math.ceil(
+      JSON.stringify(Array.isArray(messages) ? messages : []).length / 4,
+    );
+    const streamOptions = record?.stream_options;
+    const includeUsageInStream =
+      typeof streamOptions === 'object' &&
+      streamOptions !== null &&
+      (streamOptions as Record<string, unknown>).include_usage === true;
+    return { promptText, wantsStream, promptTokens, includeUsageInStream };
   },
 
   authHeaderValue(key: string) {
     return { header: 'authorization', value: `Bearer ${key}` };
   },
 
-  buildResponse(response: StubResponse): unknown {
+  buildResponse(response: StubResponse, promptTokens: number): unknown {
     return {
       id: `chatcmpl-${randomUUID()}`,
       object: 'chat.completion',
@@ -110,11 +134,15 @@ export const openAiFormat: ApiFormat = {
           finish_reason: response.tools?.length ? 'tool_calls' : 'stop',
         },
       ],
-      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+      usage: usageJson(response, promptTokens),
     };
   },
 
-  buildStreamChunks(response: StubResponse): StreamChunk[] {
+  buildStreamChunks(
+    response: StubResponse,
+    promptTokens: number,
+    includeUsageInStream: boolean,
+  ): StreamChunk[] {
     const id = `chatcmpl-${randomUUID()}`;
     const created = Math.floor(Date.now() / 1000);
     const chunk = (
@@ -143,6 +171,20 @@ export const openAiFormat: ApiFormat = {
       chunks.push(chunk({}, 'tool_calls'));
     } else {
       chunks.push(chunk({}, 'stop'));
+    }
+    if (includeUsageInStream) {
+      // OpenAI's documented shape for the final usage chunk: an empty
+      // `choices` array alongside the `usage` object, sent just before [DONE].
+      chunks.push(
+        `data: ${JSON.stringify({
+          id,
+          object: 'chat.completion.chunk',
+          created,
+          model: 'tcp-stub-llm',
+          choices: [],
+          usage: usageJson(response, promptTokens),
+        })}\n\n`,
+      );
     }
     chunks.push('data: [DONE]\n\n');
     return chunks;

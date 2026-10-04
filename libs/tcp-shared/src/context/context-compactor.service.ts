@@ -7,6 +7,8 @@ import {
 } from '@langchain/core/messages';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { Injectable, Logger } from '@nestjs/common';
+import type { LlmIdentity, LlmUsage } from '../llm/llm-usage';
+import { usageFromMessage } from '../llm/llm-usage';
 import { ContextBudgetService } from './context-budget.service';
 
 /** Result returned by {@link ContextCompactorService.trimHistory}. */
@@ -85,6 +87,8 @@ export class ContextCompactorService {
   async summariseMessage(
     msg: BaseMessage,
     model: BaseChatModel,
+    llm?: LlmIdentity,
+    onUsage?: (usage: LlmUsage) => void,
   ): Promise<BaseMessage> {
     const originalContent =
       typeof msg.content === 'string'
@@ -95,6 +99,7 @@ export class ContextCompactorService {
 
     try {
       const result = await model.invoke([new HumanMessage(prompt)]);
+      this.reportUsage(result, llm, onUsage);
       const summary =
         typeof result.content === 'string' ? result.content.trim() : '';
 
@@ -119,10 +124,13 @@ export class ContextCompactorService {
     content: string,
     label: string,
     model: BaseChatModel,
+    llm?: LlmIdentity,
+    onUsage?: (usage: LlmUsage) => void,
   ): Promise<string> {
     const prompt = `Summarise the following "${label}" section in as few tokens as possible, as a bullet-point list of essential facts only. Output only the bullets.\n\n${content}`;
     try {
       const result = await model.invoke([new HumanMessage(prompt)]);
+      this.reportUsage(result, llm, onUsage);
       return typeof result.content === 'string'
         ? result.content.trim()
         : content;
@@ -132,5 +140,20 @@ export class ContextCompactorService {
       );
       return content;
     }
+  }
+
+  /**
+   * Reports one `model.invoke()` call's usage to the caller, when both an
+   * {@link LlmIdentity} and a callback were given — omitted entirely for
+   * callers that don't track compaction spend.
+   */
+  private reportUsage(
+    result: { usage_metadata?: unknown },
+    llm?: LlmIdentity,
+    onUsage?: (usage: LlmUsage) => void,
+  ): void {
+    if (!llm || !onUsage) return;
+    const usage = usageFromMessage(result, llm);
+    if (usage) onUsage(usage);
   }
 }

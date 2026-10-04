@@ -3,6 +3,7 @@ import { MessagesAnnotation } from '@langchain/langgraph';
 import {
   AgentStatus,
   ContextManagerService,
+  LlmIdentity,
   SupervisedGraphResult,
   TcpAgent,
   buildAgentGraph,
@@ -38,6 +39,8 @@ export interface SupervisedRunContext {
   buildGraph: (
     tools: DynamicStructuredTool[],
   ) => ReturnType<typeof buildAgentGraph>;
+  /** The run's resolved provider/model, for attributing recorded token usage. */
+  llm: LlmIdentity;
 }
 
 /**
@@ -73,9 +76,10 @@ export class SupervisedTurnService {
       contextManager: this.contextManager,
       windowSize: ctx.windowSize,
       abortController: ctx.abortController,
+      llm: ctx.llm,
       hooks: {
         buildGraph: ctx.buildGraph,
-        onEvent: this.recorder.forTurn(ctx.agent, tracker),
+        onEvent: this.recorder.forTurn(ctx.agent, tracker, ctx.llm),
         checkTerminalStatus: async () => {
           const fresh = await this.agentRepo.findOneBy({ id: ctx.agent.id });
           return fresh?.status === AgentStatus.Paused ||

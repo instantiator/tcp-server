@@ -72,6 +72,13 @@ document:
   real LLM would, for the caller's own tool-dispatch loop to execute.
 - **Delay**: `minDelay`/`maxDelay` are read as a random per-word delay (ms);
   unset or `0` on both means instant responses.
+- **Token usage**: every reply's `usage` is deterministic, not zero —
+  `prompt_tokens` is `⌈JSON length of the request's messages / 4⌉`,
+  `completion_tokens` is `⌈(reply text + JSON of its tool calls).length / 4⌉`.
+  A streaming request whose body sets `stream_options.include_usage: true`
+  (which `@langchain/openai`'s `ChatOpenAI` sends by default) gets one extra
+  chunk with an empty `choices` array and the `usage` object, just before
+  `[DONE]` — OpenAI's documented shape for streamed usage.
 
 ## Endpoints
 

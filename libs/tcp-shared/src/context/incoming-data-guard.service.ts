@@ -1,5 +1,6 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import type { LlmIdentity, LlmUsage } from '../llm/llm-usage';
 import { ContextBudgetService } from './context-budget.service';
 import { ContextCompactorService } from './context-compactor.service';
 
@@ -70,6 +71,10 @@ export class IncomingDataGuardService {
    * @param model - LLM used for summarisation if compaction is needed.
    * @param overflowPath - MinIO key prefix for overflow storage (e.g.
    *   `acme/tasks/{agentId}/context-overflow`). Sanitise before passing.
+   * @param llm - Provider/model identity, so a compaction call's token usage
+   *   can be attributed; omit to skip usage reporting.
+   * @param onUsage - Receives the compaction call's usage, when both this and
+   *   `llm` are given and the provider reported any.
    */
   async check(
     text: string,
@@ -77,6 +82,8 @@ export class IncomingDataGuardService {
     windowSize: number,
     model: BaseChatModel,
     overflowPath?: string,
+    llm?: LlmIdentity,
+    onUsage?: (usage: LlmUsage) => void,
   ): Promise<IncomingDataResult> {
     const incomingTokens = await this.budget.countText(text);
     const totalTokens = currentTokens + incomingTokens;
@@ -93,6 +100,8 @@ export class IncomingDataGuardService {
       text,
       'incoming data',
       model,
+      llm,
+      onUsage,
     );
     const compactedTokens = await this.budget.countText(compacted);
     const stillOver = this.budget.isOverBudget(

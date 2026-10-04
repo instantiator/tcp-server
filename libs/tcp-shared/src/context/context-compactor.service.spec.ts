@@ -111,6 +111,49 @@ describe('ContextCompactorService', () => {
 
       expect(result).toBe(original);
     });
+
+    it('reports usage when both an llm identity and onUsage are given and the provider reported usage', async () => {
+      const reply = new AIMessage('Summary.');
+      Object.assign(reply, {
+        usage_metadata: { input_tokens: 20, output_tokens: 6 },
+      });
+      const model = { invoke: jest.fn().mockResolvedValue(reply) };
+      const original = new HumanMessage({ content: 'Long.', id: 'h-1' });
+      const onUsage = jest.fn();
+
+      await service.summariseMessage(
+        original,
+        model as never,
+        { provider: 'lm-studio', model: 'qwen3-5b' },
+        onUsage,
+      );
+
+      expect(onUsage).toHaveBeenCalledWith({
+        provider: 'lm-studio',
+        model: 'qwen3-5b',
+        inputTokens: 20,
+        outputTokens: 6,
+      });
+    });
+
+    it('does not report usage when no llm identity is given', async () => {
+      const reply = new AIMessage('Summary.');
+      Object.assign(reply, {
+        usage_metadata: { input_tokens: 20, output_tokens: 6 },
+      });
+      const model = { invoke: jest.fn().mockResolvedValue(reply) };
+      const original = new HumanMessage({ content: 'Long.', id: 'h-1' });
+      const onUsage = jest.fn();
+
+      await service.summariseMessage(
+        original,
+        model as never,
+        undefined,
+        onUsage,
+      );
+
+      expect(onUsage).not.toHaveBeenCalled();
+    });
   });
 
   describe('compactSection', () => {

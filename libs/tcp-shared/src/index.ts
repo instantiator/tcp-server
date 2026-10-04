@@ -47,6 +47,7 @@ export * from './llm/context-length-error';
 export * from './llm/reasoning-content-recovery';
 export * from './llm/run-supervised-graph';
 export * from './llm/stream-event-mapper';
+export * from './llm/llm-usage';
 export * from './llm/render-template';
 export * from './llm/resolve-env-llm-config';
 export * from './llm/prompt-vars';

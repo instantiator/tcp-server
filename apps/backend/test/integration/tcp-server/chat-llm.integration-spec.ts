@@ -7,6 +7,7 @@ import {
   TcpCompany,
   TcpRole,
   TcpTask,
+  TokenUsage,
   McpClientService,
   MODE_PROMPTS,
   WireEvent,
@@ -80,6 +81,7 @@ describe('ChatService integration (stub LLM)', () => {
   let roleRepo: Repository<TcpRole>;
   let companyRepo: Repository<TcpCompany>;
   let auditRepo: Repository<AuditEvent>;
+  let tokenUsageRepo: Repository<TokenUsage>;
   let dataSource: DataSource;
   let testCompanyId: UUID;
   let testRoleId: UUID;
@@ -144,6 +146,7 @@ describe('ChatService integration (stub LLM)', () => {
             TcpTask,
             TcpAssignment,
             AuditEvent,
+            TokenUsage,
           ],
         }),
         TypeOrmModule.forFeature([
@@ -153,6 +156,7 @@ describe('ChatService integration (stub LLM)', () => {
           TcpTask,
           TcpAssignment,
           AuditEvent,
+          TokenUsage,
         ]),
         ContextModule,
         AuditModule,
@@ -185,6 +189,7 @@ describe('ChatService integration (stub LLM)', () => {
     roleRepo = moduleRef.get(getRepositoryToken(TcpRole));
     companyRepo = moduleRef.get(getRepositoryToken(TcpCompany));
     auditRepo = moduleRef.get(getRepositoryToken(AuditEvent));
+    tokenUsageRepo = moduleRef.get(getRepositoryToken(TokenUsage));
     dataSource = moduleRef.get(DataSource);
 
     // Seed a company and role pointing to the stub LLM
@@ -218,6 +223,7 @@ describe('ChatService integration (stub LLM)', () => {
     if (!dataSource?.isInitialized) return;
     // Clean up test fixtures
     await auditRepo.delete({ companyId: testCompanyId });
+    await tokenUsageRepo.delete({ companyId: testCompanyId });
     await agentRepo.delete({ companyId: testCompanyId });
     await assignmentRepo.delete({ companyId: testCompanyId });
     await roleRepo.delete({ companyId: testCompanyId });
@@ -298,6 +304,38 @@ describe('ChatService integration (stub LLM)', () => {
       expect(types).toContain(AuditEventType.LlmResponse);
     } finally {
       await auditRepo.delete({ agentId: agent.id });
+      await agentRepo.delete({ id: agent.id });
+    }
+  });
+
+  it('records token usage for the turn', async () => {
+    await setStubResponse('Usage test response');
+
+    const assignment = await seedAssignment();
+    const agent = await agentRepo.save(
+      agentRepo.create({
+        companyId: testCompanyId,
+        roleId: testRoleId,
+        assignmentId: assignment.id,
+        status: AgentStatus.Idle,
+        initialPrompt: '',
+      }),
+    );
+
+    try {
+      const terminal = waitForTerminal(agent.id);
+      await service.sendMessage(agent.id, 'Usage test');
+      await terminal;
+
+      const rows = await tokenUsageRepo.find({
+        where: { companyId: testCompanyId },
+      });
+      expect(rows.length).toBeGreaterThanOrEqual(1);
+      expect(rows[0]?.inputTokens).toBeGreaterThan(0);
+      expect(rows[0]?.provider).toBe('lm-studio');
+    } finally {
+      await auditRepo.delete({ agentId: agent.id });
+      await tokenUsageRepo.delete({ companyId: testCompanyId });
       await agentRepo.delete({ id: agent.id });
     }
   });

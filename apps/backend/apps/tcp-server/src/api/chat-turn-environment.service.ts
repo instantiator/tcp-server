@@ -2,6 +2,7 @@ import type { DynamicStructuredTool } from '@langchain/core/tools';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import {
   ContextManagerService,
+  LlmIdentity,
   McpClientService,
   buildAgentGraph,
   buildChatModel,
@@ -77,6 +78,10 @@ export class ChatTurnEnvironmentService {
     // reveal gating.
     const graph = buildGraph(langchainTools);
     const runConfig = { configurable: { thread_id: agent.id } };
+    const llm: LlmIdentity = {
+      provider: llmConfig.provider,
+      model: llmConfig.model,
+    };
 
     // Check context budget and compact if needed before invoking. Compaction
     // writes its own `compaction` audit rows (streamed live); the running
@@ -92,6 +97,7 @@ export class ChatTurnEnvironmentService {
       agent,
       role,
       langchainTools,
+      llm,
     );
 
     return {

@@ -420,6 +420,7 @@ describe('AgentLoopService', () => {
       expect.objectContaining({ id: agent.id }),
       expect.objectContaining({ name: 'analyst' }),
       [],
+      { provider: 'lm-studio', model: 'qwen3-5b' },
     );
   });
 

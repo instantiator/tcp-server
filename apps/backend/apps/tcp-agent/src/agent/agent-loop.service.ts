@@ -9,6 +9,7 @@ import {
   ContextManagerService,
   DEFAULT_LLM_CONTEXT_WINDOW,
   DEFAULT_REQUIRED_TOOL_RETRIES,
+  LlmIdentity,
   TcpAgent,
   SupervisedGraphResult,
 } from '@tcp/shared';
@@ -198,6 +199,12 @@ export class AgentLoopService {
       configurable: { thread_id: agent.id },
       signal: abortController.signal,
     };
+    // Resolved once per run — attributes this run's token usage (LLM audit
+    // rows and any compaction call) to the provider/model actually invoked.
+    const llm: LlmIdentity = {
+      provider: limits.llmConfig.provider,
+      model: limits.llmConfig.model,
+    };
 
     // Check context budget and compact if needed before invoking — same
     // protection chat.service.ts's inline turns already have (see
@@ -217,6 +224,7 @@ export class AgentLoopService {
       agent,
       agent.role,
       env.langchainTools,
+      llm,
     );
 
     // Resume path: inject reply as the next message; checkpoint holds prior state
@@ -242,6 +250,7 @@ export class AgentLoopService {
       maxIterations: limits.maxIterations,
       timeoutMs: limits.timeoutMs,
       buildGraph: env.buildGraph,
+      llm,
     };
 
     await this.driveToTerminal(ctx, input, tracker, env.langchainTools);
