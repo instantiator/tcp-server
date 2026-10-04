@@ -28,7 +28,7 @@ export interface ProviderTemplate {
   /** What to ask the user for, in order. */
   fields: readonly ProviderField[];
   /** Where to create an API key. */
-  apiKeyUrl?: string;
+  keysPageUrl?: string;
   /** This provider's key in https://models.dev/api.json. */
   modelsDevId?: string;
   chat?: { starterModel: string };
@@ -53,7 +53,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderTemplate[] = [
     kind: 'remote',
     baseUrl: 'https://api.openai.com/v1',
     fields: ['apiKey'],
-    apiKeyUrl: 'https://platform.openai.com/api-keys',
+    keysPageUrl: 'https://platform.openai.com/api-keys',
     modelsDevId: 'openai',
     chat: { starterModel: 'gpt-5-mini' },
     embeddings: { starterModel: 'text-embedding-3-small', dimension: 1536 },
@@ -65,7 +65,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderTemplate[] = [
     // https://docs.anthropic.com/en/api/openai-sdk
     baseUrl: 'https://api.anthropic.com/v1',
     fields: ['apiKey'],
-    apiKeyUrl: 'https://console.anthropic.com/settings/keys',
+    keysPageUrl: 'https://console.anthropic.com/settings/keys',
     modelsDevId: 'anthropic',
     chat: { starterModel: 'claude-haiku-4-5' },
     notes:
@@ -78,7 +78,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderTemplate[] = [
     // https://ai.google.dev/gemini-api/docs/openai
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
     fields: ['apiKey'],
-    apiKeyUrl: 'https://aistudio.google.com/apikey',
+    keysPageUrl: 'https://aistudio.google.com/apikey',
     modelsDevId: 'google',
     chat: { starterModel: 'gemini-flash-latest' },
     notes:
@@ -91,7 +91,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderTemplate[] = [
     // https://learn.microsoft.com/en-us/azure/foundry/openai/api-version-lifecycle
     baseUrl: 'https://{resource}.openai.azure.com/openai/v1',
     fields: ['resource', 'apiKey'],
-    apiKeyUrl: 'https://portal.azure.com',
+    keysPageUrl: 'https://portal.azure.com',
     modelsDevId: 'azure',
     chat: { starterModel: 'gpt-5-mini' },
     embeddings: { starterModel: 'text-embedding-3-small', dimension: 1536 },
@@ -105,7 +105,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderTemplate[] = [
     // https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions.html
     baseUrl: 'https://bedrock-runtime.{region}.amazonaws.com/openai/v1',
     fields: ['region', 'apiKey'],
-    apiKeyUrl: 'https://console.aws.amazon.com/bedrock/home#/api-keys',
+    keysPageUrl: 'https://console.aws.amazon.com/bedrock/home#/api-keys',
     modelsDevId: 'amazon-bedrock',
     chat: { starterModel: 'openai.gpt-oss-20b-1:0' },
     notes:
@@ -117,7 +117,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderTemplate[] = [
     kind: 'remote',
     baseUrl: 'https://api.mistral.ai/v1',
     fields: ['apiKey'],
-    apiKeyUrl: 'https://console.mistral.ai/api-keys',
+    keysPageUrl: 'https://console.mistral.ai/api-keys',
     modelsDevId: 'mistral',
     chat: { starterModel: 'mistral-small-latest' },
     embeddings: { starterModel: 'mistral-embed', dimension: 1024 },
@@ -128,7 +128,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderTemplate[] = [
     kind: 'remote',
     baseUrl: 'https://openrouter.ai/api/v1',
     fields: ['apiKey'],
-    apiKeyUrl: 'https://openrouter.ai/settings/keys',
+    keysPageUrl: 'https://openrouter.ai/settings/keys',
     modelsDevId: 'openrouter',
     chat: { starterModel: 'openai/gpt-5-mini' },
     notes:

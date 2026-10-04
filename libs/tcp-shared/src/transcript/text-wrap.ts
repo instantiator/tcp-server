@@ -9,7 +9,10 @@
  */
 export function wrapText(text: string, width: number): string[] {
   const w = Math.max(width, 1);
-  const paragraphs = text.replace(/\n+$/, '').split('\n');
+  // Pop trailing empties rather than trim with /\n+$/, which backtracks
+  // quadratically on a long run of newlines that doesn't reach the end.
+  const paragraphs = text.split('\n');
+  while (paragraphs.length > 1 && paragraphs.at(-1) === '') paragraphs.pop();
   const lines: string[] = [];
   for (const para of paragraphs) {
     const words = para.split(/[ \t]+/).filter(Boolean);
