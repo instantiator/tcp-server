@@ -1033,7 +1033,7 @@ worker job — only roles, task rooms and every interaction are proven against
 real Phaser; the bookshelf tray's browser spec covers its empty state
 instead (002.02 stage 11), which still proves the tray reads its live
 `storageConsoleUrl`/`storageBucket` config. See phase 03's
-[unresolved notes](<prompts/phase 03 - web visualisation/unresolved-notes.md>).
+[unresolved notes](prompts/unresolved-notes.md).
 
 ## Tests
 

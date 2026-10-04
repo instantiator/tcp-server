@@ -2,7 +2,7 @@
  * Placeholder office colours: calm, low-saturation tones with enough
  * contrast between adjacent floor styles to read as separate rooms.
  */
-// ponytail: fixed palette; the canvas does not follow the high-contrast theme (unresolved note)
+// ponytail: fixed palette; the canvas does not follow the high-contrast theme (phase 06 001.02, accessibility audit)
 
 import type { FurnitureKind, RoomPurpose } from '../world/types';
 

@@ -15,6 +15,10 @@ Prompts are grouped into phase directories, each with its own numbering starting
 - `phase 05 - service quality/` - future-work items for the service (security/ethics review, configurable third-party services, accessibility, Strands and meshLLM evaluation), plus `unplanned.md` for notes not yet turned into prompts.
 - `phase 06 - web ui quality/` - future-work items for the web UI (browser test suite, accessibility audit, reduced motion, documentation close-out, build flags, company configuration view).
 
+## Unresolved notes
+
+[`unresolved-notes.md`](unresolved-notes.md) holds what the completed phases (01–03) left open: compromises, outside constraints, and decisions waiting on something else. A phase still running keeps its own `unresolved-notes.md` in its directory. [`deferred-work.md`](deferred-work.md) is a separate list of things noticed in use.
+
 ## Numbering
 
 Every document is numbered `xxx.yy.zz.prompt` or `xxx.yy.zz.plan` (e.g. `001.01.00.prompt - initial planning and ADRs.md`), so both its place in the history and its kind are visible right after the number:

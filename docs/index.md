@@ -104,7 +104,7 @@ In-depth guides for implemented system features.
 
 ## Planning
 
-Historical planning documents and session prompts are in [prompts/](prompts/). Phase 02's branching and PR workflow is in [prompts/phase 02 - web ui/README.md](<prompts/phase 02 - web ui/README.md>), and what that phase has left open is in [prompts/phase 02 - web ui/unresolved-notes.md](<prompts/phase 02 - web ui/unresolved-notes.md>).
+Historical planning documents and session prompts are in [prompts/](prompts/). Phase 02's branching and PR workflow is in [prompts/phase 02 - web ui/README.md](<prompts/phase 02 - web ui/README.md>), and what phases 01–03 left open is in [prompts/unresolved-notes.md](prompts/unresolved-notes.md).
 
 > [!NOTE]
 > These are records of how the project was designed, not active documentation.

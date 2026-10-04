@@ -296,7 +296,7 @@ test.describe('company visualisation', () => {
     request,
   }) => {
     // The task is created BEFORE the page opens. Creating a task publishes no
-    // live event (000.01 unresolved notes), so an open page would only see a
+    // live event (docs/prompts/unresolved-notes.md), so an open page would only see a
     // new task once it is started. Removal is the live half tested here.
     const createdTask = await request.post('/api/task', {
       headers: { Authorization: `Bearer ${token}` },
@@ -491,7 +491,7 @@ test.describe('company visualisation', () => {
       request,
     }) => {
       // Created before `goto`, same as the task-room test above: creating a
-      // task publishes no live event (000.01 unresolved notes).
+      // task publishes no live event (docs/prompts/unresolved-notes.md).
       const createdTask = await request.post('/api/task', {
         headers: { Authorization: `Bearer ${token}` },
         data: {
