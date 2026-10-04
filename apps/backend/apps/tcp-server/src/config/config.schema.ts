@@ -51,6 +51,13 @@ export const configSchema = Joi.object({
   MCP_MEMORY_URL: Joi.string().uri().empty('').optional(),
   MCP_INTERACTIONS_URL: Joi.string().uri().empty('').optional(),
   MCP_TASKS_URL: Joi.string().uri().empty('').optional(),
+  /**
+   * Comma-separated hostnames a local or custom LLM provider's `baseUrl` may
+   * use, besides the hosts of LLM_BASE_URL and EMBEDDING_BASE_URL. Remote
+   * providers are held to their catalogue URL regardless. See
+   * LlmDestinationPolicy.
+   */
+  LLM_ALLOWED_HOSTS: Joi.string().allow('').default(''),
   LLM_PROVIDER: Joi.string().empty('').optional(),
   LLM_MODEL: Joi.string().empty('').optional(),
   LLM_BASE_URL: Joi.string().uri().empty('').optional(),

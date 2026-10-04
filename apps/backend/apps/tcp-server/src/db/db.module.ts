@@ -10,6 +10,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AgentDbService } from './agent-db.service';
 import { CompanyDbService } from './company-db.service';
 import { DbService } from './db.service';
+import { LlmDestinationPolicy } from './llm-destination-policy';
 import { RoleDbService } from './role-db.service';
 
 /**
@@ -27,7 +28,13 @@ import { RoleDbService } from './role-db.service';
       CompanyUser,
     ]),
   ],
-  providers: [DbService, CompanyDbService, RoleDbService, AgentDbService],
-  exports: [DbService],
+  providers: [
+    DbService,
+    CompanyDbService,
+    RoleDbService,
+    AgentDbService,
+    LlmDestinationPolicy,
+  ],
+  exports: [DbService, LlmDestinationPolicy],
 })
 export class DbModule {}

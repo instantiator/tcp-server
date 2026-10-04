@@ -404,7 +404,7 @@ describe('KnowledgeController (e2e)', () => {
     // seeded with real chunks via RagIndexService — the outer company has no
     // embeddingConfig, so `retrieve` would silently return [] for it.
     const embeddingConfig = {
-      provider: 'openai' as const,
+      provider: 'openai-compatible' as const,
       model: 'stub-embed',
       baseUrl: STUB_LLM_URL,
       apiKey: 'test',

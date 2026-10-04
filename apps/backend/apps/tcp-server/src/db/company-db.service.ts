@@ -9,6 +9,7 @@ import { UUID } from 'crypto';
 import { DeepPartial, In, Repository } from 'typeorm';
 import { TcpCompanyTemplate } from '../templates/TcpCompanyTemplate';
 import { isUUID } from '../utils/ObjectUtils';
+import { LlmDestinationPolicy, mergeLlmConfig } from './llm-destination-policy';
 
 /** TypeORM operations for {@link TcpCompany}, behind {@link DbService}. */
 @Injectable()
@@ -20,6 +21,7 @@ export class CompanyDbService {
     private readonly roleRepo: Repository<TcpRole>,
     @InjectRepository(CompanyUser)
     private readonly companyUserRepo: Repository<CompanyUser>,
+    private readonly llmPolicy: LlmDestinationPolicy,
   ) {}
 
   /**
@@ -34,6 +36,8 @@ export class CompanyDbService {
     creatorIdentifier: string,
     creatorName?: string | null,
   ): Promise<TcpCompany> {
+    this.llmPolicy.assertAllowed(template.llmConfig, 'llmConfig');
+    this.llmPolicy.assertAllowed(template.embeddingConfig, 'embeddingConfig');
     await this.companyRepo.delete({ slug });
     const company = await this.companyRepo.save({
       ...template,
@@ -121,16 +125,17 @@ export class CompanyDbService {
       ? {
           ...existing,
           ...company,
-          // Deep-merge llmConfig so a partial patch (e.g. only model) preserves other fields.
-          // When llmConfig is explicitly null, pass it through as-is to allow removal.
-          llmConfig:
-            company.llmConfig !== undefined
-              ? company.llmConfig !== null && existing.llmConfig != null
-                ? { ...existing.llmConfig, ...company.llmConfig }
-                : company.llmConfig
-              : existing.llmConfig,
+          llmConfig: mergeLlmConfig(existing.llmConfig, company.llmConfig),
         }
       : company;
+    // Only fields this write touches: an unrelated patch must not fail on a
+    // config stored before the policy existed.
+    if (company.llmConfig !== undefined) {
+      this.llmPolicy.assertAllowed(merged.llmConfig, 'llmConfig');
+    }
+    if (company.embeddingConfig !== undefined) {
+      this.llmPolicy.assertAllowed(merged.embeddingConfig, 'embeddingConfig');
+    }
 
     const targetCompanyId = existing?.id ?? company.id;
     if (company.plannerRoleId && targetCompanyId) {

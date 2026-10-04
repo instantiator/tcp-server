@@ -36,7 +36,7 @@ Add an `embeddingConfig` to the company:
 {
   "embeddingConfig": {
     "provider": "lm-studio",
-    "baseUrl": "http://localhost:1234/v1",
+    "baseUrl": "http://host.docker.internal:1234/v1",
     "model": "nomic-embed-text",
     "contextWindow": 8192
   }

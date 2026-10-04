@@ -46,7 +46,7 @@ curl -X POST http://localhost:3000/api/company \
     "llmConfig": {
       "provider": "lm-studio",
       "model": "qwen3-5b",
-      "baseUrl": "http://localhost:1234/v1",
+      "baseUrl": "http://host.docker.internal:1234/v1",
       "apiKey": "your-lm-studio-token"
     }
   }'
@@ -59,7 +59,7 @@ curl -X POST http://localhost:3000/api/company \
 3. Otherwise the server/agent environment's `LLM_PROVIDER`/`LLM_MODEL` fallback is used.
 4. If none of the three is set, the agent run fails immediately with status `failed`.
 
-A role with no `llmConfig` and a company with no `llmConfig` are both accepted at create/update time — the environment fallback (or a failed run, if that's also unset) covers it at run time. Nothing is rejected up front.
+A role with no `llmConfig` and a company with no `llmConfig` are both accepted at create/update time — the environment fallback (or a failed run, if that's also unset) covers it at run time. The only check up front is where `baseUrl` points (see below).
 
 ---
 
@@ -78,7 +78,7 @@ curl -X POST http://localhost:3000/api/role \
     "llmConfig": {
       "provider": "lm-studio",
       "model": "qwen3-5b",
-      "baseUrl": "http://localhost:1234/v1",
+      "baseUrl": "http://host.docker.internal:1234/v1",
       "apiKey": "your-lm-studio-token"
     },
     "systemPromptTemplate": "You are {{name}}, a specialist at {{description}}. It is {{datetime}} — you are in region {{timezone}}, where the local time is {{localDatetime}}."
@@ -86,6 +86,8 @@ curl -X POST http://localhost:3000/api/role \
 ```
 
 `apiKey` holds the API key for the provider. It is stored in the database as part of the JSONB config block and masked (`***`) in API responses by default. Set `TCP_MASK_API_KEYS=false` in the environment to expose raw keys during local debugging.
+
+`baseUrl` is checked when a company or role is saved, because the server will connect to it. A remote provider (`openai`, `anthropic` and so on) must use its own URL from the [provider catalogue](../libs/tcp-shared/src/llm/provider-catalogue.ts), or leave `baseUrl` out. A local or custom provider (`lm-studio`, `ollama`, `openai-compatible`) may only use a host listed in `LLM_ALLOWED_HOSTS`, or the host of `LLM_BASE_URL` / `EMBEDDING_BASE_URL`. Anything else is a 400. A change of `baseUrl` or `provider` that doesn't send a new `apiKey` drops the stored one, so a key is never sent to a different address than it was set for.
 
 `systemPromptTemplate` is optional — a blank or omitted value resolves via `SystemPromptTemplateResolver`: the role's own template, then the company's, then a baked-in default (`DEFAULT_SYSTEM_PROMPT_TEMPLATE`).
 
@@ -134,7 +136,7 @@ Valid from status `idle`, `paused`, or `failed`. Re-enqueues the agent; the Lang
 
 ## Checking model compatibility
 
-Before assigning a role to a model, verify that the model supports the required capabilities:
+Before assigning a role to a model, verify that the model supports the required capabilities. The route is for administrators only (`TCP_ADMIN_IDENTIFIERS`), because the server connects to the `baseUrl` it's given. That address must also pass the same `baseUrl` check as a saved config (see [Creating a role](#creating-a-role)).
 
 ```bash
 curl -X POST http://localhost:3000/api/model/check \
@@ -145,14 +147,31 @@ curl -X POST http://localhost:3000/api/model/check \
       {
         "provider": "lm-studio",
         "model": "qwen3-5b",
-        "baseUrl": "http://localhost:1234/v1",
+        "baseUrl": "http://host.docker.internal:1234/v1",
         "apiKey": "your-lm-studio-token"
       }
     ]
   }'
 ```
 
-Returns `{ provider, model, supportsTools, supportsStructuredOutput, compatible, error? }` for each model. `compatible` is `true` if both tool-calling and structured output are confirmed.
+Returns `{ provider, model, supportsTools, supportsStructuredOutput, compatible, error?, errorCode? }` for each model. `compatible` is `true` if both tool-calling and structured output are confirmed.
+
+A model that refuses the tool definition or the output schema just reports that capability as `false`. When the check can't be completed, `errorCode` says why and `error` says what to check:
+
+| `errorCode`            | Meaning                                                                  |
+| ---------------------- | ------------------------------------------------------------------------ |
+| `unsupported_provider` | `provider` isn't in the catalogue                                        |
+| `destination_refused`  | `baseUrl` isn't allowed; nothing was sent                                |
+| `unreachable`          | Nothing answered at `baseUrl` (from Docker, use `host.docker.internal`)  |
+| `timeout`              | No answer within `timeoutMs`; a local model may still be loading         |
+| `auth_rejected`        | HTTP 401: the API key is wrong or missing                                |
+| `forbidden`            | HTTP 403: the key can't use this model                                   |
+| `model_not_found`      | HTTP 404: wrong model name, model not loaded, or `baseUrl` missing `/v1` |
+| `rate_limited`         | HTTP 429: rate limit or quota                                            |
+| `provider_error`       | HTTP 5xx: a fault at the provider                                        |
+| `failed`               | Anything else; the server log has the detail                             |
+
+The provider's own error text is never returned, only logged, so the route can't be used to read what an address sends back.
 
 ---
 

@@ -130,7 +130,7 @@ describe('KnowledgeReindex (integration)', () => {
         name: 'Reindex Co',
         description: 'test',
         embeddingConfig: {
-          provider: 'openai',
+          provider: 'openai-compatible',
           model: 'stub-embed',
           baseUrl: STUB_LLM_URL,
           apiKey: 'test',

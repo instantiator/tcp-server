@@ -7,7 +7,9 @@ import { makeTestJwt } from '../helpers/test-jwt';
 
 describe('ModelController (e2e)', () => {
   let app: INestApplication<App>;
-  let jwt: string;
+  /** Named in `.env.testing`'s TCP_ADMIN_IDENTIFIERS. */
+  let adminJwt: string;
+  let userJwt: string;
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -16,7 +18,8 @@ describe('ModelController (e2e)', () => {
     app = module.createNestApplication();
     // Listening, not just init() — see agent.e2e-spec.ts for why.
     await app.listen(0);
-    jwt = makeTestJwt();
+    adminJwt = makeTestJwt({ sub: 'e2e-admin' });
+    userJwt = makeTestJwt();
   });
 
   afterAll(() => app.close());
@@ -28,10 +31,19 @@ describe('ModelController (e2e)', () => {
         .send({ models: [] })
         .expect(401));
 
-    it('returns 200 when given an empty models array', () =>
+    // The route connects wherever the body says, so it is a network probe:
+    // administrators only.
+    it('returns 403 for a signed-in user who is not an administrator', () =>
       request(app.getHttpServer())
         .post('/api/model/check')
-        .set('Authorization', `Bearer ${jwt}`)
+        .set('Authorization', `Bearer ${userJwt}`)
+        .send({ models: [] })
+        .expect(403));
+
+    it('returns 201 when given an empty models array', () =>
+      request(app.getHttpServer())
+        .post('/api/model/check')
+        .set('Authorization', `Bearer ${adminJwt}`)
         .send({ models: [] })
         .expect(201)
         .expect(({ body }) => {
@@ -45,7 +57,7 @@ describe('ModelController (e2e)', () => {
     it('returns 201 with a per-model result, reporting a failure as incompatible', () =>
       request(app.getHttpServer())
         .post('/api/model/check')
-        .set('Authorization', `Bearer ${jwt}`)
+        .set('Authorization', `Bearer ${adminJwt}`)
         .send({
           models: [
             { provider: 'no-such-provider', model: 'any', apiKey: 'stub-key' },
@@ -57,7 +69,31 @@ describe('ModelController (e2e)', () => {
             expect.objectContaining({
               provider: 'no-such-provider',
               compatible: false,
-              error: 'Unsupported LLM provider: no-such-provider',
+              errorCode: 'unsupported_provider',
+            }),
+          ]);
+        }));
+
+    // Refused before any request, so no network is involved here either.
+    it('refuses a destination outside the allowed hosts, per model', () =>
+      request(app.getHttpServer())
+        .post('/api/model/check')
+        .set('Authorization', `Bearer ${adminJwt}`)
+        .send({
+          models: [
+            {
+              provider: 'openai-compatible',
+              model: 'any',
+              baseUrl: 'http://169.254.169.254/v1',
+            },
+          ],
+        })
+        .expect(201)
+        .expect(({ body }) => {
+          expect(body).toEqual([
+            expect.objectContaining({
+              compatible: false,
+              errorCode: 'destination_refused',
             }),
           ]);
         }));
