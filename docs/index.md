@@ -12,20 +12,21 @@
 
 Day-to-day guides for running and maintaining the system.
 
-| Document                                     | Description                                                                |
-| -------------------------------------------- | -------------------------------------------------------------------------- |
-| 📄 [tcp-agent](tcp-agent.md)                 | Creating roles, starting agents, run limits, model compatibility check     |
-| 📄 [Services](services.md)                   | All Docker Compose services — ports, dependencies, and purpose             |
-| 📄 [Scripts](scripts.md)                     | All scripts in `scripts/` — purpose, options, and usage examples           |
-| 📄 [Authentication](authentication.md)       | OIDC/OAuth 2.0 setup, token flows, and using an external identity provider |
-| 📄 [Zitadel Setup](zitadel-setup.md)         | Configuring the bundled OIDC provider for local development and production |
-| 📄 [Database](database.md)                   | Connection config, timestamp conventions, concurrency, useful queries      |
-| 📄 [Database Migrations](db-migrations.md)   | How to create, review, register, and run TypeORM migrations                |
-| 📄 [Shared Storage](shared-storage.md)       | MinIO authentication, folder structure, and document management            |
-| 📄 [Testing](testing.md)                     | Testing strategy, the six tiers, and how to run each suite                 |
-| 📄 [Manual Testing](manual-testing/start.md) | Structured manual test guide — infrastructure through MCP servers          |
-| 📄 [tcp-stub-llm](stub-llm.md)               | Configurable stub LLM server for tests — config format, endpoints          |
-| 📄 [Web Client](web-client.md)               | The browser application — running it, the strings and theme seams, tooling |
+| Document                                       | Description                                                                |
+| ---------------------------------------------- | -------------------------------------------------------------------------- |
+| 📄 [tcp-agent](tcp-agent.md)                   | Creating roles, starting agents, run limits, model compatibility check     |
+| 📄 [Services](services.md)                     | All Docker Compose services — ports, dependencies, and purpose             |
+| 📄 [Scripts](scripts.md)                       | All scripts in `scripts/` — purpose, options, and usage examples           |
+| 📄 [Authentication](authentication.md)         | OIDC/OAuth 2.0 setup, token flows, and using an external identity provider |
+| 📄 [Zitadel Setup](zitadel-setup.md)           | Configuring the bundled OIDC provider for local development and production |
+| 📄 [Database](database.md)                     | Connection config, timestamp conventions, concurrency, useful queries      |
+| 📄 [Backup and Restore](backup-and-restore.md) | Back up a stack's databases and objects, and restore them on any machine   |
+| 📄 [Database Migrations](db-migrations.md)     | How to create, review, register, and run TypeORM migrations                |
+| 📄 [Shared Storage](shared-storage.md)         | MinIO authentication, folder structure, and document management            |
+| 📄 [Testing](testing.md)                       | Testing strategy, the seven tiers, and how to run each suite               |
+| 📄 [Manual Testing](manual-testing/start.md)   | Structured manual test guide — infrastructure through MCP servers          |
+| 📄 [tcp-stub-llm](stub-llm.md)                 | Configurable stub LLM server for tests — config format, endpoints          |
+| 📄 [Web Client](web-client.md)                 | The browser application — running it, the strings and theme seams, tooling |
 
 ## Architecture Decision Records
 

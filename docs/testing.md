@@ -2,12 +2,12 @@
 
 ## Strategy
 
-The project uses six test tiers that run in increasing order of scope and
+The project uses seven test tiers that run in increasing order of scope and
 infrastructure requirement. CI runs them in this order — a failure at any tier
 gates the next:
 
 ```text
-unit → integration → api + smoke + e2e + browser
+unit → integration → api + smoke + e2e + browser + backup
 ```
 
 | Tier        | What it proves                                                               | Infrastructure                            |
@@ -18,6 +18,7 @@ unit → integration → api + smoke + e2e + browser
 | API         | Requests and responses through the tcp-server API with a real JWT            | A running stack, with Zitadel             |
 | Smoke       | Every service in a deployed stack is up, healthy, and serving its Swagger UI | A running stack                           |
 | Browser     | The web app works in a real browser, and is free of axe violations           | Something serving the web app             |
+| Backup      | A backup restores onto a fresh stack with nothing lost                       | Docker; starts its own stack              |
 
 The api and smoke tiers run against the same stack in CI's `api-test` job,
 which is why they are often referred to together.
@@ -192,6 +193,18 @@ global setup provisions the infrastructure, `npm run test:e2e` (bare jest) works
 directly too — it no longer hangs on an unreachable Redis. See
 [scripts/run-e2e-tests.sh](../scripts/run-e2e-tests.sh).
 
+### Backup tests
+
+```bash
+./scripts/run-backup-tests.sh --project tcp-backup --env-file .env.testing
+```
+
+Starts its own stack, seeds a company and an object, backs up, destroys the
+stack with `down -v`, restores and compares row counts and objects. It uses
+`.env.testing`'s ports, so no other fixed-port stack can run at the same time.
+`run-all-tests.sh` runs it last, after tearing its own deployment down. See
+[backup-and-restore.md](backup-and-restore.md).
+
 ### Browser tests
 
 Like the api and smoke tiers, this one is a black-box client: it drives
@@ -311,13 +324,18 @@ passed.
 
 ```text
 verify (build + lint + typecheck) → unit-test → integration-test ─┬─→ api-test (includes smoke + browser)
-                                                                   └─→ e2e-test
+                                                                   ├─→ e2e-test
+                                                                   └─→ backup-test
 ```
 
 The browser tier shares the `api-test` job rather than having one of its own:
 from 002.03 it drives the deployment's `tcp-web` service, and `api-test` is the
 job that starts a deployment. A separate job would pay for a second full stack
 to reach the same state.
+
+`backup-test` is its own job, rather than part of `api-test`, because it
+destroys and recreates its stack. Running in parallel means the extra stack
+start doesn't lengthen the run.
 
 `unit-test` publishes two reports — `unit.xml` from Jest and `frontend.xml`
 from Vitest — because one job runs both runners.
