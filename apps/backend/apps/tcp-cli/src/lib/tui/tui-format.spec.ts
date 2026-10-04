@@ -76,6 +76,16 @@ describe('wrapText', () => {
     expect(wrapText('done\n\n\n', 20)).toEqual(['done']);
   });
 
+  it('keeps blank lines from a long run of newlines in the middle', () => {
+    const lines = wrapText(`a${'\n'.repeat(100_000)}b`, 20);
+    expect(lines).toHaveLength(100_001);
+    expect(lines.at(-1)).toBe('b');
+  });
+
+  it('keeps a trailing whitespace-only line', () => {
+    expect(wrapText('a\n  ', 20)).toEqual(['a', '']);
+  });
+
   it('returns a single empty line for empty text', () => {
     expect(wrapText('', 20)).toEqual(['']);
   });

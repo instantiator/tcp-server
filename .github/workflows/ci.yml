@@ -6,6 +6,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Read-only by default; jobs that publish check runs widen this themselves.
+permissions:
+  contents: read
+
 # Job graph — a block of cheap checks, then the three heavy tiers. Parallel
 # within each block, gated between them:
 #

@@ -345,8 +345,8 @@ async function askApiKey(
     if (same) return chatModel.apiKey;
   }
 
-  if (template.apiKeyUrl) {
-    console.log(`Get a key: ${template.apiKeyUrl}`);
+  if (template.keysPageUrl) {
+    console.log(`Get a key: ${template.keysPageUrl}`);
   }
 
   const required = template.kind !== 'local';
