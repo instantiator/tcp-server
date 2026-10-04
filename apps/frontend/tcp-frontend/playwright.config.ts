@@ -13,6 +13,20 @@ import { hasSignInCredentials } from './test/browser/auth-state';
 // no browser negotiates HTTP/2 over cleartext.
 const baseURL = process.env.TCP_WEB_URL ?? 'https://localhost:5173';
 
+/**
+ * The specs that open pages signed in (`test.use({ storageState })`). Every
+ * page they open runs a full sign-in through the identity provider, and on an
+ * 8-core machine running the whole stack, 4 workers' worth of parallel
+ * sign-ins pushed single sign-ins past 15 s. So they run in their own project
+ * at half the usual workers. Add any new signed-in spec here.
+ */
+const SIGNED_IN_SPECS = [
+  /add-new\.spec\.ts/,
+  /companies\.spec\.ts/,
+  /company-activity\.spec\.ts/,
+  /company-visualisation\.spec\.ts/,
+];
+
 export default defineConfig({
   testDir: './test/browser',
   // Traces and failure screenshots join the other tiers' artefacts under the
@@ -52,6 +66,7 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+      testIgnore: SIGNED_IN_SPECS,
       // The project stays **signed out**. A spec that wants the session opts
       // in with `test.use({ storageState: AUTH_STATE_PATH })`.
       //
@@ -60,6 +75,15 @@ export default defineConfig({
       // cannot sign anyone in against a production build. Both of those pass
       // trivially, and mean nothing, once the browser arrives already signed
       // in — and neither would fail to tell you so.
+      dependencies: hasSignInCredentials ? ['setup'] : [],
+    },
+    {
+      name: 'chromium-signed-in',
+      use: { ...devices['Desktop Chrome'] },
+      testMatch: SIGNED_IN_SPECS,
+      // Half the run's default of 50% of cores: 2 workers on 8 cores, 1 on
+      // a 4-core CI runner.
+      workers: '25%',
       dependencies: hasSignInCredentials ? ['setup'] : [],
     },
     // ponytail: one browser, one binary to install and cache. ADR-026's manual

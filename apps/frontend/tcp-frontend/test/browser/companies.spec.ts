@@ -6,6 +6,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext } from '@playwright/test';
 import { AUTH_STATE_PATH, hasSignInCredentials } from './auth-state';
+import { gotoSignedIn } from './signed-in';
 
 const OIDC_DISCOVERY_URL =
   process.env.OIDC_DISCOVERY_URL ??
@@ -76,7 +77,7 @@ test.describe('signed in', () => {
   );
 
   test('reaches the companies overview', async ({ page }) => {
-    await page.goto('/companies');
+    await gotoSignedIn(page, '/companies');
 
     // By role and accessible name (ADR-028). Arriving here at all is the
     // assertion that matters: it means the guarded route redirected, the
@@ -91,7 +92,7 @@ test.describe('signed in', () => {
   test('has no accessibility violations on the companies overview', async ({
     page,
   }) => {
-    await page.goto('/companies');
+    await gotoSignedIn(page, '/companies');
     await expect(
       page.getByRole('heading', { level: 1, name: 'Companies' }),
     ).toBeVisible();
@@ -162,7 +163,7 @@ test.describe('company card navigation', () => {
     // read the same way `ProfileDialog.tsx` shows it: straight off the ID
     // token via the profile dialog's "Account identifier" field
     // (`profile.subject.label`).
-    await page.goto('/companies');
+    await gotoSignedIn(page, '/companies');
     await page.getByRole('button', { name: ACCOUNT_LABEL }).click();
     await page.getByRole('menuitem', { name: MY_PROFILE_LABEL }).click();
     const identifierField = page.locator('.profile-dialog__field', {
@@ -183,7 +184,7 @@ test.describe('company card navigation', () => {
     // earlier `goto` above (as empty, before membership existed), and a full
     // navigation is what a signed-in user clicking "Companies" again would
     // do, not something this test invents to dodge the cache.
-    await page.goto('/companies');
+    await gotoSignedIn(page, '/companies');
     const card = page.locator('li.tcp-card', { hasText: companyName });
     await expect(card).toBeVisible();
 

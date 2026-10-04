@@ -15,6 +15,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { AUTH_STATE_PATH, hasSignInCredentials } from './auth-state';
+import { gotoSignedIn } from './signed-in';
 
 const OIDC_DISCOVERY_URL =
   process.env.OIDC_DISCOVERY_URL ??
@@ -81,7 +82,7 @@ const gotoCompanyTasks = async (
   page: Page,
   companyId: string,
 ): Promise<void> => {
-  await page.goto(`/company/${companyId}#tasks`);
+  await gotoSignedIn(page, `/company/${companyId}#tasks`);
 };
 
 interface TokenEndpoint {
@@ -206,7 +207,7 @@ test.describe('company activity', () => {
   test('renders each activity list as a labelled region behind its own tab', async ({
     page,
   }) => {
-    await page.goto(`/company/${companyId}`);
+    await gotoSignedIn(page, `/company/${companyId}`);
     await expect(
       page.getByRole('heading', { level: 1, name: companyName }),
     ).toBeVisible();
@@ -356,7 +357,7 @@ test.describe('company activity', () => {
   test('a hash deep-links to a tab, and switching tabs updates the hash', async ({
     page,
   }) => {
-    await page.goto(`/company/${companyId}#enquiries`);
+    await gotoSignedIn(page, `/company/${companyId}#enquiries`);
     await expect(
       page.getByRole('tab', { name: new RegExp(`^${ENQUIRIES_HEADING}`) }),
     ).toHaveAttribute('aria-selected', 'true');
@@ -364,7 +365,7 @@ test.describe('company activity', () => {
       page.getByRole('region', { name: ENQUIRIES_HEADING }),
     ).toBeVisible();
 
-    await page.goto(`/company/${companyId}#tasks`);
+    await gotoSignedIn(page, `/company/${companyId}#tasks`);
     await expect(
       page.getByRole('tab', { name: new RegExp(`^${TASKS_HEADING}`) }),
     ).toHaveAttribute('aria-selected', 'true');
@@ -385,7 +386,7 @@ test.describe('company activity', () => {
   test('shows "TCP: <company name>" in the header on the company page', async ({
     page,
   }) => {
-    await page.goto(`/company/${companyId}`);
+    await gotoSignedIn(page, `/company/${companyId}`);
     // `app.titleWithCompany` from `strings.ts` — a plain `<span>` inside the
     // page's `<header>` (`app-header__logo`), not its own landmark or
     // heading, so this is scoped to the banner rather than queried by role.
@@ -435,7 +436,7 @@ test.describe('company activity', () => {
 
     // Straight to the Chats tab: this fixture's agent lives there, not under
     // Tasks, so `gotoCompanyTasks` would not do.
-    await page.goto(`/company/${companyId}#chats`);
+    await gotoSignedIn(page, `/company/${companyId}#chats`);
     const chatRow = page
       .getByRole('region', { name: CHATS_HEADING })
       .getByRole('button', { name: chatRowName(roleName) });

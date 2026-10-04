@@ -252,6 +252,18 @@ project and every spec that needs a session skip with a stated reason rather
 than failing, so a contributor with no deployment can still run the rest of
 the tier.
 
+Because every signed-in page signs in afresh, a spec opens one with
+`gotoSignedIn(page, path)` (`test/browser/signed-in.ts`), never a bare
+`page.goto`. It waits for the header's Account button, with a 15 s budget of
+its own, so a slow sign-in doesn't use up the 5 s the next assertion gets. It
+also logs how long sign-in took (`[sign-in] <path> <ms>`) and records it as
+a `sign-in` annotation.
+
+Signed-in specs run in their own Playwright project, `chromium-signed-in`, at
+half the usual workers, so parallel sign-ins don't overload the identity
+provider. A new signed-in spec must be added to `SIGNED_IN_SPECS` in
+`playwright.config.ts`, or it runs at full parallelism.
+
 To run the signed-in specs locally, start a deployment that provisions a test
 user — `start-deployment.sh` does, against `.env.dev` — then run the tier as
 above; `run-browser-tests.sh` picks the credentials up automatically.
