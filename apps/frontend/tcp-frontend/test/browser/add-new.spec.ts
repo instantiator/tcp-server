@@ -15,6 +15,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { AUTH_STATE_PATH, hasSignInCredentials } from './auth-state';
+import { gotoSignedIn } from './signed-in';
 
 const OIDC_DISCOVERY_URL =
   process.env.OIDC_DISCOVERY_URL ??
@@ -171,7 +172,7 @@ test.describe('add new', () => {
   test('creates a task from the floating button, and returns focus to it', async ({
     page,
   }) => {
-    await page.goto(`/company/${companyId}`);
+    await gotoSignedIn(page, `/company/${companyId}`);
 
     await addNewButton(page).click();
     await page.getByRole('menuitem', { name: CREATE_TASK_ITEM }).click();
@@ -236,7 +237,7 @@ test.describe('add new', () => {
     await createRole(request, roleAName);
     await createRole(request, roleBName);
 
-    await page.goto(`/company/${companyId}`);
+    await gotoSignedIn(page, `/company/${companyId}`);
 
     await addNewButton(page).click();
     await page.getByRole('menuitem', { name: NEW_CHAT_ITEM }).click();
@@ -275,7 +276,7 @@ test.describe('add new', () => {
     const roleName = `Add new tray role ${suffix}`;
     await createRole(request, roleName);
 
-    await page.goto(`/company/${companyId}`);
+    await gotoSignedIn(page, `/company/${companyId}`);
 
     await page.getByRole('button', { name: SHOW_DETAILS_LABEL }).click();
     await page.getByRole('option', { name: roleLabel(roleName) }).click();
@@ -313,7 +314,7 @@ test.describe('add new', () => {
     const roleName = `Add new keyboard role ${suffix}`;
     await createRole(request, roleName);
 
-    await page.goto(`/company/${companyId}`);
+    await gotoSignedIn(page, `/company/${companyId}`);
 
     // Focus the button, Enter opens the menu on its first item, ArrowDown
     // reaches "New chat", ArrowRight opens its submenu focused on the first

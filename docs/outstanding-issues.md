@@ -50,6 +50,25 @@ Open the failing test's trace with `npx playwright show-trace`. It will show whe
 loading, showing an error or redirecting to sign-in. Don't add retries;
 `playwright.config.ts` explains why.
 
+**Likely cause, with a fix in place (2026-10-04):** the identity provider
+gets overloaded. Every signed-in page starts signed out and does a full sign-in
+redirect. With 4 workers on an 8-core machine also running the whole stack,
+single sign-ins took up to 16 s, and the 5 s assertion straight after `goto`
+lost the race. Two changes:
+
+- The signed-in specs open pages with `gotoSignedIn`
+  (`test/browser/signed-in.ts`). It waits up to 15 s for sign-in, apart from
+  the test's own assertions, and logs each sign-in as `[sign-in] <path> <ms>`.
+- Those specs run in their own Playwright project, `chromium-signed-in`, at
+  half the usual workers (`25%` of cores).
+
+Measured on the same machine and stack: before, 4 failures per full run, with
+sign-in p90 4–6 s and a maximum of 16 s; after, two full runs of 54/54 in
+about 50 s, with sign-in p90 0.8 s and a maximum of 1.3 s.
+
+**Act when (replaces the one above):** the browser tier fails this way again. Check the `[sign-in]`
+times first. Delete this entry if no failure is seen by the end of phase 04.
+
 ## Finalisation assignment status
 
 When the finalisation assignment of a task completes, the task moves to state `succeeded` but the finalisation task remains `in-progress`.
