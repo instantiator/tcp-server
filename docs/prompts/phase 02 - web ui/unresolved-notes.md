@@ -133,7 +133,7 @@ It stops being true if ids become enumerable or the deployment becomes public.
 ### `TCP_ADMIN_IDENTIFIERS` is a flat list in the environment
 
 **Raised by:** 002.05 · **Condition to revisit:** permission groups exist (the
-work carried into `002.01` (phase 05))
+work carried into `002.01` (phase 06))
 
 "System administrator" had to mean something before `?all=true` and the
 `/api/system` routes could be gated, and permission groups do not exist yet. A
@@ -253,7 +253,7 @@ This is deliberate rather than unfinished: consuming it means validating it, and
 
 **Raised by:** 003.02 · **Condition to revisit:** a `Session` starts carrying a
 token or a permission — **004.03 has now passed without this happening** — or
-001.04 (phase 05) generalises the build flag
+001.04 (phase 06) generalises the build flag
 
 `?devSession=<id>` supplies a stand-in signed-in user so the shell could be
 tested before sign-in existed. It is guarded by `import.meta.env.DEV`, which
@@ -269,7 +269,7 @@ a signed-out visitor. It is a way to see the header, not a way to reach data.
 That reasoning expires when the session becomes the thing that holds
 credentials. The guard protects the artefact, not a developer's own browser, and
 nothing stops a future change to `Session` from making `?devSession=admin` mean
-something. Written into 004.03 and 001.04 (phase 05); recorded in the memory
+something. Written into 004.03 and 001.04 (phase 06); recorded in the memory
 `project-dev-session-escape-hatch`.
 
 004.03 was named above as the prompt most likely to trigger this, and it did
@@ -278,7 +278,7 @@ still `{ userId }`. That is the good outcome, and it is also the reason this
 entry stays open rather than closing. The change that would have broken the
 guarantee has now been made without breaking it, so the next person to touch the
 type will not be approaching it as the dangerous one — and from here the build
-flag is the whole of the defence rather than the second half of it. 001.04 (phase 05) owns
+flag is the whole of the defence rather than the second half of it. 001.04 (phase 06) owns
 what remains.
 
 ### `@react-aria/live-announcer` is a one-line shim over a `private` subpath
@@ -362,11 +362,11 @@ Deriving both from one shared array is the fix, and it was not worth the indirec
 
 ### A signed-in browser journey is proven only in jsdom
 
-**Raised by:** 004.02 · **Condition to revisit:** `001.01` (phase 05) lands journey 1. Testable: `test/browser/` contains a spec that reaches a page behind `RequireSession`.
+**Raised by:** 004.02 · **Condition to revisit:** `001.01` (phase 06) lands journey 1. Testable: `test/browser/` contains a spec that reaches a page behind `RequireSession`.
 
 `CallbackPage.test.tsx` intercepts `signinCallback()` on the real `UserManager`, so everything above the exchange is real — the provider mount, the session derivation, the route table, the redirect-target validation. The exchange itself is not: the redirect to Zitadel, the PKCE round trip, and the provider's own response have no coverage in any tier. `test/browser/oidc-registration.spec.ts` sends a real authorize request but has nowhere to land, and `app-shell.spec.ts` still runs the shell's coverage on `/no-such-page` for the same reason.
 
-That is a gap in what is proven, not a compromise taken — 001.01 (phase 05) is the prompt that closes it, and both notes are written into it.
+That is a gap in what is proven, not a compromise taken — 001.01 (phase 06) is the prompt that closes it, and both notes are written into it.
 
 ### Signing out in one browser tab leaves the others looking signed in
 
@@ -410,7 +410,7 @@ checked."
 
 ### The browser tier authenticates as a machine client, not a user
 
-**Raised by:** 005.02 · **Condition to revisit:** when 001.01 (phase 05) builds a real end-user sign-in helper
+**Raised by:** 005.02 · **Condition to revisit:** when 001.01 (phase 06) builds a real end-user sign-in helper
 
 `test/browser/event-streams.spec.ts` proves the transport carries seven concurrent streams, using a `client_credentials` grant. It does not prove a signed-in human can open seven — that needs a real OIDC login, which no browser-tier test performs yet.
 
@@ -574,7 +574,7 @@ is enough for it.
 
 ### Announcing a completed response in full
 
-**Raised by:** 008.01 · **Condition to revisit:** 001.02 (phase 05)'s manual screen reader pass runs and finds arrival-only insufficient. Testable: `ANNOUNCE_RESPONSE_BODY` in `useTranscript.ts` is still `false`.
+**Raised by:** 008.01 · **Condition to revisit:** 001.02 (phase 06)'s manual screen reader pass runs and finds arrival-only insufficient. Testable: `ANNOUNCE_RESPONSE_BODY` in `useTranscript.ts` is still `false`.
 
 An agent's answer can run to several paragraphs. Reading all of it holds the audio channel with no useful way to interrupt, while the text is already on screen and browsable either way. Arrival-only is the provisional answer; announcing the full body is the alternative, and only real listening can judge which is right.
 
@@ -602,7 +602,7 @@ Testable: twelve streams are open at once through ordinary use — not a bug tha
 
 ### The waiting line comes from the agent's status, not from the transcript
 
-**Raised by:** 008.02 · **Condition to revisit:** the line is seen to blink off between the two signals during `001.01` (phase 05)'s browser pass
+**Raised by:** 008.02 · **Condition to revisit:** the line is seen to blink off between the two signals during `001.01` (phase 06)'s browser pass
 
 `MessageInput` shows "waiting" while `send.isPending` or the agent's live status is `running`. The backend sets `running` and records the `state_change` before it answers the send with `202`, so in practice the two signals overlap — but they are two different things, arriving by two different paths (a settled fetch and an SSE event), and nothing in the code guarantees which lands first at the client.
 
@@ -646,13 +646,13 @@ Testable: `applyEvent` drops a row whose patched status leaves the filter its li
 
 ### An enquiry leaving the awaiting list is no longer announced
 
-**Raised by:** 008.04 · **Condition to revisit:** a user reports not knowing an enquiry was answered elsewhere, or 001.02 (phase 05)'s manual pass finds the gap
+**Raised by:** 008.04 · **Condition to revisit:** a user reports not knowing an enquiry was answered elsewhere, or 001.02 (phase 06)'s manual pass finds the gap
 
 `Notification` always announces, immediately, on whichever channel it is given. Rendering one for a new enquiry on the `enquiry` channel while `EnquiriesList` still called `useListChangeAnnouncement` on that same channel produced two announcements for one arrival, coalesced by the announcer into a single phrase that said the same thing twice. One writer per channel is the convention, so the notification became that writer and the list's call was removed.
 
 The cost is the `removed` half of what that call did: nobody is now told when an enquiry leaves the awaiting list because someone else answered it. That is background noise rather than a request to act, and the list's item count and `aria-busy` still change — but it is a real loss, taken knowingly rather than overlooked.
 
-Testable: a user answers an enquiry in `tcp-cli` while another has the activity view open, and the second user is not told the question is gone. If that reads badly in 001.02 (phase 05), the fix is a second channel for departures, not restoring the doubled announcement on the shared one.
+Testable: a user answers an enquiry in `tcp-cli` while another has the activity view open, and the second user is not told the question is gone. If that reads badly in 001.02 (phase 06), the fix is a second channel for departures, not restoring the doubled announcement on the shared one.
 
 ### The client reads soft warnings that no task route ever sends
 
@@ -706,7 +706,7 @@ Testable: a third surface needs a timestamp, or someone copies `formatTime` out 
 
 That is the right trade for reading a conversation, but it is silent: a company with a misconfigured timezone shows plausible times in the wrong zone, and nothing says so. Nothing validates `timezone` on the way in either — `companyTimezone` is a free string on the company record.
 
-Testable: the company configuration view (002.01, phase 05) lets someone type a timezone. Validate it there, where the mistake is made and can be reported, rather than at every surface that reads it.
+Testable: the company configuration view (002.01, phase 06) lets someone type a timezone. Validate it there, where the mistake is made and can be reported, rather than at every surface that reads it.
 
 ## Carried into a later prompt
 
@@ -720,7 +720,7 @@ same skeleton. Rows below that name those indices still resolve; read them as th
 | End-to-end test that more than six simultaneous event streams work — 002.03 proved the transport, not the streams                                                                                    | 002.03    | `005.02`            |
 | `tcp-web` is handed the confidential OIDC client as a stopgap; it needs the public PKCE one, and `https` redirect URIs from `TCP_WEB_URL`                                                            | 002.03    | `004.01`            |
 | A catch-all route: nginx returns the app document for any deep link, so an unknown path currently renders blank rather than a 404                                                                    | 002.03    | `003.02`            |
-| The browser tier drives the deployment over https with no local-server fallback, and runs inside CI's `api-test` job                                                                                 | 002.03    | `001.01` (phase 05) |
+| The browser tier drives the deployment over https with no local-server fallback, and runs inside CI's `api-test` job                                                                                 | 002.03    | `001.01` (phase 06) |
 | Regenerate the client after 002.04: `GET /api/company` (`?all`, `stats`), `GET /api/assignment` (`?mode`), and four summary types changed                                                            | 002.04    | `005.01`            |
 | The stat field names: `stats.activeAgents`, `stats.tasksByStatus` (zero-filled per status) and `stats.openEnquiries`, returned with the list                                                         | 002.04    | `006.01`            |
 | The company stream's five `payload.entity` values, the priming order, the summary shapes, and the exact consultations query                                                                          | 002.04    | `007.01`            |
@@ -730,15 +730,15 @@ same skeleton. Rows below that name those indices still resolve; read them as th
 | SSE streams now refuse a non-member with `403` at connect — a permanent failure the backoff must not retry forever                                                                                   | 002.05    | `005.02`            |
 | `?all=true` is administrator-only; a `403` in the overview is a real error, not an empty state                                                                                                       | 002.05    | `006.01`            |
 | The memberships dialog is authoritative — membership _is_ the access control, so the list is exactly what the user can reach                                                                         | 002.05    | `008.06`            |
-| The ADR-011 **permission flags** (migration, defaults, `@RequirePermission`, and the UI to set them) — 002.05 enforced membership only                                                               | 002.05    | `002.01` (phase 05) |
-| ADR-011's status wording: membership is enforced, flags are not; `route-audit.spec.ts` must stay green and cover every controller                                                                    | 002.05    | `001.03` (phase 05) |
+| The ADR-011 **permission flags** (migration, defaults, `@RequirePermission`, and the UI to set them) — 002.05 enforced membership only                                                               | 002.05    | `002.01` (phase 06) |
+| ADR-011's status wording: membership is enforced, flags are not; `route-audit.spec.ts` must stay green and cover every controller                                                                    | 002.05    | `001.03` (phase 06) |
 | `ThemeControl` already exists and is written for reuse — the header adopts it rather than building a second theme control                                                                            | 003.01    | `003.02`            |
 | `main` lives inside `LandingPage`; when the shell owns layout there must still be exactly one `main` on the page                                                                                     | 003.01    | `003.02`            |
 | The account menu needs its own token-valued rules in `base.css` — React Aria renders it invisible otherwise                                                                                          | 003.01    | `003.02`            |
 | The landing page's `h1` is a route-change focus target; making it focusable must not change its name or level                                                                                        | 003.01    | `003.02`            |
 | `startSignIn()` in `src/auth/sign-in.ts` is the seam — replace the body, don't move the call site                                                                                                    | 003.01    | `004.02`            |
-| Extend the four-combination contrast scan to every page; the component tier cannot check contrast at all                                                                                             | 003.01    | `001.02` (phase 05) |
-| Assert what is drawn, not only the `data-*` attribute — jsdom resolves neither pseudo-elements nor shorthands                                                                                        | 003.01    | `001.02` (phase 05) |
+| Extend the four-combination contrast scan to every page; the component tier cannot check contrast at all                                                                                             | 003.01    | `001.02` (phase 06) |
+| Assert what is drawn, not only the `data-*` attribute — jsdom resolves neither pseudo-elements nor shorthands                                                                                        | 003.01    | `001.02` (phase 06) |
 | `RequireSession` saves the attempted path as `{ from }`; validate it before navigating, or it is an open redirect                                                                                    | 003.02    | `004.02`            |
 | The OIDC callback route is absent, and must be public — behind the guard it is a redirect loop                                                                                                       | 003.02    | `004.02`            |
 | `startSignOut()` is the seam; sign-out must clear the session, not just the tokens, or the account menu stays                                                                                        | 003.02    | `004.03`            |
@@ -747,9 +747,9 @@ same skeleton. Rows below that name those indices still resolve; read them as th
 | Decide on React Aria's `RouterProvider` if its links start appearing beyond the breadcrumb                                                                                                           | 003.02    | `006.01`            |
 | `onAccountAction` in `Header.tsx` is the dialogs' entry point; `MenuTrigger` already restores focus on close                                                                                         | 003.02    | `008.06`            |
 | Scan `document.body`, not the render container — React Aria's popover portals out of it                                                                                                              | 003.02    | `008.06`            |
-| A jsdom test can be green while the browser is wrong; the shell's browser coverage runs on an unknown address                                                                                        | 003.02    | `001.02` (phase 05) |
+| A jsdom test can be green while the browser is wrong; the shell's browser coverage runs on an unknown address                                                                                        | 003.02    | `001.02` (phase 06) |
 | `?devSession=` builds a `Session` from a URL — when a session carries a token, it must not be able to mint one                                                                                       | 003.02    | `004.03`            |
-| The production build flag, removing dev-only capabilities from the artefact, and query-string feature flags                                                                                          | 003.02    | `001.04` (phase 05) |
+| The production build flag, removing dev-only capabilities from the artefact, and query-string feature flags                                                                                          | 003.02    | `001.04` (phase 06) |
 | The four state components exist with fixed props; `LoadingState` does not set `aria-busy` — the loading region's owner must                                                                          | 003.03    | `006.01`            |
 | `useLoadingAnnouncement(loading, completion)` announces a completed wait only; never announce that loading started                                                                                   | 003.03    | `006.01`            |
 | The final announcement wording for all four lists, and the three lists' missing keys — `announce.tasks*` are placeholders                                                                            | 003.03    | `007.01`            |
@@ -757,9 +757,9 @@ same skeleton. Rows below that name those indices still resolve; read them as th
 | Where a `Notification` renders is 007.01's layout decision — 003.03 ships the component with no queue, provider or container                                                                         | 003.03    | `007.01`            |
 | Suppressing per-token announcements is the caller's job — the throttle thins what was announced, it does not decide what to announce                                                                 | 003.03    | `008.01`            |
 | An individually-announced enquiry needs its own channel, not a `throttleMs` override on a shared one                                                                                                 | 003.03    | `008.04`            |
-| Tune `ANNOUNCE_THROTTLE_MS` (10s) and `ANNOUNCE_LOADING_MIN_MS` (1s), and record the values the manual pass lands on                                                                                 | 003.03    | `001.02` (phase 05) |
-| Confirm `ErrorState`'s `role="group"` plus assertive announcement reads as well as `role="alert"`, and listen for assertive truncation                                                               | 003.03    | `001.02` (phase 05) |
-| Only route change has browser-tier announcement coverage; coalescing, throttling and assertive politeness are jsdom-only                                                                             | 003.03    | `001.02` (phase 05) |
+| Tune `ANNOUNCE_THROTTLE_MS` (10s) and `ANNOUNCE_LOADING_MIN_MS` (1s), and record the values the manual pass lands on                                                                                 | 003.03    | `001.02` (phase 06) |
+| Confirm `ErrorState`'s `role="group"` plus assertive announcement reads as well as `role="alert"`, and listen for assertive truncation                                                               | 003.03    | `001.02` (phase 06) |
+| Only route change has browser-tier announcement coverage; coalescing, throttling and assertive politeness are jsdom-only                                                                             | 003.03    | `001.02` (phase 06) |
 | `AuthProvider` must wrap `getUserManager()`'s existing instance, not fresh settings — two managers hold two different users                                                                          | 004.01    | `004.02`            |
 | `renderAppAt` must mirror whatever `main.tsx` gains, or the component tier asserts a stack that only exists in tests                                                                                 | 004.01    | `004.02`            |
 | ~~The callback route completes the flow with `signinRedirectCallback()`~~ — **wrong**: `AuthProvider` does it, and doing both double-exchanges the code (corrected by 004.02)                        | 004.01    | `004.02`            |
@@ -770,79 +770,79 @@ same skeleton. Rows below that name those indices still resolve; read them as th
 | The fetch wrapper calls `getAccessToken()` per request and `handleUnauthorized()` on 401; the policy redirects, it does not renew and return                                                         | 004.01    | `005.01`            |
 | The stream reader calls `getAccessToken()` on every connection attempt including reconnects, and routes a connect 401 to the shared policy                                                           | 004.01    | `005.02`            |
 | A profile dialog showing a bare subject has a configuration cause: `OIDC_LOAD_USER_INFO`, not a rebuild                                                                                              | 004.01    | `008.06`            |
-| Assert against the production bundle that no token reaches browser storage — jsdom proves the configuration, not the artefact                                                                        | 004.01    | `001.04` (phase 05) |
+| Assert against the production bundle that no token reaches browser storage — jsdom proves the configuration, not the artefact                                                                        | 004.01    | `001.04` (phase 06) |
 | The session derivation landed in 004.02, not here — `AuthSession` exists, the `session` prop is its fallback, and the OIDC user wins                                                                 | 004.02    | `004.03`            |
 | `AuthProvider` is already mounted; `matchSignoutCallback`/`onSignoutCallback` are the sign-out return hooks — do not add a second route                                                              | 004.02    | `004.03`            |
 | Adding a guarded route means adding it to `RETURNABLE_ROUTES`; `DEFAULT_SIGNED_IN_PATH` is hardcoded to `/companies` and needs confirming                                                            | 004.02    | `006.01`            |
-| Journey 1 is sign-in's first browser coverage — the jsdom tier intercepts the exchange and proves nothing about the PKCE round trip                                                                  | 004.02    | `001.01` (phase 05) |
-| Retire `app-shell.spec.ts`'s `/no-such-page` workaround: a signed-in page is browser-reachable now                                                                                                   | 004.02    | `001.01` (phase 05) |
-| The `/callback` route's loading and error states need the manual pass, and it is a signed-out page the contrast scan can reach                                                                       | 004.02    | `001.02` (phase 05) |
+| Journey 1 is sign-in's first browser coverage — the jsdom tier intercepts the exchange and proves nothing about the PKCE round trip                                                                  | 004.02    | `001.01` (phase 06) |
+| Retire `app-shell.spec.ts`'s `/no-such-page` workaround: a signed-in page is browser-reachable now                                                                                                   | 004.02    | `001.01` (phase 06) |
+| The `/callback` route's loading and error states need the manual pass, and it is a signed-out page the contrast scan can reach                                                                       | 004.02    | `001.02` (phase 06) |
 | The "a request after token expiry recovers" test — 004.03 was asked for it and had no fetch wrapper to make the request                                                                              | 004.03    | `005.01`            |
 | Reconnecting a stream after expiry must send the _new_ token on the wire; the failure is a permanent loop after the first blip, not at expiry itself                                                 | 004.03    | `005.02`            |
-| A real-browser journey through sign-in, reload and sign-out — 004.03 proves only that a guarded route leaves for the provider                                                                        | 004.03    | `001.01` (phase 05) |
-| The expiry warning interrupts assertively and is the only surface that speaks unprompted; it and the two recovery states need the manual pass                                                        | 004.03    | `001.02` (phase 05) |
-| ADR-024 now carries (a)–(l); confirm the deliberately-unwired `matchSignoutCallback` and the two operator-facing limitations survived                                                                | 004.03    | `001.03` (phase 05) |
-| `Session` stayed `{ userId }` through 004.03, so the build flag is now the whole of what stops `?devSession=` mattering                                                                              | 004.03    | `001.04` (phase 05) |
+| A real-browser journey through sign-in, reload and sign-out — 004.03 proves only that a guarded route leaves for the provider                                                                        | 004.03    | `001.01` (phase 06) |
+| The expiry warning interrupts assertively and is the only surface that speaks unprompted; it and the two recovery states need the manual pass                                                        | 004.03    | `001.02` (phase 06) |
+| ADR-024 now carries (a)–(l); confirm the deliberately-unwired `matchSignoutCallback` and the two operator-facing limitations survived                                                                | 004.03    | `001.03` (phase 06) |
+| `Session` stayed `{ userId }` through 004.03, so the build flag is now the whole of what stops `?devSession=` mattering                                                                              | 004.03    | `001.04` (phase 06) |
 | Query keys are `[entity, scope, …]` keyed on the event's `payload.entity` — conversations key on `'enquiry'`                                                                                         | 005.01    | `005.02`            |
 | `ApiError` (`src/api/errors.ts`) is the one failure shape; the stream reader throws it too                                                                                                           | 005.01    | `005.02`            |
 | One redirect across a fetch 401 and a stream 401 together is untested — each side is proven alone                                                                                                    | 005.01    | `005.02`            |
 | `App.tsx`'s boundary-control `<span>` still has no real import to replace it                                                                                                                         | 005.01    | `005.02`            |
 | SSE payload summary types are absent from the OpenAPI description; the drift check cannot police the event contract                                                                                  | 005.01    | `005.02`            |
 | Mutation hooks are unwritten; the client and error shape they use are built                                                                                                                          | 005.01    | `006.01`            |
-| The two knowledge file-download GETs have no query hook, by design                                                                                                                                   | 005.01    | `002.01` (phase 05) |
+| The two knowledge file-download GETs have no query hook, by design                                                                                                                                   | 005.01    | `002.01` (phase 06) |
 | `useEventStream(streamUrls.company(id))` already subscribes on the company route; build on it, don't open a second connection                                                                        | 005.02    | `006.01`            |
 | The hook returns an `error` that nothing renders yet — 006.01 owns giving a stream failure a visible state                                                                                           | 005.02    | `006.01`            |
 | The live activity view is the first place `MAX_STREAMS = 12` could plausibly bite; raise it deliberately if a view needs more                                                                        | 005.02    | `007.01`            |
 | Token-level `StreamDelta`s reach a transcript via `useEventStream`'s `onEvent` callback (widened from `onDelta` to carry every `WireEvent`) and belong in local state, never the query cache         | 005.02    | `008.01`            |
 | A `403` on a stream is a permanent `ApiError`, never retried — render it as a refusal, not a spinner that never resolves                                                                             | 005.02    | `008.01`            |
 | Each open chat's `StreamDelta`s belong in that conversation's own local state, kept separate across several open chats                                                                               | 005.02    | `008.02`            |
-| The browser tier can mint a machine token but not a human one; a real end-user sign-in helper is still unbuilt                                                                                       | 005.02    | `001.01` (phase 05) |
-| SSE payload summary types are absent from the OpenAPI description; the generated-types drift check can't police the event contract                                                                   | 005.02    | `001.03` (phase 05) |
+| The browser tier can mint a machine token but not a human one; a real end-user sign-in helper is still unbuilt                                                                                       | 005.02    | `001.01` (phase 06) |
+| SSE payload summary types are absent from the OpenAPI description; the generated-types drift check can't police the event contract                                                                   | 005.02    | `001.03` (phase 06) |
 | `CompanyPage`'s tab frame has one empty `<TabPanel id="activity">` — render the live activity view into it, don't restructure the page                                                               | 006.01    | `007.01`            |
 | `useEventStream(streamUrls.company(id))` and its `ErrorState` on channel `company-stream` already exist on `CompanyPage` — reuse both, don't add a second of either                                  | 006.01    | `007.01`            |
 | `useLoadingAnnouncement`'s second argument is `Announcement \| null` — pass `null` on the failure path, not an announcement                                                                          | 006.01    | `007.01`            |
 | `{count}` is reserved in announcement strings — `announcer.ts`'s `flush` supplies it and overwrites any caller value under that name                                                                 | 006.01    | `007.01`            |
 | Per-status task counts aren't on the overview; `ACTIVE_TASK_STATUSES` sums four non-terminal statuses into one "Active tasks" figure                                                                 | 006.01    | `007.01`            |
-| Adding the second tab is one line in `CompanyPage.tsx`'s `TabList`/`TabPanel`; the keyboard test then needs real arrow-key navigation assertions                                                     | 006.01    | `002.01` (phase 05) |
-| `GET /api/company/{id}` answers 200 with `null` for a company the caller cannot see; the generated types don't say so — `CompanyPage.tsx` collapses it to `undefined`                                | 006.01    | `002.01` (phase 05) |
-| A `<ul>` styled with `list-style: none` loses its list role in Safari/VoiceOver — check the overview's and 007.01's lists once themes fill the empty rule bodies                                     | 006.01    | `001.02` (phase 05) |
-| The overview's `403` branch (a non-administrator sending `?all=true`) is proven only in jsdom — needs one browser-tier confirmation                                                                  | 006.01    | `001.02` (phase 05) |
-| `base.css`'s new `.react-aria-Tab*` rules carry the selected state by border, not colour (WCAG 1.4.1) — cover the tab list in the contrast scan, both themes and modes                               | 006.01    | `001.02` (phase 05) |
-| `?all=true` stays administrator-only and the overview never sends it; document its `403` as a refusal, not an empty state                                                                            | 006.01    | `001.03` (phase 05) |
+| Adding the second tab is one line in `CompanyPage.tsx`'s `TabList`/`TabPanel`; the keyboard test then needs real arrow-key navigation assertions                                                     | 006.01    | `002.01` (phase 06) |
+| `GET /api/company/{id}` answers 200 with `null` for a company the caller cannot see; the generated types don't say so — `CompanyPage.tsx` collapses it to `undefined`                                | 006.01    | `002.01` (phase 06) |
+| A `<ul>` styled with `list-style: none` loses its list role in Safari/VoiceOver — check the overview's and 007.01's lists once themes fill the empty rule bodies                                     | 006.01    | `001.02` (phase 06) |
+| The overview's `403` branch (a non-administrator sending `?all=true`) is proven only in jsdom — needs one browser-tier confirmation                                                                  | 006.01    | `001.02` (phase 06) |
+| `base.css`'s new `.react-aria-Tab*` rules carry the selected state by border, not colour (WCAG 1.4.1) — cover the tab list in the contrast scan, both themes and modes                               | 006.01    | `001.02` (phase 06) |
+| `?all=true` stays administrator-only and the overview never sends it; document its `403` as a refusal, not an empty state                                                                            | 006.01    | `001.03` (phase 06) |
 | Agent and consultation rows are non-interactive in the MVP; 007.01 decided against adding an assignment dialog, so no assignment-scoped transcript surface is needed                                 | 007.01    | `008.01`            |
 | The task dialog is reached from a tasks-list row in the activity view; it needs no `assignmentId` focus parameter, because agent rows deliberately do not open it                                    | 007.01    | `008.03`            |
 | The enquiry notification container is 008.04's to build, once it decides whether an enquiry has a URL — `Notification` requires a `durableHref` and nothing renders one yet                          | 007.01    | `008.04`            |
 | The 'add new' control is unbuilt — 007.01 deferred it whole, since both its actions open dialogs that did not exist yet                                                                              | 007.01    | `001.01` (phase 03) |
 | `ActivityList` in `pages/CompanyPage/activity/` is the shared four-state frame for a live list (region, heading, count, loading/error/empty/populated) — reuse it rather than repeating the contract | 007.01    | `001.01` (phase 03) |
-| The four activity lists are the first `<ul>`s that a theme will style; check the Safari/VoiceOver `list-style: none` role loss on all of them                                                        | 007.01    | `001.02` (phase 05) |
-| The announcement wordings and the ~10s `ANNOUNCE_THROTTLE_MS` are unverified against a real screen reader — the activity view is the surface to tune them on                                         | 007.01    | `001.02` (phase 05) |
+| The four activity lists are the first `<ul>`s that a theme will style; check the Safari/VoiceOver `list-style: none` role loss on all of them                                                        | 007.01    | `001.02` (phase 06) |
+| The announcement wordings and the ~10s `ANNOUNCE_THROTTLE_MS` are unverified against a real screen reader — the activity view is the surface to tune them on                                         | 007.01    | `001.02` (phase 06) |
 | The two chat hooks exist with no consumer, so their shape is unproven                                                                                                                                | 007.02    | `008.02`            |
-| ADR-030's `Live` prefix needs rechecking against `STATIC_ENTITIES`                                                                                                                                   | 007.02    | `001.03` (phase 05) |
-| The four remaining MVP journeys — create a task and watch it progress, chat with a role, answer a user enquiry, sign out and land on the landing page                                                | 007.03    | `001.01` (phase 05) |
+| ADR-030's `Live` prefix needs rechecking against `STATIC_ENTITIES`                                                                                                                                   | 007.02    | `001.03` (phase 06) |
+| The four remaining MVP journeys — create a task and watch it progress, chat with a role, answer a user enquiry, sign out and land on the landing page                                                | 007.03    | `001.01` (phase 06) |
 | Minimising unmounts the dialog, so a minimised chat's transcript unmounts and releases its stream — decide deliberately whether it keeps streaming                                                   | 008.01    | `008.02`            |
 | The dock (`DockProvider`/`useDock`, `src/components/Dialog/`) already exists and is deliberately minimal — extend it to fit, rather than working around it                                           | 008.01    | `008.02`            |
 | Each open conversation needs its own `<Transcript/>`, announcer channel (`transcript:<agentId>`) and stream — never shared across conversations                                                      | 008.01    | `008.02`            |
 | One `<Transcript/>` per assignment panel; `MAX_STREAMS` is 12 and `useTranscript` already reports an `at-capacity` status to render, not treat as a failure                                          | 008.01    | `008.03`            |
-| `ANNOUNCE_RESPONSE_BODY` in `useTranscript.ts` is `false` (arrival-only); ADR-027 leaves the full-text wording open pending this pass                                                                | 008.01    | `001.02` (phase 05) |
-| The transcript renders each entry's raw event label verbatim, matching the CLI — judge whether that reads well in the manual pass                                                                    | 008.01    | `001.02` (phase 05) |
-| ADR-026 and ADR-027 both need an "as implemented" amendment covering the dialog and transcript surfaces, once 008.x is complete                                                                      | 008.01    | `001.03` (phase 05) |
+| `ANNOUNCE_RESPONSE_BODY` in `useTranscript.ts` is `false` (arrival-only); ADR-027 leaves the full-text wording open pending this pass                                                                | 008.01    | `001.02` (phase 06) |
+| The transcript renders each entry's raw event label verbatim, matching the CLI — judge whether that reads well in the manual pass                                                                    | 008.01    | `001.02` (phase 06) |
+| ADR-026 and ADR-027 both need an "as implemented" amendment covering the dialog and transcript surfaces, once 008.x is complete                                                                      | 008.01    | `001.03` (phase 06) |
 | The connection budget policy — one stream per transcript, parked releases, restored re-primes, twelve stands — beside `MAX_STREAMS` and as an ADR-025 amendment; apply it, don't re-decide it        | 008.02    | `008.03`            |
 | The dock's `DockEntry.label` is now a `ReactNode`, plus `remove(id)` (drop an entry without reopening it) and `focusEntry(id)` (move focus to a dock button)                                         | 008.02    | `008.03`            |
 | `describe('the connection budget')` in `ChatDialog.test.tsx` is the shape to copy for proving a collapsed panel releases its stream and an expanded one re-primes from history                       | 008.02    | `008.03`            |
 | The opener API: `useChat()` gives `startChat({ companyId, roleId, roleName })` and `openChat({ agentId, roleName, reference })`; `ChatProvider` is already mounted in `AppShell`                     | 008.02    | `001.01` (phase 03) |
 | The chat dialog is modal, so a second chat cannot be opened while one is showing — the 'add new' control has to solve this, not just meet it                                                         | 008.02    | `001.01` (phase 03) |
 | `openChat` moves focus into the panel it opens; React Aria returns focus to the opening control on close, so that control must stay mounted                                                          | 008.02    | `001.01` (phase 03) |
-| Judge the arrival-only response announcement with two conversations streaming at once — `describe('speech')` in `ChatDialog.test.tsx` proves two channels produce two sentences                      | 008.02    | `001.02` (phase 05) |
+| Judge the arrival-only response announcement with two conversations streaming at once — `describe('speech')` in `ChatDialog.test.tsx` proves two channels produce two sentences                      | 008.02    | `001.02` (phase 06) |
 | The confirmation pattern for a destructive control: a second stacked `<Dialog>`, a body that says what will happen, no button that says a bare "Cancel", and a focus-recovery effect                 | 008.03    | `008.04`            |
 | The task dialog has no provider of its own — `TasksList` mounts it from local state; a caller reaching in from elsewhere is what would justify a `TaskProvider`                                      | 008.03    | `008.04`            |
 | The two-layer mutation shape: `useCancelTaskMutation` describes the request once, `useCancelTask` wraps it and owns cache invalidation across `['task']` and `['assignment']`                        | 008.03    | `008.04`            |
 | The task dialog shares the chat dialog's modal-inert limitation but has no minimise to route around it — it only closes                                                                              | 008.03    | `001.01` (phase 03) |
-| Journey 3 should also cover cancelling a task — the confirmation and its focus behaviour are proven only in jsdom against a mocked stream                                                            | 008.03    | `001.01` (phase 05) |
-| Several named regions inside one modal, one per assignment — judge whether stepping through them to find a transcript reads as navigable or as noise                                                 | 008.03    | `001.02` (phase 05) |
-| Assignment panels open collapsed by choice — judge whether a task's work being one keypress away reads as tidy or as hidden                                                                          | 008.03    | `001.02` (phase 05) |
+| Journey 3 should also cover cancelling a task — the confirmation and its focus behaviour are proven only in jsdom against a mocked stream                                                            | 008.03    | `001.01` (phase 06) |
+| Several named regions inside one modal, one per assignment — judge whether stepping through them to find a transcript reads as navigable or as noise                                                 | 008.03    | `001.02` (phase 06) |
+| Assignment panels open collapsed by choice — judge whether a task's work being one keypress away reads as tidy or as hidden                                                                          | 008.03    | `001.02` (phase 06) |
 | `CreateTaskDialog` is built and tested but has no trigger anywhere, deliberately — wiring it is one `useState` and one conditional mount                                                             | 008.04    | `001.01` (phase 03) |
-| Journey 3 needs a real file upload (`setInputFiles`) and the create → upload → start ordering; jsdom fakes both the `File` and the multipart request                                                 | 008.04    | `001.01` (phase 05) |
-| Journey 5 should include the already-answered race — answer from `tcp-cli` first, then submit from the UI and confirm the `409` reads correctly                                                      | 008.04    | `001.01` (phase 05) |
-| The MVP's two forms are proven only in jsdom; confirm a real screen reader announces a field error on focus, and says why focus moved after a failed submit                                          | 008.04    | `001.02` (phase 05) |
-| Every reader of a status-filtered live list must re-filter client-side — `applyEvent` patches a closed row in place and never removes it                                                             | 008.04    | `001.01` (phase 05) |
-| Judge the native file input's selected-files list — adding and removing a file changes a list that nothing announces                                                                                 | 008.04    | `001.02` (phase 05) |
+| Journey 3 needs a real file upload (`setInputFiles`) and the create → upload → start ordering; jsdom fakes both the `File` and the multipart request                                                 | 008.04    | `001.01` (phase 06) |
+| Journey 5 should include the already-answered race — answer from `tcp-cli` first, then submit from the UI and confirm the `409` reads correctly                                                      | 008.04    | `001.01` (phase 06) |
+| The MVP's two forms are proven only in jsdom; confirm a real screen reader announces a field error on focus, and says why focus moved after a failed submit                                          | 008.04    | `001.02` (phase 06) |
+| Every reader of a status-filtered live list must re-filter client-side — `applyEvent` patches a closed row in place and never removes it                                                             | 008.04    | `001.01` (phase 06) |
+| Judge the native file input's selected-files list — adding and removing a file changes a list that nothing announces                                                                                 | 008.04    | `001.02` (phase 06) |

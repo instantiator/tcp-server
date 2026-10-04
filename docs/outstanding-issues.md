@@ -153,3 +153,22 @@ The provider catalogue (`libs/tcp-shared/src/llm/provider-catalogue.ts`, 004.01)
 The bundled Zitadel only works on host port 8080: `docker-compose.yml` sets `ZITADEL_EXTERNALPORT: 8080` (the port in its issuer URLs), and `start-deployment.sh`'s `zit()` bootstrap calls `localhost:8080`. `start-deployment.sh` therefore refuses any other `EXPOSE_PORT_ZITADEL`, and the wizard says the port is fixed. The other host ports can be changed per instance in the wizard (004.01), but a second bundled-Zitadel stack still collides on 8080, so it can't run while `tcp-dev` does — the test tiers included.
 
 **Act when:** someone needs two stacks running at once. The fix is to carry one Zitadel port through `ZITADEL_EXTERNALPORT`, the bootstrap's `zit()`, the issuer URL and the port check. Until then, stop one stack before starting another (`./scripts/stop-dev.sh --project <name>`), which the port check's message says.
+
+## `POST /api/model/check` lets any signed-in user probe the network
+
+The route takes a `baseUrl` in its body and connects to it
+(`apps/backend/apps/tcp-server/src/api/api.model.controller.ts`). It names no
+company, so it carries `@NoCompanyScope` and any signed-in user can call it.
+The caller picks the address, and the response tells them whether something
+answered there. That makes it a server-side request forgery (SSRF) route: a
+user can make tcp-server reach internal services they can't reach themselves.
+
+It does no harm on a laptop, where the only network is the developer's own. No
+surface calls it yet (see
+[usage.gaps.md](<prompts/phase 04 - utility/usage.gaps.md#web-ui-vs-tui>)).
+
+**Act when:** tcp-server is deployed anywhere with a network worth probing (a
+cloud host, or a home or office LAN with other services on it), or before the
+web UI exposes a model check. The fix is `@AdminOnly()` on the route (see
+`apps/backend/apps/tcp-server/src/auth/company-scope.decorator.ts`), or an
+allow-list of destinations.

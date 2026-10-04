@@ -80,7 +80,7 @@ React Aria Components wins on the two criteria that matter: its accessibility wo
 - `003.03.00.prompt - shared ui states, notifications and accessibility primitives (draft).md`
 - `008.01.00` – `008.06.00` (all dialog prompts)
 - `phase 03 - web visualisation/003.01.00.prompt - add new FAB and role menu.md`
-- `phase 05 - web ui quality/001.02.00.prompt - accessibility audit and remediation (draft).md`
+- `phase 06 - web ui quality/001.02.00.prompt - accessibility audit and remediation (draft).md`
 
 ## Detail
 

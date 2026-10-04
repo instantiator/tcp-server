@@ -25,7 +25,7 @@ export interface ErrorStateProps {
  *
  * The visible half is unaffected: this still renders in place, beside the
  * thing that broke, which is what ADR-027's "errors, in context" row asks for.
- * 001.02 (phase 05)'s manual pass confirms the announced half reads as well.
+ * 001.02 (phase 06)'s manual pass confirms the announced half reads as well.
  */
 export const ErrorState = ({ message, channel, onRetry }: ErrorStateProps) => {
   // Keyed on the message, not on whether this effect has run: `StrictMode`

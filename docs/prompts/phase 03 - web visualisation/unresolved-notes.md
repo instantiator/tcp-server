@@ -73,7 +73,7 @@ Testable: the browser-tier deployment's compose services include an LLM.
 
 ### The canvas ignores the high-contrast theme
 
-**Raised by:** 000.01 · **Condition to revisit:** the accessibility audit (phase 05, `001.02`) runs, or the theme set changes
+**Raised by:** 000.01 · **Condition to revisit:** the accessibility audit (phase 06, `001.02`) runs, or the theme set changes
 
 Every colour in the office view — room floors, walls, furniture, avatars —
 comes from `scene/palette.ts`, a fixed set of values. None of it resolves
@@ -127,7 +127,7 @@ Testable: `grep -rn "entity: 'agent'" apps/backend --include=*.ts` shows a
 
 ### The picker's list can change while it is open
 
-**Raised by:** 000.01 · **Condition to revisit:** the accessibility audit (phase 05, `001.02`) runs
+**Raised by:** 000.01 · **Condition to revisit:** the accessibility audit (phase 06, `001.02`) runs
 
 The "Show details for…" picker lists the snapshot's roles, unfinished tasks
 and active agents live. If a task or agent arrives while the picker is open,
@@ -324,15 +324,15 @@ Testable: open and close the tray, and watch whether it slides out.
 
 | Note                                                                                                                                                | Raised by | Goes to             |
 | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------- |
-| No browser-tier coverage of agent avatars; decide whether stub-llm joins the browser deployment                                                     | 000.01    | `001.01` (phase 05) |
-| Once `TaskService.create` publishes a live event, add live task-creation journeys to `company-visualisation.spec.ts` and `company-activity.spec.ts` | 000.01    | `001.01` (phase 05) |
-| The canvas palette ignores the high-contrast theme                                                                                                  | 000.01    | `001.02` (phase 05) |
-| The picker's list can change while it is open                                                                                                       | 000.01    | `001.02` (phase 05) |
-| The office stage's focus and description, checked with a real screen reader                                                                         | 000.01    | `001.02` (phase 05) |
-| The tooltip against WCAG 1.4.13                                                                                                                     | 000.01    | `001.02` (phase 05) |
-| Furniture and doorway tooltips are pointer-only                                                                                                     | 002.01    | `001.02` (phase 05) |
-| The icon-only pan and full-screen controls, checked with voice control                                                                              | 002.01    | `001.02` (phase 05) |
-| The office view's documentation (`web-client.md`) and its ADR-027 amendment                                                                         | 000.01    | `001.03` (phase 05) |
-| The office view's floating controls: focus order and the new icon buttons, checked with voice control                                               | 005.01    | `001.02` (phase 05) |
-| The office view's thought bubbles are pointer-only; confirm the picker → tray → "Listen in" route                                                   | 005.01    | `001.02` (phase 05) |
+| No browser-tier coverage of agent avatars; decide whether stub-llm joins the browser deployment                                                     | 000.01    | `001.01` (phase 06) |
+| Once `TaskService.create` publishes a live event, add live task-creation journeys to `company-visualisation.spec.ts` and `company-activity.spec.ts` | 000.01    | `001.01` (phase 06) |
+| The canvas palette ignores the high-contrast theme                                                                                                  | 000.01    | `001.02` (phase 06) |
+| The picker's list can change while it is open                                                                                                       | 000.01    | `001.02` (phase 06) |
+| The office stage's focus and description, checked with a real screen reader                                                                         | 000.01    | `001.02` (phase 06) |
+| The tooltip against WCAG 1.4.13                                                                                                                     | 000.01    | `001.02` (phase 06) |
+| Furniture and doorway tooltips are pointer-only                                                                                                     | 002.01    | `001.02` (phase 06) |
+| The icon-only pan and full-screen controls, checked with voice control                                                                              | 002.01    | `001.02` (phase 06) |
+| The office view's documentation (`web-client.md`) and its ADR-027 amendment                                                                         | 000.01    | `001.03` (phase 06) |
+| The office view's floating controls: focus order and the new icon buttons, checked with voice control                                               | 005.01    | `001.02` (phase 06) |
+| The office view's thought bubbles are pointer-only; confirm the picker → tray → "Listen in" route                                                   | 005.01    | `001.02` (phase 06) |
 | A fuller reduced-motion design for the office view                                                                                                  | 000.01    | `000.02`            |
