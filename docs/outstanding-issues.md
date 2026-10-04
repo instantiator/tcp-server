@@ -6,6 +6,34 @@ knowingly left, so they stay visible instead of being rediscovered.
 
 Resolve an entry by deleting it, in the change that resolves it.
 
+## Recurring backups
+
+`scripts/backup.sh` only runs when someone runs it. Nothing takes backups on a
+schedule, so the newest backup is only as recent as the last manual run.
+
+**Act when:** 004.01 (recurring tasks) lands. Schedule `backup.sh` through it,
+or, if that only schedules agent work, through the host's cron. Prune old
+archives too.
+
+## Backup archives are not encrypted
+
+A backup archive holds every company's records and the LLM API keys saved in
+company and role settings, in plain form. Mode 600 is the only protection. See
+[backup-and-restore.md](backup-and-restore.md).
+
+**Act when:** an archive is first stored off the host (cloud storage, another
+machine, removable media). Encrypt before it leaves, for example with `age`
+or `openssl enc`, and keep the key apart from the archives.
+
+## Restore across a Postgres major version is untested
+
+The dumps are tested only against the `pgvector/pgvector:pg16` image they were
+taken from.
+
+**Act when:** the `pgvector/pgvector` tag in `docker-compose.yml` changes major
+version. Before merging that change, restore a backup taken on the old version
+with `run-backup-tests.sh` or by hand.
+
 ## Integration tier hangs on exit
 
 Rarely (about one run in six on 2026-10-03), the integration tier hangs after
@@ -43,6 +71,14 @@ twice with every CPU core busy (as slow as the failing runs). So it isn't a
 cold stack, the other specs running alongside, or CPU load alone. The cause is
 unknown. The traces that would show what the page displayed instead were
 overwritten by the next run: Playwright clears its output folder every time.
+
+On 2026-10-04 it failed again in `check.sh --comprehensive` (3 of 54), with a
+different symptom: the office element _was_ found, but its description said
+`Roles: 0. Task rooms: 0` where the test expected 2 and 1, and the call log
+shows the page coming back from a sign-in redirect just before. Traces and the
+full run log are in `.tmp/browser-failures/20261004-181111/` (local and
+gitignored, so `git clean -X` deletes them). Three earlier failed runs from the
+same day are beside it.
 
 **Act when:** the browser tier fails this way again. `run-browser-tests.sh`
 now keeps each failed run's traces in `.tmp/browser-failures/<timestamp>/`.

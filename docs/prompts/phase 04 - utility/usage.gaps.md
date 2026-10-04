@@ -10,7 +10,8 @@ the code as of 2026-10-04 (`main` at `7e5bf71`).
 ## Overview
 
 📝 marks a gap that a draft prompt or unplanned list already mentions. That
-work isn't implemented yet; each section links the document.
+work isn't implemented yet; each section links the document. ✅ marks a gap
+that has been implemented.
 
 | Title                                                               | Gap summary                                                                | Recommendation summary                                                             |
 | ------------------------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
@@ -38,7 +39,7 @@ work isn't implemented yet; each section links the document.
 | 📝 [Regional knowledge packs](#regional-knowledge-packs)            | No law, tax or postage knowledge, and no sense of when it goes stale       | Dated, sourced knowledge packs per region, with a review-by date                   |
 | [Cottage industry roles](#cottage-industry-roles)                   | No enquiry, order, bookkeeping or catalogue roles                          | Role templates in the cottage industry company template                            |
 | [Customer data protection](#customer-data-protection)               | Customer names and addresses would be stored with no retention rules       | Retention per table, deletion and export, and a note on data protection duties     |
-| [Backup and restore](#backup-and-restore)                           | No backup of the DB or MinIO; business records could be lost               | One backup script and one restore script, plus a guide                             |
+| ✅ [Backup and restore](#backup-and-restore)                        | No backup of the DB or MinIO; business records could be lost               | One backup script and one restore script, plus a guide                             |
 | 📝 [Single-user home install](#single-user-home-install)            | Docker plus Zitadel is a lot for a non-developer                           | A single-user mode; 002.01 (third-party services) covers part of it                |
 | 📝 [Web UI: create a company](#web-ui-create-a-company)             | Companies can only be created from the TUI or CLI                          | A create-company flow, starting from a template                                    |
 | 📝 [Web UI vs TUI](#web-ui-vs-tui)                                  | Company, role, knowledge, storage and admin features exist only in the CLI | Close the gaps in the table below, then retire the TUI                             |
@@ -416,6 +417,8 @@ template should say that the user may have data protection duties (in the UK,
 possibly an ICO fee) and point to the official source, without giving advice.
 
 ### Backup and restore
+
+> ✅ **Implemented in 000.01:** `scripts/backup.sh`, `scripts/restore.sh`, [the guide](../../backup-and-restore.md), and a round-trip test in CI. Recurring backup waits for [recurring tasks](#recurring-tasks); see [outstanding issues](../../outstanding-issues.md#recurring-backups).
 
 **Today:** no backup or restore script. Business records in Postgres and
 MinIO would be lost with the disk.

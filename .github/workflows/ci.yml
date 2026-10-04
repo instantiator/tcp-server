@@ -372,6 +372,43 @@ jobs:
       - if: always()
         run: docker compose -p tcp-api --profile auth down -v
 
+  # Its own job, so the round trip's second stack start runs alongside the
+  # other long tiers rather than after them. The scripts are bash, curl and
+  # jq only, so no Node install.
+  backup-test:
+    name: Backup round-trip test
+    needs: [build, lint, typecheck, unit-test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - uses: docker/setup-buildx-action@v4
+      # Same build as api-test. Reads the shared cache but leaves writing it to
+      # api-test, so the two parallel jobs don't race on one cache scope.
+      - name: Build service images
+        uses: docker/bake-action@v7
+        with:
+          files: docker-compose.yml
+          targets: |
+            tcp-server
+            tcp-agent
+            tcp-mcp-storage
+            tcp-mcp-memory
+            tcp-mcp-interactions
+            tcp-mcp-tasks
+            tcp-web
+          set: |
+            *.cache-from=type=gha,scope=monorepo-build
+            *.output=type=docker
+      # Tears its own stack down on exit; the step below is the backstop.
+      - name: Run backup round-trip test
+        run: ./scripts/run-backup-tests.sh --project tcp-backup --env-file .env.testing
+      - if: always()
+        run: docker compose -p tcp-backup --profile auth down -v
+
   e2e-test:
     name: E2E tests
     needs: [build, lint, typecheck, unit-test]
