@@ -6,6 +6,7 @@ import {
   DEFAULT_TCP_MASK_API_KEYS,
   DEFAULT_EMBEDDING_DIMENSION,
 } from '@tcp/shared/config/defaults';
+import { spendCapsSchema } from '../spend/spend-caps.config';
 
 /**
  * Joi validation schema for tcp-server environment variables.
@@ -86,4 +87,7 @@ export const configSchema = Joi.object({
    * embedding model in use — cosine scores don't compare across models.
    */
   RAG_THRESHOLD: Joi.number().min(0).max(1).empty('').optional(),
+
+  /** Per-provider application-level spend caps. See .env.example for the shape. */
+  SPEND_CAPS: spendCapsSchema,
 });
