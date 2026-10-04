@@ -18,6 +18,7 @@ networks, and volumes are completely independent of each other:
 | `start-deployment.sh --project tcp-dev` | `tcp-dev`                |
 | `start-deployment.sh --project tcp-api` | `tcp-api`                |
 | `run-all-tests.sh` (auto-started)       | `tcp-all`                |
+| `run-backup-tests.sh`                   | `tcp-backup`             |
 | `run-integration-tests.sh`              | `tcp-integration-<pid>`¹ |
 | `run-e2e-tests.sh`                      | `tcp-e2e-<pid>`¹         |
 
@@ -29,7 +30,7 @@ global setup, using a per-run project name and **random host ports**. They can
 therefore run alongside a dev stack (or each other) without conflict.
 
 > [!WARNING]
-> The fixed-port deployments (`tcp-dev`, `tcp-api`, `tcp-all`) all use the same
+> The fixed-port deployments (`tcp-dev`, `tcp-api`, `tcp-all`, `tcp-backup`) all use the same
 > host port bindings, so no two of them can run simultaneously on one machine.
 > The testcontainers-managed integration/e2e stacks are exempt — they use random
 > host ports.
@@ -42,6 +43,8 @@ therefore run alongside a dev stack (or each other) without conflict.
 | [start-deployment.sh](#start-deploymentsh)           | Start a named Docker Compose stack and bootstrap Zitadel             | Docker                |
 | [start-dev.sh](#start-devsh)                         | Start the local dev environment (delegates to `start-deployment.sh`) | Docker                |
 | [stop-dev.sh](#stop-devsh)                           | Stop the dev environment; optionally remove volumes                  | Docker                |
+| [backup.sh](#backupsh)                               | Back up a running stack's databases and objects into one archive     | Running stack         |
+| [restore.sh](#restoresh)                             | Replace a stack's data from a backup archive, then start it          | Docker                |
 | [tcp-cli.sh](#tcp-clish) (repo root)                 | Run the `tcp-cli` tool (builds automatically if needed)              | Built tcp-cli         |
 | [run-all-tests.sh](#run-all-testssh)                 | Build, lint, and run every test suite in sequence                    | Docker + built images |
 | [run-unit-tests.sh](#run-unit-testssh)               | Unit tests                                                           | Nothing               |
@@ -49,6 +52,7 @@ therefore run alongside a dev stack (or each other) without conflict.
 | [run-smoke-tests.sh](#run-smoke-testssh)             | Smoke tests — requires a running deployment                          | Running stack         |
 | [run-api-tests.sh](#run-api-testssh)                 | API tests — requires a running deployment                            | Running stack         |
 | [run-e2e-tests.sh](#run-e2e-testssh)                 | E2E tests — HTTP API workflows                                       | Docker                |
+| [run-backup-tests.sh](#run-backup-testssh)           | Backup round trip — backup, destroy, restore, compare                | Docker + built images |
 | [run-browser-tests.sh](#run-browser-testssh)         | Browser tests — requires a running deployment serving the web app    | Docker                |
 | [manual-verify.sh](#manual-verifysh)                 | Interactive scenario walkthrough with human checks                   | Running stack         |
 | [run-stub-llm.sh](#run-stub-llmsh)                   | Run `tcp-stub-llm` from source, for manual testing                   | Node                  |
@@ -261,6 +265,40 @@ and CI uploads them as the `integration-hang-diagnostics` artifact. See
 [outstanding-issues.md](outstanding-issues.md#integration-tier-hangs-on-exit).
 
 See also: [docs/testing.md](testing.md).
+
+## backup.sh
+
+Writes a running stack's Postgres databases (`tcp`, and `zitadel` when present)
+and every MinIO bucket to `backups/<project>-<UTC time>.tar.gz`. `--include-pat`
+adds Zitadel's bootstrap PAT. See [backup-and-restore.md](backup-and-restore.md).
+
+```bash
+./scripts/backup.sh --project tcp-dev --env-file .env.dev
+./scripts/backup.sh --project tcp-dev --env-file .env.dev --output /mnt/backups --include-pat
+```
+
+## restore.sh
+
+Replaces a project's databases, objects and job queues with an archive's
+contents, then runs `start-deployment.sh`. Asks for the project name first
+unless `--yes`. Refuses an archive newer than the checkout. See
+[backup-and-restore.md](backup-and-restore.md).
+
+```bash
+./scripts/restore.sh --project tcp-dev --env-file .env.dev \
+  --archive backups/tcp-dev-20261004T161924Z.tar.gz
+```
+
+## run-backup-tests.sh
+
+Starts its own `tcp-backup` stack, seeds a company and an object, takes a
+backup, destroys the stack with `down -v`, restores it and checks that every
+table's row count, every object, sign-in and the seeded data match. Also checks
+that a backup newer than the checkout is refused. Tears the stack down on exit.
+
+```bash
+./scripts/run-backup-tests.sh --project tcp-backup --env-file .env.testing
+```
 
 ## run-smoke-tests.sh
 
@@ -496,7 +534,7 @@ See also: [docs/db-migrations.md](db-migrations.md).
 ## run-all-tests.sh
 
 Runs the full verification pipeline in sequence: typecheck → build → lint →
-unit → integration → e2e → api → smoke. Each step is delegated to its own
+unit → integration → e2e → api → smoke → browser → backup. Each step is delegated to its own
 script; a failure at any step aborts the remainder.
 
 If tcp-server is already reachable at `http://localhost:3000` the running

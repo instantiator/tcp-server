@@ -6,7 +6,7 @@ usage() {
 Usage: $(basename "$0") [-h|--help]
 
 Build the project, lint, and run every test suite in order:
-  unit → integration → e2e → api → smoke → browser
+  unit → integration → e2e → api → smoke → browser → backup
 
 Unit, integration, and e2e suites manage their own Docker infrastructure.
 The api and smoke suites require the full TCP stack — this script starts it
@@ -208,6 +208,18 @@ EXPOSE_PORT_WEB="$(grep -E '^EXPOSE_PORT_WEB=' "$REPO_ROOT/.env.testing" | tail 
 # this deployment was bootstrapped with rather than a stale .env.dev.
 "$SCRIPTS/run-browser-tests.sh" --base-url "https://localhost:${EXPOSE_PORT_WEB:-5173}" \
   --env-file "$REPO_ROOT/.env.testing"
+echo
+
+# Tear the deployment down before the backup tier starts its own project —
+# both use .env.testing's ports (EXPOSE_PORT_API etc.), so the two stacks
+# cannot run at once.
+step "Tearing down deployment"
+docker compose -p "$DEPLOYMENT_PROJECT" --profile auth down -v
+DEPLOYMENT_STARTED=false
+echo
+
+step "Backup tests"
+"$SCRIPTS/run-backup-tests.sh" --project tcp-backup --env-file "$REPO_ROOT/.env.testing"
 echo
 
 record_step
