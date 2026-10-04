@@ -4,12 +4,14 @@ import {
   Conversation,
   TcpAgent,
   TcpAssignment,
+  TcpNotification,
   TcpRole,
   WireEvent,
 } from '@tcp/shared';
 import { randomUUID } from 'crypto';
 import { IsNull, Repository } from 'typeorm';
 import { DbService } from '../db/db.service';
+import { NotificationService } from '../notifications/notification.service';
 import { CompanyPrimingService } from './company-priming.service';
 import { ConversationService } from './conversation.service';
 import { TaskService } from './task.service';
@@ -56,6 +58,14 @@ const enquiry = {
   createdAt: new Date('2026-01-01T00:00:00.000Z'),
 } as Conversation;
 
+const notice = {
+  id: randomUUID(),
+  severity: 'warning',
+  kind: 'spend_threshold',
+  message: 'anthropic is at 80% of its monthly cap',
+  createdAt: new Date('2026-01-01T00:00:00.000Z'),
+} as TcpNotification;
+
 /** The `payload.entity` of each primed event, in order. */
 const entities = (events: WireEvent[]): unknown[] =>
   events.map((e) => (e.type === 'audit' ? e.event.payload.entity : e.type));
@@ -65,6 +75,7 @@ describe('CompanyPrimingService', () => {
   let db: jest.Mocked<Pick<DbService, 'listAgents' | 'listRoles'>>;
   let assignmentRepo: jest.Mocked<Pick<Repository<TcpAssignment>, 'find'>>;
   let conversations: jest.Mocked<Pick<ConversationService, 'list'>>;
+  let notifications: jest.Mocked<Pick<NotificationService, 'list'>>;
   let service: CompanyPrimingService;
 
   beforeEach(() => {
@@ -75,11 +86,13 @@ describe('CompanyPrimingService', () => {
     };
     assignmentRepo = { find: jest.fn().mockResolvedValue([]) };
     conversations = { list: jest.fn().mockResolvedValue([]) };
+    notifications = { list: jest.fn().mockResolvedValue([]) };
     service = new CompanyPrimingService(
       tasks as unknown as TaskService,
       db as unknown as DbService,
       assignmentRepo as unknown as Repository<TcpAssignment>,
       conversations as unknown as ConversationService,
+      notifications as unknown as NotificationService,
     );
   });
 
@@ -99,17 +112,30 @@ describe('CompanyPrimingService', () => {
       ]);
       assignmentRepo.find.mockResolvedValue([consultation]);
       conversations.list.mockResolvedValue([enquiry]);
+      notifications.list.mockResolvedValue([notice]);
       events = await service.prime(companyId);
     });
 
-    it('primes all five groups in list order', () => {
+    it('primes all six groups in list order', () => {
       expect(entities(events)).toEqual([
         'company',
         'task',
         'agent',
         'assignment',
         'enquiry',
+        'notification',
       ]);
+    });
+
+    it('replays only active notifications, with the row as their summary', () => {
+      expect(notifications.list).toHaveBeenCalledWith();
+      const replayed = events.at(-1);
+      expect(replayed?.type === 'audit' && replayed.event.payload).toEqual({
+        entity: 'notification',
+        newStatus: 'active',
+        reason: 'replay',
+        summary: notice,
+      });
     });
 
     it('queries only consultee orphan assignments', () => {
@@ -179,6 +205,7 @@ describe('CompanyPrimingService', () => {
         'Analyst',
         'Analyst',
         'Analyst',
+        'system',
       ]);
     });
   });

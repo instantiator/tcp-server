@@ -28,6 +28,7 @@ import { AuthModule } from './auth/auth.module';
 import { configSchema } from './config/config.schema';
 import { HealthModule } from './health/health.module';
 import { MIGRATIONS } from './migrations-list';
+import { NotificationModule } from './notifications/notification.module';
 import { EmbeddingDimensionCheck } from './embedding-dimension-check';
 import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
 
@@ -76,6 +77,7 @@ import { MaskSecretsInterceptor } from './utils/mask-secrets.interceptor';
     AuditModule,
     HealthModule,
     AuthModule,
+    NotificationModule,
   ],
   controllers: [AuthTokenController],
   providers: [

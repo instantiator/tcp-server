@@ -17,6 +17,7 @@ import { AuditModule } from '../audit/audit.module';
 import { AuthModule } from '../auth/auth.module';
 import { DbModule } from '../db/db.module';
 import { McpClientModule } from '../mcp/mcp-client.module';
+import { NotificationModule } from '../notifications/notification.module';
 import { ModelCheckModule } from '../model-check/model-check.module';
 import { ContextModule } from '../context/context.module';
 import { RagModule } from '../rag/rag.module';
@@ -71,6 +72,8 @@ import { TaskService } from './task.service';
     DbModule,
     McpClientModule,
     ModelCheckModule,
+    // Company priming replays the active notifications.
+    NotificationModule,
     ContextModule,
     RagModule,
     StorageModule,
