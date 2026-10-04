@@ -108,9 +108,9 @@ These replace the `TODO(000.01)` handlers the old placeholder visualisation had 
 
 The web client's main bundle is about 2 MB, and Phaser is imported statically through `CompanyPage`, so every page pays for it even when the office view is never opened. Phaser should load lazily, only when the visualisation tab is shown.
 
-### Office view: drag-to-pan and zoom
+### Office view: zoom
 
-Panning is toolbar buttons and arrow keys only. Dragging the canvas to pan, and zooming in and out, would make a large office easier to navigate.
+The office view has no way to zoom in or out. Panning works (toolbar buttons, arrow keys, and dragging the canvas since phase 03's 005.01), but zooming would make a large office easier to navigate.
 
 ### Office view: rooms that outgrow their slot
 
