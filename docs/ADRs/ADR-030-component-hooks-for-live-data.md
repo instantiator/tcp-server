@@ -70,8 +70,8 @@ Three parts:
   than no scheme, because it silently sends you back to reading the server.
 - **A hook that becomes live later has to be renamed, and so does every
   caller.** That is the point of the prefix — the rename is the signal. It is
-  cheap while the callers are few and gets dearer; `001.03` rechecks the
-  boundary before phase 02 closes.
+  cheap while the callers are few and gets dearer; phase 06's `001.04` rechecks
+  the boundary.
 - The boundary is a lint rule, so it fails at the keyboard rather than at
   review. It also means adding a route now takes two edits, not one.
 - Detail routes are flattened, not wrapped: [see below](#detail-routes-are-flattened-not-wrapped).
@@ -98,7 +98,7 @@ Three parts:
 ## Prompts to update when this is decided
 
 - `008.02`, `008.03`, `008.04` — the dialogs, which read single entities
-- `001.03` — documentation close-out, which rechecks the prefix
+- `001.04` (phase 06) — documentation close-out, which rechecks the prefix
 
 ## Detail
 

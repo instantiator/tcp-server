@@ -108,10 +108,10 @@ These replace the `TODO(000.01)` handlers the old placeholder visualisation had 
 
 The web client's main bundle is about 2 MB, and Phaser is imported statically through `CompanyPage`, so every page pays for it even when the office view is never opened. Phaser should load lazily, only when the visualisation tab is shown.
 
-### Office view: drag-to-pan and zoom
+### Office view: zoom
 
-Panning is toolbar buttons and arrow keys only. Dragging the canvas to pan, and zooming in and out, would make a large office easier to navigate.
+The office view has no way to zoom in or out. Panning works (toolbar buttons, arrow keys, and dragging the canvas since phase 03's 005.01), but zooming would make a large office easier to navigate.
 
 ### Office view: rooms that outgrow their slot
 
-Every room occupies one fixed-size slot (`ROOM_WIDTH = 9`, `ROOM_HEIGHT = 7`). A room with more going on than the slot can furnish — more roles than the rec room's spots, more concurrent avatars than a task room's desks — has no way to grow. See phase 03's [unresolved notes](<phase 03 - web visualisation/unresolved-notes.md>) for the two ceilings this hits today.
+Every room occupies one fixed-size slot (`ROOM_WIDTH = 9`, `ROOM_HEIGHT = 7`). A room with more going on than the slot can furnish — more roles than the rec room's spots, more concurrent avatars than a task room's desks — has no way to grow. Today that means two ceilings, both marked `ponytail:` in `world/furnishing.ts`: the rec room has 28 role spots (a 29th role isn't placed at all), and a task room has at most 8 desks (a 9th avatar stands by the whiteboard).

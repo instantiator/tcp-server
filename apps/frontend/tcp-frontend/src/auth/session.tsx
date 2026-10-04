@@ -52,7 +52,7 @@ export const SessionProvider = ({
  * which is the only way the latch reopens; and the provider's return leg always
  * lands on `/callback`, which never redirects on its own — so the two cannot
  * cycle. A counter goes in if a provider is ever seen returning a user with no
- * `sub`, or an already-expired one. See `unresolved-notes.md`.
+ * `sub`, or an already-expired one. See `docs/prompts/unresolved-notes.md`.
  *
  * Nothing here reads the attempted location. It travels in the redirect's
  * `state` and comes back attacker-influenced; {@link safeRedirectTarget} is the

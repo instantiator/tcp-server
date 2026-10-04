@@ -261,4 +261,4 @@ runs didn't happen to hit, not races that were ruled out. Reworking the
 agent-stream replay or the priming order to close them stayed out of scope
 rather than being taken on speculatively; both are tracked as unresolved
 notes with a testable recheck condition (phase 03's
-[unresolved notes](<../prompts/phase 03 - web visualisation/unresolved-notes.md>)).
+[unresolved notes](../prompts/unresolved-notes.md)).

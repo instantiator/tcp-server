@@ -401,7 +401,7 @@ through a real Zitadel login instead ([testing.md](testing.md#signing-in)).
 **The constraint on future work:** when 004.03 makes the session hold a
 bearer token, a session built from a query string must not be able to mint
 one. Today it sets `AuthSession`'s `fallback` and nothing else, which is why a
-real user always displaces it — that ordering is the thing to preserve. [prompts/phase 05 - web ui quality/001.05.00.prompt - production build flag and development feature flags (draft).md](<prompts/phase 05 - web ui quality/001.05.00.prompt - production build flag and development feature flags (draft).md>)
+real user always displaces it — that ordering is the thing to preserve. [prompts/phase 06 - web ui quality/001.05.00.prompt - production build flag and development feature flags (draft).md](<prompts/phase 06 - web ui quality/001.05.00.prompt - production build flag and development feature flags (draft).md>)
 owns the general production-build-flag rule this capability is the first case
 of.
 
@@ -1033,7 +1033,7 @@ worker job — only roles, task rooms and every interaction are proven against
 real Phaser; the bookshelf tray's browser spec covers its empty state
 instead (002.02 stage 11), which still proves the tray reads its live
 `storageConsoleUrl`/`storageBucket` config. See phase 03's
-[unresolved notes](<prompts/phase 03 - web visualisation/unresolved-notes.md>).
+[unresolved notes](prompts/unresolved-notes.md).
 
 ## Tests
 

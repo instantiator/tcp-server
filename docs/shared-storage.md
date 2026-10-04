@@ -50,7 +50,7 @@ is **not** MinIO's classic console format, which base64-encodes the prefix
 instead. A base64 prefix was tried against the same container and left the
 browser on the bucket root, reading the encoded string as a literal
 (non-existent) folder name; the percent-encoded form round-trips correctly.
-See the [Silo link format drift](<prompts/phase 03 - web visualisation/unresolved-notes.md#silo-link-format-drift>)
+See the [Silo link format drift](prompts/unresolved-notes.md#silos-console-link-format-was-confirmed-against-one-image-tag)
 unresolved note — this is confirmed against one image tag, not guaranteed
 across every future Silo release.
 
