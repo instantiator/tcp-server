@@ -72,6 +72,14 @@ cold stack, the other specs running alongside, or CPU load alone. The cause is
 unknown. The traces that would show what the page displayed instead were
 overwritten by the next run: Playwright clears its output folder every time.
 
+On 2026-10-04 it failed again in `check.sh --comprehensive` (3 of 54), with a
+different symptom: the office element _was_ found, but its description said
+`Roles: 0. Task rooms: 0` where the test expected 2 and 1, and the call log
+shows the page coming back from a sign-in redirect just before. Traces and the
+full run log are in `.tmp/browser-failures/20261004-181111/` (local and
+gitignored, so `git clean -X` deletes them). Three earlier failed runs from the
+same day are beside it.
+
 **Act when:** the browser tier fails this way again. `run-browser-tests.sh`
 now keeps each failed run's traces in `.tmp/browser-failures/<timestamp>/`.
 Open the failing test's trace with `npx playwright show-trace`. It will show whether the page was
