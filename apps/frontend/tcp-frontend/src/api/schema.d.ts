@@ -176,6 +176,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/company/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume a company's paused tasks */
+        post: operations["CompanyController_resumeCompany"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/company/{id}/spend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A company's spend totals, per-task usage and recent series */
+        get: operations["CompanyController_getCompanySpend"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/company/{companyId}/users": {
         parameters: {
             query?: never;
@@ -886,6 +920,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/spend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Application-wide spend totals and cap progress */
+        get: operations["SpendController_overview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/spend/caps/{provider}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Lift a provider's spend cap */
+        post: operations["SpendController_dismiss"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/spend/caps/{provider}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore a provider's spend cap */
+        post: operations["SpendController_restore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/system/shutdown": {
         parameters: {
             query?: never;
@@ -969,6 +1054,23 @@ export interface paths {
         put?: never;
         /** Start a task */
         post: operations["TaskController_startTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/task/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume a paused task */
+        post: operations["TaskController_resumeTask"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1214,6 +1316,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List notifications */
+        get: operations["NotificationController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notifications/{id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dismiss a notification */
+        post: operations["NotificationController_dismiss"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -1390,6 +1526,30 @@ export interface components {
             llmConfig?: components["schemas"]["LlmConfigDto"];
             rolePrompt?: string;
         };
+        ResumeResultDto: {
+            resumed: number;
+        };
+        ProviderUsageDto: {
+            provider: string;
+            inputTokens: number;
+            outputTokens: number;
+        };
+        TaskUsageDto: {
+            taskId: string;
+            inputTokens: number;
+            outputTokens: number;
+        };
+        UsageBucketDto: {
+            bucketStart: string;
+            inputTokens: number;
+            outputTokens: number;
+        };
+        CompanySpendDto: {
+            trackingSince: string | null;
+            providers: components["schemas"]["ProviderUsageDto"][];
+            tasks: components["schemas"]["TaskUsageDto"][];
+            series: components["schemas"]["UsageBucketDto"][];
+        };
         CompanyUserResponseDto: {
             id: string;
             companyId: string;
@@ -1536,6 +1696,7 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+            spendCapExempt: boolean;
         };
         AgentAssignmentResponseDto: {
             task: components["schemas"]["TaskResponseDto"] | null;
@@ -1751,6 +1912,47 @@ export interface components {
             validations: components["schemas"]["ValidationEntryDto"][];
             query: components["schemas"]["ValidateSharedDocumentQueryDto"];
         };
+        CapLimitReportDto: {
+            windowStart: string | null;
+            resetsAt: string | null;
+            tokens: number;
+            per: string;
+            used: number;
+            percent: number;
+        };
+        CapReportDto: {
+            /** @enum {string} */
+            action: "pause" | "finish-agents" | "finish-tasks";
+            /** @enum {string} */
+            dismissal: "none" | "until-reset" | "indefinite";
+            reachedUntil: string | null;
+            limits: components["schemas"]["CapLimitReportDto"][];
+            provider: string;
+            holding: boolean;
+        };
+        SpendOverviewDto: {
+            trackingSince: string | null;
+            providers: components["schemas"]["ProviderUsageDto"][];
+            caps: components["schemas"]["CapReportDto"][];
+        };
+        DismissCapDto: {
+            /** @enum {string} */
+            until: "reset" | "indefinite";
+        };
+        SpendCapState: {
+            provider: string;
+            windowStarts: {
+                [key: string]: string;
+            };
+            /** Format: date-time */
+            reachedUntil?: string;
+            /** @enum {string} */
+            action?: "pause" | "finish-agents" | "finish-tasks";
+            /** @enum {string} */
+            dismissal: "none" | "until-reset" | "indefinite";
+            /** Format: date-time */
+            updatedAt: string;
+        };
         ShutdownStatusResponseDto: {
             /** @enum {string} */
             state: "idle" | "draining" | "quiesced";
@@ -1804,6 +2006,7 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+            spendCapExempt: boolean;
             assignments: components["schemas"]["AssignmentResponseDto"][];
         };
         AuditEventResponseDto: {
@@ -1855,7 +2058,7 @@ export interface components {
             /** Format: date-time */
             pausedAt?: string;
             /** @enum {string|null} */
-            pauseReason?: "user_input" | "consultation" | "shutdown" | null;
+            pauseReason?: "user_input" | "consultation" | "shutdown" | "spend_cap" | null;
         };
         StartChatDto: {
             /** Format: uuid */
@@ -1898,6 +2101,22 @@ export interface components {
             payload: {
                 [key: string]: unknown;
             };
+        };
+        TcpNotification: {
+            id: string;
+            /** @enum {string} */
+            severity: "info" | "error" | "warning";
+            /** @enum {string} */
+            kind: "spend_threshold" | "spend_reached" | "spend_reset" | "spend_untracked";
+            message: string;
+            params?: {
+                [key: string]: unknown;
+            };
+            dedupeKey?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            dismissedAt?: string;
         };
     };
     responses: never;
@@ -2239,6 +2458,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    CompanyController_resumeCompany: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumeResultDto"];
+                };
+            };
+        };
+    };
+    CompanyController_getCompanySpend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanySpendDto"];
                 };
             };
         };
@@ -3410,6 +3671,71 @@ export interface operations {
             };
         };
     };
+    SpendController_overview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpendOverviewDto"];
+                };
+            };
+        };
+    };
+    SpendController_dismiss: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DismissCapDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpendCapState"];
+                };
+            };
+        };
+    };
+    SpendController_restore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpendCapState"];
+                };
+            };
+        };
+    };
     SystemController_getShutdown: {
         parameters: {
             query?: never;
@@ -3604,6 +3930,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskResponseDto"];
+                };
+            };
+        };
+    };
+    TaskController_resumeTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumeResultDto"];
                 };
             };
         };
@@ -3931,6 +4278,49 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    NotificationController_list: {
+        parameters: {
+            query?: {
+                /** @description Also return dismissed notifications. Bare `?includeDismissed` counts as true. */
+                includeDismissed?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TcpNotification"][];
+                };
+            };
+        };
+    };
+    NotificationController_dismiss: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TcpNotification"];
+                };
             };
         };
     };

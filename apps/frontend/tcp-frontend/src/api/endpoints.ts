@@ -359,3 +359,57 @@ export const useReplyToEnquiryMutation = (slug: string) =>
         }),
       ),
   });
+
+/** Application-wide usage totals and every configured provider's cap progress. */
+export const useSpendOverview = () =>
+  useQuery({
+    queryKey: queryKeys.spendOverview(),
+    queryFn: () => unwrap(api.GET('/api/spend')),
+  });
+
+/** One company's usage totals, per-task breakdown and recent series. */
+export const useCompanySpend = (companyId: string) =>
+  useQuery({
+    queryKey: queryKeys.companySpend(companyId),
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/company/{id}/spend', {
+          params: { path: { id: companyId } },
+        }),
+      ),
+  });
+
+/** Active notifications, newest first. */
+export const useNotifications = () =>
+  useQuery({
+    queryKey: queryKeys.notifications(),
+    queryFn: () => unwrap(api.GET('/api/notifications')),
+  });
+
+/** Dismisses a notification for every user. */
+export const useDismissNotificationMutation = () =>
+  useMutation({
+    mutationFn: (id: string) =>
+      unwrap(
+        api.POST('/api/notifications/{id}/dismiss', {
+          params: { path: { id } },
+        }),
+      ),
+  });
+
+/**
+ * Resumes a company's agents paused by a spend cap or a shutdown, and exempts
+ * their tasks from spend caps until they end.
+ *
+ * `unwrap`, not `expectAccepted` — the route answers `202` but with the
+ * resume count as its body, the same shape as cancel/start task above.
+ */
+export const useResumeCompanyMutation = (companyId: string) =>
+  useMutation({
+    mutationFn: () =>
+      unwrap(
+        api.POST('/api/company/{id}/resume', {
+          params: { path: { id: companyId } },
+        }),
+      ),
+  });

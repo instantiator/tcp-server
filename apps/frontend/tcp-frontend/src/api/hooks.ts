@@ -32,10 +32,13 @@ import {
 import type {
   AgentDTO,
   AssignmentDTO,
+  CompanySpendDTO,
   ConversationDetailDTO,
   ConversationDTO,
   KnowledgeDocumentDTO,
+  NotificationDTO,
   RoleDTO,
+  SpendOverviewDTO,
   TaskDetailDTO,
   TaskDTO,
 } from './dtos';
@@ -49,12 +52,17 @@ import {
   useCompany,
   useCompanyKnowledge,
   useCompanyRoles,
+  useCompanySpend,
   useCompleteChatMutation,
   useConversation,
   useConversations,
   useCreateTaskMutation,
+  useDismissNotificationMutation,
+  useNotifications,
   useReplyToEnquiryMutation,
+  useResumeCompanyMutation,
   useRole,
+  useSpendOverview,
   useStartChatMutation,
   useStartTaskMutation,
   useTask,
@@ -366,6 +374,66 @@ export const useLiveEnquiryState = (
 /** Not live: nothing streams a role. */
 export const useRoleState = (roleId: string): UseQueryResult<RoleDTO, Error> =>
   useRole(roleId);
+
+/**
+ * Application-wide usage totals and every provider's cap progress.
+ *
+ * A usage write patches no cache row — it carries no `entity`-matching id —
+ * so a `spend` event always invalidates (`applyEvent` in `src/events/cache.ts`).
+ * That keeps the breadcrumb bars current on any page holding the company
+ * event stream open, not just the one that caused the usage.
+ */
+export const useLiveSpendOverview = (): UseQueryResult<
+  SpendOverviewDTO,
+  Error
+> => useSpendOverview();
+
+/** One company's usage totals, per-task breakdown and recent series. */
+export const useLiveCompanySpend = (
+  companyId: string,
+): UseQueryResult<CompanySpendDTO, Error> => useCompanySpend(companyId);
+
+/**
+ * Active notifications, newest first.
+ *
+ * Server-filtered to active rows (`includeDismissed` defaults to false), and
+ * every caller re-filters on `dismissedAt` again, client-side — the same
+ * shape as {@link useLiveCompanyEnquiriesList}'s callers, and for the same
+ * reason: a dismissal arrives as a live patch to the row in place, not as its
+ * removal from the array, so the query's own filter only describes what was
+ * true when it was fetched.
+ */
+export const useLiveNotifications = (): UseQueryResult<
+  NotificationDTO[],
+  Error
+> => useNotifications();
+
+/**
+ * Dismisses a notification for every signed-in user, and makes every list
+ * holding it agree without waiting on the live event the server also sends —
+ * the same reasoning as {@link useReplyToEnquiry}'s invalidation.
+ */
+export const useDismissNotification = () => {
+  const queryClient = useQueryClient();
+  const dismiss = useDismissNotificationMutation();
+  return useMutation({
+    mutationFn: (id: string) => dismiss.mutateAsync(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['notification'] });
+    },
+  });
+};
+
+/**
+ * Resumes a company's agents paused by a spend cap or a shutdown, and exempts
+ * their tasks from spend caps until they end.
+ */
+export const useResumeCompany = (companyId: string) => {
+  const resume = useResumeCompanyMutation(companyId);
+  return useMutation({
+    mutationFn: () => resume.mutateAsync(),
+  });
+};
 
 /** The two ids an agent can be reached through. */
 export interface AgentLookup {

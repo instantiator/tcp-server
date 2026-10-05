@@ -36,6 +36,7 @@ function task(overrides: Partial<TaskDTO> = {}): TaskDTO {
     expected: [],
     completed: null,
     failureReason: null,
+    spendCapExempt: false,
     createdAt: NOW,
     updatedAt: NOW,
     ...overrides,

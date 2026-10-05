@@ -37,6 +37,8 @@ export const EVENT_ENTITIES = [
   'task',
   'assignment',
   'enquiry',
+  'notification',
+  'spend',
 ] as const;
 
 /**
@@ -142,4 +144,12 @@ export const queryKeys = {
     ['knowledge', 'list', { scope: 'company', companyId }] as const,
   companyKnowledgeStatus: (companyId: string) =>
     ['knowledge', 'status', { scope: 'company', companyId }] as const,
+
+  /** Active notifications. A dismissal patches the row in place, so there is no separate detail key. */
+  notifications: () => ['notification', 'list'] as const,
+
+  /** Application-wide usage totals and every provider's cap progress. */
+  spendOverview: () => ['spend', 'status'] as const,
+  /** One company's usage totals, per-task breakdown and recent series. */
+  companySpend: (companyId: string) => ['spend', 'detail', companyId] as const,
 } as const;

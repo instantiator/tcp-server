@@ -26,6 +26,9 @@ const CREATE_ROUTE = /\/api\/task$/;
 const START_ROUTE = new RegExp(`/api/task/${TASK_ID}/start`);
 const MATERIALS_ROUTE = new RegExp(`/api/task/${TASK_ID}/materials`);
 const ROLES_ROUTE = new RegExp(`/api/company/${COMPANY_ID}/roles`);
+// 000.02: the dialog's "start now" default reads the spend overview.
+const SPEND_ROUTE = /\/api\/spend(\?|$)/;
+const UNCAPPED_SPEND = { trackingSince: null, providers: [], caps: [] };
 
 const roleFixture = (id: string, name: string): Role => ({
   id,
@@ -52,6 +55,7 @@ const taskFixture = (overrides: Partial<Task> = {}): Task => ({
   expected: [],
   completed: null,
   failureReason: null,
+  spendCapExempt: false,
   createdAt: NOW,
   updatedAt: NOW,
   ...overrides,
@@ -62,6 +66,7 @@ interface CreateRoutes {
   readonly create?: RouteResponse;
   readonly start?: RouteResponse;
   readonly materials?: RouteResponse;
+  readonly spend?: RouteResponse;
 }
 
 /** Answers every route this dialog can reach, each overridable. */
@@ -74,6 +79,7 @@ const respondCreateTask = (overrides: CreateRoutes = {}): void => {
     [MATERIALS_ROUTE, overrides.materials ?? { status: 200, body: undefined }],
     [CREATE_ROUTE, overrides.create ?? { body: taskFixture() }],
     [ROLES_ROUTE, overrides.roles ?? { body: [ROLE_A, ROLE_B] }],
+    [SPEND_ROUTE, overrides.spend ?? { body: UNCAPPED_SPEND }],
   ]);
 };
 
@@ -509,6 +515,83 @@ describe('CreateTaskDialog', () => {
       expect(screen.queryByRole('dialog')).toBeNull();
     });
     expect(requestCount(CREATE_ROUTE)).toBe(1);
+  });
+
+  describe('the capped-aware "start now" default', () => {
+    const CAPPED_SPEND = {
+      trackingSince: NOW,
+      providers: [],
+      caps: [
+        {
+          provider: 'openai',
+          action: 'pause' as const,
+          dismissal: 'none' as const,
+          reachedUntil: NOW,
+          holding: true,
+          limits: [
+            {
+              windowStart: NOW,
+              resetsAt: NOW,
+              tokens: 1000,
+              per: 'day',
+              used: 1000,
+              percent: 100,
+            },
+          ],
+        },
+      ],
+    };
+
+    it('starts unchecked, with a hint, once a cap is reported as holding', async () => {
+      respondCreateTask({ spend: { body: CAPPED_SPEND } });
+      const user = userEvent.setup();
+      renderCreateTaskDialog();
+      await openDialog(user);
+
+      const checkbox = await screen.findByRole('checkbox', {
+        name: t('task.create.start.label'),
+      });
+      await waitFor(() => {
+        expect(checkbox).not.toBeChecked();
+      });
+      expect(
+        screen.getByText(t('task.create.start.cappedHint')),
+      ).toBeInTheDocument();
+      expect(checkbox).toHaveAccessibleDescription(
+        t('task.create.start.cappedHint'),
+      );
+    });
+
+    it('stays checked, with no hint, while nothing is capped', async () => {
+      respondCreateTask();
+      const user = userEvent.setup();
+      renderCreateTaskDialog();
+      await openDialog(user);
+
+      expect(
+        screen.getByRole('checkbox', { name: t('task.create.start.label') }),
+      ).toBeChecked();
+      expect(
+        screen.queryByText(t('task.create.start.cappedHint')),
+      ).not.toBeInTheDocument();
+    });
+
+    it('keeps a user toggle even after the capped default would otherwise apply', async () => {
+      respondCreateTask({ spend: { body: CAPPED_SPEND } });
+      const user = userEvent.setup();
+      renderCreateTaskDialog();
+      await openDialog(user);
+
+      const checkbox = await screen.findByRole('checkbox', {
+        name: t('task.create.start.label'),
+      });
+      await waitFor(() => {
+        expect(checkbox).not.toBeChecked();
+      });
+
+      await user.click(checkbox);
+      expect(checkbox).toBeChecked();
+    });
   });
 
   describe('accessibility', () => {

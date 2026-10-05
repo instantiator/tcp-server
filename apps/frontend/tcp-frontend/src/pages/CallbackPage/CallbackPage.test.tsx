@@ -56,9 +56,21 @@ describe('CallbackPage', () => {
     installFetchMock();
     fetchMock.mockImplementation((input) => {
       const url = input instanceof Request ? input.url : String(input);
+      // The company page this journey lands on (000.02) also reads the spend
+      // endpoints, which answer with an object rather than a list — the
+      // fallback below would otherwise hand them an empty array and crash it.
       const body = url.endsWith('/api/company/acme')
         ? JSON.stringify({ id: 'acme', slug: 'acme', name: 'Acme Corporation' })
-        : '[]';
+        : /\/api\/spend(\?|$)/.test(url)
+          ? JSON.stringify({ trackingSince: null, providers: [], caps: [] })
+          : /\/api\/company\/[^/]+\/spend$/.test(url)
+            ? JSON.stringify({
+                trackingSince: null,
+                providers: [],
+                tasks: [],
+                series: [],
+              })
+            : '[]';
       return Promise.resolve(
         new Response(body, {
           headers: { 'Content-Type': 'application/json' },

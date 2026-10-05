@@ -26,6 +26,8 @@ it('EVENT_ENTITIES lists exactly the payload.entity values tcp-server publishes'
     'task',
     'assignment',
     'enquiry',
+    'notification',
+    'spend',
   ]);
 });
 
@@ -75,6 +77,9 @@ const everyKey: Record<keyof typeof queryKeys, readonly unknown[]> = {
   roleKnowledgeSearch: queryKeys.roleKnowledgeSearch('role-1', 'a question'),
   companyKnowledge: queryKeys.companyKnowledge('company-1'),
   companyKnowledgeStatus: queryKeys.companyKnowledgeStatus('company-1'),
+  notifications: queryKeys.notifications(),
+  spendOverview: queryKeys.spendOverview(),
+  companySpend: queryKeys.companySpend('company-1'),
 };
 
 describe('every builder in queryKeys', () => {

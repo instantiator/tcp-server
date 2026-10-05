@@ -3,7 +3,11 @@ import { useId, useRef, useState } from 'react';
 import { Button, CheckboxButton, CheckboxField } from 'react-aria-components';
 import { ANNOUNCE_IMMEDIATE_MS, announce } from '../../announce/announcer';
 import { ApiError } from '../../api/errors';
-import { useCompanyRolesList, useCreateTask } from '../../api/hooks';
+import {
+  useCompanyRolesList,
+  useCreateTask,
+  useLiveSpendOverview,
+} from '../../api/hooks';
 import { t, type StringKey } from '../../strings';
 import { Dialog } from '../Dialog/Dialog';
 import { ErrorState } from '../ErrorState/ErrorState';
@@ -101,8 +105,18 @@ export const CreateTaskDialog = ({
   const [files, setFiles] = useState<readonly File[]>([]);
   const materialsInputId = useId();
   const plannerRoleInputId = useId();
+  const startHintId = useId();
 
-  const [start, setStart] = useState(true);
+  // `null` until the user touches the checkbox — only then does their choice
+  // override the capped-aware default. A plain `useState(true)` would have no
+  // way to tell "the user unchecked it" from "nobody has decided yet", which
+  // is exactly the distinction 000.02 needs: the default must track the cap
+  // across a live refetch, but a deliberate toggle must stick.
+  const [startChoice, setStartChoice] = useState<boolean | null>(null);
+  const capped = (useLiveSpendOverview().data?.caps ?? []).some(
+    (cap) => cap.holding,
+  );
+  const start = startChoice ?? !capped;
 
   const addExpectedRow = (): void => {
     const key = nextRowKey.current;
@@ -422,11 +436,17 @@ export const CreateTaskDialog = ({
           <div className="create-task-dialog__start">
             <CheckboxField
               isSelected={start}
-              onChange={setStart}
+              onChange={setStartChoice}
               isDisabled={createTask.isPending}
+              aria-describedby={capped ? startHintId : undefined}
             >
               <CheckboxButton>{t('task.create.start.label')}</CheckboxButton>
             </CheckboxField>
+            {capped && (
+              <p id={startHintId} className="create-task-dialog__start-hint">
+                {t('task.create.start.cappedHint')}
+              </p>
+            )}
           </div>
 
           <div className="create-task-dialog__actions">
