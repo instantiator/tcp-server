@@ -195,6 +195,18 @@ LLM's context window before running it, see `tcp-cli`'s
 [`estimate-context-window`](tcp-cli.md#estimate-context-window) — it reuses
 the same `ContextBudgetService` used at runtime to decide when to compact context.
 
+### Spend caps
+
+Every LLM call's tokens are recorded, and an optional per-provider cap
+(`SPEND_CAPS`) can hold agents back once it's reached. The gate runs in
+tcp-agent, before every LLM call and before every context-compaction call, at
+the same iteration boundary a shutdown drain uses: a held agent pauses with
+reason `spend_cap`, its checkpoint intact, and resumes from exactly that
+point once the cap resets, is dismissed, or the task is explicitly resumed.
+Chats are counted but never held back. See [spend-caps.md](spend-caps.md) for
+the full guide, including how to resume paused work and what each action
+does.
+
 ---
 
 ## MCP tools
