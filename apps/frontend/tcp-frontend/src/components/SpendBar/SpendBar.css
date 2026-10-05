@@ -46,3 +46,8 @@
 .spend-bar__tooltip > div + div {
   margin-block-start: var(--tcp-space-xs);
 }
+
+/* Same box as a bar, but nothing drawn: it only reserves the space. */
+.spend-bar--placeholder {
+  background-color: transparent;
+}

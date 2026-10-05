@@ -10,7 +10,10 @@ import { Breadcrumbs } from '../../components/Breadcrumbs/Breadcrumbs';
 import { EmptyState } from '../../components/EmptyState/EmptyState';
 import { ErrorState } from '../../components/ErrorState/ErrorState';
 import { LoadingState } from '../../components/LoadingState/LoadingState';
-import { SpendBar } from '../../components/SpendBar/SpendBar';
+import {
+  SpendBar,
+  SpendBarPlaceholder,
+} from '../../components/SpendBar/SpendBar';
 import {
   buildCompanyBar,
   buildOverviewBar,
@@ -49,8 +52,9 @@ export const CompanyPage = () => {
   // hooks require anyway.
   const spendOverview = useLiveSpendOverview();
   const companySpend = useLiveCompanySpend(companyId ?? '');
-  // `undefined` while loading or on error — no bar is rendered then, never a
-  // fake one (000.02).
+  // `undefined` while loading or on error. Then a `SpendBarPlaceholder` holds
+  // the bar's space instead of a fake bar, so the office view below never
+  // shifts when the data lands (000.02).
   const overviewBar =
     spendOverview.data === undefined
       ? undefined
@@ -103,7 +107,9 @@ export const CompanyPage = () => {
             label: t('page.companies.title'),
             to: '/companies',
             bar:
-              overviewBar === undefined ? undefined : (
+              overviewBar === undefined ? (
+                <SpendBarPlaceholder />
+              ) : (
                 <SpendBar
                   percent={overviewBar.percent}
                   tone={overviewBar.tone}
@@ -115,7 +121,9 @@ export const CompanyPage = () => {
           {
             label: company?.name ?? t('page.company.title'),
             bar:
-              companyBar === undefined ? undefined : (
+              companyBar === undefined ? (
+                <SpendBarPlaceholder />
+              ) : (
                 <SpendBar
                   percent={companyBar.percent}
                   tone={companyBar.tone}

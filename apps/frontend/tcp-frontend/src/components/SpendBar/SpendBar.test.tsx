@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { expectNoA11yViolations } from '../../test-support/axe';
-import { SpendBar } from './SpendBar';
+import { SpendBar, SpendBarPlaceholder } from './SpendBar';
 
 const DETAILS = [
   'anthropic: 65% of 1,000,000 tokens per 5h',
@@ -72,5 +72,16 @@ describe('SpendBar', () => {
     );
 
     await expectNoA11yViolations(container);
+  });
+});
+
+describe('SpendBarPlaceholder', () => {
+  it("takes a bar's box but exposes nothing to assistive technology", () => {
+    const { container } = render(<SpendBarPlaceholder />);
+    const placeholder = container.firstElementChild;
+
+    expect(placeholder).toHaveClass('spend-bar');
+    expect(placeholder).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.queryByRole('meter')).toBeNull();
   });
 });

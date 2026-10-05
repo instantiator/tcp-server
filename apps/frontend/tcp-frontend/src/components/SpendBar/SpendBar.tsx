@@ -56,3 +56,13 @@ export const SpendBar = ({
     </TooltipTrigger>
   );
 };
+
+/**
+ * Holds a {@link SpendBar}'s space while its data loads or has failed, so the
+ * layout below doesn't move when the real bar arrives — the office view
+ * sizes its canvas from where it starts. Hidden from assistive technology:
+ * there is no value to announce yet.
+ */
+export const SpendBarPlaceholder = () => (
+  <span className="spend-bar spend-bar--placeholder" aria-hidden="true" />
+);
