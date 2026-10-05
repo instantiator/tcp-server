@@ -1,8 +1,10 @@
 import { SpendCapState, TokenUsage } from '@tcp/shared';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { EventsModule } from '../events/events.module';
 import { NotificationModule } from '../notifications/notification.module';
 import { SpendCapService } from './spend-cap.service';
+import { SpendReportService } from './spend-report.service';
 import { UsageService } from './usage.service';
 
 /**
@@ -14,8 +16,9 @@ import { UsageService } from './usage.service';
   imports: [
     TypeOrmModule.forFeature([TokenUsage, SpendCapState]),
     NotificationModule,
+    EventsModule,
   ],
-  providers: [UsageService, SpendCapService],
-  exports: [UsageService, SpendCapService],
+  providers: [UsageService, SpendCapService, SpendReportService],
+  exports: [UsageService, SpendCapService, SpendReportService],
 })
 export class SpendModule {}

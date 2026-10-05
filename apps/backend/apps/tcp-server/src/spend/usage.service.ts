@@ -1,7 +1,13 @@
-import { AuditEvent, isLlmUsage, TokenUsage } from '@tcp/shared';
+import {
+  AuditEvent,
+  AuditEventType,
+  isLlmUsage,
+  TokenUsage,
+} from '@tcp/shared';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { CompanyEventService } from '../events/company-event.service';
 import { SpendCapService } from './spend-cap.service';
 
 /**
@@ -20,6 +26,7 @@ export class UsageService {
     @InjectRepository(TokenUsage)
     private readonly repo: Repository<TokenUsage>,
     private readonly caps: SpendCapService,
+    private readonly companyEvents: CompanyEventService,
   ) {}
 
   /**
@@ -50,11 +57,13 @@ export class UsageService {
       });
       // The row's own timestamp, so a stint starting now includes it.
       const createdAt: unknown = result.generatedMaps[0]?.['createdAt'];
+      const at = createdAt instanceof Date ? createdAt : new Date();
       void this.caps.onUsage(
         usage.provider,
-        createdAt instanceof Date ? createdAt : new Date(),
+        at,
         usage.inputTokens + usage.outputTokens,
       );
+      this.announceChange(event.companyId, at);
     } catch (err) {
       this.logger.error(
         `Failed to record token usage for company ${event.companyId}: ${String(err instanceof Error ? err.message : err)}`,
@@ -73,5 +82,26 @@ export class UsageService {
           `Failed to report untracked provider ${provider}: ${String(err)}`,
         ),
       );
+  }
+
+  /**
+   * Synthesizes a `state_change` onto the company's channel so an open spend
+   * view refetches — no `summary`, matching the priming-event shape the web
+   * cache already treats as "something changed, go reload".
+   */
+  private announceChange(companyId: string, at: Date): void {
+    this.companyEvents.emit(companyId, {
+      type: 'audit',
+      event: {
+        timestamp: at.toISOString(),
+        companyId,
+        role: 'system',
+        agentId: null,
+        assignmentId: null,
+        taskId: null,
+        eventType: AuditEventType.StateChange,
+        payload: { entity: 'spend', reason: 'change' },
+      },
+    });
   }
 }

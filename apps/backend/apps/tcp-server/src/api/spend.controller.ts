@@ -1,7 +1,8 @@
-import { SpendCapState } from '@tcp/shared';
+import { SpendCapState, SpendOverview } from '@tcp/shared';
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Param,
@@ -15,15 +16,17 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { CompanyMembershipGuard } from '../auth/company-membership.guard';
-import { AdminOnly } from '../auth/company-scope.decorator';
+import { AdminOnly, NoCompanyScope } from '../auth/company-scope.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { SpendCapService } from '../spend/spend-cap.service';
-import { DismissCapDto } from './dto/spend.dto';
+import { SpendReportService } from '../spend/spend-report.service';
+import { DismissCapDto, SpendOverviewDto } from './dto/spend.dto';
 import { SpendResumeService } from './spend-resume.service';
 
 /**
- * Application-level spend caps (`SPEND_CAPS`). Lifting or restoring a cap
- * changes spend protection for every company, so both are administrator-only.
+ * Application-level spend: `GET` is the overview every signed-in user can
+ * see; the cap-lifting routes change spend protection for every company, so
+ * those are administrator-only.
  */
 @ApiTags('spend')
 @ApiBearerAuth()
@@ -33,7 +36,17 @@ export class SpendController {
   constructor(
     private readonly caps: SpendCapService,
     private readonly resume: SpendResumeService,
+    private readonly report: SpendReportService,
   ) {}
+
+  /** Application-wide usage totals and every configured provider's cap progress. */
+  @ApiOperation({ summary: 'Application-wide spend totals and cap progress' })
+  @ApiOkResponse({ type: SpendOverviewDto })
+  @NoCompanyScope('application-wide totals and caps; no per-company detail')
+  @Get()
+  overview(): Promise<SpendOverview> {
+    return this.report.overview();
+  }
 
   /**
    * Lifts a provider's cap — until it next resets, or indefinitely — and

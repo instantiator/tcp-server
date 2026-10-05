@@ -1,7 +1,8 @@
-import { AuditEvent, TokenUsage } from '@tcp/shared';
+import { AuditEvent, AuditEventType, TokenUsage } from '@tcp/shared';
 import { Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import type { InsertResult, Repository } from 'typeorm';
+import { CompanyEventService } from '../events/company-event.service';
 import { SpendCapService } from './spend-cap.service';
 import { UsageService } from './usage.service';
 
@@ -25,6 +26,7 @@ describe('UsageService', () => {
   const createdAt = new Date('2026-10-04T12:00:00.000Z');
   let insert: jest.Mock<Promise<InsertResult>, [Partial<TokenUsage>]>;
   let caps: jest.Mocked<Pick<SpendCapService, 'onUsage' | 'onUntracked'>>;
+  let companyEvents: jest.Mocked<Pick<CompanyEventService, 'emit'>>;
   let service: UsageService;
 
   beforeEach(() => {
@@ -39,9 +41,11 @@ describe('UsageService', () => {
       onUsage: jest.fn().mockResolvedValue(undefined),
       onUntracked: jest.fn().mockResolvedValue(undefined),
     };
+    companyEvents = { emit: jest.fn() };
     service = new UsageService(
       { insert } as unknown as Repository<TokenUsage>,
       caps as unknown as SpendCapService,
+      companyEvents as unknown as CompanyEventService,
     );
   });
 
@@ -62,6 +66,33 @@ describe('UsageService', () => {
     await service.record(makeEvent({ usage }));
 
     expect(caps.onUsage).toHaveBeenCalledWith('lm-studio', createdAt, 120);
+  });
+
+  it('announces a spend change on the row’s company channel, once per recorded row', async () => {
+    const event = makeEvent({ usage });
+
+    await service.record(event);
+
+    expect(companyEvents.emit).toHaveBeenCalledTimes(1);
+    expect(companyEvents.emit).toHaveBeenCalledWith(event.companyId, {
+      type: 'audit',
+      event: {
+        timestamp: createdAt.toISOString(),
+        companyId: event.companyId,
+        role: 'system',
+        agentId: null,
+        assignmentId: null,
+        taskId: null,
+        eventType: AuditEventType.StateChange,
+        payload: { entity: 'spend', reason: 'change' },
+      },
+    });
+  });
+
+  it('announces nothing when no row is recorded', async () => {
+    await service.record(makeEvent({ responseText: 'hi' }));
+
+    expect(companyEvents.emit).not.toHaveBeenCalled();
   });
 
   it('inserts nothing when the payload has no usage', async () => {

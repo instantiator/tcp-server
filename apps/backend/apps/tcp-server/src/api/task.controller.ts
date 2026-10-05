@@ -4,6 +4,7 @@ import {
   type AuditEvent,
   type TcpTask,
   type WireEvent,
+  type ResumeResult,
 } from '@tcp/shared';
 import {
   BadRequestException,
@@ -50,7 +51,7 @@ import {
   TaskResponseDto,
 } from './dto/entity-response.dto';
 import { ResumeResultDto } from './dto/spend.dto';
-import { ResumeResult, SpendResumeService } from './spend-resume.service';
+import { SpendResumeService } from './spend-resume.service';
 import { SystemShutdownService } from './system-shutdown.service';
 import { TaskMaterialSummary, TaskService } from './task.service';
 

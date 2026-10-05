@@ -30,10 +30,12 @@ import type { UUID } from 'crypto';
 import type { Request, Response } from 'express';
 import {
   CompanyListItem,
+  CompanySpend,
   emptyCompanyStats,
   TcpCompany,
   TcpRole,
   WireEvent,
+  type ResumeResult,
 } from '@tcp/shared';
 import { defer, from, merge, mergeMap, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -44,13 +46,14 @@ import { CompanyScope, NoCompanyScope } from '../auth/company-scope.decorator';
 import { MembershipService } from '../auth/membership.service';
 import { getCurrentUserIdentifiers } from '../auth/current-user';
 import { CompanyEventService } from '../events/company-event.service';
+import { SpendReportService } from '../spend/spend-report.service';
 import { ApiService } from './api.service';
 import { CompanyPrimingService } from './company-priming.service';
 import { CompanyStatsService } from './company-stats.service';
 import { CreateCompanyDto, UpdateCompanyDto } from './dto/company.dto';
 import { CompanyListItemDto } from './dto/company-stats.dto';
-import { ResumeResultDto } from './dto/spend.dto';
-import { ResumeResult, SpendResumeService } from './spend-resume.service';
+import { CompanySpendDto, ResumeResultDto } from './dto/spend.dto';
+import { SpendResumeService } from './spend-resume.service';
 import { UpdateRoleDto } from './dto/role.dto';
 import { CompanyResponseDto, RoleResponseDto } from './dto/entity-response.dto';
 import { isUUID } from '../utils/ObjectUtils';
@@ -74,6 +77,7 @@ export class CompanyController {
     private readonly companyEvents: CompanyEventService,
     private readonly membership: MembershipService,
     private readonly spend: SpendResumeService,
+    private readonly spendReport: SpendReportService,
   ) {}
 
   /**
@@ -337,6 +341,21 @@ export class CompanyController {
   async resumeCompany(@Param('id') id: string): Promise<ResumeResult> {
     const company = await this.resolveCompanyOrThrow(id);
     return this.spend.resumeCompany(company.id);
+  }
+
+  /**
+   * One company's usage: totals per provider, per-task totals, and the last
+   * 24 hours in five-minute buckets.
+   */
+  @ApiOperation({
+    summary: "A company's spend totals, per-task usage and recent series",
+  })
+  @ApiOkResponse({ type: CompanySpendDto })
+  @CompanyScope({ from: 'param', key: 'id', via: 'company' })
+  @Get(':id/spend')
+  async getCompanySpend(@Param('id') id: string): Promise<CompanySpend> {
+    const company = await this.resolveCompanyOrThrow(id);
+    return this.spendReport.company(company.id);
   }
 
   /** Resolves a company by UUID or slug, throwing 404 if no match. */

@@ -4,6 +4,7 @@ import {
   TcpTask,
   type CapDismissal,
   type PauseReason,
+  type ResumeResult,
   type SpendCapState,
 } from '@tcp/shared';
 import {
@@ -25,12 +26,6 @@ const RESET_SWEEP_INTERVAL_MS = 60_000;
 
 /** Pauses an explicit resume lifts: nothing else is waiting on them. */
 const EXPLICITLY_RESUMABLE: PauseReason[] = ['spend_cap', 'shutdown'];
-
-/** What an explicit resume did. */
-export interface ResumeResult {
-  /** Agents a resume was requested for. */
-  resumed: number;
-}
 
 /**
  * Resumes the work spend caps paused: automatically when a cap resets or is
