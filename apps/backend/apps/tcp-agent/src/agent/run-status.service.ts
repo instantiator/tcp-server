@@ -2,6 +2,7 @@ import {
   AgentStatus,
   AuditClientService,
   AuditEventType,
+  markQueued,
   TcpAgent,
 } from '@tcp/shared';
 import { Injectable, Logger } from '@nestjs/common';
@@ -97,6 +98,22 @@ export class AgentRunStatusService {
         { entity: 'agent', newStatus: status },
       );
     }
+  }
+
+  /**
+   * Shows the agent as waiting for a model slot, recording the change so open
+   * pages see it. A no-op when the agent has moved on (see {@link markQueued}),
+   * or is already queued from an earlier check of the same job.
+   */
+  async markQueued(agent: TcpAgent): Promise<void> {
+    if (!(await markQueued(this.agentRepo, agent.id))) return;
+    this.auditClient.record(
+      agent.companyId,
+      agent.role.name,
+      agent.id,
+      AuditEventType.StateChange,
+      { entity: 'agent', newStatus: AgentStatus.Queued },
+    );
   }
 
   /**

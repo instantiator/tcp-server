@@ -80,6 +80,7 @@ function makeRepo() {
     count: jest.fn().mockResolvedValue(0),
     find: jest.fn().mockResolvedValue([]),
     findOne: jest.fn().mockResolvedValue(null),
+    findOneBy: jest.fn().mockResolvedValue(null),
     createQueryBuilder: jest.fn().mockReturnValue(updateQueryBuilder),
     updateQueryBuilder,
   };
@@ -337,16 +338,39 @@ describe('AgentOrchestrationService', () => {
     });
 
     // 002.02 stage 2: an early `running` here raced ahead of the database,
-    // which still read `paused` until the worker actually picked the job
-    // up — with one worker slot, that could be tens of seconds later. The
-    // worker's own `running` write (persist-then-publish) is the only
-    // `running` event now; enqueueing publishes nothing.
-    it('publishes no state_change at enqueue — the worker records its own running', async () => {
-      const agent = makeAgent({ status: AgentStatus.Paused });
+    // which still read `paused` until the worker actually picked the job up.
+    // 000.03: enqueueing now publishes `queued` instead — persisted first, so
+    // the database agrees — and the worker's own `running` write remains the
+    // only `running` event.
+    it('publishes queued, never running, once the job is enqueued', async () => {
+      const agent = makeAgent({ status: AgentStatus.Idle });
       mockDb.getAgent.mockResolvedValue(agent);
+      agentRepo.findOneBy.mockResolvedValue({
+        ...agent,
+        status: AgentStatus.Queued,
+      });
 
       await service.resumeAgent(agent.id);
 
+      expect(recordAudit).toHaveBeenCalledTimes(1);
+      expect(recordAudit).toHaveBeenCalledWith(
+        agent.companyId,
+        'agent',
+        agent.id,
+        AuditEventType.StateChange,
+        expect.objectContaining({ newStatus: AgentStatus.Queued }),
+      );
+    });
+
+    it('publishes nothing when the worker has already moved the agent on', async () => {
+      const agent = makeAgent({ status: AgentStatus.Idle });
+      mockDb.getAgent.mockResolvedValue(agent);
+      // markQueued's conditional update matches no row: the agent is running.
+      agentRepo.updateQueryBuilder.execute.mockResolvedValue({ affected: 0 });
+
+      await service.resumeAgent(agent.id);
+
+      expect(mockQueueInstance.add).toHaveBeenCalled();
       expect(recordAudit).not.toHaveBeenCalled();
     });
 

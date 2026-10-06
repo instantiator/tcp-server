@@ -18,6 +18,13 @@ export enum AgentStatus {
   /** Created but no job has been dispatched yet. */
   Idle = 'idle',
 
+  /**
+   * A start or resume job is dispatched but hasn't started: it is waiting for
+   * a worker, or for a free slot in its model pool or endpoint
+   * (`MODEL_CONCURRENCY`). Shown so a wait doesn't look like a hang.
+   */
+  Queued = 'queued',
+
   /** A job is actively being processed by tcp-agent. */
   Running = 'running',
 

@@ -24,12 +24,6 @@ export const configSchema = Joi.object({
   AGENT_LOOP_TIMEOUT_MS: Joi.number().integer().positive().optional(),
   /** Overrides {@link DEFAULT_REQUIRED_TOOL_RETRIES} when set — reminder rounds before a run missing its required tool calls is failed. */
   AGENT_REQUIRED_TOOL_RETRIES: Joi.number().integer().min(0).optional(),
-  /** Overrides {@link DEFAULT_AGENT_WORKER_CONCURRENCY} — parallel agent jobs. Set to 1 when sharing one local model. */
-  AGENT_WORKER_CONCURRENCY: Joi.number()
-    .integer()
-    .positive()
-    .empty('')
-    .optional(),
   /** Pool and endpoint run limits — see .env.example for the shape. */
   MODEL_CONCURRENCY: modelConcurrencySchema,
   // Environment-level LLM fallback — used when neither a role's llmConfig nor a company's llmConfig is set.

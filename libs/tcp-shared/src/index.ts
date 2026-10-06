@@ -6,6 +6,7 @@ export * from './context/context-budget.service';
 export * from './context/context-compactor.service';
 export * from './context/incoming-data-guard.service';
 export * from './context/context-manager.service';
+export * from './db/mark-queued';
 export * from './db/optimistic-retry';
 export * from './db/typeorm-config.factory';
 export * from './mcp/base-mcp.controller';

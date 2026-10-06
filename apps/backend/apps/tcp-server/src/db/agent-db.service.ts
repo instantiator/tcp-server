@@ -17,6 +17,7 @@ import { TcpAgentTemplate } from '../templates/TcpAgentTemplate';
  */
 export const ACTIVE_AGENT_STATUSES = [
   AgentStatus.Idle,
+  AgentStatus.Queued,
   AgentStatus.Running,
   AgentStatus.Paused,
 ] as const;

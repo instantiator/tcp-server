@@ -101,6 +101,7 @@
       "description": "Lifecycle states for an agent instance.",
       "enum": [
         "idle",
+        "queued",
         "running",
         "paused",
         "completed",

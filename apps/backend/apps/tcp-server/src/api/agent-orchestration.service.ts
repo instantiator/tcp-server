@@ -6,6 +6,7 @@ import {
   buildAgentChangeSummary,
   Conversation,
   ConversationMessage,
+  markQueued,
   TcpAgent,
   PendingConsultation,
 } from '@tcp/shared';
@@ -186,6 +187,7 @@ export class AgentOrchestrationService
   async dispatchStartJob(agentId: UUID): Promise<void> {
     this.shutdown.assertAccepting();
     await this.queue.add('start', { agentId, type: 'start' });
+    await this.announceQueued(agentId);
     this.logger.log(`Dispatched start job for agent ${agentId}`);
   }
 
@@ -287,14 +289,37 @@ export class AgentOrchestrationService
     // Only once the job is safely queued: a failure above must leave these
     // undelivered, so the next resume picks them up rather than losing them.
     if (replies) await this.markDelivered(replies);
-    // No event published here (002.02 stage 2): the DB still reads `paused`
-    // until the worker actually picks the job up, and with one worker slot
-    // that can be tens of seconds away. Publishing `running` at enqueue time
-    // told clients something the database didn't yet agree with. The
-    // worker's own `running` write (`agent-loop.service.ts` `run()`, via
-    // `RunStatusService`) is the persist-then-publish source of truth.
+    // `queued`, not `running` (002.02 stage 2): the worker may not pick the
+    // job up for a while — behind a full model pool, much longer — and
+    // publishing `running` at enqueue time told clients something the
+    // database didn't yet agree with. The worker's own `running` write
+    // (`agent-loop.service.ts` `run()`) is the source of truth for that.
+    await this.announceQueued(agent.id);
     this.logger.log(`Dispatched resume job for agent ${agent.id}`);
     return agent;
+  }
+
+  /**
+   * Shows a dispatched agent as queued until the worker starts it, so a wait
+   * for a model slot doesn't look like a hang. Persist-then-publish, after
+   * the job is safely enqueued; if the worker has already moved the agent on,
+   * {@link markQueued} leaves it alone and nothing is published.
+   */
+  private async announceQueued(agentId: UUID): Promise<void> {
+    if (!(await markQueued(this.agentRepo, agentId))) return;
+    const agent = await this.agentRepo.findOneBy({ id: agentId });
+    if (!agent) return;
+    await this.audit.record(
+      agent.companyId,
+      'agent',
+      agent.id,
+      AuditEventType.StateChange,
+      {
+        entity: 'agent',
+        newStatus: AgentStatus.Queued,
+        summary: buildAgentChangeSummary(agent),
+      },
+    );
   }
 
   /** Counts the agent's still-unresolved consultations and user-input requests. */

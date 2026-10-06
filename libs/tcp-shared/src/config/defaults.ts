@@ -118,15 +118,6 @@ export const DEFAULT_RAG_THRESHOLD = 0.35;
 export const DEFAULT_AGENT_ITERATIONS = 40;
 
 /**
- * Default number of agent jobs the tcp-agent worker processes concurrently.
- * Overridden by `AGENT_WORKER_CONCURRENCY` (tcp-agent env). Used in
- * {@link AgentWorkerService}. Set to 1 so agents sharing a single
- * capacity-limited model endpoint (e.g. one local LLM) don't starve each
- * other of model time.
- */
-export const DEFAULT_AGENT_WORKER_CONCURRENCY = 1;
-
-/**
  * Default pool total for every agent run against a local model endpoint.
  * Overridden by `MODEL_CONCURRENCY`'s `local` key (tcp-agent env). Used in
  * {@link limitsFor}. Set to 1: a home install typically has one GPU, so
