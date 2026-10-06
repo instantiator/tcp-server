@@ -28,12 +28,16 @@ provider id from the provider catalogue (`openai`, `anthropic`, `google`,
 `openai-compatible`). Leave it unset for no caps at all — a home install
 using only a local model never needs this.
 
+Keep the single quotes around the value. `start-deployment.sh` loads the env
+file with bash, which strips unquoted double quotes and leaves JSON that
+tcp-server can't read, so it refuses to start.
+
 ```bash
 # A classic monthly budget.
-SPEND_CAPS={"openai":{"limits":[{"tokens":5000000,"per":"month"}],"notifyAt":[80],"action":"pause"}}
+SPEND_CAPS='{"openai":{"limits":[{"tokens":5000000,"per":"month"}],"notifyAt":[80],"action":"pause"}}'
 
 # A "5h stint + weekly ceiling" shape, similar to a subscription plan's rhythm.
-SPEND_CAPS={"anthropic":{"limits":[{"tokens":2000000,"per":"5h"},{"tokens":20000000,"per":"week"}],"notifyAt":[50,80],"action":"pause"}}
+SPEND_CAPS='{"anthropic":{"limits":[{"tokens":2000000,"per":"5h"},{"tokens":20000000,"per":"week"}],"notifyAt":[50,80],"action":"pause"}}'
 ```
 
 Each provider's cap has:
