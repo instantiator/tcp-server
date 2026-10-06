@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -19,7 +20,8 @@ function makeConfig(overrides: Partial<WizardConfig> = {}): WizardConfig {
       agent: 3003,
     },
     agentIterations: 40,
-    agentConcurrency: 1,
+    localModelConcurrency: 1,
+    remoteModelConcurrency: 4,
     stubLlm: false,
     ...overrides,
   };
@@ -237,5 +239,21 @@ describe('writeEnvFile — committed base vs gitignored .local split', () => {
     const base = readFileSync(writeEnvFile(makeConfig(), dir).envFile, 'utf8');
     expect(uncommentedKeys(base).has('STUB_LLM')).toBe(false);
     expect(uncommentedKeys(base).has('LLM_BASE_URL')).toBe(false);
+  });
+
+  it('writes MODEL_CONCURRENCY as JSON that survives start-deployment.sh sourcing it', () => {
+    const { envFile } = writeEnvFile(
+      makeConfig({ localModelConcurrency: 2, remoteModelConcurrency: 5 }),
+      dir,
+    );
+    // start-deployment.sh `source`s the file under `set -a`, and compose
+    // prefers that exported value — unquoted, bash would strip the JSON's
+    // double quotes and tcp-agent would refuse to boot.
+    const sourced = execFileSync(
+      'bash',
+      ['-c', 'source "$1" && printf %s "$MODEL_CONCURRENCY"', '_', envFile],
+      { encoding: 'utf8' },
+    );
+    expect(JSON.parse(sourced)).toEqual({ local: 2, remote: 5 });
   });
 });

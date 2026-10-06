@@ -1,5 +1,6 @@
 import * as Joi from 'joi';
 import { DEFAULT_EMBEDDING_DIMENSION } from '@tcp/shared/config/defaults';
+import { modelConcurrencySchema } from '../worker/model-concurrency';
 
 /**
  * Joi validation schema for tcp-agent environment variables.
@@ -29,6 +30,8 @@ export const configSchema = Joi.object({
     .positive()
     .empty('')
     .optional(),
+  /** Pool and endpoint run limits — see .env.example for the shape. */
+  MODEL_CONCURRENCY: modelConcurrencySchema,
   // Environment-level LLM fallback — used when neither a role's llmConfig nor a company's llmConfig is set.
   // Both LLM_PROVIDER and LLM_MODEL must be present to activate the fallback; all other fields are optional.
   LLM_PROVIDER: Joi.string().empty('').optional(),

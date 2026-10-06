@@ -79,7 +79,8 @@ async function main(): Promise<void> {
     inferenceModel: llm.inferenceModel,
     oidc: oidc.oidc,
     agentIterations: resources.agentIterations,
-    agentConcurrency: resources.agentConcurrency,
+    localModelConcurrency: resources.localModelConcurrency,
+    remoteModelConcurrency: resources.remoteModelConcurrency,
     stubLlm: docker.stubLlm,
   };
 
@@ -101,7 +102,9 @@ async function main(): Promise<void> {
     `  OIDC:          ${config.oidc ? 'configured' : 'derived from Zitadel port'}`,
   );
   console.log(`  Iterations:    ${config.agentIterations}`);
-  console.log(`  Concurrency:   ${config.agentConcurrency}`);
+  console.log(
+    `  Concurrency:   local=${config.localModelConcurrency}, remote=${config.remoteModelConcurrency}`,
+  );
   console.log(`  Stub LLM:      ${config.stubLlm ? 'yes' : 'no'}`);
   console.log();
 

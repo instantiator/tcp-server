@@ -45,7 +45,9 @@ export interface WizardConfig {
   inferenceModel?: LlmProviderConfig;
   oidc?: OidcConfig;
   agentIterations: number;
-  agentConcurrency: number;
+  /** Written as MODEL_CONCURRENCY's `local`/`remote` pool totals. */
+  localModelConcurrency: number;
+  remoteModelConcurrency: number;
   /** Run the stub LLM in the stack (see prompts/docker.ts). */
   stubLlm: boolean;
 }

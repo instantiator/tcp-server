@@ -127,6 +127,22 @@ export const DEFAULT_AGENT_ITERATIONS = 40;
 export const DEFAULT_AGENT_WORKER_CONCURRENCY = 1;
 
 /**
+ * Default pool total for every agent run against a local model endpoint.
+ * Overridden by `MODEL_CONCURRENCY`'s `local` key (tcp-agent env). Used in
+ * {@link limitsFor}. Set to 1: a home install typically has one GPU, so
+ * parallel runs against it would only queue inside the model server anyway.
+ */
+export const DEFAULT_LOCAL_MODEL_CONCURRENCY = 1;
+
+/**
+ * Default pool total for every agent run against a remote model endpoint.
+ * Overridden by `MODEL_CONCURRENCY`'s `remote` key (tcp-agent env). Used in
+ * {@link limitsFor}. Remote providers can usually take more parallel work
+ * than a local GPU, but an unbounded pool also means an unbounded spend rate.
+ */
+export const DEFAULT_REMOTE_MODEL_CONCURRENCY = 4;
+
+/**
  * Default wall-clock timeout in milliseconds for an entire agent run.
  * Overridden by `AGENT_LOOP_TIMEOUT_MS` (tcp-agent env), then by
  * {@link AgentRunConfig.timeoutMs} via {@link resolveRunConfig}.

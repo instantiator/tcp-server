@@ -286,6 +286,8 @@ services:
       # when unset. Was never passed through before 002.02, so .env.dev's own
       # setting had no effect on the running container.
       AGENT_WORKER_CONCURRENCY: ${AGENT_WORKER_CONCURRENCY:-}
+      # Per-pool/per-endpoint run limits (optional JSON) — see .env.example.
+      MODEL_CONCURRENCY: ${MODEL_CONCURRENCY:-}
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
