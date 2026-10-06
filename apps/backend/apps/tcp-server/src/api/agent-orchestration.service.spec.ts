@@ -52,6 +52,7 @@ function makeAgent(overrides: Partial<TcpAgent> = {}): TcpAgent {
     company: {} as never,
     role: {} as never,
     version: 1,
+    rateLimitRetries: 0,
     ...overrides,
   };
 }
@@ -322,6 +323,28 @@ describe('AgentOrchestrationService', () => {
 
       it('restarts with no message when the cap held it back before its first LLM call', async () => {
         expect(await resumeCapPaused(false)).toBeUndefined();
+      });
+    });
+
+    // A rate limit strikes inside the graph, after it has checkpointed, so a
+    // restart would replay the opening prompt on top of that checkpoint.
+    it('continues a rate-limited agent from its checkpoint, even before its first response', async () => {
+      const agent = makeAgent({
+        status: AgentStatus.Paused,
+        pausedAt: new Date(),
+        pauseReason: 'rate_limited',
+      });
+      mockDb.getAgent.mockResolvedValue(agent);
+      auditRepo.exists.mockResolvedValue(false);
+
+      await service.resumeAgent(agent.id);
+
+      expect(mockQueueInstance.add).toHaveBeenCalledWith('resume', {
+        agentId: agent.id,
+        type: 'resume',
+        replyContent: expect.stringContaining(
+          'model provider was temporarily refusing',
+        ) as string,
       });
     });
 

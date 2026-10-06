@@ -284,6 +284,11 @@ services:
       # /internal/storage/* endpoints, so it has no S3 client to authenticate.
       # Per-pool/per-endpoint run limits (optional JSON) — see .env.example.
       MODEL_CONCURRENCY: ${MODEL_CONCURRENCY:-}
+      # Rate-limit pause and auto-resume — see .env.example.
+      RATE_LIMIT_AUTO_RESUME: ${RATE_LIMIT_AUTO_RESUME:-}
+      RATE_LIMIT_RETRY_MS: ${RATE_LIMIT_RETRY_MS:-}
+      RATE_LIMIT_RETRY_MAX_MS: ${RATE_LIMIT_RETRY_MAX_MS:-}
+      RATE_LIMIT_QUOTA_RETRY_MS: ${RATE_LIMIT_QUOTA_RETRY_MS:-}
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}

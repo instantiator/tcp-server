@@ -917,12 +917,13 @@
       "type": "string"
     },
     "PauseReason": {
-      "description": "Why an agent is currently  {@link  AgentStatus.Paused } .\n\n`user_input` and `consultation` pauses resolve themselves — a reply or a consultation result arrives and the agent is re-dispatched automatically. A `shutdown` pause has nothing outstanding to wait on, so it stays paused until a user resumes it explicitly. A `spend_cap` pause is lifted when the provider's cap resets or is dismissed, or by an explicit task/company resume.",
+      "description": "Why an agent is currently  {@link  AgentStatus.Paused } .\n\n`user_input` and `consultation` pauses resolve themselves — a reply or a consultation result arrives and the agent is re-dispatched automatically. A `shutdown` pause has nothing outstanding to wait on, so it stays paused until a user resumes it explicitly. A `spend_cap` pause is lifted when the provider's cap resets or is dismissed, or by an explicit task/company resume. A `rate_limited` pause — the provider refused a call — is lifted at  {@link  TcpAgent.resumeAfter }  when auto-resume is on, or by an explicit resume.",
       "enum": [
         "user_input",
         "consultation",
         "shutdown",
-        "spend_cap"
+        "spend_cap",
+        "rate_limited"
       ],
       "type": "string"
     },
@@ -1079,6 +1080,10 @@
           "format": "date-time",
           "type": "string"
         },
+        "rateLimitRetries": {
+          "description": "Rate limits in a row without the agent getting an LLM response in between — drives the doubling backoff, and starts again at 1 once a run makes progress.",
+          "type": "number"
+        },
         "requiredToolCalls": {
           "anyOf": [
             {
@@ -1092,6 +1097,11 @@
             }
           ],
           "description": "Tool names (unprefixed, e.g. `complete_assignment`) that must have been invoked successfully before the agent loop may end. Null means the default (`['complete_assignment']`); an empty array disables enforcement.\n\nUses `simple-json` (stored as TEXT) for cross-DB compatibility with SQLite unit tests."
+        },
+        "resumeAfter": {
+          "description": "When a `rate_limited` pause should be retried: the provider's hint, or the backoff cadence. Null when auto-resume is off, so only an explicit resume lifts the pause. Ignored for any other pause reason.",
+          "format": "date-time",
+          "type": "string"
         },
         "role": {
           "$ref": "#/definitions/TcpRole",
@@ -1189,6 +1199,7 @@
         "id",
         "initialPrompt",
         "output",
+        "rateLimitRetries",
         "role",
         "roleId",
         "status",

@@ -63,7 +63,7 @@ describe('SpendResumeService', () => {
   });
 
   describe('resumeTask', () => {
-    it('exempts the task before resuming its cap- and shutdown-paused agents', async () => {
+    it('exempts the task before resuming its cap-, shutdown- and rate-limit-paused agents', async () => {
       const result = await service.resumeTask(taskId);
 
       expect(calls[0]).toBe('exempt');
@@ -71,7 +71,7 @@ describe('SpendResumeService', () => {
       expect(agentFind).toHaveBeenCalledWith({
         where: {
           status: AgentStatus.Paused,
-          pauseReason: In(['spend_cap', 'shutdown']),
+          pauseReason: In(['spend_cap', 'shutdown', 'rate_limited']),
           assignment: { taskId },
         },
       });

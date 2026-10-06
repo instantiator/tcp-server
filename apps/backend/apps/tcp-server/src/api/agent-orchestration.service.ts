@@ -66,6 +66,17 @@ const SPEND_CAP_RESUME_PROMPT =
   'been allowed to continue. Continue from where you left off.';
 
 /**
+ * The first message a resumed agent sees after its model provider refused a
+ * call. Unlike a spend cap, which holds an agent back before its graph first
+ * runs, a rate limit always strikes once the graph has saved a checkpoint
+ * (tcp-agent fails, rather than pauses, a first run refused before that) —
+ * so the agent always continues, even if it never got a response.
+ */
+const RATE_LIMIT_RESUME_PROMPT =
+  'Your work was paused because the model provider was temporarily refusing ' +
+  'requests, and can now continue. Continue from where you left off.';
+
+/**
  * Creates and resumes agents by enqueuing jobs to the `agent-jobs` BullMQ queue,
  * which tcp-agent workers consume.
  *
@@ -193,15 +204,16 @@ export class AgentOrchestrationService
 
   /**
    * The message a resume carries when nothing was asked of the user: a
-   * prompt explaining the pause for shutdown and spend-cap pauses. A
-   * spend-cap pause that struck before the agent's first LLM call gets none
-   * — a resume with no message restarts the agent, which is what an agent
-   * with no checkpoint needs.
+   * prompt explaining the pause for shutdown, rate-limit and spend-cap
+   * pauses. A spend-cap pause that struck before the agent's first LLM call
+   * gets none — a resume with no message restarts the agent, which is what
+   * an agent with no checkpoint needs.
    */
   private async pauseResumePrompt(
     agent: TcpAgent,
   ): Promise<string | undefined> {
     if (agent.pauseReason === 'shutdown') return SHUTDOWN_RESUME_PROMPT;
+    if (agent.pauseReason === 'rate_limited') return RATE_LIMIT_RESUME_PROMPT;
     if (agent.pauseReason !== 'spend_cap') return undefined;
     const started = await this.auditRepo.exists({
       where: {

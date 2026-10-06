@@ -2,10 +2,17 @@ import {
   AgentStatus,
   AuditClientService,
   AuditEventType,
+  DEFAULT_RATE_LIMIT_QUOTA_RETRY_MS,
+  DEFAULT_RATE_LIMIT_RETRY_MAX_MS,
+  DEFAULT_RATE_LIMIT_RETRY_MS,
   markQueued,
+  rateLimitRetryAt,
   TcpAgent,
+  type RateLimit,
+  type RateLimitCadence,
 } from '@tcp/shared';
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -68,6 +75,7 @@ export class AgentRunStatusService {
     private readonly auditClient: AuditClientService,
     @InjectRepository(TcpAgent)
     private readonly agentRepo: Repository<TcpAgent>,
+    private readonly config: ConfigService,
   ) {}
 
   /**
@@ -114,6 +122,92 @@ export class AgentRunStatusService {
       AuditEventType.StateChange,
       { entity: 'agent', newStatus: AgentStatus.Queued },
     );
+  }
+
+  /**
+   * Pauses an agent whose provider refused a call, instead of failing it, and
+   * records when it should try again. The LangGraph checkpoint is untouched,
+   * so a resume continues from the last completed step.
+   *
+   * Leaves an agent alone that has finished or that a drain has paused, as
+   * {@link failRun} does — the rate limit is not why it stopped.
+   *
+   * @param progressed - Whether this run got any LLM response before the
+   *   refusal; if so the backoff starts again from its first step.
+   */
+  async pauseForRateLimit(
+    agent: TcpAgent,
+    limit: RateLimit,
+    progressed: boolean,
+  ): Promise<void> {
+    const fresh = await this.agentRepo.findOneBy({ id: agent.id });
+    if (
+      !fresh ||
+      TERMINAL_STATUSES.has(fresh.status) ||
+      fresh.status === AgentStatus.Paused
+    ) {
+      return;
+    }
+    const attempt = progressed ? 1 : (fresh.rateLimitRetries ?? 0) + 1;
+    const resumeAfter = this.autoResume()
+      ? rateLimitRetryAt(limit, attempt, this.cadence())
+      : null;
+
+    await this.agentRepo
+      .createQueryBuilder()
+      .update(TcpAgent)
+      .set({
+        status: AgentStatus.Paused,
+        pausedAt: new Date(),
+        pauseReason: 'rate_limited',
+        // Null when auto-resume is off: only an explicit resume lifts it.
+        resumeAfter: resumeAfter ?? (() => 'NULL'),
+        rateLimitRetries: attempt,
+      })
+      .where('id = :id', { id: agent.id })
+      .execute();
+    this.auditClient.record(
+      agent.companyId,
+      agent.role.name,
+      agent.id,
+      AuditEventType.StateChange,
+      {
+        entity: 'agent',
+        newStatus: AgentStatus.Paused,
+        reason: 'rate_limited',
+        rateLimit: limit.kind,
+        resumeAfter: resumeAfter?.toISOString() ?? null,
+      },
+    );
+    this.logger.warn(
+      `Agent ${agent.id} paused: provider ${limit.kind === 'quota' ? 'quota used up' : 'rate limit'}; ${resumeAfter ? `retrying at ${resumeAfter.toISOString()}` : 'auto-resume is off'}`,
+    );
+  }
+
+  /**
+   * Whether rate-limited agents resume by themselves. Read leniently: compose
+   * passes an unset variable as '', which must mean the default (on).
+   */
+  private autoResume(): boolean {
+    const raw = this.config.get<boolean | string>('RATE_LIMIT_AUTO_RESUME');
+    return String(raw ?? '').toLowerCase() !== 'false';
+  }
+
+  /** The retry cadence, from the environment or the defaults. */
+  private cadence(): RateLimitCadence {
+    const ms = (key: string, fallback: number) =>
+      Number(this.config.get<number | string>(key)) || fallback;
+    return {
+      retryMs: ms('RATE_LIMIT_RETRY_MS', DEFAULT_RATE_LIMIT_RETRY_MS),
+      retryMaxMs: ms(
+        'RATE_LIMIT_RETRY_MAX_MS',
+        DEFAULT_RATE_LIMIT_RETRY_MAX_MS,
+      ),
+      quotaRetryMs: ms(
+        'RATE_LIMIT_QUOTA_RETRY_MS',
+        DEFAULT_RATE_LIMIT_QUOTA_RETRY_MS,
+      ),
+    };
   }
 
   /**

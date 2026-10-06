@@ -163,6 +163,25 @@ export const DEFAULT_REQUIRED_TOOL_RETRIES = 2;
 export const DEFAULT_LLM_TIMEOUT_MS = 30 * 60 * 1000; // 30m
 
 /**
+ * First wait before retrying an agent a provider rate-limited without saying
+ * when to try again; doubles on each repeat. Overridden by
+ * `RATE_LIMIT_RETRY_MS` (tcp-agent env). A provider's own hint always wins.
+ */
+export const DEFAULT_RATE_LIMIT_RETRY_MS = 60 * 1000; // 1m
+
+/**
+ * Ceiling for that doubling wait. Overridden by `RATE_LIMIT_RETRY_MAX_MS`.
+ */
+export const DEFAULT_RATE_LIMIT_RETRY_MAX_MS = 30 * 60 * 1000; // 30m
+
+/**
+ * Wait before retrying after a used-up quota or credit balance — longer,
+ * since it usually needs a person to top up. Overridden by
+ * `RATE_LIMIT_QUOTA_RETRY_MS`.
+ */
+export const DEFAULT_RATE_LIMIT_QUOTA_RETRY_MS = 60 * 60 * 1000; // 1h
+
+/**
  * Default context window size in tokens, used when {@link LlmConfig.contextWindow}
  * is not set.
  * Used in {@link ContextBudgetService.DEFAULT_WINDOW} and {@link ChatService.sendMessage}.

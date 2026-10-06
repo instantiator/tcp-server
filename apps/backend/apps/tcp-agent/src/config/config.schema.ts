@@ -24,6 +24,22 @@ export const configSchema = Joi.object({
   AGENT_LOOP_TIMEOUT_MS: Joi.number().integer().positive().optional(),
   /** Overrides {@link DEFAULT_REQUIRED_TOOL_RETRIES} when set — reminder rounds before a run missing its required tool calls is failed. */
   AGENT_REQUIRED_TOOL_RETRIES: Joi.number().integer().min(0).optional(),
+  /** Whether a rate-limited agent resumes by itself (default true); off means only an explicit resume lifts the pause. */
+  RATE_LIMIT_AUTO_RESUME: Joi.boolean().empty('').default(true),
+  /** Overrides {@link DEFAULT_RATE_LIMIT_RETRY_MS} — first wait after a hint-less rate limit. */
+  RATE_LIMIT_RETRY_MS: Joi.number().integer().positive().empty('').optional(),
+  /** Overrides {@link DEFAULT_RATE_LIMIT_RETRY_MAX_MS} — ceiling for the doubling wait. */
+  RATE_LIMIT_RETRY_MAX_MS: Joi.number()
+    .integer()
+    .positive()
+    .empty('')
+    .optional(),
+  /** Overrides {@link DEFAULT_RATE_LIMIT_QUOTA_RETRY_MS} — wait after a used-up quota. */
+  RATE_LIMIT_QUOTA_RETRY_MS: Joi.number()
+    .integer()
+    .positive()
+    .empty('')
+    .optional(),
   /** Pool and endpoint run limits — see .env.example for the shape. */
   MODEL_CONCURRENCY: modelConcurrencySchema,
   // Environment-level LLM fallback — used when neither a role's llmConfig nor a company's llmConfig is set.

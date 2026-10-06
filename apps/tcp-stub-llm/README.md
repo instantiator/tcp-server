@@ -70,6 +70,12 @@ document:
 - **Tools**: a response's `tools` become OpenAI-shaped `tool_calls` on the
   reply — the stub does not call them itself, it only emits the same shape a
   real LLM would, for the caller's own tool-dispatch loop to execute.
+- **Refusals**: a response with `"refusal": { "status": 429, "retryAfter": 2 }`
+  is sent as a provider error instead of a reply — an OpenAI-shaped error body
+  plus a `Retry-After` header when `retryAfter` is set. `code` and `message`
+  override the body's defaults (`rate_limit_exceeded`, or `insufficient_quota`
+  for a 402). In `sequence` mode, put a refusal before a normal response to
+  test a caller's back-off and retry.
 - **Delay**: `minDelay`/`maxDelay` are read as a random per-word delay (ms);
   unset or `0` on both means instant responses.
 - **Token usage**: every reply's `usage` is deterministic, not zero —

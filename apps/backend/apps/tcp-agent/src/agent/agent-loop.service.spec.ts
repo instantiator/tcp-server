@@ -716,6 +716,79 @@ describe('AgentLoopService', () => {
     );
   });
 
+  describe('when the provider rate-limits the call', () => {
+    /** A 429 shaped like the OpenAI SDK's error, as LangChain rethrows it. */
+    function rateLimited(headers: Record<string, string> = {}): Error {
+      return Object.assign(new Error('429 Rate limit reached'), {
+        status: 429,
+        headers: new Headers(headers),
+      });
+    }
+
+    afterEach(() => {
+      configService.get.mockReturnValue(undefined);
+    });
+
+    it('pauses the agent until the hinted time, instead of failing it', async () => {
+      mockToolGraphOnce(
+        makeStubGraph([], rateLimited({ 'retry-after': '120' })),
+      );
+      const { agent } = await seedAgentAndRole();
+      const before = Date.now();
+
+      await service.run(agent.id, undefined, new AbortController());
+
+      const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+      expect(updated.status).toBe(AgentStatus.Paused);
+      expect(updated.pauseReason).toBe('rate_limited');
+      expect(updated.pausedAt).toBeTruthy();
+      expect(updated.rateLimitRetries).toBe(1);
+      const wait = new Date(updated.resumeAfter ?? 0).getTime() - before;
+      expect(wait).toBeGreaterThanOrEqual(119_000);
+      expect(wait).toBeLessThanOrEqual(121_000);
+      expect(notifyFailed).not.toHaveBeenCalled();
+      expect(auditRecord).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(String),
+        agent.id,
+        AuditEventType.StateChange,
+        expect.objectContaining({ reason: 'rate_limited' }),
+      );
+    });
+
+    it('doubles the wait for each rate limit in a row with no progress', async () => {
+      mockToolGraphOnce(makeStubGraph([], rateLimited()));
+      const { agent } = await seedAgentAndRole();
+      await agentRepo.update(agent.id, { rateLimitRetries: 2 });
+      const before = Date.now();
+
+      await service.run(agent.id, 'Continue.', new AbortController());
+
+      const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+      expect(updated.rateLimitRetries).toBe(3);
+      // Third in a row: 1 minute (the default) doubled twice.
+      const wait = new Date(updated.resumeAfter ?? 0).getTime() - before;
+      expect(wait).toBeGreaterThanOrEqual(240_000 - 1_000);
+      expect(wait).toBeLessThanOrEqual(240_000 + 1_000);
+    });
+
+    it('leaves the agent for an explicit resume when auto-resume is off', async () => {
+      configService.get.mockImplementation((key: string) =>
+        key === 'RATE_LIMIT_AUTO_RESUME' ? 'false' : undefined,
+      );
+      mockToolGraphOnce(
+        makeStubGraph([], rateLimited({ 'retry-after': '120' })),
+      );
+      const { agent } = await seedAgentAndRole();
+
+      await service.run(agent.id, undefined, new AbortController());
+
+      const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+      expect(updated.pauseReason).toBe('rate_limited');
+      expect(updated.resumeAfter).toBeNull();
+    });
+  });
+
   it('reports a human-readable reason when the run was aborted by the wall-clock timeout', async () => {
     // Simulates what LangGraph throws once the signal is aborted — the stub
     // graph itself doesn't consult the signal, so the abort is set directly.
