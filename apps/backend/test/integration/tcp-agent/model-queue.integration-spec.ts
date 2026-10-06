@@ -114,11 +114,14 @@ describe('Model queue and rate-limit pause/resume across a task run (stub LLM, r
    */
   async function waitForNoRunningLoops(): Promise<void> {
     const registry = agentModuleRef.get(AgentRegistryService);
-    await waitFor(() => Promise.resolve(registry.activeCount === 0));
+    // A cancelled loop stops at its next status check, after any reply it is
+    // mid-way through — up to ~a dozen words at 2.5 s each in the queue
+    // scenario — so allow for one slow reply, not just a quick exit.
+    await waitFor(() => Promise.resolve(registry.activeCount === 0), 60_000);
   }
 
   /**
-   * Cancels `taskId` and waits for every agent it ever dispatched to settle.
+   * Cancels each task and waits for every agent they dispatched to settle.
    *
    * Each planner's `create_plan` call dispatches a follow-on implement agent
    * before this spec gets a chance to intervene — scripted here only to
@@ -126,8 +129,8 @@ describe('Model queue and rate-limit pause/resume across a task run (stub LLM, r
    * task is cancelled right after this spec's own assertions on it are done,
    * rather than left to finish on its own past the end of the test.
    */
-  async function cancelTaskAndSettle(taskId: UUID): Promise<void> {
-    await taskService.cancel(taskId);
+  async function cancelTaskAndSettle(...taskIds: UUID[]): Promise<void> {
+    for (const taskId of taskIds) await taskService.cancel(taskId);
     await waitForNoRunningLoops();
   }
 
@@ -468,10 +471,10 @@ describe('Model queue and rate-limit pause/resume across a task run (stub LLM, r
 
       // Both plans' own assertions are done — cancel their create_plan-
       // spawned implement agents so neither is still running when the suite
-      // tears down.
-      await cancelTaskAndSettle(taskA.id);
-      await cancelTaskAndSettle(taskB.id);
-    }, 90_000);
+      // tears down. Both before waiting: the wait is on every loop, and B's
+      // implement agent would otherwise keep it open while A's settles.
+      await cancelTaskAndSettle(taskA.id, taskB.id);
+    }, 150_000);
   });
 
   describe('a hint-less rate limit pauses the run, which resumes from its checkpoint once due', () => {
