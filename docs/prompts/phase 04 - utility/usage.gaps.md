@@ -32,7 +32,7 @@ that has been implemented.
 | [Duplicate actions](#duplicate-actions)                             | A retried or repeated run could process an order or send an email twice    | Idempotency keys on records and outbound actions                                   |
 | [Home hardware realities](#home-hardware-realities)                 | The machine sleeps, the model cold-starts, there's one GPU                 | Catch-up on wake, one shared model queue, long timeouts                            |
 | 📝 [Model fit per job](#model-fit-per-job)                          | Browsing and email triage are hard for 7–14B models                        | A capability check per tool set; route heavy roles to a bigger model               |
-| [Spend tracking](#spend-tracking)                                   | No token or cost tracking; a remote API bill could eat the profit          | Record token usage per run; optional monthly budget per company                    |
+| ✅ [Spend tracking](#spend-tracking)                                | No token or cost tracking; a remote API bill could eat the profit          | Record token usage per run; optional monthly budget per company                    |
 | [Images](#images)                                                   | Agents can't look at product photos                                        | Pass images to vision-capable models; describe them otherwise                      |
 | 📝 [Configurable workflows](#configurable-workflows)                | The planner improvises every task, even routine ones                       | Fixed workflows for repeat processes (already in unplanned.md)                     |
 | 📝 [Company templates](#company-templates)                          | No packaged companies; seed JSON covers the company row only               | A template package format, with import/export and a gallery                        |
@@ -330,6 +330,13 @@ state a minimum model per role. A hardware guide (8 / 16 / 32 GB) would help
 users choose.
 
 ### Spend tracking
+
+> ✅ **Implemented in 000.02:** every LLM call's tokens are recorded, and
+> optional per-provider caps (application-wide only) raise notifications and
+> pause agents when reached — see [the guide](../../spend-caps.md) and
+> [ADR-031](../../ADRs/ADR-031-spend-tracking-and-notifications.md). Company
+> caps are deferred — see
+> [outstanding issues](../../outstanding-issues.md#company-spend-caps-and--shares).
 
 **Today:** no token usage is recorded. `AGENT_ITERATIONS` caps loop length,
 not cost.

@@ -1,5 +1,6 @@
 import {
   AgentStatus,
+  AuditEvent,
   AuditEventType,
   Conversation,
   ConversationMessage,
@@ -92,6 +93,7 @@ describe('AgentOrchestrationService', () => {
   let consultRepo: ReturnType<typeof makeRepo>;
   let convRepo: ReturnType<typeof makeRepo>;
   let msgRepo: ReturnType<typeof makeRepo>;
+  let auditRepo: { exists: jest.Mock<Promise<boolean>, [unknown]> };
   let recordAudit: jest.Mock;
   let shutdown: SystemShutdownService;
 
@@ -120,6 +122,7 @@ describe('AgentOrchestrationService', () => {
           provide: getRepositoryToken(ConversationMessage),
           useValue: msgRepo,
         },
+        { provide: getRepositoryToken(AuditEvent), useValue: auditRepo },
         { provide: AuditService, useValue: { record: recordAudit } },
         // Real instance: it holds only in-memory state and no collaborators,
         // so a spec that needs the draining behaviour can just call begin().
@@ -141,6 +144,9 @@ describe('AgentOrchestrationService', () => {
     consultRepo = makeRepo();
     convRepo = makeRepo();
     msgRepo = makeRepo();
+    auditRepo = {
+      exists: jest.fn((_options: unknown) => Promise.resolve(false)),
+    };
 
     service = await compileService();
     await service.onModuleInit();
@@ -284,6 +290,37 @@ describe('AgentOrchestrationService', () => {
         replyContent: expect.stringContaining(
           'Continue from where you left off',
         ) as string,
+      });
+    });
+
+    describe('resuming a spend-cap-paused agent', () => {
+      /** Resumes a cap-paused agent and returns the queued job's replyContent. */
+      async function resumeCapPaused(started: boolean): Promise<unknown> {
+        const agent = makeAgent({
+          status: AgentStatus.Paused,
+          pausedAt: new Date(),
+          pauseReason: 'spend_cap',
+        });
+        mockDb.getAgent.mockResolvedValue(agent);
+        auditRepo.exists.mockResolvedValue(started);
+
+        await service.resumeAgent(agent.id);
+
+        const [, job] = mockQueueInstance.add.mock.calls[0] as [
+          string,
+          { replyContent?: unknown },
+        ];
+        return job.replyContent;
+      }
+
+      it('continues from the checkpoint when the agent had already called its LLM', async () => {
+        expect(await resumeCapPaused(true)).toEqual(
+          expect.stringContaining('spending limit'),
+        );
+      });
+
+      it('restarts with no message when the cap held it back before its first LLM call', async () => {
+        expect(await resumeCapPaused(false)).toBeUndefined();
       });
     });
 

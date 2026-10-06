@@ -1,5 +1,6 @@
 import {
   AuditClientService,
+  LlmIdentity,
   StreamEventLike,
   TcpAgent,
   enrichedAuditForEvent,
@@ -40,6 +41,7 @@ export class AgentLoopEventRecorder {
   forTurn(
     agent: TcpAgent,
     tracker: AgentLoopTracker,
+    llm: LlmIdentity,
   ): (event: StreamEventLike) => void {
     // ponytail: actions include failed tool calls; on_tool_start used for simplicity
     const pendingToolInputs = new Map<string, Record<string, unknown>>();
@@ -48,7 +50,7 @@ export class AgentLoopEventRecorder {
       // Persist each lifecycle event with an enriched payload (tool name/input/
       // output, response/reasoning text) — the server streams it live. Token
       // deltas are published directly to the agent's Redis channel.
-      const audit = enrichedAuditForEvent(event);
+      const audit = enrichedAuditForEvent(event, llm);
       if (audit) {
         this.auditClient.record(
           agent.companyId,

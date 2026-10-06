@@ -9,6 +9,8 @@ import { ChatsList } from './activity/ChatsList';
 import { ConsultationsList } from './activity/ConsultationsList';
 import { EnquiriesList } from './activity/EnquiriesList';
 import { NewEnquiryNotifications } from './activity/NewEnquiryNotifications';
+import { NewNotificationToasts } from './activity/NewNotificationToasts';
+import { NotificationsList } from './activity/NotificationsList';
 import { TasksList } from './activity/TasksList';
 import './activity/activity.css';
 
@@ -19,6 +21,7 @@ const ACTIVITY_TABS = [
   { id: 'consultations', label: 'activity.consultations.heading' },
   { id: 'enquiries', label: 'activity.enquiries.heading' },
   { id: 'chats', label: 'activity.chats.heading' },
+  { id: 'notifications', label: 'notifications.heading' },
 ] as const satisfies readonly { id: string; label: StringKey }[];
 
 type ActivityTab = (typeof ACTIVITY_TABS)[number]['id'];
@@ -100,6 +103,7 @@ export const CompanyTabs = ({ companyId, visualisation }: CompanyTabsProps) => {
       consultations: listen('consultations'),
       enquiries: listen('enquiries'),
       chats: listen('chats'),
+      notifications: listen('notifications'),
     } satisfies Record<ActivityTab, CountListener>;
   }, []);
 
@@ -133,6 +137,12 @@ export const CompanyTabs = ({ companyId, visualisation }: CompanyTabsProps) => {
         onCount={listeners.chats}
       />
     ),
+    notifications: (
+      <NotificationsList
+        companyId={companyId}
+        onCount={listeners.notifications}
+      />
+    ),
   };
 
   return (
@@ -144,6 +154,13 @@ export const CompanyTabs = ({ companyId, visualisation }: CompanyTabsProps) => {
         channel (see the comment in `EnquiriesList`).
       */}
       <NewEnquiryNotifications companyId={companyId} />
+      {/*
+        Same placement, same reasoning: seen from any tab, and the single
+        writer on the `notification` announcer channel. Reads the same
+        notifications query `NotificationsList` does, so it costs no extra
+        request.
+      */}
+      <NewNotificationToasts companyId={companyId} />
       <Tabs
         className="react-aria-Tabs company-page__tabs"
         selectedKey={selectedKey}

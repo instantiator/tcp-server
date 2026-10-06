@@ -51,6 +51,9 @@ const TASKS_ROUTE = /\/api\/task\?/;
 const CHATS_ROUTE = /\/api\/assignment\?.*mode=chat/;
 const ASSIGNMENTS_ROUTE = /\/api\/assignment\?/;
 const CONVERSATIONS_ROUTE = /\/api\/conversation\?/;
+// 000.02: the Notifications tab and its toasts, mounted alongside the other
+// six activity lists.
+const NOTIFICATIONS_ROUTE = /\/api\/notifications(\?|$)/;
 // The chats list opens the chat dialog on a row's agent, which mounts a
 // `Transcript` and a `MessageInput` for `CHAT_1.agentId` — a detail and a
 // history request neither of `CompanyTabs`'s own five queries make.
@@ -237,9 +240,10 @@ interface ActivityRoutes {
   readonly assignments?: RouteResponse;
   readonly conversations?: RouteResponse;
   readonly chats?: RouteResponse;
+  readonly notifications?: RouteResponse;
 }
 
-/** Answers all six queries `CompanyTabs` mounts. Each is overridable. */
+/** Answers all seven queries `CompanyTabs` mounts. Each is overridable. */
 const respondActivity = (overrides: ActivityRoutes = {}): void => {
   respondByRoute([
     [ROLES_ROUTE, overrides.roles ?? { body: [ROLE] }],
@@ -251,6 +255,7 @@ const respondActivity = (overrides: ActivityRoutes = {}): void => {
       CONVERSATIONS_ROUTE,
       overrides.conversations ?? { body: [CONVERSATION_1] },
     ],
+    [NOTIFICATIONS_ROUTE, overrides.notifications ?? { body: [] }],
     // Not overridable per test — nothing here exercises more than one chat
     // agent, so a fixed fixture is enough.
     [CHAT_AGENT_HISTORY_ROUTE, { body: [] }],
@@ -265,6 +270,7 @@ const EMPTY_ROUTES: ActivityRoutes = {
   assignments: { body: [] },
   conversations: { body: [] },
   chats: { body: [] },
+  notifications: { body: [] },
 };
 
 /** Shows the router's current hash, which is the selected tab (005.01). */
@@ -369,9 +375,10 @@ describe('CompanyTabs', () => {
       ).toBeInTheDocument();
     }
 
-    // Five now, not four: the chats list (008.02) is a fifth region, covered
-    // in its own describe block below rather than in this loop.
-    expect(screen.getAllByRole('region')).toHaveLength(5);
+    // Six now: the chats list (008.02) and the Notifications list (000.02)
+    // are a fifth and sixth region, each covered in its own describe block
+    // below rather than in this loop.
+    expect(screen.getAllByRole('region')).toHaveLength(6);
   });
 
   it("renders each row's key fields", async () => {
@@ -1524,8 +1531,9 @@ describe('CompanyTabs', () => {
     renderActivity();
 
     const progressBars = screen.getAllByRole('progressbar');
-    // Five lists now that the chats list (008.02) has joined the other four.
-    expect(progressBars).toHaveLength(5);
+    // Six lists now that the chats list (008.02) and the Notifications list
+    // (000.02) have joined the other four.
+    expect(progressBars).toHaveLength(6);
     for (const progressBar of progressBars) {
       expect(progressBar.closest('.activity-list__body')).toHaveAttribute(
         'aria-busy',

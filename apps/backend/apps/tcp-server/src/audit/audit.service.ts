@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import type { UUID } from 'crypto';
 import { FindOptionsWhere, In, Repository } from 'typeorm';
 import { AuditEventPublisher } from '../events/audit-event-publisher.service';
+import { UsageService } from '../spend/usage.service';
 import { CreateAuditEventDto } from './create-audit-event.dto';
 
 /**
@@ -28,6 +29,7 @@ export class AuditService {
     @InjectRepository(TcpAssignment)
     private readonly assignmentRepo: Repository<TcpAssignment>,
     private readonly publisher: AuditEventPublisher,
+    private readonly usage: UsageService,
   ) {}
 
   /**
@@ -60,6 +62,9 @@ export class AuditService {
     event.eventType = dto.eventType;
     event.payload = dto.payload;
     const saved = await this.repo.save(event);
+    // Recorded before publish — a failure here is swallowed by UsageService
+    // itself, so it can never block or delay the live stream.
+    await this.usage.record(saved);
     // Persist-then-publish: the same row that history reads is streamed live.
     this.publisher.publish(saved);
   }

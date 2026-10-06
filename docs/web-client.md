@@ -235,14 +235,25 @@ The landing page and `/callback` render outside the shell and own their own
 on one page.
 
 **The company page's tabs follow the URL hash** (005.01): `#agents`, `#tasks`,
-`#consultations`, `#enquiries` and `#chats` select the activity tabs, and no
-hash (or an unknown one) selects the office view. Choosing a tab replaces the
-history entry rather than pushing one. `useRouteChange` watches only the
-pathname, so a hash change moves no focus. This is what lets the new-enquiry
-notification's link to `#enquiries` open that tab. The activity panels stay
-mounted while hidden (`shouldForceMount`, then `inert` and `display: none`), so
-a list keeps its filters across a tab switch, and each tab's count badge stays
-current.
+`#consultations`, `#enquiries`, `#chats` and `#notifications` (000.02) select
+the activity tabs, and no hash (or an unknown one) selects the office view.
+Choosing a tab replaces the history entry rather than pushing one.
+`useRouteChange` watches only the pathname, so a hash change moves no focus.
+This is what lets the new-enquiry notification's link to `#enquiries` open
+that tab, and a spend notification toast's link to `#notifications` open the
+Notifications tab the same way. The activity panels stay mounted while hidden
+(`shouldForceMount`, then `inert` and `display: none`), so a list keeps its
+filters across a tab switch, and each tab's count badge stays current.
+
+**Breadcrumb spend meters** (000.02): each crumb in `Breadcrumbs` can carry a
+`bar`, rendered under its label in the same `li` — `SpendBar`, under the
+"companies" crumb for the application-wide view and under the company crumb
+for that company's own usage. It's a plain `role="meter"` element rather than
+React Aria's `Meter`: it has to be the focusable tooltip trigger itself
+(`Focusable` only wraps a host element), and `Meter`'s
+`role="meter progressbar"` trips axe-core. Its tooltip text is also its
+`aria-valuetext`, so a screen reader gets the same detail a sighted user
+hovering it does. With no cap configured, the bar reads full.
 
 ## Signing in
 

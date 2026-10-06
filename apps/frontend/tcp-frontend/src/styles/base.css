@@ -77,6 +77,9 @@
   /* The sticky header's approximate block size, so `scroll-padding-block-start`
      below can keep focused content clear of it (WCAG 2.4.11). */
   --tcp-header-block-size: 4rem;
+  /* A breadcrumb spend bar (000.02): thin, so it reads as a crumb's detail
+     rather than a second row of content. */
+  --tcp-spend-bar-block-size: 5px;
 }
 
 *,

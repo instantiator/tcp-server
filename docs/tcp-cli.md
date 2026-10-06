@@ -116,6 +116,13 @@ See [schema.md](schema.md) for the full field reference, VS Code integration, ex
 | [`list-assignments`](#list-assignments)                     | `list-assignments (--task-id <uuid> \| --company <slug-or-id>) [--filter k=v...]`                                   | List assignments for a task or company                                                        |
 | [`eavesdrop`](#eavesdrop)                                   | `eavesdrop (--agent-id \| --assignment-id \| --task-id <uuid>) [--show-history] [--tail]`                           | Replay and/or follow an agent's, assignment's, or task's activity                             |
 | [`shutdown`](#shutdown)                                     | `shutdown [--force] [--no-stop] [--timeout <seconds>]`                                                              | Drain the system for shutdown, wait for agents to pause, then stop the containers             |
+| [`usage`](#usage)                                           | `usage [--company-id <id-or-slug>]`                                                                                 | Report spend caps, usage and totals                                                           |
+| [`notifications`](#notifications)                           | `notifications [--all]`                                                                                             | List application-wide notifications                                                           |
+| [`dismiss-notification`](#dismiss-notification)             | `dismiss-notification --notification-id <uuid>`                                                                     | Dismiss a notification                                                                        |
+| [`dismiss-cap`](#dismiss-cap)                               | `dismiss-cap --provider <id> [--indefinitely]`                                                                      | Lift a provider's spend cap (administrators only)                                             |
+| [`restore-cap`](#restore-cap)                               | `restore-cap --provider <id>`                                                                                       | Restore a provider's spend cap (administrators only)                                          |
+| [`resume-task`](#resume-task)                               | `resume-task --task-id <uuid>`                                                                                      | Resume a task paused by a spend cap or shutdown                                               |
+| [`resume-company`](#resume-company)                         | `resume-company --company-id <id-or-slug>`                                                                          | Resume a company's tasks paused by a spend cap or shutdown                                    |
 
 ### Entity identifiers: `--x`, `--x-id`, `--x-slug`
 
@@ -1268,6 +1275,126 @@ curl -X DELETE -H "Authorization: Bearer $TOKEN" \
 
 Agents the drain already paused stay paused — cancelling does not auto-resume
 them.
+
+---
+
+## Spend tracking and notifications
+
+Reports per-provider spend caps and usage (configured via `SPEND_CAPS`), and
+the application-wide notifications that threshold/cap/reset events raise.
+`resume-task`/`resume-company` undo a cap-driven pause explicitly;
+`dismiss-cap`/`restore-cap` change the cap itself and are administrator-only.
+
+### `usage`
+
+Reports application-wide spend caps, progress and totals. With
+`--company-id`, also fetches that company's own usage and merges it under
+`company`.
+
+- **stdout**: `SpendOverview` as JSON; with `--company-id`,
+  `{ ...SpendOverview, company: CompanySpend }`
+
+| Flag                        | Description                          |
+| --------------------------- | ------------------------------------ |
+| `--company-id <id-or-slug>` | Also report this company's own usage |
+
+```bash
+./tcp-cli.sh -t $TOKEN usage
+./tcp-cli.sh -t $TOKEN usage --company-id acme
+```
+
+### `notifications`
+
+Lists application-wide notifications (spend thresholds, caps reached, resets,
+untracked providers), newest first.
+
+- **stdout**: `TcpNotification[]` as JSON
+
+| Flag    | Description                             |
+| ------- | --------------------------------------- |
+| `--all` | Include already-dismissed notifications |
+
+```bash
+./tcp-cli.sh -t $TOKEN notifications
+./tcp-cli.sh -t $TOKEN notifications --all
+```
+
+### `dismiss-notification`
+
+Dismisses a notification for every user. Idempotent.
+
+- **stdout**: the dismissed `TcpNotification` as JSON
+
+| Flag                       | Description                 |
+| -------------------------- | --------------------------- |
+| `--notification-id <uuid>` | Required. Notification UUID |
+
+```bash
+./tcp-cli.sh -t $TOKEN dismiss-notification --notification-id <uuid>
+```
+
+### `dismiss-cap`
+
+Lifts a provider's spend cap — until it next resets, or indefinitely — and
+resumes the agents it paused. Administrators only.
+
+- **stdout**: the updated `SpendCapState` as JSON
+
+| Flag              | Description                                                  |
+| ----------------- | ------------------------------------------------------------ |
+| `--provider <id>` | Required. Catalogue provider id                              |
+| `--indefinitely`  | Lift the cap until restored, instead of until its next reset |
+
+```bash
+./tcp-cli.sh -t $TOKEN dismiss-cap --provider lm-studio
+./tcp-cli.sh -t $TOKEN dismiss-cap --provider anthropic --indefinitely
+```
+
+### `restore-cap`
+
+Puts a lifted cap back into force, re-evaluating it straight away.
+Administrators only.
+
+- **stdout**: the updated `SpendCapState` as JSON
+
+| Flag              | Description                     |
+| ----------------- | ------------------------------- |
+| `--provider <id>` | Required. Catalogue provider id |
+
+```bash
+./tcp-cli.sh -t $TOKEN restore-cap --provider lm-studio
+```
+
+### `resume-task`
+
+Resumes a task's agents paused by a spend cap or a shutdown, and exempts the
+task from spend caps until it ends — resuming is the user choosing to spend.
+
+- **stdout**: `{ resumed }` as JSON (the number of agents a resume was requested for)
+
+| Flag               | Description         |
+| ------------------ | ------------------- |
+| `--task-id <uuid>` | Required. Task UUID |
+
+```bash
+./tcp-cli.sh -t $TOKEN resume-task --task-id <uuid>
+```
+
+### `resume-company`
+
+Resumes every task in a company with agents paused by a spend cap or a
+shutdown, exempting those tasks from spend caps until they end. Does not lift
+the cap for any other company.
+
+- **stdout**: `{ resumed }` as JSON
+
+| Flag                        | Description                    |
+| --------------------------- | ------------------------------ |
+| `--company-id <id-or-slug>` | Required. Company UUID or slug |
+
+```bash
+./tcp-cli.sh -t $TOKEN resume-company --company-id acme
+```
 
 ---
 

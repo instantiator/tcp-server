@@ -120,6 +120,7 @@ describe('useOfficeWorld — the live pipeline (agent E2E stand-in)', () => {
     expected: [],
     completed: null,
     failureReason: null,
+    spendCapExempt: false,
     createdAt: NOW,
     updatedAt: NOW,
   });

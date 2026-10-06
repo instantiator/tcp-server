@@ -247,6 +247,57 @@ const strings = {
   'notification.announcement': '{message}',
   'notification.dismiss': 'Dismiss',
 
+  // 000.02 — the breadcrumb spend bars (`components/SpendBar`) and the
+  // notifications tab/toasts they feed into. `spend.bar.label` names the
+  // meter itself; every other `spend.bar.*` key builds its `aria-valuetext`
+  // or tooltip lines in `spend-bar-model.ts`.
+  'spend.bar.label': 'Spend',
+  'spend.bar.uncapped': '{tokens} tokens used since {since}',
+  'spend.bar.noUsage': 'no usage yet',
+  'spend.bar.capped': '{percent}% of {tokens} tokens per {per}',
+  'spend.bar.companyUsage':
+    '{tokens} tokens used by this company since {since}',
+  'spend.bar.detail.window':
+    '{provider}: {percent}% of {tokens} tokens per {per}, since {windowStart}',
+  'spend.bar.detail.windowNotStarted':
+    '{provider}: {percent}% of {tokens} tokens per {per}, stint not started',
+  'spend.bar.detail.nextReset': 'Next reset: {resetsAt}',
+  'spend.bar.detail.pausedUntil': 'Paused until {reachedUntil}',
+  'spend.bar.detail.provider': '{provider}: {input} in, {output} out',
+  'spend.bar.action.pause': 'Running agents pause before their next LLM call',
+  'spend.bar.action.finishAgents': 'Running agents finish; no new agents start',
+  'spend.bar.action.finishTasks':
+    "Running tasks finish; new tasks don't start automatically",
+
+  // The "start now" default (`CreateTaskDialog`): off while a cap holds, with
+  // a hint explaining why, associated to the checkbox via `aria-describedby`.
+  'task.create.start.cappedHint':
+    "A spend cap is reached, so new tasks don't start automatically. You can still start one now.",
+
+  // The Notifications activity tab (`pages/CompanyPage/activity/NotificationsList.tsx`)
+  // and the toast that announces a new one (`NewNotificationToasts.tsx`).
+  'notifications.heading': 'Notifications',
+  'notifications.empty.heading': 'No notifications',
+  'notifications.empty.body': 'Spend thresholds and cap notices appear here.',
+  'notifications.severity.info': 'Info',
+  'notifications.severity.warning': 'Warning',
+  'notifications.severity.error': 'Error',
+  'notifications.dismiss': 'Dismiss this notification',
+  'notifications.resumeCompany': "Resume this company's paused work",
+  'notifications.resumeCompany.requested.one':
+    'Resume requested for {count} agent',
+  'notifications.resumeCompany.requested.other':
+    'Resume requested for {count} agents',
+  'notifications.resumeCompany.failed':
+    'That resume could not be requested. Try again.',
+  // Announced through the announcer, not shown on the page — the on-page
+  // status is `notifications.resumeCompany.requested.*` above, via `tCount`.
+  // Deliberately has no count of its own: `{count}` is the announcer's
+  // reserved repeat-count slot (`strings.ts`'s own note on `announce.*`), and
+  // a hardcoded plural noun here would read wrong at a count of one.
+  'notifications.resumeCompany.announced': 'Resume requested',
+  'notifications.toast.link': 'Go to the notifications list',
+
   'page.companies.title': 'Companies',
   'page.company.title': 'Company',
 

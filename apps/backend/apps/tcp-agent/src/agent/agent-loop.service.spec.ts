@@ -33,6 +33,7 @@ import { agentPrompts } from '../agent-prompts';
 import { AgentEventPublisherService } from './agent-event-publisher.service';
 import { AgentLoopService } from './agent-loop.service';
 import { SupervisedTurnService } from './supervised-turn.service';
+import { SpendGateService } from './spend-gate.service';
 import { InitialStateService } from './initial-state.service';
 import { AgentLoopEventRecorder } from './loop-events.service';
 import { AgentRunEnvironmentService } from './run-environment.service';
@@ -212,6 +213,11 @@ describe('AgentLoopService', () => {
         AgentRunStatusService,
         AgentLoopEventRecorder,
         SupervisedTurnService,
+        // Never holds spending back here; the gate has its own spec.
+        {
+          provide: SpendGateService,
+          useValue: { forRun: () => () => Promise.resolve(false) },
+        },
         {
           provide: AuditClientService,
           useValue: { record: auditRecord, notifyComplete, notifyFailed },
@@ -420,6 +426,7 @@ describe('AgentLoopService', () => {
       expect.objectContaining({ id: agent.id }),
       expect.objectContaining({ name: 'analyst' }),
       [],
+      { provider: 'lm-studio', model: 'qwen3-5b' },
     );
   });
 

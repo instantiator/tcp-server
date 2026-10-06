@@ -203,6 +203,96 @@ The provider catalogue (`libs/tcp-shared/src/llm/provider-catalogue.ts`, 004.01)
 
 **Act when:** someone first uses a real key for one of these providers — run `./scripts/setup-wizard.sh --test-config`, then a chat and a task with tools, and correct that catalogue entry. Before any release, do this for at least OpenAI and Anthropic.
 
+## Company spend caps (and % shares)
+
+Only application-wide, per-provider spend caps exist (`SPEND_CAPS`, 000.02).
+A company cap, or a company cap expressed as a percentage of an application
+cap, was in the original request and was dropped in planning — a home
+install usually runs one company, so splitting a shared provider's budget
+across several doesn't matter yet.
+
+**Act when:** one install runs several companies on a shared paid provider
+and needs to split its budget between them.
+
+## Spend in currency rather than tokens
+
+Spend is reported and capped in tokens, never money. A per-model price table
+(and its upkeep as providers change prices) was out of scope for 000.02.
+
+**Act when:** a user asks for spend reported in currency, not tokens.
+
+## Embedding and model-check usage isn't counted
+
+`token_usage` only records LLM chat/agent calls. Embeddings (LangChain's
+`OpenAIEmbeddings` exposes no usage figure to read) and the model-compatibility
+probe (`POST /api/model/check`) are never recorded or capped.
+
+**Act when:** LangChain's embeddings client starts exposing usage, or
+embeddings move to a paid provider whose spend needs tracking.
+
+## OTLP export of usage
+
+Recorded token usage field names (`inputTokens`, `outputTokens`, `provider`,
+`model`) already follow OpenTelemetry's GenAI semantic conventions, but no
+OTLP exporter exists — 000.02 deliberately took no OpenTelemetry dependency.
+
+**Act when:** an operator wants usage visible in an external dashboard.
+
+## Cap windows are UTC only
+
+`SPEND_CAPS`'s `month`/`week`/`day` windows all reset on UTC boundaries; there
+is no per-operator or per-cap timezone setting.
+
+**Act when:** a user asks for a cap to reset on local-time boundaries instead.
+
+## `token_usage` rollup
+
+Every cap check and usage report sums raw `token_usage` rows with a SQL
+`SUM` over the relevant window — there is no rollup table. This is fine to
+roughly a million rows.
+
+**Act when:** the table passes about 1 million rows, or `GET /api/spend` /
+`GET /api/company/:id/spend` becomes noticeably slow.
+
+## Shared cap for `openai-compatible` endpoints
+
+`SPEND_CAPS` is keyed by catalogue provider id. Every `openai-compatible`
+endpoint shares that one id, so two different `openai-compatible` servers
+share one cap and can't be capped separately.
+
+**Act when:** two `openai-compatible` endpoints need separate caps.
+
+## Single tcp-server instance assumption in `SpendCapService`
+
+Cap evaluation is serialised per provider by an in-process promise chain
+(`SpendCapService.chains`), which only works correctly with one tcp-server
+instance. A second instance could race on the same `spend_cap_state` row.
+
+**Act when:** tcp-server is ever scaled out to more than one instance.
+
+## App spend bar refresh on other companies' pages
+
+The breadcrumb application spend bar refetches when its own company's usage
+events arrive, or when a notification arrives — not on every other company's
+usage event. A change on a company the viewer isn't looking at can leave the
+application bar stale until the next notification.
+
+**Act when:** users report the application-wide spend bar looking stale.
+
+## Planner-dispatched implement agent got a 404 from `complete_assignment` (not diagnosed)
+
+During 000.02 stage 8's integration spec
+(`test/integration/tcp-agent/spend-cap.integration-spec.ts`), a
+planner-dispatched implement agent received a 404 from
+`POST /internal/assignment/:id/complete` through the spec's fake tool, and
+burned all 40 iterations retrying. It happened outside the scenario the spec
+was testing, and only against a test-only fake tool — not the real
+`complete_assignment` MCP tool — so the spec was changed to cancel each task
+after its assertions rather than chase this down.
+
+**Act when:** a real `complete_assignment` call (not a test fake) ever
+returns 404.
+
 ## Two stacks with the bundled Zitadel can't run at once
 
 The bundled Zitadel only works on host port 8080: `docker-compose.yml` sets `ZITADEL_EXTERNALPORT: 8080` (the port in its issuer URLs), and `start-deployment.sh`'s `zit()` bootstrap calls `localhost:8080`. `start-deployment.sh` therefore refuses any other `EXPOSE_PORT_ZITADEL`, and the wizard says the port is fixed. The other host ports can be changed per instance in the wizard (004.01), but a second bundled-Zitadel stack still collides on 8080, so it can't run while `tcp-dev` does — the test tiers included.

@@ -7,6 +7,7 @@ import {
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EventsModule } from '../events/events.module';
+import { SpendModule } from '../spend/spend.module';
 import { AuditController } from './audit.controller';
 import { AuditService } from './audit.service';
 
@@ -15,6 +16,7 @@ import { AuditService } from './audit.service';
   imports: [
     TypeOrmModule.forFeature([AuditEvent, TcpAgent, TcpAssignment]),
     EventsModule,
+    SpendModule,
   ],
   controllers: [AuditController],
   providers: [AuditService, InternalApiKeyGuard],

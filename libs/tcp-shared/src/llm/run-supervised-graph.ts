@@ -9,6 +9,7 @@ import type { TcpAgent } from '../models/TcpAgent.model';
 import type { TcpRole } from '../models/TcpRole.model';
 import type { buildAgentGraph } from './build-agent-graph';
 import { isContextLengthError } from './context-length-error';
+import type { LlmIdentity } from './llm-usage';
 import type { StreamEventLike } from './stream-event-mapper';
 
 /** The graph type returned by {@link buildAgentGraph}. */
@@ -34,6 +35,11 @@ export interface SupervisedGraphHooks {
   /** Agent-loop only: aborts the run once exceeded. Absent (chat turns) means
    * no ceiling is enforced here. */
   maxIterations?: number;
+  /** Agent-loop only: asked before every LLM call (and its compaction). True
+   * means a spend cap holds this run back — the hook has already paused the
+   * agent, so the run stops as {@link AgentStatus.Paused} with its checkpoint
+   * intact. Absent (chat turns) means spending is never held back. */
+  holdSpending?: () => Promise<boolean>;
   /** Phase 6 (tool-schema gating): recomputes which tools should be bound for
    * the next iteration. Omit to keep the full tool set bound for the whole run. */
   resolveVisibleTools?: (
@@ -66,6 +72,8 @@ export interface RunSupervisedGraphOptions {
   windowSize: number;
   abortController: AbortController;
   hooks: SupervisedGraphHooks;
+  /** Attributes mid-run compaction's token usage; omit to skip reporting it. */
+  llm?: LlmIdentity;
 }
 
 export interface SupervisedGraphResult {
@@ -124,6 +132,7 @@ export async function runSupervisedGraph(
     windowSize,
     abortController,
     hooks,
+    llm,
   } = options;
 
   const config: RunnableConfig = {
@@ -158,6 +167,14 @@ export async function runSupervisedGraph(
     }
     firstIteration = false;
 
+    if (hooks.holdSpending && (await hooks.holdSpending())) {
+      return {
+        lastAiMessage,
+        terminalStatus: AgentStatus.Paused,
+        aborted: false,
+      };
+    }
+
     const budgetCheck = await contextManager.checkBudget(
       agentId,
       model,
@@ -167,6 +184,7 @@ export async function runSupervisedGraph(
       agent,
       role,
       currentTools,
+      llm,
     );
     if (budgetCheck.stillOverBudget) {
       abortController.abort('context_window_exceeded');
@@ -218,6 +236,7 @@ export async function runSupervisedGraph(
           agent,
           role,
           currentTools,
+          llm,
         );
         if (retry.stillOverBudget) {
           abortController.abort('context_window_exceeded');

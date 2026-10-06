@@ -38,7 +38,21 @@ describe('App', () => {
     installFetchMock();
     fetchMock.mockImplementation((input) => {
       const url = input instanceof Request ? input.url : String(input);
-      const body = /\/api\/company\/[^/]+$/.test(url) ? 'null' : '[]';
+      // The company page a deep link can land on also reads the spend
+      // endpoints (000.02), which answer with an object rather than a list —
+      // the array fallback below would otherwise crash it.
+      const body = /\/api\/company\/[^/]+$/.test(url)
+        ? 'null'
+        : /\/api\/spend(\?|$)/.test(url)
+          ? JSON.stringify({ trackingSince: null, providers: [], caps: [] })
+          : /\/api\/company\/[^/]+\/spend$/.test(url)
+            ? JSON.stringify({
+                trackingSince: null,
+                providers: [],
+                tasks: [],
+                series: [],
+              })
+            : '[]';
       return Promise.resolve(
         new Response(body, {
           headers: { 'Content-Type': 'application/json' },

@@ -3,6 +3,7 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { DynamicStructuredTool } from '@langchain/core/tools';
 import type { RunnableConfig } from '@langchain/core/runnables';
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { LlmIdentity, LlmUsage } from '../llm/llm-usage';
 import { AuditEventType } from '../models/AuditEvent.model';
 import type { TcpAgent } from '../models/TcpAgent.model';
 import type { TcpRole } from '../models/TcpRole.model';
@@ -106,6 +107,9 @@ export class ContextManagerService {
    * @param role - Agent's role (for audit logging).
    * @param tools - Tools currently bound to the model, counted toward the
    *   budget alongside message content (see class docs point 2).
+   * @param llm - Provider/model identity, so any LLM-assisted compaction run
+   *   here reports its token usage in the `complete` audit payload; omit to
+   *   skip usage reporting (e.g. a caller with no identity to attribute it to).
    */
   async prepare(
     agentId: string,
@@ -118,10 +122,15 @@ export class ContextManagerService {
     agent: TcpAgent,
     role: TcpRole,
     tools: DynamicStructuredTool[] = [],
+    llm?: LlmIdentity,
   ): Promise<PrepareResult> {
     const startMs = Date.now();
     const activities: string[] = [];
     const strategies: string[] = [];
+    // Collected across every LLM-assisted compaction call this run makes
+    // (incoming-data guard, Tier-2 summarisation); only reaches a caller when
+    // the `complete` audit payload below is actually written.
+    const usages: LlmUsage[] = [];
 
     const toolTokens = await this.budget.countTools(tools);
     const currentTokens = isFirstMessage
@@ -133,6 +142,9 @@ export class ContextManagerService {
       currentTokens,
       windowSize,
       model,
+      undefined,
+      llm,
+      (usage) => usages.push(usage),
     );
     if (guardResult.compacted && guardResult.activity) {
       activities.push(guardResult.activity);
@@ -243,7 +255,11 @@ export class ContextManagerService {
       if (oversized.length > 0) {
         strategies.push('summarise_message');
         const summaries = await Promise.all(
-          oversized.map((m) => this.compactor.summariseMessage(m, model)),
+          oversized.map((m) =>
+            this.compactor.summariseMessage(m, model, llm, (usage) =>
+              usages.push(usage),
+            ),
+          ),
         );
 
         const removes = this.compactor.buildRemoveMessages(
@@ -276,6 +292,7 @@ export class ContextManagerService {
         pct: this.budget.pct(tokensAfter, windowSize),
         durationMs: Date.now() - startMs,
         activities,
+        ...(usages.length > 0 ? { usage: this.sumUsage(usages) } : {}),
       },
     );
 
@@ -320,6 +337,7 @@ export class ContextManagerService {
     agent: TcpAgent,
     role: TcpRole,
     tools: DynamicStructuredTool[] = [],
+    llm?: LlmIdentity,
   ): Promise<{ report: CompactionReport | null; stillOverBudget: boolean }> {
     const { report } = await this.prepare(
       agentId,
@@ -332,6 +350,7 @@ export class ContextManagerService {
       agent,
       role,
       tools,
+      llm,
     );
     const stillOverBudget = report
       ? this.budget.isOverBudget(report.after.tokens, report.after.windowSize)
@@ -386,6 +405,16 @@ export class ContextManagerService {
     const msgs = state.values['messages'];
     if (!Array.isArray(msgs)) return [];
     return msgs as BaseMessage[];
+  }
+
+  /** Sums token usage across every LLM-assisted compaction call one run made. */
+  private sumUsage(usages: LlmUsage[]): LlmUsage {
+    return usages.reduce((total, usage) => ({
+      provider: total.provider,
+      model: total.model,
+      inputTokens: total.inputTokens + usage.inputTokens,
+      outputTokens: total.outputTokens + usage.outputTokens,
+    }));
   }
 
   private buildReport(

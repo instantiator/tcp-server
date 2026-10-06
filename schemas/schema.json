@@ -223,6 +223,24 @@
       ],
       "type": "string"
     },
+    "CapAction": {
+      "description": "The action a reached cap takes, mirroring `SPEND_CAPS`'s per-provider `action`.",
+      "enum": [
+        "pause",
+        "finish-agents",
+        "finish-tasks"
+      ],
+      "type": "string"
+    },
+    "CapDismissal": {
+      "description": "How a reached cap was lifted, if at all.",
+      "enum": [
+        "none",
+        "until-reset",
+        "indefinite"
+      ],
+      "type": "string"
+    },
     "CompanyListItem": {
       "additionalProperties": false,
       "description": "A company as `GET /api/company` returns it — the record plus its stats.",
@@ -878,12 +896,32 @@
       ],
       "type": "string"
     },
+    "NotificationKind": {
+      "description": "The condition a  {@link  TcpNotification }  reports, routing its UI treatment.",
+      "enum": [
+        "spend_threshold",
+        "spend_reached",
+        "spend_reset",
+        "spend_untracked"
+      ],
+      "type": "string"
+    },
+    "NotificationSeverity": {
+      "description": "How urgently a  {@link  TcpNotification }  should be surfaced.",
+      "enum": [
+        "info",
+        "warning",
+        "error"
+      ],
+      "type": "string"
+    },
     "PauseReason": {
-      "description": "Why an agent is currently  {@link  AgentStatus.Paused } .\n\n`user_input` and `consultation` pauses resolve themselves — a reply or a consultation result arrives and the agent is re-dispatched automatically. A `shutdown` pause has nothing outstanding to wait on, so it stays paused until a user resumes it explicitly.",
+      "description": "Why an agent is currently  {@link  AgentStatus.Paused } .\n\n`user_input` and `consultation` pauses resolve themselves — a reply or a consultation result arrives and the agent is re-dispatched automatically. A `shutdown` pause has nothing outstanding to wait on, so it stays paused until a user resumes it explicitly. A `spend_cap` pause is lifted when the provider's cap resets or is dismissed, or by an explicit task/company resume.",
       "enum": [
         "user_input",
         "consultation",
-        "shutdown"
+        "shutdown",
+        "spend_cap"
       ],
       "type": "string"
     },
@@ -935,6 +973,48 @@
         "result",
         "status",
         "version"
+      ],
+      "type": "object"
+    },
+    "SpendCapState": {
+      "additionalProperties": false,
+      "description": "Per-provider spend-cap state — the single source of truth both tcp-server and tcp-agent read to evaluate and enforce caps. One row per provider that has ever recorded usage.",
+      "properties": {
+        "action": {
+          "$ref": "#/definitions/CapAction",
+          "description": "The reached limit's configured action, read by tcp-agent's gate to decide its enforcement scope. Null whenever no limit is reached."
+        },
+        "dismissal": {
+          "$ref": "#/definitions/CapDismissal",
+          "description": "Whether (and how) a user has lifted the reached state."
+        },
+        "provider": {
+          "description": "Catalogue provider id this state belongs to.",
+          "type": "string"
+        },
+        "reachedUntil": {
+          "description": "End of the window during which a reached limit stays in effect; null when no limit is reached.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "updatedAt": {
+          "description": "When this row was last written.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "windowStarts": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Anchor timestamps (ISO strings) each configured window started counting from, keyed by `per`.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "provider",
+        "windowStarts",
+        "dismissal",
+        "updatedAt"
       ],
       "type": "object"
     },
@@ -1594,6 +1674,55 @@
       ],
       "type": "object"
     },
+    "TcpNotification": {
+      "additionalProperties": false,
+      "description": "An application-wide notice (a spend threshold crossed, a cap reached, a provider reporting no usage, …). Visible to every signed-in user and dismissed for everyone at once — there is no per-company scoping here. Named `TcpNotification` to avoid clashing with the DOM's global `Notification` type; the table itself is named `notification`.",
+      "properties": {
+        "createdAt": {
+          "description": "When this notification was raised.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "dedupeKey": {
+          "description": "Identifies a notification instance so a repeated condition (e.g. the same threshold crossed twice) inserts once — a colliding insert is ignored.",
+          "type": "string"
+        },
+        "dismissedAt": {
+          "description": "When a user dismissed this notification; null while still active.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "id": {
+          "$ref": "#/definitions/UUID",
+          "format": "uuid"
+        },
+        "kind": {
+          "$ref": "#/definitions/NotificationKind",
+          "description": "The condition this notification reports."
+        },
+        "message": {
+          "description": "Human-readable notification text.",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": {},
+          "description": "Structured detail backing `message` (e.g. provider, percent, window).",
+          "type": "object"
+        },
+        "severity": {
+          "$ref": "#/definitions/NotificationSeverity",
+          "description": "How urgently this notification should be surfaced."
+        }
+      },
+      "required": [
+        "id",
+        "severity",
+        "kind",
+        "message",
+        "createdAt"
+      ],
+      "type": "object"
+    },
     "TcpRole": {
       "additionalProperties": false,
       "description": "A role template that defines the behaviour and LLM configuration for an agent. Multiple  {@link  TcpAgent  }  instances can run from the same role within a company.",
@@ -1783,6 +1912,10 @@
           "description": "Short, per-company identifier assigned at creation (`'000'`, `'001'`, …) — see  {@link  TcpCompany.nextTaskShortcodeIndex } . Unique within the owning company only.",
           "type": "string"
         },
+        "spendCapExempt": {
+          "description": "Set by an explicit start/resume action so the spend-cap gate (tcp-agent) never re-pauses this task's agents before they next finish a turn.",
+          "type": "boolean"
+        },
         "status": {
           "$ref": "#/definitions/TcpTaskStatus",
           "description": "Current lifecycle state of this task."
@@ -1807,6 +1940,7 @@
         "materials",
         "request",
         "shortcode",
+        "spendCapExempt",
         "status",
         "updatedAt",
         "version"
@@ -1842,6 +1976,59 @@
         "cancelled"
       ],
       "type": "string"
+    },
+    "TokenUsage": {
+      "additionalProperties": false,
+      "description": "One LLM call's recorded token usage. Insert-only: a row is written once and never updated or deleted, so spend history survives the task or agent it references being removed later — for the same reason it carries no foreign keys. Per-provider/per-task totals are computed by the reader (`GROUP BY`), not maintained here.",
+      "properties": {
+        "agentId": {
+          "$ref": "#/definitions/UUID",
+          "description": "The agent that made the call, if any."
+        },
+        "companyId": {
+          "$ref": "#/definitions/UUID",
+          "description": "The company the LLM call was made on behalf of."
+        },
+        "createdAt": {
+          "description": "When this row was recorded.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "id": {
+          "$ref": "#/definitions/UUID",
+          "format": "uuid"
+        },
+        "inputTokens": {
+          "description": "Prompt tokens consumed.",
+          "type": "number"
+        },
+        "model": {
+          "description": "The model identifier used for the call.",
+          "type": "string"
+        },
+        "outputTokens": {
+          "description": "Completion tokens produced.",
+          "type": "number"
+        },
+        "provider": {
+          "description": "Catalogue provider id the call was billed against.",
+          "type": "string"
+        },
+        "taskId": {
+          "$ref": "#/definitions/UUID",
+          "description": "The task running at the time, if any — chats and orphan agents have none."
+        }
+      },
+      "required": [
+        "id",
+        "companyId",
+        "provider",
+        "model",
+        "inputTokens",
+        "outputTokens",
+        "createdAt"
+      ],
+      "type": "object"
     },
     "UUID": {
       "description": "A UUID string, structurally identical to `crypto`'s `UUID`.\n\nThe entity models use this type in fields that reach the browser through `@tcp/shared/client`. Importing it from `crypto` made the shared *type* surface depend on `@types/node`, which forced the browser workspace to declare Node types it must not have — and once declared, `Buffer` and `process` typecheck happily in browser code and fail at runtime.\n\n`crypto.randomUUID()` still assigns to this without a cast: the definition is the same template literal type (`@types/node`, crypto.d.ts).",

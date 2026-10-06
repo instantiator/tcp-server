@@ -1,11 +1,23 @@
 import { Link, useParams } from 'react-router';
 import { useLoadingAnnouncement } from '../../announce/useLoadingAnnouncement';
-import { useLiveCompanyState } from '../../api/hooks';
+import {
+  useLiveCompanySpend,
+  useLiveCompanyState,
+  useLiveSpendOverview,
+} from '../../api/hooks';
 import { AddNewMenu } from '../../components/AddNew/AddNewMenu';
 import { Breadcrumbs } from '../../components/Breadcrumbs/Breadcrumbs';
 import { EmptyState } from '../../components/EmptyState/EmptyState';
 import { ErrorState } from '../../components/ErrorState/ErrorState';
 import { LoadingState } from '../../components/LoadingState/LoadingState';
+import {
+  SpendBar,
+  SpendBarPlaceholder,
+} from '../../components/SpendBar/SpendBar';
+import {
+  buildCompanyBar,
+  buildOverviewBar,
+} from '../../components/SpendBar/spend-bar-model';
 import { streamUrls } from '../../events/subscriptions';
 import { useEventStream } from '../../events/useEventStream';
 import { useDocumentTitle } from '../../shell/useDocumentTitle';
@@ -33,6 +45,24 @@ export const CompanyPage = () => {
   const { data, isPending, error, refetch } = useLiveCompanyState(
     companyId ?? '',
   );
+
+  // Both read with no `enabled` guard, the same as `useLiveCompanyState`
+  // above: a request against `''` while `companyId` is briefly undefined is
+  // harmless, and keeping the hook call unconditional is what the rules of
+  // hooks require anyway.
+  const spendOverview = useLiveSpendOverview();
+  const companySpend = useLiveCompanySpend(companyId ?? '');
+  // `undefined` while loading or on error. Then a `SpendBarPlaceholder` holds
+  // the bar's space instead of a fake bar, so the office view below never
+  // shifts when the data lands (000.02).
+  const overviewBar =
+    spendOverview.data === undefined
+      ? undefined
+      : buildOverviewBar(spendOverview.data);
+  const companyBar =
+    companySpend.data === undefined
+      ? undefined
+      : buildCompanyBar(companySpend.data);
 
   // `GET /api/company/{id}` answers **200 with a JSON `null`** for a company
   // the caller cannot see, so "no such company" arrives as a successful
@@ -73,8 +103,35 @@ export const CompanyPage = () => {
       {/* The last crumb omits `to`, which is what marks it `aria-current="page"`. */}
       <Breadcrumbs
         items={[
-          { label: t('page.companies.title'), to: '/companies' },
-          { label: company?.name ?? t('page.company.title') },
+          {
+            label: t('page.companies.title'),
+            to: '/companies',
+            bar:
+              overviewBar === undefined ? (
+                <SpendBarPlaceholder />
+              ) : (
+                <SpendBar
+                  percent={overviewBar.percent}
+                  tone={overviewBar.tone}
+                  valueText={overviewBar.valueText}
+                  details={overviewBar.details}
+                />
+              ),
+          },
+          {
+            label: company?.name ?? t('page.company.title'),
+            bar:
+              companyBar === undefined ? (
+                <SpendBarPlaceholder />
+              ) : (
+                <SpendBar
+                  percent={companyBar.percent}
+                  tone={companyBar.tone}
+                  valueText={companyBar.valueText}
+                  details={companyBar.details}
+                />
+              ),
+          },
         ]}
       />
       {/*

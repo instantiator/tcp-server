@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -42,6 +42,33 @@ describe('Breadcrumbs', () => {
     await user.click(screen.getByRole('link', { name: 'Companies' }));
 
     expect(screen.getByText('Companies destination')).toBeInTheDocument();
+  });
+
+  it('renders a crumb bar inside its own li, and none when omitted', () => {
+    render(
+      <MemoryRouter>
+        <Breadcrumbs
+          items={[
+            {
+              label: 'Companies',
+              to: '/companies',
+              bar: <p>Companies bar</p>,
+            },
+            { label: 'Acme' },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+
+    const companiesItem = screen.getByText('Companies').closest('li');
+    if (companiesItem === null) throw new Error('companies li not found');
+    expect(
+      within(companiesItem).getByText('Companies bar'),
+    ).toBeInTheDocument();
+
+    const acmeItem = screen.getByText('Acme').closest('li');
+    if (acmeItem === null) throw new Error('acme li not found');
+    expect(within(acmeItem).queryByText('Companies bar')).toBeNull();
   });
 
   it('has no accessibility violations', async () => {

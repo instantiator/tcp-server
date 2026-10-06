@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { t } from '../../strings';
 import './Breadcrumbs.css';
@@ -6,6 +7,8 @@ import './Breadcrumbs.css';
 export interface Crumb {
   label: string;
   to?: string;
+  /** Rendered under the crumb's label, inside the same `li` (000.02: spend bars). */
+  bar?: ReactNode;
 }
 
 /**
@@ -20,7 +23,9 @@ export interface Crumb {
  * integration.
  *
  * Used by the company page (006.01) to show the way back to the companies
- * list.
+ * list. `bar` (000.02) carries a crumb's spend meter, rendered under its
+ * label inside the same `li` — a spend bar is about *that* crumb's scope
+ * (the application, or one company), not a separate trail item.
  */
 export const Breadcrumbs = ({ items }: { items: readonly Crumb[] }) => (
   <nav className="breadcrumbs" aria-label={t('breadcrumbs.label')}>
@@ -32,6 +37,7 @@ export const Breadcrumbs = ({ items }: { items: readonly Crumb[] }) => (
           ) : (
             <Link to={item.to}>{item.label}</Link>
           )}
+          {item.bar}
         </li>
       ))}
     </ol>

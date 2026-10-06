@@ -3,6 +3,7 @@ import { BaselineSchema1784790000000 } from './migrations/1784790000000-Baseline
 import { DynamicEmbeddingDimension1784800000000 } from './migrations/1784800000000-DynamicEmbeddingDimension';
 import { AgentPauseReason1784810000000 } from './migrations/1784810000000-AgentPauseReason';
 import { ConversationRepliesDelivered1784820000000 } from './migrations/1784820000000-ConversationRepliesDelivered';
+import { SpendTracking1784830000000 } from './migrations/1784830000000-SpendTracking';
 
 /**
  * tcp-server's full, ordered migration list — the single source of truth for
@@ -31,4 +32,5 @@ export const MIGRATIONS: (new () => MigrationInterface)[] = [
   DynamicEmbeddingDimension1784800000000,
   AgentPauseReason1784810000000,
   ConversationRepliesDelivered1784820000000,
+  SpendTracking1784830000000,
 ];

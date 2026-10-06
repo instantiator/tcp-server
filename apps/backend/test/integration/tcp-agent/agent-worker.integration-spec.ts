@@ -11,6 +11,7 @@ import {
   TcpCompany,
   TcpRole,
   TcpTask,
+  SpendCapState,
 } from '@tcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -25,6 +26,7 @@ import { AgentLoopEventRecorder } from '../../../apps/tcp-agent/src/agent/loop-e
 import { AgentRunEnvironmentService } from '../../../apps/tcp-agent/src/agent/run-environment.service';
 import { AgentRunStatusService } from '../../../apps/tcp-agent/src/agent/run-status.service';
 import { SupervisedTurnService } from '../../../apps/tcp-agent/src/agent/supervised-turn.service';
+import { SpendGateService } from '../../../apps/tcp-agent/src/agent/spend-gate.service';
 import { AuditClientService } from '@tcp/shared';
 import * as factory from '@tcp/shared/llm/llm-factory';
 import { KnowledgeRetrievalService, McpClientService } from '@tcp/shared';
@@ -39,7 +41,15 @@ import { requireEnv } from '../../support/require-env';
 // DATABASE_URL and REDIS_URL are always present.
 // Run via: ./scripts/run-integration-tests.sh
 
-const ALL_ENTITIES = [TcpCompany, TcpRole, TcpAgent, TcpTask, TcpAssignment];
+const ALL_ENTITIES = [
+  TcpCompany,
+  TcpRole,
+  TcpAgent,
+  TcpTask,
+  TcpAssignment,
+  // Read by SpendGateService before every LLM call; no cap state means no hold.
+  SpendCapState,
+];
 
 const dbUrl = requireEnv('DATABASE_URL');
 const redisUrl = requireEnv('REDIS_URL');
@@ -84,6 +94,7 @@ describe('AgentWorkerService (integration)', () => {
         AgentRunStatusService,
         AgentLoopEventRecorder,
         SupervisedTurnService,
+        SpendGateService,
         AgentRegistryService,
         {
           provide: AuditClientService,

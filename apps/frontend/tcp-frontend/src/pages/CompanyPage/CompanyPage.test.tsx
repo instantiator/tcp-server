@@ -40,6 +40,15 @@ const COMPANY = {
   description: 'A company',
 };
 
+/** No usage at all — the default answer for both spend routes (000.02). */
+const EMPTY_SPEND_OVERVIEW = { trackingSince: null, providers: [], caps: [] };
+const EMPTY_SPEND = {
+  trackingSince: null,
+  providers: [],
+  tasks: [],
+  series: [],
+};
+
 // 007.01 gives the activity panel content: mounting it fires five more
 // queries (roles, agents, tasks, assignments, conversations) alongside the
 // company detail request this suite already made. `respondWithJson`'s
@@ -57,6 +66,11 @@ const TASKS_ROUTE = /\/api\/task\?/;
 const CHATS_ROUTE = /\/api\/assignment\?.*mode=chat/;
 const ASSIGNMENTS_ROUTE = /\/api\/assignment\?/;
 const CONVERSATIONS_ROUTE = /\/api\/conversation\?/;
+// 000.02: the breadcrumb spend bars and the Notifications tab, mounted
+// alongside the other six as soon as `CompanyTabs` renders.
+const COMPANY_SPEND_ROUTE = /\/api\/company\/[^/]+\/spend/;
+const SPEND_OVERVIEW_ROUTE = /\/api\/spend(\?|$)/;
+const NOTIFICATIONS_ROUTE = /\/api\/notifications(\?|$)/;
 
 interface CompanyPageRoutes {
   readonly company?: RouteResponse;
@@ -66,24 +80,33 @@ interface CompanyPageRoutes {
   readonly assignments?: RouteResponse;
   readonly conversations?: RouteResponse;
   readonly chats?: RouteResponse;
+  readonly companySpend?: RouteResponse;
+  readonly spendOverview?: RouteResponse;
+  readonly notifications?: RouteResponse;
 }
 
 /**
- * Answers the company detail request and the activity panel's six, so
+ * Answers the company detail request and the activity panel's nine, so
  * every test that reaches a loaded company renders cleanly. `ROLES_ROUTE`
- * precedes `COMPANY_ROUTE`: both match a naive `/api/company/...` pattern,
- * and `respondByRoute` takes the first match, so the more specific one has
- * to come first.
+ * and `COMPANY_SPEND_ROUTE` precede `COMPANY_ROUTE`: all three match a naive
+ * `/api/company/...` pattern, and `respondByRoute` takes the first match, so
+ * the more specific ones have to come first.
  */
 const respondCompanyPage = (overrides: CompanyPageRoutes = {}): void => {
   respondByRoute([
     [ROLES_ROUTE, overrides.roles ?? { body: [] }],
+    [COMPANY_SPEND_ROUTE, overrides.companySpend ?? { body: EMPTY_SPEND }],
     [COMPANY_ROUTE, overrides.company ?? { body: COMPANY }],
     [AGENTS_ROUTE, overrides.agents ?? { body: [] }],
     [TASKS_ROUTE, overrides.tasks ?? { body: [] }],
     [CHATS_ROUTE, overrides.chats ?? { body: [] }],
     [ASSIGNMENTS_ROUTE, overrides.assignments ?? { body: [] }],
     [CONVERSATIONS_ROUTE, overrides.conversations ?? { body: [] }],
+    [
+      SPEND_OVERVIEW_ROUTE,
+      overrides.spendOverview ?? { body: EMPTY_SPEND_OVERVIEW },
+    ],
+    [NOTIFICATIONS_ROUTE, overrides.notifications ?? { body: [] }],
   ]);
 };
 
@@ -219,8 +242,10 @@ describe('CompanyPage', () => {
     const tasksTab = screen.getByRole('tab', {
       name: new RegExp(`^${t('activity.tasks.heading')}`),
     });
-    const chatsTab = screen.getByRole('tab', {
-      name: new RegExp(`^${t('activity.chats.heading')}`),
+    // 000.02: the Notifications tab joined as the last one, so `{End}` now
+    // lands there instead of on Chats.
+    const notificationsTab = screen.getByRole('tab', {
+      name: new RegExp(`^${t('notifications.heading')}`),
     });
 
     visualisationTab.focus();
@@ -237,8 +262,8 @@ describe('CompanyPage', () => {
     expect(visualisationTab).toHaveAttribute('aria-selected', 'true');
 
     await user.keyboard('{End}');
-    expect(chatsTab).toHaveFocus();
-    expect(chatsTab).toHaveAttribute('aria-selected', 'true');
+    expect(notificationsTab).toHaveFocus();
+    expect(notificationsTab).toHaveAttribute('aria-selected', 'true');
 
     await user.keyboard('{Home}');
     expect(visualisationTab).toHaveFocus();

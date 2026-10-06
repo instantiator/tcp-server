@@ -1,6 +1,8 @@
 import { AuditEventType } from '../models/AuditEvent.model';
 import type { StreamDelta } from '../events/wire-events';
 import { extractContentText } from './content-text';
+import type { LlmIdentity } from './llm-usage';
+import { usageFromMessage } from './llm-usage';
 
 /**
  * The subset of a LangGraph `streamEvents(..., { version: 'v2' })` event that
@@ -75,6 +77,7 @@ function field(obj: unknown, key: string): unknown {
  */
 export function enrichedAuditForEvent(
   event: StreamEventLike,
+  llm?: LlmIdentity,
 ): EnrichedAuditEvent | null {
   const eventType = EVENT_AUDIT_TYPE[event.event];
   if (!eventType) return null;
@@ -92,6 +95,12 @@ export function enrichedAuditForEvent(
       };
     case 'on_chat_model_end': {
       const output = event.data?.output;
+      // Token usage is only attributable with the caller's provider/model
+      // identity in hand. A provider that reports none is named instead, so
+      // tcp-server can warn that its spend isn't being tracked.
+      const usage = llm ? usageFromMessage(output, llm) : undefined;
+      const untracked =
+        llm && !usage ? { untrackedProvider: llm.provider } : {};
       return {
         eventType,
         payload: {
@@ -100,6 +109,8 @@ export function enrichedAuditForEvent(
           reasoningText: asText(
             field(field(output, 'additional_kwargs'), 'reasoning_content'),
           ),
+          ...(usage ? { usage } : {}),
+          ...untracked,
         },
       };
     }

@@ -154,4 +154,50 @@ describe('enrichedAuditForEvent', () => {
     expect(enrichedAuditForEvent({ event: 'on_chat_model_stream' })).toBeNull();
     expect(enrichedAuditForEvent({ event: 'on_chain_start' })).toBeNull();
   });
+
+  it('includes usage in the on_chat_model_end payload when the provider reported it and an llm identity is given', () => {
+    const output = new AIMessage({
+      content: 'the answer',
+      // usage_metadata is set after construction — AIMessage's constructor
+      // type doesn't accept it directly, but LangChain attaches it as a
+      // plain property on real provider responses.
+    });
+    Object.assign(output, {
+      usage_metadata: { input_tokens: 12, output_tokens: 4 },
+    });
+    const result = enrichedAuditForEvent(
+      { event: 'on_chat_model_end', data: { output } },
+      { provider: 'lm-studio', model: 'qwen3-5b' },
+    );
+    expect(result?.payload.usage).toEqual({
+      provider: 'lm-studio',
+      model: 'qwen3-5b',
+      inputTokens: 12,
+      outputTokens: 4,
+    });
+    expect(result?.payload).not.toHaveProperty('untrackedProvider');
+  });
+
+  it('names the provider instead of usage when it reports none, so the gap can be flagged', () => {
+    const output = new AIMessage({ content: 'the answer' });
+    const result = enrichedAuditForEvent(
+      { event: 'on_chat_model_end', data: { output } },
+      { provider: 'lm-studio', model: 'qwen3-5b' },
+    );
+    expect(result?.payload).not.toHaveProperty('usage');
+    expect(result?.payload.untrackedProvider).toBe('lm-studio');
+  });
+
+  it('omits usage when no llm identity is passed, even if the provider reported it', () => {
+    const output = new AIMessage({ content: 'the answer' });
+    Object.assign(output, {
+      usage_metadata: { input_tokens: 12, output_tokens: 4 },
+    });
+    const result = enrichedAuditForEvent({
+      event: 'on_chat_model_end',
+      data: { output },
+    });
+    expect(result?.payload).not.toHaveProperty('usage');
+    expect(result?.payload).not.toHaveProperty('untrackedProvider');
+  });
 });

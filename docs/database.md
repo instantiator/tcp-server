@@ -77,9 +77,21 @@ await withOptimisticRetry(async () => {
 
 `queryIndex` is incremented via raw SQL `UPDATE tcp_role SET "queryIndex" = "queryIndex" + 1 WHERE id = $1 RETURNING "queryIndex"`. This is atomic at the database level and does not require optimistic locking.
 
-### Append-only (`AuditEvent`)
+### Append-only (`AuditEvent`, `TokenUsage`)
 
 Audit events are INSERT-only. No locking needed.
+
+`token_usage` (000.02) is INSERT-only for the same reason, and for one more:
+summing raw rows at read time avoids an upsert against a composite, partially
+nullable key (`provider` + `companyId` + `taskId` + window) that behaves
+differently on Postgres and SQLite. A cap check and `GET /api/spend` /
+`GET /api/company/:id/spend` both `SUM` over the relevant window rather than
+reading a running total anywhere — see [spend-caps.md](spend-caps.md) and
+[ADR-031](ADRs/ADR-031-spend-tracking-and-notifications.md). `spend_cap_state`
+(one row per provider) and `notification` (application-wide, no `companyId`)
+are both updated in place, not append-only. `tcp_task` gained one column,
+`spendCapExempt`, set when a task is explicitly started or resumed while a
+cap is reached.
 
 Storage-tool audit events nest an `originators: { user: string | null; agent: string | null; task: string | null }` object inside `payload`, tracking who requested the action — `user` for direct JWT-authenticated calls (`POST /api/storage`, role document uploads), `agent` for MCP-tool-initiated calls, `task` reserved for a future task concept (always `null` today). No schema change: `payload` is already `jsonb`.
 
@@ -144,14 +156,21 @@ WHERE "agentId" = '<uuid>'
   AND "eventType" = 'agent_loop_completion'
 LIMIT 1;
 
--- LLM token usage for a run
+-- LLM token usage for a run, read off the audit payload directly
 SELECT timestamp,
-       (payload->'usage'->>'input_tokens')::int  AS in_tokens,
-       (payload->'usage'->>'output_tokens')::int AS out_tokens
+       (payload->'usage'->>'inputTokens')::int  AS in_tokens,
+       (payload->'usage'->>'outputTokens')::int AS out_tokens
 FROM audit_event
 WHERE "agentId" = '<uuid>'
   AND "eventType" = 'llm_response'
 ORDER BY timestamp ASC;
+
+-- The same figures from token_usage (000.02), the recorded copy cap checks and
+-- GET /api/spend read from
+SELECT "createdAt", provider, model, "inputTokens", "outputTokens"
+FROM token_usage
+WHERE "agentId" = '<uuid>'
+ORDER BY "createdAt" ASC;
 
 -- Open conversations awaiting user reply
 SELECT slug, question, "roleName", "createdAt"

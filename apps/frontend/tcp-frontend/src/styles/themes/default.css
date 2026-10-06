@@ -19,6 +19,7 @@
   --tcp-color-highlight-text: #ffffff;
   --tcp-color-focus: #0757ba;
   --tcp-color-danger: #cf222e;
+  --tcp-color-warning: #9a6700;
   --tcp-color-scrim: rgb(31 35 40 / 55%);
 }
 
@@ -34,5 +35,6 @@
   --tcp-color-highlight-text: #0d1117;
   --tcp-color-focus: #4493f8;
   --tcp-color-danger: #ff7b72;
+  --tcp-color-warning: #d4a72c;
   --tcp-color-scrim: rgb(1 4 9 / 65%);
 }

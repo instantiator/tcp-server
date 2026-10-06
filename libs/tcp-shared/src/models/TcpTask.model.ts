@@ -129,4 +129,11 @@ export class TcpTask extends VersionedEntity {
   /** Timestamp of the last status or field update. */
   @UpdateDateColumn()
   updatedAt!: Date;
+
+  /**
+   * Set by an explicit start/resume action so the spend-cap gate (tcp-agent)
+   * never re-pauses this task's agents before they next finish a turn.
+   */
+  @Column({ default: false })
+  spendCapExempt!: boolean;
 }

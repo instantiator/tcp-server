@@ -87,6 +87,12 @@ All fields optional. Non-null strings must be non-empty. Omitted fields are not 
 | `companyId` | UUID string                            | Conditional | Required when `type === "agent_consultation"` |
 | `roleName`  | `string`                               | Conditional | Required when `type === "agent_consultation"` |
 
+#### `DismissCapDto` — `POST /api/spend/caps/:provider/dismiss`
+
+| Field   | Type                      | Required | Constraints        |
+| ------- | ------------------------- | -------- | ------------------ |
+| `until` | `"reset" \| "indefinite"` | Yes      | Exact string match |
+
 ### Do we need a generated DTO schema?
 
 The DTO classes use [`class-validator`](https://github.com/typestack/class-validator) decorators, which are TypeScript decorator metadata — they are not reflected in `ts-json-schema-generator` output. A generated DTO schema would capture field names and types but would miss constraints like `@IsNotEmpty()`, `@IsUUID()`, and `@ValidateIf()`.

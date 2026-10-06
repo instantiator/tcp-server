@@ -226,6 +226,89 @@ describe('ContextManagerService', () => {
       );
     });
 
+    it('sums Tier-2 summarisation usage into the complete payload when an llm identity is given', async () => {
+      const bigMsg = new HumanMessage('x'.repeat(10000));
+      const graph = makeGraph([bigMsg]);
+      compactor.trimHistory.mockResolvedValue({
+        trimmed: [],
+        removedIds: ['msg-1'],
+        activity: 'Trimmed',
+      });
+      compactor.buildRemoveMessages.mockReturnValue([]);
+      const llm = { provider: 'lm-studio', model: 'qwen3-5b' };
+      compactor.summariseMessage.mockImplementation(
+        (
+          _msg: unknown,
+          _model: unknown,
+          _llm: unknown,
+          onUsage?: (u: {
+            provider: string;
+            model: string;
+            inputTokens: number;
+            outputTokens: number;
+          }) => void,
+        ) => {
+          onUsage?.({ ...llm, inputTokens: 50, outputTokens: 10 });
+          return Promise.resolve(new HumanMessage('summary'));
+        },
+      );
+
+      await service.prepare(
+        'agent-1',
+        'new message',
+        {} as BaseChatModel,
+        WINDOW,
+        graph,
+        {},
+        false,
+        makeAgent(),
+        makeRole(),
+        [],
+        llm,
+      );
+
+      expect(auditSink.record).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(String),
+        expect.any(String),
+        AuditEventType.Compaction,
+        expect.objectContaining({
+          phase: 'complete',
+          usage: { ...llm, inputTokens: 50, outputTokens: 10 },
+        }),
+      );
+    });
+
+    it('omits usage from the complete payload when no compaction call reported any', async () => {
+      const bigMsg = new HumanMessage('x'.repeat(10000));
+      const graph = makeGraph([bigMsg]);
+      compactor.trimHistory.mockResolvedValue({
+        trimmed: [],
+        removedIds: ['msg-1'],
+        activity: 'Trimmed',
+      });
+      compactor.buildRemoveMessages.mockReturnValue([]);
+
+      await service.prepare(
+        'agent-1',
+        'new message',
+        {} as BaseChatModel,
+        WINDOW,
+        graph,
+        {},
+        false,
+        makeAgent(),
+        makeRole(),
+        [],
+        { provider: 'lm-studio', model: 'qwen3-5b' },
+      );
+
+      const completeCall = auditSink.record.mock.calls.find(
+        (call) => (call[4] as { phase?: string }).phase === 'complete',
+      );
+      expect(completeCall?.[4]).not.toHaveProperty('usage');
+    });
+
     it('records a compaction started audit event before compaction', async () => {
       const bigMsg = new HumanMessage('x'.repeat(10000));
       const agent = makeAgent();

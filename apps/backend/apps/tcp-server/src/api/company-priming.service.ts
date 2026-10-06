@@ -11,6 +11,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import type { UUID } from 'crypto';
 import { IsNull, Repository } from 'typeorm';
 import { DbService } from '../db/db.service';
+import {
+  NotificationService,
+  notificationPayload,
+} from '../notifications/notification.service';
 import { ConversationService } from './conversation.service';
 import { TaskService } from './task.service';
 
@@ -18,7 +22,8 @@ import { TaskService } from './task.service';
  * Builds the priming {@link WireEvent}s a late subscriber to
  * `GET /api/company/:id/events` receives before any live row: the company
  * signal, then the current state of each list the web UI renders — tasks,
- * active agents, open consultations and open enquiries (ADR-023).
+ * active agents, open consultations and open enquiries (ADR-023) — and the
+ * active application-wide notifications.
  *
  * Every event is a synthesized `state_change` with `reason: 'replay'` and no
  * `id` (nothing was persisted), and each carries the **same summary shape**
@@ -33,16 +38,18 @@ export class CompanyPrimingService {
     @InjectRepository(TcpAssignment)
     private readonly assignmentRepo: Repository<TcpAssignment>,
     private readonly conversations: ConversationService,
+    private readonly notifications: NotificationService,
   ) {}
 
   /**
    * Builds the priming events for one company, in list order: company, tasks,
-   * active agents, consultations, open enquiries. All share one timestamp —
+   * active agents, consultations, open enquiries, active notifications. All
+   * share one timestamp —
    * they describe a single moment, not a sequence.
    */
   async prime(companyId: UUID): Promise<WireEvent[]> {
     const timestamp = new Date().toISOString();
-    const [taskSummaries, agents, consultations, enquiries, roles] =
+    const [taskSummaries, agents, consultations, enquiries, roles, notices] =
       await Promise.all([
         this.tasks.listChangeSummaries(companyId),
         this.db.listAgents({ companyId }),
@@ -51,6 +58,7 @@ export class CompanyPrimingService {
         }),
         this.conversations.list(companyId, 'awaiting_user'),
         this.db.listRoles(companyId),
+        this.notifications.list(),
       ]);
 
     // One lookup for every role name the agent and consultation rows need,
@@ -143,6 +151,19 @@ export class CompanyPrimingService {
             reason: 'replay',
             summary: buildEnquiryChangeSummary(conv),
           },
+        },
+      })),
+      ...notices.map((notice): WireEvent => ({
+        type: 'audit',
+        event: {
+          timestamp,
+          companyId,
+          role: 'system',
+          agentId: null,
+          assignmentId: null,
+          taskId: null,
+          eventType: AuditEventType.StateChange,
+          payload: notificationPayload(notice, 'replay'),
         },
       })),
     ];

@@ -114,7 +114,8 @@ async function handleChatCompletion(
     }
   }
 
-  const { promptText, wantsStream } = format.parsePrompt(body);
+  const { promptText, wantsStream, promptTokens, includeUsageInStream } =
+    format.parsePrompt(body);
   const outcome = pickResponse(promptText, resolved, matcher);
   if (!outcome.ok) {
     sendJson(res, format.buildError(outcome.reason));
@@ -128,7 +129,11 @@ async function handleChatCompletion(
       Connection: 'keep-alive',
     });
     let first = true;
-    for (const chunk of format.buildStreamChunks(outcome.response)) {
+    for (const chunk of format.buildStreamChunks(
+      outcome.response,
+      promptTokens,
+      includeUsageInStream,
+    )) {
       if (!first)
         await sleep(randomDelay(resolved.minDelay, resolved.maxDelay));
       first = false;
@@ -143,7 +148,10 @@ async function handleChatCompletion(
     totalDelay += randomDelay(resolved.minDelay, resolved.maxDelay);
   }
   await sleep(totalDelay);
-  sendJson(res, { status: 200, body: format.buildResponse(outcome.response) });
+  sendJson(res, {
+    status: 200,
+    body: format.buildResponse(outcome.response, promptTokens),
+  });
 }
 
 async function handleEmbeddings(

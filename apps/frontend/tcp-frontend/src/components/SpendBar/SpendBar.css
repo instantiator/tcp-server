@@ -1,0 +1,53 @@
+/*
+ * The breadcrumb spend bar (000.02): a thin meter under a crumb's label. The
+ * bar itself is the focusable tooltip trigger, so it takes the focus ring
+ * `base.css` gives any focused element.
+ *
+ * `holding` adds a repeating stripe on top of its colour, so the tone
+ * survives a monochrome or colour-blind rendering (WCAG 1.4.1) as well as the
+ * high-contrast theme, where colours are otherwise scarce.
+ */
+
+.spend-bar {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  inline-size: 100%;
+  block-size: var(--tcp-spend-bar-block-size);
+  border-radius: var(--tcp-radius);
+  background-color: var(--tcp-color-border);
+}
+
+.spend-bar__fill {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  block-size: 100%;
+  background-color: var(--tcp-color-accent);
+}
+
+.spend-bar--warning .spend-bar__fill {
+  background-color: var(--tcp-color-warning);
+}
+
+.spend-bar--holding .spend-bar__fill {
+  background-color: var(--tcp-color-danger);
+  /* A stripe, not a second colour: `color-mix` blends two existing tokens
+     rather than introducing a literal value, and the stripe is the
+     non-colour cue that keeps `holding` distinguishable in high contrast,
+     where colours are otherwise scarce. */
+  background-image: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--tcp-color-danger) 55%, var(--tcp-color-bg)) 0 4px,
+    transparent 4px 8px
+  );
+}
+
+.spend-bar__tooltip > div + div {
+  margin-block-start: var(--tcp-space-xs);
+}
+
+/* Same box as a bar, but nothing drawn: it only reserves the space. */
+.spend-bar--placeholder {
+  background-color: transparent;
+}

@@ -198,6 +198,69 @@ describe('runSupervisedGraph', () => {
     expect(result.aborted).toBe(false);
   });
 
+  describe('when a spend cap holds spending back', () => {
+    /** Runs a two-call conversation (a tool call, then an answer) under `holdSpending`. */
+    async function runHeldBack(holdSpending: jest.Mock<Promise<boolean>, []>) {
+      const model = new QueuedChatModel([
+        toolCall('some_tool'),
+        new AIMessage('Final answer.'),
+      ]);
+      const tools = [makeTool()];
+      const checkpointer = new MemorySaver();
+      const contextManager = makeContextManager();
+      const hooks: SupervisedGraphHooks = {
+        buildGraph: (t) =>
+          buildAgentGraph({
+            model,
+            checkpointer,
+            tools: t,
+            interruptAfterTools: true,
+          }),
+        onEvent: jest.fn(),
+        checkTerminalStatus: jest.fn().mockResolvedValue(null),
+        holdSpending,
+      };
+      const result = await runSupervisedGraph({
+        agentId: 'agent-1',
+        agent: makeAgent(),
+        role: makeRole(),
+        model,
+        allTools: tools,
+        initialGraph: hooks.buildGraph(tools),
+        input: { messages: [new HumanMessage('Hi')] },
+        config: RUN_CONFIG,
+        contextManager,
+        windowSize: 8192,
+        abortController: new AbortController(),
+        hooks,
+      });
+      return { model, contextManager, result };
+    }
+
+    it('stops as paused before the first model call — spending nothing, not even on compaction', async () => {
+      const { model, contextManager, result } = await runHeldBack(
+        jest.fn<Promise<boolean>, []>().mockResolvedValue(true),
+      );
+
+      expect(model.invokeCount).toBe(0);
+      expect(contextManager.checkBudget).not.toHaveBeenCalled();
+      expect(result.terminalStatus).toBe(AgentStatus.Paused);
+      expect(result.aborted).toBe(false);
+    });
+
+    it('stops at the next iteration boundary when the cap is reached mid-run', async () => {
+      const { model, result } = await runHeldBack(
+        jest
+          .fn<Promise<boolean>, []>()
+          .mockResolvedValueOnce(false)
+          .mockResolvedValue(true),
+      );
+
+      expect(model.invokeCount).toBe(1);
+      expect(result.terminalStatus).toBe(AgentStatus.Paused);
+    });
+  });
+
   it('stops when complete_task completes the agent mid-run, without a wasted final call', async () => {
     const model = new QueuedChatModel([
       toolCall('complete_task'),

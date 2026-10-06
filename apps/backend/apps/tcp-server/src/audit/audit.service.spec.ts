@@ -13,6 +13,7 @@ describe('AuditService', () => {
   let mockRepo: { create: jest.Mock; save: jest.Mock; find: jest.Mock };
   let mockAgentRepo: { findOneBy: jest.Mock };
   let mockAssignmentRepo: { findOneBy: jest.Mock };
+  let usageRecord: jest.Mock;
   let agents: Record<string, Pick<TcpAgent, 'assignmentId'>>;
   let assignments: Record<string, Pick<TcpAssignment, 'taskId'>>;
 
@@ -42,11 +43,13 @@ describe('AuditService', () => {
           Promise.resolve(assignments[id] ?? null),
         ),
     };
+    usageRecord = jest.fn().mockResolvedValue(undefined);
     service = new AuditService(
       mockRepo as never,
       mockAgentRepo as never,
       mockAssignmentRepo as never,
       { publish: jest.fn() } as never,
+      { record: usageRecord } as never,
     );
   });
 
@@ -116,6 +119,20 @@ describe('AuditService', () => {
     expect(saved.agentId).toBeNull();
     expect(saved.assignmentId).toBe(assignmentId);
     expect(saved.taskId).toBe(taskId);
+  });
+
+  it('calls UsageService.record with the saved row on every write', async () => {
+    const companyId = randomUUID();
+
+    await service.write({
+      companyId,
+      role: 'analyst',
+      eventType: AuditEventType.LlmResponse,
+      payload: { usage: { provider: 'lm-studio', model: 'qwen3-5b' } },
+    });
+
+    expect(usageRecord).toHaveBeenCalledTimes(1);
+    expect(usageRecord).toHaveBeenCalledWith(savedEvents[0]);
   });
 
   it('delegates to write() via record()', async () => {

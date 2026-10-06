@@ -18,6 +18,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiAcceptedResponse,
   ApiBearerAuth,
   ApiCreatedResponse,
   ApiOkResponse,
@@ -29,10 +30,12 @@ import type { UUID } from 'crypto';
 import type { Request, Response } from 'express';
 import {
   CompanyListItem,
+  CompanySpend,
   emptyCompanyStats,
   TcpCompany,
   TcpRole,
   WireEvent,
+  type ResumeResult,
 } from '@tcp/shared';
 import { defer, from, merge, mergeMap, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -43,11 +46,14 @@ import { CompanyScope, NoCompanyScope } from '../auth/company-scope.decorator';
 import { MembershipService } from '../auth/membership.service';
 import { getCurrentUserIdentifiers } from '../auth/current-user';
 import { CompanyEventService } from '../events/company-event.service';
+import { SpendReportService } from '../spend/spend-report.service';
 import { ApiService } from './api.service';
 import { CompanyPrimingService } from './company-priming.service';
 import { CompanyStatsService } from './company-stats.service';
 import { CreateCompanyDto, UpdateCompanyDto } from './dto/company.dto';
 import { CompanyListItemDto } from './dto/company-stats.dto';
+import { CompanySpendDto, ResumeResultDto } from './dto/spend.dto';
+import { SpendResumeService } from './spend-resume.service';
 import { UpdateRoleDto } from './dto/role.dto';
 import { CompanyResponseDto, RoleResponseDto } from './dto/entity-response.dto';
 import { isUUID } from '../utils/ObjectUtils';
@@ -70,6 +76,8 @@ export class CompanyController {
     private readonly priming: CompanyPrimingService,
     private readonly companyEvents: CompanyEventService,
     private readonly membership: MembershipService,
+    private readonly spend: SpendResumeService,
+    private readonly spendReport: SpendReportService,
   ) {}
 
   /**
@@ -318,6 +326,36 @@ export class CompanyController {
     const company = await this.resolveCompanyOrThrow(id);
     const primed = await this.priming.prime(company.id);
     return merge(from(primed), this.companyEvents.observe(company.id));
+  }
+
+  /**
+   * Resumes every task in the company with agents paused by a spend cap or a
+   * shutdown, exempting those tasks from spend caps until they end. Does not
+   * lift the cap for anyone else. Refused with `503` while draining.
+   */
+  @ApiOperation({ summary: "Resume a company's paused tasks" })
+  @ApiAcceptedResponse({ type: ResumeResultDto })
+  @CompanyScope({ from: 'param', key: 'id', via: 'company' })
+  @Post(':id/resume')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async resumeCompany(@Param('id') id: string): Promise<ResumeResult> {
+    const company = await this.resolveCompanyOrThrow(id);
+    return this.spend.resumeCompany(company.id);
+  }
+
+  /**
+   * One company's usage: totals per provider, per-task totals, and the last
+   * 24 hours in five-minute buckets.
+   */
+  @ApiOperation({
+    summary: "A company's spend totals, per-task usage and recent series",
+  })
+  @ApiOkResponse({ type: CompanySpendDto })
+  @CompanyScope({ from: 'param', key: 'id', via: 'company' })
+  @Get(':id/spend')
+  async getCompanySpend(@Param('id') id: string): Promise<CompanySpend> {
+    const company = await this.resolveCompanyOrThrow(id);
+    return this.spendReport.company(company.id);
   }
 
   /** Resolves a company by UUID or slug, throwing 404 if no match. */

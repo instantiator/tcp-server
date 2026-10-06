@@ -6,10 +6,12 @@ import {
   ContextCompactorService,
   ContextManagerService,
   IncomingDataGuardService,
+  SpendCapState,
   TcpAgent,
   TcpAssignment,
   TcpCompany,
   TcpRole,
+  TcpTask,
 } from '@tcp/shared';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -19,6 +21,7 @@ import { InitialStateService } from '../agent/initial-state.service';
 import { AgentLoopEventRecorder } from '../agent/loop-events.service';
 import { AgentRunEnvironmentService } from '../agent/run-environment.service';
 import { AgentRunStatusService } from '../agent/run-status.service';
+import { SpendGateService } from '../agent/spend-gate.service';
 import { SupervisedTurnService } from '../agent/supervised-turn.service';
 import { McpClientModule } from '../mcp/mcp-client.module';
 import { AgentRagModule } from '../rag/agent-rag.module';
@@ -40,7 +43,14 @@ import { ShutdownListenerService } from './shutdown-listener.service';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([TcpAgent, TcpRole, TcpCompany, TcpAssignment]),
+    TypeOrmModule.forFeature([
+      TcpAgent,
+      TcpRole,
+      TcpCompany,
+      TcpAssignment,
+      TcpTask,
+      SpendCapState,
+    ]),
     AgentRagModule,
     McpClientModule,
   ],
@@ -54,6 +64,7 @@ import { ShutdownListenerService } from './shutdown-listener.service';
     AgentRunStatusService,
     AgentLoopEventRecorder,
     SupervisedTurnService,
+    SpendGateService,
     AgentEventPublisherService,
     AgentRegistryService,
     // Answers tcp-server's drain: stops the worker taking jobs and reports how

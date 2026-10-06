@@ -10,6 +10,10 @@ export interface FormatRoute {
 export interface ParsedPrompt {
   promptText: string;
   wantsStream: boolean;
+  /** Deterministic prompt-token estimate: ⌈JSON length of the request messages / 4⌉. */
+  promptTokens: number;
+  /** Whether the request asked for a final usage-only chunk in the stream (OpenAI's `stream_options.include_usage`). */
+  includeUsageInStream: boolean;
 }
 
 export type ErrorKind = 'auth' | 'no-match' | 'exhausted';
@@ -37,10 +41,17 @@ export interface ApiFormat {
   parsePrompt(body: unknown): ParsedPrompt;
   /** The credential header/value this format's real API expects, given the configured key. */
   authHeaderValue(key: string): { header: string; value: string };
-  /** Non-streaming reply body for the chosen response. */
-  buildResponse(response: StubResponse): unknown;
-  /** Ordered SSE/NDJSON chunks for the chosen response, streamed in sequence. */
-  buildStreamChunks(response: StubResponse): StreamChunk[];
+  /** Non-streaming reply body for the chosen response, given its prompt-token estimate. */
+  buildResponse(response: StubResponse, promptTokens: number): unknown;
+  /**
+   * Ordered SSE/NDJSON chunks for the chosen response, streamed in sequence.
+   * `includeUsageInStream` mirrors the request's `stream_options.include_usage`.
+   */
+  buildStreamChunks(
+    response: StubResponse,
+    promptTokens: number,
+    includeUsageInStream: boolean,
+  ): StreamChunk[];
   /** Error status + body for one of the stub's own failure cases. */
   buildError(kind: ErrorKind): FormatError;
 }

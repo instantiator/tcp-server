@@ -6,6 +6,7 @@ import {
   buildAgentChangeSummary,
   ContextManagerService,
   DEFAULT_LLM_CONTEXT_WINDOW,
+  LlmIdentity,
   TcpAgent,
   TcpAssignment,
   TcpCompany,
@@ -202,8 +203,12 @@ export class ChatService {
     messages: BaseMessage[],
     pendingAuditWrites: Promise<unknown>[],
   ): Promise<SupervisedGraphResult> {
-    const { agent, role, windowSize } = ctx;
+    const { agent, role, windowSize, llmConfig } = ctx;
     const agentId = agent.id;
+    const llm: LlmIdentity = {
+      provider: llmConfig.provider,
+      model: llmConfig.model,
+    };
     return runSupervisedGraph({
       agentId,
       agent,
@@ -216,12 +221,13 @@ export class ChatService {
       contextManager: this.contextManager,
       windowSize,
       abortController: env.abortController,
+      llm,
       hooks: {
         buildGraph: env.buildGraph,
         onEvent: (event) => {
           // Persist each lifecycle event (streamed live by the publisher),
           // and publish token deltas directly to the agent channel.
-          const audit = enrichedAuditForEvent(event);
+          const audit = enrichedAuditForEvent(event, llm);
           if (audit) {
             pendingAuditWrites.push(
               this.audit.record(
