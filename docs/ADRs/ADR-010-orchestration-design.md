@@ -468,3 +468,17 @@ _2026-07-16._
   inheritance happens once, at creation, not per-query. See
   [ADR-008's 010.3.2 amendment](./ADR-008-audit-logging.md) for the paired
   `AuditEvent.assignmentId` denormalization.
+
+<a id="amendments-as-implemented-p04-000-03"></a>
+
+## Amendment as implemented (000.03, phase 04)
+
+_2026-10-06._
+
+- **`AGENT_WORKER_CONCURRENCY` (the 010.2.8.2 amendment above) is replaced by
+  `MODEL_CONCURRENCY`.** One flat worker-concurrency figure couldn't protect
+  a single local GPU and also let a paid remote provider run several agents
+  at once, so it's now two pools (`local`, `remote`; defaults 1 and 4) plus
+  optional per-endpoint overrides, gated per agent run in tcp-agent's
+  `ModelSlotService` rather than in BullMQ's own worker concurrency. See
+  [ADR-032](ADR-032-model-concurrency-and-rate-limits.md).

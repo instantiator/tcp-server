@@ -1,6 +1,6 @@
 # ADR-025: Browser Event Stream Consumption
 
-**Status:** Accepted (2026-08-03; amended — see [008.02](#amendment-as-implemented-00802) and [002.02 (phase 03)](#amendment-as-implemented-p03-002-02) at the end)
+**Status:** Accepted (2026-08-03; amended — see [008.02](#amendment-as-implemented-00802), [002.02 (phase 03)](#amendment-as-implemented-p03-002-02) and [000.03 (phase 04)](#amendment-as-implemented-p04-000-03) at the end)
 
 > [!NOTE]
 > **This supersedes the "use a native `EventSource`" recommendation in `docs/prompts/phase 02 - web ui/001.01.00.prompt - mvp planning.md`.** That recommendation cannot be implemented — see below.
@@ -262,3 +262,11 @@ agent-stream replay or the priming order to close them stayed out of scope
 rather than being taken on speculatively; both are tracked as unresolved
 notes with a testable recheck condition (phase 03's
 [unresolved notes](../prompts/unresolved-notes.md)).
+
+## Amendment as implemented (000.03, phase 04) <a id="amendment-as-implemented-p04-000-03"></a>
+
+`AGENT_WORKER_CONCURRENCY`, named above as the queued-agent bug's cause, is
+retired. `MODEL_CONCURRENCY`'s two pools (`local`/`remote`) now gate agent
+runs, and a new `queued` agent status carries the same meaning this ADR's
+amendment described — an agent waiting for a model slot, not stalled. See
+[ADR-032](ADR-032-model-concurrency-and-rate-limits.md).

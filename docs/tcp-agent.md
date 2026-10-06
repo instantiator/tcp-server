@@ -207,6 +207,24 @@ Chats are counted but never held back. See [spend-caps.md](spend-caps.md) for
 the full guide, including how to resume paused work and what each action
 does.
 
+### Model slots and rate limits
+
+Every agent run also counts against `MODEL_CONCURRENCY`'s two global pools
+(`local`, `remote`) plus any per-endpoint override, before the worker will
+run it at all — this, not `AGENT_WORKER_CONCURRENCY` (retired), is what
+limits how many agents use a model at once. A run refused a slot moves the
+agent to a new status, `queued` ("waiting for a model"), and the BullMQ job
+is deferred until one frees. See [model-concurrency.md](model-concurrency.md)
+for the full guide.
+
+A provider refusing a call with a rate limit or a used-up quota pauses the
+agent, `pauseReason: 'rate_limited'`, instead of failing its run — the same
+checkpoint-intact pause spend caps already use. It resumes by itself once the
+provider's own hint or the configured backoff elapses, or by an explicit
+`resume-task`/`resume-company`. See
+[model-concurrency.md § Rate limits](model-concurrency.md#rate-limits) and
+[ADR-032](ADRs/ADR-032-model-concurrency-and-rate-limits.md).
+
 ---
 
 ## MCP tools

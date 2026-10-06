@@ -66,6 +66,11 @@ rules and default responses:
   stub does not call them itself, it only emits the same shape a real LLM
   would. The caller's own agent loop dispatches them, exactly as it would a
   real LLM's tool calls.
+- A response can carry `refusal: { status, retryAfter?, code?, message? }`
+  instead of text, sent as an OpenAI-shaped error (with a `Retry-After`
+  header when `retryAfter` is set) — for driving a caller's rate-limit or
+  quota handling in tests. See [Configuring behaviour](#configuring-behaviour)
+  and `apps/tcp-stub-llm/README.md`'s "Refusals" for the full shape.
 - Real MCP tool names are `{mcpServerName}__{toolName}` (e.g.
   `tcp-mcp-tasks__complete_assignment`) — use that naming in test configs so
   the agent's tool-dispatch logic recognises them.

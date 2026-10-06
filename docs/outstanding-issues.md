@@ -298,3 +298,52 @@ returns 404.
 The bundled Zitadel only works on host port 8080: `docker-compose.yml` sets `ZITADEL_EXTERNALPORT: 8080` (the port in its issuer URLs), and `start-deployment.sh`'s `zit()` bootstrap calls `localhost:8080`. `start-deployment.sh` therefore refuses any other `EXPOSE_PORT_ZITADEL`, and the wizard says the port is fixed. The other host ports can be changed per instance in the wizard (004.01), but a second bundled-Zitadel stack still collides on 8080, so it can't run while `tcp-dev` does — the test tiers included.
 
 **Act when:** someone needs two stacks running at once. The fix is to carry one Zitadel port through `ZITADEL_EXTERNALPORT`, the bootstrap's `zit()`, the issuer URL and the port check. Until then, stop one stack before starting another (`./scripts/stop-dev.sh --project <name>`), which the port check's message says.
+
+## Chats aren't slot-gated
+
+`MODEL_CONCURRENCY` (000.03) limits agent runs, dispatched through tcp-agent's
+worker. A chat turn runs in tcp-server instead and counts against no pool or
+endpoint limit at all — it can run alongside an agent on the very same local
+model.
+
+**Act when:** a chat and an agent visibly contend for one local GPU (for
+example a chat turn times out or stalls while an agent runs against the same
+endpoint).
+
+## Model slots are in-process
+
+`ModelSlotService` (000.03) holds every pool and endpoint count in tcp-agent's
+own memory, the same single-instance assumption the worker already made.
+
+**Act when:** tcp-agent is ever run as more than one instance. The counts
+would need to move to Redis.
+
+## No notification for a used-up quota
+
+A rate limit that classifies as `quota` (000.03) pauses the agent and waits
+out `RATE_LIMIT_QUOTA_RETRY_MS`, same as a reached spend cap, but raises no
+notification the way a spend cap does.
+
+**Act when:** a user misses an out-of-credit pause — it sits paused, unnoticed,
+until someone happens to look.
+
+## One 429 doesn't hold the endpoint for other agents
+
+A rate limit (000.03) pauses only the agent whose call was refused.
+`ModelSlotService` still offers that endpoint's slot to the next waiting job
+straight away, so a provider that is rate-limiting one agent can still
+accept — and then also rate-limit — the very next one.
+
+**Act when:** repeated 429s from one provider (several agents each refused in
+turn) show up in practice.
+
+## Gemini's OpenAI-compatible error body is unverified for retry hints
+
+[docs/llm-rate-limits.md](llm-rate-limits.md) flags Gemini as the
+least-verified row in its provider table: whether a native-API `RetryInfo`/
+`retryDelay` reaches the OpenAI-compatible endpoint's error body was never
+confirmed against a real response.
+
+**Act when:** Gemini is used for real and rate-limits — check a captured 429
+body against `classifyRateLimit` (`libs/tcp-shared/src/llm/rate-limit.ts`)
+and correct the table and the classifier if it's wrong.
