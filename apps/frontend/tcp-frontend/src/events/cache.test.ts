@@ -201,7 +201,15 @@ describe('applyEvent', () => {
       );
 
       expect(queryClient.getQueryData(listKey)).toEqual([
-        { id: 'agent-1', status: 'running', initialPrompt: 'draft the report' },
+        // `pauseReason: null` rides along on every non-paused patch (000.03),
+        // so a row that later pauses for rate limiting never reads a reason
+        // left over from a pause two statuses ago.
+        {
+          id: 'agent-1',
+          status: 'running',
+          initialPrompt: 'draft the report',
+          pauseReason: null,
+        },
         { id: 'agent-2', status: 'running', initialPrompt: 'review it' },
       ]);
       // The fields the live row could not carry survive the patch — this is a
@@ -277,6 +285,92 @@ describe('applyEvent', () => {
       );
 
       expect(isInvalidated(queryClient, listKey)).toBe(true);
+    });
+
+    it('carries pauseReason and resumeAfter from a rate-limited pause', () => {
+      const queryClient = newClient();
+      const listKey = ['agent', 'list', { companyId: 'company-1' }];
+      queryClient.setQueryData(listKey, [{ id: 'agent-1', status: 'running' }]);
+
+      applyEvent(
+        queryClient,
+        auditEvent(
+          {
+            entity: 'agent',
+            newStatus: 'paused',
+            reason: 'rate_limited',
+            rateLimit: 'rate',
+            resumeAfter: '2026-08-10T09:05:00.000Z',
+          },
+          'agent-1',
+        ),
+      );
+
+      expect(queryClient.getQueryData(listKey)).toEqual([
+        {
+          id: 'agent-1',
+          status: 'paused',
+          pauseReason: 'rate_limited',
+          resumeAfter: '2026-08-10T09:05:00.000Z',
+        },
+      ]);
+    });
+
+    it('carries a null resumeAfter when auto-resume is off', () => {
+      const queryClient = newClient();
+      const listKey = ['agent', 'list', { companyId: 'company-1' }];
+      queryClient.setQueryData(listKey, [{ id: 'agent-1', status: 'running' }]);
+
+      applyEvent(
+        queryClient,
+        auditEvent(
+          {
+            entity: 'agent',
+            newStatus: 'paused',
+            reason: 'rate_limited',
+            rateLimit: 'quota',
+            resumeAfter: null,
+          },
+          'agent-1',
+        ),
+      );
+
+      expect(queryClient.getQueryData(listKey)).toEqual([
+        {
+          id: 'agent-1',
+          status: 'paused',
+          pauseReason: 'rate_limited',
+          resumeAfter: null,
+        },
+      ]);
+    });
+
+    it('clears pauseReason once the agent leaves paused', () => {
+      const queryClient = newClient();
+      const listKey = ['agent', 'list', { companyId: 'company-1' }];
+      queryClient.setQueryData(listKey, [
+        {
+          id: 'agent-1',
+          status: 'paused',
+          pauseReason: 'rate_limited',
+          resumeAfter: '2026-08-10T09:05:00.000Z',
+        },
+      ]);
+
+      // The sweep resumed it — no `reason`/`resumeAfter` on a plain running event.
+      applyEvent(
+        queryClient,
+        auditEvent({ entity: 'agent', newStatus: 'running' }, 'agent-1'),
+      );
+
+      expect(queryClient.getQueryData(listKey)).toEqual([
+        {
+          id: 'agent-1',
+          status: 'running',
+          pauseReason: null,
+          resumeAfter: '2026-08-10T09:05:00.000Z',
+        },
+      ]);
     });
   });
 });

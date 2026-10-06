@@ -2037,7 +2037,7 @@ export interface components {
             roleId: string;
             assignmentId: string;
             /** @enum {string} */
-            status: "idle" | "running" | "paused" | "completed" | "failed" | "cancelled";
+            status: "idle" | "queued" | "running" | "paused" | "completed" | "failed" | "cancelled";
             threadId: string | null;
             initialPrompt: string;
             /** Format: date-time */
@@ -2058,7 +2058,10 @@ export interface components {
             /** Format: date-time */
             pausedAt?: string;
             /** @enum {string|null} */
-            pauseReason?: "user_input" | "consultation" | "shutdown" | "spend_cap" | null;
+            pauseReason?: "user_input" | "consultation" | "shutdown" | "spend_cap" | "rate_limited" | null;
+            /** Format: date-time */
+            resumeAfter?: string;
+            rateLimitRetries: number;
         };
         StartChatDto: {
             /** Format: uuid */

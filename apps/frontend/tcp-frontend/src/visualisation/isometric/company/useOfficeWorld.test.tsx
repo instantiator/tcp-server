@@ -163,6 +163,7 @@ describe('useOfficeWorld — the live pipeline (agent E2E stand-in)', () => {
     createdAt: NOW,
     updatedAt: NOW,
     output: null,
+    rateLimitRetries: 0,
   });
 
   /** A `state_change` audit event, as `useEventStream` hands to `applyEvent`. */

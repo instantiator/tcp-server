@@ -1,6 +1,6 @@
 import { useListChangeAnnouncement } from '../../../announce/useListChangeAnnouncement';
 import { useLiveCompanyAgentsList } from '../../../api/hooks';
-import { ACTIVE_AGENT_STATUSES, statusLabel } from '../../../api/statuses';
+import { ACTIVE_AGENT_STATUSES, agentStatusLabel } from '../../../api/statuses';
 import { ExpandableText } from '../../../components/ExpandableText/ExpandableText';
 import { t } from '../../../strings';
 import { ActivityList } from './ActivityList';
@@ -47,7 +47,7 @@ export const AgentsList = ({ companyId, roleNames, onCount }: ListProps) => {
             <li className="activity-list__row" key={agent.id}>
               <p className="activity-list__row-title">{role}</p>
               <p className="activity-list__row-detail">
-                {statusLabel(agent.status)}
+                {agentStatusLabel(agent)}
               </p>
               <ExpandableText
                 text={agent.initialPrompt}
