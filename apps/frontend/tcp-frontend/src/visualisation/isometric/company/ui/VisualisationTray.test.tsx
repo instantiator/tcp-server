@@ -271,17 +271,105 @@ describe('VisualisationTray', () => {
     });
     expect(within(aside).getByText('Reconcile accounts')).toBeInTheDocument();
     expect(
-      within(aside).getByText(statusLabel('in-progress')),
-    ).toBeInTheDocument();
-    expect(
-      within(aside).getByText(
-        t('visualisation.tray.assignmentRow', {
-          role: ROLE_NAME,
-          mode: modeLabel('implement'),
-          status: statusLabel('in-progress'),
-        }),
-      ),
-    ).toBeInTheDocument();
+      within(aside).getAllByText(statusLabel('in-progress')),
+    ).not.toHaveLength(0);
+    const list = within(aside).getByRole('list');
+    expect(list).toHaveTextContent(`${ROLE_NAME} — ${modeLabel('implement')}`);
+    expect(list).toHaveTextContent(statusLabel('in-progress'));
+  });
+
+  describe('the assignment lists', () => {
+    const chicken = {
+      ...roleFixture(),
+      id: 'chicken',
+      name: 'Chicken assistant',
+    };
+    const cat = { ...roleFixture(), id: 'cat', name: 'Cat assistant' };
+    /** The user's example, created in this order; ids sort the same way. */
+    const EXAMPLE = [
+      ['chicken', 'plan', 'succeeded'],
+      ['chicken', 'implement', 'succeeded'],
+      ['chicken', 'qa', 'succeeded'],
+      ['cat', 'implement', 'succeeded'],
+      ['cat', 'qa', 'succeeded'],
+      ['chicken', 'implement', 'in-progress'],
+    ].map(([roleId, mode, status], index) => ({
+      ...assignmentFixture(status),
+      id: `assign-${index + 1}`,
+      roleId,
+      mode,
+      orderIndex: 5 - index,
+      prompt: `Prompt ${index + 1}`,
+      createdAt: `2026-09-01T00:00:0${index}.000Z`,
+    }));
+
+    const renderTask = async (assignments = EXAMPLE) => {
+      respond({
+        assignments: { body: assignments },
+        roles: { body: [chicken, cat] },
+        tasks: { body: [{ ...taskFixture(), shortcode: '003' }] },
+      });
+      renderTray({ selection: { kind: 'task', id: TASK_ID } });
+      return screen.findByRole('complementary', {
+        name: t('visualisation.tray.taskHeading', { shortcode: '003' }),
+      });
+    };
+
+    const rows = (list: HTMLElement) =>
+      within(list)
+        .getAllByRole('listitem')
+        .map((item) => ({
+          value: (item as HTMLLIElement).value,
+          text: item.textContent.replace(/\s+/g, ' '),
+        }));
+
+    it('numbers by creation, in "In progress" and "Completed" sections', async () => {
+      const aside = await renderTask();
+
+      const headings = within(aside)
+        .getAllByRole('heading', { level: 3 })
+        .map((heading) => heading.textContent);
+      expect(headings).toEqual(['In progress', 'Completed']);
+
+      const [inProgress, completed] = within(aside).getAllByRole('list');
+      expect(rows(inProgress)).toEqual([
+        { value: 6, text: 'Chicken assistant — Implementing — In progress' },
+      ]);
+      expect(rows(completed).map((row) => row.value)).toEqual([1, 2, 3, 4, 5]);
+      expect(rows(completed)[3]?.text).toBe(
+        'Cat assistant — Implementing — Succeeded',
+      );
+    });
+
+    it('omits a section with no rows', async () => {
+      const aside = await renderTask(EXAMPLE.slice(0, 5));
+
+      expect(
+        within(aside).queryByRole('heading', { name: 'In progress' }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(aside).getByRole('heading', { name: 'Completed' }),
+      ).toBeInTheDocument();
+    });
+
+    it('opens the assignment tooltip on keyboard focus', async () => {
+      await renderTask();
+
+      await userEvent.tab();
+      const info = screen.getByRole('button', { name: 'About assignment 6' });
+      while (document.activeElement !== info) await userEvent.tab();
+
+      const tooltip = await screen.findByRole('tooltip');
+      expect(tooltip).toHaveTextContent('Task 003, Assignment 006');
+      expect(tooltip).toHaveTextContent('Prompt 6');
+    });
+
+    it('has no accessibility violations', async () => {
+      await renderTask();
+      await screen.findByRole('heading', { name: 'In progress' });
+
+      await expectNoA11yViolations(document.body);
+    });
   });
 
   it("clips a long task request to an excerpt with a '…' that reveals the rest", async () => {

@@ -41,6 +41,7 @@ export const VisualisationTooltip = ({
       >
         <strong>{described.title}</strong>
         {described.description !== undefined && <p>{described.description}</p>}
+        {described.detail !== undefined && <p>{described.detail}</p>}
       </div>
     );
   }
@@ -77,6 +78,7 @@ export const VisualisationTooltip = ({
       >
         <strong>{described.title}</strong>
         {described.description !== undefined && <p>{described.description}</p>}
+        {described.detail !== undefined && <p>{described.detail}</p>}
       </div>
     );
   }
@@ -110,6 +112,7 @@ export const VisualisationTooltip = ({
     >
       <p>
         {t('visualisation.tooltip.task', {
+          shortcode: task.shortcode,
           step: task.step,
           steps: task.steps,
         })}

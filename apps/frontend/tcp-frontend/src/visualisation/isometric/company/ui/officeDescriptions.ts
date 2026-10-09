@@ -1,3 +1,4 @@
+import { shortened } from '../../../../components/ExpandableText/excerpt';
 import { t } from '../../../../strings';
 import type { CompanySnapshot } from '../rules/companySnapshot';
 import type { Furniture, OfficeWorld, Room } from '../world/types';
@@ -8,6 +9,8 @@ export interface OfficeDescription {
   readonly title: string;
   /** Absent where the title says it all (a whiteboard opens its task instead). */
   readonly description?: string;
+  /** A further line below the description (a task room shows its task's request). */
+  readonly detail?: string;
 }
 
 const ONE_TO_ONE_PREFIX = 'oneToOne:';
@@ -43,11 +46,17 @@ export function describeFurniture(
     }
     case 'whiteboard':
       return { title: t('visualisation.furniture.whiteboard') };
+    case 'bookshelf':
+      return {
+        title: t('visualisation.furniture.bookshelf', {
+          count: snapshot.tasks.filter((task) => task.succeeded).length,
+        }),
+        description: t('visualisation.furniture.bookshelf.description'),
+      };
     case 'sofa':
     case 'pigeonholes':
     case 'table':
     case 'officeDoor':
-    case 'bookshelf':
       return {
         title: t(`visualisation.furniture.${item.kind}`),
         description: t(`visualisation.furniture.${item.kind}.description`),
@@ -75,11 +84,14 @@ export function describeRoom(
         description: t(`visualisation.room.${room.purpose}.description`),
       };
     case 'task': {
-      const shortcode =
-        snapshot.tasks.find((task) => task.id === room.taskId)?.shortcode ?? '';
+      const task = snapshot.tasks.find(
+        (candidate) => candidate.id === room.taskId,
+      );
+      const shortcode = task?.shortcode ?? '';
       return {
         title: t('visualisation.room.task', { shortcode }),
         description: t('visualisation.room.task.description', { shortcode }),
+        ...(task === undefined ? {} : { detail: shortened(task.request) }),
       };
     }
     case 'oneToOne': {

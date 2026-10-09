@@ -110,7 +110,7 @@ describe('describeFurniture', () => {
     );
   });
 
-  it.each(['sofa', 'pigeonholes', 'table', 'officeDoor', 'bookshelf'] as const)(
+  it.each(['sofa', 'pigeonholes', 'table', 'officeDoor'] as const)(
     'describes a %s',
     (kind) => {
       expect(describeFurniture(furniture(kind), WORLD, SNAPSHOT)).toEqual({
@@ -122,6 +122,15 @@ describe('describeFurniture', () => {
 });
 
 describe('describeRoom', () => {
+  it('titles the bookshelf with its count of succeeded tasks', () => {
+    expect(describeFurniture(furniture('bookshelf'), WORLD, SNAPSHOT)).toEqual({
+      title: t('visualisation.furniture.bookshelf', {
+        count: SNAPSHOT.tasks.filter((task) => task.succeeded).length,
+      }),
+      description: t('visualisation.furniture.bookshelf.description'),
+    });
+  });
+
   it('names a task room after its task', () => {
     expect(
       describeRoom(room('task:task-1', 'task', 'task-1'), SNAPSHOT),
@@ -130,6 +139,7 @@ describe('describeRoom', () => {
       description: t('visualisation.room.task.description', {
         shortcode: 'TASK-1',
       }),
+      detail: SNAPSHOT.tasks[0]?.request,
     });
   });
 

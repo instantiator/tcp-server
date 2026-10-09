@@ -756,7 +756,7 @@ describe('CompanyVisualisation', () => {
         });
         const tooltip = await screen.findByRole('tooltip');
         expect(tooltip).toHaveTextContent(
-          t('visualisation.furniture.bookshelf'),
+          t('visualisation.furniture.bookshelf', { count: 1 }),
         );
         await screen.findByRole('link', { name: /^TASK-DONE — / });
 

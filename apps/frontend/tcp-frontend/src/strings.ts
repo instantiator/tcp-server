@@ -369,7 +369,7 @@ const strings = {
 
   'visualisation.tooltip.agent': 'Agent: {role}',
   'visualisation.tooltip.role': 'Role: {role}',
-  'visualisation.tooltip.task': 'Task: ({step}/{steps})',
+  'visualisation.tooltip.task': 'Task {shortcode}: ({step}/{steps})',
 
   // Canvas labels (`ui/officeLabels.ts`), each kind behind a checkbox.
   'visualisation.labels.label': 'Labels',
@@ -406,7 +406,7 @@ const strings = {
   'visualisation.furniture.officeDoor': 'Office door',
   'visualisation.furniture.officeDoor.description':
     'Agents arrive and leave here.',
-  'visualisation.furniture.bookshelf': 'Bookshelf',
+  'visualisation.furniture.bookshelf': 'Bookshelf: {count}',
   'visualisation.furniture.bookshelf.description':
     'Holds the outputs of completed tasks. Select it to see them.',
   'visualisation.room.task': 'Task room: {shortcode}',
@@ -441,8 +441,13 @@ const strings = {
   'visualisation.tray.prompt': 'Prompt',
   'visualisation.tray.prompt.expand': 'Show the full prompt',
   'visualisation.tray.prompt.collapse': 'Show less of the prompt',
-  'visualisation.tray.assignments': 'Assignments',
-  'visualisation.tray.assignmentRow': '{role} — {mode} — {status}',
+  'visualisation.tray.assignmentRow': '{role} — {mode}',
+  'visualisation.tray.assignmentStatusSuffix': ' — {status}',
+  'visualisation.tray.inProgress': 'In progress',
+  'visualisation.tray.completed': 'Completed',
+  'visualisation.tray.aboutAssignment': 'About assignment {number}',
+  'visualisation.tray.assignmentInfoTitle':
+    'Task {shortcode}, Assignment {number}',
   'visualisation.tray.follow': 'Follow',
   'visualisation.tray.listenIn': 'Listen in to {role}',
   'visualisation.tray.chatWithRole': 'Chat with {role}',
