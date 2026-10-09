@@ -58,6 +58,8 @@ import { PauseAndResumeService } from './pause-and-resume.service';
 import { PlanValidationService } from './plan-validation.service';
 import { StorageScopeService } from './storage-scope.service';
 import { SystemDrainService } from './system-drain.service';
+import { SystemHealthService } from './system-health.service';
+import { HealthModule } from '../health/health.module';
 import { SystemShutdownService } from './system-shutdown.service';
 import { QaVerdictService } from './qa-verdict.service';
 import { TaskDeliverablesService } from './task-deliverables.service';
@@ -76,6 +78,8 @@ import { TaskService } from './task.service';
     // CompanyMembershipGuard is injected into every user-facing controller.
     AuthModule,
     DbModule,
+    // The combined system health report reuses tcp-server's own checks.
+    HealthModule,
     McpClientModule,
     ModelCheckModule,
     // Company priming replays the active notifications.
@@ -137,6 +141,7 @@ import { TaskService } from './task.service';
     // intake path guards on.
     SystemShutdownService,
     SystemDrainService,
+    SystemHealthService,
     // Resumes cap-paused work: on reset, dismissal, or an explicit resume.
     SpendResumeService,
     RateLimitResumeService,

@@ -9,6 +9,7 @@ x-internal-urls: &internal-urls
   MCP_INTERACTIONS_URL: http://tcp-mcp-interactions:3012
   MCP_TASKS_URL: http://tcp-mcp-tasks:3013
   TCP_SERVER_URL: http://tcp-server:3000
+  TCP_AGENT_URL: http://tcp-agent:3001
   OIDC_INTERNAL_ISSUER_URL: http://zitadel:8080
 
 services:

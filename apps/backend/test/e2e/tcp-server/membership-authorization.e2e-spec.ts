@@ -439,6 +439,46 @@ describe('Membership authorization (e2e)', () => {
         .set('Authorization', `Bearer ${aliceJwt}`)
         .expect(403));
 
+    it('refuses the combined system health to an ordinary member', () =>
+      request(app.getHttpServer())
+        .get('/api/system/health')
+        .set('Authorization', `Bearer ${aliceJwt}`)
+        .expect(403));
+
+    it('gives an administrator the health of every service', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/api/system/health')
+        .set('Authorization', `Bearer ${adminJwt}`)
+        .expect(200);
+      const body = res.body as { services: { name: string }[] };
+      expect(body.services.map((service) => service.name)).toEqual([
+        'tcp-server',
+        'tcp-agent',
+        'tcp-mcp-storage',
+        'tcp-mcp-memory',
+        'tcp-mcp-interactions',
+        'tcp-mcp-tasks',
+      ]);
+    });
+
+    it('tells an ordinary member they are not an administrator, with the shutdown state', () =>
+      request(app.getHttpServer())
+        .get('/api/system/status')
+        .set('Authorization', `Bearer ${aliceJwt}`)
+        .expect(200)
+        .expect({ admin: false, shutdown: { state: 'idle' } }));
+
+    it('tells an administrator they are one', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/api/system/status')
+        .set('Authorization', `Bearer ${adminJwt}`)
+        .expect(200);
+      expect(res.body).toMatchObject({ admin: true });
+    });
+
+    it('refuses the system status without a token', () =>
+      request(app.getHttpServer()).get('/api/system/status').expect(401));
+
     it('lets an administrator reach a company they are not a member of', () =>
       request(app.getHttpServer())
         .get(`/api/company/${alice.id}`)

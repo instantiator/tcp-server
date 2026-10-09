@@ -6,8 +6,10 @@ import {
   HttpStatus,
   Query,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import {
   ApiAcceptedResponse,
   ApiBearerAuth,
@@ -17,9 +19,17 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CompanyMembershipGuard } from '../auth/company-membership.guard';
-import { AdminOnly } from '../auth/company-scope.decorator';
+import { AdminOnly, NoCompanyScope } from '../auth/company-scope.decorator';
+import { getCurrentUserIdentifiers } from '../auth/current-user';
+import { MembershipService } from '../auth/membership.service';
 import { ShutdownStatus, SystemDrainService } from './system-drain.service';
-import { ShutdownStatusResponseDto } from './dto/system.dto';
+import { SystemHealth, SystemHealthService } from './system-health.service';
+import { SystemShutdownService } from './system-shutdown.service';
+import {
+  ShutdownStatusResponseDto,
+  SystemHealthResponseDto,
+  SystemStatusResponseDto,
+} from './dto/system.dto';
 
 /**
  * Fleet-level lifecycle control — the only endpoints that act on the whole
@@ -35,7 +45,41 @@ import { ShutdownStatusResponseDto } from './dto/system.dto';
 @UseGuards(JwtAuthGuard, CompanyMembershipGuard)
 @Controller({ path: 'api/system' })
 export class SystemController {
-  constructor(private readonly drain: SystemDrainService) {}
+  constructor(
+    private readonly drain: SystemDrainService,
+    private readonly health: SystemHealthService,
+    private readonly shutdown: SystemShutdownService,
+    private readonly membership: MembershipService,
+  ) {}
+
+  /**
+   * Tells any signed-in user whether they are an administrator (so the web
+   * client knows to offer the System menu) and whether the system is shutting
+   * down (so every user sees the banner). Deliberately small: the full drain
+   * progress stays admin-only.
+   */
+  @ApiOperation({ summary: 'Get the caller-facing system status' })
+  @NoCompanyScope("system-wide state; reveals only the caller's own admin flag")
+  @Get('status')
+  @ApiOkResponse({ type: SystemStatusResponseDto })
+  getStatus(@Req() req: Request): SystemStatusResponseDto {
+    return {
+      admin: this.membership.isAdmin(getCurrentUserIdentifiers(req)),
+      shutdown: { state: this.shutdown.currentState },
+    };
+  }
+
+  /**
+   * Every service's health in one report. A down service is reported in the
+   * body, never as an error status, so the caller always gets the details.
+   */
+  @ApiOperation({ summary: 'Get the health of every service' })
+  @AdminOnly()
+  @Get('health')
+  @ApiOkResponse({ type: SystemHealthResponseDto })
+  getHealth(): Promise<SystemHealth> {
+    return this.health.check();
+  }
 
   /**
    * Begins draining towards a shutdown, and returns immediately with a
