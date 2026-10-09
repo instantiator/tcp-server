@@ -614,6 +614,72 @@ describe('AssignmentService', () => {
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
+    it('explains an empty prior-output list instead of printing a blank one', async () => {
+      const { task, agent } = await setupPlanner();
+      const message = await service
+        .planTask(task.id, agent.id, [
+          { prompt: 'a', role: 'analyst', expected: [] },
+          {
+            prompt: 'b',
+            role: 'analyst',
+            materials: [
+              { type: 'assignment-completed-path', value: 'draft.md' },
+            ],
+            expected: [],
+          },
+        ])
+        .then(
+          () => '',
+          (err: Error) => err.message,
+        );
+      expect(message).toContain('There are no valid values yet.');
+      expect(message).toContain(
+        'add { type: "file", value: "<filename>" } to that assignment\'s `expected` list',
+      );
+    });
+
+    // The plan a real planner resent unchanged (000.04 stage 1): outputs
+    // promised as text, then referenced as earlier steps' files.
+    it('names the text-not-file mistake when an earlier step promised the value as text', async () => {
+      const { task, agent } = await setupPlanner();
+      const message = await service
+        .planTask(task.id, agent.id, [
+          {
+            prompt: 'cats',
+            role: 'analyst',
+            expected: [{ type: 'inline-text', value: 'cats_drink_info' }],
+          },
+          {
+            prompt: 'chickens',
+            role: 'analyst',
+            expected: [{ type: 'inline-text', value: 'chickens_drink_info' }],
+          },
+          {
+            prompt: 'compare',
+            role: 'analyst',
+            materials: [
+              { type: 'assignment-completed-path', value: 'cats_drink_info' },
+              {
+                type: 'assignment-completed-path',
+                value: 'chickens_drink_info',
+              },
+            ],
+            expected: [],
+          },
+        ])
+        .then(
+          () => '',
+          (err: Error) => err.message,
+        );
+      expect(message).toContain(
+        'Assignment 0 promises "cats_drink_info" as text, but only files can be passed to a later step.',
+      );
+      expect(message).toContain(
+        'Assignment 1 promises "chickens_drink_info" as text',
+      );
+      expect(message).not.toContain('Valid values are: .');
+    });
+
     it('accepts an assignment-completed-path material matching an earlier step’s expected output', async () => {
       const { task, agent } = await setupPlanner();
       const result = await service.planTask(task.id, agent.id, [

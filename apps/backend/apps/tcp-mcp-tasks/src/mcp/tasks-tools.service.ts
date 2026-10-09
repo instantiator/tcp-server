@@ -61,7 +61,7 @@ const materialArtifactSchema = z.object({
   type: z
     .string()
     .describe(
-      "One of `material-file` (an uploaded task material), `completed-file` (an earlier step's promoted output), or `text` (literal text).",
+      "One of `material-file` (an uploaded task material), `completed-file` (an earlier step's output: that step must list the same filename as a `file` in its `expected`), or `text` (literal text).",
     ),
   value: z
     .string()

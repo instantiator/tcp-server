@@ -10,8 +10,10 @@ export interface InvalidEnumValue {
   property: string;
   /** The value the caller actually supplied. */
   value: string;
-  /** The values the field is allowed to take. */
+  /** The values the field is allowed to take. May be empty. */
   validValues: readonly string[];
+  /** How to make a value valid, when the list alone doesn't say. */
+  hint?: string;
 }
 
 /**
@@ -32,10 +34,15 @@ export function buildEnumValidationError(
   purposeOfTool: string,
   invalid: InvalidEnumValue[],
 ): string {
-  const lines = invalid.map(
-    (v) =>
-      `- ${v.property}: "${v.value}" is not one of the allowed values. Valid values are: ${v.validValues.join(', ')}.`,
-  );
+  const lines = invalid.map((v) => {
+    // An empty list printed as "Valid values are: ." left a planner retrying
+    // the same call; saying so plainly, with the hint, tells it what to change.
+    const valid =
+      v.validValues.length > 0
+        ? `is not one of the allowed values. Valid values are: ${v.validValues.join(', ')}.`
+        : 'is not valid. There are no valid values yet.';
+    return `- ${v.property}: "${v.value}" ${valid}${v.hint ? ` ${v.hint}` : ''}`;
+  });
   const properties = invalid.map((v) => v.property).join(', ');
   const heading =
     invalid.length === 1

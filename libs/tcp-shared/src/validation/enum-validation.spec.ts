@@ -39,4 +39,30 @@ describe('buildEnumValidationError', () => {
       'corrected values for assignment 0 role, assignment 0 expected type.',
     );
   });
+
+  it('says there are no valid values instead of printing an empty list', () => {
+    const msg = buildEnumValidationError('create the plan', [
+      {
+        property: 'assignment 2 materials[0] value',
+        value: 'cats_drink_info',
+        validValues: [],
+      },
+    ]);
+    expect(msg).toContain(
+      '"cats_drink_info" is not valid. There are no valid values yet.',
+    );
+    expect(msg).not.toContain('Valid values are: .');
+  });
+
+  it('appends the hint after the valid values', () => {
+    const msg = buildEnumValidationError('create the plan', [
+      {
+        property: 'assignment 1 role',
+        value: 'x',
+        validValues: ['a'],
+        hint: 'Use a slug.',
+      },
+    ]);
+    expect(msg).toContain('Valid values are: a. Use a slug.');
+  });
 });
