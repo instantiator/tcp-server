@@ -18,6 +18,7 @@ import {
   LlmConfig,
   MODE_PROMPTS,
   renderTemplate,
+  McpServerUnavailableError,
 } from '@tcp/shared';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -502,7 +503,37 @@ describe('AgentLoopService', () => {
       expect.any(Array),
       expect.any(Object),
       { agentId: agent.id, companyId: agent.companyId },
+      { required: true },
     );
+  });
+
+  // Carrying on without a server's tools leaves a step that can't finish,
+  // ending as an unexplained narration or no-output failure.
+  it('fails the run naming the MCP service that was down at tool load, before any LLM call', async () => {
+    const { agent } = await seedAgentAndRole();
+    mcpClient.loadTools.mockRejectedValueOnce(
+      new McpServerUnavailableError('tasks', 'ECONNREFUSED'),
+    );
+    const compile = jest.fn();
+    jest.mocked(StateGraph).mockImplementationOnce(
+      () =>
+        ({
+          addNode: jest.fn().mockReturnThis(),
+          addEdge: jest.fn().mockReturnThis(),
+          compile,
+        }) as unknown as InstanceType<typeof StateGraph>,
+    );
+
+    await service.run(agent.id, undefined, new AbortController());
+
+    expect((await agentRepo.findOneByOrFail({ id: agent.id })).status).toBe(
+      AgentStatus.Failed,
+    );
+    expect(notifyFailed).toHaveBeenCalledWith(
+      agent.id,
+      "The tasks service (MCP) didn't respond. Check it is running, then start the task again.",
+    );
+    expect(compile).not.toHaveBeenCalled();
   });
 
   describe('mode-tool restriction and toolChoice wiring', () => {

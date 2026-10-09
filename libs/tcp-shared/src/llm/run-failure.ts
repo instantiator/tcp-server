@@ -131,9 +131,21 @@ export function abortFailure(
  */
 function failedService(err: unknown): string | undefined {
   if (typeof err !== 'object' || err === null) return undefined;
-  const e = err as { name?: unknown; $metadata?: unknown; message?: unknown };
+  const e = err as {
+    name?: unknown;
+    $metadata?: unknown;
+    message?: unknown;
+    serverName?: unknown;
+  };
   // The AWS SDK, behind storage, tags every error with `$metadata`.
   if (e.$metadata !== undefined) return 'Storage (MinIO)';
+  // `McpServerUnavailableError`: a server the run needs was down at tool load.
+  if (
+    e.name === 'McpServerUnavailableError' &&
+    typeof e.serverName === 'string'
+  ) {
+    return `The ${e.serverName} service (MCP)`;
+  }
   if (e.name === 'McpError') return 'An MCP service';
   if (e.name === 'MaxRetriesPerRequestError') return 'Redis';
   if (e.name === 'QueryFailedError' || e.name === 'ConnectionIsNotSetError') {
