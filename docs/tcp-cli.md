@@ -111,6 +111,7 @@ See [schema.md](schema.md) for the full field reference, VS Code integration, ex
 | [`set-task`](#set-task)                                     | `set-task --task-id <uuid> [-i <json>]`                                                                             | Edit an unstarted task's request, planner, materials or expected outputs                      |
 | [`set-planner`](#set-planner)                               | `set-planner (--company <slug-or-id> \| --task-id <uuid>) --role <slug-or-id>`                                      | Set a company's default planner role, or an unstarted task's                                  |
 | [`start-task`](#start-task)                                 | `start-task --task-id <uuid>`                                                                                       | Start a task that was created earlier                                                         |
+| [`pause-task`](#pause-task)                                 | `pause-task --task-id <uuid>`                                                                                       | Pause a running task until `resume-task`                                                      |
 | [`cancel-task`](#cancel-task)                               | `cancel-task --task-id <uuid>`                                                                                      | Cancel a task and its still-non-terminal assignments/agents                                   |
 | [`list-agents`](#list-agents)                               | `list-agents (--role \| --company <slug-or-id>) [--filter k=v...]`                                                  | List agents for a role or company                                                             |
 | [`list-assignments`](#list-assignments)                     | `list-assignments (--task-id <uuid> \| --company <slug-or-id>) [--filter k=v...]`                                   | List assignments for a task or company                                                        |
@@ -121,7 +122,7 @@ See [schema.md](schema.md) for the full field reference, VS Code integration, ex
 | [`dismiss-notification`](#dismiss-notification)             | `dismiss-notification --notification-id <uuid>`                                                                     | Dismiss a notification                                                                        |
 | [`dismiss-cap`](#dismiss-cap)                               | `dismiss-cap --provider <id> [--indefinitely]`                                                                      | Lift a provider's spend cap (administrators only)                                             |
 | [`restore-cap`](#restore-cap)                               | `restore-cap --provider <id>`                                                                                       | Restore a provider's spend cap (administrators only)                                          |
-| [`resume-task`](#resume-task)                               | `resume-task --task-id <uuid>`                                                                                      | Resume a task paused by a spend cap or shutdown                                               |
+| [`resume-task`](#resume-task)                               | `resume-task --task-id <uuid>`                                                                                      | Resume a paused task (`pause-task`, spend cap, shutdown or rate limit)                        |
 | [`resume-company`](#resume-company)                         | `resume-company --company-id <id-or-slug>`                                                                          | Resume a company's tasks paused by a spend cap or shutdown                                    |
 
 ### Entity identifiers: `--x`, `--x-id`, `--x-slug`
@@ -944,9 +945,15 @@ Lists a company's tasks.
 
 Retrieves a task with its assignments (ordered: implement-mode plan
 assignments by `orderIndex`, then the rest by creation time), including QA
-outcomes.
+outcomes, and why it is waiting, if it is.
 
-- **stdout**: `{ task, assignments }` as JSON
+- **stdout**: the task as JSON, with its fields at the top level plus
+  `assignments` and `waiting`. `waiting` is `null`, or
+  `{ kind, pausedBy?, resumeAfter? }`: `kind` is `manual` (a user paused it,
+  `pausedBy` says who), `rate_limited` (`resumeAfter` is the next try),
+  `spend_cap`, `shutdown`, `user_input`, `consultation` or `queued` (waiting
+  for a model slot). A failed task's `failureReason` says what went wrong and
+  what to do.
 
 ```bash
 ./tcp-cli.sh -t $TOKEN get-task --task-id <uuid>
@@ -1007,6 +1014,38 @@ Starts a task that hasn't been started yet — the standalone equivalent of
 
 ```bash
 ./tcp-cli.sh -t $TOKEN start-task --task-id <uuid>
+```
+
+### `pause-task`
+
+Pauses a running task (`planning`, `in-progress` or `finalising`). Its agents
+stop after their current step: no LLM call is cut off. Nothing restarts them —
+not a reply, a consultation result or a sweep — until `resume-task`. Replies
+that arrive meanwhile are kept and given to the agents on resume.
+
+- **stdout**: the paused task as JSON (`pausedAt`, `pausedBy` set)
+- Returns `409` if the task isn't running, or is already paused
+
+```bash
+./tcp-cli.sh -t $TOKEN pause-task --task-id <uuid>
+```
+
+### `resume-task`
+
+Resumes a paused task: lifts a `pause-task`, and resumes its agents paused by
+it, a spend cap, a shutdown or a rate limit, plus any whose awaited reply has
+arrived. Exempts the task from spend caps only if a cap is reached at that
+moment — the same rule as `start-task`.
+
+- **stdout**: `{ resumed }` as JSON (the number of agents a resume was requested for)
+- Returns `503` while the system is shutting down
+
+| Flag               | Description         |
+| ------------------ | ------------------- |
+| `--task-id <uuid>` | Required. Task UUID |
+
+```bash
+./tcp-cli.sh -t $TOKEN resume-task --task-id <uuid>
 ```
 
 ### `cancel-task`
@@ -1365,26 +1404,12 @@ Administrators only.
 ./tcp-cli.sh -t $TOKEN restore-cap --provider lm-studio
 ```
 
-### `resume-task`
-
-Resumes a task's agents paused by a spend cap or a shutdown, and exempts the
-task from spend caps until it ends — resuming is the user choosing to spend.
-
-- **stdout**: `{ resumed }` as JSON (the number of agents a resume was requested for)
-
-| Flag               | Description         |
-| ------------------ | ------------------- |
-| `--task-id <uuid>` | Required. Task UUID |
-
-```bash
-./tcp-cli.sh -t $TOKEN resume-task --task-id <uuid>
-```
-
 ### `resume-company`
 
-Resumes every task in a company with agents paused by a spend cap or a
-shutdown, exempting those tasks from spend caps until they end. Does not lift
-the cap for any other company.
+Resumes every task in a company with agents paused by a spend cap, a shutdown
+or a rate limit. A task a user paused with `pause-task` is left alone: resume
+it with `resume-task`. Exempts the affected tasks from spend caps only while a
+cap is reached. Does not lift the cap for any other company.
 
 - **stdout**: `{ resumed }` as JSON
 

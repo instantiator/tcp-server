@@ -33,6 +33,7 @@ import { registerRespond } from './commands/respond';
 import { registerRestoreCap } from './commands/restore-cap';
 import { registerResumeCompany } from './commands/resume-company';
 import { registerResumeTask } from './commands/resume-task';
+import { registerPauseTask } from './commands/pause-task';
 import { registerSetCompany } from './commands/set-company';
 import { registerSetPlanner } from './commands/set-planner';
 import { registerSetRole } from './commands/set-role';
@@ -115,6 +116,7 @@ registerNotifications(program);
 registerDismissNotification(program);
 registerDismissCap(program);
 registerRestoreCap(program);
+registerPauseTask(program);
 registerResumeTask(program);
 registerResumeCompany(program);
 

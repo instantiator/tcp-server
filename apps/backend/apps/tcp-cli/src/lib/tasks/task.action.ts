@@ -158,6 +158,24 @@ export function cancelTaskAction(
   });
 }
 
+/** Pauses a running task. stdout: the paused task as JSON. */
+export function pauseTaskAction(
+  opts: GlobalOptions,
+  cmdOpts: { taskId: string },
+): Promise<void> {
+  return runCommand(async () => {
+    const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
+    const api = apiOptions(opts, token);
+
+    const task = await apiRequest<TcpTask>(
+      api,
+      'POST',
+      `/api/task/${encodeURIComponent(cmdOpts.taskId)}/pause`,
+    );
+    process.stdout.write(JSON.stringify(task, null, 2) + '\n');
+  });
+}
+
 /** Starts an unstarted task. stdout: the started task as JSON. */
 export function startTaskAction(
   opts: GlobalOptions,
