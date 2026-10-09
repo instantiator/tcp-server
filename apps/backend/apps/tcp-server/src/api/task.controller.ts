@@ -227,7 +227,7 @@ export class TaskController {
   @Get(':id')
   async getTask(@Param('id') id: UUID): Promise<TaskDetailResponseDto> {
     const { task, assignments } = await this.tasks.getWithAssignments(id);
-    return { ...task, assignments };
+    return { ...task, assignments, waiting: await this.tasks.waitingFor(task) };
   }
 
   /**

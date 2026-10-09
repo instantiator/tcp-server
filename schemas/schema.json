@@ -917,13 +917,14 @@
       "type": "string"
     },
     "PauseReason": {
-      "description": "Why an agent is currently  {@link  AgentStatus.Paused } .\n\n`user_input` and `consultation` pauses resolve themselves — a reply or a consultation result arrives and the agent is re-dispatched automatically. A `shutdown` pause has nothing outstanding to wait on, so it stays paused until a user resumes it explicitly. A `spend_cap` pause is lifted when the provider's cap resets or is dismissed, or by an explicit task/company resume. A `rate_limited` pause — the provider refused a call — is lifted at  {@link  TcpAgent.resumeAfter }  when auto-resume is on, or by an explicit resume.",
+      "description": "Why an agent is currently  {@link  AgentStatus.Paused } .\n\n`user_input` and `consultation` pauses resolve themselves — a reply or a consultation result arrives and the agent is re-dispatched automatically. A `shutdown` pause has nothing outstanding to wait on, so it stays paused until a user resumes it explicitly. A `spend_cap` pause is lifted when the provider's cap resets or is dismissed, or by an explicit task/company resume. A `rate_limited` pause — the provider refused a call — is lifted at  {@link  TcpAgent.resumeAfter }  when auto-resume is on, or by an explicit resume. A `manual` pause — a user paused the agent's task — is lifted only by an explicit resume of that task.",
       "enum": [
         "user_input",
         "consultation",
         "shutdown",
         "spend_cap",
-        "rate_limited"
+        "rate_limited",
+        "manual"
       ],
       "type": "string"
     },
@@ -1893,6 +1894,18 @@
           },
           "type": "array"
         },
+        "pausedAt": {
+          "description": "When a user paused this task; null while it isn't paused. While set, no automatic resume (a reply, a consultation result, a sweep) restarts its agents, and agents created for it start paused — only an explicit task resume clears it.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "pausedBy": {
+          "description": "Who paused this task, as shown to users; null while it isn't paused.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "plannerRole": {
           "anyOf": [
             {
@@ -1939,6 +1952,11 @@
         },
         "version": {
           "type": "number"
+        },
+        "visualisationClosedAt": {
+          "description": "When a user closed this task's place in the office view (its room). Until then a finished task's room stays open. Named for the view rather than the room, since other views may come later.",
+          "format": "date-time",
+          "type": "string"
         }
       },
       "required": [

@@ -1,3 +1,5 @@
+import type { StringKey } from '../strings';
+
 /**
  * Every failed API call, in one shape (ADR-021).
  *
@@ -72,3 +74,32 @@ export const networkError = (cause: unknown): ApiError =>
     cause instanceof Error ? cause.message : String(cause),
     undefined,
   );
+
+/** The task action a refusal came from, since a 409 means something different for each. */
+export type RefusalAction =
+  'start' | 'pause' | 'resume' | 'cancel' | 'edit' | 'closeVisualisation';
+
+/**
+ * The string to show when the server refuses a task action, chosen by status
+ * (and by action for a 409, where the wrong state differs per action).
+ * Anything unrecognised gets the generic "that didn't work".
+ */
+export const refusalKey = (err: unknown, action: RefusalAction): StringKey => {
+  if (!(err instanceof ApiError)) return 'refusal.failed';
+  switch (err.status) {
+    case 0:
+      return 'refusal.offline';
+    case 403:
+      return 'refusal.forbidden';
+    case 404:
+      return 'refusal.notFound';
+    case 409:
+      return `refusal.${action}.wrongState`;
+    case 422:
+      return 'refusal.start.noPlanner';
+    case 503:
+      return 'refusal.shuttingDown';
+    default:
+      return err.status >= 500 ? 'refusal.server' : 'refusal.failed';
+  }
+};

@@ -1060,6 +1060,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/task/{id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pause a running task */
+        post: operations["TaskController_pauseTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/task/{id}/resume": {
         parameters: {
             query?: never;
@@ -1697,6 +1714,11 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
             spendCapExempt: boolean;
+            /** Format: date-time */
+            pausedAt?: string;
+            pausedBy?: string | null;
+            /** Format: date-time */
+            visualisationClosedAt?: string;
         };
         AgentAssignmentResponseDto: {
             task: components["schemas"]["TaskResponseDto"] | null;
@@ -1990,6 +2012,13 @@ export interface components {
             name: string;
             size: number;
         };
+        TaskWaitingResponseDto: {
+            /** @enum {string} */
+            kind: "user_input" | "consultation" | "shutdown" | "spend_cap" | "rate_limited" | "manual" | "queued";
+            pausedBy?: string;
+            /** @description ISO-8601 */
+            resumeAfter?: string;
+        };
         TaskDetailResponseDto: {
             id: string;
             companyId: string;
@@ -2007,7 +2036,13 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
             spendCapExempt: boolean;
+            /** Format: date-time */
+            pausedAt?: string;
+            pausedBy?: string | null;
+            /** Format: date-time */
+            visualisationClosedAt?: string;
             assignments: components["schemas"]["AssignmentResponseDto"][];
+            waiting: components["schemas"]["TaskWaitingResponseDto"] | null;
         };
         AuditEventResponseDto: {
             id: string;
@@ -2058,7 +2093,7 @@ export interface components {
             /** Format: date-time */
             pausedAt?: string;
             /** @enum {string|null} */
-            pauseReason?: "user_input" | "consultation" | "shutdown" | "spend_cap" | "rate_limited" | null;
+            pauseReason?: "user_input" | "consultation" | "shutdown" | "spend_cap" | "rate_limited" | "manual" | null;
             /** Format: date-time */
             resumeAfter?: string;
             rateLimitRetries: number;
@@ -3917,6 +3952,27 @@ export interface operations {
         };
     };
     TaskController_startTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskResponseDto"];
+                };
+            };
+        };
+    };
+    TaskController_pauseTask: {
         parameters: {
             query?: never;
             header?: never;

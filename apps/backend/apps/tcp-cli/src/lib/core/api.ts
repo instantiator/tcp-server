@@ -27,6 +27,34 @@ export interface ApiOptions {
   signal?: AbortSignal;
 }
 
+/** Message shapes NestJS puts in an error body: a string, or an array from a `ValidationPipe`. */
+interface ErrorBody {
+  message?: string | string[];
+  errors?: { llmHint?: string }[];
+}
+
+/**
+ * The thrown text for a refused request: the server's own message first, so
+ * the user reads the reason rather than a route and status code. A 401 adds
+ * the way out, since an expired token is the usual cause.
+ */
+function httpErrorText(
+  method: string,
+  path: string,
+  status: number,
+  body: ErrorBody | null,
+): string {
+  const message = Array.isArray(body?.message)
+    ? body.message.join('; ')
+    : body?.message;
+  const text = message
+    ? `${message} (HTTP ${status})`
+    : `${method} ${path} failed (HTTP ${status})`;
+  return status === 401
+    ? `${text} Sign in again: ./tcp-cli.sh get-token`
+    : text;
+}
+
 /** Performs a fetch to the given path and returns the parsed JSON response. */
 export async function apiRequest<T>(
   opts: ApiOptions,
@@ -48,16 +76,8 @@ export async function apiRequest<T>(
   });
 
   if (!res.ok) {
-    let detail = '';
-    try {
-      const err = (await res.json()) as { message?: string };
-      detail = err.message ? `: ${err.message}` : '';
-    } catch {
-      // ignore parse errors — use status text
-    }
-    throw new Error(
-      `${method} ${path} failed with HTTP ${res.status}${detail}`,
-    );
+    const err = (await res.json().catch(() => null)) as ErrorBody | null;
+    throw new Error(httpErrorText(method, path, res.status, err));
   }
 
   reportWarnings(res);
@@ -108,14 +128,8 @@ export async function apiDownload(
   const res = await fetch(url, { method: 'GET', headers, signal: opts.signal });
 
   if (!res.ok) {
-    let detail = '';
-    try {
-      const err = (await res.json()) as { message?: string };
-      detail = err.message ? `: ${err.message}` : '';
-    } catch {
-      // ignore
-    }
-    throw new Error(`GET ${path} failed with HTTP ${res.status}${detail}`);
+    const err = (await res.json().catch(() => null)) as ErrorBody | null;
+    throw new Error(httpErrorText('GET', path, res.status, err));
   }
 
   reportWarnings(res);
@@ -159,21 +173,12 @@ export async function apiUpload<T>(
   const res = await fetch(url, { method: 'POST', headers, body: form });
 
   if (!res.ok) {
-    let detail = '';
-    try {
-      const err = (await res.json()) as {
-        message?: string;
-        errors?: { llmHint?: string }[];
-      };
-      detail = err.message ? `: ${err.message}` : '';
-      const hints = (err.errors ?? [])
-        .map((e) => e.llmHint)
-        .filter((hint): hint is string => Boolean(hint));
-      if (hints.length > 0) detail += `\n${hints.join('\n')}`;
-    } catch {
-      /* ignore */
-    }
-    throw new Error(`POST ${path} failed with HTTP ${res.status}${detail}`);
+    const err = (await res.json().catch(() => null)) as ErrorBody | null;
+    const hints = (err?.errors ?? [])
+      .map((e) => e.llmHint)
+      .filter((hint): hint is string => Boolean(hint));
+    const text = httpErrorText('POST', path, res.status, err);
+    throw new Error(hints.length > 0 ? `${text}\n${hints.join('\n')}` : text);
   }
 
   reportWarnings(res);

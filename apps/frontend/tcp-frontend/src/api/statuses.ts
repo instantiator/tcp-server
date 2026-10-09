@@ -15,6 +15,11 @@
  * over. That is a product judgement, and it belongs somewhere a person reads.
  */
 
+import type {
+  PauseReason,
+  TaskWaitKind,
+  TaskWaiting,
+} from '@tcp/shared/client';
 import { t, type StringKey } from '../strings';
 
 /** Non-terminal {@link TcpTaskStatus} values — a task still being worked. */
@@ -94,21 +99,63 @@ const nextTryFormatter = new Intl.DateTimeFormat(undefined, {
   timeStyle: 'short',
 });
 
+/** The words for each non-rate-limited pause reason. A new reason fails typecheck here. */
+const PAUSE_KEYS: Record<Exclude<PauseReason, 'rate_limited'>, StringKey> = {
+  user_input: 'agent.pause.user_input',
+  consultation: 'agent.pause.consultation',
+  shutdown: 'agent.pause.shutdown',
+  spend_cap: 'agent.pause.spend_cap',
+  manual: 'agent.pause.manual',
+};
+
+/** The rate-limited wording, shared by the agent and task labels. */
+const rateLimitedLabel = (resumeAfter: string | null | undefined): string =>
+  typeof resumeAfter === 'string'
+    ? t('activity.status.rateLimited', {
+        time: nextTryFormatter.format(new Date(resumeAfter)),
+      })
+    : t('activity.status.rateLimited.manual');
+
 /**
- * The user's word for an agent's status, elaborating a `rate_limited` pause
- * with when it will next be tried — `statusLabel` alone would just say
- * "Paused" and drop the one thing worth knowing about this particular pause.
+ * The user's word for an agent's status, saying why a paused agent is paused
+ * (and, for a rate limit, when it is next tried) — `statusLabel` alone would
+ * just say "Paused" and drop the one thing worth knowing.
  *
  * Takes the whole agent rather than a bare status string, because the extra
  * wording depends on `pauseReason` and `resumeAfter` too.
  */
 export const agentStatusLabel = (agent: AgentStatusFields): string => {
-  if (agent.status !== 'paused' || agent.pauseReason !== 'rate_limited') {
-    return statusLabel(agent.status);
+  if (agent.status !== 'paused') return statusLabel(agent.status);
+  const reason = agent.pauseReason;
+  if (reason === 'rate_limited') return rateLimitedLabel(agent.resumeAfter);
+  if (reason && Object.hasOwn(PAUSE_KEYS, reason)) {
+    return t(PAUSE_KEYS[reason as keyof typeof PAUSE_KEYS]);
   }
-  return typeof agent.resumeAfter === 'string'
-    ? t('activity.status.rateLimited', {
-        time: nextTryFormatter.format(new Date(agent.resumeAfter)),
-      })
-    : t('activity.status.rateLimited.manual');
+  return statusLabel(agent.status);
+};
+
+/** The sentence for each {@link TaskWaitKind}. A new kind fails typecheck here. */
+const WAITING_KEYS: Record<
+  Exclude<TaskWaitKind, 'manual' | 'rate_limited'>,
+  StringKey
+> = {
+  spend_cap: 'task.waiting.spend_cap',
+  shutdown: 'task.waiting.shutdown',
+  user_input: 'task.waiting.user_input',
+  consultation: 'task.waiting.consultation',
+  queued: 'task.waiting.queued',
+};
+
+/** The user's sentence for why a task is standing still, and what to do about it. */
+export const taskWaitingLabel = (waiting: TaskWaiting): string => {
+  switch (waiting.kind) {
+    case 'manual':
+      return waiting.pausedBy
+        ? t('task.waiting.manual', { name: waiting.pausedBy })
+        : t('task.waiting.manualAnonymous');
+    case 'rate_limited':
+      return rateLimitedLabel(waiting.resumeAfter);
+    default:
+      return t(WAITING_KEYS[waiting.kind]);
+  }
 };

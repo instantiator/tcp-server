@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { ApiError, apiError, networkError } from './errors';
+import { ApiError, apiError, networkError, refusalKey } from './errors';
 
 // `client.test.ts` already covers the 400–500 status range with messages, the
 // ValidationPipe array-message join, the statusText fallback, and
@@ -124,5 +124,33 @@ describe('ApiError', () => {
 
     expect(error).toBeInstanceOf(Error);
     expect(error.name).toBe('ApiError');
+  });
+});
+
+describe('refusalKey', () => {
+  const err = (status: number): ApiError => new ApiError(status, 'x', null);
+
+  it.each([
+    [0, 'refusal.offline'],
+    [403, 'refusal.forbidden'],
+    [404, 'refusal.notFound'],
+    [409, 'refusal.pause.wrongState'],
+    [422, 'refusal.start.noPlanner'],
+    [503, 'refusal.shuttingDown'],
+    [500, 'refusal.server'],
+    [502, 'refusal.server'],
+    [400, 'refusal.failed'],
+  ])('maps status %i to %s', (status, key) => {
+    expect(refusalKey(err(status), 'pause')).toBe(key);
+  });
+
+  it('names the action in a 409', () => {
+    expect(refusalKey(err(409), 'closeVisualisation')).toBe(
+      'refusal.closeVisualisation.wrongState',
+    );
+  });
+
+  it('treats a non-ApiError as a generic failure', () => {
+    expect(refusalKey(new Error('boom'), 'start')).toBe('refusal.failed');
   });
 });

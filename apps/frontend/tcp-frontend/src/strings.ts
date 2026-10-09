@@ -533,6 +533,39 @@ const strings = {
   // these instead of the plain `activity.status.paused` above.
   'activity.status.rateLimited': 'Rate limited — next try {time}',
   'activity.status.rateLimited.manual': 'Rate limited — resume by hand',
+  // Why an agent is paused, by `PauseReason` (`agentStatusLabel`).
+  'agent.pause.user_input': 'Waiting for your reply',
+  'agent.pause.consultation': "Waiting for a colleague's answer",
+  'agent.pause.shutdown': 'Paused by a shutdown',
+  'agent.pause.spend_cap': 'Paused — spend cap reached',
+  'agent.pause.manual': 'Paused by a user',
+  // Why a whole task is waiting, by `TaskWaitKind` (`taskWaitingLabel`).
+  'task.waiting.manual': 'Paused by {name} — resume to continue',
+  'task.waiting.manualAnonymous': 'Paused — resume to continue',
+  'task.waiting.spend_cap':
+    'Spend cap reached — resume to continue, or wait for the cap to reset',
+  'task.waiting.shutdown': 'Paused by a shutdown — resume to continue',
+  'task.waiting.user_input': 'Waiting for your reply',
+  'task.waiting.consultation': "Waiting for a colleague's answer",
+  'task.waiting.queued': 'Waiting for the model',
+  // Why the server refused a task action (`refusalKey`, api/errors.ts).
+  'refusal.offline':
+    "Couldn't reach the server. Check your connection and try again.",
+  'refusal.forbidden': "You're not a member of this company.",
+  'refusal.notFound': 'This task no longer exists.',
+  'refusal.start.wrongState': 'This task has already started or finished.',
+  'refusal.pause.wrongState': "This task isn't running, or is already paused.",
+  'refusal.resume.wrongState': "There's nothing to resume on this task.",
+  'refusal.cancel.wrongState': 'This task has already finished.',
+  'refusal.edit.wrongState': "This task has started, so it can't be edited.",
+  'refusal.closeVisualisation.wrongState':
+    "This task hasn't finished, so its room can't be closed.",
+  'refusal.start.noPlanner':
+    'No planner is set for this task or its company. Choose one, then start the task.',
+  'refusal.shuttingDown':
+    "The system is shutting down and isn't taking new work.",
+  'refusal.server': 'Something went wrong on the server. Try again.',
+  'refusal.failed': "That didn't work. Try again.",
   // Agent and consultation rows carry a role whose name may not have loaded.
   'activity.role.unknown': 'Unknown role',
   'page.notFound.title': 'Page not found',

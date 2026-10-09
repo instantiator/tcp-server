@@ -81,7 +81,45 @@ describe('apiRequest', () => {
         'GET',
         '/api/company/bad-id',
       ),
-    ).rejects.toThrow('HTTP 404');
+    ).rejects.toThrow('Not found (HTTP 404)');
+  });
+
+  it('joins an array message with semicolons', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: () => Promise.resolve({ message: ['name must be set', 'bad id'] }),
+    });
+
+    await expect(
+      apiRequest({ baseUrl: 'http://localhost:3000' }, 'POST', '/api/role'),
+    ).rejects.toThrow('name must be set; bad id (HTTP 400)');
+  });
+
+  it('names the request when the body has no message', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: false,
+      status: 502,
+      json: () => Promise.reject(new Error('not json')),
+    });
+
+    await expect(
+      apiRequest({ baseUrl: 'http://localhost:3000' }, 'GET', '/api/task'),
+    ).rejects.toThrow('GET /api/task failed (HTTP 502)');
+  });
+
+  it('tells the user how to sign in again on a 401', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: () => Promise.resolve({ message: 'Unauthorized' }),
+    });
+
+    await expect(
+      apiRequest({ baseUrl: 'http://localhost:3000' }, 'GET', '/api/task'),
+    ).rejects.toThrow(
+      'Unauthorized (HTTP 401) Sign in again: ./tcp-cli.sh get-token',
+    );
   });
 
   it('prints X-Tcp-Warnings to stderr in yellow with a warning emoji', async () => {
@@ -244,7 +282,7 @@ describe('apiUpload', () => {
         Buffer.from('# no front-matter'),
       ),
     ).rejects.toThrow(
-      "HTTP 422: Document failed validation\nOKF documents require YAML front-matter with at least a 'title' field, e.g.:\n---\ntitle: My Document\n---",
+      "Document failed validation (HTTP 422)\nOKF documents require YAML front-matter with at least a 'title' field, e.g.:\n---\ntitle: My Document\n---",
     );
   });
 
@@ -262,7 +300,7 @@ describe('apiUpload', () => {
         'archive.zip',
         Buffer.from(''),
       ),
-    ).rejects.toThrow('HTTP 400: Bad request');
+    ).rejects.toThrow('Bad request (HTTP 400)');
   });
 
   it('prints X-Tcp-Warnings on a successful upload', async () => {
@@ -335,7 +373,7 @@ describe('apiDownload', () => {
         { baseUrl: 'http://localhost:3000' },
         '/api/role/1/knowledge/missing.md',
       ),
-    ).rejects.toThrow('HTTP 404');
+    ).rejects.toThrow('Not found (HTTP 404)');
   });
 
   it('prints X-Tcp-Warnings on a successful download', async () => {

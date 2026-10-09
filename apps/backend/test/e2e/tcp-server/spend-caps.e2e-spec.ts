@@ -198,6 +198,24 @@ describe('Spend caps and task controls (e2e)', () => {
       expect(agent.pauseReason).toBe('manual');
     });
 
+    it('reports a manual pause as `waiting` on the task detail', async () => {
+      const task = await runningTask();
+      await request(app.getHttpServer())
+        .post(`/api/task/${task.id}/pause`)
+        .set(member)
+        .expect(202);
+
+      const res = await request(app.getHttpServer())
+        .get(`/api/task/${task.id}`)
+        .set(member)
+        .expect(200);
+      const { waiting } = res.body as {
+        waiting: { kind: string; pausedBy?: string };
+      };
+      expect(waiting.kind).toBe('manual');
+      expect(typeof waiting.pausedBy).toBe('string');
+    });
+
     it("409s a task that hasn't started", async () => {
       const task = await createTask();
       await request(app.getHttpServer())
