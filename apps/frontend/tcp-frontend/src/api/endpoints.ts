@@ -326,6 +326,27 @@ export const useStartTaskMutation = () =>
       unwrap(api.POST('/api/task/{id}/start', { params: { path: { id } } })),
   });
 
+/** Pauses a running task: its agents stop after their current step. */
+export const usePauseTaskMutation = (id: string) =>
+  useMutation({
+    mutationFn: () =>
+      unwrap(api.POST('/api/task/{id}/pause', { params: { path: { id } } })),
+  });
+
+/** Resumes a task a user paused, or one held by a cap, shutdown or rate limit. */
+export const useResumeTaskMutation = (id: string) =>
+  useMutation({
+    mutationFn: () =>
+      unwrap(api.POST('/api/task/{id}/resume', { params: { path: { id } } })),
+  });
+
+/** Changes a `ready` task's request, planner or expected outputs. */
+export const useUpdateTaskMutation = (id: string) =>
+  useMutation({
+    mutationFn: (body: components['schemas']['UpdateTaskDto']) =>
+      unwrap(api.PUT('/api/task/{id}', { params: { path: { id } }, body })),
+  });
+
 /**
  * Uploads one file to a task. Refused once the task has left `ready`.
  *

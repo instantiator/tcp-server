@@ -8,7 +8,7 @@ import { Button } from 'react-aria-components';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { statusLabel } from '../../api/statuses';
 import { streamUrls, subscribe } from '../../events/subscriptions';
-import { t } from '../../strings';
+import { t, type StringKey } from '../../strings';
 import { expectNoA11yViolations } from '../../test-support/axe';
 import {
   fetchMock,
@@ -86,6 +86,9 @@ const roleFixture = (id: string, name: string) => ({
 interface TaskOverrides {
   readonly status?: string;
   readonly failureReason?: string | null;
+  readonly pausedAt?: string;
+  readonly pausedBy?: string;
+  readonly expected?: readonly { type: string; value: string }[];
 }
 
 const taskFixture = (overrides: TaskOverrides = {}) => ({
@@ -96,9 +99,11 @@ const taskFixture = (overrides: TaskOverrides = {}) => ({
   plannerRoleId: null,
   status: overrides.status ?? 'in-progress',
   materials: [],
-  expected: [],
+  expected: overrides.expected ?? [],
   completed: null,
   failureReason: overrides.failureReason ?? null,
+  ...(overrides.pausedAt === undefined ? {} : { pausedAt: overrides.pausedAt }),
+  ...(overrides.pausedBy === undefined ? {} : { pausedBy: overrides.pausedBy }),
   createdAt: NOW,
   updatedAt: NOW,
 });
@@ -233,6 +238,23 @@ const streamDeltaEvent = (agentId: string, delta: string): WireEvent => ({
   timestamp: NOW,
 });
 
+/** A company agent working one of the fixture assignments. */
+const agentFixture = (assignmentId: string, status: string) => ({
+  id: `agent-for-${assignmentId}`,
+  companyId: COMPANY_ID,
+  roleId: ROLE_A_ID,
+  assignmentId,
+  status,
+  threadId: null,
+  initialPrompt: 'p',
+  createdAt: NOW,
+  output: null,
+});
+
+const TASK_START_ROUTE = /\/api\/task\/task-1\/start/;
+const TASK_PAUSE_ROUTE = /\/api\/task\/task-1\/pause/;
+const TASK_RESUME_ROUTE = /\/api\/task\/task-1\/resume/;
+const AGENTS_ROUTE = /\/api\/agent\?/;
 const TASK_CANCEL_ROUTE = /\/api\/task\/task-1\/cancel/;
 const TASK_ROUTE = /\/api\/task\/task-1(\?|$)/;
 const ASSIGNMENTS_ROUTE = /\/api\/assignment\?/;
@@ -243,6 +265,10 @@ const HISTORY_B_ROUTE = /\/api\/agent\/agent-b\/history/;
 interface TaskRoutes {
   readonly task?: RouteResponse;
   readonly cancel?: RouteResponse;
+  readonly start?: RouteResponse;
+  readonly pause?: RouteResponse;
+  readonly resume?: RouteResponse;
+  readonly agents?: RouteResponse;
   readonly assignments?: RouteResponse;
   readonly roles?: RouteResponse;
   readonly historyA?: RouteResponse;
@@ -257,6 +283,10 @@ interface TaskRoutes {
  */
 const respondTask = (overrides: TaskRoutes = {}): void => {
   respondByRoute([
+    [TASK_START_ROUTE, overrides.start ?? { body: taskFixture() }],
+    [TASK_PAUSE_ROUTE, overrides.pause ?? { body: taskFixture() }],
+    [TASK_RESUME_ROUTE, overrides.resume ?? { body: { resumed: 1 } }],
+    [AGENTS_ROUTE, overrides.agents ?? { body: [] }],
     [
       TASK_CANCEL_ROUTE,
       overrides.cancel ?? { body: taskFixture({ status: 'cancelled' }) },
@@ -371,6 +401,14 @@ const expandPanel = async (
 
 const assignmentLabel = (role: string, status: string) =>
   t('task.assignment.label', { role, status: statusLabel(status) });
+
+/** Bodies of every PUT to the task route, as pending text reads. */
+const putBodies = (): Promise<string>[] =>
+  fetchMock.mock.calls.flatMap(([input]) =>
+    input instanceof Request && input.method === 'PUT'
+      ? [input.clone().text()]
+      : [],
+  );
 
 const requestCount = (route: RegExp) =>
   fetchMock.mock.calls.filter(([input]) => {
@@ -681,14 +719,247 @@ describe('TaskDialog', () => {
         screen.getByRole('button', { name: t('task.cancel.confirm.accept') }),
       );
 
-      expect(
-        await screen.findByText(t('task.cancel.failed')),
-      ).toBeInTheDocument();
+      expect(await screen.findByText(t('refusal.server'))).toBeInTheDocument();
       expect(
         screen.getByRole('dialog', {
           name: t('task.dialog.heading', { shortcode: 'TASK-1' }),
         }),
       ).toBeInTheDocument();
+    });
+  });
+
+  describe('controls', () => {
+    const control = (key: StringKey) =>
+      screen.queryByRole('button', { name: t(key) });
+
+    it('offers Start and Edit, and not Pause, for a ready task', async () => {
+      respondTask({ task: { body: taskFixture({ status: 'ready' }) } });
+      const user = userEvent.setup();
+      renderTaskDialog();
+      await openTask(user);
+
+      expect(control('task.start')).not.toBeNull();
+      expect(control('task.edit')).not.toBeNull();
+      expect(control('task.pause')).toBeNull();
+      expect(control('task.resume')).toBeNull();
+    });
+
+    it('offers Pause and Cancel, and not Resume, for a running task', async () => {
+      respondTask();
+      const user = userEvent.setup();
+      renderTaskDialog();
+      await openTask(user);
+
+      expect(control('task.pause')).not.toBeNull();
+      expect(control('task.cancel')).not.toBeNull();
+      expect(control('task.resume')).toBeNull();
+      expect(control('task.start')).toBeNull();
+    });
+
+    it('offers Resume, and not Pause, for a paused task', async () => {
+      respondTask({
+        task: { body: taskFixture({ pausedAt: NOW, pausedBy: 'Ada' }) },
+      });
+      const user = userEvent.setup();
+      renderTaskDialog();
+      await openTask(user);
+
+      expect(control('task.resume')).not.toBeNull();
+      expect(control('task.pause')).toBeNull();
+    });
+
+    it('offers none of the four for a finished task', async () => {
+      respondTask({ task: { body: taskFixture({ status: 'succeeded' }) } });
+      const user = userEvent.setup();
+      renderTaskDialog();
+      await openTask(user);
+
+      for (const key of [
+        'task.start',
+        'task.edit',
+        'task.pause',
+        'task.resume',
+      ] as const) {
+        expect(control(key)).toBeNull();
+      }
+    });
+
+    it.each([
+      ['task.pause', TASK_PAUSE_ROUTE, {}],
+      ['task.start', TASK_START_ROUTE, { status: 'ready' }],
+      ['task.resume', TASK_RESUME_ROUTE, { pausedAt: NOW }],
+    ] as const)('%s calls its endpoint', async (key, route, overrides) => {
+      respondTask({ task: { body: taskFixture(overrides) } });
+      const user = userEvent.setup();
+      renderTaskDialog();
+      await openTask(user);
+
+      await user.click(screen.getByRole('button', { name: t(key) }));
+
+      await waitFor(() => {
+        expect(requestCount(route)).toBe(1);
+      });
+    });
+
+    it('says so when pausing is refused with a 409', async () => {
+      respondTask({ pause: { status: 409, body: { message: 'no' } } });
+      const user = userEvent.setup();
+      renderTaskDialog();
+      await openTask(user);
+
+      await user.click(screen.getByRole('button', { name: t('task.pause') }));
+
+      expect(
+        await screen.findByText(
+          "This task isn't running, or is already paused.",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it('says who paused it when no agent is still running', async () => {
+      respondTask({
+        task: { body: taskFixture({ pausedAt: NOW, pausedBy: 'Ada' }) },
+        agents: { body: [agentFixture(ASSIGN_A, 'paused')] },
+      });
+      const user = userEvent.setup();
+      renderTaskDialog();
+      await openTask(user);
+
+      expect(
+        await screen.findByText('Paused by Ada — resume to continue'),
+      ).toBeInTheDocument();
+    });
+
+    it('says it is pausing while an agent still runs', async () => {
+      respondTask({
+        task: { body: taskFixture({ pausedAt: NOW, pausedBy: 'Ada' }) },
+        agents: { body: [agentFixture(ASSIGN_A, 'running')] },
+      });
+      const user = userEvent.setup();
+      renderTaskDialog();
+      await openTask(user);
+
+      expect(
+        await screen.findByText(t('task.details.pausing')),
+      ).toBeInTheDocument();
+    });
+
+    it('moves focus to the details when Start succeeds and the button goes', async () => {
+      respondTask({ task: { body: taskFixture({ status: 'ready' }) } });
+      const user = userEvent.setup();
+      renderTaskDialog();
+      await openTask(user);
+
+      respondTask({ task: { body: taskFixture({ status: 'planning' }) } });
+      await user.click(screen.getByRole('button', { name: t('task.start') }));
+
+      await waitFor(() => {
+        expect(document.activeElement).toBe(
+          screen.getByRole('region', { name: t('task.details.label') }),
+        );
+      });
+    });
+
+    // A text expectation set from the CLI must not come back as a filename.
+    it("keeps an expected output's type when saving an edit", async () => {
+      respondTask({
+        task: {
+          body: taskFixture({
+            status: 'ready',
+            expected: [{ type: 'inline-text', value: 'Total: \\d+' }],
+          }),
+        },
+      });
+      const user = userEvent.setup();
+      renderTaskDialog();
+      await openTask(user);
+
+      await user.click(screen.getByRole('button', { name: t('task.edit') }));
+      const form = await screen.findByRole('dialog', {
+        name: t('task.edit.heading', { shortcode: 'TASK-1' }),
+      });
+      await user.click(
+        within(form).getByRole('button', { name: t('task.edit.submit') }),
+      );
+
+      await waitFor(() => {
+        expect(putBodies()).toHaveLength(1);
+      });
+      expect(JSON.parse(await putBodies()[0])).toMatchObject({
+        expected: [{ type: 'inline-text', value: 'Total: \\d+' }],
+      });
+    });
+
+    it('pre-fills the edit form and PUTs only request, planner and expected', async () => {
+      respondTask({
+        task: {
+          body: {
+            ...taskFixture({
+              status: 'ready',
+              expected: [{ type: 'task-completed-path', value: 'out.md' }],
+            }),
+            plannerRoleId: ROLE_A_ID,
+          },
+        },
+      });
+      const user = userEvent.setup();
+      renderTaskDialog();
+      await openTask(user);
+
+      await user.click(screen.getByRole('button', { name: t('task.edit') }));
+      const form = await screen.findByRole('dialog', {
+        name: t('task.edit.heading', { shortcode: 'TASK-1' }),
+      });
+      expect(
+        within(form).getByLabelText(t('task.create.request.label'), {
+          exact: false,
+        }),
+      ).toHaveValue('Reconcile Q3 accounts');
+      expect(
+        within(form).getByLabelText(
+          t('task.create.expected.label', { position: 1 }),
+          {
+            exact: false,
+          },
+        ),
+      ).toHaveValue('out.md');
+      expect(
+        within(form).queryByLabelText(t('task.create.materials.label')),
+      ).toBeNull();
+      expect(within(form).queryByText(t('task.create.start.label'))).toBeNull();
+
+      await user.click(
+        within(form).getByRole('button', { name: t('task.edit.submit') }),
+      );
+
+      await waitFor(() => {
+        expect(putBodies()).toHaveLength(1);
+      });
+      expect(JSON.parse(await putBodies()[0])).toEqual({
+        request: 'Reconcile Q3 accounts',
+        plannerRoleId: ROLE_A_ID,
+        expected: [{ type: 'task-completed-path', value: 'out.md' }],
+      });
+      await waitFor(() => {
+        expect(
+          screen.queryByRole('dialog', {
+            name: t('task.edit.heading', { shortcode: 'TASK-1' }),
+          }),
+        ).toBeNull();
+      });
+    });
+
+    it('has no accessibility violations in the paused state', async () => {
+      respondTask({
+        task: { body: taskFixture({ pausedAt: NOW, pausedBy: 'Ada' }) },
+        agents: { body: [agentFixture(ASSIGN_A, 'paused')] },
+      });
+      const user = userEvent.setup();
+      renderTaskDialog();
+      await openTask(user);
+      await screen.findByText('Paused by Ada — resume to continue');
+
+      await expectNoA11yViolations(document.body);
     });
   });
 

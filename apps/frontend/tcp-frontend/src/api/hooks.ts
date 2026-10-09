@@ -49,6 +49,9 @@ import {
   useAssignment,
   useAssignments,
   useCancelTaskMutation,
+  usePauseTaskMutation,
+  useResumeTaskMutation,
+  useUpdateTaskMutation,
   useCompany,
   useCompanyKnowledge,
   useCompanyRoles,
@@ -233,6 +236,67 @@ export const useCancelTask = (taskId: string) => {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['task'] });
       void queryClient.invalidateQueries({ queryKey: ['assignment'] });
+    },
+  });
+};
+
+/**
+ * Starts a `ready` task. The same endpoint {@link useCreateTask} calls after
+ * creating one; invalidates as {@link useCancelTask} does, because starting
+ * fans the task out into assignments.
+ */
+export const useStartTask = (taskId: string) => {
+  const queryClient = useQueryClient();
+  const startTask = useStartTaskMutation();
+  return useMutation({
+    mutationFn: () => startTask.mutateAsync(taskId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['task'] });
+      void queryClient.invalidateQueries({ queryKey: ['assignment'] });
+    },
+  });
+};
+
+/**
+ * Pauses a task. Agents stop after their current step, so their rows change
+ * too — hence `['agent']` as well as the task keys.
+ */
+export const usePauseTask = (taskId: string) => {
+  const queryClient = useQueryClient();
+  const pauseTask = usePauseTaskMutation(taskId);
+  return useMutation({
+    mutationFn: () => pauseTask.mutateAsync(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['task'] });
+      void queryClient.invalidateQueries({ queryKey: ['assignment'] });
+      void queryClient.invalidateQueries({ queryKey: ['agent'] });
+    },
+  });
+};
+
+/** Resumes a task; its paused agents pick up again, so agents are refetched. */
+export const useResumeTask = (taskId: string) => {
+  const queryClient = useQueryClient();
+  const resumeTask = useResumeTaskMutation(taskId);
+  return useMutation({
+    mutationFn: () => resumeTask.mutateAsync(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['task'] });
+      void queryClient.invalidateQueries({ queryKey: ['assignment'] });
+      void queryClient.invalidateQueries({ queryKey: ['agent'] });
+    },
+  });
+};
+
+/** Edits a `ready` task. The server refuses with a `409` once it has started. */
+export const useUpdateTask = (taskId: string) => {
+  const queryClient = useQueryClient();
+  const updateTask = useUpdateTaskMutation(taskId);
+  return useMutation({
+    mutationFn: (body: components['schemas']['UpdateTaskDto']) =>
+      updateTask.mutateAsync(body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['task'] });
     },
   });
 };

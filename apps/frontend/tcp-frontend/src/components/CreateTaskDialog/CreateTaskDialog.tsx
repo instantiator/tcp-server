@@ -2,11 +2,12 @@ import type { RefObject, SubmitEvent } from 'react';
 import { useId, useRef, useState } from 'react';
 import { Button, CheckboxButton, CheckboxField } from 'react-aria-components';
 import { ANNOUNCE_IMMEDIATE_MS, announce } from '../../announce/announcer';
-import { ApiError } from '../../api/errors';
+import { ApiError, refusalKey } from '../../api/errors';
 import {
   useCompanyRolesList,
   useCreateTask,
   useLiveSpendOverview,
+  useUpdateTask,
 } from '../../api/hooks';
 import { t, type StringKey } from '../../strings';
 import { Dialog } from '../Dialog/Dialog';
@@ -15,8 +16,20 @@ import { focusFirstInvalid } from '../Field/focusFirstInvalid';
 import { TextField } from '../Field/TextField';
 import './CreateTaskDialog.css';
 
+/** The parts of an existing task the edit form pre-fills from. */
+export interface EditableTask {
+  readonly id: string;
+  readonly shortcode: string;
+  readonly request: string;
+  readonly plannerRoleId?: string | null;
+  /** Wire rows of `{ type, value }`; read defensively, as the schema types them loosely. */
+  readonly expected: readonly unknown[];
+}
+
 export interface CreateTaskDialogProps {
   readonly companyId: string;
+  /** When given, the dialog edits this `ready` task instead of creating one. */
+  readonly task?: EditableTask;
   readonly onClose: () => void;
 }
 
@@ -27,12 +40,39 @@ export interface CreateTaskDialogProps {
  */
 const ANY_ROLE_KEY = 'any';
 
+/** An expected output's kind: a file in completed/, or a text pattern. */
+type ExpectedType = 'task-completed-path' | 'inline-text';
+
 /** One repeatable "expected output" row. `key` is stable across add/remove. */
 interface ExpectedRow {
   readonly key: number;
   readonly value: string;
+  /**
+   * Kept from the task being edited, so a text expectation set elsewhere (the
+   * CLI) isn't saved back as a filename. New rows are files.
+   */
+  readonly type?: ExpectedType;
   readonly error?: string;
 }
+
+/** One wire `expected` row's value and kind, or nothing if it has no value. */
+const expectedValue = (
+  row: unknown,
+): { value: string; type: ExpectedType }[] =>
+  typeof row === 'object' &&
+  row !== null &&
+  'value' in row &&
+  typeof row.value === 'string'
+    ? [
+        {
+          value: row.value,
+          type:
+            'type' in row && row.type === 'inline-text'
+              ? 'inline-text'
+              : 'task-completed-path',
+        },
+      ]
+    : [];
 
 /** Maps a failed create to the honest reason, never the server's own wording. */
 const rejectionKey = (error: unknown): StringKey =>
@@ -65,26 +105,35 @@ const rejectionKey = (error: unknown): StringKey =>
  */
 export const CreateTaskDialog = ({
   companyId,
+  task,
   onClose,
 }: CreateTaskDialogProps) => {
   const { data: roles } = useCompanyRolesList(companyId);
   const createTask = useCreateTask();
+  // Never mutated in create mode, so the empty id is never sent anywhere.
+  const updateTask = useUpdateTask(task?.id ?? '');
+  const editing = task !== undefined;
+  const busy = createTask.isPending || updateTask.isPending;
 
-  const [request, setRequest] = useState('');
+  const [request, setRequest] = useState(task?.request ?? '');
   const [requestError, setRequestError] = useState<string | undefined>(
     undefined,
   );
   const requestFieldRef = useRef<HTMLElement | null>(null);
 
   const [plannerRoleId, setPlannerRoleId] = useState<string | undefined>(
-    undefined,
+    task?.plannerRoleId ?? undefined,
   );
 
-  const [expectedRows, setExpectedRows] = useState<readonly ExpectedRow[]>([]);
+  const [expectedRows, setExpectedRows] = useState<readonly ExpectedRow[]>(() =>
+    (task?.expected ?? [])
+      .flatMap(expectedValue)
+      .map((row, key) => ({ key, ...row })),
+  );
   // Row identity survives add/remove, which array index does not — removing
   // row 0 would otherwise hand row 1's error to what is now displayed as row
   // 0. Each row also keeps its own focus target, addressed by that same key.
-  const nextRowKey = useRef(0);
+  const nextRowKey = useRef(expectedRows.length);
   const expectedFieldRefs = useRef(
     new Map<number, RefObject<HTMLElement | null>>(),
   );
@@ -137,7 +186,7 @@ export const CreateTaskDialog = ({
 
   const handleSubmit = (event: SubmitEvent<HTMLFormElement>): void => {
     event.preventDefault();
-    if (createTask.isPending || createTask.data !== undefined) return;
+    if (busy || createTask.data !== undefined) return;
 
     const trimmedRequest = request.trim();
     const nextRequestError =
@@ -169,6 +218,21 @@ export const CreateTaskDialog = ({
           ref: expectedFieldRef(row.key),
         })),
       ]);
+      return;
+    }
+
+    if (task !== undefined) {
+      updateTask.mutate(
+        {
+          request: trimmedRequest,
+          ...(plannerRoleId === undefined ? {} : { plannerRoleId }),
+          expected: validatedRows.map((row) => ({
+            type: row.type ?? 'task-completed-path',
+            value: row.value.trim(),
+          })),
+        },
+        { onSuccess: onClose },
+      );
       return;
     }
 
@@ -219,7 +283,11 @@ export const CreateTaskDialog = ({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      heading={t('task.create.heading')}
+      heading={
+        task === undefined
+          ? t('task.create.heading')
+          : t('task.edit.heading', { shortcode: task.shortcode })
+      }
     >
       {stayingOpenAfterCreate ? (
         <>
@@ -256,6 +324,12 @@ export const CreateTaskDialog = ({
               channel="task-create"
             />
           )}
+          {updateTask.isError && (
+            <ErrorState
+              message={t(refusalKey(updateTask.error, 'edit'))}
+              channel="task-edit"
+            />
+          )}
 
           <div className="create-task-dialog__field">
             <TextField
@@ -265,7 +339,7 @@ export const CreateTaskDialog = ({
               onChange={setRequest}
               errorMessage={requestError}
               isRequired
-              isDisabled={createTask.isPending}
+              isDisabled={busy}
               multiline
               inputRef={requestFieldRef}
             />
@@ -291,7 +365,7 @@ export const CreateTaskDialog = ({
                 id={plannerRoleInputId}
                 className="create-task-dialog__role-select"
                 value={plannerRoleId ?? ANY_ROLE_KEY}
-                disabled={createTask.isPending}
+                disabled={busy}
                 onChange={(event) => {
                   const { value } = event.target;
                   setPlannerRoleId(value === ANY_ROLE_KEY ? undefined : value);
@@ -327,12 +401,12 @@ export const CreateTaskDialog = ({
                   }}
                   errorMessage={row.error}
                   isRequired
-                  isDisabled={createTask.isPending}
+                  isDisabled={busy}
                   inputRef={expectedFieldRef(row.key)}
                 />
                 <Button
                   className="react-aria-Button create-task-dialog__expected-remove"
-                  isDisabled={createTask.isPending}
+                  isDisabled={busy}
                   onPress={() => {
                     removeExpectedRow(row.key);
                   }}
@@ -343,15 +417,16 @@ export const CreateTaskDialog = ({
             ))}
             <Button
               className="react-aria-Button create-task-dialog__expected-add"
-              isDisabled={createTask.isPending}
+              isDisabled={busy}
               onPress={addExpectedRow}
             >
               {t('task.create.expected.add')}
             </Button>
           </div>
 
-          <div className="create-task-dialog__materials">
-            {/*
+          {!editing && (
+            <div className="create-task-dialog__materials">
+              {/*
               ponytail: the native file input, not React Aria's `FileTrigger`.
               It is labelled, keyboard-operable and understood by every
               assistive technology without any of our code.
@@ -361,12 +436,12 @@ export const CreateTaskDialog = ({
               this project's `jsx-a11y/label-has-for` configuration asks for
               both, and the pairing is what a screen reader relies on.
             */}
-            <label
-              className="create-task-dialog__materials-label"
-              htmlFor={materialsInputId}
-            >
-              {t('task.create.materials.label')}
-              {/*
+              <label
+                className="create-task-dialog__materials-label"
+                htmlFor={materialsInputId}
+              >
+                {t('task.create.materials.label')}
+                {/*
                 The rule cannot see this control's label, and there is no
                 arrangement of markup that would let it: the text is
                 `t('task.create.materials.label')`, and jsx-a11y evaluates
@@ -380,91 +455,94 @@ export const CreateTaskDialog = ({
                 way a screen reader does, so the association is proven by a
                 test rather than assumed by this comment.
               */}
-              {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- see above: `t()` is not a literal */}
-              <input
-                id={materialsInputId}
-                type="file"
-                multiple
-                disabled={createTask.isPending}
-                onChange={(event) => {
-                  const chosen = event.target.files;
-                  if (chosen !== null) {
-                    setFiles((previous) => [
-                      ...previous,
-                      ...Array.from(chosen),
-                    ]);
-                  }
-                  // Cleared so picking the same file again after removing it
-                  // still fires a change event — the browser otherwise treats
-                  // an unchanged selection as nothing happening.
-                  event.target.value = '';
-                }}
-              />
-            </label>
-            {files.length > 0 && (
-              <div
-                role="group"
-                aria-label={t('task.create.materials.selected')}
-              >
-                <ul className="create-task-dialog__materials-list">
-                  {files.map((file, index) => (
-                    <li
-                      className="create-task-dialog__materials-row"
-                      key={`${file.name}-${String(index)}`}
-                    >
-                      {file.name}
-                      <Button
-                        className="react-aria-Button"
-                        isDisabled={createTask.isPending}
-                        onPress={() => {
-                          setFiles((previous) =>
-                            previous.filter((_, i) => i !== index),
-                          );
-                        }}
+                {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- see above: `t()` is not a literal */}
+                <input
+                  id={materialsInputId}
+                  type="file"
+                  multiple
+                  disabled={busy}
+                  onChange={(event) => {
+                    const chosen = event.target.files;
+                    if (chosen !== null) {
+                      setFiles((previous) => [
+                        ...previous,
+                        ...Array.from(chosen),
+                      ]);
+                    }
+                    // Cleared so picking the same file again after removing it
+                    // still fires a change event — the browser otherwise treats
+                    // an unchanged selection as nothing happening.
+                    event.target.value = '';
+                  }}
+                />
+              </label>
+              {files.length > 0 && (
+                <div
+                  role="group"
+                  aria-label={t('task.create.materials.selected')}
+                >
+                  <ul className="create-task-dialog__materials-list">
+                    {files.map((file, index) => (
+                      <li
+                        className="create-task-dialog__materials-row"
+                        key={`${file.name}-${String(index)}`}
                       >
-                        {t('task.create.materials.remove', {
-                          filename: file.name,
-                        })}
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
+                        {file.name}
+                        <Button
+                          className="react-aria-Button"
+                          isDisabled={busy}
+                          onPress={() => {
+                            setFiles((previous) =>
+                              previous.filter((_, i) => i !== index),
+                            );
+                          }}
+                        >
+                          {t('task.create.materials.remove', {
+                            filename: file.name,
+                          })}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
 
-          <div className="create-task-dialog__start">
-            <CheckboxField
-              isSelected={start}
-              onChange={setStartChoice}
-              isDisabled={createTask.isPending}
-              aria-describedby={capped ? startHintId : undefined}
-            >
-              <CheckboxButton>{t('task.create.start.label')}</CheckboxButton>
-            </CheckboxField>
-            {capped && (
-              <p id={startHintId} className="create-task-dialog__start-hint">
-                {t('task.create.start.cappedHint')}
-              </p>
-            )}
-          </div>
+          {!editing && (
+            <div className="create-task-dialog__start">
+              <CheckboxField
+                isSelected={start}
+                onChange={setStartChoice}
+                isDisabled={busy}
+                aria-describedby={capped ? startHintId : undefined}
+              >
+                <CheckboxButton>{t('task.create.start.label')}</CheckboxButton>
+              </CheckboxField>
+              {capped && (
+                <p id={startHintId} className="create-task-dialog__start-hint">
+                  {t('task.create.start.cappedHint')}
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="create-task-dialog__actions">
             <Button
               className="react-aria-Button"
               type="submit"
-              isDisabled={createTask.isPending}
+              isDisabled={busy}
             >
-              {createTask.isPending
-                ? t('task.create.submit.pending')
-                : t('task.create.submit')}
+              {editing
+                ? t(busy ? 'task.edit.submit.pending' : 'task.edit.submit')
+                : t(busy ? 'task.create.submit.pending' : 'task.create.submit')}
             </Button>
             <Button
               className="react-aria-Button"
-              isDisabled={createTask.isPending}
+              isDisabled={busy}
               onPress={onClose}
             >
-              {t('task.create.discard')}
+              {t(editing ? 'task.edit.discard' : 'task.create.discard')}
             </Button>
           </div>
         </form>
