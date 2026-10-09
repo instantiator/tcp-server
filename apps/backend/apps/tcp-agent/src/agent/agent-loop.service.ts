@@ -6,6 +6,7 @@ import {
   AgentStatus,
   AuditClientService,
   AuditEventType,
+  classifyRateLimit,
   ContextManagerService,
   DEFAULT_LLM_CONTEXT_WINDOW,
   DEFAULT_REQUIRED_TOOL_RETRIES,
@@ -168,6 +169,18 @@ export class AgentLoopService {
       // runLoop handles its own errors; this covers checkpointer.setup() and
       // anything else escaping, which would otherwise leave the agent stuck
       // Running (and any pending consultation unresolved forever).
+      //
+      // A rate limit here (the pre-turn compaction call) pauses only a
+      // resume: a first run hasn't checkpointed yet, and a resume of it
+      // would carry a continuation prompt with nothing to continue.
+      const limit =
+        replyContent !== undefined
+          ? classifyRateLimit(err, limits.llmConfig.provider)
+          : undefined;
+      if (limit) {
+        await this.status.pauseForRateLimit(agent, limit, false);
+        return;
+      }
       await this.status.failRun(
         agent,
         describeRunFailure(err, abortController, limits.timeoutMs),
@@ -262,7 +275,8 @@ export class AgentLoopService {
   /**
    * Runs turns until the agent reaches a terminal status: the opening turn,
    * then — if it ended without one — either the required-tool reminder ladder
-   * or the narrated-text fallback. Any error escaping fails the run.
+   * or the narrated-text fallback. Any error escaping fails the run, except
+   * a provider's rate limit, which pauses it.
    */
   private async driveToTerminal(
     ctx: SupervisedRunContext,
@@ -298,6 +312,15 @@ export class AgentLoopService {
 
       await this.completeFromNarration(ctx, tracker, result);
     } catch (err) {
+      // A provider refusing the call is a pause, not a failure: the run
+      // resumes from its checkpoint once the provider allows it.
+      const limit = classifyRateLimit(err, ctx.llm.provider);
+      if (limit) {
+        const progressed =
+          tracker.lastResponseText !== '' || tracker.actions.length > 0;
+        await this.status.pauseForRateLimit(agent, limit, progressed);
+        return;
+      }
       const msg = describeRunFailure(err, ctx.abortController, ctx.timeoutMs);
       this.logger.error(`Agent ${agent.id} loop error: ${msg}`);
       await this.status.failRun(agent, msg);

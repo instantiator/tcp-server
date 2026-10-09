@@ -40,6 +40,7 @@ const makeAgent = (overrides: Partial<TcpAgent> = {}): TcpAgent => ({
   role: {} as never,
   version: 1,
   pausedAt: undefined,
+  rateLimitRetries: 0,
   ...overrides,
 });
 

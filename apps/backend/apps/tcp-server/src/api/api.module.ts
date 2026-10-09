@@ -41,6 +41,7 @@ import { StorageActionsController } from './storage-actions.controller';
 import { StorageProxyController } from './storage-proxy.controller';
 import { StorageValidationController } from './storage-validation.controller';
 import { SpendController } from './spend.controller';
+import { RateLimitResumeService } from './rate-limit-resume.service';
 import { SpendResumeService } from './spend-resume.service';
 import { SystemController } from './system.controller';
 import { TaskController } from './task.controller';
@@ -137,6 +138,7 @@ import { TaskService } from './task.service';
     SystemDrainService,
     // Resumes cap-paused work: on reset, dismissal, or an explicit resume.
     SpendResumeService,
+    RateLimitResumeService,
     // The orchestration stack: TaskOrchestrationService drives a task forward,
     // delegating status writes, artifact promotion, QA verdicts, failure
     // propagation and startup repair to the collaborators below.

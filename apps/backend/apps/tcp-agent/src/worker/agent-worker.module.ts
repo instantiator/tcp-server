@@ -28,6 +28,7 @@ import { AgentRagModule } from '../rag/agent-rag.module';
 import { AgentRegistryService } from '../registry/agent-registry.service';
 import { StorageTrackingClientService } from '../storage-tracking/storage-tracking-client.service';
 import { AgentWorkerService } from './agent-worker.service';
+import { ModelSlotService } from './model-slot.service';
 import { ShutdownListenerService } from './shutdown-listener.service';
 
 /**
@@ -56,6 +57,8 @@ import { ShutdownListenerService } from './shutdown-listener.service';
   ],
   providers: [
     AgentWorkerService,
+    // Counts runs against MODEL_CONCURRENCY's pools and endpoints.
+    ModelSlotService,
     // The agent loop, plus the collaborators it delegates the run envelope,
     // the opening prompt, and its status writes to.
     AgentLoopService,

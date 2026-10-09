@@ -39,6 +39,13 @@ const isUnknownArray = (value: unknown): value is unknown[] =>
  * the highest-frequency event on the company stream — is the one change that
  * refetches an entire list instead of patching the row it names.
  *
+ * A `rate_limited` pause (000.03) carries its reason and its next-try time the
+ * same summary-less way, as `reason` and `resumeAfter` on the payload — picked
+ * up here too, so `agentStatusLabel` has what it needs without a refetch. A
+ * row that leaves `paused` clears `pauseReason`: the field otherwise goes
+ * stale and a resumed (or re-paused for an unrelated reason) agent keeps
+ * reading "Rate limited" from its last pause.
+ *
  * Returns `undefined` for every other entity, which falls through to the
  * invalidate path unchanged. It becomes dead code the day those writers start
  * sending a summary, and nothing here will notice: the real summary is
@@ -46,12 +53,30 @@ const isUnknownArray = (value: unknown): value is unknown[] =>
  */
 const synthesiseAgentPatch = (
   event: AuditWireEvent,
-): { id: string; status: string } | undefined => {
-  const { entity, newStatus } = event.payload;
+):
+  | {
+      id: string;
+      status: string;
+      pauseReason?: string | null;
+      resumeAfter?: string | null;
+    }
+  | undefined => {
+  const { entity, newStatus, reason, resumeAfter } = event.payload;
   if (entity !== 'agent') return undefined;
   if (typeof event.agentId !== 'string' || typeof newStatus !== 'string')
     return undefined;
-  return { id: event.agentId, status: newStatus };
+
+  if (newStatus !== 'paused') {
+    return { id: event.agentId, status: newStatus, pauseReason: null };
+  }
+  return {
+    id: event.agentId,
+    status: newStatus,
+    ...(typeof reason === 'string' ? { pauseReason: reason } : {}),
+    ...(typeof resumeAfter === 'string' || resumeAfter === null
+      ? { resumeAfter }
+      : {}),
+  };
 };
 
 /**

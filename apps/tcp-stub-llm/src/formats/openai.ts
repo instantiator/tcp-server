@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { StubResponse, StubTool } from '../config.ts';
+import type { StubRefusal, StubResponse, StubTool } from '../config.ts';
 import type {
   ApiFormat,
   ErrorKind,
@@ -211,5 +211,29 @@ export const openAiFormat: ApiFormat = {
           null,
         );
     }
+  },
+  buildRefusal(refusal: StubRefusal): FormatError {
+    const quota =
+      refusal.code === 'insufficient_quota' || refusal.status === 402;
+    return {
+      status: refusal.status,
+      body: {
+        error: {
+          message:
+            refusal.message ??
+            (quota
+              ? 'You exceeded your current quota.'
+              : 'Rate limit reached for requests.'),
+          type: quota ? 'insufficient_quota' : 'requests',
+          code:
+            refusal.code ??
+            (quota ? 'insufficient_quota' : 'rate_limit_exceeded'),
+        },
+      },
+      headers:
+        refusal.retryAfter !== undefined
+          ? { 'Retry-After': String(refusal.retryAfter) }
+          : undefined,
+    };
   },
 };

@@ -35,6 +35,40 @@ describe('tcp-stub-llm server (e2e)', () => {
     assert.deepEqual(await res.json(), { status: 'ok' });
   });
 
+  test('a refusal response is sent as a provider error with Retry-After, then the next response follows', async () => {
+    await putConfig({
+      defaults: {
+        responses: [
+          { text: '', refusal: { status: 429, retryAfter: 2 } },
+          { text: 'Back again', tools: [] },
+        ],
+      },
+    });
+    const ask = () =>
+      fetch(`${baseUrl}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'stub',
+          messages: [{ role: 'user', content: 'hello' }],
+        }),
+      });
+
+    const refused = await ask();
+    assert.equal(refused.status, 429);
+    assert.equal(refused.headers.get('retry-after'), '2');
+    assert.deepEqual(await refused.json(), {
+      error: {
+        message: 'Rate limit reached for requests.',
+        type: 'requests',
+        code: 'rate_limit_exceeded',
+      },
+    });
+
+    const answered = await ask();
+    assert.equal(answered.status, 200);
+  });
+
   test('a matched prompt rule returns its configured response', async () => {
     await putConfig({
       prompts: [

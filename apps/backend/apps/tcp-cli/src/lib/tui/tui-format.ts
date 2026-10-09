@@ -285,11 +285,12 @@ export interface AssignmentRow {
 }
 
 /**
- * True for a non-chat agent that's `idle` on an `in-progress` assignment —
- * decision 4 of the 002.02 plan: on a task agent, `idle` means only
- * "created, not started yet" (a queued worker slot, not a stall). Mirrors
- * the web client's `isWaitingToStart` (`FE/visualisation/isometric/company/
- * rules/companySnapshot.ts`) without importing frontend code.
+ * True for a non-chat agent that's `idle` or `queued` on an `in-progress`
+ * assignment — decision 4 of the 002.02 plan: on a task agent, `idle` means
+ * only "created, not started yet"; `queued` (000.03) is the same wait, just
+ * for a model slot rather than a job dispatch. Mirrors the web client's
+ * `isWaitingToStart` (`FE/visualisation/isometric/company/rules/
+ * companySnapshot.ts`) without importing frontend code.
  */
 function isWaitingToStart(
   agentStatus: string,
@@ -297,7 +298,7 @@ function isWaitingToStart(
   assignmentStatus: string,
 ): boolean {
   return (
-    agentStatus === 'idle' &&
+    (agentStatus === 'idle' || agentStatus === 'queued') &&
     mode !== 'chat' &&
     assignmentStatus === 'in-progress'
   );

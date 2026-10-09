@@ -24,7 +24,7 @@ import {
  * | 4 | the assignment's mode is `consultee` | `consulting`, keyed by its own assignment id |
  * | 5 | an active `consultee` assignment has this agent's assignment as its parent | `consulting`, keyed by that assignment's id |
  * | 6 | the mode is `qa` and the agent is running | `reviewing` the assignment's `targetAssignmentId` |
- * | 7 | the agent is idle, its assignment isn't `chat`, and the assignment is `in-progress` | `waiting` |
+ * | 7 | the agent is idle or queued, its assignment isn't `chat`, and the assignment is `in-progress` | `waiting` |
  * | 8 | the agent is running | `working` |
  * | 9 | anything else: paused, or idle on an assignment that isn't yet `in-progress` | `atDesk` |
  *
@@ -41,7 +41,8 @@ import {
  * queued behind the single worker slot. Row 9 used to cover `idle` too, but
  * that read as a bug — the avatar sat at its desk with an empty listen-in
  * while its task was already `planning` — so it now narrows to `paused` and
- * any other non-running status.
+ * any other non-running status. `queued` (000.03) joins `idle` in row 7 for
+ * the same reason: a model-slot wait is not work either.
  */
 export type AgentActivity =
   | { readonly kind: 'atDesk' }
@@ -215,18 +216,19 @@ function activityOf(
 }
 
 /**
- * True for a non-chat agent that's `idle` on an `in-progress` assignment —
- * decision 4 of the 002.02 plan: on a task agent, `idle` means only "created,
- * not started yet" (stage 1 checked every writer). Exported so the tray
- * (`AgentDetails.tsx`) can show the same "waiting to start" reading the
- * office does, without duplicating the condition.
+ * True for a non-chat agent that's `idle` or `queued` on an `in-progress`
+ * assignment — decision 4 of the 002.02 plan: on a task agent, `idle` means
+ * only "created, not started yet" (stage 1 checked every writer); `queued`
+ * (000.03) is the same wait, just for a model slot instead of a job dispatch.
+ * Exported so the tray (`AgentDetails.tsx`) can show the same "waiting to
+ * start" reading the office does, without duplicating the condition.
  */
 export function isWaitingToStart(
   agentStatus: AgentDTO['status'],
   assignment: Pick<AssignmentDTO, 'mode' | 'status'>,
 ): boolean {
   return (
-    agentStatus === 'idle' &&
+    (agentStatus === 'idle' || agentStatus === 'queued') &&
     assignment.mode !== 'chat' &&
     assignment.status === 'in-progress'
   );

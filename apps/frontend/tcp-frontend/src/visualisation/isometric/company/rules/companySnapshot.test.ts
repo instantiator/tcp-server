@@ -79,6 +79,7 @@ function agent(overrides: Partial<AgentDTO> = {}): AgentDTO {
     createdAt: NOW,
     output: null,
     updatedAt: NOW,
+    rateLimitRetries: 0,
     ...overrides,
   };
 }

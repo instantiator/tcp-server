@@ -1,4 +1,4 @@
-import type { StubResponse } from '../config.ts';
+import type { StubRefusal, StubResponse } from '../config.ts';
 
 /** A route a format exposes for chat-style completions (there may be more than one alias). */
 export interface FormatRoute {
@@ -21,6 +21,8 @@ export type ErrorKind = 'auth' | 'no-match' | 'exhausted';
 export interface FormatError {
   status: number;
   body: unknown;
+  /** Extra response headers, e.g. `Retry-After` on a refusal. */
+  headers?: Record<string, string>;
 }
 
 /** One already wire-encoded chunk of a streamed reply (e.g. an SSE `data: ...\n\n` line). */
@@ -54,4 +56,6 @@ export interface ApiFormat {
   ): StreamChunk[];
   /** Error status + body for one of the stub's own failure cases. */
   buildError(kind: ErrorKind): FormatError;
+  /** A provider refusal (rate limit, quota) shaped as this format's real API sends it. */
+  buildRefusal(refusal: StubRefusal): FormatError;
 }

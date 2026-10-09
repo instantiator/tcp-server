@@ -137,7 +137,15 @@ export function writeEnvFile(
 
   b.comment('Agent resource limits');
   b.set('AGENT_ITERATIONS', String(config.agentIterations));
-  b.set('AGENT_WORKER_CONCURRENCY', String(config.agentConcurrency));
+  // Single-quoted: start-deployment.sh sources this file in bash, which
+  // would otherwise strip the JSON's double quotes.
+  b.set(
+    'MODEL_CONCURRENCY',
+    `'${JSON.stringify({
+      local: config.localModelConcurrency,
+      remote: config.remoteModelConcurrency,
+    })}'`,
+  );
   b.blank();
 
   b.comment('Miscellaneous');

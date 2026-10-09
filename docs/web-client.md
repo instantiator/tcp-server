@@ -906,10 +906,11 @@ header.
   whiteboard while working, beside the avatar it is reviewing, to the 1:1
   table while consulting, or to the mail room's pigeonholes while messaging
   the user. A newly created agent that is queued behind the worker pool
-  (`agent.status === 'idle'` on an `in-progress` task assignment) waits by
-  its role's book in the rec room, reading "waiting to start" — it hasn't
-  stalled, there just isn't a free worker slot yet (002.02; see the fixed
-  bug this replaced, below). An avatar whose agent has finished waits at its
+  (`agent.status === 'idle'`, or the explicit `queued` status since 000.03,
+  on an `in-progress` task assignment) waits by its role's book in the rec
+  room, reading "waiting to start" — it hasn't stalled, there just isn't a
+  free worker slot yet (002.02; see the fixed bug this replaced, below). An
+  avatar whose agent has finished waits at its
   desk, still carrying its role, for the next agent of that role in the same
   task, which reuses it rather than walking in anew. It still opens, now as
   its role.
@@ -957,11 +958,12 @@ header.
 
 A new task's agent used to appear late, then look idle at its desk with an
 empty listen-in, while the task itself read "planning" — as if the office
-was a step behind the server. It wasn't: `AGENT_WORKER_CONCURRENCY` caps the
-worker pool (at 1 by default), so a second task's agent really does sit idle
-until a slot frees up, and the listen-in really is empty because nothing has
-called the LLM yet. Confirmed by recording both the SSE streams and the DB
-state side by side — see the plan's [stage 1 "As found"
+was a step behind the server. It wasn't: the worker's local-model pool (now
+`MODEL_CONCURRENCY`'s `local` limit, 1 by default — `AGENT_WORKER_CONCURRENCY`
+before 000.03) caps how many agents run at once, so a second task's agent
+really does sit idle until a slot frees up, and the listen-in really is empty
+because nothing has called the LLM yet. Confirmed by recording both the SSE
+streams and the DB state side by side — see the plan's [stage 1 "As found"
 note](<prompts/phase 03 - web visualisation/002.02.01.plan - isometric display elements.md#as-found-stage-1>).
 Two real gaps came out of the same investigation and were fixed alongside
 it: no event was published when an agent was created or linked to its
@@ -1024,9 +1026,13 @@ back only on arrival or exit.
   stay inside its landmarks. React Aria's replacement, `UNSAFE_PortalProvider`,
   isn't exported by react-aria-components.
 - **Consultation and "messaging the user" are read from the consultee
-  assignment and the enquiry, never from `agent.pauseReason`.** A live agent
-  event patches only `status` into the cached row, so `pauseReason` goes
-  stale — see `synthesiseAgentPatch` in `src/events/cache.ts`.
+  assignment and the enquiry, never from `agent.pauseReason`.** Since 000.03,
+  `synthesiseAgentPatch` (`src/events/cache.ts`) does carry `pauseReason` and
+  `resumeAfter` from a summary-less agent event, and clears `pauseReason`
+  when the agent leaves `paused` — but that's for the `queued`/`rate_limited`
+  status labels (`agentStatusLabel` in `src/api/statuses.ts`), not for these
+  two office-view states, which still read their own source rather than
+  `agent.pauseReason`.
 
 ### Testing
 

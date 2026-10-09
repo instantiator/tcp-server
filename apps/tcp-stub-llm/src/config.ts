@@ -7,10 +7,26 @@ export interface StubTool {
   data: unknown;
 }
 
+/**
+ * A provider refusal to send instead of a reply — a rate limit or a used-up
+ * quota — so a caller's handling of one can be tested.
+ */
+export interface StubRefusal {
+  /** HTTP status, e.g. 429 (rate limit) or 402 (out of credit). */
+  status: number;
+  /** Seconds to send in a `Retry-After` header; omit to send none. */
+  retryAfter?: number;
+  /** The provider's error code, e.g. `rate_limit_exceeded` or `insufficient_quota`. */
+  code?: string;
+  message?: string;
+}
+
 /** One canned reply: text, optionally paired with tool calls the caller should dispatch. */
 export interface StubResponse {
   text: string;
   tools?: StubTool[];
+  /** When set, the stub refuses the request with this error instead of replying. */
+  refusal?: StubRefusal;
 }
 
 /** A group of candidate responses plus the strategy used to pick among them. */
@@ -72,7 +88,33 @@ function validateResponse(value: unknown, path: string): StubResponse {
       return { tool: t.tool, data: t.data };
     });
   }
-  return { text: value.text, tools };
+  const refusal = validateRefusal(value.refusal, path);
+  return { text: value.text, tools, ...(refusal && { refusal }) };
+}
+
+function validateRefusal(
+  value: unknown,
+  path: string,
+): StubRefusal | undefined {
+  if (value === undefined) return undefined;
+  if (
+    !isPlainObject(value) ||
+    typeof value.status !== 'number' ||
+    value.status < 400 ||
+    (value.retryAfter !== undefined && typeof value.retryAfter !== 'number') ||
+    (value.code !== undefined && typeof value.code !== 'string') ||
+    (value.message !== undefined && typeof value.message !== 'string')
+  ) {
+    throw new ConfigValidationError(
+      `${path}.refusal: expected { status: number >= 400, retryAfter?: number, code?: string, message?: string }`,
+    );
+  }
+  return {
+    status: value.status,
+    retryAfter: value.retryAfter,
+    code: value.code,
+    message: value.message,
+  };
 }
 
 function validateMode(value: unknown, path: string): ResponseMode | undefined {

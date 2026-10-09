@@ -18,6 +18,13 @@ export enum AgentStatus {
   /** Created but no job has been dispatched yet. */
   Idle = 'idle',
 
+  /**
+   * A start or resume job is dispatched but hasn't started: it is waiting for
+   * a worker, or for a free slot in its model pool or endpoint
+   * (`MODEL_CONCURRENCY`). Shown so a wait doesn't look like a hang.
+   */
+  Queued = 'queued',
+
   /** A job is actively being processed by tcp-agent. */
   Running = 'running',
 
@@ -42,9 +49,12 @@ export enum AgentStatus {
  * `shutdown` pause has nothing outstanding to wait on, so it stays paused
  * until a user resumes it explicitly. A `spend_cap` pause is lifted when the
  * provider's cap resets or is dismissed, or by an explicit task/company resume.
+ * A `rate_limited` pause — the provider refused a call — is lifted at
+ * {@link TcpAgent.resumeAfter} when auto-resume is on, or by an explicit
+ * resume.
  */
 export type PauseReason =
-  'user_input' | 'consultation' | 'shutdown' | 'spend_cap';
+  'user_input' | 'consultation' | 'shutdown' | 'spend_cap' | 'rate_limited';
 
 /**
  * A running instance of an {@link TcpRole} within an {@link TcpCompany}.
@@ -177,4 +187,20 @@ export class TcpAgent extends VersionedEntity {
    */
   @Column({ type: 'varchar', nullable: true })
   pauseReason?: PauseReason | null;
+
+  /**
+   * When a `rate_limited` pause should be retried: the provider's hint, or
+   * the backoff cadence. Null when auto-resume is off, so only an explicit
+   * resume lifts the pause. Ignored for any other pause reason.
+   */
+  @Column({ nullable: true })
+  resumeAfter?: Date;
+
+  /**
+   * Rate limits in a row without the agent getting an LLM response in
+   * between — drives the doubling backoff, and starts again at 1 once a run
+   * makes progress.
+   */
+  @Column({ type: 'int', default: 0 })
+  rateLimitRetries!: number;
 }

@@ -19,10 +19,14 @@ import { MatcherState, pickResponse } from './matcher.ts';
 interface JsonReply {
   status: number;
   body: unknown;
+  headers?: Record<string, string>;
 }
 
 function sendJson(res: ServerResponse, reply: JsonReply): void {
-  res.writeHead(reply.status, { 'Content-Type': 'application/json' });
+  res.writeHead(reply.status, {
+    ...reply.headers,
+    'Content-Type': 'application/json',
+  });
   res.end(JSON.stringify(reply.body));
 }
 
@@ -119,6 +123,10 @@ async function handleChatCompletion(
   const outcome = pickResponse(promptText, resolved, matcher);
   if (!outcome.ok) {
     sendJson(res, format.buildError(outcome.reason));
+    return;
+  }
+  if (outcome.response.refusal) {
+    sendJson(res, format.buildRefusal(outcome.response.refusal));
     return;
   }
 

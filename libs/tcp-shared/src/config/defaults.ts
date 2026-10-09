@@ -118,13 +118,20 @@ export const DEFAULT_RAG_THRESHOLD = 0.35;
 export const DEFAULT_AGENT_ITERATIONS = 40;
 
 /**
- * Default number of agent jobs the tcp-agent worker processes concurrently.
- * Overridden by `AGENT_WORKER_CONCURRENCY` (tcp-agent env). Used in
- * {@link AgentWorkerService}. Set to 1 so agents sharing a single
- * capacity-limited model endpoint (e.g. one local LLM) don't starve each
- * other of model time.
+ * Default pool total for every agent run against a local model endpoint.
+ * Overridden by `MODEL_CONCURRENCY`'s `local` key (tcp-agent env). Used in
+ * {@link limitsFor}. Set to 1: a home install typically has one GPU, so
+ * parallel runs against it would only queue inside the model server anyway.
  */
-export const DEFAULT_AGENT_WORKER_CONCURRENCY = 1;
+export const DEFAULT_LOCAL_MODEL_CONCURRENCY = 1;
+
+/**
+ * Default pool total for every agent run against a remote model endpoint.
+ * Overridden by `MODEL_CONCURRENCY`'s `remote` key (tcp-agent env). Used in
+ * {@link limitsFor}. Remote providers can usually take more parallel work
+ * than a local GPU, but an unbounded pool also means an unbounded spend rate.
+ */
+export const DEFAULT_REMOTE_MODEL_CONCURRENCY = 4;
 
 /**
  * Default wall-clock timeout in milliseconds for an entire agent run.
@@ -154,6 +161,25 @@ export const DEFAULT_REQUIRED_TOOL_RETRIES = 2;
  * Used in {@link buildChatModel}.
  */
 export const DEFAULT_LLM_TIMEOUT_MS = 30 * 60 * 1000; // 30m
+
+/**
+ * First wait before retrying an agent a provider rate-limited without saying
+ * when to try again; doubles on each repeat. Overridden by
+ * `RATE_LIMIT_RETRY_MS` (tcp-agent env). A provider's own hint always wins.
+ */
+export const DEFAULT_RATE_LIMIT_RETRY_MS = 60 * 1000; // 1m
+
+/**
+ * Ceiling for that doubling wait. Overridden by `RATE_LIMIT_RETRY_MAX_MS`.
+ */
+export const DEFAULT_RATE_LIMIT_RETRY_MAX_MS = 30 * 60 * 1000; // 30m
+
+/**
+ * Wait before retrying after a used-up quota or credit balance — longer,
+ * since it usually needs a person to top up. Overridden by
+ * `RATE_LIMIT_QUOTA_RETRY_MS`.
+ */
+export const DEFAULT_RATE_LIMIT_QUOTA_RETRY_MS = 60 * 60 * 1000; // 1h
 
 /**
  * Default context window size in tokens, used when {@link LlmConfig.contextWindow}

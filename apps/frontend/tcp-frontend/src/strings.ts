@@ -522,11 +522,17 @@ const strings = {
   // Agent and assignment statuses share this block: the words are the user's,
   // not the schema's, and several are common to both.
   'activity.status.idle': 'Idle',
+  // A start or resume job dispatched but waiting for a model slot (000.03).
+  'activity.status.queued': 'Waiting for model',
   'activity.status.running': 'Running',
   'activity.status.paused': 'Paused',
   'activity.status.completed': 'Completed',
   'activity.status.in-qa': 'In QA',
   'activity.status.unknown': 'Unknown',
+  // `agentStatusLabel` (api/statuses.ts) elaborates a `rate_limited` pause with
+  // these instead of the plain `activity.status.paused` above.
+  'activity.status.rateLimited': 'Rate limited — next try {time}',
+  'activity.status.rateLimited.manual': 'Rate limited — resume by hand',
   // Agent and consultation rows carry a role whose name may not have loaded.
   'activity.role.unknown': 'Unknown role',
   'page.notFound.title': 'Page not found',

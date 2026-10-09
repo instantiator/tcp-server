@@ -436,8 +436,9 @@ describe('Company/Task SSE events (e2e)', () => {
     // 002.02 stage 2 (cause C1): starting a task used to create its planner
     // agent with no event at all — a client only learned of it from its
     // first `running`, which (queued behind another job) could be tens of
-    // seconds later. Now the company stream sees `idle` immediately.
-    it('sees a new agent as idle, before it runs', async () => {
+    // seconds later. Now the company stream sees `idle` immediately, then
+    // `queued` once its start job is dispatched (000.03).
+    it('sees a new agent as idle, then queued, before it runs', async () => {
       const taskRes = await request(app.getHttpServer())
         .post('/api/task')
         .set('Authorization', `Bearer ${jwt}`)
@@ -450,13 +451,14 @@ describe('Company/Task SSE events (e2e)', () => {
 
       // Priming: company + task (ready). Starting the task then writes: task
       // (planning), assignment (dispatched plan), agent (idle — the fix),
-      // assignment (linked to its agent). A simulated `running` write (below)
-      // stands in for the worker, which this suite never actually runs.
+      // assignment (linked to its agent), agent (queued — job dispatched). A
+      // simulated `running` write (below) stands in for the worker, which
+      // this suite never actually runs.
       const events$ = consumeSse<WireEvent>(
         app,
         `/api/company/${company.id}/events`,
         { Authorization: `Bearer ${jwt}` },
-        7,
+        8,
         10000,
       );
       await new Promise((resolve) => setTimeout(resolve, 300));
@@ -493,7 +495,7 @@ describe('Company/Task SSE events (e2e)', () => {
       const agentStatuses = events
         .filter((e) => e.type === 'audit' && e.event.payload.entity === 'agent')
         .map((e) => (e.type === 'audit' ? e.event.payload.newStatus : null));
-      expect(agentStatuses).toEqual(['idle', 'running']);
+      expect(agentStatuses).toEqual(['idle', 'queued', 'running']);
     }, 20000);
 
     // 002.02 stage 2: cancelling a task's agents used to write silently — no

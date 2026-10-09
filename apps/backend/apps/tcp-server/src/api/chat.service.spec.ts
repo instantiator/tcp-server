@@ -108,6 +108,7 @@ function makeAgent(overrides: Partial<TcpAgent> = {}): TcpAgent {
     company: {} as never,
     role: {} as never,
     version: 1,
+    rateLimitRetries: 0,
     ...overrides,
   };
 }

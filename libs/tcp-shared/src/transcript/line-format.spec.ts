@@ -113,4 +113,45 @@ describe('compactionSummary and stateChangeText', () => {
     );
     expect(stateChangeText({ newStatus: 'idle' })).toBe('idle');
   });
+
+  it('renders a queued state_change as-is, with no reason', () => {
+    expect(stateChangeText({ newStatus: 'queued' })).toBe('queued');
+  });
+
+  it('elaborates a rate-limited pause with its next-try time', () => {
+    const resumeAfter = '2026-07-19T14:32:00.000Z';
+    // Local hh:mm, TZ-independent — matches `parseClockTime`.
+    const hhmm = new Date(resumeAfter).toTimeString().slice(0, 5);
+    expect(
+      stateChangeText({
+        newStatus: 'paused',
+        reason: 'rate_limited',
+        rateLimit: 'rate',
+        resumeAfter,
+      }),
+    ).toBe(`paused (rate limited, next try ${hhmm})`);
+  });
+
+  it('elaborates a rate-limited pause with "resume by hand" when resumeAfter is null', () => {
+    expect(
+      stateChangeText({
+        newStatus: 'paused',
+        reason: 'rate_limited',
+        rateLimit: 'quota',
+        resumeAfter: null,
+      }),
+    ).toBe('paused (rate limited, resume by hand)');
+  });
+
+  it('elaborates a rate-limited pause with "resume by hand" when resumeAfter is absent', () => {
+    expect(
+      stateChangeText({ newStatus: 'paused', reason: 'rate_limited' }),
+    ).toBe('paused (rate limited, resume by hand)');
+  });
+
+  it('leaves an ordinary paused reason untouched', () => {
+    expect(stateChangeText({ newStatus: 'paused', reason: 'user_input' })).toBe(
+      'paused (user_input)',
+    );
+  });
 });

@@ -5,7 +5,11 @@ import {
 } from '../../../../api/hooks';
 import type { ReactNode } from 'react';
 import { Button } from 'react-aria-components';
-import { ACTIVE_AGENT_STATUSES, statusLabel } from '../../../../api/statuses';
+import {
+  ACTIVE_AGENT_STATUSES,
+  agentStatusLabel,
+  statusLabel,
+} from '../../../../api/statuses';
 import { ExpandableText } from '../../../../components/ExpandableText/ExpandableText';
 import { t } from '../../../../strings';
 import { isWaitingToStart } from '../rules/companySnapshot';
@@ -78,7 +82,7 @@ export const AgentDetails = ({
   const statusText =
     assignment !== undefined && isWaitingToStart(agent.status, assignment)
       ? t('visualisation.activity.waiting')
-      : statusLabel(agent.status);
+      : agentStatusLabel(agent);
 
   return (
     <>

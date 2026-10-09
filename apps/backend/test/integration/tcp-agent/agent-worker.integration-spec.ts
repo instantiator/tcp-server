@@ -33,6 +33,7 @@ import { KnowledgeRetrievalService, McpClientService } from '@tcp/shared';
 import { AgentRagService } from '../../../apps/tcp-agent/src/rag/agent-rag.service';
 import { AgentRegistryService } from '../../../apps/tcp-agent/src/registry/agent-registry.service';
 import { AgentWorkerService } from '../../../apps/tcp-agent/src/worker/agent-worker.service';
+import { ModelSlotService } from '../../../apps/tcp-agent/src/worker/model-slot.service';
 import { ShutdownListenerService } from '../../../apps/tcp-agent/src/worker/shutdown-listener.service';
 import { StorageTrackingClientService } from '../../../apps/tcp-agent/src/storage-tracking/storage-tracking-client.service';
 import { requireEnv } from '../../support/require-env';
@@ -85,6 +86,7 @@ describe('AgentWorkerService (integration)', () => {
       ],
       providers: [
         AgentWorkerService,
+        ModelSlotService,
         // Real instance: this module's ConfigService leaves REDIS_URL to the
         // worker's own getOrThrow, so the listener stays inert here.
         ShutdownListenerService,

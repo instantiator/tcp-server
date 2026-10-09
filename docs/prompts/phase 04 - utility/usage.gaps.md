@@ -308,6 +308,15 @@ no-op. Concurrency work: Opus.
 
 ### Home hardware realities
 
+> ✅ **The queue and the timeouts are done, in 000.03:** agent runs are
+> limited by two global pools (`local`/`remote`, `MODEL_CONCURRENCY`), a
+> queued agent shows "Waiting for model" rather than looking stalled, and the
+> LLM call, run and probe timeouts were all already 30 minutes — see
+> [the guide](../../model-concurrency.md) and
+> [ADR-032](../../ADRs/ADR-032-model-concurrency-and-rate-limits.md). The
+> catch-up-on-wake rule below is still open; it belongs with
+> [recurring tasks](#recurring-tasks).
+
 - The machine sleeps or reboots, so schedules need a catch-up rule (see
   [recurring tasks](#recurring-tasks)).
 - A cold local model took 28s to load on first request, so probes and

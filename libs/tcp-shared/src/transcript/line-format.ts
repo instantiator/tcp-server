@@ -6,6 +6,7 @@
 
 import type { AuditWireEvent } from '../events/wire-events';
 import { extractContentText } from '../llm/content-text';
+import { parseClockTime } from './format';
 
 /** Reads a string field, defaulting to ''. */
 function str(obj: Record<string, unknown>, key: string): string {
@@ -108,9 +109,23 @@ export function compactionSummary(payload: Record<string, unknown>): string {
   return `${num(payload['tokensAfter'])}/${num(payload['windowSize'])} tokens (${num(payload['pct'])}%)`;
 }
 
-/** The trailing line-only text of a `state_change`: `newStatus (reason)`, reason optional. */
+/**
+ * The trailing line-only text of a `state_change`: `newStatus (reason)`,
+ * reason optional. A `rate_limited` pause (000.03) instead reads
+ * `paused (rate limited, next try HH:MM)`, or `paused (rate limited, resume
+ * by hand)` when `resumeAfter` is absent or `null` — the bare reason string
+ * alone would say nothing about when, or whether, it tries again.
+ */
 export function stateChangeText(payload: Record<string, unknown>): string {
   const status = str(payload, 'newStatus');
   const reason = str(payload, 'reason');
+  if (status === 'paused' && reason === 'rate_limited') {
+    const resumeAfter = payload['resumeAfter'];
+    const time =
+      typeof resumeAfter === 'string'
+        ? parseClockTime(resumeAfter)?.slice(0, 5)
+        : null;
+    return `${status} (rate limited, ${time ? `next try ${time}` : 'resume by hand'})`;
+  }
   return reason ? `${status} (${reason})` : status;
 }

@@ -25,7 +25,11 @@ import { SystemShutdownService } from './system-shutdown.service';
 const RESET_SWEEP_INTERVAL_MS = 60_000;
 
 /** Pauses an explicit resume lifts: nothing else is waiting on them. */
-const EXPLICITLY_RESUMABLE: PauseReason[] = ['spend_cap', 'shutdown'];
+const EXPLICITLY_RESUMABLE: PauseReason[] = [
+  'spend_cap',
+  'shutdown',
+  'rate_limited',
+];
 
 /**
  * Resumes the work spend caps paused: automatically when a cap resets or is
