@@ -288,6 +288,20 @@ export const useCancelTaskMutation = (id: string) =>
   });
 
 /**
+ * Closes a finished task's room in the office view. The server refuses (409)
+ * a task that hasn't finished; closing twice is a no-op.
+ */
+export const useCloseTaskVisualisationMutation = (id: string) =>
+  useMutation({
+    mutationFn: () =>
+      unwrap(
+        api.POST('/api/task/{id}/close-visualisation', {
+          params: { path: { id } },
+        }),
+      ),
+  });
+
+/**
  * Creates a task in the `ready` state. Starting it is a separate call, and
  * materials can only be uploaded before it is started.
  *

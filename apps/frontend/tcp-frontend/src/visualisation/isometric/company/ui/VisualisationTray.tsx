@@ -86,6 +86,7 @@ export const VisualisationTray = forwardRef<
             taskId={selection.id}
             headingId={headingId}
             headingAction={followAction}
+            onRoomClosed={onClose}
             portalContainer={portalContainer}
           />
         )}

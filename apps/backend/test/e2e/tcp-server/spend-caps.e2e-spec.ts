@@ -281,6 +281,39 @@ describe('Spend caps and task controls (e2e)', () => {
     });
   });
 
+  describe("closing a task's room", () => {
+    it('closes the room of a finished task', async () => {
+      const task = await createTask();
+      await taskRepo.update(task.id, { status: 'succeeded' });
+
+      await request(app.getHttpServer())
+        .post(`/api/task/${task.id}/close-visualisation`)
+        .set(member)
+        .expect(202);
+
+      expect(
+        (await taskRepo.findOneByOrFail({ id: task.id })).visualisationClosedAt,
+      ).not.toBeNull();
+    });
+
+    it('409s a task still going', async () => {
+      const task = await runningTask();
+      await request(app.getHttpServer())
+        .post(`/api/task/${task.id}/close-visualisation`)
+        .set(member)
+        .expect(409);
+    });
+
+    it("refuses someone outside the task's company", async () => {
+      const task = await createTask();
+      await taskRepo.update(task.id, { status: 'failed' });
+      await request(app.getHttpServer())
+        .post(`/api/task/${task.id}/close-visualisation`)
+        .set(stranger)
+        .expect(403);
+    });
+  });
+
   describe('resuming a task', () => {
     it('resumes its paused agents, leaving one still waiting on a reply', async () => {
       const task = await createTask();

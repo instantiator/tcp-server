@@ -1,7 +1,7 @@
 import type { GameObjects, Scene } from 'phaser';
 import { depthOf, tileToScreen } from '../motion/iso';
 import type { Furniture, FurnitureKind } from '../world/types';
-import { FURNITURE_COLOURS } from './palette';
+import { FURNITURE_COLOURS, dim } from './palette';
 
 /** One piece of furniture's footprint and height, in pixels. */
 interface FurnitureSize {
@@ -29,17 +29,20 @@ export const FURNITURE_SIZES: Record<FurnitureKind, FurnitureSize> = {
  * id so the scene can find and destroy an individual piece later. Typed as
  * `IsoBox` rather than the base `GameObject`, so a caller (a camera follow
  * onto a whiteboard) gets the `Transform` component it needs with no cast.
+ * A piece `isLit` says is unlit is drawn dimmed.
  */
 export function drawFurniture(
   scene: Scene,
   furniture: readonly Furniture[],
+  isLit: (item: Furniture) => boolean,
 ): Map<string, GameObjects.IsoBox> {
   const objects = new Map<string, GameObjects.IsoBox>();
 
   for (const item of furniture) {
     const { x: cx, y: cy } = tileToScreen(item.tile);
     const { size, height } = FURNITURE_SIZES[item.kind];
-    const colour = FURNITURE_COLOURS[item.kind];
+    const base = FURNITURE_COLOURS[item.kind];
+    const colour = isLit(item) ? base : dim(base);
 
     const box = scene.add.isobox(cx, cy, size, height, colour, colour, colour);
     box.setDepth(depthOf(item.tile));

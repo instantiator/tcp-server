@@ -186,9 +186,13 @@ describe('useOfficeWorld — the live pipeline (agent E2E stand-in)', () => {
   });
 
   /** A `TaskChangeSummary`, built from the fixture task it patches. */
-  const taskSummary = (overrides: { status: TaskDTO['status'] }) => ({
+  const taskSummary = (overrides: {
+    status: TaskDTO['status'];
+    visualisationClosedAt?: string;
+  }) => ({
     id: TASK_ID,
     status: overrides.status,
+    visualisationClosedAt: overrides.visualisationClosedAt,
     request: 'Reticulate the splines',
     shortcode: 'TASK-1',
     createdAt: NOW,
@@ -289,7 +293,7 @@ describe('useOfficeWorld — the live pipeline (agent E2E stand-in)', () => {
       });
     });
 
-    // The task is cancelled: the room starts closing and the avatar heads out.
+    // The task is cancelled: the avatar heads out, and the room stays open.
     act(() => {
       applyEvent(
         queryClient,
@@ -302,15 +306,15 @@ describe('useOfficeWorld — the live pipeline (agent E2E stand-in)', () => {
     });
     await waitFor(() => {
       const room = result.current.world.rooms.find((r) => r.purpose === 'task');
-      expect(room?.closing).toBe(true);
+      expect(room?.closing).toBe(false);
       const avatar = result.current.world.avatars.find(
         (a) => a.id === avatarId,
       );
       expect(avatar?.target).toEqual({ kind: 'exit' });
     });
 
-    // The scene reports the avatar has left: it disappears, and — with
-    // nobody left holding the task — its room is removed too.
+    // The scene reports the avatar has left: it disappears, and the empty
+    // room stays until the user closes it.
     act(() => {
       result.current.avatarExited(avatarId);
     });
@@ -318,6 +322,29 @@ describe('useOfficeWorld — the live pipeline (agent E2E stand-in)', () => {
       expect(result.current.world.avatars.some((a) => a.id === avatarId)).toBe(
         false,
       );
+    });
+    expect(
+      result.current.world.rooms.some((room) => room.purpose === 'task'),
+    ).toBe(true);
+
+    // Closing the room removes it, with nobody left holding the task.
+    act(() => {
+      applyEvent(
+        queryClient,
+        auditEvent(
+          {
+            entity: 'task',
+            summary: taskSummary({
+              status: 'cancelled',
+              visualisationClosedAt: NOW,
+            }),
+          },
+          null,
+          TASK_ID,
+        ),
+      );
+    });
+    await waitFor(() => {
       expect(
         result.current.world.rooms.some((room) => room.purpose === 'task'),
       ).toBe(false);
@@ -913,7 +940,7 @@ describe('useOfficeWorld — the live pipeline (agent E2E stand-in)', () => {
       expect(avatar?.agentId).toBeNull();
     });
 
-    // Row 9 — succeeded: the room starts closing. The planner and worker —
+    // Row 9 — succeeded: the room stays open. The planner and worker —
     // neither the most recently dissociated — head for the exit; the QA
     // avatar, the last to let go of its agent, carries the task's outputs to
     // the archive bookshelf instead.
@@ -933,7 +960,7 @@ describe('useOfficeWorld — the live pipeline (agent E2E stand-in)', () => {
     });
     await waitFor(() => {
       const room = result.current.world.rooms.find((r) => r.purpose === 'task');
-      expect(room?.closing).toBe(true);
+      expect(room?.closing).toBe(false);
       for (const id of [plannerAvatarId, workerAvatarId]) {
         const avatar = result.current.world.avatars.find((a) => a.id === id);
         expect(avatar?.target).toEqual({ kind: 'exit' });
@@ -965,9 +992,8 @@ describe('useOfficeWorld — the live pipeline (agent E2E stand-in)', () => {
       expect(avatar?.target).toEqual({ kind: 'exit' });
     });
 
-    // The scene reports every avatar has left: they disappear, and the room
-    // — with nobody left holding the task — is removed only now, after its
-    // carrier has actually exited.
+    // The scene reports every avatar has left: they disappear, and the empty
+    // room stays until the user closes it.
     act(() => {
       result.current.avatarExited(plannerAvatarId);
       result.current.avatarExited(workerAvatarId);
@@ -978,6 +1004,29 @@ describe('useOfficeWorld — the live pipeline (agent E2E stand-in)', () => {
       expect(result.current.world.avatars.some((a) => ids.includes(a.id))).toBe(
         false,
       );
+    });
+    expect(
+      result.current.world.rooms.some((room) => room.purpose === 'task'),
+    ).toBe(true);
+
+    // Closing the room removes it.
+    act(() => {
+      applyEvent(
+        queryClient,
+        auditEvent(
+          {
+            entity: 'task',
+            summary: taskSummary({
+              status: 'succeeded',
+              visualisationClosedAt: NOW,
+            }),
+          },
+          null,
+          TASK_ID,
+        ),
+      );
+    });
+    await waitFor(() => {
       expect(
         result.current.world.rooms.some((room) => room.purpose === 'task'),
       ).toBe(false);

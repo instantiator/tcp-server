@@ -4,6 +4,7 @@ import { TcpCompanyScene } from './scene/TcpCompanyScene';
 import type {
   HoverEvent,
   OfficeLabel,
+  OfficeStatus,
   SelectionTarget,
 } from './TcpPhaserEventBus';
 import { emitTcpEvent, offTcpEvent, onTcpEvent } from './TcpPhaserEventBus';
@@ -13,6 +14,12 @@ import type { OfficeWorld, Tile } from './world/types';
 const NO_LABELS: readonly OfficeLabel[] = [];
 /** Likewise for an absent `thinkingAgentIds`. */
 const NO_AGENTS: readonly string[] = [];
+/** And for an absent `status`: nothing lit, nothing done. */
+const NO_STATUS: OfficeStatus = {
+  litRooms: new Set(),
+  litBoards: new Set(),
+  completedTaskIds: new Set(),
+};
 
 export interface TcpPhaserVisualisationProps {
   readonly world: OfficeWorld;
@@ -21,6 +28,8 @@ export interface TcpPhaserVisualisationProps {
   readonly labels?: readonly OfficeLabel[];
   /** Agents shown with a thought bubble (005.01); none by default. */
   readonly thinkingAgentIds?: readonly string[];
+  /** Which rooms and boards are lit, and which tasks are done; nothing by default. */
+  readonly status?: OfficeStatus;
   readonly followTarget?: SelectionTarget | null;
   readonly onAvatarArrived?: (avatarId: string, tile: Tile) => void;
   readonly onAvatarExited?: (avatarId: string) => void;
@@ -43,6 +52,7 @@ export default function TcpPhaserVisualisation({
   reducedMotion,
   labels,
   thinkingAgentIds,
+  status,
   followTarget,
   onAvatarArrived,
   onAvatarExited,
@@ -65,6 +75,8 @@ export default function TcpPhaserVisualisation({
   labelsRef.current = labels;
   const thinkingRef = useRef(thinkingAgentIds);
   thinkingRef.current = thinkingAgentIds;
+  const statusRef = useRef(status);
+  statusRef.current = status;
 
   const onAvatarArrivedRef = useRef(onAvatarArrived);
   onAvatarArrivedRef.current = onAvatarArrived;
@@ -103,6 +115,10 @@ export default function TcpPhaserVisualisation({
       emitTcpEvent({
         event: 'thinking-changed',
         value: thinkingRef.current ?? NO_AGENTS,
+      });
+      emitTcpEvent({
+        event: 'status-changed',
+        value: statusRef.current ?? NO_STATUS,
       });
     };
     const handleAvatarArrived = (value: { avatarId: string; tile: Tile }) => {
@@ -202,6 +218,10 @@ export default function TcpPhaserVisualisation({
       value: thinkingAgentIds ?? NO_AGENTS,
     });
   }, [thinkingAgentIds]);
+
+  useEffect(() => {
+    emitTcpEvent({ event: 'status-changed', value: status ?? NO_STATUS });
+  }, [status]);
 
   return <div ref={parentRef} className="company-visualisation__canvas" />;
 }

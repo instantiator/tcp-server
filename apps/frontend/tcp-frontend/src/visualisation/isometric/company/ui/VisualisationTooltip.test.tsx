@@ -19,6 +19,9 @@ const SNAPSHOT: CompanySnapshot = {
       request: 'Reconcile accounts',
       finished: false,
       succeeded: false,
+      status: 'in-progress',
+      pausedAt: null,
+      visualisationClosedAt: null,
       step: 1,
       steps: 3,
     },
@@ -29,6 +32,7 @@ const SNAPSHOT: CompanySnapshot = {
       roleId: 'role-1',
       assignmentId: 'assign-1',
       taskId: 'task-1',
+      status: 'running',
       activity: { kind: 'working' },
     },
   ],
@@ -99,6 +103,18 @@ describe('VisualisationTooltip', () => {
     expect(screen.getByRole('tooltip')).toHaveTextContent(
       t('visualisation.tooltip.agent', { role: 'Sales' }),
     );
+  });
+
+  it('reads "Task completed" over the completed tick', () => {
+    render(
+      <VisualisationTooltip
+        world={WORLD}
+        hover={hoverOn({ kind: 'completed', id: 'task-1' })}
+        snapshot={SNAPSHOT}
+      />,
+    );
+
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Task completed');
   });
 
   it("shows a task's step count and its request", () => {

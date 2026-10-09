@@ -2,7 +2,7 @@ import type { Bounds, OfficeWorld, Tile } from '../world/types';
 import { furnitureById, removeRoom } from '../world/worldOps';
 
 /** Whether a tile falls inside a room's bounds, walls included. */
-function tileInBounds(bounds: Bounds, tile: Tile): boolean {
+export function tileInBounds(bounds: Bounds, tile: Tile): boolean {
   return (
     tile.x >= bounds.x &&
     tile.x < bounds.x + bounds.width &&

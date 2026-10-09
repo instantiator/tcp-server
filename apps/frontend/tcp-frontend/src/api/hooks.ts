@@ -49,6 +49,7 @@ import {
   useAssignment,
   useAssignments,
   useCancelTaskMutation,
+  useCloseTaskVisualisationMutation,
   usePauseTaskMutation,
   useResumeTaskMutation,
   useUpdateTaskMutation,
@@ -236,6 +237,21 @@ export const useCancelTask = (taskId: string) => {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['task'] });
       void queryClient.invalidateQueries({ queryKey: ['assignment'] });
+    },
+  });
+};
+
+/**
+ * Closes a finished task's room in the office view. Invalidates the task
+ * lists, so the live `visualisationClosedAt` reaches the office rules.
+ */
+export const useCloseTaskVisualisation = (taskId: string) => {
+  const queryClient = useQueryClient();
+  const closeVisualisation = useCloseTaskVisualisationMutation(taskId);
+  return useMutation({
+    mutationFn: () => closeVisualisation.mutateAsync(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['task'] });
     },
   });
 };

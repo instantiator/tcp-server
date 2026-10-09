@@ -42,6 +42,15 @@ export const FURNITURE_COLOURS: Record<FurnitureKind, number> = {
   bookshelf: 0x6b4a30,
 };
 
+/** The tick above a succeeded task's whiteboard, and the disc behind it. */
+export const COMPLETED_TICK_COLOUR = 0x2e8b57;
+export const COMPLETED_TICK_BACKING_COLOUR = 0xffffff;
+
+/** The tone an unlit room or board is mixed towards: night, not black, so shapes still read. */
+const DIM_TONE = 0x2a2d3a;
+/** How far towards {@link DIM_TONE} {@link dim} goes. */
+const DIM_AMOUNT = 0.45;
+
 /** The pale block of pages on top of a role's book. */
 export const BOOK_PAGES_COLOUR = 0xf4f1e8;
 
@@ -130,3 +139,17 @@ export function shadesOf(base: number): {
 /** A working agent's thought bubble: a pale fill, outlined so it reads on any floor. */
 export const THOUGHT_BUBBLE_COLOUR = 0xffffff;
 export const THOUGHT_BUBBLE_OUTLINE = 0x57606a;
+
+/**
+ * `colour` mixed about 45% of the way towards a dark blue-grey, for a room or
+ * board with nobody working in it. A plain per-channel mix, so a dimmed
+ * colour keeps its hue.
+ */
+export function dim(colour: number): number {
+  const mix = (offset: number): number => {
+    const from = (colour >> offset) & 0xff;
+    const to = (DIM_TONE >> offset) & 0xff;
+    return clampChannel(from + (to - from) * DIM_AMOUNT);
+  };
+  return (mix(16) << 16) | (mix(8) << 8) | mix(0);
+}

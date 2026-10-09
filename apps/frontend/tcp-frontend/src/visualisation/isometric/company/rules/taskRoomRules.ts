@@ -4,10 +4,10 @@ import { addRoom, setRoomClosing, updateAvatar } from '../world/worldOps';
 import type { CompanySnapshot, SnapshotTask } from './companySnapshot';
 
 /**
- * Gives every unfinished task a room, furnished with a whiteboard. A
- * finished task never gets one, including the first time it is seen.
- * `addRoom` is already a no-op for a task that has a room, so reference
- * equality holds when nothing is new.
+ * Gives every task whose room hasn't been closed a room, furnished with a
+ * whiteboard — finished or not, so a finished task's room is there after a
+ * reload too, until the user closes it. `addRoom` is already a no-op for a
+ * task that has a room, so reference equality holds when nothing is new.
  */
 export function openTaskRooms(
   world: OfficeWorld,
@@ -15,7 +15,7 @@ export function openTaskRooms(
 ): OfficeWorld {
   let next = world;
   for (const task of snapshot.tasks) {
-    if (task.finished) {
+    if (task.visualisationClosedAt !== null) {
       continue;
     }
     next = addRoom(next, 'task', taskRoomId(task.id), task.id);
@@ -38,11 +38,12 @@ function pickCarrier(candidates: readonly Avatar[]): Avatar | undefined {
 }
 
 /**
- * Starts closing a task room once its task is finished or has left the
- * snapshot entirely, and sends every avatar still holding that task out to
- * the exit — except, for a task that succeeded, the finishing agent, which
+ * Sends every avatar still holding a finished (or vanished) task out to the
+ * exit — except, for a task that succeeded, the finishing agent, which
  * carries the task's outputs to the archive bookshelf instead. The room
- * itself is removed later, once cleanup sees it empty.
+ * stays open meanwhile: it only starts closing once the user has closed it
+ * (`visualisationClosedAt`) or its task has left the snapshot entirely, and
+ * is removed later, once cleanup sees it empty.
  */
 export function closeTaskRooms(
   world: OfficeWorld,
@@ -57,12 +58,13 @@ export function closeTaskRooms(
     }
     const task: SnapshotTask | undefined =
       room.taskId === undefined ? undefined : taskById.get(room.taskId);
-    const shouldClose = task === undefined || task.finished;
-    if (!shouldClose) {
+    const closed = task === undefined || task.visualisationClosedAt !== null;
+    if (closed) {
+      next = setRoomClosing(next, room.id);
+    }
+    if (!closed && !task.finished) {
       continue;
     }
-
-    next = setRoomClosing(next, room.id);
 
     const candidates = next.avatars.filter(
       (avatar) =>

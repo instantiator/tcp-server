@@ -46,6 +46,18 @@ export const VisualisationTooltip = ({
     );
   }
 
+  if (target.kind === 'completed') {
+    return (
+      <div
+        role="tooltip"
+        className="company-visualisation__tooltip"
+        style={{ left: x, top: y }}
+      >
+        {t('visualisation.tooltip.completed')}
+      </div>
+    );
+  }
+
   if (target.kind === 'role') {
     const role = snapshot.roles.find((candidate) => candidate.id === target.id);
     if (role === undefined) return null;

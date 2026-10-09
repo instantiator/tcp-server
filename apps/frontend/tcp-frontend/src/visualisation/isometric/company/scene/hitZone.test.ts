@@ -90,6 +90,7 @@ describe('createHitZone', () => {
   it.each([
     { kind: 'furniture', id: 'rec:sofa:0' },
     { kind: 'room', id: 'mail' },
+    { kind: 'completed', id: 'task-1' },
   ] as const)('only hovers $kind: a click selects nothing', (target) => {
     const { scene, handlers } = sceneWithZone();
     createHitZone(scene, 0, 0, 10, 10, () => target);

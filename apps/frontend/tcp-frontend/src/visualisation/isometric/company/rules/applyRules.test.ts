@@ -25,6 +25,9 @@ function taskSnap(overrides: Partial<SnapshotTask> = {}): SnapshotTask {
     request: 'Do the thing',
     finished: false,
     succeeded: false,
+    status: 'in-progress',
+    pausedAt: null,
+    visualisationClosedAt: null,
     step: 0,
     steps: 0,
     ...overrides,
@@ -76,6 +79,7 @@ describe('a full task lifecycle', () => {
             roleId: 'planner-role',
             assignmentId: 'plan-assignment',
             taskId: 'task-1',
+            status: 'running',
             activity: { kind: 'working' },
           },
         ],
@@ -103,6 +107,7 @@ describe('a full task lifecycle', () => {
             roleId: 'planner-role',
             assignmentId: 'plan-assignment',
             taskId: 'task-1',
+            status: 'completed',
             activity: { kind: 'finished' },
           },
           {
@@ -110,6 +115,7 @@ describe('a full task lifecycle', () => {
             roleId: 'implementer-role',
             assignmentId: 'impl-assignment',
             taskId: 'task-1',
+            status: 'running',
             activity: { kind: 'working' },
           },
         ],
@@ -138,6 +144,7 @@ describe('a full task lifecycle', () => {
             roleId: 'planner-role',
             assignmentId: 'plan-assignment',
             taskId: 'task-1',
+            status: 'completed',
             activity: { kind: 'finished' },
           },
           {
@@ -145,6 +152,7 @@ describe('a full task lifecycle', () => {
             roleId: 'implementer-role',
             assignmentId: 'impl-assignment',
             taskId: 'task-1',
+            status: 'idle',
             activity: { kind: 'atDesk' },
           },
           {
@@ -152,6 +160,7 @@ describe('a full task lifecycle', () => {
             roleId: 'qa-role',
             assignmentId: 'qa-assignment',
             taskId: 'task-1',
+            status: 'idle',
             activity: {
               kind: 'reviewing',
               reviewedAssignmentId: 'impl-assignment',
@@ -170,7 +179,7 @@ describe('a full task lifecycle', () => {
       avatarId: implementerAfter.id,
     });
 
-    // The task finishes: everyone is sent to the exit.
+    // The task finishes: everyone is sent to the exit, but the room stays open.
     state = officeReducer(state, {
       type: 'snapshot',
       snapshot: {
@@ -182,6 +191,7 @@ describe('a full task lifecycle', () => {
             roleId: 'planner-role',
             assignmentId: 'plan-assignment',
             taskId: 'task-1',
+            status: 'completed',
             activity: { kind: 'finished' },
           },
           {
@@ -189,6 +199,7 @@ describe('a full task lifecycle', () => {
             roleId: 'implementer-role',
             assignmentId: 'impl-assignment',
             taskId: 'task-1',
+            status: 'completed',
             activity: { kind: 'finished' },
           },
           {
@@ -196,28 +207,37 @@ describe('a full task lifecycle', () => {
             roleId: 'qa-role',
             assignmentId: 'qa-assignment',
             taskId: 'task-1',
+            status: 'completed',
             activity: { kind: 'finished' },
           },
         ],
       },
     });
-    expect(roomById(state.world, roomId)?.closing).toBe(true);
+    expect(roomById(state.world, roomId)?.closing).toBe(false);
     for (const id of [planner.id, implementerAfter.id, qa.id]) {
       expect(avatarById(state.world, id)?.target).toEqual({ kind: 'exit' });
     }
 
-    // The room disappears only once everyone has actually left.
-    state = officeReducer(state, {
-      type: 'avatarExited',
-      avatarId: planner.id,
-    });
+    // Everyone leaves, and the empty room still stands until it is closed.
+    for (const id of [planner.id, implementerAfter.id, qa.id]) {
+      state = officeReducer(state, { type: 'avatarExited', avatarId: id });
+    }
     expect(roomById(state.world, roomId)).toBeDefined();
+
+    // Closing it removes it at once, as nobody is left inside.
     state = officeReducer(state, {
-      type: 'avatarExited',
-      avatarId: implementerAfter.id,
+      type: 'snapshot',
+      snapshot: {
+        roles: [],
+        tasks: [
+          taskSnap({
+            finished: true,
+            visualisationClosedAt: '2026-10-09T10:00:00.000Z',
+          }),
+        ],
+        agents: [],
+      },
     });
-    expect(roomById(state.world, roomId)).toBeDefined();
-    state = officeReducer(state, { type: 'avatarExited', avatarId: qa.id });
     expect(roomById(state.world, roomId)).toBeUndefined();
   });
 });
@@ -236,6 +256,7 @@ describe('a consultation lifecycle', () => {
             roleId: 'caller-role',
             assignmentId: 'caller-assignment',
             taskId: 'task-1',
+            status: 'running',
             activity: { kind: 'working' },
           },
         ],
@@ -255,6 +276,7 @@ describe('a consultation lifecycle', () => {
             roleId: 'caller-role',
             assignmentId: 'caller-assignment',
             taskId: 'task-1',
+            status: 'idle',
             activity: { kind: 'consulting', oneToOneId },
           },
           {
@@ -262,6 +284,7 @@ describe('a consultation lifecycle', () => {
             roleId: 'consultee-role',
             assignmentId: oneToOneId,
             taskId: null,
+            status: 'idle',
             activity: { kind: 'consulting', oneToOneId },
           },
         ],
@@ -315,6 +338,7 @@ describe('a consultation lifecycle', () => {
             roleId: 'caller-role',
             assignmentId: 'caller-assignment',
             taskId: 'task-1',
+            status: 'running',
             activity: { kind: 'working' },
           },
           {
@@ -322,6 +346,7 @@ describe('a consultation lifecycle', () => {
             roleId: 'consultee-role',
             assignmentId: oneToOneId,
             taskId: null,
+            status: 'completed',
             activity: { kind: 'finished' },
           },
         ],

@@ -56,7 +56,7 @@ import {
 import { ResumeResultDto } from './dto/spend.dto';
 import { SpendResumeService } from './spend-resume.service';
 import { SystemShutdownService } from './system-shutdown.service';
-import { TaskPauseService } from './task-pause.service';
+import { TaskControlService } from './task-control.service';
 import { TaskMaterialSummary, TaskService } from './task.service';
 
 /** Subset of the multer file object relevant to a materials upload. */
@@ -77,7 +77,7 @@ export class TaskController {
     private readonly taskEvents: TaskEventService,
     private readonly shutdown: SystemShutdownService,
     private readonly spend: SpendResumeService,
-    private readonly pauses: TaskPauseService,
+    private readonly controls: TaskControlService,
   ) {}
 
   /** Creates a task in the `ready` state. No plan is generated until `POST /api/task/:id/start`. */
@@ -167,7 +167,20 @@ export class TaskController {
   @Post(':id/pause')
   @HttpCode(202)
   pauseTask(@Param('id') id: UUID, @Req() req: Request): Promise<TcpTask> {
-    return this.pauses.pause(id, getCurrentUserLabel(req));
+    return this.controls.pause(id, getCurrentUserLabel(req));
+  }
+
+  /**
+   * Closes a finished task's room in the office view. `409` while the task
+   * is still going; closing an already-closed room is a no-op.
+   */
+  @ApiOperation({ summary: "Close a finished task's office room" })
+  @ApiAcceptedResponse({ type: TaskResponseDto })
+  @CompanyScope({ from: 'param', key: 'id', via: 'task' })
+  @Post(':id/close-visualisation')
+  @HttpCode(202)
+  closeVisualisation(@Param('id') id: UUID): Promise<TcpTask> {
+    return this.controls.closeVisualisation(id);
   }
 
   /**

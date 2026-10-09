@@ -1077,6 +1077,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/task/{id}/close-visualisation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Close a finished task's office room */
+        post: operations["TaskController_closeVisualisation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/task/{id}/resume": {
         parameters: {
             query?: never;
@@ -1342,6 +1359,23 @@ export interface paths {
         };
         /** List notifications */
         get: operations["NotificationController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notifications/company/{companyId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List a company's notifications */
+        get: operations["NotificationController_listForCompany"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2145,12 +2179,14 @@ export interface components {
             /** @enum {string} */
             severity: "info" | "error" | "warning";
             /** @enum {string} */
-            kind: "spend_threshold" | "spend_reached" | "spend_reset" | "spend_untracked";
+            kind: "task_paused" | "spend_threshold" | "spend_reached" | "spend_reset" | "spend_untracked" | "task_failed";
             message: string;
             params?: {
                 [key: string]: unknown;
             };
             dedupeKey?: string;
+            companyId?: string | null;
+            taskId?: string | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -3993,6 +4029,27 @@ export interface operations {
             };
         };
     };
+    TaskController_closeVisualisation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskResponseDto"];
+                };
+            };
+        };
+    };
     TaskController_resumeTask: {
         parameters: {
             query?: never;
@@ -4348,6 +4405,30 @@ export interface operations {
             };
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TcpNotification"][];
+                };
+            };
+        };
+    };
+    NotificationController_listForCompany: {
+        parameters: {
+            query?: {
+                /** @description Also return dismissed notifications. Bare `?includeDismissed` counts as true. */
+                includeDismissed?: boolean;
+            };
+            header?: never;
+            path: {
+                companyId: string;
+            };
             cookie?: never;
         };
         requestBody?: never;

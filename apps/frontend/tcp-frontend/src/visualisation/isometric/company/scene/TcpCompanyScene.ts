@@ -2,7 +2,12 @@ import { Input, Scene, Scenes, type GameObjects } from 'phaser';
 import { TILE_HEIGHT, TILE_WIDTH, depthOf, tileToScreen } from '../motion/iso';
 import type { CrowdEvent } from '../motion/crowd';
 import { Crowd } from '../motion/crowd';
-import type { OfficeLabel, SelectionTarget } from '../TcpPhaserEventBus';
+import type {
+  OfficeLabel,
+  OfficeStatus,
+  SelectionTarget,
+} from '../TcpPhaserEventBus';
+import { furnitureIsLit, tileIsLit } from '../rules/roomLighting';
 import { emitTcpEvent, offTcpEvent, onTcpEvent } from '../TcpPhaserEventBus';
 import { ARCHIVE_BOOKSHELF_ID, mapBounds } from '../world/layout';
 import { renderRegion } from '../world/renderRegion';
@@ -12,6 +17,11 @@ import { CameraController } from './CameraController';
 import { DragPan, type DragPointer } from './dragPan';
 import { LabelLayer } from './LabelLayer';
 import { ThoughtBubbleLayer } from './ThoughtBubbleLayer';
+import {
+  TICK_ZONE_SIZE,
+  drawCompletionTick,
+  tickCentre,
+} from './drawCompletionTick';
 import { drawFloors } from './drawFloors';
 import { FURNITURE_SIZES, drawFurniture } from './drawFurniture';
 import { drawWalls } from './drawWalls';
@@ -20,6 +30,26 @@ import { createHitZone } from './hitZone';
 /** A whiteboard's hit zone: footprint and lift above the tile centre, in pixels. */
 const WHITEBOARD_ZONE_SIZE = 44;
 const WHITEBOARD_ZONE_LIFT = 15;
+/** Nothing lit, nothing done: what the scene draws until `status-changed` arrives. */
+const NO_STATUS: OfficeStatus = {
+  litRooms: new Set(),
+  litBoards: new Set(),
+  completedTaskIds: new Set(),
+};
+
+/**
+ * A status as a string, so two statuses with the same contents compare
+ * equal. The sets are rebuilt on every snapshot, so identity says nothing.
+ */
+function statusKey(status: OfficeStatus): string {
+  const sorted = (ids: ReadonlySet<string>): string[] => [...ids].sort();
+  return JSON.stringify([
+    sorted(status.litRooms),
+    sorted(status.litBoards),
+    sorted(status.completedTaskIds),
+  ]);
+}
+
 /**
  * How far below its tile's depth a doorway's zone sits, so an avatar
  * standing in the doorway takes the pointer rather than the door.
@@ -53,6 +83,11 @@ export class TcpCompanyScene extends Scene {
   private archiveBookshelf: GameObjects.IsoBox | undefined;
   private readonly crowd = new Crowd();
   private lastLayoutVersion: number | null = null;
+  /** The newest world received, so a status change can redraw without waiting for a new one. */
+  private world: OfficeWorld | null = null;
+  private status: OfficeStatus = NO_STATUS;
+  /** {@link statusKey} of the status the static layers were last drawn with. */
+  private drawnStatusKey: string | null = null;
   private reducedMotion = false;
   private followTarget: SelectionTarget | null = null;
   private listenersRemoved = false;
@@ -76,6 +111,7 @@ export class TcpCompanyScene extends Scene {
     onTcpEvent({ event: 'camera-follow', fn: this.handleCameraFollow });
     onTcpEvent({ event: 'labels-changed', fn: this.handleLabelsChanged });
     onTcpEvent({ event: 'thinking-changed', fn: this.handleThinkingChanged });
+    onTcpEvent({ event: 'status-changed', fn: this.handleStatusChanged });
 
     // Registered on the scene's own input plugin, which drops every listener
     // when the scene shuts down, so `removeListeners` has nothing to undo.
@@ -107,6 +143,15 @@ export class TcpCompanyScene extends Scene {
   ): void => {
     this.thinkingAgentIds = new Set(agentIds);
     this.syncBubbles();
+  };
+
+  private readonly handleStatusChanged = (status: OfficeStatus): void => {
+    this.status = status;
+    if (this.world !== null) {
+      this.redrawStaticIfStale(this.world);
+      // A redraw replaces every whiteboard, so a follow must find the new one.
+      this.applyFollow();
+    }
   };
 
   private readonly handleMotionPreference = (value: {
@@ -161,18 +206,15 @@ export class TcpCompanyScene extends Scene {
     offTcpEvent({ event: 'camera-follow', fn: this.handleCameraFollow });
     offTcpEvent({ event: 'labels-changed', fn: this.handleLabelsChanged });
     offTcpEvent({ event: 'thinking-changed', fn: this.handleThinkingChanged });
+    offTcpEvent({ event: 'status-changed', fn: this.handleStatusChanged });
     this.cameraController.destroy();
     this.labelLayer.destroy();
     this.bubbleLayer.destroy();
   };
 
   private syncWorld(world: OfficeWorld): void {
-    if (
-      this.lastLayoutVersion === null ||
-      this.lastLayoutVersion !== world.layoutVersion
-    ) {
-      this.redrawStatic(world);
-    }
+    this.world = world;
+    this.redrawStaticIfStale(world);
 
     const isWalkable = buildIsWalkable(world);
     const events = this.crowd.sync(world, isWalkable, this.reducedMotion);
@@ -226,10 +268,27 @@ export class TcpCompanyScene extends Scene {
     }
   }
 
+  /**
+   * Redraws the static layers only when the layout or the lighting has
+   * really changed — compared by value, so the many snapshots that change
+   * neither cost nothing. The switch is instant, with no fade, so it needs
+   * no reduced-motion branch.
+   */
+  private redrawStaticIfStale(world: OfficeWorld): void {
+    if (
+      this.lastLayoutVersion === world.layoutVersion &&
+      this.drawnStatusKey === statusKey(this.status)
+    ) {
+      return;
+    }
+    this.redrawStatic(world);
+  }
+
   private redrawStatic(world: OfficeWorld): void {
     const isFirstDraw = this.lastLayoutVersion === null;
 
     this.staticObjects.forEach((object) => object.destroy());
+    const isLit = (tile: Tile): boolean => tileIsLit(world, this.status, tile);
 
     const bounds = mapBounds(world);
     const region = renderRegion(
@@ -240,7 +299,9 @@ export class TcpCompanyScene extends Scene {
       bounds.y + bounds.height - 1,
     );
 
-    const furniture = drawFurniture(this, world.furniture);
+    const furniture = drawFurniture(this, world.furniture, (item) =>
+      furnitureIsLit(world, this.status, item),
+    );
     const { zones, whiteboardsByTaskId } = this.buildWhiteboardZones(
       world,
       furniture,
@@ -248,12 +309,13 @@ export class TcpCompanyScene extends Scene {
     this.whiteboardsByTaskId = whiteboardsByTaskId;
 
     this.staticObjects = [
-      drawFloors(this, region),
-      ...drawWalls(this, region),
+      drawFloors(this, region, isLit),
+      ...drawWalls(this, region, isLit),
       ...furniture.values(),
       ...zones,
       ...this.buildArchiveZone(world, furniture),
       ...this.buildDescriptionZones(world),
+      ...this.buildCompletionTicks(world),
     ];
 
     if (isFirstDraw) {
@@ -262,6 +324,7 @@ export class TcpCompanyScene extends Scene {
     this.cameraController.fitMap(bounds);
 
     this.lastLayoutVersion = world.layoutVersion;
+    this.drawnStatusKey = statusKey(this.status);
   }
 
   /**
@@ -315,6 +378,42 @@ export class TcpCompanyScene extends Scene {
     }
 
     return { zones, whiteboardsByTaskId };
+  }
+
+  /**
+   * A tick, with its own hover zone ("Task completed"), above the whiteboard
+   * of every succeeded task that has a room.
+   */
+  private buildCompletionTicks(world: OfficeWorld): GameObjects.GameObject[] {
+    const objects: GameObjects.GameObject[] = [];
+
+    for (const item of world.furniture) {
+      if (item.kind !== 'whiteboard') {
+        continue;
+      }
+      const taskId = world.rooms.find(
+        (room) => room.id === item.roomId,
+      )?.taskId;
+      if (taskId === undefined || !this.status.completedTaskIds.has(taskId)) {
+        continue;
+      }
+
+      objects.push(drawCompletionTick(this, item.tile));
+      const { x, y } = tickCentre(item.tile);
+      const zone = createHitZone(
+        this,
+        x,
+        y,
+        TICK_ZONE_SIZE,
+        TICK_ZONE_SIZE,
+        () => ({ kind: 'completed', id: taskId }),
+      );
+      // Above the whiteboard's own zone, so the tick's hover wins where they meet.
+      zone.setDepth(depthOf(item.tile) + 1);
+      objects.push(zone);
+    }
+
+    return objects;
   }
 
   /**

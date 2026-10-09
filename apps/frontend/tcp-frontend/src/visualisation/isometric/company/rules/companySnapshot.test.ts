@@ -166,6 +166,40 @@ describe('buildCompanySnapshot', () => {
     },
   );
 
+  it("carries a task's status, pause and room-closed times, null while absent", () => {
+    const open = buildCompanySnapshot(
+      data({ tasks: [task({ status: 'planning' })], assignments: [] }),
+    ).tasks[0];
+    expect(open?.status).toBe('planning');
+    expect(open?.pausedAt).toBeNull();
+    expect(open?.visualisationClosedAt).toBeNull();
+
+    const closed = buildCompanySnapshot(
+      data({
+        tasks: [
+          task({
+            status: 'succeeded',
+            pausedAt: NOW,
+            visualisationClosedAt: NOW,
+          }),
+        ],
+        assignments: [],
+      }),
+    ).tasks[0];
+    expect(closed?.pausedAt).toBe(NOW);
+    expect(closed?.visualisationClosedAt).toBe(NOW);
+  });
+
+  it("carries an agent's own status", () => {
+    const snapshot = buildCompanySnapshot(
+      data({
+        agents: [agent({ status: 'paused' })],
+        assignments: [assignment()],
+      }),
+    );
+    expect(snapshot.agents[0]?.status).toBe('paused');
+  });
+
   it('marks a succeeded task succeeded', () => {
     const snapshot = buildCompanySnapshot(
       data({ tasks: [task({ status: 'succeeded' })], assignments: [] }),

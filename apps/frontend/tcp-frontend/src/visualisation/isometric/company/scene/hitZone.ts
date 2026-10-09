@@ -5,8 +5,8 @@ import { isClick } from './dragPan';
 
 /**
  * Wires one interactive zone to the bus: `hover` on over and move, `hover`
- * null on out, and `select` on a click for anything selectable — furniture
- * and doorways are hover-only. A click is a release within
+ * null on out, and `select` on a click for anything selectable — furniture,
+ * doorways and the completed tick are hover-only. A click is a release within
  * `DRAG_THRESHOLD_PX` of the press (005.01): a press that moves further is a
  * drag that pans the camera, and selects nothing. `getTarget` is read on every event
  * rather than captured once, so a caller can repoint an existing zone at a
@@ -46,8 +46,13 @@ export function createHitZone(
       return;
     }
     const target = getTarget();
-    // Furniture and doorways only explain themselves; they open no tray.
-    if (target.kind !== 'furniture' && target.kind !== 'room') {
+    // Furniture, doorways and the completed tick only explain themselves;
+    // they open no tray.
+    if (
+      target.kind !== 'furniture' &&
+      target.kind !== 'room' &&
+      target.kind !== 'completed'
+    ) {
       emitTcpEvent({ event: 'select', value: target });
     }
   });

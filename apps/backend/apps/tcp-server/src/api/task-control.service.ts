@@ -22,16 +22,21 @@ const PAUSABLE: TcpTask['status'][] = ['planning', 'in-progress', 'finalising'];
 /** Agent statuses a pause stops: started, or about to start. */
 const STOPPABLE = [AgentStatus.Idle, AgentStatus.Queued, AgentStatus.Running];
 
+/** Statuses after which a task's office room may be closed. */
+const FINISHED: TcpTask['status'][] = ['succeeded', 'failed', 'cancelled'];
+
 /**
- * Pauses a task at a user's request.
+ * A user's controls over a task beyond its lifecycle: pausing it, and closing
+ * its room in the office view once it has finished.
  *
+ * Pausing
  * A soft stop: the task records the pause, and each of its working agents is
  * marked paused, so a running loop stops at its next status check — after
  * its current LLM call and tools — and a queued job is dropped. Nothing
  * in-flight is killed. Resuming is {@link SpendResumeService.resumeTask}.
  */
 @Injectable()
-export class TaskPauseService {
+export class TaskControlService {
   constructor(
     @InjectRepository(TcpTask)
     private readonly taskRepo: Repository<TcpTask>,
@@ -75,6 +80,30 @@ export class TaskPauseService {
 
     const task = await this.taskRepo.findOneByOrFail({ id: taskId });
     await this.taskState.recordTaskState(task, task.status, 'paused by a user');
+    return task;
+  }
+
+  /**
+   * Closes a finished task's room in the office view, for every viewer. The
+   * room otherwise stays, so its outcome can still be seen.
+   *
+   * @throws {@link NotFoundException} for an unknown task.
+   * @throws {@link ConflictException} when the task hasn't finished.
+   */
+  async closeVisualisation(taskId: UUID): Promise<TcpTask> {
+    const task = await this.taskRepo.findOneBy({ id: taskId });
+    if (!task) throw new NotFoundException(`Task ${taskId} not found`);
+    if (!FINISHED.includes(task.status)) {
+      throw new ConflictException(
+        "This task hasn't finished, so its room can't be closed.",
+      );
+    }
+    if (task.visualisationClosedAt) return task;
+    task.visualisationClosedAt = new Date();
+    await this.taskRepo.update(taskId, {
+      visualisationClosedAt: task.visualisationClosedAt,
+    });
+    await this.taskState.recordTaskState(task, task.status, 'room closed');
     return task;
   }
 

@@ -369,6 +369,7 @@ const strings = {
 
   'visualisation.tooltip.agent': 'Agent: {role}',
   'visualisation.tooltip.role': 'Role: {role}',
+  'visualisation.tooltip.completed': 'Task completed',
   'visualisation.tooltip.task': 'Task {shortcode}: ({step}/{steps})',
 
   // Canvas labels (`ui/officeLabels.ts`), each kind behind a checkbox.
@@ -452,6 +453,10 @@ const strings = {
   'visualisation.tray.listenIn': 'Listen in to {role}',
   'visualisation.tray.chatWithRole': 'Chat with {role}',
   'visualisation.tray.close': 'Close details',
+  'visualisation.tray.closeRoom': 'Close room',
+  'visualisation.tray.outputs': 'Outputs',
+  'visualisation.tray.outputsUnconfigured':
+    'The storage browser is not configured, so the outputs link is unavailable.',
 
   // The archive panel (`ui/ArchiveDetails.tsx`): the bookshelf's tray, a list
   // of completed tasks linking out to Silo. A link's accessible name is its

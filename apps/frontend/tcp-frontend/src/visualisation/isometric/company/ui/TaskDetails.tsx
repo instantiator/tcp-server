@@ -1,14 +1,20 @@
 import {
-  useCompanyRolesList,
+  useCloseTaskVisualisation,
   useLiveAssignmentsList,
+  useLiveCompanyState,
   useLiveCompanyTasksList,
+  useCompanyRolesList,
 } from '../../../../api/hooks';
+import { refusalKey } from '../../../../api/errors';
+import { taskOutputsUrl } from '../../../../api/storageLink';
+import { ErrorState } from '../../../../components/ErrorState/ErrorState';
+import { getRuntimeConfig } from '../../../../runtime-config';
 import type { AssignmentDTO } from '../../../../api/dtos';
 import { Info } from 'lucide-react';
 import { Fragment, type ReactNode } from 'react';
 import { Button, Tooltip, TooltipTrigger } from 'react-aria-components';
 import { Icon } from '../../../../components/Icon/Icon';
-import { statusLabel } from '../../../../api/statuses';
+import { ACTIVE_TASK_STATUSES, statusLabel } from '../../../../api/statuses';
 import { ExpandableText } from '../../../../components/ExpandableText/ExpandableText';
 import { t } from '../../../../strings';
 import { modeLabel } from './modeLabel';
@@ -20,6 +26,11 @@ export interface TaskDetailsProps {
   readonly headingId: string;
   /** The follow toggle, shown beside this panel's own heading. */
   readonly headingAction?: ReactNode;
+  /**
+   * Called once the task's room has closed, so the tray can let go of a
+   * selection whose whiteboard has gone and put focus somewhere deliberate.
+   */
+  readonly onRoomClosed?: () => void;
   /** Where the assignment tooltips are portalled; see `VisualisationTrayProps.portalContainer`. */
   readonly portalContainer?: Element | undefined;
 }
@@ -81,6 +92,40 @@ const AssignmentInfo = ({
 );
 
 /**
+ * The link to a succeeded task's outputs in Silo, marked up as the archive's
+ * rows are: the visible text leads the accessible name and a hidden suffix
+ * warns of the new tab (WCAG 2.5.3). Without storage configured, or before
+ * the company has loaded, there is no URL, so it says why instead.
+ */
+const OutputsLink = ({
+  slug,
+  taskId,
+}: {
+  readonly slug: string | undefined;
+  readonly taskId: string;
+}) => {
+  const url =
+    slug === undefined
+      ? null
+      : taskOutputsUrl(getRuntimeConfig(), slug, taskId);
+  if (url === null) {
+    return slug === undefined ? null : (
+      <p>{t('visualisation.tray.outputsUnconfigured')}</p>
+    );
+  }
+  return (
+    <p>
+      <a href={url} target="_blank" rel="noopener noreferrer">
+        {t('visualisation.tray.outputs')}{' '}
+        <span className="visually-hidden">
+          {t('visualisation.archive.linkSuffix')}
+        </span>
+      </a>
+    </p>
+  );
+};
+
+/**
  * One task's live details in the office tray: its request, its status, and
  * its assignments numbered in creation order, split into those in progress and those completed.
  *
@@ -93,11 +138,14 @@ export const TaskDetails = ({
   taskId,
   headingId,
   headingAction,
+  onRoomClosed,
   portalContainer,
 }: TaskDetailsProps) => {
   const tasksQuery = useLiveCompanyTasksList(companyId);
   const { data: roles } = useCompanyRolesList(companyId);
   const { data: assignments } = useLiveAssignmentsList({ companyId });
+  const companyQuery = useLiveCompanyState(companyId);
+  const closeRoom = useCloseTaskVisualisation(taskId);
 
   if (tasksQuery.isPending) {
     return (
@@ -145,6 +193,11 @@ export const TaskDetails = ({
     },
   ].filter((section) => section.rows.length > 0);
 
+  const finished = !(ACTIVE_TASK_STATUSES as readonly string[]).includes(
+    task.status,
+  );
+  const canCloseRoom = finished && !task.visualisationClosedAt;
+
   return (
     <>
       <TrayHeading id={headingId} action={headingAction}>
@@ -157,6 +210,26 @@ export const TaskDetails = ({
         collapseLabel={t('visualisation.tray.prompt.collapse')}
       />
       <p>{statusLabel(task.status)}</p>
+      {task.status === 'succeeded' && (
+        <OutputsLink slug={companyQuery.data?.slug} taskId={taskId} />
+      )}
+      {canCloseRoom && (
+        <Button
+          className="react-aria-Button"
+          isDisabled={closeRoom.isPending}
+          onPress={() => {
+            closeRoom.mutate(undefined, { onSuccess: onRoomClosed });
+          }}
+        >
+          {t('visualisation.tray.closeRoom')}
+        </Button>
+      )}
+      {closeRoom.isError && (
+        <ErrorState
+          message={t(refusalKey(closeRoom.error, 'closeVisualisation'))}
+          channel={`task-closeVisualisation:${taskId}`}
+        />
+      )}
       {sections.map((section) => (
         <Fragment key={section.heading}>
           <h3>{section.heading}</h3>

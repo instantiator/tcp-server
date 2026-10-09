@@ -17,7 +17,11 @@ import {
 } from '../world/worldOps';
 import { applyAgentAvatarRules } from './agentAvatarRules';
 import type { RuleContext } from './applyRules';
-import type { CompanySnapshot, SnapshotAgent } from './companySnapshot';
+import type {
+  CompanySnapshot,
+  SnapshotAgent,
+  SnapshotTask,
+} from './companySnapshot';
 
 const ctxFirst: RuleContext = { firstSnapshot: true };
 const ctxLater: RuleContext = { firstSnapshot: false };
@@ -28,6 +32,7 @@ function agent(overrides: Partial<SnapshotAgent> = {}): SnapshotAgent {
     roleId: 'role-1',
     assignmentId: 'assignment-1',
     taskId: 'task-1',
+    status: 'idle',
     activity: { kind: 'atDesk' },
     ...overrides,
   };
@@ -72,6 +77,27 @@ describe('applyAgentAvatarRules', () => {
     const world = applyAgentAvatarRules(
       createInitialWorld(),
       snapshot([agent()]),
+      ctxLater,
+    );
+    expect(world.avatars).toHaveLength(0);
+  });
+
+  it('gives no avatar to a live agent on a finished task, whose room is still open', () => {
+    const finishedTask: SnapshotTask = {
+      id: 'task-1',
+      shortcode: 'T1',
+      request: 'Do the thing',
+      finished: true,
+      succeeded: true,
+      status: 'succeeded',
+      pausedAt: null,
+      visualisationClosedAt: null,
+      step: 1,
+      steps: 1,
+    };
+    const world = applyAgentAvatarRules(
+      worldWithTaskRoom(),
+      { roles: [], tasks: [finishedTask], agents: [agent()] },
       ctxLater,
     );
     expect(world.avatars).toHaveLength(0);
@@ -143,6 +169,7 @@ describe('applyAgentAvatarRules', () => {
         agent({
           id: 'agent-1',
           roleId: 'role-a',
+          status: 'completed',
           activity: { kind: 'finished' },
         }),
         agent({
@@ -175,6 +202,7 @@ describe('applyAgentAvatarRules', () => {
         agent({
           id: 'agent-1',
           roleId: 'role-a',
+          status: 'completed',
           activity: { kind: 'finished' },
         }),
         agent({
@@ -198,6 +226,7 @@ describe('applyAgentAvatarRules', () => {
     const chatAgent = agent({
       id: 'chat-1',
       taskId: null,
+      status: 'idle',
       activity: { kind: 'messagingUser' },
     });
     let world = applyAgentAvatarRules(
@@ -290,6 +319,7 @@ describe('applyAgentAvatarRules', () => {
         agent({
           id: 'agent-1',
           roleId: 'role-a',
+          status: 'completed',
           activity: { kind: 'finished' },
         }),
         agent({

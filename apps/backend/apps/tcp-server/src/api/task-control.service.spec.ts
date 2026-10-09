@@ -3,12 +3,13 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { In, IsNull, type Repository } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
-import { TaskPauseService } from './task-pause.service';
+import { TaskControlService } from './task-control.service';
 import { TaskStateService } from './task-state.service';
 
-describe('TaskPauseService', () => {
+describe('TaskControlService', () => {
   const taskId = randomUUID();
   let taskRepo: {
+    findOneBy: jest.Mock;
     existsBy: jest.Mock;
     update: jest.Mock;
     findOneByOrFail: jest.Mock;
@@ -16,7 +17,7 @@ describe('TaskPauseService', () => {
   let agentRepo: { find: jest.Mock; update: jest.Mock };
   let record: jest.Mock;
   let recordTaskState: jest.Mock;
-  let service: TaskPauseService;
+  let service: TaskControlService;
 
   const agent = (): TcpAgent =>
     ({
@@ -28,6 +29,9 @@ describe('TaskPauseService', () => {
 
   beforeEach(() => {
     taskRepo = {
+      findOneBy: jest
+        .fn()
+        .mockResolvedValue({ id: taskId, status: 'succeeded' }),
       existsBy: jest.fn().mockResolvedValue(true),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
       findOneByOrFail: jest
@@ -40,7 +44,7 @@ describe('TaskPauseService', () => {
     };
     record = jest.fn().mockResolvedValue(undefined);
     recordTaskState = jest.fn().mockResolvedValue(undefined);
-    service = new TaskPauseService(
+    service = new TaskControlService(
       taskRepo as unknown as Repository<TcpTask>,
       agentRepo as unknown as Repository<TcpAgent>,
       { record } as unknown as AuditService,
@@ -110,5 +114,49 @@ describe('TaskPauseService', () => {
     await expect(service.pause(taskId, 'Ada')).rejects.toBeInstanceOf(
       NotFoundException,
     );
+  });
+
+  describe('closeVisualisation', () => {
+    it("closes a finished task's room and records it", async () => {
+      const task = await service.closeVisualisation(taskId);
+
+      expect(task.visualisationClosedAt).toBeInstanceOf(Date);
+      expect(taskRepo.update).toHaveBeenCalledWith(taskId, {
+        visualisationClosedAt: task.visualisationClosedAt,
+      });
+      expect(recordTaskState).toHaveBeenCalledWith(
+        task,
+        'succeeded',
+        'room closed',
+      );
+    });
+
+    it('leaves an already-closed room as it is', async () => {
+      const closedAt = new Date(0);
+      taskRepo.findOneBy.mockResolvedValue({
+        id: taskId,
+        status: 'failed',
+        visualisationClosedAt: closedAt,
+      });
+
+      const task = await service.closeVisualisation(taskId);
+
+      expect(task.visualisationClosedAt).toBe(closedAt);
+      expect(taskRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('409s a task still going', async () => {
+      taskRepo.findOneBy.mockResolvedValue({ id: taskId, status: 'planning' });
+      await expect(service.closeVisualisation(taskId)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+    });
+
+    it('404s an unknown task', async () => {
+      taskRepo.findOneBy.mockResolvedValue(null);
+      await expect(service.closeVisualisation(taskId)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
   });
 });

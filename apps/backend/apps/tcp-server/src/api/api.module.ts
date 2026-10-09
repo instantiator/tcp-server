@@ -65,7 +65,7 @@ import { TaskDispatcher } from './task-dispatcher.service';
 import { TaskFailureService } from './task-failure.service';
 import { TaskOrchestrationService } from './task-orchestration.service';
 import { TaskRecoveryService } from './task-recovery.service';
-import { TaskPauseService } from './task-pause.service';
+import { TaskControlService } from './task-control.service';
 import { TaskStateService } from './task-state.service';
 import { TaskService } from './task.service';
 
@@ -144,7 +144,7 @@ import { TaskService } from './task.service';
     // delegating status writes, artifact promotion, QA verdicts, failure
     // propagation and startup repair to the collaborators below.
     TaskOrchestrationService,
-    TaskPauseService,
+    TaskControlService,
     TaskStateService,
     TaskDeliverablesService,
     QaVerdictService,

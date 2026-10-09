@@ -155,15 +155,26 @@ function attachNoTaskAgent(
   return next;
 }
 
-/** Gives every unfinished snapshot agent that isn't shown yet its avatar. */
+/**
+ * Gives every unfinished snapshot agent that isn't shown yet its avatar. An
+ * agent still live on a finished task gets none: its task room can outlast
+ * the task (until the user closes it), but nobody new walks into it.
+ */
 function attachNewAgents(
   world: OfficeWorld,
   snapshot: CompanySnapshot,
   ctx: RuleContext,
 ): OfficeWorld {
+  const finishedTaskIds = new Set(
+    snapshot.tasks.filter((task) => task.finished).map((task) => task.id),
+  );
+
   let next = world;
   for (const agent of snapshot.agents) {
-    if (agent.activity.kind === 'finished') {
+    if (
+      agent.activity.kind === 'finished' ||
+      (agent.taskId !== null && finishedTaskIds.has(agent.taskId))
+    ) {
       continue;
     }
     const shown = next.avatars.some(

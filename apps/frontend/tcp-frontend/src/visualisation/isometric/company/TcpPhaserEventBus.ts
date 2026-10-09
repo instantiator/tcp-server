@@ -1,6 +1,7 @@
 // EventBus.js
 import { Events } from 'phaser';
 
+import type { OfficeLighting } from './rules/roomLighting';
 import type { OfficeWorld, Tile } from './world/types';
 
 export const TcpPhaserEventBus = new Events.EventEmitter();
@@ -15,13 +16,21 @@ export type SelectionTarget =
 
 /**
  * What a hover landed on. Roles, agents and tasks can also be selected;
- * furniture and rooms (by their doorway) only explain themselves in a
- * tooltip. `id` is the furniture or room id from the office world.
+ * furniture, rooms (by their doorway) and a task's completed tick only
+ * explain themselves in a tooltip. `id` is the furniture or room id from the
+ * office world, or, for the tick, the task's id.
  */
 export type HoverTarget =
   | SelectionTarget
   | { readonly kind: 'furniture'; readonly id: string }
-  | { readonly kind: 'room'; readonly id: string };
+  | { readonly kind: 'room'; readonly id: string }
+  | { readonly kind: 'completed'; readonly id: string };
+
+/** What the scene draws beyond the world's layout: the lighting, and which tasks wear a tick. */
+export interface OfficeStatus extends OfficeLighting {
+  /** Succeeded tasks: each draws a tick above its whiteboard. */
+  readonly completedTaskIds: ReadonlySet<string>;
+}
 
 /** A hover over something in the office. `x`/`y` are canvas-relative pixels. */
 export interface HoverEvent {
@@ -53,7 +62,7 @@ export interface OfficeLabel {
  * one case in each of three unions.
  *
  * React → scene: `world-changed`, `camera-pan`, `camera-follow`,
- * `motion-preference`, `labels-changed`, `thinking-changed`. Scene → React:
+ * `motion-preference`, `labels-changed`, `thinking-changed`, `status-changed`. Scene → React:
  * `scene-ready`, `avatar-arrived`, `avatar-exited`, `hover`, `select`,
  * `follow-stopped`, `listen-in`. Listeners on the
  * React side live only in `TcpPhaserVisualisation`; `CompanyVisualisation`
@@ -71,6 +80,8 @@ export interface TcpPhaserEventMap {
   'labels-changed': readonly OfficeLabel[];
   /** The agents that are working now, each shown with a thought bubble (005.01). */
   'thinking-changed': readonly string[];
+  /** Which rooms and boards are lit, and which tasks are done. The scene redraws only when it changes by value. */
+  'status-changed': OfficeStatus;
 
   'avatar-arrived': { readonly avatarId: string; readonly tile: Tile };
   'avatar-exited': { readonly avatarId: string };

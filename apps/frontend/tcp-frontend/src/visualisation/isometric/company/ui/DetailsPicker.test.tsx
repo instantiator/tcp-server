@@ -18,6 +18,9 @@ const SNAPSHOT: CompanySnapshot = {
       request: 'Reconcile accounts',
       finished: false,
       succeeded: false,
+      status: 'in-progress',
+      pausedAt: null,
+      visualisationClosedAt: null,
       step: 1,
       steps: 2,
     },
@@ -27,6 +30,21 @@ const SNAPSHOT: CompanySnapshot = {
       request: 'Archive old records',
       finished: true,
       succeeded: true,
+      status: 'succeeded',
+      pausedAt: null,
+      visualisationClosedAt: null,
+      step: 2,
+      steps: 2,
+    },
+    {
+      id: 'task-3',
+      shortcode: 'TASK-3',
+      request: 'Archive old records',
+      finished: true,
+      succeeded: true,
+      status: 'succeeded',
+      pausedAt: null,
+      visualisationClosedAt: '2026-10-09T10:00:00.000Z',
       step: 2,
       steps: 2,
     },
@@ -37,6 +55,7 @@ const SNAPSHOT: CompanySnapshot = {
       roleId: 'role-1',
       assignmentId: 'assign-1',
       taskId: 'task-1',
+      status: 'running',
       activity: { kind: 'working' },
     },
     {
@@ -44,6 +63,7 @@ const SNAPSHOT: CompanySnapshot = {
       roleId: 'role-2',
       assignmentId: 'assign-2',
       taskId: null,
+      status: 'idle',
       activity: { kind: 'messagingUser' },
     },
     {
@@ -51,6 +71,7 @@ const SNAPSHOT: CompanySnapshot = {
       roleId: 'role-1',
       assignmentId: 'assign-3',
       taskId: 'task-2',
+      status: 'completed',
       activity: { kind: 'finished' },
     },
   ],
@@ -85,7 +106,7 @@ describe('DetailsPicker', () => {
     ).toBeInTheDocument();
   });
 
-  it('lists only unfinished tasks', async () => {
+  it('lists every task whose room is open, finished or not, and none whose room is closed', async () => {
     const user = userEvent.setup();
     render(
       <DetailsPicker snapshot={SNAPSHOT} selection={null} onSelect={vi.fn()} />,
@@ -98,8 +119,13 @@ describe('DetailsPicker', () => {
       }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('option', {
+      screen.getByRole('option', {
         name: t('visualisation.picker.task', { shortcode: 'TASK-2' }),
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('option', {
+        name: t('visualisation.picker.task', { shortcode: 'TASK-3' }),
       }),
     ).toBeNull();
   });
@@ -124,9 +150,9 @@ describe('DetailsPicker', () => {
         name: t('visualisation.picker.agent', { role: 'Legal' }),
       }),
     ).toBeInTheDocument();
-    // 2 roles + 1 unfinished task + 2 non-finished agents + 1 archive:
+    // 2 roles + 2 open-room tasks + 2 non-finished agents + 1 archive:
     // agent-3 has finished and must not appear at all, under either wording.
-    expect(screen.getAllByRole('option')).toHaveLength(6);
+    expect(screen.getAllByRole('option')).toHaveLength(7);
   });
 
   it('always lists the Archive item, since there is only ever one archive', async () => {
