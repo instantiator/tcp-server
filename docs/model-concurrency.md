@@ -145,5 +145,8 @@ all. Resume one yourself the same way you'd resume a spend-capped task:
 ```
 
 See [tcp-cli.md](tcp-cli.md#resume-task) for the full command reference.
+A task a user paused (`pause-task`) is not resumed by the automatic sweep, or
+by `resume-company`. Only `resume-task` lifts that pause, and it lifts a rate
+limit at the same time.
 Resuming is also what to do with `RATE_LIMIT_AUTO_RESUME=false` — the pause
 never clears on its own until you do.

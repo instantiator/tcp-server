@@ -254,3 +254,11 @@ everyone, not just their own company.
   000.04 (a Resume button in the task dialog), 003.03 (push delivery on the
   `notification` table), 004.01 (automatic task starts must honour
   `finish-tasks` and the gate), and 005.00 (per-task usage on the dashboard).
+
+## Amendment as implemented (000.04, phase 04) <a id="amendment-as-implemented-p04-000-04"></a>
+
+[000.04](../prompts/phase%2004%20-%20utility/000.04.01.plan%20-%20task%20controls%20and%20failure%20reasons%20in%20the%20web%20ui%20and%20cli.md) changed three things this ADR said. The mechanism for them is in [ADR-033](ADR-033-task-pause-failure-reasons-and-wait-reasons.md).
+
+- **Resume exempts a task only while a cap is reached.** "Enforcement" above says `POST /api/task/:id/resume` and `POST /api/company/:slug/resume` mark the task `spendCapExempt` always. They now do it only if a cap is reached at that moment (`exemptIfCapped`), the same rule as Start. Resuming a user's own pause, with no cap reached, no longer switches off spend protection.
+- **A company resume skips tasks a user paused.** `resumeCompany` leaves a manually paused task for its own `resumeTask`. The spend-cap sweep skips them too.
+- **Task notices now exist beside spend notices.** Notifications gained a nullable `companyId` and `taskId`, and two kinds, `task_failed` and `task_paused`. "Notifications are application-wide" is no longer the whole story: a task notice belongs to its company, is listed by `GET /api/notifications/company/:companyId`, and is broadcast only on that company's channel. Dismissing one is open to the company's members and administrators only (404 for anyone else). Spend notices stay application-wide.

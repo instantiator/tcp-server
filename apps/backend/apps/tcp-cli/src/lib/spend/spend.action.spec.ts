@@ -85,6 +85,18 @@ describe('notificationsAction', () => {
     );
   });
 
+  it("lists a company's own notices on its route with --company-id", async () => {
+    mockedApiRequest.mockResolvedValueOnce([]);
+
+    await notificationsAction(opts, { companyId: 'c 1', all: true });
+
+    expect(mockedApiRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      'GET',
+      '/api/notifications/company/c%201?includeDismissed',
+    );
+  });
+
   it('includes dismissed notifications with --all', async () => {
     mockedApiRequest.mockResolvedValueOnce([]);
 

@@ -158,3 +158,14 @@ The "Add new" control ([003.01](../prompts/phase%2003%20-%20web%20visualisation/
 - **Icon-only controls are named twice, the same way.** Every round icon button (Account, Add new, Show details for…, Close details, Follow, pan, full screen) has an `aria-label` and a tooltip with the same words, through `WithTooltip` in `components/Icon/Icon.tsx` (WCAG 2.5.3). Sizes come from tokens that clear the 24px target minimum; the floating "Add new" clears 44px.
 - **A highlight colour joined both themes** (`--tcp-color-highlight` and its text colour), at 4.5:1 in the default theme and 7:1 in high contrast, for the tabs' count badges.
 - **Only CSS moved the office view's controls.** Their DOM order, and so the tab order, is unchanged. The new slides (tray, "Add new") are CSS transitions, which the existing reduced-motion rule already cancels.
+
+## Amendment as implemented (000.04, phase 04) <a id="amendment-as-implemented-p04-000-04"></a>
+
+[000.04](../prompts/phase%2004%20-%20utility/000.04.01.plan%20-%20task%20controls%20and%20failure%20reasons%20in%20the%20web%20ui%20and%20cli.md) made toasts short-lived. The "no timing" rule above (2.2.3) said a toast that vanishes loses information, so it had to persist or be duplicated somewhere durable. The durable copy is what makes a timer allowed.
+
+- **A toast hides itself after 8 seconds** (`AUTO_HIDE_MS` in `components/Notification/auto-hide.ts`). The timer pauses while the toast is hovered or has focus inside it, and restarts when the pointer or focus leaves. Dismiss is still a button.
+- **The durable row is the reason this is allowed.** `Notification`'s `durableHref` is a required prop, so a toast that points at no durable row cannot be written. The compile-time rule from `003.03` stays; it now carries the weight of 2.2.3.
+- **The message is the link.** Clicking the toast goes to its own row: `?notification=<id>#notifications`, or `?enquiry=<id>#enquiries` for a new enquiry.
+- **A deep link focuses the row.** The list reads the query parameter once its data has loaded, scrolls the matching row into view, focuses it (`tabIndex={-1}`) and sets `aria-current="true"` on it (`useFocusLinkedRow`). A hash change moves no focus by itself ([ADR-027](ADR-027-screen-reader-strategy.md)), so the list does it.
+- **A task notice's row links to its task.** "Open task" goes to `?task=<id>#tasks`, which `TasksList` reads to open the task dialog.
+- **Reduced motion.** The toast has no animation under `prefers-reduced-motion`.

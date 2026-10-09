@@ -118,7 +118,7 @@ See [schema.md](schema.md) for the full field reference, VS Code integration, ex
 | [`eavesdrop`](#eavesdrop)                                   | `eavesdrop (--agent-id \| --assignment-id \| --task-id <uuid>) [--show-history] [--tail]`                           | Replay and/or follow an agent's, assignment's, or task's activity                             |
 | [`shutdown`](#shutdown)                                     | `shutdown [--force] [--no-stop] [--timeout <seconds>]`                                                              | Drain the system for shutdown, wait for agents to pause, then stop the containers             |
 | [`usage`](#usage)                                           | `usage [--company-id <id-or-slug>]`                                                                                 | Report spend caps, usage and totals                                                           |
-| [`notifications`](#notifications)                           | `notifications [--all]`                                                                                             | List application-wide notifications                                                           |
+| [`notifications`](#notifications)                           | `notifications [--all] [--company-id <uuid>]`                                                                       | List notifications (a company's own with `--company-id`)                                      |
 | [`dismiss-notification`](#dismiss-notification)             | `dismiss-notification --notification-id <uuid>`                                                                     | Dismiss a notification                                                                        |
 | [`dismiss-cap`](#dismiss-cap)                               | `dismiss-cap --provider <id> [--indefinitely]`                                                                      | Lift a provider's spend cap (administrators only)                                             |
 | [`restore-cap`](#restore-cap)                               | `restore-cap --provider <id>`                                                                                       | Restore a provider's spend cap (administrators only)                                          |
@@ -1345,17 +1345,21 @@ Reports application-wide spend caps, progress and totals. With
 ### `notifications`
 
 Lists application-wide notifications (spend thresholds, caps reached, resets,
-untracked providers), newest first.
+untracked providers), newest first. With `--company-id`, also lists that
+company's own notices: a task that failed, or one a shutdown paused. Only the
+company's members may list them (`403` otherwise).
 
 - **stdout**: `TcpNotification[]` as JSON
 
-| Flag    | Description                             |
-| ------- | --------------------------------------- |
-| `--all` | Include already-dismissed notifications |
+| Flag                  | Description                                 |
+| --------------------- | ------------------------------------------- |
+| `--all`               | Include already-dismissed notifications     |
+| `--company-id <uuid>` | Also list this company's own (task) notices |
 
 ```bash
 ./tcp-cli.sh -t $TOKEN notifications
 ./tcp-cli.sh -t $TOKEN notifications --all
+./tcp-cli.sh -t $TOKEN notifications --company-id <uuid>
 ```
 
 ### `dismiss-notification`

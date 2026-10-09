@@ -304,3 +304,11 @@ before if it was last. Axe and a focus assertion cover both paths.
 - **The URL hash selects a tab.** This is what lets the new-enquiry notification's durable link land: `#enquiries` opens the Enquiries tab. A hash change moves no focus, because the route-change rule watches only the pathname.
 - **The company page `h1` is visually hidden.** The header and the breadcrumb show the name on screen; the heading is still the focus target on arrival.
 - **Thought bubbles are pointer-only, and announce nothing.** A bubble over a working agent is decoration, like movement. Clicking it listens in on that agent, and the keyboard route to the same chat is the picker, then the tray, then "Listen in". Dragging the canvas pans it, and a press that becomes a drag selects nothing; the pan buttons and keys remain the non-pointer route.
+
+## Amendment as implemented (000.04, phase 04) <a id="amendment-as-implemented-p04-000-04"></a>
+
+[000.04](../prompts/phase%2004%20-%20utility/000.04.01.plan%20-%20task%20controls%20and%20failure%20reasons%20in%20the%20web%20ui%20and%20cli.md) changed the toast row of the policy table. A toast now hides after 8 seconds, and the timer pauses on hover and focus. [ADR-026's amendment](ADR-026-web-ui-accessibility-and-component-library.md#amendment-as-implemented-p04-000-04) says why this is within 2.2.3: every toast links to a durable row.
+
+- **The announcement is unchanged.** It is still made once, on appearance, and `assertive` on failure. Hiding the toast announces nothing.
+- **Clicking the message goes to the row,** and the row takes focus and `aria-current`. The list moves that focus, not the hash change.
+- **The "never the only notice" rule now has a second half.** The row has to be reachable for as long as the event matters, since the toast is gone after 8 seconds.

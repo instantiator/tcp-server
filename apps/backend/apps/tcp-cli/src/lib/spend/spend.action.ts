@@ -44,15 +44,17 @@ export function usageAction(
 /** Lists notifications; `--all` includes already-dismissed ones. stdout: `TcpNotification[]`. */
 export function notificationsAction(
   opts: GlobalOptions,
-  cmdOpts: { all?: boolean },
+  cmdOpts: { all?: boolean; companyId?: string },
 ): Promise<void> {
   return runCommand(async () => {
     const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
     const api = apiOptions(opts, token);
 
-    const path = cmdOpts.all
-      ? '/api/notifications?includeDismissed'
+    // A company's own notices are listed only on its membership-checked route.
+    const base = cmdOpts.companyId
+      ? `/api/notifications/company/${encodeURIComponent(cmdOpts.companyId)}`
       : '/api/notifications';
+    const path = cmdOpts.all ? `${base}?includeDismissed` : base;
     const notifications = await apiRequest<TcpNotification[]>(api, 'GET', path);
     process.stdout.write(JSON.stringify(notifications, null, 2) + '\n');
   });

@@ -81,9 +81,11 @@ something you're actively having, not unattended work.
   held back before its first LLM call has nothing saved yet, so it simply
   starts.)
 - Chats keep working regardless of the action.
-- **A task you start while a cap is reached, or resume, keeps running until
+- **A task you start or resume while a cap is reached keeps running until
   it ends.** Starting or resuming is you choosing to spend; the cap won't
-  pause that task again at its next call.
+  pause that task again at its next call. This holds only if a cap is reached
+  at that moment. Resuming a task you paused yourself, with no cap reached,
+  exempts nothing, so the task is still protected if a cap is reached later.
   A task started automatically (once scheduling exists) does not get this
   exemption.
 
@@ -100,8 +102,11 @@ a courtesy, not a guarantee.
 | CLI    | `tcp-cli.sh resume-task --task-id <uuid>` or `resume-company --company-id <id-or-slug>`                                    |
 | Admins | `tcp-cli.sh dismiss-cap --provider <id> [--indefinitely]` lifts the cap itself; `restore-cap --provider <id>` puts it back |
 
-Resuming a task or a company exempts just that task (or that company's
-paused tasks) until they end — it doesn't lift the cap for anyone else.
+Resuming a task or a company while a cap is reached exempts just that task
+(or that company's paused tasks) until they end — it doesn't lift the cap for
+anyone else. With no cap reached, a resume exempts nothing. Resuming a company
+skips a task a user paused with `pause-task`: resume that task by itself.
+The cap's automatic resume skips it too.
 Lifting a cap with `dismiss-cap` does, for every company, which is why it's
 restricted to administrators. There is no "lift until reset" button in the
 web UI for the same reason: only administrators may lift a cap, and the web

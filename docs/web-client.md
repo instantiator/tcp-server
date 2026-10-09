@@ -241,7 +241,9 @@ Choosing a tab replaces the history entry rather than pushing one.
 `useRouteChange` watches only the pathname, so a hash change moves no focus.
 This is what lets the new-enquiry notification's link to `#enquiries` open
 that tab, and a spend notification toast's link to `#notifications` open the
-Notifications tab the same way. The activity panels stay mounted while hidden
+Notifications tab the same way. A query parameter can also name a row or a
+dialog: `?notification=<id>#notifications` and `?enquiry=<id>#enquiries` focus
+that row (below), and `?task=<id>#tasks` opens that task's dialog. The activity panels stay mounted while hidden
 (`shouldForceMount`, then `inert` and `display: none`), so a list keeps its
 filters across a tab switch, and each tab's count badge stays current.
 
@@ -334,9 +336,10 @@ assertively through the one announcer
 ([ADR-027](ADRs/ADR-027-screen-reader-strategy.md#one-announcer-not-scattered-live-regions))
 and shows a **Stay signed in** control that makes the same redirect on demand —
 that control is what makes the timed session meet WCAG 2.2.1 "Timing
-Adjustable". Nothing here self-dismisses on a timer
-([ADR-026](ADRs/ADR-026-web-ui-accessibility-and-component-library.md), WCAG
-2.2.3); the warning leaves only when the session renews or the user is removed.
+Adjustable". This warning never self-dismisses on a timer (it has no durable
+row behind it, unlike a toast; see
+[ADR-026](ADRs/ADR-026-web-ui-accessibility-and-component-library.md), WCAG
+2.2.3); it leaves only when the session renews or the user is removed.
 
 ## Signing out
 
@@ -502,8 +505,22 @@ region, and three failing lists would mount three of them. `Notification`'s
 `durableHref` is required for the same kind of reason — WCAG 2.2.3, adopted by
 [ADR-026](ADRs/ADR-026-web-ui-accessibility-and-component-library.md), forbids a
 notice that vanishes being the only record of an event, and a required prop
-enforces that at compile time rather than at review time. Nothing here
-self-dismisses.
+enforces that at compile time rather than at review time.
+
+Since 000.04 a `Notification` toast does hide itself, after `AUTO_HIDE_MS`
+(8 seconds, in `components/Notification/auto-hide.ts`). The required durable
+link is what allows it: the event is still in its list when the toast is gone
+([ADR-026's amendment](ADRs/ADR-026-web-ui-accessibility-and-component-library.md#amendment-as-implemented-p04-000-04)).
+The timer pauses while the toast is hovered or has focus within it, and
+restarts when the pointer or focus leaves. The message is the link, so
+clicking it goes to the toast's own row, and Dismiss stays a separate button.
+`NewNotificationToasts` links to `/company/{id}?notification={id}#notifications`
+and `NewEnquiryNotifications` to `?enquiry={id}#enquiries`. Once its data has
+loaded, `NotificationsList` (and `EnquiriesList`) scrolls the matching row into
+view, focuses it and sets `aria-current="true"` on it (`useFocusLinkedRow`): a
+hash change moves no focus by itself, so the list does. A task notification's
+row has an **Open task** link, which opens the task dialog through `?task=`.
+Announcement is unchanged: once, on appearance.
 
 Nothing consumes these yet: 006.01 and 007.01 are the first views to.
 
@@ -844,6 +861,36 @@ role. Clicking a row calls the same `openChat` the office view's "Listen in"
 button does, which reopens it in the dialog — read-write if it's the same
 conversation reopening, read-only if it's a fresh listen-in on someone else's.
 
+## The task dialog
+
+`TaskDialog` shows a task's details, a collapsible panel per assignment, and
+controls that depend on its state. Every control is a hook in `src/api/hooks.ts`
+(`useStartTask`, `usePauseTask`, `useResumeTask`, `useUpdateTask`,
+`useCancelTask`).
+
+| Control    | Shown when                                                             | Does                                                                                           |
+| ---------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| **Start**  | The task is `ready`                                                    | Starts it, as `start-task` does                                                                |
+| **Edit**   | The task is `ready`                                                    | Opens `CreateTaskDialog` in edit mode: request, planner and expected outputs                   |
+| **Pause**  | The task is running and not paused                                     | Pauses it. Agents stop after their current step, so the dialog reads "Pausing" until they have |
+| **Resume** | The task is paused, or an agent waits on something a task resume lifts | Resumes it, as `resume-task` does                                                              |
+| **Cancel** | The task is active                                                     | Asks to confirm, then cancels                                                                  |
+
+- **"Why it's waiting"** shows what holds the task still, and who paused it for
+  a manual pause. It is worked out from the live agents (`taskWaiting`, shared
+  with the CLI), so it is only as fresh as the company stream. The dialog opens
+  only the task stream, so a dialog opened outside the company page would show
+  the last fetched value. **"Why it failed"** shows the task's `failureReason`.
+- **A refused action is explained in plain words.** `refusalKey(error, action)`
+  in `src/api/errors.ts` maps a status to a string ("This task isn't running, so
+  it can't be paused.", "This task no longer exists", and so on), and
+  `ErrorState` shows it. A `401` is already a sign-in redirect.
+- **When a control disappears, focus moves to the details section,** the answer
+  ADR-027 already gives for a focused control that goes away.
+- **Edit keeps each expected output's type.** An output the CLI set as
+  `inline-text` stays inline text; it is not turned into a file name.
+- **The task dialog still has no "Add new" menu**, by decision.
+
 ## "Add new": starting a task or a chat
 
 `src/components/AddNew/AddNewMenu.tsx` (003.01) is a React Aria menu button
@@ -894,9 +941,37 @@ header.
   per role, always present), the **mail room** (chat and enquiry avatars,
   always present), the **archive room** (fixed slot 2, always present — a
   bookshelf of completed tasks), the **corridor** with the **office door**,
-  one **task room** per unfinished task, and one **1:1 room** per open
-  consultation. Dynamic rooms (task and 1:1) start at slot 3
+  one **task room** per task whose room is still open, and one **1:1 room**
+  per open consultation. Dynamic rooms (task and 1:1) start at slot 3
   (`FIRST_DYNAMIC_SLOT`), after the three fixed ones.
+- **Finished task rooms stay until closed.** A task's room opens for any task
+  whose `visualisationClosedAt` is not set, and closes only when it is. When
+  the task finishes the avatars still leave, and a succeeded task's carrier
+  still walks the outputs to the archive, but the room stays so the result can
+  be seen. A finished task's tray has a **Close room** button, which calls
+  `POST /api/task/:id/close-visualisation` and sets `visualisationClosedAt`.
+  The flag is on the server, so a closed room stays closed after a reload and
+  for every viewer. A succeeded task's tray also links to its outputs, shown
+  only on success. The "Show details for…" picker lists every open room, so a
+  finished room stays reachable by keyboard. There is no CLI `close-room`.
+- **A tick marks a succeeded task.** A small tick above its whiteboard has a
+  hover-only zone with the tooltip "Task completed". Failed and cancelled rooms
+  get no marker.
+- **Lighting shows what is being worked.** A room is lit while a running
+  agent's avatar is in it, and the corridor is always lit. A task's whiteboard
+  is lit while the task is `planning`, `in-progress` or `finalising` and not
+  paused. Everything else is dimmed (`palette.dim()`). `rules/roomLighting.ts`
+  works it out as a pure function, and the scene redraws its static layers only
+  when the lit sets change by value. The switch is instant, with no fade, so
+  reduced motion needs nothing. Like the rest of the canvas, it ignores themes.
+- **Tooltips name the task.** The whiteboard reads "Task NNN: (step/steps)", the
+  task room adds a line with the request, and the bookshelf reads "Bookshelf:
+  N", the number of succeeded tasks.
+- **The tray numbers assignments.** The task tray lists them in two sections,
+  "In progress" and "Completed", each an ordered list numbered by the
+  assignment's chronological number (001, 002, …). Each row has an info button,
+  "About assignment N", whose tooltip reads "Task NNN, Assignment NNN" then the
+  prompt.
 - **Roles, as books.** Each role is a small book in its colour, at its spot in
   the rec room, so a role never looks like an agent.
 - **Agent avatars.** A new avatar comes in at the office door, walks to its
@@ -918,7 +993,8 @@ header.
   that most recently left it — tracked by a world-wide sequence counter, not
   assignment order — carries a small box of the task's outputs to the
   archive bookshelf, then leaves. Failed or cancelled tasks don't carry
-  anything; if nobody is left in the room, nobody carries. The bookshelf's
+  anything; if nobody is left in the room, nobody carries. An agent still live
+  on a finished task gets no new avatar. The bookshelf's
   tray lists every succeeded task, newest first, each linking out to its
   outputs folder in Silo — see
   [shared-storage.md](shared-storage.md#links-from-the-web-clients-archive-tray)
@@ -995,13 +1071,13 @@ back only on arrival or exit.
 
 ### Directory layout
 
-| Folder    | Holds                                                                                                                                                                           |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `world/`  | The office model: rooms, furniture, avatars, tiles.                                                                                                                             |
-| `rules/`  | Turns live company data into world changes: `companySnapshot.ts`'s activity mapping, then one rule per concern (roles, task rooms, 1:1 rooms, agent avatars, targets, cleanup). |
-| `motion/` | Walking maths, and the `Crowd` that plans routes, moves walkers and reports arrivals.                                                                                           |
-| `scene/`  | The Phaser-bound layer: draws the static map and furniture, and asks the crowd where each avatar is.                                                                            |
-| `ui/`     | The toolbar, details picker, tooltip and tray — everything a keyboard or screen-reader user needs that the canvas alone can't give.                                             |
+| Folder    | Holds                                                                                                                                                                                              |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `world/`  | The office model: rooms, furniture, avatars, tiles.                                                                                                                                                |
+| `rules/`  | Turns live company data into world changes: `companySnapshot.ts`'s activity mapping, then one rule per concern (roles, task rooms, 1:1 rooms, agent avatars, targets, cleanup, `roomLighting.ts`). |
+| `motion/` | Walking maths, and the `Crowd` that plans routes, moves walkers and reports arrivals.                                                                                                              |
+| `scene/`  | The Phaser-bound layer: draws the static map and furniture, and asks the crowd where each avatar is.                                                                                               |
+| `ui/`     | The toolbar, details picker, tooltip and tray — everything a keyboard or screen-reader user needs that the canvas alone can't give.                                                                |
 
 ### The rules that keep it sound
 

@@ -132,6 +132,8 @@ curl -X POST http://localhost:3000/api/agent/resume/:id \
 
 Valid from status `idle`, `paused`, or `failed`. Re-enqueues the agent; the LangGraph checkpoint store restores prior conversation state.
 
+This route lifts every kind of pause. It still refuses with `409` while the agent's task is paused by a user: only a task resume (`POST /api/task/:id/resume`, `resume-task`) lifts that. Other resumes name the pauses they may lift, so a reply cannot wake an agent paused for a spend cap. See [tasks.md](tasks.md#pause-and-resume).
+
 ---
 
 ## Checking model compatibility
@@ -224,6 +226,52 @@ provider's own hint or the configured backoff elapses, or by an explicit
 `resume-task`/`resume-company`. See
 [model-concurrency.md § Rate limits](model-concurrency.md#rate-limits) and
 [ADR-032](ADRs/ADR-032-model-concurrency-and-rate-limits.md).
+
+---
+
+## Why a run fails
+
+A failed run gets a plain-words reason from one typed table, `RunFailureCode` and `RUN_FAILURE_MESSAGES` in `libs/tcp-shared/src/llm/run-failure.ts`. Each message says what went wrong and, where the user can act, what to do. It is stored as the agent's `errorMessage`, and the task's `failureReason` repeats it behind a prefix such as "The planner stopped." See [tasks.md](tasks.md#failure-reasons).
+
+| Code                     | When                                                                              |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| `unreachable`            | Nothing answered at the provider's address                                        |
+| `llm_timeout`            | The provider didn't answer one call in time (`LLM_TIMEOUT_MS`)                    |
+| `auth_rejected`          | HTTP 401: the key is wrong or missing                                             |
+| `forbidden`              | HTTP 403: the key can't use this model                                            |
+| `model_not_found`        | The model, or the address, is wrong                                               |
+| `tools_unsupported`      | The model refused the request, probably because it can't call tools               |
+| `provider_error`         | HTTP 5xx: a fault at the provider                                                 |
+| `no_llm_config`          | No model is set for the role or its company                                       |
+| `run_timed_out`          | The run's wall-clock limit passed (`AGENT_LOOP_TIMEOUT_MS`)                       |
+| `iteration_limit`        | The run took more LLM calls than `AGENT_ITERATIONS` allows                        |
+| `context_too_long`       | The conversation outgrew the context window, even after trimming                  |
+| `required_tools_missing` | The agent stopped without its required tool, even after reminders                 |
+| `no_output`              | The model returned nothing, even after a retry                                    |
+| `repeating_call`         | The same tool call got the same result three times in a row                       |
+| `service_unavailable`    | A supporting service didn't respond: storage, Redis, the database, an MCP service |
+| `stopped`                | The run was stopped by something else                                             |
+| `unexpected`             | Anything else; the message keeps this system's own error text                     |
+
+A rate limit is not a failure: it pauses the agent (see below).
+
+- **A provider's own text is never shown.** It may hold whatever answered at the address. It goes to the log only. Provider errors are classified by `classifyProbeError`, the same code the model check uses, so a run and a model check word an error the same way.
+- **Adding a reason** is one code, one message (the type makes it required) and one test.
+- **If saving a failure itself throws,** `failRun` logs the code and reason and still tells tcp-server, so the task fails. The agent row can stay `running`; see [outstanding-issues.md](outstanding-issues.md).
+
+### Repeating-call stop
+
+An agent that makes the same tool call, with the same input, and gets the same result three times in a row has its run stopped with `repeating_call`, before its next LLM call. A changed input, a changed result or a different call resets the count. A small model stuck resending a refused plan could otherwise run until the iteration limit; this ends it after three calls.
+
+### Model readiness check
+
+Before a run's first LLM call, tcp-agent asks a `local` or `custom` provider for its model list (`GET {baseUrl}/models`, 10 s timeout). No answer fails the run as `unreachable` within seconds. A model that isn't listed fails it as `model_not_found`. This matters because LM Studio answers a request for an unlisted model with whichever model is loaded, so a wrong name would run quietly on another model. A model that is downloaded but not loaded is listed, so it passes and loads on first use.
+
+Remote providers are skipped. If the answer doesn't settle it, the run goes ahead and the real call's own error is reported.
+
+| Variable              | Default | Meaning                       |
+| --------------------- | ------- | ----------------------------- |
+| `LLM_READINESS_CHECK` | `true`  | Set `false` to skip the check |
 
 ---
 
