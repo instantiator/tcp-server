@@ -25,6 +25,7 @@ export type RunFailureCode =
   | 'repeating_call'
   | 'service_unavailable'
   | 'stopped'
+  | 'interrupted'
   | 'unexpected';
 
 /** What a message may mention. Each message reads only what it needs. */
@@ -92,6 +93,8 @@ export const RUN_FAILURE_MESSAGES: Record<
     `${c.service ?? 'A supporting service'} didn't respond. Check it is running, then start the task again.`,
   stopped: (c) =>
     `The run was stopped before it finished${c.detail ? ` (${c.detail})` : ''}. Start the task again if it is still needed.`,
+  interrupted: () =>
+    "This step stopped unexpectedly and couldn't be carried on. Start the task again.",
   unexpected: (c) =>
     `Something unexpected went wrong${c.detail ? `: ${c.detail}` : ''}. Details are in the server log.`,
 };

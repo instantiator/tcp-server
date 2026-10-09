@@ -557,12 +557,14 @@ const strings = {
   'agent.pause.shutdown': 'Paused by a shutdown',
   'agent.pause.spend_cap': 'Paused — spend cap reached',
   'agent.pause.manual': 'Paused by a user',
+  'agent.pause.restart': 'Paused for a restart',
   // Why a whole task is waiting, by `TaskWaitKind` (`taskWaitingLabel`).
   'task.waiting.manual': 'Paused by {name} — resume to continue',
   'task.waiting.manualAnonymous': 'Paused — resume to continue',
   'task.waiting.spend_cap':
     'Spend cap reached — resume to continue, or wait for the cap to reset',
   'task.waiting.shutdown': 'Paused by a shutdown — resume to continue',
+  'task.waiting.restart': 'Paused for a restart — carries on by itself',
   'task.waiting.user_input': 'Waiting for your reply',
   'task.waiting.consultation': "Waiting for a colleague's answer",
   'task.waiting.queued': 'Waiting for the model',

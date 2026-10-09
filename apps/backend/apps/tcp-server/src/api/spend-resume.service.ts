@@ -34,6 +34,7 @@ const EXPLICITLY_RESUMABLE: PauseReason[] = [
   'shutdown',
   'rate_limited',
   'manual',
+  'restart',
 ];
 
 /**

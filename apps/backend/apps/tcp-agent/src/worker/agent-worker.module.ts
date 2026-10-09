@@ -12,6 +12,7 @@ import {
   TcpCompany,
   TcpRole,
   TcpTask,
+  ProcessRestarter,
 } from '@tcp/shared';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -73,6 +74,7 @@ import { ShutdownListenerService } from './shutdown-listener.service';
     // Answers tcp-server's drain: stops the worker taking jobs and reports how
     // many loops are genuinely still in flight.
     ShutdownListenerService,
+    ProcessRestarter,
     AuditClientService,
     InternalApiClient,
     StorageTrackingClientService,

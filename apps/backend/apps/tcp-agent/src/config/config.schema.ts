@@ -10,6 +10,9 @@ export const configSchema = Joi.object({
   PORT: Joi.number().default(3001),
   DATABASE_URL: Joi.string().required(),
   REDIS_URL: Joi.string().required(),
+  // True only where a supervisor (Docker's restart policy) starts tcp-agent
+  // again after it exits. Without it, a restart command resumes the worker.
+  TCP_RESTART_SUPPORTED: Joi.boolean().default(false),
   // No MINIO_* here: tcp-agent never constructs an S3 client. Every storage
   // action it takes goes through tcp-server's /internal/storage/* endpoints.
   MCP_STORAGE_URL: Joi.string().uri().optional(),

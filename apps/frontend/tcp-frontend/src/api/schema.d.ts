@@ -971,6 +971,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/system/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the caller-facing system status */
+        get: operations["SystemController_getStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/system/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the health of every service */
+        get: operations["SystemController_getHealth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/system/shutdown": {
         parameters: {
             query?: never;
@@ -981,7 +1015,7 @@ export interface paths {
         /** Get the current shutdown state */
         get: operations["SystemController_getShutdown"];
         put?: never;
-        /** Begin draining the system for shutdown */
+        /** Begin draining the system for shutdown or restart */
         post: operations["SystemController_beginShutdown"];
         /** Cancel a shutdown in progress */
         delete: operations["SystemController_cancelShutdown"];
@@ -2009,11 +2043,37 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        PublicShutdownStateDto: {
+            /** @enum {string} */
+            state: "idle" | "draining" | "quiesced";
+            restart: boolean;
+        };
+        SystemStatusResponseDto: {
+            admin: boolean;
+            shutdown: components["schemas"]["PublicShutdownStateDto"];
+        };
+        ServiceHealthDto: {
+            /** @enum {string} */
+            name: "tcp-server" | "tcp-agent" | "tcp-mcp-storage" | "tcp-mcp-memory" | "tcp-mcp-interactions" | "tcp-mcp-tasks";
+            /** @enum {string} */
+            status: "up" | "down" | "not_configured";
+            detail?: {
+                [key: string]: unknown;
+            };
+            error?: string;
+        };
+        SystemHealthResponseDto: {
+            /** @enum {string} */
+            status: "ok" | "degraded";
+            services: components["schemas"]["ServiceHealthDto"][];
+        };
         ShutdownStatusResponseDto: {
             /** @enum {string} */
             state: "idle" | "draining" | "quiesced";
             forced: boolean;
             agentsRunning: number;
+            restart: boolean;
+            restartSupported: boolean;
         };
         TaskExpectedArtifactDto: {
             /** @enum {string} */
@@ -2048,7 +2108,7 @@ export interface components {
         };
         TaskWaitingResponseDto: {
             /** @enum {string} */
-            kind: "user_input" | "consultation" | "shutdown" | "spend_cap" | "rate_limited" | "manual" | "queued";
+            kind: "user_input" | "consultation" | "shutdown" | "spend_cap" | "rate_limited" | "manual" | "restart" | "queued";
             pausedBy?: string;
             /** @description ISO-8601 */
             resumeAfter?: string;
@@ -2127,7 +2187,7 @@ export interface components {
             /** Format: date-time */
             pausedAt?: string;
             /** @enum {string|null} */
-            pauseReason?: "user_input" | "consultation" | "shutdown" | "spend_cap" | "rate_limited" | "manual" | null;
+            pauseReason?: "user_input" | "consultation" | "shutdown" | "spend_cap" | "rate_limited" | "manual" | "restart" | null;
             /** Format: date-time */
             resumeAfter?: string;
             rateLimitRetries: number;
@@ -3810,6 +3870,44 @@ export interface operations {
             };
         };
     };
+    SystemController_getStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemStatusResponseDto"];
+                };
+            };
+        };
+    };
+    SystemController_getHealth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemHealthResponseDto"];
+                };
+            };
+        };
+    };
     SystemController_getShutdown: {
         parameters: {
             query?: never;
@@ -3833,6 +3931,7 @@ export interface operations {
         parameters: {
             query?: {
                 force?: string;
+                restart?: string;
             };
             header?: never;
             path?: never;

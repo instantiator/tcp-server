@@ -25,6 +25,7 @@ describe('agentStatusLabel', () => {
     ['shutdown', 'agent.pause.shutdown'],
     ['spend_cap', 'agent.pause.spend_cap'],
     ['manual', 'agent.pause.manual'],
+    ['restart', 'agent.pause.restart'],
   ] as const)('says why a %s pause is paused', (pauseReason, key) => {
     expect(agentStatusLabel({ status: 'paused', pauseReason })).toBe(t(key));
   });
@@ -96,6 +97,7 @@ describe('taskWaitingLabel', () => {
   it.each([
     ['spend_cap', 'task.waiting.spend_cap'],
     ['shutdown', 'task.waiting.shutdown'],
+    ['restart', 'task.waiting.restart'],
     ['user_input', 'task.waiting.user_input'],
     ['consultation', 'task.waiting.consultation'],
     ['queued', 'task.waiting.queued'],

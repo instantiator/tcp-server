@@ -466,7 +466,7 @@ describe('Membership authorization (e2e)', () => {
         .get('/api/system/status')
         .set('Authorization', `Bearer ${aliceJwt}`)
         .expect(200)
-        .expect({ admin: false, shutdown: { state: 'idle' } }));
+        .expect({ admin: false, shutdown: { state: 'idle', restart: false } }));
 
     it('tells an administrator they are one', async () => {
       const res = await request(app.getHttpServer())

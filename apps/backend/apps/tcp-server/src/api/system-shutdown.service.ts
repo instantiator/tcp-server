@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   Injectable,
   Logger,
   ServiceUnavailableException,
@@ -27,6 +28,7 @@ export class SystemShutdownService {
   private readonly logger = new Logger(SystemShutdownService.name);
   private state: ShutdownState = 'idle';
   private forced = false;
+  private restarting = false;
 
   /** The current lifecycle state. */
   get currentState(): ShutdownState {
@@ -36,6 +38,11 @@ export class SystemShutdownService {
   /** True once the current drain was requested with `--force`. */
   get isForced(): boolean {
     return this.forced;
+  }
+
+  /** True when the current drain ends in a restart rather than a halt. */
+  get isRestarting(): boolean {
+    return this.restarting;
   }
 
   /**
@@ -53,17 +60,25 @@ export class SystemShutdownService {
    * Idempotent: a second graceful request while already draining changes
    * nothing. A forced request always upgrades an in-progress graceful drain,
    * because forcing is an explicit user action, never an automatic escalation.
+   * A drain can't switch between a shutdown and a restart: that is refused,
+   * because the agents already paused carry the other kind's reason.
    *
    * @returns `true` when this call changed the state.
    */
-  begin(force: boolean): boolean {
+  begin(force: boolean, restart = false): boolean {
+    if (this.isShuttingDown && restart !== this.restarting) {
+      throw new ConflictException(
+        'A shutdown is already in progress. Cancel it first.',
+      );
+    }
     const escalating = force && !this.forced;
     if (this.isShuttingDown && !escalating) return false;
 
     this.state = 'draining';
     this.forced = this.forced || force;
+    this.restarting = restart;
     this.logger.warn(
-      `System draining for shutdown (${this.forced ? 'forced' : 'graceful'})`,
+      `System draining for ${restart ? 'restart' : 'shutdown'} (${this.forced ? 'forced' : 'graceful'})`,
     );
     return true;
   }
@@ -93,6 +108,7 @@ export class SystemShutdownService {
     if (!this.isShuttingDown) return false;
     this.state = 'idle';
     this.forced = false;
+    this.restarting = false;
     this.logger.warn('Shutdown drain cancelled — accepting work again');
     return true;
   }
@@ -103,6 +119,11 @@ export class SystemShutdownService {
    */
   assertAccepting(): void {
     if (!this.isShuttingDown) return;
+    if (this.restarting) {
+      throw new ServiceUnavailableException(
+        'The system is restarting and is not accepting new work. Try again in a minute.',
+      );
+    }
     throw new ServiceUnavailableException(
       'The system is shutting down and is not accepting new work. ' +
         'Cancel the shutdown (DELETE /api/system/shutdown) to resume normal service.',

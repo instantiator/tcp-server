@@ -1,7 +1,8 @@
 import { AgentStatus, TcpAgent, TcpAssignment, TcpTask } from '@tcp/shared';
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { AgentRecoveryService } from './agent-recovery.service';
 import { TaskDeliverablesService } from './task-deliverables.service';
 import { TaskFailureService } from './task-failure.service';
 import { TaskOrchestrationService } from './task-orchestration.service';
@@ -14,12 +15,17 @@ const DEAD_AGENT_STATES: AgentStatus[] = [
 ];
 
 /**
- * Startup repair for tasks left mid-flight by a restart. Runs once on boot and
- * only touches work no live agent will finish: agents still `Running`/`Paused`
- * are left alone, because BullMQ and pause/resume own their recovery.
+ * Startup repair for tasks left mid-flight by a restart. Runs once on boot.
+ * Agents are put right first ({@link AgentRecoveryService}: stranded ones
+ * repaired, restart pauses resumed); then each task is repaired where no live
+ * agent will finish it. Agents still `Running`/`Paused` after that are left
+ * alone, because BullMQ and pause/resume own their recovery.
+ *
+ * Runs at application bootstrap rather than module init, so the agent queue
+ * is connected before recovery reads it.
  */
 @Injectable()
-export class TaskRecoveryService implements OnModuleInit {
+export class TaskRecoveryService implements OnApplicationBootstrap {
   private readonly logger = new Logger(TaskRecoveryService.name);
 
   constructor(
@@ -33,12 +39,24 @@ export class TaskRecoveryService implements OnModuleInit {
     private readonly failures: TaskFailureService,
     private readonly deliverables: TaskDeliverablesService,
     private readonly state: TaskStateService,
+    private readonly agents: AgentRecoveryService,
   ) {}
 
-  /** Reconciles every non-terminal task on startup (see {@link reconcileTask}). */
-  async onModuleInit(): Promise<void> {
+  /** Puts agents right, then reconciles every non-terminal task (see {@link reconcileTask}). */
+  async onApplicationBootstrap(): Promise<void> {
+    try {
+      await this.agents.recover();
+    } catch (err) {
+      this.logger.error(
+        `Agent recovery failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
     const tasks = await this.taskRepo.find({
-      where: [{ status: 'planning' }, { status: 'in-progress' }],
+      where: [
+        { status: 'planning' },
+        { status: 'in-progress' },
+        { status: 'finalising' },
+      ],
     });
     for (const task of tasks) {
       try {
@@ -94,21 +112,29 @@ export class TaskRecoveryService implements OnModuleInit {
   }
 
   /**
-   * A finalise agent that died mid-run fails the task — its files were already
-   * promoted, so `completed` is recorded before failing. A live one is left to
-   * BullMQ/pause-resume.
+   * Repairs a task stuck in `finalising` where it can, and fails it where the
+   * finalise step really failed:
+   *
+   * - finalise succeeded but the task wasn't marked (a crash between the two
+   *   writes) → finish the task now;
+   * - no finalise assignment yet (a crash before it was saved) → dispatch it;
+   * - the finalise agent died → fail the task, recording `completed` first
+   *   (its files were already promoted);
+   * - a live or paused agent → leave it to BullMQ/pause-resume.
    */
   private async reconcileFinalising(task: TcpTask): Promise<void> {
     const finalise = await this.assignmentRepo.findOneBy({
       taskId: task.id,
       mode: 'finalise',
     });
-    const agent = finalise?.agentId
+    if (!finalise) return this.orchestration.advance(task.id);
+    if (finalise.status === 'succeeded') {
+      return this.orchestration.assignmentFinalised(finalise);
+    }
+    const agent = finalise.agentId
       ? await this.agentRepo.findOneBy({ id: finalise.agentId })
       : null;
-    if (!finalise || (agent && !DEAD_AGENT_STATES.includes(agent.status))) {
-      return;
-    }
+    if (agent && !DEAD_AGENT_STATES.includes(agent.status)) return;
     // Fail the finalise assignment too — otherwise it's left stuck
     // `in-progress` while its task reads `failed` (same as the live
     // handleAgentFailed path).

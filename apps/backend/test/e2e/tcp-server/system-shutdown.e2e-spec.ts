@@ -173,6 +173,8 @@ describe('SystemController (e2e)', () => {
         state: 'idle',
         forced: false,
         agentsRunning: 0,
+        restart: false,
+        restartSupported: false,
       });
     });
 
@@ -183,6 +185,14 @@ describe('SystemController (e2e)', () => {
   describe('POST /api/system/shutdown', () => {
     it('returns 401 without a token', () =>
       request(app.getHttpServer()).post('/api/system/shutdown').expect(401));
+
+    // The test tiers never set TCP_RESTART_SUPPORTED, so nothing here can
+    // end the test runner's own process.
+    it('refuses a restart where nothing would start the services again', () =>
+      request(app.getHttpServer())
+        .post('/api/system/shutdown?restart')
+        .set('Authorization', `Bearer ${jwt}`)
+        .expect(409));
 
     it('quiesces immediately when no agent is running', async () => {
       const res = await request(app.getHttpServer())

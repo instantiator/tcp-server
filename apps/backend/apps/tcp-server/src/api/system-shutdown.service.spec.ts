@@ -1,4 +1,4 @@
-import { ServiceUnavailableException } from '@nestjs/common';
+import { ConflictException, ServiceUnavailableException } from '@nestjs/common';
 import { SystemShutdownService } from './system-shutdown.service';
 
 describe('SystemShutdownService', () => {
@@ -69,6 +69,34 @@ describe('SystemShutdownService', () => {
 
     it('reports nothing to cancel when idle', () => {
       expect(service.cancel()).toBe(false);
+    });
+  });
+
+  describe('restart', () => {
+    it('records that the drain ends in a restart, and clears it on cancel', () => {
+      service.begin(false, true);
+      expect(service.isRestarting).toBe(true);
+      service.cancel();
+      expect(service.isRestarting).toBe(false);
+    });
+
+    it('refuses to switch a shutdown in progress to a restart, or back', () => {
+      service.begin(false);
+      expect(() => service.begin(false, true)).toThrow(ConflictException);
+      service.cancel();
+      service.begin(false, true);
+      expect(() => service.begin(true)).toThrow(ConflictException);
+    });
+
+    it('still lets force escalate a restart drain', () => {
+      service.begin(false, true);
+      expect(service.begin(true, true)).toBe(true);
+      expect(service.isForced).toBe(true);
+    });
+
+    it('says a restart, not a shutdown, when refusing work', () => {
+      service.begin(false, true);
+      expect(() => service.assertAccepting()).toThrow(/restarting/);
     });
   });
 

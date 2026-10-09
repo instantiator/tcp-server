@@ -11,6 +11,10 @@ export class ShutdownStatusResponseDto implements ShutdownStatus {
   forced!: boolean;
   /** Agent loops still to come to rest. Zero, with state `quiesced`, means safe to halt. */
   agentsRunning!: number;
+  /** True when this drain ends in a restart rather than a halt. */
+  restart!: boolean;
+  /** True when this deployment can restart itself (it runs under a supervisor). */
+  restartSupported!: boolean;
 }
 
 /** One service's line in {@link SystemHealthResponseDto}. */
@@ -47,6 +51,8 @@ export class SystemHealthResponseDto implements SystemHealth {
 export class PublicShutdownStateDto {
   @ApiProperty({ enum: ['idle', 'draining', 'quiesced'] })
   state!: ShutdownState;
+  /** True when the drain ends in a restart, after which work carries on by itself. */
+  restart!: boolean;
 }
 
 /**

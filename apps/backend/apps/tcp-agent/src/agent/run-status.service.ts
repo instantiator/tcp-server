@@ -302,7 +302,9 @@ export class AgentRunStatusService {
     }
     if (
       fresh?.status === AgentStatus.Paused &&
-      (fresh.pauseReason === 'shutdown' || fresh.pauseReason === 'manual')
+      (fresh.pauseReason === 'shutdown' ||
+        fresh.pauseReason === 'manual' ||
+        fresh.pauseReason === 'restart')
     ) {
       this.logger.warn(
         `Agent ${agent.id} stopped by a ${fresh.pauseReason} pause — staying paused rather than failing: ${reason}`,

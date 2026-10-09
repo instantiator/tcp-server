@@ -21,7 +21,9 @@ export type ShutdownAction =
   /** Stop taking new jobs and abort in-flight LLM calls immediately. */
   | 'force'
   /** The drain was cancelled — go back to taking jobs. */
-  | 'cancel';
+  | 'cancel'
+  /** A restart drain has quiesced: exit, so the supervisor starts a fresh process. */
+  | 'restart';
 
 /** A drain instruction broadcast to every tcp-agent worker. */
 export interface ShutdownCommand {

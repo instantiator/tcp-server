@@ -65,7 +65,10 @@ export class SystemController {
   getStatus(@Req() req: Request): SystemStatusResponseDto {
     return {
       admin: this.membership.isAdmin(getCurrentUserIdentifiers(req)),
-      shutdown: { state: this.shutdown.currentState },
+      shutdown: {
+        state: this.shutdown.currentState,
+        restart: this.shutdown.isRestarting,
+      },
     };
   }
 
@@ -92,16 +95,24 @@ export class SystemController {
    *
    * Idempotent, except that `force` always escalates a graceful drain already
    * in progress.
+   *
+   * `restart` ends the drain by restarting tcp-server and tcp-agent instead of
+   * waiting for the host to halt them, and the work it paused carries on by
+   * itself after the restart. It is refused (409) where nothing would start
+   * the services again, and while a plain shutdown is already draining.
    */
-  @ApiOperation({ summary: 'Begin draining the system for shutdown' })
+  @ApiOperation({
+    summary: 'Begin draining the system for shutdown or restart',
+  })
   @AdminOnly()
   @Post('shutdown')
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiAcceptedResponse({ type: ShutdownStatusResponseDto })
-  async beginShutdown(@Query('force') force?: string): Promise<ShutdownStatus> {
-    // Present-but-empty (`?force`) counts as true, so the flag reads naturally
-    // as a bare query parameter; `?force=false` opts back out.
-    return this.drain.begin(force !== undefined && force !== 'false');
+  async beginShutdown(
+    @Query('force') force?: string,
+    @Query('restart') restart?: string,
+  ): Promise<ShutdownStatus> {
+    return this.drain.begin(isSet(force), isSet(restart));
   }
 
   /** Reports how far the drain has got. Cheap enough to poll every second. */
@@ -117,8 +128,8 @@ export class SystemController {
    * Cancels a drain in progress, so the system accepts work again.
    *
    * Agents the drain already paused stay paused: resuming them automatically
-   * would be an unrequested burst of token spend. Resume them explicitly via
-   * `POST /api/agent/resume/:id`.
+   * would be an unrequested burst of token spend. Resume them explicitly, by
+   * task (`POST /api/task/:id/resume`) or by company.
    */
   @ApiOperation({ summary: 'Cancel a shutdown in progress' })
   @AdminOnly()
@@ -127,4 +138,12 @@ export class SystemController {
   async cancelShutdown(): Promise<ShutdownStatus> {
     return (await this.drain.cancel()) ?? this.drain.status();
   }
+}
+
+/**
+ * A boolean query flag. Present-but-empty (`?force`) counts as true, so the
+ * flag reads naturally as a bare query parameter; `?force=false` opts out.
+ */
+function isSet(flag?: string): boolean {
+  return flag !== undefined && flag !== 'false';
 }

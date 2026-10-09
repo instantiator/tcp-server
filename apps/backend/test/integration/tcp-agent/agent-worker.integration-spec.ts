@@ -12,6 +12,7 @@ import {
   TcpRole,
   TcpTask,
   SpendCapState,
+  ProcessRestarter,
 } from '@tcp/shared';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -90,6 +91,7 @@ describe('AgentWorkerService (integration)', () => {
         // Real instance: this module's ConfigService leaves REDIS_URL to the
         // worker's own getOrThrow, so the listener stays inert here.
         ShutdownListenerService,
+        ProcessRestarter,
         AgentLoopService,
         AgentRunEnvironmentService,
         InitialStateService,

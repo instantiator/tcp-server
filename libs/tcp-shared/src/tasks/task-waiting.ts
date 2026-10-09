@@ -18,6 +18,7 @@ const REASON_PRECEDENCE: readonly PauseReason[] = [
   'rate_limited',
   'spend_cap',
   'shutdown',
+  'restart',
   'manual',
   'user_input',
   'consultation',

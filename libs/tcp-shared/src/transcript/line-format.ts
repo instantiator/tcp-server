@@ -117,6 +117,7 @@ export const PAUSE_REASON_TEXT: Record<PauseReason, string> = {
   shutdown: 'paused by a shutdown',
   spend_cap: 'spend cap reached',
   manual: 'paused by a user',
+  restart: 'paused for a restart',
   rate_limited: 'rate limited',
 };
 

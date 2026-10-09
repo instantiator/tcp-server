@@ -170,6 +170,9 @@ services:
       - 'host.docker.internal:host-gateway'
     environment:
       <<: *internal-urls
+      # restart: unless-stopped starts this service again when it exits, so a
+      # restart from the System menu (or `tcp-cli restart`) is safe here.
+      TCP_RESTART_SUPPORTED: 'true'
       # External-facing issuer (the `iss` claim tokens carry, validated literally);
       # OIDC_INTERNAL_ISSUER_URL (from *internal-urls) is used for the in-cluster
       # JWKS fetch. Explicit value wins, else derive from the Zitadel host port —
@@ -279,6 +282,9 @@ services:
       - 'host.docker.internal:host-gateway'
     environment:
       <<: *internal-urls
+      # restart: unless-stopped starts this service again when it exits, so a
+      # restart from the System menu (or `tcp-cli restart`) is safe here.
+      TCP_RESTART_SUPPORTED: 'true'
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
       # No MINIO credentials: tcp-agent reaches storage through tcp-server's

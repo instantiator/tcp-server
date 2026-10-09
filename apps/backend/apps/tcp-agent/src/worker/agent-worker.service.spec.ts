@@ -4,6 +4,7 @@ import {
   TcpCompany,
   TcpRole,
   type LlmConfig,
+  ProcessRestarter,
 } from '@tcp/shared';
 import { Logger, Provider } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -81,6 +82,7 @@ describe('AgentWorkerService', () => {
       // Real instance: with REDIS_URL unset it stays inert, so binding the
       // worker and reporting a finished job are both no-ops here.
       ShutdownListenerService,
+      ProcessRestarter,
       // Real instance: MODEL_CONCURRENCY unset → the built-in pool defaults
       // (one local run at a time).
       ModelSlotService,

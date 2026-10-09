@@ -44,6 +44,7 @@ const RESUMABLE_KINDS: readonly TaskWaiting['kind'][] = [
   'shutdown',
   'rate_limited',
   'manual',
+  'restart',
 ];
 
 /**
