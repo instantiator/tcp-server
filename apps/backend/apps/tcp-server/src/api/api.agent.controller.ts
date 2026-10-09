@@ -8,6 +8,7 @@ import {
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   Delete,
   Get,
@@ -42,7 +43,10 @@ import {
 import { AuditService } from '../audit/audit.service';
 import { DbService } from '../db/db.service';
 import { AgentEventService } from '../events/agent-event.service';
-import { AgentOrchestrationService } from './agent-orchestration.service';
+import {
+  AgentOrchestrationService,
+  ALL_REASONS,
+} from './agent-orchestration.service';
 import { AssignmentCompletionService } from './assignment-completion.service';
 import { AssignmentService } from './assignment.service';
 import { ChatService } from './chat.service';
@@ -239,8 +243,13 @@ export class AgentController {
   @Post('resume/:id')
   async resumeAgent(@Param('id') id: UUID): Promise<TcpAgent> {
     try {
-      return await this.orchestration.resumeAgent(id);
+      // A user asked for this one agent, so any pause reason may be lifted —
+      // except a paused task, which only the task's own resume lifts (409).
+      return await this.orchestration.resumeAgent(id, undefined, {
+        lifts: ALL_REASONS,
+      });
     } catch (err) {
+      if (err instanceof ConflictException) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('not found')) throw new NotFoundException(msg);
       throw new BadRequestException(msg);

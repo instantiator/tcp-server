@@ -62,10 +62,14 @@ export class RateLimitResumeService implements OnModuleInit, OnModuleDestroy {
           pauseReason: 'rate_limited',
           resumeAfter: LessThanOrEqual(new Date()),
         },
+        relations: { assignment: { task: true } },
       });
-      for (const agent of due) {
+      // A task a user paused waits for its own resume.
+      for (const agent of due.filter((a) => !a.assignment?.task?.pausedAt)) {
         try {
-          await this.orchestration.resumeAgent(agent.id);
+          await this.orchestration.resumeAgent(agent.id, undefined, {
+            lifts: ['rate_limited'],
+          });
         } catch (err) {
           this.logger.warn(
             `Could not resume rate-limited agent ${agent.id}: ${String(err)}`,

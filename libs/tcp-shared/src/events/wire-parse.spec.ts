@@ -46,7 +46,12 @@ describe('parseTaskChangeSummary', () => {
   };
 
   it('passes a well-formed summary through', () => {
-    expect(parseTaskChangeSummary(summary)).toEqual(summary);
+    expect(parseTaskChangeSummary(summary)).toEqual({
+      ...summary,
+      pausedAt: null,
+      pausedBy: null,
+      visualisationClosedAt: null,
+    });
   });
 
   it('rejects a summary missing its required fields', () => {
@@ -73,6 +78,9 @@ describe('parseTaskChangeSummary', () => {
       updatedAt: '',
       completedSteps: 0,
       totalSteps: 0,
+      pausedAt: null,
+      pausedBy: null,
+      visualisationClosedAt: null,
     });
   });
 });

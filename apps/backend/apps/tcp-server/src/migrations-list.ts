@@ -5,6 +5,7 @@ import { AgentPauseReason1784810000000 } from './migrations/1784810000000-AgentP
 import { ConversationRepliesDelivered1784820000000 } from './migrations/1784820000000-ConversationRepliesDelivered';
 import { SpendTracking1784830000000 } from './migrations/1784830000000-SpendTracking';
 import { AgentRateLimitPause1784840000000 } from './migrations/1784840000000-AgentRateLimitPause';
+import { TaskPauseAndVisualisation1784850000000 } from './migrations/1784850000000-TaskPauseAndVisualisation';
 
 /**
  * tcp-server's full, ordered migration list — the single source of truth for
@@ -35,4 +36,5 @@ export const MIGRATIONS: (new () => MigrationInterface)[] = [
   ConversationRepliesDelivered1784820000000,
   SpendTracking1784830000000,
   AgentRateLimitPause1784840000000,
+  TaskPauseAndVisualisation1784850000000,
 ];

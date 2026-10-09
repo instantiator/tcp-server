@@ -115,7 +115,9 @@ describe('RateLimitResumeService', () => {
 
     await service.sweep();
 
-    expect(resumeAgent.mock.calls).toEqual([[due]]);
+    expect(resumeAgent.mock.calls).toEqual([
+      [due, undefined, { lifts: ['rate_limited'] }],
+    ]);
   });
 
   it('keeps going when one resume fails', async () => {
@@ -125,7 +127,7 @@ describe('RateLimitResumeService', () => {
 
     await service.sweep();
 
-    expect(resumeAgent.mock.calls.flat().sort()).toEqual(
+    expect(resumeAgent.mock.calls.map(([id]) => id as string).sort()).toEqual(
       [first, second].sort(),
     );
   });

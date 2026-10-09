@@ -15,7 +15,10 @@ import { Queue } from 'bullmq';
 import { randomUUID } from 'crypto';
 import { DbService } from '../db/db.service';
 import { AuditService } from '../audit/audit.service';
-import { AgentOrchestrationService } from './agent-orchestration.service';
+import {
+  AgentOrchestrationService,
+  ALL_REASONS,
+} from './agent-orchestration.service';
 import { SystemShutdownService } from './system-shutdown.service';
 
 // Prevent BullMQ from trying to open a real Redis connection
@@ -273,6 +276,39 @@ describe('AgentOrchestrationService', () => {
     });
   });
 
+  describe('dispatchStartJob on a paused task', () => {
+    it('creates the agent paused instead of queueing it', async () => {
+      const agent = makeAgent({ status: AgentStatus.Idle });
+      agentRepo.findOne.mockResolvedValue({
+        ...agent,
+        assignment: { task: { pausedAt: new Date() } },
+      });
+
+      await service.dispatchStartJob(agent.id);
+
+      expect(mockQueueInstance.add).not.toHaveBeenCalled();
+      expect(agentRepo.update).toHaveBeenCalledWith(
+        { id: agent.id, status: AgentStatus.Idle },
+        expect.objectContaining({
+          status: AgentStatus.Paused,
+          pauseReason: 'manual',
+        }),
+      );
+    });
+
+    it('queues as usual when the task is not paused', async () => {
+      const agent = makeAgent({ status: AgentStatus.Idle });
+      agentRepo.findOne.mockResolvedValue({
+        ...agent,
+        assignment: { task: {} },
+      });
+
+      await service.dispatchStartJob(agent.id);
+
+      expect(mockQueueInstance.add).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('resumeAgent', () => {
     it('injects a continuation prompt when resuming a shutdown-paused agent, so tcp-agent continues from the checkpoint rather than restarting', async () => {
       const agent = makeAgent({
@@ -284,7 +320,7 @@ describe('AgentOrchestrationService', () => {
       consultRepo.count.mockResolvedValue(0);
       convRepo.count.mockResolvedValue(0);
 
-      await service.resumeAgent(agent.id);
+      await service.resumeAgent(agent.id, undefined, { lifts: ALL_REASONS });
 
       expect(mockQueueInstance.add).toHaveBeenCalledWith('resume', {
         agentId: agent.id,
@@ -306,7 +342,7 @@ describe('AgentOrchestrationService', () => {
         mockDb.getAgent.mockResolvedValue(agent);
         auditRepo.exists.mockResolvedValue(started);
 
-        await service.resumeAgent(agent.id);
+        await service.resumeAgent(agent.id, undefined, { lifts: ALL_REASONS });
 
         const [, job] = mockQueueInstance.add.mock.calls[0] as [
           string,
@@ -337,7 +373,7 @@ describe('AgentOrchestrationService', () => {
       mockDb.getAgent.mockResolvedValue(agent);
       auditRepo.exists.mockResolvedValue(false);
 
-      await service.resumeAgent(agent.id);
+      await service.resumeAgent(agent.id, undefined, { lifts: ALL_REASONS });
 
       expect(mockQueueInstance.add).toHaveBeenCalledWith('resume', {
         agentId: agent.id,
@@ -346,6 +382,76 @@ describe('AgentOrchestrationService', () => {
           'model provider was temporarily refusing',
         ) as string,
       });
+    });
+
+    describe('a manual pause', () => {
+      /** Resumes a manually paused agent and returns the queued job's replyContent. */
+      async function resumeManual(started: boolean): Promise<unknown> {
+        const agent = makeAgent({
+          status: AgentStatus.Paused,
+          pausedAt: new Date(),
+          pauseReason: 'manual',
+        });
+        mockDb.getAgent.mockResolvedValue(agent);
+        auditRepo.exists.mockResolvedValue(started);
+        await service.resumeAgent(agent.id, undefined, {
+          lifts: ALL_REASONS,
+          taskResume: true,
+        });
+        const [, job] = mockQueueInstance.add.mock.calls[0] as [
+          string,
+          { replyContent?: unknown },
+        ];
+        return job.replyContent;
+      }
+
+      it('continues from the checkpoint when the agent had already called its LLM', async () => {
+        expect(await resumeManual(true)).toEqual(
+          expect.stringContaining('A user paused your work'),
+        );
+      });
+
+      it('restarts with no message when the agent was paused before its first LLM call', async () => {
+        expect(await resumeManual(false)).toBeUndefined();
+      });
+    });
+
+    // A reply must not wake an agent paused for something else: a spend-capped
+    // agent woken this way re-paused at the gate, and the reply — already
+    // marked delivered — was lost.
+    it.each(['spend_cap', 'rate_limited', 'shutdown', 'manual'] as const)(
+      'leaves a %s pause alone on a reply, without claiming it',
+      async (pauseReason) => {
+        const agent = makeAgent({
+          status: AgentStatus.Paused,
+          pausedAt: new Date(),
+          pauseReason,
+        });
+        mockDb.getAgent.mockResolvedValue(agent);
+
+        await service.resumeAgent(agent.id);
+
+        expect(mockQueueInstance.add).not.toHaveBeenCalled();
+        expect(agentRepo.updateQueryBuilder.execute).not.toHaveBeenCalled();
+      },
+    );
+
+    it('refuses any resume but the task resume while the task is paused', async () => {
+      const agent = makeAgent({
+        status: AgentStatus.Paused,
+        pausedAt: new Date(),
+        pauseReason: 'user_input',
+      });
+      mockDb.getAgent.mockResolvedValue(agent);
+      agentRepo.findOne.mockResolvedValue({
+        ...agent,
+        assignment: { task: { pausedAt: new Date() } },
+      });
+
+      await expect(service.resumeAgent(agent.id)).rejects.toThrow(
+        'This task is paused',
+      );
+      expect(mockQueueInstance.add).not.toHaveBeenCalled();
     });
 
     it('enqueues a resume job for an idle agent', async () => {

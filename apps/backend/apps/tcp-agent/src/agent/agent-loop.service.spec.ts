@@ -682,6 +682,64 @@ describe('AgentLoopService', () => {
     );
   });
 
+  it.each([
+    ['cancelled', { status: AgentStatus.Cancelled }],
+    [
+      'paused by a user',
+      {
+        status: AgentStatus.Paused,
+        pauseReason: 'manual' as const,
+        pausedAt: new Date(),
+      },
+    ],
+  ])(
+    'leaves an agent %s alone when its run then fails',
+    async (_label, state) => {
+      const { agent } = await seedAgentAndRole({
+        llmConfig: undefined,
+        companyLlmConfig: undefined,
+      });
+      await agentRepo.update(agent.id, state);
+
+      await service.run(agent.id, undefined, new AbortController());
+
+      const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+      expect(updated.status).toBe(state.status);
+      expect(notifyFailed).not.toHaveBeenCalled();
+    },
+  );
+
+  // A user's pause can land between the worker admitting a job and the run
+  // starting; marking the agent running then would undo the pause.
+  it('does not run an agent paused after its job was admitted', async () => {
+    const { agent } = await seedAgentAndRole();
+    await agentRepo.update(agent.id, {
+      status: AgentStatus.Paused,
+      pauseReason: 'manual',
+      pausedAt: new Date(),
+    });
+
+    await service.run(agent.id, undefined, new AbortController());
+
+    const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+    expect(updated.status).toBe(AgentStatus.Paused);
+    expect(StateGraph).not.toHaveBeenCalled();
+  });
+
+  it('runs an agent whose pause a resume has already claimed', async () => {
+    const { agent } = await seedAgentAndRole();
+    await agentRepo.update(agent.id, {
+      status: AgentStatus.Paused,
+      pauseReason: null,
+      pausedAt: () => 'NULL',
+    });
+
+    await service.run(agent.id, undefined, new AbortController());
+
+    const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+    expect(updated.status).toBe(AgentStatus.Completed);
+  });
+
   it('sets status to failed and saves a state_change audit event on LLM error', async () => {
     jest.mocked(StateGraph).mockImplementationOnce(
       () =>

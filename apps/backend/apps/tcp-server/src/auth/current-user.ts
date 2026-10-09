@@ -31,3 +31,15 @@ export function getCurrentUserIdentifiers(req: Request): string[] {
     ),
   ];
 }
+
+/**
+ * How to name the signed-in user to other users — for "Paused by …". Prefers
+ * the token's display name, then its username or email, then the bare `sub`.
+ */
+export function getCurrentUserLabel(req: Request): string {
+  const user = req.user as Record<string, unknown> | undefined;
+  const label = [user?.name, user?.preferred_username, user?.email, user?.sub]
+    .filter((claim): claim is string => typeof claim === 'string')
+    .find((claim) => claim !== '');
+  return label ?? 'a user';
+}

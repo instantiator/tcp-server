@@ -9,8 +9,11 @@ import {
   markQueued,
   TcpAgent,
   PendingConsultation,
+  type PauseReason,
+  type TcpTask,
 } from '@tcp/shared';
 import {
+  ConflictException,
   Injectable,
   Logger,
   OnModuleDestroy,
@@ -75,6 +78,53 @@ const SPEND_CAP_RESUME_PROMPT =
 const RATE_LIMIT_RESUME_PROMPT =
   'Your work was paused because the model provider was temporarily refusing ' +
   'requests, and can now continue. Continue from where you left off.';
+
+/**
+ * The first message a resumed agent sees after a user paused its task
+ * mid-run. As with a spend cap, an agent paused before its first LLM call
+ * has no checkpoint, so it restarts with no message instead.
+ */
+const MANUAL_RESUME_PROMPT =
+  'A user paused your work, and has now resumed it. Continue from where you ' +
+  'left off.';
+
+/**
+ * A pause reason, or `null` for a pause that records none (the QA hand-off)
+ * and for an agent that isn't paused at all.
+ */
+type ResumableReason = PauseReason | null;
+
+/**
+ * What a reply, a consultation result or a QA verdict may lift: the waits
+ * they answer. Anything else — a spend cap, a rate limit, a shutdown, a
+ * user's pause — belongs to its own resume path, and a reply arriving
+ * meanwhile stays undelivered until that path runs.
+ */
+export const WAIT_REASONS: readonly ResumableReason[] = [
+  'user_input',
+  'consultation',
+  null,
+];
+
+/** Every reason: for a resume a user asked for explicitly. */
+export const ALL_REASONS: readonly ResumableReason[] = [
+  ...WAIT_REASONS,
+  'shutdown',
+  'spend_cap',
+  'rate_limited',
+  'manual',
+];
+
+/** Which pauses a resume call may lift. */
+export interface ResumeOptions {
+  /** Pause reasons this caller may lift. Defaults to {@link WAIT_REASONS}. */
+  lifts?: readonly ResumableReason[];
+  /**
+   * Set only by an explicit task resume, which clears the task's pause
+   * itself. Every other caller is refused while the task is paused.
+   */
+  taskResume?: boolean;
+}
 
 /**
  * Creates and resumes agents by enqueuing jobs to the `agent-jobs` BullMQ queue,
@@ -197,24 +247,80 @@ export class AgentOrchestrationService
    */
   async dispatchStartJob(agentId: UUID): Promise<void> {
     this.shutdown.assertAccepting();
+    if (await this.parkIfTaskPaused(agentId)) return;
     await this.queue.add('start', { agentId, type: 'start' });
     await this.announceQueued(agentId);
     this.logger.log(`Dispatched start job for agent ${agentId}`);
   }
 
   /**
+   * Starts an agent created for a task a user has paused as paused itself,
+   * instead of queueing it, so the task's resume starts it with the rest.
+   *
+   * @returns Whether the agent was parked (and so must not be queued).
+   */
+  private async parkIfTaskPaused(agentId: UUID): Promise<boolean> {
+    const agent = await this.agentRepo.findOne({
+      where: { id: agentId },
+      relations: { assignment: { task: true } },
+    });
+    if (!agent?.assignment?.task?.pausedAt) return false;
+    const parked = await this.agentRepo.update(
+      { id: agentId, status: AgentStatus.Idle },
+      {
+        status: AgentStatus.Paused,
+        pauseReason: 'manual',
+        pausedAt: new Date(),
+      },
+    );
+    if ((parked.affected ?? 0) === 0) return false;
+    await this.audit.record(
+      agent.companyId,
+      'agent',
+      agent.id,
+      AuditEventType.StateChange,
+      {
+        entity: 'agent',
+        newStatus: AgentStatus.Paused,
+        reason: 'manual',
+        summary: buildAgentChangeSummary({
+          ...agent,
+          status: AgentStatus.Paused,
+        }),
+      },
+    );
+    this.logger.log(`Agent ${agentId} created paused: its task is paused`);
+    return true;
+  }
+
+  /** The task an agent works on, if any. */
+  private async taskOf(agentId: UUID): Promise<TcpTask | null> {
+    const agent = await this.agentRepo.findOne({
+      where: { id: agentId },
+      relations: { assignment: { task: true } },
+    });
+    return agent?.assignment?.task ?? null;
+  }
+
+  /**
    * The message a resume carries when nothing was asked of the user: a
-   * prompt explaining the pause for shutdown, rate-limit and spend-cap
-   * pauses. A spend-cap pause that struck before the agent's first LLM call
-   * gets none — a resume with no message restarts the agent, which is what
-   * an agent with no checkpoint needs.
+   * prompt explaining the pause for shutdown, rate-limit, spend-cap and
+   * manual pauses. A spend-cap or manual pause that struck before the
+   * agent's first LLM call gets none — a resume with no message restarts the
+   * agent, which is what an agent with no checkpoint needs.
    */
   private async pauseResumePrompt(
     agent: TcpAgent,
   ): Promise<string | undefined> {
     if (agent.pauseReason === 'shutdown') return SHUTDOWN_RESUME_PROMPT;
     if (agent.pauseReason === 'rate_limited') return RATE_LIMIT_RESUME_PROMPT;
-    if (agent.pauseReason !== 'spend_cap') return undefined;
+    const prompt =
+      agent.pauseReason === 'spend_cap'
+        ? SPEND_CAP_RESUME_PROMPT
+        : agent.pauseReason === 'manual'
+          ? MANUAL_RESUME_PROMPT
+          : undefined;
+    if (!prompt) return undefined;
     const started = await this.auditRepo.exists({
       where: {
         companyId: agent.companyId,
@@ -222,7 +328,7 @@ export class AgentOrchestrationService
         eventType: AuditEventType.LlmResponse,
       },
     });
-    return started ? SPEND_CAP_RESUME_PROMPT : undefined;
+    return started ? prompt : undefined;
   }
 
   /**
@@ -235,10 +341,19 @@ export class AgentOrchestrationService
    *   on resume, used only when the agent wasn't paused via this service
    *   (e.g. a manual retry). Pause-triggered resumes aggregate every response
    *   received since the agent paused instead.
+   * @param options - Which pauses this caller may lift. A paused agent whose
+   *   reason isn't among them is left alone — its replies stay undelivered —
+   *   and the call returns it unchanged.
    * @throws if the agent does not exist or is not in a resumable state
+   * @throws `ConflictException` when the agent's task is paused by a user,
+   *   unless this is that task's resume
    * @throws `ServiceUnavailableException` while the system is draining
    */
-  async resumeAgent(agentId: UUID, replyContent?: string): Promise<TcpAgent> {
+  async resumeAgent(
+    agentId: UUID,
+    replyContent?: string,
+    options: ResumeOptions = {},
+  ): Promise<TcpAgent> {
     this.shutdown.assertAccepting();
     const agent = await this.db.getAgent(agentId);
     if (!agent) {
@@ -253,6 +368,21 @@ export class AgentOrchestrationService
       throw new Error(
         `Agent ${agentId} cannot be resumed from status '${agent.status}'`,
       );
+    }
+    if (!options.taskResume && (await this.taskOf(agentId))?.pausedAt) {
+      throw new ConflictException(
+        'This task is paused. Resume the task to continue.',
+      );
+    }
+    const lifts = options.lifts ?? WAIT_REASONS;
+    if (
+      agent.status === AgentStatus.Paused &&
+      !lifts.includes(agent.pauseReason ?? null)
+    ) {
+      this.logger.log(
+        `Agent ${agentId} is paused for '${agent.pauseReason}' — this resume can't lift that`,
+      );
+      return agent;
     }
 
     // Stay paused if the agent raised other requests that haven't been

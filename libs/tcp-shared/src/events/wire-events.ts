@@ -84,6 +84,12 @@ export interface TaskChangeSummary {
   updatedAt: string;
   completedSteps: number;
   totalSteps: number;
+  /** When a user paused the task (ISO); null or absent when not paused. */
+  pausedAt?: string | null;
+  /** Who paused it; null or absent when not paused. */
+  pausedBy?: string | null;
+  /** When its office-view room was closed (ISO); null or absent while open. */
+  visualisationClosedAt?: string | null;
 }
 
 /** Builds a {@link TaskChangeSummary} from a task and its implement-mode plan assignments. */
@@ -91,7 +97,8 @@ export function buildTaskChangeSummary(
   task: Pick<
     TcpTask,
     'id' | 'status' | 'request' | 'shortcode' | 'createdAt' | 'updatedAt'
-  >,
+  > &
+    Partial<Pick<TcpTask, 'pausedAt' | 'pausedBy' | 'visualisationClosedAt'>>,
   planAssignments: Pick<TcpAssignment, 'status'>[],
 ): TaskChangeSummary {
   return {
@@ -104,6 +111,9 @@ export function buildTaskChangeSummary(
     completedSteps: planAssignments.filter((a) => a.status === 'succeeded')
       .length,
     totalSteps: planAssignments.length,
+    pausedAt: task.pausedAt?.toISOString() ?? null,
+    pausedBy: task.pausedBy ?? null,
+    visualisationClosedAt: task.visualisationClosedAt?.toISOString() ?? null,
   };
 }
 

@@ -109,6 +109,38 @@ export class AgentRunStatusService {
   }
 
   /**
+   * Marks the agent running, unless it was paused or finished after its job
+   * was admitted — a user's pause landing in that gap must win, not be
+   * overwritten. The check and the write are one statement.
+   *
+   * @returns Whether the agent is now running, so the run should go ahead.
+   */
+  async claimRunning(agent: TcpAgent, threadId: string): Promise<boolean> {
+    const result = await this.agentRepo
+      .createQueryBuilder()
+      .update(TcpAgent)
+      .set({ status: AgentStatus.Running, threadId })
+      .where('id = :id', { id: agent.id })
+      .andWhere('status NOT IN (:...finished)', {
+        finished: [AgentStatus.Completed, AgentStatus.Cancelled],
+      })
+      // A live pause episode has `pausedAt`; a resume clears it first.
+      .andWhere('NOT (status = :paused AND pausedAt IS NOT NULL)', {
+        paused: AgentStatus.Paused,
+      })
+      .execute();
+    if ((result.affected ?? 0) === 0) return false;
+    this.auditClient.record(
+      agent.companyId,
+      agent.role.name,
+      agent.id,
+      AuditEventType.StateChange,
+      { entity: 'agent', newStatus: AgentStatus.Running },
+    );
+    return true;
+  }
+
+  /**
    * Shows the agent as waiting for a model slot, recording the change so open
    * pages see it. A no-op when the agent has moved on (see {@link markQueued}),
    * or is already queued from an earlier check of the same job.
@@ -227,18 +259,21 @@ export class AgentRunStatusService {
    */
   async failRun(agent: TcpAgent, reason: string): Promise<void> {
     const fresh = await this.agentRepo.findOneBy({ id: agent.id });
-    if (fresh?.status === AgentStatus.Completed) {
+    if (
+      fresh?.status === AgentStatus.Completed ||
+      fresh?.status === AgentStatus.Cancelled
+    ) {
       this.logger.warn(
-        `Agent ${agent.id} already completed — ignoring failure: ${reason}`,
+        `Agent ${agent.id} already ${fresh.status} — ignoring failure: ${reason}`,
       );
       return;
     }
     if (
       fresh?.status === AgentStatus.Paused &&
-      fresh.pauseReason === 'shutdown'
+      (fresh.pauseReason === 'shutdown' || fresh.pauseReason === 'manual')
     ) {
       this.logger.warn(
-        `Agent ${agent.id} stopped by a shutdown — staying paused rather than failing: ${reason}`,
+        `Agent ${agent.id} stopped by a ${fresh.pauseReason} pause — staying paused rather than failing: ${reason}`,
       );
       return;
     }

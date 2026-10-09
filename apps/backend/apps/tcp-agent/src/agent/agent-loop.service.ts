@@ -153,7 +153,11 @@ export class AgentLoopService {
       limits.timeoutMs,
     );
 
-    await this.status.updateStatus(agent, AgentStatus.Running, agentId);
+    if (!(await this.status.claimRunning(agent, agentId))) {
+      clearTimeout(timeoutId);
+      this.logger.log(`Agent ${agentId} was paused or stopped before it ran`);
+      return;
+    }
 
     const checkpointer = PostgresSaver.fromConnString(this.databaseUrl);
     try {

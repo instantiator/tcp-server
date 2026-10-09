@@ -240,6 +240,25 @@ describe('AgentWorkerService', () => {
     },
   );
 
+  it('drops the job of an agent paused after it was queued', async () => {
+    findOne.mockResolvedValueOnce({
+      ...agentRow('agent-p', AgentStatus.Paused),
+      pausedAt: new Date(),
+    });
+
+    await processor(job('agent-p'));
+
+    expect(loopRun).not.toHaveBeenCalled();
+  });
+
+  it('runs the job of an agent whose pause a resume has claimed', async () => {
+    findOne.mockResolvedValueOnce(agentRow('agent-r', AgentStatus.Paused));
+
+    await processor(job('agent-r'));
+
+    expect(loopRun).toHaveBeenCalled();
+  });
+
   describe('when the local pool is full', () => {
     let finishFirst: () => void;
     let firstRun: Promise<void>;
