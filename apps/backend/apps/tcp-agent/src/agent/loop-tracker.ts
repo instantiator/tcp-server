@@ -23,6 +23,41 @@ export interface AgentLoopTracker {
   firedTools: Set<string>;
   /** The model's most recent turn output text, overwritten on each `on_chat_model_end`. */
   lastResponseText: string;
+  /** The last tool call and its result, to spot the same one repeating. */
+  lastCall?: string;
+  /** How many times in a row {@link lastCall} has happened. */
+  callRepeats: number;
+  /** Set when a call repeated too often: the run is stopped for it. */
+  repeatedCall?: { tool: string; result: string };
+}
+
+/**
+ * How many identical calls, with identical results, in a row stop a run. An
+ * agent seen in the wild resent one refused plan until stopped by hand.
+ */
+export const MAX_CALL_REPEATS = 3;
+
+/**
+ * Records a finished tool call and says whether it has now repeated
+ * {@link MAX_CALL_REPEATS} times in a row — same tool, same input, same
+ * result — which means the agent is looping rather than working.
+ */
+export function noteToolCall(
+  tracker: AgentLoopTracker,
+  tool: string,
+  input: unknown,
+  output: unknown,
+): boolean {
+  const result = extractResultText(output);
+  const call = JSON.stringify([tool, input, result]);
+  tracker.callRepeats = call === tracker.lastCall ? tracker.callRepeats + 1 : 1;
+  tracker.lastCall = call;
+  if (tracker.callRepeats < MAX_CALL_REPEATS) return false;
+  tracker.repeatedCall = {
+    tool: baseToolName(tool),
+    result: result.split('\n')[0].slice(0, 200),
+  };
+  return true;
 }
 
 /** Creates an empty tracker for a new loop run. */
@@ -32,6 +67,7 @@ export function createTracker(): AgentLoopTracker {
     storage: { created: [], modified: [], deleted: [], moved: [] },
     firedTools: new Set(),
     lastResponseText: '',
+    callRepeats: 0,
   };
 }
 

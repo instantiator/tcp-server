@@ -1,14 +1,16 @@
-import { LlmConfig, buildChatModel, findProvider } from '@tcp/shared';
+import {
+  LlmConfig,
+  ProbeError,
+  ProbeErrorCode,
+  buildChatModel,
+  classifyProbeError,
+  findProvider,
+  isCapabilityRefusal,
+  unsupportedProvider,
+} from '@tcp/shared';
 import { Injectable, Logger } from '@nestjs/common';
 import { z } from 'zod';
 import { LlmDestinationPolicy } from '../db/llm-destination-policy';
-import {
-  ProbeError,
-  ProbeErrorCode,
-  classifyProbeError,
-  isCapabilityRefusal,
-  unsupportedProvider,
-} from './probe-error';
 
 /** Compatibility report for a single model. */
 export interface ModelCompatibilityResult {

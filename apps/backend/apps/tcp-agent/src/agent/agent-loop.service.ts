@@ -10,7 +10,9 @@ import {
   ContextManagerService,
   DEFAULT_LLM_CONTEXT_WINDOW,
   DEFAULT_REQUIRED_TOOL_RETRIES,
+  checkModelReady,
   LlmIdentity,
+  runFailure,
   TcpAgent,
   SupervisedGraphResult,
 } from '@tcp/shared';
@@ -140,10 +142,14 @@ export class AgentLoopService {
 
     const limits = resolveRunLimits(agent, this.config);
     if (!limits) {
-      await this.status.failRun(
-        agent,
-        'No LLM config: role has no llmConfig, company has no llmConfig, and no LLM env fallback is configured',
-      );
+      await this.status.failRun(agent, runFailure('no_llm_config'));
+      return;
+    }
+    const notReady = this.readinessCheck()
+      ? await checkModelReady(limits.llmConfig)
+      : null;
+    if (notReady) {
+      await this.status.failRun(agent, notReady);
       return;
     }
 
@@ -187,7 +193,7 @@ export class AgentLoopService {
       }
       await this.status.failRun(
         agent,
-        describeRunFailure(err, abortController, limits.timeoutMs),
+        describeRunFailure(err, abortController, limits, limits.llmConfig),
       );
     } finally {
       clearTimeout(timeoutId);
@@ -270,10 +276,21 @@ export class AgentLoopService {
       timeoutMs: limits.timeoutMs,
       buildGraph: env.buildGraph,
       llm,
+      llmConfig: limits.llmConfig,
       holdSpending: this.spendGate.forRun(agent, llm.provider, isFirstMessage),
     };
 
     await this.driveToTerminal(ctx, input, tracker, env.langchainTools);
+  }
+
+  /**
+   * Whether to ask a local model server for its model list before a run
+   * (`LLM_READINESS_CHECK`, on by default). Off unless the config says true,
+   * so a test module that stubs config doesn't reach for a real server.
+   */
+  private readinessCheck(): boolean {
+    const raw = this.config.get<boolean | string>('LLM_READINESS_CHECK');
+    return raw === true || raw === 'true';
   }
 
   /**
@@ -325,9 +342,14 @@ export class AgentLoopService {
         await this.status.pauseForRateLimit(agent, limit, progressed);
         return;
       }
-      const msg = describeRunFailure(err, ctx.abortController, ctx.timeoutMs);
-      this.logger.error(`Agent ${agent.id} loop error: ${msg}`);
-      await this.status.failRun(agent, msg);
+      const failure = describeRunFailure(
+        err,
+        ctx.abortController,
+        { ...ctx, repeatedCall: tracker.repeatedCall },
+        ctx.llmConfig,
+      );
+      this.logger.error(`Agent ${agent.id} loop error: ${String(err)}`);
+      await this.status.failRun(agent, failure);
     }
   }
 
@@ -382,7 +404,9 @@ export class AgentLoopService {
 
     await this.status.failRun(
       agent,
-      `Agent ended without successfully calling required tool(s): ${requiredTools.join(', ')} after ${retries} reminder(s)`,
+      runFailure('required_tools_missing', {
+        tools: requiredTools.map(callableName),
+      }),
     );
   }
 
@@ -409,7 +433,7 @@ export class AgentLoopService {
     }
 
     if (!content) {
-      await this.status.failRun(agent, 'LLM produced no output after retry');
+      await this.status.failRun(agent, runFailure('no_output'));
       return;
     }
 
@@ -442,8 +466,10 @@ export class AgentLoopService {
     if (result.aborted) {
       await this.status.failRun(
         agent,
-        result.failureReason ??
-          describeAbort(ctx.abortController, ctx.timeoutMs),
+        describeAbort(ctx.abortController, {
+          ...ctx,
+          repeatedCall: tracker.repeatedCall,
+        }),
       );
       return true;
     }

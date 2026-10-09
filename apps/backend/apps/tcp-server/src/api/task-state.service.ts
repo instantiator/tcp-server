@@ -107,8 +107,20 @@ export class TaskStateService {
       next = 'finalising';
     }
     if (next !== task.status) {
-      await this.taskRepo.update(taskId, { status: next });
-      await this.recordTaskState(task, next, 'status recomputed');
+      // A task failed through its plan says why: the failed step's reason.
+      const failureReason =
+        next === 'failed'
+          ? (plan.find((a) => a.status === 'failed')?.failureReason ?? null)
+          : undefined;
+      await this.taskRepo.update(taskId, {
+        status: next,
+        ...(failureReason !== undefined && { failureReason }),
+      });
+      await this.recordTaskState(
+        task,
+        next,
+        failureReason ?? 'status recomputed',
+      );
     }
   }
 

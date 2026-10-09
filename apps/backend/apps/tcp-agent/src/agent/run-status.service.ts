@@ -1,6 +1,10 @@
 import {
+  abortFailure,
   AgentStatus,
   AuditClientService,
+  classifyRunError,
+  type LlmConfig,
+  type RunFailure,
   AuditEventType,
   DEFAULT_RATE_LIMIT_QUOTA_RETRY_MS,
   DEFAULT_RATE_LIMIT_RETRY_MAX_MS,
@@ -27,39 +31,47 @@ const TERMINAL_STATUSES = new Set<AgentStatus>([
   AgentStatus.Cancelled,
 ]);
 
-/**
- * Builds a human-readable reason for an abort with no more specific
- * `failureReason` from `runSupervisedGraph` (e.g. the wall-clock timeout
- * firing, which aborts the signal directly rather than returning through the
- * graph runner).
- */
-export function describeAbort(
-  abortController: AbortController,
-  timeoutMs: number,
-): string {
-  if (abortController.signal.reason === 'timeout') {
-    return `timed out after ${Math.round(timeoutMs / 1000)} seconds`;
-  }
-  return String(abortController.signal.reason ?? 'unknown');
+/** What an aborted run's limits were, for its failure message. */
+export interface AbortLimits {
+  timeoutMs: number;
+  maxIterations?: number;
+  /** The call that repeated, when that is why the run was stopped. */
+  repeatedCall?: { tool: string; result: string };
 }
 
 /**
- * Builds a human-readable failure reason for an error escaping the run — a
- * timed-out abort surfaces as a generic `AbortError` here rather than through
- * `runSupervisedGraph`'s own result, so it's checked first; anything else falls
- * back to the error's own message, or a generic "unexpected LLM failure" when
- * the error carries no useful message.
+ * Classifies an aborted run by why its signal was aborted: the wall-clock
+ * timeout, the iteration limit, an overflowing context, a repeating call, or
+ * a stop by someone (a forced drain).
+ */
+export function describeAbort(
+  abortController: AbortController,
+  limits: AbortLimits,
+): RunFailure {
+  return abortFailure(abortController.signal.reason, {
+    seconds: Math.round(limits.timeoutMs / 1000),
+    iterations: limits.maxIterations,
+    tools: limits.repeatedCall && [limits.repeatedCall.tool],
+    result: limits.repeatedCall?.result,
+  });
+}
+
+/**
+ * Classifies an error escaping the run. An aborted run surfaces as a generic
+ * `AbortError` here rather than through `runSupervisedGraph`'s own result, so
+ * the abort is checked first; anything else is classified by
+ * {@link classifyRunError}.
  */
 export function describeRunFailure(
   err: unknown,
   abortController: AbortController,
-  timeoutMs: number,
-): string {
+  limits: AbortLimits,
+  llmConfig: LlmConfig,
+): RunFailure {
   if (abortController.signal.aborted) {
-    return describeAbort(abortController, timeoutMs);
+    return describeAbort(abortController, limits);
   }
-  const msg = err instanceof Error ? err.message : String(err);
-  return msg.trim() ? msg : 'unexpected LLM failure';
+  return classifyRunError(err, llmConfig);
 }
 
 /**
@@ -257,7 +269,27 @@ export class AgentRunStatusService {
    * the run really stopped and lose the pause the operator is meant to resume
    * from.
    */
-  async failRun(agent: TcpAgent, reason: string): Promise<void> {
+  async failRun(agent: TcpAgent, failure: RunFailure): Promise<void> {
+    const reason = failure.message;
+    try {
+      await this.recordFailure(agent, failure);
+    } catch (err) {
+      // The failure itself couldn't be saved. tcp-server is still told, so
+      // the task fails with its reason; the agent row may be left `running`
+      // (see docs/outstanding-issues.md).
+      this.logger.error(
+        `Agent ${agent.id} failed (${failure.code}: ${reason}), and saving that failed: ${String(err)}`,
+      );
+      this.auditClient.notifyFailed(agent.id, reason);
+    }
+  }
+
+  /** Writes the failure, unless the agent has already finished or paused. */
+  private async recordFailure(
+    agent: TcpAgent,
+    failure: RunFailure,
+  ): Promise<void> {
+    const reason = failure.message;
     const fresh = await this.agentRepo.findOneBy({ id: agent.id });
     if (
       fresh?.status === AgentStatus.Completed ||
@@ -277,7 +309,9 @@ export class AgentRunStatusService {
       );
       return;
     }
-    this.logger.error(`Agent ${agent.id} run failed: ${reason}`);
+    this.logger.error(
+      `Agent ${agent.id} run failed (${failure.code}): ${reason}`,
+    );
     // The terminal `failed` state_change (with reason) is recorded by
     // tcp-server's failAgent via notifyFailed below — no local duplicate.
     await this.updateStatus(agent, AgentStatus.Failed);

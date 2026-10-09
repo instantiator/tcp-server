@@ -100,7 +100,7 @@ export class TaskFailureService {
     );
     await this.state.failTask(
       assignment.taskId,
-      'planner completed without producing a plan',
+      'The planner finished without making a plan. Try a more capable model for planning, or simplify the request.',
     );
   }
 
@@ -147,7 +147,10 @@ export class TaskFailureService {
     reason: string,
   ): Promise<void> {
     if (!(await this.claimAgentFailure(assignment, reason))) return;
-    await this.state.failTask(assignment.taskId!, `planner failed: ${reason}`);
+    await this.state.failTask(
+      assignment.taskId!,
+      `The planner stopped. ${reason}`,
+    );
   }
 
   /**
@@ -164,7 +167,10 @@ export class TaskFailureService {
       const completed = await this.deliverables.buildTaskCompleted(task);
       await this.taskRepo.update(task.id, { completed });
     }
-    await this.state.failTask(assignment.taskId!, `finalise failed: ${reason}`);
+    await this.state.failTask(
+      assignment.taskId!,
+      `Finishing the task stopped. ${reason}`,
+    );
   }
 
   /** A failed implement agent fails its assignment and the task. */
@@ -175,7 +181,7 @@ export class TaskFailureService {
     if (!(await this.claimAgentFailure(assignment, reason))) return;
     await this.state.failTask(
       assignment.taskId!,
-      `assignment ${assignment.id} failed: ${reason}`,
+      `${stepName(assignment)} stopped. ${reason}`,
     );
   }
 
@@ -199,14 +205,14 @@ export class TaskFailureService {
       'in-qa',
       'failed',
       {
-        failureReason: `QA agent failed before completing review: ${reason}`,
+        failureReason: `The review stopped before it finished. ${reason}`,
       },
     );
     if (claimed === 0) return;
     await this.claimAgentFailure(assignment, reason);
     await this.state.failTask(
       assignment.taskId!,
-      `QA agent failed for assignment ${assignment.targetAssignmentId}`,
+      `The review of a step stopped. ${reason}`,
     );
   }
 
@@ -274,4 +280,11 @@ export class TaskFailureService {
     if (!agent?.assignmentId) return null;
     return this.assignmentRepo.findOneBy({ id: agent.assignmentId });
   }
+}
+
+/** Names a plan step for a user: "Step 2", or "A step" when its place is unknown. */
+function stepName(assignment: TcpAssignment): string {
+  return assignment.orderIndex != null
+    ? `Step ${assignment.orderIndex + 1}`
+    : 'A step';
 }

@@ -678,7 +678,7 @@ describe('AgentLoopService', () => {
     expect(updated.status).toBe(AgentStatus.Failed);
     expect(notifyFailed).toHaveBeenCalledWith(
       agent.id,
-      expect.stringContaining('No LLM config'),
+      expect.stringContaining('No model is set for this role'),
     );
   });
 
@@ -760,9 +760,10 @@ describe('AgentLoopService', () => {
 
     const updated = await agentRepo.findOneByOrFail({ id: agent.id });
     expect(updated.status).toBe(AgentStatus.Failed);
+    // Not an SDK error, so it comes from this system: its text is kept.
     expect(notifyFailed).toHaveBeenCalledWith(
       agent.id,
-      'LLM connection refused',
+      expect.stringContaining('LLM connection refused'),
     );
 
     expect(auditRecord).toHaveBeenCalledWith(
@@ -873,7 +874,7 @@ describe('AgentLoopService', () => {
     expect(updated.status).toBe(AgentStatus.Failed);
     expect(notifyFailed).toHaveBeenCalledWith(
       agent.id,
-      expect.stringMatching(/^timed out after \d+ seconds$/),
+      expect.stringMatching(/^The agent ran out of time \(\d+ seconds\)/),
     );
   });
 
@@ -894,7 +895,7 @@ describe('AgentLoopService', () => {
     expect(updated.status).toBe(AgentStatus.Failed);
     expect(notifyFailed).toHaveBeenCalledWith(
       agent.id,
-      'unexpected LLM failure',
+      'Something unexpected went wrong. Details are in the server log.',
     );
   });
 
@@ -948,7 +949,7 @@ describe('AgentLoopService', () => {
     expect(notifyComplete).not.toHaveBeenCalled();
     expect(notifyFailed).toHaveBeenCalledWith(
       agent.id,
-      'LLM produced no output after retry',
+      expect.stringContaining('The model returned nothing'),
     );
   });
 
@@ -1016,7 +1017,7 @@ describe('AgentLoopService', () => {
     // server via notifyFailed, not locally.
     expect(notifyFailed).toHaveBeenCalledWith(
       agent.id,
-      'exceeded 10 iterations',
+      expect.stringContaining('more than 10 steps'),
     );
   });
 

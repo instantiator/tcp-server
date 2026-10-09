@@ -286,6 +286,8 @@ services:
       MODEL_CONCURRENCY: ${MODEL_CONCURRENCY:-}
       # Rate-limit pause and auto-resume — see .env.example.
       RATE_LIMIT_AUTO_RESUME: ${RATE_LIMIT_AUTO_RESUME:-}
+      # Defaults to true here: an empty value would read as off.
+      LLM_READINESS_CHECK: ${LLM_READINESS_CHECK:-true}
       RATE_LIMIT_RETRY_MS: ${RATE_LIMIT_RETRY_MS:-}
       RATE_LIMIT_RETRY_MAX_MS: ${RATE_LIMIT_RETRY_MAX_MS:-}
       RATE_LIMIT_QUOTA_RETRY_MS: ${RATE_LIMIT_QUOTA_RETRY_MS:-}

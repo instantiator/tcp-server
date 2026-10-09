@@ -2,10 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsArray, ValidateNested } from 'class-validator';
 import type { ModelCompatibilityResult } from '../../model-check/model-compatibility.service';
-import {
-  PROBE_ERROR_CODES,
-  type ProbeErrorCode,
-} from '../../model-check/probe-error';
+import { PROBE_ERROR_CODES, type ProbeErrorCode } from '@tcp/shared';
 import { LlmConfigDto } from './llm-config.dto';
 
 /** Body for `POST /api/model/check`. */

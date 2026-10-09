@@ -276,7 +276,7 @@ describe('Task orchestration lifecycle (e2e)', () => {
 
     const task = await taskRepo.findOneByOrFail({ id: taskId });
     expect(task.status).toBe('failed');
-    expect(task.failureReason).toContain('without producing a plan');
+    expect(task.failureReason).toContain('without making a plan');
   });
 
   it('runs a finalise agent when the task states expected outputs, then succeeds', async () => {
@@ -389,7 +389,7 @@ describe('Task orchestration lifecycle (e2e)', () => {
 
     const failed = await taskRepo.findOneByOrFail({ id: taskId });
     expect(failed.status).toBe('failed');
-    expect(failed.failureReason).toContain('finalise failed');
+    expect(failed.failureReason).toContain('Finishing the task stopped.');
 
     // Files promoted before the failure remain — "fail but still promote".
     const afterFailure = await storage.listFiles(
@@ -465,7 +465,7 @@ describe('Task orchestration lifecycle (e2e)', () => {
 
     const task = await taskRepo.findOneByOrFail({ id: taskId });
     expect(task.status).toBe('failed');
-    expect(task.failureReason).toContain('planner failed');
+    expect(task.failureReason).toContain('The planner stopped.');
   });
 
   it('lets only one of two concurrent completions win (atomic claim)', async () => {

@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   HttpCode,
+  Logger,
   NotFoundException,
   Param,
   Patch,
@@ -57,6 +58,8 @@ import {
 @Controller('internal')
 @UseGuards(InternalApiKeyGuard)
 export class InternalController {
+  private readonly logger = new Logger(InternalController.name);
+
   constructor(
     private readonly pauseResume: PauseAndResumeService,
     private readonly taskFailures: TaskFailureService,
@@ -186,10 +189,19 @@ export class InternalController {
     @Param('agentId') agentId: UUID,
     @Body() body: FailDto,
   ): Promise<void> {
-    await this.pauseResume.failAgent(agentId, body.reason);
-    // Propagate the failure to the agent's task, when it has one (orphan/chat
-    // agents are unaffected).
-    await this.taskFailures.handleAgentFailed(agentId, body.reason);
+    try {
+      await this.pauseResume.failAgent(agentId, body.reason);
+      // Propagate the failure to the agent's task, when it has one
+      // (orphan/chat agents are unaffected).
+      await this.taskFailures.handleAgentFailed(agentId, body.reason);
+    } catch (err) {
+      // The caller is fire-and-forget, so this log is where a reason that
+      // couldn't be saved survives.
+      this.logger.error(
+        `Recording agent ${agentId}'s failure ("${body.reason}") failed: ${String(err)}`,
+      );
+      throw err;
+    }
   }
 
   /**

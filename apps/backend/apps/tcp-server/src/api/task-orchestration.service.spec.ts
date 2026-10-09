@@ -750,7 +750,7 @@ describe('TaskOrchestrationService', () => {
 
       const taskAfter = (await taskRepo.findOneBy({ id: task.id }))!;
       expect(taskAfter.status).toBe('failed');
-      expect(taskAfter.failureReason).toContain('planner failed');
+      expect(taskAfter.failureReason).toBe('The planner stopped. boom');
       // The plan assignment must not be left stuck in-progress.
       const planAfter = (await assignmentRepo.findOneBy({ id: plan.id }))!;
       expect(planAfter.status).toBe('failed');
@@ -1013,7 +1013,7 @@ describe('TaskOrchestrationService', () => {
 
       const taskAfter = (await taskRepo.findOneBy({ id: task.id }))!;
       expect(taskAfter.status).toBe('failed');
-      expect(taskAfter.failureReason).toContain('without producing a plan');
+      expect(taskAfter.failureReason).toContain('without making a plan');
       // The plan assignment itself must fail too, not just the task.
       const planAfter = (await assignmentRepo.findOneBy({ id: plan.id }))!;
       expect(planAfter.status).toBe('failed');
@@ -1180,7 +1180,7 @@ describe('TaskOrchestrationService', () => {
 
       const fresh = await taskRepo.findOneByOrFail({ id: task.id });
       expect(fresh.status).toBe('failed');
-      expect(fresh.failureReason).toContain('finalise failed');
+      expect(fresh.failureReason).toContain('Finishing the task stopped.');
       // Files still recorded as completed.
       expect(fresh.completed).toEqual([
         { type: 'task-completed-path', value: 'report.txt' },
@@ -1312,6 +1312,35 @@ describe('TaskOrchestrationService', () => {
       });
       expect(freshAssignment.status).toBe('failed');
       expect(freshAssignment.failureReason).toBe('agent died before restart');
+    });
+  });
+
+  // --- recomputeTaskStatus -----------------------------------------------
+
+  describe('recomputeTaskStatus', () => {
+    // A task failed through its plan must say why, not sit failed blank.
+    it("gives a task failed through its plan the failed step's reason", async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, { status: 'in-progress' });
+      await seedAssignment({
+        companyId: company.id,
+        roleId: role.id,
+        taskId: task.id,
+        orderIndex: 0,
+        status: 'failed',
+        failureReason: 'did not pass QA',
+      });
+
+      await new TaskStateService(
+        taskRepo,
+        assignmentRepo,
+        audit as unknown as AuditService,
+      ).recomputeTaskStatus(task.id);
+
+      const after = await taskRepo.findOneByOrFail({ id: task.id });
+      expect(after.status).toBe('failed');
+      expect(after.failureReason).toBe('did not pass QA');
     });
   });
 });
