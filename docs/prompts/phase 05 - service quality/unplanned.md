@@ -6,9 +6,6 @@
 
 - what happens when the backend has completed something but the frontend is catching up - do errors occur if the user attempts an interaction (eg.) for an agent that no longer exists?
 
-- let's link minio / silo to the OIDC service of choice
-  - add a synchronisation feature - when a user is granted access to a company, they are granted access to that company's bucket (and revoked if no longer the case)
-
 - how can we design configurable workflows, eg. provide one or more ways of working in a file format that can be interpreted
   - this starts as design work
   - examples of things it should be able to do...
