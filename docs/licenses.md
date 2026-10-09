@@ -7,7 +7,7 @@
 | @langchain/langgraph                     | MIT          | git+ssh://git@github.com/langchain-ai/langgraphjs.git          | LangChain                                                              | 1.4.8     | ^1.4.8    |
 | @langchain/langgraph-checkpoint-postgres | MIT          | git+ssh://git@github.com/langchain-ai/langgraphjs.git          | LangChain                                                              | 1.0.4     | ^1.0.4    |
 | @langchain/openai                        | MIT          | git+ssh://git@github.com/langchain-ai/langchainjs.git          | LangChain                                                              | 1.5.5     | ^1.5.5    |
-| @modelcontextprotocol/sdk                | MIT          | git+https://github.com/modelcontextprotocol/typescript-sdk.git | Anthropic, PBC (https://anthropic.com)                                 | 1.29.0    | ^1.29.0   |
+| @modelcontextprotocol/sdk                | MIT          | git+https://github.com/modelcontextprotocol/typescript-sdk.git | Anthropic, PBC (https://anthropic.com)                                 | 1.32.1    | ^1.29.0   |
 | @nestjs/axios                            | MIT          | git+https://github.com/nestjs/axios.git                        | Kamil Mysliwiec                                                        | 4.0.1     | ^4.0.1    |
 | @nestjs/common                           | MIT          | git+https://github.com/nestjs/nest.git                         | Kamil Mysliwiec                                                        | 11.1.28   | ^11.1.28  |
 | @nestjs/config                           | MIT          | git+https://github.com/nestjs/config.git                       | Kamil Mysliwiec                                                        | 4.0.4     | ^4.0.4    |
