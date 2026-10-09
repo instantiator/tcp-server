@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Button,
   CheckboxButton,
@@ -6,6 +6,7 @@ import {
   CheckboxGroup,
   Label,
 } from 'react-aria-components';
+import { useSearchParams } from 'react-router';
 import { useListChangeAnnouncement } from '../../../announce/useListChangeAnnouncement';
 import { useLiveCompanyTasksList } from '../../../api/hooks';
 import { ACTIVE_TASK_STATUSES, statusLabel } from '../../../api/statuses';
@@ -73,6 +74,13 @@ export const TasksList = ({
 }) => {
   const [selected, setSelected] = useState<string[]>([...ACTIVE_TASK_STATUSES]);
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  // `?task=<id>`, from a notification's "Open task" link, opens that task's
+  // dialog. Keyed on the value, so StrictMode's second run is a no-op.
+  const [params, setParams] = useSearchParams();
+  const linkedTaskId = params.get('task');
+  useEffect(() => {
+    if (linkedTaskId !== null) setOpenTaskId(linkedTaskId);
+  }, [linkedTaskId]);
   const query = useLiveCompanyTasksList(companyId);
   const rows = query.data?.filter((task) => selected.includes(task.status));
 
@@ -145,6 +153,17 @@ export const TasksList = ({
           companyId={companyId}
           onClose={() => {
             setOpenTaskId(null);
+            // Drop the deep link, or following it again would change nothing.
+            if (linkedTaskId !== null) {
+              setParams(
+                (previous) => {
+                  const next = new URLSearchParams(previous);
+                  next.delete('task');
+                  return next;
+                },
+                { replace: true },
+              );
+            }
           }}
         />
       )}

@@ -37,7 +37,7 @@ const ARCHIVE_ITEM: PickerItem = {
 };
 
 /**
- * Every role, every unfinished task, every agent still doing something, then
+ * Every role, every task whose room is open (finished or not), every agent still doing something, then
  * the archive — always present, since the archive room always exists.
  */
 const buildItems = (snapshot: CompanySnapshot): readonly PickerItem[] => {
@@ -55,7 +55,7 @@ const buildItems = (snapshot: CompanySnapshot): readonly PickerItem[] => {
   }));
 
   const taskItems: PickerItem[] = snapshot.tasks
-    .filter((task) => !task.finished)
+    .filter((task) => task.visualisationClosedAt === null)
     .map((task) => ({
       key: `task:${task.id}`,
       label: t('visualisation.picker.task', { shortcode: task.shortcode }),
@@ -83,8 +83,8 @@ const buildItems = (snapshot: CompanySnapshot): readonly PickerItem[] => {
 
 /**
  * The keyboard route into the tray (ADR-026/027: a pointer-only hover-and-
- * click scene fails WCAG 2.1.1). Lists every role, every unfinished task and
- * every agent still doing something, flat, in that order — choosing one
+ * click scene fails WCAG 2.1.1). Lists every role, every task with an open room
+ * (a finished task's tray holds its Close room button) and every agent still doing something, flat, in that order — choosing one
  * opens the tray on it the same way clicking the office would.
  *
  * Disabled with no snapshot or no items, rather than shown empty: an

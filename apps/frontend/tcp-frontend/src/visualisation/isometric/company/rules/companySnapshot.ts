@@ -69,6 +69,12 @@ export interface SnapshotTask {
   readonly finished: boolean;
   /** The task's status is specifically succeeded, not failed or cancelled. */
   readonly succeeded: boolean;
+  /** The task's own status; the lighting rules read it to tell an active board from a ready one. */
+  readonly status: TaskDTO['status'];
+  /** When the task was paused, or `null` while it isn't. */
+  readonly pausedAt: string | null;
+  /** When the user closed the task's room, or `null` while it stays open. */
+  readonly visualisationClosedAt: string | null;
   /** How many of the task's `implement` assignments have succeeded. */
   readonly step: number;
   /** How many `implement` assignments the task has: its plan's length. */
@@ -81,6 +87,8 @@ export interface SnapshotAgent {
   readonly assignmentId: string;
   /** From the assignment. `null` for consultee and chat agents, which have no task. */
   readonly taskId: string | null;
+  /** The agent's own status; `activity` can't tell a running consultee from an idle one. */
+  readonly status: AgentDTO['status'];
   readonly activity: AgentActivity;
 }
 
@@ -140,6 +148,9 @@ export function buildCompanySnapshot(data: CompanyData): CompanySnapshot {
       request: task.request,
       finished: !isOneOf(ACTIVE_TASK_STATUSES, task.status),
       succeeded: task.status === 'succeeded',
+      status: task.status,
+      pausedAt: task.pausedAt ?? null,
+      visualisationClosedAt: task.visualisationClosedAt ?? null,
       step: plan.filter((step) => step.status === 'succeeded').length,
       steps: plan.length,
     };
@@ -156,6 +167,7 @@ export function buildCompanySnapshot(data: CompanyData): CompanySnapshot {
         roleId: agent.roleId,
         assignmentId: assignment.id,
         taskId: assignment.taskId ?? null,
+        status: agent.status,
         activity: activityOf(
           agent,
           assignment,

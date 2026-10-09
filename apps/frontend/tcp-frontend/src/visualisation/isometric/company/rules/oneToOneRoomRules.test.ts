@@ -16,6 +16,7 @@ function consultingAgent(
     roleId: 'role-1',
     assignmentId: `${id}-assignment`,
     taskId: null,
+    status: 'idle',
     activity: { kind: 'consulting', oneToOneId },
     ...overrides,
   };

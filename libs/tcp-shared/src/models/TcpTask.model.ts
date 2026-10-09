@@ -136,4 +136,25 @@ export class TcpTask extends VersionedEntity {
    */
   @Column({ default: false })
   spendCapExempt!: boolean;
+
+  /**
+   * When a user paused this task; null while it isn't paused. While set, no
+   * automatic resume (a reply, a consultation result, a sweep) restarts its
+   * agents, and agents created for it start paused — only an explicit task
+   * resume clears it.
+   */
+  @Column({ nullable: true })
+  pausedAt?: Date;
+
+  /** Who paused this task, as shown to users; null while it isn't paused. */
+  @Column({ type: 'varchar', nullable: true })
+  pausedBy?: string | null;
+
+  /**
+   * When a user closed this task's place in the office view (its room). Until
+   * then a finished task's room stays open. Named for the view rather than
+   * the room, since other views may come later.
+   */
+  @Column({ nullable: true })
+  visualisationClosedAt?: Date;
 }

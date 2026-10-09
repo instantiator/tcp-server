@@ -5,6 +5,7 @@
 // best-effort (`docs/prompts/010.5.1` B.7).
 
 import type { AuditWireEvent } from '../events/wire-events';
+import type { PauseReason } from '../models/TcpAgent.model';
 import { extractContentText } from '../llm/content-text';
 import { parseClockTime } from './format';
 
@@ -109,6 +110,21 @@ export function compactionSummary(payload: Record<string, unknown>): string {
   return `${num(payload['tokensAfter'])}/${num(payload['windowSize'])} tokens (${num(payload['pct'])}%)`;
 }
 
+/** The words for each {@link PauseReason}, in place of the raw enum value. */
+export const PAUSE_REASON_TEXT: Record<PauseReason, string> = {
+  user_input: 'waiting for a reply',
+  consultation: 'waiting for a consultation',
+  shutdown: 'paused by a shutdown',
+  spend_cap: 'spend cap reached',
+  manual: 'paused by a user',
+  rate_limited: 'rate limited',
+};
+
+/** Whether a free-form string is one of the known pause reasons. */
+function isPauseReason(reason: string): reason is PauseReason {
+  return Object.hasOwn(PAUSE_REASON_TEXT, reason);
+}
+
 /**
  * The trailing line-only text of a `state_change`: `newStatus (reason)`,
  * reason optional. A `rate_limited` pause (000.03) instead reads
@@ -126,6 +142,9 @@ export function stateChangeText(payload: Record<string, unknown>): string {
         ? parseClockTime(resumeAfter)?.slice(0, 5)
         : null;
     return `${status} (rate limited, ${time ? `next try ${time}` : 'resume by hand'})`;
+  }
+  if (status === 'paused' && isPauseReason(reason)) {
+    return `${status} (${PAUSE_REASON_TEXT[reason]})`;
   }
   return reason ? `${status} (${reason})` : status;
 }

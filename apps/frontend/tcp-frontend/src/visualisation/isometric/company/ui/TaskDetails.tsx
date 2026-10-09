@@ -1,11 +1,20 @@
 import {
-  useCompanyRolesList,
+  useCloseTaskVisualisation,
   useLiveAssignmentsList,
+  useLiveCompanyState,
   useLiveCompanyTasksList,
+  useCompanyRolesList,
 } from '../../../../api/hooks';
+import { refusalKey } from '../../../../api/errors';
+import { taskOutputsUrl } from '../../../../api/storageLink';
+import { ErrorState } from '../../../../components/ErrorState/ErrorState';
+import { getRuntimeConfig } from '../../../../runtime-config';
 import type { AssignmentDTO } from '../../../../api/dtos';
-import type { ReactNode } from 'react';
-import { statusLabel } from '../../../../api/statuses';
+import { Info } from 'lucide-react';
+import { Fragment, type ReactNode } from 'react';
+import { Button, Tooltip, TooltipTrigger } from 'react-aria-components';
+import { Icon } from '../../../../components/Icon/Icon';
+import { ACTIVE_TASK_STATUSES, statusLabel } from '../../../../api/statuses';
 import { ExpandableText } from '../../../../components/ExpandableText/ExpandableText';
 import { t } from '../../../../strings';
 import { modeLabel } from './modeLabel';
@@ -17,21 +26,108 @@ export interface TaskDetailsProps {
   readonly headingId: string;
   /** The follow toggle, shown beside this panel's own heading. */
   readonly headingAction?: ReactNode;
+  /**
+   * Called once the task's room has closed, so the tray can let go of a
+   * selection whose whiteboard has gone and put focus somewhere deliberate.
+   */
+  readonly onRoomClosed?: () => void;
+  /** Where the assignment tooltips are portalled; see `VisualisationTrayProps.portalContainer`. */
+  readonly portalContainer?: Element | undefined;
 }
 
-/** Ascending `orderIndex`, with a `null` (not yet planned into a step) last. */
-const byOrderIndex = (a: AssignmentDTO, b: AssignmentDTO): number => {
-  const left = a.orderIndex ?? null;
-  const right = b.orderIndex ?? null;
-  if (left === null && right === null) return 0;
-  if (left === null) return 1;
-  if (right === null) return -1;
-  return left - right;
+/** Chronological: oldest first, with the id as a stable tie-break. */
+const byCreation = (a: AssignmentDTO, b: AssignmentDTO): number =>
+  a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
+
+const IN_PROGRESS_STATUSES: ReadonlySet<string> = new Set([
+  'ready',
+  'in-progress',
+  'in-qa',
+]);
+
+interface NumberedAssignment {
+  readonly assignment: AssignmentDTO;
+  /** Its place in the task's whole creation order; it never changes between sections. */
+  readonly number: number;
+}
+
+/**
+ * The "about this assignment" control: a focusable ⓘ whose tooltip names the
+ * task and assignment, then gives the assignment's prompt. A button so it
+ * takes keyboard focus, which opens the tooltip as hover does (WCAG 1.4.13).
+ */
+const AssignmentInfo = ({
+  shortcode,
+  number,
+  prompt,
+  portalContainer,
+}: {
+  readonly shortcode: string;
+  readonly number: number;
+  readonly prompt: string;
+  readonly portalContainer: Element | undefined;
+}) => (
+  <TooltipTrigger>
+    <Button
+      className="react-aria-Button"
+      aria-label={t('visualisation.tray.aboutAssignment', { number })}
+    >
+      <Icon icon={Info} />
+    </Button>
+    {/* Portalled into the office view so it shows in full screen; see `WithTooltip`. */}
+    <Tooltip
+      className="react-aria-Tooltip"
+      // eslint-disable-next-line @typescript-eslint/no-deprecated -- deliberate; see `WithTooltip`
+      UNSTABLE_portalContainer={portalContainer}
+    >
+      <div>
+        {t('visualisation.tray.assignmentInfoTitle', {
+          shortcode,
+          number: String(number).padStart(3, '0'),
+        })}
+      </div>
+      <div>{prompt}</div>
+    </Tooltip>
+  </TooltipTrigger>
+);
+
+/**
+ * The link to a succeeded task's outputs in Silo, marked up as the archive's
+ * rows are: the visible text leads the accessible name and a hidden suffix
+ * warns of the new tab (WCAG 2.5.3). Without storage configured, or before
+ * the company has loaded, there is no URL, so it says why instead.
+ */
+const OutputsLink = ({
+  slug,
+  taskId,
+}: {
+  readonly slug: string | undefined;
+  readonly taskId: string;
+}) => {
+  const url =
+    slug === undefined
+      ? null
+      : taskOutputsUrl(getRuntimeConfig(), slug, taskId);
+  if (url === null) {
+    return slug === undefined ? null : (
+      <p>{t('visualisation.tray.outputsUnconfigured')}</p>
+    );
+  }
+  return (
+    <p>
+      <a href={url} target="_blank" rel="noopener noreferrer">
+        {t('visualisation.tray.outputs')}{' '}
+        <span className="visually-hidden">
+          {t('visualisation.archive.linkSuffix')}
+        </span>
+      </a>
+    </p>
+  );
 };
 
 /**
  * One task's live details in the office tray: its request, its status, and
- * the assignments working it, in plan order.
+ * its assignments numbered in creation order, split into those in progress and those completed.
  *
  * Assignments come from the company's whole list, filtered to this task
  * client-side — the same list `useOfficeWorld` already holds for the rules,
@@ -42,10 +138,14 @@ export const TaskDetails = ({
   taskId,
   headingId,
   headingAction,
+  onRoomClosed,
+  portalContainer,
 }: TaskDetailsProps) => {
   const tasksQuery = useLiveCompanyTasksList(companyId);
   const { data: roles } = useCompanyRolesList(companyId);
   const { data: assignments } = useLiveAssignmentsList({ companyId });
+  const companyQuery = useLiveCompanyState(companyId);
+  const closeRoom = useCloseTaskVisualisation(taskId);
 
   if (tasksQuery.isPending) {
     return (
@@ -74,9 +174,29 @@ export const TaskDetails = ({
     roles?.find((role) => role.id === roleId)?.name ??
     t('activity.role.unknown');
 
-  const ordered = (assignments ?? [])
+  const numbered: NumberedAssignment[] = (assignments ?? [])
     .filter((assignment) => assignment.taskId === taskId)
-    .sort(byOrderIndex);
+    .sort(byCreation)
+    .map((assignment, index) => ({ assignment, number: index + 1 }));
+  const sections = [
+    {
+      heading: t('visualisation.tray.inProgress'),
+      rows: numbered.filter(({ assignment }) =>
+        IN_PROGRESS_STATUSES.has(assignment.status),
+      ),
+    },
+    {
+      heading: t('visualisation.tray.completed'),
+      rows: numbered.filter(
+        ({ assignment }) => !IN_PROGRESS_STATUSES.has(assignment.status),
+      ),
+    },
+  ].filter((section) => section.rows.length > 0);
+
+  const finished = !(ACTIVE_TASK_STATUSES as readonly string[]).includes(
+    task.status,
+  );
+  const canCloseRoom = finished && !task.visualisationClosedAt;
 
   return (
     <>
@@ -90,17 +210,52 @@ export const TaskDetails = ({
         collapseLabel={t('visualisation.tray.prompt.collapse')}
       />
       <p>{statusLabel(task.status)}</p>
-      <ul aria-label={t('visualisation.tray.assignments')}>
-        {ordered.map((assignment) => (
-          <li key={assignment.id}>
-            {t('visualisation.tray.assignmentRow', {
-              role: roleName(assignment.roleId),
-              mode: modeLabel(assignment.mode),
-              status: statusLabel(assignment.status),
-            })}
-          </li>
-        ))}
-      </ul>
+      {task.status === 'succeeded' && (
+        <OutputsLink slug={companyQuery.data?.slug} taskId={taskId} />
+      )}
+      {canCloseRoom && (
+        <Button
+          className="react-aria-Button"
+          isDisabled={closeRoom.isPending}
+          onPress={() => {
+            closeRoom.mutate(undefined, { onSuccess: onRoomClosed });
+          }}
+        >
+          {t('visualisation.tray.closeRoom')}
+        </Button>
+      )}
+      {closeRoom.isError && (
+        <ErrorState
+          message={t(refusalKey(closeRoom.error, 'closeVisualisation'))}
+          channel={`task-closeVisualisation:${taskId}`}
+        />
+      )}
+      {sections.map((section) => (
+        <Fragment key={section.heading}>
+          <h3>{section.heading}</h3>
+          <ol>
+            {section.rows.map(({ assignment, number }) => (
+              // The native marker shows `value`, so the number seen and the
+              // number read agree even where the section has gaps.
+              <li key={assignment.id} value={number}>
+                {t('visualisation.tray.assignmentRow', {
+                  role: roleName(assignment.roleId),
+                  mode: modeLabel(assignment.mode),
+                })}{' '}
+                <AssignmentInfo
+                  shortcode={task.shortcode}
+                  number={number}
+                  prompt={assignment.prompt}
+                  portalContainer={portalContainer}
+                />
+                {t('visualisation.tray.assignmentStatusSuffix', {
+                  status: statusLabel(assignment.status),
+                })}
+              </li>
+            ))}
+          </ol>
+        </Fragment>
+      ))}
     </>
   );
 };

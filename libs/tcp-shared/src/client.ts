@@ -142,7 +142,10 @@ export {
   eventLabel,
   compactionSummary,
   stateChangeText,
+  PAUSE_REASON_TEXT,
 } from './transcript/line-format';
+export { taskWaiting } from './tasks/task-waiting';
+export type { TaskWaiting, TaskWaitKind } from './tasks/task-waiting';
 export {
   isBlankText,
   parseClockTime,

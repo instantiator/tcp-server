@@ -6,6 +6,7 @@ import {
   createTaskAction,
   getTaskAction,
   listTasksAction,
+  pauseTaskAction,
   setPlannerAction,
   setTaskAction,
   startTaskAction,
@@ -249,6 +250,30 @@ describe('cancelTaskAction', () => {
       expect.anything(),
       'POST',
       `/api/task/${task.id}/cancel`,
+    );
+  });
+});
+
+describe('pauseTaskAction', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockedResolveToken.mockResolvedValue('token');
+    jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+  });
+
+  it('pauses the task by its encoded id and prints it', async () => {
+    const paused = { ...task, status: 'in-progress', pausedBy: 'Ada' };
+    mockedApiRequest.mockResolvedValueOnce(paused);
+
+    await pauseTaskAction(opts, { taskId: 'task id' });
+
+    expect(mockedApiRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      'POST',
+      '/api/task/task%20id/pause',
+    );
+    expect(process.stdout.write).toHaveBeenCalledWith(
+      JSON.stringify(paused, null, 2) + '\n',
     );
   });
 });

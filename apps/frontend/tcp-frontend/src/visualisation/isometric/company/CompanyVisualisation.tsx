@@ -13,9 +13,11 @@ import { emitTcpEvent } from './TcpPhaserEventBus';
 import type {
   HoverEvent,
   HoverTarget,
+  OfficeStatus,
   SelectionTarget,
 } from './TcpPhaserEventBus';
 import TcpPhaserVisualisation from './TcpPhaserVisualisation';
+import { roomLighting } from './rules/roomLighting';
 import { LabelTogglesControl } from './ui/LabelToggles';
 import { buildOfficeLabels, type LabelToggles } from './ui/officeLabels';
 import { PAN_STEP_PX, VisualisationToolbar } from './ui/VisualisationToolbar';
@@ -94,6 +96,22 @@ export default function CompanyVisualisation({
         )
         .map((agent) => agent.id),
     [snapshot],
+  );
+  // Rebuilt on every snapshot or world change; the scene compares it by
+  // value, so a new object with the same contents redraws nothing.
+  const status = useMemo<OfficeStatus | undefined>(
+    () =>
+      snapshot === null
+        ? undefined
+        : {
+            ...roomLighting(world, snapshot),
+            completedTaskIds: new Set(
+              snapshot.tasks
+                .filter((task) => task.succeeded)
+                .map((task) => task.id),
+            ),
+          },
+    [world, snapshot],
   );
   const listenIn = useListenIn(companyId);
   const onListenIn = useCallback(
@@ -238,6 +256,7 @@ export default function CompanyVisualisation({
             reducedMotion={reducedMotion}
             labels={labels}
             thinkingAgentIds={thinkingAgentIds}
+            status={status}
             onListenIn={onListenIn}
             followTarget={followTarget}
             onAvatarArrived={avatarArrived}

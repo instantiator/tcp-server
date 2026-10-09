@@ -27,16 +27,19 @@ finalisation), `TaskFailureService` (the paths that end a task badly), and
 
 ### `TcpTask`
 
-| Field           | Type                                   | Notes                                                                    |
-| --------------- | -------------------------------------- | ------------------------------------------------------------------------ |
-| `companyId`     | uuid                                   | Owning company                                                           |
-| `request`       | text                                   | The user's statement of the work                                         |
-| `plannerRoleId` | uuid, nullable                         | Explicit planner; falls back to `TcpCompany.plannerRoleId` at start time |
-| `status`        | `TcpTaskStatus`                        | See [Task status](#task-status)                                          |
-| `materials`     | `TcpMaterialArtifact[]`                | Task materials — `task-materials-path` or `inline-text` only             |
-| `expected`      | `TcpTaskCompletedArtifact[]`           | Artifacts the task should produce                                        |
-| `completed`     | `TcpTaskCompletedArtifact[]`, nullable | Set at finalisation (part 7)                                             |
-| `failureReason` | text, nullable                         | Why the task failed — planner failure, QA exhaustion, etc.               |
+| Field                   | Type                                   | Notes                                                                              |
+| ----------------------- | -------------------------------------- | ---------------------------------------------------------------------------------- |
+| `companyId`             | uuid                                   | Owning company                                                                     |
+| `request`               | text                                   | The user's statement of the work                                                   |
+| `plannerRoleId`         | uuid, nullable                         | Explicit planner; falls back to `TcpCompany.plannerRoleId` at start time           |
+| `status`                | `TcpTaskStatus`                        | See [Task status](#task-status)                                                    |
+| `materials`             | `TcpMaterialArtifact[]`                | Task materials — `task-materials-path` or `inline-text` only                       |
+| `expected`              | `TcpTaskCompletedArtifact[]`           | Artifacts the task should produce                                                  |
+| `completed`             | `TcpTaskCompletedArtifact[]`, nullable | Set at finalisation (part 7)                                                       |
+| `failureReason`         | text, nullable                         | Why the task failed, in plain words. See [Failure reasons](#failure-reasons)       |
+| `pausedAt`              | timestamp, nullable                    | Set while a user's pause holds the task. See [Pause and resume](#pause-and-resume) |
+| `pausedBy`              | text, nullable                         | Who paused it                                                                      |
+| `visualisationClosedAt` | timestamp, nullable                    | Set when a user closes a finished task's room in the office view                   |
 
 ### `TcpAssignment`
 
@@ -165,9 +168,12 @@ non-member gets a `403`, not a filtered result — see
 | `PUT /api/task/:id`                                            | Edit `request`/`plannerRoleId`/`materials`/`expected` on an unstarted task (`409` once left `ready`; `404` if `plannerRoleId` doesn't belong to the task's company)                                                                                                                                                                                                                                                                                                                                |
 | `POST /api/task/:id/materials`                                 | Upload a material file (`multipart/form-data`, field `file`); rejected once the task has left `ready` (`409`)                                                                                                                                                                                                                                                                                                                                                                                      |
 | `POST /api/task/:id/start`                                     | Resolve a planner role (task's own, falling back to the company default — `422` if neither), atomically transition `ready → planning` (`409` if not `ready`), and dispatch the planner agent                                                                                                                                                                                                                                                                                                       |
+| `POST /api/task/:id/pause`                                     | Pause a running task (`planning`, `in-progress` or `finalising`): see [Pause and resume](#pause-and-resume). `409` if it isn't running or is already paused                                                                                                                                                                                                                                                                                                                                        |
+| `POST /api/task/:id/resume`                                    | Lift a user's pause and resume the task's agents paused by it, a spend cap, a shutdown or a rate limit (plus any whose awaited reply has arrived). `503` while shutting down                                                                                                                                                                                                                                                                                                                       |
+| `POST /api/task/:id/close-visualisation`                       | Close a finished task's room in the office view (`409` unless the task is `succeeded`, `failed` or `cancelled`)                                                                                                                                                                                                                                                                                                                                                                                    |
 | `POST /api/task/:id/cancel`                                    | Transition any non-terminal status → `cancelled` (`409` if already terminal) and cascade to the task's still-non-terminal assignments and their working agents                                                                                                                                                                                                                                                                                                                                     |
 | `GET /api/task?companyId=`                                     | List a company's tasks                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `GET /api/task/:id`                                            | Get a task with its assignments — plan assignments ordered by `orderIndex`, then the rest by creation time                                                                                                                                                                                                                                                                                                                                                                                         |
+| `GET /api/task/:id`                                            | Get a task with its assignments — plan assignments ordered by `orderIndex`, then the rest by creation time — and `waiting`: why it is standing still, or `null` (see [Wait reasons](#wait-reasons))                                                                                                                                                                                                                                                                                                |
 | `GET /api/task/:id/history`                                    | Get the task's audit history — its own assignments' agents, including consultations spawned mid-assignment (see [ADR-008](ADRs/ADR-008-audit-logging.md))                                                                                                                                                                                                                                                                                                                                          |
 | `GET /api/task/:id/events`                                     | SSE stream of `task_changed`/`assignment_changed` events, primed with current state (see [ADR-015](ADRs/ADR-015-agent-completion-sse.md))                                                                                                                                                                                                                                                                                                                                                          |
 | `GET /api/company`                                             | List the caller's companies (`CompanyUser` rows matching the token's `sub` **or** `email`), each with its stat set — `stats.activeAgents`, `stats.tasksByStatus` (zero-filled per status) and `stats.openEnquiries`. `?all=true` returns every company instead — administrators only (`TCP_ADMIN_IDENTIFIERS`), `403` for anyone else (see [ADR-023](ADRs/ADR-023-backend-api-surface-for-the-web-ui.md), [ADR-011](ADRs/ADR-011-authentication-authorization.md#amendments-as-implemented-00205)) |
@@ -183,6 +189,69 @@ The `start` transition uses an atomic conditional `UPDATE ... WHERE status =
 `cancel` uses the equivalent `UPDATE ... WHERE status NOT IN (succeeded,
 failed, cancelled)` form, since any non-terminal status is a valid start
 point.
+
+## Pause and resume
+
+A user can pause a task that is `planning`, `in-progress` or `finalising`
+(`POST /api/task/:id/pause`, the task dialog's **Pause**, or `pause-task`).
+
+- **It is a soft stop.** Running agents stop at their next safe point, after
+  the LLM call they are making. Nothing is cut off, so a pause can take as long
+  as one call. The task dialog reads "Pausing" until they have stopped.
+- **The task records it:** `pausedAt` and `pausedBy`. The task keeps its real
+  status. There is no `paused` task status.
+- **Agents paused this way have `pauseReason: 'manual'`.** An agent created
+  while the task is paused starts paused.
+- **Nothing resumes a paused task by itself.** A reply, a consultation result,
+  a QA verdict and the spend and rate-limit sweeps are all refused (`409`, or
+  skipped) until the task is resumed. A reply that arrives meanwhile is kept
+  and given to its agent on resume.
+- **A task resume is the only way out** (`POST /api/task/:id/resume`, the
+  dialog's **Resume**, or `resume-task`). It clears the pause, then resumes
+  the agents paused by it, a spend cap, a shutdown or a rate limit. An agent
+  still waiting on an answer stays paused. It exempts the task from spend caps
+  only if a cap is reached at that moment, as Start does (see
+  [spend-caps.md](spend-caps.md#when-a-cap-is-reached)).
+- **A company resume skips a task a user paused.** Resume that task itself.
+- **Each resume names the pauses it may lift.** A reply lifts only a wait for
+  that reply. This is why a reply can no longer wake an agent paused by a
+  spend cap and use the reply up. See
+  [ADR-033](ADRs/ADR-033-task-pause-failure-reasons-and-wait-reasons.md).
+
+## Wait reasons
+
+`GET /api/task/:id` returns `waiting`: `null`, or `{ kind, pausedBy?,
+resumeAfter? }`. The web client and the CLI's `get-task` show the same thing, in
+the same words, from one shared function (`taskWaiting`).
+
+| `kind`         | Means                                                     |
+| -------------- | --------------------------------------------------------- |
+| `manual`       | A user paused the task (`pausedBy` says who)              |
+| `rate_limited` | A provider limit; `resumeAfter` is the next automatic try |
+| `spend_cap`    | A spend cap is reached                                    |
+| `shutdown`     | The system shut down while the task ran                   |
+| `user_input`   | An agent is waiting for a user's reply                    |
+| `consultation` | An agent is waiting for a colleague's answer              |
+| `queued`       | An agent is waiting for a model slot                      |
+
+If several apply, the task's own pause wins, then the order above after
+`manual`. See [ADR-033](ADRs/ADR-033-task-pause-failure-reasons-and-wait-reasons.md).
+
+## Failure reasons
+
+A failed task's `failureReason` says what went wrong and what to do, in plain
+words. The provider's own error text is never shown (it goes to the log). The
+reason starts by saying which part stopped: "The planner stopped.", "Step 3
+stopped.", "Finishing the task stopped.", or "The review stopped before it
+finished." The agent's own reason follows: the provider could not be reached,
+the model was not found, the key was rejected, the run ran out of time or
+steps, the same call was repeated, and so on. The full list is `RunFailureCode`
+in `libs/tcp-shared/src/llm/run-failure.ts`; see
+[tcp-agent.md](tcp-agent.md#why-a-run-fails).
+
+A task can fail with no step to blame, for example when recovery or a
+recompute finds it failed. It then takes the failed step's reason. A failed task can't be run again yet: fix what the reason names, then create a
+new task.
 
 ## Orchestration flow
 
@@ -261,7 +330,7 @@ is set (one `task-completed-path` per distinct filename, plus approved
 `inline-text` items), and the task becomes `succeeded`.
 
 **Failure propagation.** A failed agent whose assignment is task-linked fails
-the task: a planner failure (`planner failed: …`), an implement-agent failure
+the task: a planner failure ("The planner stopped. …"), an implement-agent failure
 (assignment `in-progress → failed` → task failed), or a QA-agent failure (the
 target assignment fails → task failed; a failed QA agent is not retried).
 
@@ -286,7 +355,7 @@ their recovery).
 # List a company's tasks
 ./tcp-cli.sh list-tasks -c acme
 
-# Get a task and its assignments
+# Get a task, its assignments, and why it is waiting
 ./tcp-cli.sh get-task --task-id <uuid>
 
 # Set a planner role (on a company default, or an unstarted task), edit an
@@ -294,6 +363,10 @@ their recovery).
 ./tcp-cli.sh set-planner --company-slug acme --role-slug planner
 ./tcp-cli.sh set-task --task-id <uuid> -i '{"request":"Write a longer report"}'
 ./tcp-cli.sh start-task --task-id <uuid>
+
+# Pause a running task, then resume it
+./tcp-cli.sh pause-task --task-id <uuid>
+./tcp-cli.sh resume-task --task-id <uuid>
 
 # Cancel a task (and its still-running assignments/agents)
 ./tcp-cli.sh cancel-task --task-id <uuid>
@@ -303,5 +376,9 @@ their recovery).
 ./tcp-cli.sh list-assignments --company acme --filter task=null
 ./tcp-cli.sh eavesdrop --task-id <uuid> --show-history --tail
 ```
+
+The web task dialog has the same controls: **Start** and **Edit** while the
+task is `ready`, **Pause** and **Resume**, and **Cancel**. Closing a finished
+task's room is done from the office view's tray, and has no CLI command.
 
 See [tcp-cli.md](tcp-cli.md#create-task) for the full flag reference.

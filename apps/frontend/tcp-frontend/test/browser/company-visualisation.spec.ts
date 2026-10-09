@@ -65,9 +65,12 @@ const taskPickerLabel = (shortcode: string): string => `Task: ${shortcode}`;
 /** `visualisation.tray.taskHeading`: the tray's heading for a task — no colon, unlike the picker row above. */
 const taskTrayHeading = (shortcode: string): string => `Task ${shortcode}`;
 
-/** `visualisation.tooltip.task`'s step/steps prefix, e.g. "Task: (0/0)". */
-const taskTooltipProgress = (step: number, steps: number): string =>
-  `Task: (${step}/${steps})`;
+/** `visualisation.tooltip.task`'s title, e.g. "Task 003: (0/0)". */
+const taskTooltipProgress = (
+  shortcode: string,
+  step: number,
+  steps: number,
+): string => `Task ${shortcode}: (${step}/${steps})`;
 
 /**
  * The first of the two roles `beforeAll` creates below (`roleSuffix` 'a').
@@ -292,7 +295,7 @@ test.describe('company visualisation', () => {
     expect(violations).toEqual([]);
   });
 
-  test('shows a task room, and removes it live when the task is cancelled', async ({
+  test("keeps a finished task's room until it is closed from the tray", async ({
     page,
     request,
   }) => {
@@ -307,7 +310,7 @@ test.describe('company visualisation', () => {
       },
     });
     expect(createdTask.status()).toBe(201);
-    const taskId = ((await createdTask.json()) as CreatedTask).id;
+    const { id: taskId, shortcode } = (await createdTask.json()) as CreatedTask;
 
     await gotoSignedIn(page, `/company/${companyId}`);
 
@@ -322,6 +325,20 @@ test.describe('company visualisation', () => {
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(cancelled.status()).toBe(202);
+
+    // The room stays once its task has finished, so its outcome can still be
+    // seen; the tray says so, and offers to close it.
+    await page.getByRole('button', { name: SHOW_DETAILS_LABEL }).click();
+    await page
+      .getByRole('option', { name: taskPickerLabel(shortcode) })
+      .click();
+    const tray = page.getByRole('complementary', {
+      name: taskTrayHeading(shortcode),
+    });
+    await expect(tray).toContainText('Cancelled');
+    await expect(office).toHaveAccessibleDescription(summary(2, 1, 0));
+
+    await tray.getByRole('button', { name: 'Close room' }).click();
 
     await expect(office).toHaveAccessibleDescription(summary(2, 0, 0));
   });
@@ -536,7 +553,7 @@ test.describe('company visualisation', () => {
       // lift) — is where the pointer meets it.
       await page.mouse.move(cx, cy - 15);
       const tooltip = page.getByRole('tooltip');
-      await expect(tooltip).toContainText(taskTooltipProgress(0, 0));
+      await expect(tooltip).toContainText(taskTooltipProgress(shortcode, 0, 0));
       await expect(tooltip).toContainText(
         'Created by company-visualisation.spec.ts',
       );
@@ -548,6 +565,12 @@ test.describe('company visualisation', () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       expect(cancelled.status()).toBe(202);
+      // A finished task's room stays until closed; later tests count rooms.
+      const closed = await request.post(
+        `/api/task/${taskId}/close-visualisation`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      expect(closed.status()).toBe(202);
     });
 
     test('full screen toggles on an empty corner but not on an avatar', async ({
@@ -718,6 +741,12 @@ test.describe('company visualisation', () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       expect(cancelled.status()).toBe(202);
+      // A finished task's room stays until closed; later tests count rooms.
+      const closed = await request.post(
+        `/api/task/${taskId}/close-visualisation`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      expect(closed.status()).toBe(202);
     });
 
     // 002.02 stage 8/9: the archive room and its bookshelf. There is no

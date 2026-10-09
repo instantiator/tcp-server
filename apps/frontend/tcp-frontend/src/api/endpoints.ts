@@ -288,6 +288,20 @@ export const useCancelTaskMutation = (id: string) =>
   });
 
 /**
+ * Closes a finished task's room in the office view. The server refuses (409)
+ * a task that hasn't finished; closing twice is a no-op.
+ */
+export const useCloseTaskVisualisationMutation = (id: string) =>
+  useMutation({
+    mutationFn: () =>
+      unwrap(
+        api.POST('/api/task/{id}/close-visualisation', {
+          params: { path: { id } },
+        }),
+      ),
+  });
+
+/**
  * Creates a task in the `ready` state. Starting it is a separate call, and
  * materials can only be uploaded before it is started.
  *
@@ -324,6 +338,27 @@ export const useStartTaskMutation = () =>
   useMutation({
     mutationFn: (id: string) =>
       unwrap(api.POST('/api/task/{id}/start', { params: { path: { id } } })),
+  });
+
+/** Pauses a running task: its agents stop after their current step. */
+export const usePauseTaskMutation = (id: string) =>
+  useMutation({
+    mutationFn: () =>
+      unwrap(api.POST('/api/task/{id}/pause', { params: { path: { id } } })),
+  });
+
+/** Resumes a task a user paused, or one held by a cap, shutdown or rate limit. */
+export const useResumeTaskMutation = (id: string) =>
+  useMutation({
+    mutationFn: () =>
+      unwrap(api.POST('/api/task/{id}/resume', { params: { path: { id } } })),
+  });
+
+/** Changes a `ready` task's request, planner or expected outputs. */
+export const useUpdateTaskMutation = (id: string) =>
+  useMutation({
+    mutationFn: (body: components['schemas']['UpdateTaskDto']) =>
+      unwrap(api.PUT('/api/task/{id}', { params: { path: { id } }, body })),
   });
 
 /**
@@ -379,11 +414,16 @@ export const useCompanySpend = (companyId: string) =>
       ),
   });
 
-/** Active notifications, newest first. */
-export const useNotifications = () =>
+/** A company's active notifications plus the application-wide ones, newest first. */
+export const useNotifications = (companyId: string) =>
   useQuery({
-    queryKey: queryKeys.notifications(),
-    queryFn: () => unwrap(api.GET('/api/notifications')),
+    queryKey: queryKeys.notifications(companyId),
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/notifications/company/{companyId}', {
+          params: { path: { companyId } },
+        }),
+      ),
   });
 
 /** Dismisses a notification for every user. */

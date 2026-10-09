@@ -102,6 +102,8 @@ const strings = {
   'task.details.request': 'Request',
   'task.details.status': 'Status',
   'task.details.failureReason': 'Why it failed',
+  'task.details.waiting': "Why it's waiting",
+  'task.details.pausing': 'Pausing — agents stop after their current step',
   'task.assignments.heading': 'Work on this task',
   'task.assignments.empty.heading': 'No work has started yet',
   'task.assignments.empty.body':
@@ -117,7 +119,14 @@ const strings = {
     'This stops the task and every agent working on it. A cancelled task cannot be restarted.',
   'task.cancel.confirm.accept': 'Cancel the task',
   'task.cancel.confirm.reject': 'Keep the task running',
-  'task.cancel.failed': 'This task could not be cancelled. Try again.',
+  'task.start': 'Start this task',
+  'task.pause': 'Pause this task',
+  'task.resume': 'Resume this task',
+  'task.edit': 'Edit this task',
+  'task.edit.heading': 'Edit task {shortcode}',
+  'task.edit.submit': 'Save changes',
+  'task.edit.submit.pending': 'Saving…',
+  'task.edit.discard': 'Discard changes',
   'task.announce.loaded': 'Task {shortcode} loaded',
   'task.announce.status': 'Task: {status}',
   'task.announce.assignment': '{role}: {status}',
@@ -147,7 +156,6 @@ const strings = {
   'enquiry.reply.gone': 'This question no longer exists.',
   'activity.enquiries.open': 'Answer the question from {role}',
   'activity.enquiries.notification': '{role} has asked a question.',
-  'activity.enquiries.notification.link': 'Go to the enquiries list',
 
   // 008.05 — the task creation dialog. Neither button says a bare "Cancel":
   // in a task dialog that word already means cancelling the task itself.
@@ -296,7 +304,7 @@ const strings = {
   // reserved repeat-count slot (`strings.ts`'s own note on `announce.*`), and
   // a hardcoded plural noun here would read wrong at a count of one.
   'notifications.resumeCompany.announced': 'Resume requested',
-  'notifications.toast.link': 'Go to the notifications list',
+  'notifications.openTask': 'Open task',
 
   'page.companies.title': 'Companies',
   'page.company.title': 'Company',
@@ -360,7 +368,8 @@ const strings = {
 
   'visualisation.tooltip.agent': 'Agent: {role}',
   'visualisation.tooltip.role': 'Role: {role}',
-  'visualisation.tooltip.task': 'Task: ({step}/{steps})',
+  'visualisation.tooltip.completed': 'Task completed',
+  'visualisation.tooltip.task': 'Task {shortcode}: ({step}/{steps})',
 
   // Canvas labels (`ui/officeLabels.ts`), each kind behind a checkbox.
   'visualisation.labels.label': 'Labels',
@@ -397,7 +406,7 @@ const strings = {
   'visualisation.furniture.officeDoor': 'Office door',
   'visualisation.furniture.officeDoor.description':
     'Agents arrive and leave here.',
-  'visualisation.furniture.bookshelf': 'Bookshelf',
+  'visualisation.furniture.bookshelf': 'Bookshelf: {count}',
   'visualisation.furniture.bookshelf.description':
     'Holds the outputs of completed tasks. Select it to see them.',
   'visualisation.room.task': 'Task room: {shortcode}',
@@ -432,12 +441,21 @@ const strings = {
   'visualisation.tray.prompt': 'Prompt',
   'visualisation.tray.prompt.expand': 'Show the full prompt',
   'visualisation.tray.prompt.collapse': 'Show less of the prompt',
-  'visualisation.tray.assignments': 'Assignments',
-  'visualisation.tray.assignmentRow': '{role} — {mode} — {status}',
+  'visualisation.tray.assignmentRow': '{role} — {mode}',
+  'visualisation.tray.assignmentStatusSuffix': ' — {status}',
+  'visualisation.tray.inProgress': 'In progress',
+  'visualisation.tray.completed': 'Completed',
+  'visualisation.tray.aboutAssignment': 'About assignment {number}',
+  'visualisation.tray.assignmentInfoTitle':
+    'Task {shortcode}, Assignment {number}',
   'visualisation.tray.follow': 'Follow',
   'visualisation.tray.listenIn': 'Listen in to {role}',
   'visualisation.tray.chatWithRole': 'Chat with {role}',
   'visualisation.tray.close': 'Close details',
+  'visualisation.tray.closeRoom': 'Close room',
+  'visualisation.tray.outputs': 'Outputs',
+  'visualisation.tray.outputsUnconfigured':
+    'The storage browser is not configured, so the outputs link is unavailable.',
 
   // The archive panel (`ui/ArchiveDetails.tsx`): the bookshelf's tray, a list
   // of completed tasks linking out to Silo. A link's accessible name is its
@@ -533,6 +551,39 @@ const strings = {
   // these instead of the plain `activity.status.paused` above.
   'activity.status.rateLimited': 'Rate limited — next try {time}',
   'activity.status.rateLimited.manual': 'Rate limited — resume by hand',
+  // Why an agent is paused, by `PauseReason` (`agentStatusLabel`).
+  'agent.pause.user_input': 'Waiting for your reply',
+  'agent.pause.consultation': "Waiting for a colleague's answer",
+  'agent.pause.shutdown': 'Paused by a shutdown',
+  'agent.pause.spend_cap': 'Paused — spend cap reached',
+  'agent.pause.manual': 'Paused by a user',
+  // Why a whole task is waiting, by `TaskWaitKind` (`taskWaitingLabel`).
+  'task.waiting.manual': 'Paused by {name} — resume to continue',
+  'task.waiting.manualAnonymous': 'Paused — resume to continue',
+  'task.waiting.spend_cap':
+    'Spend cap reached — resume to continue, or wait for the cap to reset',
+  'task.waiting.shutdown': 'Paused by a shutdown — resume to continue',
+  'task.waiting.user_input': 'Waiting for your reply',
+  'task.waiting.consultation': "Waiting for a colleague's answer",
+  'task.waiting.queued': 'Waiting for the model',
+  // Why the server refused a task action (`refusalKey`, api/errors.ts).
+  'refusal.offline':
+    "Couldn't reach the server. Check your connection and try again.",
+  'refusal.forbidden': "You're not a member of this company.",
+  'refusal.notFound': 'This task no longer exists.',
+  'refusal.start.wrongState': 'This task has already started or finished.',
+  'refusal.pause.wrongState': "This task isn't running, or is already paused.",
+  'refusal.resume.wrongState': "There's nothing to resume on this task.",
+  'refusal.cancel.wrongState': 'This task has already finished.',
+  'refusal.edit.wrongState': "This task has started, so it can't be edited.",
+  'refusal.closeVisualisation.wrongState':
+    "This task hasn't finished, so its room can't be closed.",
+  'refusal.start.noPlanner':
+    'No planner is set for this task or its company. Choose one, then start the task.',
+  'refusal.shuttingDown':
+    "The system is shutting down and isn't taking new work.",
+  'refusal.server': 'Something went wrong on the server. Try again.',
+  'refusal.failed': "That didn't work. Try again.",
   // Agent and consultation rows carry a role whose name may not have loaded.
   'activity.role.unknown': 'Unknown role',
   'page.notFound.title': 'Page not found',

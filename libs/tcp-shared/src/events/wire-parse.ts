@@ -52,5 +52,11 @@ export function parseTaskChangeSummary(
     completedSteps:
       typeof data.completedSteps === 'number' ? data.completedSteps : 0,
     totalSteps: typeof data.totalSteps === 'number' ? data.totalSteps : 0,
+    pausedAt: typeof data.pausedAt === 'string' ? data.pausedAt : null,
+    pausedBy: typeof data.pausedBy === 'string' ? data.pausedBy : null,
+    visualisationClosedAt:
+      typeof data.visualisationClosedAt === 'string'
+        ? data.visualisationClosedAt
+        : null,
   };
 }

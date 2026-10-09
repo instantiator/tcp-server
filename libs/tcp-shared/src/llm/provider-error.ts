@@ -1,9 +1,6 @@
-import {
-  DEFAULT_LLM_TIMEOUT_MS,
-  LlmConfig,
-  PROVIDER_CATALOGUE,
-  findProvider,
-} from '@tcp/shared';
+import { DEFAULT_LLM_TIMEOUT_MS } from '../config/defaults';
+import type { LlmConfig } from '../models/LlmConfig.model';
+import { PROVIDER_CATALOGUE, findProvider } from './provider-catalogue';
 
 /** What went wrong with a model check, for a client to act on. */
 export const PROBE_ERROR_CODES = [

@@ -5,6 +5,7 @@ import { ResponseDialog } from '../../../components/ResponseDialog/ResponseDialo
 import { t } from '../../../strings';
 import { ActivityList } from './ActivityList';
 import type { CountListener } from './activity-list-utils';
+import { useFocusLinkedRow } from './useFocusLinkedRow';
 
 /** Conversations awaiting a person's reply. */
 export interface EnquiriesListProps {
@@ -36,6 +37,12 @@ export const EnquiriesList = ({ companyId, onCount }: EnquiriesListProps) => {
     (conversation) => conversation.status === 'awaiting_user',
   );
 
+  // `?enquiry=<id>`, from a new-enquiry toast's link: focus and mark that row.
+  const { linkedId, rowRef } = useFocusLinkedRow(
+    'enquiry',
+    rows?.map((conversation) => conversation.id),
+  );
+
   return (
     <>
       <ActivityList
@@ -49,7 +56,13 @@ export const EnquiriesList = ({ companyId, onCount }: EnquiriesListProps) => {
       >
         <ul className="activity-list__rows">
           {rows?.map((conversation) => (
-            <li className="activity-list__row" key={conversation.id}>
+            <li
+              className="activity-list__row"
+              key={conversation.id}
+              ref={conversation.id === linkedId ? rowRef : undefined}
+              tabIndex={-1}
+              aria-current={conversation.id === linkedId ? 'true' : undefined}
+            >
               <Button
                 className="react-aria-Button activity-list__row-title"
                 onPress={() => {

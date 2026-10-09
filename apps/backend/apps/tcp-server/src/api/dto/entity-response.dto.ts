@@ -12,6 +12,7 @@ import {
   type ConversationStatus,
   type MemberType,
   type MessageAuthor,
+  type TaskWaitKind,
   type TcpAssignmentMode,
   type TcpAssignmentStatus,
   type TcpTaskStatus,
@@ -100,6 +101,21 @@ const _taskStatusesExhaustive: Exhaustive<
   (typeof TASK_STATUSES)[number]
 > = true;
 void _taskStatusesExhaustive;
+
+const TASK_WAIT_KINDS = [
+  'user_input',
+  'consultation',
+  'shutdown',
+  'spend_cap',
+  'rate_limited',
+  'manual',
+  'queued',
+] as const satisfies readonly TaskWaitKind[];
+const _taskWaitKindsExhaustive: Exhaustive<
+  TaskWaitKind,
+  (typeof TASK_WAIT_KINDS)[number]
+> = true;
+void _taskWaitKindsExhaustive;
 
 export const ASSIGNMENT_MODES = [
   'plan',
@@ -250,10 +266,25 @@ export class ConversationMessageResponseDto extends OmitType(
  * at the top.
  */
 
+/** Why a task is standing still: see `taskWaiting` in `@tcp/shared`. */
+export class TaskWaitingResponseDto {
+  @ApiProperty({ enum: TASK_WAIT_KINDS })
+  kind!: TaskWaitKind;
+
+  @ApiProperty({ required: false })
+  pausedBy?: string;
+
+  @ApiProperty({ required: false, description: 'ISO-8601' })
+  resumeAfter?: string;
+}
+
 /** {@link TaskResponseDto} plus the assignments working it. */
 export class TaskDetailResponseDto extends TaskResponseDto {
   @ApiProperty({ type: AssignmentResponseDto, isArray: true })
   assignments!: AssignmentResponseDto[];
+
+  @ApiProperty({ type: TaskWaitingResponseDto, nullable: true })
+  waiting!: TaskWaitingResponseDto | null;
 }
 
 /** {@link ConversationResponseDto} plus its messages and display timezone. */

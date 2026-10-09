@@ -12,6 +12,7 @@ import {
 import { randomUUID, type UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
+import { NotificationService } from '../notifications/notification.service';
 import { TaskDeliverablesService } from './task-deliverables.service';
 import { TaskFailureService } from './task-failure.service';
 import { TaskStateService } from './task-state.service';
@@ -35,6 +36,7 @@ describe('TaskFailureService.cancelTask — agent cancellation', () => {
   let companyRepo: Repository<TcpCompany>;
   let roleRepo: Repository<TcpRole>;
   let audit: { record: jest.Mock };
+  let notifications: { create: jest.Mock };
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -62,10 +64,12 @@ describe('TaskFailureService.cancelTask — agent cancellation', () => {
 
   beforeEach(() => {
     audit = { record: jest.fn().mockResolvedValue(undefined) };
+    notifications = { create: jest.fn().mockResolvedValue(null) };
     const state = new TaskStateService(
       taskRepo,
       assignmentRepo,
       audit as unknown as AuditService,
+      notifications as unknown as NotificationService,
     );
     service = new TaskFailureService(
       taskRepo,

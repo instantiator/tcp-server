@@ -13,6 +13,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import type { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
+import { NotificationService } from '../notifications/notification.service';
 import { claimStatus } from './claim-status';
 
 /**
@@ -33,6 +34,7 @@ export class TaskStateService {
     @InjectRepository(TcpAssignment)
     private readonly assignmentRepo: Repository<TcpAssignment>,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationService,
   ) {}
 
   /** The task's implement-mode plan assignments. */
@@ -85,8 +87,33 @@ export class TaskStateService {
       .execute();
     if ((claimed.affected ?? 0) === 0) return;
     const task = await this.taskRepo.findOneBy({ id: taskId });
-    if (task) await this.recordTaskState(task, 'failed', reason);
+    if (task) {
+      await this.recordTaskState(task, 'failed', reason);
+      await this.notifyFailed(task, reason);
+    }
     this.logger.warn(`Task ${taskId} failed: ${reason}`);
+  }
+
+  /**
+   * Tells the task's company it failed, wherever its members are looking.
+   * Once per task (deduped). A notice that can't be raised is logged, never
+   * allowed to undo the failure it reports.
+   */
+  private async notifyFailed(task: TcpTask, reason: string): Promise<void> {
+    try {
+      await this.notifications.create({
+        severity: 'error',
+        kind: 'task_failed',
+        message: `Task ${task.shortcode} failed. ${reason}`,
+        companyId: task.companyId,
+        taskId: task.id,
+        dedupeKey: `task_failed:${task.id}`,
+      });
+    } catch (err) {
+      this.logger.error(
+        `Couldn't raise the failure notice for task ${task.id}: ${String(err)}`,
+      );
+    }
   }
 
   /** Recomputes and persists a task's status from its plan (never past terminal). */
@@ -107,8 +134,23 @@ export class TaskStateService {
       next = 'finalising';
     }
     if (next !== task.status) {
-      await this.taskRepo.update(taskId, { status: next });
-      await this.recordTaskState(task, next, 'status recomputed');
+      // A task failed through its plan says why: the failed step's reason.
+      const failureReason =
+        next === 'failed'
+          ? (plan.find((a) => a.status === 'failed')?.failureReason ?? null)
+          : undefined;
+      await this.taskRepo.update(taskId, {
+        status: next,
+        ...(failureReason !== undefined && { failureReason }),
+      });
+      await this.recordTaskState(
+        task,
+        next,
+        failureReason ?? 'status recomputed',
+      );
+      if (next === 'failed') {
+        await this.notifyFailed(task, failureReason ?? 'A step failed.');
+      }
     }
   }
 

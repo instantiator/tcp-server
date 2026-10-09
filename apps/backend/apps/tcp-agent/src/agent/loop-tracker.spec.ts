@@ -6,6 +6,7 @@ import {
   detectDescribedToolCall,
   extractChatModelText,
   generateActionString,
+  noteToolCall,
 } from './loop-tracker';
 
 describe('createTracker', () => {
@@ -353,5 +354,39 @@ describe('applyStorageResult', () => {
       tracker,
     );
     expect(tracker.storage.created).toEqual(['y.md']);
+  });
+});
+
+describe('noteToolCall', () => {
+  const refused = { content: '2 values were not valid:\n- assignment 2 …' };
+
+  it('flags the third identical call with an identical result', () => {
+    const tracker = createTracker();
+    expect(noteToolCall(tracker, 'tasks__create_plan', { a: 1 }, refused)).toBe(
+      false,
+    );
+    expect(noteToolCall(tracker, 'tasks__create_plan', { a: 1 }, refused)).toBe(
+      false,
+    );
+    expect(noteToolCall(tracker, 'tasks__create_plan', { a: 1 }, refused)).toBe(
+      true,
+    );
+    expect(tracker.repeatedCall).toEqual({
+      tool: 'create_plan',
+      result: '2 values were not valid:',
+    });
+  });
+
+  it.each([
+    ['a changed input', { a: 2 }, refused],
+    ['a changed result', { a: 1 }, { content: 'Plan created.' }],
+  ])('starts counting again after %s', (_label, input, output) => {
+    const tracker = createTracker();
+    noteToolCall(tracker, 'tasks__create_plan', { a: 1 }, refused);
+    noteToolCall(tracker, 'tasks__create_plan', { a: 1 }, refused);
+    expect(noteToolCall(tracker, 'tasks__create_plan', input, output)).toBe(
+      false,
+    );
+    expect(tracker.callRepeats).toBe(1);
   });
 });

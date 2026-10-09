@@ -17,12 +17,14 @@ import {
   Post,
   Put,
   Query,
+  Req,
   Sse,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import type { Request } from 'express';
 import {
   ApiAcceptedResponse,
   ApiBearerAuth,
@@ -37,6 +39,7 @@ import { TaskMaterialResponseDto } from './dto/storage-response.dto';
 import type { UUID } from 'crypto';
 import { defer, from, merge, mergeMap, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
+import { getCurrentUserLabel } from '../auth/current-user';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CompanyMembershipGuard } from '../auth/company-membership.guard';
 import {
@@ -53,6 +56,7 @@ import {
 import { ResumeResultDto } from './dto/spend.dto';
 import { SpendResumeService } from './spend-resume.service';
 import { SystemShutdownService } from './system-shutdown.service';
+import { TaskControlService } from './task-control.service';
 import { TaskMaterialSummary, TaskService } from './task.service';
 
 /** Subset of the multer file object relevant to a materials upload. */
@@ -73,6 +77,7 @@ export class TaskController {
     private readonly taskEvents: TaskEventService,
     private readonly shutdown: SystemShutdownService,
     private readonly spend: SpendResumeService,
+    private readonly controls: TaskControlService,
   ) {}
 
   /** Creates a task in the `ready` state. No plan is generated until `POST /api/task/:id/start`. */
@@ -152,9 +157,37 @@ export class TaskController {
   }
 
   /**
-   * Resumes a task's agents paused by a spend cap or a shutdown, and exempts
-   * the task from spend caps until it ends — resuming is the user choosing to
-   * spend. Refused with `503` while the system is draining.
+   * Pauses a running task. Its agents stop after their current step; nothing
+   * resumes them until the task is resumed. `409` when the task isn't
+   * running or is already paused.
+   */
+  @ApiOperation({ summary: 'Pause a running task' })
+  @ApiAcceptedResponse({ type: TaskResponseDto })
+  @CompanyScope({ from: 'param', key: 'id', via: 'task' })
+  @Post(':id/pause')
+  @HttpCode(202)
+  pauseTask(@Param('id') id: UUID, @Req() req: Request): Promise<TcpTask> {
+    return this.controls.pause(id, getCurrentUserLabel(req));
+  }
+
+  /**
+   * Closes a finished task's room in the office view. `409` while the task
+   * is still going; closing an already-closed room is a no-op.
+   */
+  @ApiOperation({ summary: "Close a finished task's office room" })
+  @ApiAcceptedResponse({ type: TaskResponseDto })
+  @CompanyScope({ from: 'param', key: 'id', via: 'task' })
+  @Post(':id/close-visualisation')
+  @HttpCode(202)
+  closeVisualisation(@Param('id') id: UUID): Promise<TcpTask> {
+    return this.controls.closeVisualisation(id);
+  }
+
+  /**
+   * Resumes a task: lifts a user's pause, and resumes its agents paused by
+   * that, a spend cap, a shutdown or a rate limit. Exempts the task from
+   * spend caps only if one is reached now, as Start does. Refused with `503`
+   * while the system is draining.
    */
   @ApiOperation({ summary: 'Resume a paused task' })
   @ApiAcceptedResponse({ type: ResumeResultDto })
@@ -207,7 +240,7 @@ export class TaskController {
   @Get(':id')
   async getTask(@Param('id') id: UUID): Promise<TaskDetailResponseDto> {
     const { task, assignments } = await this.tasks.getWithAssignments(id);
-    return { ...task, assignments };
+    return { ...task, assignments, waiting: await this.tasks.waitingFor(task) };
   }
 
   /**

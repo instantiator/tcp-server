@@ -1,4 +1,4 @@
-import { classifyProbeError, isCapabilityRefusal } from './probe-error';
+import { classifyProbeError, isCapabilityRefusal } from './provider-error';
 
 /** Stands in for an OpenAI SDK error class, which is matched by name. */
 class APIConnectionError extends Error {}

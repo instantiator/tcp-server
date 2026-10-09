@@ -233,6 +233,12 @@ export class AgentWorkerService implements OnModuleInit, OnModuleDestroy {
       );
       return null;
     }
+    // Paused after this job was queued (a resume clears `pausedAt` first):
+    // whatever lifts the pause queues a fresh job.
+    if (agent.status === AgentStatus.Paused && agent.pausedAt) {
+      this.logger.log(`Agent ${agentId} is paused — dropping its job`);
+      return null;
+    }
     const llm = resolveRunLimits(agent, this.config)?.llmConfig;
     const limits = llm && this.slots.limitsFor(llm);
     if (!limits) return UNLIMITED_LEASE;

@@ -51,10 +51,16 @@ export enum AgentStatus {
  * provider's cap resets or is dismissed, or by an explicit task/company resume.
  * A `rate_limited` pause — the provider refused a call — is lifted at
  * {@link TcpAgent.resumeAfter} when auto-resume is on, or by an explicit
- * resume.
+ * resume. A `manual` pause — a user paused the agent's task — is lifted only
+ * by an explicit resume of that task.
  */
 export type PauseReason =
-  'user_input' | 'consultation' | 'shutdown' | 'spend_cap' | 'rate_limited';
+  | 'user_input'
+  | 'consultation'
+  | 'shutdown'
+  | 'spend_cap'
+  | 'rate_limited'
+  | 'manual';
 
 /**
  * A running instance of an {@link TcpRole} within an {@link TcpCompany}.

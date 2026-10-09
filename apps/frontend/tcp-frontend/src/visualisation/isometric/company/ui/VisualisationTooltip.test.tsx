@@ -5,6 +5,7 @@ import { expectNoA11yViolations } from '../../../../test-support/axe';
 import type { CompanySnapshot } from '../rules/companySnapshot';
 import type { HoverEvent } from '../TcpPhaserEventBus';
 import { createInitialWorld } from '../world/layout';
+import { addRoom } from '../world/worldOps';
 import { VisualisationTooltip } from './VisualisationTooltip';
 
 const WORLD = createInitialWorld();
@@ -18,6 +19,9 @@ const SNAPSHOT: CompanySnapshot = {
       request: 'Reconcile accounts',
       finished: false,
       succeeded: false,
+      status: 'in-progress',
+      pausedAt: null,
+      visualisationClosedAt: null,
       step: 1,
       steps: 3,
     },
@@ -28,6 +32,7 @@ const SNAPSHOT: CompanySnapshot = {
       roleId: 'role-1',
       assignmentId: 'assign-1',
       taskId: 'task-1',
+      status: 'running',
       activity: { kind: 'working' },
     },
   ],
@@ -100,6 +105,18 @@ describe('VisualisationTooltip', () => {
     );
   });
 
+  it('reads "Task completed" over the completed tick', () => {
+    render(
+      <VisualisationTooltip
+        world={WORLD}
+        hover={hoverOn({ kind: 'completed', id: 'task-1' })}
+        snapshot={SNAPSHOT}
+      />,
+    );
+
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Task completed');
+  });
+
   it("shows a task's step count and its request", () => {
     render(
       <VisualisationTooltip
@@ -111,7 +128,11 @@ describe('VisualisationTooltip', () => {
 
     const tooltip = screen.getByRole('tooltip');
     expect(tooltip).toHaveTextContent(
-      t('visualisation.tooltip.task', { step: 1, steps: 3 }),
+      t('visualisation.tooltip.task', {
+        shortcode: 'TASK-1',
+        step: 1,
+        steps: 3,
+      }),
     );
     expect(tooltip).toHaveTextContent('Reconcile accounts');
   });
@@ -159,9 +180,50 @@ describe('VisualisationTooltip', () => {
     );
 
     const tooltip = screen.getByRole('tooltip');
-    expect(tooltip).toHaveTextContent(t('visualisation.furniture.bookshelf'));
+    expect(tooltip).toHaveTextContent(
+      t('visualisation.furniture.bookshelf', { count: 0 }),
+    );
     expect(tooltip).toHaveTextContent(
       t('visualisation.furniture.bookshelf.description'),
+    );
+  });
+
+  it('counts the succeeded tasks in the bookshelf title', () => {
+    const [first] = SNAPSHOT.tasks;
+    if (first === undefined) throw new Error('fixture has no task');
+    render(
+      <VisualisationTooltip
+        world={WORLD}
+        hover={hoverOn({ kind: 'archive' })}
+        snapshot={{
+          ...SNAPSHOT,
+          tasks: [
+            first,
+            { ...first, id: 'a', finished: true, succeeded: true },
+            { ...first, id: 'b', finished: true, succeeded: true },
+            { ...first, id: 'c', finished: true },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Bookshelf: 2');
+  });
+
+  it("shows a task room's request below its description", () => {
+    render(
+      <VisualisationTooltip
+        world={addRoom(WORLD, 'task', 'task:task-1', 'task-1')}
+        hover={hoverOn({ kind: 'room', id: 'task:task-1' })}
+        snapshot={SNAPSHOT}
+      />,
+    );
+
+    const tooltip = screen.getByRole('tooltip');
+    expect(tooltip).toHaveTextContent('Task room: TASK-1');
+    expect(tooltip).toHaveTextContent('Agents work on task TASK-1 here.');
+    expect(tooltip.querySelectorAll('p')[1]).toHaveTextContent(
+      'Reconcile accounts',
     );
   });
 

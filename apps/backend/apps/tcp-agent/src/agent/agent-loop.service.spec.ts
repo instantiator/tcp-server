@@ -678,8 +678,66 @@ describe('AgentLoopService', () => {
     expect(updated.status).toBe(AgentStatus.Failed);
     expect(notifyFailed).toHaveBeenCalledWith(
       agent.id,
-      expect.stringContaining('No LLM config'),
+      expect.stringContaining('No model is set for this role'),
     );
+  });
+
+  it.each([
+    ['cancelled', { status: AgentStatus.Cancelled }],
+    [
+      'paused by a user',
+      {
+        status: AgentStatus.Paused,
+        pauseReason: 'manual' as const,
+        pausedAt: new Date(),
+      },
+    ],
+  ])(
+    'leaves an agent %s alone when its run then fails',
+    async (_label, state) => {
+      const { agent } = await seedAgentAndRole({
+        llmConfig: undefined,
+        companyLlmConfig: undefined,
+      });
+      await agentRepo.update(agent.id, state);
+
+      await service.run(agent.id, undefined, new AbortController());
+
+      const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+      expect(updated.status).toBe(state.status);
+      expect(notifyFailed).not.toHaveBeenCalled();
+    },
+  );
+
+  // A user's pause can land between the worker admitting a job and the run
+  // starting; marking the agent running then would undo the pause.
+  it('does not run an agent paused after its job was admitted', async () => {
+    const { agent } = await seedAgentAndRole();
+    await agentRepo.update(agent.id, {
+      status: AgentStatus.Paused,
+      pauseReason: 'manual',
+      pausedAt: new Date(),
+    });
+
+    await service.run(agent.id, undefined, new AbortController());
+
+    const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+    expect(updated.status).toBe(AgentStatus.Paused);
+    expect(StateGraph).not.toHaveBeenCalled();
+  });
+
+  it('runs an agent whose pause a resume has already claimed', async () => {
+    const { agent } = await seedAgentAndRole();
+    await agentRepo.update(agent.id, {
+      status: AgentStatus.Paused,
+      pauseReason: null,
+      pausedAt: () => 'NULL',
+    });
+
+    await service.run(agent.id, undefined, new AbortController());
+
+    const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+    expect(updated.status).toBe(AgentStatus.Completed);
   });
 
   it('sets status to failed and saves a state_change audit event on LLM error', async () => {
@@ -702,9 +760,10 @@ describe('AgentLoopService', () => {
 
     const updated = await agentRepo.findOneByOrFail({ id: agent.id });
     expect(updated.status).toBe(AgentStatus.Failed);
+    // Not an SDK error, so it comes from this system: its text is kept.
     expect(notifyFailed).toHaveBeenCalledWith(
       agent.id,
-      'LLM connection refused',
+      expect.stringContaining('LLM connection refused'),
     );
 
     expect(auditRecord).toHaveBeenCalledWith(
@@ -815,7 +874,7 @@ describe('AgentLoopService', () => {
     expect(updated.status).toBe(AgentStatus.Failed);
     expect(notifyFailed).toHaveBeenCalledWith(
       agent.id,
-      expect.stringMatching(/^timed out after \d+ seconds$/),
+      expect.stringMatching(/^The agent ran out of time \(\d+ seconds\)/),
     );
   });
 
@@ -836,7 +895,7 @@ describe('AgentLoopService', () => {
     expect(updated.status).toBe(AgentStatus.Failed);
     expect(notifyFailed).toHaveBeenCalledWith(
       agent.id,
-      'unexpected LLM failure',
+      'Something unexpected went wrong. Details are in the server log.',
     );
   });
 
@@ -890,7 +949,7 @@ describe('AgentLoopService', () => {
     expect(notifyComplete).not.toHaveBeenCalled();
     expect(notifyFailed).toHaveBeenCalledWith(
       agent.id,
-      'LLM produced no output after retry',
+      expect.stringContaining('The model returned nothing'),
     );
   });
 
@@ -958,7 +1017,7 @@ describe('AgentLoopService', () => {
     // server via notifyFailed, not locally.
     expect(notifyFailed).toHaveBeenCalledWith(
       agent.id,
-      'exceeded 10 iterations',
+      expect.stringContaining('more than 10 steps'),
     );
   });
 

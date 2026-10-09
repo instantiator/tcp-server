@@ -26,11 +26,16 @@ function task(overrides: Partial<SnapshotTask> = {}): SnapshotTask {
     request: 'Do the thing',
     finished: false,
     succeeded: false,
+    status: 'in-progress',
+    pausedAt: null,
+    visualisationClosedAt: null,
     step: 0,
     steps: 0,
     ...overrides,
   };
 }
+
+const CLOSED_AT = '2026-10-09T10:00:00.000Z';
 
 function requireAvatar(
   world: OfficeWorld,
@@ -49,7 +54,7 @@ describe('removeClosedRooms', () => {
     expect(removeClosedRooms(world)).toBe(world);
   });
 
-  it('removes a finished task room with no avatars in the same pass, freeing its slot', () => {
+  it('removes a closed task room with no avatars in the same pass, freeing its slot', () => {
     let state = createInitialOfficeState();
     state = officeReducer(state, {
       type: 'snapshot',
@@ -61,6 +66,16 @@ describe('removeClosedRooms', () => {
       type: 'snapshot',
       snapshot: { roles: [], tasks: [task({ finished: true })], agents: [] },
     });
+    expect(roomById(state.world, taskRoomId('t1'))).toBeDefined(); // finished, not closed: it stays
+
+    state = officeReducer(state, {
+      type: 'snapshot',
+      snapshot: {
+        roles: [],
+        tasks: [task({ finished: true, visualisationClosedAt: CLOSED_AT })],
+        agents: [],
+      },
+    });
     expect(roomById(state.world, taskRoomId('t1'))).toBeUndefined(); // gone in the same pass
 
     state = officeReducer(state, {
@@ -70,7 +85,7 @@ describe('removeClosedRooms', () => {
     expect(roomById(state.world, taskRoomId('t2'))?.slot).toBe(3); // the freed slot, reused
   });
 
-  it('removes a finished task room only after its last avatar has exited', () => {
+  it('removes a closed task room only after its last avatar has exited', () => {
     let state = createInitialOfficeState();
     state = officeReducer(state, {
       type: 'snapshot',
@@ -83,6 +98,7 @@ describe('removeClosedRooms', () => {
             roleId: 'role-1',
             assignmentId: 'assignment-1',
             taskId: 't1',
+            status: 'idle',
             activity: { kind: 'atDesk' },
           },
         ],
@@ -101,15 +117,29 @@ describe('removeClosedRooms', () => {
             roleId: 'role-1',
             assignmentId: 'assignment-1',
             taskId: 't1',
+            status: 'completed',
             activity: { kind: 'finished' },
           },
         ],
       },
     });
-    expect(roomById(state.world, taskRoomId('t1'))?.closing).toBe(true);
+    // Finishing sends the avatar out but leaves the room open.
+    expect(roomById(state.world, taskRoomId('t1'))?.closing).toBe(false);
     expect(avatarById(state.world, avatar.id)?.target).toEqual({
       kind: 'exit',
     });
+
+    // Closing the room while the avatar is still on its way keeps the room.
+    const closedSnapshot: CompanySnapshot = {
+      roles: [],
+      tasks: [task({ finished: true, visualisationClosedAt: CLOSED_AT })],
+      agents: [],
+    };
+    state = officeReducer(state, {
+      type: 'snapshot',
+      snapshot: closedSnapshot,
+    });
+    expect(roomById(state.world, taskRoomId('t1'))?.closing).toBe(true);
 
     state = officeReducer(state, {
       type: 'avatarExited',
@@ -131,6 +161,7 @@ describe('removeClosedRooms', () => {
         roleId: 'caller-role',
         assignmentId: 'caller-assignment',
         taskId: callerTaskId,
+        status: 'running',
         activity,
       };
     }
@@ -140,6 +171,7 @@ describe('removeClosedRooms', () => {
         roleId: 'consultee-role',
         assignmentId: oneToOneId,
         taskId: null,
+        status: 'running',
         activity,
       };
     }

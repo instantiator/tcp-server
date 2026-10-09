@@ -49,6 +49,10 @@ import {
   useAssignment,
   useAssignments,
   useCancelTaskMutation,
+  useCloseTaskVisualisationMutation,
+  usePauseTaskMutation,
+  useResumeTaskMutation,
+  useUpdateTaskMutation,
   useCompany,
   useCompanyKnowledge,
   useCompanyRoles,
@@ -237,6 +241,82 @@ export const useCancelTask = (taskId: string) => {
   });
 };
 
+/**
+ * Closes a finished task's room in the office view. Invalidates the task
+ * lists, so the live `visualisationClosedAt` reaches the office rules.
+ */
+export const useCloseTaskVisualisation = (taskId: string) => {
+  const queryClient = useQueryClient();
+  const closeVisualisation = useCloseTaskVisualisationMutation(taskId);
+  return useMutation({
+    mutationFn: () => closeVisualisation.mutateAsync(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['task'] });
+    },
+  });
+};
+
+/**
+ * Starts a `ready` task. The same endpoint {@link useCreateTask} calls after
+ * creating one; invalidates as {@link useCancelTask} does, because starting
+ * fans the task out into assignments.
+ */
+export const useStartTask = (taskId: string) => {
+  const queryClient = useQueryClient();
+  const startTask = useStartTaskMutation();
+  return useMutation({
+    mutationFn: () => startTask.mutateAsync(taskId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['task'] });
+      void queryClient.invalidateQueries({ queryKey: ['assignment'] });
+    },
+  });
+};
+
+/**
+ * Pauses a task. Agents stop after their current step, so their rows change
+ * too — hence `['agent']` as well as the task keys.
+ */
+export const usePauseTask = (taskId: string) => {
+  const queryClient = useQueryClient();
+  const pauseTask = usePauseTaskMutation(taskId);
+  return useMutation({
+    mutationFn: () => pauseTask.mutateAsync(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['task'] });
+      void queryClient.invalidateQueries({ queryKey: ['assignment'] });
+      void queryClient.invalidateQueries({ queryKey: ['agent'] });
+    },
+  });
+};
+
+/** Resumes a task; its paused agents pick up again, so agents are refetched. */
+export const useResumeTask = (taskId: string) => {
+  const queryClient = useQueryClient();
+  const resumeTask = useResumeTaskMutation(taskId);
+  return useMutation({
+    mutationFn: () => resumeTask.mutateAsync(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['task'] });
+      void queryClient.invalidateQueries({ queryKey: ['assignment'] });
+      void queryClient.invalidateQueries({ queryKey: ['agent'] });
+    },
+  });
+};
+
+/** Edits a `ready` task. The server refuses with a `409` once it has started. */
+export const useUpdateTask = (taskId: string) => {
+  const queryClient = useQueryClient();
+  const updateTask = useUpdateTaskMutation(taskId);
+  return useMutation({
+    mutationFn: (body: components['schemas']['UpdateTaskDto']) =>
+      updateTask.mutateAsync(body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['task'] });
+    },
+  });
+};
+
 /** What the creation dialog collects, before any of it reaches a route. */
 export interface CreateTaskInput {
   readonly companyId: string;
@@ -394,7 +474,8 @@ export const useLiveCompanySpend = (
 ): UseQueryResult<CompanySpendDTO, Error> => useCompanySpend(companyId);
 
 /**
- * Active notifications, newest first.
+ * A company's active notifications (its own and the application-wide ones),
+ * newest first.
  *
  * Server-filtered to active rows (`includeDismissed` defaults to false), and
  * every caller re-filters on `dismissedAt` again, client-side — the same
@@ -403,10 +484,9 @@ export const useLiveCompanySpend = (
  * removal from the array, so the query's own filter only describes what was
  * true when it was fetched.
  */
-export const useLiveNotifications = (): UseQueryResult<
-  NotificationDTO[],
-  Error
-> => useNotifications();
+export const useLiveNotifications = (
+  companyId: string,
+): UseQueryResult<NotificationDTO[], Error> => useNotifications(companyId);
 
 /**
  * Dismisses a notification for every signed-in user, and makes every list

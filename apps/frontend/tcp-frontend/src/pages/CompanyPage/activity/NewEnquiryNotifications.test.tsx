@@ -148,9 +148,12 @@ describe('NewEnquiryNotifications', () => {
     ).toBeInTheDocument();
 
     const link = within(group).getByRole('link', {
-      name: t('activity.enquiries.notification.link'),
+      name: t('activity.enquiries.notification', { role: 'Legal' }),
     });
-    expect(link).toHaveAttribute('href', `/company/${COMPANY_ID}#enquiries`);
+    expect(link).toHaveAttribute(
+      'href',
+      `/company/${COMPANY_ID}?enquiry=conv-2#enquiries`,
+    );
 
     await user.click(
       within(group).getByRole('button', { name: t('notification.dismiss') }),

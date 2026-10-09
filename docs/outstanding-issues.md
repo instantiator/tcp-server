@@ -347,3 +347,88 @@ confirmed against a real response.
 **Act when:** Gemini is used for real and rate-limits — check a captured 429
 body against `classifyRateLimit` (`libs/tcp-shared/src/llm/rate-limit.ts`)
 and correct the table and the classifier if it's wrong.
+
+## Supporting services fail a task rather than pause it
+
+When a supporting service is down (storage, Redis, the database, an MCP
+service), a run fails with `service_unavailable` and so does its task (000.04).
+Pausing the task, so it could be resumed once the service is back, would be
+kinder, but nothing yet tells the system a service is healthy again.
+
+**Act when:** 000.05's health signal exists. Then pause instead of fail, and
+resume when the service reports healthy.
+
+## No retry for a failed task
+
+A failed task is terminal (000.04). Its `failureReason` says what to fix, but
+the user must create a new task to try again. There is no endpoint, web button
+or CLI command to run it again.
+
+**Act when:** a user asks to rerun a task after fixing its cause.
+
+## A `running` agent is stranded when the failure write itself fails
+
+If saving an agent's failure throws (the database is down, say), `failRun`
+logs the code and reason and still tells tcp-server, which fails the task
+(000.04). But the agent row stays `running`, since the write that would have
+changed it failed.
+
+**Act when:** a stranded agent is seen (a `running` agent on a failed task).
+The fix belongs in startup recovery: mark a `running` agent with no live job
+as failed.
+
+## An MCP server that is down at tool-load time is skipped quietly
+
+`McpClientService.loadTools` skips a server it can't reach, so the failure
+never reaches the run-failure classifier (000.04) and gets no
+`service_unavailable` reason. The agent just runs without those tools.
+
+**Act when:** a run ends oddly (a required tool is missing, or the agent gives
+up) because a tool server was down. Then make `loadTools` report it.
+
+## No CLI `close-room`
+
+Closing a finished task's room (`POST /api/task/:id/close-visualisation`) is
+available only from the office view's tray (000.04). The CLI has no office
+concept, so it has no command.
+
+**Act when:** the CLI gains an office concept.
+
+## Chat `sendMessage` has no pause guard
+
+A manual pause (000.04) covers a task's agents. A chat isn't part of a task and
+can't be paused, so `sendMessage` has no pause check.
+
+**Act when:** chats can be paused. Then `sendMessage` must refuse, or queue,
+while a chat is paused.
+
+## Failed or cancelled rooms get no marker
+
+A succeeded task's room gets a tick above its whiteboard (000.04). A failed or
+cancelled task's room that is still open (until closed) gets nothing: only the
+tray's status says how it ended.
+
+**Act when:** users ask for one.
+
+## The task dialog's live agent data comes from the company stream
+
+The dialog's "Why it's waiting" line, and its Pausing and Resume states, are
+worked out from live agents, which arrive on the company stream (000.04). The
+dialog opens only the task stream. Opened without the company stream, the
+waiting row is only as fresh as the last fetch.
+
+**Act when:** the dialog is ever opened outside the company page.
+
+## `UpdateTaskDto` can't clear a task's planner
+
+Editing a `ready` task (000.04) can set its planner but not clear it back to
+the company default, because the DTO has no way to say "none".
+
+**Act when:** a user needs to clear a task's planner.
+
+## The TUI has no pause or resume keys
+
+The TUI has `s` (start) and `c` (cancel) only. `pause-task` and `resume-task`
+exist in the CLI and the web dialog (000.04). The TUI is due to retire in 002.07.
+
+**Act when:** 002.07 is dropped. Then add the keys.

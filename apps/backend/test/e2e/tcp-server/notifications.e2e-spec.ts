@@ -89,6 +89,81 @@ describe('Notifications (e2e)', () => {
     expect(all.body).toHaveLength(2);
   });
 
+  describe("a company's own notices", () => {
+    const stranger = {
+      Authorization: `Bearer ${makeTestJwt({ sub: 'notice-stranger' })}`,
+    };
+
+    /** A company the default test user created, so is a member of. */
+    async function ownCompany(): Promise<TcpCompany> {
+      const res = await request(app.getHttpServer())
+        .post('/api/company')
+        .set(auth)
+        .send({
+          slug: `noticeco-${Date.now()}`,
+          name: 'Notice Co',
+          description: 'test',
+        })
+        .expect(201);
+      return res.body as TcpCompany;
+    }
+
+    it('shows them to its members beside the application-wide ones, and nowhere else', async () => {
+      const company = await ownCompany();
+      const wide = await notifications.create({
+        severity: 'warning',
+        kind: 'spend_threshold',
+        message: 'wide',
+      });
+      const own = await notifications.create({
+        severity: 'error',
+        kind: 'task_failed',
+        message: 'Task 000 failed.',
+        companyId: company.id,
+      });
+
+      const forCompany = await request(app.getHttpServer())
+        .get(`/api/notifications/company/${company.id}`)
+        .set(auth)
+        .expect(200);
+      expect(
+        (forCompany.body as TcpNotification[]).map((n) => n.id).sort(),
+      ).toEqual([wide?.id, own?.id].sort());
+
+      const global = await request(app.getHttpServer())
+        .get('/api/notifications')
+        .set(auth)
+        .expect(200);
+      expect((global.body as TcpNotification[]).map((n) => n.id)).toEqual([
+        wide?.id,
+      ]);
+
+      await request(app.getHttpServer())
+        .get(`/api/notifications/company/${company.id}`)
+        .set(stranger)
+        .expect(403);
+    });
+
+    it('lets only its members dismiss them; to anyone else they do not exist', async () => {
+      const company = await ownCompany();
+      const own = await notifications.create({
+        severity: 'error',
+        kind: 'task_failed',
+        message: 'Task 000 failed.',
+        companyId: company.id,
+      });
+
+      await request(app.getHttpServer())
+        .post(`/api/notifications/${own?.id}/dismiss`)
+        .set(stranger)
+        .expect(404);
+      await request(app.getHttpServer())
+        .post(`/api/notifications/${own?.id}/dismiss`)
+        .set(auth)
+        .expect(200);
+    });
+  });
+
   it('404s when dismissing an unknown notification', async () => {
     await request(app.getHttpServer())
       .post('/api/notifications/00000000-0000-4000-8000-000000000000/dismiss')

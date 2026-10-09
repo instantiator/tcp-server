@@ -149,9 +149,21 @@ describe('compactionSummary and stateChangeText', () => {
     ).toBe('paused (rate limited, resume by hand)');
   });
 
-  it('leaves an ordinary paused reason untouched', () => {
-    expect(stateChangeText({ newStatus: 'paused', reason: 'user_input' })).toBe(
-      'paused (user_input)',
+  it.each([
+    ['user_input', 'waiting for a reply'],
+    ['consultation', 'waiting for a consultation'],
+    ['shutdown', 'paused by a shutdown'],
+    ['spend_cap', 'spend cap reached'],
+    ['manual', 'paused by a user'],
+  ])('puts words to the %s pause reason', (reason, text) => {
+    expect(stateChangeText({ newStatus: 'paused', reason })).toBe(
+      `paused (${text})`,
+    );
+  });
+
+  it('keeps an unknown reason as-is', () => {
+    expect(stateChangeText({ newStatus: 'paused', reason: 'toString' })).toBe(
+      'paused (toString)',
     );
   });
 });

@@ -17,6 +17,9 @@ function task(overrides: Partial<SnapshotTask> = {}): SnapshotTask {
     request: 'Do the thing',
     finished: false,
     succeeded: false,
+    status: 'in-progress',
+    pausedAt: null,
+    visualisationClosedAt: null,
     step: 0,
     steps: 0,
     ...overrides,
@@ -56,10 +59,23 @@ describe('openTaskRooms', () => {
     expect(room?.slot).toBe(3); // slots 0, 1 and 2 are the rec, mail and archive rooms
   });
 
-  it('never gives a finished task a room, even the first time it is seen', () => {
+  it('gives a finished task a room the first time it is seen, until its room is closed', () => {
     const world = openTaskRooms(
       createInitialWorld(),
-      snapshot([task({ finished: true })]),
+      snapshot([task({ finished: true, succeeded: true })]),
+    );
+    expect(roomById(world, taskRoomId('t1'))?.taskId).toBe('t1');
+  });
+
+  it('gives a task whose room was closed no room, however it finished', () => {
+    const world = openTaskRooms(
+      createInitialWorld(),
+      snapshot([
+        task({
+          finished: true,
+          visualisationClosedAt: '2026-10-09T10:00:00.000Z',
+        }),
+      ]),
     );
     expect(roomById(world, taskRoomId('t1'))).toBeUndefined();
   });
@@ -72,14 +88,14 @@ describe('openTaskRooms', () => {
 });
 
 describe('closeTaskRooms', () => {
-  it('closes a finished-but-not-succeeded task room and sends its avatars to the exit, nobody carrying', () => {
+  it('leaves a finished-but-not-succeeded task room open and sends its avatars to the exit, nobody carrying', () => {
     let world = openTaskRooms(createInitialWorld(), snapshot([task()]));
     const created = addTaskAvatar(world);
     world = created.world;
 
     world = closeTaskRooms(world, snapshot([task({ finished: true })]));
 
-    expect(roomById(world, taskRoomId('t1'))?.closing).toBe(true);
+    expect(roomById(world, taskRoomId('t1'))?.closing).toBe(false);
     const avatar = avatarById(world, created.avatarId);
     expect(avatar?.agentId).toBeNull();
     expect(avatar?.assignmentId).toBe('assignment-1'); // kept, not cleared
@@ -99,11 +115,27 @@ describe('closeTaskRooms', () => {
     expect(again).toBe(world);
   });
 
-  it('does nothing to a room with no avatars, beyond marking it closing', () => {
+  it('leaves an empty finished room open', () => {
+    const world = openTaskRooms(createInitialWorld(), snapshot([task()]));
+    const finished = closeTaskRooms(
+      world,
+      snapshot([task({ finished: true, succeeded: true })]),
+    );
+    expect(roomById(finished, taskRoomId('t1'))?.closing).toBe(false);
+    expect(finished.avatars).toEqual([]);
+  });
+
+  it('starts closing a finished room once its visualisationClosedAt is set', () => {
     const world = openTaskRooms(createInitialWorld(), snapshot([task()]));
     const closed = closeTaskRooms(
       world,
-      snapshot([task({ finished: true, succeeded: true })]),
+      snapshot([
+        task({
+          finished: true,
+          succeeded: true,
+          visualisationClosedAt: '2026-10-09T10:00:00.000Z',
+        }),
+      ]),
     );
     expect(roomById(closed, taskRoomId('t1'))?.closing).toBe(true);
     expect(closed.avatars).toEqual([]);

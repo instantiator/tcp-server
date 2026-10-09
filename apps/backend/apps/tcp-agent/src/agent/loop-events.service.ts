@@ -15,6 +15,7 @@ import {
   baseToolName,
   extractChatModelText,
   generateActionString,
+  noteToolCall,
 } from './loop-tracker';
 
 /**
@@ -42,6 +43,7 @@ export class AgentLoopEventRecorder {
     agent: TcpAgent,
     tracker: AgentLoopTracker,
     llm: LlmIdentity,
+    abortController: AbortController,
   ): (event: StreamEventLike) => void {
     // ponytail: actions include failed tool calls; on_tool_start used for simplicity
     const pendingToolInputs = new Map<string, Record<string, unknown>>();
@@ -82,6 +84,11 @@ export class AgentLoopEventRecorder {
         const output = event.data?.output;
         applyStorageResult(event.name ?? '', toolInput, output, tracker);
         pendingToolInputs.delete(runId);
+        // Stops a looping agent before its next LLM call, not an hour later
+        // at the iteration limit.
+        if (noteToolCall(tracker, event.name ?? '', toolInput, output)) {
+          abortController.abort('repeating_call');
+        }
         this.storageTracking.patch(agent.id, tracker.storage);
       }
     };

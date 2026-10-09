@@ -88,10 +88,14 @@ differently on Postgres and SQLite. A cap check and `GET /api/spend` /
 `GET /api/company/:id/spend` both `SUM` over the relevant window rather than
 reading a running total anywhere — see [spend-caps.md](spend-caps.md) and
 [ADR-031](ADRs/ADR-031-spend-tracking-and-notifications.md). `spend_cap_state`
-(one row per provider) and `notification` (application-wide, no `companyId`)
-are both updated in place, not append-only. `tcp_task` gained one column,
+(one row per provider) and `notification` are both updated in place, not
+append-only. A spend notice is application-wide (no `companyId`); a task notice
+(`task_failed`, `task_paused`) carries the `companyId` and `taskId` it belongs to
+(nullable columns added in 000.04; see
+[ADR-033](ADRs/ADR-033-task-pause-failure-reasons-and-wait-reasons.md)). `tcp_task` gained
 `spendCapExempt`, set when a task is explicitly started or resumed while a
-cap is reached.
+cap is reached, and in 000.04 `pausedAt`, `pausedBy` (a user's pause) and
+`visualisationClosedAt` (a finished task's room closed in the office view).
 
 Storage-tool audit events nest an `originators: { user: string | null; agent: string | null; task: string | null }` object inside `payload`, tracking who requested the action — `user` for direct JWT-authenticated calls (`POST /api/storage`, role document uploads), `agent` for MCP-tool-initiated calls, `task` reserved for a future task concept (always `null` today). No schema change: `payload` is already `jsonb`.
 

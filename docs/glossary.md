@@ -161,17 +161,27 @@ What crosses an SSE or Redis event stream: either a persisted audit row (`{ type
 
 ## Agent status values
 
-| Status      | Meaning                                                |
-| ----------- | ------------------------------------------------------ |
-| `idle`      | Created but not yet started, or between chat turns     |
-| `running`   | Agent loop is actively executing                       |
-| `paused`    | Stopped at a resumable point — see `pauseReason` below |
-| `completed` | Run finished successfully; `output` is populated       |
-| `failed`    | Run ended with an error; `errorMessage` explains why   |
-| `cancelled` | The task or assignment it was working was cancelled    |
+| Status      | Meaning                                                                     |
+| ----------- | --------------------------------------------------------------------------- |
+| `idle`      | Created but not yet started, or between chat turns                          |
+| `running`   | Agent loop is actively executing                                            |
+| `queued`    | Waiting for a model slot (see [model-concurrency.md](model-concurrency.md)) |
+| `paused`    | Stopped at a resumable point — see `pauseReason` below                      |
+| `completed` | Run finished successfully; `output` is populated                            |
+| `failed`    | Run ended with an error; `errorMessage` explains why                        |
+| `cancelled` | The task or assignment it was working was cancelled                         |
 
 **Pause reason (`TcpAgent.pauseReason`)**
-Why a `paused` agent stopped: `user_input`, `consultation`, or `shutdown`. It exists so `resumeAgent`'s "no outstanding requests" gate — which a shutdown-paused agent would otherwise sail straight through — can tell the cases apart. See [ADR-019](ADRs/ADR-019-graceful-shutdown.md).
+Why a `paused` agent stopped: `user_input`, `consultation`, `shutdown`, `spend_cap`, `rate_limited` or `manual` (a user paused its task). It exists so `resumeAgent`'s "no outstanding requests" gate — which a shutdown-paused agent would otherwise sail straight through — can tell the cases apart, and so each resume lifts only the pauses it owns: a reply lifts `user_input` and `consultation`, never a spend cap or a user's pause. See [ADR-019](ADRs/ADR-019-graceful-shutdown.md), [ADR-032](ADRs/ADR-032-model-concurrency-and-rate-limits.md) and [ADR-033](ADRs/ADR-033-task-pause-failure-reasons-and-wait-reasons.md).
+
+**Task pause (`TcpTask.pausedAt`, `pausedBy`)**
+A user's soft stop on a running task. Agents stop after their current step, nothing resumes the task but its own resume, and the task keeps its real status. See [tasks.md](tasks.md#pause-and-resume).
+
+**Wait reason (`taskWaiting`)**
+Why a task is standing still: `manual`, `rate_limited`, `spend_cap`, `shutdown`, `user_input`, `consultation` or `queued`. One shared function gives the server, web client and CLI the same answer. See [tasks.md](tasks.md#wait-reasons).
+
+**Failure reason (`RunFailureCode`)**
+The typed set behind a failed run's plain-words `failureReason`. See [tcp-agent.md](tcp-agent.md#why-a-run-fails).
 
 ## Task and assignment status values
 

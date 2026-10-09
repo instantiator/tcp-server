@@ -903,7 +903,9 @@
         "spend_threshold",
         "spend_reached",
         "spend_reset",
-        "spend_untracked"
+        "spend_untracked",
+        "task_failed",
+        "task_paused"
       ],
       "type": "string"
     },
@@ -917,13 +919,14 @@
       "type": "string"
     },
     "PauseReason": {
-      "description": "Why an agent is currently  {@link  AgentStatus.Paused } .\n\n`user_input` and `consultation` pauses resolve themselves — a reply or a consultation result arrives and the agent is re-dispatched automatically. A `shutdown` pause has nothing outstanding to wait on, so it stays paused until a user resumes it explicitly. A `spend_cap` pause is lifted when the provider's cap resets or is dismissed, or by an explicit task/company resume. A `rate_limited` pause — the provider refused a call — is lifted at  {@link  TcpAgent.resumeAfter }  when auto-resume is on, or by an explicit resume.",
+      "description": "Why an agent is currently  {@link  AgentStatus.Paused } .\n\n`user_input` and `consultation` pauses resolve themselves — a reply or a consultation result arrives and the agent is re-dispatched automatically. A `shutdown` pause has nothing outstanding to wait on, so it stays paused until a user resumes it explicitly. A `spend_cap` pause is lifted when the provider's cap resets or is dismissed, or by an explicit task/company resume. A `rate_limited` pause — the provider refused a call — is lifted at  {@link  TcpAgent.resumeAfter }  when auto-resume is on, or by an explicit resume. A `manual` pause — a user paused the agent's task — is lifted only by an explicit resume of that task.",
       "enum": [
         "user_input",
         "consultation",
         "shutdown",
         "spend_cap",
-        "rate_limited"
+        "rate_limited",
+        "manual"
       ],
       "type": "string"
     },
@@ -1688,8 +1691,20 @@
     },
     "TcpNotification": {
       "additionalProperties": false,
-      "description": "An application-wide notice (a spend threshold crossed, a cap reached, a provider reporting no usage, …). Visible to every signed-in user and dismissed for everyone at once — there is no per-company scoping here. Named `TcpNotification` to avoid clashing with the DOM's global `Notification` type; the table itself is named `notification`.",
+      "description": "A notice: application-wide (a spend threshold crossed, a cap reached, a provider reporting no usage, …) and visible to every signed-in user, or about one company's task (it failed, or a shutdown paused it) and visible to that company's members. Either way, dismissed for everyone at once. Named `TcpNotification` to avoid clashing with the DOM's global `Notification` type; the table itself is named `notification`.",
       "properties": {
+        "companyId": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/UUID"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The company a task notice belongs to; null for an application-wide one.",
+          "format": "uuid"
+        },
         "createdAt": {
           "description": "When this notification was raised.",
           "format": "date-time",
@@ -1724,6 +1739,18 @@
         "severity": {
           "$ref": "#/definitions/NotificationSeverity",
           "description": "How urgently this notification should be surfaced."
+        },
+        "taskId": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/UUID"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The task a task notice is about, for a link to it; null otherwise.",
+          "format": "uuid"
         }
       },
       "required": [
@@ -1893,6 +1920,18 @@
           },
           "type": "array"
         },
+        "pausedAt": {
+          "description": "When a user paused this task; null while it isn't paused. While set, no automatic resume (a reply, a consultation result, a sweep) restarts its agents, and agents created for it start paused — only an explicit task resume clears it.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "pausedBy": {
+          "description": "Who paused this task, as shown to users; null while it isn't paused.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "plannerRole": {
           "anyOf": [
             {
@@ -1939,6 +1978,11 @@
         },
         "version": {
           "type": "number"
+        },
+        "visualisationClosedAt": {
+          "description": "When a user closed this task's place in the office view (its room). Until then a finished task's room stays open. Named for the view rather than the room, since other views may come later.",
+          "format": "date-time",
+          "type": "string"
         }
       },
       "required": [

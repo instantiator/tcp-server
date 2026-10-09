@@ -2,11 +2,14 @@ import {
   AuditEvent,
   buildTaskChangeSummary,
   formatShortcodeIndex,
+  taskWaiting,
+  TcpAgent,
   TcpAssignment,
   TcpCompany,
   TcpRole,
   TcpTask,
   TaskChangeSummary,
+  type TaskWaiting,
   type TcpMaterialArtifact,
 } from '@tcp/shared';
 import {
@@ -45,6 +48,8 @@ export class TaskService {
     private readonly taskRepo: Repository<TcpTask>,
     @InjectRepository(TcpAssignment)
     private readonly assignmentRepo: Repository<TcpAssignment>,
+    @InjectRepository(TcpAgent)
+    private readonly agentRepo: Repository<TcpAgent>,
     @InjectRepository(TcpCompany)
     private readonly companyRepo: Repository<TcpCompany>,
     @InjectRepository(TcpRole)
@@ -297,6 +302,17 @@ export class TaskService {
       return a.createdAt.getTime() - b.createdAt.getTime();
     });
     return { task, assignments };
+  }
+
+  /**
+   * Why a task is standing still, if it is — its own pause, or what its agents
+   * are paused or queued on. See {@link taskWaiting}.
+   */
+  async waitingFor(task: TcpTask): Promise<TaskWaiting | null> {
+    const agents = await this.agentRepo.find({
+      where: { assignment: { taskId: task.id } },
+    });
+    return taskWaiting(task, agents);
   }
 
   /**

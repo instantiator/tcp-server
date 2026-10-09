@@ -150,10 +150,29 @@ export class PlanValidationService {
             property: `assignment ${i} materials[${mi}] value`,
             value: m.value,
             validValues: producedByEarlier,
+            hint: priorOutputHint(plan.expectedByIndex.slice(0, i), m.value),
           });
         }
       });
     }
     return invalid;
   }
+}
+
+/**
+ * Says how to make a `completed-file` reference resolve. Names the exact
+ * mistake when an earlier step promised the value as text: only files can be
+ * passed on, and a planner seen in the wild resent that plan unchanged.
+ */
+function priorOutputHint(
+  earlierExpected: TcpAssignmentWorkingArtifact[][],
+  value: string,
+): string {
+  const asText = earlierExpected.findIndex((expected) =>
+    expected.some((e) => e.type === 'inline-text' && e.value === value),
+  );
+  if (asText >= 0) {
+    return `Assignment ${asText} promises "${value}" as text, but only files can be passed to a later step. Change that expected entry to type \`file\`.`;
+  }
+  return 'A `completed-file` must name a file an earlier assignment promises: add { type: "file", value: "<filename>" } to that assignment\'s `expected` list, and use the same filename here.';
 }

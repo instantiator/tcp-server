@@ -53,7 +53,7 @@ const ASSIGNMENTS_ROUTE = /\/api\/assignment\?/;
 const CONVERSATIONS_ROUTE = /\/api\/conversation\?/;
 // 000.02: the Notifications tab and its toasts, mounted alongside the other
 // six activity lists.
-const NOTIFICATIONS_ROUTE = /\/api\/notifications(\?|$)/;
+const NOTIFICATIONS_ROUTE = /\/api\/notifications\/company\/company-1(\?|$)/;
 // The chats list opens the chat dialog on a row's agent, which mounts a
 // `Transcript` and a `MessageInput` for `CHAT_1.agentId` — a detail and a
 // history request neither of `CompanyTabs`'s own five queries make.

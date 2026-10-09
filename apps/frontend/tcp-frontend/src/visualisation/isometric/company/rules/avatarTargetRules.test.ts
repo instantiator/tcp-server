@@ -17,6 +17,7 @@ function agent(overrides: Partial<SnapshotAgent> = {}): SnapshotAgent {
     roleId: 'role-1',
     assignmentId: 'assignment-1',
     taskId: 'task-1',
+    status: 'idle',
     activity: { kind: 'atDesk' },
     ...overrides,
   };
@@ -122,6 +123,7 @@ describe('applyAvatarTargetRules', () => {
       reviewed.world,
       snapshot([
         agent({
+          status: 'idle',
           activity: {
             kind: 'reviewing',
             reviewedAssignmentId: 'reviewed-assignment',
@@ -142,6 +144,7 @@ describe('applyAvatarTargetRules', () => {
       world,
       snapshot([
         agent({
+          status: 'running',
           activity: { kind: 'reviewing', reviewedAssignmentId: 'nobody' },
         }),
       ]),

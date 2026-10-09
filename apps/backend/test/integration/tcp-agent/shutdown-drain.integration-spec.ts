@@ -303,6 +303,12 @@ describe('Shutdown drain of a running agent loop (integration)', () => {
     const checkpointsAfterPause = await countCheckpoints(agent.id);
     const build = jest.spyOn(initialState, 'build');
 
+    // tcp-server's resume claims the pause (clears pausedAt) before it queues
+    // the job; the loop won't start an agent whose pause is still live.
+    await agentRepo.update(agent.id, {
+      pausedAt: () => 'NULL',
+      pauseReason: null,
+    });
     // tcp-server resumes a shutdown-paused agent with a continuation message,
     // which is what tells the loop this is a resume and not a fresh run.
     await service.run(

@@ -14,6 +14,7 @@ const SNAPSHOT: CompanySnapshot = {
       roleId: 'role-1',
       assignmentId: 'assign-1',
       taskId: null,
+      status: 'running',
       activity: { kind: 'working' },
     },
   ],
@@ -64,6 +65,7 @@ describe('buildOfficeLabels', () => {
       id: 'avatar:agent-avatar:1',
       text: t('visualisation.label.agent', {
         role: 'Sales',
+        status: 'running',
         activity: t('visualisation.activity.working'),
       }),
       anchor: { kind: 'avatar', avatarId: 'agent-avatar:1' },
@@ -75,12 +77,14 @@ describe('buildOfficeLabels', () => {
     expect(texts).toContain(
       t('visualisation.label.agent', {
         role: 'Sales',
+        status: 'idle',
         activity: t('visualisation.activity.waiting'),
       }),
     );
     expect(texts).toContain(
       t('visualisation.label.agent', {
         role: t('activity.role.unknown'),
+        status: 'idle',
         activity: t('visualisation.activity.waiting'),
       }),
     );

@@ -14,6 +14,7 @@ import { ConfigService } from '@nestjs/config';
 import { type UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
+import { NotificationService } from '../notifications/notification.service';
 import { StorageService } from '../storage/storage.service';
 import { AgentOrchestrationService } from './agent-orchestration.service';
 import { PauseAndResumeService } from './pause-and-resume.service';
@@ -57,6 +58,7 @@ describe('TaskOrchestrationService', () => {
   let pauseResume: { completeAgent: jest.Mock; failAgent: jest.Mock };
   let storage: { copyFile: jest.Mock; listFiles: jest.Mock };
   let audit: { record: jest.Mock };
+  let notifications: { create: jest.Mock };
   let config: { get: jest.Mock };
 
   beforeAll(async () => {
@@ -108,12 +110,14 @@ describe('TaskOrchestrationService', () => {
       listFiles: jest.fn().mockResolvedValue([]),
     };
     audit = { record: jest.fn().mockResolvedValue(undefined) };
+    notifications = { create: jest.fn().mockResolvedValue(null) };
     config = { get: jest.fn().mockReturnValue(undefined) };
 
     const state = new TaskStateService(
       taskRepo,
       assignmentRepo,
       audit as unknown as AuditService,
+      notifications as unknown as NotificationService,
     );
     const deliverables = new TaskDeliverablesService(
       taskRepo,
@@ -750,7 +754,16 @@ describe('TaskOrchestrationService', () => {
 
       const taskAfter = (await taskRepo.findOneBy({ id: task.id }))!;
       expect(taskAfter.status).toBe('failed');
-      expect(taskAfter.failureReason).toContain('planner failed');
+      expect(taskAfter.failureReason).toBe('The planner stopped. boom');
+      // Its company is told, wherever its members are looking.
+      expect(notifications.create).toHaveBeenCalledWith({
+        severity: 'error',
+        kind: 'task_failed',
+        message: `Task ${taskAfter.shortcode} failed. The planner stopped. boom`,
+        companyId: taskAfter.companyId,
+        taskId: taskAfter.id,
+        dedupeKey: `task_failed:${taskAfter.id}`,
+      });
       // The plan assignment must not be left stuck in-progress.
       const planAfter = (await assignmentRepo.findOneBy({ id: plan.id }))!;
       expect(planAfter.status).toBe('failed');
@@ -1013,7 +1026,7 @@ describe('TaskOrchestrationService', () => {
 
       const taskAfter = (await taskRepo.findOneBy({ id: task.id }))!;
       expect(taskAfter.status).toBe('failed');
-      expect(taskAfter.failureReason).toContain('without producing a plan');
+      expect(taskAfter.failureReason).toContain('without making a plan');
       // The plan assignment itself must fail too, not just the task.
       const planAfter = (await assignmentRepo.findOneBy({ id: plan.id }))!;
       expect(planAfter.status).toBe('failed');
@@ -1180,7 +1193,7 @@ describe('TaskOrchestrationService', () => {
 
       const fresh = await taskRepo.findOneByOrFail({ id: task.id });
       expect(fresh.status).toBe('failed');
-      expect(fresh.failureReason).toContain('finalise failed');
+      expect(fresh.failureReason).toContain('Finishing the task stopped.');
       // Files still recorded as completed.
       expect(fresh.completed).toEqual([
         { type: 'task-completed-path', value: 'report.txt' },
@@ -1312,6 +1325,43 @@ describe('TaskOrchestrationService', () => {
       });
       expect(freshAssignment.status).toBe('failed');
       expect(freshAssignment.failureReason).toBe('agent died before restart');
+    });
+  });
+
+  // --- recomputeTaskStatus -----------------------------------------------
+
+  describe('recomputeTaskStatus', () => {
+    // A task failed through its plan must say why, not sit failed blank.
+    it("gives a task failed through its plan the failed step's reason", async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, { status: 'in-progress' });
+      await seedAssignment({
+        companyId: company.id,
+        roleId: role.id,
+        taskId: task.id,
+        orderIndex: 0,
+        status: 'failed',
+        failureReason: 'did not pass QA',
+      });
+
+      await new TaskStateService(
+        taskRepo,
+        assignmentRepo,
+        audit as unknown as AuditService,
+        notifications as unknown as NotificationService,
+      ).recomputeTaskStatus(task.id);
+
+      const after = await taskRepo.findOneByOrFail({ id: task.id });
+      expect(after.status).toBe('failed');
+      expect(after.failureReason).toBe('did not pass QA');
+      expect(notifications.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'task_failed',
+          companyId: company.id,
+          taskId: task.id,
+        }),
+      );
     });
   });
 });

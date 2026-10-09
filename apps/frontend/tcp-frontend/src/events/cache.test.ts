@@ -373,4 +373,40 @@ describe('applyEvent', () => {
       ]);
     });
   });
+
+  it('patches pausedAt and pausedBy into a cached task, and clears them', () => {
+    const queryClient = newClient();
+    const detailKey = ['task', 'detail', 'task-1'];
+    queryClient.setQueryData(detailKey, {
+      id: 'task-1',
+      status: 'in-progress',
+    });
+    const change = (summary: Record<string, unknown>) =>
+      applyEvent(
+        queryClient,
+        auditEvent({ entity: 'task', newStatus: 'in-progress', summary }),
+      );
+
+    change({
+      id: 'task-1',
+      status: 'in-progress',
+      pausedAt: '2026-08-07T00:00:00.000Z',
+      pausedBy: 'Ada',
+    });
+    expect(queryClient.getQueryData(detailKey)).toMatchObject({
+      pausedAt: '2026-08-07T00:00:00.000Z',
+      pausedBy: 'Ada',
+    });
+
+    change({
+      id: 'task-1',
+      status: 'in-progress',
+      pausedAt: null,
+      pausedBy: null,
+    });
+    expect(queryClient.getQueryData(detailKey)).toMatchObject({
+      pausedAt: null,
+      pausedBy: null,
+    });
+  });
 });

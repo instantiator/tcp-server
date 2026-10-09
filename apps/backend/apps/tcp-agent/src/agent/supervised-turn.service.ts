@@ -3,6 +3,7 @@ import { MessagesAnnotation } from '@langchain/langgraph';
 import {
   AgentStatus,
   ContextManagerService,
+  LlmConfig,
   LlmIdentity,
   SupervisedGraphResult,
   TcpAgent,
@@ -41,6 +42,8 @@ export interface SupervisedRunContext {
   ) => ReturnType<typeof buildAgentGraph>;
   /** The run's resolved provider/model, for attributing recorded token usage. */
   llm: LlmIdentity;
+  /** The run's LLM config, to name the provider in a failure message. */
+  llmConfig: LlmConfig;
   /** Asked before every LLM call; true means a spend cap has paused the agent. */
   holdSpending: () => Promise<boolean>;
 }
@@ -81,7 +84,12 @@ export class SupervisedTurnService {
       llm: ctx.llm,
       hooks: {
         buildGraph: ctx.buildGraph,
-        onEvent: this.recorder.forTurn(ctx.agent, tracker, ctx.llm),
+        onEvent: this.recorder.forTurn(
+          ctx.agent,
+          tracker,
+          ctx.llm,
+          ctx.abortController,
+        ),
         checkTerminalStatus: async () => {
           const fresh = await this.agentRepo.findOneBy({ id: ctx.agent.id });
           return fresh?.status === AgentStatus.Paused ||

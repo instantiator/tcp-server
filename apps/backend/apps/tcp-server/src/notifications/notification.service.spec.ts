@@ -83,6 +83,21 @@ describe('NotificationService', () => {
       }
     });
 
+    // Another company must never see it, even live.
+    it("sends a company's own notice to that company alone", async () => {
+      await service.create({
+        severity: 'error',
+        kind: 'task_failed',
+        message: 'Task 003 failed.',
+        companyId: companyIds[1],
+      });
+
+      expect(companyRepo.find).not.toHaveBeenCalled();
+      expect(companyEvents.emit.mock.calls.map(([id]) => id)).toEqual([
+        companyIds[1],
+      ]);
+    });
+
     it('returns null and broadcasts nothing when the dedupe key was already used', async () => {
       repo.save.mockRejectedValueOnce(uniqueViolation());
 
@@ -122,7 +137,7 @@ describe('NotificationService', () => {
       await service.list();
       expect(repo.find).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { dismissedAt: IsNull() },
+          where: [{ companyId: IsNull(), dismissedAt: IsNull() }],
           order: { createdAt: 'DESC' },
         }),
       );
@@ -131,7 +146,21 @@ describe('NotificationService', () => {
     it('includes dismissed notifications on request', async () => {
       await service.list(true);
       expect(repo.find).toHaveBeenCalledWith(
-        expect.objectContaining({ where: {} }),
+        expect.objectContaining({ where: [{ companyId: IsNull() }] }),
+      );
+    });
+  });
+
+  describe('listForCompany', () => {
+    it("returns the application-wide notices plus that company's own, and no other's", async () => {
+      await service.listForCompany(companyIds[0]);
+      expect(repo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: [
+            { companyId: IsNull(), dismissedAt: IsNull() },
+            { companyId: companyIds[0], dismissedAt: IsNull() },
+          ],
+        }),
       );
     });
   });

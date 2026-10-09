@@ -145,8 +145,9 @@ export const queryKeys = {
   companyKnowledgeStatus: (companyId: string) =>
     ['knowledge', 'status', { scope: 'company', companyId }] as const,
 
-  /** Active notifications. A dismissal patches the row in place, so there is no separate detail key. */
-  notifications: () => ['notification', 'list'] as const,
+  /** One company's active notifications, with the application-wide ones. A dismissal patches the row in place, so there is no separate detail key. */
+  notifications: (companyId: string) =>
+    ['notification', 'list', { companyId }] as const,
 
   /** Application-wide usage totals and every provider's cap progress. */
   spendOverview: () => ['spend', 'status'] as const,
