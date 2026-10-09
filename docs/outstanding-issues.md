@@ -432,3 +432,18 @@ The TUI has `s` (start) and `c` (cancel) only. `pause-task` and `resume-task`
 exist in the CLI and the web dialog (000.04). The TUI is due to retire in 002.07.
 
 **Act when:** 002.07 is dropped. Then add the keys.
+
+## `sprintf-js` advisory has no fix (21 moderate `npm audit` findings)
+
+[GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c), a
+denial of service in `sprintf-js` (every version up to 1.1.3), reaches us
+through `argparse@1`: in `mammoth` (runtime, but only its command-line entry
+point uses `argparse`) and in the jest tool chain (dev only). `npm audit`
+reports it as 21 moderate findings, one per package in those chains. Its
+suggested fix downgrades jest, ts-jest and mammoth to old majors — don't take
+it. The criticals and highs found alongside it were fixed by a lockfile
+refresh (2026-10-09).
+
+**Act when:** `sprintf-js` publishes a patched version (add an npm `overrides`
+entry if `argparse@1` doesn't pick it up), or `mammoth` and the jest chain
+drop `argparse@1`. Recheck with `npm audit --omit=dev` before any release.
