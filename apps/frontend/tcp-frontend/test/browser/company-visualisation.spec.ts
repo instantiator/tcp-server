@@ -565,6 +565,12 @@ test.describe('company visualisation', () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       expect(cancelled.status()).toBe(202);
+      // A finished task's room stays until closed; later tests count rooms.
+      const closed = await request.post(
+        `/api/task/${taskId}/close-visualisation`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      expect(closed.status()).toBe(202);
     });
 
     test('full screen toggles on an empty corner but not on an avatar', async ({
@@ -735,6 +741,12 @@ test.describe('company visualisation', () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       expect(cancelled.status()).toBe(202);
+      // A finished task's room stays until closed; later tests count rooms.
+      const closed = await request.post(
+        `/api/task/${taskId}/close-visualisation`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      expect(closed.status()).toBe(202);
     });
 
     // 002.02 stage 8/9: the archive room and its bookshelf. There is no
