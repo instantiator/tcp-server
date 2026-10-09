@@ -156,7 +156,6 @@ const strings = {
   'enquiry.reply.gone': 'This question no longer exists.',
   'activity.enquiries.open': 'Answer the question from {role}',
   'activity.enquiries.notification': '{role} has asked a question.',
-  'activity.enquiries.notification.link': 'Go to the enquiries list',
 
   // 008.05 — the task creation dialog. Neither button says a bare "Cancel":
   // in a task dialog that word already means cancelling the task itself.
@@ -305,7 +304,7 @@ const strings = {
   // reserved repeat-count slot (`strings.ts`'s own note on `announce.*`), and
   // a hardcoded plural noun here would read wrong at a count of one.
   'notifications.resumeCompany.announced': 'Resume requested',
-  'notifications.toast.link': 'Go to the notifications list',
+  'notifications.openTask': 'Open task',
 
   'page.companies.title': 'Companies',
   'page.company.title': 'Company',

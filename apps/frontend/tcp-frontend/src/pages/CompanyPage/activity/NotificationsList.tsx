@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Button } from 'react-aria-components';
+import { Link } from 'react-router';
 import { ANNOUNCE_IMMEDIATE_MS, announce } from '../../../announce/announcer';
 import {
   useDismissNotification,
@@ -10,6 +11,7 @@ import { ErrorState } from '../../../components/ErrorState/ErrorState';
 import { t, tCount } from '../../../strings';
 import { ActivityList } from './ActivityList';
 import type { CountListener } from './activity-list-utils';
+import { useFocusLinkedRow } from './useFocusLinkedRow';
 
 export interface NotificationsListProps {
   readonly companyId: string;
@@ -29,8 +31,9 @@ const dateFormatter = new Intl.DateTimeFormat(undefined, {
 });
 
 /**
- * Application-wide notifications: spend thresholds, caps reached, resets and
- * untracked providers (000.02). One Dismiss button per row, and
+ * The company's notifications and the application-wide ones: spend thresholds,
+ * caps reached, resets and untracked providers (000.02), and a task's failing
+ * or pausing. A row about a task links to that task's dialog. One Dismiss button per row, and
  * `spend_reached` rows also offer "Resume this company's paused work" —
  * every other kind carries no action here, by design (only an administrator
  * may lift a cap, and this client has no admin flag to gate that button on).
@@ -42,12 +45,18 @@ export const NotificationsList = ({
   companyId,
   onCount,
 }: NotificationsListProps) => {
-  const query = useLiveNotifications();
+  const query = useLiveNotifications(companyId);
   // Re-filtered here, client-side, for the same reason `EnquiriesList` does:
   // a live dismissal patches the row's `dismissedAt` in place rather than
   // removing it from the array, so the query's own "active only" filter only
   // describes what was true when it was fetched.
   const rows = query.data?.filter((row) => row.dismissedAt === undefined);
+
+  // `?notification=<id>`, from a toast's link: focus and mark that row.
+  const { linkedId, rowRef } = useFocusLinkedRow(
+    'notification',
+    rows?.map((row) => row.id),
+  );
 
   const dismiss = useDismissNotification();
   const resumeCompany = useResumeCompany(companyId);
@@ -84,7 +93,13 @@ export const NotificationsList = ({
     >
       <ul className="activity-list__rows">
         {rows?.map((row) => (
-          <li className="activity-list__row" key={row.id}>
+          <li
+            className="activity-list__row"
+            key={row.id}
+            ref={row.id === linkedId ? rowRef : undefined}
+            tabIndex={-1}
+            aria-current={row.id === linkedId ? 'true' : undefined}
+          >
             <p className="activity-list__row-title">
               {t(SEVERITY_LABEL[row.severity])}
             </p>
@@ -107,6 +122,14 @@ export const NotificationsList = ({
             >
               {t('notifications.dismiss')}
             </Button>
+            {row.taskId != null && (
+              <Link
+                to={`/company/${companyId}?task=${row.taskId}#tasks`}
+                aria-describedby={`notification-${row.id}-message`}
+              >
+                {t('notifications.openTask')}
+              </Link>
+            )}
             {row.kind === 'spend_reached' && (
               <>
                 <Button

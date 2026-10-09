@@ -58,7 +58,7 @@ export class CompanyPrimingService {
         }),
         this.conversations.list(companyId, 'awaiting_user'),
         this.db.listRoles(companyId),
-        this.notifications.list(),
+        this.notifications.listForCompany(companyId),
       ]);
 
     // One lookup for every role name the agent and consultation rows need,

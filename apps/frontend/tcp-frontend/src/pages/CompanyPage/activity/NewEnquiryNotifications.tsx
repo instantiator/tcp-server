@@ -90,8 +90,7 @@ export const NewEnquiryNotifications = ({
           message={t('activity.enquiries.notification', {
             role: entry.roleName,
           })}
-          durableHref={`/company/${companyId}#enquiries`}
-          durableLabel={t('activity.enquiries.notification.link')}
+          durableHref={`/company/${companyId}?enquiry=${entry.id}#enquiries`}
           channel="enquiry"
           onDismiss={() => {
             setArrived((previous) =>

@@ -15,15 +15,17 @@ import { NotificationsList } from './NotificationsList';
 const COMPANY_ID = 'company-1';
 const NOW = '2026-08-10T09:00:00.000Z';
 
-const NOTIFICATIONS_ROUTE = /\/api\/notifications(\?|$)/;
+const NOTIFICATIONS_ROUTE = /\/api\/notifications\/company\/company-1(\?|$)/;
 const DISMISS_ROUTE = /\/api\/notifications\/[^/]+\/dismiss/;
 const RESUME_ROUTE = new RegExp(`/api/company/${COMPANY_ID}/resume`);
 
 interface NotificationOverrides {
   readonly id: string;
   readonly severity?: 'info' | 'warning' | 'error';
-  readonly kind?: 'spend_threshold' | 'spend_reached' | 'spend_reset';
+  readonly kind?:
+    'spend_threshold' | 'spend_reached' | 'spend_reset' | 'task_failed';
   readonly message?: string;
+  readonly taskId?: string;
 }
 
 const notificationRow = (overrides: NotificationOverrides) => ({
@@ -32,6 +34,7 @@ const notificationRow = (overrides: NotificationOverrides) => ({
   kind: overrides.kind ?? 'spend_threshold',
   message: overrides.message ?? `${overrides.id} message`,
   createdAt: NOW,
+  ...(overrides.taskId === undefined ? {} : { taskId: overrides.taskId }),
 });
 
 interface Routes {
@@ -48,14 +51,14 @@ const respondNotifications = (overrides: Routes = {}): void => {
   ]);
 };
 
-const renderNotifications = () =>
+const renderNotifications = (path = '/') =>
   render(
     <QueryClientProvider
       client={
         new QueryClient({ defaultOptions: { queries: { retry: false } } })
       }
     >
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[path]}>
         <NotificationsList companyId={COMPANY_ID} />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -204,6 +207,73 @@ describe('NotificationsList', () => {
         tCount('notifications.resumeCompany.requested', 3),
       ),
     ).toBeInTheDocument();
+  });
+
+  describe('deep link from a toast', () => {
+    beforeEach(() => {
+      // jsdom has no layout, so no `scrollIntoView`.
+      window.HTMLElement.prototype.scrollIntoView = vi.fn();
+    });
+
+    it('focuses and marks the row the URL names', async () => {
+      respondNotifications({
+        notifications: {
+          body: [
+            notificationRow({ id: 'note-a', message: 'First notice' }),
+            notificationRow({ id: 'note-b', message: 'Second notice' }),
+          ],
+        },
+      });
+      renderNotifications('/?notification=note-b');
+
+      const target = (await screen.findByText('Second notice')).closest('li');
+      await vi.waitFor(() => {
+        expect(target).toHaveFocus();
+      });
+      expect(target).toHaveAttribute('aria-current', 'true');
+      expect(
+        screen.getByText('First notice').closest('li'),
+      ).not.toHaveAttribute('aria-current');
+    });
+
+    it('does nothing for an id the list does not hold', async () => {
+      respondNotifications({
+        notifications: { body: [notificationRow({ id: 'note-a' })] },
+      });
+      renderNotifications('/?notification=gone');
+
+      await screen.findByText('note-a message');
+      expect(document.body).toHaveFocus();
+      expect(document.querySelector('[aria-current]')).toBeNull();
+    });
+  });
+
+  it('offers "Open task" only on a row that has a task, linking to its dialog', async () => {
+    respondNotifications({
+      notifications: {
+        body: [
+          notificationRow({ id: 'note-1', kind: 'spend_threshold' }),
+          notificationRow({
+            id: 'note-2',
+            kind: 'task_failed',
+            severity: 'error',
+            taskId: 'task-9',
+          }),
+        ],
+      },
+    });
+    renderNotifications();
+
+    const link = await screen.findByRole('link', {
+      name: t('notifications.openTask'),
+    });
+    expect(link).toHaveAttribute(
+      'href',
+      `/company/${COMPANY_ID}?task=task-9#tasks`,
+    );
+    expect(
+      screen.getAllByRole('link', { name: t('notifications.openTask') }),
+    ).toHaveLength(1);
   });
 
   it('has no accessibility violations, populated or empty', async () => {

@@ -18,6 +18,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import Redis from 'ioredis';
 import { Repository } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
+import { NotificationService } from '../notifications/notification.service';
 import {
   ShutdownState,
   SystemShutdownService,
@@ -69,6 +70,7 @@ export class SystemDrainService implements OnModuleInit, OnModuleDestroy {
     private readonly config: ConfigService,
     private readonly audit: AuditService,
     private readonly shutdown: SystemShutdownService,
+    private readonly notifications: NotificationService,
   ) {}
 
   /**
@@ -167,7 +169,7 @@ export class SystemDrainService implements OnModuleInit, OnModuleDestroy {
   private async pauseRunningAgents(): Promise<number> {
     const running = await this.agentRepo.find({
       where: { status: AgentStatus.Running },
-      relations: { role: true },
+      relations: { role: true, assignment: { task: true } },
     });
     if (running.length === 0) return 0;
 
@@ -190,8 +192,44 @@ export class SystemDrainService implements OnModuleInit, OnModuleDestroy {
         },
       );
     }
+    await this.notifyPausedTasks(running, pausedAt);
     this.logger.warn(`Drain paused ${running.length} running agent(s)`);
     return running.length;
+  }
+
+  /**
+   * Tells each affected task's company that a shutdown paused it, and that it
+   * needs resuming: nothing resumes a shutdown pause by itself. One notice per
+   * task per drain. A notice that can't be raised is logged, never allowed
+   * to stop the drain.
+   */
+  private async notifyPausedTasks(
+    agents: TcpAgent[],
+    pausedAt: Date,
+  ): Promise<void> {
+    const tasks = new Map(
+      agents.flatMap((agent) =>
+        agent.assignment?.task
+          ? [[agent.assignment.task.id, agent.assignment.task] as const]
+          : [],
+      ),
+    );
+    for (const task of tasks.values()) {
+      try {
+        await this.notifications.create({
+          severity: 'warning',
+          kind: 'task_paused',
+          message: `Task ${task.shortcode} was paused by a shutdown. Resume it to continue.`,
+          companyId: task.companyId,
+          taskId: task.id,
+          dedupeKey: `task_paused:shutdown:${task.id}:${pausedAt.toISOString()}`,
+        });
+      } catch (err) {
+        this.logger.error(
+          `Couldn't raise the shutdown notice for task ${task.id}: ${String(err)}`,
+        );
+      }
+    }
   }
 
   /** Counts agents the database believes are actively running a loop. */

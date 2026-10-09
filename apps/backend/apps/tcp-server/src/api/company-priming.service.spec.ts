@@ -75,7 +75,7 @@ describe('CompanyPrimingService', () => {
   let db: jest.Mocked<Pick<DbService, 'listAgents' | 'listRoles'>>;
   let assignmentRepo: jest.Mocked<Pick<Repository<TcpAssignment>, 'find'>>;
   let conversations: jest.Mocked<Pick<ConversationService, 'list'>>;
-  let notifications: jest.Mocked<Pick<NotificationService, 'list'>>;
+  let notifications: jest.Mocked<Pick<NotificationService, 'listForCompany'>>;
   let service: CompanyPrimingService;
 
   beforeEach(() => {
@@ -86,7 +86,7 @@ describe('CompanyPrimingService', () => {
     };
     assignmentRepo = { find: jest.fn().mockResolvedValue([]) };
     conversations = { list: jest.fn().mockResolvedValue([]) };
-    notifications = { list: jest.fn().mockResolvedValue([]) };
+    notifications = { listForCompany: jest.fn().mockResolvedValue([]) };
     service = new CompanyPrimingService(
       tasks as unknown as TaskService,
       db as unknown as DbService,
@@ -112,7 +112,7 @@ describe('CompanyPrimingService', () => {
       ]);
       assignmentRepo.find.mockResolvedValue([consultation]);
       conversations.list.mockResolvedValue([enquiry]);
-      notifications.list.mockResolvedValue([notice]);
+      notifications.listForCompany.mockResolvedValue([notice]);
       events = await service.prime(companyId);
     });
 
@@ -128,7 +128,7 @@ describe('CompanyPrimingService', () => {
     });
 
     it('replays only active notifications, with the row as their summary', () => {
-      expect(notifications.list).toHaveBeenCalledWith();
+      expect(notifications.listForCompany).toHaveBeenCalledWith(companyId);
       const replayed = events.at(-1);
       expect(replayed?.type === 'audit' && replayed.event.payload).toEqual({
         entity: 'notification',

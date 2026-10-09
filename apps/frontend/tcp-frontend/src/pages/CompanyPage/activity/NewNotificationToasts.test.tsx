@@ -18,7 +18,7 @@ import { NewNotificationToasts } from './NewNotificationToasts';
 const COMPANY_ID = 'company-1';
 const NOW = '2026-08-10T09:00:00.000Z';
 
-const NOTIFICATIONS_ROUTE = /\/api\/notifications(\?|$)/;
+const NOTIFICATIONS_ROUTE = /\/api\/notifications\/company\/company-1(\?|$)/;
 
 interface NotificationOverrides {
   readonly id: string;
@@ -66,7 +66,7 @@ const auditEvent = (payload: Record<string, unknown>): WireEvent => ({
  * still nothing" rather than "still loading".
  */
 const LoadMarker = () => {
-  const query = useLiveNotifications();
+  const query = useLiveNotifications(COMPANY_ID);
   return <p>{query.isSuccess ? 'ready' : 'loading'}</p>;
 };
 
@@ -133,11 +133,11 @@ describe('NewNotificationToasts', () => {
     ).toBeInTheDocument();
 
     const link = within(group).getByRole('link', {
-      name: t('notifications.toast.link'),
+      name: 'A spend threshold was crossed.',
     });
     expect(link).toHaveAttribute(
       'href',
-      `/company/${COMPANY_ID}#notifications`,
+      `/company/${COMPANY_ID}?notification=note-2#notifications`,
     );
 
     await user.click(

@@ -414,11 +414,16 @@ export const useCompanySpend = (companyId: string) =>
       ),
   });
 
-/** Active notifications, newest first. */
-export const useNotifications = () =>
+/** A company's active notifications plus the application-wide ones, newest first. */
+export const useNotifications = (companyId: string) =>
   useQuery({
-    queryKey: queryKeys.notifications(),
-    queryFn: () => unwrap(api.GET('/api/notifications')),
+    queryKey: queryKeys.notifications(companyId),
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/notifications/company/{companyId}', {
+          params: { path: { companyId } },
+        }),
+      ),
   });
 
 /** Dismisses a notification for every user. */

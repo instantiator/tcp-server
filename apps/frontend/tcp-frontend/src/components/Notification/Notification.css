@@ -1,16 +1,27 @@
 /*
- * Empty by design (ADR-026): meaningful class names now, rules filled per
- * theme later. No literal colour, spacing or border value may appear here —
- * React Aria's own defaults live in `styles/base.css`.
+ * Small and quiet (ADR-026): spacing and type come from the tokens in
+ * `styles/base.css`, never literal values. The toast hides itself after a few
+ * seconds, so it is kept compact; its durable row carries the full detail.
  */
 .notification {
+  display: flex;
+  align-items: center;
+  gap: var(--tcp-space-sm);
+  padding: var(--tcp-space-xs) var(--tcp-space-sm);
+  font-size: var(--tcp-font-size-small);
 }
 
 .notification__message {
 }
 
-.notification__durable {
+.notification__dismiss {
+  font-size: var(--tcp-font-size-small);
+  padding: var(--tcp-space-xs) var(--tcp-space-sm);
 }
 
-.notification__dismiss {
+@media (prefers-reduced-motion: reduce) {
+  .notification {
+    transition: none;
+    animation: none;
+  }
 }

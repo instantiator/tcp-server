@@ -24,6 +24,7 @@ import {
   useLiveCompanyTasksList,
   useLiveConsultationState,
   useLiveEnquiryState,
+  useLiveNotifications,
   useLiveTaskState,
   useRoleState,
 } from './hooks';
@@ -118,6 +119,20 @@ describe('each hook asks for the right thing', () => {
 
     const url = new URL(requestedUrls()[0]);
     expect(url.searchParams.get('status')).toBe('awaiting_user');
+  });
+
+  it("useLiveNotifications requests the company's route", async () => {
+    respondByRoute([[/\/api\/notifications\/company\/[^/?]+$/, { body: [] }]]);
+
+    const { result } = renderHookWithClient(() =>
+      useLiveNotifications(COMPANY_ID),
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(requestedUrls()).toHaveLength(1);
+    expect(new URL(requestedUrls()[0]).pathname).toBe(
+      `/api/notifications/company/${COMPANY_ID}`,
+    );
   });
 
   it('useLiveAgentState({ agentId }) makes exactly one request, to /api/agent/{id}', async () => {

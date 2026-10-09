@@ -474,7 +474,8 @@ export const useLiveCompanySpend = (
 ): UseQueryResult<CompanySpendDTO, Error> => useCompanySpend(companyId);
 
 /**
- * Active notifications, newest first.
+ * A company's active notifications (its own and the application-wide ones),
+ * newest first.
  *
  * Server-filtered to active rows (`includeDismissed` defaults to false), and
  * every caller re-filters on `dismissedAt` again, client-side — the same
@@ -483,10 +484,9 @@ export const useLiveCompanySpend = (
  * removal from the array, so the query's own filter only describes what was
  * true when it was fetched.
  */
-export const useLiveNotifications = (): UseQueryResult<
-  NotificationDTO[],
-  Error
-> => useNotifications();
+export const useLiveNotifications = (
+  companyId: string,
+): UseQueryResult<NotificationDTO[], Error> => useNotifications(companyId);
 
 /**
  * Dismisses a notification for every signed-in user, and makes every list

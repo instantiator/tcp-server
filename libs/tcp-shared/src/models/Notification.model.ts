@@ -11,12 +11,18 @@ export type NotificationSeverity = 'info' | 'warning' | 'error';
 
 /** The condition a {@link TcpNotification} reports, routing its UI treatment. */
 export type NotificationKind =
-  'spend_threshold' | 'spend_reached' | 'spend_reset' | 'spend_untracked';
+  | 'spend_threshold'
+  | 'spend_reached'
+  | 'spend_reset'
+  | 'spend_untracked'
+  | 'task_failed'
+  | 'task_paused';
 
 /**
- * An application-wide notice (a spend threshold crossed, a cap reached, a
- * provider reporting no usage, …). Visible to every signed-in user and
- * dismissed for everyone at once — there is no per-company scoping here.
+ * A notice: application-wide (a spend threshold crossed, a cap reached, a
+ * provider reporting no usage, …) and visible to every signed-in user, or
+ * about one company's task (it failed, or a shutdown paused it) and visible
+ * to that company's members. Either way, dismissed for everyone at once.
  * Named `TcpNotification` to avoid clashing with the DOM's global
  * `Notification` type; the table itself is named `notification`.
  */
@@ -48,6 +54,20 @@ export class TcpNotification {
    */
   @Column({ type: 'varchar', nullable: true, unique: true })
   dedupeKey?: string;
+
+  /**
+   * The company a task notice belongs to; null for an application-wide one.
+   * @format uuid
+   */
+  @Column({ type: 'varchar', nullable: true })
+  companyId?: UUID | null;
+
+  /**
+   * The task a task notice is about, for a link to it; null otherwise.
+   * @format uuid
+   */
+  @Column({ type: 'varchar', nullable: true })
+  taskId?: UUID | null;
 
   /** When this notification was raised. */
   @CreateDateColumn()

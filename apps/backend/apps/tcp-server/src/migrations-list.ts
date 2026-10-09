@@ -6,6 +6,7 @@ import { ConversationRepliesDelivered1784820000000 } from './migrations/17848200
 import { SpendTracking1784830000000 } from './migrations/1784830000000-SpendTracking';
 import { AgentRateLimitPause1784840000000 } from './migrations/1784840000000-AgentRateLimitPause';
 import { TaskPauseAndVisualisation1784850000000 } from './migrations/1784850000000-TaskPauseAndVisualisation';
+import { TaskNotifications1784860000000 } from './migrations/1784860000000-TaskNotifications';
 
 /**
  * tcp-server's full, ordered migration list — the single source of truth for
@@ -37,4 +38,5 @@ export const MIGRATIONS: (new () => MigrationInterface)[] = [
   SpendTracking1784830000000,
   AgentRateLimitPause1784840000000,
   TaskPauseAndVisualisation1784850000000,
+  TaskNotifications1784860000000,
 ];

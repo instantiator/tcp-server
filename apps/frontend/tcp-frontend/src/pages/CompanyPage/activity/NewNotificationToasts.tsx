@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLiveNotifications } from '../../../api/hooks';
 import { Notification } from '../../../components/Notification/Notification';
-import { t } from '../../../strings';
 
 export interface NewNotificationToastsProps {
   readonly companyId: string;
@@ -34,7 +33,7 @@ interface ArrivedNotification {
 export const NewNotificationToasts = ({
   companyId,
 }: NewNotificationToastsProps) => {
-  const query = useLiveNotifications();
+  const query = useLiveNotifications(companyId);
 
   const [arrived, setArrived] = useState<readonly ArrivedNotification[]>([]);
 
@@ -82,8 +81,7 @@ export const NewNotificationToasts = ({
         <Notification
           key={entry.id}
           message={entry.message}
-          durableHref={`/company/${companyId}#notifications`}
-          durableLabel={t('notifications.toast.link')}
+          durableHref={`/company/${companyId}?notification=${entry.id}#notifications`}
           channel="notification"
           politeness={entry.severity === 'error' ? 'assertive' : 'polite'}
           onDismiss={() => {

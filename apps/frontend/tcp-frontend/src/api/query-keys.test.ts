@@ -77,7 +77,7 @@ const everyKey: Record<keyof typeof queryKeys, readonly unknown[]> = {
   roleKnowledgeSearch: queryKeys.roleKnowledgeSearch('role-1', 'a question'),
   companyKnowledge: queryKeys.companyKnowledge('company-1'),
   companyKnowledgeStatus: queryKeys.companyKnowledgeStatus('company-1'),
-  notifications: queryKeys.notifications(),
+  notifications: queryKeys.notifications('company-1'),
   spendOverview: queryKeys.spendOverview(),
   companySpend: queryKeys.companySpend('company-1'),
 };
