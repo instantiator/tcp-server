@@ -7,6 +7,7 @@ import {
   useLiveNotifications,
   useResumeCompany,
 } from '../../../api/hooks';
+import { ButtonRow } from '../../../components/ButtonRow/ButtonRow';
 import { ErrorState } from '../../../components/ErrorState/ErrorState';
 import { t, tCount } from '../../../strings';
 import { ActivityList } from './ActivityList';
@@ -113,25 +114,25 @@ export const NotificationsList = ({
             <p className="activity-list__row-detail">
               {dateFormatter.format(new Date(row.createdAt))}
             </p>
-            <Button
-              className="react-aria-Button"
-              aria-describedby={`notification-${row.id}-message`}
-              onPress={() => {
-                dismiss.mutate(row.id);
-              }}
-            >
-              {t('notifications.dismiss')}
-            </Button>
-            {row.taskId != null && (
-              <Link
-                to={`/company/${companyId}?task=${row.taskId}#tasks`}
+            <ButtonRow>
+              <Button
+                className="react-aria-Button"
                 aria-describedby={`notification-${row.id}-message`}
+                onPress={() => {
+                  dismiss.mutate(row.id);
+                }}
               >
-                {t('notifications.openTask')}
-              </Link>
-            )}
-            {row.kind === 'spend_reached' && (
-              <>
+                {t('notifications.dismiss')}
+              </Button>
+              {row.taskId != null && (
+                <Link
+                  to={`/company/${companyId}?task=${row.taskId}#tasks`}
+                  aria-describedby={`notification-${row.id}-message`}
+                >
+                  {t('notifications.openTask')}
+                </Link>
+              )}
+              {row.kind === 'spend_reached' && (
                 <Button
                   className="react-aria-Button"
                   aria-describedby={`notification-${row.id}-message`}
@@ -142,21 +143,18 @@ export const NotificationsList = ({
                 >
                   {t('notifications.resumeCompany')}
                 </Button>
-                {resumedId === row.id && resumedCount !== null && (
-                  <p className="activity-list__row-detail">
-                    {tCount(
-                      'notifications.resumeCompany.requested',
-                      resumedCount,
-                    )}
-                  </p>
-                )}
-                {resumedId === row.id && resumeCompany.isError && (
-                  <ErrorState
-                    message={t('notifications.resumeCompany.failed')}
-                    channel="notifications-resume"
-                  />
-                )}
-              </>
+              )}
+            </ButtonRow>
+            {resumedId === row.id && resumedCount !== null && (
+              <p className="activity-list__row-detail">
+                {tCount('notifications.resumeCompany.requested', resumedCount)}
+              </p>
+            )}
+            {resumedId === row.id && resumeCompany.isError && (
+              <ErrorState
+                message={t('notifications.resumeCompany.failed')}
+                channel="notifications-resume"
+              />
             )}
           </li>
         ))}

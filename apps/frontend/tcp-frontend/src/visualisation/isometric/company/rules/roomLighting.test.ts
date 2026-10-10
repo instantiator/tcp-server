@@ -83,11 +83,10 @@ describe('roomLighting', () => {
     expect(litRooms.has(taskRoomId('t1'))).toBe(false);
   });
 
-  it('lights a room with a running agent in it, and only that room', () => {
+  it('lights a task room with a running agent in it', () => {
     const world = worldWithAvatarAt((w) => insideRoom(w, taskRoomId('t1')));
     const { litRooms } = roomLighting(world, snapshot([task()], [agent()]));
     expect(litRooms.has(taskRoomId('t1'))).toBe(true);
-    expect(litRooms.has('rec')).toBe(false);
   });
 
   it('keeps a room dim when only a paused agent is in it', () => {
@@ -99,11 +98,25 @@ describe('roomLighting', () => {
     expect(litRooms.has(taskRoomId('t1'))).toBe(false);
   });
 
-  it('lights the rec room for a running agent standing in it', () => {
+  it('leaves a task room dim while its running agent stands elsewhere', () => {
     const world = worldWithAvatarAt((w) => insideRoom(w, 'rec'));
     const { litRooms } = roomLighting(world, snapshot([task()], [agent()]));
-    expect(litRooms.has('rec')).toBe(true);
     expect(litRooms.has(taskRoomId('t1'))).toBe(false);
+  });
+
+  // Lighting shows where work happens; the shared rooms say nothing by dimming.
+  it('always lights the rec room, the mail room and the archive, empty or not', () => {
+    const world = createInitialWorld();
+    const { litRooms } = roomLighting(world, snapshot([]));
+    for (const room of world.rooms.filter((r) =>
+      ['rec', 'mail', 'archive'].includes(r.purpose),
+    )) {
+      expect(litRooms.has(room.id)).toBe(true);
+    }
+    expect(
+      world.rooms.filter((r) => ['rec', 'mail', 'archive'].includes(r.purpose))
+        .length,
+    ).toBe(3);
   });
 
   it('lights a one-to-one room by the same rule', () => {

@@ -1,0 +1,8 @@
+/*
+ * Layout, not theme (ADR-026): the label sits on its own line above the
+ * value, with a little space between, so the two never run together.
+ */
+.tcp-labelled-value__label {
+  display: block;
+  margin-block-end: var(--tcp-space-xs);
+}

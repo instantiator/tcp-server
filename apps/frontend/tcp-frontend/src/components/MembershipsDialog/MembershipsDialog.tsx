@@ -26,13 +26,7 @@ export const MembershipsDialog = ({ onClose }: MembershipsDialogProps) => {
   const { data, isPending, isError } = useCompanies({});
 
   return (
-    <Dialog
-      isOpen
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-      heading={t('memberships.heading')}
-    >
+    <Dialog onClose={onClose} heading={t('memberships.heading')}>
       {isPending && <LoadingState label={t('memberships.loading')} />}
 
       {isError && (

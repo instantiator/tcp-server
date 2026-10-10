@@ -1,5 +1,5 @@
 import { taskRoomId } from '../world/layout';
-import type { Furniture, OfficeWorld, Tile } from '../world/types';
+import type { Furniture, OfficeWorld, RoomPurpose, Tile } from '../world/types';
 import { tileInBounds } from './cleanupRules';
 import type { CompanySnapshot } from './companySnapshot';
 
@@ -19,8 +19,20 @@ const ACTIVE_BOARD_STATUSES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Works out what is lit: a room while a running agent's avatar stands in it
- * (the corridor always, as it is a thoroughfare), and a task's whiteboard
+ * Rooms that are always lit. Lighting shows where work is happening, and that
+ * happens in task and one-to-one rooms; the corridor, the rec room, the mail
+ * room and the archive are shared spaces, so dimming them said nothing.
+ */
+const ALWAYS_LIT: ReadonlySet<RoomPurpose> = new Set([
+  'corridor',
+  'rec',
+  'mail',
+  'archive',
+]);
+
+/**
+ * Works out what is lit: a task or one-to-one room while a running agent's
+ * avatar stands in it (the shared rooms always), and a task's whiteboard
  * while the task is being worked and isn't paused. Pure, so the scene
  * redraws only when the result changes by value.
  */
@@ -41,7 +53,7 @@ export function roomLighting(
     world.rooms
       .filter(
         (room) =>
-          room.purpose === 'corridor' ||
+          ALWAYS_LIT.has(room.purpose) ||
           runningAvatars.some((avatar) =>
             tileInBounds(room.bounds, avatar.location),
           ),

@@ -116,16 +116,16 @@ const strings = {
   'task.assignment.collapse': 'Hide what {role} has done',
   'task.assignment.noAgent.heading': 'Not started',
   'task.assignment.noAgent.body': 'No agent has picked this up yet.',
-  'task.cancel': 'Cancel this task',
+  'task.cancel': 'Cancel',
   'task.cancel.confirm.heading': 'Cancel this task?',
   'task.cancel.confirm.body':
     'This stops the task and every agent working on it. A cancelled task cannot be restarted.',
   'task.cancel.confirm.accept': 'Cancel the task',
   'task.cancel.confirm.reject': 'Keep the task running',
-  'task.start': 'Start this task',
+  'task.start': 'Start',
   'task.pause': 'Pause this task',
   'task.resume': 'Resume this task',
-  'task.edit': 'Edit this task',
+  'task.edit': 'Edit',
   'task.edit.heading': 'Edit task {shortcode}',
   'task.edit.submit': 'Save changes',
   'task.edit.submit.pending': 'Saving…',
@@ -245,7 +245,7 @@ const strings = {
   'shutdown.explainRestart':
     'Restart does the same, then restarts the services. Paused work resumes.',
   'shutdown.restart': 'Restart',
-  'shutdown.graceful': 'Shut down gracefully',
+  'shutdown.graceful': 'Shutdown',
   'shutdown.force': 'Force shut down…',
   'shutdown.forceConfirm':
     'This stops agents mid-call and wastes the tokens already spent. Force shut down?',

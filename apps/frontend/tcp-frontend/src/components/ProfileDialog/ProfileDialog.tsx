@@ -1,5 +1,6 @@
 import { useAuth } from 'react-oidc-context';
 import { Dialog } from '../Dialog/Dialog';
+import { LabelledValue } from '../LabelledValue/LabelledValue';
 import { t } from '../../strings';
 import './ProfileDialog.css';
 
@@ -42,33 +43,18 @@ export const ProfileDialog = ({ onClose }: ProfileDialogProps) => {
   const missingBoth = name === undefined && email === undefined;
 
   return (
-    <Dialog
-      isOpen
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-      heading={t('profile.heading')}
-    >
-      <p className="profile-dialog__field">
-        <span className="profile-dialog__field-label">
-          {t('profile.name.label')}
-        </span>
+    <Dialog onClose={onClose} heading={t('profile.heading')}>
+      <LabelledValue label={t('profile.name.label')}>
         {/* A missing claim reads as "not provided", never as the raw `sub` —
             that would look like a name, not an id, to anyone reading it. */}
         {name ?? t('profile.claim.missing')}
-      </p>
-      <p className="profile-dialog__field">
-        <span className="profile-dialog__field-label">
-          {t('profile.email.label')}
-        </span>
+      </LabelledValue>
+      <LabelledValue label={t('profile.email.label')}>
         {email ?? t('profile.claim.missing')}
-      </p>
-      <p className="profile-dialog__field">
-        <span className="profile-dialog__field-label">
-          {t('profile.subject.label')}
-        </span>
+      </LabelledValue>
+      <LabelledValue label={t('profile.subject.label')}>
         {sub ?? t('profile.claim.missing')}
-      </p>
+      </LabelledValue>
 
       {missingBoth && (
         <p className="profile-dialog__claims-note">

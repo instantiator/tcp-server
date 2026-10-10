@@ -21,12 +21,10 @@ import './AddNewMenu.css';
 export interface AddNewMenuProps {
   readonly companyId: string;
   /**
-   * An icon-only, circular trigger (the company page's floating action
-   * button) instead of today's text button. The accessible name stays
-   * "Add new" either way — `aria-label` carries it when there's no visible
-   * text to derive it from. Defaults to `false` for the chat dialog's
-   * in-dialog trigger, which keeps its text (it needs no `portalContainer`:
-   * unlike the office view, nothing there clips an unportalled tooltip).
+   * The large floating action button (the company page) rather than the
+   * small round one (the chat dialog's title bar). Both are icon-only, so
+   * `aria-label` carries the name "Add new". Neither needs a
+   * `portalContainer`: nothing around them clips an unportalled tooltip.
    */
   readonly fab?: boolean;
 }
@@ -139,24 +137,17 @@ export const AddNewMenu = ({ companyId, fab = false }: AddNewMenuProps) => {
   return (
     <div className="add-new">
       <MenuTrigger isOpen={isOpen} onOpenChange={onOpenChange}>
-        {fab ? (
-          <WithTooltip label={t('addNew.trigger')}>
-            <Button
-              className="react-aria-Button tcp-icon-button tcp-icon-button--fab add-new__trigger"
-              aria-label={t('addNew.trigger')}
-              aria-describedby={error !== null ? errorId : undefined}
-            >
-              <Icon icon={Plus} />
-            </Button>
-          </WithTooltip>
-        ) : (
+        {/* The floating action button on the company page, or a small round
+            + where space is tight (the chat dialog's title bar). */}
+        <WithTooltip label={t('addNew.trigger')}>
           <Button
-            className="react-aria-Button add-new__trigger"
+            className={`react-aria-Button tcp-icon-button ${fab ? 'tcp-icon-button--fab' : 'tcp-icon-button--small'} add-new__trigger`}
+            aria-label={t('addNew.trigger')}
             aria-describedby={error !== null ? errorId : undefined}
           >
-            {t('addNew.trigger')}
+            <Icon icon={Plus} />
           </Button>
-        )}
+        </WithTooltip>
         <Popover>
           <Menu onAction={onTopAction}>
             <MenuItem id="create-task">{t('addNew.createTask')}</MenuItem>

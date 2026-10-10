@@ -1,34 +1,23 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Button } from 'react-aria-components';
 import { announce } from '../../announce/announcer';
 import { useLoadingAnnouncement } from '../../announce/useLoadingAnnouncement';
-import type { TaskWaiting } from '@tcp/shared/client';
-import { taskWaiting } from '@tcp/shared/client';
-import { refusalKey, type RefusalAction } from '../../api/errors';
 import {
-  useCancelTask,
   useCompanyRolesList,
   useLiveAssignmentsList,
-  useLiveCompanyAgentsList,
   useLiveTaskState,
-  usePauseTask,
-  useResumeTask,
-  useStartTask,
 } from '../../api/hooks';
-import {
-  ACTIVE_TASK_STATUSES,
-  statusLabel,
-  taskWaitingLabel,
-} from '../../api/statuses';
+import { statusLabel, taskWaitingLabel } from '../../api/statuses';
 import { streamUrls } from '../../events/subscriptions';
 import { useEventStream } from '../../events/useEventStream';
 import { t } from '../../strings';
-import { CreateTaskDialog } from '../CreateTaskDialog/CreateTaskDialog';
 import { Dialog } from '../Dialog/Dialog';
 import { EmptyState } from '../EmptyState/EmptyState';
 import { ErrorState } from '../ErrorState/ErrorState';
+import { LabelledValue } from '../LabelledValue/LabelledValue';
 import { LoadingState } from '../LoadingState/LoadingState';
 import { TaskAssignmentPanel } from './TaskAssignmentPanel';
+import { TaskControls } from './TaskControls';
+import { useTaskWaiting } from './useTaskWaiting';
 import './TaskDialog.css';
 
 export interface TaskDialogProps {
@@ -37,15 +26,6 @@ export interface TaskDialogProps {
   readonly companyId: string;
   readonly onClose: () => void;
 }
-
-/** Waiting kinds a user can act on with Resume, even without pausing the task. */
-const RESUMABLE_KINDS: readonly TaskWaiting['kind'][] = [
-  'spend_cap',
-  'shutdown',
-  'rate_limited',
-  'manual',
-  'restart',
-];
 
 /**
  * A task: its details, why it is waiting (if it is), one collapsible panel per
@@ -71,11 +51,7 @@ export const TaskDialog = ({ taskId, companyId, onClose }: TaskDialogProps) => {
   const task = useLiveTaskState(taskId);
   const assignments = useLiveAssignmentsList({ taskId });
   const { data: roles } = useCompanyRolesList(companyId);
-  const cancel = useCancelTask(taskId);
-  const start = useStartTask(taskId);
-  const pause = usePauseTask(taskId);
-  const resume = useResumeTask(taskId);
-  const { data: companyAgents } = useLiveCompanyAgentsList(companyId);
+  const { waiting, isPausing } = useTaskWaiting(taskId, companyId);
 
   // The dialog's own stream, and the only one it opens itself: it carries
   // this task's changes and its assignments'. `applyEvent` folds both into
@@ -86,8 +62,6 @@ export const TaskDialog = ({ taskId, companyId, onClose }: TaskDialogProps) => {
   const detailsHeadingId = useId();
   const detailsRef = useRef<HTMLElement | null>(null);
 
-  const [confirming, setConfirming] = useState(false);
-  const [editing, setEditing] = useState(false);
   const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(
     new Set(),
   );
@@ -173,70 +147,9 @@ export const TaskDialog = ({ taskId, companyId, onClose }: TaskDialogProps) => {
         },
   );
 
-  const taskData = task.data;
-  const isActive =
-    taskData !== undefined &&
-    (ACTIVE_TASK_STATUSES as readonly string[]).includes(taskData.status);
-  const isPaused = Boolean(taskData?.pausedAt);
-
-  // Worked out here from the live agents rather than read from the detail
-  // fetch's `waiting`, which is only as fresh as the last refetch.
-  const taskAgents = useMemo(() => {
-    const ids = new Set(assignments.data?.map((a) => a.id));
-    return (companyAgents ?? []).filter((a) => ids.has(a.assignmentId));
-  }, [companyAgents, assignments.data]);
-  const waiting =
-    taskData === undefined ? null : taskWaiting(taskData, taskAgents);
-  const isPausing = isPaused && taskAgents.some((a) => a.status === 'running');
-
-  const canStart = taskData?.status === 'ready';
-  const canEdit = canStart;
-  // `ACTIVE_TASK_STATUSES` includes `ready`, which has nothing to pause.
-  const isRunning = isActive && !canStart;
-  const canPause = isRunning && !isPaused;
-  const canResume =
-    isRunning &&
-    (isPaused || (waiting !== null && RESUMABLE_KINDS.includes(waiting.kind)));
-  const canCancel = isActive;
-
-  const controls = [
-    canStart && 'start',
-    canEdit && 'edit',
-    canPause && 'pause',
-    canResume && 'resume',
-    canCancel && 'cancel',
-  ]
-    .filter(Boolean)
-    .join();
-
-  useEffect(() => {
-    // A control has just been removed, and a focused element that disappears
-    // drops focus onto the page body — which ADR-027 forbids leaving it on.
-    // Only the body, deliberately: React Aria's focus scope often catches this
-    // itself, and when it has, focus is already somewhere deliberate and must
-    // not be moved again. Keyed on the set of controls, a value, so StrictMode's
-    // second run is harmless.
-    if (document.activeElement !== document.body) return;
-    detailsRef.current?.focus();
-  }, [controls]);
-
-  const failure = (
-    action: RefusalAction,
-    mutation: { isError: boolean; error: unknown },
-  ) =>
-    mutation.isError && (
-      <ErrorState
-        message={t(refusalKey(mutation.error, action))}
-        channel={`task-${action}:${taskId}`}
-      />
-    );
-
   return (
     <Dialog
-      isOpen
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
+      onClose={onClose}
       heading={
         task.data === undefined
           ? t('task.dialog.heading.pending')
@@ -260,131 +173,31 @@ export const TaskDialog = ({ taskId, companyId, onClose }: TaskDialogProps) => {
             <h3 id={detailsHeadingId} className="task-dialog__details-heading">
               {t('task.details.label')}
             </h3>
-            <p className="task-dialog__field">
-              <span className="task-dialog__field-label">
-                {t('task.details.request')}
-              </span>
+            <LabelledValue label={t('task.details.request')}>
               {task.data.request}
-            </p>
-            <p className="task-dialog__field">
-              <span className="task-dialog__field-label">
-                {t('task.details.status')}
-              </span>
+            </LabelledValue>
+            <LabelledValue label={t('task.details.status')}>
               {statusLabel(task.data.status)}
-            </p>
+            </LabelledValue>
             {(isPausing || waiting !== null) && (
-              <p className="task-dialog__field">
-                <span className="task-dialog__field-label">
-                  {t('task.details.waiting')}
-                </span>
+              <LabelledValue label={t('task.details.waiting')}>
                 {isPausing
                   ? t('task.details.pausing')
                   : waiting !== null && taskWaitingLabel(waiting)}
-              </p>
+              </LabelledValue>
             )}
             {task.data.failureReason !== null && (
-              <p className="task-dialog__field">
-                <span className="task-dialog__field-label">
-                  {t('task.details.failureReason')}
-                </span>
+              <LabelledValue label={t('task.details.failureReason')}>
                 {task.data.failureReason}
-              </p>
+              </LabelledValue>
             )}
           </section>
 
-          {canStart && (
-            <Button
-              className="react-aria-Button"
-              isDisabled={start.isPending}
-              onPress={() => {
-                start.mutate();
-              }}
-            >
-              {t('task.start')}
-            </Button>
-          )}
-          {canEdit && (
-            <Button
-              className="react-aria-Button"
-              onPress={() => {
-                setEditing(true);
-              }}
-            >
-              {t('task.edit')}
-            </Button>
-          )}
-          {canPause && (
-            <Button
-              className="react-aria-Button"
-              isDisabled={pause.isPending}
-              onPress={() => {
-                pause.mutate();
-              }}
-            >
-              {t('task.pause')}
-            </Button>
-          )}
-          {canResume && (
-            <Button
-              className="react-aria-Button"
-              isDisabled={resume.isPending}
-              onPress={() => {
-                resume.mutate();
-              }}
-            >
-              {t('task.resume')}
-            </Button>
-          )}
-          {canCancel && (
-            <Button
-              className="react-aria-Button task-dialog__cancel"
-              isDisabled={cancel.isPending}
-              onPress={() => {
-                setConfirming(true);
-              }}
-            >
-              {t('task.cancel')}
-            </Button>
-          )}
-
-          {editing && (
-            <CreateTaskDialog
-              companyId={companyId}
-              task={task.data}
-              onClose={() => {
-                setEditing(false);
-              }}
-            />
-          )}
-
-          <Dialog
-            isOpen={confirming}
-            onOpenChange={(open) => {
-              if (!open) setConfirming(false);
-            }}
-            heading={t('task.cancel.confirm.heading')}
-          >
-            <p>{t('task.cancel.confirm.body')}</p>
-            <div className="task-dialog__confirm-actions">
-              <Button
-                className="react-aria-Button"
-                onPress={() => {
-                  setConfirming(false);
-                  cancel.mutate();
-                }}
-              >
-                {t('task.cancel.confirm.accept')}
-              </Button>
-              <Button
-                className="react-aria-Button"
-                onPress={() => {
-                  setConfirming(false);
-                }}
-              >
-                {t('task.cancel.confirm.reject')}
-              </Button>
-            </div>
-          </Dialog>
+          <TaskControls
+            taskId={taskId}
+            companyId={companyId}
+            focusFallback={() => detailsRef.current}
+          />
 
           <h3 className="task-dialog__assignments-heading">
             {t('task.assignments.heading')}
@@ -410,11 +223,6 @@ export const TaskDialog = ({ taskId, companyId, onClose }: TaskDialogProps) => {
               />
             ))
           )}
-
-          {failure('start', start)}
-          {failure('pause', pause)}
-          {failure('resume', resume)}
-          {failure('cancel', cancel)}
         </>
       )}
     </Dialog>

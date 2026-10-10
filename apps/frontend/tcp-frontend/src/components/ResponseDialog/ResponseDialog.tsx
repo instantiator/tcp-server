@@ -11,6 +11,7 @@ import { ApiError } from '../../api/errors';
 import { useLiveEnquiryState, useReplyToEnquiry } from '../../api/hooks';
 import { t, type StringKey } from '../../strings';
 import { Dialog } from '../Dialog/Dialog';
+import { LabelledValue } from '../LabelledValue/LabelledValue';
 import { EmptyState } from '../EmptyState/EmptyState';
 import { ErrorState } from '../ErrorState/ErrorState';
 import { focusFirstInvalid } from '../Field/focusFirstInvalid';
@@ -141,10 +142,7 @@ export const ResponseDialog = ({ slug, onClose }: ResponseDialogProps) => {
 
   return (
     <Dialog
-      isOpen
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
+      onClose={onClose}
       heading={
         enquiryData === undefined
           ? t('enquiry.dialog.heading.pending')
@@ -174,12 +172,9 @@ export const ResponseDialog = ({ slug, onClose }: ResponseDialogProps) => {
             <p className="response-dialog__question">{enquiryData.question}</p>
 
             {enquiryData.context !== null && (
-              <p className="response-dialog__field">
-                <span className="response-dialog__field-label">
-                  {t('enquiry.context.label')}
-                </span>
+              <LabelledValue label={t('enquiry.context.label')}>
                 {enquiryData.context}
-              </p>
+              </LabelledValue>
             )}
 
             <h3 className="response-dialog__messages-heading">

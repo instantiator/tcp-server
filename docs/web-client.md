@@ -657,6 +657,16 @@ of this is `src/pages/CompanyPage/activity/TasksList.tsx`.
   against shipping unreadable, so this class of gap cannot reach the client
   silently again.
 
+## Shared building blocks
+
+Reach for these before writing the markup again:
+
+- **`Dialog`** is the only modal. Pass `onClose` for the usual dialog its opener mounts only while open, or `isOpen` with `onOpenChange` to control it. `portalContainer` keeps it inside an element such as the full-screen office view.
+- **`RoundIconButton`** is a small round icon button with its name as a tooltip, filled or `outline`. **`CloseButton`** is the round ✕ built on it. Every close control uses it: dialog title bars, chat panels, the tray and toasts. The minimise button, the chat panel's complete button and the chat dialog's "Add new" are round icons too.
+- **`ButtonRow`** holds buttons that sit side by side. It keeps a gap between them and wraps when the row is too narrow, so no two buttons ever touch.
+- **`LabelledValue`** is a read-only label above its value ("Request", then the request), used by the task, profile and response dialogs.
+- **`tcp-button--outline`** (in `base.css`) outlines a secondary button: Cancel, and Force shut down.
+
 ## Strings: one lookup, no literals in JSX
 
 Every user-facing string resolves through `src/strings.ts`:
@@ -876,9 +886,12 @@ conversation reopening, read-only if it's a fresh listen-in on someone else's.
 ## The task dialog
 
 `TaskDialog` shows a task's details, a collapsible panel per assignment, and
-controls that depend on its state. Every control is a hook in `src/api/hooks.ts`
-(`useStartTask`, `usePauseTask`, `useResumeTask`, `useUpdateTask`,
-`useCancelTask`).
+controls that depend on its state. The controls are one component,
+`TaskControls`, which the office view's tray shows too, so clicking a
+whiteboard offers the same actions. Every control is a hook in
+`src/api/hooks.ts` (`useStartTask`, `usePauseTask`, `useResumeTask`,
+`useUpdateTask`, `useCancelTask`). Cancel is an outline button, since it's the
+one not to press by default.
 
 | Control    | Shown when                                                             | Does                                                                                           |
 | ---------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
@@ -897,8 +910,10 @@ controls that depend on its state. Every control is a hook in `src/api/hooks.ts`
   in `src/api/errors.ts` maps a status to a string ("This task isn't running, so
   it can't be paused.", "This task no longer exists", and so on), and
   `ErrorState` shows it. A `401` is already a sign-in redirect.
-- **When a control disappears, focus moves to the details section,** the answer
-  ADR-027 already gives for a focused control that goes away.
+- **When a control disappears, focus moves to the details section** (in the
+  tray, to the panel's heading), the answer ADR-027 already gives for a focused
+  control that goes away. In the full-screen office view, the edit and cancel
+  dialogs are portalled into the view, so they stay visible.
 - **Edit keeps each expected output's type.** An output the CLI set as
   `inline-text` stays inline text; it is not turned into a file name.
 - **The task dialog still has no "Add new" menu**, by decision.
@@ -969,8 +984,9 @@ header.
 - **A tick marks a succeeded task.** A small tick above its whiteboard has a
   hover-only zone with the tooltip "Task completed". Failed and cancelled rooms
   get no marker.
-- **Lighting shows what is being worked.** A room is lit while a running
-  agent's avatar is in it, and the corridor is always lit. A task's whiteboard
+- **Lighting shows what is being worked.** A task or one-to-one room is lit
+  while a running agent's avatar is in it. The shared rooms (the corridor, the
+  rec room, the mail room and the archive) are always lit. A task's whiteboard
   is lit while the task is `planning`, `in-progress` or `finalising` and not
   paused. Everything else is dimmed (`palette.dim()`), except walls: they keep their full colour, so a dark room's outline stays visible. `rules/roomLighting.ts`
   works it out as a pure function, and the scene redraws its static layers only

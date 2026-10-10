@@ -1566,6 +1566,13 @@ describe('ChatDialog', () => {
         screen.getByRole('dialog', { name: t('chat.dialog.heading') }),
       ).toBeTruthy();
 
+      // The trigger is an icon button with a tooltip, shown on keyboard
+      // focus: the first escape dismisses the tooltip (WCAG 1.4.13), the
+      // next the dialog.
+      await user.keyboard('{Escape}');
+      expect(
+        screen.getByRole('dialog', { name: t('chat.dialog.heading') }),
+      ).toBeTruthy();
       await user.keyboard('{Escape}');
       await waitFor(() => {
         expect(screen.queryByRole('dialog')).toBeNull();

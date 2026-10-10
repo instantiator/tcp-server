@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from 'react-aria-components';
-import './ShutdownDialog.css';
+import { ButtonRow } from '../ButtonRow/ButtonRow';
 import { announce } from '../../announce/announcer';
 import { refusalKey } from '../../api/errors';
 import {
@@ -119,7 +119,7 @@ export const ShutdownDialog = ({ onClose }: ShutdownDialogProps) => {
   })();
 
   const idleButtons = (
-    <div className="shutdown-dialog__actions">
+    <ButtonRow>
       {restartSupported && (
         <Button
           className="react-aria-Button"
@@ -150,7 +150,7 @@ export const ShutdownDialog = ({ onClose }: ShutdownDialogProps) => {
       >
         {t('shutdown.force')}
       </Button>
-    </div>
+    </ButtonRow>
   );
 
   const cancelButton = (label: string) => (
@@ -169,13 +169,7 @@ export const ShutdownDialog = ({ onClose }: ShutdownDialogProps) => {
   const isIdle = situation === 'idle' || situation === 'restarted';
 
   return (
-    <Dialog
-      isOpen
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-      heading={t('shutdown.heading')}
-    >
+    <Dialog onClose={onClose} heading={t('shutdown.heading')}>
       {status.isPending && <LoadingState label={t('shutdown.loading')} />}
 
       {situation === null && status.isError && (
@@ -201,7 +195,7 @@ export const ShutdownDialog = ({ onClose }: ShutdownDialogProps) => {
           )}
           {isIdle && !confirmingForce && idleButtons}
           {isIdle && confirmingForce && (
-            <div className="shutdown-dialog__actions">
+            <ButtonRow>
               <Button
                 className="react-aria-Button"
                 onPress={() => {
@@ -220,7 +214,7 @@ export const ShutdownDialog = ({ onClose }: ShutdownDialogProps) => {
               >
                 {t('shutdown.back')}
               </Button>
-            </div>
+            </ButtonRow>
           )}
           {situation === 'draining' && cancelButton(t('shutdown.cancel'))}
           {situation === 'quiesced' && cancelButton(t('shutdown.cancel'))}

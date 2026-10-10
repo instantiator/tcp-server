@@ -23,13 +23,7 @@ export const SystemHealthDialog = ({ onClose }: SystemHealthDialogProps) => {
     data?.services.filter((service) => service.status === 'down').length ?? 0;
 
   return (
-    <Dialog
-      isOpen
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-      heading={t('systemHealth.heading')}
-    >
+    <Dialog onClose={onClose} heading={t('systemHealth.heading')}>
       {isPending && <LoadingState label={t('systemHealth.loading')} />}
 
       {isError && (

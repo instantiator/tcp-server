@@ -16,7 +16,11 @@ export interface TrayHeadingProps {
  */
 export const TrayHeading = ({ id, children, action }: TrayHeadingProps) => (
   <div className="company-visualisation__tray-heading">
-    <h2 id={id}>{children}</h2>
+    {/* Focusable by script only, so focus has somewhere to go when a
+        control in the panel below disappears. */}
+    <h2 id={id} tabIndex={-1}>
+      {children}
+    </h2>
     {action}
   </div>
 );

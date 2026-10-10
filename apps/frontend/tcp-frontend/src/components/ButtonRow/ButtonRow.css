@@ -1,0 +1,10 @@
+/*
+ * Layout, not theme (ADR-026): the controls sit on one row with the standard
+ * gap between them, and wrap when the row is too narrow.
+ */
+.tcp-button-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--tcp-space-sm);
+}
