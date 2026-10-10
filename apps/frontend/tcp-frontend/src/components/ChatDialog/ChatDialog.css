@@ -13,7 +13,8 @@
 
 .chat-dialog {
   display: grid;
-  grid-template-columns: minmax(14rem, 18rem) 1fr;
+  /* `minmax(0, …)`: a wide transcript entry must scroll, not widen the view. */
+  grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
   gap: var(--tcp-space-md);
   block-size: min(40rem, 100dvh - 10rem);
 }
@@ -21,7 +22,7 @@
 /* Narrow screens: the same order, stacked, the list capped so the view shows. */
 @media (max-width: 40rem) {
   .chat-dialog {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto 1fr;
     block-size: calc(100dvh - 8rem);
   }
@@ -100,6 +101,7 @@
   flex-direction: column;
   gap: var(--tcp-space-sm);
   min-block-size: 0;
+  min-inline-size: 0;
 }
 
 .chat-view__header {

@@ -141,7 +141,16 @@ body:has(.dialog-dock) .company-visualisation__stage {
   display: flex;
   flex: none;
   flex-wrap: wrap;
-  gap: var(--tcp-space-xs);
+  gap: var(--tcp-space-sm);
+}
+
+/*
+ * The task controls' wrapper steps aside, so its buttons and the close-room
+ * extra are spaced as one row by the actions' gap. A plain div, so nothing is
+ * lost from the accessibility tree.
+ */
+.tray-panel__actions .task-controls--icons {
+  display: contents;
 }
 
 .tray-panel__description {

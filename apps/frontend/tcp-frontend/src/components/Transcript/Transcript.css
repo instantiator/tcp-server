@@ -53,6 +53,7 @@
  * breaks and scrolls sideways rather than being reflowed.
  */
 .transcript__json {
+  max-inline-size: 100%;
   margin: 0;
   overflow-x: auto;
 }
