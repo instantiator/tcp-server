@@ -52,6 +52,11 @@ export const configSchema = Joi.object({
   MCP_MEMORY_URL: Joi.string().uri().empty('').optional(),
   MCP_INTERACTIONS_URL: Joi.string().uri().empty('').optional(),
   MCP_TASKS_URL: Joi.string().uri().empty('').optional(),
+  // tcp-agent's internal URL, used only by the combined system health report.
+  TCP_AGENT_URL: Joi.string().uri().empty('').optional(),
+  // True only where a supervisor (Docker's restart policy) starts tcp-server
+  // again after it exits; a restart request is refused otherwise.
+  TCP_RESTART_SUPPORTED: Joi.boolean().default(false),
   /**
    * Comma-separated hostnames a local or custom LLM provider's `baseUrl` may
    * use, besides the hosts of LLM_BASE_URL and EMBEDDING_BASE_URL. Remote

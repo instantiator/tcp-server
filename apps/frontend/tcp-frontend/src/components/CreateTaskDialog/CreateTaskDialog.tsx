@@ -10,6 +10,7 @@ import {
   useUpdateTask,
 } from '../../api/hooks';
 import { t, type StringKey } from '../../strings';
+import { ButtonRow } from '../ButtonRow/ButtonRow';
 import { Dialog } from '../Dialog/Dialog';
 import { ErrorState } from '../ErrorState/ErrorState';
 import { focusFirstInvalid } from '../Field/focusFirstInvalid';
@@ -27,6 +28,8 @@ export interface EditableTask {
 }
 
 export interface CreateTaskDialogProps {
+  /** Where the dialog is portalled; see `DialogProps.portalContainer`. */
+  readonly portalContainer?: Element | undefined;
   readonly companyId: string;
   /** When given, the dialog edits this `ready` task instead of creating one. */
   readonly task?: EditableTask;
@@ -107,6 +110,7 @@ export const CreateTaskDialog = ({
   companyId,
   task,
   onClose,
+  portalContainer,
 }: CreateTaskDialogProps) => {
   const { data: roles } = useCompanyRolesList(companyId);
   const createTask = useCreateTask();
@@ -279,10 +283,8 @@ export const CreateTaskDialog = ({
 
   return (
     <Dialog
-      isOpen
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
+      onClose={onClose}
+      portalContainer={portalContainer}
       heading={
         task === undefined
           ? t('task.create.heading')
@@ -527,7 +529,7 @@ export const CreateTaskDialog = ({
             </div>
           )}
 
-          <div className="create-task-dialog__actions">
+          <ButtonRow>
             <Button
               className="react-aria-Button"
               type="submit"
@@ -544,7 +546,7 @@ export const CreateTaskDialog = ({
             >
               {t(editing ? 'task.edit.discard' : 'task.create.discard')}
             </Button>
-          </div>
+          </ButtonRow>
         </form>
       )}
     </Dialog>

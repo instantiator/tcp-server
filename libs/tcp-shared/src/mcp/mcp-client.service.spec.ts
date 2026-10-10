@@ -44,6 +44,40 @@ describe('McpClientService', () => {
       expect(MockClient).not.toHaveBeenCalled();
     });
 
+    it('skips a server with no URL even when servers are required', async () => {
+      await expect(
+        service.loadTools(['memory'], {}, {}, { required: true }),
+      ).resolves.toEqual([]);
+    });
+
+    describe('a server that cannot be reached', () => {
+      beforeEach(() => {
+        const down = makeClientInstance();
+        down.connect.mockRejectedValue(new Error('ECONNREFUSED'));
+        MockClient.mockImplementation(() => down as unknown as Client);
+      });
+
+      it('is skipped by default, so the run carries on with the rest', async () => {
+        await expect(
+          service.loadTools(['tasks'], { tasks: 'http://tasks:3013' }),
+        ).resolves.toEqual([]);
+      });
+
+      it('throws a named error when servers are required', async () => {
+        await expect(
+          service.loadTools(
+            ['tasks'],
+            { tasks: 'http://tasks:3013' },
+            {},
+            { required: true },
+          ),
+        ).rejects.toMatchObject({
+          name: 'McpServerUnavailableError',
+          serverName: 'tasks',
+        });
+      });
+    });
+
     it('loads tools from a single server', async () => {
       const clientInstance = makeClientInstance([
         {

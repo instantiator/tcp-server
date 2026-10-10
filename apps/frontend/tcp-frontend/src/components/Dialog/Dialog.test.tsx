@@ -198,8 +198,9 @@ describe('Dialog', () => {
       // Two close buttons are on screen; the inner dialog's is the one the
       // accessible tree reaches from the inner dialog.
       const inner = screen.getByRole('dialog', { name: INNER_HEADING });
+      // An icon button since 000.05, so it is found by its accessible name.
       const innerClose = Array.from(inner.querySelectorAll('button')).find(
-        (button) => button.textContent === t('dialog.close'),
+        (button) => button.getAttribute('aria-label') === t('dialog.close'),
       );
       await user.click(innerClose as HTMLButtonElement);
 

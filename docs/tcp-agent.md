@@ -251,6 +251,7 @@ A failed run gets a plain-words reason from one typed table, `RunFailureCode` an
 | `repeating_call`         | The same tool call got the same result three times in a row                       |
 | `service_unavailable`    | A supporting service didn't respond: storage, Redis, the database, an MCP service |
 | `stopped`                | The run was stopped by something else                                             |
+| `interrupted`            | Startup recovery found the agent stranded and couldn't carry it on                |
 | `unexpected`             | Anything else; the message keeps this system's own error text                     |
 
 A rate limit is not a failure: it pauses the agent (see below).
@@ -277,7 +278,7 @@ Remote providers are skipped. If the answer doesn't settle it, the run goes ahea
 
 ## MCP tools
 
-Before running the LangGraph loop, `AgentLoopService` connects to each MCP server listed in `role.mcpServerList` and loads its tools. Tools are exposed to the model as `{serverName}__{toolName}` (e.g. `storage__list_files`) to prevent collisions across servers. If a server is unreachable, it is silently skipped and the agent runs with whatever tools did load.
+Before running the LangGraph loop, `AgentLoopService` connects to each MCP server listed in `role.mcpServerList` and loads its tools. Tools are exposed to the model as `{serverName}__{toolName}` (e.g. `storage__list_files`) to prevent collisions across servers. If a server it needs is unreachable, the run fails with `service_unavailable`, naming that server ("The tasks service (MCP) didn't respond…"), rather than carrying on without its tools. A server with no URL configured is skipped: that is a deployment choice.
 
 MCP server URLs are resolved from environment variables:
 
@@ -358,6 +359,6 @@ Query: `SELECT * FROM audit_event WHERE "agentId" = $1 ORDER BY timestamp`.
 
 `GET http://localhost:3001/health` — checks PostgreSQL connectivity and Redis connectivity. Returns HTTP 200 when both are up, 503 when either is down.
 
-The Redis check uses the shared bounded `assertRedisReachable` probe, so it cannot hang. tcp-agent also fails fast at **startup** if Redis is unreachable (`AgentWorkerService.onModuleInit`): rather than letting the BullMQ worker block indefinitely against a downed broker, it throws a clear error. `main.ts` calls `app.enableShutdownHooks()` so the worker and its Redis connection close cleanly on `SIGTERM`.
+The Redis check uses the shared bounded `assertRedisReachable` probe, so it cannot hang. tcp-agent also fails fast at **startup** if Redis is unreachable (`AgentWorkerService.onModuleInit`): rather than letting the BullMQ worker block indefinitely against a downed broker, it throws a clear error. `main.ts` calls `app.enableShutdownHooks()` so the worker and its Redis connection close cleanly on `SIGTERM`. The same path serves a restart ([ADR-034](ADRs/ADR-034-restart-and-startup-recovery.md)). When a restart drain has quiesced, `ShutdownListenerService` hears `restart` on the shutdown channel and sends itself `SIGTERM`, and Docker starts it again. That happens only where `TCP_RESTART_SUPPORTED` is `true`; otherwise it resumes the worker instead.
 
 tcp-agent needs no MinIO configuration and is given no MinIO credentials: it never constructs an S3 client. Every storage action it takes — like every other service's — goes through tcp-server's `StorageService` behind the `/internal/storage/*` endpoints.

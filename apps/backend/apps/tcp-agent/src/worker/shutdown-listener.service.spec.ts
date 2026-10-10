@@ -1,4 +1,5 @@
 import {
+  ProcessRestarter,
   SHUTDOWN_COMMAND_CHANNEL,
   SHUTDOWN_STATUS_CHANNEL,
   ShutdownAction,
@@ -44,6 +45,9 @@ describe('ShutdownListenerService', () => {
   let registry: AgentRegistryService;
   let service: ShutdownListenerService;
   let worker: ReturnType<typeof makeWorker>;
+  let restart: jest.Mock;
+  /** What `TCP_RESTART_SUPPORTED` reads as for this test. */
+  let restartFlag: string | undefined;
   /** The 'message' handler the service registered on its subscriber. */
   let deliver: (channel: string, message: string) => void;
 
@@ -69,9 +73,17 @@ describe('ShutdownListenerService', () => {
   beforeEach(async () => {
     clients.length = 0;
     registry = new AgentRegistryService();
+    restart = jest.fn();
+    restartFlag = undefined;
     service = new ShutdownListenerService(
-      { get: () => 'redis://localhost:6379' } as unknown as ConfigService,
+      {
+        get: (key: string) =>
+          key === 'TCP_RESTART_SUPPORTED'
+            ? restartFlag
+            : 'redis://localhost:6379',
+      } as unknown as ConfigService,
       registry,
+      { restart } as unknown as ProcessRestarter,
     );
     await service.onModuleInit();
 
@@ -154,6 +166,23 @@ describe('ShutdownListenerService', () => {
       // Outside a drain nobody is waiting on the count.
       service.reportActive();
       expect(clients[0].publish.mock.calls).toHaveLength(before);
+    });
+  });
+
+  describe('restart', () => {
+    it('exits so the supervisor starts a fresh process, when restart is supported', async () => {
+      restartFlag = 'true';
+      await send('drain');
+      await send('restart');
+      expect(restart).toHaveBeenCalledTimes(1);
+      expect(worker.resume).not.toHaveBeenCalled();
+    });
+
+    it('takes jobs again instead of exiting when nothing would restart it', async () => {
+      await send('drain');
+      await send('restart');
+      expect(restart).not.toHaveBeenCalled();
+      expect(worker.resume).toHaveBeenCalledTimes(1);
     });
   });
 

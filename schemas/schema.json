@@ -919,14 +919,15 @@
       "type": "string"
     },
     "PauseReason": {
-      "description": "Why an agent is currently  {@link  AgentStatus.Paused } .\n\n`user_input` and `consultation` pauses resolve themselves — a reply or a consultation result arrives and the agent is re-dispatched automatically. A `shutdown` pause has nothing outstanding to wait on, so it stays paused until a user resumes it explicitly. A `spend_cap` pause is lifted when the provider's cap resets or is dismissed, or by an explicit task/company resume. A `rate_limited` pause — the provider refused a call — is lifted at  {@link  TcpAgent.resumeAfter }  when auto-resume is on, or by an explicit resume. A `manual` pause — a user paused the agent's task — is lifted only by an explicit resume of that task.",
+      "description": "Why an agent is currently  {@link  AgentStatus.Paused } .\n\n`user_input` and `consultation` pauses resolve themselves — a reply or a consultation result arrives and the agent is re-dispatched automatically. A `shutdown` pause has nothing outstanding to wait on, so it stays paused until a user resumes it explicitly. A `spend_cap` pause is lifted when the provider's cap resets or is dismissed, or by an explicit task/company resume. A `rate_limited` pause — the provider refused a call — is lifted at  {@link  TcpAgent.resumeAfter }  when auto-resume is on, or by an explicit resume. A `manual` pause — a user paused the agent's task — is lifted only by an explicit resume of that task. A `restart` pause — a restart drain stopped the agent, or startup recovery found it stranded — is lifted by tcp-server's next boot, or by an explicit resume.",
       "enum": [
         "user_input",
         "consultation",
         "shutdown",
         "spend_cap",
         "rate_limited",
-        "manual"
+        "manual",
+        "restart"
       ],
       "type": "string"
     },

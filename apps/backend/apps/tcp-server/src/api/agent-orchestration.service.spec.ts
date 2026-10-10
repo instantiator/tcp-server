@@ -416,10 +416,45 @@ describe('AgentOrchestrationService', () => {
       });
     });
 
+    describe('a restart pause', () => {
+      /** Resumes an agent paused for a restart, as boot recovery does. */
+      async function resumeRestart(started: boolean): Promise<unknown> {
+        const agent = makeAgent({
+          status: AgentStatus.Paused,
+          pausedAt: new Date(),
+          pauseReason: 'restart',
+        });
+        mockDb.getAgent.mockResolvedValue(agent);
+        auditRepo.exists.mockResolvedValue(started);
+        await service.resumeAgent(agent.id, undefined, { lifts: ['restart'] });
+        const [, job] = mockQueueInstance.add.mock.calls[0] as [
+          string,
+          { replyContent?: unknown },
+        ];
+        return job.replyContent;
+      }
+
+      it('continues from the checkpoint when the agent had already called its LLM', async () => {
+        expect(await resumeRestart(true)).toEqual(
+          expect.stringContaining('The system restarted'),
+        );
+      });
+
+      it('restarts with no message when the agent never reached its first LLM call', async () => {
+        expect(await resumeRestart(false)).toBeUndefined();
+      });
+    });
+
     // A reply must not wake an agent paused for something else: a spend-capped
     // agent woken this way re-paused at the gate, and the reply — already
     // marked delivered — was lost.
-    it.each(['spend_cap', 'rate_limited', 'shutdown', 'manual'] as const)(
+    it.each([
+      'spend_cap',
+      'rate_limited',
+      'shutdown',
+      'manual',
+      'restart',
+    ] as const)(
       'leaves a %s pause alone on a reply, without claiming it',
       async (pauseReason) => {
         const agent = makeAgent({

@@ -23,6 +23,7 @@ import { Repository } from 'typeorm';
 import { z } from 'zod';
 import { AgentRegistryService } from '../../../apps/tcp-agent/src/registry/agent-registry.service';
 import { AgentOrchestrationService } from '../../../apps/tcp-server/src/api/agent-orchestration.service';
+import { AgentRecoveryService } from '../../../apps/tcp-server/src/api/agent-recovery.service';
 import { SpendResumeService } from '../../../apps/tcp-server/src/api/spend-resume.service';
 import { TaskControlService } from '../../../apps/tcp-server/src/api/task-control.service';
 import { TaskService } from '../../../apps/tcp-server/src/api/task.service';
@@ -36,6 +37,9 @@ const INTERNAL_API_KEY = requireEnv('INTERNAL_API_KEY');
 /** Marks the planner prompt of the pause scenario (stays in its history). */
 const PAUSE_MARKER = 'TASK-CONTROLS-PAUSE-MARKER';
 
+/** Marks the planner prompt of the crash-recovery scenario. */
+const RECOVER_MARKER = 'TASK-CONTROLS-RECOVER-MARKER';
+
 /**
  * 000.04's task controls and failure reasons end to end, with the real
  * tcp-server and tcp-agent apps, the real BullMQ queue, Postgres and the stub
@@ -46,7 +50,9 @@ const PAUSE_MARKER = 'TASK-CONTROLS-PAUSE-MARKER';
  *   on from its checkpoint;
  * - a provider that doesn't answer, and a local server that doesn't list the
  *   model, each fail the task within seconds with a plain reason — and tell
- *   its company with a notice.
+ *   its company with a notice;
+ * - an agent a crash left `running` with no job is carried on by startup
+ *   recovery, from its checkpoint (000.05).
  *
  * Modelled on `model-queue.integration-spec.ts`.
  *
@@ -67,6 +73,7 @@ describe('Task controls and failure reasons (stub LLM, real queue)', () => {
   let controls: TaskControlService;
   let resumes: SpendResumeService;
   let orchestration: AgentOrchestrationService;
+  let recovery: AgentRecoveryService;
 
   const internalHeaders = {
     headers: { 'X-Internal-Api-Key': INTERNAL_API_KEY },
@@ -220,6 +227,7 @@ describe('Task controls and failure reasons (stub LLM, real queue)', () => {
     controls = serverModuleRef.get(TaskControlService);
     resumes = serverModuleRef.get(SpendResumeService);
     orchestration = serverModuleRef.get(AgentOrchestrationService);
+    recovery = serverModuleRef.get(AgentRecoveryService);
 
     agentModuleRef = await Test.createTestingModule({
       imports: [TcpAgentAppModule],
@@ -347,6 +355,73 @@ describe('Task controls and failure reasons (stub LLM, real queue)', () => {
         return fresh.status === 'in-progress' ? fresh : null;
       }, 30_000);
       expect(planned.pausedAt).toBeNull();
+      await taskService.cancel(task.id);
+    }, 90_000);
+  });
+
+  describe('a crash strands a running agent', () => {
+    beforeAll(async () => {
+      await putStubConfig({
+        minDelay: 300,
+        maxDelay: 300,
+        prompts: [
+          {
+            match: RECOVER_MARKER,
+            mode: 'sequence',
+            responses: [
+              {
+                text: 'Let me think about this carefully first.',
+                tools: [{ tool: 'tasks__note', data: {} }],
+              },
+              {
+                text: 'Planning now.',
+                tools: [{ tool: 'tasks__create_plan', data: {} }],
+              },
+            ],
+          },
+        ],
+        defaults: { mode: 'loop', responses: [{ text: 'fallback' }] },
+      });
+    });
+
+    it('carries the agent on from its checkpoint when recovery runs at boot', async () => {
+      const { task, plannerId } = await startTask(
+        {
+          provider: 'openai-compatible',
+          model: 'stub',
+          baseUrl: STUB_LLM_URL,
+          apiKey: 'test',
+        },
+        `${RECOVER_MARKER}: do the thing.`,
+      );
+      await waitFor(async () => {
+        const agent = await agentRepo.findOneBy({ id: plannerId });
+        return agent?.status === AgentStatus.Running;
+      });
+
+      // Stop the planner after its first step, so a checkpoint exists...
+      await controls.pause(task.id, 'Ada');
+      await waitForNoRunningLoops();
+
+      // ...then leave the rows as a crash would: the agent believed running,
+      // the task not paused, and no job left in the queue for either.
+      await agentRepo.update(plannerId, {
+        status: AgentStatus.Running,
+        pauseReason: null,
+        pausedAt: () => 'NULL',
+      });
+      await taskRepo.update(task.id, {
+        pausedAt: () => 'NULL',
+        pausedBy: () => 'NULL',
+      });
+
+      await recovery.recover();
+
+      // The planner carries on, takes its second turn and makes the plan.
+      await waitFor(async () => {
+        const fresh = await taskRepo.findOneByOrFail({ id: task.id });
+        return fresh.status === 'in-progress';
+      }, 30_000);
       await taskService.cancel(task.id);
     }, 90_000);
   });

@@ -155,6 +155,7 @@ describe('compactionSummary and stateChangeText', () => {
     ['shutdown', 'paused by a shutdown'],
     ['spend_cap', 'spend cap reached'],
     ['manual', 'paused by a user'],
+    ['restart', 'paused for a restart'],
   ])('puts words to the %s pause reason', (reason, text) => {
     expect(stateChangeText({ newStatus: 'paused', reason })).toBe(
       `paused (${text})`,

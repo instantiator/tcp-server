@@ -24,11 +24,12 @@ describe('taskWaiting', () => {
     });
   });
 
-  it('ranks agent pauses rate_limited > spend_cap > shutdown > manual > user_input > consultation', () => {
+  it('ranks agent pauses rate_limited > spend_cap > shutdown > restart > manual > user_input > consultation', () => {
     const order = [
       'rate_limited',
       'spend_cap',
       'shutdown',
+      'restart',
       'manual',
       'user_input',
       'consultation',

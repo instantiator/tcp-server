@@ -149,7 +149,7 @@ export const CompanyPage = () => {
       */}
       {companyId !== undefined && (
         <div className="company-page__add-new">
-          <AddNewMenu companyId={companyId} fab />
+          <AddNewMenu companyId={companyId} />
         </div>
       )}
 

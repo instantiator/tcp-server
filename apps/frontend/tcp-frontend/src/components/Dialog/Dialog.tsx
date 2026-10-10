@@ -1,19 +1,31 @@
+import { Minus } from 'lucide-react';
 import type { ReactNode } from 'react';
 import {
-  Button,
   Dialog as AriaDialog,
   Heading,
   Modal,
   ModalOverlay,
 } from 'react-aria-components';
 import { t } from '../../strings';
+import { CloseButton } from '../CloseButton/CloseButton';
+import { RoundIconButton } from '../RoundIconButton/RoundIconButton';
 import './Dialog.css';
 
 export interface DialogProps {
-  /** Whether the dialog is showing. The caller owns this, not the dialog. */
-  readonly isOpen: boolean;
+  /**
+   * Whether the dialog is showing. The caller owns this, not the dialog.
+   * Defaults to `true`, for a dialog its opener mounts only while it is open.
+   */
+  readonly isOpen?: boolean;
   /** Called with `false` when the user closes the dialog or presses escape. */
-  readonly onOpenChange: (isOpen: boolean) => void;
+  readonly onOpenChange?: (isOpen: boolean) => void;
+  /** Called when the user closes the dialog or presses escape: the usual case. */
+  readonly onClose?: () => void;
+  /**
+   * Where the dialog is portalled, when it must stay inside an element such
+   * as the office view in full screen. The page body when omitted.
+   */
+  readonly portalContainer?: Element | undefined;
   /** The dialog's title, which is also its accessible name. Already resolved through `t`. */
   readonly heading: string;
   readonly children: ReactNode;
@@ -61,43 +73,60 @@ export interface DialogProps {
  * dismissing the dialog as ADR-026 requires.
  */
 export const Dialog = ({
-  isOpen,
+  isOpen = true,
   onOpenChange,
+  onClose,
+  portalContainer,
   heading,
   children,
   onMinimise,
   hideClose = false,
   actions,
-}: DialogProps) => (
-  <ModalOverlay isOpen={isOpen} onOpenChange={onOpenChange}>
-    <Modal>
-      <AriaDialog>
-        <div className="dialog__bar">
-          <Heading slot="title" className="react-aria-Heading dialog__heading">
-            {heading}
-          </Heading>
-          {actions}
-          {onMinimise !== undefined && (
-            <Button
-              className="react-aria-Button dialog__minimise"
-              onPress={onMinimise}
+}: DialogProps) => {
+  const changeOpen = (open: boolean): void => {
+    onOpenChange?.(open);
+    if (!open) onClose?.();
+  };
+  return (
+    <ModalOverlay
+      isOpen={isOpen}
+      onOpenChange={changeOpen}
+      // eslint-disable-next-line @typescript-eslint/no-deprecated -- deliberate; see `WithTooltip`
+      UNSTABLE_portalContainer={portalContainer}
+    >
+      <Modal>
+        <AriaDialog>
+          <div className="dialog__bar">
+            <Heading
+              slot="title"
+              className="react-aria-Heading dialog__heading"
             >
-              {t('dialog.minimise')}
-            </Button>
-          )}
-          {!hideClose && (
-            <Button
-              className="react-aria-Button dialog__close"
-              onPress={() => {
-                onOpenChange(false);
-              }}
-            >
-              {t('dialog.close')}
-            </Button>
-          )}
-        </div>
-        <div className="dialog__body">{children}</div>
-      </AriaDialog>
-    </Modal>
-  </ModalOverlay>
-);
+              {heading}
+            </Heading>
+            {actions}
+            {onMinimise !== undefined && (
+              <RoundIconButton
+                icon={Minus}
+                className="dialog__minimise"
+                label={t('dialog.minimise')}
+                portalContainer={portalContainer}
+                onPress={onMinimise}
+              />
+            )}
+            {!hideClose && (
+              <CloseButton
+                className="dialog__close"
+                label={t('dialog.close')}
+                portalContainer={portalContainer}
+                onPress={() => {
+                  changeOpen(false);
+                }}
+              />
+            )}
+          </div>
+          <div className="dialog__body">{children}</div>
+        </AriaDialog>
+      </Modal>
+    </ModalOverlay>
+  );
+};

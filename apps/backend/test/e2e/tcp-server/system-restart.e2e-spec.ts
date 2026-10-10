@@ -62,6 +62,8 @@ describe('Restart after a shutdown (e2e)', () => {
   let taskId: UUID;
   let assignmentId: UUID;
   let agentId: UUID;
+  let restartAgentId: UUID;
+  let strandedAgentId: UUID;
   let companyId: UUID;
 
   beforeAll(async () => {
@@ -128,6 +130,42 @@ describe('Restart after a shutdown (e2e)', () => {
     );
     agentId = agent.id;
     await before.repos.assignment.update(assignment.id, { agentId: agent.id });
+
+    // Beside it: an agent a restart drain paused, and one a crash left
+    // `running` with no job behind it. Both should carry on after the boot.
+    const sideAgent = async (
+      orderIndex: number,
+      fields: Partial<TcpAgent>,
+    ): Promise<UUID> => {
+      const side = await before.repos.assignment.save(
+        before.repos.assignment.create({
+          taskId: task.id,
+          companyId: company.id,
+          roleId: role.id,
+          mode: 'implement',
+          orderIndex,
+          prompt: 'Check the figures',
+          status: 'in-progress',
+        }),
+      );
+      const saved = await before.repos.agent.save(
+        before.repos.agent.create({
+          companyId: company.id,
+          roleId: role.id,
+          assignmentId: side.id,
+          initialPrompt: 'Check the figures',
+          ...fields,
+        }),
+      );
+      await before.repos.assignment.update(side.id, { agentId: saved.id });
+      return saved.id;
+    };
+    restartAgentId = await sideAgent(1, {
+      status: AgentStatus.Paused,
+      pausedAt: new Date(),
+      pauseReason: 'restart',
+    });
+    strandedAgentId = await sideAgent(2, { status: AgentStatus.Running });
     await before.app.close();
 
     // Phase 2: the stack comes back up.
@@ -167,6 +205,21 @@ describe('Restart after a shutdown (e2e)', () => {
     const agent = await repos.agent.findOneByOrFail({ id: agentId });
     expect(agent.status).toBe(AgentStatus.Paused);
     expect(agent.pauseReason).toBe('shutdown');
+  });
+
+  it('resumes an agent a restart paused, by itself', async () => {
+    const agent = await repos.agent.findOneByOrFail({ id: restartAgentId });
+    expect(agent.status).toBe(AgentStatus.Queued);
+    expect(agent.pauseReason).toBeNull();
+  });
+
+  it('carries on an agent a crash stranded running, marking it recovered', async () => {
+    const agent = await repos.agent.findOneByOrFail({ id: strandedAgentId });
+    expect(agent.status).toBe(AgentStatus.Queued);
+    const changes = await repos.audit.findBy({ agentId: strandedAgentId });
+    expect(changes.some((event) => event.payload['recovered'] === true)).toBe(
+      true,
+    );
   });
 
   it('does not fail the task its paused agent was working', async () => {

@@ -1,8 +1,10 @@
+import { Archive } from 'lucide-react';
 import { useEffect, useId, useRef } from 'react';
-import { Button } from 'react-aria-components';
 import { useCompleteChat, useLiveAgentState } from '../../api/hooks';
 import { t } from '../../strings';
+import { CloseButton } from '../CloseButton/CloseButton';
 import { ErrorState } from '../ErrorState/ErrorState';
+import { RoundIconButton } from '../RoundIconButton/RoundIconButton';
 import { Transcript } from '../Transcript/Transcript';
 import { isTerminalAgentStatus } from './agentStatus';
 import { MessageInput } from './MessageInput';
@@ -130,17 +132,18 @@ export const ChatConversation = ({
           controls on one screen fail WCAG 2.4.6.
         */}
         {!finished && !readOnly && (
-          <Button
-            className="react-aria-Button chat-conversation__complete"
+          <RoundIconButton
+            icon={Archive}
+            outline
+            className="chat-conversation__complete"
+            label={t('chat.complete', { role: roleName })}
             // Disabled rather than queued: a turn is in flight, and completing
             // the chat out from under it is a real race the server refuses too.
             isDisabled={status === 'running' || complete.isPending}
             onPress={() => {
               complete.mutate();
             }}
-          >
-            {t('chat.complete', { role: roleName })}
-          </Button>
+          />
         )}
         {/*
           On every panel, finished or not, read-only or not — the only
@@ -149,14 +152,14 @@ export const ChatConversation = ({
           Chats is how it's found again. Its own accessible name for the same
           WCAG 2.4.6 reason as Complete above.
         */}
-        <Button
-          className="react-aria-Button chat-conversation__close"
+        <CloseButton
+          outline
+          className="chat-conversation__close"
+          label={t('chat.close', { role: roleName })}
           onPress={() => {
             closeChat(agentId);
           }}
-        >
-          {t('chat.close', { role: roleName })}
-        </Button>
+        />
       </div>
       <Transcript agentId={agentId} roleName={roleName} />
       {/* Listening in is not a conversation: nothing to send. */}

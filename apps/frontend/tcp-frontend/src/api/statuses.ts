@@ -106,6 +106,7 @@ const PAUSE_KEYS: Record<Exclude<PauseReason, 'rate_limited'>, StringKey> = {
   shutdown: 'agent.pause.shutdown',
   spend_cap: 'agent.pause.spend_cap',
   manual: 'agent.pause.manual',
+  restart: 'agent.pause.restart',
 };
 
 /** The rate-limited wording, shared by the agent and task labels. */
@@ -141,6 +142,7 @@ const WAITING_KEYS: Record<
 > = {
   spend_cap: 'task.waiting.spend_cap',
   shutdown: 'task.waiting.shutdown',
+  restart: 'task.waiting.restart',
   user_input: 'task.waiting.user_input',
   consultation: 'task.waiting.consultation',
   queued: 'task.waiting.queued',

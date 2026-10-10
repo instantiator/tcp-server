@@ -66,11 +66,6 @@
 .create-task-dialog__start-hint {
 }
 
-.create-task-dialog__actions {
-  display: flex;
-  gap: var(--tcp-space-sm);
-}
-
 .create-task-dialog__warnings {
   margin-block-end: var(--tcp-space-md);
 }

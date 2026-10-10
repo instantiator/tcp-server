@@ -21,19 +21,19 @@ import './AddNewMenu.css';
 export interface AddNewMenuProps {
   readonly companyId: string;
   /**
-   * An icon-only, circular trigger (the company page's floating action
-   * button) instead of today's text button. The accessible name stays
-   * "Add new" either way — `aria-label` carries it when there's no visible
-   * text to derive it from. Defaults to `false` for the chat dialog's
-   * in-dialog trigger, which keeps its text (it needs no `portalContainer`:
-   * unlike the office view, nothing there clips an unportalled tooltip).
+   * The chat dialog's own control: a small round + offering only new chats,
+   * since that dialog is about chats, not tasks. Otherwise it is the company
+   * page's floating action button, offering a task or a chat. Both are
+   * icon-only, so `aria-label` carries the name. Neither needs a
+   * `portalContainer`: nothing around them clips an unportalled tooltip.
    */
-  readonly fab?: boolean;
+  readonly inChat?: boolean;
 }
 
 /**
  * The "Add new" menu: create a task, or start a chat with one of the
- * company's roles (003.01).
+ * company's roles (003.01). In the chat dialog it lists the roles straight
+ * away, with no task option.
  *
  * Follows the account menu's pattern in `shell/Header.tsx` —
  * `MenuTrigger > Button > Popover > Menu`, `onAction`, a dialog mounted from
@@ -54,7 +54,7 @@ export interface AddNewMenuProps {
  * **Not positioned here.** The `add-new` wrapper is a hook for a later stage
  * to place this control; this component only builds the menu.
  */
-export const AddNewMenu = ({ companyId, fab = false }: AddNewMenuProps) => {
+export const AddNewMenu = ({ companyId, inChat = false }: AddNewMenuProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [showCreateTask, setShowCreateTask] = useState(false);
   // The role a chat attempt most recently failed for, so the error paragraph
@@ -136,66 +136,65 @@ export const AddNewMenu = ({ companyId, fab = false }: AddNewMenuProps) => {
       ? []
       : sortedRoles.map((role) => role.id).filter((id) => id !== pendingRoleId);
 
+  const triggerLabel = t(inChat ? 'addNew.newChat' : 'addNew.trigger');
+
+  // The roles to chat with: the whole menu in the chat dialog, the "New chat"
+  // submenu on the company page.
+  const rolesMenuElement = (
+    <Menu
+      ref={rolesMenu}
+      key={focusFirstRole ? 'refocused' : 'initial'}
+      // eslint-disable-next-line jsx-a11y/no-autofocus -- only returns focus the user already had inside this menu (see above)
+      autoFocus={focusFirstRole ? 'first' : undefined}
+      shouldCloseOnSelect={false}
+      disabledKeys={disabledRoleKeys}
+      onAction={onRoleAction}
+    >
+      {rolesQuery.isPending ? (
+        // Focusable, not disabled: a keyboard user who opens this
+        // before the roles arrive lands here and hears it, and
+        // focus moves on to a role when they replace it.
+        <MenuItem id="loading-roles">{t('addNew.loadingRoles')}</MenuItem>
+      ) : sortedRoles.length === 0 ? (
+        <MenuItem id="no-roles" isDisabled>
+          {t('addNew.noRoles')}
+        </MenuItem>
+      ) : (
+        sortedRoles.map((role) => (
+          <MenuItem key={role.id} id={role.id}>
+            {pendingRoleId === role.id
+              ? t('addNew.starting', { role: role.name })
+              : role.name}
+          </MenuItem>
+        ))
+      )}
+    </Menu>
+  );
+
   return (
     <div className="add-new">
       <MenuTrigger isOpen={isOpen} onOpenChange={onOpenChange}>
-        {fab ? (
-          <WithTooltip label={t('addNew.trigger')}>
-            <Button
-              className="react-aria-Button tcp-icon-button tcp-icon-button--fab add-new__trigger"
-              aria-label={t('addNew.trigger')}
-              aria-describedby={error !== null ? errorId : undefined}
-            >
-              <Icon icon={Plus} />
-            </Button>
-          </WithTooltip>
-        ) : (
+        <WithTooltip label={triggerLabel}>
           <Button
-            className="react-aria-Button add-new__trigger"
+            className={`react-aria-Button tcp-icon-button ${inChat ? 'tcp-icon-button--small' : 'tcp-icon-button--fab'} add-new__trigger`}
+            aria-label={triggerLabel}
             aria-describedby={error !== null ? errorId : undefined}
           >
-            {t('addNew.trigger')}
+            <Icon icon={Plus} />
           </Button>
-        )}
+        </WithTooltip>
         <Popover>
-          <Menu onAction={onTopAction}>
-            <MenuItem id="create-task">{t('addNew.createTask')}</MenuItem>
-            <SubmenuTrigger>
-              <MenuItem id="new-chat">{t('addNew.newChat')}</MenuItem>
-              <Popover>
-                <Menu
-                  ref={rolesMenu}
-                  key={focusFirstRole ? 'refocused' : 'initial'}
-                  // eslint-disable-next-line jsx-a11y/no-autofocus -- only returns focus the user already had inside this menu (see above)
-                  autoFocus={focusFirstRole ? 'first' : undefined}
-                  shouldCloseOnSelect={false}
-                  disabledKeys={disabledRoleKeys}
-                  onAction={onRoleAction}
-                >
-                  {rolesQuery.isPending ? (
-                    // Focusable, not disabled: a keyboard user who opens this
-                    // before the roles arrive lands here and hears it, and
-                    // focus moves on to a role when they replace it.
-                    <MenuItem id="loading-roles">
-                      {t('addNew.loadingRoles')}
-                    </MenuItem>
-                  ) : sortedRoles.length === 0 ? (
-                    <MenuItem id="no-roles" isDisabled>
-                      {t('addNew.noRoles')}
-                    </MenuItem>
-                  ) : (
-                    sortedRoles.map((role) => (
-                      <MenuItem key={role.id} id={role.id}>
-                        {pendingRoleId === role.id
-                          ? t('addNew.starting', { role: role.name })
-                          : role.name}
-                      </MenuItem>
-                    ))
-                  )}
-                </Menu>
-              </Popover>
-            </SubmenuTrigger>
-          </Menu>
+          {inChat ? (
+            rolesMenuElement
+          ) : (
+            <Menu onAction={onTopAction}>
+              <MenuItem id="create-task">{t('addNew.createTask')}</MenuItem>
+              <SubmenuTrigger>
+                <MenuItem id="new-chat">{t('addNew.newChat')}</MenuItem>
+                <Popover>{rolesMenuElement}</Popover>
+              </SubmenuTrigger>
+            </Menu>
+          )}
         </Popover>
       </MenuTrigger>
 

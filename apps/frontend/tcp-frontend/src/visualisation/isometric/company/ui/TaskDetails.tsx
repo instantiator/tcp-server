@@ -7,7 +7,9 @@ import {
 } from '../../../../api/hooks';
 import { refusalKey } from '../../../../api/errors';
 import { taskOutputsUrl } from '../../../../api/storageLink';
+import { ButtonRow } from '../../../../components/ButtonRow/ButtonRow';
 import { ErrorState } from '../../../../components/ErrorState/ErrorState';
+import { TaskControls } from '../../../../components/TaskDialog/TaskControls';
 import { getRuntimeConfig } from '../../../../runtime-config';
 import type { AssignmentDTO } from '../../../../api/dtos';
 import { Info } from 'lucide-react';
@@ -126,7 +128,8 @@ const OutputsLink = ({
 };
 
 /**
- * One task's live details in the office tray: its request, its status, and
+ * One task's live details in the office tray: its request, its status, the
+ * same controls the task dialog has (start, edit, pause, resume, cancel), and
  * its assignments numbered in creation order, split into those in progress and those completed.
  *
  * Assignments come from the company's whole list, filtered to this task
@@ -213,16 +216,24 @@ export const TaskDetails = ({
       {task.status === 'succeeded' && (
         <OutputsLink slug={companyQuery.data?.slug} taskId={taskId} />
       )}
+      <TaskControls
+        taskId={taskId}
+        companyId={companyId}
+        portalContainer={portalContainer}
+        focusFallback={() => document.getElementById(headingId)}
+      />
       {canCloseRoom && (
-        <Button
-          className="react-aria-Button"
-          isDisabled={closeRoom.isPending}
-          onPress={() => {
-            closeRoom.mutate(undefined, { onSuccess: onRoomClosed });
-          }}
-        >
-          {t('visualisation.tray.closeRoom')}
-        </Button>
+        <ButtonRow>
+          <Button
+            className="react-aria-Button"
+            isDisabled={closeRoom.isPending}
+            onPress={() => {
+              closeRoom.mutate(undefined, { onSuccess: onRoomClosed });
+            }}
+          >
+            {t('visualisation.tray.closeRoom')}
+          </Button>
+        </ButtonRow>
       )}
       {closeRoom.isError && (
         <ErrorState

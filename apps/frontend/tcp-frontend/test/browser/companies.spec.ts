@@ -166,7 +166,7 @@ test.describe('company card navigation', () => {
     await gotoSignedIn(page, '/companies');
     await page.getByRole('button', { name: ACCOUNT_LABEL }).click();
     await page.getByRole('menuitem', { name: MY_PROFILE_LABEL }).click();
-    const identifierField = page.locator('.profile-dialog__field', {
+    const identifierField = page.locator('.tcp-labelled-value', {
       hasText: PROFILE_SUBJECT_LABEL,
     });
     const identifierText = await identifierField.textContent();

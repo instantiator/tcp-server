@@ -77,7 +77,13 @@ export const networkError = (cause: unknown): ApiError =>
 
 /** The task action a refusal came from, since a 409 means something different for each. */
 export type RefusalAction =
-  'start' | 'pause' | 'resume' | 'cancel' | 'edit' | 'closeVisualisation';
+  | 'start'
+  | 'pause'
+  | 'resume'
+  | 'cancel'
+  | 'edit'
+  | 'closeVisualisation'
+  | 'shutdown';
 
 /**
  * The string to show when the server refuses a task action, chosen by status

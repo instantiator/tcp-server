@@ -57,7 +57,10 @@ const respond = ({ task = {}, close }: Routes = {}): void => {
       CLOSE_ROUTE,
       close ?? { status: 202, body: taskFixture({ status: 'succeeded' }) },
     ],
+    [/\/api\/task\/task-1\/start/, { status: 202, body: taskFixture(task) }],
+    [/\/api\/task\/task-1$/, { body: taskFixture(task) }],
     [/\/api\/task\?/, { body: [taskFixture(task)] }],
+    [/\/api\/agent/, { body: [] }],
     [/\/api\/assignment\?/, { body: [] }],
     [/\/api\/company\/company-1\/roles/, { body: [] }],
     [/\/api\/company\/company-1(\?|$)/, { body: companyFixture() }],
@@ -178,6 +181,74 @@ describe('TaskDetails — closing the room', () => {
     await screen.findByRole('button', {
       name: t('visualisation.tray.closeRoom'),
     });
+    await expectNoA11yViolations(document.body);
+  });
+});
+
+// Clicking a whiteboard should offer what the task dialog does: an unstarted
+// task can be started, edited or cancelled straight from the tray.
+describe('TaskDetails — task controls', () => {
+  beforeEach(() => {
+    installFetchMock();
+  });
+
+  const control = (
+    key: 'task.start' | 'task.edit' | 'task.pause' | 'task.cancel',
+  ) => screen.queryByRole('button', { name: t(key) });
+
+  it('offers Start, Edit and Cancel for a task that has not started', async () => {
+    respond({ task: { status: 'ready' } });
+    renderDetails();
+
+    expect(
+      await screen.findByRole('button', { name: t('task.start') }),
+    ).toBeInTheDocument();
+    expect(control('task.edit')).toBeInTheDocument();
+    expect(control('task.cancel')).toBeInTheDocument();
+    expect(control('task.pause')).toBeNull();
+  });
+
+  it('starts the task from the tray', async () => {
+    const user = userEvent.setup();
+    respond({ task: { status: 'ready' } });
+    renderDetails();
+
+    await user.click(
+      await screen.findByRole('button', { name: t('task.start') }),
+    );
+    await waitFor(() => {
+      expect(
+        requestedUrls().some((url) => /\/api\/task\/task-1\/start/.test(url)),
+      ).toBe(true);
+    });
+  });
+
+  it('offers Pause and Cancel while the task runs', async () => {
+    respond({ task: { status: 'in-progress' } });
+    renderDetails();
+
+    expect(
+      await screen.findByRole('button', { name: t('task.pause') }),
+    ).toBeInTheDocument();
+    expect(control('task.cancel')).toBeInTheDocument();
+    expect(control('task.start')).toBeNull();
+  });
+
+  it('offers no task controls once the task has finished', async () => {
+    respond({ task: { status: 'succeeded' } });
+    renderDetails();
+
+    await screen.findByRole('button', {
+      name: t('visualisation.tray.closeRoom'),
+    });
+    expect(control('task.cancel')).toBeNull();
+  });
+
+  it('has no accessibility violations with the controls', async () => {
+    respond({ task: { status: 'ready' } });
+    renderDetails();
+
+    await screen.findByRole('button', { name: t('task.start') });
     await expectNoA11yViolations(document.body);
   });
 });

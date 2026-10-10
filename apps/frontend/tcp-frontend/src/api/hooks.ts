@@ -69,13 +69,104 @@ import {
   useSpendOverview,
   useStartChatMutation,
   useStartTaskMutation,
+  useBeginShutdownMutation,
+  useCancelShutdownMutation,
+  useShutdownStatusQuery,
+  useSystemHealthQuery,
+  useSystemStatusQuery,
   useTask,
   useTasks,
   useUploadMaterialMutation,
 } from './endpoints';
+import { queryKeys } from './query-keys';
 import type { components } from './schema';
+import { useSession } from '../auth/useSession';
 
 export { useCompanies } from './endpoints';
+
+/**
+ * Whether the caller is an administrator, and the shutdown state. Not live:
+ * the answer rarely changes, so it is never stale and a failure is not retried
+ * (a failed call just means no System menu). `options` lets a caller poll.
+ *
+ * Asks only once signed in: the route needs a token, and a 401 is a
+ * full-page sign-in redirect, which would bounce a signed-out visitor off a
+ * public page.
+ */
+export const useSystemStatus = (
+  options: Parameters<typeof useSystemStatusQuery>[0] = {},
+) => {
+  const signedIn = useSession() !== null;
+  return useSystemStatusQuery({
+    staleTime: Infinity,
+    retry: false,
+    ...options,
+    enabled: signedIn && (options.enabled ?? true),
+  });
+};
+
+/** How often the shutdown dialog asks while something is happening. */
+const SHUTDOWN_POLL_MS = 2_000;
+
+/**
+ * The shutdown state, while the shutdown dialog is open.
+ *
+ * Polls while a drain is under way, and while the server is unreachable after
+ * a restart was seen (it is down and coming back). TanStack keeps the last good
+ * answer through a failed refetch, which is how "after a restart was seen" is
+ * known. Idle, or at rest without a restart, nothing changes by itself.
+ */
+export const useShutdownStatus = (enabled: boolean) =>
+  useShutdownStatusQuery({
+    enabled,
+    retry: false,
+    refetchInterval: (query) => {
+      if (!enabled) return false;
+      const { data, status } = query.state;
+      if (status === 'error') return data?.restart === true && SHUTDOWN_POLL_MS;
+      if (data === undefined || data.state === 'idle') return false;
+      // At rest without a restart, nothing more happens by itself.
+      return (data.state === 'draining' || data.restart) && SHUTDOWN_POLL_MS;
+    },
+  });
+
+/**
+ * Starts a shutdown or restart. The answer is the new state, so it goes
+ * straight into the cache; the system status carries the same state for the
+ * banner.
+ */
+export const useBeginShutdown = () => {
+  const queryClient = useQueryClient();
+  const begin = useBeginShutdownMutation();
+  return useMutation({
+    mutationFn: (flags: { force: boolean; restart: boolean }) =>
+      begin.mutateAsync(flags),
+    onSuccess: (status) => {
+      queryClient.setQueryData(queryKeys.shutdownStatus(), status);
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.systemStatus(),
+      });
+    },
+  });
+};
+
+/** Cancels a shutdown or restart that is still draining or at rest. */
+export const useCancelShutdown = () => {
+  const queryClient = useQueryClient();
+  const cancel = useCancelShutdownMutation();
+  return useMutation({
+    mutationFn: () => cancel.mutateAsync(),
+    onSuccess: (status) => {
+      queryClient.setQueryData(queryKeys.shutdownStatus(), status);
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.systemStatus(),
+      });
+    },
+  });
+};
+
+/** The health of every service. Administrators only; refetched on request. */
+export const useSystemHealth = useSystemHealthQuery;
 
 /**
  * One company.

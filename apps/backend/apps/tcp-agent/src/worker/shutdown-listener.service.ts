@@ -1,4 +1,6 @@
 import {
+  ProcessRestarter,
+  restartSupported,
   SHUTDOWN_COMMAND_CHANNEL,
   SHUTDOWN_STATUS_CHANNEL,
   ShutdownCommand,
@@ -28,7 +30,9 @@ const FORCED_SHUTDOWN_REASON = 'forced shutdown';
  * {@link AgentRegistryService}, which is the only place that knows.
  *
  * Both drain modes stop the worker taking new jobs; a forced drain also aborts
- * the in-flight LLM calls, wasting whatever those calls have cost so far.
+ * the in-flight LLM calls, wasting whatever those calls have cost so far. A
+ * restart command, sent once a restart drain has quiesced, exits the process
+ * so its supervisor starts a fresh one.
  */
 @Injectable()
 export class ShutdownListenerService implements OnModuleInit, OnModuleDestroy {
@@ -41,6 +45,7 @@ export class ShutdownListenerService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly config: ConfigService,
     private readonly registry: AgentRegistryService,
+    private readonly restarter: ProcessRestarter,
   ) {}
 
   /**
@@ -138,6 +143,19 @@ export class ShutdownListenerService implements OnModuleInit, OnModuleDestroy {
         // Unlike pause(), BullMQ's resume() is synchronous.
         this.worker?.resume();
         this.logger.warn('Shutdown cancelled — taking jobs again');
+        return;
+      case 'restart':
+        this.draining = false;
+        if (restartSupported(this.config.get('TCP_RESTART_SUPPORTED'))) {
+          this.restarter.restart();
+        } else {
+          // Nothing would start this process again, so exiting would leave the
+          // system without a worker: carry on taking jobs instead.
+          this.worker?.resume();
+          this.logger.warn(
+            'Restart requested, but TCP_RESTART_SUPPORTED is off — taking jobs again without restarting',
+          );
+        }
         return;
     }
 

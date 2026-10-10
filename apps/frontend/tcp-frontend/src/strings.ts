@@ -34,6 +34,9 @@ const strings = {
   'header.account.profile': 'My profile',
   'header.account.memberships': 'My company memberships',
   'header.account.signOut': 'Sign out',
+  'header.system.label': 'System',
+  'header.system.health': 'System health',
+  'header.system.shutdown': 'Shut down or restart…',
 
   'breadcrumbs.label': 'Breadcrumb',
 
@@ -113,16 +116,16 @@ const strings = {
   'task.assignment.collapse': 'Hide what {role} has done',
   'task.assignment.noAgent.heading': 'Not started',
   'task.assignment.noAgent.body': 'No agent has picked this up yet.',
-  'task.cancel': 'Cancel this task',
+  'task.cancel': 'Cancel',
   'task.cancel.confirm.heading': 'Cancel this task?',
   'task.cancel.confirm.body':
     'This stops the task and every agent working on it. A cancelled task cannot be restarted.',
   'task.cancel.confirm.accept': 'Cancel the task',
   'task.cancel.confirm.reject': 'Keep the task running',
-  'task.start': 'Start this task',
+  'task.start': 'Start',
   'task.pause': 'Pause this task',
   'task.resume': 'Resume this task',
-  'task.edit': 'Edit this task',
+  'task.edit': 'Edit',
   'task.edit.heading': 'Edit task {shortcode}',
   'task.edit.submit': 'Save changes',
   'task.edit.submit.pending': 'Saving…',
@@ -220,6 +223,66 @@ const strings = {
   'memberships.empty.heading': 'You cannot reach any company yet',
   'memberships.empty.body':
     'Ask an administrator to add you to a company. Until then there is nothing here to open.',
+
+  'systemHealth.heading': 'System health',
+  'systemHealth.loading': 'system health',
+  'systemHealth.error': 'The system health could not be loaded. Try again.',
+  'systemHealth.allUp': 'All services are up',
+  // Counted phrase, picked by `tCount`.
+  'systemHealth.down.one': '{count} service is down',
+  'systemHealth.down.other': '{count} services are down',
+  'systemHealth.service': '{name}: {status}',
+  'systemHealth.status.up': 'Up',
+  'systemHealth.status.down': 'Down',
+  'systemHealth.status.not_configured': 'Not configured',
+  'systemHealth.refresh': 'Refresh',
+  'systemHealth.fullReport': 'Full report',
+  'shutdown.heading': 'Shut down or restart',
+  'shutdown.loading': 'shutdown status',
+  'shutdown.error': 'The shutdown status could not be loaded. Try again.',
+  'shutdown.explain':
+    'A graceful shutdown lets every agent finish its current step, then pauses it. Paused tasks wait until someone resumes them.',
+  'shutdown.explainRestart':
+    'Restart does the same, then restarts the services. Paused work resumes.',
+  'shutdown.restart': 'Restart',
+  'shutdown.graceful': 'Shutdown',
+  'shutdown.force': 'Force shut down…',
+  'shutdown.forceConfirm':
+    'This stops agents mid-call and wastes the tokens already spent. Force shut down?',
+  'shutdown.forceConfirmed': 'Force shut down',
+  'shutdown.back': 'Back',
+  'shutdown.draining.one':
+    'Shutting down: {count} agent still finishing its current step',
+  'shutdown.draining.other':
+    'Shutting down: {count} agents still finishing their current step',
+  'shutdown.restartDraining.one':
+    'Restarting: {count} agent still finishing its current step',
+  'shutdown.restartDraining.other':
+    'Restarting: {count} agents still finishing their current step',
+  'shutdown.quiesced':
+    'Every agent is at rest. You can stop the services now, for example with ./scripts/stop-dev.sh. Agents stay paused until resumed.',
+  'shutdown.restarting':
+    'Restarting the services… This page reconnects by itself.',
+  'shutdown.restarted': 'The system restarted. Paused work is carrying on.',
+  'shutdown.cancel': 'Cancel shutdown',
+  'shutdown.cancelRestart': 'Cancel restart',
+  'shutdown.announce.idle': 'The system is taking new work again',
+  'shutdown.announce.draining': 'Shutting down: agents are finishing',
+  'shutdown.announce.restartDraining': 'Restarting: agents are finishing',
+  'shutdown.announce.quiesced': 'Every agent is at rest',
+  'shutdown.announce.restarting': 'Restarting the services',
+  'shutdown.announce.restarted': 'The system restarted',
+  'banner.system.label': 'System status',
+  'banner.system.draining':
+    "The system is shutting down. New work can't start; running agents are finishing their current step.",
+  'banner.system.restartDraining':
+    'The system is restarting. Running agents are finishing their current step, then everything carries on by itself.',
+  'banner.system.quiesced':
+    "The system has shut down. Work carries on once it's started again.",
+  'banner.system.restarting':
+    'The system is restarting. This page reconnects by itself.',
+  'banner.system.unreachable':
+    "The server can't be reached right now. This page keeps trying.",
 
   // Announcements. Every wording here is deliberately count-agnostic —
   // 'Tasks: {count} added', never '{count} tasks added' — because `t` has no
@@ -557,12 +620,14 @@ const strings = {
   'agent.pause.shutdown': 'Paused by a shutdown',
   'agent.pause.spend_cap': 'Paused — spend cap reached',
   'agent.pause.manual': 'Paused by a user',
+  'agent.pause.restart': 'Paused for a restart',
   // Why a whole task is waiting, by `TaskWaitKind` (`taskWaitingLabel`).
   'task.waiting.manual': 'Paused by {name} — resume to continue',
   'task.waiting.manualAnonymous': 'Paused — resume to continue',
   'task.waiting.spend_cap':
     'Spend cap reached — resume to continue, or wait for the cap to reset',
   'task.waiting.shutdown': 'Paused by a shutdown — resume to continue',
+  'task.waiting.restart': 'Paused for a restart — carries on by itself',
   'task.waiting.user_input': 'Waiting for your reply',
   'task.waiting.consultation': "Waiting for a colleague's answer",
   'task.waiting.queued': 'Waiting for the model',
@@ -580,6 +645,8 @@ const strings = {
     "This task hasn't finished, so its room can't be closed.",
   'refusal.start.noPlanner':
     'No planner is set for this task or its company. Choose one, then start the task.',
+  'refusal.shutdown.wrongState':
+    "A shutdown or restart is already under way, or restart isn't available here.",
   'refusal.shuttingDown':
     "The system is shutting down and isn't taking new work.",
   'refusal.server': 'Something went wrong on the server. Try again.',

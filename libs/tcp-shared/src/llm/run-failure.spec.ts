@@ -71,6 +71,14 @@ describe('classifyRunError', () => {
       'service_unavailable',
     ],
     [
+      'an MCP server down at tool load',
+      Object.assign(new Error('x'), {
+        name: 'McpServerUnavailableError',
+        serverName: 'tasks',
+      }),
+      'service_unavailable',
+    ],
+    [
       'a Redis error',
       Object.assign(new Error('x'), { name: 'MaxRetriesPerRequestError' }),
       'service_unavailable',
@@ -83,6 +91,16 @@ describe('classifyRunError', () => {
     ['anything else', new Error('checkpointer setup broke'), 'unexpected'],
   ])('classifies %s', (_label, err, code) => {
     expect(classifyRunError(err, config).code).toBe(code);
+  });
+
+  it('names the MCP server a run needed but could not reach', () => {
+    const err = Object.assign(new Error('x'), {
+      name: 'McpServerUnavailableError',
+      serverName: 'tasks',
+    });
+    expect(classifyRunError(err, config).message).toBe(
+      "The tasks service (MCP) didn't respond. Check it is running, then start the task again.",
+    );
   });
 
   it("never echoes a provider's own text", () => {

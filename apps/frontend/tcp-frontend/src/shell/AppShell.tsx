@@ -4,6 +4,7 @@ import { DockProvider } from '../components/Dialog/DockProvider';
 import { t } from '../strings';
 import { Header } from './Header';
 import { SessionExpiryWarning } from './SessionExpiryWarning';
+import { SystemBanner } from './SystemBanner';
 import './AppShell.css';
 
 /**
@@ -21,6 +22,9 @@ import './AppShell.css';
  * header does: the route replaces `main`'s content, and a warning about the
  * session belongs to the shell rather than to whichever page happens to be
  * showing when the token starts expiring.
+ *
+ * {@link SystemBanner} sits beside it for the same reason: a shutdown or
+ * restart concerns every page, and every signed-in user.
  *
  * The landing page renders outside this shell and owns its own `main` — there
  * must never be two on one page.
@@ -45,6 +49,7 @@ export const AppShell = () => (
         </a>
         <Header />
         <SessionExpiryWarning />
+        <SystemBanner />
         <main className="app-shell__main" id="main-content" tabIndex={-1}>
           <Outlet />
         </main>

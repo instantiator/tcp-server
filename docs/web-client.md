@@ -352,6 +352,18 @@ is optional in OIDC; Zitadel publishes one), the local side is already clean
 and only the navigation is missing. The fallback clears the user again and
 navigates to `/` itself, so sign-out never throws out of the menu item.
 
+## The System menu and the shutdown banner
+
+Both read `GET /api/system/status` through `useSystemStatus`, which asks only once the user is signed in. A 401 is a full-page sign-in redirect, so asking from a public page would bounce a signed-out visitor.
+
+- **The System menu** sits beside the account menu, for administrators only (the status answer's `admin`). It has two items.
+  - **System health** opens `SystemHealthDialog`: every service's status in words, the error for one that is down, a Refresh button, and the full JSON behind a disclosure. It reads `GET /api/system/health`, which tcp-server gathers from every service on the internal network.
+  - **Shut down or restart…** opens `ShutdownDialog`. It offers Restart (where the server says restart is supported), a graceful shutdown, and a forced one behind a confirmation. It counts the agents still finishing, and Cancel ends the drain. It never halts the services: once a shutdown has drained, it says they can be stopped (`./scripts/stop-dev.sh`). A restart is followed through to "The system restarted." The dialog polls every 2 s only while something is happening.
+- **The shutdown banner** (`SystemBanner`, in `AppShell` under the session warning) shows every signed-in user when the system is shutting down, restarting, shut down or unreachable. It polls every 30 s while idle and 5 s otherwise. Once the server answers again after failing, it invalidates every query, so the page shows the restarted system.
+  - It has no live region of its own (ADR-027); each new text goes through the one announcer.
+
+See [ADR-034](ADRs/ADR-034-restart-and-startup-recovery.md) for restart, and [ADR-023's 000.05 amendment](ADRs/ADR-023-backend-api-surface-for-the-web-ui.md#amendment-as-implemented-p04-000-05) for why the admin flag comes from the server.
+
 ## `?devSession=`: skipping the provider
 
 `?devSession=<id>` on any URL supplies a stand-in signed-in user, so the
@@ -573,7 +585,7 @@ past it.
 An event arrives over SSE, `applyEvent` folds it into the query cache, and
 every `useLive*` hook reading that cache re-renders. Its absence is a fact
 about the system, not an oversight: `query-keys.ts` names `role`,
-`company-user` and `knowledge` as `STATIC_ENTITIES` — nothing streams them, so
+`company-user`, `knowledge` and `system` as `STATIC_ENTITIES` — nothing streams them, so
 `useCompanyRolesList`, `useCompanyKnowledgeList` and `useRoleState` carry no
 prefix and answer once, refetching only when asked.
 
@@ -644,6 +656,16 @@ of this is `src/pages/CompanyPage/activity/TasksList.tsx`.
   `src/api/schema.test.ts` guards every `GET /api/…` route a component reads
   against shipping unreadable, so this class of gap cannot reach the client
   silently again.
+
+## Shared building blocks
+
+Reach for these before writing the markup again:
+
+- **`Dialog`** is the only modal. Pass `onClose` for the usual dialog its opener mounts only while open, or `isOpen` with `onOpenChange` to control it. `portalContainer` keeps it inside an element such as the full-screen office view.
+- **`RoundIconButton`** is a small round icon button with its name as a tooltip, filled or `outline`. **`CloseButton`** is the round ✕ built on it. Every close control uses it: dialog title bars, chat panels, the tray and toasts. The minimise button, the chat panel's complete button and the chat dialog's "Add new" are round icons too.
+- **`ButtonRow`** holds buttons that sit side by side. It keeps a gap between them and wraps when the row is too narrow, so no two buttons ever touch.
+- **`LabelledValue`** is a read-only label above its value ("Request", then the request), used by the task, profile and response dialogs.
+- **`tcp-button--outline`** (in `base.css`) outlines a secondary button: Cancel, and Force shut down.
 
 ## Strings: one lookup, no literals in JSX
 
@@ -864,9 +886,12 @@ conversation reopening, read-only if it's a fresh listen-in on someone else's.
 ## The task dialog
 
 `TaskDialog` shows a task's details, a collapsible panel per assignment, and
-controls that depend on its state. Every control is a hook in `src/api/hooks.ts`
-(`useStartTask`, `usePauseTask`, `useResumeTask`, `useUpdateTask`,
-`useCancelTask`).
+controls that depend on its state. The controls are one component,
+`TaskControls`, which the office view's tray shows too, so clicking a
+whiteboard offers the same actions. Every control is a hook in
+`src/api/hooks.ts` (`useStartTask`, `usePauseTask`, `useResumeTask`,
+`useUpdateTask`, `useCancelTask`). Cancel is an outline button, since it's the
+one not to press by default.
 
 | Control    | Shown when                                                             | Does                                                                                           |
 | ---------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
@@ -885,8 +910,10 @@ controls that depend on its state. Every control is a hook in `src/api/hooks.ts`
   in `src/api/errors.ts` maps a status to a string ("This task isn't running, so
   it can't be paused.", "This task no longer exists", and so on), and
   `ErrorState` shows it. A `401` is already a sign-in redirect.
-- **When a control disappears, focus moves to the details section,** the answer
-  ADR-027 already gives for a focused control that goes away.
+- **When a control disappears, focus moves to the details section** (in the
+  tray, to the panel's heading), the answer ADR-027 already gives for a focused
+  control that goes away. In the full-screen office view, the edit and cancel
+  dialogs are portalled into the view, so they stay visible.
 - **Edit keeps each expected output's type.** An output the CLI set as
   `inline-text` stays inline text; it is not turned into a file name.
 - **The task dialog still has no "Add new" menu**, by decision.
@@ -905,12 +932,12 @@ It appears in two places:
   `h1` in the DOM, so it comes early in the tab order. It rises above the dock
   when one is showing, and slides left of the office view's tray while that is
   open.
-- **The chat dialog's title bar**, while a company is the current route. The
-  dialog is modal, so the page's own control is out of reach while it shows.
-  From here a new chat joins the dialog as another panel, and a new task
-  opens as a dialog stacked on top of the chat. The task dialog has no such
-  menu: it holds nothing the user typed, so they close it and use the page's
-  control.
+- **The chat dialog's title bar**, while a company is the current route, as a
+  small round "+" named "New chat" (`inChat`). The dialog is about chats, so
+  this one lists the roles straight away, with no task option. A new chat
+  joins the dialog as another panel. The dialog is modal, so the page's own
+  control is out of reach while it shows. The task dialog has no such menu: it
+  holds nothing the user typed, so they close it and use the page's control.
 
 While a chat starts, the chosen role reads "Starting chat with…" and keeps
 focus, the other roles are disabled, and the change is announced. On success
@@ -957,10 +984,11 @@ header.
 - **A tick marks a succeeded task.** A small tick above its whiteboard has a
   hover-only zone with the tooltip "Task completed". Failed and cancelled rooms
   get no marker.
-- **Lighting shows what is being worked.** A room is lit while a running
-  agent's avatar is in it, and the corridor is always lit. A task's whiteboard
+- **Lighting shows what is being worked.** A task or one-to-one room is lit
+  while a running agent's avatar is in it. The shared rooms (the corridor, the
+  rec room, the mail room and the archive) are always lit. A task's whiteboard
   is lit while the task is `planning`, `in-progress` or `finalising` and not
-  paused. Everything else is dimmed (`palette.dim()`). `rules/roomLighting.ts`
+  paused. Everything else is dimmed (`palette.dim()`), except walls: they keep their full colour, so a dark room's outline stays visible. `rules/roomLighting.ts`
   works it out as a pure function, and the scene redraws its static layers only
   when the lit sets change by value. The switch is instant, with no fade, so
   reduced motion needs nothing. Like the rest of the canvas, it ignores themes.

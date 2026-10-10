@@ -120,6 +120,9 @@ export class AgentRunEnvironmentService {
         this.serverNames(agent, mode, mcpServerUrls, hasKnowledge),
         mcpServerUrls,
         { agentId: agent.id, companyId: agent.companyId },
+        // A run without a server it needs can't finish its step, so it fails
+        // naming the service rather than carrying on without those tools.
+        { required: true },
       ),
       mode,
     );

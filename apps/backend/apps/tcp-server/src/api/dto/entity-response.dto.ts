@@ -109,6 +109,7 @@ const TASK_WAIT_KINDS = [
   'spend_cap',
   'rate_limited',
   'manual',
+  'restart',
   'queued',
 ] as const satisfies readonly TaskWaitKind[];
 const _taskWaitKindsExhaustive: Exhaustive<

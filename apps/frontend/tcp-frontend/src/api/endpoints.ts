@@ -1,4 +1,8 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQuery,
+  type UseQueryOptions,
+} from '@tanstack/react-query';
 
 import { api, expectAccepted, postFile, unwrap } from './client';
 import { apiError, networkError } from './errors';
@@ -400,6 +404,71 @@ export const useSpendOverview = () =>
   useQuery({
     queryKey: queryKeys.spendOverview(),
     queryFn: () => unwrap(api.GET('/api/spend')),
+  });
+
+/**
+ * Who the caller is to the system and whether a shutdown is under way. Takes
+ * the cache and polling options its wrapper in `hooks.ts` chooses; none is
+ * set here (see the header).
+ */
+export const useSystemStatusQuery = (
+  options: Pick<
+    UseQueryOptions<components['schemas']['SystemStatusResponseDto']>,
+    'staleTime' | 'retry' | 'refetchInterval' | 'enabled'
+  > = {},
+) =>
+  useQuery({
+    ...options,
+    queryKey: queryKeys.systemStatus(),
+    queryFn: () => unwrap(api.GET('/api/system/status')),
+  });
+
+/**
+ * The shutdown state, for the dialog that controls it. The wrapper in
+ * `hooks.ts` chooses the polling; none is set here.
+ */
+export const useShutdownStatusQuery = (
+  options: Pick<
+    UseQueryOptions<components['schemas']['ShutdownStatusResponseDto']>,
+    'retry' | 'refetchInterval' | 'enabled'
+  > = {},
+) =>
+  useQuery({
+    ...options,
+    queryKey: queryKeys.shutdownStatus(),
+    queryFn: () => unwrap(api.GET('/api/system/shutdown')),
+  });
+
+/**
+ * Starts draining. A bare `?force=` or `?restart=` is how the server reads a
+ * flag: present and not `'false'`.
+ */
+export const useBeginShutdownMutation = () =>
+  useMutation({
+    mutationFn: ({ force, restart }: { force: boolean; restart: boolean }) =>
+      unwrap(
+        api.POST('/api/system/shutdown', {
+          params: {
+            query: {
+              ...(force && { force: '' }),
+              ...(restart && { restart: '' }),
+            },
+          },
+        }),
+      ),
+  });
+
+/** Cancels the drain and reopens intake. */
+export const useCancelShutdownMutation = () =>
+  useMutation({
+    mutationFn: () => unwrap(api.DELETE('/api/system/shutdown')),
+  });
+
+/** The health of every service the system depends on. Administrators only. */
+export const useSystemHealthQuery = () =>
+  useQuery({
+    queryKey: queryKeys.systemHealth(),
+    queryFn: () => unwrap(api.GET('/api/system/health')),
   });
 
 /** One company's usage totals, per-task breakdown and recent series. */

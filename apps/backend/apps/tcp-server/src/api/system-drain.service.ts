@@ -1,6 +1,8 @@
 import {
   AgentStatus,
   AuditEventType,
+  ProcessRestarter,
+  restartSupported,
   SHUTDOWN_COMMAND_CHANNEL,
   SHUTDOWN_STATUS_CHANNEL,
   ShutdownAction,
@@ -8,6 +10,7 @@ import {
   TcpAgent,
 } from '@tcp/shared';
 import {
+  ConflictException,
   Injectable,
   Logger,
   OnModuleDestroy,
@@ -31,6 +34,10 @@ export interface ShutdownStatus {
   forced: boolean;
   /** Agent loops still to come to rest. Zero, with state `quiesced`, means safe to halt. */
   agentsRunning: number;
+  /** True when this drain ends in a restart rather than a halt. */
+  restart: boolean;
+  /** True when this deployment can restart itself (it runs under a supervisor). */
+  restartSupported: boolean;
 }
 
 /**
@@ -71,7 +78,13 @@ export class SystemDrainService implements OnModuleInit, OnModuleDestroy {
     private readonly audit: AuditService,
     private readonly shutdown: SystemShutdownService,
     private readonly notifications: NotificationService,
+    private readonly restarter: ProcessRestarter,
   ) {}
+
+  /** Whether something starts tcp-server again after it exits (`TCP_RESTART_SUPPORTED`). */
+  private get canRestart(): boolean {
+    return restartSupported(this.config.get('TCP_RESTART_SUPPORTED'));
+  }
 
   /**
    * Opens the Redis connections and starts listening for worker reports.
@@ -110,12 +123,22 @@ export class SystemDrainService implements OnModuleInit, OnModuleDestroy {
    *
    * Idempotent: re-requesting a graceful drain that is already running marks
    * nothing further and simply reports progress.
+   *
+   * A `restart` drain ends, once quiesced, with tcp-server and tcp-agent
+   * exiting so their supervisor starts them again. It is refused where
+   * nothing would start them again, since it would then just be a stop.
    */
-  async begin(force: boolean): Promise<ShutdownStatus> {
+  async begin(force: boolean, restart = false): Promise<ShutdownStatus> {
+    if (restart && !this.canRestart) {
+      throw new ConflictException(
+        'Restart needs the services to run under Docker (or another supervisor). ' +
+          'Shut down instead, and start the services yourself.',
+      );
+    }
     // Escalating a drain that is already running continues the same episode:
     // its counters carry over, so agents already waiting to stop still count.
     const startingFresh = !this.shutdown.isShuttingDown;
-    const changed = this.shutdown.begin(force);
+    const changed = this.shutdown.begin(force, restart);
     if (changed) {
       if (startingFresh) {
         this.markedByDrain = 0;
@@ -157,12 +180,15 @@ export class SystemDrainService implements OnModuleInit, OnModuleDestroy {
       state: this.shutdown.currentState,
       forced: this.shutdown.isForced,
       agentsRunning: this.remainingAgents(running),
+      restart: this.shutdown.isRestarting,
+      restartSupported: this.canRestart,
     };
   }
 
   /**
-   * Marks every currently `Running` agent as paused for shutdown, recording a
-   * `state_change` for each so anything watching sees why it stopped.
+   * Marks every currently `Running` agent as paused for shutdown (or for a
+   * restart, which the next boot lifts), recording a `state_change` for each
+   * so anything watching sees why it stopped.
    *
    * @returns How many agents were marked.
    */
@@ -174,11 +200,12 @@ export class SystemDrainService implements OnModuleInit, OnModuleDestroy {
     if (running.length === 0) return 0;
 
     const pausedAt = new Date();
+    const pauseReason = this.shutdown.isRestarting ? 'restart' : 'shutdown';
     for (const agent of running) {
       await this.agentRepo.update(agent.id, {
         status: AgentStatus.Paused,
         pausedAt,
-        pauseReason: 'shutdown',
+        pauseReason,
       });
       await this.audit.record(
         agent.companyId,
@@ -188,7 +215,7 @@ export class SystemDrainService implements OnModuleInit, OnModuleDestroy {
         {
           entity: 'agent',
           newStatus: AgentStatus.Paused,
-          reason: 'shutdown',
+          reason: pauseReason,
         },
       );
     }
@@ -199,7 +226,8 @@ export class SystemDrainService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Tells each affected task's company that a shutdown paused it, and that it
-   * needs resuming: nothing resumes a shutdown pause by itself. One notice per
+   * needs resuming: nothing resumes a shutdown pause by itself. A restart's
+   * notice says instead that the task carries on by itself. One notice per
    * task per drain. A notice that can't be raised is logged, never allowed
    * to stop the drain.
    */
@@ -214,15 +242,18 @@ export class SystemDrainService implements OnModuleInit, OnModuleDestroy {
           : [],
       ),
     );
+    const restart = this.shutdown.isRestarting;
     for (const task of tasks.values()) {
       try {
         await this.notifications.create({
-          severity: 'warning',
+          severity: restart ? 'info' : 'warning',
           kind: 'task_paused',
-          message: `Task ${task.shortcode} was paused by a shutdown. Resume it to continue.`,
+          message: restart
+            ? `Task ${task.shortcode} was paused for a restart. It carries on by itself once the system is back.`
+            : `Task ${task.shortcode} was paused by a shutdown. Resume it to continue.`,
           companyId: task.companyId,
           taskId: task.id,
-          dedupeKey: `task_paused:shutdown:${task.id}:${pausedAt.toISOString()}`,
+          dedupeKey: `task_paused:${restart ? 'restart' : 'shutdown'}:${task.id}:${pausedAt.toISOString()}`,
         });
       } catch (err) {
         this.logger.error(
@@ -244,12 +275,27 @@ export class SystemDrainService implements OnModuleInit, OnModuleDestroy {
    * zero in-flight loops — the paused rows are this service's own writes, so
    * believing them alone would report success while an LLM call was still
    * running.
+   *
+   * A restart drain restarts the services the moment it quiesces.
    */
   private evaluateQuiescence(running: number): void {
     if (this.shutdown.currentState !== 'draining') return;
     if (running > 0) return;
     if (this.markedByDrain > 0 && this.lastReportedActive !== 0) return;
-    this.shutdown.markQuiesced();
+    if (this.shutdown.markQuiesced() && this.shutdown.isRestarting) {
+      void this.restartServices();
+    }
+  }
+
+  /**
+   * Tells tcp-agent to restart, then restarts tcp-server. Each exits and its
+   * supervisor starts it again; the next boot resumes the agents this drain
+   * paused (see `AgentRecoveryService`).
+   */
+  private async restartServices(): Promise<void> {
+    this.logger.warn('Restart drain quiesced — restarting the services');
+    await this.publish('restart');
+    this.restarter.restart();
   }
 
   /**

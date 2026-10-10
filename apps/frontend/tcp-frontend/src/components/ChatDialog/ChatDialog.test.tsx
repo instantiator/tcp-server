@@ -1444,9 +1444,10 @@ describe('ChatDialog', () => {
         [START_ROUTE, { body: agentFixture(AGENT_B, 'idle') }],
       ]);
     };
+    // The chat dialog's own "Add new" offers chats only, so it is named for that.
     const addNew = () =>
       within(screen.getByRole('dialog')).getByRole('button', {
-        name: t('addNew.trigger'),
+        name: t('addNew.newChat'),
       });
 
     it('is absent away from a company route', async () => {
@@ -1459,7 +1460,7 @@ describe('ChatDialog', () => {
 
       expect(
         within(screen.getByRole('dialog')).queryByRole('button', {
-          name: t('addNew.trigger'),
+          name: t('addNew.newChat'),
         }),
       ).toBeNull();
     });
@@ -1473,9 +1474,6 @@ describe('ChatDialog', () => {
       await waitForTranscriptsReady();
 
       await user.click(addNew());
-      await user.click(
-        await screen.findByRole('menuitem', { name: t('addNew.newChat') }),
-      );
       await user.click(await screen.findByRole('menuitem', { name: ROLE_B }));
 
       const panelB = await screen.findByRole('region', {
@@ -1492,54 +1490,29 @@ describe('ChatDialog', () => {
       expect(screen.queryByRole('menu')).toBeNull();
     });
 
-    it('opens the task form over the chat; closing it returns to the menu with the draft intact', async () => {
+    // The chat dialog is about chats: creating a task from here was confusing.
+    it('lists the roles straight away, with no task option', async () => {
       respondWithMenu();
       const user = userEvent.setup();
       renderChat('/company/company-1');
 
       await user.click(screen.getByRole('button', { name: 'Open Sales' }));
       await waitForTranscriptsReady();
-      const field = screen.getByRole('textbox', {
-        name: t('chat.message.label', { role: ROLE_A }),
-      });
-      await user.type(field, 'half a thought');
-
       await user.click(addNew());
-      await user.click(
-        await screen.findByRole('menuitem', { name: t('addNew.createTask') }),
-      );
 
-      const taskDialog = await screen.findByRole('dialog', {
-        name: t('task.create.heading'),
-      });
-      await waitFor(() => {
-        expect(taskDialog).toContainElement(
-          document.activeElement as HTMLElement,
-        );
-      });
-
-      await user.keyboard('{Escape}');
-
-      await waitFor(() => {
-        expect(
-          screen.queryByRole('dialog', { name: t('task.create.heading') }),
-        ).toBeNull();
-      });
-      // Escape closed only the top dialog: the chat is still open beneath it.
       expect(
-        screen.getByRole('dialog', { name: t('chat.dialog.heading') }),
+        await screen.findByRole('menuitem', { name: ROLE_A }),
       ).toBeTruthy();
-      await waitFor(() => {
-        expect(addNew()).toHaveFocus();
-      });
+      expect(screen.getByRole('menuitem', { name: ROLE_B })).toBeTruthy();
       expect(
-        screen.getByRole('textbox', {
-          name: t('chat.message.label', { role: ROLE_A }),
-        }),
-      ).toHaveValue('half a thought');
+        screen.queryByRole('menuitem', { name: t('addNew.createTask') }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole('menuitem', { name: t('addNew.newChat') }),
+      ).toBeNull();
     });
 
-    it('peels one layer per Escape: submenu, menu, then the dialog itself', async () => {
+    it('peels one layer per Escape: menu, tooltip, then the dialog itself', async () => {
       respondWithMenu();
       const user = userEvent.setup();
       renderChat('/company/company-1');
@@ -1547,15 +1520,8 @@ describe('ChatDialog', () => {
       await user.click(screen.getByRole('button', { name: 'Open Sales' }));
       await waitForTranscriptsReady();
       addNew().focus();
-      await user.keyboard('{Enter}{ArrowDown}{ArrowRight}');
+      await user.keyboard('{Enter}');
       await screen.findByRole('menuitem', { name: ROLE_B });
-
-      await user.keyboard('{Escape}');
-      await waitFor(() => {
-        expect(
-          screen.getByRole('menuitem', { name: t('addNew.newChat') }),
-        ).toHaveFocus();
-      });
 
       await user.keyboard('{Escape}');
       await waitFor(() => {
@@ -1566,13 +1532,20 @@ describe('ChatDialog', () => {
         screen.getByRole('dialog', { name: t('chat.dialog.heading') }),
       ).toBeTruthy();
 
+      // The trigger is an icon button with a tooltip, shown on keyboard
+      // focus: the first escape dismisses the tooltip (WCAG 1.4.13), the
+      // next the dialog.
+      await user.keyboard('{Escape}');
+      expect(
+        screen.getByRole('dialog', { name: t('chat.dialog.heading') }),
+      ).toBeTruthy();
       await user.keyboard('{Escape}');
       await waitFor(() => {
         expect(screen.queryByRole('dialog')).toBeNull();
       });
     });
 
-    it('has no accessibility violations with the menu and its submenu open', async () => {
+    it('has no accessibility violations with the menu open', async () => {
       respondWithMenu();
       const user = userEvent.setup();
       renderChat('/company/company-1');
@@ -1580,12 +1553,6 @@ describe('ChatDialog', () => {
       await user.click(screen.getByRole('button', { name: 'Open Sales' }));
       await waitForTranscriptsReady();
       await user.click(addNew());
-      await screen.findByRole('menu');
-      await expectNoA11yViolations(document.body);
-
-      await user.click(
-        screen.getByRole('menuitem', { name: t('addNew.newChat') }),
-      );
       await screen.findByRole('menuitem', { name: ROLE_B });
       await expectNoA11yViolations(document.body);
     });

@@ -37,6 +37,31 @@ export interface McpToolContext {
  * Tools from different servers are disambiguated by prefixing the tool name
  * with the server name: `{serverName}__{toolName}`.
  */
+/**
+ * A server a run needs couldn't be reached when its tools were loaded. Named
+ * so the run-failure classifier can say which service is down, rather than
+ * the run carrying on without that server's tools.
+ */
+export class McpServerUnavailableError extends Error {
+  override readonly name = 'McpServerUnavailableError';
+
+  constructor(
+    readonly serverName: string,
+    cause: string,
+  ) {
+    super(`MCP server "${serverName}" couldn't be reached: ${cause}`);
+  }
+}
+
+/** How {@link McpClientService.loadTools} treats a server that can't be reached. */
+export interface LoadToolsOptions {
+  /**
+   * Throw {@link McpServerUnavailableError} instead of skipping the server.
+   * A server with no URL is still skipped: that is a deployment choice.
+   */
+  required?: boolean;
+}
+
 @Injectable()
 export class McpClientService {
   private readonly logger = new Logger(McpClientService.name);
@@ -46,7 +71,8 @@ export class McpClientService {
    * server name (as stored in {@link TcpRole.mcpServerList}) with its HTTP URL.
    *
    * Servers that fail to connect are logged and skipped — the agent will still
-   * run with whichever servers did respond.
+   * run with whichever servers did respond — unless `options.required` asks
+   * for a failure instead.
    *
    * @param context identity values (`agentId`, `companyId`) for the current
    *   agent run. Any matching tool parameter is removed from what the LLM
@@ -56,6 +82,7 @@ export class McpClientService {
     serverNames: string[],
     serverUrls: Record<string, string>,
     context: McpToolContext = {},
+    options: LoadToolsOptions = {},
   ): Promise<McpTool[]> {
     const results: McpTool[] = [];
 
@@ -71,8 +98,10 @@ export class McpClientService {
         const tools = await this.fetchToolsFrom(name, url, context);
         results.push(...tools);
       } catch (err) {
+        const cause = String(err instanceof Error ? err.message : err);
+        if (options.required) throw new McpServerUnavailableError(name, cause);
         this.logger.warn(
-          `Failed to load tools from MCP server "${name}" at ${url}: ${String(err instanceof Error ? err.message : err)}`,
+          `Failed to load tools from MCP server "${name}" at ${url}: ${cause}`,
         );
       }
     }

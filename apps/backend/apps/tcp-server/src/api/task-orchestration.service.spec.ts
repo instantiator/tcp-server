@@ -23,6 +23,7 @@ import { TaskDeliverablesService } from './task-deliverables.service';
 import { TaskFailureService } from './task-failure.service';
 import { TaskOrchestrationService } from './task-orchestration.service';
 import { TaskRecoveryService } from './task-recovery.service';
+import type { AgentRecoveryService } from './agent-recovery.service';
 import { TaskStateService } from './task-state.service';
 import type { TcpAgentTemplate } from '../templates/TcpAgentTemplate';
 
@@ -44,6 +45,7 @@ describe('TaskOrchestrationService', () => {
   let service: TaskOrchestrationService;
   let failures: TaskFailureService;
   let recovery: TaskRecoveryService;
+  let recoverAgents: jest.Mock;
   let taskRepo: Repository<TcpTask>;
   let assignmentRepo: Repository<TcpAssignment>;
   let agentRepo: Repository<TcpAgent>;
@@ -156,6 +158,7 @@ describe('TaskOrchestrationService', () => {
       deliverables,
       state,
     );
+    recoverAgents = jest.fn().mockResolvedValue(undefined);
     recovery = new TaskRecoveryService(
       taskRepo,
       assignmentRepo,
@@ -164,6 +167,7 @@ describe('TaskOrchestrationService', () => {
       failures,
       deliverables,
       state,
+      { recover: recoverAgents } as unknown as AgentRecoveryService,
     );
   });
 
@@ -1325,6 +1329,116 @@ describe('TaskOrchestrationService', () => {
       });
       expect(freshAssignment.status).toBe('failed');
       expect(freshAssignment.failureReason).toBe('agent died before restart');
+    });
+
+    // A crash between claiming the finalise assignment and marking the task
+    // left it `finalising` with nothing to do: finish it rather than leave it.
+    it('finishes a finalising task whose finalise step already succeeded', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, {
+        status: 'finalising',
+        expected: [{ type: 'task-completed-path', value: 'report.txt' }],
+      });
+      const finalise = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        mode: 'finalise',
+        status: 'succeeded',
+        summary: 'done',
+      });
+      const agent = await agentRepo.save(
+        agentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          assignmentId: finalise.id,
+          initialPrompt: 'x',
+          status: AgentStatus.Running,
+        }),
+      );
+      await assignmentRepo.update(finalise.id, { agentId: agent.id });
+
+      await recovery.reconcileTask(task);
+
+      expect((await taskRepo.findOneByOrFail({ id: task.id })).status).toBe(
+        'succeeded',
+      );
+      expect(pauseResume.completeAgent).toHaveBeenCalledWith(agent.id, 'done');
+    });
+
+    // A crash before the finalise assignment was saved left no step at all.
+    it('dispatches the finalise step a finalising task never got', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, {
+        status: 'finalising',
+        plannerRoleId: role.id,
+        expected: [{ type: 'task-completed-path', value: 'report.txt' }],
+      });
+      await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        orderIndex: 0,
+        status: 'succeeded',
+      });
+
+      await recovery.reconcileTask(task);
+
+      const finalise = await assignmentRepo.findOneBy({
+        taskId: task.id,
+        mode: 'finalise',
+      });
+      expect(finalise?.status).toBe('in-progress');
+      expect(agents.dispatchStartJob).toHaveBeenCalled();
+    });
+
+    it('leaves a finalising task alone while its finalise agent is paused', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, {
+        status: 'finalising',
+        expected: [{ type: 'task-completed-path', value: 'report.txt' }],
+      });
+      const finalise = await seedAssignment({
+        taskId: task.id,
+        companyId: company.id,
+        roleId: role.id,
+        mode: 'finalise',
+        status: 'in-progress',
+      });
+      const agent = await agentRepo.save(
+        agentRepo.create({
+          companyId: company.id,
+          roleId: role.id,
+          assignmentId: finalise.id,
+          initialPrompt: 'x',
+          status: AgentStatus.Paused,
+          pauseReason: 'restart',
+        }),
+      );
+      await assignmentRepo.update(finalise.id, { agentId: agent.id });
+
+      await recovery.reconcileTask(task);
+
+      expect((await taskRepo.findOneByOrFail({ id: task.id })).status).toBe(
+        'finalising',
+      );
+    });
+
+    it('puts agents right before it reconciles finalising tasks on boot', async () => {
+      const company = await seedCompany();
+      const task = await seedTask(company.id, { status: 'finalising' });
+      const reconcile = jest.spyOn(recovery, 'reconcileTask');
+
+      await recovery.onApplicationBootstrap();
+
+      expect(recoverAgents).toHaveBeenCalledTimes(1);
+      expect(reconcile.mock.calls.some(([t]) => t.id === task.id)).toBe(true);
+      expect(recoverAgents.mock.invocationCallOrder[0]).toBeLessThan(
+        reconcile.mock.invocationCallOrder[0],
+      );
     });
   });
 

@@ -117,6 +117,9 @@ See [schema.md](schema.md) for the full field reference, VS Code integration, ex
 | [`list-assignments`](#list-assignments)                     | `list-assignments (--task-id <uuid> \| --company <slug-or-id>) [--filter k=v...]`                                   | List assignments for a task or company                                                        |
 | [`eavesdrop`](#eavesdrop)                                   | `eavesdrop (--agent-id \| --assignment-id \| --task-id <uuid>) [--show-history] [--tail]`                           | Replay and/or follow an agent's, assignment's, or task's activity                             |
 | [`shutdown`](#shutdown)                                     | `shutdown [--force] [--no-stop] [--timeout <seconds>]`                                                              | Drain the system for shutdown, wait for agents to pause, then stop the containers             |
+| [`restart`](#restart)                                       | `restart [--force] [--timeout <seconds>]`                                                                           | Drain the system, then restart tcp-server and tcp-agent; paused work carries on by itself     |
+| [`cancel-shutdown`](#cancel-shutdown)                       | `cancel-shutdown`                                                                                                   | Cancel a shutdown or restart in progress                                                      |
+| [`get-health`](#get-health)                                 | `get-health [--app <name>]`                                                                                         | Show the health of every service                                                              |
 | [`usage`](#usage)                                           | `usage [--company-id <id-or-slug>]`                                                                                 | Report spend caps, usage and totals                                                           |
 | [`notifications`](#notifications)                           | `notifications [--all] [--company-id <uuid>]`                                                                       | List notifications (a company's own with `--company-id`)                                      |
 | [`dismiss-notification`](#dismiss-notification)             | `dismiss-notification --notification-id <uuid>`                                                                     | Dismiss a notification                                                                        |
@@ -951,7 +954,7 @@ outcomes, and why it is waiting, if it is.
   `assignments` and `waiting`. `waiting` is `null`, or
   `{ kind, pausedBy?, resumeAfter? }`: `kind` is `manual` (a user paused it,
   `pausedBy` says who), `rate_limited` (`resumeAfter` is the next try),
-  `spend_cap`, `shutdown`, `user_input`, `consultation` or `queued` (waiting
+  `spend_cap`, `shutdown`, `restart`, `user_input`, `consultation` or `queued` (waiting
   for a model slot). A failed task's `failureReason` says what went wrong and
   what to do.
 
@@ -1267,9 +1270,10 @@ accept the cost.
 
 Either way the agents end up `paused` with the reason `shutdown`, keeping their
 LangGraph checkpoints. They stay paused across a restart and are resumed
-explicitly, one at a time, with `POST /api/agent/resume/:id` — nothing
-auto-resumes on boot, so bringing the stack up never starts spending tokens by
-itself.
+explicitly, with [`resume-task`](#resume-task) or
+[`resume-company`](#resume-company). Nothing auto-resumes a shutdown pause on
+boot, so bringing the stack up never starts spending tokens by itself. To have
+work carry on by itself, use [`restart`](#restart) instead.
 
 Halting the containers is done by `tcp-cli.sh` (via `docker compose stop`)
 after the API reports the system drained, not by the server: every Compose
@@ -1279,7 +1283,7 @@ no `tcp-dev` containers are running — a bare `npm run start:dev`, say — it s
 so and leaves the processes for you to stop.
 
 - **stdout**: the final shutdown status as JSON
-  (`{ state, forced, agentsRunning }`)
+  (`{ state, forced, agentsRunning, restart, restartSupported }`)
 - **stderr**: one progress line per poll
 - **Exit codes**: `0` once drained; `1` on timeout, having reported what is
   still running. A timeout never escalates to `--force` — throwing away
@@ -1305,15 +1309,70 @@ so and leaves the processes for you to stop.
 ./tcp-cli.sh -t $TOKEN shutdown --timeout 120
 ```
 
-To cancel a drain that is taking too long, without halting anything:
+To cancel a drain that is taking too long, without halting anything, use
+[`cancel-shutdown`](#cancel-shutdown).
+
+### `restart`
+
+Drains the system like [`shutdown`](#shutdown), then restarts tcp-server and
+tcp-agent instead of halting them. Running agents are paused with the reason
+`restart`, and the next boot resumes them by itself, from their checkpoints.
+A task a user paused stays paused.
+
+Once the drain has quiesced, both services exit and Docker's
+`restart: unless-stopped` starts them again. A restart is refused (409) where
+nothing would start them again (`TCP_RESTART_SUPPORTED` unset, as in a bare
+`npm run start:dev`), or while a plain shutdown is already draining. See
+[ADR-034](ADRs/ADR-034-restart-and-startup-recovery.md).
+
+- **stdout**: the final status as JSON, once the server answers `idle` again
+- **stderr**: one progress line per poll while draining, then
+  `Restarting the services…`
+- **Exit codes**: `0` once the services are back; `1` on timeout
+
+| Flag               | Description                                                                       |
+| ------------------ | --------------------------------------------------------------------------------- |
+| `-f, --force`      | Abort in-flight LLM calls immediately, wasting the tokens spent on them           |
+| `--timeout <secs>` | Give up waiting for the drain and the restart together, and exit 1 (default: 600) |
 
 ```bash
-curl -X DELETE -H "Authorization: Bearer $TOKEN" \
-  http://localhost:3000/api/system/shutdown
+./tcp-cli.sh -t $TOKEN restart
 ```
 
-Agents the drain already paused stay paused — cancelling does not auto-resume
-them.
+### `cancel-shutdown`
+
+Cancels a shutdown or restart in progress, so the system takes work again
+(`DELETE /api/system/shutdown`). Agents the drain already paused stay paused:
+resume them with [`resume-task`](#resume-task) or
+[`resume-company`](#resume-company). Administrator-only.
+
+- **stdout**: the resulting status as JSON
+
+```bash
+./tcp-cli.sh -t $TOKEN cancel-shutdown
+```
+
+### `get-health`
+
+Prints the health of every service as JSON, from `GET /api/system/health`.
+tcp-server asks tcp-agent and the MCP servers on the internal network, so this
+works even though they aren't published to the host. Each service is `up`,
+`down` or `not_configured`, with its own health document as `detail` and, when
+the probe itself failed, an `error`. Administrator-only.
+
+- **stdout**: `{ status: 'ok' | 'degraded', services: [...] }`, or with `--app`
+  only that service's entry
+- **Exit codes**: `0` even when degraded (the command reports health; it
+  doesn't judge it); `1` for an unknown `--app`, listing the known names
+
+| Flag           | Description                                     |
+| -------------- | ----------------------------------------------- |
+| `--app <name>` | Show only this service, for example `tcp-agent` |
+
+```bash
+./tcp-cli.sh -t $TOKEN get-health
+./tcp-cli.sh -t $TOKEN get-health --app tcp-mcp-tasks
+```
 
 ---
 

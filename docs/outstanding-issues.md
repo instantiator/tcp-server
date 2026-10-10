@@ -350,13 +350,16 @@ and correct the table and the classifier if it's wrong.
 
 ## Supporting services fail a task rather than pause it
 
-When a supporting service is down (storage, Redis, the database, an MCP
-service), a run fails with `service_unavailable` and so does its task (000.04).
-Pausing the task, so it could be resumed once the service is back, would be
-kinder, but nothing yet tells the system a service is healthy again.
+When a supporting service is down, a run that notices fails with `service_unavailable`, and so does its task (000.04). 000.05 looked at pausing it instead, now that a health report exists, and found that pausing would rarely help:
 
-**Act when:** 000.05's health signal exists. Then pause instead of fail, and
-resume when the service reports healthy.
+- An MCP or MinIO error, reached through a tool call, goes back to the model as an ordinary tool result. It never reaches the classifier.
+- The LangGraph checkpointer throws raw `pg` errors, which classify as `unexpected`.
+- A database outage can't write a pause at all. Startup recovery (000.05) is the safety net for that one.
+- Only the failure's message, not its code, reaches tcp-server (`FailDto` has `reason` only).
+
+What 000.05 did do: a run whose MCP server is down when its tools load now fails, naming the service, instead of carrying on without those tools.
+
+**Act when:** a real outage fails a task that would have carried on cleanly once the service was back. Then pass the failure code to tcp-server, pause on `service_unavailable`, and resume when `GET /api/system/health` reports that service up.
 
 ## No retry for a failed task
 
@@ -365,26 +368,6 @@ the user must create a new task to try again. There is no endpoint, web button
 or CLI command to run it again.
 
 **Act when:** a user asks to rerun a task after fixing its cause.
-
-## A `running` agent is stranded when the failure write itself fails
-
-If saving an agent's failure throws (the database is down, say), `failRun`
-logs the code and reason and still tells tcp-server, which fails the task
-(000.04). But the agent row stays `running`, since the write that would have
-changed it failed.
-
-**Act when:** a stranded agent is seen (a `running` agent on a failed task).
-The fix belongs in startup recovery: mark a `running` agent with no live job
-as failed.
-
-## An MCP server that is down at tool-load time is skipped quietly
-
-`McpClientService.loadTools` skips a server it can't reach, so the failure
-never reaches the run-failure classifier (000.04) and gets no
-`service_unavailable` reason. The agent just runs without those tools.
-
-**Act when:** a run ends oddly (a required tool is missing, or the agent gives
-up) because a tool server was down. Then make `loadTools` report it.
 
 ## No CLI `close-room`
 
@@ -447,3 +430,27 @@ refresh (2026-10-09).
 **Act when:** `sprintf-js` publishes a patched version (add an npm `overrides`
 entry if `argparse@1` doesn't pick it up), or `mammoth` and the jest chain
 drop `argparse@1`. Recheck with `npm audit --omit=dev` before any release.
+
+## Startup recovery runs only when tcp-server boots
+
+`AgentRecoveryService` (000.05) repairs `running` or `queued` agents that have no job, but only when tcp-server starts. If tcp-agent alone restarts or crashes, BullMQ re-dispatches its stalled jobs and, after `maxStalledCount`, fails them, which can leave the agent row `running`.
+
+**Act when:** an agent is seen `running` with no job after a tcp-agent-only restart. Then run the stranded-agent pass on a timer as well.
+
+## Restart needs a supervisor
+
+Restart (000.05) exits tcp-server and tcp-agent and relies on Docker's `restart: unless-stopped` to start them again. `TCP_RESTART_SUPPORTED` is set only in `docker-compose.yml`. Elsewhere (a bare `npm run start:dev`), a restart request is refused with 409.
+
+**Act when:** a deployment without Docker (systemd, a process manager) needs restart from the API. Then set the flag in that deployment's config, once its supervisor restarts on exit.
+
+## The shutdown banner polls rather than streams
+
+The web client's shutdown banner reads `GET /api/system/status`: every 30 s while idle, every 5 s during a drain or restart. The client has no app-wide event stream to carry it.
+
+**Act when:** an app-wide event stream is added, or the poll shows up in load. Then push the shutdown state on it instead.
+
+## No browser-tier journey for the System menu
+
+The System menu, health dialog, shutdown dialog and banner (000.05) are covered by jsdom tests only. The browser tier signs in as a test user who isn't in `TCP_ADMIN_IDENTIFIERS`, so the menu never shows there. A browser shutdown would also stop the shared testing stack under the other specs.
+
+**Act when:** the browser tier gains an admin sign-in. Then add a journey that opens System health, plus one that starts a drain and cancels it, run serially after the other specs.

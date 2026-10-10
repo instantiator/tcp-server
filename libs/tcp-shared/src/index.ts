@@ -14,6 +14,7 @@ export * from './mcp/mcp-client.service';
 export * from './mcp/mcp-registry';
 export * from './mcp/tool-result';
 export * from './bootstrap/bootstrap-mcp-app';
+export * from './bootstrap/process-restarter';
 export * from './health/service-identity';
 export * from './health/static-health.module';
 export * from './config/defaults';

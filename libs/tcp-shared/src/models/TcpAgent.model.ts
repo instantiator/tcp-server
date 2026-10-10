@@ -52,7 +52,9 @@ export enum AgentStatus {
  * A `rate_limited` pause — the provider refused a call — is lifted at
  * {@link TcpAgent.resumeAfter} when auto-resume is on, or by an explicit
  * resume. A `manual` pause — a user paused the agent's task — is lifted only
- * by an explicit resume of that task.
+ * by an explicit resume of that task. A `restart` pause — a restart drain
+ * stopped the agent, or startup recovery found it stranded — is lifted by
+ * tcp-server's next boot, or by an explicit resume.
  */
 export type PauseReason =
   | 'user_input'
@@ -60,7 +62,8 @@ export type PauseReason =
   | 'shutdown'
   | 'spend_cap'
   | 'rate_limited'
-  | 'manual';
+  | 'manual'
+  | 'restart';
 
 /**
  * A running instance of an {@link TcpRole} within an {@link TcpCompany}.

@@ -94,6 +94,7 @@ describe('SpendResumeService', () => {
             'shutdown',
             'rate_limited',
             'manual',
+            'restart',
             'user_input',
             'consultation',
           ]),

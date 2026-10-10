@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button } from 'react-aria-components';
 import { Link } from 'react-router';
 import {
   ANNOUNCE_IMMEDIATE_MS,
@@ -7,6 +6,7 @@ import {
   type Politeness,
 } from '../../announce/announcer';
 import { t } from '../../strings';
+import { CloseButton } from '../CloseButton/CloseButton';
 import { AUTO_HIDE_MS } from './auto-hide';
 import './Notification.css';
 
@@ -127,12 +127,11 @@ export const Notification = ({
       <Link className="notification__message" to={durableHref}>
         {message}
       </Link>
-      <Button
-        className="react-aria-Button notification__dismiss"
+      <CloseButton
+        className="notification__dismiss"
+        label={t('notification.dismiss')}
         onPress={onDismiss}
-      >
-        {t('notification.dismiss')}
-      </Button>
+      />
     </div>
   );
 };

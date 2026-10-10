@@ -60,6 +60,16 @@ const SHUTDOWN_RESUME_PROMPT =
   'Continue from where you left off.';
 
 /**
+ * The first message a resumed agent sees after a restart stopped it mid-run,
+ * or after startup recovery found it stranded by a crash. An agent that never
+ * reached its first LLM call has no checkpoint, so it restarts with no
+ * message instead.
+ */
+const RESTART_RESUME_PROMPT =
+  'The system restarted while you were working. Continue from where you ' +
+  'left off.';
+
+/**
  * The first message a resumed agent sees after a spend cap paused it
  * mid-run. An agent the cap held back before its first LLM call has no
  * checkpoint to continue, so it is restarted with no message instead.
@@ -113,6 +123,7 @@ export const ALL_REASONS: readonly ResumableReason[] = [
   'spend_cap',
   'rate_limited',
   'manual',
+  'restart',
 ];
 
 /** Which pauses a resume call may lift. */
@@ -173,6 +184,22 @@ export class AgentOrchestrationService
       this.logger.warn(`agent-jobs queue error: ${err.message}`);
     });
     this.logger.log('Connected to agent-jobs queue');
+  }
+
+  /**
+   * The agents that have a job in the queue — running, waiting or delayed —
+   * so startup recovery can tell a live agent from a stranded one. Throws if
+   * the queue can't be read; the caller must not treat that as "no jobs".
+   */
+  async agentIdsWithJobs(): Promise<Set<string>> {
+    const jobs = await this.queue.getJobs([
+      'active',
+      'waiting',
+      'delayed',
+      'prioritized',
+      'waiting-children',
+    ]);
+    return new Set(jobs.map((job) => job.data.agentId));
   }
 
   /**
@@ -304,9 +331,9 @@ export class AgentOrchestrationService
 
   /**
    * The message a resume carries when nothing was asked of the user: a
-   * prompt explaining the pause for shutdown, rate-limit, spend-cap and
-   * manual pauses. A spend-cap or manual pause that struck before the
-   * agent's first LLM call gets none — a resume with no message restarts the
+   * prompt explaining the pause for shutdown, rate-limit, spend-cap, manual
+   * and restart pauses. A spend-cap, manual or restart pause that struck
+   * before the agent's first LLM call gets none — a resume with no message restarts the
    * agent, which is what an agent with no checkpoint needs.
    */
   private async pauseResumePrompt(
@@ -314,12 +341,12 @@ export class AgentOrchestrationService
   ): Promise<string | undefined> {
     if (agent.pauseReason === 'shutdown') return SHUTDOWN_RESUME_PROMPT;
     if (agent.pauseReason === 'rate_limited') return RATE_LIMIT_RESUME_PROMPT;
-    const prompt =
-      agent.pauseReason === 'spend_cap'
-        ? SPEND_CAP_RESUME_PROMPT
-        : agent.pauseReason === 'manual'
-          ? MANUAL_RESUME_PROMPT
-          : undefined;
+    const prompts: Partial<Record<PauseReason, string>> = {
+      spend_cap: SPEND_CAP_RESUME_PROMPT,
+      manual: MANUAL_RESUME_PROMPT,
+      restart: RESTART_RESUME_PROMPT,
+    };
+    const prompt = agent.pauseReason ? prompts[agent.pauseReason] : undefined;
     if (!prompt) return undefined;
     const started = await this.auditRepo.exists({
       where: {

@@ -9,7 +9,7 @@
  */
 .dialog__bar {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--tcp-space-sm);
   margin-block-end: var(--tcp-space-md);
 }

@@ -310,7 +310,7 @@ export class TcpCompanyScene extends Scene {
 
     this.staticObjects = [
       drawFloors(this, region, isLit),
-      ...drawWalls(this, region, isLit),
+      ...drawWalls(this, region),
       ...furniture.values(),
       ...zones,
       ...this.buildArchiveZone(world, furniture),

@@ -1,6 +1,7 @@
-import { Crosshair, X } from 'lucide-react';
+import { Crosshair } from 'lucide-react';
 import { forwardRef, useId } from 'react';
-import { Button, ToggleButton } from 'react-aria-components';
+import { ToggleButton } from 'react-aria-components';
+import { CloseButton } from '../../../../components/CloseButton/CloseButton';
 import { Icon, WithTooltip } from '../../../../components/Icon/Icon';
 import { t } from '../../../../strings';
 import type { SelectionTarget } from '../TcpPhaserEventBus';
@@ -105,15 +106,12 @@ export const VisualisationTray = forwardRef<
             headingAction={followAction}
           />
         )}
-        <WithTooltip label={closeLabel} portalContainer={portalContainer}>
-          <Button
-            className="react-aria-Button tcp-icon-button tcp-icon-button--small company-visualisation__tray-close"
-            aria-label={closeLabel}
-            onPress={onClose}
-          >
-            <Icon icon={X} />
-          </Button>
-        </WithTooltip>
+        <CloseButton
+          className="company-visualisation__tray-close"
+          label={closeLabel}
+          portalContainer={portalContainer}
+          onPress={onClose}
+        />
       </aside>
     );
   },

@@ -127,3 +127,11 @@ this feature is for.
 - Single deployment only. The worker's status reports are not keyed by worker id,
   so several tcp-agent instances would overwrite each other's counts; a
   multi-instance deployment needs a per-worker tally first.
+
+## Amendment as implemented (000.05, phase 04) <a id="amendment-as-implemented-p04-000-05"></a>
+
+[000.05](../prompts/phase%2004%20-%20utility/000.05.01.plan%20-%20system%20menu%20for%20health%20and%20shutdown.md) changed three things this ADR said. The mechanism is in [ADR-034](ADR-034-restart-and-startup-recovery.md).
+
+- **A restart may exit the process.** "Process suicide" is still ruled out for a _halt_. A restart drain (`?restart`) ends with tcp-server and tcp-agent exiting so Docker starts them again, but only where `TCP_RESTART_SUPPORTED` says something will. Agents a restart pauses carry the reason `restart`, and the next boot resumes them by itself.
+- **`TaskRecoveryService` changed.** "Needed no change" no longer holds. Startup recovery now resumes `running` or `queued` agents that have no job, from their checkpoint, and fails one only if its task has ended or it was recovered once before. It also repairs tasks stuck in `finalising`. A `shutdown` pause is still left for a user to resume.
+- **Draining has a web surface.** The System menu's shutdown dialog drains, restarts and cancels, but never halts: the host still stops the services. Every signed-in user sees a banner while the system is shutting down or restarting (`GET /api/system/status`). Resuming a drained task is `POST /api/task/:id/resume` or `resume-company`, not one agent at a time.

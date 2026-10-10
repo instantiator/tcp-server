@@ -11,6 +11,7 @@ import {
   TcpRole,
   TcpTask,
   PendingConsultation,
+  ProcessRestarter,
 } from '@tcp/shared';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -58,6 +59,8 @@ import { PauseAndResumeService } from './pause-and-resume.service';
 import { PlanValidationService } from './plan-validation.service';
 import { StorageScopeService } from './storage-scope.service';
 import { SystemDrainService } from './system-drain.service';
+import { SystemHealthService } from './system-health.service';
+import { HealthModule } from '../health/health.module';
 import { SystemShutdownService } from './system-shutdown.service';
 import { QaVerdictService } from './qa-verdict.service';
 import { TaskDeliverablesService } from './task-deliverables.service';
@@ -65,6 +68,7 @@ import { TaskDispatcher } from './task-dispatcher.service';
 import { TaskFailureService } from './task-failure.service';
 import { TaskOrchestrationService } from './task-orchestration.service';
 import { TaskRecoveryService } from './task-recovery.service';
+import { AgentRecoveryService } from './agent-recovery.service';
 import { TaskControlService } from './task-control.service';
 import { TaskStateService } from './task-state.service';
 import { TaskService } from './task.service';
@@ -76,6 +80,8 @@ import { TaskService } from './task.service';
     // CompanyMembershipGuard is injected into every user-facing controller.
     AuthModule,
     DbModule,
+    // The combined system health report reuses tcp-server's own checks.
+    HealthModule,
     McpClientModule,
     ModelCheckModule,
     // Company priming replays the active notifications.
@@ -136,7 +142,9 @@ import { TaskService } from './task.service';
     // The drain executes shutdowns; the shutdown service holds the state every
     // intake path guards on.
     SystemShutdownService,
+    ProcessRestarter,
     SystemDrainService,
+    SystemHealthService,
     // Resumes cap-paused work: on reset, dismissal, or an explicit resume.
     SpendResumeService,
     RateLimitResumeService,
@@ -150,6 +158,7 @@ import { TaskService } from './task.service';
     QaVerdictService,
     TaskFailureService,
     TaskRecoveryService,
+    AgentRecoveryService,
     // The real dispatcher: TaskDispatcher (the token the transition services
     // inject) resolves to the single TaskOrchestrationService instance.
     { provide: TaskDispatcher, useExisting: TaskOrchestrationService },
