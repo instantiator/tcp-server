@@ -13,21 +13,19 @@ import { TaskControls } from '../../../../components/TaskDialog/TaskControls';
 import { getRuntimeConfig } from '../../../../runtime-config';
 import type { AssignmentDTO } from '../../../../api/dtos';
 import { Info } from 'lucide-react';
-import { Fragment, type ReactNode } from 'react';
+import { Fragment } from 'react';
 import { Button, Tooltip, TooltipTrigger } from 'react-aria-components';
 import { Icon } from '../../../../components/Icon/Icon';
 import { ACTIVE_TASK_STATUSES, statusLabel } from '../../../../api/statuses';
 import { ExpandableText } from '../../../../components/ExpandableText/ExpandableText';
 import { t } from '../../../../strings';
 import { modeLabel } from './modeLabel';
-import { TrayHeading } from './TrayHeading';
+import { TrayPanel } from './TrayPanel';
 
 export interface TaskDetailsProps {
   readonly companyId: string;
   readonly taskId: string;
   readonly headingId: string;
-  /** The follow toggle, shown beside this panel's own heading. */
-  readonly headingAction?: ReactNode;
   /**
    * Called once the task's room has closed, so the tray can let go of a
    * selection whose whiteboard has gone and put focus somewhere deliberate.
@@ -140,7 +138,6 @@ export const TaskDetails = ({
   companyId,
   taskId,
   headingId,
-  headingAction,
   onRoomClosed,
   portalContainer,
 }: TaskDetailsProps) => {
@@ -152,24 +149,24 @@ export const TaskDetails = ({
 
   if (tasksQuery.isPending) {
     return (
-      <>
-        <TrayHeading id={headingId} action={headingAction}>
-          {t('visualisation.tray.heading')}
-        </TrayHeading>
+      <TrayPanel
+        headingId={headingId}
+        heading={t('visualisation.tray.heading')}
+      >
         <p>{t('visualisation.tray.loading')}</p>
-      </>
+      </TrayPanel>
     );
   }
 
   const task = tasksQuery.data?.find((candidate) => candidate.id === taskId);
   if (task === undefined) {
     return (
-      <>
-        <TrayHeading id={headingId} action={headingAction}>
-          {t('visualisation.tray.heading')}
-        </TrayHeading>
+      <TrayPanel
+        headingId={headingId}
+        heading={t('visualisation.tray.heading')}
+      >
         <p>{t('visualisation.tray.gone')}</p>
-      </>
+      </TrayPanel>
     );
   }
 
@@ -202,16 +199,21 @@ export const TaskDetails = ({
   const canCloseRoom = finished && !task.visualisationClosedAt;
 
   return (
-    <>
-      <TrayHeading id={headingId} action={headingAction}>
-        {t('visualisation.tray.taskHeading', { shortcode: task.shortcode })}
-      </TrayHeading>
-      <ExpandableText
-        text={task.request}
-        variant="ellipsis"
-        expandLabel={t('visualisation.tray.prompt.expand')}
-        collapseLabel={t('visualisation.tray.prompt.collapse')}
-      />
+    <TrayPanel
+      headingId={headingId}
+      heading={t('visualisation.tray.taskHeading', {
+        shortcode: task.shortcode,
+      })}
+      description={
+        <ExpandableText
+          text={task.request}
+          variant="icon"
+          expandLabel={t('visualisation.tray.prompt.expand')}
+          collapseLabel={t('visualisation.tray.prompt.collapse')}
+          portalContainer={portalContainer}
+        />
+      }
+    >
       <p>{statusLabel(task.status)}</p>
       {task.status === 'succeeded' && (
         <OutputsLink slug={companyQuery.data?.slug} taskId={taskId} />
@@ -267,6 +269,6 @@ export const TaskDetails = ({
           </ol>
         </Fragment>
       ))}
-    </>
+    </TrayPanel>
   );
 };

@@ -437,7 +437,6 @@ const strings = {
 
   // `components/ExpandableText`: a long text clipped to its opening.
   'expandableText.truncated': '{excerpt}…',
-  'expandableText.showLess': 'Show less',
 
   // The isometric office view.
   'visualisation.stage.label': 'Office view',
@@ -538,6 +537,8 @@ const strings = {
   'visualisation.tray.prompt': 'Prompt',
   'visualisation.tray.prompt.expand': 'Show the full prompt',
   'visualisation.tray.prompt.collapse': 'Show less of the prompt',
+  'visualisation.tray.description.expand': 'Show the full description',
+  'visualisation.tray.description.collapse': 'Show less of the description',
   'visualisation.tray.assignmentRow': '{role} — {mode}',
   'visualisation.tray.assignmentStatusSuffix': ' — {status}',
   'visualisation.tray.inProgress': 'In progress',

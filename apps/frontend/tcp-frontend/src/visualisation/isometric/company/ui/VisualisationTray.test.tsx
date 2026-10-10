@@ -554,6 +554,32 @@ describe('VisualisationTray', () => {
     expect(onToggleFollow).toHaveBeenCalledTimes(1);
   });
 
+  // The shared layout places these by CSS; reading and tab order stay
+  // title, actions, description, body, then Follow and Close (000.06.03).
+  it('reads the heading, the listen-in action, the body, then Follow and Close', async () => {
+    respond();
+    renderTray();
+
+    const heading = await screen.findByRole('heading', {
+      name: t('visualisation.tray.agentHeading', { role: ROLE_NAME }),
+    });
+    const order = [
+      heading,
+      screen.getByRole('button', {
+        name: t('visualisation.tray.listenIn', { role: ROLE_NAME }),
+      }),
+      screen.getByText(t('visualisation.tray.status')),
+      screen.getByRole('button', { name: t('visualisation.tray.follow') }),
+      screen.getByRole('button', { name: t('visualisation.tray.close') }),
+    ];
+    for (let i = 1; i < order.length; i++) {
+      expect(
+        order[i - 1].compareDocumentPosition(order[i]) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+  });
+
   it('calls onClose when Close details is pressed', async () => {
     respond();
     const user = userEvent.setup();

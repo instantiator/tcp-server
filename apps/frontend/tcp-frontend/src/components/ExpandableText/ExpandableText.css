@@ -6,3 +6,23 @@
 /* The control that reveals, or hides again, the rest of a clipped text. */
 .expandable-text__toggle {
 }
+
+/*
+ * The icon variant: the chevron sits at the end of the text, and while the
+ * text is expanded it sticks to the bottom of the nearest scroller, so the
+ * way back stays in view however long the text is.
+ */
+.expandable-text--icon {
+  display: flex;
+  flex-direction: column;
+}
+
+.expandable-text--icon > p {
+  margin: 0;
+}
+
+.expandable-text--icon .expandable-text__toggle {
+  position: sticky;
+  inset-block-end: 0;
+  align-self: flex-end;
+}

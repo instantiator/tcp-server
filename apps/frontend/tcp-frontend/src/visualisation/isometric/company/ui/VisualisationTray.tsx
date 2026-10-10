@@ -30,10 +30,10 @@ export interface VisualisationTrayProps {
  * live query data and simply re-render, which is browsing, not an
  * announcement.
  *
- * The close button floats at the tray's own top-right corner (CSS); the
- * follow toggle travels with whichever `*Details` panel is showing, next to
- * its heading, via `TrayHeading` — both are built once here and handed down
- * or placed directly, rather than duplicated per selection kind.
+ * Each `*Details` panel lays itself out with `TrayPanel`; the close and
+ * follow buttons are built once here, after the panel in DOM order, and CSS
+ * places them — close in the panel's title bar, follow floating at the
+ * bottom right — rather than duplicating them per selection kind.
  */
 export const VisualisationTray = forwardRef<
   HTMLElement,
@@ -78,7 +78,7 @@ export const VisualisationTray = forwardRef<
             companyId={companyId}
             agentId={selection.id}
             headingId={headingId}
-            headingAction={followAction}
+            portalContainer={portalContainer}
           />
         )}
         {selection.kind === 'task' && (
@@ -86,7 +86,6 @@ export const VisualisationTray = forwardRef<
             companyId={companyId}
             taskId={selection.id}
             headingId={headingId}
-            headingAction={followAction}
             onRoomClosed={onClose}
             portalContainer={portalContainer}
           />
@@ -96,16 +95,13 @@ export const VisualisationTray = forwardRef<
             companyId={companyId}
             roleId={selection.id}
             headingId={headingId}
-            headingAction={followAction}
+            portalContainer={portalContainer}
           />
         )}
         {selection.kind === 'archive' && (
-          <ArchiveDetails
-            companyId={companyId}
-            headingId={headingId}
-            headingAction={followAction}
-          />
+          <ArchiveDetails companyId={companyId} headingId={headingId} />
         )}
+        <div className="company-visualisation__tray-follow">{followAction}</div>
         <CloseButton
           className="company-visualisation__tray-close"
           label={closeLabel}

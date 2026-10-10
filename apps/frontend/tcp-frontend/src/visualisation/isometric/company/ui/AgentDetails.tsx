@@ -3,31 +3,32 @@ import {
   useLiveAgentState,
   useLiveAssignmentsList,
 } from '../../../../api/hooks';
-import type { ReactNode } from 'react';
-import { Button } from 'react-aria-components';
+import { Ear } from 'lucide-react';
 import {
   ACTIVE_AGENT_STATUSES,
   agentStatusLabel,
   statusLabel,
 } from '../../../../api/statuses';
 import { ExpandableText } from '../../../../components/ExpandableText/ExpandableText';
+import { RoundIconButton } from '../../../../components/RoundIconButton/RoundIconButton';
 import { t } from '../../../../strings';
 import { isWaitingToStart } from '../rules/companySnapshot';
 import { modeLabel } from './modeLabel';
-import { TrayHeading } from './TrayHeading';
+import { TrayPanel } from './TrayPanel';
 import { useListenIn } from './useListenIn';
 
 export interface AgentDetailsProps {
   readonly companyId: string;
   readonly agentId: string;
   readonly headingId: string;
-  /** The follow toggle, shown beside this panel's own heading. */
-  readonly headingAction?: ReactNode;
+  /** Where tooltips are portalled; see `VisualisationTrayProps.portalContainer`. */
+  readonly portalContainer?: Element | undefined;
 }
 
 /**
  * One agent's live details in the office tray: its role, its own status, and
- * the assignment it is working — its mode, its status and its prompt.
+ * the assignment it is working — its mode, its status and (as the
+ * description) its prompt — with a Listen in action while it is active.
  *
  * The assignment comes from the company's whole assignments list, filtered to
  * the one id the agent names, rather than a per-id fetch: `useOfficeWorld`
@@ -38,7 +39,7 @@ export const AgentDetails = ({
   companyId,
   agentId,
   headingId,
-  headingAction,
+  portalContainer,
 }: AgentDetailsProps) => {
   const agentQuery = useLiveAgentState({ agentId });
   const listenIn = useListenIn(companyId);
@@ -47,12 +48,12 @@ export const AgentDetails = ({
 
   if (agentQuery.isPending) {
     return (
-      <>
-        <TrayHeading id={headingId} action={headingAction}>
-          {t('visualisation.tray.heading')}
-        </TrayHeading>
+      <TrayPanel
+        headingId={headingId}
+        heading={t('visualisation.tray.heading')}
+      >
         <p>{t('visualisation.tray.loading')}</p>
-      </>
+      </TrayPanel>
     );
   }
 
@@ -62,12 +63,12 @@ export const AgentDetails = ({
   const agent = agentQuery.data;
   if (agentQuery.isError || agent === null || agent === undefined) {
     return (
-      <>
-        <TrayHeading id={headingId} action={headingAction}>
-          {t('visualisation.tray.heading')}
-        </TrayHeading>
+      <TrayPanel
+        headingId={headingId}
+        heading={t('visualisation.tray.heading')}
+      >
         <p>{t('visualisation.tray.gone')}</p>
-      </>
+      </TrayPanel>
     );
   }
 
@@ -84,11 +85,45 @@ export const AgentDetails = ({
       ? t('visualisation.activity.waiting')
       : agentStatusLabel(agent);
 
+  // Only while the agent is active: a finished agent has nothing more to
+  // say, and its whole history is in the task dialog. The name carries the
+  // role so it reads on its own in the tray (WCAG 2.4.6).
+  const canListenIn = ACTIVE_AGENT_STATUSES.some(
+    (active) => active === agent.status,
+  );
+
   return (
-    <>
-      <TrayHeading id={headingId} action={headingAction}>
-        {t('visualisation.tray.agentHeading', { role: roleName })}
-      </TrayHeading>
+    <TrayPanel
+      headingId={headingId}
+      heading={t('visualisation.tray.agentHeading', { role: roleName })}
+      actions={
+        canListenIn ? (
+          <RoundIconButton
+            icon={Ear}
+            label={t('visualisation.tray.listenIn', { role: roleName })}
+            portalContainer={portalContainer}
+            onPress={() => {
+              listenIn({
+                id: agentId,
+                roleId: agent.roleId,
+                assignmentId: agent.assignmentId,
+              });
+            }}
+          />
+        ) : undefined
+      }
+      description={
+        assignment === undefined ? undefined : (
+          <ExpandableText
+            text={assignment.prompt}
+            variant="icon"
+            expandLabel={t('visualisation.tray.prompt.expand')}
+            collapseLabel={t('visualisation.tray.prompt.collapse')}
+            portalContainer={portalContainer}
+          />
+        )
+      }
+    >
       <dl>
         <dt>{t('visualisation.tray.status')}</dt>
         <dd>{statusText}</dd>
@@ -98,37 +133,9 @@ export const AgentDetails = ({
             <dd>{modeLabel(assignment.mode)}</dd>
             <dt>{t('visualisation.tray.assignmentStatus')}</dt>
             <dd>{statusLabel(assignment.status)}</dd>
-            <dt>{t('visualisation.tray.prompt')}</dt>
-            <dd>
-              <ExpandableText
-                text={assignment.prompt}
-                variant="ellipsis"
-                expandLabel={t('visualisation.tray.prompt.expand')}
-                collapseLabel={t('visualisation.tray.prompt.collapse')}
-              />
-            </dd>
           </>
         )}
       </dl>
-      {/*
-        Only while the agent is active: a finished agent has nothing more to
-        say, and its whole history is in the task dialog. The name carries the
-        role so it reads on its own in the tray (WCAG 2.4.6).
-      */}
-      {ACTIVE_AGENT_STATUSES.some((active) => active === agent.status) && (
-        <Button
-          className="react-aria-Button"
-          onPress={() => {
-            listenIn({
-              id: agentId,
-              roleId: agent.roleId,
-              assignmentId: agent.assignmentId,
-            });
-          }}
-        >
-          {t('visualisation.tray.listenIn', { role: roleName })}
-        </Button>
-      )}
-    </>
+    </TrayPanel>
   );
 };
