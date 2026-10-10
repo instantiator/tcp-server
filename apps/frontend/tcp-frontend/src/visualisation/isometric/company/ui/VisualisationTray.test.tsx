@@ -17,7 +17,7 @@ import {
   respondByRoute,
   type RouteResponse,
 } from '../../../../test-support/fetch-mock';
-import { modeLabel } from './modeLabel';
+import { modeLabel } from '../../../../api/modeLabel';
 import { VisualisationTray } from './VisualisationTray';
 
 const COMPANY_ID = 'company-1';

@@ -10,18 +10,21 @@ import {
   ListBoxItem,
   ListBoxSection,
   SearchField,
+  Text,
 } from 'react-aria-components';
 import { announce } from '../../announce/announcer';
 import {
   useCompanyRolesList,
+  useLiveAssignmentsList,
   useLiveCompanyAgentsList,
-  useLiveCompanyChatsList,
+  useLiveCompanyTasksList,
   useTranscriptSearch,
 } from '../../api/hooks';
+import { modeLabel } from '../../api/modeLabel';
+import { ACTIVE_ASSIGNMENT_STATUSES } from '../../api/statuses';
 import { t, type StringKey } from '../../strings';
 import { AddNewMenu } from '../AddNew/AddNewMenu';
 import { Icon } from '../Icon/Icon';
-import { isTerminalAgentStatus } from './agentStatus';
 import type { Eavesdrop } from './eavesdropStorage';
 import type { Conversation } from './useChat';
 import { useActivityStamps } from './useActivityStamps';
@@ -38,6 +41,21 @@ const GROUPS: readonly { id: Group; heading: StringKey }[] = [
   { id: 'finished', heading: 'chat.list.group.finished' },
 ];
 
+/** When a chat started: its only visible difference from another chat with the same role. */
+const startedFormatter = new Intl.DateTimeFormat(undefined, {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
+
+/**
+ * Whether an assignment is over. Read from the assignment, not its agent: the
+ * agents list holds only active agents, so a finished one isn't in it at all.
+ * An assignment not found yet is not finished.
+ */
+const isFinished = (status: string | undefined): boolean =>
+  status !== undefined &&
+  !(ACTIVE_ASSIGNMENT_STATUSES as readonly string[]).includes(status);
+
 /** One view in the list: a role chat, or an agent being listened in on. */
 interface Row {
   readonly conversation: Conversation;
@@ -47,6 +65,8 @@ interface Row {
   readonly activity: number;
   /** Its second line: what it is, and its state. */
   readonly detail: string;
+  /** A listened-in task's request, as a third line; `null` for everything else. */
+  readonly task: string | null;
 }
 
 export interface ChatListProps {
@@ -78,7 +98,8 @@ export const ChatList = ({
   onSelect,
   listRef,
 }: ChatListProps) => {
-  const chats = useLiveCompanyChatsList(companyId);
+  const assignments = useLiveAssignmentsList({ companyId });
+  const tasks = useLiveCompanyTasksList(companyId);
   const agents = useLiveCompanyAgentsList(companyId);
   const roles = useCompanyRolesList(companyId);
   const activity = useActivityStamps(agents.data);
@@ -99,8 +120,10 @@ export const ChatList = ({
   const search = useTranscriptSearch(companyId, searched);
   const transcriptMatches = new Set(search.data ?? []);
 
-  const statusOf = (agentId: string) =>
-    agents.data?.find((agent) => agent.id === agentId)?.status;
+  const assignmentOf = (agentId: string) =>
+    assignments.data?.find((assignment) => assignment.agentId === agentId);
+  const taskOf = (taskId: string | null | undefined) =>
+    taskId == null ? undefined : tasks.data?.find((task) => task.id === taskId);
   const roleName = (roleId: string) =>
     roles.data?.find((role) => role.id === roleId)?.name ??
     t('activity.role.unknown');
@@ -116,10 +139,10 @@ export const ChatList = ({
     );
 
   const rows: Row[] = [
-    ...(chats.data ?? []).flatMap((assignment): Row[] => {
+    ...(assignments.data ?? []).flatMap((assignment): Row[] => {
       const { agentId } = assignment;
-      if (typeof agentId !== 'string') return [];
-      const finished = isTerminalAgentStatus(statusOf(agentId));
+      if (assignment.mode !== 'chat' || typeof agentId !== 'string') return [];
+      const finished = isFinished(assignment.status);
       const reference = assignment.shortcode ?? null;
       return [
         {
@@ -129,32 +152,47 @@ export const ChatList = ({
             reference,
           },
           group: 'chats',
+          // Archiving a chat completes it, so a finished chat is an archived one.
           archived: finished,
           activity: activity(agentId, assignment.updatedAt),
           detail: [
             t('chat.list.kind.chat'),
-            reference,
+            t('chat.list.started', {
+              time: startedFormatter.format(new Date(assignment.createdAt)),
+            }),
             stateText(finished, true),
-          ]
-            .filter(Boolean)
-            .join(' · '),
+          ].join(' · '),
+          task: null,
         },
       ];
     }),
     ...eavesdrops.map((eavesdrop): Row => {
-      const finished = isTerminalAgentStatus(statusOf(eavesdrop.agentId));
+      const assignment = assignmentOf(eavesdrop.agentId);
+      const task = taskOf(assignment?.taskId);
+      const finished = isFinished(assignment?.status);
       return {
         conversation: { ...eavesdrop, readOnly: true },
         group: finished ? 'finished' : 'running',
         archived: eavesdrop.archived,
-        activity: activity(eavesdrop.agentId, undefined),
-        detail: [
-          t('chat.list.kind.listening'),
-          eavesdrop.reference,
-          stateText(finished, false),
-        ]
+        activity: activity(eavesdrop.agentId, assignment?.updatedAt),
+        // What the agent is doing and for which task tells apart rows that
+        // share a role; the stored shortcode stands in until the assignment
+        // is known.
+        detail: (assignment === undefined
+          ? [t('chat.list.kind.listening'), eavesdrop.reference]
+          : [
+              modeLabel(assignment.mode),
+              task === undefined
+                ? null
+                : t('visualisation.tray.taskHeading', {
+                    shortcode: task.shortcode,
+                  }),
+            ]
+        )
+          .concat(stateText(finished, false))
           .filter(Boolean)
           .join(' · '),
+        task: task?.request ?? null,
       };
     }),
   ];
@@ -234,10 +272,24 @@ export const ChatList = ({
                     <Icon icon={row.group === 'chats' ? MessageCircle : Ear} />
                   </span>
                   <span className="chat-list__text">
-                    <span className="chat-list__title">
-                      {row.conversation.roleName}
-                    </span>
-                    <span className="chat-list__detail">{row.detail}</span>
+                    {/*
+                      The role and the detail line name the row, so arrowing
+                      through same-role rows reads what sets each apart. The
+                      task's request is its description, read after.
+                    */}
+                    <Text slot="label" className="chat-list__label">
+                      <span className="chat-list__title">
+                        {row.conversation.roleName}
+                      </span>
+                      {/* A pause between the two lines, heard not seen. */}
+                      <span className="visually-hidden">,</span>{' '}
+                      <span className="chat-list__detail">{row.detail}</span>
+                    </Text>
+                    {row.task !== null && (
+                      <Text slot="description" className="chat-list__task">
+                        {row.task}
+                      </Text>
+                    )}
                   </span>
                 </ListBoxItem>
               ))}

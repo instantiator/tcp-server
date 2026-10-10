@@ -89,10 +89,14 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   // Set by an opener, so focus moves into the view it asked for.
   const [focusRequested, setFocusRequested] = useState(false);
 
-  const select = (conversation: Conversation): void => {
+  /**
+   * Opening a view from outside the list (Listen in, Add new): a listened-in
+   * agent joins the list, or comes back out of the archive. Picking a row in
+   * the list only selects it, so browsing "Show archived" un-archives nothing.
+   */
+  const open = (conversation: Conversation): void => {
     setSelected(conversation);
     if (conversation.readOnly !== true) return;
-    // Listening in: join the list, or come back out of the archive.
     const entry: Eavesdrop = {
       agentId: conversation.agentId,
       roleName: conversation.roleName,
@@ -110,7 +114,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
 
   const chat = useMemo<ChatContextValue>(() => {
     const openChat = (conversation: Conversation): void => {
-      select(conversation);
+      open(conversation);
       dock.remove(DOCK_ID);
       setIsOpen(true);
       setFocusRequested(true);
@@ -125,7 +129,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         openChat({ agentId: agent.id, roleName, reference: null });
       },
     };
-    // `select` closes over setters only, which are stable.
+    // `open` closes over setters only, which are stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dock, startChatMutation]);
 
@@ -155,7 +159,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         onFocused={() => {
           setFocusRequested(false);
         }}
-        onSelect={select}
+        onSelect={setSelected}
         onArchiveEavesdrop={(agentId) => {
           updateEavesdrops((list) =>
             list.map((e) =>

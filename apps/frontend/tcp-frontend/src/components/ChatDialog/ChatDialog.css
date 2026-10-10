@@ -76,6 +76,19 @@
   min-inline-size: 0;
 }
 
+.chat-list__label {
+  display: flex;
+  flex-direction: column;
+}
+
+/* One line of the task's request: enough to recognise it, never a wall of text. */
+.chat-list__task {
+  overflow: hidden;
+  font-size: 0.875em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .chat-list__title {
   font-weight: bold;
 }

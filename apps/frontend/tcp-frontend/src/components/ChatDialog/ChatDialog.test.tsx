@@ -65,17 +65,45 @@ const agent = (agentId: string, status: string, updatedAt = OLDER) => ({
 const chatAssignment = (
   { agentId, roleId }: { agentId: string; roleId: string },
   updatedAt: string,
+  status = 'in-progress',
 ) => ({
   id: `assignment-${agentId}`,
   companyId: COMPANY_ID,
   roleId,
   agentId,
+  taskId: null,
   mode: 'chat',
-  status: 'in-progress',
+  status,
   shortcode: null,
-  createdAt: OLDER,
+  createdAt: updatedAt,
   updatedAt,
 });
+
+/** The task the listened-in Writer works on. */
+const WRITER_TASK = {
+  id: 'task-1',
+  companyId: COMPANY_ID,
+  shortcode: '001',
+  request: 'Write the launch announcement',
+  status: 'in-progress',
+  createdAt: OLDER,
+  updatedAt: OLDER,
+};
+
+/** An agent's status, as its assignment's: a finished agent's work succeeded. */
+const assignmentStatus = (agentStatus: string): string =>
+  ['completed', 'failed', 'cancelled'].includes(agentStatus)
+    ? 'succeeded'
+    : 'in-progress';
+
+/** How a chat's start reads in the list. */
+const started = (iso: string) =>
+  t('chat.list.started', {
+    time: new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(new Date(iso)),
+  });
 
 const history = (agentId: string, text: string): AuditWireEvent[] => [
   {
@@ -145,35 +173,50 @@ const respond = ({
       { body: agent(WORKER.agentId, status(WORKER.agentId, 'running')) },
     ],
     [
+      // Like the server: with no status filter, only active agents.
       /\/api\/agent\?/,
       {
         body: [
           agent(SALES.agentId, status(SALES.agentId, 'idle'), NEWER),
           agent(LEGAL.agentId, status(LEGAL.agentId, 'idle')),
           agent(WORKER.agentId, status(WORKER.agentId, 'running')),
-        ],
-      },
-    ],
-    [
-      /\/api\/assignment\?.*mode=chat/,
-      {
-        body: [chatAssignment(SALES, NEWER), chatAssignment(LEGAL, OLDER)],
+        ].filter(({ status: s }) =>
+          ['idle', 'queued', 'running', 'paused'].includes(s),
+        ),
       },
     ],
     [
       /\/api\/assignment\?/,
       {
-        body: running
-          ? [
-              {
-                ...chatAssignment(WORKER, OLDER),
-                mode: 'implement',
-                shortcode: '001-002',
-              },
-            ]
-          : [],
+        body: [
+          chatAssignment(
+            SALES,
+            NEWER,
+            assignmentStatus(status(SALES.agentId, 'idle')),
+          ),
+          chatAssignment(
+            LEGAL,
+            OLDER,
+            assignmentStatus(status(LEGAL.agentId, 'idle')),
+          ),
+          ...(running
+            ? [
+                {
+                  ...chatAssignment(
+                    WORKER,
+                    OLDER,
+                    assignmentStatus(status(WORKER.agentId, 'running')),
+                  ),
+                  taskId: WRITER_TASK.id,
+                  mode: 'implement',
+                  shortcode: '001-002',
+                },
+              ]
+            : []),
+        ],
       },
     ],
+    [/\/api\/task\?/, { body: [WRITER_TASK] }],
     [
       /\/api\/company\/company-1\/roles/,
       {
@@ -462,7 +505,20 @@ describe('ChatDialog', () => {
       name: t('chat.list.showArchived'),
     });
     await user.click(box);
-    expect(row(/Legal/)).toBeInTheDocument();
+    expect(row(/Legal/)).toHaveAccessibleName(
+      `${LEGAL.roleName}, ${t('chat.list.kind.chat')} · ${started(OLDER)} · ${t('chat.list.state.completed')}`,
+    );
+  });
+
+  it('names each chat by when it started, so two with one role differ', async () => {
+    respond();
+    const user = userEvent.setup();
+    renderChat();
+    await openSales(user);
+
+    expect(row(/Sales/)).toHaveAccessibleName(
+      `${SALES.roleName}, ${t('chat.list.kind.chat')} · ${started(NEWER)} · ${t('chat.list.state.open')}`,
+    );
   });
 
   describe('listening in', () => {
@@ -493,7 +549,29 @@ describe('ChatDialog', () => {
       ).toBeNull();
     });
 
-    it('archives without stopping the agent, and comes back when chosen again', async () => {
+    it('names the work and task, and files a finished one under "finished"', async () => {
+      respond({ running: true, statuses: { [WORKER.agentId]: 'completed' } });
+      const user = userEvent.setup();
+      renderChat();
+      await user.click(
+        screen.getByRole('button', { name: 'Listen in to Writer' }),
+      );
+      await within(dialog()).findByText('Drafting');
+
+      const finished = await within(list()).findByRole('group', {
+        name: t('chat.list.group.finished'),
+      });
+      const option = within(finished).getByRole('option', { name: /Writer/ });
+      expect(option).toHaveAccessibleName(
+        `${WORKER.roleName}, ${t('visualisation.mode.implement')} · ${t(
+          'visualisation.tray.taskHeading',
+          { shortcode: WRITER_TASK.shortcode },
+        )} · ${t('chat.list.state.finished')}`,
+      );
+      expect(option).toHaveAccessibleDescription(WRITER_TASK.request);
+    });
+
+    it('archives without stopping the agent, and comes back only on Listen in', async () => {
       respond();
       const user = userEvent.setup();
       renderChat();
@@ -524,11 +602,20 @@ describe('ChatDialog', () => {
           name: t('chat.list.showArchived'),
         }),
       );
+      // Browsing the archive is not listening in again.
       await user.click(row(/Writer/));
       await user.click(
         within(dialog()).getByRole('checkbox', {
           name: t('chat.list.showArchived'),
         }),
+      );
+      expect(
+        within(list()).queryByRole('option', { name: /Writer/ }),
+      ).toBeNull();
+
+      await user.keyboard('{Escape}');
+      await user.click(
+        screen.getByRole('button', { name: 'Listen in to Writer' }),
       );
       expect(row(/Writer/)).toBeInTheDocument();
     });

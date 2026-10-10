@@ -13,7 +13,7 @@ import { ExpandableText } from '../../../../components/ExpandableText/Expandable
 import { RoundIconButton } from '../../../../components/RoundIconButton/RoundIconButton';
 import { t } from '../../../../strings';
 import { isWaitingToStart } from '../rules/companySnapshot';
-import { modeLabel } from './modeLabel';
+import { modeLabel } from '../../../../api/modeLabel';
 import { TrayPanel } from './TrayPanel';
 import { useListenIn } from './useListenIn';
 

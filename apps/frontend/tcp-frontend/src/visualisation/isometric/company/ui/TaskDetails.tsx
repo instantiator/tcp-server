@@ -17,7 +17,7 @@ import { RoundIconButton } from '../../../../components/RoundIconButton/RoundIco
 import { ACTIVE_TASK_STATUSES } from '../../../../api/statuses';
 import { ExpandableText } from '../../../../components/ExpandableText/ExpandableText';
 import { t } from '../../../../strings';
-import { modeLabel } from './modeLabel';
+import { modeLabel } from '../../../../api/modeLabel';
 import { StatusIcon } from './StatusIcon';
 import { TrayPanel } from './TrayPanel';
 import { useListenIn } from './useListenIn';

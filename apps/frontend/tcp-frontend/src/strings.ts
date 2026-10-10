@@ -107,6 +107,7 @@ const strings = {
   'chat.list.state.completed': 'Completed',
   'chat.list.state.running': 'Running',
   'chat.list.state.finished': 'Finished',
+  'chat.list.started': 'started {time}',
   'chat.list.showArchived': 'Show archived',
   'chat.list.empty': 'No chats yet.',
   'chat.list.noMatches': 'No chats match.',
@@ -577,7 +578,7 @@ const strings = {
     'The storage browser is not configured, so these are shown as text only.',
 
   // Assignment modes, the office's word for each — `modeLabel` in
-  // `visualisation/isometric/company/ui/modeLabel.ts`, mirroring
+  // `api/modeLabel.ts`, mirroring
   // `statusLabel` in `api/statuses.ts`.
   'visualisation.mode.plan': 'Planning',
   'visualisation.mode.implement': 'Implementing',
