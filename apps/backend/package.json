@@ -54,6 +54,7 @@
     "class-validator": "^0.15.1",
     "commander": "^15.0.0",
     "csv-parse": "^7.0.3",
+    "decimal.js": "^10.6.0",
     "fast-xml-parser": "^5.10.1",
     "inquirer": "^14.0.2",
     "ioredis": "^5.11.1",
