@@ -250,13 +250,11 @@ test.describe('add new', () => {
     });
     await expect(firstPanel).toBeVisible();
 
-    // The dialog is modal, so its own "Add new" is the reachable one —
-    // scoped to the dialog because the floating button, though inert behind
-    // the overlay, still shares its accessible name (003.01 decision 1).
+    // The dialog's own control offers chats only (000.05), so it is named
+    // "New chat" and lists the roles straight away.
     await chatDialog
-      .getByRole('button', { name: ADD_NEW_TRIGGER, exact: true })
+      .getByRole('button', { name: NEW_CHAT_ITEM, exact: true })
       .click();
-    await page.getByRole('menuitem', { name: NEW_CHAT_ITEM }).click();
     await page.getByRole('menuitem', { name: roleBName }).click();
 
     const secondPanel = page.getByRole('region', {

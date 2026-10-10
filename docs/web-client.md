@@ -932,12 +932,12 @@ It appears in two places:
   `h1` in the DOM, so it comes early in the tab order. It rises above the dock
   when one is showing, and slides left of the office view's tray while that is
   open.
-- **The chat dialog's title bar**, while a company is the current route. The
-  dialog is modal, so the page's own control is out of reach while it shows.
-  From here a new chat joins the dialog as another panel, and a new task
-  opens as a dialog stacked on top of the chat. The task dialog has no such
-  menu: it holds nothing the user typed, so they close it and use the page's
-  control.
+- **The chat dialog's title bar**, while a company is the current route, as a
+  small round "+" named "New chat" (`inChat`). The dialog is about chats, so
+  this one lists the roles straight away, with no task option. A new chat
+  joins the dialog as another panel. The dialog is modal, so the page's own
+  control is out of reach while it shows. The task dialog has no such menu: it
+  holds nothing the user typed, so they close it and use the page's control.
 
 While a chat starts, the chosen role reads "Starting chat with…" and keeps
 focus, the other roles are disabled, and the change is announced. On success

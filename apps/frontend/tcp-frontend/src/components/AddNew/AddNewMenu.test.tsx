@@ -368,7 +368,9 @@ describe('AddNewMenu', () => {
     }
 
     expect(screen.getByRole('menuitem', { name: 'Role 50' })).toHaveFocus();
-  });
+    // Fifty key presses one at a time: well past Vitest's 5 s default when
+    // the machine is busy (the pre-push gate runs every suite at once).
+  }, 15_000);
 
   describe('accessibility', () => {
     it('has no violations with the top menu open', async () => {

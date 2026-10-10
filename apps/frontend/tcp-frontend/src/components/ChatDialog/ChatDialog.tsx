@@ -85,7 +85,9 @@ export const ChatDialog = ({
       heading={t('chat.dialog.heading')}
       onMinimise={onMinimise}
       hideClose
-      actions={companyId !== undefined && <AddNewMenu companyId={companyId} />}
+      actions={
+        companyId !== undefined && <AddNewMenu companyId={companyId} inChat />
+      }
     >
       {conversations.map((conversation) => (
         <ChatConversation
