@@ -1,7 +1,7 @@
 {
   "name": "tcp-backend",
   "version": "0.0.1",
-  "description": "The NestJS services (API, agent runner, three MCP servers) and the tcp-cli.",
+  "description": "The NestJS services (API, agent runner, MCP servers) and the tcp-cli.",
   "private": true,
   "license": "MIT",
   "engines": {
@@ -9,14 +9,14 @@
   },
   "scripts": {
     "build": "npm run build:apps",
-    "build:apps": "nest build tcp-server && nest build tcp-agent && nest build tcp-mcp-storage && nest build tcp-mcp-memory && nest build tcp-mcp-interactions && nest build tcp-mcp-tasks && nest build tcp-cli",
+    "build:apps": "nest build tcp-server && nest build tcp-agent && nest build tcp-mcp-storage && nest build tcp-mcp-memory && nest build tcp-mcp-interactions && nest build tcp-mcp-tasks && nest build tcp-mcp-utilities && nest build tcp-cli",
     "build:tcp-cli": "nest build tcp-cli",
     "start": "nest start tcp-server",
     "start:dev": "nest start tcp-server --watch",
     "start:debug": "nest start tcp-server --debug --watch",
     "start:prod": "node dist/apps/tcp-server/main",
     "start:tcp-cli": "node dist/apps/tcp-cli/main",
-    "typecheck": "tsc --noemit -p apps/tcp-server/tsconfig.json && tsc --noemit -p apps/tcp-agent/tsconfig.json && tsc --noemit -p apps/tcp-cli/tsconfig.json && tsc --noemit -p apps/tcp-mcp-storage/tsconfig.json && tsc --noemit -p apps/tcp-mcp-memory/tsconfig.json && tsc --noemit -p apps/tcp-mcp-interactions/tsconfig.json && tsc --noemit -p apps/tcp-mcp-tasks/tsconfig.json && tsc --noemit -p test/tsconfig.json",
+    "typecheck": "tsc --noemit -p apps/tcp-server/tsconfig.json && tsc --noemit -p apps/tcp-agent/tsconfig.json && tsc --noemit -p apps/tcp-cli/tsconfig.json && tsc --noemit -p apps/tcp-mcp-storage/tsconfig.json && tsc --noemit -p apps/tcp-mcp-memory/tsconfig.json && tsc --noemit -p apps/tcp-mcp-interactions/tsconfig.json && tsc --noemit -p apps/tcp-mcp-tasks/tsconfig.json && tsc --noemit -p apps/tcp-mcp-utilities/tsconfig.json && tsc --noemit -p test/tsconfig.json",
     "test": "jest --runInBand",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",

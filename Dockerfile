@@ -98,6 +98,14 @@ COPY --from=builder /app/apps/backend/dist/apps/tcp-mcp-tasks ./dist
 EXPOSE 3013
 CMD ["node", "dist/main.js"]
 
+FROM node:26-alpine AS tcp-mcp-utilities
+WORKDIR /app
+RUN apk add --no-cache curl
+COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=builder /app/apps/backend/dist/apps/tcp-mcp-utilities ./dist
+EXPOSE 3014
+CMD ["node", "dist/main.js"]
+
 # ---- Web bundle -------------------------------------------------------------
 # `builder`'s build:apps is `--workspace apps/backend` only, so the frontend
 # has never been built by anything above this line. Giving it its own stage

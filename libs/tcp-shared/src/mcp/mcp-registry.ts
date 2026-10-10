@@ -40,6 +40,12 @@ export const MCP_REGISTRY = [
     usage:
       'completing your assignment — planning a task, submitting finished work, or assuring another agent’s work (the exact tool depends on your mode).',
   },
+  {
+    name: 'utilities',
+    envKey: 'MCP_UTILITIES_URL',
+    usage:
+      'arithmetic on money and quantities, date calculations and unit conversion — use these instead of working figures out yourself.',
+  },
 ] as const;
 
 /**

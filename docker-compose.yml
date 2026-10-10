@@ -8,6 +8,7 @@ x-internal-urls: &internal-urls
   MCP_MEMORY_URL: http://tcp-mcp-memory:3011
   MCP_INTERACTIONS_URL: http://tcp-mcp-interactions:3012
   MCP_TASKS_URL: http://tcp-mcp-tasks:3013
+  MCP_UTILITIES_URL: http://tcp-mcp-utilities:3014
   TCP_SERVER_URL: http://tcp-server:3000
   TCP_AGENT_URL: http://tcp-agent:3001
   OIDC_INTERNAL_ISSUER_URL: http://zitadel:8080
@@ -411,6 +412,24 @@ services:
     # Internal-only by default (see docker-compose.dev-ports.yml to publish).
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:3013/health']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  tcp-mcp-utilities:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: tcp-mcp-utilities
+    image: tcp-mcp-utilities:latest
+    restart: unless-stopped
+    # Stateless: no database or tcp-server calls, so nothing to wait for.
+    environment:
+      <<: *internal-urls
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+    # Internal-only by default (see docker-compose.dev-ports.yml to publish).
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3014/health']
       interval: 15s
       timeout: 5s
       retries: 5

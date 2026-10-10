@@ -30,3 +30,6 @@ services:
   tcp-mcp-tasks:
     ports:
       - '3013:3013'
+  tcp-mcp-utilities:
+    ports:
+      - '3014:3014'
