@@ -31,15 +31,30 @@ const ALWAYS_LIT: ReadonlySet<RoomPurpose> = new Set([
 ]);
 
 /**
- * Works out what is lit: a task or one-to-one room while a running agent's
- * avatar stands in it (the shared rooms always), and a task's whiteboard
- * while the task is being worked and isn't paused. Pure, so the scene
- * redraws only when the result changes by value.
+ * Works out what is lit:
+ * - the shared rooms, always;
+ * - a task's room and whiteboard while the task is being worked and isn't
+ *   paused — by the task's status alone, so the room stays lit while one
+ *   assignment hands over to the next and no avatar is in it;
+ * - a one-to-one room while a running agent's avatar stands in it.
+ *
+ * Pure, so the scene redraws only when the result changes by value.
  */
 export function roomLighting(
   world: OfficeWorld,
   snapshot: CompanySnapshot,
 ): OfficeLighting {
+  const litBoards = new Set(
+    snapshot.tasks
+      .filter(
+        (task) =>
+          ACTIVE_BOARD_STATUSES.has(task.status) &&
+          task.pausedAt === null &&
+          world.rooms.some((room) => room.id === taskRoomId(task.id)),
+      )
+      .map((task) => task.id),
+  );
+
   const runningAgents = new Set(
     snapshot.agents
       .filter((agent) => agent.status === 'running')
@@ -51,25 +66,16 @@ export function roomLighting(
 
   const litRooms = new Set(
     world.rooms
-      .filter(
-        (room) =>
-          ALWAYS_LIT.has(room.purpose) ||
-          runningAvatars.some((avatar) =>
-            tileInBounds(room.bounds, avatar.location),
-          ),
+      .filter((room) =>
+        ALWAYS_LIT.has(room.purpose)
+          ? true
+          : room.taskId !== undefined
+            ? litBoards.has(room.taskId)
+            : runningAvatars.some((avatar) =>
+                tileInBounds(room.bounds, avatar.location),
+              ),
       )
       .map((room) => room.id),
-  );
-
-  const litBoards = new Set(
-    snapshot.tasks
-      .filter(
-        (task) =>
-          ACTIVE_BOARD_STATUSES.has(task.status) &&
-          task.pausedAt === null &&
-          world.rooms.some((room) => room.id === taskRoomId(task.id)),
-      )
-      .map((task) => task.id),
   );
 
   return { litRooms, litBoards };
