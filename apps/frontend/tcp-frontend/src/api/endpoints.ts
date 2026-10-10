@@ -423,6 +423,47 @@ export const useSystemStatusQuery = (
     queryFn: () => unwrap(api.GET('/api/system/status')),
   });
 
+/**
+ * The shutdown state, for the dialog that controls it. The wrapper in
+ * `hooks.ts` chooses the polling; none is set here.
+ */
+export const useShutdownStatusQuery = (
+  options: Pick<
+    UseQueryOptions<components['schemas']['ShutdownStatusResponseDto']>,
+    'retry' | 'refetchInterval' | 'enabled'
+  > = {},
+) =>
+  useQuery({
+    ...options,
+    queryKey: queryKeys.shutdownStatus(),
+    queryFn: () => unwrap(api.GET('/api/system/shutdown')),
+  });
+
+/**
+ * Starts draining. A bare `?force=` or `?restart=` is how the server reads a
+ * flag: present and not `'false'`.
+ */
+export const useBeginShutdownMutation = () =>
+  useMutation({
+    mutationFn: ({ force, restart }: { force: boolean; restart: boolean }) =>
+      unwrap(
+        api.POST('/api/system/shutdown', {
+          params: {
+            query: {
+              ...(force && { force: '' }),
+              ...(restart && { restart: '' }),
+            },
+          },
+        }),
+      ),
+  });
+
+/** Cancels the drain and reopens intake. */
+export const useCancelShutdownMutation = () =>
+  useMutation({
+    mutationFn: () => unwrap(api.DELETE('/api/system/shutdown')),
+  });
+
 /** The health of every service the system depends on. Administrators only. */
 export const useSystemHealthQuery = () =>
   useQuery({

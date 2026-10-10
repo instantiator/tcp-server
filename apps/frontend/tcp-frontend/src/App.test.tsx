@@ -41,18 +41,24 @@ describe('App', () => {
       // The company page a deep link can land on also reads the spend
       // endpoints (000.02), which answer with an object rather than a list —
       // the array fallback below would otherwise crash it.
-      const body = /\/api\/company\/[^/]+$/.test(url)
-        ? 'null'
-        : /\/api\/spend(\?|$)/.test(url)
-          ? JSON.stringify({ trackingSince: null, providers: [], caps: [] })
-          : /\/api\/company\/[^/]+\/spend$/.test(url)
-            ? JSON.stringify({
-                trackingSince: null,
-                providers: [],
-                tasks: [],
-                series: [],
-              })
-            : '[]';
+      // The shell's system banner reads the status on every signed-in page.
+      const body = url.endsWith('/api/system/status')
+        ? JSON.stringify({
+            admin: false,
+            shutdown: { state: 'idle', restart: false },
+          })
+        : /\/api\/company\/[^/]+$/.test(url)
+          ? 'null'
+          : /\/api\/spend(\?|$)/.test(url)
+            ? JSON.stringify({ trackingSince: null, providers: [], caps: [] })
+            : /\/api\/company\/[^/]+\/spend$/.test(url)
+              ? JSON.stringify({
+                  trackingSince: null,
+                  providers: [],
+                  tasks: [],
+                  series: [],
+                })
+              : '[]';
       return Promise.resolve(
         new Response(body, {
           headers: { 'Content-Type': 'application/json' },

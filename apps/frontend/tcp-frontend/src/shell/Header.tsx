@@ -14,6 +14,7 @@ import { startSignOut } from '../auth/sign-out';
 import { useSession } from '../auth/useSession';
 import { Icon, WithTooltip } from '../components/Icon/Icon';
 import { MembershipsDialog } from '../components/MembershipsDialog/MembershipsDialog';
+import { ShutdownDialog } from '../components/ShutdownDialog/ShutdownDialog';
 import { SystemHealthDialog } from '../components/SystemHealthDialog/SystemHealthDialog';
 import { ProfileDialog } from '../components/ProfileDialog/ProfileDialog';
 import { t } from '../strings';
@@ -75,7 +76,7 @@ export const Header = () => {
   const session = useSession();
   const companyId = useMatch('/company/:companyId/*')?.params.companyId;
   const [openDialog, setOpenDialog] = useState<
-    'profile' | 'memberships' | 'health' | null
+    'profile' | 'memberships' | 'health' | 'shutdown' | null
   >(null);
   // A failed or pending status call leaves the System menu out.
   const isAdmin = useSystemStatus().data?.admin === true;
@@ -92,6 +93,7 @@ export const Header = () => {
 
   const onSystemAction = (key: Key): void => {
     if (key === 'health') setOpenDialog('health');
+    else if (key === 'shutdown') setOpenDialog('shutdown');
   };
 
   const systemLabel = t('header.system.label');
@@ -122,6 +124,7 @@ export const Header = () => {
           <Popover>
             <Menu onAction={onSystemAction}>
               <MenuItem id="health">{t('header.system.health')}</MenuItem>
+              <MenuItem id="shutdown">{t('header.system.shutdown')}</MenuItem>
             </Menu>
           </Popover>
         </MenuTrigger>
@@ -165,6 +168,13 @@ export const Header = () => {
       )}
       {openDialog === 'health' && (
         <SystemHealthDialog
+          onClose={() => {
+            setOpenDialog(null);
+          }}
+        />
+      )}
+      {openDialog === 'shutdown' && (
+        <ShutdownDialog
           onClose={() => {
             setOpenDialog(null);
           }}

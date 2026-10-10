@@ -160,6 +160,8 @@ export const queryKeys = {
   companySpend: (companyId: string) => ['spend', 'detail', companyId] as const,
   /** Who the caller is to the system (admin or not) and the shutdown state. */
   systemStatus: () => ['system', 'detail'] as const,
+  /** Whether a shutdown or restart is under way, and whether restart is available. */
+  shutdownStatus: () => ['system', 'history'] as const,
   /** The combined health of the server, agent runner and MCP servers. */
   systemHealth: () => ['system', 'status'] as const,
 } as const;

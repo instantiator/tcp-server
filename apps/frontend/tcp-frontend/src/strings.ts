@@ -36,6 +36,7 @@ const strings = {
   'header.account.signOut': 'Sign out',
   'header.system.label': 'System',
   'header.system.health': 'System health',
+  'header.system.shutdown': 'Shut down or restart…',
 
   'breadcrumbs.label': 'Breadcrumb',
 
@@ -236,6 +237,52 @@ const strings = {
   'systemHealth.status.not_configured': 'Not configured',
   'systemHealth.refresh': 'Refresh',
   'systemHealth.fullReport': 'Full report',
+  'shutdown.heading': 'Shut down or restart',
+  'shutdown.loading': 'shutdown status',
+  'shutdown.error': 'The shutdown status could not be loaded. Try again.',
+  'shutdown.explain':
+    'A graceful shutdown lets every agent finish its current step, then pauses it. Paused tasks wait until someone resumes them.',
+  'shutdown.explainRestart':
+    'Restart does the same, then restarts the services, and paused work carries on by itself.',
+  'shutdown.restart': 'Restart',
+  'shutdown.graceful': 'Shut down gracefully',
+  'shutdown.force': 'Force shut down…',
+  'shutdown.forceConfirm':
+    'This stops agents mid-call and wastes the tokens already spent. Force shut down?',
+  'shutdown.forceConfirmed': 'Force shut down',
+  'shutdown.back': 'Back',
+  'shutdown.draining.one':
+    'Shutting down: {count} agent still finishing its current step',
+  'shutdown.draining.other':
+    'Shutting down: {count} agents still finishing their current step',
+  'shutdown.restartDraining.one':
+    'Restarting: {count} agent still finishing its current step',
+  'shutdown.restartDraining.other':
+    'Restarting: {count} agents still finishing their current step',
+  'shutdown.quiesced':
+    'Every agent is at rest. You can stop the services now, for example with ./scripts/stop-dev.sh. Agents stay paused until resumed.',
+  'shutdown.restarting':
+    'Restarting the services… This page reconnects by itself.',
+  'shutdown.restarted': 'The system restarted. Paused work is carrying on.',
+  'shutdown.cancel': 'Cancel shutdown',
+  'shutdown.cancelRestart': 'Cancel restart',
+  'shutdown.announce.idle': 'The system is taking new work again',
+  'shutdown.announce.draining': 'Shutting down: agents are finishing',
+  'shutdown.announce.restartDraining': 'Restarting: agents are finishing',
+  'shutdown.announce.quiesced': 'Every agent is at rest',
+  'shutdown.announce.restarting': 'Restarting the services',
+  'shutdown.announce.restarted': 'The system restarted',
+  'banner.system.label': 'System status',
+  'banner.system.draining':
+    "The system is shutting down. New work can't start; running agents are finishing their current step.",
+  'banner.system.restartDraining':
+    'The system is restarting. Running agents are finishing their current step, then everything carries on by itself.',
+  'banner.system.quiesced':
+    "The system has shut down. Work carries on once it's started again.",
+  'banner.system.restarting':
+    'The system is restarting. This page reconnects by itself.',
+  'banner.system.unreachable':
+    "The server can't be reached right now. This page keeps trying.",
 
   // Announcements. Every wording here is deliberately count-agnostic —
   // 'Tasks: {count} added', never '{count} tasks added' — because `t` has no
@@ -598,6 +645,8 @@ const strings = {
     "This task hasn't finished, so its room can't be closed.",
   'refusal.start.noPlanner':
     'No planner is set for this task or its company. Choose one, then start the task.',
+  'refusal.shutdown.wrongState':
+    "A shutdown or restart is already under way, or restart isn't available here.",
   'refusal.shuttingDown':
     "The system is shutting down and isn't taking new work.",
   'refusal.server': 'Something went wrong on the server. Try again.',

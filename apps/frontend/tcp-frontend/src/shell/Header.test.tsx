@@ -324,6 +324,53 @@ describe('Header', () => {
         ).toBeInTheDocument();
       });
 
+      it('offers "Shut down or restart…" beside it', async () => {
+        const user = userEvent.setup();
+        renderHeader(SIGNED_IN);
+
+        await user.click(await systemButton());
+
+        expect(
+          screen.getAllByRole('menuitem').map((i) => i.textContent),
+        ).toEqual([t('header.system.health'), t('header.system.shutdown')]);
+      });
+
+      it('opens the shutdown dialog, and focus returns to the button on close', async () => {
+        respondByRoute([
+          [
+            /\/api\/system\/shutdown/,
+            {
+              body: {
+                state: 'idle',
+                forced: false,
+                agentsRunning: 0,
+                restart: false,
+                restartSupported: false,
+              },
+            },
+          ],
+          [/\/api\/system\/status/, { body: STATUS(true) }],
+        ]);
+        const user = userEvent.setup();
+        renderHeader(SIGNED_IN);
+
+        const button = await systemButton();
+        await user.click(button);
+        await user.click(
+          screen.getByRole('menuitem', { name: t('header.system.shutdown') }),
+        );
+        expect(
+          await screen.findByRole('dialog', { name: t('shutdown.heading') }),
+        ).toBeInTheDocument();
+        await user.click(
+          screen.getByRole('button', { name: t('dialog.close') }),
+        );
+
+        await waitFor(() => {
+          expect(document.activeElement).toBe(button);
+        });
+      });
+
       it('opens the health dialog, and focus returns to the button on close', async () => {
         const user = userEvent.setup();
         renderHeader(SIGNED_IN);

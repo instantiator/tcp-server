@@ -69,12 +69,16 @@ import {
   useSpendOverview,
   useStartChatMutation,
   useStartTaskMutation,
+  useBeginShutdownMutation,
+  useCancelShutdownMutation,
+  useShutdownStatusQuery,
   useSystemHealthQuery,
   useSystemStatusQuery,
   useTask,
   useTasks,
   useUploadMaterialMutation,
 } from './endpoints';
+import { queryKeys } from './query-keys';
 import type { components } from './schema';
 import { useSession } from '../auth/useSession';
 
@@ -98,6 +102,66 @@ export const useSystemStatus = (
     retry: false,
     ...options,
     enabled: signedIn && (options.enabled ?? true),
+  });
+};
+
+/** How often the shutdown dialog asks while something is happening. */
+const SHUTDOWN_POLL_MS = 2_000;
+
+/**
+ * The shutdown state, while the shutdown dialog is open.
+ *
+ * Polls while a drain is under way, and while the server is unreachable after
+ * a restart was seen (it is down and coming back). TanStack keeps the last good
+ * answer through a failed refetch, which is how "after a restart was seen" is
+ * known. Idle, or at rest without a restart, nothing changes by itself.
+ */
+export const useShutdownStatus = (enabled: boolean) =>
+  useShutdownStatusQuery({
+    enabled,
+    retry: false,
+    refetchInterval: (query) => {
+      if (!enabled) return false;
+      const { data, status } = query.state;
+      if (status === 'error') return data?.restart === true && SHUTDOWN_POLL_MS;
+      if (data === undefined || data.state === 'idle') return false;
+      // At rest without a restart, nothing more happens by itself.
+      return (data.state === 'draining' || data.restart) && SHUTDOWN_POLL_MS;
+    },
+  });
+
+/**
+ * Starts a shutdown or restart. The answer is the new state, so it goes
+ * straight into the cache; the system status carries the same state for the
+ * banner.
+ */
+export const useBeginShutdown = () => {
+  const queryClient = useQueryClient();
+  const begin = useBeginShutdownMutation();
+  return useMutation({
+    mutationFn: (flags: { force: boolean; restart: boolean }) =>
+      begin.mutateAsync(flags),
+    onSuccess: (status) => {
+      queryClient.setQueryData(queryKeys.shutdownStatus(), status);
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.systemStatus(),
+      });
+    },
+  });
+};
+
+/** Cancels a shutdown or restart that is still draining or at rest. */
+export const useCancelShutdown = () => {
+  const queryClient = useQueryClient();
+  const cancel = useCancelShutdownMutation();
+  return useMutation({
+    mutationFn: () => cancel.mutateAsync(),
+    onSuccess: (status) => {
+      queryClient.setQueryData(queryKeys.shutdownStatus(), status);
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.systemStatus(),
+      });
+    },
   });
 };
 
