@@ -972,7 +972,7 @@ header.
 - **Lighting shows what is being worked.** A room is lit while a running
   agent's avatar is in it, and the corridor is always lit. A task's whiteboard
   is lit while the task is `planning`, `in-progress` or `finalising` and not
-  paused. Everything else is dimmed (`palette.dim()`). `rules/roomLighting.ts`
+  paused. Everything else is dimmed (`palette.dim()`), except walls: they keep their full colour, so a dark room's outline stays visible. `rules/roomLighting.ts`
   works it out as a pure function, and the scene redraws its static layers only
   when the lit sets change by value. The switch is instant, with no fade, so
   reduced motion needs nothing. Like the rest of the canvas, it ignores themes.

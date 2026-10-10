@@ -64,7 +64,7 @@ export function roomLighting(
 }
 
 /**
- * Whether a floor or wall tile is lit: it takes its room's lighting, by the
+ * Whether a floor tile is lit (walls are never dimmed): it takes its room's lighting, by the
  * same rule `renderRegion` uses to pick a tile's room (the first room other
  * than the corridor whose bounds hold it). A tile in no such room — the
  * corridor, or the apron outside — is always lit.

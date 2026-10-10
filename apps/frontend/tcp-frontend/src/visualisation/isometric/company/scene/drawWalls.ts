@@ -1,7 +1,7 @@
 import type { GameObjects, Scene } from 'phaser';
 import { depthOf, TILE_WIDTH, tileToScreen } from '../motion/iso';
 import type { Region, Tile } from '../world/types';
-import { WALL_COLOURS, dim } from './palette';
+import { WALL_COLOURS } from './palette';
 
 /**
  * A wall's height in pixels. Short on purpose — a wall this low never hides
@@ -12,14 +12,12 @@ export const WALL_HEIGHT = 12;
 /**
  * Draws one short `IsoBox` per wall tile in `region`. An `IsoBox` sized
  * `TILE_WIDTH` matches a tile's footprint exactly, and each is depth-sorted
- * by its own screen `y` so nearer walls draw over further ones. A wall
- * `isLit` says is unlit is drawn dimmed.
+ * by its own screen `y` so nearer walls draw over further ones.
+ *
+ * Walls keep their full colour when their room is dimmed: only the floor and
+ * furniture go dark, so the room's outline stays easy to see.
  */
-export function drawWalls(
-  scene: Scene,
-  region: Region,
-  isLit: (tile: Tile) => boolean,
-): GameObjects.IsoBox[] {
+export function drawWalls(scene: Scene, region: Region): GameObjects.IsoBox[] {
   const boxes: GameObjects.IsoBox[] = [];
 
   region.cells.forEach((row, rowIndex) => {
@@ -28,16 +26,12 @@ export function drawWalls(
         return;
       }
 
-      const tile = {
+      const tile: Tile = {
         x: region.origin.x + colIndex,
         y: region.origin.y + rowIndex,
       };
       const { x: cx, y: cy } = tileToScreen(tile);
-      const base = WALL_COLOURS[cell.floor];
-      const lit = isLit(tile);
-      const colours = lit
-        ? base
-        : { top: dim(base.top), left: dim(base.left), right: dim(base.right) };
+      const colours = WALL_COLOURS[cell.floor];
 
       const box = scene.add.isobox(
         cx,
