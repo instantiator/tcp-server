@@ -4,7 +4,7 @@
 
 import type { AuditWireEvent } from '../events/wire-events';
 import { ASSIGNMENT_COMPLETE_LABEL, parseClockTime } from './format';
-import type { LogEntry } from './entries';
+import type { LogEntry, ToolSummary } from './entries';
 import {
   compactionSummary,
   eventLabel,
@@ -124,9 +124,50 @@ class JsonTextContentAuditEventRenderer implements AuditEventRenderer {
         label: eventLabel(e),
         text: JSON.stringify(body, null, 2),
         json: true,
+        tool: summariseTool(e),
       },
     ];
   }
+}
+
+/** Whether a value is a non-null object, so its fields can be read. */
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+/** A content value as text: a string, or the joined text of `{ type: 'text', text }` parts. */
+function contentText(content: unknown): string | undefined {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return undefined;
+  const parts = content.flatMap((part) =>
+    isRecord(part) && typeof part['text'] === 'string' ? [part['text']] : [],
+  );
+  return parts.length > 0 ? parts.join('') : undefined;
+}
+
+/**
+ * The key facts of a tool event. A result's output is usually a serialised
+ * LangChain `ToolMessage` (`{ kwargs: { status, content } }`), sometimes a
+ * plain string. Any other shape yields the name alone: the full JSON is still
+ * in the entry's `text`.
+ */
+function summariseTool(e: AuditWireEvent): ToolSummary {
+  const tool = e.payload['tool'];
+  const summary: ToolSummary = {
+    name: typeof tool === 'string' ? tool : 'unknown',
+  };
+  if (e.eventType !== 'tool_result') return summary;
+  const output = e.payload['output'];
+  const fields =
+    isRecord(output) && isRecord(output['kwargs'])
+      ? output['kwargs']
+      : undefined;
+  const status = fields?.['status'];
+  if (typeof status === 'string') summary.status = status;
+  const content = contentText(
+    fields === undefined ? output : fields['content'],
+  );
+  if (content !== undefined) summary.content = content;
+  return summary;
 }
 
 /** `llm_request` (bare line), `decision` (its summary), `compaction` (its metrics) — all line-only. */

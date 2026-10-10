@@ -125,7 +125,7 @@ export type {
 export { EventLogBuffer } from './transcript/event-log';
 export type { AppendEvent } from './transcript/event-log';
 export { renderEntry } from './transcript/entries';
-export type { LogEntry } from './transcript/entries';
+export type { LogEntry, ToolSummary } from './transcript/entries';
 export { plainStyle } from './transcript/style';
 export type { EntryStyle, StyleBackend } from './transcript/style';
 export { HeadingBlockRenderer, ScopeTracker } from './transcript/heading';

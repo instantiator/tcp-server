@@ -35,6 +35,17 @@ export interface LogEntry {
   text: string;
   /** When true, `text` is pretty-printed JSON — indented verbatim, not wrapped. */
   json?: boolean;
+  /** The key facts of a tool call or result, for surfaces that show a summary before the JSON. */
+  tool?: ToolSummary;
+}
+
+/** What a tool entry is about, read from its payload; any field the payload lacks is absent. */
+export interface ToolSummary {
+  name: string;
+  /** A result's status, e.g. `success` or `error`. */
+  status?: string;
+  /** A result's text content. */
+  content?: string;
 }
 
 /** Whether an entry renders as an indented content block (vs a single trailing line). */
