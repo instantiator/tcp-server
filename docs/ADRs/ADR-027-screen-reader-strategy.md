@@ -332,3 +332,11 @@ before if it was last. Axe and a focus assertion cover both paths.
 - **Reading order is unchanged by the new layout.** Fixed and floating regions are CSS only, so the DOM order is heading, actions, description, body, Follow, Close. Follow moved from beside the heading to after the body.
 - **Statuses are named images.** A task's status icon sits before its heading, outside the `h2`, so the landmark stays "Task 002" while the status reads first. Each assignment row's icon is named for its status ("Succeeded").
 - **An assignment's prompt is a native `<details>` disclosure** on its role, so its expanded state is read with no announcement, as for transcript reasoning. The summary carries hidden text ("description of assignment 4") so each one is told apart. The old "About assignment N" tooltip button is gone.
+
+## Amendment as implemented (000.06.05, phase 04) <a id="amendment-as-implemented-p04-000-06-05"></a>
+
+[000.06.05](../prompts/phase%2004%20-%20utility/000.06.05.plan%20-%20ui%20feedback.md) rendered transcript text as markdown and renamed the chat list's rows. Nothing new is announced.
+
+- **Markdown headings are all `h4`.** An agent's `# Title` sits below the chat view's `h3`, so it never breaks the dialog's outline, and heading navigation still finds it.
+- **Tool entries are tables with row headers** (Tool name, Status, Content), and their full JSON is a native `<details>`, like reasoning.
+- **Chat list rows are named by what sets them apart:** the role, a hidden comma, then the detail line ("Implementing · Task 001 · Finished", or a chat's start time). A listened-in row's task request is its description.

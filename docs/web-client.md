@@ -883,14 +883,24 @@ dialog unmounts on minimise.
   a turn finished), never on streamed reasoning, so busy chats don't shuffle
   (`useActivityStamps`). It's a single-select React Aria `ListBox`: arrow keys
   browse, and selecting keeps focus in the list.
+- **Row states come from assignments**, not agents (000.06.05):
+  `GET /api/agent` returns only active agents, so a finished one isn't there
+  at all. The list reads the company's assignments (the same query Add new
+  uses) and counts a row finished when its assignment's status isn't in
+  `ACTIVE_ASSIGNMENT_STATUSES`.
+- **Each row says what sets it apart.** A chat reads "Chat · started
+  10 Oct 2026, 09:40 · Open". A listened-in row reads its mode, its task and
+  its state ("Implementing · Task 001 · Finished"), with the task's request
+  as a one-line description. The role and that line name the row, so arrowing
+  through rows with one role reads the difference.
 - **The view** (`ChatView`) has a fixed heading with Archive, Delete (role
   chats only) and the reasoning menu, then the transcript with its Follow
   toggle, then the message form (role chats only). Only the selected view is
   mounted, so the dialog holds one event stream.
 - **Archive** completes a role chat. For a listened-in view it only sets a
   flag, and never stops the agent. Either way the view leaves the list, and
-  focus goes back to the list. Choosing an archived listened-in view again
-  (with "Show archived" ticked) un-archives it.
+  focus goes back to the list. Choosing an archived row (with "Show
+  archived" ticked) only views it; "Listen in" from elsewhere un-archives it.
 - **Delete** asks first (`ConfirmDialog`), then calls
   `DELETE /api/agent/:id/chat`, which removes the transcript, the assignment
   and the agent. It's refused while a turn runs.
@@ -916,6 +926,21 @@ latest only (the default). It's one setting for every transcript, kept in the
 browser (`transcript/reasoningRule.ts`), and chosen from a small menu in the
 view's heading or the task dialog's title bar. Opening or closing one entry
 by hand lasts until the rule changes. Reasoning is never announced.
+
+### Markdown and tool calls
+
+Reasoning, responses, messages and other prose render as markdown
+(`transcript/Markdown.tsx`: `react-markdown` with `remark-gfm` and
+`remark-breaks`, so a single newline is a line break). It's re-parsed as it
+streams; half-written markup shows as text until it closes. The text is model
+output, so raw HTML is dropped, images show only their alt text (a remote
+image could leak data through its URL), links open in a new tab with no
+opener or referrer, every heading is an `h4` below the view's heading, and
+tables scroll inside their own box.
+
+Tool calls and results show a small table (tool name; for a result, status
+and content) read by the shared renderer into `LogEntry.tool`, with the full
+JSON in a "Full JSON" disclosure. The CLI still prints the JSON.
 
 **Follow** (on by default) keeps the newest entry in view. Scrolling away from
 the bottom turns it off; pressing it again scrolls back down (`useFollow`).
