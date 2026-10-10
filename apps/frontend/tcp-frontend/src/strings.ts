@@ -75,6 +75,13 @@ const strings = {
   'transcript.reasoning.none': 'Hide all reasoning',
   'transcript.reasoning.latest': 'Show latest reasoning only',
   'transcript.follow': 'Follow latest',
+  'transcript.tool.requestField': 'Request field',
+  'transcript.tool.responseField': 'Response field',
+  'transcript.tool.value': 'Value',
+  'transcript.tool.name': 'Tool name',
+  'transcript.tool.status': 'Status',
+  'transcript.tool.content': 'Content',
+  'transcript.tool.fullJson': 'Full JSON',
 
   // The chat dialog (008.02). Its panels reuse the transcript above; these
   // keys are what surrounds it: the dialog's own heading, each panel's

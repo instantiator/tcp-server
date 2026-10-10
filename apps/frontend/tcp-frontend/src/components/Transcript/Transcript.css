@@ -58,6 +58,47 @@
   overflow-x: auto;
 }
 
+/* Agent prose as markdown: block spacing kept tight, as in a chat. */
+.transcript__markdown > :first-child {
+  margin-block-start: 0;
+}
+
+.transcript__markdown > :last-child {
+  margin-block-end: 0;
+}
+
+.transcript__markdown :is(p, ul, ol, pre, blockquote, h4) {
+  margin-block: var(--tcp-space-xs);
+}
+
+.transcript__markdown pre {
+  overflow-x: auto;
+}
+
+/* A wide table scrolls inside its own box rather than widening the view. */
+.transcript__table-scroll {
+  max-inline-size: 100%;
+  overflow-x: auto;
+}
+
+/* A tool entry's key facts. */
+.transcript__tool {
+  border-collapse: collapse;
+}
+
+.transcript__tool :is(th, td) {
+  padding: var(--tcp-space-xs) var(--tcp-space-sm);
+  border: var(--tcp-border-width) solid var(--tcp-color-border);
+  text-align: start;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.transcript__json-details summary {
+  cursor: pointer;
+  color: var(--tcp-color-text-muted);
+}
+
 .transcript__entry--user {
 }
 

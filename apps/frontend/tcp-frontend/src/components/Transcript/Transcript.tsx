@@ -1,4 +1,8 @@
-import { isBlankText, type LogEntry } from '@tcp/shared/client';
+import {
+  isBlankText,
+  type LogEntry,
+  type ToolSummary,
+} from '@tcp/shared/client';
 import { ArrowDownToLine } from 'lucide-react';
 import { useState } from 'react';
 import { ToggleButton } from 'react-aria-components';
@@ -7,6 +11,7 @@ import { EmptyState } from '../EmptyState/EmptyState';
 import { ErrorState } from '../ErrorState/ErrorState';
 import { Icon, WithTooltip } from '../Icon/Icon';
 import { LoadingState } from '../LoadingState/LoadingState';
+import { Markdown } from './Markdown';
 import { useReasoningRule, type ReasoningRule } from './reasoningRule';
 import { useFollow } from './useFollow';
 import { useTranscript, type TranscriptStatus } from './useTranscript';
@@ -32,14 +37,75 @@ const FAILURE_MESSAGES: Record<
 };
 
 /**
+ * A tool entry: a small table of its key facts, then the full JSON behind a
+ * disclosure. The JSON is the shared renderer's, unchanged, so nothing the
+ * summary leaves out is lost.
+ */
+const ToolBody = ({
+  entry,
+  tool,
+}: {
+  readonly entry: LogEntry;
+  readonly tool: ToolSummary;
+}) => {
+  const isResult = entry.label?.startsWith('tool_result') === true;
+  const rows: readonly [StringKey, string | undefined][] = [
+    ['transcript.tool.name', tool.name],
+    ['transcript.tool.status', isResult ? tool.status : undefined],
+    ['transcript.tool.content', isResult ? tool.content : undefined],
+  ];
+  return (
+    <>
+      <table className="transcript__tool">
+        <thead>
+          <tr>
+            <th scope="col">
+              {t(
+                isResult
+                  ? 'transcript.tool.responseField'
+                  : 'transcript.tool.requestField',
+              )}
+            </th>
+            <th scope="col">{t('transcript.tool.value')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(([key, value]) =>
+            value === undefined ? null : (
+              <tr key={key}>
+                <th scope="row">{t(key)}</th>
+                <td>
+                  {key === 'transcript.tool.name' ? (
+                    <code>{value}</code>
+                  ) : (
+                    value
+                  )}
+                </td>
+              </tr>
+            ),
+          )}
+        </tbody>
+      </table>
+      <details className="transcript__json-details">
+        <summary>{t('transcript.tool.fullJson')}</summary>
+        <pre className="transcript__json">{entry.text}</pre>
+      </details>
+    </>
+  );
+};
+
+/**
  * One entry's content.
  *
  * A line-only entry — `llm_request`, or an `llm_response` whose text already
  * streamed — carries no text at all, and renders as its heading line alone.
- * `json` marks text the shared renderer already pretty-printed, so it is shown
- * verbatim rather than reflowed.
+ * Tool entries get a summary table; other `json` text is shown verbatim.
+ * Everything else is the agent's or user's prose, rendered as markdown.
  */
 const EntryBody = ({ entry }: { readonly entry: LogEntry }) => {
+  if (entry.tool !== undefined) {
+    return <ToolBody entry={entry} tool={entry.tool} />;
+  }
   if (entry.json === true) {
     return <pre className="transcript__json">{entry.text}</pre>;
   }
@@ -49,7 +115,7 @@ const EntryBody = ({ entry }: { readonly entry: LogEntry }) => {
     return <p className="transcript__text">{t('transcript.blank')}</p>;
   }
   if (isBlankText(entry.text)) return null;
-  return <p className="transcript__text">{entry.text}</p>;
+  return <Markdown text={entry.text} />;
 };
 
 /** Whether a reasoning entry starts open under the rule. */

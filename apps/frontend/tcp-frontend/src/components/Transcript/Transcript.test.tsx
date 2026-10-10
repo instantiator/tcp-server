@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { AuditWireEvent, WireEvent } from '@tcp/shared/client';
@@ -197,6 +198,63 @@ describe('Transcript', () => {
       expect(entryFor('tool_result:search').textContent).toContain('"hits": 2');
     });
 
+    it('summarises a tool result in a table, with the full JSON behind a disclosure', async () => {
+      await renderTranscript([
+        auditEvent({
+          eventType: 'tool_result',
+          payload: {
+            tool: 'tasks__create_plan',
+            output: {
+              lc: 1,
+              kwargs: { status: 'success', content: 'Plan created' },
+            },
+          },
+        }),
+      ]);
+
+      const entry = entryFor('tool_result:tasks__create_plan');
+      const rows = within(entry).getAllByRole('row');
+      expect(rows.map((row) => row.textContent)).toEqual([
+        `${t('transcript.tool.responseField')}${t('transcript.tool.value')}`,
+        `${t('transcript.tool.name')}tasks__create_plan`,
+        `${t('transcript.tool.status')}success`,
+        `${t('transcript.tool.content')}Plan created`,
+      ]);
+      expect(
+        within(entry).getByRole('rowheader', {
+          name: t('transcript.tool.content'),
+        }),
+      ).toBeTruthy();
+      const details = within(entry)
+        .getByText(t('transcript.tool.fullJson'))
+        .closest('details');
+      expect(details?.open).toBe(false);
+      expect(details?.querySelector('pre')?.textContent).toContain(
+        '"content": "Plan created"',
+      );
+    });
+
+    it('names only the tool for a tool call', async () => {
+      await renderTranscript([
+        auditEvent({
+          eventType: 'tool_call',
+          payload: { tool: 'search', input: { query: 'pricing' } },
+        }),
+      ]);
+
+      const entry = entryFor('tool_call:search');
+      expect(
+        within(entry)
+          .getAllByRole('rowheader')
+          .map((cell) => cell.textContent),
+      ).toEqual([t('transcript.tool.name')]);
+      expect(
+        within(entry).getByRole('columnheader', {
+          name: t('transcript.tool.requestField'),
+        }),
+      ).toBeTruthy();
+    });
+
     it('renders a decision', async () => {
       await renderTranscript([
         auditEvent({
@@ -255,6 +313,96 @@ describe('Transcript', () => {
     });
   });
 
+  describe('markdown', () => {
+    const responseWith = (responseText: string) =>
+      renderTranscript([
+        auditEvent({ eventType: 'llm_response', payload: { responseText } }),
+      ]);
+
+    it('renders emphasis and lists', async () => {
+      await responseWith('**Ready**\n\n- one\n- two');
+
+      const entry = entryFor('llm_response:response');
+      expect(entry.querySelector('strong')?.textContent).toBe('Ready');
+      expect(
+        [...entry.querySelectorAll('li')].map((li) => li.textContent),
+      ).toEqual(['one', 'two']);
+    });
+
+    it('keeps a single newline as a line break', async () => {
+      await responseWith('first line\nsecond line');
+
+      expect(
+        entryFor('llm_response:response').querySelector('br'),
+      ).not.toBeNull();
+    });
+
+    it('shows an image as its alt text and never loads it', async () => {
+      await responseWith('![a chart](https://example.com/leak?d=secret)');
+
+      const entry = entryFor('llm_response:response');
+      expect(entry.querySelector('img')).toBeNull();
+      expect(entry.textContent).toContain('a chart');
+    });
+
+    it('opens links in a new tab with no opener or referrer', async () => {
+      await responseWith('[docs](https://example.com)');
+
+      const link = within(entryFor('llm_response:response')).getByRole('link', {
+        name: 'docs',
+      });
+      expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+      expect(link.getAttribute('target')).toBe('_blank');
+    });
+
+    it('renders no raw HTML', async () => {
+      await responseWith('<b>bold</b> <script>alert(1)</script>');
+
+      const entry = entryFor('llm_response:response');
+      expect(entry.querySelector('b, script')).toBeNull();
+    });
+
+    it('puts every heading level at h4, below the view heading', async () => {
+      await responseWith('# Title\n\n### Sub');
+
+      expect(
+        within(entryFor('llm_response:response'))
+          .getAllByRole('heading')
+          .map((h) => [h.tagName, h.textContent]),
+      ).toEqual([
+        ['H4', 'Title'],
+        ['H4', 'Sub'],
+      ]);
+    });
+
+    it('renders markdown while it streams, finishing it once it closes', async () => {
+      await renderTranscript();
+
+      act(() => {
+        emit?.({
+          type: 'stream',
+          agentId: AGENT_ID,
+          channel: 'response',
+          delta: 'A **bo',
+          timestamp: '2026-08-07T09:00:01.000Z',
+        });
+      });
+      const entry = () => entryFor('llm_response:response');
+      expect(entry().querySelector('strong')).toBeNull();
+
+      act(() => {
+        emit?.({
+          type: 'stream',
+          agentId: AGENT_ID,
+          channel: 'response',
+          delta: 'ld** move',
+          timestamp: '2026-08-07T09:00:02.000Z',
+        });
+      });
+      expect(entry().querySelector('strong')?.textContent).toBe('bold');
+    });
+  });
+
   it('shows a response arriving progressively', async () => {
     await renderTranscript();
 
@@ -302,6 +450,17 @@ describe('Transcript', () => {
       auditEvent({
         eventType: 'tool_call',
         payload: { tool: 'search', input: { query: 'pricing' } },
+      }),
+      auditEvent({
+        eventType: 'tool_result',
+        payload: { tool: 'search', output: 'two hits' },
+      }),
+      auditEvent({
+        eventType: 'llm_response',
+        payload: {
+          responseText:
+            '# Plan\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\n[docs](https://example.com)',
+        },
       }),
     ]);
 
