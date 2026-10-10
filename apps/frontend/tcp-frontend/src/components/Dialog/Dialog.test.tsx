@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { t } from '../../strings';
 import { expectNoA11yViolations } from '../../test-support/axe';
 import { Dialog } from './Dialog';
+import { DockProvider } from './DockProvider';
 
 const HEADING = 'Chat with Sales';
 const INNER_HEADING = 'Confirm';
@@ -139,7 +140,7 @@ describe('Dialog', () => {
     }
   });
 
-  it('offers no minimise button unless the caller can park it', async () => {
+  it('offers no minimise button with no dock to park it in', async () => {
     const user = userEvent.setup();
     render(<Harness />);
     await open(user);
@@ -157,6 +158,93 @@ describe('Dialog', () => {
     expect(
       screen.getByRole('button', { name: t('dialog.minimise') }),
     ).toBeTruthy();
+  });
+
+  describe('in a dock', () => {
+    /** Owner state that must outlive a minimise: a draft, say. */
+    const DraftHarness = () => {
+      const [draft, setDraft] = useState('');
+      return (
+        <DockProvider>
+          <Dialog heading={HEADING}>
+            <input
+              aria-label="Draft"
+              value={draft}
+              onChange={(event) => {
+                setDraft(event.target.value);
+              }}
+            />
+          </Dialog>
+        </DockProvider>
+      );
+    };
+
+    it('minimises to a dock button, focuses it, and restores with the owner state kept', async () => {
+      const user = userEvent.setup();
+      render(<DraftHarness />);
+      await user.type(screen.getByRole('textbox', { name: 'Draft' }), 'half');
+
+      await user.click(
+        screen.getByRole('button', { name: t('dialog.minimise') }),
+      );
+      expect(screen.queryByRole('dialog')).toBeNull();
+      const docked = screen.getByRole('button', { name: HEADING });
+      await waitFor(() => {
+        expect(document.activeElement).toBe(docked);
+      });
+
+      await user.click(docked);
+      expect(screen.getByRole('dialog', { name: HEADING })).toBeTruthy();
+      expect(screen.getByRole('textbox', { name: 'Draft' })).toHaveValue(
+        'half',
+      );
+      expect(screen.queryByRole('navigation')).toBeNull();
+    });
+
+    it('drops its dock button when its owner closes it while parked', async () => {
+      const user = userEvent.setup();
+      const Owner = () => {
+        const [shown, setShown] = useState(true);
+        return (
+          <DockProvider>
+            <Button
+              className="react-aria-Button"
+              onPress={() => {
+                setShown(false);
+              }}
+            >
+              Forget it
+            </Button>
+            {shown && <Dialog heading={HEADING}>body</Dialog>}
+          </DockProvider>
+        );
+      };
+      render(<Owner />);
+      await user.click(
+        screen.getByRole('button', { name: t('dialog.minimise') }),
+      );
+      expect(screen.getByRole('button', { name: HEADING })).toBeTruthy();
+
+      await user.click(screen.getByRole('button', { name: 'Forget it' }));
+      expect(screen.queryByRole('button', { name: HEADING })).toBeNull();
+    });
+
+    it('offers neither minimise nor close on a confirmation', () => {
+      render(
+        <DockProvider>
+          <Dialog confirmation heading={HEADING}>
+            body
+          </Dialog>
+        </DockProvider>,
+      );
+      expect(screen.getByRole('alertdialog', { name: HEADING })).toBeTruthy();
+      expect(
+        screen.queryByRole('button', { name: t('dialog.minimise') }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole('button', { name: t('dialog.close') }),
+      ).toBeNull();
+    });
   });
 
   it('hides its close button when the caller asks, without losing escape', async () => {

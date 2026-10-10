@@ -13,6 +13,7 @@ import {
   respondByRoute,
   type RouteResponse,
 } from '../../test-support/fetch-mock';
+import { DockProvider } from '../Dialog/DockProvider';
 import { CreateTaskDialog } from './CreateTaskDialog';
 
 type Task = components['schemas']['TaskResponseDto'];
@@ -112,7 +113,7 @@ const Opener = () => {
   );
 };
 
-const renderCreateTaskDialog = () => {
+const renderCreateTaskDialog = ({ dock = false } = {}) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -121,7 +122,13 @@ const renderCreateTaskDialog = () => {
     ...render(
       <StrictMode>
         <QueryClientProvider client={queryClient}>
-          <Opener />
+          {dock ? (
+            <DockProvider>
+              <Opener />
+            </DockProvider>
+          ) : (
+            <Opener />
+          )}
         </QueryClientProvider>
       </StrictMode>,
     ),
@@ -177,6 +184,23 @@ const fileFromMaterialsCall = (init?: RequestInit): File | null => {
 describe('CreateTaskDialog', () => {
   beforeEach(() => {
     installFetchMock();
+  });
+
+  it('keeps a half-written request across minimise and restore', async () => {
+    respondCreateTask();
+    const user = userEvent.setup();
+    renderCreateTaskDialog({ dock: true });
+    await openDialog(user);
+    await user.type(requestField(), 'Write a poem');
+
+    await user.click(
+      screen.getByRole('button', { name: t('dialog.minimise') }),
+    );
+    await user.click(
+      screen.getByRole('button', { name: t('task.create.heading') }),
+    );
+
+    expect(requestField()).toHaveValue('Write a poem');
   });
 
   it('makes every field reachable by role and accessible name', async () => {

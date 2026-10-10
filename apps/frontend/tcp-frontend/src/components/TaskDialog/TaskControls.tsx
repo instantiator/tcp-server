@@ -12,7 +12,7 @@ import { ACTIVE_TASK_STATUSES } from '../../api/statuses';
 import { t } from '../../strings';
 import { ButtonRow } from '../ButtonRow/ButtonRow';
 import { CreateTaskDialog } from '../CreateTaskDialog/CreateTaskDialog';
-import { Dialog } from '../Dialog/Dialog';
+import { ConfirmDialog } from '../Dialog/ConfirmDialog';
 import { ErrorState } from '../ErrorState/ErrorState';
 import { RESUMABLE_KINDS, useTaskWaiting } from './useTaskWaiting';
 
@@ -171,35 +171,21 @@ export const TaskControls = ({
         />
       )}
 
-      <Dialog
+      <ConfirmDialog
         isOpen={confirming}
-        onClose={() => {
+        heading={t('task.cancel.confirm.heading')}
+        message={t('task.cancel.confirm.body')}
+        confirmLabel={t('task.cancel.confirm.accept')}
+        cancelLabel={t('task.cancel.confirm.reject')}
+        portalContainer={portalContainer}
+        onConfirm={() => {
+          setConfirming(false);
+          cancel.mutate();
+        }}
+        onCancel={() => {
           setConfirming(false);
         }}
-        portalContainer={portalContainer}
-        heading={t('task.cancel.confirm.heading')}
-      >
-        <p>{t('task.cancel.confirm.body')}</p>
-        <ButtonRow>
-          <Button
-            className="react-aria-Button"
-            onPress={() => {
-              setConfirming(false);
-              cancel.mutate();
-            }}
-          >
-            {t('task.cancel.confirm.accept')}
-          </Button>
-          <Button
-            className="react-aria-Button"
-            onPress={() => {
-              setConfirming(false);
-            }}
-          >
-            {t('task.cancel.confirm.reject')}
-          </Button>
-        </ButtonRow>
-      </Dialog>
+      />
 
       {failure('start', start)}
       {failure('pause', pause)}

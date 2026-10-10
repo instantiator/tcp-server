@@ -42,6 +42,8 @@ const strings = {
 
   'dialog.close': 'Close',
   'dialog.minimise': 'Minimise',
+  'confirm.yes': 'Yes',
+  'confirm.no': 'No',
   // Names the bar, not the buttons in it. Each button is labelled by the
   // dialog it restores, so its visible text and its accessible name match
   // (WCAG 2.5.3); what the bar is for is said once, here.
