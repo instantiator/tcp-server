@@ -61,6 +61,7 @@ import {
   useConversation,
   useConversations,
   useCreateTaskMutation,
+  useDeleteChatMutation,
   useDismissNotificationMutation,
   useNotifications,
   useReplyToEnquiryMutation,
@@ -304,6 +305,24 @@ export const useCompleteChat = (agentId: string) => {
     mutationFn: () => completeChat.mutateAsync(),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['assignment'] });
+    },
+  });
+};
+
+/**
+ * Deletes a chat, and makes every list holding it agree.
+ *
+ * Both keys are invalidated: the chat's assignment and its agent are both
+ * gone, and no live event announces a deletion.
+ */
+export const useDeleteChat = (agentId: string) => {
+  const queryClient = useQueryClient();
+  const deleteChat = useDeleteChatMutation(agentId);
+  return useMutation({
+    mutationFn: () => deleteChat.mutateAsync(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['assignment'] });
+      void queryClient.invalidateQueries({ queryKey: ['agent'] });
     },
   });
 };
@@ -647,4 +666,5 @@ export {
   useRoleKnowledgeStatus,
   useSendMessageMutation as useSendMessage,
   useTaskHistory,
+  useTranscriptSearch,
 } from './endpoints';

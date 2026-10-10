@@ -11,6 +11,7 @@ import { streamUrls } from '../../events/subscriptions';
 import { useEventStream } from '../../events/useEventStream';
 import { t } from '../../strings';
 import { Dialog } from '../Dialog/Dialog';
+import { ReasoningRuleMenu } from '../Transcript/ReasoningRuleMenu';
 import { EmptyState } from '../EmptyState/EmptyState';
 import { ErrorState } from '../ErrorState/ErrorState';
 import { LabelledValue } from '../LabelledValue/LabelledValue';
@@ -150,6 +151,7 @@ export const TaskDialog = ({ taskId, companyId, onClose }: TaskDialogProps) => {
   return (
     <Dialog
       onClose={onClose}
+      actions={<ReasoningRuleMenu />}
       heading={
         task.data === undefined
           ? t('task.dialog.heading.pending')

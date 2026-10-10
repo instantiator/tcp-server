@@ -6,9 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { applyEvent } from '../events/cache';
 import {
+  fetchMock,
   installFetchMock,
   requestedUrls,
   respondByRoute,
+  respondWithJson,
 } from '../test-support/fetch-mock';
 import {
   useCompanyKnowledgeList,
@@ -25,8 +27,10 @@ import {
   useLiveConsultationState,
   useLiveEnquiryState,
   useLiveNotifications,
+  useDeleteChat,
   useLiveTaskState,
   useRoleState,
+  useTranscriptSearch,
 } from './hooks';
 
 // This file tests two things about hooks.ts: that each hook asks the network
@@ -92,6 +96,44 @@ describe('each hook asks for the right thing', () => {
 
     const url = new URL(requestedUrls()[0]);
     expect(url.searchParams.get('mode')).toBe('chat');
+  });
+
+  it('useDeleteChat sends DELETE /api/agent/{id}/chat and invalidates assignments and agents', async () => {
+    respondWithJson(204, undefined);
+
+    const { result, queryClient } = renderHookWithClient(() =>
+      useDeleteChat('agent-1'),
+    );
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    await act(() => result.current.mutateAsync());
+
+    const request = fetchMock.mock.calls[0]?.[0];
+    if (!(request instanceof Request)) throw new Error('no request was made');
+    expect(request.method).toBe('DELETE');
+    expect(new URL(request.url).pathname).toBe('/api/agent/agent-1/chat');
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['assignment'] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['agent'] });
+  });
+
+  it('useTranscriptSearch waits for two characters, then returns the agent ids', async () => {
+    respondByRoute([
+      [/\/api\/agent\/search\?/, { body: { agentIds: ['a1'] } }],
+    ]);
+
+    const { result } = renderHookWithClient(() =>
+      useTranscriptSearch(COMPANY_ID, 'b'),
+    );
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(requestedUrls()).toHaveLength(0);
+
+    const search = renderHookWithClient(() =>
+      useTranscriptSearch(COMPANY_ID, 'budget'),
+    );
+    await waitFor(() => expect(search.result.current.isSuccess).toBe(true));
+    expect(search.result.current.data).toEqual(['a1']);
+    const url = new URL(requestedUrls()[0]);
+    expect(url.searchParams.get('companyId')).toBe(COMPANY_ID);
+    expect(url.searchParams.get('q')).toBe('budget');
   });
 
   it("useLiveCompanyConsultationsList requests taskId='null' (the literal string) and mode=consultee", async () => {

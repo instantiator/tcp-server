@@ -270,3 +270,7 @@ retired. `MODEL_CONCURRENCY`'s two pools (`local`/`remote`) now gate agent
 runs, and a new `queued` agent status carries the same meaning this ADR's
 amendment described — an agent waiting for a model slot, not stalled. See
 [ADR-032](ADR-032-model-concurrency-and-rate-limits.md).
+
+## Amendment as implemented (000.06, phase 04) <a id="amendment-as-implemented-p04-000-06"></a>
+
+[000.06](../prompts/phase%2004%20-%20utility/000.06.01.plan%20-%20dialog%20improvements.md) applied the [008.02](#amendment-as-implemented-00802) policy rather than changing it. The chat dialog now mounts only the selected view's `<Transcript/>`, so it holds one stream however many chats are listed, where it used to hold one per open panel. Switching views releases one stream and opens the next, which re-primes from history. The list's statuses come from the company stream through the query cache, so the list opens no stream of its own.

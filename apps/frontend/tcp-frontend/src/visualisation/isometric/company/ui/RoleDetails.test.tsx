@@ -133,7 +133,7 @@ describe('RoleDetails, chatting with a real ChatProvider', () => {
 
     await user.click(
       screen.getByRole('button', {
-        name: t('chat.close', { role: ROLE_NAME }),
+        name: t('dialog.close'),
       }),
     );
 

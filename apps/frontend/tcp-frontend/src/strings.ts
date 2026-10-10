@@ -42,6 +42,8 @@ const strings = {
 
   'dialog.close': 'Close',
   'dialog.minimise': 'Minimise',
+  'confirm.yes': 'Yes',
+  'confirm.no': 'No',
   // Names the bar, not the buttons in it. Each button is labelled by the
   // dialog it restores, so its visible text and its accessible name match
   // (WCAG 2.5.3); what the bar is for is said once, here.
@@ -67,6 +69,12 @@ const strings = {
   // The label React Aria's audit-event rows carry after the time. Rendered as
   // written by the shared renderers, so it is not a translatable string.
   'transcript.entry.label': '{time}, {label}',
+  // 000.06 — reasoning accordions and following the latest entry.
+  'transcript.reasoning.label': 'Show or hide reasoning',
+  'transcript.reasoning.all': 'Show all reasoning',
+  'transcript.reasoning.none': 'Hide all reasoning',
+  'transcript.reasoning.latest': 'Show latest reasoning only',
+  'transcript.follow': 'Follow latest',
 
   // The chat dialog (008.02). Its panels reuse the transcript above; these
   // keys are what surrounds it: the dialog's own heading, each panel's
@@ -77,11 +85,34 @@ const strings = {
   'chat.conversation.listening': 'Listening in: {role}',
   'chat.conversation.listeningWithReference':
     'Listening in: {role} ({reference})',
-  'chat.complete': 'Complete the chat with {role}',
-  // Closing (002.02) is not completing: it only takes the panel off screen.
-  // The chat stays open on the server, and Activity → Chats is how it's
-  // found again.
-  'chat.close': 'Close the chat with {role}',
+  // Archiving a role chat completes it: the prompt's "ends a conversation".
+  'chat.complete': 'Archive the chat with {role}',
+  // 000.06 — the list of views, and what a view's controls do.
+  'chat.list.label': 'Chats list',
+  'chat.search.label': 'Search chats',
+  'chat.search.announce': 'Chats matching: {count}',
+  'chat.list.group.chats': 'Chats',
+  'chat.list.group.running': 'Listening in, running',
+  'chat.list.group.finished': 'Listening in, finished',
+  'chat.list.kind.chat': 'Chat',
+  'chat.list.kind.listening': 'Listening in',
+  'chat.list.state.open': 'Open',
+  'chat.list.state.completed': 'Completed',
+  'chat.list.state.running': 'Running',
+  'chat.list.state.finished': 'Finished',
+  'chat.list.showArchived': 'Show archived',
+  'chat.list.empty': 'No chats yet.',
+  'chat.list.noMatches': 'No chats match.',
+  'chat.view.empty.heading': 'No chat selected',
+  'chat.view.empty.body': 'Choose a chat, or start one with +.',
+  'chat.archive.listening': 'Archive listening in on {role}',
+  'chat.delete': 'Delete the chat with {role}',
+  'chat.delete.failed': 'The chat could not be deleted.',
+  'chat.delete.confirm.heading': 'Delete this chat?',
+  'chat.delete.confirm.body':
+    'The chat with {role} and its transcript will be deleted. This can’t be undone.',
+  'chat.delete.confirm.accept': 'Delete the chat',
+  'chat.delete.confirm.reject': 'Keep the chat',
   'chat.message.label': 'Message {role}',
   'chat.send': 'Send',
   'chat.waiting': 'Waiting for {role} to reply…',
@@ -93,7 +124,6 @@ const strings = {
   'chat.send.failed':
     'That message could not be sent. Your text is still here — try again.',
   'chat.complete.failed': 'This chat could not be completed. Try again.',
-  'chat.dock.label': '{role} — {status}',
 
   // The task dialog (008.03): its own heading, the task's details, one
   // collapsible panel per assignment, and the confirmed cancel control.
@@ -197,6 +227,10 @@ const strings = {
   'addNew.trigger': 'Add new',
   'addNew.createTask': 'Create a new task',
   'addNew.newChat': 'New chat',
+  'addNew.chatWithRole': 'Chat with a role',
+  'addNew.listenIn': 'Listen in on an assignment',
+  'addNew.listenIn.option': '{role} ({reference})',
+  'addNew.noAssignments': 'Nothing is running to listen in on',
   'addNew.starting': 'Starting chat with {role}…',
   'addNew.noRoles': 'This company has no roles yet',
   'addNew.loadingRoles': 'Loading roles…',

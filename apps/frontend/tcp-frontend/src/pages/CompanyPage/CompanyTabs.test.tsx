@@ -1153,7 +1153,7 @@ describe('CompanyTabs', () => {
       await user.click(row);
       await user.click(
         screen.getByRole('button', {
-          name: t('chat.close', { role: ROLE.name }),
+          name: t('dialog.close'),
         }),
       );
       expect(

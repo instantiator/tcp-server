@@ -671,7 +671,7 @@ describe('TaskDialog', () => {
       await openTask(user);
 
       await user.click(screen.getByRole('button', { name: t('task.cancel') }));
-      const confirmDialog = await screen.findByRole('dialog', {
+      const confirmDialog = await screen.findByRole('alertdialog', {
         name: t('task.cancel.confirm.heading'),
       });
       expect(
@@ -1017,7 +1017,7 @@ describe('TaskDialog', () => {
 
       await openTask(user);
       await user.click(screen.getByRole('button', { name: t('task.cancel') }));
-      await screen.findByRole('dialog', {
+      await screen.findByRole('alertdialog', {
         name: t('task.cancel.confirm.heading'),
       });
       await user.click(
@@ -1040,7 +1040,7 @@ describe('TaskDialog', () => {
 
       await openTask(user);
       await user.click(screen.getByRole('button', { name: t('task.cancel') }));
-      await screen.findByRole('dialog', {
+      await screen.findByRole('alertdialog', {
         name: t('task.cancel.confirm.heading'),
       });
 
@@ -1250,7 +1250,7 @@ describe('TaskDialog', () => {
 
       await openTask(user);
       await user.click(screen.getByRole('button', { name: t('task.cancel') }));
-      await screen.findByRole('dialog', {
+      await screen.findByRole('alertdialog', {
         name: t('task.cancel.confirm.heading'),
       });
 
