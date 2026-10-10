@@ -5,7 +5,7 @@ import {
   TcpAssignment,
 } from '@tcp/shared';
 import { randomUUID } from 'crypto';
-import { AuditService } from './audit.service';
+import { AuditService, escapeLike } from './audit.service';
 
 describe('AuditService', () => {
   let service: AuditService;
@@ -207,5 +207,15 @@ describe('AuditService', () => {
     expect(call[0].where.companyId).toBe(companyId);
     expect(call[0].where.taskId).toBe(taskId);
     expect(call[0].order).toEqual({ timestamp: 'ASC' });
+  });
+});
+
+describe('escapeLike', () => {
+  it.each([
+    ['50%', '50\\%'],
+    ['a_b', 'a\\_b'],
+    ['back\\slash', 'back\\\\slash'],
+  ])('escapes %s', (input, expected) => {
+    expect(escapeLike(input)).toBe(expected);
   });
 });

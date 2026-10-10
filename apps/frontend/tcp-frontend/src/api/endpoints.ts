@@ -67,6 +67,22 @@ export const useAgentHistory = (id: string) =>
   });
 
 /**
+ * The ids of the company's agents whose transcripts contain `q`. Waits for two
+ * characters, which is the shortest search the server accepts.
+ */
+export const useTranscriptSearch = (companyId: string, q: string) =>
+  useQuery({
+    queryKey: queryKeys.agentSearch(companyId, q),
+    queryFn: async () =>
+      (
+        await unwrap(
+          api.GET('/api/agent/search', { params: { query: { companyId, q } } }),
+        )
+      ).agentIds,
+    enabled: q.trim().length >= 2,
+  });
+
+/**
  * The one agent holding an assignment. Agent and assignment are 1:1, so the
  * list route filtered by `assignmentId` returns at most one row.
  *
@@ -274,6 +290,18 @@ export const useCompleteChatMutation = (id: string) =>
     mutationFn: () =>
       unwrap(
         api.POST('/api/agent/{id}/complete', { params: { path: { id } } }),
+      ),
+  });
+
+/**
+ * Deletes a chat with its agent and transcript. `expectAccepted`, not
+ * `unwrap` — the route answers `204`, with no body.
+ */
+export const useDeleteChatMutation = (id: string) =>
+  useMutation({
+    mutationFn: () =>
+      expectAccepted(
+        api.DELETE('/api/agent/{id}/chat', { params: { path: { id } } }),
       ),
   });
 

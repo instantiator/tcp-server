@@ -1264,6 +1264,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agent/{id}/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a chat */
+        delete: operations["AgentController_deleteChat"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agent/{id}/events": {
         parameters: {
             query?: never;
@@ -1307,6 +1324,23 @@ export interface paths {
         };
         /** List agents */
         get: operations["AgentController_listAgents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search agent transcripts */
+        get: operations["AgentController_searchTranscripts"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2204,6 +2238,9 @@ export interface components {
         MessageAcceptedResponseDto: {
             /** @enum {boolean} */
             accepted: true;
+        };
+        TranscriptSearchResponseDto: {
+            agentIds: string[];
         };
         ModelCheckDto: {
             models: components["schemas"]["LlmConfigDto"][];
@@ -4325,6 +4362,25 @@ export interface operations {
             };
         };
     };
+    AgentController_deleteChat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     AgentController_streamEvents: {
         parameters: {
             query?: never;
@@ -4387,6 +4443,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentResponseDto"][];
+                };
+            };
+        };
+    };
+    AgentController_searchTranscripts: {
+        parameters: {
+            query: {
+                companyId: string;
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranscriptSearchResponseDto"];
                 };
             };
         };

@@ -12,6 +12,11 @@ import { AuditEventPublisher } from '../events/audit-event-publisher.service';
 import { UsageService } from '../spend/usage.service';
 import { CreateAuditEventDto } from './create-audit-event.dto';
 
+/** Escapes `\`, `%` and `_` so user text is matched literally by LIKE. */
+export function escapeLike(text: string): string {
+  return text.replace(/[\\%_]/g, '\\$&');
+}
+
 /**
  * Writes {@link AuditEvent} rows to the database.
  *
@@ -67,6 +72,28 @@ export class AuditService {
     await this.usage.record(saved);
     // Persist-then-publish: the same row that history reads is streamed live.
     this.publisher.publish(saved);
+  }
+
+  /**
+   * Ids of the company's agents whose audit payloads contain `q`,
+   * case-insensitively and literally (`%` and `_` are not wildcards).
+   *
+   * A full scan of the company's audit payloads: add a pg_trgm/tsvector index
+   * when a search takes more than ~500 ms.
+   */
+  async searchAgentIds(companyId: UUID, q: string): Promise<string[]> {
+    const pattern = `%${escapeLike(q).toLowerCase()}%`;
+    const rows = await this.repo
+      .createQueryBuilder('e')
+      .select('DISTINCT e.agentId', 'agentId')
+      .where('e.companyId = :companyId', { companyId })
+      .andWhere('e.agentId IS NOT NULL')
+      .andWhere("LOWER(CAST(e.payload AS TEXT)) LIKE :pattern ESCAPE '\\'", {
+        pattern,
+      })
+      .limit(200)
+      .getRawMany<{ agentId: string }>();
+    return rows.map((r) => r.agentId);
   }
 
   async record(
