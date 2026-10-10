@@ -18,11 +18,9 @@ const INNER_HEADING = 'Confirm';
  */
 const Harness = ({
   onMinimise,
-  hideClose,
   children,
 }: {
   onMinimise?: () => void;
-  hideClose?: boolean;
   children?: React.ReactNode;
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -42,7 +40,6 @@ const Harness = ({
         onOpenChange={setIsOpen}
         heading={HEADING}
         onMinimise={onMinimise}
-        hideClose={hideClose}
       >
         {children ?? <Button className="react-aria-Button">Do a thing</Button>}
       </Dialog>
@@ -245,22 +242,6 @@ describe('Dialog', () => {
         screen.queryByRole('button', { name: t('dialog.close') }),
       ).toBeNull();
     });
-  });
-
-  it('hides its close button when the caller asks, without losing escape', async () => {
-    const user = userEvent.setup();
-    render(<Harness hideClose onMinimise={() => undefined} />);
-    await open(user);
-
-    expect(
-      screen.queryByRole('button', { name: t('dialog.close') }),
-    ).toBeNull();
-
-    // The point of the prop is that one *control* goes, not that the dialog
-    // becomes impossible to dismiss — a modal with no way out is the failure
-    // this asserts against.
-    await user.keyboard('{Escape}');
-    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('hides the page behind it from assistive technology', async () => {

@@ -13,14 +13,14 @@ export interface MessageInputProps {
   /** The agent's role, for the field label and the waiting line. */
   readonly roleName: string;
   /**
-   * The agent's live status, read once by `ChatConversation` and passed down.
+   * The agent's live status, read once by `ChatView` and passed down.
    * `undefined` until it has been fetched, which reads as "not busy".
    */
   readonly status: string | undefined;
 }
 
 /**
- * The form at the bottom of one chat panel: a single-line message field, a
+ * The form at the bottom of a chat view: a single-line message field, a
  * send button, and a line saying when the agent owes a reply.
  *
  * **Sending returns immediately and the reply arrives on the event stream, not
@@ -32,7 +32,7 @@ export interface MessageInputProps {
  * or from reading the transcript.** Sending sets the agent to `running` and
  * finishing a turn sets it back, and both transitions arrive on the very
  * stream the transcript beside this is already watching — so the status
- * `ChatConversation` hands down is live here without anything opening a
+ * `ChatView` hands down is live here without anything opening a
  * connection of its own. The mutation's own pending state covers the moment
  * before the first of those events lands.
  *

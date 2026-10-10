@@ -312,3 +312,15 @@ before if it was last. Axe and a focus assertion cover both paths.
 - **The announcement is unchanged.** It is still made once, on appearance, and `assertive` on failure. Hiding the toast announces nothing.
 - **Clicking the message goes to the row,** and the row takes focus and `aria-current`. The list moves that focus, not the hash change.
 - **The "never the only notice" rule now has a second half.** The row has to be reachable for as long as the event matters, since the toast is gone after 8 seconds.
+
+## Amendment as implemented (000.06, phase 04) <a id="amendment-as-implemented-p04-000-06"></a>
+
+[000.06](../prompts/phase%2004%20-%20utility/000.06.01.plan%20-%20dialog%20improvements.md) replaced the chat dialog's stack of panels with a list of views and one selected view. The transcript policy in the table above is unchanged: arrival only, one announcer.
+
+- **Reading order is layout order.** The title bar, then the list pane (search, the grouped list, "Show archived", Add new), then the selected view (its heading and controls, the transcript, Follow, the message form). Below 40rem wide the panes stack in the same order.
+- **Selecting a view keeps focus in the list,** so a user can browse views without being thrown into each transcript. An opener elsewhere on the page (Activity → Chats, "Listen in", Add new) moves focus into the view it opened. Archive and Delete take the view out of the list and put focus back in the list.
+- **Only the selected view announces.** Only it is mounted, so other chats finishing a turn say nothing. Their rows re-sort, and React Aria keeps focus on the same row by key, so a re-sort never moves the user.
+- **Rows re-sort only when an agent's status changes.** Streamed reasoning and tool steps never move a row, so several busy chats don't shuffle under a screen reader's virtual cursor.
+- **Search announces a count, once it settles** ("Chats matching: {count}"), not each match. The list itself is browsable.
+- **Reasoning is a native `<details>` disclosure,** so its expanded state is read out with no extra announcement. Reasoning is never announced on arrival. The rule that decides which entries start open is a menu of three checkable items, not a cycling button whose name would change under the user.
+- **Follow is a toggle button** (`aria-pressed`). Scrolling away from the newest entry turns it off; nothing is announced either way.

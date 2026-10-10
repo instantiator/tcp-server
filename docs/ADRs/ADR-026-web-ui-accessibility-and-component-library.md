@@ -169,3 +169,13 @@ The "Add new" control ([003.01](../prompts/phase%2003%20-%20web%20visualisation/
 - **A deep link focuses the row.** The list reads the query parameter once its data has loaded, scrolls the matching row into view, focuses it (`tabIndex={-1}`) and sets `aria-current="true"` on it (`useFocusLinkedRow`). A hash change moves no focus by itself ([ADR-027](ADR-027-screen-reader-strategy.md)), so the list does it.
 - **A task notice's row links to its task.** "Open task" goes to `?task=<id>#tasks`, which `TasksList` reads to open the task dialog.
 - **Reduced motion.** The toast has no animation under `prefers-reduced-motion`.
+
+## Amendment as implemented (000.06, phase 04) <a id="amendment-as-implemented-p04-000-06"></a>
+
+[000.06](../prompts/phase%2004%20-%20utility/000.06.01.plan%20-%20dialog%20improvements.md) rebuilt the chat dialog and gave every dialog the same chrome. The decisions above stand. Dialogs stay modal.
+
+- **Every dialog can be minimised, not only the chat dialog.** `Dialog` docks itself, labelled by its heading, whenever a `DockProvider` is present. Minimising still unmounts the modal ([008.01](#amendment-as-implemented-00801)), but the component that renders the dialog stays mounted, so its state survives: a half-written task comes back intact. This reverses 008.03's "the task dialog never minimises".
+- **Confirmations are their own kind of dialog.** `ConfirmDialog` is an `alertdialog` with no Minimise or Close, so the user answers with its buttons. Focus starts on the safe answer ("No"), and Escape means "No". It replaced the task cancel confirmation that was built by hand.
+- **The chat dialog has a real Close now, and docks as one entry.** Closing loses nothing (chats are on the server, the list and selection are held above the dialog), so "Escape minimises" is gone and `Dialog`'s `hideClose` prop, which only the chat dialog used, is removed. Escape closes, as everywhere else.
+- **The chat list is a single-select `ListBox`** with `disallowEmptySelection`. Without it, pressing the selected row deselects it, which left the view showing with nothing selected.
+- **The selected row is marked by a border as well as a colour** (1.4.1).
