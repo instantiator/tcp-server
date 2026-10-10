@@ -69,6 +69,12 @@ const strings = {
   // The label React Aria's audit-event rows carry after the time. Rendered as
   // written by the shared renderers, so it is not a translatable string.
   'transcript.entry.label': '{time}, {label}',
+  // 000.06 — reasoning accordions and following the latest entry.
+  'transcript.reasoning.label': 'Show or hide reasoning',
+  'transcript.reasoning.all': 'Show all reasoning',
+  'transcript.reasoning.none': 'Hide all reasoning',
+  'transcript.reasoning.latest': 'Show latest reasoning only',
+  'transcript.follow': 'Follow latest',
 
   // The chat dialog (008.02). Its panels reuse the transcript above; these
   // keys are what surrounds it: the dialog's own heading, each panel's

@@ -6,6 +6,21 @@
  * and default indentation does not read as a conversation, and one that grows
  * without a scroll box pushes its dialog off the screen.
  */
+/*
+ * The list and its follow toggle. A column, so a caller that gives the view a
+ * fixed height (the chat dialog) gets a list that scrolls within it.
+ */
+.transcript-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tcp-space-sm);
+  min-block-size: 0;
+}
+
+.transcript-view__follow {
+  align-self: flex-start;
+}
+
 .transcript {
   max-block-size: var(--tcp-transcript-max-height);
   overflow-y: auto;
@@ -48,7 +63,8 @@
 .transcript__entry--llm {
 }
 
-.transcript__entry--reasoning {
+.transcript__entry--reasoning summary {
+  cursor: pointer;
 }
 
 .transcript__entry--response {
