@@ -324,3 +324,11 @@ before if it was last. Axe and a focus assertion cover both paths.
 - **Search announces a count, once it settles** ("Chats matching: {count}"), not each match. The list itself is browsable.
 - **Reasoning is a native `<details>` disclosure,** so its expanded state is read out with no extra announcement. Reasoning is never announced on arrival. The rule that decides which entries start open is a menu of three checkable items, not a cycling button whose name would change under the user.
 - **Follow is a toggle button** (`aria-pressed`). Scrolling away from the newest entry turns it off; nothing is announced either way.
+
+## Amendment as implemented (000.06.03, phase 04) <a id="amendment-as-implemented-p04-000-06-03"></a>
+
+[000.06.03](../prompts/phase%2004%20-%20utility/000.06.03.plan%20-%20ui%20feedback.md) rearranged the office tray. It is still a non-modal `<aside>` named by its heading, and opening it still moves no focus.
+
+- **Reading order is unchanged by the new layout.** Fixed and floating regions are CSS only, so the DOM order is heading, actions, description, body, Follow, Close. Follow moved from beside the heading to after the body.
+- **Statuses are named images.** A task's status icon sits before its heading, outside the `h2`, so the landmark stays "Task 002" while the status reads first. Each assignment row's icon is named for its status ("Succeeded").
+- **An assignment's prompt is a native `<details>` disclosure** on its role, so its expanded state is read with no announcement, as for transcript reasoning. The summary carries hidden text ("description of assignment 4") so each one is told apart. The old "About assignment N" tooltip button is gone.

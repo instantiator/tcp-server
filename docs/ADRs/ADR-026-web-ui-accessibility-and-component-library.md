@@ -179,3 +179,11 @@ The "Add new" control ([003.01](../prompts/phase%2003%20-%20web%20visualisation/
 - **The chat dialog has a real Close now, and docks as one entry.** Closing loses nothing (chats are on the server, the list and selection are held above the dialog), so "Escape minimises" is gone and `Dialog`'s `hideClose` prop, which only the chat dialog used, is removed. Escape closes, as everywhere else.
 - **The chat list is a single-select `ListBox`** with `disallowEmptySelection`. Without it, pressing the selected row deselects it, which left the view showing with nothing selected.
 - **The selected row is marked by a border as well as a colour** (1.4.1).
+
+## Amendment as implemented (000.06.03, phase 04) <a id="amendment-as-implemented-p04-000-06-03"></a>
+
+[000.06.03](../prompts/phase%2004%20-%20utility/000.06.03.plan%20-%20ui%20feedback.md) gave the office view's trays one layout. The decisions above stand.
+
+- **One tray layout, `TrayPanel`.** A title bar (heading and Close), a fixed section (icon actions, then the description), and a scrolling body, with Follow floating at the bottom right. Every panel (task, agent, role, archive) uses it.
+- **Tray actions are round icon buttons with tooltips**, each named for what it acts on ("Pause task 002", "Listen in to Cat assistant, assignment 4"), per WCAG 2.4.6 and 2.5.3. `TaskControls` draws the same controls as text in the task dialog and as icons in the tray.
+- **`ExpandableText`'s `ellipsis` variant became `icon`**: a chevron button after the text. While expanded, it sticks to the bottom of the scrolling description, so the way back is always in view.

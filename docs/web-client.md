@@ -1022,22 +1022,24 @@ header.
 - **A tick marks a succeeded task.** A small tick above its whiteboard has a
   hover-only zone with the tooltip "Task completed". Failed and cancelled rooms
   get no marker.
-- **Lighting shows what is being worked.** A task or one-to-one room is lit
-  while a running agent's avatar is in it. The shared rooms (the corridor, the
-  rec room, the mail room and the archive) are always lit. A task's whiteboard
-  is lit while the task is `planning`, `in-progress` or `finalising` and not
-  paused. Everything else is dimmed (`palette.dim()`), except walls: they keep their full colour, so a dark room's outline stays visible. `rules/roomLighting.ts`
+- **Lighting shows what is being worked.** A task's room and its whiteboard
+  are lit while the task is `planning`, `in-progress` or `finalising` and not
+  paused — by the task's status alone (000.06.03), so the room stays lit while
+  one assignment hands over to the next. A one-to-one room is lit while a
+  running agent's avatar is in it. The shared rooms (the corridor, the rec
+  room, the mail room and the archive) are always lit. Everything else is dimmed (`palette.dim()`), except walls: they keep their full colour, so a dark room's outline stays visible. `rules/roomLighting.ts`
   works it out as a pure function, and the scene redraws its static layers only
   when the lit sets change by value. The switch is instant, with no fade, so
   reduced motion needs nothing. Like the rest of the canvas, it ignores themes.
 - **Tooltips name the task.** The whiteboard reads "Task NNN: (step/steps)", the
   task room adds a line with the request, and the bookshelf reads "Bookshelf:
   N", the number of succeeded tasks.
-- **The tray numbers assignments.** The task tray lists them in two sections,
-  "In progress" and "Completed", each an ordered list numbered by the
-  assignment's chronological number (001, 002, …). Each row has an info button,
-  "About assignment N", whose tooltip reads "Task NNN, Assignment NNN" then the
-  prompt.
+- **The task tray lists assignments** (000.06.03) under one "Assignments"
+  heading, in creation order. Each row has a status icon, the mode ("1.
+  Planning"), then the role as a native `<details>` disclosure that reveals the
+  assignment's prompt, then **Listen in** (an `Ear` icon button): filled while
+  the assignment's agent is working, outlined once it has finished, and absent
+  before it has started. It opens the chat dialog read-only on that agent.
 - **Roles, as books.** Each role is a small book in its colour, at its spot in
   the rec room, so a role never looks like an agent.
 - **Agent avatars.** A new avatar comes in at the office door, walks to its
@@ -1080,12 +1082,17 @@ header.
   task, agent or the bookshelf shows a tooltip; clicking opens a side tray
   with its live details. Furniture and doorways have hover-only tooltips
   saying what they are for (`ui/officeDescriptions.ts`). The tray slides in
-  over the canvas's right edge (005.01), so the canvas doesn't resize. Its
-  Close and Follow buttons are round icon buttons, Follow beside the heading.
-  The tray clips a
-  long prompt with a "…" that reveals the rest
-  (`components/ExpandableText`). An active agent's tray has a "Listen in"
-  button, which opens the chat dialog read-only on its live transcript. The
+  over the canvas's right edge (005.01), so the canvas doesn't resize. Every
+  tray panel uses one layout, `ui/TrayPanel.tsx` (000.06.03): a title bar with
+  the heading (and, for a task, a status icon named for the status) and
+  Close; then a fixed section of small icon actions and the description
+  (`ExpandableText`'s `icon` variant, whose collapse button sticks to the
+  bottom of a long description as it scrolls); then a body that scrolls.
+  Follow floats at the bottom right. All of this is CSS, so the reading and
+  tab order is heading, actions, description, body, Follow, Close. The task's
+  actions are `TaskControls` drawn as icons (`icons`), named for the task
+  ("Pause task 002"), plus Close room once it has finished. A role's action is
+  "Chat with {role}"; an active agent's is "Listen in". The
   toolbar's "Show details for…" picker is the keyboard route to the same
   tray (WCAG 2.1.1), including the archive, and also how a keyboard user
   follows an object to the centre of the view. Arrow keys, WASD and the
