@@ -145,7 +145,7 @@ const renderTray = (
   const openChat = vi.fn();
   const utils = render(
     <QueryClientProvider client={queryClient}>
-      <ChatContext.Provider value={{ openChat, closeChat: vi.fn(), startChat }}>
+      <ChatContext.Provider value={{ openChat, startChat }}>
         <VisualisationTray
           companyId={COMPANY_ID}
           selection={{ kind: 'agent', id: AGENT_ID }}

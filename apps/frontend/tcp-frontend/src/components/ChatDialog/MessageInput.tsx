@@ -1,8 +1,10 @@
+import { Send } from 'lucide-react';
 import { useState, type SubmitEvent } from 'react';
 import { Button, Input, Label, TextField } from 'react-aria-components';
 import { useSendMessage } from '../../api/hooks';
 import { t } from '../../strings';
 import { ErrorState } from '../ErrorState/ErrorState';
+import { Icon, WithTooltip } from '../Icon/Icon';
 import { isTerminalAgentStatus } from './agentStatus';
 
 export interface MessageInputProps {
@@ -96,13 +98,16 @@ export const MessageInput = ({
                 someone asks. */}
             <Input className="react-aria-Input" />
           </TextField>
-          <Button
-            type="submit"
-            className="react-aria-Button chat-input__send"
-            isDisabled={disabled}
-          >
-            {t('chat.send')}
-          </Button>
+          <WithTooltip label={t('chat.send')}>
+            <Button
+              type="submit"
+              className="react-aria-Button tcp-icon-button chat-input__send"
+              aria-label={t('chat.send')}
+              isDisabled={disabled}
+            >
+              <Icon icon={Send} />
+            </Button>
+          </WithTooltip>
         </>
       )}
       {/* Not a live region either, for the same reason as the waiting line

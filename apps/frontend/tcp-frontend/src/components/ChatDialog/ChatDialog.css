@@ -1,36 +1,136 @@
 /*
- * Meaningful class names now, rules filled per theme later (ADR-026). No
- * literal colour, spacing or border value may appear here — see
- * Transcript.css for the convention this follows.
- *
- * The two rules below are layout, not theme: several conversation panels
- * stack in one dialog and need visible space between them, and the message
- * form's field and button have to sit on one row rather than wrap onto their
- * own lines.
+ * The chat dialog (000.06): a list pane and a view pane side by side, each
+ * scrolling on its own while the title bar, the search box, the list's footer,
+ * the view's heading and the message form stay put. Theme values only; no
+ * literal colours.
  */
-.chat-conversation {
-  margin-block-end: var(--tcp-space-lg);
+
+/* Wider than other dialogs: two panes need the room. */
+.react-aria-Modal:has(.chat-dialog) {
+  inline-size: min(64rem, 100%);
+  max-inline-size: none;
 }
 
-.chat-conversation__heading {
+.chat-dialog {
+  display: grid;
+  grid-template-columns: minmax(14rem, 18rem) 1fr;
+  gap: var(--tcp-space-md);
+  block-size: min(40rem, 100dvh - 10rem);
 }
 
-/* Complete and Close sit on one row, beside the heading they belong to. */
-.chat-conversation__actions {
+/* Narrow screens: the same order, stacked, the list capped so the view shows. */
+@media (max-width: 40rem) {
+  .chat-dialog {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    block-size: calc(100dvh - 8rem);
+  }
+
+  .chat-list {
+    max-block-size: 30dvh;
+  }
+}
+
+.chat-list {
   display: flex;
+  flex-direction: column;
+  gap: var(--tcp-space-sm);
+  min-block-size: 0;
+  padding-inline-end: var(--tcp-space-md);
+  border-inline-end: var(--tcp-border-width) solid var(--tcp-color-border);
+}
+
+.chat-list__items {
+  flex: 1;
+  min-block-size: 0;
+  overflow-y: auto;
+}
+
+.chat-list__group {
+  margin-block: var(--tcp-space-sm) var(--tcp-space-xs);
+  color: var(--tcp-color-text-muted);
+  font-weight: bold;
+}
+
+.chat-list__item {
+  display: flex;
+  gap: var(--tcp-space-sm);
+  align-items: flex-start;
+}
+
+/*
+ * The selected view is marked by a border as well as a colour: colour alone
+ * can't carry it (WCAG 1.4.1).
+ */
+.chat-list__item[data-selected] {
+  border-inline-start: calc(var(--tcp-border-width) * 4) solid
+    var(--tcp-color-accent);
+  background-color: var(--tcp-color-highlight);
+  color: var(--tcp-color-highlight-text);
+}
+
+.chat-list__text {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.chat-list__title {
+  font-weight: bold;
+}
+
+.chat-list__detail {
+  font-size: 0.875em;
+}
+
+.chat-list__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--tcp-space-sm);
 }
 
-.chat-conversation__complete {
+.chat-list__empty {
+  color: var(--tcp-color-text-muted);
 }
 
-.chat-conversation__close {
+.chat-view,
+.chat-dialog__empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tcp-space-sm);
+  min-block-size: 0;
+}
+
+.chat-view__header {
+  display: flex;
+  align-items: center;
+  gap: var(--tcp-space-sm);
+}
+
+.chat-view__heading {
+  flex: 1;
+  margin: 0;
+}
+
+/* The transcript takes whatever height the heading and form leave. */
+.chat-view .transcript-view {
+  flex: 1;
+}
+
+.chat-view .transcript {
+  flex: 1;
+  max-block-size: none;
 }
 
 .chat-input {
   display: flex;
   align-items: flex-end;
   gap: var(--tcp-space-sm);
+}
+
+.chat-input__field {
+  flex: 1;
 }
 
 .chat-input__waiting {

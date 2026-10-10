@@ -10,10 +10,11 @@ import {
   type Key,
 } from 'react-aria-components';
 import { ANNOUNCE_IMMEDIATE_MS, announce } from '../../announce/announcer';
-import { useCompanyRolesList } from '../../api/hooks';
+import { useCompanyRolesList, useLiveAssignmentsList } from '../../api/hooks';
 import { t } from '../../strings';
 import { Icon, WithTooltip } from '../Icon/Icon';
 import { CreateTaskDialog } from '../CreateTaskDialog/CreateTaskDialog';
+import { useChat } from '../ChatDialog/useChat';
 import { rolesForMenu } from './rolesForMenu';
 import { useStartChatAction, type StartChatRole } from './useStartChatAction';
 import './AddNewMenu.css';
@@ -21,8 +22,9 @@ import './AddNewMenu.css';
 export interface AddNewMenuProps {
   readonly companyId: string;
   /**
-   * The chat dialog's own control: a small round + offering only new chats,
-   * since that dialog is about chats, not tasks. Otherwise it is the company
+   * The chat dialog's own control: a small round + offering a chat with a
+   * role or listening in on running work (000.06), since that dialog is about
+   * chats, not tasks. Otherwise it is the company
    * page's floating action button, offering a task or a chat. Both are
    * icon-only, so `aria-label` carries the name. Neither needs a
    * `portalContainer`: nothing around them clips an unportalled tooltip.
@@ -54,6 +56,67 @@ export interface AddNewMenuProps {
  * **Not positioned here.** The `add-new` wrapper is a hook for a later stage
  * to place this control; this component only builds the menu.
  */
+/**
+ * The agents at work that can be listened in on: assignments in progress that
+ * have an agent. Chats are left out — they have their own place in the list.
+ * Its own component so only the chat dialog's menu fetches assignments.
+ */
+const ListenInMenu = ({
+  companyId,
+  onOpened,
+}: {
+  readonly companyId: string;
+  readonly onOpened: () => void;
+}) => {
+  const { openChat } = useChat();
+  const roles = useCompanyRolesList(companyId);
+  const assignments = useLiveAssignmentsList({ companyId });
+  const listenable = (assignments.data ?? []).flatMap(
+    ({ agentId, ...assignment }) =>
+      assignment.status === 'in-progress' &&
+      assignment.mode !== 'chat' &&
+      typeof agentId === 'string'
+        ? [
+            {
+              agentId,
+              roleName:
+                roles.data?.find((role) => role.id === assignment.roleId)
+                  ?.name ?? t('activity.role.unknown'),
+              reference: assignment.shortcode ?? null,
+            },
+          ]
+        : [],
+  );
+
+  return (
+    <Menu
+      onAction={(key) => {
+        const target = listenable.find((row) => row.agentId === key);
+        if (target === undefined) return;
+        openChat({ ...target, readOnly: true });
+        onOpened();
+      }}
+    >
+      {listenable.length === 0 ? (
+        <MenuItem id="no-assignments" isDisabled>
+          {t('addNew.noAssignments')}
+        </MenuItem>
+      ) : (
+        listenable.map((row) => (
+          <MenuItem key={row.agentId} id={row.agentId}>
+            {row.reference === null
+              ? row.roleName
+              : t('addNew.listenIn.option', {
+                  role: row.roleName,
+                  reference: row.reference,
+                })}
+          </MenuItem>
+        ))
+      )}
+    </Menu>
+  );
+};
+
 export const AddNewMenu = ({ companyId, inChat = false }: AddNewMenuProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [showCreateTask, setShowCreateTask] = useState(false);
@@ -136,7 +199,7 @@ export const AddNewMenu = ({ companyId, inChat = false }: AddNewMenuProps) => {
       ? []
       : sortedRoles.map((role) => role.id).filter((id) => id !== pendingRoleId);
 
-  const triggerLabel = t(inChat ? 'addNew.newChat' : 'addNew.trigger');
+  const triggerLabel = t('addNew.trigger');
 
   // The roles to chat with: the whole menu in the chat dialog, the "New chat"
   // submenu on the company page.
@@ -185,7 +248,26 @@ export const AddNewMenu = ({ companyId, inChat = false }: AddNewMenuProps) => {
         </WithTooltip>
         <Popover>
           {inChat ? (
-            rolesMenuElement
+            // In the chat dialog: a new chat, or a new view onto running work.
+            <Menu>
+              <SubmenuTrigger>
+                <MenuItem id="chat-with-role">
+                  {t('addNew.chatWithRole')}
+                </MenuItem>
+                <Popover>{rolesMenuElement}</Popover>
+              </SubmenuTrigger>
+              <SubmenuTrigger>
+                <MenuItem id="listen-in">{t('addNew.listenIn')}</MenuItem>
+                <Popover>
+                  <ListenInMenu
+                    companyId={companyId}
+                    onOpened={() => {
+                      setIsOpen(false);
+                    }}
+                  />
+                </Popover>
+              </SubmenuTrigger>
+            </Menu>
           ) : (
             <Menu onAction={onTopAction}>
               <MenuItem id="create-task">{t('addNew.createTask')}</MenuItem>

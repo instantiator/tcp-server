@@ -45,8 +45,11 @@ const TASKS_HEADING = 'Tasks';
 
 /** `chat.conversation.label` and `visualisation.tray.chatWithRole` both read this. */
 const chatWithRole = (role: string): string => `Chat with ${role}`;
-/** `chat.close`. */
-const closeChatName = (role: string): string => `Close the chat with ${role}`;
+/** `dialog.close`: the chat dialog's own Close (000.06). */
+const CLOSE_LABEL = 'Close';
+/** `addNew.trigger` and `addNew.chatWithRole`: the chat dialog's Add new (000.06). */
+const ADD_NEW_LABEL = 'Add new';
+const CHAT_WITH_ROLE_ITEM = 'Chat with a role';
 
 /*
  * `visualisation.*` literals, copied the same way — see
@@ -250,20 +253,27 @@ test.describe('add new', () => {
     });
     await expect(firstPanel).toBeVisible();
 
-    // The dialog's own control offers chats only (000.05), so it is named
-    // "New chat" and lists the roles straight away.
+    // The dialog's own Add new offers a chat with a role, or listening in
+    // (000.06).
     await chatDialog
-      .getByRole('button', { name: NEW_CHAT_ITEM, exact: true })
+      .getByRole('button', { name: ADD_NEW_LABEL, exact: true })
       .click();
+    await page.getByRole('menuitem', { name: CHAT_WITH_ROLE_ITEM }).click();
     await page.getByRole('menuitem', { name: roleBName }).click();
 
     const secondPanel = page.getByRole('region', {
       name: chatWithRole(roleBName),
     });
     await expect(secondPanel).toBeVisible();
-    // The first panel is untouched — a plain vertical stack, not tabs
-    // (`ChatDialog.tsx`), so adding a panel never unmounts another.
-    await expect(firstPanel).toBeVisible();
+    // One view at a time (000.06): the first chat is still in the list, and
+    // the new one is selected.
+    const list = chatDialog.getByRole('listbox', { name: CHAT_DIALOG_HEADING });
+    await expect(
+      list.getByRole('option', { name: new RegExp(roleAName) }),
+    ).toBeVisible();
+    await expect(
+      list.getByRole('option', { name: new RegExp(roleBName) }),
+    ).toHaveAttribute('aria-selected', 'true');
   });
 
   test("starts a chat from the office view's role tray, and returns focus to its button on close", async ({
@@ -292,14 +302,12 @@ test.describe('add new', () => {
     const panel = page.getByRole('region', { name: chatWithRole(roleName) });
     await expect(panel).toBeVisible();
 
-    // The only open panel: closing it empties the conversation list, which
-    // closes the dialog with it (`ChatProvider.tsx`'s
-    // `isOpen={isOpen && conversations.length > 0}`) — the same behaviour
-    // `company-activity.spec.ts`'s close test exercises from Activity → Chats.
-    // Closing here returns focus to whatever opened the dialog, which is the
+    // Closing returns focus to whatever opened the dialog, which is the
     // tray's own button — the tray stays mounted underneath throughout
     // (003.01 stage 4).
-    await page.getByRole('button', { name: closeChatName(roleName) }).click();
+    await chatDialog
+      .getByRole('button', { name: CLOSE_LABEL, exact: true })
+      .click();
     await expect(chatDialog).toBeHidden();
     await expect(chatButton).toBeFocused();
   });
