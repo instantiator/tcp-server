@@ -28,10 +28,20 @@ import { SessionProvider } from '../auth/session';
 import { startSignOut } from '../auth/sign-out';
 import { t } from '../strings';
 import { expectNoA11yViolations } from '../test-support/axe';
-import { installFetchMock, respondWithJson } from '../test-support/fetch-mock';
+import {
+  fetchMock,
+  installFetchMock,
+  respondByRoute,
+  respondWithJson,
+} from '../test-support/fetch-mock';
 import { Header } from './Header';
 
 const SIGNED_IN = { userId: 'test-user' };
+
+const STATUS = (admin: boolean) => ({
+  admin,
+  shutdown: { state: 'idle', restart: false },
+});
 
 /**
  * Renders the header with the given session, or signed out when omitted, at
@@ -57,10 +67,23 @@ describe('Header', () => {
   beforeEach(() => {
     vi.mocked(startSignOut).mockClear();
     installFetchMock();
+    respondByRoute([[/\/api\/system\/status/, { body: STATUS(false) }]]);
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  // The route needs a token, and a 401 redirects the whole page to sign in.
+  it('never asks for the system status when signed out', () => {
+    renderHeader();
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input instanceof Request ? input.url : input).includes(
+          '/api/system/status',
+        ),
+      ),
+    ).toBe(false);
   });
 
   it('shows no account menu when signed out', () => {
@@ -250,6 +273,88 @@ describe('Header', () => {
           },
         ),
       ).toBeInTheDocument();
+    });
+  });
+
+  describe('the System menu', () => {
+    const systemButton = () =>
+      screen.findByRole('button', { name: t('header.system.label') });
+
+    it('is absent for a non-admin', async () => {
+      renderHeader(SIGNED_IN);
+
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalled();
+      });
+      expect(
+        screen.queryByRole('button', { name: t('header.system.label') }),
+      ).toBeNull();
+    });
+
+    it('is absent when the status call fails', async () => {
+      respondByRoute([
+        [/\/api\/system\/status/, { status: 500, body: { message: 'boom' } }],
+      ]);
+      renderHeader(SIGNED_IN);
+
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalled();
+      });
+      expect(
+        screen.queryByRole('button', { name: t('header.system.label') }),
+      ).toBeNull();
+    });
+
+    describe('for an admin', () => {
+      beforeEach(() => {
+        respondByRoute([
+          [/\/api\/system\/status/, { body: STATUS(true) }],
+          [/\/api\/system\/health/, { body: { status: 'ok', services: [] } }],
+        ]);
+      });
+
+      it('offers "System health"', async () => {
+        const user = userEvent.setup();
+        renderHeader(SIGNED_IN);
+
+        await user.click(await systemButton());
+
+        expect(
+          screen.getByRole('menuitem', { name: t('header.system.health') }),
+        ).toBeInTheDocument();
+      });
+
+      it('opens the health dialog, and focus returns to the button on close', async () => {
+        const user = userEvent.setup();
+        renderHeader(SIGNED_IN);
+
+        const button = await systemButton();
+        await user.click(button);
+        await user.click(
+          screen.getByRole('menuitem', { name: t('header.system.health') }),
+        );
+        expect(
+          await screen.findByRole('dialog', {
+            name: t('systemHealth.heading'),
+          }),
+        ).toBeInTheDocument();
+        await user.click(
+          screen.getByRole('button', { name: t('dialog.close') }),
+        );
+
+        await waitFor(() => {
+          expect(document.activeElement).toBe(button);
+        });
+      });
+
+      it('has no accessibility violations, with the menu open', async () => {
+        const user = userEvent.setup();
+        renderHeader(SIGNED_IN);
+
+        await user.click(await systemButton());
+
+        await expectNoA11yViolations(document.body);
+      });
     });
   });
 });

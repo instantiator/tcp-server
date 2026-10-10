@@ -45,7 +45,12 @@ export const EVENT_ENTITIES = [
  * Key prefixes with no event behind them. Nothing streams a role, a member
  * list or a knowledge index, so these refetch only when their own hook asks.
  */
-export const STATIC_ENTITIES = ['role', 'company-user', 'knowledge'] as const;
+export const STATIC_ENTITIES = [
+  'role',
+  'company-user',
+  'knowledge',
+  'system',
+] as const;
 
 /** The second element of every key. */
 export type QueryScope = 'list' | 'detail' | 'history' | 'status' | 'search';
@@ -153,4 +158,8 @@ export const queryKeys = {
   spendOverview: () => ['spend', 'status'] as const,
   /** One company's usage totals, per-task breakdown and recent series. */
   companySpend: (companyId: string) => ['spend', 'detail', companyId] as const,
+  /** Who the caller is to the system (admin or not) and the shutdown state. */
+  systemStatus: () => ['system', 'detail'] as const,
+  /** The combined health of the server, agent runner and MCP servers. */
+  systemHealth: () => ['system', 'status'] as const,
 } as const;

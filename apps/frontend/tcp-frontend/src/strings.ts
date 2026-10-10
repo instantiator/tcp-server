@@ -34,6 +34,8 @@ const strings = {
   'header.account.profile': 'My profile',
   'header.account.memberships': 'My company memberships',
   'header.account.signOut': 'Sign out',
+  'header.system.label': 'System',
+  'header.system.health': 'System health',
 
   'breadcrumbs.label': 'Breadcrumb',
 
@@ -220,6 +222,20 @@ const strings = {
   'memberships.empty.heading': 'You cannot reach any company yet',
   'memberships.empty.body':
     'Ask an administrator to add you to a company. Until then there is nothing here to open.',
+
+  'systemHealth.heading': 'System health',
+  'systemHealth.loading': 'system health',
+  'systemHealth.error': 'The system health could not be loaded. Try again.',
+  'systemHealth.allUp': 'All services are up',
+  // Counted phrase, picked by `tCount`.
+  'systemHealth.down.one': '{count} service is down',
+  'systemHealth.down.other': '{count} services are down',
+  'systemHealth.service': '{name}: {status}',
+  'systemHealth.status.up': 'Up',
+  'systemHealth.status.down': 'Down',
+  'systemHealth.status.not_configured': 'Not configured',
+  'systemHealth.refresh': 'Refresh',
+  'systemHealth.fullReport': 'Full report',
 
   // Announcements. Every wording here is deliberately count-agnostic —
   // 'Tasks: {count} added', never '{count} tasks added' — because `t` has no

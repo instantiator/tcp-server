@@ -80,6 +80,8 @@ const everyKey: Record<keyof typeof queryKeys, readonly unknown[]> = {
   notifications: queryKeys.notifications('company-1'),
   spendOverview: queryKeys.spendOverview(),
   companySpend: queryKeys.companySpend('company-1'),
+  systemStatus: queryKeys.systemStatus(),
+  systemHealth: queryKeys.systemHealth(),
 };
 
 describe('every builder in queryKeys', () => {

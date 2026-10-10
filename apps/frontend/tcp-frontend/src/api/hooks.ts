@@ -69,13 +69,40 @@ import {
   useSpendOverview,
   useStartChatMutation,
   useStartTaskMutation,
+  useSystemHealthQuery,
+  useSystemStatusQuery,
   useTask,
   useTasks,
   useUploadMaterialMutation,
 } from './endpoints';
 import type { components } from './schema';
+import { useSession } from '../auth/useSession';
 
 export { useCompanies } from './endpoints';
+
+/**
+ * Whether the caller is an administrator, and the shutdown state. Not live:
+ * the answer rarely changes, so it is never stale and a failure is not retried
+ * (a failed call just means no System menu). `options` lets a caller poll.
+ *
+ * Asks only once signed in: the route needs a token, and a 401 is a
+ * full-page sign-in redirect, which would bounce a signed-out visitor off a
+ * public page.
+ */
+export const useSystemStatus = (
+  options: Parameters<typeof useSystemStatusQuery>[0] = {},
+) => {
+  const signedIn = useSession() !== null;
+  return useSystemStatusQuery({
+    staleTime: Infinity,
+    retry: false,
+    ...options,
+    enabled: signedIn && (options.enabled ?? true),
+  });
+};
+
+/** The health of every service. Administrators only; refetched on request. */
+export const useSystemHealth = useSystemHealthQuery;
 
 /**
  * One company.

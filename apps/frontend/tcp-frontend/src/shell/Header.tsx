@@ -1,4 +1,4 @@
-import { User } from 'lucide-react';
+import { Server, User } from 'lucide-react';
 import { useState } from 'react';
 import {
   Button,
@@ -9,11 +9,12 @@ import {
   type Key,
 } from 'react-aria-components';
 import { useMatch } from 'react-router';
-import { useLiveCompanyState } from '../api/hooks';
+import { useLiveCompanyState, useSystemStatus } from '../api/hooks';
 import { startSignOut } from '../auth/sign-out';
 import { useSession } from '../auth/useSession';
 import { Icon, WithTooltip } from '../components/Icon/Icon';
 import { MembershipsDialog } from '../components/MembershipsDialog/MembershipsDialog';
+import { SystemHealthDialog } from '../components/SystemHealthDialog/SystemHealthDialog';
 import { ProfileDialog } from '../components/ProfileDialog/ProfileDialog';
 import { t } from '../strings';
 import './Header.css';
@@ -74,8 +75,10 @@ export const Header = () => {
   const session = useSession();
   const companyId = useMatch('/company/:companyId/*')?.params.companyId;
   const [openDialog, setOpenDialog] = useState<
-    'profile' | 'memberships' | null
+    'profile' | 'memberships' | 'health' | null
   >(null);
+  // A failed or pending status call leaves the System menu out.
+  const isAdmin = useSystemStatus().data?.admin === true;
 
   const onAccountAction = (key: Key): void => {
     if (key === 'signOut') {
@@ -87,6 +90,11 @@ export const Header = () => {
     }
   };
 
+  const onSystemAction = (key: Key): void => {
+    if (key === 'health') setOpenDialog('health');
+  };
+
+  const systemLabel = t('header.system.label');
   const accountLabel = t('header.account.label');
 
   return (
@@ -99,6 +107,24 @@ export const Header = () => {
         <span className="app-header__logo">{t('app.title')}</span>
       ) : (
         <CompanyTitle companyId={companyId} />
+      )}
+
+      {session !== null && isAdmin && (
+        <MenuTrigger>
+          <WithTooltip label={systemLabel}>
+            <Button
+              className="react-aria-Button tcp-icon-button app-header__account"
+              aria-label={systemLabel}
+            >
+              <Icon icon={Server} />
+            </Button>
+          </WithTooltip>
+          <Popover>
+            <Menu onAction={onSystemAction}>
+              <MenuItem id="health">{t('header.system.health')}</MenuItem>
+            </Menu>
+          </Popover>
+        </MenuTrigger>
       )}
 
       {session !== null && (
@@ -132,6 +158,13 @@ export const Header = () => {
       )}
       {openDialog === 'memberships' && (
         <MembershipsDialog
+          onClose={() => {
+            setOpenDialog(null);
+          }}
+        />
+      )}
+      {openDialog === 'health' && (
+        <SystemHealthDialog
           onClose={() => {
             setOpenDialog(null);
           }}
