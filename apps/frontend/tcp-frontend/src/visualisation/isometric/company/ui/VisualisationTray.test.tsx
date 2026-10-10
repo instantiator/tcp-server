@@ -270,12 +270,13 @@ describe('VisualisationTray', () => {
       name: t('visualisation.tray.taskHeading', { shortcode: 'TASK-1' }),
     });
     expect(within(aside).getByText('Reconcile accounts')).toBeInTheDocument();
+    // The task's status is an icon named for it, read before the heading.
     expect(
-      within(aside).getAllByText(statusLabel('in-progress')),
+      within(aside).getAllByRole('img', { name: statusLabel('in-progress') }),
     ).not.toHaveLength(0);
     const list = within(aside).getByRole('list');
-    expect(list).toHaveTextContent(`${ROLE_NAME} — ${modeLabel('implement')}`);
-    expect(list).toHaveTextContent(statusLabel('in-progress'));
+    expect(list).toHaveTextContent(modeLabel('implement'));
+    expect(list).toHaveTextContent(ROLE_NAME);
   });
 
   describe('the assignment lists', () => {
@@ -309,64 +310,123 @@ describe('VisualisationTray', () => {
         roles: { body: [chicken, cat] },
         tasks: { body: [{ ...taskFixture(), shortcode: '003' }] },
       });
-      renderTray({ selection: { kind: 'task', id: TASK_ID } });
+      openChat = renderTray({
+        selection: { kind: 'task', id: TASK_ID },
+      }).openChat;
       return screen.findByRole('complementary', {
         name: t('visualisation.tray.taskHeading', { shortcode: '003' }),
       });
     };
+    let openChat = vi.fn();
 
     const rows = (list: HTMLElement) =>
       within(list)
         .getAllByRole('listitem')
-        .map((item) => ({
-          value: (item as HTMLLIElement).value,
-          text: item.textContent.replace(/\s+/g, ' '),
-        }));
+        .map((item) => item.textContent.replace(/\s+/g, ' ').trim());
 
-    it('numbers by creation, in "In progress" and "Completed" sections', async () => {
+    it('lists every assignment once, numbered by creation, under "Assignments"', async () => {
       const aside = await renderTask();
 
-      const headings = within(aside)
-        .getAllByRole('heading', { level: 3 })
-        .map((heading) => heading.textContent);
-      expect(headings).toEqual(['In progress', 'Completed']);
-
-      const [inProgress, completed] = within(aside).getAllByRole('list');
-      expect(rows(inProgress)).toEqual([
-        { value: 6, text: 'Chicken assistant — Implementing — In progress' },
-      ]);
-      expect(rows(completed).map((row) => row.value)).toEqual([1, 2, 3, 4, 5]);
-      expect(rows(completed)[3]?.text).toBe(
-        'Cat assistant — Implementing — Succeeded',
-      );
+      expect(
+        within(aside)
+          .getAllByRole('heading', { level: 3 })
+          .map((heading) => heading.textContent),
+      ).toEqual([t('visualisation.tray.assignments')]);
+      const list = within(aside).getByRole('list');
+      expect(rows(list)).toHaveLength(6);
+      expect(rows(list)[0]).toMatch(/^1\. Planning ?Chicken assistant/);
+      expect(rows(list)[5]).toMatch(/^6\. Implementing ?Chicken assistant/);
     });
 
-    it('omits a section with no rows', async () => {
-      const aside = await renderTask(EXAMPLE.slice(0, 5));
+    it("names each row's status icon", async () => {
+      const aside = await renderTask();
+      const list = within(aside).getByRole('list');
 
       expect(
-        within(aside).queryByRole('heading', { name: 'In progress' }),
-      ).not.toBeInTheDocument();
+        within(list).getAllByRole('img', { name: statusLabel('succeeded') }),
+      ).toHaveLength(5);
       expect(
-        within(aside).getByRole('heading', { name: 'Completed' }),
-      ).toBeInTheDocument();
+        within(list).getAllByRole('img', { name: statusLabel('in-progress') }),
+      ).toHaveLength(1);
     });
 
-    it('opens the assignment tooltip on keyboard focus', async () => {
+    it("reveals an assignment's prompt from its role", async () => {
       await renderTask();
+      const user = userEvent.setup();
 
-      await userEvent.tab();
-      const info = screen.getByRole('button', { name: 'About assignment 6' });
-      while (document.activeElement !== info) await userEvent.tab();
+      const summary = screen.getByText(
+        (_, element) =>
+          element?.tagName === 'SUMMARY' &&
+          element.textContent.includes('description of assignment 6'),
+      );
+      const details = summary.closest('details');
+      expect(details).not.toHaveAttribute('open');
+      await user.click(summary);
+      expect(details).toHaveAttribute('open');
+      expect(details).toHaveTextContent('Prompt 6');
+    });
 
-      const tooltip = await screen.findByRole('tooltip');
-      expect(tooltip).toHaveTextContent('Task 003, Assignment 006');
-      expect(tooltip).toHaveTextContent('Prompt 6');
+    it('fills Listen in while the agent works, outlines it once finished, and omits it before the start', async () => {
+      await renderTask([
+        ...EXAMPLE.slice(4),
+        {
+          ...EXAMPLE[0],
+          id: 'assign-7',
+          status: 'ready',
+          createdAt: '2026-09-01T00:00:09.000Z',
+        },
+      ]);
+
+      const working = screen.getByRole('button', {
+        name: t('visualisation.tray.listenInAssignment', {
+          role: 'Chicken assistant',
+          number: 2,
+        }),
+      });
+      const finished = screen.getByRole('button', {
+        name: t('visualisation.tray.listenInAssignment', {
+          role: 'Cat assistant',
+          number: 1,
+        }),
+      });
+      expect(working).not.toHaveClass('tcp-button--outline');
+      expect(finished).toHaveClass('tcp-button--outline');
+      expect(
+        screen.queryByRole('button', {
+          name: t('visualisation.tray.listenInAssignment', {
+            role: 'Chicken assistant',
+            number: 3,
+          }),
+        }),
+      ).toBeNull();
+    });
+
+    it("listens in on the assignment's agent, read-only", async () => {
+      await renderTask();
+      const user = userEvent.setup();
+
+      await user.click(
+        screen.getByRole('button', {
+          name: t('visualisation.tray.listenInAssignment', {
+            role: 'Chicken assistant',
+            number: 6,
+          }),
+        }),
+      );
+      expect(openChat).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentId: AGENT_ID,
+          roleName: 'Chicken assistant',
+          readOnly: true,
+        }),
+      );
     });
 
     it('has no accessibility violations', async () => {
       await renderTask();
-      await screen.findByRole('heading', { name: 'In progress' });
+      await screen.findByRole('heading', {
+        name: t('visualisation.tray.assignments'),
+      });
 
       await expectNoA11yViolations(document.body);
     });

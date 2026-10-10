@@ -3,7 +3,11 @@ import type { ReactNode } from 'react';
 export interface TrayPanelProps {
   readonly headingId: string;
   readonly heading: ReactNode;
-  /** A status icon before the heading text; it must carry its own name. */
+  /**
+   * A status icon before the heading; it must carry its own name. Outside the
+   * `h2`, so the heading — and the tray landmark it names — stays "Task 003"
+   * rather than taking on a status that changes.
+   */
   readonly icon?: ReactNode;
   /** Small icon buttons for what the user can do with this entity. */
   readonly actions?: ReactNode;
@@ -34,10 +38,10 @@ export const TrayPanel = ({
 }: TrayPanelProps) => (
   <>
     <div className="tray-panel__title">
+      {icon}
       {/* Focusable by script only, so focus has somewhere to go when a
           control in the panel below disappears. */}
       <h2 id={headingId} tabIndex={-1}>
-        {icon}
         {heading}
       </h2>
     </div>

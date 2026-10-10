@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { Pause, Pencil, Play, Square, type LucideIcon } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Button } from 'react-aria-components';
 import { refusalKey, type RefusalAction } from '../../api/errors';
 import {
@@ -9,11 +10,12 @@ import {
   useStartTask,
 } from '../../api/hooks';
 import { ACTIVE_TASK_STATUSES } from '../../api/statuses';
-import { t } from '../../strings';
+import { t, type StringKey } from '../../strings';
 import { ButtonRow } from '../ButtonRow/ButtonRow';
 import { CreateTaskDialog } from '../CreateTaskDialog/CreateTaskDialog';
 import { ConfirmDialog } from '../Dialog/ConfirmDialog';
 import { ErrorState } from '../ErrorState/ErrorState';
+import { RoundIconButton } from '../RoundIconButton/RoundIconButton';
 import { RESUMABLE_KINDS, useTaskWaiting } from './useTaskWaiting';
 
 export interface TaskControlsProps {
@@ -27,19 +29,40 @@ export interface TaskControlsProps {
   readonly focusFallback: () => HTMLElement | null;
   /** Where its dialogs are portalled; see `DialogProps.portalContainer`. */
   readonly portalContainer?: Element | undefined;
+  /**
+   * Small round icon buttons, named for the task ("Pause task 002"), instead
+   * of text buttons — for the office tray's action row.
+   */
+  readonly icons?: boolean;
+  /** Further icon buttons drawn in the same row, after these (the tray's Close room). */
+  readonly extraActions?: ReactNode;
+}
+
+/** One control, drawn either way. */
+interface Control {
+  readonly id: string;
+  readonly text: StringKey;
+  /** The icon variant's name, which takes `{shortcode}`. */
+  readonly iconLabel: StringKey;
+  readonly icon: LucideIcon;
+  readonly outline?: boolean;
+  readonly isDisabled?: boolean;
+  readonly onPress: () => void;
 }
 
 /**
  * Start, edit, pause, resume and cancel a task, each shown only in the states
  * where the server would accept it, with Cancel behind a confirmation. Shared
- * by the task dialog and the office view's tray, so both offer the same
- * controls.
+ * by the task dialog (text buttons) and the office view's tray (`icons`), so
+ * both offer the same controls.
  */
 export const TaskControls = ({
   taskId,
   companyId,
   focusFallback,
   portalContainer,
+  icons = false,
+  extraActions,
 }: TaskControlsProps) => {
   const task = useLiveTaskState(taskId);
   const { waiting } = useTaskWaiting(taskId, companyId);
@@ -99,66 +122,101 @@ export const TaskControls = ({
       />
     );
 
+  const candidates: (Control | false)[] = [
+    canStart && {
+      id: 'start',
+      text: 'task.start',
+      iconLabel: 'task.start.icon',
+      icon: Play,
+      isDisabled: start.isPending,
+      onPress: () => {
+        start.mutate();
+      },
+    },
+    canEdit && {
+      id: 'edit',
+      text: 'task.edit',
+      iconLabel: 'task.edit.icon',
+      icon: Pencil,
+      onPress: () => {
+        setEditing(true);
+      },
+    },
+    canPause && {
+      id: 'pause',
+      text: 'task.pause',
+      iconLabel: 'task.pause.icon',
+      icon: Pause,
+      isDisabled: pause.isPending,
+      onPress: () => {
+        pause.mutate();
+      },
+    },
+    canResume && {
+      id: 'resume',
+      text: 'task.resume',
+      iconLabel: 'task.resume.icon',
+      icon: Play,
+      isDisabled: resume.isPending,
+      onPress: () => {
+        resume.mutate();
+      },
+    },
+    canCancel && {
+      id: 'cancel',
+      text: 'task.cancel',
+      iconLabel: 'task.cancel.icon',
+      icon: Square,
+      outline: true,
+      isDisabled: cancel.isPending,
+      onPress: () => {
+        setConfirming(true);
+      },
+    },
+  ];
+  const shown = candidates.filter(
+    (control): control is Control => control !== false,
+  );
+
   return (
     <>
-      {controls !== '' && (
-        <ButtonRow>
-          {canStart && (
-            <Button
-              className="react-aria-Button"
-              isDisabled={start.isPending}
-              onPress={() => {
-                start.mutate();
-              }}
-            >
-              {t('task.start')}
-            </Button>
+      {icons
+        ? (shown.length > 0 || extraActions !== undefined) && (
+            <div className="task-controls--icons">
+              {shown.map((control) => (
+                <RoundIconButton
+                  key={control.id}
+                  icon={control.icon}
+                  label={t(control.iconLabel, {
+                    shortcode: taskData.shortcode,
+                  })}
+                  outline={control.outline}
+                  isDisabled={control.isDisabled}
+                  portalContainer={portalContainer}
+                  onPress={control.onPress}
+                />
+              ))}
+              {extraActions}
+            </div>
+          )
+        : shown.length > 0 && (
+            <ButtonRow>
+              {shown.map((control) => (
+                <Button
+                  key={control.id}
+                  className={
+                    control.outline === true
+                      ? 'react-aria-Button tcp-button--outline'
+                      : 'react-aria-Button'
+                  }
+                  isDisabled={control.isDisabled}
+                  onPress={control.onPress}
+                >
+                  {t(control.text)}
+                </Button>
+              ))}
+            </ButtonRow>
           )}
-          {canEdit && (
-            <Button
-              className="react-aria-Button"
-              onPress={() => {
-                setEditing(true);
-              }}
-            >
-              {t('task.edit')}
-            </Button>
-          )}
-          {canPause && (
-            <Button
-              className="react-aria-Button"
-              isDisabled={pause.isPending}
-              onPress={() => {
-                pause.mutate();
-              }}
-            >
-              {t('task.pause')}
-            </Button>
-          )}
-          {canResume && (
-            <Button
-              className="react-aria-Button"
-              isDisabled={resume.isPending}
-              onPress={() => {
-                resume.mutate();
-              }}
-            >
-              {t('task.resume')}
-            </Button>
-          )}
-          {canCancel && (
-            <Button
-              className="react-aria-Button tcp-button--outline"
-              isDisabled={cancel.isPending}
-              onPress={() => {
-                setConfirming(true);
-              }}
-            >
-              {t('task.cancel')}
-            </Button>
-          )}
-        </ButtonRow>
-      )}
 
       {editing && (
         <CreateTaskDialog

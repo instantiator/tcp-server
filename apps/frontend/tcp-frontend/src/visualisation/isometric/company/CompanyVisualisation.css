@@ -118,12 +118,12 @@ body:has(.dialog-dock) .company-visualisation__stage {
   padding: var(--tcp-space-sm) var(--tcp-space-md);
   padding-inline-end: calc(var(--tcp-icon-button-size) + var(--tcp-space-md));
   border-block-end: var(--tcp-border-width) solid var(--tcp-color-border);
-}
-
-.tray-panel__title h2 {
   display: flex;
   align-items: center;
   gap: var(--tcp-space-sm);
+}
+
+.tray-panel__title h2 {
   margin: 0;
 }
 
@@ -168,6 +168,48 @@ body:has(.dialog-dock) .company-visualisation__stage {
   position: absolute;
   inset-block-end: var(--tcp-space-sm);
   inset-inline-end: var(--tcp-space-sm);
+}
+
+/* The task tray's assignments: status icon, mode over role, Listen in. */
+.tray-assignments {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tcp-space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tray-assignments__row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: var(--tcp-space-sm);
+}
+
+.tray-assignments__mode {
+  font-weight: bold;
+}
+
+.tray-assignments__details > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--tcp-space-xs);
+  cursor: pointer;
+  list-style: none;
+}
+
+.tray-assignments__details > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* The chevron turns down once the description is showing. */
+.tray-assignments__details[open] > summary .tcp-icon {
+  rotate: 90deg;
+}
+
+.tray-assignments__details > p {
+  margin-block: var(--tcp-space-xs) 0;
 }
 
 /*
