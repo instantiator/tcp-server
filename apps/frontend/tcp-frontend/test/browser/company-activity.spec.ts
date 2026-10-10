@@ -49,7 +49,8 @@ const taskRowName = (shortcode: string) => `Open task ${shortcode}`;
 /*
  * 002.02 stage 7 literals, copied the same way from `strings.ts`
  * (`activity.chats.open`, `chat.dialog.heading`, `chat.conversation.label`,
- * `dialog.minimise`, `chat.close`, `chat.dock.label`, `activity.status.idle`).
+ * `dialog.minimise`, `dialog.close`; the chat dialog docks as one entry named
+ * by its heading since 000.06).
  * `POST /api/agent/chat/start` creates an orphan assignment
  * (`AgentDbService.create`) with no shortcode — only a task's plan,
  * implement, QA and finalise assignments get one, from
@@ -58,11 +59,11 @@ const taskRowName = (shortcode: string) => `Open task ${shortcode}`;
  */
 const chatRowName = (role: string) => `Open the chat with ${role}`;
 const chatPanelHeading = (role: string) => `Chat with ${role}`;
-const chatCloseName = (role: string) => `Close the chat with ${role}`;
-/** A freshly created chat agent never runs, so its status stays `idle` throughout. */
-const chatDockLabel = (role: string) => `${role} — Idle`;
 const CHAT_DIALOG_HEADING = 'Chats';
 const MINIMISE_LABEL = 'Minimise';
+const CLOSE_LABEL = 'Close';
+/** `dock.label`: the bar minimised dialogs sit in. */
+const DOCK_LABEL = 'Minimised dialogs';
 
 /** `activity.filter.label`: the tasks list's status checkbox group. */
 const TASK_STATUSES_FILTER_LABEL = 'Task statuses';
@@ -454,9 +455,9 @@ test.describe('company activity', () => {
     // Minimise: the dialog unmounts and a dock entry takes its place.
     await page.getByRole('button', { name: MINIMISE_LABEL }).click();
     await expect(dialog).toBeHidden();
-    const dockButton = page.getByRole('button', {
-      name: chatDockLabel(roleName),
-    });
+    const dockButton = page
+      .getByRole('navigation', { name: DOCK_LABEL })
+      .getByRole('button', { name: CHAT_DIALOG_HEADING });
     await expect(dockButton).toBeVisible();
 
     // Restore: the dock entry is gone, the dialog and panel are back.
@@ -465,17 +466,15 @@ test.describe('company activity', () => {
     await expect(panel).toBeVisible();
     await expect(dockButton).toBeHidden();
 
-    // Close: the one open panel is the only one, so closing it empties the
-    // dialog's conversation list and the dialog closes with it — there is no
-    // separate close control for the dialog itself (`Dialog.tsx`'s
-    // `hideClose`).
-    await page.getByRole('button', { name: chatCloseName(roleName) }).click();
-    await expect(panel).toBeHidden();
+    // Close: the dialog's own Close (000.06). Nothing is docked.
+    await dialog
+      .getByRole('button', { name: CLOSE_LABEL, exact: true })
+      .click();
     await expect(dialog).toBeHidden();
     await expect(dockButton).toBeHidden();
 
-    // The chat is untouched on the server (`useChat().closeChat` only drops
-    // it from this screen), so Activity → Chats is still the way back in.
+    // Closing leaves the chat on the server, so Activity → Chats is still
+    // the way back in.
     await expect(chatRow).toBeVisible();
     await chatRow.click();
     await expect(dialog).toBeVisible();

@@ -46,6 +46,66 @@ describe('renderAuditEvent', () => {
     });
   });
 
+  describe('tool summary', () => {
+    const langchainResult = (kwargs: Record<string, unknown>) =>
+      ev('tool_result', {
+        tool: 'tasks__create_plan',
+        output: { lc: 1, type: 'constructor', kwargs },
+      });
+
+    it('gives a tool call its name only', () => {
+      const [entry] = renderAuditEvent(
+        ev('tool_call', { tool: 'web_search', input: { q: 'x' } }),
+        fresh(),
+      );
+      expect(entry.tool).toEqual({ name: 'web_search' });
+    });
+
+    it('reads status and content from a LangChain ToolMessage, leaving the JSON intact', () => {
+      const e = langchainResult({ status: 'success', content: 'Plan created' });
+      const [entry] = renderAuditEvent(e, fresh());
+      expect(entry.tool).toEqual({
+        name: 'tasks__create_plan',
+        status: 'success',
+        content: 'Plan created',
+      });
+      expect(JSON.parse(entry.text)).toEqual({
+        tool: 'tasks__create_plan',
+        output: e.payload['output'],
+      });
+    });
+
+    it('takes a string output as the content', () => {
+      const [entry] = renderAuditEvent(
+        ev('tool_result', { tool: 't', output: 'done' }),
+        fresh(),
+      );
+      expect(entry.tool).toEqual({ name: 't', content: 'done' });
+    });
+
+    it('joins array content from its text parts', () => {
+      const [entry] = renderAuditEvent(
+        langchainResult({
+          content: [
+            { type: 'text', text: 'a' },
+            { type: 'image' },
+            { type: 'text', text: 'b' },
+          ],
+        }),
+        fresh(),
+      );
+      expect(entry.tool).toEqual({ name: 'tasks__create_plan', content: 'ab' });
+    });
+
+    it('gives only the name for an output it cannot read', () => {
+      const [entry] = renderAuditEvent(
+        ev('tool_result', { tool: 7, output: { kwargs: 'nope' } }),
+        fresh(),
+      );
+      expect(entry.tool).toEqual({ name: 'unknown' });
+    });
+  });
+
   it('replays an llm_response as reasoning then response blocks when no deltas streamed', () => {
     const entries = renderAuditEvent(
       ev('llm_response', { reasoningText: 'because', responseText: 'answer' }),

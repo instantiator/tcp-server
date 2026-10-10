@@ -1,4 +1,4 @@
-import { t, type StringKey } from '../../../../strings';
+import { t, type StringKey } from '../strings';
 
 // Every `AssignmentDTO['mode']` value, mapped to its string key. A `Record`
 // lookup rather than a template-literal key, for the same reason

@@ -77,30 +77,40 @@ function insideRoom(world: OfficeWorld, roomId: string): Tile {
 }
 
 describe('roomLighting', () => {
-  it('leaves an empty room dim', () => {
+  it('lights an active task room with nobody in it', () => {
     const world = addRoom(createInitialWorld(), 'task', taskRoomId('t1'), 't1');
     const { litRooms } = roomLighting(world, snapshot([task()]));
-    expect(litRooms.has(taskRoomId('t1'))).toBe(false);
-  });
-
-  it('lights a task room with a running agent in it', () => {
-    const world = worldWithAvatarAt((w) => insideRoom(w, taskRoomId('t1')));
-    const { litRooms } = roomLighting(world, snapshot([task()], [agent()]));
     expect(litRooms.has(taskRoomId('t1'))).toBe(true);
   });
 
-  it('keeps a room dim when only a paused agent is in it', () => {
+  // Between assignments no agent is running, and the room used to go dark.
+  it('keeps an active task room lit while no agent is running', () => {
+    const world = worldWithAvatarAt((w) => insideRoom(w, 'rec'));
+    const { litRooms } = roomLighting(
+      world,
+      snapshot([task()], [agent({ status: 'completed' })]),
+    );
+    expect(litRooms.has(taskRoomId('t1'))).toBe(true);
+  });
+
+  it.each(['ready', 'succeeded', 'failed', 'cancelled'] as const)(
+    'leaves the room of a %s task dim, even with a running agent in it',
+    (status) => {
+      const world = worldWithAvatarAt((w) => insideRoom(w, taskRoomId('t1')));
+      const { litRooms } = roomLighting(
+        world,
+        snapshot([task({ status })], [agent()]),
+      );
+      expect(litRooms.has(taskRoomId('t1'))).toBe(false);
+    },
+  );
+
+  it('leaves the room of a paused task dim', () => {
     const world = worldWithAvatarAt((w) => insideRoom(w, taskRoomId('t1')));
     const { litRooms } = roomLighting(
       world,
-      snapshot([task()], [agent({ status: 'paused' })]),
+      snapshot([task({ pausedAt: '2026-10-09T10:00:00.000Z' })], [agent()]),
     );
-    expect(litRooms.has(taskRoomId('t1'))).toBe(false);
-  });
-
-  it('leaves a task room dim while its running agent stands elsewhere', () => {
-    const world = worldWithAvatarAt((w) => insideRoom(w, 'rec'));
-    const { litRooms } = roomLighting(world, snapshot([task()], [agent()]));
     expect(litRooms.has(taskRoomId('t1'))).toBe(false);
   });
 
@@ -119,7 +129,7 @@ describe('roomLighting', () => {
     ).toBe(3);
   });
 
-  it('lights a one-to-one room by the same rule', () => {
+  it('lights a one-to-one room while a running agent stands in it', () => {
     const roomId = oneToOneRoomId('consult-1');
     const world = addRoom(createInitialWorld(), 'oneToOne', roomId);
     const withAvatar = addAgentAvatar(world, {

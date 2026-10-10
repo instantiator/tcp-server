@@ -58,9 +58,7 @@ const renderCompanyVisualisation = () => {
   const openChat = vi.fn();
   const utils = render(
     <QueryClientProvider client={queryClient}>
-      <ChatContext.Provider
-        value={{ openChat, closeChat: vi.fn(), startChat: vi.fn() }}
-      >
+      <ChatContext.Provider value={{ openChat, startChat: vi.fn() }}>
         <CompanyVisualisation companyId={COMPANY_ID} />
       </ChatContext.Provider>
     </QueryClientProvider>,
@@ -453,7 +451,7 @@ describe('CompanyVisualisation', () => {
     // than after all of a panel's content as a tray-level control — so it
     // comes before the link here, not after it. Close stays last in the
     // tray's markup; its top-right position is CSS only.
-    it('opens the archive tray from the picker like any other kind, with Follow before its links in the Tab order', async () => {
+    it('opens the archive tray from the picker like any other kind, with its links before Follow and Close in the Tab order', async () => {
       withArchive();
       const user = userEvent.setup();
       renderCompanyVisualisation();
@@ -479,13 +477,13 @@ describe('CompanyVisualisation', () => {
 
       stage.focus();
       await user.tab();
+      expect(link).toHaveFocus();
+      await user.tab();
       expect(
         within(tray).getByRole('button', {
           name: t('visualisation.tray.follow'),
         }),
       ).toHaveFocus();
-      await user.tab();
-      expect(link).toHaveFocus();
       await user.tab();
       expect(
         within(tray).getByRole('button', {

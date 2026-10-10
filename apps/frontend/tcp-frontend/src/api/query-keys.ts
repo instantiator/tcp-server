@@ -116,6 +116,10 @@ export const queryKeys = {
 
   agentHistory: (id: string) => ['agent', 'history', id] as const,
 
+  /** Agents whose transcripts contain `q`; refetched when an agent changes. */
+  agentSearch: (companyId: string, q: string) =>
+    ['agent', 'search', companyId, q] as const,
+
   tasks: (params: TaskListParams) => ['task', 'list', params] as const,
   task: (id: string) => ['task', 'detail', id] as const,
   taskHistory: (id: string) => ['task', 'history', id] as const,

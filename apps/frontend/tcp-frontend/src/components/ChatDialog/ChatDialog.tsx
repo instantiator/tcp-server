@@ -1,107 +1,105 @@
 import { useEffect, useRef } from 'react';
-import { useMatch } from 'react-router';
-import { AddNewMenu } from '../AddNew/AddNewMenu';
-import { Dialog } from '../Dialog/Dialog';
 import { t } from '../../strings';
-import { ChatConversation } from './ChatConversation';
+import { Dialog } from '../Dialog/Dialog';
+import { EmptyState } from '../EmptyState/EmptyState';
+import { ChatList } from './ChatList';
+import { ChatView } from './ChatView';
+import type { Eavesdrop } from './eavesdropStorage';
 import type { Conversation } from './useChat';
 import './ChatDialog.css';
 
 export interface ChatDialogProps {
-  readonly conversations: readonly Conversation[];
   readonly isOpen: boolean;
-  /** The conversation to move focus into once the dialog is showing, if any. */
-  readonly focusAgentId: string | null;
-  readonly onMinimise: () => void;
-  /** Called once focus has been moved, so the same move does not repeat. */
+  /** The company whose chats are listed; `null` before any company was seen. */
+  readonly companyId: string | null;
+  readonly selected: Conversation | null;
+  readonly eavesdrops: readonly Eavesdrop[];
+  /** An opener asked for this view: move focus into it once showing. */
+  readonly focusRequested: boolean;
   readonly onFocused: () => void;
+  readonly onSelect: (conversation: Conversation) => void;
+  readonly onArchiveEavesdrop: (agentId: string) => void;
+  /** The selected view was archived or deleted. */
+  readonly onDeselect: () => void;
+  readonly onMinimise: () => void;
+  readonly onClose: () => void;
 }
 
 /**
- * The chat dialog: every open conversation, stacked in one modal.
+ * The chat dialog (000.06): a list of views on the left and the selected one
+ * on the right, like a conventional chat client.
  *
- * **It has no close control of its own — only minimise (`hideClose`).** The
- * dialog already disappears on its own once `ChatProvider` empties the
- * conversation list, so there is no separate "closed" state for a close button
- * to reach: it would do exactly what minimise does, under a name suggesting
- * otherwise. Escape is still wired to minimise, because a panel can be holding
- * a half-typed message and throwing that away on a stray press would be
- * hostile.
+ * Reading and tab order follows the layout: the title bar, then the list pane
+ * (search, the grouped list, Show archived, Add new), then the selected view
+ * (its heading and controls, the transcript, Follow, the message form). Below
+ * 40rem wide the panes stack in the same order.
  *
- * **This component never shortens its own list.** Completing a conversation
- * (`ChatConversation`) leaves its panel in place with its transcript intact,
- * so no focus has to be rehomed to a neighbour. Closing one does shorten the
- * list — but that happens in `ChatProvider`, which owns `conversations` and
- * decides where focus goes next; this component only renders whatever it is
- * handed and moves focus to `focusAgentId` when told to. The focus machinery
- * below serves both directions: bringing a conversation back from the dock,
- * and landing on the neighbour of one that was just closed.
- *
- * **A plain vertical stack, not tabs.** React Aria's `Tabs` unmounts every
- * panel but the selected one, and every conversation here needs to keep
- * running while the dialog is showing: its own live transcript, subscribed
- * to its own event stream, receiving the agent's reply whether or not that
- * panel happens to be in view. Unmounting a hidden panel would drop its
- * stream and lose whatever arrived while another conversation had the focus.
- *
- * **Its title bar carries the "Add new" menu (003.01).** The dialog is modal,
- * so the page's own control is unreachable while it shows. From here, a new
- * chat joins this stack as another panel, and a new task opens as a dialog
- * stacked on top. The dialog outlives the company page it was opened from, so
- * the menu shows only while a company is the current route.
+ * It has both Minimise and Close. Closing loses nothing — role chats live on
+ * the server, and the eavesdrop list and selection are held by `ChatProvider`
+ * — so escape closes it, as it does every other dialog.
  */
 export const ChatDialog = ({
-  conversations,
   isOpen,
-  focusAgentId,
-  onMinimise,
+  companyId,
+  selected,
+  eavesdrops,
+  focusRequested,
   onFocused,
+  onSelect,
+  onArchiveEavesdrop,
+  onDeselect,
+  onMinimise,
+  onClose,
 }: ChatDialogProps) => {
-  // Each open conversation's panel element, keyed by agent id, so focus can
-  // be moved to one by id without a DOM query. Populated by the ref callback
-  // handed down to each `ChatConversation` below.
-  const panels = useRef(new Map<string, HTMLElement>());
-  const companyId = useMatch('/company/:companyId/*')?.params.companyId;
+  const list = useRef<HTMLDivElement>(null);
+  const view = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    // A plain `useEffect`, not `useLayoutEffect` — deliberately. React
-    // Aria's `Modal` focuses the first focusable element inside it in a
-    // layout effect when it mounts. Layout effects all run, in order, before
-    // any normal effect does, so this one is guaranteed to run after that
-    // one and win the race for where focus ends up. A layout effect here
-    // would run alongside (or even before) the modal's own, and the modal's
-    // auto-focus could undo ours.
-    if (focusAgentId === null || !isOpen) return;
-    panels.current.get(focusAgentId)?.focus();
+    // A plain effect, not a layout effect: React Aria's `Modal` focuses its
+    // first focusable element in a layout effect on mount, and this has to
+    // run after it to win.
+    if (!focusRequested || !isOpen) return;
+    (view.current ?? list.current)?.focus();
     onFocused();
-  }, [focusAgentId, isOpen, onFocused]);
+  }, [focusRequested, isOpen, onFocused]);
 
   return (
     <Dialog
       isOpen={isOpen}
-      onOpenChange={(open) => {
-        if (!open) onMinimise();
-      }}
+      onClose={onClose}
       heading={t('chat.dialog.heading')}
       onMinimise={onMinimise}
-      hideClose
-      actions={
-        companyId !== undefined && <AddNewMenu companyId={companyId} inChat />
-      }
     >
-      {conversations.map((conversation) => (
-        <ChatConversation
-          key={conversation.agentId}
-          conversation={conversation}
-          sectionRef={(element) => {
-            if (element === null) {
-              panels.current.delete(conversation.agentId);
-            } else {
-              panels.current.set(conversation.agentId, element);
-            }
-          }}
-        />
-      ))}
+      <div className="chat-dialog">
+        {companyId !== null && (
+          <ChatList
+            companyId={companyId}
+            selectedAgentId={selected?.agentId ?? null}
+            eavesdrops={eavesdrops}
+            onSelect={onSelect}
+            listRef={list}
+          />
+        )}
+        {selected === null ? (
+          <div className="chat-dialog__empty">
+            <EmptyState heading={t('chat.view.empty.heading')} headingLevel={3}>
+              {t('chat.view.empty.body')}
+            </EmptyState>
+          </div>
+        ) : (
+          <ChatView
+            // A fresh view per agent: its transcript and stream start clean.
+            key={selected.agentId}
+            conversation={selected}
+            sectionRef={view}
+            onArchiveEavesdrop={onArchiveEavesdrop}
+            onGone={() => {
+              onDeselect();
+              list.current?.focus();
+            }}
+          />
+        )}
+      </div>
     </Dialog>
   );
 };

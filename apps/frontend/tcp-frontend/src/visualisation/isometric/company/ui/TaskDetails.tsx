@@ -7,27 +7,25 @@ import {
 } from '../../../../api/hooks';
 import { refusalKey } from '../../../../api/errors';
 import { taskOutputsUrl } from '../../../../api/storageLink';
-import { ButtonRow } from '../../../../components/ButtonRow/ButtonRow';
 import { ErrorState } from '../../../../components/ErrorState/ErrorState';
 import { TaskControls } from '../../../../components/TaskDialog/TaskControls';
 import { getRuntimeConfig } from '../../../../runtime-config';
 import type { AssignmentDTO } from '../../../../api/dtos';
-import { Info } from 'lucide-react';
-import { Fragment, type ReactNode } from 'react';
-import { Button, Tooltip, TooltipTrigger } from 'react-aria-components';
+import { ChevronRight, DoorClosed, Ear } from 'lucide-react';
 import { Icon } from '../../../../components/Icon/Icon';
-import { ACTIVE_TASK_STATUSES, statusLabel } from '../../../../api/statuses';
+import { RoundIconButton } from '../../../../components/RoundIconButton/RoundIconButton';
+import { ACTIVE_TASK_STATUSES } from '../../../../api/statuses';
 import { ExpandableText } from '../../../../components/ExpandableText/ExpandableText';
 import { t } from '../../../../strings';
-import { modeLabel } from './modeLabel';
-import { TrayHeading } from './TrayHeading';
+import { modeLabel } from '../../../../api/modeLabel';
+import { StatusIcon } from './StatusIcon';
+import { TrayPanel } from './TrayPanel';
+import { useListenIn } from './useListenIn';
 
 export interface TaskDetailsProps {
   readonly companyId: string;
   readonly taskId: string;
   readonly headingId: string;
-  /** The follow toggle, shown beside this panel's own heading. */
-  readonly headingAction?: ReactNode;
   /**
    * Called once the task's room has closed, so the tray can let go of a
    * selection whose whiteboard has gone and put focus somewhere deliberate.
@@ -41,57 +39,8 @@ export interface TaskDetailsProps {
 const byCreation = (a: AssignmentDTO, b: AssignmentDTO): number =>
   a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
 
-const IN_PROGRESS_STATUSES: ReadonlySet<string> = new Set([
-  'ready',
-  'in-progress',
-  'in-qa',
-]);
-
-interface NumberedAssignment {
-  readonly assignment: AssignmentDTO;
-  /** Its place in the task's whole creation order; it never changes between sections. */
-  readonly number: number;
-}
-
-/**
- * The "about this assignment" control: a focusable ⓘ whose tooltip names the
- * task and assignment, then gives the assignment's prompt. A button so it
- * takes keyboard focus, which opens the tooltip as hover does (WCAG 1.4.13).
- */
-const AssignmentInfo = ({
-  shortcode,
-  number,
-  prompt,
-  portalContainer,
-}: {
-  readonly shortcode: string;
-  readonly number: number;
-  readonly prompt: string;
-  readonly portalContainer: Element | undefined;
-}) => (
-  <TooltipTrigger>
-    <Button
-      className="react-aria-Button"
-      aria-label={t('visualisation.tray.aboutAssignment', { number })}
-    >
-      <Icon icon={Info} />
-    </Button>
-    {/* Portalled into the office view so it shows in full screen; see `WithTooltip`. */}
-    <Tooltip
-      className="react-aria-Tooltip"
-      // eslint-disable-next-line @typescript-eslint/no-deprecated -- deliberate; see `WithTooltip`
-      UNSTABLE_portalContainer={portalContainer}
-    >
-      <div>
-        {t('visualisation.tray.assignmentInfoTitle', {
-          shortcode,
-          number: String(number).padStart(3, '0'),
-        })}
-      </div>
-      <div>{prompt}</div>
-    </Tooltip>
-  </TooltipTrigger>
-);
+/** An assignment whose agent is at work now: its Listen in is filled. */
+const WORKING_STATUSES: ReadonlySet<string> = new Set(['in-progress', 'in-qa']);
 
 /**
  * The link to a succeeded task's outputs in Silo, marked up as the archive's
@@ -128,9 +77,15 @@ const OutputsLink = ({
 };
 
 /**
- * One task's live details in the office tray: its request, its status, the
- * same controls the task dialog has (start, edit, pause, resume, cancel), and
- * its assignments numbered in creation order, split into those in progress and those completed.
+ * One task's live details in the office tray (000.06.03): its status as an
+ * icon in the heading, the task dialog's controls as icon actions (plus Close
+ * room once it has finished), its request as the description, and its
+ * assignments in creation order.
+ *
+ * Each assignment row reads: status, mode, then its role as a disclosure
+ * (native `<details>`, like the transcript's reasoning) that reveals the
+ * assignment's prompt, then Listen in — filled while its agent is working,
+ * outlined once it has finished, and absent before it has started.
  *
  * Assignments come from the company's whole list, filtered to this task
  * client-side — the same list `useOfficeWorld` already holds for the rules,
@@ -140,7 +95,6 @@ export const TaskDetails = ({
   companyId,
   taskId,
   headingId,
-  headingAction,
   onRoomClosed,
   portalContainer,
 }: TaskDetailsProps) => {
@@ -149,27 +103,28 @@ export const TaskDetails = ({
   const { data: assignments } = useLiveAssignmentsList({ companyId });
   const companyQuery = useLiveCompanyState(companyId);
   const closeRoom = useCloseTaskVisualisation(taskId);
+  const listenIn = useListenIn(companyId);
 
   if (tasksQuery.isPending) {
     return (
-      <>
-        <TrayHeading id={headingId} action={headingAction}>
-          {t('visualisation.tray.heading')}
-        </TrayHeading>
+      <TrayPanel
+        headingId={headingId}
+        heading={t('visualisation.tray.heading')}
+      >
         <p>{t('visualisation.tray.loading')}</p>
-      </>
+      </TrayPanel>
     );
   }
 
   const task = tasksQuery.data?.find((candidate) => candidate.id === taskId);
   if (task === undefined) {
     return (
-      <>
-        <TrayHeading id={headingId} action={headingAction}>
-          {t('visualisation.tray.heading')}
-        </TrayHeading>
+      <TrayPanel
+        headingId={headingId}
+        heading={t('visualisation.tray.heading')}
+      >
         <p>{t('visualisation.tray.gone')}</p>
-      </>
+      </TrayPanel>
     );
   }
 
@@ -177,24 +132,9 @@ export const TaskDetails = ({
     roles?.find((role) => role.id === roleId)?.name ??
     t('activity.role.unknown');
 
-  const numbered: NumberedAssignment[] = (assignments ?? [])
+  const rows = (assignments ?? [])
     .filter((assignment) => assignment.taskId === taskId)
-    .sort(byCreation)
-    .map((assignment, index) => ({ assignment, number: index + 1 }));
-  const sections = [
-    {
-      heading: t('visualisation.tray.inProgress'),
-      rows: numbered.filter(({ assignment }) =>
-        IN_PROGRESS_STATUSES.has(assignment.status),
-      ),
-    },
-    {
-      heading: t('visualisation.tray.completed'),
-      rows: numbered.filter(
-        ({ assignment }) => !IN_PROGRESS_STATUSES.has(assignment.status),
-      ),
-    },
-  ].filter((section) => section.rows.length > 0);
+    .sort(byCreation);
 
   const finished = !(ACTIVE_TASK_STATUSES as readonly string[]).includes(
     task.status,
@@ -202,38 +142,46 @@ export const TaskDetails = ({
   const canCloseRoom = finished && !task.visualisationClosedAt;
 
   return (
-    <>
-      <TrayHeading id={headingId} action={headingAction}>
-        {t('visualisation.tray.taskHeading', { shortcode: task.shortcode })}
-      </TrayHeading>
-      <ExpandableText
-        text={task.request}
-        variant="ellipsis"
-        expandLabel={t('visualisation.tray.prompt.expand')}
-        collapseLabel={t('visualisation.tray.prompt.collapse')}
-      />
-      <p>{statusLabel(task.status)}</p>
+    <TrayPanel
+      headingId={headingId}
+      icon={<StatusIcon status={task.status} paused={task.pausedAt !== null} />}
+      heading={t('visualisation.tray.taskHeading', {
+        shortcode: task.shortcode,
+      })}
+      actions={
+        <TaskControls
+          taskId={taskId}
+          companyId={companyId}
+          portalContainer={portalContainer}
+          focusFallback={() => document.getElementById(headingId)}
+          icons
+          extraActions={
+            canCloseRoom ? (
+              <RoundIconButton
+                icon={DoorClosed}
+                label={t('visualisation.tray.closeRoom')}
+                portalContainer={portalContainer}
+                isDisabled={closeRoom.isPending}
+                onPress={() => {
+                  closeRoom.mutate(undefined, { onSuccess: onRoomClosed });
+                }}
+              />
+            ) : undefined
+          }
+        />
+      }
+      description={
+        <ExpandableText
+          text={task.request}
+          variant="icon"
+          expandLabel={t('visualisation.tray.prompt.expand')}
+          collapseLabel={t('visualisation.tray.prompt.collapse')}
+          portalContainer={portalContainer}
+        />
+      }
+    >
       {task.status === 'succeeded' && (
         <OutputsLink slug={companyQuery.data?.slug} taskId={taskId} />
-      )}
-      <TaskControls
-        taskId={taskId}
-        companyId={companyId}
-        portalContainer={portalContainer}
-        focusFallback={() => document.getElementById(headingId)}
-      />
-      {canCloseRoom && (
-        <ButtonRow>
-          <Button
-            className="react-aria-Button"
-            isDisabled={closeRoom.isPending}
-            onPress={() => {
-              closeRoom.mutate(undefined, { onSuccess: onRoomClosed });
-            }}
-          >
-            {t('visualisation.tray.closeRoom')}
-          </Button>
-        </ButtonRow>
       )}
       {closeRoom.isError && (
         <ErrorState
@@ -241,32 +189,61 @@ export const TaskDetails = ({
           channel={`task-closeVisualisation:${taskId}`}
         />
       )}
-      {sections.map((section) => (
-        <Fragment key={section.heading}>
-          <h3>{section.heading}</h3>
-          <ol>
-            {section.rows.map(({ assignment, number }) => (
-              // The native marker shows `value`, so the number seen and the
-              // number read agree even where the section has gaps.
-              <li key={assignment.id} value={number}>
-                {t('visualisation.tray.assignmentRow', {
-                  role: roleName(assignment.roleId),
-                  mode: modeLabel(assignment.mode),
-                })}{' '}
-                <AssignmentInfo
-                  shortcode={task.shortcode}
-                  number={number}
-                  prompt={assignment.prompt}
-                  portalContainer={portalContainer}
-                />
-                {t('visualisation.tray.assignmentStatusSuffix', {
-                  status: statusLabel(assignment.status),
-                })}
-              </li>
-            ))}
+      {rows.length > 0 && (
+        <>
+          <h3>{t('visualisation.tray.assignments')}</h3>
+          <ol className="tray-assignments">
+            {rows.map((assignment, index) => {
+              const number = index + 1;
+              const role = roleName(assignment.roleId);
+              const agentId = assignment.agentId ?? null;
+              const working = WORKING_STATUSES.has(assignment.status);
+              const canListen =
+                agentId !== null && assignment.status !== 'ready';
+              return (
+                <li key={assignment.id} className="tray-assignments__row">
+                  <StatusIcon status={assignment.status} />
+                  <div className="tray-assignments__text">
+                    <span className="tray-assignments__mode">
+                      {number}. {modeLabel(assignment.mode)}
+                    </span>
+                    <details className="tray-assignments__details">
+                      <summary>
+                        {role}
+                        <span className="visually-hidden">
+                          {t('visualisation.tray.assignmentDescription', {
+                            number,
+                          })}
+                        </span>
+                        <Icon icon={ChevronRight} />
+                      </summary>
+                      <p>{assignment.prompt}</p>
+                    </details>
+                  </div>
+                  {canListen && (
+                    <RoundIconButton
+                      icon={Ear}
+                      outline={!working}
+                      label={t('visualisation.tray.listenInAssignment', {
+                        role,
+                        number,
+                      })}
+                      portalContainer={portalContainer}
+                      onPress={() => {
+                        listenIn({
+                          id: agentId,
+                          roleId: assignment.roleId,
+                          assignmentId: assignment.id,
+                        });
+                      }}
+                    />
+                  )}
+                </li>
+              );
+            })}
           </ol>
-        </Fragment>
-      ))}
-    </>
+        </>
+      )}
+    </TrayPanel>
   );
 };

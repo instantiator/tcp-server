@@ -575,8 +575,9 @@ this is how to use what it decided.
 | `useRoleKnowledgeSearch(roleId, query)`           | A role's knowledge index, searched                            | No                                     |
 | `useRoleKnowledgeStatus(roleId)`                  | A role's knowledge indexing status                            | No                                     |
 | `useTaskHistory(id)`                              | A task's audit history                                        | No                                     |
+| `useTranscriptSearch(companyId, q)`               | Agents whose transcripts contain `q` (from 2 characters)      | No                                     |
 
-The last eight have no facade of their own — `hooks.ts` re-exports them from
+The last nine have no facade of their own — `hooks.ts` re-exports them from
 `endpoints.ts` so the door stays complete, and nothing has a reason to reach
 past it.
 
@@ -662,7 +663,7 @@ of this is `src/pages/CompanyPage/activity/TasksList.tsx`.
 Reach for these before writing the markup again:
 
 - **`Dialog`** is the only modal. Pass `onClose` for the usual dialog its opener mounts only while open, or `isOpen` with `onOpenChange` to control it. `portalContainer` keeps it inside an element such as the full-screen office view.
-- **`RoundIconButton`** is a small round icon button with its name as a tooltip, filled or `outline`. **`CloseButton`** is the round ✕ built on it. Every close control uses it: dialog title bars, chat panels, the tray and toasts. The minimise button, the chat panel's complete button and the chat dialog's "Add new" are round icons too.
+- **`RoundIconButton`** is a small round icon button with its name as a tooltip, filled or `outline`. **`CloseButton`** is the round ✕ built on it. Every close control uses it: dialog title bars, the tray and toasts. The minimise button, the chat view's Archive and Delete, and the chat dialog's "Add new" and Send are round icons too.
 - **`ButtonRow`** holds buttons that sit side by side. It keeps a gap between them and wraps when the row is too narrow, so no two buttons ever touch.
 - **`LabelledValue`** is a read-only label above its value ("Request", then the request), used by the task, profile and response dialogs.
 - **`tcp-button--outline`** (in `base.css`) outlines a secondary button: Cancel, and Force shut down.
@@ -853,35 +854,96 @@ target Node, with CommonJS and decorators. Prettier is shared with the root.
 > clean `npm ci` fails outright. The root `overrides` entry pinning that peer
 > is what prevents it. Don't remove it until the plugin widens its range.
 
+## Dialogs
+
+Every dialog is `src/components/Dialog/Dialog.tsx`, React Aria's modal with a
+title bar (heading, optional `actions`, Minimise, Close). Since 000.06 every
+dialog can be minimised: while a `DockProvider` is present, Minimise parks it
+in the dock under its heading. The modal unmounts, but the component that
+renders the dialog stays mounted, so a half-written task survives. Escape
+closes.
+
+`ConfirmDialog` is the yes/no question before something that can't be undone
+(cancelling a task, deleting a chat). It's an `alertdialog` with no Minimise
+or Close, so the answer comes from its buttons. Focus starts on "No", and
+Escape means "No".
+
 ## Chat dialog
 
-`src/components/ChatDialog/` holds one or more conversations at once, each
-with its own agent, transcript and message form. `ChatProvider` (in
-`AppShell`) holds the open conversations above the dialog itself, because the
-dialog unmounts on minimise and anything that must survive that has to live
-above it — the same reason `DockProvider` sits beside it.
+`src/components/ChatDialog/` (rebuilt in 000.06) looks like a conventional
+chat client: a list of views on the left and the selected one on the right.
+`ChatProvider` (in `AppShell`) holds its state above the dialog, because the
+dialog unmounts on minimise.
 
-Every panel gets two controls, not one:
+- **The list** (`ChatList`) has a search box, three groups, a "Show archived"
+  checkbox and the "Add new" button. The groups are **Chats** (the company's
+  role chats, from the server), and **Listening in, running** and **Listening
+  in, finished** (agents the user is listening in on). Each group is newest
+  first. A row re-sorts only when its agent's status changes (a message sent,
+  a turn finished), never on streamed reasoning, so busy chats don't shuffle
+  (`useActivityStamps`). It's a single-select React Aria `ListBox`: arrow keys
+  browse, and selecting keeps focus in the list.
+- **Row states come from assignments**, not agents (000.06.05):
+  `GET /api/agent` returns only active agents, so a finished one isn't there
+  at all. The list reads the company's assignments (the same query Add new
+  uses) and counts a row finished when its assignment's status isn't in
+  `ACTIVE_ASSIGNMENT_STATUSES`.
+- **Each row says what sets it apart.** A chat reads "Chat · started
+  10 Oct 2026, 09:40 · Open". A listened-in row reads its mode, its task and
+  its state ("Implementing · Task 001 · Finished"), with the task's request
+  as a one-line description. The role and that line name the row, so arrowing
+  through rows with one role reads the difference.
+- **The view** (`ChatView`) has a fixed heading with Archive, Delete (role
+  chats only) and the reasoning menu, then the transcript with its Follow
+  toggle, then the message form (role chats only). Only the selected view is
+  mounted, so the dialog holds one event stream.
+- **Archive** completes a role chat. For a listened-in view it only sets a
+  flag, and never stops the agent. Either way the view leaves the list, and
+  focus goes back to the list. Choosing an archived row (with "Show
+  archived" ticked) only views it; "Listen in" from elsewhere un-archives it.
+- **Delete** asks first (`ConfirmDialog`), then calls
+  `DELETE /api/agent/:id/chat`, which removes the transcript, the assignment
+  and the agent. It's refused while a turn runs.
+- **Search** filters by name at once, and by transcript text through
+  `GET /api/agent/search` (debounced 300 ms). The result count is announced
+  once it settles.
+- **Listening in is kept in the browser**, per user and company
+  (`eavesdropStorage.ts`, key `tcp.chat.eavesdrops.<user>.<company>`). It
+  survives a reload, not a change of device. Role chats come from the server.
+- **Minimise** docks one "Chats" button. **Close** and Escape close the
+  dialog; nothing is lost, since chats live on the server and the list and
+  selection live in `ChatProvider`.
 
-- **Complete** ends the chat on the server (the assignment succeeds, the
-  agent completes) and leaves the panel exactly where it is — only the
-  message form goes, replaced by a line saying the chat is over. The
-  transcript stays, so there is still something to read.
-- **Close** (`t('chat.close', { role })`, 002.02) removes the panel from the
-  dialog and releases its stream. The chat itself is untouched on the
-  server — closing only takes it off this screen. Closing the last panel
-  closes the dialog and returns focus to whatever opened it; closing any
-  other panel moves focus to its neighbour (the one after it, or the one
-  before if it was last). The dialog's own chrome still has no close of its
-  own — minimise (and Escape) are what it offers, so a half-typed message in
-  another open panel is never lost by one keystroke.
+Everything opens through `useChat().openChat`: Activity → Chats rows, the
+office view's "Listen in", and "Add new". A `readOnly` view joins the
+listening-in list.
 
-**The Chats tab is the way back.** A closed chat is still a real
-assignment, so it still shows in the company's Chats list
-(`src/pages/CompanyPage/activity/ChatsList.tsx`), filterable by status and
-role. Clicking a row calls the same `openChat` the office view's "Listen in"
-button does, which reopens it in the dialog — read-write if it's the same
-conversation reopening, read-only if it's a fresh listen-in on someone else's.
+### Reasoning and Follow
+
+Every transcript (the chat and task dialogs) shows reasoning as a native
+`<details>` disclosure. A rule chooses which start open: all, none, or the
+latest only (the default). It's one setting for every transcript, kept in the
+browser (`transcript/reasoningRule.ts`), and chosen from a small menu in the
+view's heading or the task dialog's title bar. Opening or closing one entry
+by hand lasts until the rule changes. Reasoning is never announced.
+
+### Markdown and tool calls
+
+Reasoning, responses, messages and other prose render as markdown
+(`transcript/Markdown.tsx`: `react-markdown` with `remark-gfm` and
+`remark-breaks`, so a single newline is a line break). It's re-parsed as it
+streams; half-written markup shows as text until it closes. The text is model
+output, so raw HTML is dropped, images show only their alt text (a remote
+image could leak data through its URL), links open in a new tab with no
+opener or referrer, every heading is an `h4` below the view's heading, and
+tables scroll inside their own box.
+
+Tool calls and results show a small table (tool name; for a result, status
+and content) read by the shared renderer into `LogEntry.tool`, with the full
+JSON in a "Full JSON" disclosure. The CLI still prints the JSON.
+
+**Follow** (on by default) keeps the newest entry in view. Scrolling away from
+the bottom turns it off; pressing it again scrolls back down (`useFollow`).
 
 ## The task dialog
 
@@ -932,12 +994,13 @@ It appears in two places:
   `h1` in the DOM, so it comes early in the tab order. It rises above the dock
   when one is showing, and slides left of the office view's tray while that is
   open.
-- **The chat dialog's title bar**, while a company is the current route, as a
-  small round "+" named "New chat" (`inChat`). The dialog is about chats, so
-  this one lists the roles straight away, with no task option. A new chat
-  joins the dialog as another panel. The dialog is modal, so the page's own
-  control is out of reach while it shows. The task dialog has no such menu: it
-  holds nothing the user typed, so they close it and use the page's control.
+- **The chat dialog's list pane**, as a small round "+" (`inChat`). The dialog
+  is about chats, so it offers **Chat with a role** (the roles, as above) and
+  **Listen in on an assignment** (work in progress that has an agent), with
+  no task option (000.06). Either selects the new view. The dialog is modal,
+  so the page's own control is out of reach while it shows. The task dialog
+  has no such menu: it holds nothing the user typed, so they close it and use
+  the page's control.
 
 While a chat starts, the chosen role reads "Starting chat with…" and keeps
 focus, the other roles are disabled, and the change is announced. On success
@@ -984,22 +1047,24 @@ header.
 - **A tick marks a succeeded task.** A small tick above its whiteboard has a
   hover-only zone with the tooltip "Task completed". Failed and cancelled rooms
   get no marker.
-- **Lighting shows what is being worked.** A task or one-to-one room is lit
-  while a running agent's avatar is in it. The shared rooms (the corridor, the
-  rec room, the mail room and the archive) are always lit. A task's whiteboard
-  is lit while the task is `planning`, `in-progress` or `finalising` and not
-  paused. Everything else is dimmed (`palette.dim()`), except walls: they keep their full colour, so a dark room's outline stays visible. `rules/roomLighting.ts`
+- **Lighting shows what is being worked.** A task's room and its whiteboard
+  are lit while the task is `planning`, `in-progress` or `finalising` and not
+  paused — by the task's status alone (000.06.03), so the room stays lit while
+  one assignment hands over to the next. A one-to-one room is lit while a
+  running agent's avatar is in it. The shared rooms (the corridor, the rec
+  room, the mail room and the archive) are always lit. Everything else is dimmed (`palette.dim()`), except walls: they keep their full colour, so a dark room's outline stays visible. `rules/roomLighting.ts`
   works it out as a pure function, and the scene redraws its static layers only
   when the lit sets change by value. The switch is instant, with no fade, so
   reduced motion needs nothing. Like the rest of the canvas, it ignores themes.
 - **Tooltips name the task.** The whiteboard reads "Task NNN: (step/steps)", the
   task room adds a line with the request, and the bookshelf reads "Bookshelf:
   N", the number of succeeded tasks.
-- **The tray numbers assignments.** The task tray lists them in two sections,
-  "In progress" and "Completed", each an ordered list numbered by the
-  assignment's chronological number (001, 002, …). Each row has an info button,
-  "About assignment N", whose tooltip reads "Task NNN, Assignment NNN" then the
-  prompt.
+- **The task tray lists assignments** (000.06.03) under one "Assignments"
+  heading, in creation order. Each row has a status icon, the mode ("1.
+  Planning"), then the role as a native `<details>` disclosure that reveals the
+  assignment's prompt, then **Listen in** (an `Ear` icon button): filled while
+  the assignment's agent is working, outlined once it has finished, and absent
+  before it has started. It opens the chat dialog read-only on that agent.
 - **Roles, as books.** Each role is a small book in its colour, at its spot in
   the rec room, so a role never looks like an agent.
 - **Agent avatars.** A new avatar comes in at the office door, walks to its
@@ -1042,12 +1107,17 @@ header.
   task, agent or the bookshelf shows a tooltip; clicking opens a side tray
   with its live details. Furniture and doorways have hover-only tooltips
   saying what they are for (`ui/officeDescriptions.ts`). The tray slides in
-  over the canvas's right edge (005.01), so the canvas doesn't resize. Its
-  Close and Follow buttons are round icon buttons, Follow beside the heading.
-  The tray clips a
-  long prompt with a "…" that reveals the rest
-  (`components/ExpandableText`). An active agent's tray has a "Listen in"
-  button, which opens the chat dialog read-only on its live transcript. The
+  over the canvas's right edge (005.01), so the canvas doesn't resize. Every
+  tray panel uses one layout, `ui/TrayPanel.tsx` (000.06.03): a title bar with
+  the heading (and, for a task, a status icon named for the status) and
+  Close; then a fixed section of small icon actions and the description
+  (`ExpandableText`'s `icon` variant, whose collapse button sticks to the
+  bottom of a long description as it scrolls); then a body that scrolls.
+  Follow floats at the bottom right. All of this is CSS, so the reading and
+  tab order is heading, actions, description, body, Follow, Close. The task's
+  actions are `TaskControls` drawn as icons (`icons`), named for the task
+  ("Pause task 002"), plus Close room once it has finished. A role's action is
+  "Chat with {role}"; an active agent's is "Listen in". The
   toolbar's "Show details for…" picker is the keyboard route to the same
   tray (WCAG 2.1.1), including the archive, and also how a keyboard user
   follows an object to the centre of the view. Arrow keys, WASD and the

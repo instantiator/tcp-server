@@ -335,7 +335,8 @@ test.describe('company visualisation', () => {
     const tray = page.getByRole('complementary', {
       name: taskTrayHeading(shortcode),
     });
-    await expect(tray).toContainText('Cancelled');
+    // The status is an icon named for it (000.06.03), not text.
+    await expect(tray.getByRole('img', { name: 'Cancelled' })).toBeVisible();
     await expect(office).toHaveAccessibleDescription(summary(2, 1, 0));
 
     await tray.getByRole('button', { name: 'Close room' }).click();

@@ -49,57 +49,59 @@ describe('ExpandableText', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
-  describe.each(['labelled', 'ellipsis'] as const)(
-    'the %s variant',
-    (variant) => {
-      it('keeps the rest of a long text out of the DOM until expanded, then collapses again', async () => {
-        render(
-          <ExpandableText
-            text={LONG}
-            variant={variant}
-            expandLabel={EXPAND}
-            collapseLabel={COLLAPSE}
-          />,
-        );
-        expect(screen.queryByText(LONG)).not.toBeInTheDocument();
+  describe.each(['labelled', 'icon'] as const)('the %s variant', (variant) => {
+    it('keeps the rest of a long text out of the DOM until expanded, then collapses again', async () => {
+      render(
+        <ExpandableText
+          text={LONG}
+          variant={variant}
+          expandLabel={EXPAND}
+          collapseLabel={COLLAPSE}
+        />,
+      );
+      expect(screen.queryByText(LONG)).not.toBeInTheDocument();
 
-        const control = screen.getByRole('button', { name: EXPAND });
-        expect(control).toHaveAttribute('aria-expanded', 'false');
-        await userEvent.click(control);
+      const control = screen.getByRole('button', { name: EXPAND });
+      expect(control).toHaveAttribute('aria-expanded', 'false');
+      await userEvent.click(control);
 
-        expect(screen.getByText(LONG)).toBeInTheDocument();
-        const collapse = screen.getByRole('button', { name: COLLAPSE });
-        expect(collapse).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByText(LONG)).toBeInTheDocument();
+      const collapse = screen.getByRole('button', { name: COLLAPSE });
+      expect(collapse).toHaveAttribute('aria-expanded', 'true');
 
-        await userEvent.click(collapse);
-        expect(screen.queryByText(LONG)).not.toBeInTheDocument();
-      });
+      await userEvent.click(collapse);
+      expect(screen.queryByText(LONG)).not.toBeInTheDocument();
+    });
 
-      it('has no accessibility violations, collapsed or expanded', async () => {
-        const { container } = render(
-          <ExpandableText
-            text={LONG}
-            variant={variant}
-            expandLabel={EXPAND}
-            collapseLabel={COLLAPSE}
-          />,
-        );
-        await expectNoA11yViolations(container);
-        await userEvent.click(screen.getByRole('button', { name: EXPAND }));
-        await expectNoA11yViolations(container);
-      });
-    },
-  );
+    it('has no accessibility violations, collapsed or expanded', async () => {
+      const { container } = render(
+        <ExpandableText
+          text={LONG}
+          variant={variant}
+          expandLabel={EXPAND}
+          collapseLabel={COLLAPSE}
+        />,
+      );
+      await expectNoA11yViolations(container);
+      await userEvent.click(screen.getByRole('button', { name: EXPAND }));
+      await expectNoA11yViolations(container);
+    });
+  });
 
-  it('shows a compact "…" in the ellipsis variant, named in full', () => {
+  it('shows the icon variant as an icon button, named by the labels', async () => {
     render(
       <ExpandableText
         text={LONG}
-        variant="ellipsis"
+        variant="icon"
         expandLabel={EXPAND}
         collapseLabel={COLLAPSE}
       />,
     );
-    expect(screen.getByRole('button', { name: EXPAND })).toHaveTextContent('…');
+    const control = screen.getByRole('button', { name: EXPAND });
+    expect(control).toHaveTextContent('');
+    await userEvent.click(control);
+    expect(screen.getByRole('button', { name: COLLAPSE })).toHaveTextContent(
+      '',
+    );
   });
 });

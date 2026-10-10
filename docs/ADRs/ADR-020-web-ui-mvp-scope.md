@@ -168,3 +168,10 @@ answer to "how does a panel leave the screen." See
 ## Amendment as implemented (003.01, phase 03) <a id="amendment-as-implemented-p03-003-01"></a>
 
 **The 'add new' FAB now exists.** [003.01](../prompts/phase%2003%20-%20web%20visualisation/003.01.00.prompt%20-%20add%20new%20FAB%20and%20role%20menu.md) closed the gap recorded above under "The 'add new' FAB is absent, not stubbed". It is a floating menu button on the company page, offering "Create a new task" and "New chat", a submenu of the company's roles. It sits on the company page rather than inside the activity view, so it is reachable from the office view too. The chat dialog carries the same menu, because the dialog is modal and would otherwise hide the page's control. See [web-client.md](../web-client.md#add-new-starting-a-task-or-a-chat).
+
+## Amendment as implemented (000.06, phase 04) <a id="amendment-as-implemented-p04-000-06"></a>
+
+[000.06](../prompts/phase%2004%20-%20utility/000.06.01.plan%20-%20dialog%20improvements.md) changed two things this ADR recorded about the dialogs.
+
+- **The task dialog can now be parked.** Every dialog minimises to the dock, so 008.03's "a plain modal rather than a parkable one" no longer holds. See [ADR-026's amendment](ADR-026-web-ui-accessibility-and-component-library.md#amendment-as-implemented-p04-000-06).
+- **The chat dialog's per-panel Close is gone.** The dialog is a list of views beside one selected view, with one Close for the whole dialog. A view leaves the list by being archived (a role chat is completed; listening in is only hidden) or deleted (role chats only, after a confirmation).

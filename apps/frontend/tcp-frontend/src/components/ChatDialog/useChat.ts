@@ -1,10 +1,10 @@
 import { createContext, use } from 'react';
 
-/** One open conversation in the chat dialog. */
+/** One view in the chat dialog: a role chat, or listening in on an agent. */
 export interface Conversation {
   /**
-   * The agent holding the chat. Everything about a conversation keys on this:
-   * its transcript, its event stream, its announcer channel and its dock entry.
+   * The agent holding the chat. Everything about a view keys on this: its
+   * list row, its transcript, its event stream and its announcer channel.
    */
   readonly agentId: string;
   /** The agent's role, for the panel heading, the dock button and the announcements. */
@@ -33,25 +33,18 @@ export interface NewChat {
 }
 
 /**
- * The two ways to reach the chat dialog.
+ * The ways to reach the chat dialog.
  *
  * Deliberately small. A control that opens a chat needs to open a chat, and
  * nothing here reports on the dialog's own state — that belongs to the dialog.
  */
 export interface ChatContextValue {
   /**
-   * Opens a conversation with an agent that already exists, or brings an
-   * already-open one to the fore. Restores the dialog if it is parked.
+   * Opens the chat dialog on a view of an agent that already exists, and
+   * selects it. A listened-in view (`readOnly`) joins the stored list, or is
+   * un-archived if it was there already. Restores the dialog if it is parked.
    */
   readonly openChat: (conversation: Conversation) => void;
-  /**
-   * Drops a conversation from the dialog for good — its panel, its dock entry
-   * if it happened to be parked, and its stream. The chat itself is untouched
-   * on the server, so it stays reachable from Activity → Chats; this only
-   * forgets it here, which is what lets a long session open many chats
-   * without the dialog growing without bound.
-   */
-  readonly closeChat: (agentId: string) => void;
   /**
    * Creates a chat-mode agent for a role, then opens it.
    *

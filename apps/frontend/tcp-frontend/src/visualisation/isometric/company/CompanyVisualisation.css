@@ -91,9 +91,10 @@ body:has(.dialog-dock) .company-visualisation__stage {
   inset-block: 0;
   inset-inline-end: 0;
   z-index: var(--tcp-layer-dock);
+  display: flex;
+  flex-direction: column;
   inline-size: var(--tcp-visualisation-tray-width);
-  overflow: auto;
-  padding: var(--tcp-space-md);
+  overflow: hidden;
   border-inline-start: var(--tcp-border-width) solid var(--tcp-color-border);
   background-color: var(--tcp-color-bg);
   transition: translate var(--tcp-motion-duration);
@@ -105,17 +106,119 @@ body:has(.dialog-dock) .company-visualisation__stage {
   }
 }
 
-/* A details panel's heading and the action beside it (the follow toggle). */
-.company-visualisation__tray-heading {
+/*
+ * `TrayPanel`'s regions (000.06.03). The title bar and the fixed section
+ * never scroll. The description may grow to fill the tray and then scrolls
+ * itself; the body has a zero basis, so it only gets what is left over, and
+ * scrolls too.
+ */
+.tray-panel__title {
+  flex: none;
+  /* Room for the close button, which the tray places over this bar. */
+  padding: var(--tcp-space-sm) var(--tcp-space-md);
+  padding-inline-end: calc(var(--tcp-icon-button-size) + var(--tcp-space-md));
+  border-block-end: var(--tcp-border-width) solid var(--tcp-color-border);
   display: flex;
   align-items: center;
   gap: var(--tcp-space-sm);
+}
+
+.tray-panel__title h2 {
+  margin: 0;
+}
+
+.tray-panel__fixed {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  gap: var(--tcp-space-sm);
+  min-block-size: 0;
+  padding: var(--tcp-space-sm) var(--tcp-space-md);
+  border-block-end: var(--tcp-border-width) solid var(--tcp-color-border);
+}
+
+.tray-panel__actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: var(--tcp-space-sm);
+}
+
+/*
+ * The task controls' wrapper steps aside, so its buttons and the close-room
+ * extra are spaced as one row by the actions' gap. A plain div, so nothing is
+ * lost from the accessibility tree.
+ */
+.tray-panel__actions .task-controls--icons {
+  display: contents;
+}
+
+.tray-panel__description {
+  min-block-size: 0;
+  overflow: auto;
+}
+
+.tray-panel__body {
+  flex: 1 1 0;
+  overflow: auto;
+  padding: var(--tcp-space-sm) var(--tcp-space-md);
+  /* Clear of the floating follow button at the bottom. */
+  padding-block-end: calc(var(--tcp-icon-button-size) + var(--tcp-space-md));
 }
 
 .company-visualisation__tray-close {
   position: absolute;
   inset-block-start: var(--tcp-space-sm);
   inset-inline-end: var(--tcp-space-sm);
+}
+
+/* Follow floats at the tray's bottom right, over the body's padding. */
+.company-visualisation__tray-follow {
+  position: absolute;
+  inset-block-end: var(--tcp-space-sm);
+  inset-inline-end: var(--tcp-space-sm);
+}
+
+/* The task tray's assignments: status icon, mode over role, Listen in. */
+.tray-assignments {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tcp-space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tray-assignments__row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: var(--tcp-space-sm);
+}
+
+.tray-assignments__mode {
+  font-weight: bold;
+}
+
+.tray-assignments__details > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--tcp-space-xs);
+  cursor: pointer;
+  list-style: none;
+}
+
+.tray-assignments__details > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* The chevron turns down once the description is showing. */
+.tray-assignments__details[open] > summary .tcp-icon {
+  rotate: 90deg;
+}
+
+.tray-assignments__details > p {
+  margin-block: var(--tcp-space-xs) 0;
 }
 
 /*

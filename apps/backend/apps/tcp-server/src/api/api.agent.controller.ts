@@ -27,6 +27,7 @@ import {
   ApiAcceptedResponse,
   ApiBearerAuth,
   ApiCreatedResponse,
+  ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -56,6 +57,8 @@ import {
   SendMessageDto,
   StartAgentDto,
   StartChatDto,
+  TranscriptSearchQueryDto,
+  TranscriptSearchResponseDto,
 } from './dto/agent.dto';
 import {
   AgentResponseDto,
@@ -177,6 +180,21 @@ export class AgentController {
   }
 
   /**
+   * Deletes a chat: the agent, its assignment and its transcript. Refused
+   * with `409` while a turn is in flight, and `400` for a non-chat.
+   */
+  @ApiOperation({ summary: 'Delete a chat' })
+  @ApiNoContentResponse()
+  @CompanyScope({ from: 'param', key: 'id', via: 'agent' })
+  @Delete(':id/chat')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteChat(@Param('id') id: UUID): Promise<void> {
+    const { assignment } = await this.assignments.getAgentAssignment(id);
+    await this.completion.deleteChat(assignment);
+    this.agentEvents.cleanup(id);
+  }
+
+  /**
    * SSE stream of turn activity for a chat agent — status transitions, LLM
    * activity, reasoning/response deltas, consultation hand-offs, and the
    * terminal `completed`/`failed` event.
@@ -284,6 +302,23 @@ export class AgentController {
       );
     }
     return this.db.listAgents({ companyId, roleId, assignmentId, status });
+  }
+
+  /**
+   * Finds the agents whose transcripts contain the text, case-insensitively.
+   * Declared before `:id` routes so `search` is not read as an agent id.
+   */
+  @ApiOperation({ summary: 'Search agent transcripts' })
+  @ApiOkResponse({ type: TranscriptSearchResponseDto })
+  @CompanyScope({ from: 'query', key: 'companyId', via: 'company' })
+  @CompanyScopeRequired('companyId query parameter is required')
+  @Get('search')
+  async searchTranscripts(
+    @Query() query: TranscriptSearchQueryDto,
+  ): Promise<TranscriptSearchResponseDto> {
+    return {
+      agentIds: await this.audit.searchAgentIds(query.companyId, query.q),
+    };
   }
 
   /** Retrieves the current state of an agent by its UUID. */

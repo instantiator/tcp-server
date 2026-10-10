@@ -1,4 +1,5 @@
 import {
+  AgentStatus,
   AuditEvent,
   CompanyUser,
   TcpAgent,
@@ -42,6 +43,7 @@ import { seedMembership } from '../helpers/seed-membership';
  */
 describe('AgentController (e2e)', () => {
   let app: INestApplication<App>;
+  let companyUserRepo: Repository<CompanyUser>;
   let companyRepo: Repository<TcpCompany>;
   let roleRepo: Repository<TcpRole>;
   let agentRepo: Repository<TcpAgent>;
@@ -58,6 +60,7 @@ describe('AgentController (e2e)', () => {
     }).compile();
     app = module.createNestApplication();
     await app.listen(0);
+    companyUserRepo = module.get(getRepositoryToken(CompanyUser));
     companyRepo = module.get(getRepositoryToken(TcpCompany));
     roleRepo = module.get(getRepositoryToken(TcpRole));
     agentRepo = module.get(getRepositoryToken(TcpAgent));
@@ -329,6 +332,201 @@ describe('AgentController (e2e)', () => {
         .get(`/api/agent/${created.id}`)
         .set('Authorization', `Bearer ${jwt}`)
         .expect(404);
+    });
+  });
+
+  describe('with a second company', () => {
+    let otherCompanyId: UUID;
+    let otherRoleId2: UUID;
+    let strangerJwt: string;
+
+    beforeAll(async () => {
+      const other = await companyRepo.save(
+        companyRepo.create({
+          slug: 'globex',
+          name: 'Globex',
+          description: 'Second company',
+        }),
+      );
+      otherCompanyId = other.id;
+      const role = await roleRepo.save(
+        roleRepo.create({
+          slug: 'engineer',
+          name: 'Engineer',
+          description: 'Test role',
+          systemPromptTemplate: 'You are a helpful assistant.',
+          knowledgeDomains: [],
+          mcpServerList: [],
+          company: other,
+          companyId: other.id,
+        }),
+      );
+      otherRoleId2 = role.id;
+      // The default test user belongs to Acme only.
+      strangerJwt = makeTestJwt({ sub: 'stranger' });
+    });
+
+    afterAll(async () => {
+      await roleRepo.delete({ id: otherRoleId2 });
+      await companyRepo.delete({ id: otherCompanyId });
+    });
+
+    const startChat = async (
+      forCompany: UUID,
+      forRole: UUID,
+    ): Promise<TcpAgent> =>
+      (
+        await request(app.getHttpServer())
+          .post('/api/agent/chat/start')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({ companyId: forCompany, roleId: forRole })
+          .expect(201)
+      ).body as TcpAgent;
+
+    describe('DELETE /api/agent/:id/chat', () => {
+      let chat: TcpAgent;
+
+      beforeEach(async () => {
+        chat = await startChat(companyId, roleId);
+        await auditRepo.save(
+          auditRepo.create({
+            companyId,
+            role: 'engineer',
+            agentId: chat.id,
+            eventType: 'state_change',
+            payload: { reason: 'extra' },
+          }),
+        );
+      });
+
+      it('returns 204 and removes the assignment, agent and audit rows', async () => {
+        await request(app.getHttpServer())
+          .delete(`/api/agent/${chat.id}/chat`)
+          .set('Authorization', `Bearer ${jwt}`)
+          .expect(204);
+
+        expect(
+          await assignmentRepo.findOneBy({ id: chat.assignmentId }),
+        ).toBeNull();
+        expect(await agentRepo.findOneBy({ id: chat.id })).toBeNull();
+        expect(await auditRepo.countBy({ agentId: chat.id })).toBe(0);
+        expect(
+          await auditRepo.countBy({ assignmentId: chat.assignmentId }),
+        ).toBe(0);
+      });
+
+      it('returns 404 for an unknown agent id', () =>
+        request(app.getHttpServer())
+          .delete('/api/agent/00000000-0000-0000-0000-000000000000/chat')
+          .set('Authorization', `Bearer ${jwt}`)
+          .expect(404));
+
+      it('returns 400 for an agent that is not a chat', async () => {
+        await assignmentRepo.update(
+          { id: chat.assignmentId },
+          { mode: 'implement' },
+        );
+        await request(app.getHttpServer())
+          .delete(`/api/agent/${chat.id}/chat`)
+          .set('Authorization', `Bearer ${jwt}`)
+          .expect(400);
+        expect(await agentRepo.findOneBy({ id: chat.id })).not.toBeNull();
+      });
+
+      it('returns 409 while the agent is mid-turn and keeps the chat', async () => {
+        await agentRepo.update(
+          { id: chat.id },
+          { status: AgentStatus.Running },
+        );
+        await request(app.getHttpServer())
+          .delete(`/api/agent/${chat.id}/chat`)
+          .set('Authorization', `Bearer ${jwt}`)
+          .expect(409);
+        expect(await agentRepo.findOneBy({ id: chat.id })).not.toBeNull();
+        expect(await auditRepo.countBy({ agentId: chat.id })).toBeGreaterThan(
+          0,
+        );
+      });
+
+      it('returns 403 for a user of another company', () =>
+        request(app.getHttpServer())
+          .delete(`/api/agent/${chat.id}/chat`)
+          .set('Authorization', `Bearer ${strangerJwt}`)
+          .expect(403));
+    });
+
+    describe('GET /api/agent/search', () => {
+      let chat: TcpAgent;
+      let otherChat: TcpAgent;
+
+      const search = (q: string, forCompany: string | undefined = companyId) =>
+        request(app.getHttpServer())
+          .get('/api/agent/search')
+          .query({ ...(forCompany ? { companyId: forCompany } : {}), q })
+          .set('Authorization', `Bearer ${jwt}`);
+
+      const say = (agent: TcpAgent, forCompany: UUID, text: string) =>
+        auditRepo.save(
+          auditRepo.create({
+            companyId: forCompany,
+            role: 'engineer',
+            agentId: agent.id,
+            eventType: 'state_change',
+            payload: { text },
+          }),
+        );
+
+      beforeAll(async () => {
+        await seedMembership(companyUserRepo, otherCompanyId);
+      });
+
+      beforeEach(async () => {
+        chat = await startChat(companyId, roleId);
+        otherChat = await startChat(otherCompanyId, otherRoleId2);
+      });
+
+      it('matches case-insensitively', async () => {
+        await say(chat, companyId, 'Quarterly Budget review');
+        const res = await search('qUARTERLY budget').expect(200);
+        expect((res.body as { agentIds: string[] }).agentIds).toEqual([
+          chat.id,
+        ]);
+      });
+
+      it('treats % and _ literally', async () => {
+        await say(chat, companyId, 'growth was 50% in total');
+        await say(chat, companyId, 'file_name');
+        const other = await startChat(companyId, otherRoleId);
+        await say(other, companyId, 'revenue 500 units, filexname');
+
+        const pct = await search('50%').expect(200);
+        expect((pct.body as { agentIds: string[] }).agentIds).toEqual([
+          chat.id,
+        ]);
+        const spurious = await search('5%0').expect(200);
+        expect((spurious.body as { agentIds: string[] }).agentIds).toEqual([]);
+        const under = await search('file_name').expect(200);
+        expect((under.body as { agentIds: string[] }).agentIds).toEqual([
+          chat.id,
+        ]);
+      });
+
+      it('is scoped to the company', async () => {
+        await say(chat, companyId, 'zebra');
+        await say(otherChat, otherCompanyId, 'zebra');
+        const res = await search('zebra').expect(200);
+        expect((res.body as { agentIds: string[] }).agentIds).toEqual([
+          chat.id,
+        ]);
+      });
+
+      it('returns 400 for a query that is too short or too long', async () => {
+        await search('a').expect(400);
+        await search('a'.repeat(201)).expect(400);
+      });
+
+      it('returns 400 without a companyId', () =>
+        search('zebra', '').expect(400));
     });
   });
 });

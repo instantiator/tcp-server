@@ -1,5 +1,5 @@
 import { Minus } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { use, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import {
   Dialog as AriaDialog,
   Heading,
@@ -9,6 +9,7 @@ import {
 import { t } from '../../strings';
 import { CloseButton } from '../CloseButton/CloseButton';
 import { RoundIconButton } from '../RoundIconButton/RoundIconButton';
+import { DockContext } from './useDock';
 import './Dialog.css';
 
 export interface DialogProps {
@@ -30,15 +31,16 @@ export interface DialogProps {
   readonly heading: string;
   readonly children: ReactNode;
   /**
-   * Parks the dialog in the dock instead of closing it. Omit for a dialog that
-   * cannot be minimised, which is all of them but the chat dialog (008.02).
+   * Replaces the built-in minimise, for a caller that parks itself — the chat
+   * dialog keeps its own dock entry. Omit to get the built-in one.
    */
   readonly onMinimise?: () => void;
   /**
-   * Suppresses the framework's own close button. Escape and `onOpenChange` are
-   * untouched — this hides a control, it does not remove a dismissal path.
+   * A yes/no question rather than a window: announced as an `alertdialog`,
+   * with no minimise or close, so the user answers with the buttons (000.06).
+   * Escape still dismisses it, which the caller treats as "no".
    */
-  readonly hideClose?: boolean;
+  readonly confirmation?: boolean;
   /** Extra controls for the title bar, placed before minimise and close. */
   readonly actions?: ReactNode;
 }
@@ -55,22 +57,18 @@ export interface DialogProps {
  * is what wires the accessible name; a plain `h2` would leave the dialog
  * unnamed.
  *
- * **Minimising unmounts the dialog.** A modal that stayed mounted would keep
- * its focus trap and keep the rest of the page inert, which is wrong for a
- * dialog the user has parked. The caller keeps whatever state the dialog needs
- * and re-opens it when the dock restores it — see `dock.tsx`.
+ * **Every dialog can be minimised** (000.06), unless it is a confirmation or
+ * there is no dock. Minimising unmounts the modal, because a modal that stayed
+ * mounted would keep its focus trap and keep the rest of the page inert, which
+ * is wrong for a dialog the user has parked. This component stays mounted, and
+ * so does whatever renders it, so the caller's state — a half-written task,
+ * say — is still there when the dock restores it. Anything inside the modal
+ * unmounts, which releases its streams.
  *
  * Clicking outside does not close it: a dialog holding a half-typed message
  * should not vanish on a stray click. Escape still does, which is what ADR-026
  * requires.
- *
- * **`hideClose` is for a dialog whose Close would be a duplicate of its
- * Minimise.** A caller that parks rather than closes — the chat dialog — wires
- * `onOpenChange(false)` to the same thing `onMinimise` does, so both buttons
- * do exactly one thing under two names. That is a real bug, not a hypothetical:
- * two controls that look like different outcomes and are not. Hiding the close
- * button leaves one visible control saying what it does, with escape still
- * dismissing the dialog as ADR-026 requires.
+
  */
 export const Dialog = ({
   isOpen = true,
@@ -80,22 +78,57 @@ export const Dialog = ({
   heading,
   children,
   onMinimise,
-  hideClose = false,
   actions,
+  confirmation = false,
 }: DialogProps) => {
+  const dock = use(DockContext);
+  const dockId = useId();
+  const [minimised, setMinimised] = useState(false);
+
+  // A dialog its owner closes while parked must not leave its button behind.
+  // Through a ref: `remove` changes identity with every dock change, and an
+  // effect keyed on it would remove the entry the moment it was added.
+  const dockRef = useRef(dock);
+  dockRef.current = dock;
+  useEffect(
+    () => () => {
+      dockRef.current?.remove(dockId);
+    },
+    [dockId],
+  );
+
   const changeOpen = (open: boolean): void => {
     onOpenChange?.(open);
     if (!open) onClose?.();
   };
+
+  const minimise =
+    onMinimise ??
+    (dock === null || confirmation
+      ? undefined
+      : () => {
+          dock.minimise({
+            id: dockId,
+            label: heading,
+            restore: () => {
+              setMinimised(false);
+            },
+          });
+          setMinimised(true);
+          // Focus has to land somewhere deliberate once the modal is gone
+          // (ADR-027): the button that now stands for it.
+          dock.focusEntry(dockId);
+        });
+
   return (
     <ModalOverlay
-      isOpen={isOpen}
+      isOpen={isOpen && !minimised}
       onOpenChange={changeOpen}
       // eslint-disable-next-line @typescript-eslint/no-deprecated -- deliberate; see `WithTooltip`
       UNSTABLE_portalContainer={portalContainer}
     >
       <Modal>
-        <AriaDialog>
+        <AriaDialog role={confirmation ? 'alertdialog' : 'dialog'}>
           <div className="dialog__bar">
             <Heading
               slot="title"
@@ -104,16 +137,16 @@ export const Dialog = ({
               {heading}
             </Heading>
             {actions}
-            {onMinimise !== undefined && (
+            {minimise !== undefined && (
               <RoundIconButton
                 icon={Minus}
                 className="dialog__minimise"
                 label={t('dialog.minimise')}
                 portalContainer={portalContainer}
-                onPress={onMinimise}
+                onPress={minimise}
               />
             )}
-            {!hideClose && (
+            {!confirmation && (
               <CloseButton
                 className="dialog__close"
                 label={t('dialog.close')}

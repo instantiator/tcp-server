@@ -1,16 +1,18 @@
-import { useId, type ReactNode } from 'react';
-import { Button } from 'react-aria-components';
+import { MessageCircle } from 'lucide-react';
+import { useId } from 'react';
 import { useCompanyRolesList } from '../../../../api/hooks';
 import { useStartChatAction } from '../../../../components/AddNew/useStartChatAction';
+import { RoundIconButton } from '../../../../components/RoundIconButton/RoundIconButton';
+import { ExpandableText } from '../../../../components/ExpandableText/ExpandableText';
 import { t } from '../../../../strings';
-import { TrayHeading } from './TrayHeading';
+import { TrayPanel } from './TrayPanel';
 
 export interface RoleDetailsProps {
   readonly companyId: string;
   readonly roleId: string;
   readonly headingId: string;
-  /** The follow toggle, shown beside this panel's own heading. */
-  readonly headingAction?: ReactNode;
+  /** Where tooltips are portalled; see `VisualisationTrayProps.portalContainer`. */
+  readonly portalContainer?: Element | undefined;
 }
 
 /**
@@ -20,15 +22,15 @@ export interface RoleDetailsProps {
  * `useStartChatAction` (built for `AddNewMenu`'s roles submenu) does the
  * work here too: it tracks the in-flight attempt and announces a failure on
  * its own channel, so this only has to show what it reports — `isPending` on
- * the button (React Aria keeps it focusable and announces progress itself,
- * so the label does not need to change) and an error paragraph the button
+ * the icon button (React Aria keeps it focusable and announces progress
+ * itself, so the label does not need to change) and an error paragraph the button
  * points to with `aria-describedby`.
  */
 export const RoleDetails = ({
   companyId,
   roleId,
   headingId,
-  headingAction,
+  portalContainer,
 }: RoleDetailsProps) => {
   const rolesQuery = useCompanyRolesList(companyId);
   const errorId = useId();
@@ -36,46 +38,56 @@ export const RoleDetails = ({
 
   if (rolesQuery.isPending) {
     return (
-      <>
-        <TrayHeading id={headingId} action={headingAction}>
-          {t('visualisation.tray.heading')}
-        </TrayHeading>
+      <TrayPanel
+        headingId={headingId}
+        heading={t('visualisation.tray.heading')}
+      >
         <p>{t('visualisation.tray.loading')}</p>
-      </>
+      </TrayPanel>
     );
   }
 
   const role = rolesQuery.data?.find((candidate) => candidate.id === roleId);
   if (role === undefined) {
     return (
-      <>
-        <TrayHeading id={headingId} action={headingAction}>
-          {t('visualisation.tray.heading')}
-        </TrayHeading>
+      <TrayPanel
+        headingId={headingId}
+        heading={t('visualisation.tray.heading')}
+      >
         <p>{t('visualisation.tray.gone')}</p>
-      </>
+      </TrayPanel>
     );
   }
 
   return (
-    <>
-      <TrayHeading id={headingId} action={headingAction}>
-        {t('visualisation.tray.roleHeading', { name: role.name })}
-      </TrayHeading>
-      <p>{role.description}</p>
-      <Button
-        className="react-aria-Button"
-        isPending={pendingRoleId === role.id}
-        aria-describedby={error !== null ? errorId : undefined}
-        onPress={() => {
-          start({ id: role.id, name: role.name });
-        }}
-      >
-        {t('visualisation.tray.chatWithRole', { role: role.name })}
-      </Button>
+    <TrayPanel
+      headingId={headingId}
+      heading={t('visualisation.tray.roleHeading', { name: role.name })}
+      actions={
+        <RoundIconButton
+          icon={MessageCircle}
+          label={t('visualisation.tray.chatWithRole', { role: role.name })}
+          portalContainer={portalContainer}
+          isPending={pendingRoleId === role.id}
+          aria-describedby={error !== null ? errorId : undefined}
+          onPress={() => {
+            start({ id: role.id, name: role.name });
+          }}
+        />
+      }
+      description={
+        <ExpandableText
+          text={role.description}
+          variant="icon"
+          expandLabel={t('visualisation.tray.description.expand')}
+          collapseLabel={t('visualisation.tray.description.collapse')}
+          portalContainer={portalContainer}
+        />
+      }
+    >
       {error !== null && (
         <p id={errorId}>{t('addNew.error', { role: role.name })}</p>
       )}
-    </>
+    </TrayPanel>
   );
 };

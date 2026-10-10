@@ -1,8 +1,10 @@
+import { Send } from 'lucide-react';
 import { useState, type SubmitEvent } from 'react';
 import { Button, Input, Label, TextField } from 'react-aria-components';
 import { useSendMessage } from '../../api/hooks';
 import { t } from '../../strings';
 import { ErrorState } from '../ErrorState/ErrorState';
+import { Icon, WithTooltip } from '../Icon/Icon';
 import { isTerminalAgentStatus } from './agentStatus';
 
 export interface MessageInputProps {
@@ -11,14 +13,14 @@ export interface MessageInputProps {
   /** The agent's role, for the field label and the waiting line. */
   readonly roleName: string;
   /**
-   * The agent's live status, read once by `ChatConversation` and passed down.
+   * The agent's live status, read once by `ChatView` and passed down.
    * `undefined` until it has been fetched, which reads as "not busy".
    */
   readonly status: string | undefined;
 }
 
 /**
- * The form at the bottom of one chat panel: a single-line message field, a
+ * The form at the bottom of a chat view: a single-line message field, a
  * send button, and a line saying when the agent owes a reply.
  *
  * **Sending returns immediately and the reply arrives on the event stream, not
@@ -30,7 +32,7 @@ export interface MessageInputProps {
  * or from reading the transcript.** Sending sets the agent to `running` and
  * finishing a turn sets it back, and both transitions arrive on the very
  * stream the transcript beside this is already watching — so the status
- * `ChatConversation` hands down is live here without anything opening a
+ * `ChatView` hands down is live here without anything opening a
  * connection of its own. The mutation's own pending state covers the moment
  * before the first of those events lands.
  *
@@ -96,13 +98,16 @@ export const MessageInput = ({
                 someone asks. */}
             <Input className="react-aria-Input" />
           </TextField>
-          <Button
-            type="submit"
-            className="react-aria-Button chat-input__send"
-            isDisabled={disabled}
-          >
-            {t('chat.send')}
-          </Button>
+          <WithTooltip label={t('chat.send')}>
+            <Button
+              type="submit"
+              className="react-aria-Button tcp-icon-button chat-input__send"
+              aria-label={t('chat.send')}
+              isDisabled={disabled}
+            >
+              <Icon icon={Send} />
+            </Button>
+          </WithTooltip>
         </>
       )}
       {/* Not a live region either, for the same reason as the waiting line

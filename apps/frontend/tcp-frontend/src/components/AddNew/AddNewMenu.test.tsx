@@ -56,9 +56,7 @@ const renderAddNewMenu = (
     ...render(
       <StrictMode>
         <QueryClientProvider client={queryClient}>
-          <ChatContext.Provider
-            value={{ openChat: vi.fn(), closeChat: vi.fn(), startChat }}
-          >
+          <ChatContext.Provider value={{ openChat: vi.fn(), startChat }}>
             <AddNewMenu companyId={COMPANY_ID} />
           </ChatContext.Provider>
         </QueryClientProvider>

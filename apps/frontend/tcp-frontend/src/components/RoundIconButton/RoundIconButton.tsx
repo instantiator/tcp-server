@@ -10,6 +10,10 @@ export interface RoundIconButtonProps {
   /** Outlined rather than filled, for a secondary control. */
   readonly outline?: boolean;
   readonly isDisabled?: boolean;
+  /** An action in flight: React Aria keeps it focusable and announces progress. */
+  readonly isPending?: boolean;
+  /** Points at text that describes the button, such as an error it caused. */
+  readonly 'aria-describedby'?: string | undefined;
   /** An extra class for the caller's own layout. */
   readonly className?: string;
   /** Where the tooltip is portalled; see `WithTooltip`. */
@@ -28,6 +32,8 @@ export const RoundIconButton = ({
   onPress,
   outline = false,
   isDisabled,
+  isPending,
+  'aria-describedby': describedBy,
   className,
   portalContainer,
 }: RoundIconButtonProps) => (
@@ -42,6 +48,8 @@ export const RoundIconButton = ({
         .join(' ')}
       aria-label={label}
       isDisabled={isDisabled}
+      isPending={isPending}
+      aria-describedby={describedBy}
       onPress={onPress}
     >
       <Icon icon={icon} />

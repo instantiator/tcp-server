@@ -1,6 +1,8 @@
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useId, useState } from 'react';
 import { Button } from 'react-aria-components';
 import { t } from '../../strings';
+import { Icon, WithTooltip } from '../Icon/Icon';
 import './ExpandableText.css';
 import { EXCERPT_LENGTH, excerptOf } from './excerpt';
 
@@ -15,12 +17,15 @@ export interface ExpandableTextProps {
   readonly collapseLabel: string;
   /**
    * `labelled` shows the labels as the control's text, under the paragraph.
-   * `ellipsis` puts a compact "…" at the end of the excerpt instead, for
-   * narrow places like the office view's tray; its accessible name is still
-   * the full label.
+   * `icon` puts a small chevron button after the text instead, for narrow
+   * places like the office view's tray; the labels become its name and
+   * tooltip. Expanded, the button sticks to the bottom of whatever scrolls
+   * the text, so the way back is always in view.
    */
-  readonly variant?: 'labelled' | 'ellipsis';
+  readonly variant?: 'labelled' | 'icon';
   readonly className?: string;
+  /** Where the `icon` variant's tooltip is portalled; see `WithTooltip`. */
+  readonly portalContainer?: Element | undefined;
 }
 
 /**
@@ -43,6 +48,7 @@ export const ExpandableText = ({
   collapseLabel,
   variant = 'labelled',
   className,
+  portalContainer,
 }: ExpandableTextProps) => {
   const [expanded, setExpanded] = useState(false);
   const textId = useId();
@@ -57,20 +63,31 @@ export const ExpandableText = ({
     setExpanded((open) => !open);
   };
 
-  if (variant === 'ellipsis') {
+  if (variant === 'icon') {
+    const label = expanded ? collapseLabel : expandLabel;
     return (
-      <p className={className}>
-        <span id={textId}>{expanded ? text : excerptOf(text)}</span>{' '}
-        <Button
-          className="react-aria-Button expandable-text__toggle"
-          aria-expanded={expanded}
-          aria-controls={textId}
-          aria-label={expanded ? collapseLabel : expandLabel}
-          onPress={toggle}
-        >
-          {expanded ? t('expandableText.showLess') : '…'}
-        </Button>
-      </p>
+      <div
+        className={['expandable-text--icon', className]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        <p id={textId}>
+          {expanded
+            ? text
+            : t('expandableText.truncated', { excerpt: excerptOf(text) })}
+        </p>
+        <WithTooltip label={label} portalContainer={portalContainer}>
+          <Button
+            className="react-aria-Button tcp-icon-button tcp-icon-button--small tcp-button--outline expandable-text__toggle"
+            aria-expanded={expanded}
+            aria-controls={textId}
+            aria-label={label}
+            onPress={toggle}
+          >
+            <Icon icon={expanded ? ChevronUp : ChevronDown} />
+          </Button>
+        </WithTooltip>
+      </div>
     );
   }
 

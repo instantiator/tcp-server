@@ -1,5 +1,6 @@
 import {
   AgentStatus,
+  AuditEvent,
   AuditEventType,
   buildAgentChangeSummary,
   buildEnumValidationError,
@@ -165,6 +166,41 @@ export class AssignmentCompletionService {
     // reconnects to a finished chat.
     await this.pauseResume.completeAgent(agentId, agent?.output ?? '');
     this.logger.log(`Chat assignment ${assignment.id} completed by a user`);
+  }
+
+  /**
+   * Deletes a chat outright: its audit rows (the transcript) and its
+   * assignment, which cascades to the agent. One transaction, so a failure
+   * cannot leave a transcript-less chat behind. Unlike
+   * {@link completeChat} nothing is kept, so the person must mean it.
+   *
+   * @throws {@link BadRequestException} when the assignment is not a chat.
+   * @throws {@link ConflictException} when the agent is mid-turn.
+   */
+  async deleteChat(assignment: TcpAssignment): Promise<void> {
+    if (assignment.mode !== 'chat') {
+      throw new BadRequestException(
+        `Assignment ${assignment.id} is not a chat (mode: ${assignment.mode}).`,
+      );
+    }
+    const agentId = assignment.agentId;
+    if (agentId) {
+      const agent = await this.agentRepo.findOneBy({ id: agentId });
+      if (agent?.status === AgentStatus.Running) {
+        throw new ConflictException(
+          `Agent ${agentId} is mid-turn; wait for the reply before deleting the chat.`,
+        );
+      }
+    }
+
+    await this.assignmentRepo.manager.transaction(async (em) => {
+      // Audit rows carry no foreign key, so they would outlive the chat.
+      const { companyId } = assignment;
+      if (agentId) await em.delete(AuditEvent, { companyId, agentId });
+      await em.delete(AuditEvent, { companyId, assignmentId: assignment.id });
+      await em.delete(TcpAssignment, { id: assignment.id });
+    });
+    this.logger.log(`Chat assignment ${assignment.id} deleted by a user`);
   }
 
   /**

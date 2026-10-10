@@ -454,3 +454,55 @@ The web client's shutdown banner reads `GET /api/system/status`: every 30 s whil
 The System menu, health dialog, shutdown dialog and banner (000.05) are covered by jsdom tests only. The browser tier signs in as a test user who isn't in `TCP_ADMIN_IDENTIFIERS`, so the menu never shows there. A browser shutdown would also stop the shared testing stack under the other specs.
 
 **Act when:** the browser tier gains an admin sign-in. Then add a journey that opens System health, plus one that starts a drain and cancels it, run serially after the other specs.
+
+## Transcript search scans every audit row
+
+`GET /api/agent/search` (000.06) runs a case-insensitive `LIKE` over every
+audit payload in the company. There is no text index, so the cost grows with
+the company's history. Its query key sits under `agent`, so a live agent event
+also refetches an open search.
+
+**Act when:** a search takes more than about 500 ms, or a company's audit
+table passes about a million rows. Add a `pg_trgm` GIN index on the payload
+text (or a `tsvector` column), and move the key out from under `agent` if the
+refetches show up in the network panel.
+
+## A deleted chat lingers in other open tabs
+
+Deleting a chat (000.06) invalidates the deleting browser's lists, but no live
+event announces a deletion: `events/cache.ts` only patches and adds. Another
+user, or another tab, keeps the row until it reloads, and opening it then
+fails with a 404.
+
+**Act when:** a second user of one company reports a chat that "won't open",
+or any entity gains a delete that other clients must see. Add a `deleted`
+event kind to the company stream and drop the row in `applyEvent`.
+
+## The chat list re-sorts only on a status change
+
+The chat list's order (000.06, `useActivityStamps`) moves a row when its agent
+changes status: a message sent, a turn finished. A tool call finishing
+mid-turn doesn't move it. That is deliberate, to stop busy chats shuffling,
+but a long turn full of tool calls sits still.
+
+**Act when:** a user asks for finer ordering. Stamp the row on a
+`tool_result` audit event too, which needs those events on the company stream
+or a per-row read of the agent's last event time.
+
+## Listening in is remembered per browser
+
+The listening-in list and its archived flags (000.06) live in `localStorage`,
+per user and company. They don't follow a user to another device or browser.
+
+**Act when:** a user asks to see their listening-in list on a second device.
+Move it to a per-user server table, with routes to read and change it.
+
+## No browser test listens in from the chat dialog
+
+The browser tier has no LLM, so no assignment ever runs, and "Listen in on an
+assignment" (000.06) always offers nothing there. It is covered by the
+component tests only. This is the same gap as the office view's agents.
+
+**Act when:** stub-llm joins the browser tier. Add a spec that starts a task,
+listens in on its running assignment from the chat dialog, archives it, and
+brings it back.
