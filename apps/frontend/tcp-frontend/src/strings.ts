@@ -243,7 +243,7 @@ const strings = {
   'shutdown.explain':
     'A graceful shutdown lets every agent finish its current step, then pauses it. Paused tasks wait until someone resumes them.',
   'shutdown.explainRestart':
-    'Restart does the same, then restarts the services, and paused work carries on by itself.',
+    'Restart does the same, then restarts the services. Paused work resumes.',
   'shutdown.restart': 'Restart',
   'shutdown.graceful': 'Shut down gracefully',
   'shutdown.force': 'Force shut down…',

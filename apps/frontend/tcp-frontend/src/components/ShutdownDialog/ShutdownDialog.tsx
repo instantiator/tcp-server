@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from 'react-aria-components';
+import './ShutdownDialog.css';
 import { announce } from '../../announce/announcer';
 import { refusalKey } from '../../api/errors';
 import {
@@ -118,7 +119,7 @@ export const ShutdownDialog = ({ onClose }: ShutdownDialogProps) => {
   })();
 
   const idleButtons = (
-    <>
+    <div className="shutdown-dialog__actions">
       {restartSupported && (
         <Button
           className="react-aria-Button"
@@ -142,14 +143,14 @@ export const ShutdownDialog = ({ onClose }: ShutdownDialogProps) => {
         {t('shutdown.graceful')}
       </Button>
       <Button
-        className="react-aria-Button"
+        className="react-aria-Button tcp-button--outline"
         onPress={() => {
           setConfirmingForce(true);
         }}
       >
         {t('shutdown.force')}
       </Button>
-    </>
+    </div>
   );
 
   const cancelButton = (label: string) => (
@@ -200,7 +201,7 @@ export const ShutdownDialog = ({ onClose }: ShutdownDialogProps) => {
           )}
           {isIdle && !confirmingForce && idleButtons}
           {isIdle && confirmingForce && (
-            <>
+            <div className="shutdown-dialog__actions">
               <Button
                 className="react-aria-Button"
                 onPress={() => {
@@ -219,7 +220,7 @@ export const ShutdownDialog = ({ onClose }: ShutdownDialogProps) => {
               >
                 {t('shutdown.back')}
               </Button>
-            </>
+            </div>
           )}
           {situation === 'draining' && cancelButton(t('shutdown.cancel'))}
           {situation === 'quiesced' && cancelButton(t('shutdown.cancel'))}

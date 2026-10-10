@@ -111,46 +111,50 @@ export const Header = () => {
         <CompanyTitle companyId={companyId} />
       )}
 
-      {session !== null && isAdmin && (
-        <MenuTrigger>
-          <WithTooltip label={systemLabel}>
-            <Button
-              className="react-aria-Button tcp-icon-button app-header__account"
-              aria-label={systemLabel}
-            >
-              <Icon icon={Server} />
-            </Button>
-          </WithTooltip>
-          <Popover>
-            <Menu onAction={onSystemAction}>
-              <MenuItem id="health">{t('header.system.health')}</MenuItem>
-              <MenuItem id="shutdown">{t('header.system.shutdown')}</MenuItem>
-            </Menu>
-          </Popover>
-        </MenuTrigger>
-      )}
+      {/* One group, so the header's space-between keeps both menus together
+          at the end rather than spreading them across the bar. */}
+      <div className="app-header__menus">
+        {session !== null && isAdmin && (
+          <MenuTrigger>
+            <WithTooltip label={systemLabel}>
+              <Button
+                className="react-aria-Button tcp-icon-button app-header__account"
+                aria-label={systemLabel}
+              >
+                <Icon icon={Server} />
+              </Button>
+            </WithTooltip>
+            <Popover>
+              <Menu onAction={onSystemAction}>
+                <MenuItem id="health">{t('header.system.health')}</MenuItem>
+                <MenuItem id="shutdown">{t('header.system.shutdown')}</MenuItem>
+              </Menu>
+            </Popover>
+          </MenuTrigger>
+        )}
 
-      {session !== null && (
-        <MenuTrigger>
-          <WithTooltip label={accountLabel}>
-            <Button
-              className="react-aria-Button tcp-icon-button app-header__account"
-              aria-label={accountLabel}
-            >
-              <Icon icon={User} />
-            </Button>
-          </WithTooltip>
-          <Popover>
-            <Menu onAction={onAccountAction}>
-              <MenuItem id="profile">{t('header.account.profile')}</MenuItem>
-              <MenuItem id="memberships">
-                {t('header.account.memberships')}
-              </MenuItem>
-              <MenuItem id="signOut">{t('header.account.signOut')}</MenuItem>
-            </Menu>
-          </Popover>
-        </MenuTrigger>
-      )}
+        {session !== null && (
+          <MenuTrigger>
+            <WithTooltip label={accountLabel}>
+              <Button
+                className="react-aria-Button tcp-icon-button app-header__account"
+                aria-label={accountLabel}
+              >
+                <Icon icon={User} />
+              </Button>
+            </WithTooltip>
+            <Popover>
+              <Menu onAction={onAccountAction}>
+                <MenuItem id="profile">{t('header.account.profile')}</MenuItem>
+                <MenuItem id="memberships">
+                  {t('header.account.memberships')}
+                </MenuItem>
+                <MenuItem id="signOut">{t('header.account.signOut')}</MenuItem>
+              </Menu>
+            </Popover>
+          </MenuTrigger>
+        )}
+      </div>
 
       {openDialog === 'profile' && (
         <ProfileDialog

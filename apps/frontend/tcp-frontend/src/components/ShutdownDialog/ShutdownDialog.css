@@ -1,0 +1,12 @@
+/*
+ * Meaningful class names now, rules filled per theme later (ADR-026). No
+ * literal colour, spacing or border value may appear here.
+ *
+ * The rule below is layout, not theme: a row of buttons with space between
+ * them, matching `.task-dialog__confirm-actions` in TaskDialog.css.
+ */
+.shutdown-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--tcp-space-sm);
+}
