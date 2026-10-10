@@ -496,6 +496,8 @@ can't attach files to a task or answer an enquiry.
 | 13  | Context-window estimate, open Swagger                                    | No        | `estimate-context-window`, `open-swagger`          | Keep in the CLI; developer tools, not user features                                                                          |
 | 14  | Memory view (episodic memories per role)                                 | No        | No                                                 | Add a read-only view; users should see what agents remember                                                                  |
 
+> ✅ **Rows 11–12 done in [000.05](<000.05.01.plan - system menu for health and shutdown.md>):** an admin-only System menu with health, shutdown, restart and cancel, plus `get-health`, `restart` and `cancel-shutdown` in the CLI. That also gives `DELETE /api/system/shutdown` a surface.
+
 **Unused API routes:** `POST /api/model/check`, the company-user routes,
 `POST /api/agent/start` (non-chat), `POST /api/agent/resume/:id`, delete role
 by slug, and `DELETE /api/system/shutdown` (cancel a drain). Either give each a

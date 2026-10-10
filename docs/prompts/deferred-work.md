@@ -34,6 +34,8 @@ When disconnected, the UI should poll to determine if it has become available ag
 
 ### System health monitoring
 
+> ✅ **Done in [000.05](<phase 04 - utility/000.05.01.plan - system menu for health and shutdown.md>):** `GET /api/system/health` combines every service's health. `tcp-cli get-health [--app <name>]` reads it, and the web client's admin-only System menu shows it, with the full JSON behind a disclosure.
+
 System health is available through the `/health` endpoint.
 
 Add a `get-health` verb to tcp-cli which retrieves and prints the json object from the tcp-server's `/health` endpoint (formatted).

@@ -352,6 +352,18 @@ is optional in OIDC; Zitadel publishes one), the local side is already clean
 and only the navigation is missing. The fallback clears the user again and
 navigates to `/` itself, so sign-out never throws out of the menu item.
 
+## The System menu and the shutdown banner
+
+Both read `GET /api/system/status` through `useSystemStatus`, which asks only once the user is signed in. A 401 is a full-page sign-in redirect, so asking from a public page would bounce a signed-out visitor.
+
+- **The System menu** sits beside the account menu, for administrators only (the status answer's `admin`). It has two items.
+  - **System health** opens `SystemHealthDialog`: every service's status in words, the error for one that is down, a Refresh button, and the full JSON behind a disclosure. It reads `GET /api/system/health`, which tcp-server gathers from every service on the internal network.
+  - **Shut down or restart…** opens `ShutdownDialog`. It offers Restart (where the server says restart is supported), a graceful shutdown, and a forced one behind a confirmation. It counts the agents still finishing, and Cancel ends the drain. It never halts the services: once a shutdown has drained, it says they can be stopped (`./scripts/stop-dev.sh`). A restart is followed through to "The system restarted." The dialog polls every 2 s only while something is happening.
+- **The shutdown banner** (`SystemBanner`, in `AppShell` under the session warning) shows every signed-in user when the system is shutting down, restarting, shut down or unreachable. It polls every 30 s while idle and 5 s otherwise. Once the server answers again after failing, it invalidates every query, so the page shows the restarted system.
+  - It has no live region of its own (ADR-027); each new text goes through the one announcer.
+
+See [ADR-034](ADRs/ADR-034-restart-and-startup-recovery.md) for restart, and [ADR-023's 000.05 amendment](ADRs/ADR-023-backend-api-surface-for-the-web-ui.md#amendment-as-implemented-p04-000-05) for why the admin flag comes from the server.
+
 ## `?devSession=`: skipping the provider
 
 `?devSession=<id>` on any URL supplies a stand-in signed-in user, so the
@@ -573,7 +585,7 @@ past it.
 An event arrives over SSE, `applyEvent` folds it into the query cache, and
 every `useLive*` hook reading that cache re-renders. Its absence is a fact
 about the system, not an oversight: `query-keys.ts` names `role`,
-`company-user` and `knowledge` as `STATIC_ENTITIES` — nothing streams them, so
+`company-user`, `knowledge` and `system` as `STATIC_ENTITIES` — nothing streams them, so
 `useCompanyRolesList`, `useCompanyKnowledgeList` and `useRoleState` carry no
 prefix and answer once, refetching only when asked.
 

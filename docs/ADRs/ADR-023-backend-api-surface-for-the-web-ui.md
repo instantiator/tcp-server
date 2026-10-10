@@ -204,3 +204,7 @@ and the `wantsAll` parse in `CompanyController.listCompanies`.
 `enableCors()` is still not called, and now will not be — see
 [web-client.md](../web-client.md#runtime-configuration) for why, and for what a
 CDN deployment would need if that shape is ever built.
+
+## Amendment as implemented (000.05, phase 04) <a id="amendment-as-implemented-p04-000-05"></a>
+
+Decision 3 still stands, with no `/api/me`. But one fact about the caller isn't in any token claim: whether they are an administrator (`TCP_ADMIN_IDENTIFIERS`, held by the server). [000.05](../prompts/phase%2004%20-%20utility/000.05.01.plan%20-%20system%20menu%20for%20health%20and%20shutdown.md) added `GET /api/system/status` (`@NoCompanyScope`), which returns `{ admin, shutdown: { state, restart } }`. The web client uses `admin` to show the System menu, and `shutdown` to show every user the shutdown banner. It isn't a general identity route: profile data still comes from the ID token.

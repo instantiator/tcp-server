@@ -230,6 +230,7 @@ the same words, from one shared function (`taskWaiting`).
 | `rate_limited` | A provider limit; `resumeAfter` is the next automatic try |
 | `spend_cap`    | A spend cap is reached                                    |
 | `shutdown`     | The system shut down while the task ran                   |
+| `restart`      | The system is restarting; the task carries on by itself   |
 | `user_input`   | An agent is waiting for a user's reply                    |
 | `consultation` | An agent is waiting for a colleague's answer              |
 | `queued`       | An agent is waiting for a model slot                      |
@@ -334,13 +335,29 @@ the task: a planner failure ("The planner stopped. …"), an implement-agent fai
 (assignment `in-progress → failed` → task failed), or a QA-agent failure (the
 target assignment fails → task failed; a failed QA agent is not retried).
 
-**Startup recovery.** On module init, `TaskRecoveryService.reconcileTask`
-idempotently repairs every non-terminal task: a `planning` task with no live planner → failed; an
-`in-progress` assignment whose agent died → failure propagated; an `in-qa`
-assignment with no live QA agent → a fresh QA agent dispatched; nothing running
-with a ready step → dispatched; all succeeded but not finalised → finalised.
-Agents still `Running`/`Paused` are left alone (BullMQ and pause/resume own
-their recovery).
+**Startup recovery.** At application bootstrap, `AgentRecoveryService` first
+puts agents right:
+
+- A `running` or `queued` agent with no job in the queue is paused for a
+  restart, then resumed from its checkpoint. It is failed as `interrupted`
+  instead if its task has ended, or if it was recovered once before.
+- Every `restart` pause, left by a restart drain or by the step above, is
+  resumed.
+
+Then `TaskRecoveryService.reconcileTask` idempotently repairs every
+non-terminal task:
+
+- a `planning` task with no live planner → failed;
+- an `in-progress` assignment whose agent died → failure propagated;
+- an `in-qa` assignment with no live QA agent → a fresh QA agent dispatched;
+- nothing running with a ready step → dispatched;
+- all succeeded but not finalised → finalised;
+- a `finalising` task whose finalise step succeeded → succeeded, and one with no
+  finalise step yet → dispatched.
+
+Agents still `Running` with a job, or `Paused` for any other reason, are left
+alone (BullMQ and pause/resume own their recovery). See
+[ADR-034](ADRs/ADR-034-restart-and-startup-recovery.md).
 
 ## CLI
 
