@@ -13,6 +13,7 @@ import { MembershipService } from '../auth/membership.service';
 import { DbService } from '../db/db.service';
 import { CompanyEventService } from '../events/company-event.service';
 import { SpendReportService } from '../spend/spend-report.service';
+import { RecordsCleanupService } from './records-cleanup.service';
 import { SpendResumeService } from './spend-resume.service';
 import { CompanyController } from './api.company.controller';
 import { CompanyPrimingService } from './company-priming.service';
@@ -97,9 +98,13 @@ describe('CompanyController', () => {
   let priming: ReturnType<typeof makePrimingService>;
   let companyEvents: ReturnType<typeof makeCompanyEventService>;
   let membership: ReturnType<typeof makeMembershipService>;
+  let recordsCleanup: jest.Mocked<
+    Pick<RecordsCleanupService, 'companyDeleted'>
+  >;
   let controller: CompanyController;
 
   beforeEach(() => {
+    recordsCleanup = { companyDeleted: jest.fn().mockResolvedValue(undefined) };
     api = makeApiService();
     db = makeDbService();
     stats = makeStatsService();
@@ -115,6 +120,7 @@ describe('CompanyController', () => {
       membership as unknown as MembershipService,
       {} as SpendResumeService,
       {} as SpendReportService,
+      recordsCleanup as unknown as RecordsCleanupService,
     );
   });
 
@@ -438,6 +444,18 @@ describe('CompanyController', () => {
       await controller.deleteCompany('acme-slug');
       expect(db.getCompany).toHaveBeenCalledWith('acme-slug');
       expect(db.deleteCompany).toHaveBeenCalledWith(companyId);
+    });
+
+    it('tells the records server once the company is deleted', async () => {
+      const companyId = randomUUID();
+      db.getCompany.mockResolvedValue({ id: companyId } as never);
+      db.deleteCompany.mockImplementation(() => {
+        expect(recordsCleanup.companyDeleted).not.toHaveBeenCalled();
+        return Promise.resolve(true);
+      });
+
+      await controller.deleteCompany(companyId);
+      expect(recordsCleanup.companyDeleted).toHaveBeenCalledWith(companyId);
     });
 
     it('throws NotFoundException when the company does not resolve', async () => {

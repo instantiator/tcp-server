@@ -14,6 +14,7 @@ import {
   ProcessRestarter,
 } from '@tcp/shared';
 import { Module } from '@nestjs/common';
+import { RecordsCleanupService } from './records-cleanup.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditModule } from '../audit/audit.module';
 import { AuthModule } from '../auth/auth.module';
@@ -125,6 +126,7 @@ import { TaskService } from './task.service';
   ],
   providers: [
     ApiService,
+    RecordsCleanupService,
     AgentOrchestrationService,
     AssignmentService,
     AssignmentCompletionService,
