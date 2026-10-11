@@ -41,6 +41,7 @@ const TIMED = {
 describe('RecordsApiService', () => {
   const company = { id: randomUUID(), slug: 'acme' } as const;
   const records = {
+    createTable: jest.fn(),
     listTableSummaries: jest.fn(),
     describeTable: jest.fn(),
     readRows: jest.fn(),
@@ -93,6 +94,26 @@ describe('RecordsApiService', () => {
     ]);
     return payload;
   }
+
+  it('makes a table for the company and audits its definition', async () => {
+    records.createTable.mockResolvedValue(DEFINITION);
+    const table = {
+      name: 'orders',
+      purpose: 'Orders',
+      schema: { properties: {} },
+      primaryKey: ['order_id'],
+    };
+    await expect(service.createTable(acme, table, 'u')).resolves.toBe(
+      DEFINITION,
+    );
+    expect(records.createTable).toHaveBeenCalledWith(company.id, table, null);
+    expect(audited()).toMatchObject({
+      action: 'create_table',
+      table: 'orders',
+      definition: DEFINITION,
+      userId: 'u',
+    });
+  });
 
   it('answers an unknown company with 404', async () => {
     db.getCompany.mockResolvedValue(null);

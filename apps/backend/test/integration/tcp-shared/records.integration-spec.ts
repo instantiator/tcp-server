@@ -570,7 +570,8 @@ describe('RecordsService (integration)', () => {
         seen.push(...batch.map((r) => r['order_id']));
       });
       expect(batches).toEqual([1000, 1000, 500]);
-      expect(new Set(seen).size).toBe(2500);
+      // In the order they were added, though one insertMany added them all.
+      expect(seen).toEqual(rows.map((r) => r.order_id));
     });
 
     describe('insertMany', () => {

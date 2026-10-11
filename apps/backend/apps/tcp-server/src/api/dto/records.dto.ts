@@ -1,5 +1,12 @@
 import { ApiProperty, getSchemaPath } from '@nestjs/swagger';
-import { IsInt, IsObject, Min } from 'class-validator';
+import {
+  IsArray,
+  IsInt,
+  IsObject,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 
 /**
  * Request and response shapes for `records.controller.ts`.
@@ -92,6 +99,35 @@ export class AppendRecordsCsvResultDto {
 /** How many records a clear or delete removed. */
 export class RemovedRecordsDto {
   removed!: number;
+}
+
+/**
+ * A new table, as an agent's `create_table` takes it. The records service
+ * checks the name and schema; this only checks the shape of the request.
+ */
+export class CreateRecordTableDto {
+  /** Lower case letters, digits and `_`, starting with a letter. */
+  @IsString()
+  name!: string;
+  @IsString()
+  purpose!: string;
+  /** A JSON Schema object whose properties are scalar fields. */
+  @ApiProperty(OPEN_OBJECT)
+  @IsObject()
+  schema!: Record<string, unknown>;
+  /** The primary key's fields: required, and string or integer. */
+  @IsArray()
+  @IsString({ each: true })
+  primaryKey!: string[];
+  /** Each further unique key's fields. */
+  @ApiProperty({
+    type: 'array',
+    items: { type: 'array', items: { type: 'string' } },
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  uniqueKeys?: string[][];
 }
 
 /** A record to add. */

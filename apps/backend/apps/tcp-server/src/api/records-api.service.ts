@@ -1,8 +1,10 @@
 import {
   AuditEventType,
+  type NewTable,
   type RecordData,
   RecordsError,
   RecordsService,
+  type TableDefinition,
   type TableRows,
   type TableSummary,
   type TcpCompany,
@@ -75,6 +77,23 @@ export class RecordsApiService {
 
   listTables(company: TcpCompany): Promise<TableSummary[]> {
     return call(() => this.records.listTableSummaries(company.id));
+  }
+
+  /** Makes a table, as an agent's `create_table` does; audited as the user. */
+  async createTable(
+    company: TcpCompany,
+    table: NewTable,
+    userId: string | null,
+  ): Promise<TableDefinition> {
+    const definition = await call(() =>
+      this.records.createTable(company.id, table, null),
+    );
+    await this.changed(company, userId, {
+      action: 'create_table',
+      table: definition.name,
+      definition,
+    });
+    return definition;
   }
 
   readTable(company: TcpCompany, table: string): Promise<TableRows> {

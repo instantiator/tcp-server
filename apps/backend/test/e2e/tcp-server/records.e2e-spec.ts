@@ -280,6 +280,26 @@ describe('Records API (e2e)', () => {
     });
   });
 
+  describe('create table', () => {
+    it('makes a table from a schema, refusing a bad one and a taken name', async () => {
+      const table = { ...ORDERS, name: 'stock', primaryKey: ['order_id'] };
+      const res = await alice().post('/tables').send(table).expect(201);
+      expect(res.body).toMatchObject({
+        name: 'stock',
+        primaryKey: ['order_id'],
+      });
+      await alice().post('/tables').send(table).expect(409);
+      await alice()
+        .post('/tables')
+        .send({ ...table, name: 'Bad Name' })
+        .expect(400);
+      expect((await userChanges()).at(-1)).toMatchObject({
+        action: 'create_table',
+        table: 'stock',
+      });
+    });
+  });
+
   // Every route, as someone who isn't a member: refused before anything runs.
   it.each([
     ['get', '/tables'],
@@ -292,6 +312,7 @@ describe('Records API (e2e)', () => {
     ['delete', '/tables/orders/rows/x?version=1'],
     ['delete', '/tables/orders/rows'],
     ['delete', '/tables/orders'],
+    ['post', '/tables'],
   ] as const)('refuses %s %s to a non-member', (method, path) =>
     as(bobJwt)[method](path).expect(403),
   );

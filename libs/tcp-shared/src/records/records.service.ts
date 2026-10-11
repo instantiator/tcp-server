@@ -512,8 +512,12 @@ export class RecordsService {
           let inserted = 0;
           for (const data of rows) {
             if (await this.findByKeys(tx, table, data)) continue;
+            // clock_timestamp(), not the default now(): now() is the
+            // transaction's start, so every row would share one time and
+            // an export would lose the file's order.
             const [row] = await tx.query<{ id: string }[]>(
-              `INSERT INTO "record" ("tableId", "companyId", "data") VALUES ($1, $2, $3) RETURNING "id"`,
+              `INSERT INTO "record" ("tableId", "companyId", "data", "createdAt", "updatedAt")
+               VALUES ($1, $2, $3, clock_timestamp(), clock_timestamp()) RETURNING "id"`,
               [table.id, companyId, JSON.stringify(data)],
             );
             await this.writeKeys(tx, table, row.id, data);

@@ -36,6 +36,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
   AddRecordDto,
   AppendRecordsCsvResultDto,
+  CreateRecordTableDto,
+  RecordTableDefinitionDto,
   RecordFieldSchemaDto,
   RecordTableRowsDto,
   RecordTableSummaryDto,
@@ -88,6 +90,23 @@ export class RecordsController {
   @Get('tables')
   async listTables(@Param('companyId') companyId: string) {
     return this.records.listTables(await this.records.company(companyId));
+  }
+
+  /**
+   * Makes a table from a JSON Schema, as an agent's `create_table` does. The
+   * web UI has no form for it yet; tests and tools use it.
+   */
+  @ApiOperation({ summary: 'Create a record table' })
+  @ApiCreatedResponse({ type: RecordTableDefinitionDto })
+  @CompanyScope(SCOPE)
+  @Post('tables')
+  async createTable(
+    @Param('companyId') companyId: string,
+    @Body() body: CreateRecordTableDto,
+    @Req() req: Request,
+  ) {
+    const company = await this.records.company(companyId);
+    return this.records.createTable(company, body, getCurrentUserId(req));
   }
 
   /** Every table as a zip of CSVs. */

@@ -30,7 +30,11 @@
   flex-direction: column;
 }
 
-.tables-panel__count,
+/* Smaller, not muted: it inherits the item's colour, so it stays readable on a selected row. */
+.tables-panel__count {
+  font-size: 0.875em;
+}
+
 .tables-panel__empty,
 .tables-panel__hint {
   color: var(--tcp-color-text-muted);

@@ -668,7 +668,8 @@ export interface paths {
         /** List a company's record tables */
         get: operations["RecordsController_listTables"];
         put?: never;
-        post?: never;
+        /** Create a record table */
+        post: operations["RecordsController_createTable"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2073,6 +2074,15 @@ export interface components {
             purpose: string;
             records: number;
             updatedAt: string;
+        };
+        CreateRecordTableDto: {
+            schema: {
+                [key: string]: unknown;
+            };
+            uniqueKeys?: string[][];
+            name: string;
+            purpose: string;
+            primaryKey: string[];
         };
         RecordTableSchemaDto: {
             properties: {
@@ -3649,6 +3659,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecordTableSummaryDto"][];
+                };
+            };
+        };
+    };
+    RecordsController_createTable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRecordTableDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordTableDefinitionDto"];
                 };
             };
         };
