@@ -244,8 +244,13 @@ function jsonSchemaFieldToZodBase(field: Record<string, unknown>): z.ZodType {
       return z.array(
         jsonSchemaFieldToZod((field['items'] as Record<string, unknown>) ?? {}),
       );
-    case 'object':
-      return buildZodSchema(field);
+    case 'object': {
+      // An object with no declared properties is a free-form record (a
+      // records-server row, say): z.object({}) would strip every key from it.
+      if (!field['properties']) return z.record(z.string(), z.unknown());
+      const built = buildZodSchema(field);
+      return field['additionalProperties'] === false ? built : built.loose();
+    }
     default:
       return z.unknown();
   }
