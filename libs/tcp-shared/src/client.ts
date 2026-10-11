@@ -53,7 +53,7 @@ export {
 
 // -- Records downloads: one file name for the server, CLI and web ------------
 // These import nothing, so they are safe as values.
-export { recordsDownloadName } from './records/download-name';
+export { downloadStamp, recordsDownloadName } from './records/download-name';
 export { fieldOrder } from './records/field-order';
 
 // -- Company statistics: the `GET /api/company` response shape ---------------

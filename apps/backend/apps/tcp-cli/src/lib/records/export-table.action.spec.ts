@@ -58,14 +58,19 @@ describe('exportTableAction', () => {
     );
   });
 
-  it('uses the server filename when the target is a directory', async () => {
-    await exportTableAction(opts, {
-      companyId: 'c1',
-      table: 'people',
-      target: dir,
-    });
+  it('uses the server filename, restamped in local time, when the target is a directory', async () => {
+    jest.useFakeTimers({ now: new Date(2026, 4, 6, 7, 8, 9) });
+    try {
+      await exportTableAction(opts, {
+        companyId: 'c1',
+        table: 'people',
+        target: dir,
+      });
+    } finally {
+      jest.useRealTimers();
+    }
 
-    const file = path.join(dir, '2026-01-01 00-00-00 acme people.csv');
+    const file = path.join(dir, '2026-05-06 07-08-09 acme people.csv');
     expect(fs.readFileSync(file)).toEqual(csv);
     expect(stdoutSpy).toHaveBeenCalledWith(
       expect.stringContaining('"size": 8'),

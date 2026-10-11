@@ -3,6 +3,13 @@ function pad(n: number): string {
   return String(n).padStart(2, '0');
 }
 
+/** `YYYY-MM-DD HH-mm-ss` in local time: the stamp that starts every records download's name. */
+export function downloadStamp(at: Date = new Date()): string {
+  const date = `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
+  const time = `${pad(at.getHours())}-${pad(at.getMinutes())}-${pad(at.getSeconds())}`;
+  return `${date} ${time}`;
+}
+
 /**
  * The file name for a records download, e.g. `2026-10-11 14-05-09 acme orders.csv`
  * or `… acme tables.zip`. The time is local to whatever makes the file, and
@@ -14,7 +21,5 @@ export function recordsDownloadName(
   extension: 'csv' | 'zip',
   at: Date = new Date(),
 ): string {
-  const date = `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
-  const time = `${pad(at.getHours())}-${pad(at.getMinutes())}-${pad(at.getSeconds())}`;
-  return `${date} ${time} ${companySlug} ${label}.${extension}`;
+  return `${downloadStamp(at)} ${companySlug} ${label}.${extension}`;
 }
