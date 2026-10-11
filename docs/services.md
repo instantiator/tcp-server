@@ -76,7 +76,7 @@ NestJS agent loop runner. Consumes BullMQ jobs from Redis, executes agent steps,
 
 ### tcp-mcp-storage
 
-NestJS MCP server giving agents read-only exploration of the shared document store plus assignment-scoped working-file and material tools. It holds no S3 client of its own — every action is proxied to tcp-server's `/internal/storage/*` endpoints. Uses the MCP Streamable HTTP transport — stateless, one session per request. See [tcp-mcp-storage.md](tcp-mcp-storage.md) for the tool reference.
+NestJS MCP server giving agents read-only exploration of their own company's files, assignment-scoped working-file and material tools, and company-resource tools. It holds no S3 client of its own — every action is proxied to tcp-server's `/internal/storage/*` endpoints. Uses the MCP Streamable HTTP transport — stateless, one session per request. See [tcp-mcp-storage.md](tcp-mcp-storage.md) for the tool reference.
 
 - **Health:** `GET http://localhost:3010/health` — static (no dependency of its own to probe)
 - **API:** `POST http://localhost:3010/mcp` (MCP JSON-RPC)

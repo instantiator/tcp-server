@@ -121,7 +121,7 @@ append-only. A spend notice is application-wide (no `companyId`); a task notice
 cap is reached, and in 000.04 `pausedAt`, `pausedBy` (a user's pause) and
 `visualisationClosedAt` (a finished task's room closed in the office view).
 
-Storage-tool audit events nest an `originators: { user: string | null; agent: string | null; task: string | null }` object inside `payload`, tracking who requested the action — `user` for direct JWT-authenticated calls (`POST /api/storage`, role document uploads), `agent` for MCP-tool-initiated calls, `task` reserved for a future task concept (always `null` today). No schema change: `payload` is already `jsonb`.
+Storage-tool audit events nest an `originators: { user: string | null; agent: string | null; task: string | null }` object inside `payload`, tracking who requested the action — `user` for direct JWT-authenticated calls (`POST /api/storage`, role document uploads), `agent` for MCP-tool-initiated calls, `task` is set when applying a task's company resource changes (since 001.02), and `null` otherwise. No schema change: `payload` is already `jsonb`.
 
 ### LangGraph checkpoint store
 

@@ -110,23 +110,40 @@ reset), up to the QA-attempt cap (see [Orchestration flow](#orchestration-flow))
 
 `TcpAssignmentMode`: `plan | implement | qa | chat | consultee | finalise`. An
 agent's mode **is** its assignment's mode; it drives the prompt
-(`MODE_PROMPTS`), the required completion tool (`requiredToolForMode`), and the
+(`modePrompt`), the required completion tool (`requiredToolForMode`), and the
 tools offered (`MODE_TOOLS` in `@tcp/shared`). `MODE_TOOLS` is the single source
 of truth for both the client-side tool filter and the server-side storage
 read-only scope.
 
-| Mode        | Purpose                                                | Prompt source                                      | Tools available                                                                    | Behaviour                                                                                                  | Expectation (required tool) |
-| ----------- | ------------------------------------------------------ | -------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | --------------------------- |
-| `plan`      | Design a task's plan                                   | `MODE_PROMPTS.plan` + injected company role roster | tasks, storage (read-only), memory                                                 | Reads materials/storage to design a plan; **cannot** consult, query the user, or write files               | `create_plan`               |
-| `implement` | Carry out one plan step                                | `MODE_PROMPTS.implement`                           | tasks, storage (read-write), memory, interactions                                  | Produces the step's outputs; may consult other roles; result goes to QA                                    | `complete_assignment`       |
-| `qa`        | Review a completed step                                | `MODE_PROMPTS.qa`                                  | tasks, storage (**read-only**, target's dir), memory, interactions                 | Reads the prepared artifacts and accepts or rejects with feedback                                          | `assure_assignment`         |
-| `chat`      | Converse with a user                                   | `MODE_PROMPTS.chat`                                | tasks, storage (read-write), memory, interactions                                  | Ongoing conversation; may consult/act; returns to `Idle` after each turn                                   | _none_ (narrated reply)     |
-| `consultee` | Answer another agent's consultation                    | `MODE_PROMPTS.consultee`                           | tasks, storage (read-write), memory, interactions                                  | Answers the question concisely in the `summary` (a file only if genuinely needed); orphan assignment       | `complete_assignment`       |
-| `finalise`  | Bring a task's deliverables up to its expected outputs | `MODE_PROMPTS.finalise` + task request/expected    | tasks, storage (**read-write on the task `completed/` dir**), memory, interactions | Edits/renames/deletes deliverables, may consult; runs after all steps + QA when the task states `expected` | `complete_assignment`       |
+The prompt is built from sections, each tied to an MCP server.
+`modePrompt(mode, serverNames)` (`libs/tcp-shared/src/prompts/mode-prompts.ts`)
+keeps only the sections for servers the agent has, so a role with records
+switched off is never told about `query`. See the
+[ADR-013 amendment](ADRs/ADR-013-prompt-assembly-context-management.md#amendment-as-implemented-p04-001-02).
+
+| Mode        | Purpose                                                | Servers (all modes also get `utilities`)      | Storage                                  | Records    | Company resources                                         | Required tool           |
+| ----------- | ------------------------------------------------------ | --------------------------------------------- | ---------------------------------------- | ---------- | --------------------------------------------------------- | ----------------------- |
+| `plan`      | Design a task's plan                                   | tasks, storage, memory, records               | Read-only                                | Read-only  | Read-only                                                 | `create_plan`           |
+| `implement` | Carry out one plan step                                | tasks, storage, memory, interactions, records | Read-write                               | Read-write | Writes its own draft                                      | `complete_assignment`   |
+| `qa`        | Review a completed step                                | tasks, storage, memory, interactions, records | Read-only, on the step under review      | Read-only  | Read-only; sees the step's drafts                         | `assure_assignment`     |
+| `chat`      | Converse with a user                                   | tasks, storage, memory, interactions, records | Read-write                               | Read-write | Writes the live resources directly                        | _none_ (narrated reply) |
+| `consultee` | Answer another agent's consultation                    | tasks, storage, memory, interactions, records | Read-write                               | Read-write | Read-only                                                 | `complete_assignment`   |
+| `finalise`  | Bring a task's deliverables up to its expected outputs | tasks, storage, memory, interactions, records | Read-write, on the task `completed/` dir | Read-write | Edits the task's pending changes (`completed/resources/`) | `complete_assignment`   |
+
+What each mode does:
+
+- `plan` reads materials and storage to design a plan. It can't consult, query the user, or change anything.
+- `implement` produces the step's outputs and may consult other roles. Its result goes to QA.
+- `qa` reads the prepared artifacts and accepts or rejects with feedback.
+- `chat` is an ongoing conversation. It may consult or act, and returns to `Idle` after each turn.
+- `consultee` answers the question concisely in the `summary`, and writes a file only if truly needed. It is an orphan assignment.
+- `finalise` edits, renames or deletes deliverables and may consult. It runs after all steps and their QA when the task states `expected` outputs.
 
 `consultee` and `finalise` were added in 010.2.8.3. `plan` and `qa` are storage
-read-only; every other mode is read-write. Only `plan` drops the `interactions`
-server (no consultation/user-query — so a planning run always terminates).
+and records read-only; the write tools for records are hidden from them on the
+agent side. Company resources are read-only in `plan`, `qa` and `consultee`.
+Only `plan` drops the `interactions` server (no consultation/user-query, so a
+planning run always terminates).
 
 ## Artifact model
 
@@ -134,24 +151,55 @@ Artifacts are `{ type, value }` pairs stored in `simple-json` columns —
 there is no artifact table. `TcpArtifactType` constrains where an artifact
 lives:
 
-| Type                        | Resolves to (via `resolveArtifactKey`)                                                                                                                                  |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `task-materials-path`       | `{companySlug}/tasks/{taskId}/materials/{value}`                                                                                                                        |
-| `task-completed-path`       | `{companySlug}/tasks/{taskId}/completed/{value}`                                                                                                                        |
-| `assignment-working-path`   | `{companySlug}/tasks/{taskId}/assignments/{orderIndex}/working/{value}` (orphan: `{companySlug}/assignments/{assignmentId}/working/{value}`)                            |
-| `assignment-completed-path` | `{companySlug}/tasks/{taskId}/assignments/{orderIndex}/completed/{value}` — `orderIndex` is the **most recent prior** assignment whose `approved` list contains `value` |
-| `inline-text`               | Not a storage pointer — literal text. As an expectation, an empty `value` matches any text, otherwise `value` is a regex the text must match                            |
+| Type                        | Resolves to (via `resolveArtifactKey`)                                                                                                                                                                   |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `task-materials-path`       | `{companySlug}/tasks/{taskId}/materials/{value}`                                                                                                                                                         |
+| `task-completed-path`       | `{companySlug}/tasks/{taskId}/completed/{value}`                                                                                                                                                         |
+| `assignment-working-path`   | `{companySlug}/tasks/{taskId}/assignments/{orderIndex}/working/{value}` (orphan: `{companySlug}/assignments/{assignmentId}/working/{value}`)                                                             |
+| `assignment-completed-path` | `{companySlug}/tasks/{taskId}/assignments/{orderIndex}/completed/{value}` — `orderIndex` is the **most recent prior** assignment whose `approved` list contains `value`                                  |
+| `inline-text`               | Not a storage pointer — literal text. As an expectation, the `value` describes the answer for the agent and QA; the gate only checks that some non-empty text was given                                  |
+| `resource`                  | A company resource: `value` is its path under `resources/` (e.g. `invoices/INV-0042.md`). Resolved through the agent's resource scope, not to one fixed key. See [Company resources](#company-resources) |
 
 Four union types constrain which artifact types are valid in which field —
 see `libs/tcp-shared/src/models/TcpArtifact.ts`:
 
-- `TcpMaterialArtifact` (`TcpTask.materials`, `TcpAssignment.materials`): `task-materials-path | assignment-completed-path | inline-text`
-- `TcpAssignmentWorkingArtifact` (`TcpAssignment.expected`, `.prepared`): `assignment-working-path | inline-text`
-- `TcpAssignmentCompletedArtifact` (`TcpAssignment.approved`): `assignment-completed-path | inline-text`
-- `TcpTaskCompletedArtifact` (`TcpTask.expected`, `.completed`): `task-completed-path | inline-text`
+- `TcpMaterialArtifact` (`TcpTask.materials`, `TcpAssignment.materials`): `task-materials-path | assignment-completed-path | resource | inline-text`
+- `TcpAssignmentWorkingArtifact` (`TcpAssignment.expected`, `.prepared`): `assignment-working-path | resource | inline-text`
+- `TcpAssignmentCompletedArtifact` (`TcpAssignment.approved`): `assignment-completed-path | resource | inline-text`
+- `TcpTaskCompletedArtifact` (`TcpTask.expected`, `.completed`): `task-completed-path | resource | inline-text`. A user sets only file and text outputs in `expected`; `completed` records resource changes as `resource` entries.
 
 See [Shared Storage](shared-storage.md#folder-structure) for the full
 storage tree, including the orphan-assignment working directory.
+
+### Company resources
+
+A `resource` artifact names a company document by its path under
+`{companySlug}/resources/`. It is the one artifact type that is not a pointer
+to a single key: where it is read from depends on the agent that asks. See
+[Shared Storage → Company resources](shared-storage.md#company-resources) for
+the layout and the tools.
+
+- **Expected outputs.** A plan step lists a resource it should create or
+  change as `{ "type": "resource", "value": "invoices/INV-0042.md" }` in its
+  `expected`. One output can create a new resource or update an existing one.
+- **Materials.** A step that should use a resource lists it in `materials` the
+  same way. It does not appear in the materials tools. The prompt shows it as
+  `- resource: {path}`, and the agent reads it with `read_resource`.
+- **Plan validation.** `create_plan` normalises each path and rejects a bad one
+  (`..`, an empty path, a trailing `/`). A `resource` material must already
+  exist, or be expected by an earlier step; otherwise the plan is refused.
+- **Drafts.** In a task, `write_resource` writes a draft into the step's
+  `working/resources/`. The output gate checks that each expected resource has
+  a draft. It need not be in `prepared`: every draft is promoted.
+- **QA.** The QA prompt lists the step's resource drafts, and QA reads them
+  with `read_resource`. When QA accepts, **every** file under
+  `working/resources/` is promoted to the step's `completed/resources/`, and
+  recorded in `approved` as a `resource` entry.
+- **Apply.** When the task succeeds, the resource files that gathered in the
+  task's `completed/resources/` folder are copied over the live
+  `resources/` files. See [Finalisation](#orchestration-flow) below.
+
+A chat agent has no draft step: its resource changes are live at once.
 
 ## REST API
 
@@ -310,8 +358,9 @@ its agent; the orchestrator dispatches a QA agent of the **same role** (a fresh
 instance with the domain expertise — a dedicated company QA role is future
 work) required to call `assure_assignment`.
 
-- **Accept** promotes each prepared `assignment-working-path` file from the
-  assignment's `working/` directory to its `completed/` directory, records the
+- **Accept** promotes each prepared `assignment-working-path` file, and every
+  resource draft, from the assignment's `working/` directory to its
+  `completed/` directory, records the
   `approved` artifacts, transitions `in-qa → succeeded`, completes the paused
   implementing agent (its `summary` becomes the agent output), and advances the
   task.
@@ -327,8 +376,32 @@ via `runConfig.maxQaAttempts` and `resolveRunConfig`.
 **Finalisation.** When every implement assignment has succeeded, each
 assignment's `completed/` files are copied into the task's `completed/`
 directory (on a filename collision the highest `orderIndex` wins), `task.completed`
-is set (one `task-completed-path` per distinct filename, plus approved
-`inline-text` items), and the task becomes `succeeded`.
+is set (one `task-completed-path` per distinct filename, one `resource` entry
+per resource change, plus approved `inline-text` items), and the task becomes
+`succeeded`.
+
+Files under `resources/` keep their folders when they are gathered into the
+task's `completed/` directory. Other files are flattened to their name.
+
+**Applying resource changes.** Just before the task is marked `succeeded`,
+`TaskDeliverablesService.applyResourceChanges` copies each file in the task's
+`completed/resources/` over the live file in `{slug}/resources/`. It runs on
+both finalise paths: `finaliseMechanical` (a task with no `expected` outputs)
+and `assignmentFinalised` (after a finalise agent has run). The finalise
+agent's prompt lists the pending changes, and it can fix them with the
+resource tools before it completes.
+
+- The task's copy is kept, as the record of what it changed.
+- Running apply again is harmless. It writes the same content as a new
+  version, so startup recovery can simply run it again.
+- If a copy fails part-way, the task **fails**. Its `failureReason` names the
+  resource that stopped it and the ones already applied. The finalise agent is
+  still completed, because it did its job. The task keeps its `completed`
+  record.
+- A failed or cancelled task applies nothing.
+- Two tasks that change one resource: the later apply wins. The older version
+  stays in the bucket's version history (see
+  [Shared Storage → Versioning](shared-storage.md#versioning-and-retention)).
 
 **Failure propagation.** A failed agent whose assignment is task-linked fails
 the task: a planner failure ("The planner stopped. …"), an implement-agent failure

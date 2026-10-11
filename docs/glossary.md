@@ -17,7 +17,7 @@ MCP server (port 3012) that lets agents pause for human input (`request_user_inp
 MCP server (port 3011) that provides agents with access to episodic memory and role knowledge via `recall`, `remember`, and `search_knowledge`.
 
 **tcp-mcp-storage**
-MCP server (port 3010) giving agents read-only exploration of the shared document store, plus assignment-scoped working-file and material tools. It holds no S3 client — it proxies to tcp-server.
+MCP server (port 3010) giving agents read-only exploration of their own company's files, assignment-scoped working-file and material tools, and tools for company resources. It holds no S3 client — it proxies to tcp-server.
 
 **tcp-mcp-tasks**
 MCP server (port 3013) through which an agent completes its assignment: `create_plan`, `complete_assignment`, or `assure_assignment`, gated to the agent's mode.
@@ -81,7 +81,7 @@ Not an entity: a task's plan **is** its implement-mode assignments, ordered by `
 One unit of work given to an agent of a specific role — a plan step, the planner's own assignment, a QA review, a consultation, a finalisation pass, or a plain chat. An assignment with no `taskId` is an **orphan** (a conversation or consultation outside any task).
 
 **Mode (`TcpAssignmentMode`)**
-`plan | implement | qa | chat | consultee | finalise`. An agent's mode **is** its assignment's mode. It decides the prompt (`MODE_PROMPTS`), the tools offered (`MODE_TOOLS`), and the tool the agent must call to finish (`requiredToolForMode`). See [tasks.md → Agent modes](tasks.md#agent-modes).
+`plan | implement | qa | chat | consultee | finalise`. An agent's mode **is** its assignment's mode. It decides the prompt (`modePrompt`, which leaves out text for servers the agent doesn't have), the tools offered (`MODE_TOOLS`), and the tool the agent must call to finish (`requiredToolForMode`). See [tasks.md → Agent modes](tasks.md#agent-modes).
 
 **Planner role**
 The role that plans a company's tasks. Resolved per task: the task's own `plannerRoleId`, falling back to the company's. Set with `tcp-cli set-planner`.
@@ -143,7 +143,7 @@ A map of MCP server names to `true`/`false` on a company or role, switching serv
 ## Storage
 
 **MinIO bucket**
-Per-company object storage. All task inputs, outputs, knowledge documents, audit logs, and context overflow are stored under `{company_slug}/` in a single bucket.
+Per-company object storage. All task inputs, outputs, company resources, knowledge documents, audit logs, and context overflow are stored under `{company_slug}/` in a single bucket.
 
 **Task materials**
 User-supplied inputs placed in `tasks/{task_id}/materials/` before a task starts. Read-only for agents.
@@ -151,11 +151,17 @@ User-supplied inputs placed in `tasks/{task_id}/materials/` before a task starts
 **Working directory**
 An assignment's private scratch area — `tasks/{task_id}/assignments/{orderIndex}/working/`, or `assignments/{assignment_id}/working/` for an orphan. The agent supplies only a filename; the prefix is derived server-side from its assignment, so it cannot write outside it.
 
+**Company resource**
+A long-lived company document kept under `{company_slug}/resources/`: an invoice, a price list, a policy, listing copy. Unlike a working file, it belongs to the company rather than to one task. Agents read and change resources with `list_resources`, `read_resource`, `write_resource`, `append_resource` and `replace_in_resource`. Artifact type `resource`. See [shared-storage.md](shared-storage.md#company-resources).
+
+**Resource draft**
+A company resource change made inside a task. It is written to the step's `working/resources/` folder, reviewed by QA, and copied over the live resource only when the task succeeds. A chat has no drafts: its changes are live at once.
+
 **Completed directory**
 Where approved work lands: an assignment's `completed/` holds the files QA accepted from its `working/`; the task's `completed/` holds the final deliverables gathered from those at finalisation.
 
 **Artifact**
-A `{ type, value }` pair naming an input or output — a storage pointer (`task-materials-path`, `assignment-working-path`, `assignment-completed-path`, `task-completed-path`) or literal `inline-text`. There is no artifact table; `resolveArtifactKey` turns a pointer into a storage key. See [tasks.md → Artifact model](tasks.md#artifact-model).
+A `{ type, value }` pair naming an input or output — a storage pointer (`task-materials-path`, `assignment-working-path`, `assignment-completed-path`, `task-completed-path`), a company `resource` path, or literal `inline-text`. There is no artifact table; `resolveArtifactKey` turns a pointer into a storage key. See [tasks.md → Artifact model](tasks.md#artifact-model).
 
 ## Audit
 

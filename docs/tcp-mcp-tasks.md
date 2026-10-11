@@ -42,7 +42,7 @@ The three non-`describe_server` tools are **mode-gated**: calling the wrong one 
 
 ## `describe_server`
 
-Returns a markdown overview of the tasks service tailored to the caller's mode. The per-mode instructions are the live `MODE_PROMPTS` texts from `@tcp/shared` (the same text an agent sees in its assignment prompt), embedded here so the tool description and the prompt can never drift.
+Returns a markdown overview of the tasks service tailored to the caller's mode. The per-mode instructions are the live `MODE_PROMPTS` texts from `@tcp/shared` (the full text, with every server's section), embedded here so the tool description and the prompt can never drift. It covers every mode that completes through this server: plan, implement, qa, consultee and finalise. An agent's own assignment prompt shows the same text, minus the sections for servers it doesn't have (`modePrompt`).
 
 **Arguments:** none (the injected `agentId`, when present, selects which mode to lead with).
 
@@ -56,7 +56,9 @@ Returns a markdown overview of the tasks service tailored to the caller's mode. 
 | ------------- | ----- | -------- | ----------------------------------------------------------------- |
 | `assignments` | array | yes      | Ordered `{ prompt, role, expected[], materials? }` — at least one |
 
-Each `expected`/`materials` entry is an `{ type, value }` artifact. Internally, `expected` accepts `assignment-working-path` or `inline-text`; `materials` accepts `task-materials-path`, `assignment-completed-path`, or `inline-text`. The MCP tool schema advertises the shorter LLM-facing names `file`/`text` (`expected`) and `material-file`/`completed-file`/`text` (`materials`), and `canonicalArtifactType` (`libs/tcp-shared/src/models/TcpArtifact.ts`) accepts several near-miss synonyms (`working-file`, `path`, `filename`, `inline`, `string`, …) for all of them, normalising to the internal type before validation.
+Each `expected`/`materials` entry is an `{ type, value }` artifact. Internally, `expected` accepts `assignment-working-path`, `resource` or `inline-text`; `materials` accepts `task-materials-path`, `assignment-completed-path`, `resource` or `inline-text`. The MCP tool schema advertises the shorter LLM-facing names `file`/`resource`/`text` (`expected`) and `material-file`/`completed-file`/`resource`/`text` (`materials`), and `canonicalArtifactType` (`libs/tcp-shared/src/models/TcpArtifact.ts`) accepts several near-miss synonyms (`working-file`, `path`, `filename`, `inline`, `string`, …) for all of them, normalising to the internal type before validation.
+
+A `resource` value is a path under the company's `resources/` folder, such as `invoices/INV-0042.md`. As an `expected` output it tells the step to create or change that resource; as a `materials` entry it points the step at an existing one. The path is normalised and checked (a leading `resources/` is stripped; `..` is refused), and a `resource` material must already exist or be expected by an earlier step. See [tasks.md → Company resources](tasks.md#company-resources).
 
 **Backing endpoint:** `POST /internal/task/:taskId/plan`. Validation (each failure → 4xx with a message the tool relays verbatim): the caller is a `plan`-mode agent whose assignment belongs to `:taskId`; the task is in `planning` (atomically claimed `planning → in-progress`); ≥ 1 assignment; every `role` resolves (id or slug) within the company; artifact types are within the allowed unions. On success it creates the implement-mode `TcpAssignment` rows (`orderIndex` 0…n−1, status `ready`) and calls `TaskDispatcher.taskPlanned`, which dispatches the first ready assignment.
 
@@ -64,7 +66,7 @@ Each `expected`/`materials` entry is an `{ type, value }` artifact. Internally, 
 
 ## `complete_assignment`
 
-**`implement`, `consultee`, or `finalise` mode.** Submits finished work.
+**`implement`, `consultee`, or `finalise` mode.** Submits finished work. Implement and finalise agents normally use it for task work; a consultee uses it to answer the consulting agent.
 
 | Parameter  | Type   | Required | Description                                     |
 | ---------- | ------ | -------- | ----------------------------------------------- |
@@ -74,7 +76,8 @@ Each `expected`/`materials` entry is an `{ type, value }` artifact. Internally, 
 **Backing endpoint:** `POST /internal/assignment/:id/complete`. After confirming the caller is the assignment's agent, in a completing mode (`implement`, `consultee` or `finalise`), and the assignment is `in-progress`, the **mechanical gate** runs:
 
 - every `expected` `assignment-working-path` must appear in `prepared` **and** its resolved storage key must exist;
-- every `expected` `inline-text` must be matched by a prepared `inline-text` (empty expected value → any; otherwise the expected value is a regex the prepared text must match);
+- every `expected` `inline-text` needs a non-empty prepared `inline-text`. The expected value is a description for the agent and QA, not a pattern; the gate does not match it;
+- every `expected` `resource` must have a draft in the step's `working/resources/`. It need not be listed in `prepared`: every draft is promoted;
 - every prepared `assignment-working-path` must exist in storage.
 
 A gate failure returns **422** with a corrective message listing exactly what is missing — the tool returns this as a normal result (not an exception) so the model can fix and call again. On a gate pass it branches:
