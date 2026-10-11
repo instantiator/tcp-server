@@ -21,7 +21,7 @@ export interface Originators {
   user: string | null;
   /** Agent id, for MCP-tool-initiated calls. `null` for direct human/CLI calls. */
   agent: string | null;
-  /** Reserved for a future task concept. Always `null` today — see ADR-008. */
+  /** The task the platform acted for (applying its resource changes); otherwise `null` — see ADR-008. */
   task: string | null;
 }
 

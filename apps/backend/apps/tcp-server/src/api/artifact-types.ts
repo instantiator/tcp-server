@@ -7,6 +7,7 @@ import {
 /** Artifact types permitted in an assignment's `expected`/`prepared` lists. */
 export const WORKING_ARTIFACT_TYPES = new Set([
   'assignment-working-path',
+  'resource',
   'inline-text',
 ]);
 
@@ -14,6 +15,7 @@ export const WORKING_ARTIFACT_TYPES = new Set([
 export const MATERIAL_ARTIFACT_TYPES = new Set([
   'task-materials-path',
   'assignment-completed-path',
+  'resource',
   'inline-text',
 ]);
 

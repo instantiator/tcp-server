@@ -130,7 +130,10 @@ describe('AssignmentService', () => {
           record: jest.fn().mockResolvedValue(undefined),
         } as unknown as AuditService,
       ),
-      new PlanValidationService(dbService),
+      new PlanValidationService(
+        dbService,
+        storage as unknown as StorageService,
+      ),
       new StorageScopeService(assignmentRepo, dbService),
     );
   });
@@ -627,7 +630,106 @@ describe('AssignmentService', () => {
             expected: [{ type: 'bogus-type', value: 'out.md' }] as never,
           },
         ]),
-      ).rejects.toThrow(/file, text/);
+      ).rejects.toThrow(/file, resource, text/);
+    });
+
+    describe('resource outputs and materials', () => {
+      /** A planner whose company already has these live resources. */
+      async function plannerWithResources(live: string[]) {
+        const setup = await setupPlanner();
+        db.getCompany.mockResolvedValue({
+          id: setup.company.id,
+          slug: 'acme',
+        });
+        storage.listFiles.mockResolvedValue(
+          live.map((p) => ({ key: `acme/resources/${p}`, name: p })),
+        );
+        return setup;
+      }
+      const createdSteps = (taskId: UUID) =>
+        assignmentRepo.find({
+          where: { taskId, mode: 'implement' },
+          order: { orderIndex: 'ASC' },
+        });
+
+      it('accepts a resource output and stores its path normalised', async () => {
+        const { task, agent } = await plannerWithResources([]);
+        await service.planTask(task.id, agent.id, [
+          {
+            prompt: 'Write the invoice',
+            role: 'analyst',
+            expected: [
+              { type: 'resource', value: 'resources/invoices/INV-1.md' },
+            ] as never,
+          },
+        ]);
+        const [step] = await createdSteps(task.id);
+        expect(step.expected).toEqual([
+          { type: 'resource', value: 'invoices/INV-1.md' },
+        ]);
+      });
+
+      it('rejects a resource path with .., naming the resources that exist', async () => {
+        const { task, agent } = await plannerWithResources(['price-list.md']);
+        await expect(
+          service.planTask(task.id, agent.id, [
+            {
+              prompt: 'a',
+              role: 'analyst',
+              expected: [{ type: 'resource', value: '../x.md' }] as never,
+            },
+          ]),
+        ).rejects.toThrow(
+          /expected\[0\] value.*price-list\.md.*can't contain '\.\.'/s,
+        );
+      });
+
+      it('accepts a live resource as a material', async () => {
+        const { task, agent } = await plannerWithResources(['price-list.md']);
+        await service.planTask(task.id, agent.id, [
+          {
+            prompt: 'a',
+            role: 'analyst',
+            expected: [],
+            materials: [{ type: 'resource', value: 'price-list.md' }] as never,
+          },
+        ]);
+        expect(await createdSteps(task.id)).toHaveLength(1);
+      });
+
+      it('accepts a resource material an earlier step creates', async () => {
+        const { task, agent } = await plannerWithResources([]);
+        await service.planTask(task.id, agent.id, [
+          {
+            prompt: 'a',
+            role: 'analyst',
+            expected: [{ type: 'resource', value: 'policy.md' }] as never,
+          },
+          {
+            prompt: 'b',
+            role: 'analyst',
+            expected: [],
+            materials: [{ type: 'resource', value: 'policy.md' }] as never,
+          },
+        ]);
+        expect(await createdSteps(task.id)).toHaveLength(2);
+      });
+
+      it('rejects a resource material nothing provides, listing what exists', async () => {
+        const { task, agent } = await plannerWithResources(['price-list.md']);
+        await expect(
+          service.planTask(task.id, agent.id, [
+            {
+              prompt: 'a',
+              role: 'analyst',
+              expected: [],
+              materials: [{ type: 'resource', value: 'prices.md' }] as never,
+            },
+          ]),
+        ).rejects.toThrow(
+          /materials\[0\] value: "prices\.md".*price-list\.md.*list_resources/s,
+        );
+      });
     });
 
     it('rejects a non-plan-mode caller', async () => {
@@ -895,6 +997,35 @@ describe('AssignmentService', () => {
           { type: 'assignment-working-path', value: 'out.md' },
         ]),
       ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    });
+
+    it('422s when an expected resource has no draft, and passes once it does', async () => {
+      const company = await seedCompany();
+      const role = await seedRole(company.id);
+      const task = await seedTask(company.id, 'in-progress');
+      const { assignment, agent } = await setupImplementer({
+        companyId: company.id,
+        roleId: role.id,
+        taskId: task.id,
+        orderIndex: 0,
+        expected: [{ type: 'resource', value: 'price-list.md' }],
+      });
+      db.getCompany.mockResolvedValue({ id: company.id, slug: company.slug });
+      const draft = `${company.slug}/tasks/${task.id}/assignments/0/working/resources/price-list.md`;
+
+      storage.checkMissingFiles.mockResolvedValue([draft]);
+      await expect(
+        service.completeAssignment(assignment.id, agent.id, 'done', []),
+      ).rejects.toThrow(
+        /Expected company resource 'price-list\.md'.*write_resource/,
+      );
+      expect(storage.checkMissingFiles).toHaveBeenCalledWith([draft]);
+
+      // Not listed in prepared, but the draft exists: accepted.
+      storage.checkMissingFiles.mockResolvedValue([]);
+      await service.completeAssignment(assignment.id, agent.id, 'done', []);
+      const fresh = await assignmentRepo.findOneByOrFail({ id: assignment.id });
+      expect(fresh.status).toBe('in-qa');
     });
 
     it('passes an inline-text expectation on shape alone — content is not gate-matched (QA judges it)', async () => {

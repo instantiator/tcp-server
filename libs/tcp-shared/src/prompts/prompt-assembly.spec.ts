@@ -41,6 +41,25 @@ describe('buildAssignmentMessage', () => {
     expect(msg).toBe(`${MODE_PROMPTS.implement}\n\nSummarise the market.`);
   });
 
+  it('labels a resource in the materials and expected lists, so the agent uses the resource tools', () => {
+    const msg = buildAssignmentMessage(
+      {
+        mode: 'implement',
+        prompt: 'Raise the invoice.',
+        materials: [{ type: 'resource', value: 'price-list.md' }],
+        expected: [
+          { type: 'resource', value: 'invoices/INV-1.md' },
+          { type: 'assignment-working-path', value: 'notes.md' },
+        ],
+        resolutionContext: orphanCtx,
+      },
+      strings,
+    );
+    expect(msg).toContain('- resource: price-list.md');
+    expect(msg).toContain('- resource: invoices/INV-1.md');
+    expect(msg).toContain('- notes.md');
+  });
+
   it('selects the mode prompt by mode', () => {
     for (const mode of ['plan', 'qa', 'chat'] as const) {
       const msg = buildAssignmentMessage(

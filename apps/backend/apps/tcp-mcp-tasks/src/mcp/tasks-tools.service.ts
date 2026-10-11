@@ -36,24 +36,25 @@ interface CallerAssignment {
  * an assignment's own expected output — used for `expected` (create_plan) and
  * `prepared` (complete_assignment). The server does the actual validation
  * (and accepts near-miss synonyms, e.g. `working-file`, `path`) so this
- * `.describe()` only needs to state the two values agents should aim for.
+ * `.describe()` only needs to state the values agents should aim for.
  */
 const workingArtifactSchema = z.object({
   type: z
     .string()
     .describe(
-      'Either `file` (a filename in your working directory) or `text` (literal text).',
+      '`file` (a filename in your working directory), `resource` (a company resource path, e.g. `invoices/INV-0042.md`, written with write_resource), or `text` (literal text).',
     ),
   value: z
     .string()
     .describe(
-      'The filename (for type `file`) or the literal text (for type `text`).',
+      'The filename (`file`), the resource path (`resource`), or the literal text (`text`).',
     ),
 });
 
 /**
  * Zod shape for an `{ type, value }` material handed to a plan step: either
- * an uploaded task material, a prior step's promoted output, or literal text.
+ * an uploaded task material, a prior step's promoted output, a company
+ * resource, or literal text.
  * Kept distinct from {@link workingArtifactSchema} because a planner must be
  * able to name both file sources at once, unlike a working artifact.
  */
@@ -61,12 +62,12 @@ const materialArtifactSchema = z.object({
   type: z
     .string()
     .describe(
-      "One of `material-file` (an uploaded task material), `completed-file` (an earlier step's output: that step must list the same filename as a `file` in its `expected`), or `text` (literal text).",
+      "One of `material-file` (an uploaded task material), `completed-file` (an earlier step's output: that step must list the same filename as a `file` in its `expected`), `resource` (an existing company resource, or one an earlier step creates), or `text` (literal text).",
     ),
   value: z
     .string()
     .describe(
-      'The filename (for type `material-file`/`completed-file`) or the literal text (for type `text`).',
+      'The filename (`material-file`/`completed-file`), the resource path (`resource`), or the literal text (`text`).',
     ),
 });
 

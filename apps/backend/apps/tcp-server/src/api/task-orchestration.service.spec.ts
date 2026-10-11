@@ -583,6 +583,41 @@ describe('TaskOrchestrationService', () => {
       });
     });
 
+    it('promotes every resource draft, listed or not, and the mechanical finalise applies it', async () => {
+      const { company, task, target } = await seedInQa();
+      const draft = `${company.slug}/tasks/${task.id}/assignments/0/working/resources/invoices/INV-1.md`;
+      const keys = new Set([draft]);
+      storage.listFiles.mockImplementation((prefix: string) =>
+        Promise.resolve(
+          [...keys]
+            .filter((k) => k.startsWith(prefix))
+            .map((key) => ({ key, name: key.split('/').at(-1) })),
+        ),
+      );
+      storage.copyFile.mockImplementation((_from: string, to: string) => {
+        keys.add(to);
+        return Promise.resolve();
+      });
+
+      await service.assignmentAssured(target);
+
+      const after = await assignmentRepo.findOneByOrFail({ id: target.id });
+      expect(after.approved).toContainEqual({
+        type: 'resource',
+        value: 'invoices/INV-1.md',
+      });
+      // Approved draft → task's pending changes (folders kept) → live.
+      expect([...keys]).toEqual(
+        expect.arrayContaining([
+          `${company.slug}/tasks/${task.id}/assignments/0/completed/resources/invoices/INV-1.md`,
+          `${company.slug}/tasks/${task.id}/completed/resources/invoices/INV-1.md`,
+          `${company.slug}/resources/invoices/INV-1.md`,
+        ]),
+      );
+      const taskAfter = await taskRepo.findOneByOrFail({ id: task.id });
+      expect(taskAfter.status).toBe('succeeded');
+    });
+
     it('is idempotent — a duplicate accept does not re-run side effects', async () => {
       const { target } = await seedInQa();
       await service.assignmentAssured(target);
@@ -1183,6 +1218,86 @@ describe('TaskOrchestrationService', () => {
         { type: 'task-completed-path', value: 'report.txt' },
       ]);
       expect(pauseResume.completeAgent).toHaveBeenCalled();
+    });
+
+    describe('company resource changes', () => {
+      /**
+       * Backs the storage mock with a set of keys, so copies made by one step
+       * are listed by the next, as in real storage.
+       */
+      function fakeStore(initial: string[]): Set<string> {
+        const keys = new Set(initial);
+        storage.listFiles.mockImplementation((prefix: string) =>
+          Promise.resolve(
+            [...keys]
+              .filter((k) => k.startsWith(prefix))
+              .map((key) => ({ key, name: key.split('/').at(-1) })),
+          ),
+        );
+        storage.copyFile.mockImplementation((_from: string, to: string) => {
+          keys.add(to);
+          return Promise.resolve();
+        });
+        return keys;
+      }
+
+      it('assignmentFinalised applies pending changes to the live resources before succeeding', async () => {
+        const { company, task, finalise } = await seedFinalising();
+        const pending = `${company.slug}/tasks/${task.id}/completed/resources/invoices/INV-1.md`;
+        const keys = fakeStore([pending]);
+
+        await service.assignmentFinalised(
+          await assignmentRepo.findOneByOrFail({ id: finalise.id }),
+        );
+
+        expect(keys).toContain(`${company.slug}/resources/invoices/INV-1.md`);
+        expect(storage.copyFile).toHaveBeenCalledWith(
+          pending,
+          `${company.slug}/resources/invoices/INV-1.md`,
+          { user: null, agent: null, task: task.id },
+        );
+        const fresh = await taskRepo.findOneByOrFail({ id: task.id });
+        expect(fresh.status).toBe('succeeded');
+        expect(fresh.completed).toEqual([
+          { type: 'resource', value: 'invoices/INV-1.md' },
+        ]);
+      });
+
+      it('fails the task, naming what was applied, when applying stops part-way', async () => {
+        const { company, task, finalise } = await seedFinalising();
+        const base = `${company.slug}/tasks/${task.id}/completed/resources/`;
+        fakeStore([`${base}a.md`, `${base}b.md`]);
+        storage.copyFile.mockImplementation((from: string) =>
+          from.endsWith('b.md')
+            ? Promise.reject(new Error('storage down'))
+            : Promise.resolve(),
+        );
+
+        await service.assignmentFinalised(
+          await assignmentRepo.findOneByOrFail({ id: finalise.id }),
+        );
+
+        const fresh = await taskRepo.findOneByOrFail({ id: task.id });
+        expect(fresh.status).toBe('failed');
+        expect(fresh.failureReason).toMatch(
+          /stopped at 'b\.md' \(already applied: a\.md\): storage down/,
+        );
+        expect(fresh.completed).not.toBeNull();
+        // The finalise agent did its job, so it still completes.
+        expect(pauseResume.completeAgent).toHaveBeenCalled();
+      });
+
+      it('applying twice is harmless — the same content is copied again', async () => {
+        const { company, task, finalise } = await seedFinalising();
+        fakeStore([
+          `${company.slug}/tasks/${task.id}/completed/resources/p.md`,
+        ]);
+        const fin = await assignmentRepo.findOneByOrFail({ id: finalise.id });
+        await service.assignmentFinalised(fin);
+        await service.assignmentFinalised(fin);
+        const fresh = await taskRepo.findOneByOrFail({ id: task.id });
+        expect(fresh.status).toBe('succeeded');
+      });
     });
 
     it('handleAgentFailed(finalise): fails the task and the finalise assignment, keeping files promoted', async () => {

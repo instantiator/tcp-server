@@ -18,17 +18,29 @@ import type { TcpAssignment } from '../models/TcpAssignment.model';
  */
 function renderArtifacts(artifacts: TcpArtifact[]): string {
   if (artifacts.length === 0) return '  (none)';
-  return artifacts.map((a) => `  - ${a.value}`).join('\n');
+  return artifacts
+    .map((a) => `  - ${a.type === 'resource' ? 'resource: ' : ''}${a.value}`)
+    .join('\n');
 }
 
 /**
  * The prompt given to a QA agent: the assignment it is reviewing, the outputs
- * that assignment was expected to produce, and the artifacts the implementing
- * agent actually prepared.
+ * that assignment was expected to produce, the artifacts the implementing
+ * agent actually prepared, and any company resource drafts it wrote (paths
+ * under `resources/`, read with `read_resource`).
  */
 export function renderQaPresentation(
   target: Pick<TcpAssignment, 'prompt' | 'expected' | 'prepared'>,
+  resourceDrafts: string[] = [],
 ): string {
+  const drafts =
+    resourceDrafts.length > 0
+      ? [
+          '',
+          'Company resource changes (drafts, applied when the task succeeds — read each with `read_resource`):',
+          ...resourceDrafts.map((r) => `  - resource: ${r}`),
+        ]
+      : [];
   return [
     'You are reviewing another agent’s completed assignment.',
     '',
@@ -39,7 +51,8 @@ export function renderQaPresentation(
     renderArtifacts(target.expected),
     '',
     'Artifacts the agent prepared:',
-    renderArtifacts(target.prepared),
+    renderArtifacts(target.prepared.filter((a) => a.type !== 'resource')),
+    ...drafts,
     '',
     'Read each prepared artifact by name via `read_working_file` and decide whether it meets the assignment’s needs.',
   ].join('\n');

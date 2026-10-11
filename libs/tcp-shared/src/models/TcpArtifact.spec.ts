@@ -1,4 +1,8 @@
-import { canonicalArtifactType, canonicaliseArtifacts } from './TcpArtifact';
+import {
+  artifactTypeDisplayName,
+  canonicalArtifactType,
+  canonicaliseArtifacts,
+} from './TcpArtifact';
 
 describe('canonicalArtifactType', () => {
   it('maps word aliases to inline-text', () => {
@@ -26,6 +30,14 @@ describe('canonicalArtifactType', () => {
 
   it('returns an unknown value normalised (still invalid, for the caller to reject)', () => {
     expect(canonicalArtifactType('totally_bogus')).toBe('totally-bogus');
+  });
+});
+
+describe('the resource type', () => {
+  it('is its own canonical and display name, with no aliases needed', () => {
+    expect(canonicalArtifactType('resource')).toBe('resource');
+    expect(canonicalArtifactType(' Resource ')).toBe('resource');
+    expect(artifactTypeDisplayName('resource')).toBe('resource');
   });
 });
 

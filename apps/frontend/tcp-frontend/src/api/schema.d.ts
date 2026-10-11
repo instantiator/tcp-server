@@ -1882,6 +1882,12 @@ export interface components {
             name: string;
             inlineText?: string;
         };
+        ResourceScopeDto: {
+            /** @enum {string} */
+            mode: "draft" | "direct" | "read-only";
+            writePrefix: string | null;
+            readPrefixes: string[];
+        };
         StorageScopeResponseDto: {
             /** @enum {string} */
             mode: "plan" | "implement" | "qa" | "chat" | "consultee" | "finalise";
@@ -1889,6 +1895,7 @@ export interface components {
             readOnly: boolean;
             companyPrefix: string;
             workingPrefix: string;
+            resources: components["schemas"]["ResourceScopeDto"];
         };
         PlanTaskDto: {
             /** Format: uuid */
@@ -1964,6 +1971,7 @@ export interface components {
         };
         ListFilesDto: {
             prefix?: string;
+            all?: boolean;
         };
         StorageObjectDto: {
             key: string;

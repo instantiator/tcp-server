@@ -185,6 +185,10 @@ export function buildAssignmentMessage(
  * never the fully resolved storage key.
  */
 function renderArtifactList(header: string, artifacts: TcpArtifact[]): string {
-  const items = artifacts.map((a) => `- ${a.value}`);
+  // A resource is read with the resource tools, not the working-file ones,
+  // so it says so.
+  const items = artifacts.map(
+    (a) => `- ${a.type === 'resource' ? 'resource: ' : ''}${a.value}`,
+  );
   return [header, ...items].join('\n');
 }

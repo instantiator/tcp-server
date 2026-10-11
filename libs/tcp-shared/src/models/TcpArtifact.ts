@@ -20,6 +20,13 @@ export type TcpArtifactType =
    */
   | 'assignment-completed-path'
   /**
+   * A company resource: `value` is its path under `{companySlug}/resources/`.
+   * Inside a task a change to it is a draft (in the step's
+   * `working/resources/`), applied to the live resources when the task
+   * succeeds. Resolved through the agent's resource scope, not to one key.
+   */
+  | 'resource'
+  /**
    * Literal text — no storage lookup. As an expectation, an empty `value`
    * matches any text; otherwise `value` is a regex the text must match.
    */
@@ -62,6 +69,7 @@ const ARTIFACT_TYPE_DISPLAY_NAMES: Record<TcpArtifactType, string> = {
   'task-materials-path': 'material-file',
   'assignment-completed-path': 'completed-file',
   'task-completed-path': 'task-completed-path',
+  resource: 'resource',
 };
 
 /** Maps canonical artifact types to their short, LLM-facing display name. */
@@ -95,22 +103,26 @@ export function canonicaliseArtifacts<T extends TcpArtifact>(
   }));
 }
 
-/** An artifact usable as task materials: an uploaded file, a promoted assignment output, or inline text. */
+/** An artifact usable as task materials: an uploaded file, a promoted assignment output, a company resource, or inline text. */
 export type TcpMaterialArtifact = TcpArtifact & {
-  type: 'task-materials-path' | 'assignment-completed-path' | 'inline-text';
+  type:
+    | 'task-materials-path'
+    | 'assignment-completed-path'
+    | 'resource'
+    | 'inline-text';
 };
 
-/** An artifact living in an assignment's own working directory, or inline text. */
+/** An artifact living in an assignment's own working directory, a company resource draft, or inline text. */
 export type TcpAssignmentWorkingArtifact = TcpArtifact & {
-  type: 'assignment-working-path' | 'inline-text';
+  type: 'assignment-working-path' | 'resource' | 'inline-text';
 };
 
-/** An artifact promoted into an assignment's completed directory, or inline text. */
+/** An artifact promoted into an assignment's completed directory, an approved resource draft, or inline text. */
 export type TcpAssignmentCompletedArtifact = TcpArtifact & {
-  type: 'assignment-completed-path' | 'inline-text';
+  type: 'assignment-completed-path' | 'resource' | 'inline-text';
 };
 
-/** An artifact promoted into a task's completed directory, or inline text. */
+/** An artifact promoted into a task's completed directory, a resource change it applied, or inline text. */
 export type TcpTaskCompletedArtifact = TcpArtifact & {
-  type: 'task-completed-path' | 'inline-text';
+  type: 'task-completed-path' | 'resource' | 'inline-text';
 };

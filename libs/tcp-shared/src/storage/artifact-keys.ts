@@ -180,6 +180,11 @@ export function resolveArtifactKey(
     case 'inline-text':
       return null;
 
+    // A resource has no single key: the agent's resource scope layers its
+    // draft over earlier steps and the live folder (see `read_resource`).
+    case 'resource':
+      return null;
+
     case 'task-materials-path':
       requireTask(ctx, artifact.type);
       return taskMaterialsKey(ctx.companySlug, ctx.task!.id, artifact.value);
@@ -217,7 +222,11 @@ export function resolveArtifactKey(
           (a) =>
             a.orderIndex != null &&
             a.orderIndex < boundary &&
-            a.approved.some((approved) => approved.value === artifact.value),
+            a.approved.some(
+              (approved) =>
+                approved.type === 'assignment-completed-path' &&
+                approved.value === artifact.value,
+            ),
         )
         .reduce<{
           orderIndex?: number | null;

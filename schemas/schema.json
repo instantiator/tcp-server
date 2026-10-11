@@ -1262,6 +1262,7 @@
         "task-completed-path",
         "assignment-working-path",
         "assignment-completed-path",
+        "resource",
         "inline-text"
       ],
       "type": "string"
@@ -1507,7 +1508,7 @@
     },
     "TcpAssignmentCompletedArtifact": {
       "additionalProperties": false,
-      "description": "An artifact promoted into an assignment's completed directory, or inline text.",
+      "description": "An artifact promoted into an assignment's completed directory, an approved resource draft, or inline text.",
       "properties": {
         "type": {
           "$ref": "#/definitions/TcpArtifactType"
@@ -1560,7 +1561,7 @@
     },
     "TcpAssignmentWorkingArtifact": {
       "additionalProperties": false,
-      "description": "An artifact living in an assignment's own working directory, or inline text.",
+      "description": "An artifact living in an assignment's own working directory, a company resource draft, or inline text.",
       "properties": {
         "type": {
           "$ref": "#/definitions/TcpArtifactType"
@@ -1718,7 +1719,7 @@
     },
     "TcpMaterialArtifact": {
       "additionalProperties": false,
-      "description": "An artifact usable as task materials: an uploaded file, a promoted assignment output, or inline text.",
+      "description": "An artifact usable as task materials: an uploaded file, a promoted assignment output, a company resource, or inline text.",
       "properties": {
         "type": {
           "$ref": "#/definitions/TcpArtifactType"
@@ -2060,7 +2061,7 @@
     },
     "TcpTaskCompletedArtifact": {
       "additionalProperties": false,
-      "description": "An artifact promoted into a task's completed directory, or inline text.",
+      "description": "An artifact promoted into a task's completed directory, a resource change it applied, or inline text.",
       "properties": {
         "type": {
           "$ref": "#/definitions/TcpArtifactType"
