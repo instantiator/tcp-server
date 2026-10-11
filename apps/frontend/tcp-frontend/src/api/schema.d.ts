@@ -1609,6 +1609,7 @@ export interface components {
             mcpServerToggles?: {
                 [key: string]: boolean;
             } | null;
+            versionRetentionDays?: number | null;
             timezone?: string;
             /** Format: uuid */
             plannerRoleId?: string;
@@ -1625,6 +1626,7 @@ export interface components {
             mcpServerToggles?: {
                 [key: string]: boolean;
             } | null;
+            versionRetentionDays?: number | null;
             timezone?: string;
             /** Format: uuid */
             plannerRoleId?: string;
@@ -1640,6 +1642,7 @@ export interface components {
             mcpServerToggles?: {
                 [key: string]: boolean;
             } | null;
+            versionRetentionDays?: number | null;
             timezone?: string | null;
             companyContext?: string | null;
             embeddingConfig?: Record<string, never> | null;
@@ -1658,6 +1661,7 @@ export interface components {
             mcpServerToggles?: {
                 [key: string]: boolean;
             } | null;
+            versionRetentionDays?: number | null;
             timezone?: string;
             /** Format: uuid */
             plannerRoleId?: string;
@@ -1883,6 +1887,7 @@ export interface components {
             mode: "plan" | "implement" | "qa" | "chat" | "consultee" | "finalise";
             materials: components["schemas"]["ResolvedMaterialDto"][];
             readOnly: boolean;
+            companyPrefix: string;
             workingPrefix: string;
         };
         PlanTaskDto: {

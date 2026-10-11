@@ -367,6 +367,13 @@
             "string",
             "null"
           ]
+        },
+        "versionRetentionDays": {
+          "description": "Days this company's old file versions are kept after a file is overwritten or deleted. Null uses the app's `STORAGE_VERSION_RETENTION_DAYS`.",
+          "type": [
+            "number",
+            "null"
+          ]
         }
       },
       "required": [
@@ -1688,6 +1695,13 @@
           "description": "IANA timezone name (e.g. `'Europe/London'`) used only for *display* and prompt localization — CLI/UI timestamp formatting, and the `{{timezone}}`/ `{{localDatetime}}` prompt variables (see `buildPromptDateVars`). Never used for storage (always UTC) or as a replacement for the UTC time given to the LLM (`{{datetime}}` remains the authoritative anchor).",
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "versionRetentionDays": {
+          "description": "Days this company's old file versions are kept after a file is overwritten or deleted. Null uses the app's `STORAGE_VERSION_RETENTION_DAYS`.",
+          "type": [
+            "number",
             "null"
           ]
         }

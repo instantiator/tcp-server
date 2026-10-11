@@ -202,6 +202,8 @@ services:
       EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      # Days old file versions are kept — see .env.example.
+      STORAGE_VERSION_RETENTION_DAYS: ${STORAGE_VERSION_RETENTION_DAYS:-}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
     depends_on:
       postgres:

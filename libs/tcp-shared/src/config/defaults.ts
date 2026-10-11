@@ -28,6 +28,13 @@ export const DEFAULT_MINIO_SECRET_KEY = 'tcp-secret-key';
 /** Default MinIO bucket prefix. Overridden by `MINIO_BUCKET_PREFIX` env var. */
 export const DEFAULT_MINIO_BUCKET_PREFIX = 'tcp';
 
+/**
+ * Days an overwritten or deleted file's old version is kept before MinIO
+ * removes it. Overridden by `STORAGE_VERSION_RETENTION_DAYS`, and per company
+ * by `TcpCompany.versionRetentionDays`.
+ */
+export const DEFAULT_STORAGE_VERSION_RETENTION_DAYS = 90;
+
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
 /** Default internal API key for service-to-service auth. Overridden by `INTERNAL_API_KEY` env var. */

@@ -77,6 +77,14 @@ export class TcpCompany implements WithLlmConfig {
   mcpServerToggles?: McpServerToggles | null;
 
   /**
+   * Days this company's old file versions are kept after a file is
+   * overwritten or deleted. Null uses the app's
+   * `STORAGE_VERSION_RETENTION_DAYS`.
+   */
+  @Column({ type: 'integer', nullable: true })
+  versionRetentionDays?: number | null;
+
+  /**
    * IANA timezone name (e.g. `'Europe/London'`) used only for *display* and
    * prompt localization — CLI/UI timestamp formatting, and the `{{timezone}}`/
    * `{{localDatetime}}` prompt variables (see `buildPromptDateVars`). Never

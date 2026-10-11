@@ -6,13 +6,15 @@ import { RagModule } from '../rag/rag.module';
 import { MinioStorageAdapter } from './minio-storage.adapter';
 import { StorageSideEffects } from './storage-side-effects.service';
 import { StorageService } from './storage.service';
+import { StorageVersioningService } from './storage-versioning.service';
 
 /**
  * Provides {@link StorageService}, backed today by {@link MinioStorageAdapter}.
  * Reads `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, and
  * `MINIO_BUCKET_PREFIX` from the global config on startup. Imports
  * {@link AuditModule} and the `TcpCompany` repository so writes can record
- * a properly attributed audit event.
+ * a properly attributed audit event, and so {@link StorageVersioningService}
+ * can build each company's version-retention rule.
  *
  * {@link RagModule} is imported via `forwardRef` because the adapter's write
  * hook calls `KnowledgeReindexService.bumpByKey` to keep RAG embeddings in
@@ -27,6 +29,7 @@ import { StorageService } from './storage.service';
   providers: [
     MinioStorageAdapter,
     StorageSideEffects,
+    StorageVersioningService,
     { provide: StorageService, useExisting: MinioStorageAdapter },
   ],
   exports: [StorageService, MinioStorageAdapter],
