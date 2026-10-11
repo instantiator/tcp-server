@@ -658,6 +658,112 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/company/{companyId}/records/tables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List a company's record tables */
+        get: operations["RecordsController_listTables"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/company/{companyId}/records/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download every record table as a zip of CSVs */
+        get: operations["RecordsController_export"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/company/{companyId}/records/tables/{table}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a record table */
+        get: operations["RecordsController_readTable"];
+        put?: never;
+        post?: never;
+        /** Delete a record table */
+        delete: operations["RecordsController_dropTable"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/company/{companyId}/records/tables/{table}/csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download a record table as CSV */
+        get: operations["RecordsController_tableCsv"];
+        put?: never;
+        /** Append CSV rows to a record table */
+        post: operations["RecordsController_appendCsv"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/company/{companyId}/records/tables/{table}/rows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add a record */
+        post: operations["RecordsController_addRow"];
+        /** Clear a record table */
+        delete: operations["RecordsController_clearTable"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/company/{companyId}/records/tables/{table}/rows/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a record */
+        delete: operations["RecordsController_deleteRow"];
+        options?: never;
+        head?: never;
+        /** Change a record */
+        patch: operations["RecordsController_updateRow"];
+        trace?: never;
+    };
     "/api/role": {
         parameters: {
             query?: never;
@@ -1953,6 +2059,67 @@ export interface components {
         KnowledgeReindexResponseDto: {
             /** @enum {boolean} */
             reindexing: true;
+        };
+        RecordFieldSchemaDto: {
+            /** @enum {string} */
+            type: "string" | "number" | "integer" | "boolean";
+            format?: string;
+            description?: string;
+            minimum?: number;
+            maximum?: number;
+        };
+        RecordTableSummaryDto: {
+            name: string;
+            purpose: string;
+            records: number;
+            updatedAt: string;
+        };
+        RecordTableSchemaDto: {
+            properties: {
+                [key: string]: components["schemas"]["RecordFieldSchemaDto"];
+            };
+            required?: string[];
+        };
+        RecordTableDefinitionDto: {
+            uniqueKeys: string[][];
+            id: string;
+            name: string;
+            purpose: string;
+            schema: components["schemas"]["RecordTableSchemaDto"];
+            primaryKey: string[];
+        };
+        TimedRecordDto: {
+            data: {
+                [key: string]: unknown;
+            };
+            id: string;
+            version: number;
+            createdAt: string;
+            updatedAt: string;
+        };
+        RecordTableRowsDto: {
+            definition: components["schemas"]["RecordTableDefinitionDto"];
+            rows: components["schemas"]["TimedRecordDto"][];
+            total: number;
+            truncated: boolean;
+        };
+        RemovedRecordsDto: {
+            removed: number;
+        };
+        AppendRecordsCsvResultDto: {
+            inserted: number;
+            alreadyExists: number;
+        };
+        AddRecordDto: {
+            data: {
+                [key: string]: unknown;
+            };
+        };
+        UpdateRecordDto: {
+            changes: {
+                [key: string]: unknown;
+            };
+            version: number;
         };
         CreateRoleDto: {
             /** Format: uuid */
@@ -3461,6 +3628,241 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["KnowledgeReindexResponseDto"];
+                };
+            };
+        };
+    };
+    RecordsController_listTables: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordTableSummaryDto"][];
+                };
+            };
+        };
+    };
+    RecordsController_export: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": string;
+                };
+            };
+        };
+    };
+    RecordsController_readTable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+                table: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordTableRowsDto"];
+                };
+            };
+        };
+    };
+    RecordsController_dropTable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+                table: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemovedRecordsDto"];
+                };
+            };
+        };
+    };
+    RecordsController_tableCsv: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+                table: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+        };
+    };
+    RecordsController_appendCsv: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+                table: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppendRecordsCsvResultDto"];
+                };
+            };
+        };
+    };
+    RecordsController_addRow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+                table: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddRecordDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimedRecordDto"];
+                };
+            };
+        };
+    };
+    RecordsController_clearTable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+                table: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemovedRecordsDto"];
+                };
+            };
+        };
+    };
+    RecordsController_deleteRow: {
+        parameters: {
+            query: {
+                version: number;
+            };
+            header?: never;
+            path: {
+                companyId: string;
+                table: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RecordsController_updateRow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                companyId: string;
+                table: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateRecordDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimedRecordDto"];
                 };
             };
         };

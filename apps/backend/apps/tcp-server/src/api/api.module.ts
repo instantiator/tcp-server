@@ -17,6 +17,9 @@ import { Module } from '@nestjs/common';
 import { ToolFootprintController } from './tool-footprint.controller';
 import { ToolFootprintService } from './tool-footprint.service';
 import { RecordsCleanupService } from './records-cleanup.service';
+import { RecordsApiService } from './records-api.service';
+import { RecordsController } from './records.controller';
+import { RecordsModule } from '../records/records.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditModule } from '../audit/audit.module';
 import { AuthModule } from '../auth/auth.module';
@@ -92,6 +95,8 @@ import { TaskService } from './task.service';
     SpendModule,
     ContextModule,
     RagModule,
+    // People read and correct record tables through their own connection.
+    RecordsModule,
     StorageModule,
     TypeOrmModule.forFeature([
       AuditEvent,
@@ -117,6 +122,7 @@ import { TaskService } from './task.service';
     InternalController,
     InternalTaskController,
     KnowledgeController,
+    RecordsController,
     RoleController,
     StorageActionsController,
     StorageProxyController,
@@ -131,6 +137,7 @@ import { TaskService } from './task.service';
     ApiService,
     ToolFootprintService,
     RecordsCleanupService,
+    RecordsApiService,
     AgentOrchestrationService,
     AssignmentService,
     AssignmentCompletionService,
