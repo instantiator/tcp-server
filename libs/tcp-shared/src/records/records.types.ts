@@ -1,0 +1,129 @@
+/**
+ * A request the caller can correct: an unknown table, a record that fails its
+ * schema, a key that clashes. The message is written for a language model, so
+ * it says what was wrong and what to do instead.
+ */
+export class RecordsError extends Error {
+  override readonly name = 'RecordsError';
+}
+
+/** The JSON types a top-level record field may have. Scalars only, so every field can be filtered, sorted and grouped. */
+export type FieldType = 'string' | 'number' | 'integer' | 'boolean';
+
+/** One field of a table's JSON Schema, as far as the records server reads it. */
+export interface FieldSchema {
+  type: FieldType;
+  [keyword: string]: unknown;
+}
+
+/** A table's JSON Schema: a closed object of scalar fields. */
+export interface TableSchema {
+  type: 'object';
+  properties: Record<string, FieldSchema>;
+  required?: string[];
+  additionalProperties: false;
+  [keyword: string]: unknown;
+}
+
+/** What an agent supplies to create a table. */
+export interface NewTable {
+  name: string;
+  purpose: string;
+  schema: Record<string, unknown>;
+  primaryKey: string[];
+  uniqueKeys?: string[][];
+}
+
+/** A table as stored and as `describe_table` returns it. */
+export interface TableDefinition {
+  id: string;
+  name: string;
+  purpose: string;
+  schema: TableSchema;
+  primaryKey: string[];
+  uniqueKeys: string[][];
+}
+
+/** A record's field values. */
+export type RecordData = Record<string, unknown>;
+
+/** A stored record. */
+export interface StoredRecord {
+  id: string;
+  data: RecordData;
+  version: number;
+}
+
+/** Picks one record: by its id, or by the values of the table's primary key fields. */
+export type RecordRef = { id: string } | { key: RecordData };
+
+/** The result of an insert: a new record, or the one already holding that key. */
+export type InsertResult =
+  | { status: 'inserted'; record: StoredRecord }
+  | {
+      status: 'already_exists';
+      /** The existing record. */
+      record: StoredRecord;
+      /** The key that matched, e.g. `{ order_id: "A1" }`. */
+      key: RecordData;
+      /** Whether the existing record holds exactly the data that was offered. */
+      matches: boolean;
+    };
+
+/** A change and the values either side of it, for the audit trail. */
+export interface RecordChange {
+  record: StoredRecord;
+  before: RecordData;
+}
+
+/** The comparison operators `query` and `aggregate` filters accept. */
+export const FILTER_OPS = [
+  'eq',
+  'ne',
+  'lt',
+  'lte',
+  'gt',
+  'gte',
+  'contains',
+  'in',
+] as const;
+export type FilterOp = (typeof FILTER_OPS)[number];
+
+/** One filter; a query's filters are ANDed. */
+export interface RecordFilter {
+  field: string;
+  op: FilterOp;
+  value: unknown;
+}
+
+/** What `query` accepts. */
+export interface RecordQuery {
+  filters?: RecordFilter[];
+  sort?: { field: string; direction?: 'asc' | 'desc' }[];
+  limit?: number;
+  offset?: number;
+}
+
+/** A page of matching records, with how many match in all. */
+export interface QueryResult {
+  records: StoredRecord[];
+  total: number;
+}
+
+/** The aggregate functions `aggregate` offers. */
+export const AGGREGATE_OPS = ['count', 'sum', 'avg', 'min', 'max'] as const;
+export type AggregateOp = (typeof AGGREGATE_OPS)[number];
+
+/** What `aggregate` accepts. */
+export interface AggregateQuery {
+  op: AggregateOp;
+  field?: string;
+  groupBy?: string[];
+  filters?: RecordFilter[];
+}
+
+/** One aggregate value, per group when grouped. Values are decimal strings, so totals stay exact. */
+export interface AggregateRow {
+  group: RecordData;
+  value: string | null;
+}

@@ -62,6 +62,7 @@ export * from './llm/default-system-prompt-template';
 export * from './rag/embedding.service';
 export * from './rag/knowledge-retrieval.service';
 export * from './rag/resolve-env-embedding-config';
+export * from './records';
 export * from './storage/validation';
 export * from './storage/artifact-keys';
 export * from './prompts/mode-prompts';
