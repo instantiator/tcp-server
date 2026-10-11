@@ -137,6 +137,9 @@ Tools are namespaced as `{serverName}__{toolName}` (e.g., `storage__list_files`)
 **mcpServerList**
 A list of MCP server names on a role, additive with the company's and the system registry's, specifying which servers are available to the agent. Its mode then narrows that set further (`MODE_TOOLS`).
 
+**mcpServerToggles**
+A map of MCP server names to `true`/`false` on a company or role, switching servers on or off. The role's toggle wins, then the company's; unmentioned servers are on. Used to keep tool schemas out of small context windows.
+
 ## Storage
 
 **MinIO bucket**

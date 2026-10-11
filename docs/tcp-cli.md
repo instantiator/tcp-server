@@ -1190,10 +1190,19 @@ output }` JSON, and `llm_response` replayed as a reasoning block then a
 ### `estimate-context-window`
 
 Estimates the worst-case token footprint of a role's initial prompt (system
-prompt + role prompt + company context + services message + task query + RAG
-retrieval) plus a projected run of further conversation turns, and reports it
-against the resolved LLM's context window (`role.llmConfig` → `company.llmConfig`
-→ the built-in default). Reuses the same tiktoken-based `ContextBudgetService`
+prompt + role prompt + company context + services message + MCP tool schemas +
+task query + RAG retrieval) plus a projected run of further conversation turns,
+and reports it against the resolved LLM's context window (`role.llmConfig` →
+`company.llmConfig` → `LLM_CONTEXT_WINDOW` from the env file → the built-in
+default).
+
+Tool schemas are counted by tcp-server, which can reach the MCP servers
+(`GET /api/company/:id/roles/by-slug/:slug/tool-footprint?mode=`). It loads the
+role's tools the way tcp-agent would, after the company's and role's
+`mcpServerToggles` and the mode's allowlist, and stderr lists the cost per
+server, so it's clear which servers are worth switching off. It counts
+`memory` even for a role with no knowledge (tcp-agent drops it then), so it's a
+worst case. With `--from-file` there's no server to ask: pass `--tool-tokens`. Reuses the same tiktoken-based `ContextBudgetService`
 the server uses to decide when to compact context mid-run — no separate
 counting logic.
 
@@ -1201,21 +1210,23 @@ Company/role are optional: with neither given, the estimate uses only the
 baked-in default system prompt template and the registered MCP services.
 
 - **stdout**: the total token count (default), or the full breakdown as JSON (`--json`)
-- **stderr**: the window size, turn count, and RAG estimate actually used
+- **stderr**: the tool cost per MCP server, then the window size, turn count, and RAG estimate actually used
 
-| Flag                    | Alias | Description                                                                                       |
-| ----------------------- | ----- | ------------------------------------------------------------------------------------------------- |
-| `--company-id <uuid>`   | `-c`  | Company to estimate for                                                                           |
-| `--company-slug <slug>` |       | Company slug, instead of `--company-id`                                                           |
-| `--role-id <uuid>`      | `-r`  | Role to estimate for                                                                              |
-| `--role-slug <slug>`    |       | Role slug, instead of `--role-id` (requires a company identifier)                                 |
-| `--from-file <path>`    |       | Read `{"company":...,"role":...}` from a JSON file instead of a live server                       |
-| `--query <text>`        |       | Actual task query text to size (counted exactly)                                                  |
-| `--query-tokens <n>`    |       | Estimated query size in tokens, when `--query` isn't given (default: 200)                         |
-| `--rag-tokens <n>`      |       | Estimated RAG retrieval size in tokens (default: worst case, 5 chunks × 2000 chars ≈ 2500 tokens) |
-| `--turn-tokens <n>`     |       | Estimated tokens per further conversation turn (default: 300)                                     |
-| `--turns <n>`           | `-n`  | Number of further turns to project (default: 20)                                                  |
-| `--json`                |       | Print the full breakdown instead of just the total                                                |
+| Flag                    | Alias | Description                                                                                                     |
+| ----------------------- | ----- | --------------------------------------------------------------------------------------------------------------- |
+| `--company-id <uuid>`   | `-c`  | Company to estimate for                                                                                         |
+| `--company-slug <slug>` |       | Company slug, instead of `--company-id`                                                                         |
+| `--role-id <uuid>`      | `-r`  | Role to estimate for                                                                                            |
+| `--role-slug <slug>`    |       | Role slug, instead of `--role-id` (requires a company identifier)                                               |
+| `--from-file <path>`    |       | Read `{"company":...,"role":...}` from a JSON file instead of a live server                                     |
+| `--query <text>`        |       | Actual task query text to size (counted exactly)                                                                |
+| `--query-tokens <n>`    |       | Estimated query size in tokens, when `--query` isn't given (default: 200)                                       |
+| `--rag-tokens <n>`      |       | Estimated RAG retrieval size in tokens (default: worst case, 5 chunks × 2000 chars ≈ 2500 tokens)               |
+| `--turn-tokens <n>`     |       | Estimated tokens per further conversation turn (default: 300)                                                   |
+| `--turns <n>`           | `-n`  | Number of further turns to project (default: 20)                                                                |
+| `--mode <mode>`         |       | Mode whose tool set to count: `plan`, `implement`, `qa`, `chat`, `consultee`, `finalise` (default: `implement`) |
+| `--tool-tokens <n>`     |       | Tool schema tokens to assume instead of asking tcp-server (needed with `--from-file`)                           |
+| `--json`                |       | Print the full breakdown instead of just the total                                                              |
 
 ```bash
 # Quick total for a specific role

@@ -121,6 +121,20 @@ Add server names to the role's `mcpServerList`:
 }
 ```
 
+### Switching servers off for a company or role
+
+Every configured server reaches every role unless switched off. Set `mcpServerToggles` on a company (all its roles) or a role (just that one) to a map of server names to `true`/`false`:
+
+```json
+{ "mcpServerToggles": { "records": false, "utilities": false } }
+```
+
+The role's toggle wins, then the company's; a server neither mentions is on. `resolveMcpServerList` applies this after the union of the registry and `mcpServerList`, so tcp-agent runs, chat turns and `estimate-context-window` all agree. Names must be registry names; anything else is a 400. `null` clears every toggle.
+
+Any server can be switched off, including `tasks`, but then agents have no `create_plan`, `complete_assignment` or `assure_assignment` and can't finish an assignment, so saving that answers with an `X-Tcp-Warnings` warning.
+
+Why bother: every tool schema is sent to the model on every turn. With all six servers that is about 5,800 tokens, which crowds out an 8k window. `estimate-context-window` shows the cost per server.
+
 At agent startup, `McpClientService` loads tools from each listed server. Tools are prefixed `{serverName}__` (e.g. `storage__list_files`) to avoid name collisions across servers. The LangGraph graph adds a conditional `ToolNode` when any tools are available.
 
 The agent receives prompt part 3 listing the servers available to it, with `describe_server` offered as the way to learn what any one of them can do. Calling it is no longer a precondition for using the rest — all of a server's tools are bound from turn 1 (see below).

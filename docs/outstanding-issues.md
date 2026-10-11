@@ -594,22 +594,17 @@ they take up space.
 Then call the records server's delete route for the replaced company, as
 tcp-server does after a company delete.
 
-## Every role gets every MCP server, and an 8k model runs out of room
+## MCP server toggles have no web UI, and the estimate ignores the knowledge rule
 
-Tool schemas are sent to the model on every turn. With all six MCP servers they
-cost about 5,600 tokens (measured from each server's `tools/list`, as the model
-sees them). The utilities and records servers add about 1,450 of that, after
-their descriptions were cut down in 001.01. A role on a model with an 8,192-token
-window, like the dev `diy-assistant` on LM Studio, now fails with "Context window
-exceeded even after compaction" after one or two tool calls. Before records it
-had just enough room. `estimate-context-window` doesn't count tool schemas, so
-it can't warn about this.
+001.01.03 added `mcpServerToggles` on companies and roles, and tool schemas
+now show in `estimate-context-window`. Two gaps remain:
 
-There is no way to leave a server out: `resolveMcpServerList` is a union, so
-every configured server reaches every role.
+- The toggles can only be set through the API or `tcp-cli set-company` /
+  `set-role` JSON. The web UI's company and role forms don't show them.
+- The tool footprint counts `memory` even for a role with no knowledge, which
+  tcp-agent leaves out, so a knowledge-less role's estimate is about 700
+  tokens high.
 
-**Act when:** before 001.01 merges, or the first time a real role is meant to
-run on a model with a window under 16k. Choose one: let a company or role leave
-servers out (or make `records` opt-in through `mcpServerList`), and/or count
-tool schemas in `estimate-context-window`. Raising the model's context window
-also works where the model allows it.
+**Act when:** 002.00 or 002.02 builds the role or company edit forms (add the
+toggles there), or someone sizes a knowledge-less role near its window limit
+(ask the knowledge index whether the role has chunks, as tcp-agent does).
