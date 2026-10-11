@@ -65,6 +65,7 @@ export * from './rag/resolve-env-embedding-config';
 export * from './records';
 export * from './storage/validation';
 export * from './storage/artifact-keys';
+export * from './storage/resource-path';
 export * from './prompts/mode-prompts';
 export * from './prompts/mode-tools';
 export * from './prompts/prompt-assembly';

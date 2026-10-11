@@ -375,6 +375,112 @@ describe('AssignmentService', () => {
       expect(scope.workingPrefix).toBe(`acme/tasks/${task.id}/completed/`);
     });
 
+    describe('company resources', () => {
+      /** Seeds a company, role and task, and returns a helper to seed steps on it. */
+      async function seedTaskSteps() {
+        const company = await seedCompany();
+        const role = await seedRole(company.id);
+        const task = await seedTask(company.id);
+        db.getCompany.mockResolvedValue({ id: company.id, slug: 'acme' });
+        const step = (partial: Partial<TcpAssignment>) =>
+          seedAssignment({
+            companyId: company.id,
+            roleId: role.id,
+            taskId: task.id,
+            ...partial,
+          });
+        const scopeOf = async (a: TcpAssignment) =>
+          (
+            await service.resolveStorageScope(
+              (await seedAgent(company.id, role.id, a.id)).id,
+            )
+          ).resources;
+        return { company, role, task, step, scopeOf };
+      }
+
+      it('implement drafts in its own working folder, reading earlier approved steps (latest first), then live', async () => {
+        const { task, step, scopeOf } = await seedTaskSteps();
+        await step({ orderIndex: 0 });
+        await step({ orderIndex: 1 });
+        const current = await step({ orderIndex: 2 });
+        await step({ orderIndex: 3 });
+
+        const base = `acme/tasks/${task.id}/assignments`;
+        expect(await scopeOf(current)).toEqual({
+          mode: 'draft',
+          readPrefixes: [
+            `${base}/2/working/resources/`,
+            `${base}/1/completed/resources/`,
+            `${base}/0/completed/resources/`,
+            'acme/resources/',
+          ],
+          writePrefix: `${base}/2/working/resources/`,
+        });
+      });
+
+      it("qa reads the reviewed step's layers but cannot write", async () => {
+        const { task, step, scopeOf } = await seedTaskSteps();
+        await step({ orderIndex: 0 });
+        const target = await step({ orderIndex: 1 });
+        const qa = await step({ mode: 'qa', targetAssignmentId: target.id });
+
+        const base = `acme/tasks/${task.id}/assignments`;
+        expect(await scopeOf(qa)).toEqual({
+          mode: 'read-only',
+          readPrefixes: [
+            `${base}/1/working/resources/`,
+            `${base}/0/completed/resources/`,
+            'acme/resources/',
+          ],
+          writePrefix: null,
+        });
+      });
+
+      it("finalise reads and writes the task's pending changes, then live", async () => {
+        const { task, step, scopeOf } = await seedTaskSteps();
+        const fin = await step({ mode: 'finalise' });
+        const pending = `acme/tasks/${task.id}/completed/resources/`;
+        expect(await scopeOf(fin)).toEqual({
+          mode: 'draft',
+          readPrefixes: [pending, 'acme/resources/'],
+          writePrefix: pending,
+        });
+      });
+
+      it('plan reads only the live resources', async () => {
+        const { step, scopeOf } = await seedTaskSteps();
+        const plan = await step({ mode: 'plan', orderIndex: 0 });
+        expect(await scopeOf(plan)).toEqual({
+          mode: 'read-only',
+          readPrefixes: ['acme/resources/'],
+          writePrefix: null,
+        });
+      });
+
+      it('chat writes the live resources directly', async () => {
+        const { step, scopeOf } = await seedTaskSteps();
+        const chat = await step({ mode: 'chat', taskId: null });
+        expect(await scopeOf(chat)).toEqual({
+          mode: 'direct',
+          readPrefixes: ['acme/resources/'],
+          writePrefix: 'acme/resources/',
+        });
+      });
+
+      it.each(['consultee', 'implement'] as const)(
+        'a %s assignment with no task can only read',
+        async (mode) => {
+          const { step, scopeOf } = await seedTaskSteps();
+          const orphan = await step({ mode, taskId: null });
+          expect(await scopeOf(orphan)).toEqual({
+            mode: 'read-only',
+            readPrefixes: ['acme/resources/'],
+            writePrefix: null,
+          });
+        },
+      );
+    });
+
     it('resolves inline-text materials to stable synthetic names', async () => {
       const company = await seedCompany();
       const role = await seedRole(company.id);

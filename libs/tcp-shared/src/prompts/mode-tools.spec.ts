@@ -1,9 +1,11 @@
 import {
+  canWriteResources,
   filterToolsForMode,
   serverNamesForMode,
   isStorageReadOnly,
   MODE_TOOLS,
   RECORDS_WRITE_TOOLS,
+  RESOURCE_WRITE_TOOLS,
   STORAGE_WRITE_TOOLS,
 } from './mode-tools';
 import type { TcpAssignmentMode } from '../models/TcpAssignment.model';
@@ -152,6 +154,43 @@ describe('filterToolsForMode', () => {
   it('drops records write names only from the records server', () => {
     const other = [{ serverName: 'storage', toolName: 'storage__insert' }];
     expect(filterToolsForMode(other, 'plan')).toHaveLength(1);
+  });
+
+  describe('company resource tools', () => {
+    const RESOURCE_SET = [
+      tool('storage', 'list_resources'),
+      tool('storage', 'read_resource'),
+      ...RESOURCE_WRITE_TOOLS.map((w) => tool('storage', w)),
+    ];
+
+    it.each(['implement', 'chat', 'finalise'] as const)(
+      '%s keeps every resource tool',
+      (mode) => {
+        expect(filterToolsForMode(RESOURCE_SET, mode)).toHaveLength(
+          RESOURCE_SET.length,
+        );
+        expect(canWriteResources(mode)).toBe(true);
+      },
+    );
+
+    it.each(['plan', 'qa', 'consultee'] as const)(
+      '%s keeps the reads but drops every resource write',
+      (mode) => {
+        const kept = filterToolsForMode(RESOURCE_SET, mode).map(
+          (t) => t.toolName,
+        );
+        expect(kept).toEqual([
+          'storage__list_resources',
+          'storage__read_resource',
+        ]);
+        expect(canWriteResources(mode)).toBe(false);
+      },
+    );
+
+    it('keeps consultee working-file writes while dropping resource writes', () => {
+      const kept = filterToolsForMode(FULL_SET, 'consultee');
+      expect(kept).toHaveLength(FULL_SET.length);
+    });
   });
 
   it('handles unprefixed tool names', () => {

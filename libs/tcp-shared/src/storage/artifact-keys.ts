@@ -120,6 +120,18 @@ export function orphanWorkingPrefix(
   return `${companySlug}/assignments/${assignmentId}/working/`;
 }
 
+/**
+ * Folder name for company resources: `{companySlug}/resources/` holds the live
+ * ones, and the same folder under a working or completed prefix holds a task's
+ * drafts of them.
+ */
+export const RESOURCES_DIR = 'resources/';
+
+/** Listing prefix for a company's live resources: `{companySlug}/resources/`. */
+export function resourcesPrefix(companySlug: string): string {
+  return `${companySlug}/${RESOURCES_DIR}`;
+}
+
 /** Context needed to resolve an {@link TcpArtifact} to a full storage key. */
 export interface ArtifactResolutionContext {
   companySlug: string;

@@ -32,6 +32,17 @@ export const RECORDS_WRITE_TOOLS: readonly string[] = [
   'delete',
 ];
 
+/**
+ * The storage server's resource-changing tools, withheld where resources are
+ * read-only. Enforced on both sides, like the working-file tools: hidden here,
+ * and refused by the storage server when the agent's scope has no write folder.
+ */
+export const RESOURCE_WRITE_TOOLS: readonly string[] = [
+  'write_resource',
+  'append_resource',
+  'replace_in_resource',
+];
+
 /** What tools a given mode is offered. */
 export interface ModeToolAccess {
   /** MCP servers offered to this mode. */
@@ -45,6 +56,12 @@ export interface ModeToolAccess {
   storage: 'read-write' | 'read-only';
   /** Records tools offered: all of them, or only the reads ({@link RECORDS_WRITE_TOOLS} dropped). */
   records: 'read-write' | 'read-only';
+  /**
+   * Company resource tools offered: all of them, or only the reads
+   * ({@link RESOURCE_WRITE_TOOLS} dropped). Also decides whether the storage
+   * scope gets a resource write folder.
+   */
+  resources: 'read-write' | 'read-only';
 }
 
 /**
@@ -55,13 +72,16 @@ export interface ModeToolAccess {
  * Notable restrictions: `plan` drops the `interactions` server entirely (no
  * consultation / user queries — removes every pause vector so planning always
  * terminates) and is storage read-only (it plans, it doesn't do the work); `qa`
- * is storage read-only (it reviews, it doesn't edit).
+ * is storage read-only (it reviews, it doesn't edit). Company resources are
+ * also read-only to `consultee`: it advises another agent, it doesn't change
+ * company documents.
  */
 export const MODE_TOOLS: Record<TcpAssignmentMode, ModeToolAccess> = {
   plan: {
     servers: ['tasks', 'storage', 'memory', 'utilities', 'records'],
     storage: 'read-only',
     records: 'read-only',
+    resources: 'read-only',
   },
   implement: {
     servers: [
@@ -74,6 +94,7 @@ export const MODE_TOOLS: Record<TcpAssignmentMode, ModeToolAccess> = {
     ],
     storage: 'read-write',
     records: 'read-write',
+    resources: 'read-write',
   },
   qa: {
     servers: [
@@ -86,6 +107,7 @@ export const MODE_TOOLS: Record<TcpAssignmentMode, ModeToolAccess> = {
     ],
     storage: 'read-only',
     records: 'read-only',
+    resources: 'read-only',
   },
   chat: {
     servers: [
@@ -98,6 +120,7 @@ export const MODE_TOOLS: Record<TcpAssignmentMode, ModeToolAccess> = {
     ],
     storage: 'read-write',
     records: 'read-write',
+    resources: 'read-write',
   },
   consultee: {
     servers: [
@@ -110,6 +133,7 @@ export const MODE_TOOLS: Record<TcpAssignmentMode, ModeToolAccess> = {
     ],
     storage: 'read-write',
     records: 'read-write',
+    resources: 'read-only',
   },
   finalise: {
     servers: [
@@ -122,8 +146,14 @@ export const MODE_TOOLS: Record<TcpAssignmentMode, ModeToolAccess> = {
     ],
     storage: 'read-write',
     records: 'read-write',
+    resources: 'read-write',
   },
 };
+
+/** Whether `mode` may change company resources (server-side enforcement). */
+export function canWriteResources(mode: TcpAssignmentMode): boolean {
+  return MODE_TOOLS[mode].resources === 'read-write';
+}
 
 /** Whether the storage scope for `mode` is read-only (server-side enforcement). */
 export function isStorageReadOnly(mode: TcpAssignmentMode): boolean {
@@ -152,9 +182,9 @@ export function serverNamesForMode(
 
 /**
  * Filters already-loaded tools to those a mode is offered: only servers in
- * {@link MODE_TOOLS} `.servers`, and — for a `read-only` storage or records
- * mode — with the mutating {@link STORAGE_WRITE_TOOLS} or
- * {@link RECORDS_WRITE_TOOLS} dropped. Generic over the loaded-tool
+ * {@link MODE_TOOLS} `.servers`, and — for a `read-only` storage, records or
+ * resources mode — with the mutating {@link STORAGE_WRITE_TOOLS},
+ * {@link RECORDS_WRITE_TOOLS} or {@link RESOURCE_WRITE_TOOLS} dropped. Generic over the loaded-tool
  * shape so both the shared `McpTool` and any test double satisfy it.
  */
 export function filterToolsForMode<
@@ -165,6 +195,8 @@ export function filterToolsForMode<
   const writeTools = new Set(STORAGE_WRITE_TOOLS);
   const dropRecordWrites = MODE_TOOLS[mode].records === 'read-only';
   const recordWriteTools = new Set(RECORDS_WRITE_TOOLS);
+  const dropResourceWrites = MODE_TOOLS[mode].resources === 'read-only';
+  const resourceWriteTools = new Set(RESOURCE_WRITE_TOOLS);
   return tools.filter((t) => {
     const name = stripServerPrefix(t.toolName);
     return (
@@ -174,6 +206,11 @@ export function filterToolsForMode<
         dropRecordWrites &&
         t.serverName === 'records' &&
         recordWriteTools.has(name)
+      ) &&
+      !(
+        dropResourceWrites &&
+        t.serverName === 'storage' &&
+        resourceWriteTools.has(name)
       )
     );
   });

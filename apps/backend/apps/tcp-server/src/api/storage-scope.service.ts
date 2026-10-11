@@ -1,6 +1,11 @@
 import {
+  ArtifactResolutionContext,
+  assignmentCompletedPrefix,
   assignmentWorkingPrefix,
+  canWriteResources,
   isStorageReadOnly,
+  RESOURCES_DIR,
+  resourcesPrefix,
   TcpAssignment,
   TcpAssignmentMode,
   orphanWorkingPrefix,
@@ -28,6 +33,20 @@ export interface ResolvedMaterial {
 }
 
 /**
+ * Where an agent's company-resource tools read and write. Inside a task a
+ * change is a draft, applied to the live resources when the task succeeds;
+ * a chat changes the live resources directly.
+ */
+export interface ResourceScope {
+  /** `draft`: writes go to a task draft; `direct`: to the live resources; `read-only`: no writes. */
+  mode: 'draft' | 'direct' | 'read-only';
+  /** Prefixes a resource path is read from, first match wins; the last is the live `resources/` folder. */
+  readPrefixes: string[];
+  /** Prefix writes go to, or `null` when this agent may not change resources. */
+  writePrefix: string | null;
+}
+
+/**
  * The storage scope for an agent, resolved server-side from its assignment —
  * backs the assignment-scoped storage tools in tcp-mcp-storage (part 6). For a
  * qa-mode caller the scope is the *target* assignment's (read-only).
@@ -42,6 +61,8 @@ export interface StorageScope {
   workingPrefix: string;
   /** The scoped assignment's materials, resolved to concrete keys/inline text. */
   materials: ResolvedMaterial[];
+  /** Where the company-resource tools read and write. */
+  resources: ResourceScope;
 }
 
 /**
@@ -92,13 +113,81 @@ export class StorageScopeService {
           ? assignmentWorkingPrefix(slug, target.taskId, target.orderIndex)
           : orphanWorkingPrefix(slug, target.id);
 
-    const materials = await this.resolveMaterials(slug, target);
+    const planAssignments = target.taskId
+      ? (
+          await this.assignmentRepo.find({
+            where: { taskId: target.taskId, mode: 'implement' },
+          })
+        ).map((a) => ({ orderIndex: a.orderIndex, approved: a.approved }))
+      : undefined;
+    const materials = this.resolveMaterials(slug, target, planAssignments);
     return {
       mode: caller.mode,
       readOnly,
       companyPrefix: `${slug}/`,
       workingPrefix,
       materials,
+      resources: this.resolveResources(
+        caller,
+        target,
+        slug,
+        planAssignments ?? [],
+      ),
+    };
+  }
+
+  /**
+   * Resolves the {@link ResourceScope}:
+   * - `finalise` reads and writes the task's pending changes (its
+   *   `completed/resources/`), then falls back to the live resources;
+   * - `implement` reads its own draft, then each earlier step's approved
+   *   draft (latest first), then the live resources, and writes its own draft;
+   *   `qa` reads the same layers as the step it reviews, without writing;
+   * - every other mode works outside a task's drafts: it reads the live
+   *   resources, and only `chat` writes them directly.
+   */
+  private resolveResources(
+    caller: TcpAssignment,
+    target: TcpAssignment,
+    slug: string,
+    planAssignments: { orderIndex?: number | null }[],
+  ): ResourceScope {
+    const live = resourcesPrefix(slug);
+    if (caller.mode === 'finalise' && caller.taskId != null) {
+      const pending = `${taskCompletedPrefix(slug, caller.taskId)}${RESOURCES_DIR}`;
+      return {
+        mode: 'draft',
+        readPrefixes: [pending, live],
+        writePrefix: pending,
+      };
+    }
+    const { taskId, orderIndex } = target;
+    if (
+      (caller.mode === 'implement' || caller.mode === 'qa') &&
+      taskId != null &&
+      orderIndex != null
+    ) {
+      const draft = `${assignmentWorkingPrefix(slug, taskId, orderIndex)}${RESOURCES_DIR}`;
+      const earlier = planAssignments
+        .map((a) => a.orderIndex)
+        .filter((i): i is number => i != null && i < orderIndex)
+        .sort((a, b) => b - a)
+        .map(
+          (i) =>
+            `${assignmentCompletedPrefix(slug, taskId, i)}${RESOURCES_DIR}`,
+        );
+      const write = canWriteResources(caller.mode);
+      return {
+        mode: write ? 'draft' : 'read-only',
+        readPrefixes: [draft, ...earlier, live],
+        writePrefix: write ? draft : null,
+      };
+    }
+    const direct = caller.mode === 'chat';
+    return {
+      mode: direct ? 'direct' : 'read-only',
+      readPrefixes: [live],
+      writePrefix: direct ? live : null,
     };
   }
 
@@ -131,17 +220,11 @@ export class StorageScopeService {
    * should keep this unreachable for a plan created normally, so this is a
    * backstop, not the expected path.
    */
-  private async resolveMaterials(
+  private resolveMaterials(
     slug: string,
     target: TcpAssignment,
-  ): Promise<ResolvedMaterial[]> {
-    const planAssignments = target.taskId
-      ? (
-          await this.assignmentRepo.find({
-            where: { taskId: target.taskId, mode: 'implement' },
-          })
-        ).map((a) => ({ orderIndex: a.orderIndex, approved: a.approved }))
-      : undefined;
+    planAssignments: ArtifactResolutionContext['planAssignments'],
+  ): ResolvedMaterial[] {
     const ctx = {
       companySlug: slug,
       task: target.taskId ? { id: target.taskId } : null,
