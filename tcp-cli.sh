@@ -58,6 +58,13 @@ set -a
 source "$ENV_FILE"
 set +a
 
+# The host-facing database URL for `db-url`, derived as the other scripts do.
+# `set +u` in the subshell: an env file without DB_PASSWORD must not stop
+# every other verb from running.
+# shellcheck disable=SC1091 # source path resolved at runtime
+TCP_HOST_DATABASE_URL="$(set +u && . "$ROOT/scripts/lib/derive-urls.sh" && derive_host_urls && echo "$DATABASE_URL")"
+export TCP_HOST_DATABASE_URL
+
 # When an explicit env file was provided, sync the running Docker containers so
 # the server picks up any new vars (e.g. LLM_*) without a manual restart.
 if [[ -n "$EXPLICIT_ENV" ]]; then
