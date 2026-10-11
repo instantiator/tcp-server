@@ -11,7 +11,10 @@ import { promptWithHelp } from '../utils/prompt-with-help';
 import { validateModel } from '../utils/model-validator';
 import { lookupContextWindow } from '../utils/context-lookup';
 import { isHostLocal, toDockerHost } from '../utils/docker-host';
-import { DEFAULT_EMBEDDING_DIMENSION } from '../utils/app-defaults';
+import {
+  DEFAULT_EMBEDDING_DIMENSION,
+  RECOMMENDED_LOCAL_CONTEXT_WINDOW,
+} from '../utils/app-defaults';
 
 /** What each purpose is asked for and called, in prompts. */
 type Purpose = 'chat' | 'embedding';
@@ -530,7 +533,17 @@ async function askContextWindow(
   probeUrl: string,
 ): Promise<number> {
   const found = await lookupContextWindow(template, model, probeUrl);
-  if (found) {
+  // A local model loaded with a small window can't hold the tool schemas, so
+  // don't offer that window as the answer: recommend 32768, and say how to
+  // raise it on the model server, which enforces its own limit.
+  const tooSmall =
+    template.kind === 'local' &&
+    (found?.tokens ?? 0) < RECOMMENDED_LOCAL_CONTEXT_WINDOW;
+  if (tooSmall) {
+    console.log(
+      `\n${found ? `${template.name} reports ${found.tokens} tokens for this model. ` : ''}TCP recommends a context window of at least ${RECOMMENDED_LOCAL_CONTEXT_WINDOW} tokens for local models: the agents' tool descriptions alone take about 6,000 tokens a turn.\nLoad the model with that context length in ${template.name} (see the setup steps above) and enter ${RECOMMENDED_LOCAL_CONTEXT_WINDOW} here.\n`,
+    );
+  } else if (found) {
     const { useFound } = await promptWithHelp<{ useFound: boolean }>([
       {
         type: 'confirm',
@@ -547,12 +560,15 @@ async function askContextWindow(
       type: 'number',
       name: 'value',
       message: 'Context window size (tokens):',
-      default: found?.tokens ?? 128000,
+      default: tooSmall
+        ? RECOMMENDED_LOCAL_CONTEXT_WINDOW
+        : (found?.tokens ?? 128000),
       validate: (input: number) =>
         (Number.isInteger(input) && input > 0) || 'Must be a positive integer',
       help: `The maximum number of tokens the model can process in a single request.
   - Check your model's documentation for the limit
   - Common values: 4096, 8192, 32000, 128000
+  - Local models (LM Studio, Ollama): ${RECOMMENDED_LOCAL_CONTEXT_WINDOW} recommended, set on the model server too
   - Larger windows allow more context but cost more`,
     },
   ]);

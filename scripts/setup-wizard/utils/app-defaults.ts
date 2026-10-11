@@ -23,6 +23,7 @@ export {
   DEFAULT_EXPOSE_PORT_ZITADEL,
   DEFAULT_TCP_MASK_API_KEYS,
   DEFAULT_KNOWLEDGE_POLL_INTERVAL_MS,
+  RECOMMENDED_LOCAL_CONTEXT_WINDOW,
 } from '@tcp/shared/config/defaults';
 
 export { LOCAL_ONLY_ENV_KEYS } from '@tcp/shared/config/local-env-keys';

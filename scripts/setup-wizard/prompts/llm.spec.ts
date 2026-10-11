@@ -95,6 +95,61 @@ describe('promptLlm', () => {
     );
   });
 
+  describe('context window for a local model', () => {
+    /** Answers up to the context-window question for LM Studio on localhost. */
+    const lmStudioUpToWindow = () => [
+      'y', // configure a chat model
+      'lm-studio', // provider select
+      'test-key', // API key
+      'y', // "is LM Studio running?"
+      'google/gemma-4-e4b', // model name
+      'http://localhost:1234/v1', // base URL
+      'y', // use the host.docker.internal conversion
+    ];
+
+    /** The default the context-window number prompt offered. */
+    const offeredWindow = () =>
+      mockedPrompt.mock.calls
+        .flatMap(([questions]) =>
+          Array.isArray(questions) ? (questions as unknown[]) : [questions],
+        )
+        .map((q) => q as { message?: string; default?: unknown })
+        .find((q) => q.message === 'Context window size (tokens):')?.default;
+
+    it('recommends 32768 instead of offering a smaller loaded window, and says how to raise it', async () => {
+      mockedValidateModel.mockResolvedValueOnce({ success: true });
+      mockedLookupContextWindow.mockResolvedValueOnce({
+        tokens: 8192,
+        source: 'LM Studio',
+      });
+      queueAnswers(...lmStudioUpToWindow(), '32768', 'n');
+
+      const answers = await promptLlm();
+
+      expect(answers.inferenceModel?.contextWindow).toBe(32768);
+      expect(offeredWindow()).toBe(32768);
+      expect(console.log).toHaveBeenCalledWith(
+        expect.stringMatching(/reports 8192 tokens.*at least 32768/s),
+      );
+    });
+
+    it('offers a loaded window that is already big enough', async () => {
+      mockedValidateModel.mockResolvedValueOnce({ success: true });
+      mockedLookupContextWindow.mockResolvedValueOnce({
+        tokens: 65536,
+        source: 'LM Studio',
+      });
+      queueAnswers(...lmStudioUpToWindow(), 'y', 'n');
+
+      const answers = await promptLlm();
+
+      expect(answers.inferenceModel?.contextWindow).toBe(65536);
+      expect(console.log).not.toHaveBeenCalledWith(
+        expect.stringContaining('TCP recommends'),
+      );
+    });
+  });
+
   it('rejects a probed dimension over the ivfflat limit and restarts the provider choice', async () => {
     mockedValidateModel
       .mockResolvedValueOnce({ success: true, dimension: 3072 })

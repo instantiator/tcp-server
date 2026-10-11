@@ -121,6 +121,14 @@ Here are some of the popular choices:
 - [LM Studio](https://lmstudio.ai/)
 - [Ollama](https://ollama.com/)
 
+> [!IMPORTANT]
+> Give a local model a context window of **32768** tokens, both in the model server and in `LLM_CONTEXT_WINDOW`. Every agent turn carries the descriptions of all its tools — about 6,000 tokens with every MCP server switched on — so the 8,192-token window many models load with fills up before an agent has done any work. The model server enforces its own limit, so TCP's setting alone isn't enough:
+>
+> - **LM Studio:** load the model with Context Length 32768, and save that as the model's default load setting, or a reload after an idle timeout falls back to the smaller window. From a terminal: `lms load <model> -c 32768`.
+> - **Ollama:** set `OLLAMA_CONTEXT_LENGTH=32768` in the environment Ollama starts with, then restart it.
+>
+> If you can't spare the memory, switch off MCP servers a company or role doesn't need (see [agent-services.md](agent-services.md#switching-servers-off-for-a-company-or-role)), and check the fit with `./tcp-cli.sh estimate-context-window`.
+
 <details>
 <summary><b>LM Studio example...</b></summary>
 
@@ -133,6 +141,7 @@ LLM_PROVIDER=lm-studio
 LLM_MODEL=google/gemma-4-e4b
 LLM_BASE_URL=http://host.docker.internal:1234/v1
 LLM_API_KEY=<your API key goes here>
+LLM_CONTEXT_WINDOW=32768
 ```
 
 > [!TIP]
