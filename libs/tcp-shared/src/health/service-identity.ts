@@ -14,7 +14,8 @@ export type ServiceName =
   | 'tcp-mcp-storage'
   | 'tcp-mcp-memory'
   | 'tcp-mcp-interactions'
-  | 'tcp-mcp-tasks';
+  | 'tcp-mcp-tasks'
+  | 'tcp-mcp-utilities';
 
 /**
  * The `service` entry a health document carries under `info` and `details`.

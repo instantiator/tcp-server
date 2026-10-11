@@ -61,15 +61,22 @@ describe('MODE_TOOLS', () => {
       expect(MODE_TOOLS[mode].servers).toContain('interactions');
     }
   });
+
+  it('offers utilities to every mode, since it only computes and never changes anything', () => {
+    for (const mode of Object.keys(MODE_TOOLS) as (keyof typeof MODE_TOOLS)[]) {
+      expect(MODE_TOOLS[mode].servers).toContain('utilities');
+    }
+  });
 });
 
 describe('serverNamesForMode', () => {
-  const names = ['tasks', 'storage', 'memory', 'interactions'];
+  const names = ['tasks', 'storage', 'memory', 'interactions', 'utilities'];
   it('drops interactions for plan; keeps all servers for every other mode', () => {
     expect(serverNamesForMode(names, 'plan')).toEqual([
       'tasks',
       'storage',
       'memory',
+      'utilities',
     ]);
     for (const mode of [
       'implement',

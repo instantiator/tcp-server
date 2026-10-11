@@ -15,7 +15,7 @@ where start-deployment.sh starts the stack. Start services first:
   docker compose -p tcp-smoke --profile auth down -v
 
 Smoke tests verify end-to-end health across the full stack: tcp-server,
-tcp-agent, all three MCP services, PostgreSQL, MinIO, Redis, and Zitadel.
+tcp-agent, every MCP service, PostgreSQL, MinIO, Redis, and Zitadel.
 
 Any extra arguments after -- are passed through to Jest, for example:
   $(basename "$0") -- --testNamePattern="oidc"

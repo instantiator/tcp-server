@@ -18,6 +18,7 @@ describe('SystemHealthService', () => {
     MCP_MEMORY_URL: 'http://tcp-mcp-memory:3011',
     MCP_INTERACTIONS_URL: 'http://tcp-mcp-interactions:3012',
     MCP_TASKS_URL: 'http://tcp-mcp-tasks:3013',
+    MCP_UTILITIES_URL: 'http://tcp-mcp-utilities:3014',
   };
   let fetchMock: jest.SpyInstance<Promise<Response>, Parameters<typeof fetch>>;
   let selfCheck: jest.Mock<Promise<unknown>, []>;
@@ -57,6 +58,7 @@ describe('SystemHealthService', () => {
       ['tcp-mcp-memory', 'up'],
       ['tcp-mcp-interactions', 'up'],
       ['tcp-mcp-tasks', 'up'],
+      ['tcp-mcp-utilities', 'up'],
     ]);
   });
 

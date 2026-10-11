@@ -28,6 +28,7 @@
 | class-validator                          | MIT          | git+https://github.com/typestack/class-validator.git           | TypeStack contributors                                                 | 0.15.1    | ^0.15.1   |
 | commander                                | MIT          | git+https://github.com/tj/commander.js.git                     | TJ Holowaychuk <tj@vision-media.ca>                                    | 15.0.0    | ^15.0.0   |
 | csv-parse                                | MIT          | git+https://github.com/adaltas/node-csv.git                    | David Worms <david@adaltas.com> (https://www.adaltas.com)              | 7.0.3     | ^7.0.3    |
+| decimal.js                               | MIT          | git+https://github.com/MikeMcl/decimal.js.git                  | Michael Mclaughlin M8ch88l@gmail.com                                   | 10.6.0    | ^10.6.0   |
 | fast-xml-parser                          | MIT          | git+https://github.com/NaturalIntelligence/fast-xml-parser.git | Amit Gupta (https://solothought.com)                                   | 5.10.1    | ^5.10.1   |
 | inquirer                                 | MIT          | git+https://github.com/SBoudrias/Inquirer.js.git               | Simon Boudrias <admin@simonboudrias.com>                               | 14.0.2    | ^14.0.2   |
 | ioredis                                  | MIT          | git://github.com/luin/ioredis.git                              | Zihua Li <i@zihua.li> (http://zihua.li)                                | 5.11.1    | ^5.11.1   |

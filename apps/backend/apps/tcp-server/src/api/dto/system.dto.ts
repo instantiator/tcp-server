@@ -27,6 +27,7 @@ export class ServiceHealthDto implements ServiceHealth {
       'tcp-mcp-memory',
       'tcp-mcp-interactions',
       'tcp-mcp-tasks',
+      'tcp-mcp-utilities',
     ],
   })
   name!: string;

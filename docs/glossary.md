@@ -22,6 +22,9 @@ MCP server (port 3010) giving agents read-only exploration of the shared documen
 **tcp-mcp-tasks**
 MCP server (port 3013) through which an agent completes its assignment: `create_plan`, `complete_assignment`, or `assure_assignment`, gated to the agent's mode.
 
+**tcp-mcp-utilities**
+MCP server (port 3014) that gives agents exact arithmetic (`calculate`), date maths (`date_math`) and unit conversion (`convert_units`). It is stateless and has no database. See [tcp-mcp-utilities](tcp-mcp-utilities.md).
+
 **tcp-cli**
 Developer CLI tool for interacting with the system: obtaining OIDC tokens, managing companies and roles, creating and monitoring tasks, chatting with agents (including a full-screen TUI), responding to open queries, and draining the system for shutdown. See [tcp-cli.md](tcp-cli.md).
 

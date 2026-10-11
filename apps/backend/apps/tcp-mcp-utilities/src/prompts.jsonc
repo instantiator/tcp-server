@@ -1,0 +1,4 @@
+{
+  // Returned by describe_server — gives the agent an overview of the utilities tools.
+  "describe_server": "## Utilities Service\n\nExact calculations, so you never work figures out in your head. `calculate` does decimal arithmetic for money and quantities (totals, VAT, discounts, postage). `date_math` adds or subtracts durations and business days, measures the days between two dates, and finds the tax year a date falls in. `convert_units` converts weights and lengths. There is no currency conversion: if you know an exchange rate, multiply with `calculate` and say which rate you used. Its tools are now available to call directly."
+}

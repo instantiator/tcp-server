@@ -4,14 +4,15 @@
 
 > **Requires:** Section 1 complete — Docker stack running. Section 5 recommended (storage operations are more interesting with files present).
 
-You are testing the four MCP (Model Context Protocol) servers. Each exposes an HTTP endpoint that agents use to call tools at runtime. The servers use a stateless request-per-connection model: a fresh MCP session is created for every tool call.
+You are testing the five MCP (Model Context Protocol) servers. Each exposes an HTTP endpoint that agents use to call tools at runtime. The servers use a stateless request-per-connection model: a fresh MCP session is created for every tool call.
 
-The four servers are:
+The five servers are:
 
 - **tcp-mcp-storage** (port 3010) — shared-storage exploration plus assignment-scoped working files and materials. Holds no S3 client: it proxies to tcp-server.
 - **tcp-mcp-memory** (port 3011) — `recall`, `remember`, `search_knowledge`, over pgvector. The only one with its own database connection.
 - **tcp-mcp-interactions** (port 3012) — `request_user_input`, `request_agent_consultation`, `list_available_contacts`. Proxies to tcp-server.
 - **tcp-mcp-tasks** (port 3013) — `create_plan`, `complete_assignment`, `assure_assignment`, gated to the caller's mode. Proxies to tcp-server.
+- **tcp-mcp-utilities** (port 3014) — `calculate`, `date_math`, `convert_units`. Stateless: no database, no calls to other services.
 
 > The MCP servers are internal-only unless the stack was started with
 > `./scripts/start-deployment.sh --dev-ports`. Start it that way before running
@@ -50,6 +51,7 @@ Each MCP server exposes a `GET /health` endpoint.
 curl -s http://localhost:3010/health
 curl -s http://localhost:3011/health
 curl -s http://localhost:3012/health
+curl -s http://localhost:3014/health
 ```
 
 Expected response for each (status 200):
@@ -237,6 +239,26 @@ message if nothing clears the threshold. With no `embeddingConfig` on the
 company, expect a message directing the agent to the RAG context in its prompt
 instead — that is the one remaining "not implemented"-shaped response, and it
 means "not configured", not "not built".
+
+---
+
+## 6.8 — Check the utilities server
+
+The utilities server needs no setup. Call `calculate` with a sum that floats get wrong:
+
+```bash
+curl -s -X POST http://localhost:3014/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{
+        "name":"calculate","arguments":{"expression":"round(3 * 4.99 * 1.2, 2)"}}}'
+```
+
+Expected: the result text is `17.96`.
+
+Then try a bad input, `"expression": "1 / 0"`. Expected: an error result (`isError: true`) saying division by zero is not allowed. The call itself does not fail.
+
+Try `date_math` with `{"operation":"add","date":"2026-01-31","months":1}`. Expected: `{"result":"2026-02-28","clamped":true}`.
 
 ---
 

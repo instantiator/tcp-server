@@ -13,6 +13,7 @@ starts when the `auth` profile is active (`docker compose --profile auth up`).
 | tcp-mcp-memory       | `tcp-mcp-memory`       | 3011¹                                | Memory MCP server                                        |
 | tcp-mcp-interactions | `tcp-mcp-interactions` | 3012¹                                | Interactions MCP server                                  |
 | tcp-mcp-tasks        | `tcp-mcp-tasks`        | 3013¹                                | Tasks MCP server                                         |
+| tcp-mcp-utilities    | `tcp-mcp-utilities`    | 3014¹                                | Utilities MCP server                                     |
 | stub-llm             | `stub-llm`             | 3002¹                                | Configurable stub LLM for tests (profile: `integration`) |
 | PostgreSQL           | `postgres`             | 5432                                 | Primary relational store (pgvector extension enabled)    |
 | Redis                | `redis`                | 6379                                 | BullMQ broker and pub/sub transport for SSE and shutdown |
@@ -107,6 +108,15 @@ NestJS MCP server through which an agent completes its assignment — `create_pl
 - **API:** `POST http://localhost:3013/mcp`
 - **Depends on:** tcp-server
 - **Built from:** the root `Dockerfile`, target `tcp-mcp-tasks`
+
+### tcp-mcp-utilities
+
+NestJS MCP server that gives agents exact arithmetic (`calculate`), date maths (`date_math`) and unit conversion (`convert_units`). It is stateless: no database, and no calls to other services. See [tcp-mcp-utilities.md](tcp-mcp-utilities.md) for the tool reference.
+
+- **Health:** `GET http://localhost:3014/health` — static
+- **API:** `POST http://localhost:3014/mcp`
+- **Depends on:** nothing
+- **Built from:** the root `Dockerfile`, target `tcp-mcp-utilities`
 
 ### stub-llm _(profile: integration)_
 

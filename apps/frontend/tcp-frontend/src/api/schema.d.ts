@@ -2088,7 +2088,7 @@ export interface components {
         };
         ServiceHealthDto: {
             /** @enum {string} */
-            name: "tcp-server" | "tcp-agent" | "tcp-mcp-storage" | "tcp-mcp-memory" | "tcp-mcp-interactions" | "tcp-mcp-tasks";
+            name: "tcp-server" | "tcp-agent" | "tcp-mcp-storage" | "tcp-mcp-memory" | "tcp-mcp-interactions" | "tcp-mcp-tasks" | "tcp-mcp-utilities";
             /** @enum {string} */
             status: "up" | "down" | "not_configured";
             detail?: {

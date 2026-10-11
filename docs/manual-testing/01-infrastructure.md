@@ -18,6 +18,7 @@ graph LR
     A --> MM[tcp-mcp-memory :3011]
     A --> MI[tcp-mcp-interactions :3012]
     A --> MT[tcp-mcp-tasks :3013]
+    A --> MU[tcp-mcp-utilities :3014]
     MS --> S
     MI --> S
     MT --> S
@@ -51,6 +52,7 @@ Expected: all services show `healthy` in the Status column.
 | tcp-mcp-memory       | healthy         |
 | tcp-mcp-interactions | healthy         |
 | tcp-mcp-tasks        | healthy         |
+| tcp-mcp-utilities    | healthy         |
 
 If a service is `starting` after 60 seconds, check its logs:
 

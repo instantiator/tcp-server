@@ -506,3 +506,23 @@ component tests only. This is the same gap as the office view's agents.
 **Act when:** stub-llm joins the browser tier. Add a spec that starts a task,
 listens in on its running assignment from the chat dialog, archives it, and
 brings it back.
+
+## No currency conversion in tcp-mcp-utilities
+
+The utilities server has no source of exchange rates, so it offers no currency
+conversion. `describe_server` tells agents to use `calculate` with a rate they
+state. Agents can still pick a stale or invented rate.
+
+**Act when:** a rates source is chosen (a configured provider URL or API). Then
+add a `convert_currency` tool that reads the rate from that source and fails
+loudly when no source is configured, rather than guessing.
+
+## No holiday calendars for business-day maths
+
+`date_math` counts Monday to Friday as business days and skips only the dates
+the agent passes in `holidays`. It knows no regional holidays, so an agent that
+forgets the list gets a wrong count around a bank holiday.
+
+**Act when:** 005.02 (regional knowledge packs) lands, or a user reports a wrong
+business-day count around a bank holiday. Until then agents pass `holidays`
+explicitly.

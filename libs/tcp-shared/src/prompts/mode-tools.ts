@@ -1,7 +1,7 @@
 import type { TcpAssignmentMode } from '../models/TcpAssignment.model';
 import { MCP_REGISTRY } from '../mcp/mcp-registry';
 
-/** A registered MCP server name (`'tasks' | 'storage' | 'memory' | 'interactions'`). */
+/** A registered MCP server name (`'tasks' | 'storage' | 'memory' | 'interactions' | 'utilities'`). */
 export type McpServerName = (typeof MCP_REGISTRY)[number]['name'];
 
 /**
@@ -43,25 +43,28 @@ export interface ModeToolAccess {
  * is storage read-only (it reviews, it doesn't edit).
  */
 export const MODE_TOOLS: Record<TcpAssignmentMode, ModeToolAccess> = {
-  plan: { servers: ['tasks', 'storage', 'memory'], storage: 'read-only' },
+  plan: {
+    servers: ['tasks', 'storage', 'memory', 'utilities'],
+    storage: 'read-only',
+  },
   implement: {
-    servers: ['tasks', 'storage', 'memory', 'interactions'],
+    servers: ['tasks', 'storage', 'memory', 'interactions', 'utilities'],
     storage: 'read-write',
   },
   qa: {
-    servers: ['tasks', 'storage', 'memory', 'interactions'],
+    servers: ['tasks', 'storage', 'memory', 'interactions', 'utilities'],
     storage: 'read-only',
   },
   chat: {
-    servers: ['tasks', 'storage', 'memory', 'interactions'],
+    servers: ['tasks', 'storage', 'memory', 'interactions', 'utilities'],
     storage: 'read-write',
   },
   consultee: {
-    servers: ['tasks', 'storage', 'memory', 'interactions'],
+    servers: ['tasks', 'storage', 'memory', 'interactions', 'utilities'],
     storage: 'read-write',
   },
   finalise: {
-    servers: ['tasks', 'storage', 'memory', 'interactions'],
+    servers: ['tasks', 'storage', 'memory', 'interactions', 'utilities'],
     storage: 'read-write',
   },
 };

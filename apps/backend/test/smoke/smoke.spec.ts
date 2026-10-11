@@ -20,6 +20,8 @@ const TCP_MCP_MEMORY =
 const TCP_MCP_INTERACTIONS =
   process.env.TCP_MCP_INTERACTIONS_URL ?? 'http://localhost:3012';
 const TCP_MCP_TASKS = process.env.TCP_MCP_TASKS_URL ?? 'http://localhost:3013';
+const TCP_MCP_UTILITIES =
+  process.env.TCP_MCP_UTILITIES_URL ?? 'http://localhost:3014';
 /**
  * Full OIDC discovery URL. Defaults to Zitadel on localhost.
  * Override with OIDC_DISCOVERY_URL for remote deployments.
@@ -330,6 +332,7 @@ const SERVICES: { name: ServiceName; baseUrl: string }[] = [
   { name: 'tcp-mcp-memory', baseUrl: TCP_MCP_MEMORY },
   { name: 'tcp-mcp-interactions', baseUrl: TCP_MCP_INTERACTIONS },
   { name: 'tcp-mcp-tasks', baseUrl: TCP_MCP_TASKS },
+  { name: 'tcp-mcp-utilities', baseUrl: TCP_MCP_UTILITIES },
 ];
 
 describe('Smoke', () => {

@@ -96,6 +96,7 @@ export async function testConfig(opts: TestConfigOptions): Promise<number> {
     ['tcp-mcp-memory', 3011],
     ['tcp-mcp-interactions', 3012],
     ['tcp-mcp-tasks', 3013],
+    ['tcp-mcp-utilities', 3014],
   ];
   for (const [service, port] of internal) {
     report(

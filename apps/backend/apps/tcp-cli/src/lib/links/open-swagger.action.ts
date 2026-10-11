@@ -8,6 +8,7 @@ export const SWAGGER_SERVICES = [
   'tcp-mcp-memory',
   'tcp-mcp-interactions',
   'tcp-mcp-tasks',
+  'tcp-mcp-utilities',
 ] as const;
 
 export type SwaggerService = (typeof SWAGGER_SERVICES)[number];
@@ -34,6 +35,8 @@ function defaultServiceUrls(): Record<SwaggerService, string> {
       'http://localhost:3012',
     'tcp-mcp-tasks':
       process.env['TCP_MCP_TASKS_BROWSER_URL'] ?? 'http://localhost:3013',
+    'tcp-mcp-utilities':
+      process.env['TCP_MCP_UTILITIES_BROWSER_URL'] ?? 'http://localhost:3014',
   };
 }
 

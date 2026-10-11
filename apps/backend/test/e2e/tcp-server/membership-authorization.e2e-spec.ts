@@ -458,6 +458,7 @@ describe('Membership authorization (e2e)', () => {
         'tcp-mcp-memory',
         'tcp-mcp-interactions',
         'tcp-mcp-tasks',
+        'tcp-mcp-utilities',
       ]);
     });
 

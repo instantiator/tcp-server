@@ -22,6 +22,7 @@ Local credentials live in `.env` (not committed). See `.env.example` for the req
 | tcp-mcp-memory       | Yes      | Reads/writes `EpisodicMemory`; reads `TcpCompany` for embedding config |
 | tcp-mcp-storage      | No       | Uses MinIO only                                                        |
 | tcp-mcp-interactions | No       | Delegates all DB writes to tcp-server via internal HTTP                |
+| tcp-mcp-utilities    | No       | Stateless; stores nothing and calls no other service                   |
 
 ## SQLite fallback for tests
 
