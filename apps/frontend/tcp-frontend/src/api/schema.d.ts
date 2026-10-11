@@ -86,6 +86,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/company/{companyId}/roles/by-slug/{slug}/tool-footprint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Count a role's MCP tool schema tokens */
+        get: operations["ToolFootprintController_toolFootprint"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/company": {
         parameters: {
             query?: never;
@@ -1547,6 +1564,18 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        ServerFootprintDto: {
+            error?: string;
+            name: string;
+            tools: number;
+            tokens: number;
+        };
+        ToolFootprintDto: {
+            /** @enum {string} */
+            mode: "plan" | "implement" | "qa" | "chat" | "consultee" | "finalise";
+            servers: components["schemas"]["ServerFootprintDto"][];
+            total: number;
+        };
         CompanyStatsDto: {
             /** @description Agents that are idle, running or paused */
             activeAgents: number;
@@ -1577,6 +1606,9 @@ export interface components {
             companyContext?: string;
             systemPromptTemplate?: string;
             mcpServerList?: string[];
+            mcpServerToggles?: {
+                [key: string]: boolean;
+            } | null;
             timezone?: string;
             /** Format: uuid */
             plannerRoleId?: string;
@@ -1590,6 +1622,9 @@ export interface components {
             companyContext?: string;
             systemPromptTemplate?: string;
             mcpServerList?: string[];
+            mcpServerToggles?: {
+                [key: string]: boolean;
+            } | null;
             timezone?: string;
             /** Format: uuid */
             plannerRoleId?: string;
@@ -1602,6 +1637,9 @@ export interface components {
             llmConfig?: Record<string, never> | null;
             systemPromptTemplate?: string | null;
             mcpServerList: string[];
+            mcpServerToggles?: {
+                [key: string]: boolean;
+            } | null;
             timezone?: string | null;
             companyContext?: string | null;
             embeddingConfig?: Record<string, never> | null;
@@ -1617,6 +1655,9 @@ export interface components {
             companyContext?: string;
             systemPromptTemplate?: string;
             mcpServerList?: string[];
+            mcpServerToggles?: {
+                [key: string]: boolean;
+            } | null;
             timezone?: string;
             /** Format: uuid */
             plannerRoleId?: string;
@@ -1632,6 +1673,9 @@ export interface components {
             rolePrompt?: string | null;
             knowledgeDomains: string[];
             mcpServerList: string[];
+            mcpServerToggles?: {
+                [key: string]: boolean;
+            } | null;
             runConfig?: Record<string, never> | null;
             queryIndex: number;
         };
@@ -1642,6 +1686,9 @@ export interface components {
             systemPromptTemplate?: string;
             knowledgeDomains?: string[];
             mcpServerList?: string[];
+            mcpServerToggles?: {
+                [key: string]: boolean;
+            } | null;
             llmConfig?: components["schemas"]["LlmConfigDto"];
             rolePrompt?: string;
         };
@@ -1904,6 +1951,9 @@ export interface components {
             systemPromptTemplate?: string;
             knowledgeDomains: string[];
             mcpServerList: string[];
+            mcpServerToggles?: {
+                [key: string]: boolean;
+            } | null;
             llmConfig?: components["schemas"]["LlmConfigDto"];
             rolePrompt?: string;
         };
@@ -2409,6 +2459,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssignmentResponseDto"];
+                };
+            };
+        };
+    };
+    ToolFootprintController_toolFootprint: {
+        parameters: {
+            query?: {
+                mode?: "plan" | "implement" | "qa" | "chat" | "consultee" | "finalise";
+            };
+            header?: never;
+            path: {
+                companyId: string;
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolFootprintDto"];
                 };
             };
         };

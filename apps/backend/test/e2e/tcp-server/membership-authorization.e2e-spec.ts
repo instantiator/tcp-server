@@ -217,6 +217,11 @@ describe('Membership authorization (e2e)', () => {
     it('scopes a role reached through its company slug', () =>
       expectScoped(`/api/company/${alice.id}/roles/by-slug/analyst`));
 
+    it("scopes a role's tool footprint", () =>
+      expectScoped(
+        `/api/company/${alice.id}/roles/by-slug/analyst/tool-footprint?mode=plan`,
+      ));
+
     it('refuses creating a role in another company', () =>
       request(app.getHttpServer())
         .post('/api/role')

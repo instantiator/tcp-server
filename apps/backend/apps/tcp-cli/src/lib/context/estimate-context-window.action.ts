@@ -9,6 +9,7 @@ import {
   buildPromptDateVars,
   renderTemplate,
   resolveLlmConfig,
+  resolveMcpServerList,
   resolveSystemPromptTemplate,
 } from '@tcp/shared';
 import { resolveToken } from '../auth/token';
@@ -35,7 +36,18 @@ export interface EstimateContextWindowOpts extends EntityRefOpts {
   ragTokens?: number;
   turnTokens?: number;
   turns?: number;
+  /** Mode whose tool set to count (default `implement`). */
+  mode?: string;
+  /** Tool schema tokens to assume, instead of asking tcp-server to count them. */
+  toolTokens?: number;
   json?: boolean;
+}
+
+/** tcp-server's count of a role's MCP tool schemas, per server (`GET …/tool-footprint`). */
+interface ToolFootprint {
+  mode: string;
+  servers: { name: string; tools: number; tokens: number; error?: string }[];
+  total: number;
 }
 
 export interface PromptSizeBreakdown {
@@ -43,6 +55,8 @@ export interface PromptSizeBreakdown {
   rolePrompt: number;
   companyContext: number;
   servicesMessage: number;
+  /** MCP tool schemas, sent on every turn (0 when they weren't counted). */
+  tools: number;
   query: number;
   rag: number;
   perTurn: number;
@@ -103,6 +117,18 @@ async function loadFromApi(
   return { company, role };
 }
 
+/** Prints each server's tool schema cost, so it's clear which servers to switch off. */
+function reportFootprint(footprint: ToolFootprint): void {
+  process.stderr.write(`Tool schemas (${footprint.mode} mode, worst case):\n`);
+  for (const s of footprint.servers) {
+    process.stderr.write(
+      s.error
+        ? `  ${s.name}: not counted (${s.error})\n`
+        : `  ${s.name}: ${s.tools} tools, ~${s.tokens} tokens\n`,
+    );
+  }
+}
+
 /** Computes an estimated worst-case token breakdown for an agent's initial prompt plus a run of turns. */
 export async function computeBreakdown(
   budget: ContextBudgetService,
@@ -124,12 +150,24 @@ export async function computeBreakdown(
     roleSlug: role?.slug ?? '',
   });
 
-  const servicesMessage = MCP_REGISTRY.map((s) => `${s.name}: ${s.usage}`).join(
-    '\n',
+  // Only the servers this company and role have switched on are described.
+  const enabled = new Set(
+    resolveMcpServerList(
+      MCP_REGISTRY.map((s) => s.name),
+      company,
+      role,
+    ),
   );
+  const servicesMessage = MCP_REGISTRY.filter((s) => enabled.has(s.name))
+    .map((s) => `${s.name}: ${s.usage}`)
+    .join('\n');
 
   const llmConfig = resolveLlmConfig(role, company, null);
-  const windowSize = llmConfig?.contextWindow ?? DEFAULT_LLM_CONTEXT_WINDOW;
+  // tcp-cli.sh exports the env file, so the servers' LLM_CONTEXT_WINDOW
+  // fallback is visible here too.
+  const windowSize =
+    llmConfig?.contextWindow ??
+    (Number(process.env['LLM_CONTEXT_WINDOW']) || DEFAULT_LLM_CONTEXT_WINDOW);
 
   const queryTokens = opts.query
     ? await budget.countText(opts.query)
@@ -147,6 +185,7 @@ export async function computeBreakdown(
       ? await budget.countText(company.companyContext)
       : 0,
     servicesMessage: await budget.countText(servicesMessage),
+    tools: opts.toolTokens ?? 0,
     query: queryTokens,
     rag: ragTokens,
     perTurn: turnTokens,
@@ -161,6 +200,7 @@ export async function computeBreakdown(
     breakdown.rolePrompt +
     breakdown.companyContext +
     breakdown.servicesMessage +
+    breakdown.tools +
     breakdown.query +
     breakdown.rag +
     breakdown.perTurn * breakdown.turns;
@@ -171,9 +211,11 @@ export async function computeBreakdown(
 
 /**
  * Estimates the worst-case token footprint of an agent's initial prompt
- * (system prompt + role prompt + company context + services message + task
- * query + RAG retrieval) plus `turns` further conversation turns, and reports
- * it against the resolved LLM's context window.
+ * (system prompt + role prompt + company context + services message + MCP
+ * tool schemas + task query + RAG retrieval) plus `turns` further
+ * conversation turns, and reports it against the resolved LLM's context
+ * window. Tool schemas are counted by tcp-server, which can reach the MCP
+ * servers; offline (`--from-file`) they come from `--tool-tokens`.
  *
  * stdout: the total token count (default) or the full JSON breakdown (`--json`).
  * stderr: progress and the values actually used for the estimate.
@@ -186,15 +228,33 @@ export function estimateContextWindowAction(
     const budget = new ContextBudgetService();
     let fixture: FileFixture;
 
+    let toolTokens = cmdOpts.toolTokens;
     if (cmdOpts.fromFile) {
       fixture = await loadFromFile(cmdOpts.fromFile);
     } else {
       const token = await resolveToken({ ...opts, baseUrl: opts.tcpServer });
       const api = apiOptions(opts, token);
       fixture = await loadFromApi(api, cmdOpts);
+      if (toolTokens === undefined && fixture.company?.id && fixture.role?.id) {
+        const footprint = await apiRequest<ToolFootprint>(
+          api,
+          'GET',
+          `/api/company/${fixture.company.id}/roles/by-slug/${fixture.role.id}/tool-footprint?mode=${encodeURIComponent(cmdOpts.mode ?? 'implement')}`,
+        );
+        reportFootprint(footprint);
+        toolTokens = footprint.total;
+      }
+    }
+    if (toolTokens === undefined) {
+      process.stderr.write(
+        'Tool schemas not counted: give a company and role on a live server, or --tool-tokens.\n',
+      );
     }
 
-    const breakdown = await computeBreakdown(budget, fixture, cmdOpts);
+    const breakdown = await computeBreakdown(budget, fixture, {
+      ...cmdOpts,
+      toolTokens,
+    });
 
     process.stderr.write(
       `Using window size ${breakdown.windowSize} tokens, ${breakdown.turns} turns at ~${breakdown.perTurn} tokens/turn, RAG estimate ~${breakdown.rag} tokens.\n`,

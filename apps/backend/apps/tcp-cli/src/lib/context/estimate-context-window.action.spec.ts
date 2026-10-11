@@ -12,15 +12,46 @@ describe('computeBreakdown', () => {
     expect(breakdown.perTurn).toBe(300);
     expect(breakdown.turns).toBe(20);
     expect(breakdown.windowSize).toBe(8192);
+    expect(breakdown.tools).toBe(0);
     expect(breakdown.total).toBe(
       breakdown.systemPrompt +
         breakdown.rolePrompt +
         breakdown.companyContext +
         breakdown.servicesMessage +
+        breakdown.tools +
         breakdown.query +
         breakdown.rag +
         breakdown.perTurn * breakdown.turns,
     );
+  });
+
+  it("falls back to the env file's LLM_CONTEXT_WINDOW before the built-in default", async () => {
+    process.env['LLM_CONTEXT_WINDOW'] = '32768';
+    try {
+      expect((await computeBreakdown(budget, {}, {})).windowSize).toBe(32768);
+    } finally {
+      delete process.env['LLM_CONTEXT_WINDOW'];
+    }
+  });
+
+  it('adds the tool schema tokens to the total', async () => {
+    const without = await computeBreakdown(budget, {}, {});
+    const withTools = await computeBreakdown(budget, {}, { toolTokens: 1500 });
+    expect(withTools.tools).toBe(1500);
+    expect(withTools.total - without.total).toBe(1500);
+  });
+
+  it('describes only the MCP servers the company and role leave switched on', async () => {
+    const all = await computeBreakdown(budget, {}, {});
+    const lean = await computeBreakdown(
+      budget,
+      {
+        company: { mcpServerToggles: { records: false } },
+        role: { mcpServerToggles: { utilities: false } },
+      },
+      {},
+    );
+    expect(lean.servicesMessage).toBeLessThan(all.servicesMessage);
   });
 
   it('counts actual tokens for role/company text when present', async () => {
