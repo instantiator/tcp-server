@@ -510,15 +510,17 @@ export class RecordsService {
       try {
         return await this.ds.transaction(async (tx) => {
           let inserted = 0;
-          for (const data of rows) {
+          for (const [index, data] of rows.entries()) {
             if (await this.findByKeys(tx, table, data)) continue;
-            // clock_timestamp(), not the default now(): now() is the
-            // transaction's start, so every row would share one time and
-            // an export would lose the file's order.
+            // The transaction's time plus the row's index in microseconds,
+            // not the default now() alone (shared by the whole transaction)
+            // nor clock_timestamp() (too coarse in some VMs): rows keep the
+            // file's order in an export, whatever the clock does.
             const [row] = await tx.query<{ id: string }[]>(
               `INSERT INTO "record" ("tableId", "companyId", "data", "createdAt", "updatedAt")
-               VALUES ($1, $2, $3, clock_timestamp(), clock_timestamp()) RETURNING "id"`,
-              [table.id, companyId, JSON.stringify(data)],
+               VALUES ($1, $2, $3, now() + $4 * interval '1 microsecond', now() + $4 * interval '1 microsecond')
+               RETURNING "id"`,
+              [table.id, companyId, JSON.stringify(data), index],
             );
             await this.writeKeys(tx, table, row.id, data);
             inserted++;
