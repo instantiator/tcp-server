@@ -1,7 +1,8 @@
 {
-  // Tool descriptions for tcp-mcp-utilities
-  "describe_server": "Returns an overview of the utilities service and its tools.",
-  "calculate": "Work out an arithmetic expression exactly, with decimal maths. Use it for every sum involving money or quantities instead of calculating yourself. Supports + - * / ^ (whole-number powers), brackets, % as percent (120 * 20% = 24), and round(x, dp), round_even(x, dp), floor, ceil, abs, min, max. Write plain numbers without currency symbols or thousands separators. Round money yourself: round(3 * 4.99 * 1.2, 2) = 17.96.",
-  "date_math": "Exact date calculations on YYYY-MM-DD dates. operation `add` / `subtract`: move `date` by years, months, weeks and days (31 Jan + 1 month = 28 Feb, flagged as clamped). `add_business_days`: move `date` by `days` working days (Monday to Friday, skipping any `holidays`). `difference`: calendar days and business days from `date` to `other_date`. `tax_year`: the tax year containing `date`, starting on `tax_year_start` (MM-DD, default 04-06, the UK tax year).",
-  "convert_units": "Convert a weight or length exactly, for example to check a postage band. Weights: mg, g, kg, t, oz, lb, st. Lengths: mm, cm, m, km, in, ft, yd, mi. Give `value` as a plain decimal number, e.g. convert 2.5 lb to kg."
+  // Tool descriptions for tcp-mcp-utilities. Every tool's schema is sent to the
+  // model on every turn, so keep these short: small local models have 8k windows.
+  "describe_server": "Overview of the utilities service.",
+  "calculate": "Work out arithmetic exactly (decimal maths). Use it for every sum with money or quantities. + - * / ^, brackets, % as percent (120 * 20% = 24), round(x, dp), round_even, floor, ceil, abs, min, max. Plain numbers only, e.g. round(3 * 4.99 * 1.2, 2).",
+  "date_math": "Exact maths on YYYY-MM-DD dates. add/subtract: move `date` by years, months, weeks, days. add_business_days: move by `days` weekdays, skipping `holidays`. difference: days and business days to `other_date`. tax_year: the tax year containing `date` (start `tax_year_start` MM-DD, default 04-06).",
+  "convert_units": "Convert a weight (mg g kg t oz lb st) or length (mm cm m km in ft yd mi) exactly. `value` is a plain decimal."
 }

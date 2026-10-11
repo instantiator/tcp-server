@@ -282,13 +282,14 @@ Before running the LangGraph loop, `AgentLoopService` connects to each MCP serve
 
 MCP server URLs are resolved from environment variables:
 
-| Variable               | Server                                                                                        |
-| ---------------------- | --------------------------------------------------------------------------------------------- |
-| `MCP_STORAGE_URL`      | [tcp-mcp-storage](tcp-mcp-storage.md) — shared-storage exploration, working files, materials  |
-| `MCP_MEMORY_URL`       | [tcp-mcp-memory](tcp-mcp-memory.md) — episodic memory and knowledge search                    |
-| `MCP_INTERACTIONS_URL` | [tcp-mcp-interactions](tcp-mcp-interactions.md) — user input and agent consultation           |
-| `MCP_TASKS_URL`        | [tcp-mcp-tasks](tcp-mcp-tasks.md) — plan a task, submit finished work, assure QA (mode-gated) |
-| `MCP_UTILITIES_URL`    | [tcp-mcp-utilities](tcp-mcp-utilities.md) — exact arithmetic, date maths, unit conversion     |
+| Variable               | Server                                                                                                         |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `MCP_STORAGE_URL`      | [tcp-mcp-storage](tcp-mcp-storage.md) — shared-storage exploration, working files, materials                   |
+| `MCP_MEMORY_URL`       | [tcp-mcp-memory](tcp-mcp-memory.md) — episodic memory and knowledge search                                     |
+| `MCP_INTERACTIONS_URL` | [tcp-mcp-interactions](tcp-mcp-interactions.md) — user input and agent consultation                            |
+| `MCP_TASKS_URL`        | [tcp-mcp-tasks](tcp-mcp-tasks.md) — plan a task, submit finished work, assure QA (mode-gated)                  |
+| `MCP_UTILITIES_URL`    | [tcp-mcp-utilities](tcp-mcp-utilities.md) — exact arithmetic, date maths, unit conversion                      |
+| `MCP_RECORDS_URL`      | [tcp-mcp-records](tcp-mcp-records.md) — structured records in typed per-company tables (plan and qa read-only) |
 
 Which of the loaded servers an agent actually gets is then narrowed by its
 mode — `MODE_TOOLS` in `@tcp/shared` is the single source of truth (see

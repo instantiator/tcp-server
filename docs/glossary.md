@@ -25,6 +25,9 @@ MCP server (port 3013) through which an agent completes its assignment: `create_
 **tcp-mcp-utilities**
 MCP server (port 3014) that gives agents exact arithmetic (`calculate`), date maths (`date_math`) and unit conversion (`convert_units`). It is stateless and has no database. See [tcp-mcp-utilities](tcp-mcp-utilities.md).
 
+**tcp-mcp-records**
+MCP server (port 3015) that lets agents keep structured records in typed, per-company tables: `create_table`, `insert`, `update`, `delete`, `query` and `aggregate`. It has its own database connection and audits every read and change. See [tcp-mcp-records](tcp-mcp-records.md).
+
 **tcp-cli**
 Developer CLI tool for interacting with the system: obtaining OIDC tokens, managing companies and roles, creating and monitoring tasks, chatting with agents (including a full-screen TUI), responding to open queries, and draining the system for shutdown. See [tcp-cli.md](tcp-cli.md).
 

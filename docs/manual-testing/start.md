@@ -61,6 +61,7 @@ Work through these in order.
 | tcp-mcp-interactions | 3012¹ | Interactions MCP server           |
 | tcp-mcp-tasks        | 3013¹ | Tasks MCP server                  |
 | tcp-mcp-utilities    | 3014¹ | Utilities MCP server              |
+| tcp-mcp-records      | 3015¹ | Records MCP server                |
 | MinIO API            | 9000  | S3-compatible object storage      |
 | MinIO console        | 9001  | Web UI for browsing stored files  |
 | Zitadel              | 8080  | OIDC provider (auth profile only) |

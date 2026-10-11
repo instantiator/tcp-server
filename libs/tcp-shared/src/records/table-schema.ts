@@ -95,7 +95,8 @@ export function checkNewTable(table: NewTable): {
       `purpose must say what the table is for, in at most ${RECORD_LIMITS.purposeLength} characters`,
     );
   }
-  const raw = table.schema;
+  // Small models often leave out `"type": "object"`; a schema with properties can only mean that.
+  const raw: Record<string, unknown> = { type: 'object', ...table.schema };
   if (raw['type'] !== 'object' || !isPlainObject(raw['properties'])) {
     throw new RecordsError(
       'schema must be a JSON Schema object: { "type": "object", "properties": { ... }, "required": [ ... ] }',

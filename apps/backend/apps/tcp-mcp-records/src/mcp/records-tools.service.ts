@@ -30,33 +30,18 @@ const identity = {
   agentId: z.uuid().describe('The agent making the call.'),
 };
 
-const tableArg = z.string().describe('The table name, e.g. "orders".');
+const tableArg = z.string().describe('Table name');
 const freeForm = z.record(z.string(), z.unknown());
-const filterValue = z
-  .union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.array(z.union([z.string(), z.number()])),
-  ])
-  .describe('The value to compare with; a list for "in".');
+// Untyped on purpose: a union of value types costs tokens on every turn, and
+// RecordSql checks each value against its field's declared type anyway.
 const filtersArg = z
   .array(
-    z.object({
-      field: z.string().describe('A field of the table.'),
-      op: z.enum(FILTER_OPS).describe('How to compare.'),
-      value: filterValue,
-    }),
+    z.object({ field: z.string(), op: z.enum(FILTER_OPS), value: z.unknown() }),
   )
-  .optional()
-  .describe('Conditions every matching record meets.');
+  .optional();
 const refArgs = {
-  id: z.string().optional().describe('The record id. Give this or `key`.'),
-  key: freeForm
-    .optional()
-    .describe(
-      'The primary key values, e.g. {"order_id": "A1"}. Give this or `id`.',
-    ),
+  id: z.string().optional(),
+  key: freeForm.optional().describe('Primary key values'),
 };
 
 /** Picks the record reference out of a tool's `id`/`key` arguments. */
@@ -130,20 +115,14 @@ export class RecordsToolsService {
         description: d.create_table,
         inputSchema: {
           ...identity,
-          name: z.string().describe('The new table name, e.g. "orders".'),
-          purpose: z
-            .string()
-            .describe('What the table holds, shown to every agent.'),
-          schema: freeForm.describe('A JSON Schema object for one record.'),
-          primary_key: z
-            .array(z.string())
-            .describe('The field(s) that identify a record.'),
+          name: z.string(),
+          purpose: z.string().describe('What it holds, shown to all agents'),
+          schema: freeForm,
+          primary_key: z.array(z.string()),
           unique_keys: z
             .array(z.array(z.string()))
             .optional()
-            .describe(
-              'Other field sets that must be unique, e.g. [["email"]].',
-            ),
+            .describe('Other unique field sets, e.g. [["email"]]'),
         },
       },
       (args) =>
@@ -175,7 +154,7 @@ export class RecordsToolsService {
         inputSchema: {
           ...identity,
           table: tableArg,
-          record: freeForm.describe('The record, as field: value pairs.'),
+          record: freeForm,
         },
       },
       ({ companyId, agentId, table, record }) =>
@@ -215,9 +194,7 @@ export class RecordsToolsService {
           ...identity,
           table: tableArg,
           ...refArgs,
-          changes: freeForm.describe(
-            'The fields to change; null removes a field.',
-          ),
+          changes: freeForm,
         },
       },
       ({ companyId, agentId, table, changes, ...ref }) =>
@@ -278,18 +255,9 @@ export class RecordsToolsService {
                 direction: z.enum(['asc', 'desc']).optional(),
               }),
             )
-            .optional()
-            .describe('Sort order, first field first.'),
-          limit: z
-            .number()
-            .int()
-            .optional()
-            .describe('Most records to return (default 50, at most 200).'),
-          offset: z
-            .number()
-            .int()
-            .optional()
-            .describe('Records to skip, for the next page.'),
+            .optional(),
+          limit: z.number().int().optional().describe('Default 50, max 200'),
+          offset: z.number().int().optional(),
         },
       },
       ({ companyId, agentId, table, ...query }) =>
@@ -312,15 +280,9 @@ export class RecordsToolsService {
         inputSchema: {
           ...identity,
           table: tableArg,
-          op: z.enum(AGGREGATE_OPS).describe('What to compute.'),
-          field: z
-            .string()
-            .optional()
-            .describe('The field to compute over (not needed for count).'),
-          group_by: z
-            .array(z.string())
-            .optional()
-            .describe('Fields to group by, at most 3.'),
+          op: z.enum(AGGREGATE_OPS),
+          field: z.string().optional().describe('Not needed for count'),
+          group_by: z.array(z.string()).optional().describe('Up to 3 fields'),
           filters: filtersArg,
         },
       },

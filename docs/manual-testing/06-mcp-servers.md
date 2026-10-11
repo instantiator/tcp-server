@@ -4,15 +4,16 @@
 
 > **Requires:** Section 1 complete — Docker stack running. Section 5 recommended (storage operations are more interesting with files present).
 
-You are testing the five MCP (Model Context Protocol) servers. Each exposes an HTTP endpoint that agents use to call tools at runtime. The servers use a stateless request-per-connection model: a fresh MCP session is created for every tool call.
+You are testing the six MCP (Model Context Protocol) servers. Each exposes an HTTP endpoint that agents use to call tools at runtime. The servers use a stateless request-per-connection model: a fresh MCP session is created for every tool call.
 
-The five servers are:
+The six servers are:
 
 - **tcp-mcp-storage** (port 3010) — shared-storage exploration plus assignment-scoped working files and materials. Holds no S3 client: it proxies to tcp-server.
 - **tcp-mcp-memory** (port 3011) — `recall`, `remember`, `search_knowledge`, over pgvector. The only one with its own database connection.
 - **tcp-mcp-interactions** (port 3012) — `request_user_input`, `request_agent_consultation`, `list_available_contacts`. Proxies to tcp-server.
 - **tcp-mcp-tasks** (port 3013) — `create_plan`, `complete_assignment`, `assure_assignment`, gated to the caller's mode. Proxies to tcp-server.
 - **tcp-mcp-utilities** (port 3014) — `calculate`, `date_math`, `convert_units`. Stateless: no database, no calls to other services.
+- **tcp-mcp-records** (port 3015) — `create_table`, `insert`, `update`, `delete`, `query`, `aggregate`. Has its own database connection and audits every read and change.
 
 > The MCP servers are internal-only unless the stack was started with
 > `./scripts/start-deployment.sh --dev-ports`. Start it that way before running
@@ -52,6 +53,7 @@ curl -s http://localhost:3010/health
 curl -s http://localhost:3011/health
 curl -s http://localhost:3012/health
 curl -s http://localhost:3014/health
+curl -s http://localhost:3015/health
 ```
 
 Expected response for each (status 200):
@@ -259,6 +261,67 @@ Expected: the result text is `17.96`.
 Then try a bad input, `"expression": "1 / 0"`. Expected: an error result (`isError: true`) saying division by zero is not allowed. The call itself does not fail.
 
 Try `date_math` with `{"operation":"add","date":"2026-01-31","months":1}`. Expected: `{"result":"2026-02-28","clamped":true}`.
+
+---
+
+## 6.9 — Check the records server
+
+The records server needs a company, because every table belongs to one. Use the id of a company from Section 2. Any UUID works for `agentId`. The audit write for an unknown agent is logged and dropped, and does not fail the call.
+
+Set the two values once:
+
+```bash
+COMPANY_ID=<company id>
+AGENT_ID=$(uuidgen)
+```
+
+Make a table:
+
+```bash
+curl -s -X POST http://localhost:3015/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{
+        "name":"create_table","arguments":{
+          "companyId":"'$COMPANY_ID'","agentId":"'$AGENT_ID'",
+          "name":"orders","purpose":"Customer orders",
+          "schema":{"type":"object","properties":{
+            "order_id":{"type":"string"},"total":{"type":"number"}},
+            "required":["order_id","total"]},
+          "primary_key":["order_id"]}}}'
+```
+
+Expected: the table, as JSON, with the name `orders`.
+
+Insert a record, and then the same call again:
+
+```bash
+curl -s -X POST http://localhost:3015/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{
+        "name":"insert","arguments":{
+          "companyId":"'$COMPANY_ID'","agentId":"'$AGENT_ID'","table":"orders",
+          "record":{"order_id":"A1","total":10.10}}}}'
+```
+
+Expected the first time: `"status":"inserted"`. Expected the second time: `"status":"already_exists"` with `"matches":true`, and no second record.
+
+Add a second order (`"order_id":"A2","total":20.20`), then total them:
+
+```bash
+curl -s -X POST http://localhost:3015/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
+        "name":"aggregate","arguments":{
+          "companyId":"'$COMPANY_ID'","agentId":"'$AGENT_ID'","table":"orders",
+          "op":"sum","field":"total"}}}'
+```
+
+Expected: one row whose `value` is the string `"30.30"`.
+
+Try a record that does not fit, such as `{"order_id":"A3"}` with no `total`. Expected: an error result (`isError: true`) that names the missing field. The call itself does not fail.
 
 ---
 

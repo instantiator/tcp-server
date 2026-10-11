@@ -7,7 +7,7 @@ The tech stack, source layout, everyday commands, and project conventions. Read 
 
 ## Project overview
 
-NestJS monorepo for the TCP system: `tcp-server` (REST API + orchestration state), `tcp-agent` (agent loop runner), `tcp-cli` (CLI client), and five MCP servers agents call for tools — `tcp-mcp-storage`, `tcp-mcp-memory`, `tcp-mcp-interactions`, `tcp-mcp-tasks`, `tcp-mcp-utilities`. Shared entities, prompt assembly, and cross-app utilities live in `libs/tcp-shared` (imported as `@tcp/shared`). Data is persisted in PostgreSQL + pgvector in production; better-sqlite3 in-memory for unit tests.
+NestJS monorepo for the TCP system: `tcp-server` (REST API + orchestration state), `tcp-agent` (agent loop runner), `tcp-cli` (CLI client), and six MCP servers agents call for tools — `tcp-mcp-storage`, `tcp-mcp-memory`, `tcp-mcp-interactions`, `tcp-mcp-tasks`, `tcp-mcp-utilities`, `tcp-mcp-records`. Shared entities, prompt assembly, and cross-app utilities live in `libs/tcp-shared` (imported as `@tcp/shared`). Data is persisted in PostgreSQL + pgvector in production; better-sqlite3 in-memory for unit tests.
 
 ## Tech stack
 
@@ -114,6 +114,7 @@ flowchart TD
   McpInteract["tcp-mcp-interactions\n:3012"]
   McpTasks["tcp-mcp-tasks\n:3013"]
   McpUtilities["tcp-mcp-utilities\n:3014"]
+  McpRecords["tcp-mcp-records\n:3015"]
 
   subgraph TCP["TCP (containers)"]
       Server ~~~ Dbs ~~~ Agent ~~~ ThirdParty
@@ -131,7 +132,7 @@ flowchart TD
   subgraph Agent["Agent"]
       TcpAgent
       subgraph MCP
-        McpStorage ~~~ McpMemory ~~~ McpInteract ~~~ McpTasks ~~~ McpUtilities
+        McpStorage ~~~ McpMemory ~~~ McpInteract ~~~ McpTasks ~~~ McpUtilities ~~~ McpRecords
       end
   end
 
@@ -151,6 +152,8 @@ flowchart TD
   TcpAgent -->|HTTP /mcp| McpInteract
   TcpAgent -->|HTTP /mcp| McpTasks
   TcpAgent -->|HTTP /mcp| McpUtilities
+  TcpAgent -->|HTTP /mcp| McpRecords
+  McpRecords -->|SQL| Postgres
   McpStorage -->|HTTP /internal/storage/*\nX-Internal-Api-Key| TcpServer
   McpTasks -->|HTTP /internal/*\nX-Internal-Api-Key| TcpServer
 ```
@@ -161,12 +164,13 @@ flowchart TD
 > - **tcp-server** communicates directly with the authorisation service, and storage service
 > - **tcp-server** and **tcp-agent** use Postgres to store and manage state, and Redis with BullMQ queues to communicate
 > - **tcp-agent** consumes BullMQ jobs and runs the LangGraph agent loop.
-> - Five MCP servers provide tool access to agents:
+> - Six MCP servers provide tool access to agents:
 >   - **tcp-mcp-storage** proxies file operations to tcp-server's internal storage endpoints
 >   - **tcp-mcp-memory** manages RAG access to embeddings from role-knowledge and company-knowledge, and memories
 >   - **tcp-mcp-interactions** lets agents ask users questions and consult other agent roles
 >   - **tcp-mcp-tasks** lets agents complete their assignment — plan a task, submit finished work, or assure another agent's work (mode-gated)
 >   - **tcp-mcp-utilities** gives agents exact arithmetic, date maths and unit conversion (stateless, no database)
+>   - **tcp-mcp-records** lets agents keep structured records in typed per-company tables, with exact totals and an audit trail (own database connection)
 > - **PostgreSQL** (with pgvector) stores entities, agent checkpoints, and knowledge embeddings
 > - **MinIO** stores knowledge documents, task files, and context-overflow data
 > - **Zitadel** is an optional auth service, which starts if the `auth` profile is specified (ie. with `--profile auth`)
@@ -238,6 +242,7 @@ flowchart TD
 | tcp-mcp-interactions | MCP tools allowing agents to ask users questions and consult other agent roles.                   |
 | tcp-mcp-tasks        | MCP tools allowing agents to complete their assignment — plan, submit work, or assure QA.         |
 | tcp-mcp-utilities    | MCP tools giving agents exact arithmetic, date maths and unit conversion.                         |
+| tcp-mcp-records      | MCP tools giving agents typed, per-company record tables with exact totals.                       |
 | tcp-mcp-memory       | MCP tools allowing agents to retrieve memory from their stored expertise.                         |
 | tcp-mcp-storage      | MCP tools allowing agents interact with shared storage.                                           |
 
@@ -318,6 +323,7 @@ apps/
    tcp-mcp-interactions/   # Interactions MCP server — user input, agent consultation (port 3012)
    tcp-mcp-tasks/          # Tasks MCP server — create_plan/complete_assignment/assure_assignment (port 3013)
    tcp-mcp-utilities/      # Utilities MCP server — calculate/date_math/convert_units, stateless (port 3014)
+   tcp-mcp-records/        # Records MCP server — typed per-company tables on JSONB; own DB connection and migrations (port 3015)
                             # Each MCP app follows the same shape: src/mcp/, a tools.jsonc +
                             # prompts.jsonc pair, and a thin HTTP-proxy *-tools.service.ts
                             # calling tcp-server's /internal/* endpoints via InternalApiClient.
@@ -349,6 +355,7 @@ apps/
       tcp-mcp-memory/         # tcp-mcp-memory health + MCP protocol E2E specs (skipped without Postgres)
       tcp-mcp-storage/        # tcp-mcp-storage health + MCP protocol E2E specs
       tcp-mcp-utilities/      # tcp-mcp-utilities health + MCP protocol E2E specs
+      tcp-mcp-records/        # tcp-mcp-records health, MCP protocol and internal-route E2E specs
       helpers/                # Shared E2E utilities (test-jwt helper)
     integration/
       tcp-server/             # tcp-server service connectivity tests (need Docker)
@@ -423,6 +430,8 @@ schemas/                        # Auto-generated JSON Schema — do not edit by 
 
 `tcp-mcp-utilities` is the other exception: it is stateless. It has no database, makes no calls to tcp-server, and writes no audit events of its own (tcp-agent already audits every tool call). See [tcp-mcp-utilities.md](tcp-mcp-utilities.md).
 
+`tcp-mcp-records` is the other one with its own database connection (alongside `tcp-mcp-memory`). It also owns its migrations, writes its own audit events, and takes a separate database through `RECORDS_DATABASE_URL`. See [tcp-mcp-records.md](tcp-mcp-records.md).
+
 ## Common commands
 
 ```bash
@@ -490,6 +499,8 @@ Beyond the database/Redis/MinIO/OIDC connection strings (see `.env.example`), a 
 | `TCP_AGENT_URL`              | tcp-server            | tcp-agent's internal URL, used only by the combined health report (`GET /api/system/health`)                                                                                                                                                                                    |
 | `TCP_RESTART_SUPPORTED`      | tcp-server, tcp-agent | `true` where a supervisor (Docker's restart policy) starts the service again after it exits; restart is refused otherwise (default `false`; compose sets `true`)                                                                                                                |
 | `MCP_TASKS_URL`              | tcp-server, tcp-agent | `tcp-mcp-tasks` base URL; omit to disable that server                                                                                                                                                                                                                           |
+| `MCP_RECORDS_URL`            | tcp-server, tcp-agent | `tcp-mcp-records` base URL; omit to disable that server                                                                                                                                                                                                                         |
+| `RECORDS_DATABASE_URL`       | tcp-mcp-records       | Optional separate database for records; empty means `DATABASE_URL`. See [tcp-mcp-records.md](tcp-mcp-records.md#a-separate-database)                                                                                                                                            |
 | `MCP_UTILITIES_URL`          | tcp-server, tcp-agent | `tcp-mcp-utilities` base URL; omit to disable that server                                                                                                                                                                                                                       |
 | `INTERNAL_API_KEY`           | all apps              | Shared secret for internal service-to-service calls (`X-Internal-Api-Key`)                                                                                                                                                                                                      |
 | `KNOWLEDGE_POLL_INTERVAL_MS` | tcp-server            | Reconciliation-poll interval for the `knowledge-reindex` sync (default `60000`)                                                                                                                                                                                                 |

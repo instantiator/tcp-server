@@ -35,6 +35,7 @@ services:
   tcp-mcp-interactions:   Interactions MCP server — port 3012
   tcp-mcp-tasks:          Tasks MCP server (added 010.2.5) — port 3013
   tcp-mcp-utilities:      Utilities MCP server (added 04/001.00) — port 3014
+  tcp-mcp-records:        Records MCP server (added 04/001.01) — port 3015; starts after tcp-server is healthy
   postgres:               PostgreSQL 16 + pgvector (pgvector/pgvector image)
   minio:                  MinIO-compatible object storage (pgsty/silo image — see amendment below)
   redis:                  Redis 7 (BullMQ queue backend)

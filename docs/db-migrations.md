@@ -83,6 +83,19 @@ git add libs/tcp-shared/src/models/TcpCompany.model.ts \
 git commit -m "Add region column to tcp_company"
 ```
 
+## The records server's migrations
+
+`tcp-mcp-records` has its own migration list, because its tables may live in a database of their own (`RECORDS_DATABASE_URL`). It is separate from tcp-server's in every way:
+
+- **List:** `RECORDS_MIGRATIONS` in `apps/backend/apps/tcp-mcp-records/src/migrations-list.ts`. Register a new class there by hand, as in step 4 above.
+- **Files:** `apps/backend/apps/tcp-mcp-records/src/migrations/`.
+- **Run:** by the records server on start (`migrationsRun: true`), on its own connection.
+- **Record:** the `records_migrations` table, not `typeorm_migrations`.
+- **Not generated:** the records tables are raw SQL, not entities, so `migration:generate` does not apply. Write the migration by hand.
+- **Order:** tcp-server migrates first. The records migration adds its company foreign keys only if `tcp_company` exists, so a shared database needs that order. Compose starts the records server after tcp-server is healthy. The test tiers do the same in `apps/backend/test/support/migrate-database.ts`.
+
+`scripts/backup.sh` and the migration-version check in `scripts/restore.sh` read only tcp-server's migrations. See [backup-and-restore.md](backup-and-restore.md).
+
 ## Running migrations manually
 
 In most cases `migrationsRun: true` handles this on startup. For exceptional cases:

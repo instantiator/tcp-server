@@ -135,3 +135,38 @@ The `log_decision` MCP tool described in this ADR was not implemented. Instead, 
 - JSONB payload size: very long LLM responses could be large. Consider truncating/summarising payloads above a threshold, or storing large payloads as MinIO objects referenced by the row.
 - Agents call `complete_task` as their last action; the completion enforcement logic in tcp-agent ensures this happens even if the agent forgets.
 - **(009.4)** There is no mechanism today to trace an MCP-tool-initiated action back to the human who ultimately requested the work. `McpToolContext` (see [ADR-013](./ADR-013-prompt-assembly-context-management.md)) carries `agentId`/`companyId` only; no `task` concept exists yet to carry a requesting-user reference through the agent→task→tool-call chain, so `originators.user` stays `null` for every agent-initiated storage action (see the `originators` amendment above). [ADR-010](./ADR-010-orchestration-design.md) (orchestration design) is the ADR that will need to introduce that chain — likely a `task` entity owning both the requesting user and the agents/consultations spawned under it — before `originators.user` can ever be populated for agent-initiated actions. Recorded here so this gap surfaces again in whatever future pass tackles task modeling, rather than being rediscovered from scratch.
+
+## Amendment as implemented (001.01, phase 04) <a id="amendment-as-implemented-p04-001-01"></a>
+
+[001.01](../prompts/phase%2004%20-%20utility/001.01.01.plan%20-%20records%20mcp%20server%20for%20structured%20records.md) added `tcp-mcp-records`. The decisions above stand. This amendment records what the records server writes, and corrects a sentence in the Implemented list.
+
+**Which servers write audit events.** The Implemented list says all three MCP servers write `tool_call` and `tool_result` events. That is no longer true. `tcp-agent` records a `tool_call` and a `tool_result` for every MCP tool call, so every server is covered that way. On top of that, `tcp-mcp-storage`, `tcp-mcp-tasks` and `tcp-mcp-records` write events of their own, because they know what changed. `tcp-mcp-utilities` writes none, since it changes nothing.
+
+**What the records server writes.** Through `AuditClientService`, fire-and-forget, with role `agent` and the calling `agentId`. tcp-server fills in the task and assignment from the agent, as it does for every row. Every payload carries `source: 'records'`.
+
+A change is a `state_change`:
+
+| `action`       | Payload besides `source` and `action`               |
+| -------------- | --------------------------------------------------- |
+| `create_table` | `table`, `definition` (name, purpose, schema, keys) |
+| `insert`       | `table`, `recordId`, `before: null`, `after`        |
+| `update`       | `table`, `recordId`, `before`, `after`              |
+| `delete`       | `table`, `recordId`, `before`, `after: null`        |
+
+A read is a `tool_call`:
+
+| `tool`      | Payload besides `source` and `tool`                                                                               |
+| ----------- | ----------------------------------------------------------------------------------------------------------------- |
+| `query`     | `table`, `filters`, `recordIds` (the ids returned)                                                                |
+| `aggregate` | `table`, `op`, `field`, `groupBy`, `filters`, `groups` (how many groups came back)                                |
+| `insert`    | `table`, `outcome: 'already_exists'`, `recordIds`. An insert that wrote nothing but read back the existing record |
+
+A call that fails validation changes and reads nothing, so it writes no event.
+
+**Consequences.**
+
+- The before and after values of a record are in the audit log. A deleted record's last values survive there.
+- Because the write is fire-and-forget, a lost audit request does not roll back the change. The record and its history can disagree. This is recorded in [outstanding-issues.md](../outstanding-issues.md#records-audit-is-fire-and-forget).
+- The records server may use a database that holds no `tcp_role`, so it sends the fixed role `agent`, as `tcp-mcp-tasks` does.
+
+See [tcp-mcp-records.md](../tcp-mcp-records.md#audit).

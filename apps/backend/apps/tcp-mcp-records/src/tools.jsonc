@@ -1,12 +1,13 @@
 {
-  // Tool descriptions for tcp-mcp-records
-  "describe_server": "Returns an overview of the records service and its tools.",
-  "list_tables": "List your company's record tables, with what each is for.",
-  "describe_table": "Show one table's fields (as JSON Schema), its primary key and any unique keys. Check this before inserting or querying.",
-  "create_table": "Create a record table when no existing table fits. `schema` is a JSON Schema object whose fields are strings, numbers, integers or booleans (use \"format\": \"date\" for YYYY-MM-DD dates), with the fields every record must have in \"required\". `primary_key` names the field(s) that identify a record, such as [\"order_id\"]; a record with the same key can never be added twice. Example schema: {\"type\":\"object\",\"properties\":{\"order_id\":{\"type\":\"string\"},\"customer\":{\"type\":\"string\"},\"total\":{\"type\":\"number\"},\"ordered_on\":{\"type\":\"string\",\"format\":\"date\"}},\"required\":[\"order_id\",\"customer\",\"total\"]}.",
-  "insert": "Add a record to a table. It must fit the table's schema. If a record with the same primary or unique key already exists, nothing is added and you are told which record holds it, so retrying is always safe.",
-  "update": "Change fields of one record, found by its `id` or by `key` (its primary key values, e.g. {\"order_id\": \"A1\"}). Only the fields in `changes` change; set a field to null to remove it.",
-  "delete": "Delete one record, found by its `id` or by `key` (its primary key values).",
-  "query": "Find records in a table. `filters` are ANDed, each {\"field\", \"op\", \"value\"} with op eq, ne, lt, lte, gt, gte, contains (text) or in (a list). Returns the matching records (newest first unless `sort` says otherwise) and how many match in all.",
-  "aggregate": "Count, total (sum), average, minimum or maximum a field over matching records, optionally grouped by up to 3 fields — e.g. op sum, field total, filters ordered_on gte 2026-10-01, for this month's takings. Use this for every total instead of adding figures yourself; results are exact."
+  // Tool descriptions for tcp-mcp-records. Every tool's schema is sent to the
+  // model on every turn, so keep these short: small local models have 8k windows.
+  "describe_server": "Overview of the records service.",
+  "list_tables": "List your company's record tables and what each is for.",
+  "describe_table": "Show a table's fields, primary key and unique keys.",
+  "create_table": "Create a table when none fits. `schema` is a JSON Schema object of string, number, integer or boolean fields (\"format\": \"date\" for dates) with a \"required\" list, e.g. {\"type\":\"object\",\"properties\":{\"order_id\":{\"type\":\"string\"},\"total\":{\"type\":\"number\"}},\"required\":[\"order_id\",\"total\"]}. `primary_key` (e.g. [\"order_id\"]) stops a record being added twice.",
+  "insert": "Add a record. If its key already exists nothing is added and you're told, so retrying is safe.",
+  "update": "Change fields of one record, found by `id` or `key` (primary key values). null removes a field.",
+  "delete": "Delete one record, found by `id` or `key` (primary key values).",
+  "query": "Find records. `filters` are ANDed {field, op, value}; op is eq, ne, lt, lte, gt, gte, contains or in (value a list).",
+  "aggregate": "Count, sum, avg, min or max a field over matching records, optionally grouped. Use it for every total; results are exact."
 }

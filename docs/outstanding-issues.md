@@ -526,3 +526,90 @@ forgets the list gets a wrong count around a bank holiday.
 **Act when:** 005.02 (regional knowledge packs) lands, or a user reports a wrong
 business-day count around a bank holiday. Until then agents pass `holidays`
 explicitly.
+
+## A separate records database is not backed up
+
+`scripts/backup.sh` dumps tcp-server's database only. If `RECORDS_DATABASE_URL`
+points at another database, its records are not in the archive. The migration
+check in `restore.sh` also reads only tcp-server's migrations, so it ignores the
+records migrations. See [tcp-mcp-records.md](tcp-mcp-records.md#a-separate-database).
+
+**Act when:** someone first sets `RECORDS_DATABASE_URL`. Then dump that database
+into the archive, and make the restore check cover `records_migrations`.
+
+## Records audit is fire-and-forget
+
+The records server audits every read and change, but a lost audit request does
+not undo the write. A record can change without its history. See
+[ADR-008](ADRs/ADR-008-audit-logging.md#amendment-as-implemented-p04-001-01).
+
+**Act when:** an audit gap is found, or 001.04 (customer data protection) needs
+a guaranteed history. Then write the audit event in the same transaction as the
+change, or fail the tool call when the audit write fails.
+
+## Plan and QA are read-only for records on the agent side only
+
+`plan` and `qa` mode agents are not offered `create_table`, `insert`, `update`
+or `delete`. The records server does no mode check of its own. Company scoping
+is its security boundary.
+
+**Act when:** an agent is seen changing records in plan or qa mode. Then pass the
+mode to the records server and refuse the write tools there.
+
+## Records tables cannot be altered or dropped
+
+An agent can make a table but cannot add a field, change a type or drop the
+table. A wrong first schema has to be worked around.
+
+**Act when:** 001.03 (records in the web UI) needs to edit a table, or 002.03
+(templates) needs to change a shipped one. Add `alter_table` and `drop_table`
+with an audit event each.
+
+## No template table schemas for records
+
+No ready-made tables are shipped for orders, customers, products, materials,
+suppliers, income and expenses. Agents make their own.
+
+**Act when:** 002.03 (templates) lands. Ship the schemas with the templates so
+every company of one type starts with the same tables.
+
+## Idempotency keys on outbound actions are not built
+
+Records are safe to retry: an insert never makes a duplicate. That is the first
+half of avoiding duplicate actions. The second half is not built. An action that
+leaves the system, such as sending an email, has no key, so a retry could send
+it twice.
+
+**Act when:** 004.02 (email) lands. Give each outbound action a key and refuse
+a second send with the same key.
+
+## A template import can orphan records in a separate records database
+
+A template import that replaces a company by slug deletes the old company. In a
+shared database its records cascade away. In a separate records database they
+stay behind. They cannot be reached, because company ids are never reused, but
+they take up space.
+
+**Act when:** `RECORDS_DATABASE_URL` is set and 002.03 imports replace companies.
+Then call the records server's delete route for the replaced company, as
+tcp-server does after a company delete.
+
+## Every role gets every MCP server, and an 8k model runs out of room
+
+Tool schemas are sent to the model on every turn. With all six MCP servers they
+cost about 5,600 tokens (measured from each server's `tools/list`, as the model
+sees them). The utilities and records servers add about 1,450 of that, after
+their descriptions were cut down in 001.01. A role on a model with an 8,192-token
+window, like the dev `diy-assistant` on LM Studio, now fails with "Context window
+exceeded even after compaction" after one or two tool calls. Before records it
+had just enough room. `estimate-context-window` doesn't count tool schemas, so
+it can't warn about this.
+
+There is no way to leave a server out: `resolveMcpServerList` is a union, so
+every configured server reaches every role.
+
+**Act when:** before 001.01 merges, or the first time a real role is meant to
+run on a model with a window under 16k. Choose one: let a company or role leave
+servers out (or make `records` opt-in through `mcpServerList`), and/or count
+tool schemas in `estimate-context-window`. Raising the model's context window
+also works where the model allows it.

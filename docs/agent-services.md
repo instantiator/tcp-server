@@ -75,7 +75,7 @@ author: Alice
 
 ## MCP Servers
 
-Agents access external tools via the Model Context Protocol. Five MCP servers run as Docker Compose services.
+Agents access external tools via the Model Context Protocol. Six MCP servers run as Docker Compose services.
 
 ### Architecture
 
@@ -89,6 +89,8 @@ flowchart LR
     MC -->|HTTP POST /mcp| I[tcp-mcp-interactions :3012]
     MC -->|HTTP POST /mcp| T[tcp-mcp-tasks :3013]
     MC -->|HTTP POST /mcp| U[tcp-mcp-utilities :3014]
+    MC -->|HTTP POST /mcp| R[tcp-mcp-records :3015]
+    R -->|HTTP POST /internal/audit, X-Internal-Api-Key| LS
     S -->|HTTP POST /internal/storage/*, X-Internal-Api-Key| LS[tcp-server]
     T -->|HTTP POST /internal/*, X-Internal-Api-Key| LS
     LS --> MIO[(MinIO)]
@@ -98,13 +100,14 @@ Each MCP server uses the **Streamable HTTP transport** with a stateless per-requ
 
 ### Available servers
 
-| Server                                          | Port | Status      | Description                                                                                                      |
-| ----------------------------------------------- | ---- | ----------- | ---------------------------------------------------------------------------------------------------------------- |
-| [tcp-mcp-storage](tcp-mcp-storage.md)           | 3010 | Implemented | Read/write access to the shared MinIO object store, proxied through tcp-server                                   |
-| [tcp-mcp-memory](tcp-mcp-memory.md)             | 3011 | Implemented | Hybrid pgvector search over episodic memory and role/shared knowledge (`recall`, `remember`, `search_knowledge`) |
-| [tcp-mcp-interactions](tcp-mcp-interactions.md) | 3012 | Implemented | Request input from a human user or consult another agent by role                                                 |
-| [tcp-mcp-tasks](tcp-mcp-tasks.md)               | 3013 | Implemented | Complete your assignment — plan a task, submit finished work, or assure QA (mode-gated)                          |
-| [tcp-mcp-utilities](tcp-mcp-utilities.md)       | 3014 | Implemented | Exact arithmetic, date maths and unit conversion. Stateless, with no database                                    |
+| Server                                          | Port | Status      | Description                                                                                                              |
+| ----------------------------------------------- | ---- | ----------- | ------------------------------------------------------------------------------------------------------------------------ |
+| [tcp-mcp-storage](tcp-mcp-storage.md)           | 3010 | Implemented | Read/write access to the shared MinIO object store, proxied through tcp-server                                           |
+| [tcp-mcp-memory](tcp-mcp-memory.md)             | 3011 | Implemented | Hybrid pgvector search over episodic memory and role/shared knowledge (`recall`, `remember`, `search_knowledge`)         |
+| [tcp-mcp-interactions](tcp-mcp-interactions.md) | 3012 | Implemented | Request input from a human user or consult another agent by role                                                         |
+| [tcp-mcp-tasks](tcp-mcp-tasks.md)               | 3013 | Implemented | Complete your assignment — plan a task, submit finished work, or assure QA (mode-gated)                                  |
+| [tcp-mcp-utilities](tcp-mcp-utilities.md)       | 3014 | Implemented | Exact arithmetic, date maths and unit conversion. Stateless, with no database                                            |
+| [tcp-mcp-records](tcp-mcp-records.md)           | 3015 | Implemented | Typed per-company record tables: create, insert, update, delete, query and exact totals. Has its own database connection |
 
 See the individual server docs for tool reference, argument details, and implementation status.
 
@@ -124,7 +127,9 @@ The agent receives prompt part 3 listing the servers available to it, with `desc
 
 **Tool-schema gating — removed in 010.2.8.2.** From 008.6 through 010.2.8, only each server's `describe_server` tool was bound to the model at first; a server's other tools became bound only after the agent called `describe_server`, tracked per-run by `ToolVisibilityTracker`. That mechanism (and `ToolVisibilityTracker`) is gone: all mode-filtered tools are now bound to the model from turn 1, since their schemas are compact and the gating cost extra round-trips and let weak models "forget" a tool. Mode filtering (`@tcp/shared` `mode-tools.ts`) still limits which servers/tools a mode gets — see [tasks.md → Agent modes](tasks.md#agent-modes). See also [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-010282).
 
-**Identity fields (`agentId`, `companyId`):** `loadTools` accepts an optional context (`{ agentId, companyId }`) for the agent currently running. Any tool parameter matching one of those names is removed from the schema the LLM sees and the real value substituted on every call, regardless of what (if anything) the LLM supplies — the LLM has no reliable way to know its own `agentId` (it's a DB id, not part of its context) and shouldn't be trusted to assert one. This is why `request_user_input`/`request_agent_consultation` in `tcp-mcp-interactions` and `create_plan`/`complete_assignment`/`assure_assignment` in `tcp-mcp-tasks` no longer need `agentId`/`companyId` filled in by the model, even though those fields are still part of the MCP server's published tool schema.
+**Identity fields (`agentId`, `companyId`):** `loadTools` accepts an optional context (`{ agentId, companyId }`) for the agent currently running. Any tool parameter matching one of those names is removed from the schema the LLM sees and the real value substituted on every call, regardless of what (if anything) the LLM supplies — the LLM has no reliable way to know its own `agentId` (it's a DB id, not part of its context) and shouldn't be trusted to assert one. The converter that turns a tool's JSON Schema into the Zod schema the model sees keeps free-form object arguments (an object with no declared properties, such as a record's fields in `records__insert`). It once stripped every key from such an object, so the agent could not pass a record. Identity injection and this conversion both live in `McpClientService`.
+
+This is why `request_user_input`/`request_agent_consultation` in `tcp-mcp-interactions` and `create_plan`/`complete_assignment`/`assure_assignment` in `tcp-mcp-tasks` no longer need `agentId`/`companyId` filled in by the model, even though those fields are still part of the MCP server's published tool schema.
 
 ### MCP server URLs
 
@@ -137,6 +142,7 @@ MCP server URLs are resolved from environment variables:
 | `MCP_INTERACTIONS_URL` | `http://tcp-mcp-interactions:3012/mcp` |
 | `MCP_TASKS_URL`        | `http://tcp-mcp-tasks:3013/mcp`        |
 | `MCP_UTILITIES_URL`    | `http://tcp-mcp-utilities:3014/mcp`    |
+| `MCP_RECORDS_URL`      | `http://tcp-mcp-records:3015/mcp`      |
 
 If a variable is unset, that server is silently skipped. Agents run with only the servers that resolved successfully.
 

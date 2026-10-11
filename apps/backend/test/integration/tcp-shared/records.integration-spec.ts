@@ -135,6 +135,18 @@ describe('RecordsService (integration)', () => {
       ).rejects.toThrow(message);
     });
 
+    it('accepts a schema that leaves out "type": "object"', async () => {
+      const untyped = Object.fromEntries(
+        Object.entries(ORDERS.schema).filter(([k]) => k !== 'type'),
+      );
+      const table = await records.createTable(
+        companyId,
+        { ...ORDERS, name: 'untyped', schema: untyped },
+        null,
+      );
+      expect(table.schema.type).toBe('object');
+    });
+
     it('stops at the per-company table limit', async () => {
       const crowded = await newCompany();
       await ds.query(

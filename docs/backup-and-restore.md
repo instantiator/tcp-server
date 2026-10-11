@@ -29,6 +29,11 @@ PAT anywhere else (see [What you must keep safe](#what-you-must-keep-safe)).
 
 Not included, on purpose:
 
+- **A separate records database.** Records normally live in `tcp.dump`. If
+  `RECORDS_DATABASE_URL` points at another database, it is not dumped. Back it
+  up another way. The migration check on restore reads only tcp-server's
+  migrations, so it does not look at the records migrations either. See
+  [tcp-mcp-records.md](tcp-mcp-records.md#a-separate-database).
 - **Redis.** It only holds the job queues. On restore, Redis is emptied so old
   jobs can't run against the restored data. Jobs that were queued or running at
   backup time are lost. Start them again after a restore.
