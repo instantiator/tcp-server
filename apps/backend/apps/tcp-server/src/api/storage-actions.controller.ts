@@ -79,7 +79,9 @@ export class StorageActionsController {
   async list(
     @Body() body: ListFilesDto,
   ): Promise<{ entries: StorageObject[] }> {
-    const entries = await this.storage.listFiles(body.prefix);
+    const entries = await this.storage.listFiles(body.prefix, {
+      all: body.all,
+    });
     return { entries };
   }
 

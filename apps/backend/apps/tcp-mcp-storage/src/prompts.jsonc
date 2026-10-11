@@ -1,13 +1,37 @@
 {
   // Returned by describe_server — gives the agent an overview of available storage tools.
-  "describe_server": "## Storage Service\n\nProvides access to the shared object store, organised per the ADR-007 folder layout.\n\n### Read-only exploration\nBrowse and read anything in shared storage with `list_files`, `read_file`, `search_files`, `get_file_properties`, and `get_file_summary` (full object keys, `{company_slug}/{area}/...`, no leading slash). Call `describe_folder` with a path prefix to learn what a folder is for.\n\n### Your working directory (produce your outputs here)\nThe `*_working_file` tools act on your own assignment's working directory — you pass only a **filename** (subdirectories allowed); the location is derived from your assignment, so you cannot write outside it. Use `create_working_file` for a brand-new file or a full rewrite, `append_working_file` to add to a file, `replace_in_working_file` for a small in-place edit, `read_working_file`, `get_working_file_summary` (structure — headings/keys/CSV columns — without reading the whole file), `list_working_files`, and soft `delete_working_file`/`restore_working_file`. In qa mode these are read-only: you review the assignment under review, you do not modify it.\n\n### Your materials (your inputs)\nThe `*_material_file` tools expose the materials handed to your assignment — `list_material_files`, `read_material_file`, `get_material_file_properties`. Inline-text materials are read back as their literal content.",
+  "describe_server": "## Storage Service\n\nProvides access to the shared object store, organised per the ADR-007 folder layout.\n\n### Read-only exploration\nBrowse and read your company's files with `list_files`, `read_file`, `search_files`, `get_file_properties`, and `get_file_summary`. Paths start at your company folder (e.g. `knowledge/shared/`); the full keys these tools return work too. Call `describe_folder` with a path prefix to learn what a folder is for.\n\n### Your working directory (produce your outputs here)\nThe `*_working_file` tools act on your own assignment's working directory — you pass only a **filename** (subdirectories allowed); the location is derived from your assignment, so you cannot write outside it. Use `create_working_file` for a brand-new file or a full rewrite, `append_working_file` to add to a file, `replace_in_working_file` for a small in-place edit, `read_working_file`, `get_working_file_summary` (structure — headings/keys/CSV columns — without reading the whole file), `list_working_files`, and soft `delete_working_file`/`restore_working_file`. In qa mode these are read-only: you review the assignment under review, you do not modify it.\n\n### Your materials (your inputs)\nThe `*_material_file` tools expose the materials handed to your assignment — `list_material_files`, `read_material_file`, `get_material_file_properties`. Inline-text materials are read back as their literal content.\n\n### Company resources\nCompany resources are long-lived company documents such as invoices, price lists and policies. Use `list_resources`, `read_resource`, `write_resource`, `append_resource` and `replace_in_resource`, with paths like `invoices/INV-0042.md`. In a task your changes are drafts, applied to the company's resources when the task succeeds; in a chat they change the resources straight away.",
 
   // Folder descriptions returned by describe_folder, keyed by folder type.
   "describe_folder_task_materials": "**Task materials** — User-submitted inputs for this task (briefs, data files, reference documents). Read-only after task creation.",
   "describe_folder_task_completed": "**Task completed outputs** — The task's final deliverables, promoted from its assignments' `completed/` directories once every assignment succeeds. Accessible to all agents working the task.",
   "describe_folder_assignment_working": "**Assignment working area** — The private scratch area for one assignment's agent. Write intermediate results and final artefacts here before submitting via `complete_assignment`.",
   "describe_folder_assignment_completed": "**Assignment completed outputs** — Files promoted from an assignment's working area once QA accepts them. Later assignments and the task's finalisation step read from here.",
+  "describe_folder_resources": "**Company resources** — Long-lived company documents (invoices, price lists, policies, listing copy). Read and change them with the resource tools (`list_resources`, `read_resource`, `write_resource`); each folder's `README.md` says what it is for.",
   "describe_folder_knowledge": "**Knowledge base** — OKF Markdown source documents for RAG indexing. Managed by the `store-knowledge` CLI command. Treat as read-only from within an agent.",
   "describe_folder_audit": "**Audit log** — Append-only JSONL audit entries written by the system. Do not modify.",
-  "describe_folder_fallback": "No specific description is available for this path. Use `list_files` to explore its contents."
+  "describe_folder_fallback": "No specific description is available for this path. Use `list_files` to explore its contents.",
+
+  // Company-resource tool replies. {{name}} placeholders are filled in by ResourceToolsService.
+  "resources_read_only": "Company resources are read-only in this mode. Use list_resources and read_resource to look at them.",
+  "resources_none": "There are no company resources yet.",
+  "resources_create_hint": " Create one with write_resource, e.g. 'price-list.md'.",
+  "resources_more": "…and {{count}} more. Pass a folder path to see it.",
+  "resources_no_folder": "There is no folder '{{folder}}/'.",
+  "resources_is_file": "'{{path}}' is a file, not a folder. Read it with read_resource.",
+  "resources_is_folder": "'{{path}}' is a folder. Its files: {{files}}.",
+  "resources_no_resource": "There is no resource '{{path}}'. Files in '{{folder}}/': {{files}}.",
+  "resources_no_resource_empty": "There is no resource '{{path}}'. The folder '{{folder}}/' has no files.",
+  "resources_did_you_mean": " Did you mean {{names}}?",
+  "resources_binary": "'{{path}}' is a binary file and can't be read as text.",
+  "resources_created": "Created resource '{{path}}'.",
+  "resources_replaced": "Replaced resource '{{path}}'.",
+  "resources_appended": "Appended to resource '{{path}}'.",
+  "resources_replaced_count": "Replaced {{count}} occurrence(s) in resource '{{path}}'.",
+  "resources_draft_note": " It's a draft, applied to the company's resources when the task succeeds.",
+  "resources_new_folder_hint": " New folder '{{folder}}/'. Add a one-line purpose note with write_resource('{{folder}}/README.md', …).",
+  // Pointers from the older file tools to the resource tools.
+  "working_file_is_resource": "'{{filename}}' is a company resource, not a working file. Use read_resource / write_resource with path '{{path}}'.",
+  "resources_same_name_hint": " A company resource with this name exists: use {{calls}}.",
+  "resources_shared_note": "\n\n(This is a company resource; read_resource also shows drafts from your task.)"
 }

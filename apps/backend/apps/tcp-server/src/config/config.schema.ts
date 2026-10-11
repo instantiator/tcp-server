@@ -2,6 +2,7 @@ import * as Joi from 'joi';
 import {
   DEFAULT_EXPOSE_PORT_API,
   DEFAULT_MINIO_BUCKET_PREFIX,
+  DEFAULT_STORAGE_VERSION_RETENTION_DAYS,
   DEFAULT_KNOWLEDGE_POLL_INTERVAL_MS,
   DEFAULT_TCP_MASK_API_KEYS,
   DEFAULT_EMBEDDING_DIMENSION,
@@ -20,6 +21,12 @@ export const configSchema = Joi.object({
   MINIO_ACCESS_KEY: Joi.string().required(),
   MINIO_SECRET_KEY: Joi.string().required(),
   MINIO_BUCKET_PREFIX: Joi.string().default(DEFAULT_MINIO_BUCKET_PREFIX),
+  /** Days old file versions are kept; a company's own setting wins. */
+  STORAGE_VERSION_RETENTION_DAYS: Joi.number()
+    .integer()
+    .min(1)
+    .empty('')
+    .default(DEFAULT_STORAGE_VERSION_RETENTION_DAYS),
   /** Interval (ms) between knowledge-reindex reconciliation poll cycles. */
   KNOWLEDGE_POLL_INTERVAL_MS: Joi.number()
     .integer()

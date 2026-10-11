@@ -608,3 +608,70 @@ now show in `estimate-context-window`. Two gaps remain:
 **Act when:** 002.00 or 002.02 builds the role or company edit forms (add the
 toggles there), or someone sizes a knowledge-less role near its window limit
 (ask the knowledge index whether the role has chunks, as tcp-agent does).
+
+## Company resources can't be deleted by agents
+
+The resource tools create, replace, append and edit. None removes a resource.
+A task that should retire a resource (an old price list, a withdrawn policy)
+has no way to do it. A user can still delete the file in the MinIO console, and
+versioning keeps the old version.
+
+**Act when:** a task needs to remove a resource. Add a delete that is a draft
+like any other change (a marker applied on success), not an immediate removal.
+
+## Two tasks changing one resource: last write wins
+
+Apply copies a task's draft over the live resource. If two tasks change the same
+resource, the one that succeeds last wins, and the other task's change is
+overwritten without a warning. Versioning keeps the older content, so nothing
+is lost for good.
+
+**Act when:** the first lost update is seen, or when 004.01 (recurring tasks)
+lands and tasks can overlap on a schedule. Then check the live resource's
+version at apply time against the version the draft started from.
+
+## Resources are text only
+
+An agent can read and write only text resources. A PDF invoice, an image or an
+office document is refused with a reply that says it can't be read as text.
+
+**Act when:** 006.02 (images) lands, or a real need for PDFs appears (for
+example invoices that must be sent as PDF).
+
+## The context estimate doesn't count the mode prompt
+
+`estimate-context-window` counts bound tool schemas, but not the mode prompt
+text. With every server on, that text is up to about 540 tokens (plan mode),
+so a small-window role can pass the estimate and still run out of room.
+
+**Act when:** a small-window role fails for lack of context despite a passing
+estimate. Count `modePrompt(mode, serverNames)` for each mode in the estimate.
+
+## Versioning covers the whole bucket
+
+Bucket versioning keeps old versions of working files too, not just resources.
+Frequent working-file edits add versions that are rarely wanted. They expire
+after `STORAGE_VERSION_RETENTION_DAYS` (default 90), but they take space until
+then.
+
+**Act when:** version storage grows too large (check the bucket's size against
+its live data). The upgrade is a separate versioned bucket for resources only.
+
+## One lifecycle rule per company
+
+`StorageVersioningService` writes one lifecycle rule for each company prefix,
+plus one for `_deleted/`. S3 allows about 1,000 rules per bucket. A deleted
+company's rule also stays until the next boot.
+
+**Act when:** a deployment nears about 800 companies. Switch to one default rule
+plus rules only for companies with their own `versionRetentionDays`.
+
+## Sensitive resource changes need user approval
+
+Today a task's resource changes are applied when it succeeds, with QA as the
+only review. Some changes (prices, policies) should wait for a person. This
+moved to 003.01 (action approval), which has a section for it:
+[003.01 prompt](prompts/phase%2004%20-%20utility/003.01.00.prompt%20-%20action%20approval%20%28draft%29.md).
+
+**Act when:** the core of 003.01 lands. Then let a folder's `README.md` mark it
+sensitive, and pause apply until a user approves.

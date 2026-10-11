@@ -1,6 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
 import type { TcpAssignmentMode } from '@tcp/shared';
-import type { ResolvedMaterial, StorageScope } from '../storage-scope.service';
+import type {
+  ResolvedMaterial,
+  ResourceScope,
+  StorageScope,
+} from '../storage-scope.service';
 import {
   ASSIGNMENT_MODES,
   AssignmentResponseDto,
@@ -62,16 +66,30 @@ export class ResolvedMaterialDto implements ResolvedMaterial {
   inlineText?: string;
 }
 
+/** {@link ResourceScope}: where an agent's company-resource tools read and write. */
+export class ResourceScopeDto implements ResourceScope {
+  @ApiProperty({ enum: ['draft', 'direct', 'read-only'] })
+  mode!: 'draft' | 'direct' | 'read-only';
+  /** Prefixes a resource path is read from, first match wins. */
+  readPrefixes!: string[];
+  /** Prefix writes go to, or `null` when this agent may not change resources. */
+  @ApiProperty({ type: String, nullable: true })
+  writePrefix!: string | null;
+}
+
 /** {@link StorageScope}: the slice of storage an agent's scoped tools may see. */
 export class StorageScopeResponseDto implements StorageScope {
   @ApiProperty({ enum: ASSIGNMENT_MODES })
   mode!: TcpAssignmentMode;
   /** True for qa-mode callers — the working tools may only read. */
   readOnly!: boolean;
+  /** The caller's company folder (`{slug}/`); the shared read tools stay inside it. */
+  companyPrefix!: string;
   /** Object-key prefix (ending in `/`) of the scoped working directory. */
   workingPrefix!: string;
   @ApiProperty({ type: ResolvedMaterialDto, isArray: true })
   materials!: ResolvedMaterialDto[];
+  resources!: ResourceScopeDto;
 }
 
 /** `POST /internal/task/:taskId/plan`. */

@@ -3,6 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { ToolResult, extractServerErrorMessage, ok } from '@tcp/shared';
 import { storageToolDescriptions } from '../storage-tool-descriptions';
+import { resourceHint } from './resource-hint';
 import {
   FileProperties,
   ResolvedMaterial,
@@ -113,7 +114,12 @@ export class MaterialFileToolsService {
     try {
       const scope = await this.storage.fetchScope(agentId);
       const material = this.findMaterial(scope, filename);
-      if (!material) return ok(materialNotFound(filename));
+      if (!material) {
+        return ok(
+          materialNotFound(filename) +
+            (await resourceHint(this.storage, scope, filename)),
+        );
+      }
       if (material.key === null) {
         return ok(material.inlineText ?? '');
       }

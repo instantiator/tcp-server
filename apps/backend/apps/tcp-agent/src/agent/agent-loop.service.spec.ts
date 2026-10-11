@@ -16,7 +16,7 @@ import {
   TcpRole,
   TcpTask,
   LlmConfig,
-  MODE_PROMPTS,
+  modePrompt,
   renderTemplate,
   McpServerUnavailableError,
 } from '@tcp/shared';
@@ -1426,8 +1426,9 @@ describe('AgentLoopService', () => {
           m.content.includes('Summarise the market.'),
       );
       expect(assignmentMsg).toBeDefined();
+      // No MCP tools load here, so only the sections that need no server.
       expect((assignmentMsg as HumanMessage).content).toContain(
-        MODE_PROMPTS.implement,
+        modePrompt('implement', []),
       );
     });
 
@@ -1467,7 +1468,7 @@ describe('AgentLoopService', () => {
         (m) =>
           m instanceof HumanMessage &&
           typeof m.content === 'string' &&
-          m.content.includes(MODE_PROMPTS.plan),
+          m.content.includes(modePrompt('plan', [])),
       );
       expect(hasPlanPrompt).toBe(true);
     });

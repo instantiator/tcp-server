@@ -261,6 +261,76 @@ describe('Task orchestration lifecycle (e2e)', () => {
     expect(completedFiles.map((f) => f.name)).toContain('out.md');
   });
 
+  it("applies a step's company resource draft to the live resources when the task succeeds", async () => {
+    const taskId = await createAndStart();
+    const live = `${company.slug}/resources/invoices/INV-1.md`;
+    await storage.putByKey(live, Buffer.from('old invoice\n'), 'text/markdown');
+
+    const planAgentId = await agentIdFor((await planAssignment(taskId)).id);
+    await request(app.getHttpServer())
+      .post(`/internal/task/${taskId}/plan`)
+      .set('X-Internal-Api-Key', INTERNAL_KEY)
+      .send({
+        agentId: planAgentId,
+        assignments: [
+          {
+            prompt: 'Update the invoice',
+            role: role.slug,
+            // The planner's `resources/` prefix is forgiven and stripped.
+            expected: [
+              { type: 'resource', value: 'resources/invoices/INV-1.md' },
+            ],
+          },
+        ],
+      })
+      .expect(201);
+    const s0 = await step(taskId, 0);
+    expect(s0.expected).toEqual([
+      { type: 'resource', value: 'invoices/INV-1.md' },
+    ]);
+    const agentId = await agentIdFor(s0.id);
+    const complete = (status: number) =>
+      request(app.getHttpServer())
+        .post(`/internal/assignment/${s0.id}/complete`)
+        .set('X-Internal-Api-Key', INTERNAL_KEY)
+        .send({ agentId, summary: 'done', prepared: [] })
+        .expect(status);
+
+    // No draft yet: the gate says to write it.
+    const refused = await complete(422);
+    expect(JSON.stringify(refused.body)).toContain('write_resource');
+
+    await storage.putByKey(
+      assignmentWorkingKey(
+        company.slug,
+        taskId,
+        0,
+        'resources/invoices/INV-1.md',
+      ),
+      Buffer.from('new invoice\n'),
+      'text/markdown',
+    );
+    await complete(200);
+    // The live resource is untouched until the task succeeds.
+    expect(await storage.readFile(live)).toBe('old invoice\n');
+
+    await assure(s0.id, 'accept');
+
+    const task = await taskRepo.findOneByOrFail({ id: taskId });
+    expect(task.status).toBe('succeeded');
+    expect(task.completed).toContainEqual({
+      type: 'resource',
+      value: 'invoices/INV-1.md',
+    });
+    expect(await storage.readFile(live)).toBe('new invoice\n');
+    // The task keeps its own copy, as the record of what it changed.
+    expect(
+      await storage.readFile(
+        `${taskCompletedPrefix(company.slug, taskId)}resources/invoices/INV-1.md`,
+      ),
+    ).toBe('new invoice\n');
+  });
+
   it('fails a still-planning task when the planner completes without ever submitting a plan', async () => {
     const taskId = await createAndStart();
     const planAgentId = await agentIdFor((await planAssignment(taskId)).id);

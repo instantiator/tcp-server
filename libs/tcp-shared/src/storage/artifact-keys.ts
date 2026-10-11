@@ -120,6 +120,18 @@ export function orphanWorkingPrefix(
   return `${companySlug}/assignments/${assignmentId}/working/`;
 }
 
+/**
+ * Folder name for company resources: `{companySlug}/resources/` holds the live
+ * ones, and the same folder under a working or completed prefix holds a task's
+ * drafts of them.
+ */
+export const RESOURCES_DIR = 'resources/';
+
+/** Listing prefix for a company's live resources: `{companySlug}/resources/`. */
+export function resourcesPrefix(companySlug: string): string {
+  return `${companySlug}/${RESOURCES_DIR}`;
+}
+
 /** Context needed to resolve an {@link TcpArtifact} to a full storage key. */
 export interface ArtifactResolutionContext {
   companySlug: string;
@@ -168,6 +180,11 @@ export function resolveArtifactKey(
     case 'inline-text':
       return null;
 
+    // A resource has no single key: the agent's resource scope layers its
+    // draft over earlier steps and the live folder (see `read_resource`).
+    case 'resource':
+      return null;
+
     case 'task-materials-path':
       requireTask(ctx, artifact.type);
       return taskMaterialsKey(ctx.companySlug, ctx.task!.id, artifact.value);
@@ -205,7 +222,11 @@ export function resolveArtifactKey(
           (a) =>
             a.orderIndex != null &&
             a.orderIndex < boundary &&
-            a.approved.some((approved) => approved.value === artifact.value),
+            a.approved.some(
+              (approved) =>
+                approved.type === 'assignment-completed-path' &&
+                approved.value === artifact.value,
+            ),
         )
         .reduce<{
           orderIndex?: number | null;

@@ -17,7 +17,7 @@ export const FINAL_INSTRUCTION =
 export const CHAT_PROMPT_STRINGS: PromptAssemblyStrings = {
   services_header: '## Available Services',
   services_intro:
-    "You have access to the following external services via tools. Each service's other tools only become available once you call its `describe_server` tool — they stay available for a few turns, then are hidden again until you re-describe. Be sparing: only describe a service you actually need for the current step.",
+    "You have access to the following services through tools. Call any of their tools directly by its exact name; call a service's `describe_server` only if you want more detail.",
   services_item: '- **{{name}}**: use for {{usage}}',
   services_item_unknown:
     '- **{{name}}**: call `{{name}}__describe_server` for a full tool list and usage guide',
@@ -25,7 +25,7 @@ export const CHAT_PROMPT_STRINGS: PromptAssemblyStrings = {
     'The following excerpts from your knowledge base are relevant to your current task. Draw on them as needed:',
   rag_source_header: '### Source: {{documentPath}}',
   assignment_materials_header:
-    '## Materials (each name below is read via `read_material_file`, not a storage path)',
+    '## Materials (read each name below with `read_material_file`, or a `resource:` entry with `read_resource` — not a storage path)',
   assignment_expected_header:
-    "## Expected outputs (each filename below is what you pass to `append_working_file`/`create_working_file` and to `complete_assignment`'s `prepared` — not a storage path)",
+    "## Expected outputs (each filename below is what you pass to `append_working_file`/`create_working_file` and to `complete_assignment`'s `prepared`; a `resource:` entry is a company resource you write with `write_resource` — not a storage path)",
 };

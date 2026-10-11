@@ -2,12 +2,16 @@ import {
   buildEnumValidationError,
   canonicaliseArtifacts,
   InvalidEnumValue,
+  normaliseResourcePath,
+  resourcesPrefix,
+  TcpArtifact,
   TcpAssignmentWorkingArtifact,
   TcpMaterialArtifact,
 } from '@tcp/shared';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import type { UUID } from 'crypto';
 import { DbService } from '../db/db.service';
+import { StorageService } from '../storage/storage.service';
 import {
   invalidArtifactTypeErrors,
   MATERIAL_ARTIFACT_TYPES,
@@ -37,7 +41,10 @@ export interface ValidatedPlan {
  */
 @Injectable()
 export class PlanValidationService {
-  constructor(private readonly db: DbService) {}
+  constructor(
+    private readonly db: DbService,
+    private readonly storage: StorageService,
+  ) {}
 
   /**
    * Validates the proposed assignments and returns their resolved roles and
@@ -95,6 +102,7 @@ export class PlanValidationService {
       );
     }
 
+    invalid.push(...(await this.resourceProblems(companyId, plan)));
     invalid.push(...this.danglingPriorOutputs(plan));
 
     if (invalid.length > 0) {
@@ -120,6 +128,76 @@ export class PlanValidationService {
         throw new BadRequestException(`Assignment ${i}: prompt is required.`);
       }
     }
+  }
+
+  /**
+   * Checks every `resource` artifact: its path must be valid (and is stored in
+   * its normalised form, e.g. without a leading `resources/`), and a `resource`
+   * material must be an existing company resource or one an earlier step's
+   * expected outputs create. Each problem lists the resources that exist.
+   */
+  private async resourceProblems(
+    companyId: UUID,
+    plan: ValidatedPlan,
+  ): Promise<InvalidEnumValue[]> {
+    const resources = (artifacts: TcpArtifact[]) =>
+      artifacts.filter((a) => a.type === 'resource');
+    if (
+      ![...plan.expectedByIndex, ...plan.materialsByIndex].some(
+        (list) => resources(list).length > 0,
+      )
+    ) {
+      return [];
+    }
+    const company = await this.db.getCompany(companyId);
+    if (!company) return [];
+    const prefix = resourcesPrefix(company.slug);
+    const live = (await this.storage.listFiles(prefix, { all: true })).map(
+      (f) => f.key.slice(prefix.length),
+    );
+
+    const invalid: InvalidEnumValue[] = [];
+    /** Normalises `a.value` in place; false (with a problem recorded) if it can't be. */
+    const normalise = (a: TcpArtifact, property: string): boolean => {
+      const parsed = normaliseResourcePath(a.value, company.slug);
+      if ('error' in parsed) {
+        invalid.push({
+          property,
+          value: a.value,
+          validValues: live,
+          hint: parsed.error,
+        });
+        return false;
+      }
+      a.value = parsed.path;
+      return true;
+    };
+
+    for (const [i, expected] of plan.expectedByIndex.entries()) {
+      for (const [ei, e] of expected.entries()) {
+        if (e.type === 'resource') {
+          normalise(e, `assignment ${i} expected[${ei}] value`);
+        }
+      }
+    }
+    for (const [i, materials] of plan.materialsByIndex.entries()) {
+      const createdEarlier = plan.expectedByIndex
+        .slice(0, i)
+        .flatMap((expected) => resources(expected).map((e) => e.value));
+      for (const [mi, m] of materials.entries()) {
+        const property = `assignment ${i} materials[${mi}] value`;
+        if (m.type !== 'resource' || !normalise(m, property)) continue;
+        if (!live.includes(m.value) && !createdEarlier.includes(m.value)) {
+          invalid.push({
+            property,
+            value: m.value,
+            validValues: [...new Set([...live, ...createdEarlier])],
+            hint: 'A `resource` material must be an existing company resource (see list_resources), or one an earlier step creates: add { type: "resource", value: "<path>" } to that step\'s `expected` list.',
+          });
+        }
+      }
+    }
+    return invalid;
   }
 
   /**

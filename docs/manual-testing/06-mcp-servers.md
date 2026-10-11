@@ -105,16 +105,16 @@ curl -s -X POST http://localhost:3010/mcp \
 
 Expected tool list:
 
-| Tool                                                                                                                                                                                                                                 | Description                                                           |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
-| `describe_server`                                                                                                                                                                                                                    | Returns an overview of the storage service                            |
-| `describe_folder`                                                                                                                                                                                                                    | Explains the purpose of a folder by path prefix                       |
-| `list_files` / `read_file` / `search_files`                                                                                                                                                                                          | Read-only exploration by full object key                              |
-| `get_file_properties` / `get_file_summary`                                                                                                                                                                                           | File metadata / structural summary                                    |
-| `list_working_files` / `read_working_file` / `create_working_file` / `append_working_file` / `replace_in_working_file` / `delete_working_file` / `restore_working_file` / `get_working_file_properties` / `get_working_file_summary` | Assignment-scoped working files (filename-only; require an `agentId`) |
-| `list_material_files` / `read_material_file` / `get_material_file_properties`                                                                                                                                                        | Assignment-scoped materials (require an `agentId`)                    |
+| Tool                                                                                                                                                                                                                                 | Description                                                                |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| `describe_server`                                                                                                                                                                                                                    | Returns an overview of the storage service                                 |
+| `describe_folder`                                                                                                                                                                                                                    | Explains the purpose of a folder by path prefix                            |
+| `list_files` / `read_file` / `search_files`                                                                                                                                                                                          | Read-only exploration of the caller's own company (needs a real `agentId`) |
+| `get_file_properties` / `get_file_summary`                                                                                                                                                                                           | File metadata / structural summary                                         |
+| `list_working_files` / `read_working_file` / `create_working_file` / `append_working_file` / `replace_in_working_file` / `delete_working_file` / `restore_working_file` / `get_working_file_properties` / `get_working_file_summary` | Assignment-scoped working files (filename-only; require an `agentId`)      |
+| `list_material_files` / `read_material_file` / `get_material_file_properties`                                                                                                                                                        | Assignment-scoped materials (require an `agentId`)                         |
 
-> The `*_working_file` and `*_material_file` tools take an `agentId` that in production is injected by `McpClientService` and resolved server-side to a working directory. A bare `curl` has no agent context, so the sections below exercise the read-only exploration tools; drive the scoped tools through a real agent run instead.
+> The `*_working_file` and `*_material_file` tools take an `agentId` that in production is injected by `McpClientService` and resolved server-side to a working directory. A bare `curl` has no agent context, so the sections below use the read-only exploration tools, which only need the `id` of a real agent in your company (they look up its company from it and stay inside that company's folder). Drive the working-file, material and resource tools through a real agent run instead.
 
 ---
 
@@ -175,7 +175,8 @@ Try different path prefixes and observe the canned descriptions:
 If you uploaded a document in Section 5, you can retrieve it through the storage MCP server:
 
 ```bash
-# Replace 'acme' with your company slug
+# AGENT_ID is the id of any agent in your company. Paths are relative to the
+# company folder; the full key (acme/knowledge) works too.
 curl -s -X POST http://localhost:3010/mcp \
   -H "Content-Type: application/json" \
   -d '{
@@ -184,7 +185,7 @@ curl -s -X POST http://localhost:3010/mcp \
     "method": "tools/call",
     "params": {
       "name": "list_files",
-      "arguments": { "path": "acme/knowledge" }
+      "arguments": { "agentId": "'$AGENT_ID'", "path": "knowledge" }
     }
   }' | jq -r '.result.content[0].text'
 ```
@@ -213,7 +214,7 @@ curl -s -X POST http://localhost:3010/mcp \
     "method": "tools/call",
     "params": {
       "name": "read_file",
-      "arguments": { "path": "acme/knowledge/analyst/test-knowledge.md" }
+      "arguments": { "agentId": "'$AGENT_ID'", "path": "knowledge/analyst/test-knowledge.md" }
     }
   }' | jq -r '.result.content[0].text'
 ```

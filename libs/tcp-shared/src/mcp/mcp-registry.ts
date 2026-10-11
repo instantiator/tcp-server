@@ -21,7 +21,7 @@ export const MCP_REGISTRY = [
     name: 'storage',
     envKey: 'MCP_STORAGE_URL',
     usage:
-      'reading, writing, and searching shared files — task materials, work-in-progress output, and finished reports.',
+      'reading, writing, and searching shared files — task materials, work-in-progress output, and finished reports — and company resources: documents the company keeps, such as invoices, price lists and policies.',
   },
   {
     name: 'memory',

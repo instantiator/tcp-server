@@ -71,8 +71,9 @@ export class ChatTurnPromptService {
     if (!isFirstMessage) return [new HumanMessage(preparedMessage)];
 
     const ragMessage = await this.buildRagMessage(ctx, inputs);
+    const serverNames = [...new Set(inputs.mcpTools.map((t) => t.serverName))];
     const servicesText = buildServicesMessage(
-      [...new Set(inputs.mcpTools.map((t) => t.serverName))],
+      serverNames,
       inputs.mcpServerUrls,
       CHAT_PROMPT_STRINGS,
     );
@@ -93,7 +94,9 @@ export class ChatTurnPromptService {
       // built via the same shared builder the worker path uses, so the chat
       // agent knows it is in a conversation. materials/expected are empty for
       // the chat orphan assignment.
-      new HumanMessage(this.buildAssignmentText(ctx, preparedMessage)),
+      new HumanMessage(
+        this.buildAssignmentText(ctx, preparedMessage, serverNames),
+      ),
       // Prompt part 5: RAG data retrieved for this query (omitted when nothing relevant)
       ...(ragMessage ? [ragMessage] : []),
       // Prompt part 6: MCP pre-task responses (none for stub servers; wired here for future use)
@@ -146,6 +149,7 @@ export class ChatTurnPromptService {
   private buildAssignmentText(
     ctx: TurnContext,
     preparedMessage: string,
+    serverNames: string[],
   ): string {
     const { agent, company } = ctx;
     const assignment = agent.assignment;
@@ -155,6 +159,7 @@ export class ChatTurnPromptService {
         prompt: preparedMessage,
         materials: assignment.materials,
         expected: assignment.expected,
+        serverNames,
         resolutionContext: {
           companySlug: company?.slug ?? '',
           task: assignment.task ?? null,

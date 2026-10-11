@@ -9,7 +9,7 @@ import {
   TcpTask,
   TokenUsage,
   McpClientService,
-  MODE_PROMPTS,
+  modePrompt,
   WireEvent,
 } from '@tcp/shared';
 import { ConfigModule } from '@nestjs/config';
@@ -268,7 +268,8 @@ describe('ChatService integration (stub LLM)', () => {
       // agent knows it is in a conversation (not a bare user message).
       const req = await lastChatRequest();
       const promptText = (req?.messages ?? []).map((m) => m.content).join('\n');
-      expect(promptText).toContain(MODE_PROMPTS.chat);
+      // No MCP servers load here, so only the sections that need no server.
+      expect(promptText).toContain(modePrompt('chat', []));
       expect(promptText).toContain('Hi there');
     } finally {
       await agentRepo.delete({ id: agent.id });

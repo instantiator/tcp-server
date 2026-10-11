@@ -4,6 +4,7 @@ import { registerDescribeServer } from '@tcp/shared';
 import { storagePrompts } from '../storage-prompts';
 import { storageToolDescriptions } from '../storage-tool-descriptions';
 import { MaterialFileToolsService } from './material-file-tools.service';
+import { ResourceToolsService } from './resource-tools.service';
 import { SharedStorageToolsService } from './shared-storage-tools.service';
 import { WorkingFileToolsService } from './working-file-tools.service';
 
@@ -11,7 +12,7 @@ import { WorkingFileToolsService } from './working-file-tools.service';
  * Builds fresh {@link McpServer} instances pre-loaded with all storage tools.
  * A new server is created per request so state is never shared across sessions.
  *
- * Three tiers of tool, one collaborator each — the tier a tool belongs to is
+ * Four tiers of tool, one collaborator each — the tier a tool belongs to is
  * what decides how far it can reach:
  * - {@link SharedStorageToolsService} — read-only exploration of shared storage
  *   by full object key.
@@ -19,6 +20,9 @@ import { WorkingFileToolsService } from './working-file-tools.service';
  *   resolved server-side from its assignment; qa-mode callers are read-only.
  * - {@link MaterialFileToolsService} — read-only access to the assignment's
  *   attached materials, addressed by name.
+ *
+ * - {@link ResourceToolsService} — the company's long-lived resources, read
+ *   through the caller's layers and written to its draft or the live folder.
  *
  * All file-action logic (validation, soft-delete, content analysis, audit)
  * lives on `tcp-server` behind `/internal/storage/*` — these services are a
@@ -30,6 +34,7 @@ export class StorageToolsService {
     private readonly shared: SharedStorageToolsService,
     private readonly working: WorkingFileToolsService,
     private readonly materials: MaterialFileToolsService,
+    private readonly resources: ResourceToolsService,
   ) {}
 
   /** Creates and returns a configured McpServer with all storage tools registered. */
@@ -44,6 +49,7 @@ export class StorageToolsService {
     this.shared.register(server);
     this.working.register(server);
     this.materials.register(server);
+    this.resources.register(server);
 
     return server;
   }

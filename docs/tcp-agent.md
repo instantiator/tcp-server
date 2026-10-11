@@ -278,13 +278,13 @@ Remote providers are skipped. If the answer doesn't settle it, the run goes ahea
 
 ## MCP tools
 
-Before running the LangGraph loop, `AgentLoopService` connects to each MCP server listed in `role.mcpServerList` and loads its tools. Tools are exposed to the model as `{serverName}__{toolName}` (e.g. `storage__list_files`) to prevent collisions across servers. If a server it needs is unreachable, the run fails with `service_unavailable`, naming that server ("The tasks service (MCP) didn't respond…"), rather than carrying on without its tools. A server with no URL configured is skipped: that is a deployment choice.
+Before running the LangGraph loop, `AgentLoopService` works out which MCP servers the agent gets and loads their tools. `resolveMcpServerList` takes the configured servers (the registry, plus the company's and the role's `mcpServerList`) and drops any the role or company has switched off with `mcpServerToggles`. Tools are exposed to the model as `{serverName}__{toolName}` (e.g. `storage__list_files`) to prevent collisions across servers. If a server it needs is unreachable, the run fails with `service_unavailable`, naming that server ("The tasks service (MCP) didn't respond…"), rather than carrying on without its tools. A server with no URL configured is skipped: that is a deployment choice.
 
 MCP server URLs are resolved from environment variables:
 
 | Variable               | Server                                                                                                         |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `MCP_STORAGE_URL`      | [tcp-mcp-storage](tcp-mcp-storage.md) — shared-storage exploration, working files, materials                   |
+| `MCP_STORAGE_URL`      | [tcp-mcp-storage](tcp-mcp-storage.md) — company files, working files, materials, company resources             |
 | `MCP_MEMORY_URL`       | [tcp-mcp-memory](tcp-mcp-memory.md) — episodic memory and knowledge search                                     |
 | `MCP_INTERACTIONS_URL` | [tcp-mcp-interactions](tcp-mcp-interactions.md) — user input and agent consultation                            |
 | `MCP_TASKS_URL`        | [tcp-mcp-tasks](tcp-mcp-tasks.md) — plan a task, submit finished work, assure QA (mode-gated)                  |
@@ -294,6 +294,11 @@ MCP server URLs are resolved from environment variables:
 Which of the loaded servers an agent actually gets is then narrowed by its
 mode — `MODE_TOOLS` in `@tcp/shared` is the single source of truth (see
 [tasks.md → Agent modes](tasks.md#agent-modes)).
+
+The names of the servers that actually loaded also decide the mode prompt:
+`modePrompt(mode, serverNames)` leaves out the text for any server the agent
+doesn't have, so the prompt never describes a tool the agent can't call. See
+[agent-services.md](agent-services.md#enabling-mcp-tools-for-a-role).
 
 See [agent-services.md → MCP Servers](agent-services.md#mcp-servers) for configuration details.
 

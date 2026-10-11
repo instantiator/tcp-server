@@ -1,21 +1,31 @@
 import { Injectable } from '@nestjs/common';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { ToolResult, extractServerErrorMessage, ok } from '@tcp/shared';
+import {
+  RESOURCES_DIR,
+  ToolResult,
+  extractServerErrorMessage,
+  ok,
+} from '@tcp/shared';
 import { storagePrompts } from '../storage-prompts';
 import { storageToolDescriptions } from '../storage-tool-descriptions';
+import { resolveCompanyKey } from './scoped-key';
 import {
   FileEntry,
   FileProperties,
   StorageApiService,
 } from './storage-api.service';
 
+/** Injected caller identity: hidden from the model, filled in by the agent runtime. */
+const AGENT_ID = { agentId: z.uuid() };
+
 /**
  * The read-only exploration tier: thin proxies over `/internal/storage/*` that
- * let an agent browse shared storage by full object key.
+ * let an agent browse its company's storage by object key.
  *
- * Nothing here is assignment-scoped — these tools see the whole bucket, and
- * cannot write to any of it.
+ * Every path is resolved inside the caller's company folder
+ * ({@link resolveCompanyKey}), so no other company's files are reachable.
+ * Nothing here is assignment-scoped, and nothing here writes.
  */
 @Injectable()
 export class SharedStorageToolsService {
@@ -41,22 +51,28 @@ export class SharedStorageToolsService {
       {
         description: storageToolDescriptions.list_files,
         inputSchema: {
+          ...AGENT_ID,
           path: z
             .string()
             .optional()
-            .describe('Path prefix to list under (default: all files).'),
+            .describe(
+              'Path prefix to list under (default: all your company files).',
+            ),
         },
       },
-      ({ path }) => this.listFiles(path),
+      ({ agentId, path }) => this.listFiles(agentId, path),
     );
 
     server.registerTool(
       'read_file',
       {
         description: storageToolDescriptions.read_file,
-        inputSchema: { path: z.string().describe('The object key to read.') },
+        inputSchema: {
+          ...AGENT_ID,
+          path: z.string().describe('The object key to read.'),
+        },
       },
-      ({ path }) => this.readFile(path),
+      ({ agentId, path }) => this.readFile(agentId, path),
     );
 
     server.registerTool(
@@ -64,6 +80,7 @@ export class SharedStorageToolsService {
       {
         description: storageToolDescriptions.search_files,
         inputSchema: {
+          ...AGENT_ID,
           prefix: z
             .string()
             .optional()
@@ -76,7 +93,8 @@ export class SharedStorageToolsService {
             ),
         },
       },
-      ({ prefix, pattern }) => this.searchFiles(prefix, pattern),
+      ({ agentId, prefix, pattern }) =>
+        this.searchFiles(agentId, prefix, pattern),
     );
 
     server.registerTool(
@@ -84,10 +102,11 @@ export class SharedStorageToolsService {
       {
         description: storageToolDescriptions.get_file_properties,
         inputSchema: {
+          ...AGENT_ID,
           path: z.string().describe('The object key to inspect.'),
         },
       },
-      ({ path }) => this.getFileProperties(path),
+      ({ agentId, path }) => this.getFileProperties(agentId, path),
     );
 
     server.registerTool(
@@ -95,58 +114,83 @@ export class SharedStorageToolsService {
       {
         description: storageToolDescriptions.get_file_summary,
         inputSchema: {
+          ...AGENT_ID,
           path: z.string().describe('The object key to summarise.'),
         },
       },
-      ({ path }) => this.getFileSummary(path),
+      ({ agentId, path }) => this.getFileSummary(agentId, path),
     );
   }
 
-  async listFiles(prefix?: string): Promise<ToolResult> {
-    const { entries } = await this.storage.post<{ entries: FileEntry[] }>(
-      'list',
-      { prefix },
-    );
-    return ok(JSON.stringify(entries, null, 2));
+  async listFiles(agentId: string, prefix?: string): Promise<ToolResult> {
+    return this.inCompany(agentId, prefix, async (key) => {
+      const { entries } = await this.storage.post<{ entries: FileEntry[] }>(
+        'list',
+        { prefix: key },
+      );
+      return JSON.stringify(entries, null, 2);
+    });
   }
 
-  async readFile(path: string): Promise<ToolResult> {
-    try {
+  async readFile(agentId: string, path: string): Promise<ToolResult> {
+    return this.inCompany(agentId, path, async (key, companyPrefix) => {
       const { content } = await this.storage.post<{ content: string }>('read', {
-        path,
+        path: key,
       });
-      return ok(content);
-    } catch (e) {
-      return ok(extractServerErrorMessage(e));
-    }
+      return content + resourceNote(key, companyPrefix);
+    });
   }
 
-  async searchFiles(prefix?: string, pattern?: string): Promise<ToolResult> {
-    const { entries } = await this.storage.post<{ entries: FileEntry[] }>(
-      'search',
-      { prefix, pattern },
-    );
-    return ok(JSON.stringify(entries, null, 2));
+  async searchFiles(
+    agentId: string,
+    prefix?: string,
+    pattern?: string,
+  ): Promise<ToolResult> {
+    return this.inCompany(agentId, prefix, async (key) => {
+      const { entries } = await this.storage.post<{ entries: FileEntry[] }>(
+        'search',
+        { prefix: key, pattern },
+      );
+      return JSON.stringify(entries, null, 2);
+    });
   }
 
-  async getFileProperties(path: string): Promise<ToolResult> {
-    try {
+  async getFileProperties(agentId: string, path: string): Promise<ToolResult> {
+    return this.inCompany(agentId, path, async (key, companyPrefix) => {
       const props = await this.storage.post<FileProperties>('properties', {
-        path,
+        path: key,
       });
-      return ok(JSON.stringify(props, null, 2));
-    } catch (e) {
-      return ok(extractServerErrorMessage(e));
-    }
+      return JSON.stringify(props, null, 2) + resourceNote(key, companyPrefix);
+    });
   }
 
-  async getFileSummary(path: string): Promise<ToolResult> {
-    try {
+  async getFileSummary(agentId: string, path: string): Promise<ToolResult> {
+    return this.inCompany(agentId, path, async (key, companyPrefix) => {
       const summary = await this.storage.post<Record<string, unknown>>(
         'summary',
-        { path },
+        { path: key },
       );
-      return ok(JSON.stringify(summary, null, 2));
+      return (
+        JSON.stringify(summary, null, 2) + resourceNote(key, companyPrefix)
+      );
+    });
+  }
+
+  /**
+   * Resolves `path` inside the caller's company folder and runs `action` on
+   * the resulting key. Any failure — a bad path, a missing file — is relayed
+   * to the model as text, as the other storage tools do.
+   */
+  private async inCompany(
+    agentId: string,
+    path: string | undefined,
+    action: (key: string, companyPrefix: string) => Promise<string>,
+  ): Promise<ToolResult> {
+    try {
+      const { companyPrefix } = await this.storage.fetchScope(agentId);
+      return ok(
+        await action(resolveCompanyKey(companyPrefix, path), companyPrefix),
+      );
     } catch (e) {
       return ok(extractServerErrorMessage(e));
     }
@@ -154,6 +198,9 @@ export class SharedStorageToolsService {
 
   /** Explains what a folder in the ADR-007 hierarchy is for, from its path shape. */
   private describeFolder(p: string): string {
+    // First: a draft under `working/resources/` is still a resource.
+    if (p.includes('/resources/') || p.endsWith('/resources'))
+      return storagePrompts.describe_folder_resources;
     if (p.includes('/tasks/') && p.includes('/materials'))
       return storagePrompts.describe_folder_task_materials;
     if (
@@ -172,4 +219,11 @@ export class SharedStorageToolsService {
       return storagePrompts.describe_folder_audit;
     return storagePrompts.describe_folder_fallback;
   }
+}
+
+/** Tells the model a key is a company resource, so it finds the resource tools. */
+function resourceNote(key: string, companyPrefix: string): string {
+  return key.startsWith(`${companyPrefix}${RESOURCES_DIR}`)
+    ? storagePrompts.resources_shared_note
+    : '';
 }

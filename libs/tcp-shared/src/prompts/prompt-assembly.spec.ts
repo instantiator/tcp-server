@@ -41,6 +41,45 @@ describe('buildAssignmentMessage', () => {
     expect(msg).toBe(`${MODE_PROMPTS.implement}\n\nSummarise the market.`);
   });
 
+  it('labels a resource in the materials and expected lists, so the agent uses the resource tools', () => {
+    const msg = buildAssignmentMessage(
+      {
+        mode: 'implement',
+        prompt: 'Raise the invoice.',
+        materials: [{ type: 'resource', value: 'price-list.md' }],
+        expected: [
+          { type: 'resource', value: 'invoices/INV-1.md' },
+          { type: 'assignment-working-path', value: 'notes.md' },
+        ],
+        resolutionContext: orphanCtx,
+      },
+      strings,
+    );
+    expect(msg).toContain('- resource: price-list.md');
+    expect(msg).toContain('- resource: invoices/INV-1.md');
+    expect(msg).toContain('- notes.md');
+  });
+
+  it("keeps only the mode prompt's sections for the agent's servers", () => {
+    const msg = (serverNames?: string[]) =>
+      buildAssignmentMessage(
+        {
+          mode: 'implement',
+          prompt: 'Do it.',
+          materials: [],
+          expected: [],
+          resolutionContext: orphanCtx,
+          serverNames,
+        },
+        strings,
+      );
+    expect(msg(['tasks', 'storage'])).toContain('list_resources');
+    expect(msg(['tasks', 'storage'])).not.toContain('list_tables');
+    expect(msg(['tasks', 'records'])).toContain('list_tables');
+    expect(msg(['tasks', 'records'])).not.toContain('list_resources');
+    expect(msg()).toContain('list_tables');
+  });
+
   it('selects the mode prompt by mode', () => {
     for (const mode of ['plan', 'qa', 'chat'] as const) {
       const msg = buildAssignmentMessage(

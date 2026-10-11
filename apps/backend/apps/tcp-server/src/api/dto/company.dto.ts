@@ -3,10 +3,13 @@ import type { McpServerToggles } from '@tcp/shared';
 import { IsMcpServerToggles } from './is-mcp-server-toggles.validator';
 import {
   IsArray,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
@@ -59,6 +62,13 @@ export class CreateCompanyDto {
   @IsMcpServerToggles()
   mcpServerToggles?: McpServerToggles | null;
 
+  /** Days old file versions are kept; `null` uses the app default. */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(3650)
+  versionRetentionDays?: number | null;
+
   @IsOptional()
   @Transform(({ value }: { value: unknown }) => normalizeIanaTimeZone(value))
   @IsIanaTimeZone()
@@ -107,6 +117,13 @@ export class UpdateCompanyDto {
   @IsOptional()
   @IsMcpServerToggles()
   mcpServerToggles?: McpServerToggles | null;
+
+  /** Days old file versions are kept; `null` uses the app default. */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(3650)
+  versionRetentionDays?: number | null;
 
   @IsOptional()
   @Transform(({ value }: { value: unknown }) => normalizeIanaTimeZone(value))

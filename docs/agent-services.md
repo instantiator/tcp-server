@@ -102,7 +102,7 @@ Each MCP server uses the **Streamable HTTP transport** with a stateless per-requ
 
 | Server                                          | Port | Status      | Description                                                                                                              |
 | ----------------------------------------------- | ---- | ----------- | ------------------------------------------------------------------------------------------------------------------------ |
-| [tcp-mcp-storage](tcp-mcp-storage.md)           | 3010 | Implemented | Read/write access to the shared MinIO object store, proxied through tcp-server                                           |
+| [tcp-mcp-storage](tcp-mcp-storage.md)           | 3010 | Implemented | Read the company's files, write working files, and keep long-lived company resources, proxied through tcp-server         |
 | [tcp-mcp-memory](tcp-mcp-memory.md)             | 3011 | Implemented | Hybrid pgvector search over episodic memory and role/shared knowledge (`recall`, `remember`, `search_knowledge`)         |
 | [tcp-mcp-interactions](tcp-mcp-interactions.md) | 3012 | Implemented | Request input from a human user or consult another agent by role                                                         |
 | [tcp-mcp-tasks](tcp-mcp-tasks.md)               | 3013 | Implemented | Complete your assignment — plan a task, submit finished work, or assure QA (mode-gated)                                  |
@@ -133,11 +133,13 @@ The role's toggle wins, then the company's; a server neither mentions is on. `re
 
 Any server can be switched off, including `tasks`, but then agents have no `create_plan`, `complete_assignment` or `assure_assignment` and can't finish an assignment, so saving that answers with an `X-Tcp-Warnings` warning.
 
-Why bother: every tool schema is sent to the model on every turn. With all six servers that is about 5,800 tokens, which crowds out an 8k window. `estimate-context-window` shows the cost per server.
+Why bother: every tool schema is sent to the model on every turn. With all six servers that is about 6,400 tokens (implement mode; the storage server's company-resource tools added about 600), which crowds out an 8k window. `estimate-context-window` shows the cost per server.
 
 At agent startup, `McpClientService` loads tools from each listed server. Tools are prefixed `{serverName}__` (e.g. `storage__list_files`) to avoid name collisions across servers. The LangGraph graph adds a conditional `ToolNode` when any tools are available.
 
-The agent receives prompt part 3 listing the servers available to it, with `describe_server` offered as the way to learn what any one of them can do. Calling it is no longer a precondition for using the rest — all of a server's tools are bound from turn 1 (see below).
+The agent receives prompt part 3 listing the servers available to it, with `describe_server` offered as the way to learn what any one of them can do. Calling it is no longer a precondition for using the rest — all of a server's tools are bound from turn 1 (see below). The services intro no longer says otherwise.
+
+**The mode prompt depends on the servers.** The assignment prompt (part 4) opens with text for the agent's mode. That text is built from sections, each tied to a server, by `modePrompt(mode, serverNames)` in `@tcp/shared`. A section is kept only if the agent has that server. A role with `records` switched off is never told about `query`, and one with `storage` off is never told about `write_resource`. The mode prompt text is not counted by `estimate-context-window`; it is up to about 540 tokens with every server on. See the [ADR-013 amendment](ADRs/ADR-013-prompt-assembly-context-management.md#amendment-as-implemented-p04-001-02).
 
 **Tool-schema gating — removed in 010.2.8.2.** From 008.6 through 010.2.8, only each server's `describe_server` tool was bound to the model at first; a server's other tools became bound only after the agent called `describe_server`, tracked per-run by `ToolVisibilityTracker`. That mechanism (and `ToolVisibilityTracker`) is gone: all mode-filtered tools are now bound to the model from turn 1, since their schemas are compact and the gating cost extra round-trips and let weak models "forget" a tool. Mode filtering (`@tcp/shared` `mode-tools.ts`) still limits which servers/tools a mode gets — see [tasks.md → Agent modes](tasks.md#agent-modes). See also [ADR-013 Amendments](ADRs/ADR-013-prompt-assembly-context-management.md#amendments-as-implemented-010282).
 

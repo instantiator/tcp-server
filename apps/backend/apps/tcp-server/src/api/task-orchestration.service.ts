@@ -20,9 +20,10 @@ import { TaskStateService } from './task-state.service';
 
 /**
  * Restates a task's expected outputs for the finalise agent, so it knows what
- * the deliverables must meet or exceed.
+ * the deliverables must meet or exceed, and lists the company resource changes
+ * that will be applied when it completes.
  */
-function buildFinalisePrompt(task: TcpTask): string {
+function buildFinalisePrompt(task: TcpTask, resourceChanges: string[]): string {
   const expectedLines = task.expected
     .map((e) =>
       e.type === 'task-completed-path'
@@ -30,7 +31,16 @@ function buildFinalisePrompt(task: TcpTask): string {
         : `- text: ${e.value || '(any text)'}`,
     )
     .join('\n');
-  return `Task: ${task.request}\n\nThe task's expected outputs — make the completed deliverables meet or exceed these:\n${expectedLines}`;
+  const parts = [
+    `Task: ${task.request}`,
+    `The task's expected outputs — make the completed deliverables meet or exceed these:\n${expectedLines}`,
+  ];
+  if (resourceChanges.length > 0) {
+    parts.push(
+      `Company resource changes this task makes (applied when you complete; check them with read_resource):\n${resourceChanges.map((r) => `- resource: ${r}`).join('\n')}`,
+    );
+  }
+  return parts.join('\n\n');
 }
 
 /**
@@ -145,7 +155,10 @@ export class TaskOrchestrationService extends TaskDispatcher {
         targetAssignmentId: assignment.id,
         roleId: assignment.roleId,
         status: 'in-progress',
-        prompt: renderQaPresentation(assignment),
+        prompt: renderQaPresentation(
+          assignment,
+          await this.deliverables.resourceDrafts(assignment),
+        ),
         materials: assignment.materials,
         expected: [],
       }),
@@ -185,20 +198,43 @@ export class TaskOrchestrationService extends TaskDispatcher {
     if (!finalise.taskId) return;
     const task = await this.taskRepo.findOneBy({ id: finalise.taskId });
     if (!task) return;
-    const completed = await this.deliverables.buildTaskCompleted(task);
-    await this.taskRepo.update(task.id, { completed, status: 'succeeded' });
-    await this.state.recordTaskState(
-      task,
-      'succeeded',
-      'task finalised (expectations met)',
-    );
+    if (await this.applyResourceChangesOrFail(task)) {
+      const completed = await this.deliverables.buildTaskCompleted(task);
+      await this.taskRepo.update(task.id, { completed, status: 'succeeded' });
+      await this.state.recordTaskState(
+        task,
+        'succeeded',
+        'task finalised (expectations met)',
+      );
+      this.logger.log(`Task ${task.id} finalised (succeeded)`);
+    }
+    // The finalise agent did its job either way.
     if (finalise.agentId) {
       await this.pauseResume.completeAgent(
         finalise.agentId,
         finalise.summary ?? '',
       );
     }
-    this.logger.log(`Task ${task.id} finalised (succeeded)`);
+  }
+
+  /**
+   * Applies the task's company resource changes before it is marked
+   * succeeded. On a failure the task fails instead, keeping its `completed`
+   * record and naming what was applied; returns whether it may succeed.
+   */
+  private async applyResourceChangesOrFail(task: TcpTask): Promise<boolean> {
+    try {
+      await this.deliverables.applyResourceChanges(task);
+      return true;
+    } catch (e) {
+      const completed = await this.deliverables.buildTaskCompleted(task);
+      await this.taskRepo.update(task.id, { completed });
+      await this.state.failTask(
+        task.id,
+        e instanceof Error ? e.message : String(e),
+      );
+      return false;
+    }
   }
 
   /** Cascades a cancellation to the task's live assignments and their agents. */
@@ -277,6 +313,7 @@ export class TaskOrchestrationService extends TaskDispatcher {
   private async finaliseMechanical(task: TcpTask): Promise<void> {
     if (task.completed != null) return;
     await this.deliverables.promoteToTaskCompleted(task);
+    if (!(await this.applyResourceChangesOrFail(task))) return;
     const completed = await this.deliverables.buildTaskCompleted(task);
     await this.taskRepo.update(task.id, { completed, status: 'succeeded' });
     await this.state.recordTaskState(task, 'succeeded', 'task finalised');
@@ -310,7 +347,10 @@ export class TaskOrchestrationService extends TaskDispatcher {
       throw new Error(`Task ${task.id} has no resolvable role for finalise`);
     }
 
-    const prompt = buildFinalisePrompt(task);
+    const prompt = buildFinalisePrompt(
+      task,
+      await this.deliverables.pendingResourceChanges(task),
+    );
     // One past the last implement step — finalise runs after the whole plan.
     const planIndex = (await this.state.planAssignments(task.id)).length + 1;
     const finalise = await this.assignmentRepo.save(

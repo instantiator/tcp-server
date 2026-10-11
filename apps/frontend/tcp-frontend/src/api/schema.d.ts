@@ -1609,6 +1609,7 @@ export interface components {
             mcpServerToggles?: {
                 [key: string]: boolean;
             } | null;
+            versionRetentionDays?: number | null;
             timezone?: string;
             /** Format: uuid */
             plannerRoleId?: string;
@@ -1625,6 +1626,7 @@ export interface components {
             mcpServerToggles?: {
                 [key: string]: boolean;
             } | null;
+            versionRetentionDays?: number | null;
             timezone?: string;
             /** Format: uuid */
             plannerRoleId?: string;
@@ -1640,6 +1642,7 @@ export interface components {
             mcpServerToggles?: {
                 [key: string]: boolean;
             } | null;
+            versionRetentionDays?: number | null;
             timezone?: string | null;
             companyContext?: string | null;
             embeddingConfig?: Record<string, never> | null;
@@ -1658,6 +1661,7 @@ export interface components {
             mcpServerToggles?: {
                 [key: string]: boolean;
             } | null;
+            versionRetentionDays?: number | null;
             timezone?: string;
             /** Format: uuid */
             plannerRoleId?: string;
@@ -1878,12 +1882,20 @@ export interface components {
             name: string;
             inlineText?: string;
         };
+        ResourceScopeDto: {
+            /** @enum {string} */
+            mode: "draft" | "direct" | "read-only";
+            writePrefix: string | null;
+            readPrefixes: string[];
+        };
         StorageScopeResponseDto: {
             /** @enum {string} */
             mode: "plan" | "implement" | "qa" | "chat" | "consultee" | "finalise";
             materials: components["schemas"]["ResolvedMaterialDto"][];
             readOnly: boolean;
+            companyPrefix: string;
             workingPrefix: string;
+            resources: components["schemas"]["ResourceScopeDto"];
         };
         PlanTaskDto: {
             /** Format: uuid */
@@ -1959,6 +1971,7 @@ export interface components {
         };
         ListFilesDto: {
             prefix?: string;
+            all?: boolean;
         };
         StorageObjectDto: {
             key: string;

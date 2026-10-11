@@ -2,6 +2,9 @@ import {
   assignmentCompletedKey,
   assignmentCompletedPrefix,
   assignmentWorkingKey,
+  assignmentWorkingPrefix,
+  RESOURCES_DIR,
+  resourcesPrefix,
   TcpAssignment,
   TcpCompany,
   TcpMaterialArtifact,
@@ -16,6 +19,24 @@ import type { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { StorageService } from '../storage/storage.service';
 import { TaskStateService } from './task-state.service';
+
+/**
+ * Applying a task's resource changes stopped part-way: `applied` lists the
+ * resources already changed, so the failure reason can say what landed.
+ */
+export class ResourceApplyError extends Error {
+  constructor(
+    readonly path: string,
+    readonly applied: string[],
+    cause: unknown,
+  ) {
+    super(
+      `Applying company resource changes stopped at '${path}'` +
+        ` (already applied: ${applied.join(', ') || 'none'}): ` +
+        (cause instanceof Error ? cause.message : String(cause)),
+    );
+  }
+}
 
 /**
  * Moves a task's artifacts between the storage tiers the lifecycle defines —
@@ -46,7 +67,9 @@ export class TaskDeliverablesService {
   /**
    * Copies a QA-accepted assignment's prepared working files into its completed
    * directory, and returns the `approved` artifact list to record on the row.
-   * Inline text needs no copy — it is carried across as-is.
+   * Inline text needs no copy — it is carried across as-is. Every resource
+   * draft is promoted too, whether or not the agent listed it in `prepared`:
+   * QA has seen them all, and a small model often forgets to list one.
    */
   async promoteApproved(
     target: TcpAssignment,
@@ -58,6 +81,7 @@ export class TaskDeliverablesService {
         approved.push({ type: 'inline-text', value: item.value });
         continue;
       }
+      if (item.type === 'resource') continue; // promoted from the listing below
       const source = assignmentWorkingKey(
         slug,
         target.taskId!,
@@ -73,7 +97,79 @@ export class TaskDeliverablesService {
       await this.storage.copyFile(source, destination);
       approved.push({ type: 'assignment-completed-path', value: item.value });
     }
+    for (const path of await this.resourceDrafts(target)) {
+      await this.storage.copyFile(
+        assignmentWorkingKey(
+          slug,
+          target.taskId!,
+          target.orderIndex!,
+          `${RESOURCES_DIR}${path}`,
+        ),
+        assignmentCompletedKey(
+          slug,
+          target.taskId!,
+          target.orderIndex!,
+          `${RESOURCES_DIR}${path}`,
+        ),
+      );
+      approved.push({ type: 'resource', value: path });
+    }
     return approved;
+  }
+
+  /** The resource drafts in a task step's working folder, as paths under `resources/`. */
+  async resourceDrafts(assignment: TcpAssignment): Promise<string[]> {
+    if (assignment.taskId == null || assignment.orderIndex == null) return [];
+    const slug = await this.companySlug(assignment.companyId);
+    return this.pathsUnder(
+      `${assignmentWorkingPrefix(slug, assignment.taskId, assignment.orderIndex)}${RESOURCES_DIR}`,
+    );
+  }
+
+  /** The resource changes waiting in a task's completed folder, applied when it succeeds. */
+  async pendingResourceChanges(task: TcpTask): Promise<string[]> {
+    const slug = await this.companySlug(task.companyId);
+    return this.pathsUnder(
+      `${taskCompletedPrefix(slug, task.id)}${RESOURCES_DIR}`,
+    );
+  }
+
+  /**
+   * Applies a task's resource changes: copies each pending change over the
+   * live company resource. Running it again just writes the same content as
+   * a new version, so a restart can safely repeat it. The task's own copy
+   * stays, as the record of what it changed.
+   *
+   * ponytail: last write wins if two tasks change one resource; versioning
+   * keeps the other. Compare a base version first if lost updates show up.
+   *
+   * @throws {@link ResourceApplyError} naming what was applied before the failure.
+   */
+  async applyResourceChanges(task: TcpTask): Promise<string[]> {
+    const slug = await this.companySlug(task.companyId);
+    const pending = `${taskCompletedPrefix(slug, task.id)}${RESOURCES_DIR}`;
+    const applied: string[] = [];
+    for (const path of await this.pathsUnder(pending)) {
+      try {
+        await this.storage.copyFile(
+          `${pending}${path}`,
+          `${resourcesPrefix(slug)}${path}`,
+          { user: null, agent: null, task: task.id },
+        );
+      } catch (e) {
+        throw new ResourceApplyError(path, applied, e);
+      }
+      applied.push(path);
+    }
+    return applied;
+  }
+
+  /** Every file under `prefix` (all pages), as paths relative to it. */
+  private async pathsUnder(prefix: string): Promise<string[]> {
+    const files = await this.storage.listFiles(prefix, { all: true });
+    return files
+      .filter((f) => f.key.startsWith(prefix))
+      .map((f) => f.key.slice(prefix.length));
   }
 
   /**
@@ -90,13 +186,22 @@ export class TaskDeliverablesService {
     );
     for (const assignment of ordered) {
       if (assignment.orderIndex == null) continue;
-      const files = await this.storage.listFiles(
-        assignmentCompletedPrefix(slug, task.id, assignment.orderIndex),
+      const prefix = assignmentCompletedPrefix(
+        slug,
+        task.id,
+        assignment.orderIndex,
       );
-      for (const file of files) {
+      for (const file of await this.storage.listFiles(prefix, { all: true })) {
+        // Resource drafts keep their folders; other files are flattened to
+        // their name, as before.
+        const rel = file.key.slice(prefix.length);
         await this.storage.copyFile(
           file.key,
-          taskCompletedKey(slug, task.id, file.name),
+          taskCompletedKey(
+            slug,
+            task.id,
+            rel.startsWith(RESOURCES_DIR) ? rel : file.name,
+          ),
         );
       }
     }
@@ -104,20 +209,22 @@ export class TaskDeliverablesService {
 
   /**
    * Builds the task's `completed` artifact list from the files currently in its
-   * completed/ directory (so a finalise agent's renames/edits are reflected)
-   * plus any approved `inline-text` from the plan assignments.
+   * completed/ directory (so a finalise agent's renames/edits are reflected) —
+   * resource changes as `resource` entries — plus any approved `inline-text`
+   * from the plan assignments.
    */
   async buildTaskCompleted(task: TcpTask): Promise<TcpTaskCompletedArtifact[]> {
     const slug = await this.companySlug(task.companyId);
-    const files = await this.storage.listFiles(
-      taskCompletedPrefix(slug, task.id),
-    );
+    const prefix = taskCompletedPrefix(slug, task.id);
+    const files = await this.storage.listFiles(prefix, { all: true });
     const plan = await this.state.planAssignments(task.id);
     return [
-      ...files.map((f): TcpTaskCompletedArtifact => ({
-        type: 'task-completed-path',
-        value: f.name,
-      })),
+      ...files.map((f): TcpTaskCompletedArtifact => {
+        const rel = f.key.slice(prefix.length);
+        return rel.startsWith(RESOURCES_DIR)
+          ? { type: 'resource', value: rel.slice(RESOURCES_DIR.length) }
+          : { type: 'task-completed-path', value: f.name };
+      }),
       ...plan.flatMap((a) =>
         a.approved
           .filter((art) => art.type === 'inline-text')

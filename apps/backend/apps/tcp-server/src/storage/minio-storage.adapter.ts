@@ -161,8 +161,13 @@ export class MinioStorageAdapter
 
   // Generic file-action operations: list, read, write, delete, copy, move, search.
 
-  async listFiles(prefix?: string): Promise<StorageObject[]> {
-    const objects = await this.store.listPage(prefix ?? '');
+  async listFiles(
+    prefix?: string,
+    options?: { all?: boolean },
+  ): Promise<StorageObject[]> {
+    const objects = options?.all
+      ? await this.store.listAll(prefix ?? '')
+      : await this.store.listPage(prefix ?? '');
     return objects
       .filter((obj) => !obj.Key?.startsWith(DELETED_PREFIX))
       .map((obj) => ({

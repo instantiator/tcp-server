@@ -90,13 +90,17 @@ Each company's data lives under a top-level prefix derived from the company's `s
     {task_id}/
       materials/               ← user-submitted inputs; read-only for agents
       completed/                ← final outputs of the task
+        resources/               ← the task's resource changes, applied when it succeeds
       assignments/
         {orderIndex}/
           working/               ← private working area for the assignment's agent
+            resources/           ← drafts of company resource changes
           completed/             ← files promoted from working/ when QA accepts
+            resources/           ← approved resource drafts
   assignments/
     {assignment_id}/
       working/                 ← working area for ORPHAN assignments (agents outside any task)
+  resources/                   ← company resources: long-lived company documents
   knowledge/
     {role_slug}/               ← OKF Markdown documents used for RAG indexing (knowledge for the role)
     shared/                    ← OKF Markdown documents used for RAG indexing (company-wide knowledge)
@@ -109,16 +113,17 @@ Each company's data lives under a top-level prefix derived from the company's `s
 
 ### Folder purposes
 
-| Path                                             | Written by                        | Read by                   | Notes                                                                                                                                  |
-| ------------------------------------------------ | --------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `tasks/{id}/materials/`                          | tcp-server (`POST .../materials`) | Agents (read-only)        | Task inputs submitted by the user                                                                                                      |
-| `tasks/{id}/completed/`                          | Orchestrator (finalisation)       | All agents                | Final outputs of the task, copied from its assignments' `completed/` directories                                                       |
-| `tasks/{id}/assignments/{orderIndex}/working/`   | The assignment's agent            | The assignment's agent    | Private scratch area for one plan step (a task's implement-mode assignment)                                                            |
-| `tasks/{id}/assignments/{orderIndex}/completed/` | Orchestrator (on QA accept)       | Later assignments, task   | Files promoted from `working/` when QA accepts; `resolveArtifactKey` finds the most recent prior assignment approving a given filename |
-| `assignments/{assignment_id}/working/`           | The (orphan) assignment's agent   | The assignment's agent    | Working area for assignments outside any task — plain conversations/consultations                                                      |
-| `knowledge/{role_slug}/`                         | tcp-cli `store-knowledge`         | tcp-server (RAG indexing) | Source documents for a role's RAG; see [Agent Services](agent-services.md#rag-retrieval-augmented-generation)                          |
-| `knowledge/shared/`                              | tcp-cli `store-knowledge`         | tcp-server (RAG indexing) | Source documents for company-wide RAG (all roles); `shared` is a reserved role slug and cannot be claimed by a role                    |
-| `audit/{id}/`                                    | tcp-agent (planned)               | Operations tooling        | Append-only JSONL audit records per task step                                                                                          |
+| Path                                             | Written by                                 | Read by                   | Notes                                                                                                                                  |
+| ------------------------------------------------ | ------------------------------------------ | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `tasks/{id}/materials/`                          | tcp-server (`POST .../materials`)          | Agents (read-only)        | Task inputs submitted by the user                                                                                                      |
+| `tasks/{id}/completed/`                          | Orchestrator (finalisation)                | All agents                | Final outputs of the task, copied from its assignments' `completed/` directories                                                       |
+| `tasks/{id}/assignments/{orderIndex}/working/`   | The assignment's agent                     | The assignment's agent    | Private scratch area for one plan step (a task's implement-mode assignment)                                                            |
+| `tasks/{id}/assignments/{orderIndex}/completed/` | Orchestrator (on QA accept)                | Later assignments, task   | Files promoted from `working/` when QA accepts; `resolveArtifactKey` finds the most recent prior assignment approving a given filename |
+| `assignments/{assignment_id}/working/`           | The (orphan) assignment's agent            | The assignment's agent    | Working area for assignments outside any task — plain conversations/consultations                                                      |
+| `resources/`                                     | Chat agents (directly); tasks (on success) | All agents                | Company resources: invoices, price lists, policies. See [Company resources](#company-resources)                                        |
+| `knowledge/{role_slug}/`                         | tcp-cli `store-knowledge`                  | tcp-server (RAG indexing) | Source documents for a role's RAG; see [Agent Services](agent-services.md#rag-retrieval-augmented-generation)                          |
+| `knowledge/shared/`                              | tcp-cli `store-knowledge`                  | tcp-server (RAG indexing) | Source documents for company-wide RAG (all roles); `shared` is a reserved role slug and cannot be claimed by a role                    |
+| `audit/{id}/`                                    | tcp-agent (planned)                        | Operations tooling        | Append-only JSONL audit records per task step                                                                                          |
 
 ### Context overflow
 
@@ -130,13 +135,76 @@ When incoming data (RAG results, MCP responses) still exceeds the context budget
 
 If the write fails, the compacted (truncated) version is used instead. See [Context Management](context-management.md) for the full compaction strategy.
 
+## Company resources
+
+`{company_slug}/resources/` holds long-lived company documents: invoices, price lists, policies, listing copy. A task's working files belong to that task. A resource belongs to the company and is meant to be found and used again.
+
+A folder's purpose is its `README.md`, which is an ordinary resource. Agents and users can both edit it. Resources are text only, so a PDF or an image can't be read or written by an agent.
+
+Agents use five tools in the storage server: `list_resources`, `read_resource`, `write_resource`, `append_resource` and `replace_in_resource`. See [tcp-mcp-storage.md](tcp-mcp-storage.md#company-resources).
+
+Where a change goes depends on the agent's mode:
+
+| Mode                | Reads from                                                            | Writes to                                                         |
+| ------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `chat`              | `resources/`                                                          | `resources/` directly. The user in the conversation is the review |
+| `implement`         | Its own draft, then earlier approved steps' drafts, then `resources/` | Its own draft: `.../working/resources/`                           |
+| `qa`                | The same layers as the step it reviews                                | Nothing (read-only)                                               |
+| `finalise`          | The task's pending changes, then `resources/`                         | The task's pending changes: `tasks/{id}/completed/resources/`     |
+| `plan`, `consultee` | `resources/`                                                          | Nothing (read-only)                                               |
+
+### Drafts, then apply
+
+Inside a task a resource change is a **draft**. It moves through the same steps as any other output:
+
+1. The implementing agent writes the draft into its `working/resources/` folder.
+2. When QA accepts the step, **every** file under `working/resources/` is promoted to the step's `completed/resources/`, whether or not it was listed in `prepared`.
+3. When the task finalises, the steps' `completed/resources/` files are gathered into the task's `completed/resources/` folder. Unlike other files, they keep their folders.
+4. **Apply:** just before the task is marked `succeeded`, each file in the task's `completed/resources/` is copied over the live file in `resources/`. This happens on both finalise paths: the mechanical one, and after a finalise agent has run.
+
+The task's copy stays where it is, as the record of what the task changed. Its `completed` list names each change as a `resource` entry. If a task fails, nothing is applied. If applying stops part-way, the task fails and its failure reason names what was already applied. Running apply twice is harmless: it writes the same content again as a new version.
+
+See [tasks.md → Company resources](tasks.md#company-resources).
+
+## Versioning and retention
+
+tcp-server turns on MinIO bucket versioning when it starts. After that, overwriting or deleting a file keeps the old version. Old versions are not kept forever. Lifecycle rules remove a version once it has been replaced for longer than the retention period.
+
+| Setting                               | Where                                                       | Default |
+| ------------------------------------- | ----------------------------------------------------------- | ------- |
+| `STORAGE_VERSION_RETENTION_DAYS`      | Environment variable on tcp-server (and `.env`)             | 90 days |
+| `versionRetentionDays` on the company | Company field, set through the API or `tcp-cli set-company` | unset   |
+
+A company's `versionRetentionDays` wins over the environment variable. Set it to `null` to go back to the default. For example:
+
+```bash
+./tcp-cli.sh -t $TOKEN set-company --company-slug acme -i '{"versionRetentionDays": 365}'
+```
+
+tcp-server writes one lifecycle rule for each company folder (`{slug}/`), plus one for `_deleted/` at the default. It rewrites the rules at start-up, and shortly after a company is created or its `versionRetentionDays` changes. A deleted company's rule stays until the next start. Failures are logged and do not stop storage working.
+
+Versioning covers the whole bucket, so working-file edits keep old versions too. S3 allows about 1,000 lifecycle rules per bucket, which limits how many companies one deployment can hold. See [outstanding-issues.md](outstanding-issues.md).
+
+### Restoring an old version
+
+Restoring is done in the MinIO console for now. The wording of the console changes between releases, so look for the equivalent of each step.
+
+1. Open the console. Run `./tcp-cli.sh open-document-store`, or go to `MINIO_CONSOLE_URL` (default [http://localhost:9001](http://localhost:9001)), and log in as described under [Authentication](#console-login).
+2. Browse the bucket to the file, for example `{company_slug}/resources/price-list.md`.
+3. Select the file and open its version history. The console calls this "Versions" or "Display Object Versions". It lists each version with its date and size.
+4. Pick the version you want. Restore it, or download it and upload it again.
+
+Restoring does not remove the newer versions. It makes a **new current version** with the old content, so you can undo the restore the same way.
+
+A version is only there until its retention period ends. Restore soon after the bad change.
+
 ## Write validation
 
 Documents written through the storage abstraction (`StorageService`, currently backed by `MinioStorageAdapter`) are validated before being accepted — JSON, YAML, OKF Markdown, plain Markdown, XML, and CSV each have a registered validator (`libs/tcp-shared/src/storage/validation/`). OKF documents (under `knowledge/{role_slug}/` or `knowledge/shared/`) require YAML front-matter with a non-empty `title` field; other formats get structural well-formedness checks, plus JSON-Schema validation when the document names a local `$schema` reference (remote schema URLs are never fetched, to avoid the server making outbound requests driven by untrusted document content).
 
 A failed validation returns `422 Unprocessable Entity` with a body of `{ statusCode, message, errors: [{ message, path?, llmHint }] }`. `errors[].llmHint` is written to be directly actionable by the calling agent — relay it back into the agent's context rather than the raw parser error.
 
-Every write also records an audit event carrying `originators: { user, agent, task }` — `user` is populated for direct JWT-authenticated writes (`POST /api/storage`, `POST /api/role/:roleId/knowledge`, `POST /api/company/:companyId/knowledge`); `agent`/`task` are populated for MCP-tool-initiated writes once wired (see the shared-lib `AuditEvent.payload` shape in `docs/database.md`).
+Every write also records an audit event carrying `originators: { user, agent, task }` — `user` is populated for direct JWT-authenticated writes (`POST /api/storage`, `POST /api/role/:roleId/knowledge`, `POST /api/company/:companyId/knowledge`); `agent` is populated for MCP-tool-initiated writes, and `task` for the copies that apply a task's company resource changes (see the shared-lib `AuditEvent.payload` shape in `docs/database.md`).
 
 ## Managing knowledge documents
 
@@ -223,17 +291,18 @@ Both commands write a JSON result to stdout and progress messages to stderr. See
 
 ## Agent access via MCP
 
-Agents interact with storage through the [tcp-mcp-storage](tcp-mcp-storage.md) MCP server rather than directly via the S3 API. The tools fall into three tiers:
+Agents interact with storage through the [tcp-mcp-storage](tcp-mcp-storage.md) MCP server rather than directly via the S3 API. The tools fall into four tiers:
 
-- **Read-only exploration** — `describe_server`, `describe_folder`, `list_files`, `read_file`, `search_files`, `get_file_properties`, `get_file_summary`. Agents may browse and read anything in the shared company folder by full object key.
+- **Read-only exploration** — `describe_server`, `describe_folder`, `list_files`, `read_file`, `search_files`, `get_file_properties`, `get_file_summary`. Agents may browse and read anything in **their own company's** folder. Paths are taken relative to the company folder (`knowledge/shared/`), and a full key inside it works too. Another company's files can't be reached: a path that isn't already inside the caller's company folder is placed inside it, so it is simply not found.
 - **Assignment-scoped working files** — `list_working_files`, `get_working_file_properties`, `get_working_file_summary`, `read_working_file`, `create_working_file`, `append_working_file`, `replace_in_working_file`, `delete_working_file`, `restore_working_file`, `rename_working_file`. The agent supplies **only a filename** (subdirectories allowed); the working-directory prefix is derived server-side from the caller's assignment (see below), so an agent can only write inside its own working area. `create_working_file` creates a new file (or replaces one entirely with `overwrite: true`) — the whole-file counterpart to `append_working_file` (add to a file) and `replace_in_working_file` (small in-place edit). In **qa mode** these are read-only and target the assignment under review — the mutating variants return a "not available in qa mode" message.
+- **Company resources** — `list_resources`, `read_resource`, `write_resource`, `append_resource`, `replace_in_resource`. The agent supplies a path under `resources/`. Where reads look and where a write lands is decided server-side from the agent's mode (see [Company resources](#company-resources)).
 - **Assignment-scoped materials** — `list_material_files`, `get_material_file_properties`, `read_material_file`. Exposes the caller's assignment's `materials`, resolved to concrete keys (`resolveArtifactKey`); `inline-text` materials are keyed by a synthetic `inline-N` name and read back as their literal content.
 
 The permissive general **write** tools (`write_file`, `delete_file`, `restore_file`, `copy_file`, `move_file`) are no longer exposed to agents — the internal endpoints behind them remain for the knowledge API, storage proxy, and orchestration. See [tcp-mcp-storage.md](tcp-mcp-storage.md) for the full tool reference.
 
 ### Scope resolution
 
-The scoped tools resolve their working prefix and materials via `GET /internal/agent/:agentId/storage-scope` (the `agentId` is injected by `McpClientService`, never model-supplied). tcp-server returns `{ mode, readOnly, workingPrefix, materials }`:
+The scoped tools resolve their working prefix and materials via `GET /internal/agent/:agentId/storage-scope` (the `agentId` is injected by `McpClientService`, never model-supplied). tcp-server returns `{ mode, readOnly, companyPrefix, workingPrefix, materials, resources }`. `companyPrefix` (`{slug}/`) keeps the shared read tools inside the caller's company. `resources` is `{ mode, readPrefixes, writePrefix }`: the folders a resource is read from in order, and the one folder writes go to, or `null` when the agent may not change resources.
 
 - `implement`/`plan` callers get their **own** assignment's working directory (`tasks/{taskId}/assignments/{orderIndex}/working/`, or `assignments/{assignmentId}/working/` for orphans), read/write.
 - `qa` callers get the **target assignment**'s working directory, read-only, and the target's materials view.
@@ -242,4 +311,4 @@ Filenames are normalised and rejected if absolute, containing a `..` segment, or
 
 ## Internal storage-action endpoints
 
-The full file-action surface (list, read, write, delete, restore, search, properties, copy, move, summary, exists) lives on `tcp-server` under `POST /internal/storage/*` (plus `GET /internal/storage/exists`), guarded by `X-Internal-Api-Key` rather than JWT — these are service-to-service endpoints backing `tcp-mcp-storage`'s MCP tools, not for direct CLI/human use. `POST /internal/storage/append` (read-modify-write that creates the file when absent, `created` in the response) and `POST /internal/storage/replace` (all-occurrence literal string replace, returning `count`) are both variants of `write` and re-use its validation/audit/origination plumbing. `StorageProxyController`'s JWT-guarded `GET/POST /api/storage` remains the human-facing generic get/put-by-key surface. `delete`/`restore` are soft-delete (files move to `_deleted/`), matching the MCP tool semantics described above — `deleteKnowledgeFile` now delegates to the same soft-delete primitive rather than hard-deleting.
+The full file-action surface (list, read, write, delete, restore, search, properties, copy, move, summary, exists) lives on `tcp-server` under `POST /internal/storage/*` (plus `GET /internal/storage/exists`), guarded by `X-Internal-Api-Key` rather than JWT — these are service-to-service endpoints backing `tcp-mcp-storage`'s MCP tools, not for direct CLI/human use. `POST /internal/storage/append` (read-modify-write that creates the file when absent, `created` in the response) and `POST /internal/storage/replace` (all-occurrence literal string replace, returning `count`) are both variants of `write` and re-use its validation/audit/origination plumbing. `StorageProxyController`'s JWT-guarded `GET/POST /api/storage` remains the human-facing generic get/put-by-key surface. `list` takes an `all` flag that lifts the 1,000-key cap, used for resource trees and for promotion. `delete`/`restore` are soft-delete (files move to `_deleted/`), matching the MCP tool semantics described above — `deleteKnowledgeFile` now delegates to the same soft-delete primitive rather than hard-deleting.

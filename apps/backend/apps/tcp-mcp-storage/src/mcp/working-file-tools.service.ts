@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import axios from 'axios';
 import { z } from 'zod';
 import { ToolResult, extractServerErrorMessage, ok } from '@tcp/shared';
 import { getReadOnlyMessage } from '../storage-prompts';
 import { storageToolDescriptions } from '../storage-tool-descriptions';
+import { resourceHint } from './resource-hint';
 import { resolveScopedKey } from './scoped-key';
 import {
   FileEntry,
@@ -179,11 +181,15 @@ export class WorkingFileToolsService {
     agentId: string,
     filename: string,
   ): Promise<ToolResult> {
-    return this.scopedRead(agentId, filename, async (key) => {
+    return this.scopedRead(agentId, filename, async (key, scope) => {
       const props = await this.storage.post<FileProperties>('properties', {
         path: key,
       });
-      return JSON.stringify(props, null, 2);
+      // A missing file is a normal reply here, not an error.
+      const hint = props.exists
+        ? ''
+        : await resourceHint(this.storage, scope, filename);
+      return JSON.stringify(props, null, 2) + hint;
     });
   }
 
@@ -191,25 +197,38 @@ export class WorkingFileToolsService {
     agentId: string,
     filename: string,
   ): Promise<ToolResult> {
-    return this.scopedRead(agentId, filename, async (key) => {
-      const summary = await this.storage.post<Record<string, unknown>>(
-        'summary',
-        { path: key },
-      );
-      return JSON.stringify(summary, null, 2);
-    });
+    return this.scopedRead(
+      agentId,
+      filename,
+      async (key) => {
+        const summary = await this.storage.post<Record<string, unknown>>(
+          'summary',
+          { path: key },
+        );
+        return JSON.stringify(summary, null, 2);
+      },
+      true,
+    );
   }
 
   async readWorkingFile(
     agentId: string,
     filename: string,
   ): Promise<ToolResult> {
-    return this.scopedRead(agentId, filename, async (key) => {
-      const { content } = await this.storage.post<{ content: string }>('read', {
-        path: key,
-      });
-      return content;
-    });
+    return this.scopedRead(
+      agentId,
+      filename,
+      async (key) => {
+        const { content } = await this.storage.post<{ content: string }>(
+          'read',
+          {
+            path: key,
+          },
+        );
+        return content;
+      },
+      true,
+    );
   }
 
   async createWorkingFile(
@@ -373,18 +392,35 @@ export class WorkingFileToolsService {
    * The read-side counterpart of {@link workingFileAction}: same scope
    * resolution and filename confinement, no read-only refusal — these tools
    * stay available to a qa-mode caller.
+   *
+   * @param hintOnMissing - When a 404 comes back, point the model at a
+   *   same-named company resource, if there is one.
    */
   private async scopedRead(
     agentId: string,
     filename: string,
-    run: (key: string) => Promise<string>,
+    run: (key: string, scope: StorageScope) => Promise<string>,
+    hintOnMissing = false,
   ): Promise<ToolResult> {
     try {
       const scope = await this.storage.fetchScope(agentId);
       const key = resolveScopedKey(scope.workingPrefix, filename);
-      return ok(await run(key));
+      try {
+        return ok(await run(key, scope));
+      } catch (e) {
+        if (!hintOnMissing || !isNotFound(e)) throw e;
+        return ok(
+          extractServerErrorMessage(e) +
+            (await resourceHint(this.storage, scope, filename)),
+        );
+      }
     } catch (e) {
       return ok(extractServerErrorMessage(e));
     }
   }
+}
+
+/** True for an HTTP 404 from tcp-server. */
+function isNotFound(e: unknown): boolean {
+  return axios.isAxiosError(e) && e.response?.status === 404;
 }

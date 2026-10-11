@@ -121,6 +121,7 @@ describe('Storage scope + append (e2e)', () => {
     expect(scopeRes.body).toMatchObject({
       mode: 'implement',
       readOnly: false,
+      companyPrefix: `${company.slug}/`,
       workingPrefix: expectedPrefix,
       materials: [{ name: 'inline-1', key: null, inlineText: 'a hint' }],
     });

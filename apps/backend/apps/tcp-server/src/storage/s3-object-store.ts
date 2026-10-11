@@ -5,7 +5,10 @@ import {
   GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
+  LifecycleRule,
   ListObjectsV2Command,
+  PutBucketLifecycleConfigurationCommand,
+  PutBucketVersioningCommand,
   PutObjectCommand,
   S3Client,
   _Object,
@@ -75,6 +78,26 @@ export class S3ObjectStore {
         );
       }
     }
+  }
+
+  /** Turns on versioning, so an overwritten or deleted object keeps its old versions. */
+  async enableVersioning(): Promise<void> {
+    await this.client.send(
+      new PutBucketVersioningCommand({
+        Bucket: this.bucket,
+        VersioningConfiguration: { Status: 'Enabled' },
+      }),
+    );
+  }
+
+  /** Replaces the bucket's whole lifecycle configuration with `rules`. */
+  async putLifecycleRules(rules: LifecycleRule[]): Promise<void> {
+    await this.client.send(
+      new PutBucketLifecycleConfigurationCommand({
+        Bucket: this.bucket,
+        LifecycleConfiguration: { Rules: rules },
+      }),
+    );
   }
 
   /** Writes an object, replacing anything already at `key`. */

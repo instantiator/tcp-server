@@ -27,18 +27,19 @@ Every endpoint that accepts a request body uses a dedicated DTO (Data Transfer O
 
 #### `CreateCompanyDto` — `POST /api/company`
 
-| Field                  | Type           | Required | Constraints                                                           |
-| ---------------------- | -------------- | -------- | --------------------------------------------------------------------- |
-| `slug`                 | `string`       | Yes      | Non-empty                                                             |
-| `name`                 | `string`       | Yes      | Non-empty                                                             |
-| `description`          | `string`       | Yes      | Non-empty                                                             |
-| `llmConfig`            | `LlmConfigDto` | No       | Nested object                                                         |
-| `embeddingConfig`      | `LlmConfigDto` | No       | Nested object                                                         |
-| `companyContext`       | `string`       | No       |                                                                       |
-| `systemPromptTemplate` | `string`       | No       | Default fallback for roles that leave theirs blank                    |
-| `mcpServerList`        | `string[]`     | No       | Additive — combined with the system registry and each role's own list |
-| `mcpServerToggles`     | `object\|null` | No       | Server name → `true`/`false`; switches servers on/off for all roles   |
-| `timezone`             | `string`       | No       | IANA name; display/prompt-localization only, never storage            |
+| Field                  | Type            | Required | Constraints                                                             |
+| ---------------------- | --------------- | -------- | ----------------------------------------------------------------------- |
+| `slug`                 | `string`        | Yes      | Non-empty                                                               |
+| `name`                 | `string`        | Yes      | Non-empty                                                               |
+| `description`          | `string`        | Yes      | Non-empty                                                               |
+| `llmConfig`            | `LlmConfigDto`  | No       | Nested object                                                           |
+| `embeddingConfig`      | `LlmConfigDto`  | No       | Nested object                                                           |
+| `companyContext`       | `string`        | No       |                                                                         |
+| `systemPromptTemplate` | `string`        | No       | Default fallback for roles that leave theirs blank                      |
+| `mcpServerList`        | `string[]`      | No       | Additive — combined with the system registry and each role's own list   |
+| `mcpServerToggles`     | `object\|null`  | No       | Server name → `true`/`false`; switches servers on/off for all roles     |
+| `timezone`             | `string`        | No       | IANA name; display/prompt-localization only, never storage              |
+| `versionRetentionDays` | `integer\|null` | No       | 1 to 3650; days old file versions are kept. `null` uses the app default |
 
 #### `UpdateCompanyDto` — `PUT /api/company/:id`
 
@@ -124,18 +125,19 @@ These are the definitions you are most likely to reference when preparing CLI in
 
 Represents a company (tenant). Used by `set-company`.
 
-| Field                  | Type                      | Required | Notes                                                                                                                                                                                       |
-| ---------------------- | ------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `slug`                 | `string`                  | Yes      | URL-safe identifier; globally unique                                                                                                                                                        |
-| `name`                 | `string`                  | Yes      | Display name                                                                                                                                                                                |
-| `description`          | `string`                  | Yes      | One-sentence description                                                                                                                                                                    |
-| `companyContext`       | `string`                  | No       | Injected into every agent prompt as part 2                                                                                                                                                  |
-| `llmConfig`            | [`LlmConfig`](#llmconfig) | No       | Default LLM for all roles that don't override; company/role both implement `WithLlmConfig`                                                                                                  |
-| `embeddingConfig`      | [`LlmConfig`](#llmconfig) | No       | Embedding model (can differ from the chat LLM)                                                                                                                                              |
-| `systemPromptTemplate` | `string`                  | No       | Default fallback for roles that leave theirs blank; falls back to a baked-in default if also blank                                                                                          |
-| `mcpServerList`        | `string[]`                | No       | Additive extra servers, unioned with the system registry and each role's own list                                                                                                           |
-| `mcpServerToggles`     | `Record<string, boolean>` | No       | Servers switched on (`true`) or off (`false`) for all the company's roles; a role's own toggle wins. See [agent-services.md](agent-services.md#switching-servers-off-for-a-company-or-role) |
-| `timezone`             | `string`                  | No       | IANA name (e.g. `Europe/London`); CLI/UI display and prompt localization only — storage and the LLM's `{{datetime}}` anchor are always UTC                                                  |
+| Field                  | Type                      | Required | Notes                                                                                                                                                                                                             |
+| ---------------------- | ------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `slug`                 | `string`                  | Yes      | URL-safe identifier; globally unique                                                                                                                                                                              |
+| `name`                 | `string`                  | Yes      | Display name                                                                                                                                                                                                      |
+| `description`          | `string`                  | Yes      | One-sentence description                                                                                                                                                                                          |
+| `companyContext`       | `string`                  | No       | Injected into every agent prompt as part 2                                                                                                                                                                        |
+| `llmConfig`            | [`LlmConfig`](#llmconfig) | No       | Default LLM for all roles that don't override; company/role both implement `WithLlmConfig`                                                                                                                        |
+| `embeddingConfig`      | [`LlmConfig`](#llmconfig) | No       | Embedding model (can differ from the chat LLM)                                                                                                                                                                    |
+| `systemPromptTemplate` | `string`                  | No       | Default fallback for roles that leave theirs blank; falls back to a baked-in default if also blank                                                                                                                |
+| `mcpServerList`        | `string[]`                | No       | Additive extra servers, unioned with the system registry and each role's own list                                                                                                                                 |
+| `mcpServerToggles`     | `Record<string, boolean>` | No       | Servers switched on (`true`) or off (`false`) for all the company's roles; a role's own toggle wins. See [agent-services.md](agent-services.md#switching-servers-off-for-a-company-or-role)                       |
+| `timezone`             | `string`                  | No       | IANA name (e.g. `Europe/London`); CLI/UI display and prompt localization only — storage and the LLM's `{{datetime}}` anchor are always UTC                                                                        |
+| `versionRetentionDays` | `number \| null`          | No       | Days old file versions are kept after a file is overwritten or deleted (1 to 3650). Unset uses `STORAGE_VERSION_RETENTION_DAYS` (default 90). See [shared-storage.md](shared-storage.md#versioning-and-retention) |
 
 ### `TcpRole`
 

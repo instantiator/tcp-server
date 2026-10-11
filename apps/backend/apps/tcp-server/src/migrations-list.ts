@@ -8,6 +8,7 @@ import { AgentRateLimitPause1784840000000 } from './migrations/1784840000000-Age
 import { TaskPauseAndVisualisation1784850000000 } from './migrations/1784850000000-TaskPauseAndVisualisation';
 import { TaskNotifications1784860000000 } from './migrations/1784860000000-TaskNotifications';
 import { McpServerToggles1784880000000 } from './migrations/1784880000000-McpServerToggles';
+import { VersionRetentionDays1784890000000 } from './migrations/1784890000000-VersionRetentionDays';
 
 /**
  * tcp-server's full, ordered migration list — the single source of truth for
@@ -41,4 +42,5 @@ export const MIGRATIONS: (new () => MigrationInterface)[] = [
   TaskPauseAndVisualisation1784850000000,
   TaskNotifications1784860000000,
   McpServerToggles1784880000000,
+  VersionRetentionDays1784890000000,
 ];

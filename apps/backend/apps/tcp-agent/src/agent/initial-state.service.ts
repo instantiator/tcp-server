@@ -71,7 +71,7 @@ export class InitialStateService {
     );
 
     const assignmentMessage = new HumanMessage(
-      await this.buildAssignmentText(agent, initialPrompt),
+      await this.buildAssignmentText(agent, initialPrompt, loadedServerNames),
     );
     const rolesMessage = await this.buildRolesMessage(assignment, company.id);
 
@@ -140,6 +140,7 @@ export class InitialStateService {
   private async buildAssignmentText(
     agent: TcpAgent,
     initialPrompt: string,
+    serverNames: string[],
   ): Promise<string> {
     const { company, assignment } = agent;
     // The task's implement-mode plan, needed to resolve any
@@ -160,6 +161,7 @@ export class InitialStateService {
         prompt: initialPrompt,
         materials: assignment.materials,
         expected: assignment.expected,
+        serverNames,
         resolutionContext: {
           companySlug: company.slug,
           task: assignment.task ?? null,

@@ -1,4 +1,6 @@
 import {
+  assignmentWorkingPrefix,
+  RESOURCES_DIR,
   TcpAssignment,
   TcpAssignmentWorkingArtifact,
   TcpTask,
@@ -50,7 +52,10 @@ export class OutputGateService {
    * - each expected `inline-text` requires a non-empty `inline-text` artifact in
    *   `prepared` (its content is judged by QA, not matched here — the expected
    *   `value` is a description for the agent/QA, not an enforced pattern);
-   * - each prepared `assignment-working-path` must exist in storage.
+   * - each prepared `assignment-working-path` must exist in storage;
+   * - each expected `resource` must have a draft in the working folder's
+   *   `resources/` (it need not be listed in `prepared` — every draft is
+   *   promoted).
    */
   async checkAssignmentOutputs(
     assignment: TcpAssignment,
@@ -103,7 +108,35 @@ export class OutputGateService {
       }
     }
 
+    problems.push(
+      ...(await this.missingResourceDrafts(assignment, company.slug)),
+    );
     return problems;
+  }
+
+  /** Expected resources the assignment hasn't written a draft of. */
+  private async missingResourceDrafts(
+    assignment: TcpAssignment,
+    slug: string,
+  ): Promise<string[]> {
+    const expected = assignment.expected.filter((e) => e.type === 'resource');
+    if (
+      expected.length === 0 ||
+      assignment.taskId == null ||
+      assignment.orderIndex == null
+    ) {
+      return [];
+    }
+    const drafts = `${assignmentWorkingPrefix(slug, assignment.taskId, assignment.orderIndex)}${RESOURCES_DIR}`;
+    const missing = await this.storage.checkMissingFiles(
+      expected.map((e) => `${drafts}${e.value}`),
+    );
+    return expected
+      .filter((e) => missing.includes(`${drafts}${e.value}`))
+      .map(
+        (e) =>
+          `Expected company resource '${e.value}': write it with write_resource (path '${e.value}'). It doesn't need to be in your prepared list.`,
+      );
   }
 
   /**

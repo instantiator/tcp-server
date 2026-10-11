@@ -448,6 +448,21 @@ describe('MinioStorageAdapter', () => {
       expect(entries[0].key).toBe('acme/a.txt');
       expect(entries[0].name).toBe('a.txt');
     });
+
+    it('follows continuation tokens when asked for every key', async () => {
+      send
+        .mockResolvedValueOnce({
+          Contents: [{ Key: 'acme/a.txt', Size: 1, LastModified: new Date() }],
+          NextContinuationToken: 'next',
+        })
+        .mockResolvedValueOnce({
+          Contents: [{ Key: 'acme/b.txt', Size: 2, LastModified: new Date() }],
+        });
+      const svc = makeAdapter(makeConfig());
+      const entries = await svc.listFiles('acme', { all: true });
+      expect(entries.map((e) => e.key)).toEqual(['acme/a.txt', 'acme/b.txt']);
+      expect(send).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('readFile', () => {

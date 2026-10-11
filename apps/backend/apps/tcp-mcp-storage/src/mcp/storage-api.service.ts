@@ -25,12 +25,24 @@ export interface ResolvedMaterial {
   inlineText?: string;
 }
 
+/** Where the caller's company-resource tools read and write (see tcp-server's `ResourceScope`). */
+export interface ResourceScope {
+  mode: 'draft' | 'direct' | 'read-only';
+  /** Read from each in turn; the first that has the file wins. */
+  readPrefixes: string[];
+  /** Where writes go, or `null` when the caller may not change resources. */
+  writePrefix: string | null;
+}
+
 /** The caller's storage scope, resolved by `GET /internal/agent/:id/storage-scope`. */
 export interface StorageScope {
   mode: string;
   readOnly: boolean;
+  /** The caller's company folder (`{slug}/`); the shared tools stay inside it. */
+  companyPrefix: string;
   workingPrefix: string;
   materials: ResolvedMaterial[];
+  resources: ResourceScope;
 }
 
 /**

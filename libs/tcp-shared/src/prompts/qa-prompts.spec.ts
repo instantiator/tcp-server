@@ -45,6 +45,31 @@ describe('renderQaPresentation', () => {
   });
 });
 
+describe('renderQaPresentation with resource drafts', () => {
+  const target = {
+    prompt: 'Raise the invoice.',
+    expected: [{ type: 'resource' as const, value: 'invoices/INV-1.md' }],
+    prepared: [{ type: 'resource' as const, value: 'invoices/INV-1.md' }],
+  };
+
+  it('lists the drafts in their own section, pointing at read_resource', () => {
+    const text = renderQaPresentation(target, ['invoices/INV-1.md']);
+    expect(text).toContain('Company resource changes');
+    expect(text).toContain('read_resource');
+    expect(text).toContain('  - resource: invoices/INV-1.md');
+    // Not repeated as a prepared artifact to read with read_working_file.
+    expect(text.split('Artifacts the agent prepared:')[1]).toMatch(
+      /^\n {2}\(none\)/,
+    );
+  });
+
+  it('leaves the section out when there are no drafts', () => {
+    expect(renderQaPresentation(target)).not.toContain(
+      'Company resource changes',
+    );
+  });
+});
+
 describe('renderQaRejectionMessage', () => {
   it('quotes the QA feedback', () => {
     expect(renderQaRejectionMessage('Missing the summary section.')).toContain(
