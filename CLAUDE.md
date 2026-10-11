@@ -1,6 +1,6 @@
 # TCP Server
 
-NestJS monorepo for the TCP simulation: `tcp-server` (REST API + orchestration), `tcp-agent` (agent loop runner), three MCP servers, and a shared library (`libs/tcp-shared`, imported as `@tcp/shared`).
+NestJS monorepo for the TCP simulation: `tcp-server` (REST API + orchestration), `tcp-agent` (agent loop runner), the MCP servers (`apps/backend/apps/tcp-mcp-*`), and a shared library (`libs/tcp-shared`, imported as `@tcp/shared`).
 
 ## Mandatory instructions
 

@@ -75,7 +75,7 @@ author: Alice
 
 ## MCP Servers
 
-Agents access external tools via the Model Context Protocol. Four MCP servers run as Docker Compose services.
+Agents access external tools via the Model Context Protocol. Five MCP servers run as Docker Compose services.
 
 ### Architecture
 
@@ -88,6 +88,7 @@ flowchart LR
     MC -->|HTTP POST /mcp| M[tcp-mcp-memory :3011]
     MC -->|HTTP POST /mcp| I[tcp-mcp-interactions :3012]
     MC -->|HTTP POST /mcp| T[tcp-mcp-tasks :3013]
+    MC -->|HTTP POST /mcp| U[tcp-mcp-utilities :3014]
     S -->|HTTP POST /internal/storage/*, X-Internal-Api-Key| LS[tcp-server]
     T -->|HTTP POST /internal/*, X-Internal-Api-Key| LS
     LS --> MIO[(MinIO)]
@@ -103,6 +104,7 @@ Each MCP server uses the **Streamable HTTP transport** with a stateless per-requ
 | [tcp-mcp-memory](tcp-mcp-memory.md)             | 3011 | Implemented | Hybrid pgvector search over episodic memory and role/shared knowledge (`recall`, `remember`, `search_knowledge`) |
 | [tcp-mcp-interactions](tcp-mcp-interactions.md) | 3012 | Implemented | Request input from a human user or consult another agent by role                                                 |
 | [tcp-mcp-tasks](tcp-mcp-tasks.md)               | 3013 | Implemented | Complete your assignment — plan a task, submit finished work, or assure QA (mode-gated)                          |
+| [tcp-mcp-utilities](tcp-mcp-utilities.md)       | 3014 | Implemented | Exact arithmetic, date maths and unit conversion. Stateless, with no database                                    |
 
 See the individual server docs for tool reference, argument details, and implementation status.
 
@@ -134,6 +136,7 @@ MCP server URLs are resolved from environment variables:
 | `MCP_MEMORY_URL`       | `http://tcp-mcp-memory:3011/mcp`       |
 | `MCP_INTERACTIONS_URL` | `http://tcp-mcp-interactions:3012/mcp` |
 | `MCP_TASKS_URL`        | `http://tcp-mcp-tasks:3013/mcp`        |
+| `MCP_UTILITIES_URL`    | `http://tcp-mcp-utilities:3014/mcp`    |
 
 If a variable is unset, that server is silently skipped. Agents run with only the servers that resolved successfully.
 

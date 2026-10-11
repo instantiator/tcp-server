@@ -38,4 +38,4 @@ A new `tcp-cli open-swagger --service <name>` command mirrors `open-document-sto
 
 ## Amendment as implemented (010.2.5)
 
-`tcp-mcp-tasks`, added after this ADR as the sixth server app, was wired up the same way from the start — `SwaggerModule` in its `main.ts`, `@nestjs/swagger` in `nest-cli.json`'s plugin list, and a smoke-test assertion — so it was never a gap to fix, just a service this ADR's "five" wording predates. `tcp-cli open-swagger --service tcp-mcp-tasks` and all other consequences above apply to it unchanged.
+`tcp-mcp-tasks`, added after this ADR as the sixth server app, was wired up the same way from the start — `SwaggerModule` in its `main.ts`, `@nestjs/swagger` in `nest-cli.json`'s plugin list, and a smoke-test assertion — so it was never a gap to fix, just a service this ADR's "five" wording predates. `tcp-cli open-swagger --service tcp-mcp-tasks` and all other consequences above apply to it unchanged. `tcp-mcp-utilities` (001.00) is the same again: `bootstrapMcpApp` mounts Swagger for every MCP app, and it is in `open-swagger` and the smoke tier.

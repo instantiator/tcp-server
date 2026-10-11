@@ -84,7 +84,7 @@ Checks an existing instance's connections instead of running the wizard, one lin
 ./scripts/setup-wizard.sh --test-config --env .env.staging --project tcp-staging
 ```
 
-It checks the env file's required values, Docker, tcp-server's own checks (database, Redis, MinIO, OIDC), the OIDC issuer from your machine, tcp-agent and the four MCP servers, the web client, and the chat and embedding models. The model requests are sent from inside tcp-agent, with its environment, because that's the address the agents use: a `localhost` URL that works on your machine points at the container itself there. A stopped stack skips the checks that need it.
+It checks the env file's required values, Docker, tcp-server's own checks (database, Redis, MinIO, OIDC), the OIDC issuer from your machine, tcp-agent and the MCP servers, the web client, and the chat and embedding models. The model requests are sent from inside tcp-agent, with its environment, because that's the address the agents use: a `localhost` URL that works on your machine points at the container itself there. A stopped stack skips the checks that need it.
 
 Manual `.env` editing remains a supported fallback — the wizard is a
 convenience, not a gate. See

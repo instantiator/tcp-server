@@ -781,10 +781,10 @@ Print the Swagger UI URL for one of the six server apps and open it in the defau
 - **stdout**: the Swagger UI URL (`{base}/swagger`)
 - Base URLs come from `TCP_<SERVICE>_BROWSER_URL` env vars (Docker-internal `TCP_*_URL` values aren't reachable from the host browser), defaulting to `http://localhost:<port>`
 
-| Flag               | Description                                                                                                            |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| `--service <name>` | **(Required)** `tcp-server \| tcp-agent \| tcp-mcp-storage \| tcp-mcp-memory \| tcp-mcp-interactions \| tcp-mcp-tasks` |
-| `--no-open`        | Print the URL without opening it                                                                                       |
+| Flag               | Description                                                                                                                                 |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--service <name>` | **(Required)** `tcp-server \| tcp-agent \| tcp-mcp-storage \| tcp-mcp-memory \| tcp-mcp-interactions \| tcp-mcp-tasks \| tcp-mcp-utilities` |
+| `--no-open`        | Print the URL without opening it                                                                                                            |
 
 ```bash
 ./tcp-cli.sh open-swagger --service tcp-server
