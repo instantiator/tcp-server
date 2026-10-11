@@ -45,3 +45,22 @@ export function resolveScopedKey(prefix: string, filename: string): string {
   }
   return `${prefix}${norm}`;
 }
+
+/**
+ * Resolves a model-supplied key or prefix inside the caller's company folder.
+ * A path already under `companyPrefix` is used as-is; anything else is taken
+ * as relative to it, so another company's files are unreachable whatever the
+ * model passes. An empty path means the company folder itself.
+ *
+ * @throws {Error} with a corrective message the tool relays to the model.
+ */
+export function resolveCompanyKey(companyPrefix: string, path = ''): string {
+  const norm = path.trim().replace(/\\/g, '/').replace(/^\/+/, '');
+  if (norm.split('/').some((segment) => segment === '..')) {
+    throw new Error(`Path must not contain '..' segments: '${path}'.`);
+  }
+  if (norm.startsWith('_deleted/')) {
+    throw new Error(`Deleted files can't be read directly: '${path}'.`);
+  }
+  return norm.startsWith(companyPrefix) ? norm : `${companyPrefix}${norm}`;
+}

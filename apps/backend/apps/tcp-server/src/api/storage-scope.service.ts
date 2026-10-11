@@ -36,6 +36,8 @@ export interface StorageScope {
   mode: TcpAssignmentMode;
   /** True for qa-mode callers — the working tools may only read. */
   readOnly: boolean;
+  /** The caller's company folder (`{slug}/`); the shared read tools stay inside it. */
+  companyPrefix: string;
   /** Object-key prefix (ending in `/`) of the scoped working directory. */
   workingPrefix: string;
   /** The scoped assignment's materials, resolved to concrete keys/inline text. */
@@ -91,7 +93,13 @@ export class StorageScopeService {
           : orphanWorkingPrefix(slug, target.id);
 
     const materials = await this.resolveMaterials(slug, target);
-    return { mode: caller.mode, readOnly, workingPrefix, materials };
+    return {
+      mode: caller.mode,
+      readOnly,
+      companyPrefix: `${slug}/`,
+      workingPrefix,
+      materials,
+    };
   }
 
   /** Loads the assignment a qa-mode caller is reviewing. */

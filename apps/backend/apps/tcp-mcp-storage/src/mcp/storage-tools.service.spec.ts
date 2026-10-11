@@ -15,6 +15,7 @@ const SCOPE_URL = 'http://tcp-server:3000/internal/agent/agent-1/storage-scope';
 interface Scope {
   mode: 'plan' | 'implement' | 'qa';
   readOnly: boolean;
+  companyPrefix: string;
   workingPrefix: string;
   materials: { name: string; key: string | null; inlineText?: string }[];
 }
@@ -88,6 +89,7 @@ function mockScope(scope: Partial<Scope>): void {
   const full: Scope = {
     mode: 'implement',
     readOnly: false,
+    companyPrefix: 'acme/',
     workingPrefix: 'acme/tasks/t1/assignments/0/working/',
     materials: [],
     ...scope,
@@ -111,15 +113,16 @@ describe('StorageToolsService', () => {
 
   describe('listFiles', () => {
     it('proxies to POST /internal/storage/list and returns entries as JSON', async () => {
+      mockScope({});
       mockedAxios.post.mockResolvedValue({
         data: {
           entries: [{ key: 'a', name: 'a', size: 1, lastModified: 'x' }],
         },
       });
-      const result = await makeSharedTools().listFiles('acme');
+      const result = await makeSharedTools().listFiles('agent-1', 'acme/');
       expect(mockedAxios.post).toHaveBeenCalledWith(
         'http://tcp-server:3000/internal/storage/list',
-        { prefix: 'acme' },
+        { prefix: 'acme/' },
         { headers: { 'X-Internal-Api-Key': 'secret-key' } },
       );
       expect(JSON.parse(result.content[0].text)).toEqual([
@@ -130,30 +133,96 @@ describe('StorageToolsService', () => {
 
   describe('readFile', () => {
     it('returns the file content as text', async () => {
+      mockScope({});
       mockedAxios.post.mockResolvedValue({ data: { content: 'hello' } });
-      const result = await makeSharedTools().readFile('acme/a.txt');
+      const result = await makeSharedTools().readFile('agent-1', 'acme/a.txt');
       expect(result.content[0].text).toBe('hello');
     });
 
     it('returns the server error message for a missing file', async () => {
+      mockScope({});
       mockedAxios.post.mockRejectedValue(
         axiosError(404, { message: 'File not found: acme/missing.txt' }),
       );
-      const result = await makeSharedTools().readFile('acme/missing.txt');
+      const result = await makeSharedTools().readFile(
+        'agent-1',
+        'acme/missing.txt',
+      );
       expect(result.content[0].text).toBe('File not found: acme/missing.txt');
     });
   });
 
   describe('getFileSummary', () => {
     it('returns the server-computed summary as JSON', async () => {
+      mockScope({});
       mockedAxios.post.mockResolvedValue({
         data: { format: 'json-object', keys: ['a'] },
       });
-      const result = await makeSharedTools().getFileSummary('acme/config.json');
+      const result = await makeSharedTools().getFileSummary(
+        'agent-1',
+        'acme/config.json',
+      );
       expect(JSON.parse(result.content[0].text)).toEqual({
         format: 'json-object',
         keys: ['a'],
       });
+    });
+  });
+
+  describe('company scoping of the shared tools', () => {
+    /** The key the last POST asked tcp-server for. */
+    function postedKey(): unknown {
+      const body = mockedAxios.post.mock.calls[0][1] as Record<string, unknown>;
+      return body['path'] ?? body['prefix'];
+    }
+
+    beforeEach(() => mockScope({}));
+
+    it('lists the company folder when no path is given', async () => {
+      mockedAxios.post.mockResolvedValue({ data: { entries: [] } });
+      await makeSharedTools().listFiles('agent-1');
+      expect(postedKey()).toBe('acme/');
+    });
+
+    it('puts a relative path inside the company folder', async () => {
+      mockedAxios.post.mockResolvedValue({ data: { content: 'x' } });
+      await makeSharedTools().readFile('agent-1', 'knowledge/shared/a.md');
+      expect(postedKey()).toBe('acme/knowledge/shared/a.md');
+    });
+
+    it("keeps a full key that is already in the caller's company", async () => {
+      mockedAxios.post.mockResolvedValue({ data: {} });
+      await makeSharedTools().getFileProperties('agent-1', '/acme/x.md');
+      expect(postedKey()).toBe('acme/x.md');
+    });
+
+    it("can't reach another company's files", async () => {
+      mockedAxios.post.mockResolvedValue({ data: { entries: [] } });
+      await makeSharedTools().searchFiles('agent-1', 'otherco/', '*.md');
+      expect(postedKey()).toBe('acme/otherco/');
+    });
+
+    it('does not treat a company whose slug starts the same as its own', async () => {
+      mockedAxios.post.mockResolvedValue({ data: { content: 'x' } });
+      await makeSharedTools().readFile('agent-1', 'acmecorp/x.md');
+      expect(postedKey()).toBe('acme/acmecorp/x.md');
+    });
+
+    it.each([
+      ['acme/../otherco/x.md', "must not contain '..'"],
+      ['_deleted/acme/x.md', "Deleted files can't be read"],
+    ])('refuses %s without calling tcp-server', async (path, message) => {
+      const result = await makeSharedTools().readFile('agent-1', path);
+      expect(result.content[0].text).toContain(message);
+      expect(mockedAxios.post).not.toHaveBeenCalled();
+    });
+
+    it('relays a list failure as text instead of throwing', async () => {
+      mockedAxios.post.mockRejectedValue(
+        axiosError(500, { message: 'storage down' }),
+      );
+      const result = await makeSharedTools().listFiles('agent-1');
+      expect(result.content[0].text).toBe('storage down');
     });
   });
 

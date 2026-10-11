@@ -68,6 +68,8 @@ export class StorageScopeResponseDto implements StorageScope {
   mode!: TcpAssignmentMode;
   /** True for qa-mode callers — the working tools may only read. */
   readOnly!: boolean;
+  /** The caller's company folder (`{slug}/`); the shared read tools stay inside it. */
+  companyPrefix!: string;
   /** Object-key prefix (ending in `/`) of the scoped working directory. */
   workingPrefix!: string;
   @ApiProperty({ type: ResolvedMaterialDto, isArray: true })

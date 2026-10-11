@@ -29,6 +29,8 @@ export interface ResolvedMaterial {
 export interface StorageScope {
   mode: string;
   readOnly: boolean;
+  /** The caller's company folder (`{slug}/`); the shared tools stay inside it. */
+  companyPrefix: string;
   workingPrefix: string;
   materials: ResolvedMaterial[];
 }
