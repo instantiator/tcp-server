@@ -52,7 +52,7 @@ export {
 } from './events/wire-parse';
 
 // -- Records downloads: one file name for the server, CLI and web ------------
-// These import only types, so they are safe as values.
+// These import nothing, so they are safe as values.
 export { recordsDownloadName } from './records/download-name';
 export { fieldOrder } from './records/field-order';
 

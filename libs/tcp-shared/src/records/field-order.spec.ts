@@ -6,8 +6,6 @@ describe('fieldOrder', () => {
       fieldOrder({
         primaryKey: ['region', 'order_id'],
         schema: {
-          type: 'object',
-          additionalProperties: false,
           properties: {
             qty: { type: 'integer' },
             order_id: { type: 'string' },

@@ -109,3 +109,46 @@ export const refusalKey = (err: unknown, action: RefusalAction): StringKey => {
       return err.status >= 500 ? 'refusal.server' : 'refusal.failed';
   }
 };
+
+/** The extra fields tcp-server puts in a records refusal body. */
+export interface RecordErrorBody {
+  /** `stale` (changed since read) or `conflict` (a unique key already exists). */
+  readonly code?: string;
+  /** The existing row a `conflict` collided with. */
+  readonly recordId?: string;
+  /** Per-row CSV validation failures; `row` is the CSV row number. */
+  readonly errors: readonly { row: number; message: string }[];
+}
+
+/**
+ * Reads {@link RecordErrorBody} out of an {@link ApiError}, so a component
+ * never has to narrow the untyped `body` itself. Anything missing or
+ * malformed comes back absent, never thrown.
+ */
+export const recordErrorBody = (error: ApiError): RecordErrorBody => {
+  const { body } = error;
+  if (typeof body !== 'object' || body === null) return { errors: [] };
+  const code =
+    'code' in body && typeof body.code === 'string' ? body.code : undefined;
+  const recordId =
+    'recordId' in body && typeof body.recordId === 'string'
+      ? body.recordId
+      : undefined;
+  const errors: { row: number; message: string }[] = [];
+  if ('errors' in body && Array.isArray(body.errors)) {
+    const entries: unknown[] = body.errors;
+    for (const entry of entries) {
+      if (
+        typeof entry === 'object' &&
+        entry !== null &&
+        'row' in entry &&
+        typeof entry.row === 'number' &&
+        'message' in entry &&
+        typeof entry.message === 'string'
+      ) {
+        errors.push({ row: entry.row, message: entry.message });
+      }
+    }
+  }
+  return { code, recordId, errors };
+};
