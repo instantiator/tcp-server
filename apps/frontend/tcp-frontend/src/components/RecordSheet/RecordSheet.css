@@ -1,0 +1,15 @@
+/* The spreadsheet for one record table. Values come from theme tokens only (ADR-026). */
+.record-sheet {
+  inline-size: 100%;
+}
+
+.record-sheet__cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--tcp-space-xs);
+}
+
+.record-sheet__mark {
+  display: inline-flex;
+  color: var(--tcp-color-accent);
+}
