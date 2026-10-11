@@ -257,6 +257,49 @@ describe('CompanyController (e2e)', () => {
           'Updated',
         );
       });
+
+      it('stores MCP server toggles, returns them, and clears them with null', async () => {
+        await request(app.getHttpServer())
+          .put(`/api/company/${company.id}`)
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({ mcpServerToggles: { records: false, utilities: true } })
+          .expect(200);
+        const res = await request(app.getHttpServer())
+          .get(`/api/company/${company.id}`)
+          .set('Authorization', `Bearer ${jwt}`)
+          .expect(200);
+        expect(
+          (res.body as { mcpServerToggles: unknown }).mcpServerToggles,
+        ).toEqual({ records: false, utilities: true });
+
+        await request(app.getHttpServer())
+          .put(`/api/company/${company.id}`)
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({ mcpServerToggles: null })
+          .expect(200);
+        expect(
+          (await companyRepo.findOneBy({ id: company.id }))!.mcpServerToggles,
+        ).toBeNull();
+      });
+
+      it('refuses a toggle for a server that does not exist', () =>
+        request(app.getHttpServer())
+          .put(`/api/company/${company.id}`)
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({ mcpServerToggles: { recrods: false } })
+          .expect(400));
+
+      it('warns, but saves, when the tasks server is switched off', async () => {
+        const res = await request(app.getHttpServer())
+          .put(`/api/company/${company.id}`)
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({ mcpServerToggles: { tasks: false } })
+          .expect(200);
+        const warnings = JSON.parse(res.headers['x-tcp-warnings']) as string[];
+        expect(warnings.map(decodeURIComponent)).toContainEqual(
+          expect.stringContaining('tasks MCP server is switched off'),
+        );
+      });
     });
 
     describe('DELETE /api/company/:id', () => {
@@ -453,6 +496,26 @@ describe('RoleController (e2e)', () => {
             mcpServerList: [],
           })
           .expect(201);
+      });
+
+      it("stores the role's MCP server toggles", async () => {
+        await request(app.getHttpServer())
+          .post('/api/role')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            companyId: company.id,
+            slug: 'lean',
+            name: 'lean',
+            description: 'Runs without records.',
+            systemPromptTemplate: 'You are {{name}}.',
+            knowledgeDomains: [],
+            mcpServerList: [],
+            mcpServerToggles: { records: false },
+          })
+          .expect(201);
+        expect(
+          (await roleRepo.findOneByOrFail({ slug: 'lean' })).mcpServerToggles,
+        ).toEqual({ records: false });
       });
 
       it('returns 201 when role has no llmConfig and company has no llmConfig (env fallback covers)', async () => {

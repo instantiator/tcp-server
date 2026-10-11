@@ -3,6 +3,7 @@ import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import type { AgentRunConfig } from './AgentRunConfig.model';
 import { TcpRole } from './TcpRole.model';
 import type { LlmConfig } from './LlmConfig.model';
+import type { McpServerToggles } from '../mcp/resolve-mcp-server-list';
 import type { WithLlmConfig } from './WithLlmConfig';
 
 /**
@@ -66,6 +67,14 @@ export class TcpCompany implements WithLlmConfig {
    */
   @Column({ type: 'jsonb', default: [] })
   mcpServerList!: string[];
+
+  /**
+   * MCP servers switched on (`true`) or off (`false`) for this company's
+   * agents, by registry name. A role's own toggle wins; a server neither
+   * mentions is on. Resolved via {@link resolveMcpServerList}.
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  mcpServerToggles?: McpServerToggles | null;
 
   /**
    * IANA timezone name (e.g. `'Europe/London'`) used only for *display* and

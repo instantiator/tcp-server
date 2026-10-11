@@ -1,4 +1,6 @@
 import type { UUID } from 'crypto';
+import type { McpServerToggles } from '@tcp/shared';
+import { IsMcpServerToggles } from './is-mcp-server-toggles.validator';
 import {
   IsArray,
   IsNotEmpty,
@@ -39,6 +41,11 @@ export class CreateRoleDto {
   @IsArray()
   @IsString({ each: true })
   mcpServerList!: string[];
+
+  /** MCP servers switched on or off, by name; `null` clears every toggle. */
+  @IsOptional()
+  @IsMcpServerToggles()
+  mcpServerToggles?: McpServerToggles | null;
 
   @IsOptional()
   @ValidateNested()
@@ -81,6 +88,11 @@ export class UpdateRoleDto {
   @IsArray()
   @IsString({ each: true })
   mcpServerList?: string[];
+
+  /** MCP servers switched on or off, by name; `null` clears every toggle. */
+  @IsOptional()
+  @IsMcpServerToggles()
+  mcpServerToggles?: McpServerToggles | null;
 
   @IsOptional()
   @ValidateNested()

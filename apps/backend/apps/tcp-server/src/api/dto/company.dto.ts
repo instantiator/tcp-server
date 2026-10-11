@@ -1,4 +1,6 @@
 import type { UUID } from 'crypto';
+import type { McpServerToggles } from '@tcp/shared';
+import { IsMcpServerToggles } from './is-mcp-server-toggles.validator';
 import {
   IsArray,
   IsNotEmpty,
@@ -52,6 +54,11 @@ export class CreateCompanyDto {
   @IsString({ each: true })
   mcpServerList?: string[];
 
+  /** MCP servers switched on or off, by name; `null` clears every toggle. */
+  @IsOptional()
+  @IsMcpServerToggles()
+  mcpServerToggles?: McpServerToggles | null;
+
   @IsOptional()
   @Transform(({ value }: { value: unknown }) => normalizeIanaTimeZone(value))
   @IsIanaTimeZone()
@@ -95,6 +102,11 @@ export class UpdateCompanyDto {
   @IsArray()
   @IsString({ each: true })
   mcpServerList?: string[];
+
+  /** MCP servers switched on or off, by name; `null` clears every toggle. */
+  @IsOptional()
+  @IsMcpServerToggles()
+  mcpServerToggles?: McpServerToggles | null;
 
   @IsOptional()
   @Transform(({ value }: { value: unknown }) => normalizeIanaTimeZone(value))

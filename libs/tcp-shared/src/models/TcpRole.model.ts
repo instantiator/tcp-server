@@ -1,4 +1,5 @@
 import type { UUID } from '../uuid';
+import type { McpServerToggles } from '../mcp/resolve-mcp-server-list';
 import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import type { AgentRunConfig } from './AgentRunConfig.model';
 import { TcpCompany } from './TcpCompany.model';
@@ -101,6 +102,14 @@ export class TcpRole implements WithLlmConfig {
    */
   @Column({ type: 'jsonb', default: [] })
   mcpServerList!: string[];
+
+  /**
+   * MCP servers switched on (`true`) or off (`false`) for this role, by
+   * registry name. Overrides the company's toggles; a server neither
+   * mentions is on. Resolved via {@link resolveMcpServerList}.
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  mcpServerToggles?: McpServerToggles | null;
 
   /**
    * Optional agent-loop resource overrides for agents running in this role.
