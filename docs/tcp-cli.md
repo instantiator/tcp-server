@@ -98,6 +98,9 @@ See [schema.md](schema.md) for the full field reference, VS Code integration, ex
 | [`query-knowledge`](#query-knowledge)                       | `query-knowledge --role <slug-or-id> -q <text> [--top-k <n>] [--threshold <n>]`                                     | Query the RAG index for a role, without invoking any LLM call                                 |
 | [`open-document-store`](#open-document-store)               | `open-document-store [--no-open]`                                                                                   | Print (and open) the MinIO console URL                                                        |
 | [`open-swagger`](#open-swagger)                             | `open-swagger --service <name> [--no-open]`                                                                         | Print (and open) a service's Swagger UI URL                                                   |
+| [`list-tables`](#list-tables)                               | `list-tables (-c <uuid>\|--company-slug <slug>)`                                                                    | List a company's record tables, with their record counts                                      |
+| [`export-table`](#export-table)                             | `export-table --table <name> [--target <path>] (-c <uuid>\|--company-slug <slug>)`                                  | Export one record table as CSV                                                                |
+| [`db-url`](#db-url)                                         | `db-url [--records] [-c <uuid>\|--company-slug <slug>]`                                                             | Print a database connection URL (**contains the password**)                                   |
 | [`list-open-queries`](#list-open-queries)                   | `list-open-queries [-c <uuid>\|--company-slug <slug>] [--format table\|json\|csv]`                                  | List open agent-to-human queries                                                              |
 | [`read-query`](#read-query)                                 | `read-query <slug>`                                                                                                 | Read a query's full question and conversation history                                         |
 | [`respond`](#respond)                                       | `respond <slug> <message>`                                                                                          | Reply to a query and resume the waiting agent                                                 |
@@ -794,6 +797,76 @@ Print the Swagger UI URL for one of the six server apps and open it in the defau
 ```
 
 No authentication required to print/open the URL — the Swagger UI itself has no separate login.
+
+---
+
+### `list-tables`
+
+List a company's record tables (see [tcp-mcp-records.md](tcp-mcp-records.md)).
+
+- **stdout**: JSON array of `{ name, purpose, records, updatedAt }`, the API's answer as it is. An empty array if the company has no tables
+
+| Flag                    | Alias | Description                             |
+| ----------------------- | ----- | --------------------------------------- |
+| `--company-id <uuid>`   | `-c`  | Company UUID                            |
+| `--company-slug <slug>` |       | Company slug, instead of `--company-id` |
+
+```bash
+./tcp-cli.sh -t $TOKEN list-tables --company-slug acme
+```
+
+Needs a token, like any API verb. The caller must be a member of the company.
+
+---
+
+### `export-table`
+
+Export one record table as CSV. The format is the one the web UI downloads: see [tcp-mcp-records.md → CSV](tcp-mcp-records.md#csv).
+
+- **stdout**: with no `--target`, the raw CSV and nothing else, so it can be piped. With `--target`, JSON `{ source, target, size }`. A "Saved to" line goes to stderr
+
+| Flag                    | Alias | Description                                                                  |
+| ----------------------- | ----- | ---------------------------------------------------------------------------- |
+| `--table <name>`        |       | **(Required)** Record table name                                             |
+| `--target <path>`       |       | A file to write, or an existing directory. Without it the CSV goes to stdout |
+| `--company-id <uuid>`   | `-c`  | Company UUID                                                                 |
+| `--company-slug <slug>` |       | Company slug, instead of `--company-id`                                      |
+
+With a directory as the target, the file is named `YYYY-MM-DD HH-mm-ss <company> <table>.csv`. The server stamps its own name in its own time zone (often UTC), so the CLI restamps it in your local time, as the web UI does. A file path is used as given.
+
+```bash
+./tcp-cli.sh -t $TOKEN export-table --company-slug acme --table orders > orders.csv
+./tcp-cli.sh -t $TOKEN export-table --company-slug acme --table orders --target ~/Downloads
+```
+
+Needs a token. The caller must be a member of the company.
+
+---
+
+### `db-url`
+
+Print a database connection URL, so you can open the data in your own database tool (`psql`, DBeaver and so on).
+
+> **Warning: the output contains the database password.** Mind your shell history, screen sharing, terminal recordings and logs. Do not paste it into chat, tickets or CI output.
+
+- **stdout**: JSON `{ database, url }`, where `database` is `tcp-server` or `records`
+- With `--records` and a company, it adds `{ companyId, tables, filter }`. `tables` is `record_table`, `record` and `record_key`, and `filter` is `"companyId" = '<id>'`. All companies share these tables, so filter by it
+
+| Flag                    | Alias | Description                                                  |
+| ----------------------- | ----- | ------------------------------------------------------------ |
+| `--records`             |       | The records database, not tcp-server's                       |
+| `--company-id <uuid>`   | `-c`  | With `--records`: also print the company's id and row filter |
+| `--company-slug <slug>` |       | Company slug, instead of `--company-id`                      |
+
+```bash
+./tcp-cli.sh db-url
+./tcp-cli.sh -t $TOKEN db-url --records --company-slug acme
+psql "$(./tcp-cli.sh db-url --records | jq -r .url)"
+```
+
+The URL is never fetched from the API. `./tcp-cli.sh` reads the local env file and derives the host-facing `DATABASE_URL` with `scripts/lib/derive-urls.sh`, the way the start scripts do. So `db-url` only works where the CLI shares the deployment's env file, and the CLI must be run through `./tcp-cli.sh`. `--records` uses `RECORDS_DATABASE_URL` as it is when that is set; otherwise it prints the same URL as tcp-server's.
+
+Authentication is needed only when a company is named with `--records`, to look up its id.
 
 ---
 

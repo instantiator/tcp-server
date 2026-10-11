@@ -556,14 +556,15 @@ is its security boundary.
 **Act when:** an agent is seen changing records in plan or qa mode. Then pass the
 mode to the records server and refuse the write tools there.
 
-## Records tables cannot be altered or dropped
+## Record tables cannot have columns added or renamed
 
-An agent can make a table but cannot add a field, change a type or drop the
-table. A wrong first schema has to be worked around.
+People can clear and delete a whole table (001.03), but nobody can add, rename
+or retype a column, in the web UI or through a tool. A wrong first schema has to
+be worked around: make a new table, export, and append the rows back.
 
-**Act when:** 001.03 (records in the web UI) needs to edit a table, or 002.03
-(templates) needs to change a shipped one. Add `alter_table` and `drop_table`
-with an audit event each.
+**Act when:** a user asks for it, or 002.03 (templates) needs to change a
+shipped table. Add an alter route (and an `alter_table` tool for agents) with an
+audit event each, and a column editor in the table view.
 
 ## No template table schemas for records
 
@@ -675,3 +676,78 @@ moved to 003.01 (action approval), which has a section for it:
 
 **Act when:** the core of 003.01 lands. Then let a folder's `README.md` mark it
 sensitive, and pause apply until a user approves.
+
+## Record tables are not live
+
+Record tables are not on the company SSE stream. A table loads when it opens;
+the summaries refetch when the window regains focus; **Reload** in the sheet's
+More menu fetches a table again. If an agent changes a row while a person has
+the sheet open, the person sees the old value until they reload. The version
+check stops their edit overwriting the agent's (409 `stale`), and the table
+reloads.
+
+**Act when:** a user reports a stale view, or records join the company stream.
+Then publish record changes as audit events and patch the cached table from them.
+
+## Clear and delete are open to every company member
+
+Any member of a company can edit rows, clear a table and delete a table. There
+are no role flags yet. Clear and drop keep a count in the audit trail, not the
+rows.
+
+**Act when:** membership role flags exist (see 003.01). Then limit clear and
+delete to owners.
+
+## Record exports are built in memory
+
+`GET tables/:table/csv` and `GET export` build the whole file in memory before
+they send it. The zip is built with `fflate`'s `zipSync`. A `ponytail:` comment
+in the code names the ceiling.
+
+**Act when:** an export passes about 50 MB, or tcp-server memory alerts fire
+during one. Stream it instead: `forEachRowBatch` already reads in batches, and
+`fflate`'s `Zip` class can write a zip as it goes.
+
+## The record sheet shows at most 10,000 rows
+
+`GET tables/:table` returns the 10,000 most recently changed rows and sets
+`truncated`. A larger table shows only those, and the sheet says so. Exports
+have no cap.
+
+**Act when:** a table reaches 10,000 rows. Page the read on the server (keyset
+by id), or filter on the server, and load pages into the sheet.
+
+## Record tables have no create-table screen
+
+`POST /api/company/:id/records/tables` exists, and is audited as the user, but
+the web UI has no form for it. Tests, tools and templates use the route. People
+can only get a table by asking an agent for one.
+
+**Act when:** 002.03 (templates) lands, or a user asks to make a table by hand.
+Add a form built on the same JSON Schema rules.
+
+## AG Grid UI strings bypass `t()`
+
+The sheet's filter menus, pagination ("Page 1 of 1") and similar text come from
+AG Grid's own English locale, not from `src/strings.ts`.
+
+**Act when:** translation work starts. Pass a `localeText` object built from
+`t()` to the grid.
+
+## `MaskSecretsInterceptor` flattens a returned `StreamableFile`
+
+The global interceptor walks every returned value as a plain object, so a
+route that returns a Nest `StreamableFile` sends JSON instead of the file. The
+records downloads avoid it by writing to `@Res()` directly.
+
+**Act when:** another route needs to return a `StreamableFile`. Teach the
+interceptor to pass it (and other streams) through untouched.
+
+## Record sheet screen-reader pass is not done
+
+The sheet has axe checks in all three tiers and a keyboard-only browser test.
+It has not had a manual VoiceOver or NVDA pass: cell, header and sort
+announcements, and entering and leaving edit mode.
+
+**Act when:** before the phase 04 release, or at the next ADR-026 manual matrix
+run, whichever comes first. Record the findings in the 001.03 plan's outcome.

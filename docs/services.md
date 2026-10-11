@@ -121,7 +121,7 @@ NestJS MCP server that gives agents exact arithmetic (`calculate`), date maths (
 
 ### tcp-mcp-records
 
-NestJS MCP server that lets agents keep structured records in typed, per-company tables (`create_table`, `insert`, `update`, `delete`, `query`, `aggregate`). It has its own database connection: `RECORDS_DATABASE_URL`, or `DATABASE_URL` when that is empty. See [tcp-mcp-records.md](tcp-mcp-records.md) for the tool reference.
+NestJS MCP server that lets agents keep structured records in typed, per-company tables (`create_table`, `insert`, `update`, `delete`, `query`, `aggregate`). It has its own database connection: `RECORDS_DATABASE_URL`, or `DATABASE_URL` when that is empty. tcp-server opens a connection to the same database, for the web UI's record tables. See [tcp-mcp-records.md](tcp-mcp-records.md) for the tool reference.
 
 - **Health:** `GET http://localhost:3015/health` — pings the database
 - **API:** `POST http://localhost:3015/mcp`

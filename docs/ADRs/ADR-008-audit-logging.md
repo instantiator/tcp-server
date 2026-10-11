@@ -170,3 +170,29 @@ A call that fails validation changes and reads nothing, so it writes no event.
 - The records server may use a database that holds no `tcp_role`, so it sends the fixed role `agent`, as `tcp-mcp-tasks` does.
 
 See [tcp-mcp-records.md](../tcp-mcp-records.md#audit).
+
+## Amendment as implemented (001.03, phase 04) <a id="amendment-as-implemented-p04-001-03"></a>
+
+[001.03](../prompts/phase%2004%20-%20utility/001.03.01.plan%20-%20records%20view%2C%20edit%20and%20csv%20export%20in%20the%20web%20ui.md) lets people change records in the web UI. The decisions above stand. This amendment records the first audit events that tcp-server writes for a person's action on a company's data.
+
+**Who writes them.** tcp-server itself (`RecordsApiService`), through `AuditService`, not over HTTP. The role is `user` and there is no agent. Every payload carries `source: 'records'` and `userId`, the JWT `sub` of the person who acted. This is the first controller to audit as a user.
+
+A change is a `state_change`:
+
+| `action`       | Payload besides `source`, `action` and `userId` |
+| -------------- | ----------------------------------------------- |
+| `create_table` | `table`, `definition`                           |
+| `add_row`      | `table`, `recordId`, `after`                    |
+| `update`       | `table`, `recordId`, `before`, `after`          |
+| `delete_row`   | `table`, `recordId`, `before`                   |
+| `append_csv`   | `table`, `inserted`, `alreadyExists`            |
+| `clear_table`  | `table`, `removed` (a count)                    |
+| `drop_table`   | `table`, `definition`, `removed` (a count)      |
+
+Clear and drop record how many rows went, not the rows themselves. Drop keeps the table's definition, so the table can be made again. A person's reads are not audited, in line with the storage proxy.
+
+**Consequences.**
+
+- A person's correction of an agent's record can be told apart from the agent's own write by its role.
+- Clear and drop leave no copy of the removed rows, only the count. A person who wants a copy can download one first, and the web UI offers it.
+- Any company member can do all of this. Limiting clear and delete to owners waits for membership role flags (see [outstanding-issues.md](../outstanding-issues.md#clear-and-delete-are-open-to-every-company-member)).

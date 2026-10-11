@@ -8,7 +8,7 @@
 
 The server has its own database connection (see [Configuration](#configuration)). It does not call tcp-server for data. It does call tcp-server to write audit events, and tcp-server calls it once when a company is deleted.
 
-The code that does the work is `RecordsService` in `libs/tcp-shared/src/records/`. The MCP server is a thin layer on top. It is shared so the web UI (001.03) can use the same service.
+The code that does the work is `RecordsService` in `libs/tcp-shared/src/records/`. The MCP server is a thin layer on top. It is shared, so tcp-server uses the same service for people's access (see [People's access](#peoples-access-00103)).
 
 The tools are offered to every agent mode (see `libs/tcp-shared/src/prompts/mode-tools.ts`). See [agent-services.md → MCP Servers](agent-services.md#mcp-servers) for how agents connect.
 
@@ -292,15 +292,99 @@ Changes are `state_change` events. Reads are `tool_call` events. Both carry `sou
 
 Audit writes are fire-and-forget. A lost audit request does not undo the write. tcp-agent also records its own `tool_call` and `tool_result` events for every tool call.
 
+### Changes made by people
+
+When a person changes records in the web UI, tcp-server writes the audit event itself (`RecordsApiService`). It is a `state_change` with role `user` and no agent, and the payload carries `source: 'records'` and the person's `userId`. Reads are not audited, as with the storage proxy. See [ADR-008](ADRs/ADR-008-audit-logging.md#amendment-as-implemented-p04-001-03).
+
+| Event          | Payload                                                            | When                                 |
+| -------------- | ------------------------------------------------------------------ | ------------------------------------ |
+| `state_change` | `{ action: 'create_table', table, definition, userId }`            | A table is made through the API      |
+| `state_change` | `{ action: 'add_row', table, recordId, after, userId }`            | A row is added                       |
+| `state_change` | `{ action: 'update', table, recordId, before, after, userId }`     | A row is edited                      |
+| `state_change` | `{ action: 'delete_row', table, recordId, before, userId }`        | A row is deleted                     |
+| `state_change` | `{ action: 'append_csv', table, inserted, alreadyExists, userId }` | A CSV is appended                    |
+| `state_change` | `{ action: 'clear_table', table, removed, userId }`                | A table is cleared. A count, no rows |
+| `state_change` | `{ action: 'drop_table', table, definition, removed, userId }`     | A table is deleted. Keeps the schema |
+
+Clear and drop record how many rows went, not the rows. Drop keeps the table's definition so it can be made again.
+
+---
+
+## People's access (001.03)
+
+People can read and correct records in the web UI, and download and append CSV. tcp-server does this itself. It does not call the records server. See [web-client.md](web-client.md#record-tables) for the screens and [tcp-cli.md](tcp-cli.md#list-tables) for the CLI verbs.
+
+### The `records` connection
+
+tcp-server opens a second TypeORM connection, named `records`, in `apps/backend/apps/tcp-server/src/records/records.module.ts`.
+
+- It connects to `RECORDS_DATABASE_URL`, or `DATABASE_URL` when that is empty.
+- It has a pool of 5 and no entities and no migrations. `tcp-mcp-records` still owns the tables and the migrations.
+- It builds a `RecordsService` on that connection, the same class the agents use.
+- Without Postgres (unit tests), it falls back to an in-memory SQLite database, so any records call fails there.
+
+Every `RecordsService` method takes `companyId` first, and every route checks that the caller is a member of that company.
+
+### Routes
+
+All routes are under `/api/company/:companyId/records`. All need a signed-in company member. There are no role checks, so any member can edit, clear and delete.
+
+| Method and path                 | Does                                                                                            |
+| ------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `GET tables`                    | The company's tables: `name`, `purpose`, `records`, `updatedAt`                                 |
+| `POST tables`                   | Makes a table from the same JSON Schema an agent sends to `create_table`. See below             |
+| `GET tables/:table`             | The definition and the rows (newest change first, at most 10,000), with `total` and `truncated` |
+| `DELETE tables/:table`          | Deletes the table and every row. Returns `{ removed }`                                          |
+| `GET tables/:table/csv`         | One table as `text/csv`                                                                         |
+| `POST tables/:table/csv`        | Appends rows from an uploaded CSV (multipart field `file`). All or nothing                      |
+| `POST tables/:table/rows`       | Adds a row. 409 `conflict` if its key is already held                                           |
+| `PATCH tables/:table/rows/:id`  | Edits a row: `{ changes, version }`. 409 `stale` if the row changed since `version`             |
+| `DELETE tables/:table/rows/:id` | Deletes a row (`?version=` is checked the same way). 204                                        |
+| `DELETE tables/:table/rows`     | Clears the table: every row goes, the table stays. Returns `{ removed }`                        |
+| `GET export`                    | Every table as a zip of CSVs (`application/zip`)                                                |
+
+`POST tables` has no screen. It exists for tests, tools and, later, templates (002.03).
+
+### Version checks and key clashes
+
+Every row has a `version`. An edit or a delete sends the version it saw. If the row has changed since, the server answers 409 with `code: 'stale'` and changes nothing. A row added with a primary or unique key that another row holds gets 409 with `code: 'conflict'` (and the `recordId` that holds it). The 409 does not carry the current row, so the web client reloads the table. A schema failure is a 400 that lists the messages.
+
+### CSV
+
+- **Columns** are the table's fields in `fieldOrder` (`libs/tcp-shared/src/records/field-order.ts`): the primary key first, then the rest alphabetically. Postgres `jsonb` loses the order an agent declared its fields in, so this is our own stable order. There is no `id` or timestamp column, so an exported file can be appended back.
+- **Encoding** is UTF-8 with a byte order mark, so Excel opens it correctly. Uploads may carry one too.
+- **Formula guard.** Agents write records from untrusted content, and Excel runs a cell that starts with `=`, `+`, `-` or `@`, a tab or a carriage return as a formula. On export, a text cell that starts that way gets a leading `'`. On append, one leading `'` before those characters is removed, so a file still round-trips.
+- **Append is all or nothing.** The first line names the columns. An unknown column is an error; a missing optional column is fine; an empty cell means the field is absent. If any row fails, nothing is added. Errors are listed by spreadsheet row, with the header as row 1.
+- **Limits** are 5 MB and 10,000 rows per upload.
+- **Rows whose key is already held** are skipped and counted, not treated as errors. The result is `{ inserted, alreadyExists }`.
+- **File order.** All rows in one append share a transaction, and `now()` is the transaction's start time. So each appended row is stamped with `now()` plus its position in the file in microseconds (`createdAt` and `updatedAt`), and an export keeps the file's order whatever the clock does.
+- **File names** are `YYYY-MM-DD HH-mm-ss {company-slug} {table}.csv` and `… {company-slug} tables.zip`, in the time of whoever makes the file.
+
+The export is built in memory (see [outstanding-issues.md](outstanding-issues.md#record-exports-are-built-in-memory)).
+
+### New `RecordsService` methods
+
+| Method                    | Does                                                                                         |
+| ------------------------- | -------------------------------------------------------------------------------------------- |
+| `listTableSummaries`      | Tables with record counts and the latest change                                              |
+| `readRows`                | A table's definition and rows with timestamps, newest first, up to a cap. Sets `truncated`   |
+| `readRow`                 | One row with its timestamps                                                                  |
+| `forEachRowBatch`         | Walks every row in batches of 1,000, oldest first, with no cap. For exports                  |
+| `insertMany`              | Adds many rows in one transaction, or none. Reports every failing row. Held keys are counted |
+| `clearTable`, `dropTable` | Remove all rows, or the table too. Return how many rows went                                 |
+| `update`, `delete`        | Gain an optional `expectedVersion`. A mismatch is a `conflict` error                         |
+
+`RecordsError` now has a `code`: `not_found`, `conflict` or `invalid`. The controller maps it to 404, 409 or 400. The MCP tool outputs did not change.
+
 ---
 
 ## Configuration
 
-| Variable               | Used by               | Value                                                                 |
-| ---------------------- | --------------------- | --------------------------------------------------------------------- |
-| `MCP_RECORDS_URL`      | tcp-server, tcp-agent | `http://tcp-mcp-records:3015` (compose adds `/mcp` for agents)        |
-| `DATABASE_URL`         | tcp-mcp-records       | The main database. Required                                           |
-| `RECORDS_DATABASE_URL` | tcp-mcp-records       | Optional. A separate database for records. Empty means `DATABASE_URL` |
+| Variable               | Used by                     | Value                                                                                                                                                |
+| ---------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MCP_RECORDS_URL`      | tcp-server, tcp-agent       | `http://tcp-mcp-records:3015` (compose adds `/mcp` for agents)                                                                                       |
+| `DATABASE_URL`         | tcp-mcp-records             | The main database. Required                                                                                                                          |
+| `RECORDS_DATABASE_URL` | tcp-mcp-records, tcp-server | Optional. A separate database for records. Empty means `DATABASE_URL`. tcp-server reads it too, for the web UI's reads and edits (compose passes it) |
 
 The server reads the shared MCP config (`PORT`, default 3015, `TCP_SERVER_URL` and `INTERNAL_API_KEY`) plus the two database variables. Omit `MCP_RECORDS_URL` to disable the server for agents. The registry name is `records`.
 
@@ -348,11 +432,12 @@ See [manual-testing/06-mcp-servers.md](manual-testing/06-mcp-servers.md) for a m
 
 ## What it deliberately does not do
 
-| Not offered                    | Why                                                                               |
-| ------------------------------ | --------------------------------------------------------------------------------- |
-| Alter or drop a table          | Not needed yet. Planned for 001.03 (web UI editing) and 002.03 (templates)        |
-| Template table schemas         | Orders, customers and so on are not shipped. Planned for 002.03                   |
-| Nested objects or array fields | Fields are scalars, so queries and totals stay simple and exact                   |
-| Raw SQL                        | Agents never write SQL. Every query is built from checked fields and bound values |
-| A server-side read-only mode   | Plan and QA are filtered on the agent side. Company scoping is the boundary       |
-| Guaranteed audit               | Audit writes are fire-and-forget                                                  |
+| Not offered                         | Why                                                                               |
+| ----------------------------------- | --------------------------------------------------------------------------------- |
+| Agents clearing or dropping a table | Only people can, through the web UI and API (001.03). Agents have no such tool    |
+| Alter a table's columns             | No tool and no UI. Planned with 002.03 (templates), or on request                 |
+| Template table schemas              | Orders, customers and so on are not shipped. Planned for 002.03                   |
+| Nested objects or array fields      | Fields are scalars, so queries and totals stay simple and exact                   |
+| Raw SQL                             | Agents never write SQL. Every query is built from checked fields and bound values |
+| A server-side read-only mode        | Plan and QA are filtered on the agent side. Company scoping is the boundary       |
+| Guaranteed audit                    | Audit writes are fire-and-forget                                                  |

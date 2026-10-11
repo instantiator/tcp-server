@@ -1,6 +1,6 @@
 # ADR-035: AG Grid Community for the Records Spreadsheet
 
-**Status:** Accepted (2026-10-11) — to be delivered by 001.03 (phase 04)
+**Status:** Implemented (2026-10-11) — delivered by 001.03 (phase 04)
 
 ## Context
 
@@ -65,3 +65,15 @@ React Aria `Table` was the closest call: it is already installed and has the str
 | `popupParent`                                               | Filter menus stay inside full screen                         |
 | `theme: themeQuartz.withParams(...)`                        | Colours and fonts come from the app's CSS custom properties  |
 | `undoRedoCellEditing: false`                                | Our own undo stack covers edits, added rows and deleted rows |
+
+## Amendment as implemented (001.03, phase 04) <a id="amendment-as-implemented-p04-001-03"></a>
+
+[001.03](../prompts/phase%2004%20-%20utility/001.03.01.plan%20-%20records%20view%2C%20edit%20and%20csv%20export%20in%20the%20web%20ui.md) built the sheet as decided. These are the facts the build added.
+
+- **Bundle size.** The lazy `RecordSheet` chunk is 971 kB (272 kB gzipped). The main bundle grew by 18 kB, for the views around the sheet.
+- **AG Grid's own text is English only.** Its filter menus and pagination ("Page 1 of 1") come from its English locale, not from `t()`. They can be routed through `localeText` when translation work starts (logged in [outstanding-issues.md](../outstanding-issues.md#ag-grid-ui-strings-bypass-t)).
+- **Rows never move when edited.** The default "Updated, newest first" sort compares each row's position in the cached table, which edits patch in place, not its timestamp. A sort the user picks re-applies as values change. This follows [ADR-027](ADR-027-screen-reader-strategy.md): a row must not jump away from the cursor.
+- **Ctrl/Cmd+Z undoes our stack only when no cell is being edited.** While an editor is open, the key belongs to the editor.
+- **`singleClickEdit` is on**, as the prompt asked. A click starts an edit, as well as Enter, F2 or typing.
+- **Cells edit as text, number or a true/false list.** Dates are text; the server checks their format.
+- **A browser-tier test and component tests cover it.** AG Grid renders and edits under jsdom, so Vitest covers editing, undo, add, delete and append. `test/browser/records.spec.ts` covers the keyboard-only edit, sorting, and axe on the tray, dialog and tab. The manual screen-reader pass is still to do (see [outstanding-issues.md](../outstanding-issues.md#record-sheet-screen-reader-pass-is-not-done)).
