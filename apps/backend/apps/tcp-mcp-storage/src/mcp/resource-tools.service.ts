@@ -42,9 +42,7 @@ const BINARY_EXTENSIONS = new Set([
 
 const PATH_PARAM = z
   .string()
-  .describe(
-    "Path under the company's resources, e.g. 'price-list.md' or 'invoices/INV-0042.md'.",
-  );
+  .describe("Path under resources/, e.g. 'price-list.md'.");
 
 /** Every resource the caller can see, by path under `resources/`. */
 type Merged = Map<string, { key: string; draft: boolean }>;
@@ -88,10 +86,7 @@ export class ResourceToolsService {
         description: storageToolDescriptions.list_resources,
         inputSchema: {
           agentId: agentIdField,
-          path: z
-            .string()
-            .optional()
-            .describe('A folder to show. Leave out for the top folder.'),
+          path: z.string().optional().describe('Folder to show; omit for all.'),
         },
       },
       ({ agentId, path }) =>
@@ -115,7 +110,7 @@ export class ResourceToolsService {
         inputSchema: {
           agentId: agentIdField,
           path: PATH_PARAM,
-          content: z.string().describe('The full content of the resource.'),
+          content: z.string(),
         },
       },
       ({ agentId, path, content }) =>
@@ -131,7 +126,7 @@ export class ResourceToolsService {
         inputSchema: {
           agentId: agentIdField,
           path: PATH_PARAM,
-          content: z.string().describe('The text to add at the end.'),
+          content: z.string(),
         },
       },
       ({ agentId, path, content }) =>
@@ -147,10 +142,8 @@ export class ResourceToolsService {
         inputSchema: {
           agentId: agentIdField,
           path: PATH_PARAM,
-          find: z
-            .string()
-            .describe('The literal string to find (all occurrences replaced).'),
-          replace: z.string().describe('The replacement string.'),
+          find: z.string(),
+          replace: z.string(),
         },
       },
       ({ agentId, path, find, replace }) =>
@@ -257,10 +250,14 @@ export class ResourceToolsService {
     if (typeof target === 'string') return target;
     const { path, key } = target;
 
-    await this.copyIntoWriteLayer(scope, path, key);
+    const existed = await this.copyIntoWriteLayer(scope, path, key);
     const { created } = await this.storage.post<{ created: boolean }>(
       'append',
-      { path: key, content, originators: { agent: agentId } },
+      {
+        path: key,
+        content: existed ? await this.onNewLine(key, content) : content,
+        originators: { agent: agentId },
+      },
     );
     return (
       fill(
@@ -331,6 +328,20 @@ export class ResourceToolsService {
       await this.storage.post('copy', { source: existing, destination: key });
     }
     return existing !== null;
+  }
+
+  /**
+   * Starts appended text on a new line when the file doesn't end with one.
+   * A small model often leaves out the leading newline, and the new text
+   * would otherwise run on from the last line.
+   */
+  private async onNewLine(key: string, content: string): Promise<string> {
+    if (content.startsWith('\n')) return content;
+    const { content: current } = await this.storage.post<{ content: string }>(
+      'read',
+      { path: key },
+    );
+    return current === '' || current.endsWith('\n') ? content : `\n${content}`;
   }
 
   private draftNote(scope: StorageScope): string {

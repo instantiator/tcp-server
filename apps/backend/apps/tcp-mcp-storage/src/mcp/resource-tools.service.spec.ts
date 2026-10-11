@@ -512,6 +512,16 @@ describe('ResourceToolsService', () => {
       expect(text).toBe("Appended to resource 'notes.md'.");
     });
 
+    it('starts the new text on a new line when the file has no trailing newline', async () => {
+      useScope(DIRECT_SCOPE);
+      store.set(`${LIVE}prices.md`, 'Call-out: £45');
+      await callTool('append_resource', {
+        path: 'prices.md',
+        content: 'Hourly: £30',
+      });
+      expect(store.get(`${LIVE}prices.md`)).toBe('Call-out: £45\nHourly: £30');
+    });
+
     it('creates the file when no layer has it', async () => {
       expect(
         await callTool('append_resource', { path: 'new.md', content: 'x' }),
