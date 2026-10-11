@@ -1,15 +1,7 @@
 import { fieldOrder } from '@tcp/shared/client';
 import type { GridApi } from 'ag-grid-community';
 import { Download, Plus, Trash2, Undo2 } from 'lucide-react';
-import {
-  Suspense,
-  lazy,
-  useCallback,
-  useId,
-  useRef,
-  useState,
-  type RefObject,
-} from 'react';
+import { Suspense, lazy, useCallback, useId, useRef, useState } from 'react';
 import { ApiError, recordErrorBody } from '../../api/errors';
 import type { TimedRecord } from '../../api/dtos';
 import {
@@ -44,8 +36,6 @@ export interface TableViewProps {
    * already names it (the dialog's own heading).
    */
   readonly titleLevel?: 2 | 3;
-  /** The title, so a caller can move focus to it when the table is chosen. */
-  readonly titleRef?: RefObject<HTMLHeadingElement | null>;
   /** Called once the table is deleted. */
   readonly onDropped?: () => void;
   readonly portalContainer?: Element | undefined;
@@ -88,7 +78,6 @@ export const TableView = ({
   companySlug,
   table,
   titleLevel,
-  titleRef,
   onDropped,
   portalContainer,
 }: TableViewProps) => {
@@ -220,12 +209,7 @@ export const TableView = ({
     >
       <div className="table-view__bar">
         {titleLevel !== undefined && (
-          <Title
-            id={titleId}
-            ref={titleRef}
-            tabIndex={-1}
-            className="table-view__title"
-          >
+          <Title id={titleId} className="table-view__title">
             {table}
             <span className="table-view__count">
               {' '}

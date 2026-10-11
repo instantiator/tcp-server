@@ -12,6 +12,7 @@ import { NewEnquiryNotifications } from './activity/NewEnquiryNotifications';
 import { NewNotificationToasts } from './activity/NewNotificationToasts';
 import { NotificationsList } from './activity/NotificationsList';
 import { TasksList } from './activity/TasksList';
+import { TablesPanel } from './TablesPanel';
 import './activity/activity.css';
 
 /** The activity lists, one tab each, in tab order. Each id is also its URL hash. */
@@ -29,11 +30,16 @@ type ActivityTab = (typeof ACTIVITY_TABS)[number]['id'];
 /** The tab shown with no hash, or an unknown one. */
 const DEFAULT_TAB = 'visualisation';
 
+/** The record tables' tab. Its hash may name a table too: `#tables/orders`. */
+const TABLES_TAB = 'tables';
+
 const isActivityTab = (key: string): key is ActivityTab =>
   ACTIVITY_TABS.some((tab) => tab.id === key);
 
 export interface CompanyTabsProps {
   readonly companyId: string;
+  /** For the names of downloaded files. */
+  readonly companySlug: string;
   /** The office view, shown in the first tab. */
   readonly visualisation: ReactNode;
 }
@@ -66,7 +72,11 @@ export interface CompanyTabsProps {
  * Every `className` repeats React Aria's own default class name, because
  * passing `className` *replaces* the default rather than composing with it.
  */
-export const CompanyTabs = ({ companyId, visualisation }: CompanyTabsProps) => {
+export const CompanyTabs = ({
+  companyId,
+  companySlug,
+  visualisation,
+}: CompanyTabsProps) => {
   const { data: roles } = useCompanyRolesList(companyId);
   const roleNames = useMemo(
     () => new Map((roles ?? []).map((role) => [role.id, role.name])),
@@ -75,8 +85,10 @@ export const CompanyTabs = ({ companyId, visualisation }: CompanyTabsProps) => {
 
   const { hash } = useLocation();
   const navigate = useNavigate();
-  const hashKey = hash.slice(1);
-  const selectedKey = isActivityTab(hashKey) ? hashKey : DEFAULT_TAB;
+  const [hashKey, tableHash = ''] = hash.slice(1).split('/');
+  const selectedKey =
+    isActivityTab(hashKey) || hashKey === TABLES_TAB ? hashKey : DEFAULT_TAB;
+  const openTable = tableHash === '' ? null : decodeURIComponent(tableHash);
   const onSelectionChange = (key: Key): void => {
     void navigate(
       { hash: key === DEFAULT_TAB ? '' : `#${String(key)}` },
@@ -188,6 +200,9 @@ export const CompanyTabs = ({ companyId, visualisation }: CompanyTabsProps) => {
               </Tab>
             );
           })}
+          <Tab id={TABLES_TAB} className="react-aria-Tab">
+            {t('company.tab.tables')}
+          </Tab>
         </TabList>
         <TabPanel
           id={DEFAULT_TAB}
@@ -205,6 +220,31 @@ export const CompanyTabs = ({ companyId, visualisation }: CompanyTabsProps) => {
             {lists[id]}
           </TabPanel>
         ))}
+        {/*
+          Not force-mounted: the sheet is large and not live, so it loads when
+          the tab opens. The open table survives in the URL instead.
+        */}
+        <TabPanel
+          id={TABLES_TAB}
+          className="react-aria-TabPanel company-page__tab"
+        >
+          <TablesPanel
+            companyId={companyId}
+            companySlug={companySlug}
+            selected={openTable}
+            onSelect={(table) =>
+              void navigate(
+                {
+                  hash:
+                    table === null
+                      ? `#${TABLES_TAB}`
+                      : `#${TABLES_TAB}/${encodeURIComponent(table)}`,
+                },
+                { replace: true },
+              )
+            }
+          />
+        </TabPanel>
       </Tabs>
     </>
   );

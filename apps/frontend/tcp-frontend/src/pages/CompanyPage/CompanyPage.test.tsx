@@ -242,10 +242,10 @@ describe('CompanyPage', () => {
     const tasksTab = screen.getByRole('tab', {
       name: new RegExp(`^${t('activity.tasks.heading')}`),
     });
-    // 000.02: the Notifications tab joined as the last one, so `{End}` now
-    // lands there instead of on Chats.
-    const notificationsTab = screen.getByRole('tab', {
-      name: new RegExp(`^${t('notifications.heading')}`),
+    // 001.03: the Tables tab joined as the last one, so `{End}` now lands
+    // there instead of on Notifications.
+    const tablesTab = screen.getByRole('tab', {
+      name: t('company.tab.tables'),
     });
 
     visualisationTab.focus();
@@ -262,8 +262,8 @@ describe('CompanyPage', () => {
     expect(visualisationTab).toHaveAttribute('aria-selected', 'true');
 
     await user.keyboard('{End}');
-    expect(notificationsTab).toHaveFocus();
-    expect(notificationsTab).toHaveAttribute('aria-selected', 'true');
+    expect(tablesTab).toHaveFocus();
+    expect(tablesTab).toHaveAttribute('aria-selected', 'true');
 
     await user.keyboard('{Home}');
     expect(visualisationTab).toHaveFocus();

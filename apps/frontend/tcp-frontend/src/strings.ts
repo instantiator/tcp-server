@@ -732,6 +732,13 @@ const strings = {
     'Your session is about to expire. Choose "Stay signed in" to continue.',
 
   // Record tables (001.03): the spreadsheet view, its actions and dialogs.
+  'company.tab.tables': 'Tables',
+  'tables.list.label': 'Record tables',
+  'tables.loading': 'Loading the tables',
+  'tables.error': 'The tables could not be loaded.',
+  'tables.empty':
+    'No record tables yet. Agents make them when they keep records such as orders or stock.',
+  'tables.choose': 'Choose a table to see and correct its records.',
   'records.count.one': '{count} record',
   'records.count.other': '{count} records',
   'records.loading': 'Loading the table',

@@ -295,7 +295,11 @@ const renderActivity = (initialEntry = '/') => {
           */}
           <DockProvider>
             <ChatProvider>
-              <CompanyTabs companyId={COMPANY_ID} visualisation={null} />
+              <CompanyTabs
+                companyId={COMPANY_ID}
+                companySlug="acme"
+                visualisation={null}
+              />
             </ChatProvider>
           </DockProvider>
         </MemoryRouter>
@@ -1026,6 +1030,22 @@ describe('CompanyTabs', () => {
         'aria-selected',
         'true',
       );
+    });
+
+    it('opens the Tables tab from a hash that names a table, and keeps the table in it', async () => {
+      respondActivity();
+      const user = userEvent.setup();
+      renderActivity('/#tables/orders');
+
+      expect(
+        screen.getByRole('tab', { name: t('company.tab.tables') }),
+      ).toHaveAttribute('aria-selected', 'true');
+
+      await user.click(tabNamed('activity.chats.heading'));
+      await user.click(
+        screen.getByRole('tab', { name: t('company.tab.tables') }),
+      );
+      expect(screen.getByTestId('hash')).toHaveTextContent('#tables');
     });
 
     it('falls back to the office view for no hash or an unknown one', () => {
