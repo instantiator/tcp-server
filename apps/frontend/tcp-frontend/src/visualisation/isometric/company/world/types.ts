@@ -56,7 +56,8 @@ export type FurnitureKind =
   | 'pigeonholes'
   | 'table'
   | 'officeDoor'
-  | 'bookshelf';
+  | 'bookshelf'
+  | 'filingCabinet';
 
 /** One piece of furniture, standing on one tile. */
 export interface Furniture {

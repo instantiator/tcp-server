@@ -300,3 +300,28 @@ body:has(.dialog-dock) .company-visualisation__stage {
   inset-inline-start: var(--tcp-space-md);
   z-index: var(--tcp-layer-dock);
 }
+
+/* The filing cabinet's tray (001.03): a table of record tables. */
+.records-tray__table {
+  inline-size: 100%;
+  border-collapse: collapse;
+}
+
+.records-tray__table th,
+.records-tray__table td {
+  padding-block: var(--tcp-space-xs);
+  padding-inline: var(--tcp-space-xs);
+  text-align: start;
+  border-block-end: var(--tcp-border-width) solid var(--tcp-color-border);
+}
+
+.records-tray__actions {
+  display: flex;
+  gap: var(--tcp-space-xs);
+}
+
+/* A record table opened from the tray: wider than other dialogs, for the sheet. */
+.react-aria-Modal:has(.records-tray__dialog) {
+  inline-size: min(72rem, 100%);
+  max-inline-size: none;
+}

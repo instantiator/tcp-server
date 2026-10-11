@@ -22,6 +22,8 @@ export const FURNITURE_SIZES: Record<FurnitureKind, FurnitureSize> = {
   officeDoor: { size: 64, height: 2 },
   // Tall and shallow: a shelving unit against the wall, not a floor piece.
   bookshelf: { size: 28, height: 34 },
+  // Narrower and a little shorter than the bookshelf beside it.
+  filingCabinet: { size: 22, height: 28 },
 };
 
 /**

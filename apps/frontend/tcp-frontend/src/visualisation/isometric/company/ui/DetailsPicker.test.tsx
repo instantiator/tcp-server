@@ -150,9 +150,10 @@ describe('DetailsPicker', () => {
         name: t('visualisation.picker.agent', { role: 'Legal' }),
       }),
     ).toBeInTheDocument();
-    // 2 roles + 2 open-room tasks + 2 non-finished agents + 1 archive:
-    // agent-3 has finished and must not appear at all, under either wording.
-    expect(screen.getAllByRole('option')).toHaveLength(7);
+    // 2 roles + 2 open-room tasks + 2 non-finished agents + the archive and
+    // its filing cabinet: agent-3 has finished and must not appear at all,
+    // under either wording.
+    expect(screen.getAllByRole('option')).toHaveLength(8);
   });
 
   it('always lists the Archive item, since there is only ever one archive', async () => {
@@ -165,6 +166,23 @@ describe('DetailsPicker', () => {
     expect(
       screen.getByRole('option', { name: t('visualisation.picker.archive') }),
     ).toBeInTheDocument();
+  });
+
+  it('lists the filing cabinet, which selects the record tables', async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(
+      <DetailsPicker
+        snapshot={SNAPSHOT}
+        selection={null}
+        onSelect={onSelect}
+      />,
+    );
+    await openPicker(user);
+    await user.click(
+      screen.getByRole('option', { name: t('visualisation.picker.records') }),
+    );
+    expect(onSelect).toHaveBeenCalledWith({ kind: 'records' });
   });
 
   it('calls onSelect with the chosen role', async () => {
@@ -289,7 +307,7 @@ describe('DetailsPicker', () => {
 
     expect(pickerButton()).not.toBeDisabled();
     await openPicker(user);
-    expect(screen.getAllByRole('option')).toHaveLength(1);
+    expect(screen.getAllByRole('option')).toHaveLength(2);
     expect(
       screen.getByRole('option', { name: t('visualisation.picker.archive') }),
     ).toBeInTheDocument();

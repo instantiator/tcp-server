@@ -53,6 +53,11 @@ export function describeFurniture(
         }),
         description: t('visualisation.furniture.bookshelf.description'),
       };
+    case 'filingCabinet':
+      return {
+        title: t('visualisation.furniture.filingCabinet'),
+        description: t('visualisation.furniture.filingCabinet.description'),
+      };
     case 'sofa':
     case 'pigeonholes':
     case 'table':

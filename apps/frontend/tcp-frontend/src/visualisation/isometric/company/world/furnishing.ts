@@ -91,6 +91,13 @@ export function furnishRoom(room: Room): Furniture[] {
           roomId: room.id,
           tile: roomTile(room, 4, 1),
         },
+        // The company's record tables (001.03), beside the bookshelf.
+        {
+          id: `${room.id}:filingCabinet`,
+          kind: 'filingCabinet',
+          roomId: room.id,
+          tile: roomTile(room, 5, 1),
+        },
       ];
     case 'corridor':
       return [];

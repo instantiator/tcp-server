@@ -738,6 +738,10 @@ const strings = {
   'tables.error': 'The tables could not be loaded.',
   'tables.empty':
     'No record tables yet. Agents make them when they keep records such as orders or stock.',
+  'records.tray.heading': 'Record tables',
+  'records.tray.column.table': 'Table',
+  'records.tray.column.records': 'Records',
+  'records.tray.column.actions': 'Actions',
   'tables.choose': 'Choose a table to see and correct its records.',
   'records.count.one': '{count} record',
   'records.count.other': '{count} records',

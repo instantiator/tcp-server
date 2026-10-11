@@ -36,9 +36,16 @@ const ARCHIVE_ITEM: PickerItem = {
   target: { kind: 'archive' },
 };
 
+/** The archive's filing cabinet: the record tables (001.03). Only ever one. */
+const RECORDS_ITEM: PickerItem = {
+  key: 'records',
+  label: t('visualisation.picker.records'),
+  target: { kind: 'records' },
+};
+
 /**
  * Every role, every task whose room is open (finished or not), every agent still doing something, then
- * the archive — always present, since the archive room always exists.
+ * the archive and its filing cabinet — always present, since the archive room always exists.
  */
 const buildItems = (snapshot: CompanySnapshot): readonly PickerItem[] => {
   const roleName = (roleId: string): string =>
@@ -78,7 +85,13 @@ const buildItems = (snapshot: CompanySnapshot): readonly PickerItem[] => {
       };
     });
 
-  return [...roleItems, ...taskItems, ...agentItems, ARCHIVE_ITEM];
+  return [
+    ...roleItems,
+    ...taskItems,
+    ...agentItems,
+    ARCHIVE_ITEM,
+    RECORDS_ITEM,
+  ];
 };
 
 /**
@@ -108,9 +121,9 @@ export const DetailsPicker = ({
   const value: Key | null =
     selection === null
       ? null
-      : selection.kind === 'archive'
-        ? 'archive'
-        : `${selection.kind}:${selection.id}`;
+      : 'id' in selection
+        ? `${selection.kind}:${selection.id}`
+        : selection.kind;
 
   const label = t('visualisation.picker.label');
 

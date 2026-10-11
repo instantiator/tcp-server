@@ -7,6 +7,7 @@ import { t } from '../../../../strings';
 import type { SelectionTarget } from '../TcpPhaserEventBus';
 import { AgentDetails } from './AgentDetails';
 import { ArchiveDetails } from './ArchiveDetails';
+import { RecordsDetails } from './RecordsDetails';
 import { RoleDetails } from './RoleDetails';
 import { TaskDetails } from './TaskDetails';
 
@@ -100,6 +101,13 @@ export const VisualisationTray = forwardRef<
         )}
         {selection.kind === 'archive' && (
           <ArchiveDetails companyId={companyId} headingId={headingId} />
+        )}
+        {selection.kind === 'records' && (
+          <RecordsDetails
+            companyId={companyId}
+            headingId={headingId}
+            portalContainer={portalContainer}
+          />
         )}
         <div className="company-visualisation__tray-follow">{followAction}</div>
         <CloseButton
