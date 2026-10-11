@@ -1,0 +1,12 @@
+{
+  // Tool descriptions for tcp-mcp-records
+  "describe_server": "Returns an overview of the records service and its tools.",
+  "list_tables": "List your company's record tables, with what each is for.",
+  "describe_table": "Show one table's fields (as JSON Schema), its primary key and any unique keys. Check this before inserting or querying.",
+  "create_table": "Create a record table when no existing table fits. `schema` is a JSON Schema object whose fields are strings, numbers, integers or booleans (use \"format\": \"date\" for YYYY-MM-DD dates), with the fields every record must have in \"required\". `primary_key` names the field(s) that identify a record, such as [\"order_id\"]; a record with the same key can never be added twice. Example schema: {\"type\":\"object\",\"properties\":{\"order_id\":{\"type\":\"string\"},\"customer\":{\"type\":\"string\"},\"total\":{\"type\":\"number\"},\"ordered_on\":{\"type\":\"string\",\"format\":\"date\"}},\"required\":[\"order_id\",\"customer\",\"total\"]}.",
+  "insert": "Add a record to a table. It must fit the table's schema. If a record with the same primary or unique key already exists, nothing is added and you are told which record holds it, so retrying is always safe.",
+  "update": "Change fields of one record, found by its `id` or by `key` (its primary key values, e.g. {\"order_id\": \"A1\"}). Only the fields in `changes` change; set a field to null to remove it.",
+  "delete": "Delete one record, found by its `id` or by `key` (its primary key values).",
+  "query": "Find records in a table. `filters` are ANDed, each {\"field\", \"op\", \"value\"} with op eq, ne, lt, lte, gt, gte, contains (text) or in (a list). Returns the matching records (newest first unless `sort` says otherwise) and how many match in all.",
+  "aggregate": "Count, total (sum), average, minimum or maximum a field over matching records, optionally grouped by up to 3 fields — e.g. op sum, field total, filters ordered_on gte 2026-10-01, for this month's takings. Use this for every total instead of adding figures yourself; results are exact."
+}

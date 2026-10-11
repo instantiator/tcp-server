@@ -264,6 +264,7 @@ jobs:
             tcp-mcp-interactions
             tcp-mcp-tasks
             tcp-mcp-utilities
+            tcp-mcp-records
             tcp-web
           set: |
             *.cache-from=type=gha,scope=monorepo-build
@@ -401,6 +402,7 @@ jobs:
             tcp-mcp-interactions
             tcp-mcp-tasks
             tcp-mcp-utilities
+            tcp-mcp-records
             tcp-web
           set: |
             *.cache-from=type=gha,scope=monorepo-build

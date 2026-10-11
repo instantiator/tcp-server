@@ -170,7 +170,7 @@ fi
 
 # Stop everything that writes, then make sure the data services are up.
 step "stopping the application services" "Docker's own error is above."
-$DC stop tcp-web tcp-mcp-storage tcp-mcp-memory tcp-mcp-interactions tcp-mcp-tasks tcp-mcp-utilities tcp-agent tcp-server
+$DC stop tcp-web tcp-mcp-storage tcp-mcp-memory tcp-mcp-interactions tcp-mcp-tasks tcp-mcp-utilities tcp-mcp-records tcp-agent tcp-server
 [[ -z "$AUTH_PROFILE" ]] || $DC stop zitadel
 step "starting postgres, redis and minio" "Docker's own error is above. 'port is already allocated' means another stack holds the port."
 $DC up -d --wait postgres redis minio

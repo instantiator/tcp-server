@@ -134,6 +134,23 @@
           { "include": "tools.jsonc", "outDir": "dist/apps/tcp-mcp-utilities" }
         ]
       }
+    },
+    "tcp-mcp-records": {
+      "type": "application",
+      "root": "apps/tcp-mcp-records",
+      "entryFile": "main",
+      "sourceRoot": "apps/tcp-mcp-records/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/tcp-mcp-records/tsconfig.app.json",
+        "plugins": ["@nestjs/swagger"],
+        "assets": [
+          {
+            "include": "prompts.jsonc",
+            "outDir": "dist/apps/tcp-mcp-records"
+          },
+          { "include": "tools.jsonc", "outDir": "dist/apps/tcp-mcp-records" }
+        ]
+      }
     }
   }
 }

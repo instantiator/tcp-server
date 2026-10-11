@@ -9,6 +9,7 @@ x-internal-urls: &internal-urls
   MCP_INTERACTIONS_URL: http://tcp-mcp-interactions:3012
   MCP_TASKS_URL: http://tcp-mcp-tasks:3013
   MCP_UTILITIES_URL: http://tcp-mcp-utilities:3014
+  MCP_RECORDS_URL: http://tcp-mcp-records:3015
   TCP_SERVER_URL: http://tcp-server:3000
   TCP_AGENT_URL: http://tcp-agent:3001
   OIDC_INTERNAL_ISSUER_URL: http://zitadel:8080
@@ -430,6 +431,31 @@ services:
     # Internal-only by default (see docker-compose.dev-ports.yml to publish).
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:3014/health']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  tcp-mcp-records:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: tcp-mcp-records
+    image: tcp-mcp-records:latest
+    restart: unless-stopped
+    environment:
+      <<: *internal-urls
+      # Empty means "use DATABASE_URL". Set it to keep records in a separate
+      # database; see docs/tcp-mcp-records.md for what that gives up.
+      RECORDS_DATABASE_URL: ${RECORDS_DATABASE_URL:-}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+    depends_on:
+      # tcp-server migrates first, so the records tables get their company
+      # foreign keys in a shared database.
+      tcp-server:
+        condition: service_healthy
+    # Internal-only by default (see docker-compose.dev-ports.yml to publish).
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3015/health']
       interval: 15s
       timeout: 5s
       retries: 5
