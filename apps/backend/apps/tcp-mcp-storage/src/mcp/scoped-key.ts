@@ -1,3 +1,7 @@
+import { RESOURCES_DIR } from '@tcp/shared';
+import { storagePrompts } from '../storage-prompts';
+import { fill } from './fill';
+
 /**
  * Path segment names reserved by the ADR-007 storage hierarchy
  * (`{company_slug}/tasks/{taskId}/assignments/{orderIndex}/working/...`).
@@ -17,7 +21,7 @@ const RESERVED_PATH_SEGMENTS = new Set([
 
 /**
  * Validates a model-supplied filename and joins it under a working prefix.
- * Rejects absolute paths, any `..` segment, and any segment that looks like
+ * Rejects absolute paths, any `..` segment, a company-resource path, and any segment that looks like
  * a resolved storage-hierarchy path component, so a resolved key can never
  * escape the working directory — or land in an unintended nested one.
  *
@@ -35,6 +39,16 @@ export function resolveScopedKey(prefix: string, filename: string): string {
   if (segments.some((segment) => segment === '..')) {
     throw new Error(
       `Filename must not contain '..' path segments: '${filename}'.`,
+    );
+  }
+  // Checked first: a resource path would otherwise hit the generic message.
+  const resourcesAt = segments.indexOf(RESOURCES_DIR.replace('/', ''));
+  if (resourcesAt >= 0) {
+    throw new Error(
+      fill(storagePrompts.working_file_is_resource, {
+        filename,
+        path: segments.slice(resourcesAt + 1).join('/'),
+      }),
     );
   }
   if (segments.some((segment) => RESERVED_PATH_SEGMENTS.has(segment))) {

@@ -29,5 +29,9 @@
   "resources_appended": "Appended to resource '{{path}}'.",
   "resources_replaced_count": "Replaced {{count}} occurrence(s) in resource '{{path}}'.",
   "resources_draft_note": " It's a draft, applied to the company's resources when the task succeeds.",
-  "resources_new_folder_hint": " New folder '{{folder}}/'. Add a one-line purpose note with write_resource('{{folder}}/README.md', …)."
+  "resources_new_folder_hint": " New folder '{{folder}}/'. Add a one-line purpose note with write_resource('{{folder}}/README.md', …).",
+  // Pointers from the older file tools to the resource tools.
+  "working_file_is_resource": "'{{filename}}' is a company resource, not a working file. Use read_resource / write_resource with path '{{path}}'.",
+  "resources_same_name_hint": " A company resource with this name exists: use {{calls}}.",
+  "resources_shared_note": "\n\n(This is a company resource; read_resource also shows drafts from your task.)"
 }

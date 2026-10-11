@@ -62,7 +62,7 @@ function makeService(): StorageToolsService {
   );
 }
 
-function axiosError(status: number, body: unknown): unknown {
+function axiosError(status: number, body: unknown): Error {
   const err = new Error('request failed');
   Object.assign(err, {
     isAxiosError: true,
@@ -808,6 +808,164 @@ describe('StorageToolsService', () => {
         'nope.md',
       );
       expect(result.content[0].text).toContain("No material named 'nope.md'");
+    });
+  });
+
+  // Pointers from the older file tools to company resources ---------------
+
+  describe('company resources reached through the older tools', () => {
+    const HINT =
+      " A company resource with this name exists: use read_resource('price-list.md').";
+    const listing = {
+      data: {
+        entries: [
+          { key: 'acme/resources/price-list.md' },
+          { key: 'acme/resources/other/readme.md' },
+        ],
+      },
+    };
+
+    /** Storage answers `list` with the resources; every other action as given. */
+    function mockStorage(
+      other: (url: string) => Promise<unknown>,
+      list: Promise<unknown> = Promise.resolve(listing),
+    ): void {
+      mockedAxios.post.mockImplementation((url: string) =>
+        url.endsWith('/list') ? list : other(url),
+      );
+    }
+
+    beforeEach(() => mockScope({}));
+
+    it.each([
+      ['resources/price-list.md', 'price-list.md'],
+      ['acme/resources/invoices/a.md', 'invoices/a.md'],
+    ])(
+      'sends a working-file call for %s to the resource tools',
+      async (filename, path) => {
+        const result = await makeWorkingTools().createWorkingFile(
+          'agent-1',
+          filename,
+          'x',
+        );
+        expect(result.content[0].text).toBe(
+          `'${filename}' is a company resource, not a working file. Use read_resource / write_resource with path '${path}'.`,
+        );
+        expect(mockedAxios.post).not.toHaveBeenCalled();
+      },
+    );
+
+    it('still accepts a genuine subdirectory filename', async () => {
+      mockedAxios.post.mockResolvedValue({ data: { content: 'x' } });
+      const result = await makeWorkingTools().readWorkingFile(
+        'agent-1',
+        'notes/a.md',
+      );
+      expect(result.content[0].text).toBe('x');
+    });
+
+    it('hints at a same-named resource when a working file is missing', async () => {
+      mockStorage(() =>
+        Promise.reject(axiosError(404, { message: 'File not found' })),
+      );
+      const result = await makeWorkingTools().readWorkingFile(
+        'agent-1',
+        'price-list.md',
+      );
+      expect(result.content[0].text).toBe('File not found' + HINT);
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        'http://tcp-server:3000/internal/storage/list',
+        { prefix: 'acme/resources/', all: true },
+        { headers: { 'X-Internal-Api-Key': 'secret-key' } },
+      );
+    });
+
+    it('hints in the summary of a missing working file', async () => {
+      mockStorage(() =>
+        Promise.reject(axiosError(404, { message: 'File not found' })),
+      );
+      const result = await makeWorkingTools().getWorkingFileSummary(
+        'agent-1',
+        'price-list.md',
+      );
+      expect(result.content[0].text).toBe('File not found' + HINT);
+    });
+
+    it('hints in the properties of a missing working file', async () => {
+      mockStorage(() => Promise.resolve({ data: { exists: false } }));
+      const result = await makeWorkingTools().getWorkingFileProperties(
+        'agent-1',
+        'price-list.md',
+      );
+      expect(result.content[0].text).toBe(
+        JSON.stringify({ exists: false }, null, 2) + HINT,
+      );
+    });
+
+    it('leaves the reply alone when no resource has that name', async () => {
+      mockStorage(() =>
+        Promise.reject(axiosError(404, { message: 'File not found' })),
+      );
+      const result = await makeWorkingTools().readWorkingFile(
+        'agent-1',
+        'unknown.md',
+      );
+      expect(result.content[0].text).toBe('File not found');
+    });
+
+    it('leaves the reply alone when the lookup fails', async () => {
+      mockStorage(
+        () => Promise.reject(axiosError(404, { message: 'File not found' })),
+        Promise.reject(axiosError(500, { message: 'storage down' })),
+      );
+      const result = await makeWorkingTools().readWorkingFile(
+        'agent-1',
+        'price-list.md',
+      );
+      expect(result.content[0].text).toBe('File not found');
+    });
+
+    it('does not hint for a working file that exists', async () => {
+      mockStorage(() => Promise.resolve({ data: { exists: true } }));
+      const result = await makeWorkingTools().getWorkingFileProperties(
+        'agent-1',
+        'price-list.md',
+      );
+      expect(result.content[0].text).toBe(
+        JSON.stringify({ exists: true }, null, 2),
+      );
+    });
+
+    it('hints at a same-named resource when a material is missing', async () => {
+      mockStorage(() => Promise.reject(new Error('unused')));
+      const result = await makeMaterialTools().readMaterialFile(
+        'agent-1',
+        'price-list.md',
+      );
+      expect(result.content[0].text).toBe(
+        "No material named 'price-list.md'. Use list_material_files to see the available materials." +
+          HINT,
+      );
+    });
+
+    it('notes that a file read through read_file is a company resource', async () => {
+      mockedAxios.post.mockResolvedValue({ data: { content: 'prices' } });
+      const result = await makeSharedTools().readFile(
+        'agent-1',
+        'acme/resources/price-list.md',
+      );
+      expect(result.content[0].text).toBe(
+        'prices\n\n(This is a company resource; read_resource also shows drafts from your task.)',
+      );
+    });
+
+    it('adds no note to a file outside the resources', async () => {
+      mockedAxios.post.mockResolvedValue({ data: { content: 'plain' } });
+      const result = await makeSharedTools().readFile(
+        'agent-1',
+        'acme/knowledge/a.md',
+      );
+      expect(result.content[0].text).toBe('plain');
     });
   });
 });

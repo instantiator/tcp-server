@@ -30,6 +30,9 @@ export interface StoragePrompts {
   resources_replaced_count: string;
   resources_draft_note: string;
   resources_new_folder_hint: string;
+  working_file_is_resource: string;
+  resources_same_name_hint: string;
+  resources_shared_note: string;
 }
 
 /** Loaded once at module initialisation from the co-located {@link prompts.jsonc} file. */

@@ -9,6 +9,7 @@ import {
 } from '@tcp/shared';
 import { storagePrompts } from '../storage-prompts';
 import { storageToolDescriptions } from '../storage-tool-descriptions';
+import { fill } from './fill';
 import {
   FileEntry,
   FileProperties,
@@ -59,13 +60,6 @@ interface TreeLine {
 interface FolderNode {
   folders: Map<string, FolderNode>;
   files: Map<string, boolean>;
-}
-
-/** Fills `{{name}}` placeholders in a prompt template. */
-function fill(template: string, vars: Record<string, string | number>): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-    String(vars[name]),
-  );
 }
 
 /**

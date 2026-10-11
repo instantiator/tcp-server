@@ -28,6 +28,9 @@ describe('storagePrompts loader', () => {
     'resources_replaced_count',
     'resources_draft_note',
     'resources_new_folder_hint',
+    'working_file_is_resource',
+    'resources_same_name_hint',
+    'resources_shared_note',
   ];
 
   it.each(keys)('"%s" is a non-empty string', (key) => {

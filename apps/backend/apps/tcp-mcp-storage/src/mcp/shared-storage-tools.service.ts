@@ -1,7 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { ToolResult, extractServerErrorMessage, ok } from '@tcp/shared';
+import {
+  RESOURCES_DIR,
+  ToolResult,
+  extractServerErrorMessage,
+  ok,
+} from '@tcp/shared';
 import { storagePrompts } from '../storage-prompts';
 import { storageToolDescriptions } from '../storage-tool-descriptions';
 import { resolveCompanyKey } from './scoped-key';
@@ -128,11 +133,11 @@ export class SharedStorageToolsService {
   }
 
   async readFile(agentId: string, path: string): Promise<ToolResult> {
-    return this.inCompany(agentId, path, async (key) => {
+    return this.inCompany(agentId, path, async (key, companyPrefix) => {
       const { content } = await this.storage.post<{ content: string }>('read', {
         path: key,
       });
-      return content;
+      return content + resourceNote(key, companyPrefix);
     });
   }
 
@@ -151,21 +156,23 @@ export class SharedStorageToolsService {
   }
 
   async getFileProperties(agentId: string, path: string): Promise<ToolResult> {
-    return this.inCompany(agentId, path, async (key) => {
+    return this.inCompany(agentId, path, async (key, companyPrefix) => {
       const props = await this.storage.post<FileProperties>('properties', {
         path: key,
       });
-      return JSON.stringify(props, null, 2);
+      return JSON.stringify(props, null, 2) + resourceNote(key, companyPrefix);
     });
   }
 
   async getFileSummary(agentId: string, path: string): Promise<ToolResult> {
-    return this.inCompany(agentId, path, async (key) => {
+    return this.inCompany(agentId, path, async (key, companyPrefix) => {
       const summary = await this.storage.post<Record<string, unknown>>(
         'summary',
         { path: key },
       );
-      return JSON.stringify(summary, null, 2);
+      return (
+        JSON.stringify(summary, null, 2) + resourceNote(key, companyPrefix)
+      );
     });
   }
 
@@ -177,11 +184,13 @@ export class SharedStorageToolsService {
   private async inCompany(
     agentId: string,
     path: string | undefined,
-    action: (key: string) => Promise<string>,
+    action: (key: string, companyPrefix: string) => Promise<string>,
   ): Promise<ToolResult> {
     try {
       const { companyPrefix } = await this.storage.fetchScope(agentId);
-      return ok(await action(resolveCompanyKey(companyPrefix, path)));
+      return ok(
+        await action(resolveCompanyKey(companyPrefix, path), companyPrefix),
+      );
     } catch (e) {
       return ok(extractServerErrorMessage(e));
     }
@@ -210,4 +219,11 @@ export class SharedStorageToolsService {
       return storagePrompts.describe_folder_audit;
     return storagePrompts.describe_folder_fallback;
   }
+}
+
+/** Tells the model a key is a company resource, so it finds the resource tools. */
+function resourceNote(key: string, companyPrefix: string): string {
+  return key.startsWith(`${companyPrefix}${RESOURCES_DIR}`)
+    ? storagePrompts.resources_shared_note
+    : '';
 }
