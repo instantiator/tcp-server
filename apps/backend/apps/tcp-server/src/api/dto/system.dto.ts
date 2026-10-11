@@ -28,6 +28,7 @@ export class ServiceHealthDto implements ServiceHealth {
       'tcp-mcp-interactions',
       'tcp-mcp-tasks',
       'tcp-mcp-utilities',
+      'tcp-mcp-records',
     ],
   })
   name!: string;

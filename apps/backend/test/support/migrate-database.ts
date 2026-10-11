@@ -1,4 +1,5 @@
 import { DataSource } from 'typeorm';
+import { RECORDS_MIGRATIONS } from '../../apps/tcp-mcp-records/src/migrations-list';
 import { MIGRATIONS } from '../../apps/tcp-server/src/migrations-list';
 import {
   AuditEvent,
@@ -17,7 +18,8 @@ import {
 } from '../../../../libs/tcp-shared/src/models';
 
 /**
- * Applies tcp-server's migrations to `databaseUrl` once, before any spec runs.
+ * Applies tcp-server's migrations, then the records server's, to `databaseUrl`
+ * once, before any spec runs.
  *
  * Both test tiers share one Postgres container, and tcp-server is the sole
  * migration owner (see `apps/tcp-server/src/migrations-list.ts`) — so a spec
@@ -63,4 +65,16 @@ export async function migrateDatabase(databaseUrl: string): Promise<void> {
   await migrationDataSource.initialize();
   await migrationDataSource.runMigrations();
   await migrationDataSource.destroy();
+
+  // The records server's tables, into its own migrations table. After
+  // tcp-server's, so they get their company foreign keys.
+  const recordsDataSource = new DataSource({
+    type: 'postgres',
+    url: databaseUrl,
+    migrations: RECORDS_MIGRATIONS,
+    migrationsTableName: 'records_migrations',
+  });
+  await recordsDataSource.initialize();
+  await recordsDataSource.runMigrations();
+  await recordsDataSource.destroy();
 }

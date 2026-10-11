@@ -53,6 +53,7 @@ export const configSchema = Joi.object({
   MCP_INTERACTIONS_URL: Joi.string().uri().empty('').optional(),
   MCP_TASKS_URL: Joi.string().uri().empty('').optional(),
   MCP_UTILITIES_URL: Joi.string().uri().empty('').optional(),
+  MCP_RECORDS_URL: Joi.string().uri().empty('').optional(),
   // tcp-agent's internal URL, used only by the combined system health report.
   TCP_AGENT_URL: Joi.string().uri().empty('').optional(),
   // True only where a supervisor (Docker's restart policy) starts tcp-server

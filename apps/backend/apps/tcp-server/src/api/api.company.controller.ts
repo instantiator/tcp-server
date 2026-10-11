@@ -47,6 +47,7 @@ import { MembershipService } from '../auth/membership.service';
 import { getCurrentUserIdentifiers } from '../auth/current-user';
 import { CompanyEventService } from '../events/company-event.service';
 import { SpendReportService } from '../spend/spend-report.service';
+import { RecordsCleanupService } from './records-cleanup.service';
 import { ApiService } from './api.service';
 import { CompanyPrimingService } from './company-priming.service';
 import { CompanyStatsService } from './company-stats.service';
@@ -78,6 +79,7 @@ export class CompanyController {
     private readonly membership: MembershipService,
     private readonly spend: SpendResumeService,
     private readonly spendReport: SpendReportService,
+    private readonly recordsCleanup: RecordsCleanupService,
   ) {}
 
   /**
@@ -203,7 +205,8 @@ export class CompanyController {
   /**
    * Deletes a company by UUID or slug. Cascades to its roles, agents, audit
    * events, conversations, knowledge chunks, episodic memory, and company
-   * users (see the `AddMissingCompanyRoleForeignKeys` migration).
+   * users (see the `AddMissingCompanyRoleForeignKeys` migration), and to its
+   * record tables — through the records server when they live elsewhere.
    */
   @ApiOperation({ summary: 'Delete a company by ID or slug' })
   @CompanyScope({ from: 'param', key: 'id', via: 'company' })
@@ -212,6 +215,7 @@ export class CompanyController {
   async deleteCompany(@Param('id') id: string): Promise<void> {
     const company = await this.resolveCompanyOrThrow(id);
     await this.db.deleteCompany(company.id);
+    await this.recordsCleanup.companyDeleted(company.id);
   }
 
   /**

@@ -37,6 +37,7 @@ Every endpoint that accepts a request body uses a dedicated DTO (Data Transfer O
 | `companyContext`       | `string`       | No       |                                                                       |
 | `systemPromptTemplate` | `string`       | No       | Default fallback for roles that leave theirs blank                    |
 | `mcpServerList`        | `string[]`     | No       | Additive — combined with the system registry and each role's own list |
+| `mcpServerToggles`     | `object\|null` | No       | Server name → `true`/`false`; switches servers on/off for all roles   |
 | `timezone`             | `string`       | No       | IANA name; display/prompt-localization only, never storage            |
 
 #### `UpdateCompanyDto` — `PUT /api/company/:id`
@@ -123,17 +124,18 @@ These are the definitions you are most likely to reference when preparing CLI in
 
 Represents a company (tenant). Used by `set-company`.
 
-| Field                  | Type                      | Required | Notes                                                                                                                                      |
-| ---------------------- | ------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `slug`                 | `string`                  | Yes      | URL-safe identifier; globally unique                                                                                                       |
-| `name`                 | `string`                  | Yes      | Display name                                                                                                                               |
-| `description`          | `string`                  | Yes      | One-sentence description                                                                                                                   |
-| `companyContext`       | `string`                  | No       | Injected into every agent prompt as part 2                                                                                                 |
-| `llmConfig`            | [`LlmConfig`](#llmconfig) | No       | Default LLM for all roles that don't override; company/role both implement `WithLlmConfig`                                                 |
-| `embeddingConfig`      | [`LlmConfig`](#llmconfig) | No       | Embedding model (can differ from the chat LLM)                                                                                             |
-| `systemPromptTemplate` | `string`                  | No       | Default fallback for roles that leave theirs blank; falls back to a baked-in default if also blank                                         |
-| `mcpServerList`        | `string[]`                | No       | Additive extra servers, unioned with the system registry and each role's own list                                                          |
-| `timezone`             | `string`                  | No       | IANA name (e.g. `Europe/London`); CLI/UI display and prompt localization only — storage and the LLM's `{{datetime}}` anchor are always UTC |
+| Field                  | Type                      | Required | Notes                                                                                                                                                                                       |
+| ---------------------- | ------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `slug`                 | `string`                  | Yes      | URL-safe identifier; globally unique                                                                                                                                                        |
+| `name`                 | `string`                  | Yes      | Display name                                                                                                                                                                                |
+| `description`          | `string`                  | Yes      | One-sentence description                                                                                                                                                                    |
+| `companyContext`       | `string`                  | No       | Injected into every agent prompt as part 2                                                                                                                                                  |
+| `llmConfig`            | [`LlmConfig`](#llmconfig) | No       | Default LLM for all roles that don't override; company/role both implement `WithLlmConfig`                                                                                                  |
+| `embeddingConfig`      | [`LlmConfig`](#llmconfig) | No       | Embedding model (can differ from the chat LLM)                                                                                                                                              |
+| `systemPromptTemplate` | `string`                  | No       | Default fallback for roles that leave theirs blank; falls back to a baked-in default if also blank                                                                                          |
+| `mcpServerList`        | `string[]`                | No       | Additive extra servers, unioned with the system registry and each role's own list                                                                                                           |
+| `mcpServerToggles`     | `Record<string, boolean>` | No       | Servers switched on (`true`) or off (`false`) for all the company's roles; a role's own toggle wins. See [agent-services.md](agent-services.md#switching-servers-off-for-a-company-or-role) |
+| `timezone`             | `string`                  | No       | IANA name (e.g. `Europe/London`); CLI/UI display and prompt localization only — storage and the LLM's `{{datetime}}` anchor are always UTC                                                  |
 
 ### `TcpRole`
 
@@ -147,6 +149,7 @@ Represents an agent role within a company. Used by `set-role`.
 | `systemPromptTemplate` | `string`                  | No       | Blank/omitted resolves via role → company → baked-in default. Supports `{{name}}`, `{{description}}`, `{{date}}`, `{{datetime}}`, `{{timezone}}`, `{{localDatetime}}`, `{{companyId}}`, `{{roleId}}` |
 | `knowledgeDomains`     | `string[]`                | Yes      | Tags for query routing (e.g. `["finance","legal"]`)                                                                                                                                                  |
 | `mcpServerList`        | `string[]`                | Yes      | MCP server names the role can use, additive with the company's and system's                                                                                                                          |
+| `mcpServerToggles`     | `Record<string, boolean>` | No       | Servers switched on (`true`) or off (`false`) for this role; overrides the company's toggles                                                                                                         |
 | `llmConfig`            | [`LlmConfig`](#llmconfig) | No       | Per-role LLM override; falls back to company, then environment                                                                                                                                       |
 | `rolePrompt`           | `string`                  | No       | Additional context injected at the start of each run                                                                                                                                                 |
 

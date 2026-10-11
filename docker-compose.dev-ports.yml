@@ -33,3 +33,6 @@ services:
   tcp-mcp-utilities:
     ports:
       - '3014:3014'
+  tcp-mcp-records:
+    ports:
+      - '3015:3015'

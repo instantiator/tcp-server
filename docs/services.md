@@ -14,6 +14,7 @@ starts when the `auth` profile is active (`docker compose --profile auth up`).
 | tcp-mcp-interactions | `tcp-mcp-interactions` | 3012¹                                | Interactions MCP server                                  |
 | tcp-mcp-tasks        | `tcp-mcp-tasks`        | 3013¹                                | Tasks MCP server                                         |
 | tcp-mcp-utilities    | `tcp-mcp-utilities`    | 3014¹                                | Utilities MCP server                                     |
+| tcp-mcp-records      | `tcp-mcp-records`      | 3015¹                                | Records MCP server                                       |
 | stub-llm             | `stub-llm`             | 3002¹                                | Configurable stub LLM for tests (profile: `integration`) |
 | PostgreSQL           | `postgres`             | 5432                                 | Primary relational store (pgvector extension enabled)    |
 | Redis                | `redis`                | 6379                                 | BullMQ broker and pub/sub transport for SSE and shutdown |
@@ -117,6 +118,15 @@ NestJS MCP server that gives agents exact arithmetic (`calculate`), date maths (
 - **API:** `POST http://localhost:3014/mcp`
 - **Depends on:** nothing
 - **Built from:** the root `Dockerfile`, target `tcp-mcp-utilities`
+
+### tcp-mcp-records
+
+NestJS MCP server that lets agents keep structured records in typed, per-company tables (`create_table`, `insert`, `update`, `delete`, `query`, `aggregate`). It has its own database connection: `RECORDS_DATABASE_URL`, or `DATABASE_URL` when that is empty. See [tcp-mcp-records.md](tcp-mcp-records.md) for the tool reference.
+
+- **Health:** `GET http://localhost:3015/health` — pings the database
+- **API:** `POST http://localhost:3015/mcp`
+- **Depends on:** tcp-server (healthy), so that a shared database already has `tcp_company` when the records migration adds its foreign keys
+- **Built from:** the root `Dockerfile`, target `tcp-mcp-records`
 
 ### stub-llm _(profile: integration)_
 

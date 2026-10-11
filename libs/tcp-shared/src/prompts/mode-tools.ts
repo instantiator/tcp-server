@@ -1,7 +1,7 @@
 import type { TcpAssignmentMode } from '../models/TcpAssignment.model';
 import { MCP_REGISTRY } from '../mcp/mcp-registry';
 
-/** A registered MCP server name (`'tasks' | 'storage' | 'memory' | 'interactions' | 'utilities'`). */
+/** A registered MCP server name (`'tasks' | 'storage' | 'memory' | 'interactions' | 'utilities' | 'records'`). */
 export type McpServerName = (typeof MCP_REGISTRY)[number]['name'];
 
 /**
@@ -19,6 +19,19 @@ export const STORAGE_WRITE_TOOLS: readonly string[] = [
   'restore_working_file',
 ];
 
+/**
+ * The records server's mutating tools, withheld from the read-only modes.
+ * ponytail: filtered on the agent side only. Company scoping is the records
+ * server's security boundary; this only keeps planners and reviewers from
+ * changing records. Add a server-side check if an agent is seen bypassing it.
+ */
+export const RECORDS_WRITE_TOOLS: readonly string[] = [
+  'create_table',
+  'insert',
+  'update',
+  'delete',
+];
+
 /** What tools a given mode is offered. */
 export interface ModeToolAccess {
   /** MCP servers offered to this mode. */
@@ -30,6 +43,8 @@ export interface ModeToolAccess {
    * drift.
    */
   storage: 'read-write' | 'read-only';
+  /** Records tools offered: all of them, or only the reads ({@link RECORDS_WRITE_TOOLS} dropped). */
+  records: 'read-write' | 'read-only';
 }
 
 /**
@@ -44,28 +59,69 @@ export interface ModeToolAccess {
  */
 export const MODE_TOOLS: Record<TcpAssignmentMode, ModeToolAccess> = {
   plan: {
-    servers: ['tasks', 'storage', 'memory', 'utilities'],
+    servers: ['tasks', 'storage', 'memory', 'utilities', 'records'],
     storage: 'read-only',
+    records: 'read-only',
   },
   implement: {
-    servers: ['tasks', 'storage', 'memory', 'interactions', 'utilities'],
+    servers: [
+      'tasks',
+      'storage',
+      'memory',
+      'interactions',
+      'utilities',
+      'records',
+    ],
     storage: 'read-write',
+    records: 'read-write',
   },
   qa: {
-    servers: ['tasks', 'storage', 'memory', 'interactions', 'utilities'],
+    servers: [
+      'tasks',
+      'storage',
+      'memory',
+      'interactions',
+      'utilities',
+      'records',
+    ],
     storage: 'read-only',
+    records: 'read-only',
   },
   chat: {
-    servers: ['tasks', 'storage', 'memory', 'interactions', 'utilities'],
+    servers: [
+      'tasks',
+      'storage',
+      'memory',
+      'interactions',
+      'utilities',
+      'records',
+    ],
     storage: 'read-write',
+    records: 'read-write',
   },
   consultee: {
-    servers: ['tasks', 'storage', 'memory', 'interactions', 'utilities'],
+    servers: [
+      'tasks',
+      'storage',
+      'memory',
+      'interactions',
+      'utilities',
+      'records',
+    ],
     storage: 'read-write',
+    records: 'read-write',
   },
   finalise: {
-    servers: ['tasks', 'storage', 'memory', 'interactions', 'utilities'],
+    servers: [
+      'tasks',
+      'storage',
+      'memory',
+      'interactions',
+      'utilities',
+      'records',
+    ],
     storage: 'read-write',
+    records: 'read-write',
   },
 };
 
@@ -96,8 +152,9 @@ export function serverNamesForMode(
 
 /**
  * Filters already-loaded tools to those a mode is offered: only servers in
- * {@link MODE_TOOLS} `.servers`, and — for a `read-only` storage mode — with the
- * mutating {@link STORAGE_WRITE_TOOLS} dropped. Generic over the loaded-tool
+ * {@link MODE_TOOLS} `.servers`, and — for a `read-only` storage or records
+ * mode — with the mutating {@link STORAGE_WRITE_TOOLS} or
+ * {@link RECORDS_WRITE_TOOLS} dropped. Generic over the loaded-tool
  * shape so both the shared `McpTool` and any test double satisfy it.
  */
 export function filterToolsForMode<
@@ -106,9 +163,18 @@ export function filterToolsForMode<
   const allowedServers = new Set<string>(MODE_TOOLS[mode].servers);
   const dropWrites = MODE_TOOLS[mode].storage === 'read-only';
   const writeTools = new Set(STORAGE_WRITE_TOOLS);
-  return tools.filter(
-    (t) =>
+  const dropRecordWrites = MODE_TOOLS[mode].records === 'read-only';
+  const recordWriteTools = new Set(RECORDS_WRITE_TOOLS);
+  return tools.filter((t) => {
+    const name = stripServerPrefix(t.toolName);
+    return (
       allowedServers.has(t.serverName) &&
-      !(dropWrites && writeTools.has(stripServerPrefix(t.toolName))),
-  );
+      !(dropWrites && writeTools.has(name)) &&
+      !(
+        dropRecordWrites &&
+        t.serverName === 'records' &&
+        recordWriteTools.has(name)
+      )
+    );
+  });
 }

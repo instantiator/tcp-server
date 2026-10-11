@@ -336,6 +336,70 @@ describe('McpClientService', () => {
       expect(inner.type.safeParse('paragraph').success).toBe(false);
     });
 
+    describe('object arguments', () => {
+      /** Loads one tool with the given `properties` and returns its LangChain schema. */
+      async function schemaFor(properties: Record<string, unknown>) {
+        MockClient.mockImplementation(
+          () =>
+            makeClientInstance([
+              {
+                name: 'insert',
+                description: 'Insert a record',
+                inputSchema: { type: 'object', properties },
+              },
+            ]) as unknown as Client,
+        );
+        const [mcpTool] = await service.loadTools(['records'], {
+          records: 'http://localhost:3015',
+        });
+        return mcpTool.tool.schema as z.ZodType;
+      }
+
+      it('keeps every key of a free-form record (an object with no declared properties)', async () => {
+        const schema = await schemaFor({
+          record: {
+            type: 'object',
+            propertyNames: { type: 'string' },
+            additionalProperties: {},
+          },
+        });
+        const record = { order_id: 'A1', qty: 2, paid: true };
+        expect(schema.parse({ record })).toEqual({ record });
+      });
+
+      it('keeps undeclared keys of an object that allows them', async () => {
+        const schema = await schemaFor({
+          changes: { type: 'object', properties: { note: { type: 'string' } } },
+        });
+        const changes = { note: 'x', status: 'shipped' };
+        expect(schema.parse({ changes })).toEqual({ changes });
+      });
+
+      it('still strips undeclared keys when additionalProperties is false', async () => {
+        const schema = await schemaFor({
+          closed: {
+            type: 'object',
+            properties: { a: { type: 'string' } },
+            additionalProperties: false,
+          },
+        });
+        expect(schema.parse({ closed: { a: 'x', b: 'y' } })).toEqual({
+          closed: { a: 'x' },
+        });
+      });
+
+      it('keeps the keys of free-form records inside an array', async () => {
+        const schema = await schemaFor({
+          rows: {
+            type: 'array',
+            items: { type: 'object', additionalProperties: {} },
+          },
+        });
+        const rows = [{ a: 1 }, { b: 'two' }];
+        expect(schema.parse({ rows })).toEqual({ rows });
+      });
+    });
+
     it('returns empty string when callTool produces no text content', async () => {
       const clientInstance = makeClientInstance([
         {

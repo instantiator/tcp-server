@@ -34,6 +34,7 @@ const REMOTE_SERVICES: { name: string; urlKey: string }[] = [
   { name: 'tcp-mcp-interactions', urlKey: 'MCP_INTERACTIONS_URL' },
   { name: 'tcp-mcp-tasks', urlKey: 'MCP_TASKS_URL' },
   { name: 'tcp-mcp-utilities', urlKey: 'MCP_UTILITIES_URL' },
+  { name: 'tcp-mcp-records', urlKey: 'MCP_RECORDS_URL' },
 ];
 
 /**

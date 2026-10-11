@@ -52,9 +52,7 @@ export class UtilitiesToolsService {
       {
         description: utilitiesToolDescriptions.calculate,
         inputSchema: {
-          expression: z
-            .string()
-            .describe('The expression, e.g. "round(3 * 4.99 * 1.2, 2)".'),
+          expression: z.string(),
         },
       },
       ({ expression }): ToolResult => attempt(() => calculate(expression)),
@@ -62,31 +60,21 @@ export class UtilitiesToolsService {
   }
 
   private registerDateMath(server: McpServer): void {
-    const count = (unit: string) =>
-      z.number().int().optional().describe(`Whole ${unit} to move by.`);
+    const count = z.number().int().optional();
     server.registerTool(
       'date_math',
       {
         description: utilitiesToolDescriptions.date_math,
         inputSchema: {
-          operation: z.enum(DATE_OPERATIONS).describe('What to calculate.'),
-          date: z.string().describe('The starting date, YYYY-MM-DD.'),
-          other_date: z
-            .string()
-            .optional()
-            .describe('The end date for `difference`, YYYY-MM-DD.'),
-          years: count('years'),
-          months: count('months'),
-          weeks: count('weeks'),
-          days: count('days (business days for `add_business_days`)'),
-          holidays: z
-            .array(z.string())
-            .optional()
-            .describe('Dates (YYYY-MM-DD) that are not business days.'),
-          tax_year_start: z
-            .string()
-            .optional()
-            .describe('First day of the tax year, MM-DD. Default 04-06.'),
+          operation: z.enum(DATE_OPERATIONS),
+          date: z.string(),
+          other_date: z.string().optional(),
+          years: count,
+          months: count,
+          weeks: count,
+          days: count,
+          holidays: z.array(z.string()).optional(),
+          tax_year_start: z.string().optional(),
         },
       },
       (input): ToolResult => attempt(() => JSON.stringify(dateMath(input))),
@@ -99,9 +87,9 @@ export class UtilitiesToolsService {
       {
         description: utilitiesToolDescriptions.convert_units,
         inputSchema: {
-          value: z.string().describe('The amount, as a decimal, e.g. "2.5".'),
-          from: z.string().describe('The unit to convert from, e.g. "lb".'),
-          to: z.string().describe('The unit to convert to, e.g. "kg".'),
+          value: z.string(),
+          from: z.string(),
+          to: z.string(),
         },
       },
       ({ value, from, to }): ToolResult =>

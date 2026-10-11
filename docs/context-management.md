@@ -10,7 +10,9 @@ Budget checks run **once per tool-calling iteration**, not just once at the star
 
 ## Context window size
 
-The model's context window is configured via `LlmConfig.contextWindow` (tokens). If absent, the default is `8192` tokens. Set this when creating or updating a role's LLM config:
+The model's context window is configured via `LlmConfig.contextWindow` (tokens), falling back to `LLM_CONTEXT_WINDOW` from the environment. If neither is set, the default is `8192` tokens.
+
+**For local models, use 32768** (`RECOMMENDED_LOCAL_CONTEXT_WINDOW` in `libs/tcp-shared/src/config/defaults.ts`), and load the model with the same context length in LM Studio or Ollama. The tool schemas alone take about 6,000 tokens a turn with every MCP server on, so 8,192 leaves almost nothing for the conversation. The setup wizard recommends 32768 for a local provider, and `estimate-context-window` shows the fit. See [your-first-company.md](your-first-company.md) for how to set it in each model server. Set this when creating or updating a role's LLM config:
 
 ```json
 {

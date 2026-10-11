@@ -151,7 +151,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderTemplate[] = [
       steps: [
         'Install LM Studio and open it.',
         'In the Discover tab, download the model below.',
-        'In the Developer tab, load the model, then switch the server on (Status: Running).',
+        "In the Developer tab, load the model with a Context Length of 32768, then switch the server on (Status: Running). Save 32768 as the model's default load setting too (or run: lms load <model> -c 32768), or a reload falls back to a smaller window.",
         'If you turn on "Require API key" in the server settings, create a key there. Otherwise any value works as the key.',
         'The Developer tab shows the server address — usually http://localhost:1234 (TCP adds /v1).',
       ],
@@ -170,6 +170,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderTemplate[] = [
       steps: [
         'Install Ollama and start it (it runs in the background).',
         'Download the model below: ollama pull <model>',
+        'Give models a 32768-token context: set OLLAMA_CONTEXT_LENGTH=32768 in the environment Ollama starts with, then restart it.',
         'Ollama needs no API key, and serves on http://localhost:11434 (TCP adds /v1).',
       ],
     },

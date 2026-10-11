@@ -45,6 +45,15 @@ export function registerEstimateContextWindow(program: Command): void {
       Number,
     )
     .option(
+      '--mode <mode>',
+      'Mode whose MCP tool set to count: plan, implement, qa, chat, consultee or finalise (default: implement)',
+    )
+    .option(
+      '--tool-tokens <n>',
+      'MCP tool schema tokens to assume instead of asking tcp-server (needed with --from-file)',
+      Number,
+    )
+    .option(
       '--json',
       'Print the full breakdown as JSON instead of just the total',
     )

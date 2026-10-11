@@ -3,6 +3,7 @@ import {
   serverNamesForMode,
   isStorageReadOnly,
   MODE_TOOLS,
+  RECORDS_WRITE_TOOLS,
   STORAGE_WRITE_TOOLS,
 } from './mode-tools';
 import type { TcpAssignmentMode } from '../models/TcpAssignment.model';
@@ -23,6 +24,12 @@ const FULL_SET = [
   tool('storage', 'restore_working_file'),
   tool('memory', 'search_knowledge'),
   tool('interactions', 'request_agent_consultation'),
+  tool('records', 'query'),
+  tool('records', 'aggregate'),
+  tool('records', 'insert'),
+  tool('records', 'update'),
+  tool('records', 'delete'),
+  tool('records', 'create_table'),
 ];
 
 const ALL_MODES: TcpAssignmentMode[] = [
@@ -70,13 +77,21 @@ describe('MODE_TOOLS', () => {
 });
 
 describe('serverNamesForMode', () => {
-  const names = ['tasks', 'storage', 'memory', 'interactions', 'utilities'];
+  const names = [
+    'tasks',
+    'storage',
+    'memory',
+    'interactions',
+    'utilities',
+    'records',
+  ];
   it('drops interactions for plan; keeps all servers for every other mode', () => {
     expect(serverNamesForMode(names, 'plan')).toEqual([
       'tasks',
       'storage',
       'memory',
       'utilities',
+      'records',
     ]);
     for (const mode of [
       'implement',
@@ -120,6 +135,23 @@ describe('filterToolsForMode', () => {
     ] as const) {
       expect(filterToolsForMode(FULL_SET, mode)).toHaveLength(FULL_SET.length);
     }
+  });
+
+  it('plan and qa keep the records reads but drop every records write', () => {
+    for (const mode of ['plan', 'qa'] as const) {
+      const kept = filterToolsForMode(FULL_SET, mode).map((t) => t.toolName);
+      expect(kept).toEqual(
+        expect.arrayContaining(['records__query', 'records__aggregate']),
+      );
+      for (const w of RECORDS_WRITE_TOOLS) {
+        expect(kept).not.toContain(`records__${w}`);
+      }
+    }
+  });
+
+  it('drops records write names only from the records server', () => {
+    const other = [{ serverName: 'storage', toolName: 'storage__insert' }];
+    expect(filterToolsForMode(other, 'plan')).toHaveLength(1);
   });
 
   it('handles unprefixed tool names', () => {

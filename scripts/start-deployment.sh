@@ -590,6 +590,7 @@ wait_for tcp-mcp-memory       "$DC exec -T tcp-mcp-memory curl -sf http://localh
 wait_for tcp-mcp-interactions "$DC exec -T tcp-mcp-interactions curl -sf http://localhost:3012/health"
 wait_for tcp-mcp-tasks        "$DC exec -T tcp-mcp-tasks curl -sf http://localhost:3013/health"
 wait_for tcp-mcp-utilities    "$DC exec -T tcp-mcp-utilities curl -sf http://localhost:3014/health"
+wait_for tcp-mcp-records      "$DC exec -T tcp-mcp-records curl -sf http://localhost:3015/health"
 # -k: the default certificate is self-signed until a real one is mounted. This
 # probe matters — without it, the script would print "Deployment ready" while
 # nginx might still be generating its certificate or picking a config, the
@@ -612,6 +613,7 @@ if [[ "$DEV_PORTS" = "true" ]]; then
   echo "  tcp-mcp-interactions   →  http://localhost:3012"
   echo "  tcp-mcp-tasks          →  http://localhost:3013"
   echo "  tcp-mcp-utilities      →  http://localhost:3014"
+  echo "  tcp-mcp-records        →  http://localhost:3015"
 else
   echo "  tcp-mcp-*              →  internal only (rerun with --dev-ports to publish)"
 fi

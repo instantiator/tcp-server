@@ -15,14 +15,35 @@ Local credentials live in `.env` (not committed). See `.env.example` for the req
 
 ## Which services connect
 
-| Service              | Connects | Notes                                                                  |
-| -------------------- | -------- | ---------------------------------------------------------------------- |
-| tcp-server           | Yes      | Owns migrations; reads and writes all entities                         |
-| tcp-agent            | Yes      | Reads roles/companies; writes `TcpAgent`; migrations run by tcp-server |
-| tcp-mcp-memory       | Yes      | Reads/writes `EpisodicMemory`; reads `TcpCompany` for embedding config |
-| tcp-mcp-storage      | No       | Uses MinIO only                                                        |
-| tcp-mcp-interactions | No       | Delegates all DB writes to tcp-server via internal HTTP                |
-| tcp-mcp-utilities    | No       | Stateless; stores nothing and calls no other service                   |
+| Service              | Connects | Notes                                                                                                                |
+| -------------------- | -------- | -------------------------------------------------------------------------------------------------------------------- |
+| tcp-server           | Yes      | Owns migrations; reads and writes all entities                                                                       |
+| tcp-agent            | Yes      | Reads roles/companies; writes `TcpAgent`; migrations run by tcp-server                                               |
+| tcp-mcp-memory       | Yes      | Reads/writes `EpisodicMemory`; reads `TcpCompany` for embedding config                                               |
+| tcp-mcp-storage      | No       | Uses MinIO only                                                                                                      |
+| tcp-mcp-interactions | No       | Delegates all DB writes to tcp-server via internal HTTP                                                              |
+| tcp-mcp-utilities    | No       | Stateless; stores nothing and calls no other service                                                                 |
+| tcp-mcp-records      | Yes      | Own connection (`RECORDS_DATABASE_URL`, else `DATABASE_URL`); raw SQL on the records tables; runs its own migrations |
+
+## Records tables
+
+`tcp-mcp-records` keeps agents' structured records in three tables. They are not TypeORM entities: the server uses raw SQL on its own connection. See [tcp-mcp-records.md](tcp-mcp-records.md) for the full picture.
+
+| Table          | Holds                                                                                                            |
+| -------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `record_table` | One row per agent-made table: `companyId`, `name`, `purpose`, `schema` (JSON Schema), `primaryKey`, `uniqueKeys` |
+| `record`       | One row per record: `tableId`, `companyId`, `data` (JSONB), `version`                                            |
+| `record_key`   | One row per key value of a record. Its primary key `(tableId, keyName, keyValue)` makes keys unique under races  |
+
+The company foreign keys (`ON DELETE CASCADE` to `tcp_company`) exist only when `tcp_company` is in the same database.
+
+### A second migration list
+
+The records server has its own migration list (`RECORDS_MIGRATIONS`) and its own table, `records_migrations`. It runs them on start (`migrationsRun: true`) on its own connection. tcp-server's migrations do not include the records tables. See [db-migrations.md](db-migrations.md#the-records-servers-migrations).
+
+### A separate records database
+
+`RECORDS_DATABASE_URL` puts the records in a database of their own. With it set, there are no company foreign keys, so a company delete does not cascade. tcp-server calls the records server to delete the company's records instead (best effort). `scripts/backup.sh` does not back this database up. See [tcp-mcp-records.md → A separate database](tcp-mcp-records.md#a-separate-database).
 
 ## SQLite fallback for tests
 
@@ -38,6 +59,8 @@ The SQLite fallback does not run migrations and does not support pgvector or JSO
 Migrations run automatically on tcp-server startup when connecting to Postgres (`migrationsRun: true`). tcp-agent and tcp-mcp-memory set `migrationsRun: false` — they assume tcp-server has already applied all migrations.
 
 The integration and e2e test tiers apply the same ownership rule: each tier's Jest `global-setup.ts` migrates the shared Postgres container once (`apps/backend/test/support/migrate-database.ts`) before any spec runs, so no spec builds or owns the schema. A spec must not point a `synchronize: true` connection at the tier's `DATABASE_URL` — that leaves the database carrying TypeORM's generated constraint names and unmigratable for whichever spec boots a real `AppModule` next.
+
+The records server is the exception: it runs its own migrations on its own list, in a table of its own. It starts after tcp-server is healthy, so that in a shared database the records migration finds `tcp_company`.
 
 See [db-migrations.md](db-migrations.md) for how to generate, review, register
 and run one — including the hand-registration step in `migrations-list.ts` that

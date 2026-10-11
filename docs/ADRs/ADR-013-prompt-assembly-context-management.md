@@ -152,3 +152,8 @@ _2026-07-13._
 - **The `memory` service is skipped for empty-knowledge-base roles** (`AgentRagService.hasKnowledge`), rather than being bound and immediately failing every `recall`/`search_knowledge` call.
 
 This section supersedes the 008.6 tool-schema-gating bullet above and the Part 3 row's earlier description; see also [ADR-010's 010.2.8.2 amendment](ADR-010-orchestration-design.md#amendments-as-implemented-010282), which this work was originally recorded under.
+
+## Amendment as implemented (001.01.03, phase 04) <a id="amendment-as-implemented-p04-001-01-03"></a>
+
+- **Tool schemas are part of the estimate.** `estimate-context-window` used to leave them out, though the run-time budget (`ContextBudgetService.countTools`) always counted them. With six MCP servers they cost about 5,800 tokens a turn, enough to fill an 8k window before any work. tcp-server now counts them per server (`GET …/roles/by-slug/:slug/tool-footprint`), and the CLI adds them as a `tools` line.
+- **Part 3 (services available) and the bound tools respect `mcpServerToggles`.** A company or role can switch any MCP server off; `resolveMcpServerList` applies the toggles (role, then company, then on) after the additive union, so a switched-off server is neither described nor bound.

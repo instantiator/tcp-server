@@ -189,6 +189,15 @@ export const DEFAULT_RATE_LIMIT_QUOTA_RETRY_MS = 60 * 60 * 1000; // 1h
 export const DEFAULT_LLM_CONTEXT_WINDOW = 8192;
 
 /**
+ * The context window to load a local model (LM Studio, Ollama) with. Every
+ * MCP tool schema is sent on every turn — about 6,000 tokens with all six
+ * servers — so an 8k window fills before an agent has done any work.
+ * Offered by the setup wizard and recommended in the docs; the model server
+ * must be set to it too, since TCP can't raise a window the server enforces.
+ */
+export const RECOMMENDED_LOCAL_CONTEXT_WINDOW = 32768;
+
+/**
  * Default maximum QA rejections a task assignment may accrue before it is
  * failed (and its task with it).
  * Overridden by `TASK_MAX_QA_ATTEMPTS` (tcp-server env), then by

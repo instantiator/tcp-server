@@ -292,6 +292,17 @@
           },
           "type": "array"
         },
+        "mcpServerToggles": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/McpServerToggles"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "MCP servers switched on (`true`) or off (`false`) for this company's agents, by registry name. A role's own toggle wins; a server neither mentions is on. Resolved via  {@link  resolveMcpServerList  } ."
+        },
         "name": {
           "description": "Human-readable display name for the company.",
           "minLength": 1,
@@ -878,6 +889,13 @@
         "provider",
         "model"
       ],
+      "type": "object"
+    },
+    "McpServerToggles": {
+      "additionalProperties": {
+        "type": "boolean"
+      },
+      "description": "MCP servers switched on (`true`) or off (`false`), by registry name. Set on a company and/or a role; a server not mentioned is on.",
       "type": "object"
     },
     "MemberType": {
@@ -1600,6 +1618,17 @@
           },
           "type": "array"
         },
+        "mcpServerToggles": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/McpServerToggles"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "MCP servers switched on (`true`) or off (`false`) for this company's agents, by registry name. A role's own toggle wins; a server neither mentions is on. Resolved via  {@link  resolveMcpServerList  } ."
+        },
         "name": {
           "description": "Human-readable display name for the company.",
           "minLength": 1,
@@ -1810,6 +1839,17 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "mcpServerToggles": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/McpServerToggles"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "MCP servers switched on (`true`) or off (`false`) for this role, by registry name. Overrides the company's toggles; a server neither mentions is on. Resolved via  {@link  resolveMcpServerList  } ."
         },
         "name": {
           "description": "Short identifier for this role within the company (e.g. `'analyst'`, `'planner'`).",

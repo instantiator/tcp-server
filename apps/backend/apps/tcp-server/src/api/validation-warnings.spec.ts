@@ -22,6 +22,18 @@ describe('computeRoleWarnings', () => {
     expect(computeRoleWarnings(baseRole)).toEqual([]);
   });
 
+  it('warns when the role switches off the tasks server, and only then', () => {
+    expect(
+      computeRoleWarnings({ ...baseRole, mcpServerToggles: { tasks: false } }),
+    ).toEqual([expect.stringContaining('tasks MCP server is switched off')]);
+    expect(
+      computeRoleWarnings({
+        ...baseRole,
+        mcpServerToggles: { tasks: true, records: false },
+      }),
+    ).toEqual([]);
+  });
+
   it('warns when knowledgeDomains is empty', () => {
     const warnings = computeRoleWarnings({ ...baseRole, knowledgeDomains: [] });
     expect(warnings).toEqual(
@@ -56,6 +68,15 @@ describe('computeRoleWarnings', () => {
 describe('computeCompanyWarnings', () => {
   it('returns no warnings when companyContext is set', () => {
     expect(computeCompanyWarnings(baseCompany)).toEqual([]);
+  });
+
+  it('warns when the company switches off the tasks server', () => {
+    expect(
+      computeCompanyWarnings({
+        ...baseCompany,
+        mcpServerToggles: { tasks: false },
+      }),
+    ).toEqual([expect.stringContaining('tasks MCP server is switched off')]);
   });
 
   it('warns when companyContext is null', () => {

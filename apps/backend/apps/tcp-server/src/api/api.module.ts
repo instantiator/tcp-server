@@ -14,6 +14,9 @@ import {
   ProcessRestarter,
 } from '@tcp/shared';
 import { Module } from '@nestjs/common';
+import { ToolFootprintController } from './tool-footprint.controller';
+import { ToolFootprintService } from './tool-footprint.service';
+import { RecordsCleanupService } from './records-cleanup.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditModule } from '../audit/audit.module';
 import { AuthModule } from '../auth/auth.module';
@@ -107,6 +110,7 @@ import { TaskService } from './task.service';
   ],
   controllers: [
     AssignmentController,
+    ToolFootprintController,
     CompanyController,
     CompanyUserController,
     ConversationController,
@@ -125,6 +129,8 @@ import { TaskService } from './task.service';
   ],
   providers: [
     ApiService,
+    ToolFootprintService,
+    RecordsCleanupService,
     AgentOrchestrationService,
     AssignmentService,
     AssignmentCompletionService,

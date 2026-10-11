@@ -9,6 +9,13 @@ export const WARNINGS_HEADER = 'X-Tcp-Warnings';
 const logger = new Logger('validation-warnings');
 
 /**
+ * Switching off the tasks server is allowed, but an agent without it has no
+ * tool to plan, submit or assure work, so its assignments can't finish.
+ */
+const TASKS_OFF_WARNING =
+  'The tasks MCP server is switched off, so agents here cannot finish an assignment (no create_plan, complete_assignment or assure_assignment).';
+
+/**
  * Sets {@link WARNINGS_HEADER} as a JSON array, or omits it entirely when
  * there are no warnings.
  *
@@ -51,6 +58,9 @@ export function computeRoleWarnings(role: TcpRole): string[] {
   if (!role.rolePrompt?.trim()) {
     warnings.push('Role has a blank or missing rolePrompt.');
   }
+  if (role.mcpServerToggles?.['tasks'] === false) {
+    warnings.push(TASKS_OFF_WARNING);
+  }
   return warnings;
 }
 
@@ -59,6 +69,9 @@ export function computeCompanyWarnings(company: TcpCompany): string[] {
   const warnings: string[] = [];
   if (!company.companyContext?.trim()) {
     warnings.push('Company has a blank or missing companyContext.');
+  }
+  if (company.mcpServerToggles?.['tasks'] === false) {
+    warnings.push(TASKS_OFF_WARNING);
   }
   return warnings;
 }

@@ -46,6 +46,12 @@ export const MCP_REGISTRY = [
     usage:
       'arithmetic on money and quantities, date calculations and unit conversion — use these instead of working figures out yourself.',
   },
+  {
+    name: 'records',
+    envKey: 'MCP_RECORDS_URL',
+    usage:
+      'keeping and looking up structured business records — orders, customers, stock, income — and totalling them; use it instead of free-text files for anything tabular.',
+  },
 ] as const;
 
 /**
