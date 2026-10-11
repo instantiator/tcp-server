@@ -79,8 +79,14 @@ export abstract class StorageService {
   /** Ensures the backing bucket/container exists, creating it if necessary. */
   abstract ensureBucketExists(): Promise<void>;
 
-  /** Lists objects under an optional prefix (excludes soft-deleted objects). */
-  abstract listFiles(prefix?: string): Promise<StorageObject[]>;
+  /**
+   * Lists objects under an optional prefix (excludes soft-deleted objects).
+   * Returns the first page only, unless `all` asks for every key.
+   */
+  abstract listFiles(
+    prefix?: string,
+    options?: { all?: boolean },
+  ): Promise<StorageObject[]>;
 
   /** Reads an object's content as text. Returns `null` when it does not exist. */
   abstract readFile(path: string): Promise<string | null>;

@@ -47,8 +47,16 @@ describe('StorageActionsController', () => {
       { key: 'a', name: 'a', size: 1, lastModified: new Date() },
     ]);
     const result = await ctrl.list({ prefix: 'acme' });
-    expect(storage.listFiles).toHaveBeenCalledWith('acme');
+    expect(storage.listFiles).toHaveBeenCalledWith('acme', { all: undefined });
     expect(result.entries).toHaveLength(1);
+  });
+
+  it('list passes the all flag through for a full listing', async () => {
+    storage.listFiles.mockResolvedValue([]);
+    await ctrl.list({ prefix: 'acme/resources/', all: true });
+    expect(storage.listFiles).toHaveBeenCalledWith('acme/resources/', {
+      all: true,
+    });
   });
 
   it('read returns { content } for an existing file', async () => {

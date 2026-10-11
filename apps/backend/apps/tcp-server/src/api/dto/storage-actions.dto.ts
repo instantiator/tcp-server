@@ -25,6 +25,11 @@ export class ListFilesDto {
   @IsOptional()
   @IsString()
   prefix?: string;
+
+  /** List every key under the prefix, not just the first page. */
+  @IsOptional()
+  @IsBoolean()
+  all?: boolean;
 }
 
 export class ReadFileDto {

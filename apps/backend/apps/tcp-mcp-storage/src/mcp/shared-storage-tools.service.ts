@@ -189,6 +189,9 @@ export class SharedStorageToolsService {
 
   /** Explains what a folder in the ADR-007 hierarchy is for, from its path shape. */
   private describeFolder(p: string): string {
+    // First: a draft under `working/resources/` is still a resource.
+    if (p.includes('/resources/') || p.endsWith('/resources'))
+      return storagePrompts.describe_folder_resources;
     if (p.includes('/tasks/') && p.includes('/materials'))
       return storagePrompts.describe_folder_task_materials;
     if (

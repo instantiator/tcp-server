@@ -24,6 +24,11 @@ export interface StorageToolDescriptions {
   list_material_files: string;
   get_material_file_properties: string;
   read_material_file: string;
+  list_resources: string;
+  read_resource: string;
+  write_resource: string;
+  append_resource: string;
+  replace_in_resource: string;
 }
 
 /** Loaded once at module initialisation from the co-located {@link tools.jsonc} file. */

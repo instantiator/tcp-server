@@ -2,6 +2,7 @@ import { InternalApiClient } from '@tcp/shared';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { MaterialFileToolsService } from './material-file-tools.service';
+import { ResourceToolsService } from './resource-tools.service';
 import { SharedStorageToolsService } from './shared-storage-tools.service';
 import { StorageApiService } from './storage-api.service';
 import { StorageToolsService } from './storage-tools.service';
@@ -18,6 +19,11 @@ interface Scope {
   companyPrefix: string;
   workingPrefix: string;
   materials: { name: string; key: string | null; inlineText?: string }[];
+  resources: {
+    mode: 'draft' | 'direct' | 'read-only';
+    readPrefixes: string[];
+    writePrefix: string | null;
+  };
 }
 
 function makeConfig(): ConfigService {
@@ -52,6 +58,7 @@ function makeService(): StorageToolsService {
     new SharedStorageToolsService(storage),
     new WorkingFileToolsService(storage),
     new MaterialFileToolsService(storage),
+    new ResourceToolsService(storage),
   );
 }
 
@@ -92,6 +99,14 @@ function mockScope(scope: Partial<Scope>): void {
     companyPrefix: 'acme/',
     workingPrefix: 'acme/tasks/t1/assignments/0/working/',
     materials: [],
+    resources: {
+      mode: 'draft',
+      readPrefixes: [
+        'acme/tasks/t1/assignments/0/working/resources/',
+        'acme/resources/',
+      ],
+      writePrefix: 'acme/tasks/t1/assignments/0/working/resources/',
+    },
     ...scope,
   };
   mockedAxios.get.mockImplementation((url: string) => {
@@ -235,6 +250,11 @@ describe('StorageToolsService', () => {
       [
         'acme/tasks/t1/assignments/0/completed/',
         'Assignment completed outputs',
+      ],
+      ['acme/resources/invoices/', 'Company resources'],
+      [
+        'acme/tasks/t1/assignments/0/working/resources/x.md',
+        'Company resources',
       ],
       ['acme/knowledge/analyst/', 'Knowledge base'],
       ['acme/knowledge/shared/', 'Knowledge base'],

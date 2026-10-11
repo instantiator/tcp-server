@@ -26,5 +26,12 @@
   // Assignment materials (inputs handed to your assignment). Read-only.
   "list_material_files": "Lists the materials supplied to your assignment (uploaded files, prior outputs, and inline text).",
   "get_material_file_properties": "Returns metadata for one of your assignment's materials.",
-  "read_material_file": "Reads one of your assignment's materials by name (returns the inline text directly for inline-text materials)."
+  "read_material_file": "Reads one of your assignment's materials by name (returns the inline text directly for inline-text materials).",
+
+  // Company resources: long-lived company documents under {slug}/resources/.
+  "list_resources": "Show the company's resources folder tree: long-lived company documents such as invoices, price lists and policies. Each folder shows its purpose.",
+  "read_resource": "Read a company resource by its path, e.g. `price-list.md` or `invoices/INV-0042.md`.",
+  "write_resource": "Create or replace a company resource. Folders are created as needed. In a task this saves a draft that is applied when the task succeeds.",
+  "append_resource": "Add text to the end of a company resource, creating it if missing.",
+  "replace_in_resource": "Replace every occurrence of `find` with `replace` in a company resource."
 }
