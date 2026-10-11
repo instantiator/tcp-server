@@ -140,6 +140,7 @@ export class TasksToolsService {
       `### Plan mode — create_plan\n\n${MODE_PROMPTS.plan}`,
       `### Implement mode — complete_assignment\n\n${MODE_PROMPTS.implement}`,
       `### QA mode — assure_assignment\n\n${MODE_PROMPTS.qa}`,
+      `### Finalise mode — complete_assignment\n\n${MODE_PROMPTS.finalise}`,
     ]
       .filter(Boolean)
       .join('\n\n');

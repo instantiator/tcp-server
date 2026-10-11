@@ -1,6 +1,8 @@
+import type { TcpAssignmentMode } from '../models/TcpAssignment.model';
 import {
   buildAvailableRolesMessage,
   MODE_PROMPTS,
+  modePrompt,
   requiredToolForMode,
 } from './mode-prompts';
 
@@ -90,6 +92,86 @@ describe('MODE_PROMPTS', () => {
     expect(plan).toContain('only job');
     expect(plan).toContain('cannot consult');
     expect(plan).not.toContain('put questions to the user to resolve');
+  });
+});
+
+describe('modePrompt', () => {
+  const MODES: TcpAssignmentMode[] = [
+    'plan',
+    'implement',
+    'qa',
+    'chat',
+    'consultee',
+    'finalise',
+  ];
+  const ALL = [
+    'tasks',
+    'storage',
+    'memory',
+    'interactions',
+    'utilities',
+    'records',
+  ];
+
+  it('is the full prompt when every server is loaded, or no list is given', () => {
+    for (const mode of MODES) {
+      expect(modePrompt(mode, ALL)).toBe(MODE_PROMPTS[mode]);
+      expect(modePrompt(mode)).toBe(MODE_PROMPTS[mode]);
+    }
+  });
+
+  it('still names the completion tool with no servers at all', () => {
+    for (const mode of MODES) {
+      for (const tool of requiredToolForMode(mode)) {
+        expect(modePrompt(mode, [])).toContain(tool);
+      }
+    }
+  });
+
+  it('says nothing about records when records is switched off', () => {
+    for (const mode of MODES) {
+      const text = modePrompt(
+        mode,
+        ALL.filter((s) => s !== 'records'),
+      );
+      expect(text).not.toMatch(/list_tables|aggregate|\brecords?\b/i);
+    }
+  });
+
+  it('says nothing about files or resources when storage is switched off', () => {
+    for (const mode of MODES) {
+      const text = modePrompt(
+        mode,
+        ALL.filter((s) => s !== 'storage'),
+      );
+      expect(text).not.toMatch(/_resource|working_file|list_resources/);
+    }
+  });
+
+  it('tells implement and plan about records and resources when they have them', () => {
+    for (const mode of ['implement', 'plan'] as const) {
+      const text = modePrompt(mode, ALL);
+      expect(text).toContain('list_resources');
+      expect(text).toContain('list_tables');
+    }
+    expect(modePrompt('plan', ALL)).toContain('"type": "resource"');
+  });
+
+  it('tells qa and finalise that resource changes are drafts and records are already saved', () => {
+    for (const mode of ['qa', 'finalise'] as const) {
+      const text = modePrompt(mode, ALL);
+      expect(text).toContain('read_resource');
+      expect(text).toMatch(/already saved/);
+    }
+  });
+
+  it('leaves out consultation when interactions is switched off', () => {
+    expect(
+      modePrompt(
+        'chat',
+        ALL.filter((s) => s !== 'interactions'),
+      ),
+    ).not.toContain('consult');
   });
 });
 

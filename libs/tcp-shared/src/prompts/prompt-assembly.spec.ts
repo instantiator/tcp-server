@@ -60,6 +60,26 @@ describe('buildAssignmentMessage', () => {
     expect(msg).toContain('- notes.md');
   });
 
+  it("keeps only the mode prompt's sections for the agent's servers", () => {
+    const msg = (serverNames?: string[]) =>
+      buildAssignmentMessage(
+        {
+          mode: 'implement',
+          prompt: 'Do it.',
+          materials: [],
+          expected: [],
+          resolutionContext: orphanCtx,
+          serverNames,
+        },
+        strings,
+      );
+    expect(msg(['tasks', 'storage'])).toContain('list_resources');
+    expect(msg(['tasks', 'storage'])).not.toContain('list_tables');
+    expect(msg(['tasks', 'records'])).toContain('list_tables');
+    expect(msg(['tasks', 'records'])).not.toContain('list_resources');
+    expect(msg()).toContain('list_tables');
+  });
+
   it('selects the mode prompt by mode', () => {
     for (const mode of ['plan', 'qa', 'chat'] as const) {
       const msg = buildAssignmentMessage(

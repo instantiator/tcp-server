@@ -11,7 +11,7 @@ import {
   KnowledgeRetrievalService,
   TcpAgent,
   TcpRole,
-  MODE_PROMPTS,
+  modePrompt,
   WireEvent,
 } from '@tcp/shared';
 import { ConfigService } from '@nestjs/config';
@@ -759,7 +759,8 @@ describe('ChatService', () => {
     // mode prompt so the agent knows it is in a conversation.
     const messages = streamedMessages();
     expect(messages[1].content).toBe(
-      `${MODE_PROMPTS.chat}\n\nWhat should I do?`,
+      // No MCP tools load here, so only the sections that need no server.
+      `${modePrompt('chat', [])}\n\nWhat should I do?`,
     );
   });
 

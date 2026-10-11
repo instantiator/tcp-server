@@ -7,11 +7,9 @@
   "services_header": "## Available Services",
 
   // Body text for prompt part 3. Follows the heading, before the per-service bullet list.
-  // Deliberately omits tool names/parameters/descriptions — those are already sent to the
-  // LLM via bindTools once a service has been described. Only the "when to use this
-  // service" framing is added here; the prompt itself still points the agent at
-  // describe_server for anything deeper.
-  "services_intro": "You have access to the following external services via tools. Each service's other tools only become available once you call its `describe_server` tool — they stay available for a few turns, then are hidden again until you re-describe. Be sparing: only describe a service you actually need for the current step.",
+  // Deliberately omits tool names/parameters/descriptions — every tool is already sent to
+  // the LLM via bindTools. Only the "when to use this service" framing is added here.
+  "services_intro": "You have access to the following services through tools. Call any of their tools directly by its exact name; call a service's `describe_server` only if you want more detail.",
 
   // Template for a single service bullet in prompt part 3. {{name}} and {{usage}} are substituted.
   "services_item": "- **{{name}}**: use for {{usage}}",
@@ -34,10 +32,10 @@
   "required_tools_call_failed": "Your task is NOT complete: your call to {{tools}} did not succeed. Review the tool error message above, fix the problem it describes, and call {{tools}} again now.",
 
   // Heading for the materials list in the assignment-presentation prompt part (part 4).
-  "assignment_materials_header": "## Materials (each name below is read via `read_material_file`, not a storage path)",
+  "assignment_materials_header": "## Materials (read each name below with `read_material_file`, or a `resource:` entry with `read_resource` — not a storage path)",
 
   // Heading for the expected-outputs list in the assignment-presentation prompt part (part 4).
-  "assignment_expected_header": "## Expected outputs (each filename below is what you pass to `append_working_file`/`create_working_file` and to `complete_assignment`'s `prepared` — not a storage path)",
+  "assignment_expected_header": "## Expected outputs (each filename below is what you pass to `append_working_file`/`create_working_file` and to `complete_assignment`'s `prepared`; a `resource:` entry is a company resource you write with `write_resource` — not a storage path)",
 
   // Introductory sentence for prompt part 5 (RAG knowledge-base excerpts).
   "rag_intro": "The following excerpts from your knowledge base are relevant to your current task. Draw on them as needed:",

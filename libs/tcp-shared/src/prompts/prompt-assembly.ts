@@ -9,7 +9,7 @@ import { DEFAULT_SYSTEM_PROMPT_TEMPLATE } from '../llm/default-system-prompt-tem
 import { resolveSystemPromptTemplate } from '../config/resolve-system-prompt-template';
 import { renderTemplate } from '../llm/render-template';
 import { buildPromptDateVars } from '../llm/prompt-vars';
-import { MODE_PROMPTS } from './mode-prompts';
+import { modePrompt } from './mode-prompts';
 
 /**
  * Pure, unit-testable builders for the individual initial-prompt parts (see
@@ -123,7 +123,7 @@ export function buildRagMessage(
 
 /** Inputs for {@link buildAssignmentMessage} — prompt part 4. */
 export interface AssignmentMessageParams {
-  /** The assignment's mode — selects the {@link MODE_PROMPTS} preamble. */
+  /** The assignment's mode — selects the {@link modePrompt} preamble. */
   mode: TcpAssignment['mode'];
   /**
    * The assignment/task prompt. Already passed through
@@ -137,6 +137,11 @@ export interface AssignmentMessageParams {
   expected: TcpArtifact[];
   /** Context for resolving material/expected artifact keys. */
   resolutionContext: ArtifactResolutionContext;
+  /**
+   * The MCP servers the agent actually has. The mode prompt keeps only the
+   * sections for these ({@link modePrompt}); omitted, it keeps every section.
+   */
+  serverNames?: readonly string[];
 }
 
 /**
@@ -157,8 +162,8 @@ export function buildAssignmentMessage(
   // presentation no longer needs it for display, but callers still build one
   // for other purposes (e.g. `planTask`'s cross-reference validation), so the
   // param stays part of the public contract.
-  const { mode, prompt, materials, expected } = params;
-  const blocks: string[] = [MODE_PROMPTS[mode]];
+  const { mode, prompt, materials, expected, serverNames } = params;
+  const blocks: string[] = [modePrompt(mode, serverNames)];
 
   if (prompt.trim()) {
     blocks.push(prompt);
