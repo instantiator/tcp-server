@@ -3,6 +3,7 @@ import { createServer, type AddressInfo } from 'node:net';
 import {
   AgentStatus,
   AuditClientService,
+  AuditEvent,
   CompanyUser,
   McpClientService,
   SpendCapState,
@@ -88,6 +89,7 @@ describe('Spend cap enforcement across a task run (stub LLM, real queue)', () =>
   let notificationRepo: Repository<TcpNotification>;
   let spendCapStateRepo: Repository<SpendCapState>;
   let tokenUsageRepo: Repository<TokenUsage>;
+  let auditRepo: Repository<AuditEvent>;
   let taskService: TaskService;
   let spendResume: SpendResumeService;
   let initialState: InitialStateService;
@@ -116,6 +118,44 @@ describe('Spend cap enforcement across a task run (stub LLM, real queue)', () =>
     }
   }
 
+  /**
+   * Everything known about why an agent is where it is, for a failure message:
+   * its own fields, its assignment's and task's status and failure reason,
+   * and its last audit events. An unexpected `failed` once surfaced in CI
+   * with only `output: (none)` to go on (2026-10-12), and passed on every
+   * local rerun — this is what the next occurrence will carry.
+   */
+  async function describeAgent(agentId: UUID): Promise<string> {
+    const agent = await agentRepo.findOneBy({ id: agentId });
+    if (!agent) return `agent ${agentId}: not found`;
+    const assignment = await assignmentRepo.findOneBy({
+      id: agent.assignmentId,
+    });
+    const task = assignment?.taskId
+      ? await taskRepo.findOneBy({ id: assignment.taskId })
+      : null;
+    const events = await auditRepo.find({
+      where: { agentId },
+      order: { timestamp: 'DESC' },
+      take: 10,
+    });
+    const lines = [
+      `agent ${agentId}: status=${agent.status} pauseReason=${agent.pauseReason ?? '-'} ` +
+        `output=${agent.output ?? '(none)'}`,
+      `assignment ${agent.assignmentId}: status=${assignment?.status ?? '?'} ` +
+        `failureReason=${assignment?.failureReason ?? '-'}`,
+      `task ${task?.id ?? '-'}: status=${task?.status ?? '-'} ` +
+        `failureReason=${task?.failureReason ?? '-'}`,
+      'last audit events, newest first:',
+      ...events.map(
+        (e) =>
+          `  ${e.timestamp.toISOString()} ${e.eventType} ` +
+          JSON.stringify(e.payload).slice(0, 400),
+      ),
+    ];
+    return lines.join('\n');
+  }
+
   /** Waits for `agentId` to settle on `expected`, failing fast on another terminal status. */
   async function waitForAgentStatus(
     agentId: UUID,
@@ -132,17 +172,24 @@ describe('Spend cap enforcement across a task run (stub LLM, real queue)', () =>
       AgentStatus.Cancelled,
     ].filter((status) => status !== expected);
 
-    return waitFor(async () => {
-      const found = await agentRepo.findOneBy({ id: agentId });
-      if (!found) return null;
-      if (settledElsewhere.includes(found.status)) {
-        throw new Error(
-          `agent ${agentId} settled on ${found.status}, expected ${expected}. ` +
-            `output: ${found.output ?? '(none)'}`,
-        );
-      }
-      return found.status === expected ? found : null;
-    });
+    try {
+      return await waitFor(async () => {
+        const found = await agentRepo.findOneBy({ id: agentId });
+        if (!found) return null;
+        if (settledElsewhere.includes(found.status)) {
+          throw new Error(
+            `agent ${agentId} settled on ${found.status}, expected ${expected}.`,
+          );
+        }
+        return found.status === expected ? found : null;
+      });
+    } catch (e) {
+      // Settled elsewhere, or timed out: either way, say what the agent did.
+      const why = e instanceof Error ? e.message : String(e);
+      throw new Error(`${why}\n${await describeAgent(agentId)}`, {
+        cause: e,
+      });
+    }
   }
 
   /** True once `agentId` has reached any terminal status (or no longer exists). */
@@ -324,6 +371,7 @@ describe('Spend cap enforcement across a task run (stub LLM, real queue)', () =>
     taskRepo = serverModuleRef.get(getRepositoryToken(TcpTask));
     assignmentRepo = serverModuleRef.get(getRepositoryToken(TcpAssignment));
     agentRepo = serverModuleRef.get(getRepositoryToken(TcpAgent));
+    auditRepo = serverModuleRef.get(getRepositoryToken(AuditEvent));
     notificationRepo = serverModuleRef.get(getRepositoryToken(TcpNotification));
     spendCapStateRepo = serverModuleRef.get(getRepositoryToken(SpendCapState));
     tokenUsageRepo = serverModuleRef.get(getRepositoryToken(TokenUsage));

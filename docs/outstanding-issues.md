@@ -279,6 +279,18 @@ application bar stale until the next notification.
 
 **Act when:** users report the application-wide spend bar looking stale.
 
+## Spend-cap integration spec: a planner failed instead of pausing (once, in CI)
+
+In CI on 2026-10-12 (PR #117), `spend-cap.integration-spec.ts` failed at its
+second step: task A's planner settled on `failed` where the spec expected it to
+pause on the spend cap. The only detail was `output: (none)`. It passed in the
+same branch's previous CI run, and on five local reruns. The spec now prints the
+agent's state, its assignment's and task's failure reasons, and its last ten
+audit events whenever a wait fails, so the next occurrence explains itself.
+
+**Act when:** it fails again. Read the failure message's diagnostics, find why
+the planner failed, then fix the cause or the spec's timing.
+
 ## Planner-dispatched implement agent got a 404 from `complete_assignment` (not diagnosed)
 
 During 000.02 stage 8's integration spec
