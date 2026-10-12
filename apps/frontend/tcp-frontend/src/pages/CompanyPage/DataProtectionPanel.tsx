@@ -286,12 +286,13 @@ const SearchResults = ({
         </p>
       )}
       <div className="data-protection__actions">
-        <RoundIconButton
-          icon={Download}
-          label={t('dataProtection.search.downloadAll')}
-          outline
+        {/* Words, not a second download icon beside the first. */}
+        <Button
+          className="react-aria-Button tcp-button--outline"
           onPress={onDownloadAll}
-        />
+        >
+          {t('dataProtection.search.downloadAll')}
+        </Button>
         <RoundIconButton
           icon={Download}
           label={tCount('records.selected.download', selectedCount)}

@@ -135,7 +135,8 @@ const cell = (page: Page, key: string, column: number) =>
     .filter({
       has: page.getByRole('gridcell', { name: new RegExp(`^${key}( |$)`) }),
     })
-    .getByRole('gridcell')
+    // Skipping AG Grid's row-selection checkbox column (001.04).
+    .locator('[role="gridcell"]:not([col-id="ag-Grid-SelectionColumn"])')
     .nth(column);
 
 /**
@@ -268,7 +269,8 @@ test.describe('record tables', () => {
       .getByRole('grid', { name: SHEET })
       .getByRole('row')
       .nth(1)
-      .getByRole('gridcell')
+      // Skipping AG Grid's row-selection checkbox column (001.04).
+      .locator('[role="gridcell"]:not([col-id="ag-Grid-SelectionColumn"])')
       .first();
     await expect(firstKey).toHaveText('A1');
   });
