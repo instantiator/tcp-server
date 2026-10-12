@@ -120,4 +120,50 @@ describe('tcp-mcp-records MCP endpoint (e2e)', () => {
     ) as { value: string }[];
     expect(totals).toEqual([{ group: {}, value: '0.3' }]);
   });
+
+  it('refuses to store someone on the do-not-store list an agent added — over the real transport', async () => {
+    const identity = { companyId, agentId };
+    await callTool(app, 'create_table', {
+      ...identity,
+      name: 'customers',
+      purpose: 'People who order.',
+      schema: {
+        type: 'object',
+        properties: { email: { type: 'string' }, name: { type: 'string' } },
+        required: ['email'],
+      },
+      primary_key: ['email'],
+    });
+    expect(
+      await callTool(app, 'do_not_store', {
+        ...identity,
+        action: 'add',
+        value: 'Ann Lee',
+        reason: 'She asked us not to keep her details.',
+      }),
+    ).toMatch(/^Added/);
+
+    const refused = JSON.parse(
+      await callTool(app, 'insert', {
+        ...identity,
+        table: 'customers',
+        record: { email: 'a@example.com', name: 'Mrs ann lee' },
+      }),
+    ) as { status: string; fields: string[] };
+    expect(refused).toMatchObject({ status: 'not_stored', fields: ['name'] });
+
+    const stored = JSON.parse(
+      await callTool(app, 'insert', {
+        ...identity,
+        table: 'customers',
+        record: { email: 'b@example.com', name: 'Bob Annlee' },
+      }),
+    ) as { status: string };
+    expect(stored.status).toBe('inserted');
+
+    const query = JSON.parse(
+      await callTool(app, 'query', { ...identity, table: 'customers' }),
+    ) as { total: number };
+    expect(query.total).toBe(1);
+  });
 });

@@ -143,6 +143,16 @@ describe('filterToolsForMode', () => {
     expect(kept.includes('tasks__fail_assignment')).toBe(offered);
   });
 
+  it('offers do_not_store even where records are read-only: adding to it only protects people', () => {
+    for (const mode of ['plan', 'qa'] as const) {
+      const kept = filterToolsForMode(
+        [tool('records', 'do_not_store')],
+        mode,
+      ).map((t) => t.toolName);
+      expect(kept).toEqual(['records__do_not_store']);
+    }
+  });
+
   it('read-write modes keep the full set', () => {
     for (const mode of [
       'implement',
