@@ -249,6 +249,27 @@ describe('InternalController', () => {
       expect(pauseResume.failAgent).toHaveBeenCalledWith(
         agentId,
         'Agent ended without calling complete_task',
+        undefined,
+      );
+    });
+
+    it('passes the failure code on to the agent and its task', async () => {
+      const agentId = randomUUID();
+
+      await controller.fail(agentId, {
+        reason: 'The agent stopped.',
+        code: 'data_protection',
+      });
+
+      expect(pauseResume.failAgent).toHaveBeenCalledWith(
+        agentId,
+        'The agent stopped.',
+        'data_protection',
+      );
+      expect(taskFailures.handleAgentFailed).toHaveBeenCalledWith(
+        agentId,
+        'The agent stopped.',
+        'data_protection',
       );
     });
   });

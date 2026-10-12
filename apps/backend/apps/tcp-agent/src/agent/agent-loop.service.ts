@@ -345,7 +345,11 @@ export class AgentLoopService {
       const failure = describeRunFailure(
         err,
         ctx.abortController,
-        { ...ctx, repeatedCall: tracker.repeatedCall },
+        {
+          ...ctx,
+          repeatedCall: tracker.repeatedCall,
+          lastTool: tracker.lastTool,
+        },
         ctx.llmConfig,
       );
       this.logger.error(`Agent ${agent.id} loop error: ${String(err)}`);

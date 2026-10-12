@@ -190,10 +190,14 @@ export class InternalController {
     @Body() body: FailDto,
   ): Promise<void> {
     try {
-      await this.pauseResume.failAgent(agentId, body.reason);
+      await this.pauseResume.failAgent(agentId, body.reason, body.code);
       // Propagate the failure to the agent's task, when it has one
       // (orphan/chat agents are unaffected).
-      await this.taskFailures.handleAgentFailed(agentId, body.reason);
+      await this.taskFailures.handleAgentFailed(
+        agentId,
+        body.reason,
+        body.code,
+      );
     } catch (err) {
       // The caller is fire-and-forget, so this log is where a reason that
       // couldn't be saved survives.

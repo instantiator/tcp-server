@@ -11,6 +11,7 @@ import {
   TcpTask,
   McpClientService,
   assignmentWorkingKey,
+  type RunFailure,
 } from '@tcp/shared';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { INestApplication } from '@nestjs/common';
@@ -348,10 +349,10 @@ describe('Agent loop interactions (e2e)', () => {
       .overrideProvider(AuditClientService)
       .useValue({
         notifyComplete: () => {},
-        notifyFailed: (agentId: UUID, reason: string) => {
+        notifyFailed: (agentId: UUID, failure: RunFailure) => {
           void axios.post(
             `${tcpServerUrl}/internal/agent/${agentId}/fail`,
-            { reason },
+            { reason: failure.message, code: failure.code },
             { headers: { 'X-Internal-Api-Key': INTERNAL_API_KEY } },
           );
         },

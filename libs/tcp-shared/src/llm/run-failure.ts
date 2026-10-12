@@ -26,7 +26,13 @@ export type RunFailureCode =
   | 'service_unavailable'
   | 'stopped'
   | 'interrupted'
-  | 'unexpected';
+  | 'unexpected'
+  // The review: a reviewer rejected the work too many times.
+  | 'review_exhausted'
+  // The agent's own choice, through `fail_assignment`.
+  | 'data_protection'
+  | 'tools_exhausted'
+  | 'information_unavailable';
 
 /** What a message may mention. Each message reads only what it needs. */
 export interface RunFailureContext {
@@ -42,7 +48,11 @@ export interface RunFailureContext {
   result?: string;
   /** The supporting service that failed. */
   service?: string;
-  /** Free text from the cause, when nothing more specific is known. */
+  /** How many review attempts were used. */
+  attempts?: number;
+  /** The last tool the agent called before an unexpected error. */
+  lastTool?: string;
+  /** Free text from the cause, or the agent's own explanation. */
   detail?: string;
 }
 
@@ -96,8 +106,28 @@ export const RUN_FAILURE_MESSAGES: Record<
   interrupted: () =>
     "This step stopped unexpectedly and couldn't be carried on. Start the task again.",
   unexpected: (c) =>
-    `Something unexpected went wrong${c.detail ? `: ${c.detail}` : ''}. Details are in the server log.`,
+    `Something unexpected went wrong${c.detail ? `: ${c.detail}` : ''}${c.lastTool ? ` (the last tool called was ${c.lastTool})` : ''}. Details are in the server log.`,
+  review_exhausted: (c) =>
+    `The work didn't pass review after ${c.attempts ?? 'several'} attempts. Make the request clearer, or try a more capable model for this role.`,
+  data_protection: (c) =>
+    `The agent stopped because the work would mean storing personal data on the company's do-not-store list${c.detail ? `: ${c.detail}` : ''}. Check the list, or change the request.`,
+  tools_exhausted: (c) =>
+    `The agent tried every approach it could think of, and its tools still didn't work${c.detail ? `: ${c.detail}` : ''}. Check the services it needs, or try a more capable model.`,
+  information_unavailable: (c) =>
+    `The agent couldn't get information the task needs${c.detail ? `: ${c.detail}` : ''}. Add it to the request or the company's knowledge, then start the task again.`,
 };
+
+/** Every failure code, for validating one that arrives over the wire. */
+export const RUN_FAILURE_CODES = Object.keys(
+  RUN_FAILURE_MESSAGES,
+) as RunFailureCode[];
+
+/** The failure codes an agent may choose for itself with `fail_assignment`. */
+export const AGENT_FAILURE_CODES = [
+  'data_protection',
+  'tools_exhausted',
+  'information_unavailable',
+] as const satisfies readonly RunFailureCode[];
 
 /** Builds the failure for `code`. */
 export function runFailure(
@@ -187,8 +217,18 @@ export function classifyRunError(
     case 'provider_error':
       return runFailure('provider_error');
     default: {
-      const detail = err instanceof Error ? err.message : String(err);
-      return runFailure('unexpected', { detail: detail.trim() || undefined });
+      // A specific name says what kind of fault it was (TypeError, …).
+      const detail = (
+        err instanceof Error
+          ? err.name !== 'Error'
+            ? `${err.name}: ${err.message}`
+            : err.message
+          : String(err)
+      ).trim();
+      return runFailure('unexpected', {
+        detail: detail || undefined,
+        lastTool: ctx.lastTool,
+      });
     }
   }
 }

@@ -3,6 +3,7 @@ import {
   buildAssignmentChangeSummary,
   buildTaskChangeSummary,
   deriveTaskStatus,
+  type RunFailureCode,
   TcpAssignment,
   TcpAssignmentStatus,
   TcpTask,
@@ -54,9 +55,12 @@ export class TaskStateService {
     to: TcpAssignmentStatus,
     reason: string,
     failureReason?: string,
+    failureCode?: RunFailureCode,
   ): Promise<boolean> {
     const extra =
-      to === 'failed' && failureReason ? { failureReason } : undefined;
+      to === 'failed' && failureReason
+        ? { failureReason, failureCode: failureCode ?? null }
+        : undefined;
     if (
       (await claimStatus(
         this.assignmentRepo,
@@ -69,17 +73,25 @@ export class TaskStateService {
       return false;
     }
     assignment.status = to;
-    if (extra) assignment.failureReason = extra.failureReason;
+    if (extra) Object.assign(assignment, extra);
     await this.recordAssignmentState(assignment, reason);
     return true;
   }
 
   /** Fails a task: atomically claims a non-terminal status → `failed`, records the reason. */
-  async failTask(taskId: UUID, reason: string): Promise<void> {
+  async failTask(
+    taskId: UUID,
+    reason: string,
+    code?: RunFailureCode,
+  ): Promise<void> {
     const claimed = await this.taskRepo
       .createQueryBuilder()
       .update(TcpTask)
-      .set({ status: 'failed', failureReason: reason })
+      .set({
+        status: 'failed',
+        failureReason: reason,
+        failureCode: code ?? null,
+      })
       .where('id = :id', { id: taskId })
       .andWhere('status NOT IN (:...terminal)', {
         terminal: ['succeeded', 'failed', 'cancelled'],
@@ -135,13 +147,16 @@ export class TaskStateService {
     }
     if (next !== task.status) {
       // A task failed through its plan says why: the failed step's reason.
+      const failedStep =
+        next === 'failed' ? plan.find((a) => a.status === 'failed') : undefined;
       const failureReason =
-        next === 'failed'
-          ? (plan.find((a) => a.status === 'failed')?.failureReason ?? null)
-          : undefined;
+        next === 'failed' ? (failedStep?.failureReason ?? null) : undefined;
       await this.taskRepo.update(taskId, {
         status: next,
-        ...(failureReason !== undefined && { failureReason }),
+        ...(failureReason !== undefined && {
+          failureReason,
+          failureCode: failedStep?.failureCode ?? null,
+        }),
       });
       await this.recordTaskState(
         task,

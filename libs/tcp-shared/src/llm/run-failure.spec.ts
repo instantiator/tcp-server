@@ -115,6 +115,16 @@ describe('classifyRunError', () => {
     );
   });
 
+  it('names a specific error type and the last tool called', () => {
+    expect(
+      classifyRunError(new TypeError('x is undefined'), config, {
+        lastTool: 'insert',
+      }).message,
+    ).toBe(
+      'Something unexpected went wrong: TypeError: x is undefined (the last tool called was insert). Details are in the server log.',
+    );
+  });
+
   it("keeps this system's own error text as detail", () => {
     expect(
       classifyRunError(new Error('checkpointer setup broke'), config).message,

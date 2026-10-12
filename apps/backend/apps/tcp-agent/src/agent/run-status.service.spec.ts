@@ -1,7 +1,18 @@
-import { AuditClientService, runFailure, TcpAgent, TcpRole } from '@tcp/shared';
+import {
+  AuditClientService,
+  type RunFailure,
+  runFailure,
+  TcpAgent,
+  TcpRole,
+} from '@tcp/shared';
 import { ConfigService } from '@nestjs/config';
 import type { Repository } from 'typeorm';
 import { AgentRunStatusService } from './run-status.service';
+
+/** Matches the {@link RunFailure} `notifyFailed` was given, by its message. */
+function failureWith(message: unknown): RunFailure {
+  return expect.objectContaining({ message }) as RunFailure;
+}
 
 describe('AgentRunStatusService.failRun', () => {
   const agent = Object.assign(new TcpAgent(), {
@@ -26,7 +37,7 @@ describe('AgentRunStatusService.failRun', () => {
     ).resolves.toBeUndefined();
     expect(notifyFailed).toHaveBeenCalledWith(
       'agent-1',
-      expect.stringContaining('The model returned nothing'),
+      failureWith(expect.stringContaining('The model returned nothing')),
     );
   });
 });

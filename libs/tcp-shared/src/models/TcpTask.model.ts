@@ -1,3 +1,4 @@
+import type { RunFailureCode } from '../llm/run-failure';
 import type { UUID } from '../uuid';
 import {
   Column,
@@ -121,6 +122,10 @@ export class TcpTask extends VersionedEntity {
   /** Why the task failed — planner failure, QA exhaustion, etc. Null unless `status` is `failed`. */
   @Column({ type: 'text', nullable: true })
   failureReason!: string | null;
+
+  /** The {@link RunFailureCode} behind `failureReason`, when one is known. */
+  @Column({ type: 'varchar', nullable: true })
+  failureCode!: RunFailureCode | null;
 
   /** Timestamp when this task was created. */
   @CreateDateColumn()

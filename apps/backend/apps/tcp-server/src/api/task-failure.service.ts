@@ -7,6 +7,7 @@ import {
   TcpAssignmentStatus,
   TcpRole,
   TcpTask,
+  type RunFailureCode,
 } from '@tcp/shared';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -46,19 +47,23 @@ export class TaskFailureService {
    * Propagates an agent-run failure to its task, when the failed agent's
    * assignment is task-linked. The reaction differs by assignment mode.
    */
-  async handleAgentFailed(agentId: UUID, reason: string): Promise<void> {
+  async handleAgentFailed(
+    agentId: UUID,
+    reason: string,
+    code?: RunFailureCode,
+  ): Promise<void> {
     const assignment = await this.assignmentForAgent(agentId);
     if (!assignment?.taskId) return;
 
     switch (assignment.mode) {
       case 'plan':
-        return this.failPlanner(assignment, reason);
+        return this.failPlanner(assignment, reason, code);
       case 'finalise':
-        return this.failFinalise(assignment, reason);
+        return this.failFinalise(assignment, reason, code);
       case 'implement':
-        return this.failImplement(assignment, reason);
+        return this.failImplement(assignment, reason, code);
       case 'qa':
-        return this.failQa(assignment, reason);
+        return this.failQa(assignment, reason, code);
     }
   }
 
@@ -145,11 +150,13 @@ export class TaskFailureService {
   private async failPlanner(
     assignment: TcpAssignment,
     reason: string,
+    code?: RunFailureCode,
   ): Promise<void> {
-    if (!(await this.claimAgentFailure(assignment, reason))) return;
+    if (!(await this.claimAgentFailure(assignment, reason, code))) return;
     await this.state.failTask(
       assignment.taskId!,
       `The planner stopped. ${reason}`,
+      code,
     );
   }
 
@@ -160,8 +167,9 @@ export class TaskFailureService {
   private async failFinalise(
     assignment: TcpAssignment,
     reason: string,
+    code?: RunFailureCode,
   ): Promise<void> {
-    if (!(await this.claimAgentFailure(assignment, reason))) return;
+    if (!(await this.claimAgentFailure(assignment, reason, code))) return;
     const task = await this.taskRepo.findOneBy({ id: assignment.taskId! });
     if (task) {
       const completed = await this.deliverables.buildTaskCompleted(task);
@@ -170,6 +178,7 @@ export class TaskFailureService {
     await this.state.failTask(
       assignment.taskId!,
       `Finishing the task stopped. ${reason}`,
+      code,
     );
   }
 
@@ -177,11 +186,13 @@ export class TaskFailureService {
   private async failImplement(
     assignment: TcpAssignment,
     reason: string,
+    code?: RunFailureCode,
   ): Promise<void> {
-    if (!(await this.claimAgentFailure(assignment, reason))) return;
+    if (!(await this.claimAgentFailure(assignment, reason, code))) return;
     await this.state.failTask(
       assignment.taskId!,
       `${stepName(assignment)} stopped. ${reason}`,
+      code,
     );
   }
 
@@ -197,6 +208,7 @@ export class TaskFailureService {
   private async failQa(
     assignment: TcpAssignment,
     reason: string,
+    code?: RunFailureCode,
   ): Promise<void> {
     if (!assignment.targetAssignmentId) return;
     const claimed = await claimStatus(
@@ -206,13 +218,15 @@ export class TaskFailureService {
       'failed',
       {
         failureReason: `The review stopped before it finished. ${reason}`,
+        failureCode: code ?? null,
       },
     );
     if (claimed === 0) return;
-    await this.claimAgentFailure(assignment, reason);
+    await this.claimAgentFailure(assignment, reason, code);
     await this.state.failTask(
       assignment.taskId!,
       `The review of a step stopped. ${reason}`,
+      code,
     );
   }
 
@@ -220,6 +234,7 @@ export class TaskFailureService {
   private claimAgentFailure(
     assignment: TcpAssignment,
     reason: string,
+    code?: RunFailureCode,
   ): Promise<boolean> {
     return this.state.transitionAssignment(
       assignment,
@@ -227,6 +242,7 @@ export class TaskFailureService {
       'failed',
       'assignment failed (agent failed)',
       reason,
+      code,
     );
   }
 
@@ -283,7 +299,7 @@ export class TaskFailureService {
 }
 
 /** Names a plan step for a user: "Step 2", or "A step" when its place is unknown. */
-function stepName(assignment: TcpAssignment): string {
+export function stepName(assignment: TcpAssignment): string {
   return assignment.orderIndex != null
     ? `Step ${assignment.orderIndex + 1}`
     : 'A step';

@@ -730,14 +730,21 @@ describe('TaskOrchestrationService', () => {
       const after = (await assignmentRepo.findOneBy({ id: target.id }))!;
       expect(after.status).toBe('failed');
       expect(after.qaAttempts).toBe(3);
-      expect(after.failureReason).toBe('did not pass QA');
+      expect(after.failureReason).toBe(
+        "The work didn't pass review after 3 attempts. Make the request clearer, or try a more capable model for this role.",
+      );
+      expect(after.failureCode).toBe('review_exhausted');
       expect(pauseResume.failAgent).toHaveBeenCalledWith(
         target.agentId,
-        expect.stringContaining('QA'),
+        expect.stringContaining("didn't pass review"),
+        'review_exhausted',
       );
       const taskAfter = (await taskRepo.findOneBy({ id: after.taskId! }))!;
       expect(taskAfter.status).toBe('failed');
-      expect(taskAfter.failureReason).toContain(target.id);
+      expect(taskAfter.failureCode).toBe('review_exhausted');
+      // Plain words for a person: no internal ids.
+      expect(taskAfter.failureReason).not.toContain(target.id);
+      expect(taskAfter.failureReason).toMatch(/^(Step \d+|A step) stopped\. /);
     });
 
     it('honours a role runConfig.maxQaAttempts override', async () => {
@@ -829,14 +836,15 @@ describe('TaskOrchestrationService', () => {
         }),
       );
 
-      await failures.handleAgentFailed(agent.id, 'crashed');
+      await failures.handleAgentFailed(agent.id, 'crashed', 'data_protection');
 
       const stepAfter = (await assignmentRepo.findOneBy({ id: step.id }))!;
       expect(stepAfter.status).toBe('failed');
       expect(stepAfter.failureReason).toBe('crashed');
-      expect((await taskRepo.findOneBy({ id: task.id }))!.status).toBe(
-        'failed',
-      );
+      expect(stepAfter.failureCode).toBe('data_protection');
+      const taskAfter = (await taskRepo.findOneBy({ id: task.id }))!;
+      expect(taskAfter.status).toBe('failed');
+      expect(taskAfter.failureCode).toBe('data_protection');
     });
 
     it('does nothing for an orphan (task-less) agent', async () => {
@@ -1572,6 +1580,7 @@ describe('TaskOrchestrationService', () => {
         orderIndex: 0,
         status: 'failed',
         failureReason: 'did not pass QA',
+        failureCode: 'review_exhausted',
       });
 
       await new TaskStateService(
@@ -1584,6 +1593,7 @@ describe('TaskOrchestrationService', () => {
       const after = await taskRepo.findOneByOrFail({ id: task.id });
       expect(after.status).toBe('failed');
       expect(after.failureReason).toBe('did not pass QA');
+      expect(after.failureCode).toBe('review_exhausted');
       expect(notifications.create).toHaveBeenCalledWith(
         expect.objectContaining({
           kind: 'task_failed',

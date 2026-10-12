@@ -13,6 +13,7 @@ import {
   TcpTask,
   type LlmConfig,
   type McpToolContext,
+  type RunFailure,
 } from '@tcp/shared';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { ConflictException, INestApplication } from '@nestjs/common';
@@ -252,11 +253,11 @@ describe('Task controls and failure reasons (stub LLM, real queue)', () => {
       .useValue({
         notifyComplete: () => {},
         // The real failure path: tcp-server fails the assignment and task.
-        notifyFailed: (agentId: UUID, reason: string) => {
+        notifyFailed: (agentId: UUID, failure: RunFailure) => {
           axios
             .post(
               `${tcpServerUrl}/internal/agent/${agentId}/fail`,
-              { reason },
+              { reason: failure.message, code: failure.code },
               internalHeaders,
             )
             .catch(() => {});

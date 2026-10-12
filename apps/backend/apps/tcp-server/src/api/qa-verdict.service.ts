@@ -7,6 +7,7 @@ import {
   TcpCompany,
   TcpRole,
   TcpTask,
+  runFailure,
 } from '@tcp/shared';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -16,6 +17,7 @@ import { AgentOrchestrationService } from './agent-orchestration.service';
 import { claimStatus } from './claim-status';
 import { PauseAndResumeService } from './pause-and-resume.service';
 import { TaskDeliverablesService } from './task-deliverables.service';
+import { stepName } from './task-failure.service';
 import { TaskStateService } from './task-state.service';
 
 /**
@@ -140,11 +142,17 @@ export class QaVerdictService {
     target: TcpAssignment,
     nextAttempts: number,
   ): Promise<void> {
-    const failureReason = 'did not pass QA';
+    const failure = runFailure('review_exhausted', { attempts: nextAttempts });
+    const failureReason = failure.message;
     const claimed = await this.assignmentRepo
       .createQueryBuilder()
       .update(TcpAssignment)
-      .set({ status: 'failed', qaAttempts: nextAttempts, failureReason })
+      .set({
+        status: 'failed',
+        qaAttempts: nextAttempts,
+        failureReason,
+        failureCode: failure.code,
+      })
       .where('id = :id', { id: target.id })
       .andWhere('status = :inQa', { inQa: 'in-qa' })
       .execute();
@@ -153,6 +161,7 @@ export class QaVerdictService {
     // Reflect the claimed DB update in-memory (see accept's note).
     target.status = 'failed';
     target.failureReason = failureReason;
+    target.failureCode = failure.code;
     await this.state.recordAssignmentState(
       target,
       'assignment failed (QA exhausted)',
@@ -161,12 +170,16 @@ export class QaVerdictService {
         qaAttempts: nextAttempts,
       },
     );
-    const reason = `assignment failed QA after ${nextAttempts} attempt(s)`;
     if (target.agentId)
-      await this.pauseResume.failAgent(target.agentId, reason);
+      await this.pauseResume.failAgent(
+        target.agentId,
+        failureReason,
+        failure.code,
+      );
     await this.state.failTask(
       target.taskId!,
-      `assignment ${target.id}: ${reason}`,
+      `${stepName(target)} stopped. ${failureReason}`,
+      failure.code,
     );
   }
 

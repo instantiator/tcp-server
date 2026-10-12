@@ -10,6 +10,7 @@ import {
   TcpRole,
   TcpTask,
   type McpToolContext,
+  type RunFailure,
 } from '@tcp/shared';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { INestApplication } from '@nestjs/common';
@@ -290,11 +291,11 @@ describe('Model queue and rate-limit pause/resume across a task run (stub LLM, r
       .overrideProvider(AuditClientService)
       .useValue({
         notifyComplete: () => {},
-        notifyFailed: (agentId: UUID, reason: string) => {
+        notifyFailed: (agentId: UUID, failure: RunFailure) => {
           axios
             .post(
               `${tcpServerUrl}/internal/agent/${agentId}/fail`,
-              { reason },
+              { reason: failure.message, code: failure.code },
               internalHeaders,
             )
             .catch(() => {});

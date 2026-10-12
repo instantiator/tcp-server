@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InternalApiClient } from '../http/internal-api.client';
+import type { RunFailure } from '../llm/run-failure';
 import { AuditEventType } from '../models/AuditEvent.model';
 
 /**
@@ -31,17 +32,17 @@ export class AuditClientService {
   }
 
   /**
-   * Notifies tcp-server that an agent run has failed with the given reason.
+   * Notifies tcp-server that an agent run has failed, with its reason and code.
    *
    * The server resolves any pending consultation as `failed` and resumes the
    * calling agent so it can react to the failure rather than wait forever.
    *
    * Only used by tcp-agent; MCP services do not call this method.
    */
-  notifyFailed(agentId: string, reason: string): void {
+  notifyFailed(agentId: string, failure: RunFailure): void {
     this.api.postAndForget(
       `/internal/agent/${agentId}/fail`,
-      { reason },
+      { reason: failure.message, code: failure.code },
       `Agent failure notification for ${agentId}`,
     );
   }

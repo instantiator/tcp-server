@@ -37,6 +37,8 @@ export interface AbortLimits {
   maxIterations?: number;
   /** The call that repeated, when that is why the run was stopped. */
   repeatedCall?: { tool: string; result: string };
+  /** The last tool called, to say what the agent was doing when it broke. */
+  lastTool?: string;
 }
 
 /**
@@ -71,7 +73,7 @@ export function describeRunFailure(
   if (abortController.signal.aborted) {
     return describeAbort(abortController, limits);
   }
-  return classifyRunError(err, llmConfig);
+  return classifyRunError(err, llmConfig, { lastTool: limits.lastTool });
 }
 
 /**
@@ -280,7 +282,7 @@ export class AgentRunStatusService {
       this.logger.error(
         `Agent ${agent.id} failed (${failure.code}: ${reason}), and saving that failed: ${String(err)}`,
       );
-      this.auditClient.notifyFailed(agent.id, reason);
+      this.auditClient.notifyFailed(agent.id, failure);
     }
   }
 
@@ -317,6 +319,6 @@ export class AgentRunStatusService {
     // The terminal `failed` state_change (with reason) is recorded by
     // tcp-server's failAgent via notifyFailed below — no local duplicate.
     await this.updateStatus(agent, AgentStatus.Failed);
-    this.auditClient.notifyFailed(agent.id, reason);
+    this.auditClient.notifyFailed(agent.id, failure);
   }
 }

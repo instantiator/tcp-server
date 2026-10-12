@@ -23,6 +23,8 @@ export interface AgentLoopTracker {
   firedTools: Set<string>;
   /** The model's most recent turn output text, overwritten on each `on_chat_model_end`. */
   lastResponseText: string;
+  /** The last tool's base name, to say what the agent was doing if it breaks. */
+  lastTool?: string;
   /** The last tool call and its result, to spot the same one repeating. */
   lastCall?: string;
   /** How many times in a row {@link lastCall} has happened. */
@@ -49,6 +51,7 @@ export function noteToolCall(
   output: unknown,
 ): boolean {
   const result = extractResultText(output);
+  tracker.lastTool = baseToolName(tool);
   const call = JSON.stringify([tool, input, result]);
   tracker.callRepeats = call === tracker.lastCall ? tracker.callRepeats + 1 : 1;
   tracker.lastCall = call;

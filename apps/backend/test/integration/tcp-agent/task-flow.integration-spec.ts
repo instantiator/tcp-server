@@ -9,6 +9,7 @@ import {
   TcpRole,
   TcpTask,
   McpClientService,
+  type RunFailure,
 } from '@tcp/shared';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { INestApplication } from '@nestjs/common';
@@ -170,10 +171,10 @@ describe('Task/assignment flow via the agent loop (stub LLM)', () => {
       .overrideProvider(AuditClientService)
       .useValue({
         notifyComplete: () => {},
-        notifyFailed: (agentId: UUID, reason: string) => {
+        notifyFailed: (agentId: UUID, failure: RunFailure) => {
           void axios.post(
             `${tcpServerUrl}/internal/agent/${agentId}/fail`,
-            { reason },
+            { reason: failure.message, code: failure.code },
             { headers: { 'X-Internal-Api-Key': INTERNAL_API_KEY } },
           );
         },

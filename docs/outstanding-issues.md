@@ -367,11 +367,11 @@ When a supporting service is down, a run that notices fails with `service_unavai
 - An MCP or MinIO error, reached through a tool call, goes back to the model as an ordinary tool result. It never reaches the classifier.
 - The LangGraph checkpointer throws raw `pg` errors, which classify as `unexpected`.
 - A database outage can't write a pause at all. Startup recovery (000.05) is the safety net for that one.
-- Only the failure's message, not its code, reaches tcp-server (`FailDto` has `reason` only).
+- Since 001.04, the failure's code reaches tcp-server too, and is stored as `failureCode` on the step and task.
 
 What 000.05 did do: a run whose MCP server is down when its tools load now fails, naming the service, instead of carrying on without those tools.
 
-**Act when:** a real outage fails a task that would have carried on cleanly once the service was back. Then pass the failure code to tcp-server, pause on `service_unavailable`, and resume when `GET /api/system/health` reports that service up.
+**Act when:** a real outage fails a task that would have carried on cleanly once the service was back. Then pause on `service_unavailable` (the code now reaches tcp-server), and resume when `GET /api/system/health` reports that service up.
 
 ## No retry for a failed task
 
