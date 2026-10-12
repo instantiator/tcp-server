@@ -64,6 +64,7 @@ const assignmentFixture = (status = 'in-progress') => ({
   roleId: ROLE_ID,
   status,
   failureReason: null,
+  failureCode: null,
   agentId: AGENT_ID,
   targetAssignmentId: null,
   parentAssignmentId: null,
@@ -90,6 +91,7 @@ const taskFixture = (status = 'in-progress') => ({
   expected: [],
   completed: null,
   failureReason: null,
+  failureCode: null,
   createdAt: NOW,
   updatedAt: NOW,
 });

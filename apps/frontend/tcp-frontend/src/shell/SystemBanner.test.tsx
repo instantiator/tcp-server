@@ -15,6 +15,7 @@ const SIGNED_IN = { userId: 'test-user' };
 interface Shutdown {
   state: 'idle' | 'draining' | 'quiesced';
   restart: boolean;
+  haltedOnError?: boolean;
 }
 
 const status = (shutdown: Shutdown, admin = false) => ({
@@ -97,6 +98,16 @@ describe('SystemBanner', () => {
       'quiesced for a restart',
       { state: 'quiesced', restart: true },
       'banner.system.restarting',
+    ],
+    [
+      'halted itself while draining',
+      { state: 'draining', restart: false, haltedOnError: true },
+      'banner.system.halted',
+    ],
+    [
+      'halted itself and quiesced',
+      { state: 'quiesced', restart: false, haltedOnError: true },
+      'banner.system.halted',
     ],
   ])('says so when %s', async (_name, shutdown, key) => {
     current = status(shutdown);

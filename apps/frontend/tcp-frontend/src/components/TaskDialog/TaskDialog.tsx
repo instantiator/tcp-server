@@ -218,6 +218,7 @@ export const TaskDialog = ({ taskId, companyId, onClose }: TaskDialogProps) => {
                 agentId={assignment.agentId ?? null}
                 roleName={roleName(assignment.roleId)}
                 status={assignment.status}
+                failureReason={assignment.failureReason}
                 isExpanded={expandedIds.has(assignment.id)}
                 onToggle={() => {
                   toggleExpanded(assignment.id);

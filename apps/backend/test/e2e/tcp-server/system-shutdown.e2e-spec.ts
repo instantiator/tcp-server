@@ -175,6 +175,7 @@ describe('SystemController (e2e)', () => {
         agentsRunning: 0,
         restart: false,
         restartSupported: false,
+        haltedOnError: false,
       });
     });
 

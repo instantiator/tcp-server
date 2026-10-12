@@ -151,6 +151,7 @@ const strings = {
     'Roles appear here once the task has been planned.',
   'task.assignment.label': '{role} — {status}',
   'task.assignment.expand': 'Show what {role} has done',
+  'task.assignment.failureReason': 'Why it failed: {reason}',
   'task.assignment.collapse': 'Hide what {role} has done',
   'task.assignment.noAgent.heading': 'Not started',
   'task.assignment.noAgent.body': 'No agent has picked this up yet.',
@@ -320,6 +321,8 @@ const strings = {
   'shutdown.announce.restarting': 'Restarting the services',
   'shutdown.announce.restarted': 'The system restarted',
   'banner.system.label': 'System status',
+  'banner.system.halted':
+    "The system has stopped itself: it couldn't record why a task failed. No new work starts. An administrator should check the server log, then cancel the shutdown or restart.",
   'banner.system.draining':
     "The system is shutting down. New work can't start; running agents are finishing their current step.",
   'banner.system.restartDraining':

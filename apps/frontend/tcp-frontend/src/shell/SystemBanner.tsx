@@ -41,6 +41,8 @@ export const SystemBanner = () => {
       shutdown?.restart === true
         ? 'banner.system.restarting'
         : 'banner.system.unreachable';
+  } else if (shutdown?.haltedOnError === true && shutdown.state !== 'idle') {
+    key = 'banner.system.halted';
   } else if (shutdown?.state === 'draining') {
     key = shutdown.restart
       ? 'banner.system.restartDraining'

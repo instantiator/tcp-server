@@ -1654,6 +1654,8 @@ export interface components {
             /** @enum {string} */
             status: "ready" | "in-progress" | "in-qa" | "succeeded" | "failed" | "cancelled";
             failureReason: string | null;
+            /** @enum {string|null} */
+            failureCode: "forbidden" | "unreachable" | "llm_timeout" | "auth_rejected" | "model_not_found" | "tools_unsupported" | "provider_error" | "no_llm_config" | "run_timed_out" | "iteration_limit" | "context_too_long" | "required_tools_missing" | "no_output" | "repeating_call" | "service_unavailable" | "stopped" | "interrupted" | "unexpected" | "review_exhausted" | "data_protection" | "tools_exhausted" | "information_unavailable" | null;
             agentId?: string | null;
             targetAssignmentId?: string | null;
             parentAssignmentId?: string | null;
@@ -1947,6 +1949,8 @@ export interface components {
         };
         FailDto: {
             reason: string;
+            /** @enum {string} */
+            code?: "unreachable" | "llm_timeout" | "auth_rejected" | "forbidden" | "model_not_found" | "tools_unsupported" | "provider_error" | "no_llm_config" | "run_timed_out" | "iteration_limit" | "context_too_long" | "required_tools_missing" | "no_output" | "repeating_call" | "service_unavailable" | "stopped" | "interrupted" | "unexpected" | "review_exhausted" | "data_protection" | "tools_exhausted" | "information_unavailable";
         };
         UpdateStorageChangesDto: {
             created?: string[];
@@ -1969,6 +1973,8 @@ export interface components {
             expected: Record<string, never>[];
             completed: Record<string, never>[] | null;
             failureReason: string | null;
+            /** @enum {string|null} */
+            failureCode: "forbidden" | "unreachable" | "llm_timeout" | "auth_rejected" | "model_not_found" | "tools_unsupported" | "provider_error" | "no_llm_config" | "run_timed_out" | "iteration_limit" | "context_too_long" | "required_tools_missing" | "no_output" | "repeating_call" | "service_unavailable" | "stopped" | "interrupted" | "unexpected" | "review_exhausted" | "data_protection" | "tools_exhausted" | "information_unavailable" | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -2321,6 +2327,7 @@ export interface components {
             /** @enum {string} */
             state: "idle" | "draining" | "quiesced";
             restart: boolean;
+            haltedOnError: boolean;
         };
         SystemStatusResponseDto: {
             admin: boolean;
@@ -2348,6 +2355,7 @@ export interface components {
             agentsRunning: number;
             restart: boolean;
             restartSupported: boolean;
+            haltedOnError: boolean;
         };
         TaskExpectedArtifactDto: {
             /** @enum {string} */
@@ -2399,6 +2407,8 @@ export interface components {
             expected: Record<string, never>[];
             completed: Record<string, never>[] | null;
             failureReason: string | null;
+            /** @enum {string|null} */
+            failureCode: "forbidden" | "unreachable" | "llm_timeout" | "auth_rejected" | "model_not_found" | "tools_unsupported" | "provider_error" | "no_llm_config" | "run_timed_out" | "iteration_limit" | "context_too_long" | "required_tools_missing" | "no_output" | "repeating_call" | "service_unavailable" | "stopped" | "interrupted" | "unexpected" | "review_exhausted" | "data_protection" | "tools_exhausted" | "information_unavailable" | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */

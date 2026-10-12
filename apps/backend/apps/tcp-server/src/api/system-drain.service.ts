@@ -75,6 +75,11 @@ export class SystemDrainService implements OnModuleInit, OnModuleDestroy {
   /** Set by {@link haltOnError}, cleared when the drain is cancelled. */
   private haltedOnError = false;
 
+  /** True while the current drain is one the system started itself. */
+  get isHaltedOnError(): boolean {
+    return this.haltedOnError;
+  }
+
   constructor(
     @InjectRepository(TcpAgent)
     private readonly agentRepo: Repository<TcpAgent>,
