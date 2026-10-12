@@ -5,7 +5,22 @@
  */
 export class RecordsError extends Error {
   override readonly name = 'RecordsError';
+
+  constructor(
+    message: string,
+    /** What kind of mistake it was, so an HTTP caller can pick a status. */
+    readonly code: RecordsErrorCode = 'invalid',
+  ) {
+    super(message);
+  }
 }
+
+/**
+ * `invalid`: the request itself is wrong. `not_found`: no such table or record.
+ * `conflict`: a key or name another row already holds. `stale`: the record
+ * changed since the caller read it.
+ */
+export type RecordsErrorCode = 'invalid' | 'not_found' | 'conflict' | 'stale';
 
 /** The JSON types a top-level record field may have. Scalars only, so every field can be filtered, sorted and grouped. */
 export type FieldType = 'string' | 'number' | 'integer' | 'boolean';
@@ -52,6 +67,42 @@ export interface StoredRecord {
   id: string;
   data: RecordData;
   version: number;
+}
+
+/** A stored record with its timestamps (ISO 8601), for people rather than agents. */
+export interface TimedRecord extends StoredRecord {
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A table with its size, for a list of tables. */
+export interface TableSummary {
+  name: string;
+  purpose: string;
+  records: number;
+  /** When a record last changed, or the table was made if it has none. */
+  updatedAt: string;
+}
+
+/** A table's rows for display, newest change first, possibly cut short. */
+export interface TableRows {
+  definition: TableDefinition;
+  rows: TimedRecord[];
+  total: number;
+  truncated: boolean;
+}
+
+/** One row that failed its schema in a batch insert; `row` counts from 1. */
+export interface RowError {
+  row: number;
+  message: string;
+}
+
+/** The result of a batch insert. When `errors` isn't empty, nothing was inserted. */
+export interface InsertManyResult {
+  inserted: number;
+  alreadyExists: number;
+  errors: RowError[];
 }
 
 /** Picks one record: by its id, or by the values of the table's primary key fields. */

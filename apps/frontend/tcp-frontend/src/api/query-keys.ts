@@ -49,6 +49,7 @@ export const STATIC_ENTITIES = [
   'role',
   'company-user',
   'knowledge',
+  'record',
   'system',
 ] as const;
 
@@ -157,6 +158,13 @@ export const queryKeys = {
   /** One company's active notifications, with the application-wide ones. A dismissal patches the row in place, so there is no separate detail key. */
   notifications: (companyId: string) =>
     ['notification', 'list', { companyId }] as const,
+
+  /** The summary of every record table in a company. */
+  recordTables: (companyId: string) =>
+    ['record', 'list', { companyId }] as const,
+  /** One record table: its definition and rows. */
+  recordTable: (companyId: string, table: string) =>
+    ['record', 'detail', { companyId, table }] as const,
 
   /** Application-wide usage totals and every provider's cap progress. */
   spendOverview: () => ['spend', 'status'] as const,

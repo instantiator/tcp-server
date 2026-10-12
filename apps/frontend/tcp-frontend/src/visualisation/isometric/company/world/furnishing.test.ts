@@ -114,6 +114,18 @@ describe('furnishRoom', () => {
     ]);
   });
 
+  it('gives the archive a bookshelf with the filing cabinet beside it', () => {
+    const archive = roomAt('archive', 2);
+    const [bookshelf, cabinet] = furnishRoom(archive);
+    expect(bookshelf).toMatchObject({ id: 'archive:bookshelf' });
+    expect(cabinet).toEqual({
+      id: 'archive:filingCabinet',
+      kind: 'filingCabinet',
+      roomId: 'archive',
+      tile: { x: bookshelf.tile.x + 1, y: bookshelf.tile.y },
+    });
+  });
+
   it('furnishes the corridor with nothing', () => {
     const corridor: Room = {
       id: 'corridor',

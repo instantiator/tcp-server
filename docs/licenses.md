@@ -28,8 +28,10 @@
 | class-validator                          | MIT          | git+https://github.com/typestack/class-validator.git           | TypeStack contributors                                                 | 0.15.1    | ^0.15.1   |
 | commander                                | MIT          | git+https://github.com/tj/commander.js.git                     | TJ Holowaychuk <tj@vision-media.ca>                                    | 15.0.0    | ^15.0.0   |
 | csv-parse                                | MIT          | git+https://github.com/adaltas/node-csv.git                    | David Worms <david@adaltas.com> (https://www.adaltas.com)              | 7.0.3     | ^7.0.3    |
+| csv-stringify                            | MIT          | git+https://github.com/adaltas/node-csv.git                    | David Worms <david@adaltas.com> (https://www.adaltas.com)              | 6.9.0     | ^6.9.0    |
 | decimal.js                               | MIT          | git+https://github.com/MikeMcl/decimal.js.git                  | Michael Mclaughlin M8ch88l@gmail.com                                   | 10.6.0    | ^10.6.0   |
 | fast-xml-parser                          | MIT          | git+https://github.com/NaturalIntelligence/fast-xml-parser.git | Amit Gupta (https://solothought.com)                                   | 5.10.1    | ^5.10.1   |
+| fflate                                   | MIT          | git+https://github.com/101arrowz/fflate.git                    | Arjun Barrett <arjunbarrett@gmail.com>                                 | 0.8.3     | ^0.8.3    |
 | inquirer                                 | MIT          | git+https://github.com/SBoudrias/Inquirer.js.git               | Simon Boudrias <admin@simonboudrias.com>                               | 14.0.2    | ^14.0.2   |
 | ioredis                                  | MIT          | git://github.com/luin/ioredis.git                              | Zihua Li <i@zihua.li> (http://zihua.li)                                | 5.11.1    | ^5.11.1   |
 | joi                                      | BSD-3-Clause | git://github.com/hapijs/joi.git                                | n/a                                                                    | 18.2.9    | ^18.2.9   |
@@ -62,6 +64,8 @@
 | :------------------------- | :--------- | :------------------------------------------------------- | :-------------------------------------------------------- | :-------- | :------- |
 | @react-aria/live-announcer | Apache-2.0 | git+https://github.com/adobe/react-spectrum.git          | n/a                                                       | 3.5.1     | ^3.5.1   |
 | @tanstack/react-query      | MIT        | git+https://github.com/TanStack/query.git                | tannerlinsley                                             | 5.101.4   | ^5.101.4 |
+| ag-grid-community          | MIT        | git+https://github.com/ag-grid/ag-grid.git               | Sean Landsman <sean@thelandsmans.com>                     | 36.2.0    | ^36.2.0  |
+| ag-grid-react              | MIT        | git+https://github.com/ag-grid/ag-grid.git               | Niall Crosby <niall.crosby@ag-grid.com>                   | 36.2.0    | ^36.2.0  |
 | lucide-react               | ISC        | https://github.com/lucide-icons/lucide.git               | Eric Fennis                                               | 1.48.0    | ^1.48.0  |
 | oidc-client-ts             | Apache-2.0 | git+https://github.com/authts/oidc-client-ts.git         | n/a                                                       | 3.5.0     | ^3.5.0   |
 | openapi-fetch              | MIT        | git+https://github.com/openapi-ts/openapi-typescript.git | Drew Powers drew@pow.rs                                   | 0.17.0    | ^0.17.0  |

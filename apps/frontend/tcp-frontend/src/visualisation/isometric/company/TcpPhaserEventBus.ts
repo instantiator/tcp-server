@@ -7,12 +7,13 @@ import type { OfficeWorld, Tile } from './world/types';
 export const TcpPhaserEventBus = new Events.EventEmitter();
 
 /**
- * What a hover or a click landed on. `archive` carries no `id` — there is
- * only ever one archive room, unlike a role, an agent or a task.
+ * What a hover or a click landed on. `archive` (the bookshelf) and `records`
+ * (the filing cabinet) carry no `id`: there is only ever one of each, unlike
+ * a role, an agent or a task.
  */
 export type SelectionTarget =
   | { readonly kind: 'role' | 'agent' | 'task'; readonly id: string }
-  | { readonly kind: 'archive' };
+  | { readonly kind: 'archive' | 'records' };
 
 /**
  * What a hover landed on. Roles, agents and tasks can also be selected;

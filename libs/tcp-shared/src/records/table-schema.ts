@@ -26,6 +26,7 @@ export const RECORD_LIMITS = {
   fieldsPerTable: 50,
   recordBytes: 64 * 1024,
   purposeLength: 1000,
+  rowsPerInsert: 10_000,
 } as const;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

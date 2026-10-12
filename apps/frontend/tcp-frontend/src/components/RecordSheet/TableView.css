@@ -1,0 +1,36 @@
+/* One record table: a title bar of actions above the sheet. Theme tokens only (ADR-026). */
+.table-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tcp-space-sm);
+  min-inline-size: 0;
+}
+
+.table-view__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--tcp-space-sm);
+}
+
+.table-view__title {
+  margin: 0;
+}
+
+.table-view__count {
+  font-size: var(--tcp-font-size-small);
+  font-weight: normal;
+  color: var(--tcp-color-text-muted);
+}
+
+.table-view__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--tcp-space-xs);
+}
+
+.table-view__notice {
+  margin: 0;
+  color: var(--tcp-color-text-muted);
+}

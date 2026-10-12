@@ -40,6 +40,8 @@ export const FURNITURE_COLOURS: Record<FurnitureKind, number> = {
   officeDoor: 0x5c5148,
   // Wood-brown, close to a desk's tone but distinct enough beside it.
   bookshelf: 0x6b4a30,
+  // Painted-steel grey, so it reads as a different thing from the wood beside it.
+  filingCabinet: 0x7d8790,
 };
 
 /** The tick above a succeeded task's whiteboard, and the disc behind it. */

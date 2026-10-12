@@ -501,6 +501,220 @@ describe('RecordsService (integration)', () => {
     });
   });
 
+  describe('for people (001.03)', () => {
+    describe('reading', () => {
+      let companyId: string;
+      let first: string;
+      beforeAll(async () => {
+        companyId = await newCompany();
+        await records.createTable(companyId, ORDERS, null);
+        await records.createTable(
+          companyId,
+          { ...ORDERS, name: 'empty' },
+          null,
+        );
+        first = (await records.insert(companyId, 'orders', order(1))).record.id;
+        await records.insert(companyId, 'orders', order(2));
+        await records.insert(companyId, 'orders', order(3));
+        // Touch the oldest, so it becomes the most recently changed.
+        await records.update(companyId, 'orders', { id: first }, { qty: 7 });
+      });
+
+      it('lists tables with their record counts', async () => {
+        const summaries = await records.listTableSummaries(companyId);
+        expect(summaries.map((t) => [t.name, t.records])).toEqual([
+          ['empty', 0],
+          ['orders', 3],
+        ]);
+        expect(Date.parse(summaries[1].updatedAt)).not.toBeNaN();
+      });
+
+      it('reads rows most recently changed first, with timestamps', async () => {
+        const { rows, total, truncated, definition } = await records.readRows(
+          companyId,
+          'orders',
+        );
+        expect(definition.primaryKey).toEqual(['order_id']);
+        expect(total).toBe(3);
+        expect(truncated).toBe(false);
+        expect(rows[0]).toMatchObject({ id: first, version: 2 });
+        expect(rows[0].updatedAt >= rows[1].updatedAt).toBe(true);
+        expect(rows[0].createdAt).toMatch(/^\d{4}-\d\d-\d\dT/);
+      });
+
+      it('cuts the rows at the cap and says so', async () => {
+        const read = await records.readRows(companyId, 'orders', 2);
+        expect(read.rows).toHaveLength(2);
+        expect(read).toMatchObject({ total: 3, truncated: true });
+      });
+
+      it('reads one row, and answers an unknown id as not found', async () => {
+        await expect(
+          records.readRow(companyId, 'orders', first),
+        ).resolves.toMatchObject({ id: first, data: { qty: 7 } });
+        await expect(
+          records.readRow(companyId, 'orders', 'not-a-uuid'),
+        ).rejects.toMatchObject({ code: 'not_found' });
+      });
+    });
+
+    it('walks a whole table in batches, oldest first, with no repeats', async () => {
+      const companyId = await newCompany();
+      await records.createTable(companyId, ORDERS, null);
+      const rows = Array.from({ length: 2500 }, (_, i) => order(i + 1));
+      await records.insertMany(companyId, 'orders', rows);
+      const batches: number[] = [];
+      const seen: unknown[] = [];
+      await records.forEachRowBatch(companyId, 'orders', (batch) => {
+        batches.push(batch.length);
+        seen.push(...batch.map((r) => r['order_id']));
+      });
+      expect(batches).toEqual([1000, 1000, 500]);
+      // In the order they were added, though one insertMany added them all.
+      expect(seen).toEqual(rows.map((r) => r.order_id));
+    });
+
+    describe('insertMany', () => {
+      let companyId: string;
+      beforeAll(async () => {
+        companyId = await newCompany();
+        await records.createTable(companyId, ORDERS, null);
+        await records.insert(companyId, 'orders', order(1));
+      });
+
+      it('inserts nothing when any row fails, and names every failing row', async () => {
+        const result = await records.insertMany(companyId, 'orders', [
+          order(10),
+          order(11, { qty: 0 }),
+          order(12),
+          { order_id: 'A13' },
+        ]);
+        expect(result.inserted).toBe(0);
+        expect(result.errors.map((e) => e.row)).toEqual([2, 4]);
+        expect(result.errors[0].message).toMatch(/qty must be >= 1/);
+        expect((await records.query(companyId, 'orders', {})).total).toBe(1);
+      });
+
+      it('counts rows whose key is already held, in the table or earlier in the batch', async () => {
+        const result = await records.insertMany(companyId, 'orders', [
+          order(1),
+          order(20),
+          order(20),
+          order(21),
+        ]);
+        expect(result).toEqual({ inserted: 2, alreadyExists: 2, errors: [] });
+      });
+
+      it('gives one row per key when two batches with the same keys race', async () => {
+        const batch = [order(30), order(31), order(32)];
+        const results = await Promise.all([
+          records.insertMany(companyId, 'orders', batch),
+          records.insertMany(companyId, 'orders', batch),
+        ]);
+        expect(results.map((r) => r.inserted).sort()).toEqual([0, 3]);
+        const [{ count }] = await ds.query<{ count: number }[]>(
+          `SELECT count(*)::int AS count FROM "record"
+           WHERE "companyId" = $1 AND "data" ->> 'order_id' IN ('A30', 'A31', 'A32')`,
+          [companyId],
+        );
+        expect(count).toBe(3);
+      });
+
+      it('refuses more rows than the limit', async () => {
+        const many = Array.from({ length: 10_001 }, (_, i) => order(i));
+        await expect(
+          records.insertMany(companyId, 'orders', many),
+        ).rejects.toThrow(/at most 10000/);
+      });
+    });
+
+    describe('version checks', () => {
+      let companyId: string;
+      let id: string;
+      beforeAll(async () => {
+        companyId = await newCompany();
+        await records.createTable(companyId, ORDERS, null);
+        id = (await records.insert(companyId, 'orders', order(1))).record.id;
+      });
+
+      it('refuses an update or delete from a stale version, and keeps the record', async () => {
+        await records.update(companyId, 'orders', { id }, { qty: 2 }, 1);
+        await expect(
+          records.update(companyId, 'orders', { id }, { qty: 3 }, 1),
+        ).rejects.toMatchObject({ code: 'stale' });
+        await expect(
+          records.delete(companyId, 'orders', { id }, 1),
+        ).rejects.toMatchObject({ code: 'stale' });
+        await expect(
+          records.readRow(companyId, 'orders', id),
+        ).resolves.toMatchObject({ version: 2, data: { qty: 2 } });
+        await records.delete(companyId, 'orders', { id }, 2);
+      });
+
+      it('marks a key clash as a conflict', async () => {
+        const a = await records.insert(companyId, 'orders', order(5));
+        await records.insert(companyId, 'orders', order(6));
+        await expect(
+          records.update(
+            companyId,
+            'orders',
+            { id: a.record.id },
+            { order_id: 'A6' },
+          ),
+        ).rejects.toMatchObject({ code: 'conflict' });
+      });
+    });
+
+    describe('clear and drop', () => {
+      let companyA: string;
+      let companyB: string;
+      beforeAll(async () => {
+        companyA = await newCompany();
+        companyB = await newCompany();
+        for (const c of [companyA, companyB]) {
+          await records.createTable(c, ORDERS, null);
+          await records.insertMany(c, 'orders', [order(1), order(2)]);
+        }
+      });
+
+      it('clears the records and their keys, but keeps the table', async () => {
+        expect(await records.clearTable(companyA, 'orders')).toBe(2);
+        expect(await records.listTables(companyA)).toHaveLength(1);
+        // The keys went too, so the same orders can be added again.
+        await expect(
+          records.insert(companyA, 'orders', order(1)),
+        ).resolves.toMatchObject({ status: 'inserted' });
+        expect((await records.query(companyB, 'orders', {})).total).toBe(2);
+      });
+
+      it('drops the table and reports what it held', async () => {
+        const dropped = await records.dropTable(companyA, 'orders');
+        expect(dropped).toMatchObject({
+          removed: 1,
+          definition: { name: 'orders' },
+        });
+        expect(await records.listTables(companyA)).toEqual([]);
+        const [{ count }] = await ds.query<{ count: number }[]>(
+          `SELECT count(*)::int AS count FROM "record_key" WHERE "tableId" = $1`,
+          [dropped.definition.id],
+        );
+        expect(count).toBe(0);
+      });
+
+      it("can't clear, drop or read another company's table", async () => {
+        const empty = await newCompany();
+        for (const call of [
+          records.clearTable(empty, 'orders'),
+          records.dropTable(empty, 'orders'),
+          records.readRows(empty, 'orders'),
+        ]) {
+          await expect(call).rejects.toMatchObject({ code: 'not_found' });
+        }
+        expect((await records.query(companyB, 'orders', {})).total).toBe(2);
+      });
+    });
+  });
+
   describe('company deletion', () => {
     it('cascades from the company row in a shared database', async () => {
       const companyId = await newCompany();

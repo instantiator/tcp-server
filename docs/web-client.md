@@ -235,8 +235,8 @@ The landing page and `/callback` render outside the shell and own their own
 on one page.
 
 **The company page's tabs follow the URL hash** (005.01): `#agents`, `#tasks`,
-`#consultations`, `#enquiries`, `#chats` and `#notifications` (000.02) select
-the activity tabs, and no hash (or an unknown one) selects the office view.
+`#consultations`, `#enquiries`, `#chats`, `#notifications` (000.02) and
+`#tables` or `#tables/<name>` (001.03) select the activity tabs, and no hash (or an unknown one) selects the office view.
 Choosing a tab replaces the history entry rather than pushing one.
 `useRouteChange` watches only the pathname, so a hash change moves no focus.
 This is what lets the new-enquiry notification's link to `#enquiries` open
@@ -245,7 +245,8 @@ Notifications tab the same way. A query parameter can also name a row or a
 dialog: `?notification=<id>#notifications` and `?enquiry=<id>#enquiries` focus
 that row (below), and `?task=<id>#tasks` opens that task's dialog. The activity panels stay mounted while hidden
 (`shouldForceMount`, then `inert` and `display: none`), so a list keeps its
-filters across a tab switch, and each tab's count badge stays current.
+filters across a tab switch, and each tab's count badge stays current. The
+Tables tab is the exception (see [Record tables](#record-tables)).
 
 **Breadcrumb spend meters** (000.02): each crumb in `Breadcrumbs` can carry a
 `bar`, rendered under its label in the same `li` — `SpendBar`, under the
@@ -1010,6 +1011,71 @@ to the trigger, and an error beside the trigger is announced and linked with
 The office view's role tray uses the same hook for its "Chat with {role}"
 button.
 
+## Record tables
+
+[001.03](<prompts/phase 04 - utility/001.03.01.plan - records view, edit and csv export in the web ui.md>)
+lets people read and correct the tables agents keep (see
+[tcp-mcp-records.md](tcp-mcp-records.md#peoples-access-00103) for the API and
+the CSV format). There are two ways in, and both show the same view.
+
+- **The Tables tab** is the last activity tab. It is a menu and a main area, as
+  in the chat dialog: a single-select list of tables (name and record count)
+  with **Download all** above it, and the table view beside it. Below 40rem the
+  two stack. `#tables/<name>` in the URL keeps the open table across a reload.
+  The tab has no badge, because tables are not live. It is not force-mounted,
+  so AG Grid loads only when the tab opens.
+- **The filing cabinet** stands in the archive room, beside the bookshelf. One
+  selectable zone covers each piece (`SELECTABLE_FURNITURE`): the bookshelf
+  selects `archive`, the cabinet selects `records`. Clicking it, or choosing it
+  in the "Show details for…" picker, opens a tray (`ui/RecordsDetails.tsx`).
+  The tray body is a native `<table>` named by the tray heading: the table name
+  (a button that opens the table in a wide dialog, `RecordTableDialog`), the
+  record count, **Download** and a **More actions** menu. **Download all** is in
+  the tray's actions.
+
+### The table view
+
+`src/components/RecordSheet/` holds `TableView`, shared by the dialog and the
+tab. Its header has the title, **Download**, **Add row**, **Delete row**,
+**Undo** and a **More actions** menu: Append CSV, Reload, Clear and Delete.
+Clear and Delete each ask first, say how many records go, and offer
+**Download a copy first**. Append CSV opens a small dialog with a file input
+(a menu item cannot hold one). The rows that stop an append are listed in it,
+and each error names its spreadsheet row.
+
+The sheet itself is AG Grid Community ([ADR-035](ADRs/ADR-035-spreadsheet-grid-library.md)).
+`RecordSheet` is loaded with `React.lazy`, so the main bundle does not carry it.
+The lazy chunk is about 971 kB (272 kB gzipped).
+
+- Columns follow the table's fields in `fieldOrder`, then a read-only
+  **Updated** column. Key fields are marked in their header. Every column sorts
+  and filters. Cells edit as text, a number, or a true/false list; dates are
+  text, checked by the server.
+- **Rows never move when edited.** The default sort ("Updated, newest first")
+  compares each row's position in the cached table, and an edit patches the row
+  in place. A sort the user picks re-applies as values change.
+- **Undo.** A session stack of inverse API calls covers edits, added rows and
+  deleted rows. Each saved change marks its cell or row with an icon and
+  hidden "changed" text, so the mark is not colour alone. **Undo**, or
+  Ctrl/Cmd+Z when no cell is being edited, applies the inverse and announces it.
+  The stack clears when the table changes.
+- **Saving** sends the row's `version`. A 400 reverts the cell and announces the
+  messages. A 409 reloads the table and announces that it changed elsewhere.
+- **Focus.** Choosing a table keeps focus on the list; Tab goes on into the
+  sheet. Deleting a table moves focus back to the list (in the tab) or to the
+  tray heading (in the cabinet). Delete row acts on the focused cell's row and
+  is named for it, e.g. "Delete row 3: order 1001".
+- **No live updates.** Records are not on the SSE stream. A table loads when it
+  opens; **Reload** in the More menu fetches it again; the summaries refetch
+  when the window regains focus. The version check stops edits overwriting each
+  other. See [outstanding-issues.md](outstanding-issues.md#record-tables-are-not-live).
+
+Components import hooks from `src/api/hooks.ts` as usual (`useRecordTables`,
+`useRecordTable`, `useAddRecord`, `useUpdateRecord` and so on). Add, edit and
+delete patch the cached table in place and invalidate only the summaries.
+Downloads go through `getBlob` in `client.ts`, so they carry the token and the
+401 policy, and are named by `recordsDownloadName` from `@tcp/shared`.
+
 ## The office view (company visualisation)
 
 `CompanyPage`'s first tab draws the company as an isometric office
@@ -1030,7 +1096,7 @@ header.
 - **Rooms**, in fixed-size slots along one corridor: the **rec room** (one spot
   per role, always present), the **mail room** (chat and enquiry avatars,
   always present), the **archive room** (fixed slot 2, always present — a
-  bookshelf of completed tasks), the **corridor** with the **office door**,
+  bookshelf of completed tasks, and a filing cabinet of record tables), the **corridor** with the **office door**,
   one **task room** per task whose room is still open, and one **1:1 room**
   per open consultation. Dynamic rooms (task and 1:1) start at slot 3
   (`FIRST_DYNAMIC_SLOT`), after the three fixed ones.
@@ -1104,7 +1170,7 @@ header.
   text and `scene/LabelLayer.ts` draws it. They are a visual aid; the picker
   and tray give a screen reader the same facts.
 - **The tray, tooltips, picker, pan keys and full screen.** Hovering a role,
-  task, agent or the bookshelf shows a tooltip; clicking opens a side tray
+  task, agent, the bookshelf or the filing cabinet shows a tooltip; clicking opens a side tray
   with its live details. Furniture and doorways have hover-only tooltips
   saying what they are for (`ui/officeDescriptions.ts`). The tray slides in
   over the canvas's right edge (005.01), so the canvas doesn't resize. Every

@@ -474,6 +474,7 @@ const strings = {
   'visualisation.picker.agent': 'Agent: {role}',
   'visualisation.picker.agentWithTask': 'Agent: {role} (task {shortcode})',
   'visualisation.picker.archive': 'Archive',
+  'visualisation.picker.records': 'Filing cabinet (record tables)',
 
   'visualisation.tooltip.agent': 'Agent: {role}',
   'visualisation.tooltip.role': 'Role: {role}',
@@ -516,6 +517,9 @@ const strings = {
   'visualisation.furniture.officeDoor.description':
     'Agents arrive and leave here.',
   'visualisation.furniture.bookshelf': 'Bookshelf: {count}',
+  'visualisation.furniture.filingCabinet': 'Filing cabinet',
+  'visualisation.furniture.filingCabinet.description':
+    "Holds the company's record tables, such as orders, customers and stock. Select it to check and correct them.",
   'visualisation.furniture.bookshelf.description':
     'Holds the outputs of completed tasks. Select it to see them.',
   'visualisation.room.task': 'Task room: {shortcode}',
@@ -726,6 +730,101 @@ const strings = {
   'session.staySignedIn': 'Stay signed in',
   'session.expiring.announcement':
     'Your session is about to expire. Choose "Stay signed in" to continue.',
+
+  // Record tables (001.03): the spreadsheet view, its actions and dialogs.
+  'company.tab.tables': 'Tables',
+  'tables.list.label': 'Record tables',
+  'tables.loading': 'Loading the tables',
+  'tables.error': 'The tables could not be loaded.',
+  'tables.empty':
+    'No record tables yet. Agents make them when they keep records such as orders or stock.',
+  'records.tray.heading': 'Record tables',
+  'records.tray.column.table': 'Table',
+  'records.tray.column.records': 'Records',
+  'records.tray.column.actions': 'Actions',
+  'tables.choose': 'Choose a table to see and correct its records.',
+  'records.count.one': '{count} record',
+  'records.count.other': '{count} records',
+  'records.loading': 'Loading the table',
+  'records.error': 'The table could not be loaded.',
+  'records.empty': 'This table has no records yet.',
+  'records.truncated':
+    'Showing the {shown} most recently changed of {total} records. Download the table to see them all.',
+  'records.usage':
+    'Spreadsheet. Arrow keys move between cells. Enter or F2 edits a cell, Enter saves and Escape cancels. Rows start most recently changed first; choose a column header to sort by that column. Changed cells are marked until you leave the table.',
+  'records.sheet.label': '{table} records',
+  'records.column.key': '{field} (key)',
+  'records.column.updated': 'Updated',
+  'records.changed': '(changed)',
+  'records.added': '(added)',
+  'records.boolean.yes': 'true',
+  'records.boolean.no': 'false',
+  'records.download': 'Download {table} as CSV',
+  'records.downloadAll': 'Download all tables as a zip',
+  'records.downloadFailed': 'The download failed.',
+  'records.addRow': 'Add a row to {table}',
+  'records.deleteRow': 'Delete row {row}',
+  'records.deleteRow.none': 'Delete row: choose a cell in the row first',
+  'records.undo': 'Undo {change}',
+  'records.undo.none': 'Nothing to undo',
+  'records.change.edit': 'the change to {field} of {row}',
+  'records.change.add': 'adding {row}',
+  'records.change.delete': 'deleting {row}',
+  'records.more': 'More actions for {table}',
+  'records.action.append': 'Append CSV…',
+  'records.action.reload': 'Reload',
+  'records.action.clear': 'Clear table…',
+  'records.action.drop': 'Delete table…',
+  'records.append.heading': 'Append CSV to {table}',
+  'records.append.file': 'CSV file',
+  'records.append.hint':
+    'The first line names the columns: {columns}. Rows whose key is already in the table are skipped.',
+  'records.append.submit': 'Append',
+  'records.append.cancel': 'Cancel',
+  'records.append.noFile': 'Choose a CSV file.',
+  'records.append.tooBig': 'The file is larger than 5 MB.',
+  'records.append.errors': 'Nothing was added. Fix these rows and try again:',
+  'records.append.errorRow': 'Row {row}: {message}',
+  'records.clear.heading': 'Clear {table}?',
+  'records.clear.message.one':
+    'This deletes {count} record. The table stays. This cannot be undone.',
+  'records.clear.message.other':
+    'This deletes {count} records. The table stays. This cannot be undone.',
+  'records.clear.confirm': 'Clear table',
+  'records.drop.heading': 'Delete {table}?',
+  'records.drop.message.one':
+    'This deletes the table and its {count} record. This cannot be undone.',
+  'records.drop.message.other':
+    'This deletes the table and its {count} records. This cannot be undone.',
+  'records.drop.confirm': 'Delete table',
+  'records.downloadFirst': 'Download a copy first',
+  'records.addRow.heading': 'Add a row to {table}',
+  'records.addRow.submit': 'Add row',
+  'records.addRow.required': 'Fill this in.',
+  'records.addRow.number': 'Enter a number.',
+  'records.addRow.integer': 'Enter a whole number.',
+  'records.addRow.boolean': 'Enter true or false.',
+  'records.addRow.hint.boolean': 'true or false',
+  'records.addRow.hint.date': 'A date, as YYYY-MM-DD',
+  'records.addRow.clash': 'A record with this key is already in the table.',
+  'records.deleteRow.heading': 'Delete row {row}?',
+  'records.deleteRow.message':
+    'This deletes the record. You can undo it until you leave this table.',
+  'records.deleteRow.confirm': 'Delete row',
+  'records.error.generic': 'Something went wrong. Try again.',
+  'records.announce.saved': 'Saved: {field} of {row}',
+  'records.announce.notSaved': 'Not saved: {message}',
+  'records.announce.stale':
+    'Not saved: the record was changed elsewhere, so the table has been reloaded',
+  'records.announce.added': 'Row added: {row}',
+  'records.announce.deleted': 'Row deleted: {row}',
+  'records.announce.undone': 'Undone: {change}',
+  'records.announce.undoFailed': 'Could not undo: {message}',
+  'records.announce.appended':
+    'Appended to {table}: {inserted} added, {skipped} already there',
+  'records.announce.cleared': 'Table cleared: {table}',
+  'records.announce.dropped': 'Table deleted: {table}',
+  'records.announce.reloaded': 'Reloaded: {table}',
 } as const;
 
 /** Every key `t` accepts. A typo is a type error, not a blank screen. */

@@ -36,6 +36,8 @@ import type {
   ConversationDetailDTO,
   ConversationDTO,
   KnowledgeDocumentDTO,
+  RecordTableRows,
+  TimedRecord,
   NotificationDTO,
   RoleDTO,
   SpendOverviewDTO,
@@ -55,6 +57,17 @@ import {
   useUpdateTaskMutation,
   useCompany,
   useCompanyKnowledge,
+  useAddRecordMutation,
+  useAppendRecordsCsvMutation,
+  useClearRecordTableMutation,
+  useDeleteRecordMutation,
+  useDropRecordTableMutation,
+  useRecordTable,
+  useRecordTables,
+  useUpdateRecordMutation,
+  getBlob,
+  recordTableCsvPath,
+  recordsExportPath,
   useCompanyRoles,
   useCompanySpend,
   useCompleteChatMutation,
@@ -79,6 +92,8 @@ import {
   useTasks,
   useUploadMaterialMutation,
 } from './endpoints';
+import { recordsDownloadName } from '@tcp/shared/client';
+
 import { queryKeys } from './query-keys';
 import type { components } from './schema';
 import { useSession } from '../auth/useSession';
@@ -668,3 +683,144 @@ export {
   useTaskHistory,
   useTranscriptSearch,
 } from './endpoints';
+
+export { useRecordTable, useRecordTables };
+export { recordErrorBody, type RecordErrorBody } from './errors';
+
+/**
+ * Edits patch the cached table where it stands rather than refetching: a
+ * refetch re-sorts newest-first and an edited row would jump under the user
+ * (ADR-027). Only the summaries (row counts, updated time) are refetched.
+ */
+const useRecordCache = (companyId: string, table: string) => {
+  const queryClient = useQueryClient();
+  const tableKey = queryKeys.recordTable(companyId, table);
+  const edit = (change: (current: RecordTableRows) => RecordTableRows) => {
+    queryClient.setQueryData<RecordTableRows>(tableKey, (current) =>
+      current === undefined ? current : change(current),
+    );
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.recordTables(companyId),
+    });
+  };
+  // A refused edit (often a 409) means the table moved on: reload it.
+  const reload = () => {
+    void queryClient.invalidateQueries({ queryKey: tableKey });
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.recordTables(companyId),
+    });
+  };
+  return { edit, reload };
+};
+
+/** Returns a function that reloads the open table; the UI's explicit "Reload". */
+export const useReloadRecordTable = (companyId: string, table: string) =>
+  useRecordCache(companyId, table).reload;
+
+/** Adds a row at the start of the cached table. */
+export const useAddRecord = (companyId: string, table: string) => {
+  const { edit, reload } = useRecordCache(companyId, table);
+  const add = useAddRecordMutation(companyId, table);
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) => add.mutateAsync(data),
+    onSuccess: (row: TimedRecord) =>
+      edit((t) => ({ ...t, rows: [row, ...t.rows], total: t.total + 1 })),
+    onError: reload,
+  });
+};
+
+/** Replaces the edited row in the cached table, in the same position. */
+export const useUpdateRecord = (companyId: string, table: string) => {
+  const { edit, reload } = useRecordCache(companyId, table);
+  const update = useUpdateRecordMutation(companyId, table);
+  return useMutation({
+    mutationFn: (input: {
+      id: string;
+      changes: Record<string, unknown>;
+      version: number;
+    }) => update.mutateAsync(input),
+    onSuccess: (row: TimedRecord) =>
+      edit((t) => ({
+        ...t,
+        rows: t.rows.map((r) => (r.id === row.id ? row : r)),
+      })),
+    onError: reload,
+  });
+};
+
+/** Removes the row from the cached table and lowers its total. */
+export const useDeleteRecord = (companyId: string, table: string) => {
+  const { edit, reload } = useRecordCache(companyId, table);
+  const remove = useDeleteRecordMutation(companyId, table);
+  return useMutation({
+    mutationFn: (input: { id: string; version: number }) =>
+      remove.mutateAsync(input),
+    onSuccess: (_result, { id }) =>
+      edit((t) => ({
+        ...t,
+        rows: t.rows.filter((r) => r.id !== id),
+        total: t.total - 1,
+      })),
+    onError: reload,
+  });
+};
+
+/** Wraps a bulk mutation so every record query reloads once it settles. */
+const useBulkRecordMutation = <TInput, TResult>(
+  companyId: string,
+  table: string,
+  useInner: (
+    companyId: string,
+    table: string,
+  ) => {
+    mutateAsync: (input: TInput) => Promise<TResult>;
+  },
+) => {
+  const queryClient = useQueryClient();
+  const inner = useInner(companyId, table);
+  return useMutation({
+    mutationFn: (input: TInput) => inner.mutateAsync(input),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['record'] }),
+  });
+};
+
+/** Appends rows from a CSV; a `400` carries per-row `errors` (see {@link recordErrorBody}). */
+export const useAppendRecordsCsv = (companyId: string, table: string) =>
+  useBulkRecordMutation(companyId, table, useAppendRecordsCsvMutation);
+
+/** Removes every row, keeping the table. */
+export const useClearRecordTable = (companyId: string, table: string) =>
+  useBulkRecordMutation(companyId, table, useClearRecordTableMutation);
+
+/** Removes the table and its rows. */
+export const useDropRecordTable = (companyId: string, table: string) =>
+  useBulkRecordMutation(companyId, table, useDropRecordTableMutation);
+
+/** Saves a blob under a name: a temporary object URL and a clicked anchor. */
+const saveBlob = (blob: Blob, name: string): void => {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = name;
+  anchor.click();
+  URL.revokeObjectURL(url);
+};
+
+/** Downloads one table as CSV, named in local time by the browser, not the server. */
+export const downloadRecordTableCsv = async (
+  companyId: string,
+  companySlug: string,
+  table: string,
+): Promise<void> => {
+  const { blob } = await getBlob(recordTableCsvPath(companyId, table));
+  saveBlob(blob, recordsDownloadName(companySlug, table, 'csv'));
+};
+
+/** Downloads every table as one zip. */
+export const downloadAllRecordTables = async (
+  companyId: string,
+  companySlug: string,
+): Promise<void> => {
+  const { blob } = await getBlob(recordsExportPath(companyId));
+  saveBlob(blob, recordsDownloadName(companySlug, 'tables', 'zip'));
+};

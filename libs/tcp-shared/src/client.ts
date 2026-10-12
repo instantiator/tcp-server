@@ -51,6 +51,11 @@ export {
   parseTaskChangeSummary,
 } from './events/wire-parse';
 
+// -- Records downloads: one file name for the server, CLI and web ------------
+// These import nothing, so they are safe as values.
+export { downloadStamp, recordsDownloadName } from './records/download-name';
+export { fieldOrder } from './records/field-order';
+
 // -- Company statistics: the `GET /api/company` response shape ---------------
 // CompanyStats.model.ts imports only types, so its helper is safe as a value.
 export type {

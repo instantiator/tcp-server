@@ -2,7 +2,7 @@ import { shortened } from '../../../../components/ExpandableText/excerpt';
 import { t } from '../../../../strings';
 import type { CompanySnapshot } from '../rules/companySnapshot';
 import type { HoverEvent } from '../TcpPhaserEventBus';
-import { ARCHIVE_BOOKSHELF_ID } from '../world/layout';
+import { ARCHIVE_BOOKSHELF_ID, ARCHIVE_CABINET_ID } from '../world/layout';
 import type { OfficeWorld } from '../world/types';
 import { describeTarget } from './officeDescriptions';
 
@@ -72,12 +72,17 @@ export const VisualisationTooltip = ({
     );
   }
 
-  if (target.kind === 'archive') {
-    // The bookshelf's own selectable zone reports `{kind:'archive'}` on
-    // hover as well as on select; its tooltip is still the furniture
-    // description `describeTarget` already gives the bookshelf by id.
+  if (!('id' in target)) {
+    // The bookshelf's and filing cabinet's selectable zones report
+    // `{kind:'archive'}` / `{kind:'records'}` on hover as well as on select;
+    // their tooltips are still the furniture descriptions `describeTarget`
+    // gives them by id.
     const described = describeTarget(
-      { kind: 'furniture', id: ARCHIVE_BOOKSHELF_ID },
+      {
+        kind: 'furniture',
+        id:
+          target.kind === 'archive' ? ARCHIVE_BOOKSHELF_ID : ARCHIVE_CABINET_ID,
+      },
       world,
       snapshot,
     );

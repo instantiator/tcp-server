@@ -132,9 +132,32 @@ export const expectAccepted = async (
  * multipart boundary, which cannot be guessed here.
  */
 export const postFile = async (path: string, file: File): Promise<void> => {
+  await postFileForJson(path, file);
+};
+
+/** {@link postFile}, for a route that answers with a JSON body; the caller validates it. */
+export const postFileForJson = async (
+  path: string,
+  file: File,
+): Promise<unknown> => {
   const body = new FormData();
   body.append('file', file);
+  const response = await send(path, { method: 'POST', body });
+  return response.json().catch(() => null);
+};
 
+/**
+ * Fetches a binary download (a CSV or zip attachment) as a `Blob`. Not
+ * through {@link api}: the generated types describe these responses as
+ * strings. Same token, 401 policy and `ApiError` as {@link postFile}.
+ */
+export const getBlob = async (path: string): Promise<{ blob: Blob }> => {
+  const response = await send(path, { method: 'GET' });
+  return { blob: await response.blob() };
+};
+
+/** The shared half of {@link postFile} and {@link getBlob}: token, 401 policy, `ApiError`. */
+const send = async (path: string, init: RequestInit): Promise<Response> => {
   const token = await getAccessToken();
   const headers = new Headers();
   if (token !== null) headers.set('Authorization', `Bearer ${token}`);
@@ -142,9 +165,8 @@ export const postFile = async (path: string, file: File): Promise<void> => {
   let response: Response;
   try {
     response = await fetch(new URL(path, window.location.origin), {
-      method: 'POST',
+      ...init,
       headers,
-      body,
     });
   } catch (cause) {
     throw networkError(cause);
@@ -158,4 +180,5 @@ export const postFile = async (path: string, file: File): Promise<void> => {
     const parsed: unknown = await response.json().catch(() => null);
     throw apiError(response, parsed);
   }
+  return response;
 };

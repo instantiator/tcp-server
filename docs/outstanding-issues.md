@@ -279,6 +279,18 @@ application bar stale until the next notification.
 
 **Act when:** users report the application-wide spend bar looking stale.
 
+## Spend-cap integration spec: a planner failed instead of pausing (once, in CI)
+
+In CI on 2026-10-12 (PR #117), `spend-cap.integration-spec.ts` failed at its
+second step: task A's planner settled on `failed` where the spec expected it to
+pause on the spend cap. The only detail was `output: (none)`. It passed in the
+same branch's previous CI run, and on five local reruns. The spec now prints the
+agent's state, its assignment's and task's failure reasons, and its last ten
+audit events whenever a wait fails, so the next occurrence explains itself.
+
+**Act when:** it fails again. Read the failure message's diagnostics, find why
+the planner failed, then fix the cause or the spec's timing.
+
 ## Planner-dispatched implement agent got a 404 from `complete_assignment` (not diagnosed)
 
 During 000.02 stage 8's integration spec
@@ -556,14 +568,19 @@ is its security boundary.
 **Act when:** an agent is seen changing records in plan or qa mode. Then pass the
 mode to the records server and refuse the write tools there.
 
-## Records tables cannot be altered or dropped
+## Record tables cannot have columns added or renamed
 
-An agent can make a table but cannot add a field, change a type or drop the
-table. A wrong first schema has to be worked around.
+People can clear and delete a whole table (001.03), but nobody can add, rename
+or retype a column, in the web UI or through a tool. A wrong first schema has to
+be worked around: make a new table, export, and append the rows back.
 
-**Act when:** 001.03 (records in the web UI) needs to edit a table, or 002.03
-(templates) needs to change a shipped one. Add `alter_table` and `drop_table`
-with an audit event each.
+A user has now asked for it (2026-10-12): on the dev server, an agent made a
+`feedings` table with no column for which animal was fed, and could not add one.
+
+**Act when:** now — planned in
+[001.06](prompts/phase%2004%20-%20utility/001.06.00.prompt%20-%20record%20table%20schema%20changes%20%28draft%29.md):
+agents may add and rename columns, and asking to delete one returns advice to
+ask a user; people get a column editor in the sheet. Key fields are protected.
 
 ## No template table schemas for records
 
@@ -675,3 +692,92 @@ moved to 003.01 (action approval), which has a section for it:
 
 **Act when:** the core of 003.01 lands. Then let a folder's `README.md` mark it
 sensitive, and pause apply until a user approves.
+
+## Record tables are not live
+
+Record tables are not on the company SSE stream. A table loads when it opens;
+the summaries refetch when the window regains focus; **Reload** in the sheet's
+More menu fetches a table again. If an agent changes a row while a person has
+the sheet open, the person sees the old value until they reload. The version
+check stops their edit overwriting the agent's (409 `stale`), and the table
+reloads.
+
+When this is done, the sheet should also:
+
+- **Say when it is out of date.** When a row or the table changes elsewhere,
+  show that the sheet needs an update (a notice with **Reload**, and one polite
+  announcement), rather than silently replacing what the person is reading.
+- **Stop edits to rows that are out of date.** A row known to have changed
+  elsewhere becomes read-only, and is marked as changed elsewhere (not by colour
+  alone), until the sheet is reloaded. The version check stays as the backstop.
+
+**Act when:** a user reports a stale view, or records join the company stream.
+Then publish record changes as audit events, and use them to mark the sheet and
+its rows out of date. Planned in [001.05](prompts/phase%2004%20-%20utility/001.05.00.prompt%20-%20live%20record%20updates%20%28draft%29.md).
+
+## Clear and delete are open to every company member
+
+Any member of a company can edit rows, clear a table and delete a table. There
+are no role flags yet. Clear and drop keep a count in the audit trail, not the
+rows.
+
+**Act when:** membership role flags exist (see 003.01). Then limit clear and
+delete to owners.
+
+## Record exports are built in memory
+
+`GET tables/:table/csv` and `GET export` build the whole file in memory before
+they send it. The zip is built with `fflate`'s `zipSync`. A `ponytail:` comment
+in the code names the ceiling.
+
+**Act when:** an export passes about 50 MB, or tcp-server memory alerts fire
+during one. Stream it instead: `forEachRowBatch` already reads in batches, and
+`fflate`'s `Zip` class can write a zip as it goes.
+
+## The record sheet shows at most 10,000 rows
+
+`GET tables/:table` returns the 10,000 most recently changed rows and sets
+`truncated`. A larger table shows only those, and the sheet says so. Exports
+have no cap.
+
+**Act when:** a table reaches 10,000 rows. Page the read on the server (keyset
+by id), or filter on the server, and load pages into the sheet.
+
+## Record tables have no create-table screen
+
+`POST /api/company/:id/records/tables` exists, and is audited as the user, but
+the web UI has no form for it. Tests, tools and templates use the route. People
+can only get a table by asking an agent for one.
+
+**Act when:** 002.03 (templates) lands, or a user asks to make a table by hand.
+Add a form built on the same JSON Schema rules.
+
+## AG Grid UI strings bypass `t()`
+
+The sheet's filter menus, pagination ("Page 1 of 1") and similar text come from
+AG Grid's own English locale, not from `src/strings.ts`.
+
+**Act when:** translation work starts. Register AG Grid's `LocaleModule` and
+give the grid a `getLocaleText` callback that looks each key up through `t()`,
+falling back to AG Grid's default. Comments in
+`apps/frontend/tcp-frontend/src/components/RecordSheet/RecordSheet.tsx` mark
+the places to change, including the "Updated" column's date format, which
+follows the browser's locale.
+
+## `MaskSecretsInterceptor` flattens a returned `StreamableFile`
+
+The global interceptor walks every returned value as a plain object, so a
+route that returns a Nest `StreamableFile` sends JSON instead of the file. The
+records downloads avoid it by writing to `@Res()` directly.
+
+**Act when:** another route needs to return a `StreamableFile`. Teach the
+interceptor to pass it (and other streams) through untouched.
+
+## Record sheet screen-reader pass is not done
+
+The sheet has axe checks in all three tiers and a keyboard-only browser test.
+It has not had a manual VoiceOver or NVDA pass: cell, header and sort
+announcements, and entering and leaving edit mode.
+
+**Act when:** before the phase 04 release, or at the next ADR-026 manual matrix
+run, whichever comes first. Record the findings in the 001.03 plan's outcome.

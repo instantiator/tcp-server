@@ -48,6 +48,8 @@ export const ARCHIVE_ROOM_ID = 'archive';
 export const CORRIDOR_ID = 'corridor';
 /** The archive's bookshelf, by the plan's `<roomId>:<kind>` furniture-id convention. */
 export const ARCHIVE_BOOKSHELF_ID = `${ARCHIVE_ROOM_ID}:bookshelf`;
+/** The archive's filing cabinet, which holds the company's record tables (001.03). */
+export const ARCHIVE_CABINET_ID = `${ARCHIVE_ROOM_ID}:filingCabinet`;
 
 /** The id of the room for a task. */
 export const taskRoomId = (taskId: string): string => `task:${taskId}`;

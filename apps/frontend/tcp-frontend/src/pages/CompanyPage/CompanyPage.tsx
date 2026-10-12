@@ -197,6 +197,7 @@ export const CompanyPage = () => {
         {!isPending && error === null && company !== undefined && (
           <CompanyTabs
             companyId={company.id}
+            companySlug={company.slug}
             visualisation={<CompanyVisualisation companyId={company.id} />}
           />
         )}

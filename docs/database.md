@@ -15,15 +15,15 @@ Local credentials live in `.env` (not committed). See `.env.example` for the req
 
 ## Which services connect
 
-| Service              | Connects | Notes                                                                                                                |
-| -------------------- | -------- | -------------------------------------------------------------------------------------------------------------------- |
-| tcp-server           | Yes      | Owns migrations; reads and writes all entities                                                                       |
-| tcp-agent            | Yes      | Reads roles/companies; writes `TcpAgent`; migrations run by tcp-server                                               |
-| tcp-mcp-memory       | Yes      | Reads/writes `EpisodicMemory`; reads `TcpCompany` for embedding config                                               |
-| tcp-mcp-storage      | No       | Uses MinIO only                                                                                                      |
-| tcp-mcp-interactions | No       | Delegates all DB writes to tcp-server via internal HTTP                                                              |
-| tcp-mcp-utilities    | No       | Stateless; stores nothing and calls no other service                                                                 |
-| tcp-mcp-records      | Yes      | Own connection (`RECORDS_DATABASE_URL`, else `DATABASE_URL`); raw SQL on the records tables; runs its own migrations |
+| Service              | Connects | Notes                                                                                                                                                                                                                              |
+| -------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| tcp-server           | Yes      | Owns migrations; reads and writes all entities                                                                                                                                                                                     |
+| tcp-agent            | Yes      | Reads roles/companies; writes `TcpAgent`; migrations run by tcp-server                                                                                                                                                             |
+| tcp-mcp-memory       | Yes      | Reads/writes `EpisodicMemory`; reads `TcpCompany` for embedding config                                                                                                                                                             |
+| tcp-mcp-storage      | No       | Uses MinIO only                                                                                                                                                                                                                    |
+| tcp-mcp-interactions | No       | Delegates all DB writes to tcp-server via internal HTTP                                                                                                                                                                            |
+| tcp-mcp-utilities    | No       | Stateless; stores nothing and calls no other service                                                                                                                                                                               |
+| tcp-mcp-records      | Yes      | Own connection (`RECORDS_DATABASE_URL`, else `DATABASE_URL`); raw SQL on the records tables; runs its own migrations. tcp-server has a second, `records` connection to the same database (pool of 5, no migrations) for the web UI |
 
 ## Records tables
 
@@ -43,7 +43,7 @@ The records server has its own migration list (`RECORDS_MIGRATIONS`) and its own
 
 ### A separate records database
 
-`RECORDS_DATABASE_URL` puts the records in a database of their own. With it set, there are no company foreign keys, so a company delete does not cascade. tcp-server calls the records server to delete the company's records instead (best effort). `scripts/backup.sh` does not back this database up. See [tcp-mcp-records.md → A separate database](tcp-mcp-records.md#a-separate-database).
+`RECORDS_DATABASE_URL` puts the records in a database of their own. With it set, there are no company foreign keys, so a company delete does not cascade. tcp-server calls the records server to delete the company's records instead (best effort). tcp-server also connects to this database itself, for the web UI's record tables. `scripts/backup.sh` does not back this database up. See [tcp-mcp-records.md → A separate database](tcp-mcp-records.md#a-separate-database).
 
 ## SQLite fallback for tests
 

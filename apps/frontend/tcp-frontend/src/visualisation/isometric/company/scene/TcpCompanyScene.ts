@@ -9,7 +9,11 @@ import type {
 } from '../TcpPhaserEventBus';
 import { furnitureIsLit, tileIsLit } from '../rules/roomLighting';
 import { emitTcpEvent, offTcpEvent, onTcpEvent } from '../TcpPhaserEventBus';
-import { ARCHIVE_BOOKSHELF_ID, mapBounds } from '../world/layout';
+import {
+  ARCHIVE_BOOKSHELF_ID,
+  ARCHIVE_CABINET_ID,
+  mapBounds,
+} from '../world/layout';
 import { renderRegion } from '../world/renderRegion';
 import type { Avatar, Bounds, OfficeWorld, Tile } from '../world/types';
 import { AvatarSprite } from './AvatarSprite';
@@ -56,6 +60,12 @@ function statusKey(status: OfficeStatus): string {
  */
 const DOOR_ZONE_DEPTH_OFFSET = 0.5;
 
+/** Furniture a click selects, and what it selects. */
+const SELECTABLE_FURNITURE = new Map<string, 'archive' | 'records'>([
+  [ARCHIVE_BOOKSHELF_ID, 'archive'],
+  [ARCHIVE_CABINET_ID, 'records'],
+]);
+
 /**
  * The isometric office scene. React works out the whole office and sends it
  * over on `world-changed`; this scene draws it, and a {@link Crowd} walks
@@ -79,8 +89,14 @@ export class TcpCompanyScene extends Scene {
   private staticObjects: GameObjects.GameObject[] = [];
   private readonly avatarSprites = new Map<string, AvatarSprite>();
   private whiteboardsByTaskId = new Map<string, GameObjects.IsoBox>();
-  /** The archive bookshelf's game object, for follow — there is only ever one. */
-  private archiveBookshelf: GameObjects.IsoBox | undefined;
+  /**
+   * The archive's selectable furniture, for follow: the bookshelf (`archive`)
+   * and the filing cabinet (`records`). There is only ever one of each.
+   */
+  private archiveFurniture = new Map<
+    'archive' | 'records',
+    GameObjects.IsoBox
+  >();
   private readonly crowd = new Crowd();
   private lastLayoutVersion: number | null = null;
   /** The newest world received, so a status change can redraw without waiting for a new one. */
@@ -313,7 +329,7 @@ export class TcpCompanyScene extends Scene {
       ...drawWalls(this, region),
       ...furniture.values(),
       ...zones,
-      ...this.buildArchiveZone(world, furniture),
+      ...this.buildArchiveZones(world, furniture),
       ...this.buildDescriptionZones(world),
       ...this.buildCompletionTicks(world),
     ];
@@ -417,52 +433,53 @@ export class TcpCompanyScene extends Scene {
   }
 
   /**
-   * The archive bookshelf's own hit zone: selectable, targeting the one
-   * archive (there is only ever one). Sized exactly like the hover-only zone
-   * {@link buildDescriptionZones} gives every other piece of furniture — the
-   * bookshelf is left out of that loop and gets this instead, so its
-   * tooltip still describes it on hover (`ui/officeDescriptions.ts` reads
-   * `{kind:'furniture', id}` the same as before) while a click opens the
-   * tray on `{kind:'archive'}` rather than doing nothing.
+   * Hit zones for the archive's selectable furniture: the bookshelf opens the
+   * archive tray (`archive`), and the filing cabinet the record tables
+   * (`records`, 001.03). Each is sized exactly like the hover-only zone
+   * {@link buildDescriptionZones} gives every other piece of furniture, and is
+   * left out of that loop, so its tooltip still describes it on hover
+   * (`ui/officeDescriptions.ts` reads `{kind:'furniture', id}` as before)
+   * while a click opens its tray rather than doing nothing.
    */
-  private buildArchiveZone(
+  private buildArchiveZones(
     world: OfficeWorld,
     furniture: ReadonlyMap<string, GameObjects.IsoBox>,
   ): GameObjects.Zone[] {
-    const item = world.furniture.find(
-      (candidate) => candidate.id === ARCHIVE_BOOKSHELF_ID,
-    );
-    const board = item === undefined ? undefined : furniture.get(item.id);
-    this.archiveBookshelf = board;
-    if (item === undefined || board === undefined) {
-      return [];
-    }
+    this.archiveFurniture.clear();
+    const zones: GameObjects.Zone[] = [];
+    for (const [id, kind] of SELECTABLE_FURNITURE) {
+      const item = world.furniture.find((candidate) => candidate.id === id);
+      const box = item === undefined ? undefined : furniture.get(item.id);
+      if (item === undefined || box === undefined) continue;
+      this.archiveFurniture.set(kind, box);
 
-    const { size, height } = FURNITURE_SIZES[item.kind];
-    const { x, y } = tileToScreen(item.tile);
-    const zone = createHitZone(
-      this,
-      x,
-      y - height / 2,
-      size,
-      size / 2 + height,
-      () => ({ kind: 'archive' }),
-    );
-    zone.setDepth(depthOf(item.tile));
-    return [zone];
+      const { size, height } = FURNITURE_SIZES[item.kind];
+      const { x, y } = tileToScreen(item.tile);
+      const zone = createHitZone(
+        this,
+        x,
+        y - height / 2,
+        size,
+        size / 2 + height,
+        () => ({ kind }),
+      );
+      zone.setDepth(depthOf(item.tile));
+      zones.push(zone);
+    }
+    return zones;
   }
 
   /**
    * Hover-only zones that let furniture and doorways explain themselves in
    * a tooltip. Whiteboards are left out: their own zone opens the task. The
-   * archive bookshelf is left out too: {@link buildArchiveZone} gives it a
-   * selectable zone instead.
+   * archive's bookshelf and filing cabinet are left out too:
+   * {@link buildArchiveZones} gives them selectable zones instead.
    */
   private buildDescriptionZones(world: OfficeWorld): GameObjects.Zone[] {
     const zones: GameObjects.Zone[] = [];
 
     for (const item of world.furniture) {
-      if (item.kind === 'whiteboard' || item.id === ARCHIVE_BOOKSHELF_ID) {
+      if (item.kind === 'whiteboard' || SELECTABLE_FURNITURE.has(item.id)) {
         continue;
       }
       const { size, height } = FURNITURE_SIZES[item.kind];
@@ -588,8 +605,8 @@ export class TcpCompanyScene extends Scene {
     if (target.kind === 'role') {
       return this.avatarSprites.get(`role:${target.id}`)?.followable;
     }
-    if (target.kind === 'archive') {
-      return this.archiveBookshelf;
+    if (!('id' in target)) {
+      return this.archiveFurniture.get(target.kind);
     }
     for (const sprite of this.avatarSprites.values()) {
       if (

@@ -4,7 +4,14 @@ import {
   type UseQueryOptions,
 } from '@tanstack/react-query';
 
-import { api, expectAccepted, postFile, unwrap } from './client';
+import {
+  api,
+  expectAccepted,
+  getBlob,
+  postFile,
+  postFileForJson,
+  unwrap,
+} from './client';
 import { apiError, networkError } from './errors';
 import {
   queryKeys,
@@ -14,6 +21,7 @@ import {
   type ConversationListParams,
   type TaskListParams,
 } from './query-keys';
+import type { AppendRecordsCsvResult } from './dtos';
 import type { components } from './schema';
 import { readWarnings } from './warnings';
 
@@ -550,3 +558,137 @@ export const useResumeCompanyMutation = (companyId: string) =>
         }),
       ),
   });
+
+// Company record tables. Static (`record` is a STATIC_ENTITY): nothing streams
+// them, so they refetch on mount, on window focus and after a mutation.
+
+const recordsBase = (companyId: string) =>
+  `/api/company/${encodeURIComponent(companyId)}/records`;
+
+export const useRecordTables = (companyId: string) =>
+  useQuery({
+    queryKey: queryKeys.recordTables(companyId),
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/company/{companyId}/records/tables', {
+          params: { path: { companyId } },
+        }),
+      ),
+  });
+
+/** One table's definition and rows; idle while `table` is `null` (none chosen). */
+export const useRecordTable = (companyId: string, table: string | null) =>
+  useQuery({
+    queryKey: queryKeys.recordTable(companyId, table ?? ''),
+    enabled: table !== null,
+    // A focus refetch re-sorts the rows under a user who is mid-read (ADR-027).
+    refetchOnWindowFocus: false,
+    queryFn: () =>
+      unwrap(
+        api.GET('/api/company/{companyId}/records/tables/{table}', {
+          params: { path: { companyId, table: table ?? '' } },
+        }),
+      ),
+  });
+
+/** Adds one row. A duplicate unique key is a `409` carrying the existing `recordId`. */
+export const useAddRecordMutation = (companyId: string, table: string) =>
+  useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      unwrap(
+        api.POST('/api/company/{companyId}/records/tables/{table}/rows', {
+          params: { path: { companyId, table } },
+          body: { data },
+        }),
+      ),
+  });
+
+/** Changes a row; `version` is the one the user read, and a `409` means it moved. */
+export const useUpdateRecordMutation = (companyId: string, table: string) =>
+  useMutation({
+    mutationFn: (input: {
+      id: string;
+      changes: Record<string, unknown>;
+      version: number;
+    }) =>
+      unwrap(
+        api.PATCH('/api/company/{companyId}/records/tables/{table}/rows/{id}', {
+          params: { path: { companyId, table, id: input.id } },
+          body: { changes: input.changes, version: input.version },
+        }),
+      ),
+  });
+
+/** Deletes a row at the version the user read; answers `204`. */
+export const useDeleteRecordMutation = (companyId: string, table: string) =>
+  useMutation({
+    mutationFn: (input: { id: string; version: number }) =>
+      expectAccepted(
+        api.DELETE(
+          '/api/company/{companyId}/records/tables/{table}/rows/{id}',
+          {
+            params: {
+              path: { companyId, table, id: input.id },
+              query: { version: input.version },
+            },
+          },
+        ),
+      ),
+  });
+
+/** Appends a CSV's rows; a `400` body lists the bad rows in `errors`. */
+export const useAppendRecordsCsvMutation = (companyId: string, table: string) =>
+  useMutation({
+    mutationFn: async (file: File): Promise<AppendRecordsCsvResult> => {
+      const result = await postFileForJson(
+        recordTableCsvPath(companyId, table),
+        file,
+      );
+      if (
+        typeof result === 'object' &&
+        result !== null &&
+        'inserted' in result &&
+        typeof result.inserted === 'number' &&
+        'alreadyExists' in result &&
+        typeof result.alreadyExists === 'number'
+      ) {
+        return {
+          inserted: result.inserted,
+          alreadyExists: result.alreadyExists,
+        };
+      }
+      throw networkError(new Error('Unexpected CSV upload response'));
+    },
+  });
+
+/** Removes every row but keeps the table. */
+export const useClearRecordTableMutation = (companyId: string, table: string) =>
+  useMutation({
+    mutationFn: () =>
+      unwrap(
+        api.DELETE('/api/company/{companyId}/records/tables/{table}/rows', {
+          params: { path: { companyId, table } },
+        }),
+      ),
+  });
+
+/** Removes the table and its rows. */
+export const useDropRecordTableMutation = (companyId: string, table: string) =>
+  useMutation({
+    mutationFn: () =>
+      unwrap(
+        api.DELETE('/api/company/{companyId}/records/tables/{table}', {
+          params: { path: { companyId, table } },
+        }),
+      ),
+  });
+
+/** The route a table's CSV download is served from. */
+export const recordTableCsvPath = (companyId: string, table: string) =>
+  `${recordsBase(companyId)}/tables/${encodeURIComponent(table)}/csv`;
+
+/** The route the all-tables zip download is served from. */
+export const recordsExportPath = (companyId: string) =>
+  `${recordsBase(companyId)}/export`;
+
+export { getBlob };

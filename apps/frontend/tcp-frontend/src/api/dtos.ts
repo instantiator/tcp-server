@@ -16,3 +16,12 @@ export type KnowledgeDocumentDTO =
 export type SpendOverviewDTO = components['schemas']['SpendOverviewDto'];
 export type CompanySpendDTO = components['schemas']['CompanySpendDto'];
 export type NotificationDTO = components['schemas']['TcpNotification'];
+
+export type RecordTableSummary = components['schemas']['RecordTableSummaryDto'];
+export type RecordTableRows = components['schemas']['RecordTableRowsDto'];
+export type RecordTableDefinition =
+  components['schemas']['RecordTableDefinitionDto'];
+export type RecordFieldSchema = components['schemas']['RecordFieldSchemaDto'];
+export type TimedRecord = components['schemas']['TimedRecordDto'];
+export type AppendRecordsCsvResult =
+  components['schemas']['AppendRecordsCsvResultDto'];
