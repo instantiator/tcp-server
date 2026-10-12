@@ -574,9 +574,13 @@ People can clear and delete a whole table (001.03), but nobody can add, rename
 or retype a column, in the web UI or through a tool. A wrong first schema has to
 be worked around: make a new table, export, and append the rows back.
 
-**Act when:** a user asks for it, or 002.03 (templates) needs to change a
-shipped table. Add an alter route (and an `alter_table` tool for agents) with an
-audit event each, and a column editor in the table view.
+A user has now asked for it (2026-10-12): on the dev server, an agent made a
+`feedings` table with no column for which animal was fed, and could not add one.
+
+**Act when:** now — planned in
+[001.06](prompts/phase%2004%20-%20utility/001.06.00.prompt%20-%20record%20table%20schema%20changes%20%28draft%29.md):
+agents may add and rename columns, and asking to delete one returns advice to
+ask a user; people get a column editor in the sheet. Key fields are protected.
 
 ## No template table schemas for records
 
