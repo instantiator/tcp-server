@@ -25,3 +25,7 @@ export type RecordFieldSchema = components['schemas']['RecordFieldSchemaDto'];
 export type TimedRecord = components['schemas']['TimedRecordDto'];
 export type AppendRecordsCsvResult =
   components['schemas']['AppendRecordsCsvResultDto'];
+export type RecordTableRetention =
+  components['schemas']['RecordTableRetentionDto'];
+export type RecordSearchResult = components['schemas']['RecordSearchResultDto'];
+export type DoNotStoreEntry = components['schemas']['DoNotStoreEntryDto'];

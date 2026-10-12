@@ -72,7 +72,7 @@ export const AddRowDialog = ({
       return;
     }
     try {
-      onAdded(await add.mutateAsync(data));
+      onAdded(await add.mutateAsync({ data }));
       onClose();
     } catch (error) {
       if (!(error instanceof ApiError)) throw error;

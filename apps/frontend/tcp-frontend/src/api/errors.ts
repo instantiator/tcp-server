@@ -112,12 +112,17 @@ export const refusalKey = (err: unknown, action: RefusalAction): StringKey => {
 
 /** The extra fields tcp-server puts in a records refusal body. */
 export interface RecordErrorBody {
-  /** `stale` (changed since read) or `conflict` (a unique key already exists). */
+  /**
+   * `stale` (changed since read), `conflict` (a unique key already exists),
+   * or `do_not_store` (the data matches the do-not-store list).
+   */
   readonly code?: string;
   /** The existing row a `conflict` collided with. */
   readonly recordId?: string;
   /** Per-row CSV validation failures; `row` is the CSV row number. */
   readonly errors: readonly { row: number; message: string }[];
+  /** For `do_not_store`: the fields that matched the list. */
+  readonly fields: readonly string[];
 }
 
 /**
@@ -127,7 +132,9 @@ export interface RecordErrorBody {
  */
 export const recordErrorBody = (error: ApiError): RecordErrorBody => {
   const { body } = error;
-  if (typeof body !== 'object' || body === null) return { errors: [] };
+  if (typeof body !== 'object' || body === null) {
+    return { errors: [], fields: [] };
+  }
   const code =
     'code' in body && typeof body.code === 'string' ? body.code : undefined;
   const recordId =
@@ -150,5 +157,12 @@ export const recordErrorBody = (error: ApiError): RecordErrorBody => {
       }
     }
   }
-  return { code, recordId, errors };
+  const fields: string[] = [];
+  if ('fields' in body && Array.isArray(body.fields)) {
+    const entries: unknown[] = body.fields;
+    for (const entry of entries) {
+      if (typeof entry === 'string') fields.push(entry);
+    }
+  }
+  return { code, recordId, errors, fields };
 };

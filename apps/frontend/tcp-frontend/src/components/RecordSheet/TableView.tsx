@@ -134,7 +134,9 @@ export const TableView = ({
     setUndoing(true);
     try {
       if (change.kind === 'delete') {
-        const restored = await addRecord.mutateAsync({ ...change.data });
+        const restored = await addRecord.mutateAsync({
+          data: { ...change.data },
+        });
         undo.pop(restored.id);
       } else if (current === undefined) {
         throw new Error('row gone');

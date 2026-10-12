@@ -156,10 +156,27 @@ export const getBlob = async (path: string): Promise<{ blob: Blob }> => {
   return { blob: await response.blob() };
 };
 
+/**
+ * Posts JSON and fetches the binary download it answers with, as
+ * {@link getBlob} does for a GET. For a download chosen by a body too large,
+ * or too personal, for a URL: a selection of records.
+ */
+export const postJsonForBlob = async (
+  path: string,
+  body: unknown,
+): Promise<{ blob: Blob }> => {
+  const response = await send(path, {
+    method: 'POST',
+    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json' },
+  });
+  return { blob: await response.blob() };
+};
+
 /** The shared half of {@link postFile} and {@link getBlob}: token, 401 policy, `ApiError`. */
 const send = async (path: string, init: RequestInit): Promise<Response> => {
   const token = await getAccessToken();
-  const headers = new Headers();
+  const headers = new Headers(init.headers);
   if (token !== null) headers.set('Authorization', `Bearer ${token}`);
 
   let response: Response;

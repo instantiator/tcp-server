@@ -212,7 +212,7 @@ const AppendCsvDialog = ({
       return;
     }
     try {
-      const result = await append.mutateAsync(file);
+      const result = await append.mutateAsync({ file });
       announceRecords('records.announce.appended', {
         table,
         inserted: result.inserted,

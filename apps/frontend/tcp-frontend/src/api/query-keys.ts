@@ -165,6 +165,15 @@ export const queryKeys = {
   /** One record table: its definition and rows. */
   recordTable: (companyId: string, table: string) =>
     ['record', 'detail', { companyId, table }] as const,
+  /** Rows across every table matching a search, grouped by table. */
+  recordSearch: (companyId: string, q: string) =>
+    ['record', 'search', { companyId, q }] as const,
+  /**
+   * A company's do-not-store list. A `list` of records, so anything that
+   * reloads the company's record lists reloads it too.
+   */
+  doNotStore: (companyId: string) =>
+    ['record', 'list', { companyId, doNotStore: true }] as const,
 
   /** Application-wide usage totals and every provider's cap progress. */
   spendOverview: () => ['spend', 'status'] as const,
