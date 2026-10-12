@@ -138,6 +138,22 @@ const cell = (page: Page, key: string, column: number) =>
     .getByRole('gridcell')
     .nth(column);
 
+/**
+ * Gives a cell keyboard focus without editing it. A click opens the cell's
+ * editor (single-click editing), and the editor opens a moment later, so the
+ * Escape that closes it must wait for it. Pressed too early, on a slow runner,
+ * the Escape is lost and the next keys type into the editor (CI, 2026-10-11).
+ */
+const focusCell = async (page: Page, key: string, column: number) => {
+  const target = cell(page, key, column);
+  await target.click();
+  const editor = target.locator('input');
+  await expect(editor).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(editor).toHaveCount(0);
+  await expect(target).toBeFocused();
+};
+
 /** Opens the Tables tab on `orders`. */
 const openOrders = async (page: Page, companyId: string) => {
   await gotoSignedIn(page, `/company/${companyId}#tables`);
@@ -217,20 +233,25 @@ test.describe('record tables', () => {
     await openOrders(page, fixture.companyId);
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 
-    // A click opens the editor (single-click editing); Escape leaves it,
-    // with the cell focused. Everything after that is the keyboard.
-    await cell(page, 'A1', 0).click();
-    await page.keyboard.press('Escape');
+    // Focus the key cell, then everything is the keyboard. Each step waits
+    // for the grid to reach its state before the next key, as a person would.
+    await focusCell(page, 'A1', 0);
     await page.keyboard.press('ArrowRight');
+    const qty = cell(page, 'A1', 1);
+    await expect(qty).toBeFocused();
     await page.keyboard.press('Enter');
+    const editor = qty.locator('input');
+    await expect(editor).toBeFocused();
     await page.keyboard.press('ControlOrMeta+a');
     await page.keyboard.type('9');
+    await expect(editor).toHaveValue('9');
     await page.keyboard.press('Enter');
-    await expect(cell(page, 'A1', 1)).toContainText('9');
-    await expect(cell(page, 'A1', 1)).toContainText('(changed)');
+    await expect(qty).toContainText('9');
+    await expect(qty).toContainText('(changed)');
+    await expect(qty).toBeFocused();
 
     await page.keyboard.press('ControlOrMeta+z');
-    await expect(cell(page, 'A1', 1)).toHaveText('2');
+    await expect(qty).toHaveText('2');
     await expect(
       page.getByRole('button', { name: 'Nothing to undo' }),
     ).toBeDisabled();
@@ -262,8 +283,7 @@ test.describe('record tables', () => {
     await expect(form).toBeHidden();
     await expect(cell(page, 'A3', 1)).toHaveText(/^4/);
 
-    await cell(page, 'A3', 0).click();
-    await page.keyboard.press('Escape');
+    await focusCell(page, 'A3', 0);
     await page.getByRole('button', { name: 'Delete row A3' }).click();
     const confirm = page.getByRole('alertdialog', { name: 'Delete row A3?' });
     await confirm.getByRole('button', { name: 'Delete row' }).click();
