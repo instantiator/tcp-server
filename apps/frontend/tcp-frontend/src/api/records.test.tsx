@@ -59,6 +59,7 @@ const tableOf = (rows: TimedRecord[]): RecordTableRows => ({
     uniqueKeys: [],
     primaryKey: [],
     schema: { properties: {} },
+    retention: null,
   },
   rows,
   total: rows.length,

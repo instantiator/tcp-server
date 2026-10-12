@@ -1,11 +1,16 @@
 import { ApiProperty, getSchemaPath } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsInt,
+  IsNotEmpty,
   IsObject,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
 
 /**
@@ -42,6 +47,19 @@ export class RecordTableSchemaDto {
   required?: string[];
 }
 
+/**
+ * How long a table keeps its rows: `days` after `from`, which is a date field
+ * of the table or `updated` for the row's last change.
+ */
+export class RecordTableRetentionDto {
+  @IsInt()
+  @Min(1)
+  days!: number;
+  @IsString()
+  @IsNotEmpty()
+  from!: string;
+}
+
 /** A table's definition. */
 export class RecordTableDefinitionDto {
   id!: string;
@@ -56,6 +74,8 @@ export class RecordTableDefinitionDto {
     items: { type: 'array', items: { type: 'string' } },
   })
   uniqueKeys!: string[][];
+  /** How long rows are kept; null when they are kept until deleted. */
+  retention!: RecordTableRetentionDto | null;
 }
 
 /** A table in a company's list of tables. */
@@ -146,4 +166,104 @@ export class UpdateRecordDto {
   @IsInt()
   @Min(1)
   version!: number;
+}
+
+/** Text to look for across every table. */
+export class SearchRecordsDto {
+  @IsString()
+  @MaxLength(200)
+  q!: string;
+}
+
+/** One table's rows that matched a search. */
+export class RecordSearchGroupDto {
+  definition!: RecordTableDefinitionDto;
+  rows!: TimedRecordDto[];
+}
+
+/** Rows across every table that matched a search, grouped by table. */
+export class RecordSearchResultDto {
+  groups!: RecordSearchGroupDto[];
+  /** True when there were more matches than a search returns (1,000). */
+  truncated!: boolean;
+}
+
+/** Which rows to export: per table, a list of record ids or `all`. */
+export class ExportRecordsDto {
+  @ApiProperty({
+    type: 'object',
+    additionalProperties: {
+      oneOf: [
+        { type: 'string', enum: ['all'] },
+        { type: 'array', items: { type: 'string' } },
+      ],
+    },
+  })
+  @IsObject()
+  tables!: Record<string, string[] | 'all'>;
+}
+
+/** A record to act on, at the version the caller last saw. */
+export class VersionedRefDto {
+  @IsString()
+  id!: string;
+  @IsInt()
+  @Min(1)
+  version!: number;
+}
+
+/** Records to delete together, all or none. */
+export class DeleteRecordsDto {
+  @IsArray()
+  @ArrayMaxSize(10_000)
+  @ValidateNested({ each: true })
+  @Type(() => VersionedRefDto)
+  rows!: VersionedRefDto[];
+}
+
+/** A table's new retention, or null to keep rows until deleted. */
+export class SetRetentionDto {
+  @ApiProperty({ type: RecordTableRetentionDto, nullable: true })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RecordTableRetentionDto)
+  retention!: RecordTableRetentionDto | null;
+}
+
+/** An entry on the do-not-store list. */
+export class DoNotStoreEntryDto {
+  id!: string;
+  /** A name, email address or other text agents may not store. */
+  value!: string;
+  note!: string | null;
+  @ApiProperty({ enum: ['user', 'agent'] })
+  addedByRole!: 'user' | 'agent';
+  /** The user identifier or agent id that added it, when known. */
+  addedById!: string | null;
+  createdAt!: string;
+  updatedAt!: string;
+}
+
+/** A new do-not-store entry. */
+export class AddDoNotStoreDto {
+  @IsString()
+  @MaxLength(200)
+  value!: string;
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  note?: string;
+}
+
+/** Changes to a do-not-store entry. */
+export class UpdateDoNotStoreDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  value?: string;
+  @ApiProperty({ type: String, nullable: true, required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  note?: string | null;
 }

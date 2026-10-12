@@ -78,6 +78,10 @@ describe('Records API (e2e)', () => {
       request(app.getHttpServer())
         .delete(`${base}${path}`)
         .set('Authorization', `Bearer ${jwt}`),
+    put: (path: string) =>
+      request(app.getHttpServer())
+        .put(`${base}${path}`)
+        .set('Authorization', `Bearer ${jwt}`),
   });
   const alice = () => as(aliceJwt);
 
@@ -300,6 +304,182 @@ describe('Records API (e2e)', () => {
     });
   });
 
+  describe('data protection (001.04)', () => {
+    const CUSTOMERS: NewTable = {
+      name: 'customers',
+      purpose: 'People who order.',
+      schema: {
+        type: 'object',
+        properties: {
+          email: { type: 'string' },
+          name: { type: 'string' },
+          delivered_on: { type: 'string', format: 'date' },
+        },
+        required: ['email'],
+      },
+      primaryKey: ['email'],
+    };
+    let entryId: string;
+
+    beforeAll(async () => {
+      await records.createTable(companyId, CUSTOMERS, null);
+      await records.insert(companyId, 'customers', {
+        email: 'cara@example.com',
+        name: 'Cara Diaz',
+      });
+      await records.insert(companyId, 'customers', {
+        email: 'dan@example.com',
+        name: 'Dan Ito',
+      });
+    });
+
+    it('keeps a do-not-store list: add, list, edit, refuse a duplicate', async () => {
+      const added = await alice()
+        .post('/do-not-store')
+        .send({ value: 'Ann Lee', note: 'Asked by phone' })
+        .expect(201);
+      entryId = (added.body as { id: string }).id;
+      expect(added.body).toMatchObject({
+        value: 'Ann Lee',
+        addedByRole: 'user',
+        addedById: 'alice',
+      });
+      await alice()
+        .post('/do-not-store')
+        .send({ value: 'ann  LEE' })
+        .expect(409);
+      await alice()
+        .patch(`/do-not-store/${entryId}`)
+        .send({ note: null })
+        .expect(200);
+      const list = await alice().get('/do-not-store').expect(200);
+      expect(list.body).toEqual([
+        expect.objectContaining({ id: entryId, note: null }),
+      ]);
+    });
+
+    it('warns before a person stores a match, and stores it once they confirm', async () => {
+      const refused = await alice()
+        .post('/tables/customers/rows')
+        .send({ data: { email: 'ann@example.com', name: 'Mrs Ann Lee' } })
+        .expect(409);
+      expect(refused.body).toMatchObject({
+        code: 'do_not_store',
+        fields: ['name'],
+      });
+      await alice()
+        .post('/tables/customers/rows?confirmDoNotStore=true')
+        .send({ data: { email: 'ann@example.com', name: 'Mrs Ann Lee' } })
+        .expect(201);
+      await alice()
+        .post('/tables/customers/csv')
+        .attach(
+          'file',
+          Buffer.from('email,name\nx@example.com,ann lee\n'),
+          'c.csv',
+        )
+        .expect(409);
+    });
+
+    it('finds a person in every table, and exports them', async () => {
+      const found = await alice()
+        .post('/search')
+        .send({ q: 'ann' })
+        .expect(200);
+      const result = found.body as {
+        groups: { definition: { name: string }; rows: Row[] }[];
+      };
+      expect(result.groups.map((g) => g.definition.name)).toEqual([
+        'customers',
+      ]);
+      const ids = result.groups[0].rows.map((r) => r.id);
+
+      const csv = await alice()
+        .post('/export')
+        .send({ tables: { customers: ids } })
+        .buffer(true)
+        .parse((res, done) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (c: Buffer) => chunks.push(c));
+          res.on('end', () => done(null, Buffer.concat(chunks)));
+        })
+        .expect(200)
+        .expect('Content-Type', /text\/csv/);
+      const text = (csv.body as Buffer).toString('utf8');
+      expect(text).toContain('ann@example.com');
+      expect(text).not.toContain('dan@example.com');
+
+      await alice()
+        .post('/export')
+        .send({ tables: { customers: ids, stock: 'all' } })
+        .expect(200)
+        .expect('Content-Type', /application\/zip/);
+    });
+
+    it('deletes chosen rows together, refusing a stale version', async () => {
+      const { rows } = (await alice().get('/tables/customers').expect(200))
+        .body as { rows: Row[] };
+      const cara = rows.find((r) => r.data.email === 'cara@example.com')!;
+      const dan = rows.find((r) => r.data.email === 'dan@example.com')!;
+      await alice()
+        .post('/tables/customers/rows/delete')
+        .send({
+          rows: [
+            { id: cara.id, version: cara.version },
+            { id: dan.id, version: dan.version + 1 },
+          ],
+        })
+        .expect(409);
+      const removed = await alice()
+        .post('/tables/customers/rows/delete')
+        .send({ rows: [{ id: cara.id, version: cara.version }] })
+        .expect(200);
+      expect(removed.body).toEqual({ removed: 1 });
+    });
+
+    it('sets retention from a date field, refusing a field that is not a date', async () => {
+      await alice()
+        .put('/tables/customers/retention')
+        .send({ retention: { days: 180, from: 'name' } })
+        .expect(400);
+      const set = await alice()
+        .put('/tables/customers/retention')
+        .send({ retention: { days: 180, from: 'delivered_on' } })
+        .expect(200);
+      expect(set.body).toMatchObject({
+        retention: { days: 180, from: 'delivered_on' },
+      });
+      const cleared = await alice()
+        .put('/tables/customers/retention')
+        .send({ retention: null })
+        .expect(200);
+      expect(cleared.body).toMatchObject({ retention: null });
+    });
+
+    it('removes an entry, and audited everything without names or values', async () => {
+      await alice().delete(`/do-not-store/${entryId}`).expect(204);
+      await alice().delete(`/do-not-store/${entryId}`).expect(404);
+      const changes = await userChanges();
+      const actions = changes.map((c) => c.action);
+      for (const action of [
+        'do_not_store_add',
+        'do_not_store_update',
+        'delete_rows',
+        'set_retention',
+        'do_not_store_remove',
+      ]) {
+        expect(actions).toContain(action);
+      }
+      const dataProtection = changes.filter((c) =>
+        String(c.action).match(/do_not_store|delete_rows|set_retention/),
+      );
+      expect(JSON.stringify(dataProtection)).not.toMatch(/Ann Lee|Cara Diaz/);
+      expect(
+        changes.find((c) => c.doNotStoreOverride !== undefined),
+      ).toMatchObject({ action: 'add_row', doNotStoreOverride: ['name'] });
+    });
+  });
+
   // Every route, as someone who isn't a member: refused before anything runs.
   it.each([
     ['get', '/tables'],
@@ -313,6 +493,14 @@ describe('Records API (e2e)', () => {
     ['delete', '/tables/orders/rows'],
     ['delete', '/tables/orders'],
     ['post', '/tables'],
+    ['post', '/search'],
+    ['post', '/export'],
+    ['post', '/tables/orders/rows/delete'],
+    ['put', '/tables/orders/retention'],
+    ['get', '/do-not-store'],
+    ['post', '/do-not-store'],
+    ['patch', '/do-not-store/x'],
+    ['delete', '/do-not-store/x'],
   ] as const)('refuses %s %s to a non-member', (method, path) =>
     as(bobJwt)[method](path).expect(403),
   );

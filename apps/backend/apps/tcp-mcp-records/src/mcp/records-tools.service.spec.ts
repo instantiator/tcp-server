@@ -328,9 +328,9 @@ describe('RecordsToolsService', () => {
         changes: { email: 'ann@example.com' },
       });
 
-      expect(records.doNotStoreMatches).toHaveBeenCalledWith(companyId, {
-        email: 'ann@example.com',
-      });
+      expect(records.doNotStoreMatches).toHaveBeenCalledWith(companyId, [
+        { email: 'ann@example.com' },
+      ]);
       expect(text).toContain('not_stored');
       expect(records.update).not.toHaveBeenCalled();
     });

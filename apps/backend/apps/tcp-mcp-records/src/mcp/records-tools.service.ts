@@ -381,7 +381,7 @@ export class RecordsToolsService {
   ): Promise<
     { status: 'not_stored'; fields: string[]; note: string } | undefined
   > {
-    const fields = await this.records.doNotStoreMatches(companyId, data);
+    const fields = await this.records.doNotStoreMatches(companyId, [data]);
     if (fields.length === 0) return undefined;
     this.read(companyId, agentId, {
       tool,

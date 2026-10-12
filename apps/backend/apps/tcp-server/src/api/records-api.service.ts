@@ -1,14 +1,18 @@
 import {
   AuditEventType,
+  type DoNotStoreEntry,
   type NewTable,
   type RecordData,
   RecordsError,
   RecordsService,
+  type SearchResult,
   type TableDefinition,
+  type TableRetention,
   type TableRows,
   type TableSummary,
   type TcpCompany,
   type TimedRecord,
+  type VersionedRef,
   recordsDownloadName,
 } from '@tcp/shared';
 import {
@@ -106,7 +110,13 @@ export class RecordsApiService {
     table: string,
     data: RecordData,
     userId: string | null,
+    confirmDoNotStore = false,
   ): Promise<TimedRecord> {
+    const overridden = await this.checkDoNotStore(
+      company,
+      [data],
+      confirmDoNotStore,
+    );
     const result = await call(() =>
       this.records.insert(company.id, table, data),
     );
@@ -122,6 +132,7 @@ export class RecordsApiService {
       table,
       recordId: result.record.id,
       after: result.record.data,
+      ...overridden,
     });
     return call(() =>
       this.records.readRow(company.id, table, result.record.id),
@@ -136,7 +147,13 @@ export class RecordsApiService {
     changes: RecordData,
     version: number,
     userId: string | null,
+    confirmDoNotStore = false,
   ): Promise<TimedRecord> {
+    const overridden = await this.checkDoNotStore(
+      company,
+      [changes],
+      confirmDoNotStore,
+    );
     const change = await call(() =>
       this.records.update(company.id, table, { id }, changes, version),
     );
@@ -146,6 +163,7 @@ export class RecordsApiService {
       recordId: id,
       before: change.before,
       after: change.record.data,
+      ...overridden,
     });
     return call(() => this.records.readRow(company.id, table, id));
   }
@@ -178,6 +196,7 @@ export class RecordsApiService {
     table: string,
     file: Buffer,
     userId: string | null,
+    confirmDoNotStore = false,
   ): Promise<{ inserted: number; alreadyExists: number }> {
     const definition = await call(() =>
       this.records.describeTable(company.id, table),
@@ -185,6 +204,9 @@ export class RecordsApiService {
     const { rows, errors } = await call(() =>
       parseCsv(definition, file.toString('utf8')),
     );
+    const overridden = errors.length
+      ? {}
+      : await this.checkDoNotStore(company, rows, confirmDoNotStore);
     const result = errors.length
       ? { inserted: 0, alreadyExists: 0, errors }
       : await call(() => this.records.insertMany(company.id, table, rows));
@@ -202,6 +224,7 @@ export class RecordsApiService {
       table,
       inserted: result.inserted,
       alreadyExists: result.alreadyExists,
+      ...overridden,
     });
     return { inserted: result.inserted, alreadyExists: result.alreadyExists };
   }
@@ -266,6 +289,185 @@ export class RecordsApiService {
       filename: recordsDownloadName(company.slug, 'tables', 'zip'),
       body: zipSync(files),
     };
+  }
+
+  /** Rows in any table with a field containing `q`, grouped by table. */
+  search(company: TcpCompany, q: string): Promise<SearchResult> {
+    return call(() => this.records.search(company.id, q));
+  }
+
+  /**
+   * Chosen rows as a download: per table, the ids picked or `all`. One table
+   * is a CSV; several are a zip with a CSV each, as for a subject access
+   * request across tables.
+   */
+  async exportSelection(
+    company: TcpCompany,
+    tables: Record<string, string[] | 'all'>,
+  ): Promise<RecordsDownload> {
+    const names = Object.keys(tables);
+    if (names.length === 0) {
+      throw new BadRequestException('choose at least one table to export');
+    }
+    const files: Record<string, Uint8Array> = {};
+    for (const name of names) {
+      const ids = tables[name];
+      if (
+        ids !== 'all' &&
+        !(Array.isArray(ids) && ids.every((id) => typeof id === 'string'))
+      ) {
+        throw new BadRequestException(
+          `'${name}' must be 'all' or a list of record ids`,
+        );
+      }
+      files[`${name}.csv`] = strToU8(
+        ids === 'all'
+          ? await this.csvText(company, name)
+          : await this.selectionCsv(company, name, ids),
+      );
+    }
+    if (names.length === 1) {
+      return {
+        filename: recordsDownloadName(company.slug, names[0], 'csv'),
+        body: files[`${names[0]}.csv`],
+      };
+    }
+    return {
+      filename: recordsDownloadName(company.slug, 'tables', 'zip'),
+      body: zipSync(files),
+    };
+  }
+
+  /**
+   * Deletes chosen records together, all or none. Audited by id only: the
+   * audit log isn't erased with the records, so it mustn't keep their values.
+   */
+  async deleteRows(
+    company: TcpCompany,
+    table: string,
+    rows: VersionedRef[],
+    userId: string | null,
+  ): Promise<{ removed: number }> {
+    const removed = await call(() =>
+      this.records.deleteRows(company.id, table, rows),
+    );
+    await this.changed(company, userId, {
+      action: 'delete_rows',
+      table,
+      recordIds: rows.map((r) => r.id),
+      removed,
+    });
+    return { removed };
+  }
+
+  /** Sets or clears how long a table keeps its rows. */
+  async setRetention(
+    company: TcpCompany,
+    table: string,
+    retention: TableRetention | null,
+    userId: string | null,
+  ): Promise<TableDefinition> {
+    const definition = await call(() =>
+      this.records.setRetention(company.id, table, retention),
+    );
+    await this.changed(company, userId, {
+      action: 'set_retention',
+      table,
+      retention,
+    });
+    return definition;
+  }
+
+  listDoNotStore(company: TcpCompany): Promise<DoNotStoreEntry[]> {
+    return call(() => this.records.listDoNotStore(company.id));
+  }
+
+  /** Adds a do-not-store entry. Audited by id, never by its text. */
+  async addDoNotStore(
+    company: TcpCompany,
+    entry: { value: string; note?: string },
+    userId: string | null,
+  ): Promise<DoNotStoreEntry> {
+    const added = await call(() =>
+      this.records.addDoNotStore(company.id, entry, {
+        role: 'user',
+        id: userId,
+      }),
+    );
+    await this.changed(company, userId, {
+      action: 'do_not_store_add',
+      entryId: added.id,
+    });
+    return added;
+  }
+
+  async updateDoNotStore(
+    company: TcpCompany,
+    id: string,
+    changes: { value?: string; note?: string | null },
+    userId: string | null,
+  ): Promise<DoNotStoreEntry> {
+    const updated = await call(() =>
+      this.records.updateDoNotStore(company.id, id, changes),
+    );
+    await this.changed(company, userId, {
+      action: 'do_not_store_update',
+      entryId: id,
+    });
+    return updated;
+  }
+
+  async removeDoNotStore(
+    company: TcpCompany,
+    id: string,
+    userId: string | null,
+  ): Promise<void> {
+    await call(() => this.records.removeDoNotStore(company.id, id));
+    await this.changed(company, userId, {
+      action: 'do_not_store_remove',
+      entryId: id,
+    });
+  }
+
+  /**
+   * Warns before a person stores something on the do-not-store list: a 409
+   * `do_not_store` naming the matching fields, unless they have confirmed.
+   * A confirmed override is returned for the audit, by field name only.
+   */
+  private async checkDoNotStore(
+    company: TcpCompany,
+    rows: RecordData[],
+    confirmed: boolean,
+  ): Promise<{ doNotStoreOverride?: string[] }> {
+    const fields = await call(() =>
+      this.records.doNotStoreMatches(company.id, rows),
+    );
+    if (fields.length === 0) return {};
+    if (!confirmed) {
+      throw new ConflictException({
+        message: `${fields.join(', ')} match the do-not-store list`,
+        code: 'do_not_store',
+        fields,
+      });
+    }
+    return { doNotStoreOverride: fields };
+  }
+
+  /** Chosen rows of one table as CSV, oldest first. */
+  private async selectionCsv(
+    company: TcpCompany,
+    table: string,
+    ids: string[],
+  ): Promise<string> {
+    const definition = await call(() =>
+      this.records.describeTable(company.id, table),
+    );
+    const rows = await call(() =>
+      this.records.readRowsById(company.id, table, ids),
+    );
+    return (
+      UTF8_BOM + toCsv(definition, [], true) + toCsv(definition, rows, false)
+    );
   }
 
   private async csvText(company: TcpCompany, table: string): Promise<string> {

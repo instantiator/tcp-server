@@ -781,11 +781,13 @@ describe('RecordsService (integration)', () => {
           { role: 'user', id: 'u' },
         );
         expect(
-          await records.doNotStoreMatches(companyId, {
-            customer: 'Mrs CARA  diaz',
-            note: 'Deliver to Cara Diazepam Ltd',
-            qty: 1,
-          }),
+          await records.doNotStoreMatches(companyId, [
+            {
+              customer: 'Mrs CARA  diaz',
+              note: 'Deliver to Cara Diazepam Ltd',
+              qty: 1,
+            },
+          ]),
         ).toEqual(['customer']);
       });
 
@@ -793,7 +795,7 @@ describe('RecordsService (integration)', () => {
         const other = await newCompany();
         expect(await records.listDoNotStore(other)).toEqual([]);
         expect(
-          await records.doNotStoreMatches(other, { customer: 'Cara Diaz' }),
+          await records.doNotStoreMatches(other, [{ customer: 'Cara Diaz' }]),
         ).toEqual([]);
         const [entry] = await records.listDoNotStore(companyId);
         await expect(

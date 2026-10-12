@@ -1,3 +1,5 @@
+import type { UUID } from '../uuid';
+
 /**
  * A request the caller can correct: an unknown table, a record that fails its
  * schema, a key that clashes. The message is written for a language model, so
@@ -124,7 +126,7 @@ export interface VersionedRef {
 
 /** What a retention sweep deleted from one table. */
 export interface RetentionSweep {
-  companyId: string;
+  companyId: UUID;
   table: string;
   deleted: number;
 }

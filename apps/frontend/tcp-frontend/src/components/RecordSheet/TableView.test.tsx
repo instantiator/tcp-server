@@ -48,6 +48,7 @@ const TABLE: RecordTableRows = {
       },
       required: ['order_id', 'qty'],
     },
+    retention: null,
   },
   rows: [
     row('r2', { order_id: 'A2', qty: 5, paid: true }, 3),

@@ -6,6 +6,7 @@ import {
   doNotStoreFields,
   normaliseDoNotStore,
 } from './do-not-store';
+import type { UUID } from '../uuid';
 import { RecordSql } from './filter-sql';
 import {
   AGGREGATE_OPS,
@@ -769,23 +770,23 @@ export class RecordsService {
   }
 
   /**
-   * The fields of `data` that hold an entry of the company's do-not-store
-   * list, as a whole phrase in any case; empty when the record may be stored.
+   * The fields, across `rows`, that hold an entry of the company's
+   * do-not-store list as a whole phrase in any case; empty when they may all
+   * be stored. The list is read once, however many rows there are.
    */
   // ponytail: checked before the write, outside its transaction, so an entry
   // added in that instant can miss one write. Lock the list if that matters.
   async doNotStoreMatches(
     companyId: string,
-    data: RecordData,
+    rows: RecordData[],
   ): Promise<string[]> {
-    const rows = await this.ds.query<{ normalised: string }[]>(
-      `SELECT "normalised" FROM "record_do_not_store" WHERE "companyId" = $1`,
-      [companyId],
-    );
-    return doNotStoreFields(
-      data,
-      rows.map((r) => r.normalised),
-    );
+    const entries = (
+      await this.ds.query<{ normalised: string }[]>(
+        `SELECT "normalised" FROM "record_do_not_store" WHERE "companyId" = $1`,
+        [companyId],
+      )
+    ).map((r) => r.normalised);
+    return [...new Set(rows.flatMap((row) => doNotStoreFields(row, entries)))];
   }
 
   /**
@@ -928,7 +929,7 @@ export class RecordsService {
     const tables = await this.ds.query<
       {
         id: string;
-        companyId: string;
+        companyId: UUID;
         name: string;
         retention: TableRetention;
       }[]
