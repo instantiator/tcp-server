@@ -233,32 +233,36 @@ provider's own hint or the configured backoff elapses, or by an explicit
 
 A failed run gets a plain-words reason from one typed table, `RunFailureCode` and `RUN_FAILURE_MESSAGES` in `libs/tcp-shared/src/llm/run-failure.ts`. Each message says what went wrong and, where the user can act, what to do. It is stored as the agent's `errorMessage`, and the task's `failureReason` repeats it behind a prefix such as "The planner stopped." See [tasks.md](tasks.md#failure-reasons).
 
-| Code                     | When                                                                              |
-| ------------------------ | --------------------------------------------------------------------------------- |
-| `unreachable`            | Nothing answered at the provider's address                                        |
-| `llm_timeout`            | The provider didn't answer one call in time (`LLM_TIMEOUT_MS`)                    |
-| `auth_rejected`          | HTTP 401: the key is wrong or missing                                             |
-| `forbidden`              | HTTP 403: the key can't use this model                                            |
-| `model_not_found`        | The model, or the address, is wrong                                               |
-| `tools_unsupported`      | The model refused the request, probably because it can't call tools               |
-| `provider_error`         | HTTP 5xx: a fault at the provider                                                 |
-| `no_llm_config`          | No model is set for the role or its company                                       |
-| `run_timed_out`          | The run's wall-clock limit passed (`AGENT_LOOP_TIMEOUT_MS`)                       |
-| `iteration_limit`        | The run took more LLM calls than `AGENT_ITERATIONS` allows                        |
-| `context_too_long`       | The conversation outgrew the context window, even after trimming                  |
-| `required_tools_missing` | The agent stopped without its required tool, even after reminders                 |
-| `no_output`              | The model returned nothing, even after a retry                                    |
-| `repeating_call`         | The same tool call got the same result three times in a row                       |
-| `service_unavailable`    | A supporting service didn't respond: storage, Redis, the database, an MCP service |
-| `stopped`                | The run was stopped by something else                                             |
-| `interrupted`            | Startup recovery found the agent stranded and couldn't carry it on                |
-| `unexpected`             | Anything else; the message keeps this system's own error text                     |
+| Code                                                            | When                                                                                                                                                                 |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unreachable`                                                   | Nothing answered at the provider's address                                                                                                                           |
+| `llm_timeout`                                                   | The provider didn't answer one call in time (`LLM_TIMEOUT_MS`)                                                                                                       |
+| `auth_rejected`                                                 | HTTP 401: the key is wrong or missing                                                                                                                                |
+| `forbidden`                                                     | HTTP 403: the key can't use this model                                                                                                                               |
+| `model_not_found`                                               | The model, or the address, is wrong                                                                                                                                  |
+| `tools_unsupported`                                             | The model refused the request, probably because it can't call tools                                                                                                  |
+| `provider_error`                                                | HTTP 5xx: a fault at the provider                                                                                                                                    |
+| `no_llm_config`                                                 | No model is set for the role or its company                                                                                                                          |
+| `run_timed_out`                                                 | The run's wall-clock limit passed (`AGENT_LOOP_TIMEOUT_MS`)                                                                                                          |
+| `iteration_limit`                                               | The run took more LLM calls than `AGENT_ITERATIONS` allows                                                                                                           |
+| `context_too_long`                                              | The conversation outgrew the context window, even after trimming                                                                                                     |
+| `required_tools_missing`                                        | The agent stopped without its required tool, even after reminders                                                                                                    |
+| `no_output`                                                     | The model returned nothing, even after a retry                                                                                                                       |
+| `repeating_call`                                                | The same tool call got the same result three times in the run (001.04: anywhere, not just in a row)                                                                  |
+| `service_unavailable`                                           | A supporting service didn't respond: storage, Redis, the database, an MCP service. An MCP server that refuses three connections in a row mid-run counts too (001.04) |
+| `stopped`                                                       | The run was stopped by something else                                                                                                                                |
+| `interrupted`                                                   | Startup recovery found the agent stranded and couldn't carry it on                                                                                                   |
+| `unexpected`                                                    | Anything else; the message keeps this system's own error text, its type, and the last tool called                                                                    |
+| `review_exhausted`                                              | A reviewer rejected the step too many times                                                                                                                          |
+| `data_protection`, `tools_exhausted`, `information_unavailable` | The agent gave up with `fail_assignment`                                                                                                                             |
 
 A rate limit is not a failure: it pauses the agent (see below).
 
 - **A provider's own text is never shown.** It may hold whatever answered at the address. It goes to the log only. Provider errors are classified by `classifyProbeError`, the same code the model check uses, so a run and a model check word an error the same way.
 - **Adding a reason** is one code, one message (the type makes it required) and one test.
 - **If saving a failure itself throws,** `failRun` logs the code and reason and still tells tcp-server, so the task fails. The agent row can stay `running`; see [outstanding-issues.md](outstanding-issues.md).
+- **Telling tcp-server is retried** after 1s, 5s and 25s (001.04). If every try fails, `FailureUnreportedError` reaches the worker, which stops taking jobs (`ShutdownListenerService.halt`) and logs why. A cancelled drain or a restart takes jobs again.
+- **The code travels with the message.** `notifyFailed` sends both; tcp-server stores the code as `failureCode`.
 
 ### Repeating-call stop
 

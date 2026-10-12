@@ -1033,6 +1033,24 @@ the CSV format). There are two ways in, and both show the same view.
   record count, **Download** and a **More actions** menu. **Download all** is in
   the tray's actions.
 
+### Data protection (001.04)
+
+- **Every sheet has a checkbox column.** With rows ticked, **Download** and
+  **Delete** act on those rows (their labels say how many); deleting asks
+  first and offers a copy. A click in a cell still edits it.
+- **Retention…** in the More menu sets how long a table keeps its rows; the
+  table view says so under its title.
+- **Warn and allow.** Editing, adding or appending data that matches the
+  do-not-store list goes through `useDoNotStoreGuard`: a confirmation naming
+  the fields, then the save again with `confirmDoNotStore`. Saying no keeps an
+  Add row dialog open.
+- **The Data protection tab** (`#data-protection`, after Tables, not
+  force-mounted) has a note on data protection duties with a link to the
+  ICO's page, a search across every table (one sheet per table; every match,
+  or ticked rows across tables, can be downloaded or deleted), and the
+  do-not-store list, drawn with the same grid and filterable. An edit made from
+  a search patches that row in place in the cached search (ADR-027).
+
 ### The table view
 
 `src/components/RecordSheet/` holds `TableView`, shared by the dialog and the
