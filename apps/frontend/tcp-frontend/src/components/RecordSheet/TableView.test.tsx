@@ -4,11 +4,12 @@ import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RecordTableRows, TimedRecord } from '../../api/dtos';
-import { t } from '../../strings';
+import { t, tCount } from '../../strings';
 import { expectNoA11yViolations } from '../../test-support/axe';
 import {
   fetchMock,
   installFetchMock,
+  requestedUrls,
   respondByRoute,
 } from '../../test-support/fetch-mock';
 import { announceRecords } from './announceRecords';
@@ -20,6 +21,15 @@ vi.mock('./announceRecords', () => ({
 }));
 
 const BASE = '/api/company/c1/records';
+
+/** AG Grid's checkbox column for picking rows; the record's own cells come after it. */
+const SELECTION_COLUMN = 'ag-Grid-SelectionColumn';
+
+/** A row's or header row's cells of `role`, without the selection checkbox column. */
+const dataCells = (parent: HTMLElement, role: 'gridcell' | 'columnheader') =>
+  within(parent)
+    .queryAllByRole(role)
+    .filter((c) => c.getAttribute('col-id') !== SELECTION_COLUMN);
 
 const row = (
   id: string,
@@ -102,7 +112,7 @@ describe('TableView', () => {
     const grid = await screen.findByRole('grid', {
       name: t('records.sheet.label', { table: 'orders' }),
     });
-    const headers = within(grid).getAllByRole('columnheader');
+    const headers = dataCells(grid, 'columnheader');
     // AG Grid pads header text and adds the sort position after the name.
     expect(headers.map((h) => h.textContent.trim().split(/\s+/)[0])).toEqual([
       'order_id',
@@ -117,7 +127,7 @@ describe('TableView', () => {
     const firstCells = within(grid)
       .getAllByRole('row')
       .slice(1)
-      .map((r) => within(r).getAllByRole('gridcell')[0].textContent);
+      .map((r) => dataCells(r, 'gridcell')[0].textContent);
     expect(firstCells).toEqual(['A2', 'A1']);
     await expectNoA11yViolations(document.body);
   });
@@ -127,11 +137,9 @@ describe('TableView', () => {
     waitFor(() => {
       const target = within(screen.getByRole('grid'))
         .getAllByRole('row')
-        .find(
-          (r) => within(r).queryAllByRole('gridcell')[0]?.textContent === key,
-        );
+        .find((r) => dataCells(r, 'gridcell')[0]?.textContent === key);
       if (target === undefined) throw new Error(`no row ${key} yet`);
-      return within(target).getAllByRole('gridcell')[column];
+      return dataCells(target, 'gridcell')[column];
     });
 
   /** The bodies sent to `path` with `method`. */
@@ -402,5 +410,228 @@ describe('TableView', () => {
     await waitFor(async () =>
       expect(await bodiesTo(/\/rows\/r1$/, 'PATCH')).toHaveLength(2),
     );
+  });
+
+  describe('data protection (001.04)', () => {
+    /** The grid row whose key is `key`, once drawn. */
+    const rowFor = (key: string) =>
+      waitFor(() => {
+        const found = within(screen.getByRole('grid'))
+          .getAllByRole('row')
+          .find((r) => dataCells(r, 'gridcell')[0]?.textContent === key);
+        if (found === undefined) throw new Error(`no row ${key} yet`);
+        return found;
+      });
+
+    it('downloads and deletes only the ticked rows, after asking', async () => {
+      const user = userEvent.setup();
+      respondByRoute([
+        [/\/rows\/delete$/, { body: { removed: 2 } }],
+        [/\/records\/export$/, { body: 'csv' }],
+        [new RegExp(`${BASE}/tables/orders$`), { body: TABLE }],
+      ]);
+      URL.createObjectURL = vi.fn(() => 'blob:x');
+      URL.revokeObjectURL = vi.fn();
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(
+        () => undefined,
+      );
+      renderView();
+
+      await user.click(within(await rowFor('A1')).getByRole('checkbox'));
+      await user.click(within(await rowFor('A2')).getByRole('checkbox'));
+
+      await user.click(
+        screen.getByRole('button', {
+          name: tCount('records.selected.download', 2),
+        }),
+      );
+      await waitFor(() =>
+        expect(requestedUrls().some((u) => u.endsWith(`${BASE}/export`))).toBe(
+          true,
+        ),
+      );
+
+      await user.click(
+        screen.getByRole('button', {
+          name: tCount('records.selected.delete', 2),
+        }),
+      );
+      const confirm = await screen.findByRole('alertdialog', {
+        name: tCount('records.deleteRows.heading', 2),
+      });
+      expect(
+        within(confirm).getByRole('button', { name: t('confirm.no') }),
+      ).toHaveFocus();
+      await user.click(
+        within(confirm).getByRole('button', {
+          name: t('records.deleteRows.confirm'),
+        }),
+      );
+
+      await waitFor(async () =>
+        expect(await bodiesTo(/\/rows\/delete$/, 'POST')).toHaveLength(1),
+      );
+      const [sent] = await bodiesTo(/\/rows\/delete$/, 'POST');
+      expect(sent).toEqual({
+        rows: expect.arrayContaining([
+          { id: 'r1', version: 1 },
+          { id: 'r2', version: 3 },
+        ]) as unknown,
+      });
+      expect(announceRecords).toHaveBeenCalledWith(
+        'records.announce.rowsDeleted',
+        { table: 'orders', count: 2 },
+      );
+      vi.restoreAllMocks();
+    });
+
+    it('sets retention from a date field, offering only date fields', async () => {
+      const user = userEvent.setup();
+      const dated: RecordTableRows = {
+        ...TABLE,
+        definition: {
+          ...TABLE.definition,
+          schema: {
+            ...TABLE.definition.schema,
+            properties: {
+              ...TABLE.definition.schema.properties,
+              delivered_on: { type: 'string', format: 'date' },
+            },
+          },
+        },
+      };
+      respondByRoute([
+        [
+          /\/retention$/,
+          {
+            body: {
+              ...dated.definition,
+              retention: { days: 180, from: 'delivered_on' },
+            },
+          },
+        ],
+        [new RegExp(`${BASE}/tables/orders$`), { body: dated }],
+      ]);
+      renderView();
+
+      await user.click(
+        await screen.findByRole('button', {
+          name: t('records.more', { table: 'orders' }),
+        }),
+      );
+      await user.click(
+        screen.getByRole('menuitem', { name: t('records.action.retention') }),
+      );
+      const dialog = await screen.findByRole('dialog', {
+        name: t('records.retention.heading', { table: 'orders' }),
+      });
+      const radios = within(dialog)
+        .getAllByRole('radio')
+        .map((r) => r.closest('label')?.textContent);
+      expect(radios).toEqual([
+        t('records.retention.never'),
+        t('records.retention.fromUpdated'),
+        t('records.retention.fromField', { field: 'delivered_on' }),
+      ]);
+
+      await user.click(
+        within(dialog).getByRole('radio', {
+          name: t('records.retention.fromField', { field: 'delivered_on' }),
+        }),
+      );
+      await user.type(
+        within(dialog).getByRole('textbox', {
+          name: t('records.retention.days'),
+        }),
+        '180',
+      );
+      await user.click(
+        within(dialog).getByRole('button', {
+          name: t('records.retention.save'),
+        }),
+      );
+
+      await waitFor(async () =>
+        expect(await bodiesTo(/\/retention$/, 'PUT')).toEqual([
+          { retention: { days: 180, from: 'delivered_on' } },
+        ]),
+      );
+      expect(
+        await screen.findByText(
+          t('records.retention.summaryField', {
+            days: 180,
+            field: 'delivered_on',
+          }),
+        ),
+      ).toBeVisible();
+    });
+
+    /** Edits A1's qty to 7, against a server that refuses it as do-not-store until confirmed. */
+    const editRefused = async (user: ReturnType<typeof userEvent.setup>) => {
+      respondByRoute([
+        [
+          /\/rows\/r1\?confirmDoNotStore=true$/,
+          { body: row('r1', { order_id: 'A1', qty: 7 }, 2) },
+        ],
+        [
+          /\/rows\/r1$/,
+          {
+            status: 409,
+            body: { code: 'do_not_store', fields: ['qty'], message: 'x' },
+          },
+        ],
+        [new RegExp(`${BASE}/tables/orders$`), { body: TABLE }],
+      ]);
+      renderView();
+      await user.click(await cell('A1', 2));
+      const editor = await within(await cell('A1', 2)).findByRole('spinbutton');
+      await user.clear(editor);
+      await user.type(editor, '7{Enter}');
+      return screen.findByRole('alertdialog', {
+        name: t('records.doNotStore.heading'),
+      });
+    };
+
+    it('asks before storing a do-not-store match, and stores it once confirmed', async () => {
+      const user = userEvent.setup();
+      const ask = await editRefused(user);
+      expect(ask).toHaveTextContent('qty');
+
+      await user.click(
+        within(ask).getByRole('button', {
+          name: t('records.doNotStore.confirm'),
+        }),
+      );
+
+      await waitFor(() =>
+        expect(
+          requestedUrls().filter((u) => u.includes('confirmDoNotStore=true')),
+        ).toHaveLength(1),
+      );
+      await waitFor(() =>
+        expect(announceRecords).toHaveBeenCalledWith('records.announce.saved', {
+          field: 'qty',
+          row: 'A1',
+        }),
+      );
+    });
+
+    it('stores nothing when the person says no, and says so', async () => {
+      const user = userEvent.setup();
+      const ask = await editRefused(user);
+
+      await user.click(
+        within(ask).getByRole('button', { name: t('confirm.no') }),
+      );
+
+      await waitFor(() =>
+        expect(announceRecords).toHaveBeenCalledWith(
+          'records.announce.doNotStoreKept',
+        ),
+      );
+      expect(
+        requestedUrls().filter((u) => u.includes('confirmDoNotStore')),
+      ).toEqual([]);
+    });
   });
 });

@@ -815,6 +815,40 @@ const strings = {
     'This deletes the record. You can undo it until you leave this table.',
   'records.deleteRow.confirm': 'Delete row',
   'records.error.generic': 'Something went wrong. Try again.',
+  'records.doNotStore.heading': 'Store something on the do-not-store list?',
+  'records.doNotStore.message':
+    "{fields}: matches an entry on this company's do-not-store list. Someone asked for their details not to be kept. Store it anyway?",
+  'records.doNotStore.confirm': 'Store anyway',
+  'records.announce.doNotStoreKept':
+    'Not saved: it matches the do-not-store list',
+  'records.selected.download.one': 'Download {count} selected row',
+  'records.selected.download.other': 'Download {count} selected rows',
+  'records.selected.delete.one': 'Delete {count} selected row',
+  'records.selected.delete.other': 'Delete {count} selected rows',
+  'records.deleteRows.heading.one': 'Delete {count} row?',
+  'records.deleteRows.heading.other': 'Delete {count} rows?',
+  'records.deleteRows.message':
+    "They can't be brought back, and undo won't restore them. Download a copy first if you need one.",
+  'records.deleteRows.confirm': 'Delete rows',
+  'records.announce.rowsDeleted': 'Rows deleted from {table}: {count}',
+  'records.action.retention': 'Retention…',
+  'records.retention.heading': 'How long {table} keeps its rows',
+  'records.retention.when': 'Delete rows',
+  'records.retention.never': 'Never: keep them until someone deletes them',
+  'records.retention.fromUpdated': 'A number of days after their last change',
+  'records.retention.fromField': 'A number of days after {field}',
+  'records.retention.days': 'Days',
+  'records.retention.daysHint': 'From 1 to 36500 (a hundred years).',
+  'records.retention.daysInvalid': 'Enter a whole number from 1 to 36500.',
+  'records.retention.note':
+    'Rows are checked every hour. A row whose date is blank is kept.',
+  'records.retention.save': 'Save',
+  'records.retention.cancel': 'Cancel',
+  'records.retention.summaryUpdated':
+    'Rows are deleted {days} days after their last change.',
+  'records.retention.summaryField':
+    'Rows are deleted {days} days after {field}.',
+  'records.announce.retentionSet': 'Retention saved for {table}',
   'records.announce.saved': 'Saved: {field} of {row}',
   'records.announce.notSaved': 'Not saved: {message}',
   'records.announce.stale':

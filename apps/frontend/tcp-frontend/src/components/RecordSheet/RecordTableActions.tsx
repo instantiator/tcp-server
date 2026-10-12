@@ -8,6 +8,7 @@ import {
   Popover,
   type Key,
 } from 'react-aria-components';
+import type { RecordTableDefinition } from '../../api/dtos';
 import { ApiError, recordErrorBody } from '../../api/errors';
 import {
   downloadRecordTableCsv,
@@ -19,7 +20,9 @@ import { t, tCount } from '../../strings';
 import { ButtonRow } from '../ButtonRow/ButtonRow';
 import { Dialog } from '../Dialog/Dialog';
 import { Icon, WithTooltip } from '../Icon/Icon';
+import { RetentionDialog } from './RetentionDialog';
 import { announceRecords } from './announceRecords';
+import { useDoNotStoreGuard } from './useDoNotStoreGuard';
 
 export interface RecordTableActionsProps {
   readonly companyId: string;
@@ -31,10 +34,18 @@ export interface RecordTableActionsProps {
   readonly onReload?: () => void;
   /** Called once the table is deleted, so the caller can move focus somewhere stable. */
   readonly onDropped?: () => void;
+  /** Adds "Retention…" to the menu, for a view that has the table's definition. */
+  readonly definition?: RecordTableDefinition;
   readonly portalContainer?: Element | undefined;
 }
 
-type Open = 'append' | 'clear' | 'drop' | null;
+type Open = 'append' | 'retention' | 'clear' | 'drop' | null;
+
+/** Narrows a menu key to the dialog it opens, without a cast. */
+const asOpen = (key: Key): Open =>
+  key === 'append' || key === 'retention' || key === 'clear' || key === 'drop'
+    ? key
+    : null;
 
 /**
  * The less common things to do to a whole table — append a CSV, clear it,
@@ -50,6 +61,7 @@ export const RecordTableActions = ({
   records,
   onReload,
   onDropped,
+  definition,
   portalContainer,
 }: RecordTableActionsProps) => {
   const [open, setOpen] = useState<Open>(null);
@@ -62,9 +74,7 @@ export const RecordTableActions = ({
       onReload?.();
       announceRecords('records.announce.reloaded', { table });
     } else {
-      setOpen(
-        key === 'append' || key === 'clear' || key === 'drop' ? key : null,
-      );
+      setOpen(asOpen(key));
     }
   };
 
@@ -106,6 +116,11 @@ export const RecordTableActions = ({
             {onReload !== undefined && (
               <MenuItem id="reload">{t('records.action.reload')}</MenuItem>
             )}
+            {definition !== undefined && (
+              <MenuItem id="retention">
+                {t('records.action.retention')}
+              </MenuItem>
+            )}
             <MenuItem id="clear">{t('records.action.clear')}</MenuItem>
             <MenuItem id="drop">{t('records.action.drop')}</MenuItem>
           </Menu>
@@ -116,6 +131,15 @@ export const RecordTableActions = ({
         <AppendCsvDialog
           companyId={companyId}
           table={table}
+          portalContainer={portalContainer}
+          onClose={() => setOpen(null)}
+        />
+      )}
+
+      {open === 'retention' && definition !== undefined && (
+        <RetentionDialog
+          companyId={companyId}
+          definition={definition}
           portalContainer={portalContainer}
           onClose={() => setOpen(null)}
         />
@@ -197,6 +221,7 @@ const AppendCsvDialog = ({
   readonly onClose: () => void;
 }) => {
   const append = useAppendRecordsCsv(companyId, table);
+  const { guard, dialog } = useDoNotStoreGuard(portalContainer);
   const inputId = useId();
   const errorsId = useId();
   const [file, setFile] = useState<File | null>(null);
@@ -212,7 +237,10 @@ const AppendCsvDialog = ({
       return;
     }
     try {
-      const result = await append.mutateAsync({ file });
+      const result = await guard((confirmDoNotStore) =>
+        append.mutateAsync({ file, confirmDoNotStore }),
+      );
+      if (result === undefined) return;
       announceRecords('records.announce.appended', {
         table,
         inserted: result.inserted,
@@ -289,6 +317,7 @@ const AppendCsvDialog = ({
           </Button>
         </ButtonRow>
       </form>
+      {dialog}
     </Dialog>
   );
 };

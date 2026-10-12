@@ -610,7 +610,11 @@ export const useAddRecordMutation = (companyId: string, table: string) =>
         api.POST('/api/company/{companyId}/records/tables/{table}/rows', {
           params: {
             path: { companyId, table },
-            query: { confirmDoNotStore: input.confirmDoNotStore },
+            // Sent only when confirmed, so an ordinary save's URL is unchanged.
+            query:
+              input.confirmDoNotStore === true
+                ? { confirmDoNotStore: true }
+                : undefined,
           },
           body: { data: input.data },
         }),
@@ -631,7 +635,11 @@ export const useUpdateRecordMutation = (companyId: string, table: string) =>
         api.PATCH('/api/company/{companyId}/records/tables/{table}/rows/{id}', {
           params: {
             path: { companyId, table, id: input.id },
-            query: { confirmDoNotStore: input.confirmDoNotStore },
+            // Sent only when confirmed, so an ordinary save's URL is unchanged.
+            query:
+              input.confirmDoNotStore === true
+                ? { confirmDoNotStore: true }
+                : undefined,
           },
           body: { changes: input.changes, version: input.version },
         }),

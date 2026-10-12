@@ -6,8 +6,10 @@ import {
   NumberEditorModule,
   NumberFilterModule,
   PaginationModule,
+  QuickFilterModule,
   RenderApiModule,
   RowApiModule,
+  RowSelectionModule,
   SelectEditorModule,
   TextEditorModule,
   TextFilterModule,
@@ -19,6 +21,8 @@ import {
   type GridApi,
   type GridReadyEvent,
   type IRowNode,
+  type RowSelectionOptions,
+  type SelectionChangedEvent,
 } from 'ag-grid-community';
 import { AgGridReact, type CustomCellRendererProps } from 'ag-grid-react';
 import { fieldOrder } from '@tcp/shared/client';
@@ -41,6 +45,8 @@ ModuleRegistry.registerModules([
   CellStyleModule,
   RenderApiModule,
   RowApiModule,
+  RowSelectionModule,
+  QuickFilterModule,
   // Explains a misconfigured option in the console, in development only.
   ...(import.meta.env.DEV ? [ValidationModule] : []),
   // Translation (not yet done): AG Grid's own text needs `LocaleModule`
@@ -65,6 +71,19 @@ const sheetTheme = themeQuartz.withParams({
 
 /** Rows a page shows. Pages, not virtual scrolling, so every row is in the DOM (ADR-035). */
 const PAGE_SIZE = 100;
+
+/**
+ * Several rows at once, by a checkbox column; the header's box picks every
+ * row the filters show. A click in a cell still edits it rather than
+ * selecting the row, so selecting is always a deliberate act.
+ */
+const ROW_SELECTION: RowSelectionOptions = {
+  mode: 'multiRow',
+  checkboxes: true,
+  headerCheckbox: true,
+  selectAll: 'filtered',
+  enableClickSelection: false,
+};
 
 /**
  * The "Updated" column's display: the reader's own date and time format.
@@ -145,6 +164,15 @@ export interface RecordSheetProps {
   readonly onApi?: (api: GridApi<TimedRecord> | null) => void;
   /** Where filter menus open, to stay inside the office view in full screen. */
   readonly portalContainer?: Element | undefined;
+  /**
+   * Turns on row selection, and hears the selected rows whenever they change.
+   * Without it, the sheet has no checkbox column.
+   */
+  readonly onSelectionChange?: (rows: TimedRecord[]) => void;
+  /** Fields shown but never edited, such as who added an entry. */
+  readonly readOnlyFields?: ReadonlySet<string>;
+  /** Shows only the rows with this text in any cell. */
+  readonly quickFilter?: string;
 }
 
 /**
@@ -168,6 +196,9 @@ const RecordSheet = ({
   describedBy,
   onApi,
   portalContainer,
+  onSelectionChange,
+  readOnlyFields,
+  quickFilter,
 }: RecordSheetProps) => {
   const apiRef = useRef<GridApi<TimedRecord> | null>(null);
   const fields = useMemo(() => fieldOrder(definition), [definition]);
@@ -187,6 +218,7 @@ const RecordSheet = ({
       const isDate = schema.type === 'string' && schema.format === 'date';
       return {
         colId: field,
+        editable: !readOnlyFields?.has(field),
         headerName: definition.primaryKey.includes(field)
           ? t('records.column.key', { field })
           : field,
@@ -272,7 +304,7 @@ const RecordSheet = ({
         (position.current.get(nodeA.data?.id ?? '') ?? -1),
     });
     return columns;
-  }, [definition, fields]);
+  }, [definition, fields, readOnlyFields]);
 
   const context = useMemo(
     (): SheetContext => ({
@@ -319,6 +351,13 @@ const RecordSheet = ({
         pagination
         paginationPageSize={PAGE_SIZE}
         paginationPageSizeSelector={false}
+        rowSelection={
+          onSelectionChange === undefined ? undefined : ROW_SELECTION
+        }
+        onSelectionChanged={({ api }: SelectionChangedEvent<TimedRecord>) =>
+          onSelectionChange?.(api.getSelectedRows())
+        }
+        quickFilterText={quickFilter}
         ensureDomOrder
         suppressRowVirtualisation
         suppressColumnVirtualisation
