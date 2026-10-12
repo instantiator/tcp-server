@@ -2,8 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import {
+  AGENT_FAILURE_CODES,
   AuditClientService,
   InternalApiClient,
+  MODE_TOOLS,
   TcpAssignmentMode,
   MODE_PROMPTS,
   ToolResult,
@@ -11,6 +13,7 @@ import {
   ok,
   relay4xxOrError,
   requiredToolForMode,
+  runFailure,
 } from '@tcp/shared';
 import { taskPrompts } from '../tasks-prompts';
 import { taskToolDescriptions } from '../tasks-tool-descriptions';
@@ -99,6 +102,7 @@ export class TasksToolsService {
     this.registerCreatePlan(server);
     this.registerCompleteAssignment(server);
     this.registerAssureAssignment(server);
+    this.registerFailAssignment(server);
     return server;
   }
 
@@ -308,6 +312,68 @@ export class TasksToolsService {
             e,
             'assure_assignment',
             taskPrompts.error_assure_assignment,
+          );
+        }
+      },
+    );
+  }
+
+  /**
+   * Lets an agent give up on its assignment with a reason. It reuses the
+   * failure route tcp-agent calls when a run breaks, so the step, the task
+   * and any waiting consultation fail exactly as they would then. The agent
+   * row turns `failed`, which the run notices and stops on.
+   */
+  private registerFailAssignment(server: McpServer): void {
+    server.registerTool(
+      'fail_assignment',
+      {
+        description: taskToolDescriptions.fail_assignment,
+        inputSchema: {
+          agentId: z.uuid().describe('The calling agent UUID.'),
+          companyId: z.uuid().describe('The company UUID.'),
+          reason: z
+            .enum(AGENT_FAILURE_CODES)
+            .describe('Why the assignment cannot be done.'),
+          explanation: z
+            .string()
+            .min(1)
+            .max(500)
+            .describe('One or two sentences the user will read.'),
+        },
+      },
+      async ({
+        agentId,
+        companyId,
+        reason,
+        explanation,
+      }): Promise<ToolResult> => {
+        const caller = await this.tryFetchAssignment(agentId);
+        if (!caller) return err(taskPrompts.error_no_assignment);
+        if (!MODE_TOOLS[caller.mode].canFail) {
+          return err(
+            interpolate(taskPrompts.error_cannot_fail, { mode: caller.mode }),
+          );
+        }
+
+        // The message carries on after the explanation, so drop its full stop.
+        const detail = explanation.trim().replace(/[.!?]+$/, '');
+        const failure = runFailure(reason, { detail });
+        try {
+          await this.api.post(`/internal/agent/${agentId}/fail`, {
+            reason: failure.message,
+            code: failure.code,
+          });
+          this.audit.record(companyId, 'agent', agentId, 'state_change', {
+            source: 'fail_assignment',
+            code: failure.code,
+          });
+          return ok(taskPrompts.assignment_failed);
+        } catch (e) {
+          return this.relayOrError(
+            e,
+            'fail_assignment',
+            taskPrompts.error_fail_assignment,
           );
         }
       },

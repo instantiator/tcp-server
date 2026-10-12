@@ -128,6 +128,21 @@ describe('filterToolsForMode', () => {
     }
   });
 
+  it.each<[TcpAssignmentMode, boolean]>([
+    ['plan', true],
+    ['implement', true],
+    ['qa', true],
+    ['finalise', true],
+    ['chat', false],
+    ['consultee', false],
+  ])('%s: offers fail_assignment = %s', (mode, offered) => {
+    const kept = filterToolsForMode(
+      [tool('tasks', 'fail_assignment')],
+      mode,
+    ).map((t) => t.toolName);
+    expect(kept.includes('tasks__fail_assignment')).toBe(offered);
+  });
+
   it('read-write modes keep the full set', () => {
     for (const mode of [
       'implement',

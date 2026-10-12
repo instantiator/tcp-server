@@ -446,6 +446,12 @@ describe('tcp-mcp-tasks -> tcp-server (cross-service e2e)', () => {
       const stored = await assignmentRepo.findOneByOrFail({ id: target.id });
       expect(stored.status).toBe('failed');
       expect(stored.qaAttempts).toBe(MAX_QA_ATTEMPTS);
+      expect(stored.failureCode).toBe('review_exhausted');
+      const task = await taskRepo.findOneByOrFail({ id: target.taskId! });
+      expect(task.failureCode).toBe('review_exhausted');
+      expect(task.failureReason).toMatch(
+        /^Step 1 stopped\. The work didn't pass review/,
+      );
     });
 
     it('relays the server’s refusal when rejecting without feedback', async () => {
@@ -473,6 +479,62 @@ describe('tcp-mcp-tasks -> tcp-server (cross-service e2e)', () => {
 
       expect(text).toContain('implement');
       expect(text).toContain('complete_assignment');
+    });
+  });
+  describe('fail_assignment', () => {
+    it('fails the step and its task with the code and the agent’s explanation', async () => {
+      const task = await taskRepo.save(
+        taskRepo.create({
+          companyId,
+          request: 'Store an order.',
+          shortcode: `fail-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          status: 'in-progress',
+        }),
+      );
+      const { assignment, agent } = await seedAgentOn({
+        mode: 'implement',
+        taskId: task.id,
+        orderIndex: 0,
+      });
+
+      const text = await callTool(tools, 'fail_assignment', {
+        agentId: agent.id,
+        companyId,
+        reason: 'data_protection',
+        explanation: 'The customer is on the do-not-store list.',
+      });
+
+      expect(text).toContain('Assignment failed');
+      const step = await assignmentRepo.findOneByOrFail({ id: assignment.id });
+      expect(step.status).toBe('failed');
+      expect(step.failureCode).toBe('data_protection');
+      expect(step.failureReason).toContain(
+        'The customer is on the do-not-store list',
+      );
+      const failedTask = await taskRepo.findOneByOrFail({ id: task.id });
+      expect(failedTask.status).toBe('failed');
+      expect(failedTask.failureCode).toBe('data_protection');
+      expect(failedTask.failureReason).toMatch(/^Step 1 stopped\. /);
+      expect((await agentRepo.findOneByOrFail({ id: agent.id })).status).toBe(
+        AgentStatus.Failed,
+      );
+    });
+
+    it('refuses a chat-mode caller and changes nothing', async () => {
+      const { assignment, agent } = await seedAgentOn({ mode: 'chat' });
+
+      const text = await callTool(tools, 'fail_assignment', {
+        agentId: agent.id,
+        companyId,
+        reason: 'tools_exhausted',
+        explanation: 'Nothing works.',
+      });
+
+      expect(text).toContain('chat mode');
+      const stored = await assignmentRepo.findOneByOrFail({
+        id: assignment.id,
+      });
+      expect(stored.status).toBe('in-progress');
     });
   });
 });

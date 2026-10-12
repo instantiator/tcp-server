@@ -56,6 +56,7 @@ import {
 interface TerminalLogMessages {
   paused: string;
   completed: string;
+  failed: string;
   cancelled: string;
 }
 
@@ -315,6 +316,7 @@ export class AgentLoopService {
           completed: `Agent ${agent.id} loop ending with status 'completed' (set by tool call)`,
           // Task cancellation already set this status (and recorded the audit
           // event) — just stop the loop, no further writes.
+          failed: `Agent ${agent.id} loop ending: assignment failed`,
           cancelled: `Agent ${agent.id} loop ending: task cancelled`,
         })
       ) {
@@ -399,6 +401,7 @@ export class AgentLoopService {
         await this.settleRunResult(agent, ctx, result, tracker, {
           paused: `Agent ${agent.id} paused during required-tool reminder — exiting`,
           completed: `Agent ${agent.id} completed after required-tool reminder ${attempt}`,
+          failed: `Agent ${agent.id} loop ending during required-tool reminder: assignment failed`,
           cancelled: `Agent ${agent.id} loop ending during required-tool reminder: task cancelled`,
         })
       ) {
@@ -491,6 +494,10 @@ export class AgentLoopService {
           AuditEventType.AgentLoopCompletion,
           buildCompletionSummary(tracker),
         );
+        return true;
+      // `fail_assignment` already failed the run on tcp-server.
+      case AgentStatus.Failed:
+        this.logger.log(messages.failed);
         return true;
       case AgentStatus.Cancelled:
         this.logger.log(messages.cancelled);

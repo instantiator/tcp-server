@@ -417,6 +417,39 @@ describe('AgentLoopService', () => {
     expect(notifyFailed).not.toHaveBeenCalled();
   });
 
+  it('stops without reporting a second failure when the agent fails its own assignment', async () => {
+    const { agent } = await seedAgentAndRole();
+    // `fail_assignment` has tcp-server mark the agent failed mid-turn; the
+    // run must notice and stop, not fail it again or complete it.
+    const stubGraph = {
+      streamEvents: jest.fn().mockImplementation(() => ({
+        [Symbol.asyncIterator]: async function* () {
+          for (const ev of SUCCESS_EVENTS) yield ev;
+          await agentRepo.update(agent.id, { status: AgentStatus.Failed });
+        },
+      })),
+      getState: jest
+        .fn()
+        .mockResolvedValue({ values: { messages: [] }, next: [] }),
+      updateState: jest.fn().mockResolvedValue({}),
+    };
+    jest.mocked(StateGraph).mockImplementation(
+      () =>
+        ({
+          addNode: jest.fn().mockReturnThis(),
+          addEdge: jest.fn().mockReturnThis(),
+          compile: jest.fn().mockReturnValue(stubGraph),
+        }) as unknown as InstanceType<typeof StateGraph>,
+    );
+
+    await service.run(agent.id, undefined, new AbortController());
+
+    const updated = await agentRepo.findOneByOrFail({ id: agent.id });
+    expect(updated.status).toBe(AgentStatus.Failed);
+    expect(notifyComplete).not.toHaveBeenCalled();
+    expect(notifyFailed).not.toHaveBeenCalled();
+  });
+
   it('checks context budget before running, using the resolved window size and loaded tools', async () => {
     const { agent } = await seedAgentAndRole();
 

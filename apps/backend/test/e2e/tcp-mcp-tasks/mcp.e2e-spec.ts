@@ -61,6 +61,7 @@ describe('tcp-mcp-tasks MCP endpoint (e2e)', () => {
       'complete_assignment',
       'create_plan',
       'describe_server',
+      'fail_assignment',
     ]);
   });
 });

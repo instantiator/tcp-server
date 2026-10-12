@@ -1,7 +1,7 @@
 {
   // Framing shown at the top of describe_server, before the per-mode instructions
   // (which are embedded live from @tcp/shared's MODE_PROMPTS so they can't drift).
-  "describe_header": "## Tasks Service\n\nThe tasks service is how you complete your assignment. Which tool you call depends on your mode:\n- plan mode → `create_plan`\n- implement, finalise and consultee modes → `complete_assignment`\n- qa mode → `assure_assignment`\n\nYou may only call the tool that matches your current mode; the others will return an error explaining this. Call your mode's tool exactly once, as your final action, after the work is done.",
+  "describe_header": "## Tasks Service\n\nThe tasks service is how you complete your assignment. Which tool you call depends on your mode:\n- plan mode → `create_plan`\n- implement, finalise and consultee modes → `complete_assignment`\n- qa mode → `assure_assignment`\n\nYou may only call the tool that matches your current mode; the others will return an error explaining this. Call your mode's tool exactly once, as your final action, after the work is done.\n\nIf the assignment can't be done, `fail_assignment` ends it with a reason instead (plan, implement, qa and finalise modes only).",
 
   // Prepended to the per-mode blocks when the caller's mode is known.
   "current_mode": "You are currently in **{{mode}}** mode — your completion tool is `{{tool}}`.",
@@ -15,6 +15,12 @@
   // assure_assignment success. {{verdict}} is 'accepted' or 'rejected'.
   "assignment_assured": "Assurance recorded ({{verdict}}). Your QA run is now finished.",
 
+  // fail_assignment success.
+  "assignment_failed": "Assignment failed and your run is now finished. The user will see your reason.",
+
+  // Returned when fail_assignment is called from a mode that can't fail (chat, consultee).
+  "error_cannot_fail": "You cannot fail an assignment in {{mode}} mode. Explain the problem in your answer instead.",
+
   // Returned when the caller's mode does not permit the tool it called.
   // {{mode}} is the caller's actual mode, {{tool}} the tool they should use instead.
   "error_wrong_mode": "You cannot use this tool: you are in {{mode}} mode. Use the `{{tool}}` tool instead.",
@@ -25,5 +31,6 @@
   // Generic failures (non-corrective — network/server errors).
   "error_create_plan": "Could not submit the plan. Check your inputs and try again.",
   "error_complete_assignment": "Could not submit the assignment. Your work may still have been recorded.",
-  "error_assure_assignment": "Could not record your assurance. Try again."
+  "error_assure_assignment": "Could not record your assurance. Try again.",
+  "error_fail_assignment": "Could not record the failure. Try again."
 }

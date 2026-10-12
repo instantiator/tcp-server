@@ -334,6 +334,51 @@ describe('TasksToolsService', () => {
     });
   });
 
+  describe('fail_assignment', () => {
+    it.each(['plan', 'implement', 'qa', 'finalise'])(
+      'fails the run with its code for a %s-mode caller',
+      async (mode) => {
+        mockAssignment(axiosGet, { id: assignmentId, mode, taskId });
+        axiosPost.mockResolvedValue({ data: {} });
+
+        const text = await callTool(service, 'fail_assignment', {
+          agentId,
+          companyId,
+          reason: 'data_protection',
+          explanation: ' Ann Lee asked not to be stored. ',
+        });
+
+        expect(axiosPost).toHaveBeenCalledWith(
+          `http://tcp-server:3000/internal/agent/${agentId}/fail`,
+          {
+            code: 'data_protection',
+            reason:
+              "The agent stopped because the work would mean storing personal data on the company's do-not-store list: Ann Lee asked not to be stored. Check the list, or change the request.",
+          },
+          expect.any(Object),
+        );
+        expect(text).toContain('Assignment failed');
+      },
+    );
+
+    it.each(['chat', 'consultee'])(
+      'refuses a %s-mode caller without failing anything',
+      async (mode) => {
+        mockAssignment(axiosGet, { id: assignmentId, mode, taskId: null });
+
+        const text = await callTool(service, 'fail_assignment', {
+          agentId,
+          companyId,
+          reason: 'tools_exhausted',
+          explanation: 'Nothing works.',
+        });
+
+        expect(axiosPost).not.toHaveBeenCalled();
+        expect(text).toContain(`cannot fail an assignment in ${mode} mode`);
+      },
+    );
+  });
+
   it('reports when the caller’s assignment cannot be resolved', async () => {
     axiosGet.mockRejectedValue(new Error('boom'));
     const text = await callTool(service, 'create_plan', {
