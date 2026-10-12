@@ -43,6 +43,8 @@ ModuleRegistry.registerModules([
   RowApiModule,
   // Explains a misconfigured option in the console, in development only.
   ...(import.meta.env.DEV ? [ValidationModule] : []),
+  // Translation (not yet done): AG Grid's own text needs `LocaleModule`
+  // registered here, alongside `getLocaleText` on the grid below.
 ]);
 
 /**
@@ -64,7 +66,11 @@ const sheetTheme = themeQuartz.withParams({
 /** Rows a page shows. Pages, not virtual scrolling, so every row is in the DOM (ADR-035). */
 const PAGE_SIZE = 100;
 
-/** The "Updated" column's display: the reader's own date and time format. */
+/**
+ * The "Updated" column's display: the reader's own date and time format.
+ * Translation: this follows the browser's locale, not the app's language. When
+ * the app chooses a language, pass that locale here instead of `undefined`.
+ */
 const updatedFormat = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'medium',
   timeStyle: 'short',
@@ -287,6 +293,16 @@ const RecordSheet = ({
   return (
     <div className="record-sheet">
       <AgGridReact<TimedRecord>
+        // Translation (not yet done): the text AG Grid writes itself — filter
+        // menus ("Contains", "Equals"), pagination ("Page 1 of 1"), "No Rows To
+        // Show", and its ARIA labels — comes from its built-in English. To
+        // translate it, register `LocaleModule` (above) and add
+        // `getLocaleText={({ key, defaultValue }) => …}` here, looking each key
+        // up through `t()` (say as `records.grid.<key>`) and falling back to
+        // `defaultValue`. Prefer `getLocaleText` to a static `localeText` map:
+        // both are read only when the grid is created, but the callback keeps
+        // every string behind `t()`. Our own text (headers, true/false, marks)
+        // already goes through `t()`. Tracked in docs/outstanding-issues.md.
         theme={sheetTheme}
         rowData={rowData}
         columnDefs={columnDefs}

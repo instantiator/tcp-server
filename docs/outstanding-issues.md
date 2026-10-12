@@ -686,8 +686,18 @@ the sheet open, the person sees the old value until they reload. The version
 check stops their edit overwriting the agent's (409 `stale`), and the table
 reloads.
 
+When this is done, the sheet should also:
+
+- **Say when it is out of date.** When a row or the table changes elsewhere,
+  show that the sheet needs an update (a notice with **Reload**, and one polite
+  announcement), rather than silently replacing what the person is reading.
+- **Stop edits to rows that are out of date.** A row known to have changed
+  elsewhere becomes read-only, and is marked as changed elsewhere (not by colour
+  alone), until the sheet is reloaded. The version check stays as the backstop.
+
 **Act when:** a user reports a stale view, or records join the company stream.
-Then publish record changes as audit events and patch the cached table from them.
+Then publish record changes as audit events, and use them to mark the sheet and
+its rows out of date. Planned in [001.05](prompts/phase%2004%20-%20utility/001.05.00.prompt%20-%20live%20record%20updates%20%28draft%29.md).
 
 ## Clear and delete are open to every company member
 
@@ -731,8 +741,12 @@ Add a form built on the same JSON Schema rules.
 The sheet's filter menus, pagination ("Page 1 of 1") and similar text come from
 AG Grid's own English locale, not from `src/strings.ts`.
 
-**Act when:** translation work starts. Pass a `localeText` object built from
-`t()` to the grid.
+**Act when:** translation work starts. Register AG Grid's `LocaleModule` and
+give the grid a `getLocaleText` callback that looks each key up through `t()`,
+falling back to AG Grid's default. Comments in
+`apps/frontend/tcp-frontend/src/components/RecordSheet/RecordSheet.tsx` mark
+the places to change, including the "Updated" column's date format, which
+follows the browser's locale.
 
 ## `MaskSecretsInterceptor` flattens a returned `StreamableFile`
 
