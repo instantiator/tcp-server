@@ -49,6 +49,15 @@ export interface NewTable {
   uniqueKeys?: string[][];
 }
 
+/**
+ * How long a table keeps its rows: `days` after `from`, which is a date field
+ * of the table, or `updated` for the row's last change. Set by people only.
+ */
+export interface TableRetention {
+  days: number;
+  from: string;
+}
+
 /** A table as stored and as `describe_table` returns it. */
 export interface TableDefinition {
   id: string;
@@ -57,6 +66,8 @@ export interface TableDefinition {
   schema: TableSchema;
   primaryKey: string[];
   uniqueKeys: string[][];
+  /** Null when rows are kept until someone deletes them. */
+  retention: TableRetention | null;
 }
 
 /** A record's field values. */
@@ -90,6 +101,48 @@ export interface TableRows {
   rows: TimedRecord[];
   total: number;
   truncated: boolean;
+}
+
+/** One table's rows that matched a search. */
+export interface SearchGroup {
+  definition: TableDefinition;
+  rows: TimedRecord[];
+}
+
+/** Rows across every table that matched a search, grouped by table. */
+export interface SearchResult {
+  groups: SearchGroup[];
+  /** True when there were more matches than a search returns. */
+  truncated: boolean;
+}
+
+/** A record to act on, at the version the caller last saw. */
+export interface VersionedRef {
+  id: string;
+  version: number;
+}
+
+/** What a retention sweep deleted from one table. */
+export interface RetentionSweep {
+  companyId: string;
+  table: string;
+  deleted: number;
+}
+
+/**
+ * One entry on a company's do-not-store list: text, such as a person's name
+ * or email address, that agents may not store in a record table.
+ */
+export interface DoNotStoreEntry {
+  id: string;
+  value: string;
+  note: string | null;
+  /** Who added it: a person or an agent. */
+  addedByRole: 'user' | 'agent';
+  /** The user identifier or agent id that added it, when known. */
+  addedById: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** One row that failed its schema in a batch insert; `row` counts from 1. */

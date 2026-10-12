@@ -250,6 +250,7 @@ describe('RecordsToolsService', () => {
       },
       primaryKey: ['order_id'],
       uniqueKeys: [],
+      retention: null,
     };
     records.createTable.mockResolvedValue(definition);
     await callTool(service, 'create_table', {

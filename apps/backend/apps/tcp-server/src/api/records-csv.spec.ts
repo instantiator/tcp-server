@@ -19,6 +19,7 @@ const ORDERS: TableDefinition = {
   },
   primaryKey: ['order_id'],
   uniqueKeys: [],
+  retention: null,
 };
 
 describe('records CSV', () => {

@@ -28,6 +28,7 @@ const DEFINITION: TableDefinition = {
   },
   primaryKey: ['order_id'],
   uniqueKeys: [],
+  retention: null,
 };
 
 const TIMED = {
