@@ -725,6 +725,36 @@ export const useDeleteRecordsMutation = (companyId: string, table: string) =>
       ),
   });
 
+/**
+ * Deletes chosen rows from several tables: each table's rows all or none.
+ * Returns how many went in all.
+ */
+// ponytail: one request per table, so a failure part-way leaves the earlier
+// tables' deletions done. Add a cross-table route if that ever matters.
+export const useDeleteRecordsAcrossMutation = (companyId: string) =>
+  useMutation({
+    mutationFn: async (
+      byTable: Readonly<
+        Record<string, readonly { id: string; version: number }[]>
+      >,
+    ) => {
+      let removed = 0;
+      for (const [table, rows] of Object.entries(byTable)) {
+        const result = await unwrap(
+          api.POST(
+            '/api/company/{companyId}/records/tables/{table}/rows/delete',
+            {
+              params: { path: { companyId, table } },
+              body: { rows: [...rows] },
+            },
+          ),
+        );
+        removed += result.removed;
+      }
+      return { removed };
+    },
+  });
+
 /** Sets how long a table keeps its rows, or `null` to keep them until deleted. */
 export const useSetRetentionMutation = (companyId: string, table: string) =>
   useMutation({

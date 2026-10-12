@@ -208,9 +208,37 @@ describe('record mutations that patch the cache', () => {
     if (!(error instanceof ApiError)) return;
     expect(error.status).toBe(409);
     expect(recordErrorBody(error).code).toBe('stale');
+    // Any search showing the row reloads too (001.04).
     expect(invalidatedKeys(spy)).toEqual([
       queryKeys.recordTable(C, T),
       queryKeys.recordTables(C),
+      ['record', 'search'],
+    ]);
+  });
+
+  it('an edit made from a search replaces the row where it stands in the search', async () => {
+    respondByRoute([[/rows\/b$/, { body: row('b', 2, { x: 9 }) }]]);
+    const { result, queryClient } = setup(() => useUpdateRecord(C, T));
+    const searchKey = queryKeys.recordSearch(C, 'x');
+    queryClient.setQueryData(searchKey, {
+      groups: [
+        {
+          definition: tableOf([]).definition,
+          rows: [row('a'), row('b'), row('c')],
+        },
+      ],
+      truncated: false,
+    });
+    await act(() =>
+      result.current.mutateAsync({ id: 'b', changes: { x: 9 }, version: 1 }),
+    );
+    const search = queryClient.getQueryData<{
+      groups: { rows: TimedRecord[] }[];
+    }>(searchKey);
+    expect(search?.groups[0].rows.map((r) => [r.id, r.version])).toEqual([
+      ['a', 1],
+      ['b', 2],
+      ['c', 1],
     ]);
   });
 

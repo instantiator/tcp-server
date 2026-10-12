@@ -173,6 +173,8 @@ export interface RecordSheetProps {
   readonly readOnlyFields?: ReadonlySet<string>;
   /** Shows only the rows with this text in any cell. */
   readonly quickFilter?: string;
+  /** The grid's accessible name, where "{table} records" would be wrong. */
+  readonly label?: string;
 }
 
 /**
@@ -199,6 +201,7 @@ const RecordSheet = ({
   onSelectionChange,
   readOnlyFields,
   quickFilter,
+  label,
 }: RecordSheetProps) => {
   const apiRef = useRef<GridApi<TimedRecord> | null>(null);
   const fields = useMemo(() => fieldOrder(definition), [definition]);
@@ -368,7 +371,10 @@ const RecordSheet = ({
         }
         onGridReady={({ api }: GridReadyEvent<TimedRecord>) => {
           apiRef.current = api;
-          api.setGridAriaProperty('label', t('records.sheet.label', { table }));
+          api.setGridAriaProperty(
+            'label',
+            label ?? t('records.sheet.label', { table }),
+          );
           api.setGridAriaProperty('describedby', describedBy);
           onApi?.(api);
         }}

@@ -12,6 +12,7 @@ import { NewEnquiryNotifications } from './activity/NewEnquiryNotifications';
 import { NewNotificationToasts } from './activity/NewNotificationToasts';
 import { NotificationsList } from './activity/NotificationsList';
 import { TasksList } from './activity/TasksList';
+import { DataProtectionPanel } from './DataProtectionPanel';
 import { TablesPanel } from './TablesPanel';
 import './activity/activity.css';
 
@@ -32,6 +33,9 @@ const DEFAULT_TAB = 'visualisation';
 
 /** The record tables' tab. Its hash may name a table too: `#tables/orders`. */
 const TABLES_TAB = 'tables';
+
+/** Search, export and delete across tables, and the do-not-store list (001.04). */
+const DATA_PROTECTION_TAB = 'data-protection';
 
 const isActivityTab = (key: string): key is ActivityTab =>
   ACTIVITY_TABS.some((tab) => tab.id === key);
@@ -87,7 +91,11 @@ export const CompanyTabs = ({
   const navigate = useNavigate();
   const [hashKey, tableHash = ''] = hash.slice(1).split('/');
   const selectedKey =
-    isActivityTab(hashKey) || hashKey === TABLES_TAB ? hashKey : DEFAULT_TAB;
+    isActivityTab(hashKey) ||
+    hashKey === TABLES_TAB ||
+    hashKey === DATA_PROTECTION_TAB
+      ? hashKey
+      : DEFAULT_TAB;
   const openTable = tableHash === '' ? null : decodeURIComponent(tableHash);
   const onSelectionChange = (key: Key): void => {
     void navigate(
@@ -203,6 +211,9 @@ export const CompanyTabs = ({
           <Tab id={TABLES_TAB} className="react-aria-Tab">
             {t('company.tab.tables')}
           </Tab>
+          <Tab id={DATA_PROTECTION_TAB} className="react-aria-Tab">
+            {t('company.tab.dataProtection')}
+          </Tab>
         </TabList>
         <TabPanel
           id={DEFAULT_TAB}
@@ -243,6 +254,16 @@ export const CompanyTabs = ({
                 { replace: true },
               )
             }
+          />
+        </TabPanel>
+        {/* Not force-mounted, like Tables: its sheets load when it opens. */}
+        <TabPanel
+          id={DATA_PROTECTION_TAB}
+          className="react-aria-TabPanel company-page__tab"
+        >
+          <DataProtectionPanel
+            companyId={companyId}
+            companySlug={companySlug}
           />
         </TabPanel>
       </Tabs>

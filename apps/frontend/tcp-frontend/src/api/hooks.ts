@@ -37,6 +37,7 @@ import type {
   ConversationDTO,
   KnowledgeDocumentDTO,
   RecordTableDefinition,
+  RecordSearchResult,
   RecordTableRetention,
   RecordTableRows,
   TimedRecord,
@@ -68,6 +69,7 @@ import {
   useRecordTables,
   useUpdateRecordMutation,
   useAddDoNotStoreMutation,
+  useDeleteRecordsAcrossMutation,
   useDeleteRecordsMutation,
   useDoNotStoreList,
   useRecordSearch,
@@ -716,14 +718,36 @@ const useRecordCache = (companyId: string, table: string) => {
       queryKey: queryKeys.recordTables(companyId),
     });
   };
-  // A refused edit (often a 409) means the table moved on: reload it.
+  // A refused edit (often a 409) means the table moved on: reload it, and any
+  // search showing its rows.
   const reload = () => {
     void queryClient.invalidateQueries({ queryKey: tableKey });
     void queryClient.invalidateQueries({
       queryKey: queryKeys.recordTables(companyId),
     });
+    void queryClient.invalidateQueries({ queryKey: ['record', 'search'] });
   };
-  return { edit, reload };
+  // A row changed from a search: replace it where it stands in every search
+  // showing it, as an edit does in the table (ADR-027).
+  const replaceInSearches = (row: TimedRecord) =>
+    queryClient.setQueriesData<RecordSearchResult>(
+      { queryKey: ['record', 'search'] },
+      (current) =>
+        current === undefined
+          ? current
+          : {
+              ...current,
+              groups: current.groups.map((group) =>
+                group.definition.name !== table
+                  ? group
+                  : {
+                      ...group,
+                      rows: group.rows.map((r) => (r.id === row.id ? row : r)),
+                    },
+              ),
+            },
+    );
+  return { edit, reload, replaceInSearches };
 };
 
 /** Returns a function that reloads the open table; the UI's explicit "Reload". */
@@ -746,7 +770,7 @@ export const useAddRecord = (companyId: string, table: string) => {
 
 /** Replaces the edited row in the cached table, in the same position. */
 export const useUpdateRecord = (companyId: string, table: string) => {
-  const { edit, reload } = useRecordCache(companyId, table);
+  const { edit, reload, replaceInSearches } = useRecordCache(companyId, table);
   const update = useUpdateRecordMutation(companyId, table);
   return useMutation({
     mutationFn: (
@@ -756,11 +780,13 @@ export const useUpdateRecord = (companyId: string, table: string) => {
         version: number;
       } & DoNotStoreConfirmation,
     ) => update.mutateAsync(input),
-    onSuccess: (row: TimedRecord) =>
+    onSuccess: (row: TimedRecord) => {
       edit((t) => ({
         ...t,
         rows: t.rows.map((r) => (r.id === row.id ? row : r)),
-      })),
+      }));
+      replaceInSearches(row);
+    },
     onError: reload,
   });
 };
@@ -836,6 +862,23 @@ export const useDeleteRecords = (companyId: string, table: string) => {
       });
     },
     onError: reload,
+  });
+};
+
+/**
+ * Deletes chosen rows from several tables, as from a search's results.
+ * Every record query reloads afterwards, whatever happened.
+ */
+export const useDeleteRecordsAcross = (companyId: string) => {
+  const queryClient = useQueryClient();
+  const remove = useDeleteRecordsAcrossMutation(companyId);
+  return useMutation({
+    mutationFn: (
+      byTable: Readonly<
+        Record<string, readonly { id: string; version: number }[]>
+      >,
+    ) => remove.mutateAsync(byTable),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['record'] }),
   });
 };
 
