@@ -31,6 +31,17 @@ const TERMINAL_STATUSES = new Set<AgentStatus>([
   AgentStatus.Cancelled,
 ]);
 
+/** Waits before each retry of a failure report tcp-server didn't take. */
+export const FAILURE_REPORT_RETRY_MS = [1_000, 5_000, 25_000];
+
+/**
+ * tcp-server never heard that a run failed, even after retries, so its task
+ * is stuck. The worker halts on it: carrying on would strand more tasks.
+ */
+export class FailureUnreportedError extends Error {
+  override readonly name = 'FailureUnreportedError';
+}
+
 /** What an aborted run's limits were, for its failure message. */
 export interface AbortLimits {
   timeoutMs: number;
@@ -272,25 +283,29 @@ export class AgentRunStatusService {
    * from.
    */
   async failRun(agent: TcpAgent, failure: RunFailure): Promise<void> {
-    const reason = failure.message;
+    let report: boolean;
     try {
-      await this.recordFailure(agent, failure);
+      report = await this.recordFailure(agent, failure);
     } catch (err) {
       // The failure itself couldn't be saved. tcp-server is still told, so
       // the task fails with its reason; the agent row may be left `running`
       // (see docs/outstanding-issues.md).
       this.logger.error(
-        `Agent ${agent.id} failed (${failure.code}: ${reason}), and saving that failed: ${String(err)}`,
+        `Agent ${agent.id} failed (${failure.code}: ${failure.message}), and saving that failed: ${String(err)}`,
       );
-      this.auditClient.notifyFailed(agent.id, failure);
+      report = true;
     }
+    if (report) await this.reportFailure(agent, failure);
   }
 
-  /** Writes the failure, unless the agent has already finished or paused. */
+  /**
+   * Writes the failure, unless the agent has already finished or paused.
+   * @returns whether tcp-server should be told.
+   */
   private async recordFailure(
     agent: TcpAgent,
     failure: RunFailure,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const reason = failure.message;
     const fresh = await this.agentRepo.findOneBy({ id: agent.id });
     if (
@@ -300,7 +315,7 @@ export class AgentRunStatusService {
       this.logger.warn(
         `Agent ${agent.id} already ${fresh.status} — ignoring failure: ${reason}`,
       );
-      return;
+      return false;
     }
     if (
       fresh?.status === AgentStatus.Paused &&
@@ -311,14 +326,41 @@ export class AgentRunStatusService {
       this.logger.warn(
         `Agent ${agent.id} stopped by a ${fresh.pauseReason} pause — staying paused rather than failing: ${reason}`,
       );
-      return;
+      return false;
     }
     this.logger.error(
       `Agent ${agent.id} run failed (${failure.code}): ${reason}`,
     );
     // The terminal `failed` state_change (with reason) is recorded by
-    // tcp-server's failAgent via notifyFailed below — no local duplicate.
+    // tcp-server's failAgent once told — no local duplicate.
     await this.updateStatus(agent, AgentStatus.Failed);
-    this.auditClient.notifyFailed(agent.id, failure);
+    return true;
+  }
+
+  /**
+   * Tells tcp-server about a failure, retrying while it can't be reached.
+   * @throws {FailureUnreportedError} when every attempt failed: the worker
+   *   then stops taking jobs rather than leave more tasks stuck.
+   */
+  private async reportFailure(
+    agent: TcpAgent,
+    failure: RunFailure,
+  ): Promise<void> {
+    let lastError: unknown;
+    for (const wait of [0, ...FAILURE_REPORT_RETRY_MS]) {
+      if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
+      try {
+        await this.auditClient.notifyFailed(agent.id, failure);
+        return;
+      } catch (err) {
+        lastError = err;
+        this.logger.warn(
+          `Telling tcp-server that agent ${agent.id} failed didn't work: ${String(err)}`,
+        );
+      }
+    }
+    throw new FailureUnreportedError(
+      `tcp-server was never told that agent ${agent.id} failed (${failure.code}: ${failure.message}): ${String(lastError)}`,
+    );
   }
 }

@@ -38,6 +38,8 @@ export interface ShutdownStatus {
   restart: boolean;
   /** True when this deployment can restart itself (it runs under a supervisor). */
   restartSupported: boolean;
+  /** True when the system started this drain itself, because a failure couldn't be recorded. */
+  haltedOnError: boolean;
 }
 
 /**
@@ -70,6 +72,8 @@ export class SystemDrainService implements OnModuleInit, OnModuleDestroy {
   private markedByDrain = 0;
   /** The worker's last reported in-flight count; null until it has reported since the drain began. */
   private lastReportedActive: number | null = null;
+  /** Set by {@link haltOnError}, cleared when the drain is cancelled. */
+  private haltedOnError = false;
 
   constructor(
     @InjectRepository(TcpAgent)
@@ -151,6 +155,27 @@ export class SystemDrainService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Halts the system because something it relies on is broken, such as a
+   * failure that couldn't be recorded: a graceful drain the system starts
+   * itself, flagged so the banner says why. An administrator cancels it or
+   * restarts once the cause is fixed.
+   *
+   * Never throws. If the drain can't pause the running agents (the database
+   * may be what broke), the workers are still told to stop taking jobs.
+   */
+  async haltOnError(): Promise<void> {
+    this.haltedOnError = true;
+    try {
+      await this.begin(false);
+    } catch (err) {
+      this.logger.error(
+        `Halting couldn't pause the running agents: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      await this.publish('drain');
+    }
+  }
+
+  /**
    * Cancels a drain so the system accepts work again, and tells the workers to
    * start taking jobs again.
    *
@@ -161,6 +186,7 @@ export class SystemDrainService implements OnModuleInit, OnModuleDestroy {
    */
   async cancel(): Promise<ShutdownStatus | null> {
     if (!this.shutdown.cancel()) return null;
+    this.haltedOnError = false;
     this.markedByDrain = 0;
     this.lastReportedActive = null;
     await this.publish('cancel');
@@ -182,6 +208,7 @@ export class SystemDrainService implements OnModuleInit, OnModuleDestroy {
       agentsRunning: this.remainingAgents(running),
       restart: this.shutdown.isRestarting,
       restartSupported: this.canRestart,
+      haltedOnError: this.haltedOnError,
     };
   }
 

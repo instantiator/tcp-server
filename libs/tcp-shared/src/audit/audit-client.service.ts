@@ -6,7 +6,8 @@ import { AuditEventType } from '../models/AuditEvent.model';
 /**
  * Fire-and-forget writer for agent lifecycle notifications and audit events on
  * tcp-server. Errors are logged but never thrown — audit failures must not
- * interrupt agent or MCP tool operations.
+ * interrupt agent or MCP tool operations — except for
+ * {@link AuditClientService.notifyFailed}, which its caller retries.
  *
  * Used by tcp-agent and all three MCP services. Register as a provider in the
  * host app's module alongside {@link InternalApiClient}.
@@ -32,19 +33,20 @@ export class AuditClientService {
   }
 
   /**
-   * Notifies tcp-server that an agent run has failed, with its reason and code.
+   * Tells tcp-server that an agent run has failed, with its reason and code.
    *
-   * The server resolves any pending consultation as `failed` and resumes the
-   * calling agent so it can react to the failure rather than wait forever.
+   * The server fails the step and task, resolves any pending consultation as
+   * `failed`, and resumes the calling agent so it can react rather than wait
+   * forever. Unlike the other notifications this one throws: a failure
+   * tcp-server never hears of leaves a task stuck, so the caller retries it.
    *
    * Only used by tcp-agent; MCP services do not call this method.
    */
-  notifyFailed(agentId: string, failure: RunFailure): void {
-    this.api.postAndForget(
-      `/internal/agent/${agentId}/fail`,
-      { reason: failure.message, code: failure.code },
-      `Agent failure notification for ${agentId}`,
-    );
+  async notifyFailed(agentId: string, failure: RunFailure): Promise<void> {
+    await this.api.post(`/internal/agent/${agentId}/fail`, {
+      reason: failure.message,
+      code: failure.code,
+    });
   }
 
   /** Writes an audit event. Never throws. */

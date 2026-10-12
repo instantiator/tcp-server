@@ -12,7 +12,10 @@ import { UUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { AgentLoopService } from '../agent/agent-loop.service';
 import { resolveRunLimits } from '../agent/run-environment.service';
-import { AgentRunStatusService } from '../agent/run-status.service';
+import {
+  AgentRunStatusService,
+  FailureUnreportedError,
+} from '../agent/run-status.service';
 import { AgentRegistryService } from '../registry/agent-registry.service';
 import {
   ModelSlotService,
@@ -130,6 +133,11 @@ export class AgentWorkerService implements OnModuleInit, OnModuleDestroy {
           if (!admitted) return;
           lease = admitted;
           await this.loop.run(agentId, replyContent, abortController);
+        } catch (err) {
+          if (err instanceof FailureUnreportedError) {
+            await this.shutdown.halt(err.message);
+          }
+          throw err;
         } finally {
           const next = lease.release();
           if (next) void this.promote(next);

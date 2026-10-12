@@ -40,6 +40,7 @@ import {
 import {
   AgentRunStatusService,
   describeRunFailure,
+  FailureUnreportedError,
   describeAbort,
 } from './run-status.service';
 import { SpendGateService } from './spend-gate.service';
@@ -177,6 +178,8 @@ export class AgentLoopService {
         replyContent,
       );
     } catch (err) {
+      // Already a failure no one could be told about: the worker halts on it.
+      if (err instanceof FailureUnreportedError) throw err;
       // runLoop handles its own errors; this covers checkpointer.setup() and
       // anything else escaping, which would otherwise leave the agent stuck
       // Running (and any pending consultation unresolved forever).
@@ -335,6 +338,7 @@ export class AgentLoopService {
 
       await this.completeFromNarration(ctx, tracker, result);
     } catch (err) {
+      if (err instanceof FailureUnreportedError) throw err;
       // A provider refusing the call is a pause, not a failure: the run
       // resumes from its checkpoint once the provider allows it.
       const limit = classifyRateLimit(err, ctx.llm.provider);

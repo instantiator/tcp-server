@@ -111,6 +111,18 @@ export class ShutdownListenerService implements OnModuleInit, OnModuleDestroy {
       });
   }
 
+  /**
+   * Stops this worker taking jobs because something is badly wrong, such as a
+   * failure tcp-server could never be told about. Jobs already running carry
+   * on. A cancelled drain, or a restart, takes jobs again.
+   */
+  async halt(reason: string): Promise<void> {
+    this.logger.error(
+      `Halting: ${reason}. This worker takes no more jobs until an administrator cancels the shutdown or restarts tcp-agent.`,
+    );
+    await this.stopTakingJobs();
+  }
+
   /** Applies one drain command, then reports the resulting in-flight count. */
   private async handle(message: string): Promise<void> {
     let command: ShutdownCommand;

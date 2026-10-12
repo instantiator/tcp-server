@@ -23,6 +23,7 @@ import {
   PauseResponseDto,
 } from './dto/internal-response.dto';
 import {
+  AuditEventType,
   buildEnumValidationError,
   CompanyUser,
   InternalApiKeyGuard,
@@ -32,8 +33,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import type { UUID } from 'crypto';
+import { AuditService } from '../audit/audit.service';
 import { DbService } from '../db/db.service';
 import { PauseAndResumeService } from './pause-and-resume.service';
+import { SystemDrainService } from './system-drain.service';
 import { TaskFailureService } from './task-failure.service';
 import {
   CompleteDto,
@@ -70,6 +73,8 @@ export class InternalController {
     private readonly roleRepo: Repository<TcpRole>,
     @InjectRepository(CompanyUser)
     private readonly userRepo: Repository<CompanyUser>,
+    private readonly audit: AuditService,
+    private readonly drain: SystemDrainService,
   ) {}
 
   /**
@@ -199,13 +204,48 @@ export class InternalController {
         body.code,
       );
     } catch (err) {
-      // The caller is fire-and-forget, so this log is where a reason that
-      // couldn't be saved survives.
-      this.logger.error(
-        `Recording agent ${agentId}'s failure ("${body.reason}") failed: ${String(err)}`,
-      );
+      await this.haltOnUnrecordedFailure(agentId, body, err);
       throw err;
     }
+  }
+
+  /**
+   * A failure that can't be recorded leaves its task stuck with no reason
+   * shown, and whatever broke will break the next one too. So the system
+   * halts, after leaving the failure everywhere it still can: the console log
+   * (always) and the audit log (if the database still answers).
+   */
+  private async haltOnUnrecordedFailure(
+    agentId: UUID,
+    body: FailDto,
+    err: unknown,
+  ): Promise<void> {
+    this.logger.error(
+      `Recording agent ${agentId}'s failure (${body.code ?? 'no code'}: "${body.reason}") failed, so the system is halting: ${String(err)}`,
+    );
+    try {
+      const agent = await this.agentRepo.findOneBy({ id: agentId });
+      if (agent) {
+        await this.audit.record(
+          agent.companyId,
+          'system',
+          agentId,
+          AuditEventType.StateChange,
+          {
+            entity: 'system',
+            newStatus: 'halted',
+            reason: "A failure couldn't be recorded, so the system halted.",
+            failure: { code: body.code ?? null, reason: body.reason },
+            error: String(err),
+          },
+        );
+      }
+    } catch (auditErr) {
+      this.logger.error(
+        `The halt couldn't be audited either: ${String(auditErr)}`,
+      );
+    }
+    await this.drain.haltOnError();
   }
 
   /**
