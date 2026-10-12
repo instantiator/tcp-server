@@ -133,6 +133,18 @@ describe('classifyRunError', () => {
 });
 
 describe('abortFailure', () => {
+  it('names an MCP server that went down mid-run', () => {
+    const err = Object.assign(new Error('x'), {
+      name: 'McpServerUnavailableError',
+      serverName: 'records',
+    });
+    expect(abortFailure(err)).toEqual({
+      code: 'service_unavailable',
+      message:
+        "The records service (MCP) didn't respond. Check it is running, then start the task again.",
+    });
+  });
+
   it.each<[string, RunFailureCode]>([
     ['timeout', 'run_timed_out'],
     ['max_iterations', 'iteration_limit'],

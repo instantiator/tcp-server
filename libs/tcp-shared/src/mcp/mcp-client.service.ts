@@ -53,6 +53,9 @@ export class McpServerUnavailableError extends Error {
   }
 }
 
+/** Told whether each tool call managed to connect to its server. */
+type ConnectionListener = (ok: boolean, err: unknown) => void;
+
 /** How {@link McpClientService.loadTools} treats a server that can't be reached. */
 export interface LoadToolsOptions {
   /**
@@ -60,7 +63,16 @@ export interface LoadToolsOptions {
    * A server with no URL is still skipped: that is a deployment choice.
    */
   required?: boolean;
+  /**
+   * Called once a server has refused {@link MAX_MCP_CONNECT_FAILURES}
+   * connections in a row from these tools. A failed call otherwise goes back
+   * to the model as an ordinary tool error, which it can't fix by retrying.
+   */
+  onServerDown?: (err: McpServerUnavailableError) => void;
 }
+
+/** Connection failures in a row, to one server, that count as it being down. */
+export const MAX_MCP_CONNECT_FAILURES = 3;
 
 @Injectable()
 export class McpClientService {
@@ -85,6 +97,8 @@ export class McpClientService {
     options: LoadToolsOptions = {},
   ): Promise<McpTool[]> {
     const results: McpTool[] = [];
+    // Consecutive connection failures per server, for this set of tools only.
+    const failures = new Map<string, number>();
 
     for (const name of serverNames) {
       const url = serverUrls[name];
@@ -95,7 +109,9 @@ export class McpClientService {
         continue;
       }
       try {
-        const tools = await this.fetchToolsFrom(name, url, context);
+        const tools = await this.fetchToolsFrom(name, url, context, (ok, e) =>
+          this.noteConnection(name, ok, e, failures, options.onServerDown),
+        );
         results.push(...tools);
       } catch (err) {
         const cause = String(err instanceof Error ? err.message : err);
@@ -109,10 +125,33 @@ export class McpClientService {
     return results;
   }
 
+  /**
+   * Keeps the count of connection failures in a row to `serverName`, and
+   * reports the server down when the count reaches the limit.
+   */
+  private noteConnection(
+    serverName: string,
+    ok: boolean,
+    err: unknown,
+    failures: Map<string, number>,
+    onServerDown: LoadToolsOptions['onServerDown'],
+  ): void {
+    const count = ok ? 0 : (failures.get(serverName) ?? 0) + 1;
+    failures.set(serverName, count);
+    if (count === MAX_MCP_CONNECT_FAILURES && onServerDown) {
+      const cause = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `MCP server "${serverName}" refused ${count} connections in a row: ${cause}`,
+      );
+      onServerDown(new McpServerUnavailableError(serverName, cause));
+    }
+  }
+
   private async fetchToolsFrom(
     serverName: string,
     baseUrl: string,
     context: McpToolContext,
+    onConnect: ConnectionListener,
   ): Promise<McpTool[]> {
     const client = new Client({ name: 'tcp', version: '0.0.1' });
     const transport = new StreamableHTTPClientTransport(
@@ -124,7 +163,7 @@ export class McpClientService {
       const { tools } = await client.listTools();
       // Pass baseUrl rather than client — each tool invocation opens its own connection
       return tools.map((t) =>
-        this.convertTool(serverName, baseUrl, t, context),
+        this.convertTool(serverName, baseUrl, t, context, onConnect),
       );
     } finally {
       await client.close();
@@ -136,6 +175,7 @@ export class McpClientService {
     baseUrl: string,
     mcpTool: Tool,
     context: McpToolContext,
+    onConnect: ConnectionListener,
   ): McpTool {
     const toolName = `${serverName}__${mcpTool.name}`;
     const mcpUrl = `${baseUrl.replace(/\/$/, '')}/mcp`;
@@ -161,7 +201,13 @@ export class McpClientService {
         // Fresh connection per call — avoids holding open connections across LLM turns
         const callClient = new Client({ name: 'tcp', version: '0.0.1' });
         const transport = new StreamableHTTPClientTransport(new URL(mcpUrl));
-        await callClient.connect(transport);
+        try {
+          await callClient.connect(transport);
+        } catch (err) {
+          onConnect(false, err);
+          throw err;
+        }
+        onConnect(true, undefined);
         try {
           const raw = await callClient.callTool({
             name: mcpTool.name,

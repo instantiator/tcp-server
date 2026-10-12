@@ -542,7 +542,7 @@ describe('AgentLoopService', () => {
       expect.any(Array),
       expect.any(Object),
       { agentId: agent.id, companyId: agent.companyId },
-      { required: true },
+      expect.objectContaining({ required: true }),
     );
   });
 

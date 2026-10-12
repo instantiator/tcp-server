@@ -377,16 +377,58 @@ describe('noteToolCall', () => {
     });
   });
 
+  it('flags a call repeated with other calls in between', () => {
+    const tracker = createTracker();
+    const other = { content: 'ok' };
+    noteToolCall(tracker, 'tasks__create_plan', { a: 1 }, refused);
+    noteToolCall(tracker, 'storage__list_working_files', {}, other);
+    noteToolCall(tracker, 'tasks__create_plan', { a: 1 }, refused);
+    noteToolCall(tracker, 'storage__list_working_files', {}, other);
+    expect(noteToolCall(tracker, 'tasks__create_plan', { a: 1 }, refused)).toBe(
+      true,
+    );
+    expect(tracker.repeatedCall?.tool).toBe('create_plan');
+  });
+
+  it('treats the same input in another key order as the same call', () => {
+    const tracker = createTracker();
+    noteToolCall(
+      tracker,
+      'records__insert',
+      { t: 'x', r: { a: 1, b: 2 } },
+      refused,
+    );
+    noteToolCall(
+      tracker,
+      'records__insert',
+      { r: { b: 2, a: 1 }, t: 'x' },
+      refused,
+    );
+    expect(
+      noteToolCall(
+        tracker,
+        'records__insert',
+        { t: 'x', r: { b: 2, a: 1 } },
+        refused,
+      ),
+    ).toBe(true);
+  });
+
   it.each([
     ['a changed input', { a: 2 }, refused],
     ['a changed result', { a: 1 }, { content: 'Plan created.' }],
-  ])('starts counting again after %s', (_label, input, output) => {
+  ])('does not count %s as the same call', (_label, input, output) => {
     const tracker = createTracker();
     noteToolCall(tracker, 'tasks__create_plan', { a: 1 }, refused);
     noteToolCall(tracker, 'tasks__create_plan', { a: 1 }, refused);
     expect(noteToolCall(tracker, 'tasks__create_plan', input, output)).toBe(
       false,
     );
-    expect(tracker.callRepeats).toBe(1);
+  });
+
+  it('remembers the last tool called', () => {
+    const tracker = createTracker();
+    noteToolCall(tracker, 'records__insert', {}, refused);
+    expect(tracker.lastTool).toBe('insert');
   });
 });

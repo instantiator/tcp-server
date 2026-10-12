@@ -150,6 +150,9 @@ export function abortFailure(
   reason: unknown,
   ctx: RunFailureContext = {},
 ): RunFailure {
+  // A run stopped because a service it needs went down mid-run.
+  const service = failedService(reason);
+  if (service) return runFailure('service_unavailable', { service });
   const detail = typeof reason === 'string' ? reason : undefined;
   const code = detail !== undefined ? ABORT_CODES[detail] : undefined;
   return code ? runFailure(code, ctx) : runFailure('stopped', { detail });
@@ -169,7 +172,8 @@ function failedService(err: unknown): string | undefined {
   };
   // The AWS SDK, behind storage, tags every error with `$metadata`.
   if (e.$metadata !== undefined) return 'Storage (MinIO)';
-  // `McpServerUnavailableError`: a server the run needs was down at tool load.
+  // `McpServerUnavailableError`: a server the run needs was down at tool
+  // load, or refused several calls in a row mid-run.
   if (
     e.name === 'McpServerUnavailableError' &&
     typeof e.serverName === 'string'
