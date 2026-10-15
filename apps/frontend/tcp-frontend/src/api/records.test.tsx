@@ -30,7 +30,7 @@ import {
   useDropRecordTable,
   useRecordSearch,
   useRecordTable,
-  useRecordTables,
+  useLiveRecordTables,
   useReloadRecordTable,
   useSetRetention,
   useUpdateRecord,
@@ -109,7 +109,7 @@ describe('record queries', () => {
 
   it('lists the tables', async () => {
     respondByRoute([[/records\/tables$/, { body: [] }]]);
-    const { result } = setup(() => useRecordTables(C));
+    const { result } = setup(() => useLiveRecordTables(C));
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(requestedUrls()[0]).toContain(`${BASE}/tables`);
   });

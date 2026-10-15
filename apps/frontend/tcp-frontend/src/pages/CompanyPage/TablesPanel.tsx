@@ -1,7 +1,7 @@
 import { Download } from 'lucide-react';
 import { useRef } from 'react';
 import { ListBox, ListBoxItem, Text } from 'react-aria-components';
-import { downloadAllRecordTables, useRecordTables } from '../../api/hooks';
+import { downloadAllRecordTables, useLiveRecordTables } from '../../api/hooks';
 import { ErrorState } from '../../components/ErrorState/ErrorState';
 import { LoadingState } from '../../components/LoadingState/LoadingState';
 import {
@@ -39,7 +39,7 @@ export const TablesPanel = ({
   selected,
   onSelect,
 }: TablesPanelProps) => {
-  const tables = useRecordTables(companyId);
+  const tables = useLiveRecordTables(companyId);
   const listRef = useRef<HTMLDivElement>(null);
 
   const known =

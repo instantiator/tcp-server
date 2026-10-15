@@ -39,6 +39,7 @@ export const EVENT_ENTITIES = [
   'enquiry',
   'notification',
   'spend',
+  'record',
 ] as const;
 
 /**
@@ -49,12 +50,12 @@ export const STATIC_ENTITIES = [
   'role',
   'company-user',
   'knowledge',
-  'record',
   'system',
 ] as const;
 
 /** The second element of every key. */
-export type QueryScope = 'list' | 'detail' | 'history' | 'status' | 'search';
+export type QueryScope =
+  'list' | 'detail' | 'history' | 'status' | 'search' | 'latest';
 
 export type EventEntity = (typeof EVENT_ENTITIES)[number];
 export type StaticEntity = (typeof STATIC_ENTITIES)[number];
@@ -168,6 +169,15 @@ export const queryKeys = {
   /** Rows across every table matching a search, grouped by table. */
   recordSearch: (companyId: string, q: string) =>
     ['record', 'search', { companyId, q }] as const,
+  /**
+   * A fresher copy of an open table, read in the background when it changes
+   * elsewhere (001.05). Never shown: the sheet compares it with what it shows.
+   */
+  recordTableLatest: (companyId: string, table: string) =>
+    ['record', 'latest', { companyId, table }] as const,
+  /** A fresher copy of an open search, as {@link recordTableLatest} is of a table. */
+  recordSearchLatest: (companyId: string, q: string) =>
+    ['record', 'latest', { companyId, q }] as const,
   /**
    * A company's do-not-store list. A `list` of records, so anything that
    * reloads the company's record lists reloads it too.

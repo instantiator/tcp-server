@@ -2,6 +2,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import type { AuditWireEvent, WireEvent } from '@tcp/shared/client';
 
 import { EVENT_ENTITIES, type EventEntity } from '../api/query-keys';
+import { recordChanged } from '../api/record-changes';
 
 /** Narrows to a plain object, so a property can be read without an `any` cast. */
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -98,8 +99,19 @@ export const applyEvent = (
   // `useEventStream`'s `onDelta` callback, never by the cache.
   if (event.type === 'stream') return;
 
-  const { entity, summary } = event.event.payload;
+  const { entity, summary, table } = event.event.payload;
   if (!isEventEntity(entity)) return;
+
+  // A record change never patches or refetches what is on screen: that would
+  // replace a sheet under its reader. It is compared instead (001.05).
+  if (entity === 'record') {
+    recordChanged(
+      queryClient,
+      event.event.companyId,
+      typeof table === 'string' ? table : undefined,
+    );
+    return;
+  }
 
   const patch = hasStringId(summary)
     ? summary

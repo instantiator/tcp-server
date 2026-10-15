@@ -24,10 +24,13 @@
  */
 
 import {
+  skipToken,
   useMutation,
+  useQuery,
   useQueryClient,
   type UseQueryResult,
 } from '@tanstack/react-query';
+import { useMemo } from 'react';
 
 import type {
   AgentDTO,
@@ -47,6 +50,13 @@ import type {
   TaskDetailDTO,
   TaskDTO,
 } from './dtos';
+import { compareRows, NO_ROW_CHANGES, type RowChanges } from './compareRows';
+import {
+  forgetLatestRecords,
+  keyParams,
+  latestSearches,
+  type LatestRecordTable,
+} from './record-changes';
 import {
   useAgent,
   useAgentByAssignment,
@@ -698,7 +708,14 @@ export {
   useTranscriptSearch,
 } from './endpoints';
 
-export { useDoNotStoreList, useRecordSearch, useRecordTable, useRecordTables };
+export { useDoNotStoreList, useRecordSearch, useRecordTable };
+
+/**
+ * The summary of every record table: name, purpose and row count. Live: a
+ * change to any table elsewhere refetches it (001.05), so the tray and the
+ * Tables tab stay current. Ordered by name, so a refetch never moves a row.
+ */
+export const useLiveRecordTables = useRecordTables;
 export type { DoNotStoreConfirmation };
 export { recordErrorBody, type RecordErrorBody } from './errors';
 
@@ -706,6 +723,9 @@ export { recordErrorBody, type RecordErrorBody } from './errors';
  * Edits patch the cached table where it stands rather than refetching: a
  * refetch re-sorts newest-first and an edited row would jump under the user
  * (ADR-027). Only the summaries (row counts, updated time) are refetched.
+ *
+ * An edit patches the table's fresher copy too, when one has been read
+ * (001.05), so a change made here is never reported as made elsewhere.
  */
 const useRecordCache = (companyId: string, table: string) => {
   const queryClient = useQueryClient();
@@ -714,6 +734,10 @@ const useRecordCache = (companyId: string, table: string) => {
     queryClient.setQueryData<RecordTableRows>(tableKey, (current) =>
       current === undefined ? current : change(current),
     );
+    queryClient.setQueryData<LatestRecordTable>(
+      queryKeys.recordTableLatest(companyId, table),
+      (current) => (current ? change(current) : current),
+    );
     void queryClient.invalidateQueries({
       queryKey: queryKeys.recordTables(companyId),
     });
@@ -721,6 +745,11 @@ const useRecordCache = (companyId: string, table: string) => {
   // A refused edit (often a 409) means the table moved on: reload it, and any
   // search showing its rows.
   const reload = () => {
+    forgetLatestRecords(
+      queryClient,
+      companyId,
+      (params) => params.table === table || latestSearches(params),
+    );
     void queryClient.invalidateQueries({ queryKey: tableKey });
     void queryClient.invalidateQueries({
       queryKey: queryKeys.recordTables(companyId),
@@ -728,25 +757,35 @@ const useRecordCache = (companyId: string, table: string) => {
     void queryClient.invalidateQueries({ queryKey: ['record', 'search'] });
   };
   // A row changed from a search: replace it where it stands in every search
-  // showing it, as an edit does in the table (ADR-027).
-  const replaceInSearches = (row: TimedRecord) =>
+  // showing it, as an edit does in the table (ADR-027), and in their fresher
+  // copies, as `edit` does.
+  const replaceInSearches = (row: TimedRecord) => {
+    const replace = (current: RecordSearchResult | undefined) =>
+      current === undefined
+        ? current
+        : {
+            ...current,
+            groups: current.groups.map((group) =>
+              group.definition.name !== table
+                ? group
+                : {
+                    ...group,
+                    rows: group.rows.map((r) => (r.id === row.id ? row : r)),
+                  },
+            ),
+          };
     queryClient.setQueriesData<RecordSearchResult>(
       { queryKey: ['record', 'search'] },
-      (current) =>
-        current === undefined
-          ? current
-          : {
-              ...current,
-              groups: current.groups.map((group) =>
-                group.definition.name !== table
-                  ? group
-                  : {
-                      ...group,
-                      rows: group.rows.map((r) => (r.id === row.id ? row : r)),
-                    },
-              ),
-            },
+      replace,
     );
+    queryClient.setQueriesData<RecordSearchResult>(
+      {
+        queryKey: ['record', 'latest'],
+        predicate: (query) => latestSearches(keyParams(query)),
+      },
+      replace,
+    );
+  };
   return { edit, reload, replaceInSearches };
 };
 
@@ -823,7 +862,10 @@ const useBulkRecordMutation = <TInput, TResult>(
   const inner = useInner(companyId, table);
   return useMutation({
     mutationFn: (input: TInput) => inner.mutateAsync(input),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ['record'] }),
+    onSettled: () => {
+      forgetLatestRecords(queryClient, companyId);
+      return queryClient.invalidateQueries({ queryKey: ['record'] });
+    },
   });
 };
 
@@ -857,6 +899,7 @@ export const useDeleteRecords = (companyId: string, table: string) => {
         rows: t.rows.filter((r) => !gone.has(r.id)),
         total: t.total - removed,
       }));
+      forgetLatestRecords(queryClient, companyId, latestSearches);
       void queryClient.invalidateQueries({
         queryKey: ['record', 'search'],
       });
@@ -878,7 +921,10 @@ export const useDeleteRecordsAcross = (companyId: string) => {
         Record<string, readonly { id: string; version: number }[]>
       >,
     ) => remove.mutateAsync(byTable),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ['record'] }),
+    onSettled: () => {
+      forgetLatestRecords(queryClient, companyId);
+      return queryClient.invalidateQueries({ queryKey: ['record'] });
+    },
   });
 };
 
@@ -897,6 +943,104 @@ export const useSetRetention = (companyId: string, table: string) => {
       );
     },
   });
+};
+
+/**
+ * How what is on screen differs from what is stored now (001.05). Nothing,
+ * until a change elsewhere is heard and a fresher copy has been read.
+ */
+export interface LiveRecordChanges extends RowChanges {
+  /** The table itself was deleted elsewhere. */
+  readonly dropped: boolean;
+  /** Anything at all differs: the sheet is out of date. */
+  readonly any: boolean;
+}
+
+/** What a sheet with nothing changed elsewhere shows. */
+const UNCHANGED: LiveRecordChanges = {
+  ...NO_ROW_CHANGES,
+  dropped: false,
+  any: false,
+};
+
+/** Adds `dropped` and `any` to a comparison. */
+const withSummary = (changes: RowChanges): LiveRecordChanges => ({
+  ...changes,
+  dropped: false,
+  any: changes.changed.size + changes.deleted.size + changes.added > 0,
+});
+
+/**
+ * Compares an open table's rows with the copy read when it last changed
+ * elsewhere. Live, but it never fetches: the company stream does that
+ * (`recordChanged`), and only for tables someone has open.
+ */
+export const useLiveRecordTableChanges = (
+  companyId: string,
+  table: string,
+  shown: RecordTableRows | undefined,
+): LiveRecordChanges => {
+  const latest = useQuery<LatestRecordTable>({
+    queryKey: queryKeys.recordTableLatest(companyId, table),
+    queryFn: skipToken,
+  });
+  return useMemo(() => {
+    if (latest.data === undefined || shown === undefined) return UNCHANGED;
+    if (latest.data === null) return { ...UNCHANGED, dropped: true, any: true };
+    return withSummary(
+      compareRows(shown.rows, latest.data.rows, latest.data.truncated),
+    );
+  }, [latest.data, shown]);
+};
+
+/** A search's differences: per table shown, and for the search as a whole. */
+export interface LiveRecordSearchChanges extends LiveRecordChanges {
+  /** Each shown table's differences, by table name. */
+  readonly byTable: ReadonlyMap<string, RowChanges>;
+}
+
+/**
+ * {@link useLiveRecordTableChanges} for a search: rows that now match but
+ * weren't shown, including whole tables, count as added; rows that no longer
+ * match count as deleted, since either way they are no longer in the results.
+ */
+export const useLiveRecordSearchChanges = (
+  companyId: string,
+  q: string,
+  shown: RecordSearchResult | undefined,
+): LiveRecordSearchChanges => {
+  const latest = useQuery<RecordSearchResult>({
+    queryKey: queryKeys.recordSearchLatest(companyId, q),
+    queryFn: skipToken,
+  });
+  return useMemo(() => {
+    if (latest.data === undefined || shown === undefined) {
+      return { ...UNCHANGED, byTable: new Map() };
+    }
+    const fresh = new Map(
+      latest.data.groups.map((g) => [g.definition.name, g.rows]),
+    );
+    const byTable = new Map<string, RowChanges>();
+    const changed = new Set<string>();
+    const deleted = new Set<string>();
+    let added = 0;
+    for (const group of shown.groups) {
+      const name = group.definition.name;
+      const changes = compareRows(
+        group.rows,
+        fresh.get(name) ?? [],
+        latest.data.truncated,
+      );
+      byTable.set(name, changes);
+      changes.changed.forEach((id) => changed.add(id));
+      changes.deleted.forEach((id) => deleted.add(id));
+      added += changes.added;
+      fresh.delete(name);
+    }
+    // Tables that weren't in the results at all, and now are.
+    for (const rows of fresh.values()) added += rows.length;
+    return { ...withSummary({ changed, deleted, added }), byTable };
+  }, [latest.data, shown]);
 };
 
 /** Wraps a do-not-store mutation so the list reloads once it settles. */
