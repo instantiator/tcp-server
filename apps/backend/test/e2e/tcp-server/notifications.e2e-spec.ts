@@ -7,7 +7,7 @@ import { App } from 'supertest/types';
 import { Repository } from 'typeorm';
 import { AppModule } from '../../../apps/tcp-server/src/app.module';
 import { NotificationService } from '../../../apps/tcp-server/src/notifications/notification.service';
-import { consumeSse } from '../helpers/consume-sse';
+import { consumeCompanySse } from '../helpers/consume-sse';
 import { makeTestJwt } from '../helpers/test-jwt';
 
 /** The notification payloads among `events`, in arrival order. */
@@ -205,7 +205,7 @@ describe('Notifications (e2e)', () => {
     });
 
     // Priming: company + the active notification; live: one raise, one dismissal.
-    const events$ = consumeSse<WireEvent>(
+    const events$ = consumeCompanySse(
       app,
       `/api/company/${company.id}/events`,
       auth,

@@ -107,4 +107,63 @@ describe('AuditEventPublisher', () => {
       expect(taskEvents.emit).not.toHaveBeenCalled();
     });
   });
+
+  describe('records changes (001.05)', () => {
+    const update = {
+      source: 'records',
+      action: 'update',
+      table: 'orders',
+      recordId: 'r1',
+      before: { name: 'Ann Lee' },
+      after: { name: 'Ann Lee-Smith' },
+      userId: 'u1',
+    };
+
+    // The audit row holds customer data; the browser only needs to know
+    // which table to look at again.
+    it('sends the company stream only the table and the action', () => {
+      publisher.publish(row({ payload: update }));
+      expect(companyEvents.emit).toHaveBeenCalledTimes(1);
+      const [, sent] = companyEvents.emit.mock.calls[0];
+      expect(sent.type === 'audit' && sent.event.payload).toEqual({
+        entity: 'record',
+        action: 'update',
+        table: 'orders',
+      });
+    });
+
+    it('sends a do-not-store change without a table', () => {
+      publisher.publish(
+        row({
+          payload: {
+            source: 'records',
+            action: 'do_not_store_add',
+            entryId: 'e1',
+          },
+        }),
+      );
+      const [, sent] = companyEvents.emit.mock.calls[0];
+      expect(sent.type === 'audit' && sent.event.payload).toEqual({
+        entity: 'record',
+        action: 'do_not_store_add',
+      });
+    });
+
+    it('does not send a read', () => {
+      publisher.publish(
+        row({
+          eventType: AuditEventType.ToolCall,
+          payload: { source: 'records', action: 'query', table: 'orders' },
+        }),
+      );
+      expect(companyEvents.emit).not.toHaveBeenCalled();
+    });
+
+    it('still sends the agent stream the full change', () => {
+      publisher.publish(row({ agentId, payload: update }));
+      const [id, sent] = agentEvents.emit.mock.calls[0];
+      expect(id).toBe(agentId);
+      expect(sent.type === 'audit' && sent.event.payload).toEqual(update);
+    });
+  });
 });
