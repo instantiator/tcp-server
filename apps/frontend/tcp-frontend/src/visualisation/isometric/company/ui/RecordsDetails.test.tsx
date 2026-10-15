@@ -1,7 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { WireEvent } from '@tcp/shared/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { RECORD_CHANGE_WINDOW_MS } from '../../../../api/record-changes';
+import { applyEvent } from '../../../../events/cache';
 import { t } from '../../../../strings';
 import { expectNoA11yViolations } from '../../../../test-support/axe';
 import {
@@ -53,18 +56,39 @@ const respond = (tables: unknown[]) =>
     [COMPANY_ROUTE, { body: company }],
   ]);
 
-const renderTray = () =>
+const renderTray = (
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) =>
   render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
+    <QueryClientProvider client={client}>
       <aside aria-label="Tray test wrapper">
         <RecordsDetails companyId="company-1" headingId="records-heading" />
       </aside>
     </QueryClientProvider>,
   );
+
+/** A `record` signal as the company stream sends it (001.05). */
+const recordEvent = (companyId: string, table: string): WireEvent => ({
+  type: 'audit',
+  event: {
+    timestamp: '2026-10-15T10:00:00.000Z',
+    companyId,
+    role: 'agent',
+    agentId: null,
+    assignmentId: null,
+    taskId: null,
+    eventType: 'state_change',
+    payload: { entity: 'record', action: 'update', table },
+  },
+});
+
+/** Hears a record change, and lets its gathering window close. */
+const hear = async (queryClient: QueryClient, event: WireEvent) => {
+  act(() => applyEvent(queryClient, event));
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(RECORD_CHANGE_WINDOW_MS);
+  });
+};
 
 describe('RecordsDetails', () => {
   beforeEach(() => {
@@ -122,5 +146,31 @@ describe('RecordsDetails', () => {
     expect(
       screen.getByRole('button', { name: t('records.downloadAll') }),
     ).toBeDisabled();
+  });
+
+  describe('when a table changes elsewhere (001.05)', () => {
+    beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+    afterEach(() => vi.useRealTimers());
+
+    it('keeps the counts current', async () => {
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      renderTray(client);
+      const table = await screen.findByRole('table', {
+        name: t('records.tray.heading'),
+      });
+
+      respond([
+        { name: 'orders', purpose: '', records: 4, updatedAt: '' },
+        { name: 'stock', purpose: '', records: 0, updatedAt: '' },
+      ]);
+      await hear(client, recordEvent('company-1', 'orders'));
+
+      const [orders] = within(table).getAllByRole('row').slice(1);
+      await waitFor(() =>
+        expect(within(orders).getByRole('cell', { name: '4' })).toBeVisible(),
+      );
+    });
   });
 });

@@ -716,7 +716,7 @@ export { useDoNotStoreList, useRecordSearch, useRecordTable };
  * Tables tab stay current. Ordered by name, so a refetch never moves a row.
  */
 export const useLiveRecordTables = useRecordTables;
-export type { DoNotStoreConfirmation };
+export type { DoNotStoreConfirmation, RowChanges };
 export { recordErrorBody, type RecordErrorBody } from './errors';
 
 /**
@@ -787,6 +787,17 @@ const useRecordCache = (companyId: string, table: string) => {
     );
   };
   return { edit, reload, replaceInSearches };
+};
+
+/** Returns a function that runs a search again; its out-of-date notice's "Reload". */
+export const useReloadRecordSearch = (companyId: string, q: string) => {
+  const queryClient = useQueryClient();
+  return () => {
+    forgetLatestRecords(queryClient, companyId, latestSearches);
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.recordSearch(companyId, q),
+    });
+  };
 };
 
 /** Returns a function that reloads the open table; the UI's explicit "Reload". */

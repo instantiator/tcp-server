@@ -1,5 +1,5 @@
 import { Download } from 'lucide-react';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { ListBox, ListBoxItem, Text } from 'react-aria-components';
 import { downloadAllRecordTables, useLiveRecordTables } from '../../api/hooks';
 import { ErrorState } from '../../components/ErrorState/ErrorState';
@@ -45,6 +45,13 @@ export const TablesPanel = ({
   const known =
     selected !== null &&
     (tables.data ?? []).some((table) => table.name === selected);
+
+  // A table deleted elsewhere leaves the list but stays open, saying so,
+  // rather than vanishing from under its reader (001.05, ADR-027). Only a
+  // table that was listed is kept: an unknown name in the address is not.
+  const [kept, setKept] = useState<string | null>(null);
+  if (known && kept !== selected) setKept(selected);
+  const showing = known || (selected !== null && selected === kept);
 
   return (
     <div className="tables-panel">
@@ -101,7 +108,7 @@ export const TablesPanel = ({
         )}
       </div>
       <div className="tables-panel__main">
-        {known ? (
+        {showing ? (
           <TableView
             key={selected}
             companyId={companyId}

@@ -804,12 +804,28 @@ const strings = {
   'records.truncated':
     'Showing the {shown} most recently changed of {total} records. Download the table to see them all.',
   'records.usage':
-    'Spreadsheet. Arrow keys move between cells. Enter or F2 edits a cell, Enter saves and Escape cancels. Rows start most recently changed first; choose a column header to sort by that column. Changed cells are marked until you leave the table.',
+    'Spreadsheet. Arrow keys move between cells. Enter or F2 edits a cell, Enter saves and Escape cancels. Rows start most recently changed first; choose a column header to sort by that column. Changed cells are marked until you leave the table. Rows changed elsewhere are marked too, and cannot be edited until you reload.',
   'records.sheet.label': '{table} records',
   'records.column.key': '{field} (key)',
   'records.column.updated': 'Updated',
   'records.changed': '(changed)',
   'records.added': '(added)',
+  'records.changedElsewhere': '(changed elsewhere, so it cannot be edited)',
+  'records.deletedElsewhere': '(deleted elsewhere, so it cannot be edited)',
+  'records.outOfDate.label': 'Out of date',
+  'records.outOfDate.intro': 'Changed elsewhere since you opened it:',
+  'records.outOfDate.changed.one': '{count} row changed',
+  'records.outOfDate.changed.other': '{count} rows changed',
+  'records.outOfDate.deleted.one': '{count} row deleted',
+  'records.outOfDate.deleted.other': '{count} rows deleted',
+  'records.outOfDate.added.one': '{count} row added',
+  'records.outOfDate.added.other': '{count} rows added',
+  'records.outOfDate.hint': 'Marked rows cannot be edited until you reload.',
+  'records.outOfDate.reload': 'Reload',
+  'records.outOfDate.dropped':
+    'This table was deleted elsewhere. You can still read it here, but it cannot be changed.',
+  'records.deleteRow.stale':
+    'Delete row: not available, {row} changed elsewhere',
   'records.boolean.yes': 'true',
   'records.boolean.no': 'false',
   'records.download': 'Download {table} as CSV',
@@ -912,6 +928,15 @@ const strings = {
   'records.announce.cleared': 'Table cleared: {table}',
   'records.announce.dropped': 'Table deleted: {table}',
   'records.announce.reloaded': 'Reloaded: {table}',
+  'records.announce.outOfDate':
+    '{table} has changed elsewhere. Reload to see the changes.',
+  'records.announce.droppedElsewhere': '{table} was deleted elsewhere.',
+  'dataProtection.outOfDate.deleted.one': '{count} row no longer matches',
+  'dataProtection.outOfDate.deleted.other': '{count} rows no longer match',
+  'dataProtection.outOfDate.added.one': '{count} new match',
+  'dataProtection.outOfDate.added.other': '{count} new matches',
+  'dataProtection.announce.outOfDate':
+    'The search results have changed elsewhere. Reload to see the changes.',
 } as const;
 
 /** Every key `t` accepts. A typo is a type error, not a blank screen. */

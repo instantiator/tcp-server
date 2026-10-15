@@ -1,7 +1,15 @@
 import { fieldOrder } from '@tcp/shared/client';
 import type { GridApi } from 'ag-grid-community';
 import { Download, Plus, Trash2, Undo2 } from 'lucide-react';
-import { Suspense, lazy, useCallback, useId, useRef, useState } from 'react';
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { ApiError, recordErrorBody } from '../../api/errors';
 import type { TimedRecord } from '../../api/dtos';
 import {
@@ -10,6 +18,7 @@ import {
   useAddRecord,
   useDeleteRecord,
   useDeleteRecords,
+  useLiveRecordTableChanges,
   useRecordTable,
   useReloadRecordTable,
   useUpdateRecord,
@@ -21,6 +30,9 @@ import { LoadingState } from '../LoadingState/LoadingState';
 import { RoundIconButton } from '../RoundIconButton/RoundIconButton';
 import { AddRowDialog } from './AddRowDialog';
 import { DeleteRowsDialog } from './DeleteRowsDialog';
+import { describeChanges } from './describeChanges';
+import { OutOfDateNotice } from './OutOfDateNotice';
+import type { StaleRow } from './RecordSheet';
 import { retentionSummary } from './retention';
 import { RecordTableActions } from './RecordTableActions';
 import { RECORDS_CHANNEL, announceRecords } from './announceRecords';
@@ -92,6 +104,16 @@ export const TableView = ({
   const deleteRecord = useDeleteRecord(companyId, table);
   const deleteRecords = useDeleteRecords(companyId, table);
   const reload = useReloadRecordTable(companyId, table);
+  const changes = useLiveRecordTableChanges(companyId, table, query.data);
+  /** Rows changed elsewhere: marked, and not editable until a reload. */
+  const staleRows = useMemo(
+    () =>
+      new Map<string, StaleRow>([
+        ...[...changes.changed].map((id) => [id, 'changed'] as const),
+        ...[...changes.deleted].map((id) => [id, 'deleted'] as const),
+      ]),
+    [changes],
+  );
   const { guard, dialog: doNotStoreDialog } =
     useDoNotStoreGuard(portalContainer);
   const undo = useUndoStack();
@@ -237,6 +259,22 @@ export const TableView = ({
     }
   };
 
+  const reloadTable = () => {
+    undo.clear();
+    reload();
+  };
+
+  // The notice's Reload button goes once the sheet is current, so focus moves
+  // to the sheet's first cell rather than falling to the page (ADR-027).
+  const reloadFromNotice = () => {
+    reloadTable();
+    announceRecords('records.announce.reloaded', { table });
+    const firstField =
+      definition === undefined ? undefined : fieldOrder(definition)[0];
+    if (firstField !== undefined) apiRef.current?.setFocusedCell(0, firstField);
+  };
+
+  const focusedStale = focusedRow !== null && staleRows.has(focusedRow.id);
   const Title = titleLevel === 3 ? 'h3' : 'h2';
   const records = query.data?.total ?? 0;
 
@@ -281,7 +319,7 @@ export const TableView = ({
             icon={Plus}
             label={t('records.addRow', { table })}
             outline
-            isDisabled={definition === undefined}
+            isDisabled={definition === undefined || changes.dropped}
             portalContainer={portalContainer}
             onPress={() => setAdding(true)}
           />
@@ -292,10 +330,15 @@ export const TableView = ({
                 ? tCount('records.selected.delete', selected.length)
                 : focusedRow === null
                   ? t('records.deleteRow.none')
-                  : t('records.deleteRow', { row: labelOf(focusedRow) })
+                  : focusedStale
+                    ? t('records.deleteRow.stale', { row: labelOf(focusedRow) })
+                    : t('records.deleteRow', { row: labelOf(focusedRow) })
             }
             outline
-            isDisabled={selected.length === 0 && focusedRow === null}
+            isDisabled={
+              changes.dropped ||
+              (selected.length === 0 && (focusedRow === null || focusedStale))
+            }
             portalContainer={portalContainer}
             onPress={() =>
               selected.length > 0
@@ -311,29 +354,46 @@ export const TableView = ({
                 : t('records.undo', { change: describeChange(undo.last) })
             }
             outline
-            isDisabled={undo.last === undefined}
+            isDisabled={undo.last === undefined || changes.dropped}
             isPending={undoing}
             portalContainer={portalContainer}
             onPress={() => void runUndo()}
           />
-          <RecordTableActions
-            companyId={companyId}
-            companySlug={companySlug}
-            table={table}
-            records={records}
-            onReload={() => {
-              undo.clear();
-              reload();
-            }}
-            onDropped={onDropped}
-            definition={definition}
-            portalContainer={portalContainer}
-          />
+          {/* Every action left in the menu would fail on a deleted table. */}
+          {!changes.dropped && (
+            <RecordTableActions
+              companyId={companyId}
+              companySlug={companySlug}
+              table={table}
+              records={records}
+              onReload={reloadTable}
+              onDropped={onDropped}
+              definition={definition}
+              portalContainer={portalContainer}
+            />
+          )}
         </div>
       </div>
 
       {definition !== undefined && retentionSummary(definition) !== null && (
         <p className="table-view__notice">{retentionSummary(definition)}</p>
+      )}
+
+      {changes.dropped ? (
+        <OutOfDateNotice
+          message={t('records.outOfDate.dropped')}
+          announcement="records.announce.droppedElsewhere"
+          announcementParams={{ table }}
+        />
+      ) : (
+        changes.any && (
+          <OutOfDateNotice
+            message={`${t('records.outOfDate.intro')} ${describeChanges(changes)}. ${t('records.outOfDate.hint')}`}
+            announcement="records.announce.outOfDate"
+            announcementParams={{ table }}
+            onReload={reloadFromNotice}
+          />
+        )
       )}
 
       <p id={usageId} className="visually-hidden">
@@ -374,6 +434,8 @@ export const TableView = ({
               }}
               onSelectionChange={setSelected}
               portalContainer={portalContainer}
+              staleRows={staleRows}
+              readOnly={changes.dropped}
             />
           </Suspense>
         </>

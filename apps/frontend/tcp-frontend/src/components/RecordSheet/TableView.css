@@ -34,3 +34,19 @@
   margin: 0;
   color: var(--tcp-color-text-muted);
 }
+
+/* Changed elsewhere since it was read (001.05): set apart, never colour alone. */
+.out-of-date {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--tcp-space-sm);
+  padding: var(--tcp-space-sm);
+  border: var(--tcp-border-width) solid var(--tcp-color-border);
+  background-color: var(--tcp-color-surface);
+}
+
+.out-of-date__message {
+  margin: 0;
+  flex: 1 1 20rem;
+}
